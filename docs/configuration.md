@@ -13,7 +13,7 @@ The `.armature/config.json` file is stored on the `_armature` branch and accesse
 | `project_type` | string | auto-detected | Project type, auto-detected from repo markers. Possible values: `go`, `node`, `python`, `rust`, `make`, `unknown`. |
 | `default_ttl` | integer | `60` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted; an explicit `--ttl` always wins. The chosen value is written onto the claim op and drives claim staleness (see [Interaction with Stale Detection](#interaction-with-stale-detection)). If unset or 0, the builtin fallback is 60. |
 | `token_budget` | integer | `1600` | Default token budget for `arm render-context`. Used when `--budget` is omitted; an explicit `--budget` always wins. Truncation approximates 4 characters per token (see [Interaction with Context Assembly](#interaction-with-context-assembly)). If unset or 0, the builtin fallback is 4000. `arm bootstrap` writes 1600. |
-| `low_stakes_push_threshold` | integer | `5` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets so the next high-stakes op (claim, transition, assign) pushes the accumulated batch to `_armature`. Lower values reset sooner (smaller batches); higher values coalesce more writes into each push. If unset or 0, the builtin fallback is 5. |
+| `low_stakes_push_threshold` | integer | `5` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets. The field does not push `_armature` and does not change batch size; only a high-stakes op (claim, transition, assign) pushes. If unset or 0, the builtin fallback is 5. |
 | `hooks` | array | `[]` | Array of pre-transition hook configurations (see [Hooks](#hooks) below). |
 
 ### Project Type Detection
@@ -31,7 +31,7 @@ If the detected type is incorrect, manually edit `project_type` in `.armature/co
 
 ## Hooks
 
-Hooks run before task transitions (e.g., when marking a task as `done`). Use them to enforce validation rules or run automated checks.
+Hooks run before every `arm transition`. Use them to enforce validation rules or run automated checks.
 
 ### Hook Configuration
 
@@ -40,32 +40,31 @@ Each hook in the `hooks` array has this structure:
 ```json
 {
   "name": "string",        // Unique hook identifier
-  "command": ["string"],   // Shell command as array (e.g., ["bash", "-c", "make test"])
-  "required": boolean
+  "command": ["string"]    // argv (e.g., ["sh", "-c", "echo '{\"allowed\":true}'"])
 }
 ```
 
 ### Hook Behavior
 
 - **Execution:** Hooks run sequentially in array order on every `arm transition`, before the transition is materialized. They are not filtered by `name` or event type.
-- **Failure:** If any hook exits with non-zero status, the transition is rejected and the op is not appended.
-- **Environment:** Hooks run in the context of the ops worktree (`.armature/`).
+- **Input:** JSON on stdin with `issue_id`, `from_status`, `to_status`, and `worker_id`.
+- **Output:** JSON on stdout: `{"allowed": true}` or `{"allowed": false, "message": "..."}`. A non-zero exit, invalid JSON, or `allowed: false` rejects the transition and the op is not appended.
+- **Working directory:** Hooks inherit the caller's process cwd (typically the code worktree where `arm` was invoked). The runner does not change the command directory to the ops worktree.
 
-### Example: Require Tests Before Done
+### Example: Block transitions unless tests pass
 
 ```json
 {
   "hooks": [
     {
       "name": "test",
-      "command": ["bash", "-c", "make test"],
-      "required": true
+      "command": ["sh", "-c", "make test >/dev/null && echo '{\"allowed\":true}'"]
     }
   ]
 }
 ```
 
-This rejects any `transition --to done` unless `make test` passes.
+This runs on every `arm transition`, not only `--to done`. A failing `make test` is a non-zero exit and blocks. A passing `make test` still blocks unless stdout is valid JSON with `allowed` true.
 
 ## Complete Example Configuration
 
@@ -78,13 +77,11 @@ This rejects any `transition --to done` unless `make test` passes.
   "hooks": [
     {
       "name": "lint",
-      "command": ["bash", "-c", "make lint"],
-      "required": false
+      "command": ["sh", "-c", "make lint >/dev/null && echo '{\"allowed\":true}'"]
     },
     {
       "name": "test",
-      "command": ["bash", "-c", "make test"],
-      "required": true
+      "command": ["sh", "-c", "make test >/dev/null && echo '{\"allowed\":true}'"]
     }
   ]
 }

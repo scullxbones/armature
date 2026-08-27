@@ -235,13 +235,11 @@ Armature reads configuration from `.armature/config.json`. Edit this file to set
   "hooks": [
     {
       "name": "notify_slack",
-      "command": ["scripts/notify-slack.sh"],
-      "required": true
+      "command": ["sh", "-c", "scripts/notify-slack.sh >/dev/null && echo '{\"allowed\":true}'"]
     },
     {
       "name": "page_oncall",
-      "command": ["scripts/page-on-call.sh"],
-      "required": true
+      "command": ["sh", "-c", "scripts/page-on-call.sh >/dev/null && echo '{\"allowed\":true}'"]
     }
   ]
 }
@@ -254,31 +252,29 @@ Key settings:
 | `project_type` | Project language/framework: `"go"`, `"node"`, `"python"`, `"rust"`, `"make"`, or `"unknown"` |
 | `default_ttl` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted (explicit `--ttl` always wins). The value is written onto the claim op and drives staleness until a heartbeat or claimant activity extends it. Builtin fallback is 60 if the field is unset or 0. |
 | `token_budget` | Default token budget for `arm render-context`. Used when `--budget` is omitted (explicit `--budget` always wins). Truncation drops lowest-priority context layers until the bundle fits, approximating 4 characters per token. Builtin fallback is 4000 if the field is unset or 0; `arm bootstrap` writes 1600. |
-| `low_stakes_push_threshold` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets so the next high-stakes op (claim, transition, assign) pushes the accumulated batch to `_armature`. Lower values reset sooner; higher values coalesce more writes into each push. Builtin fallback is 5 if the field is unset or 0. |
-| `hooks` | Array of pre-transition hooks: `name`, `command` array, and `required` flag |
+| `low_stakes_push_threshold` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets. The field does not push `_armature` and does not change batch size; only a high-stakes op (claim, transition, assign) pushes. Builtin fallback is 5 if the field is unset or 0. |
+| `hooks` | Array of pre-transition hooks: `name` and `command` array |
 
 ### Hook Configuration
 
-Armature can fire hooks on state transitions. Configure them in `.armature/config.json` under the `hooks` key as an array of objects, each with a name, command, and required flag.
+Armature can fire hooks on state transitions. Configure them in `.armature/config.json` under the `hooks` key as an array of objects, each with a name and command.
 
 ```json
 {
   "hooks": [
     {
       "name": "notify_slack",
-      "command": ["scripts/notify-slack.sh"],
-      "required": false
+      "command": ["sh", "-c", "scripts/notify-slack.sh >/dev/null && echo '{\"allowed\":true}'"]
     },
     {
       "name": "page_oncall",
-      "command": ["scripts/page-on-call.sh"],
-      "required": false
+      "command": ["sh", "-c", "scripts/page-on-call.sh >/dev/null && echo '{\"allowed\":true}'"]
     }
   ]
 }
 ```
 
-Each hook is invoked as `command[0] command[1] ... command[n]` on every `arm transition` call. Hooks run in array order and are not filtered by name or event type. A non-zero exit blocks the transition.
+Each hook is invoked as `command[0] command[1] ... command[n]` on every `arm transition` call. JSON input (`issue_id`, `from_status`, `to_status`, `worker_id`) is written to stdin. The command must print JSON on stdout: `{"allowed":true}` or `{"allowed":false,"message":"..."}`. Hooks run in array order and are not filtered by name or event type. A non-zero exit, invalid JSON, or `allowed: false` blocks the transition. Hooks inherit the caller's process cwd (typically the code worktree); the runner does not set the command directory to the ops worktree.
 
 ### Routine Operations
 
