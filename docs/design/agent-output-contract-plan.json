@@ -204,26 +204,29 @@
       "notes": [
         "arm show currently handles only human and json and silently renders human prose when given --format agent.",
         "The coordinator remediation loop parses arm show JSON to recover its cycle counter. Migrate that consumer to .issues[0].notes in the same task and lint the path so a later shape change cannot silently reset escalation state.",
+        "--field stays a scalar extractor (N1.5), not an enveloped mode. Non-TTY substitutions such as bootstrap.go's claim_id=$(arm show active-claim --field id) and the coordinator's arm show --field claimed_by keep capturing a bare value. Do not add bootstrap.go to scope; do not rewrite those consumers onto jq.",
         "Owns its own docs/commands.md lines per E13: stories deliver vertical slices, not horizontal layers. Because only one task may own a file at a time, the S2 migrations run as a chain rather than a parallel wave."
       ],
-      "dod": "arm show honours the structured contract and emits the envelope on stdout. Large text fields are truncated by default with total size stated and --full offered only when used. The coordinator remediation loop reads cycle notes from .issues[0].notes, and a skill-lint regression prevents a top-level parser from silently resetting the escalation cycle.",
+      "dod": "arm show honours the structured contract and emits the envelope on stdout. Large text fields are truncated by default with total size stated and --full offered only when used. The coordinator remediation loop reads cycle notes from .issues[0].notes, and a skill-lint regression prevents a top-level parser from silently resetting the escalation cycle. --field stays a scalar extractor, never an envelope.",
       "acceptance": [
         "TestShowHonoursStructuredFormat_REQ_AOC_S2_T3 passes",
         "TestShowTruncatesOutcomeWithSizeHint_REQ_AOC_S2_T3 passes",
         "TestShowFullFlagReturnsCompleteField_REQ_AOC_S2_T3 passes",
         "TestCoordinatorShowRecoveryReadsEnvelope_REQ_AOC_S2_T3 passes",
+        "TestShowFieldExtractionStaysScalar_REQ_AOC_S2_T3 passes",
         "make check green"
       ],
       "source": "63be1d55-5014-47cf-ac51-eea876931e93",
       "context_files": [
-        "docs/design/agent-output-contract.md"
+        "docs/design/agent-output-contract.md",
+        "cmd/armature/bootstrap.go"
       ]
     },
     {
       "id": "AOC-S2-T4",
       "title": "Remaining structured commands conform to the contract",
       "type": "task",
-      "scope": "cmd/armature/context_history.go, cmd/armature/context_history_test.go, cmd/armature/workers.go, cmd/armature/workers_test.go, cmd/armature/validate.go, cmd/armature/worktree.go, docs/commands.md",
+      "scope": "cmd/armature/context_history.go, cmd/armature/context_history_test.go, cmd/armature/workers.go, cmd/armature/workers_test.go, cmd/armature/validate.go, cmd/armature/worktree.go, cmd/armature/review.go, cmd/armature/review_test.go, cmd/armature/decompose.go, cmd/armature/cmd_extra_test.go, docs/commands.md",
       "priority": "medium",
       "parent": "AOC-S2",
       "blocked_by": [
@@ -232,14 +235,17 @@
       "notes": [
         "arm workers currently emits JSONL where arm list emits a JSON array; that inconsistency is the reason the envelope must be uniform.",
         "context-history currently scans only the latest 100 commits by default. Remove that silent boundary; an explicit --limit remains a user-selected query boundary and must be disclosed in the envelope and help[].",
+        "AOC-S1-T3 classifies review prepare --output and ordinary dag apply as agent-facing without changing bytes. This task migrates those result modes, plus review record and review commits, onto the envelope so AOC-S3-T3 can fixture every non-artifact mode. Artifact modes stay verbatim.",
         "doctor, dagsum and render-context are deliberately excluded: each is claimed by an active backlog issue (TOPTIER-S15, LNGHZN-S6-T4, LNGHZN-S6-T2 / LNGHZN-S7). They migrate after those land and are caught by the AOC-S3-T3 lint rather than hand-scheduled here.",
         "Owns its own docs/commands.md lines per E13: stories deliver vertical slices, not horizontal layers. Because only one task may own a file at a time, the S2 migrations run as a chain rather than a parallel wave."
       ],
-      "dod": "Every remaining agent-facing command in this batch emits the envelope: workers, validate, worktree and context-history. Each payload key is named. context-history scans complete history by default; explicit --limit defines a disclosed boundary and count equals returned rows within it. harness-hook remains Protocol Output.",
+      "dod": "Every remaining agent-facing command in this batch emits the envelope: workers, validate, worktree, context-history, review prepare --output, review record, review commits, and ordinary dag apply. Each payload key is named. context-history scans complete history by default; explicit --limit defines a disclosed boundary. Artifact modes and harness-hook stay exempt.",
       "acceptance": [
         "TestWorkersEmitsEnvelopeNotJSONL_REQ_AOC_S2_T4 passes",
         "TestContextHistoryScansFullHistoryByDefault_REQ_AOC_S2_T4 passes",
         "TestContextHistoryExplicitLimitIsDisclosed_REQ_AOC_S2_T4 passes",
+        "TestReviewPrepareOutputModeEmitsEnvelope_REQ_AOC_S2_T4 passes",
+        "TestDagApplyResultModesEmitEnvelope_REQ_AOC_S2_T4 passes",
         "TestAllAgentFacingCommandsEmitEnvelope_REQ_AOC_S2_T4 passes",
         "TestHarnessHookOutputUnchanged_REQ_AOC_S2_T4 passes",
         "make check green"
@@ -361,7 +367,7 @@
       ],
       "notes": [
         "This is the guardrail. The enumeration source must be the command tree itself: a fixture list maintained by hand is a gate over the commands somebody remembered to fixture, which is the hole this task exists to close.",
-        "Conformance means: envelope present, payload key named, count present on collections, help[] present where required, nothing written to stderr, definitive empty state. Protocol Output and Artifact Output are exempt only through explicit classification; mode-sensitive Artifact Output commands fixture both their artifact and agent-facing modes."
+        "Conformance means: envelope present, payload key named, count present on collections, help[] present where required, nothing written to stderr, definitive empty state. Protocol Output and Artifact Output are exempt only through explicit classification; mode-sensitive Artifact Output commands fixture both their artifact and agent-facing modes. --field invocations are projections (N1.5/N9.6), not structured modes, and do not require envelope fixtures."
       ],
       "dod": "A lint enumerates every registered cobra command mode. Each agent-facing mode requires a conforming golden; a missing fixture fails make check. Protocol Output and Artifact Output modes are exempt only by explicit classification, never by name. Each Artifact Output mode is checked against its cited foreign shape, while other modes of the same command require envelope fixtures.",
       "acceptance": [
