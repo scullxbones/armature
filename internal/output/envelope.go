@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"sort"
 	"strconv"
 )
 
@@ -14,6 +15,7 @@ import (
 type Envelope struct {
 	payloadKey string
 	items      any
+	adjuncts   map[string]json.RawMessage
 	help       []string
 }
 
@@ -52,6 +54,25 @@ func NewEnvelope(payloadKey string, items any, help []string) (*Envelope, error)
 	return &Envelope{payloadKey: payloadKey, items: items, help: helpCopy}, nil
 }
 
+// AddAdjunct adds a named result field between the payload and trailing help.
+func (e *Envelope) AddAdjunct(key string, value any) error {
+	if key == "" || key == "count" || key == e.payloadKey || key == "help" || key == "payload" {
+		return fmt.Errorf("envelope adjunct key %q conflicts with a reserved member", key)
+	}
+	if _, exists := e.adjuncts[key]; exists {
+		return fmt.Errorf("envelope adjunct key %q is already present", key)
+	}
+	data, err := marshalVerbatim(value)
+	if err != nil {
+		return fmt.Errorf("marshal envelope adjunct %q: %w", key, err)
+	}
+	if e.adjuncts == nil {
+		e.adjuncts = make(map[string]json.RawMessage)
+	}
+	e.adjuncts[key] = data
+	return nil
+}
+
 // MarshalJSON emits {count, <payloadKey>[], help[]} with count equal to payload length.
 // Members are written in that order because help trails the payload (N5.1); a
 // map would be re-sorted lexicographically by encoding/json, putting help ahead
@@ -63,6 +84,9 @@ func NewEnvelope(payloadKey string, items any, help []string) (*Envelope, error)
 func (e *Envelope) MarshalJSON() ([]byte, error) {
 	if e == nil {
 		return nil, fmt.Errorf("nil envelope")
+	}
+	if e.items == nil {
+		return nil, fmt.Errorf("envelope payload must be an array")
 	}
 	n := reflect.ValueOf(e.items).Len()
 	payload, err := marshalVerbatim(e.items)
@@ -91,6 +115,21 @@ func (e *Envelope) MarshalJSON() ([]byte, error) {
 	buf.Write(key)
 	buf.WriteByte(':')
 	buf.Write(payload)
+	adjunctKeys := make([]string, 0, len(e.adjuncts))
+	for adjunctKey := range e.adjuncts {
+		adjunctKeys = append(adjunctKeys, adjunctKey)
+	}
+	sort.Strings(adjunctKeys)
+	for _, adjunctKey := range adjunctKeys {
+		keyJSON, err := marshalVerbatim(adjunctKey)
+		if err != nil {
+			return nil, fmt.Errorf("marshal envelope adjunct key %q: %w", adjunctKey, err)
+		}
+		buf.WriteByte(',')
+		buf.Write(keyJSON)
+		buf.WriteByte(':')
+		buf.Write(e.adjuncts[adjunctKey])
+	}
 	buf.WriteString(`,"help":`)
 	buf.Write(helpJSON)
 	buf.WriteByte('}')

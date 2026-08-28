@@ -105,6 +105,17 @@ func TestEnvelopeRejectsInvalidInput_REQ_AOC_S1_T2(t *testing.T) {
 	require.Error(t, WriteEnvelope(failWriter{}, env))
 }
 
+func TestEnvelopeRejectsZeroValue_REQ_AOC_S1_T2(t *testing.T) {
+	t.Parallel()
+
+	env := &Envelope{}
+	_, err := json.Marshal(env)
+	require.Error(t, err)
+	_, err = env.MarshalJSON()
+	require.Error(t, err)
+	require.Error(t, WriteEnvelope(&bytes.Buffer{}, env))
+}
+
 type failWriter struct{}
 
 func (failWriter) Write([]byte) (int, error) {
@@ -176,6 +187,33 @@ func TestEnvelopeMemberOrder_REQ_AOC_S1_T2(t *testing.T) {
 				"stdout bytes must carry the same member order")
 		})
 	}
+}
+
+func TestEnvelopeSupportsAdjuncts_REQ_AOC_S1_T2(t *testing.T) {
+	t.Parallel()
+
+	env, err := NewEnvelope("issues", []contractListRow{{ID: "AOC-S2-T1"}},
+		[]string{"arm show <id> for detail"})
+	require.NoError(t, err)
+	require.NoError(t, env.AddAdjunct("waves", [][]string{{"AOC-S2-T1"}}))
+	require.NoError(t, env.AddAdjunct("expired_claims", []contractListRow{{ID: "AOC-S9-T1"}}))
+
+	var stdout bytes.Buffer
+	require.NoError(t, WriteEnvelope(&stdout, env))
+	assertJSONEqual(t, []byte(`{
+		"count": 1,
+		"issues": [{"id": "AOC-S2-T1", "type": "", "status": "", "title": ""}],
+		"expired_claims": [{"id": "AOC-S9-T1", "type": "", "status": "", "title": ""}],
+		"waves": [["AOC-S2-T1"]],
+		"help": ["arm show <id> for detail"]
+	}`), stdout.Bytes())
+	require.Equal(t, []string{"count", "issues", "expired_claims", "waves", "help"},
+		topLevelKeyOrder(t, stdout.Bytes()), "adjuncts must be deterministic and help must remain last")
+
+	for _, key := range []string{"", "count", "issues", "help", "payload", "waves"} {
+		require.Error(t, env.AddAdjunct(key, []string{"invalid"}), "adjunct key %q must be rejected", key)
+	}
+	require.Error(t, env.AddAdjunct("invalid_value", func() {}), "adjunct values must be JSON-serializable")
 }
 
 func TestEnvelopeDoesNotEscapeContractText_REQ_AOC_S1_T2(t *testing.T) {
