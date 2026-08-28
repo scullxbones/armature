@@ -187,6 +187,11 @@ Keywords MUST / MUST NOT / SHOULD / MAY are used as in RFC 2119.
 4. Failure reporting (non-zero exit, error object) is out of scope here.
    Result data still MUST NOT be moved to stderr because an error path
    exists.
+5. `--field` is a scalar projection, not a structured format. When it is
+   set, stdout MUST be the requested field values as plain text, one per
+   line, even if json/agent format is explicit or implied. Command
+   substitution such as `$(arm show … --field id)` MUST capture a bare
+   value, never the envelope.
 
 Version queries remain agent-facing. In human format, `arm version` and the
 root `--version`, `-v`, and `-V` fast paths MAY print the existing bare version
@@ -344,6 +349,9 @@ Every CLI command mode is **agent-facing**, **Protocol Output**, or
    that cites nothing is not admissible.
 5. Where a command has both artifact and result modes, the classification
    MUST name the selecting flags, and the shape lint MUST fixture both.
+6. `--field` is a projection flag, not a fourth classification. The shape
+   lint fixtures the structured invocation without `--field`. A `--field`
+   invocation MUST NOT require an envelope fixture.
 
 ## Worked examples
 
@@ -407,6 +415,9 @@ Non-conforming shapes (lint MUST reject for agent-facing commands):
 - **AOC-S1-T3** adds the cited, mode-sensitive Artifact Output classification
   omitted from T2. Existing output remains byte-identical.
 - **AOC-S2** migrates agent-facing commands onto this envelope.
+  `AOC-S2-T3` keeps `--field` as a scalar extractor. `AOC-S2-T4` migrates
+  the remaining result modes of `review` and `dag apply` that T3 classified
+  as agent-facing without changing bytes.
 - **AOC-S3** deletes the legacy writers and installs the cobra-enumerated
   shape lint against this document.
 - Alternate encodings are out of this spec.
