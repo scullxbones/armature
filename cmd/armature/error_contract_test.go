@@ -79,15 +79,73 @@ func TestFailureCodePrefixMatchesModuleOrUse_REQ_LNGHZN_S6_T3(t *testing.T) {
 	t.Parallel()
 	allowed := allowedFailureCodePrefixes(t)
 	for _, code := range registeredFailureCodes(t) {
+		assert.Truef(t, validFailureCodeShape(code),
+			"registered code %q must be PREFIX or PREFIX-N with no zero-padded suffix", code)
 		prefix := failureCodePrefix(code)
 		assert.Containsf(t, allowed, prefix,
-			"non-reserved prefix %q (from %q) must be ToUpper(module basename) or ToUpper(top-level Use)", prefix, code)
+			"non-reserved prefix %q (from %q) must be ToUpper(designated deep module) or ToUpper(top-level Use)", prefix, code)
 	}
 	for _, row := range parseErrorContractLedger(t) {
+		assert.Truef(t, validFailureCodeShape(row.Code),
+			"ledger code %q must be PREFIX or PREFIX-N with no zero-padded suffix", row.Code)
 		prefix := failureCodePrefix(row.Code)
 		assert.Containsf(t, allowed, prefix,
-			"ledger code %q prefix %q is not a reserved prefix, module basename, or top-level Use", row.Code, prefix)
+			"ledger code %q prefix %q is not a reserved prefix, designated deep module, or top-level Use", row.Code, prefix)
+		if _, reserved := reservedFailureCodePrefixes[prefix]; reserved {
+			continue
+		}
+		assert.Equalf(t, armerrors.Prefix(row.ModuleOrUse), prefix,
+			"ledger code %q prefix must match declared Module or Use %q", row.Code, row.ModuleOrUse)
 	}
+}
+
+func TestFailureCodeShapeRejectsZeroPaddedSuffix_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	assert.False(t, validFailureCodeShape("CLAIM-001"), "padded CLAIM-001 must be rejected")
+	assert.False(t, validFailureCodeShape("CLAIM-01"), "padded CLAIM-01 must be rejected")
+	assert.False(t, validFailureCodeShape("CLAIM-00"), "padded CLAIM-00 must be rejected")
+	assert.True(t, validFailureCodeShape("CLAIM-1"))
+	assert.True(t, validFailureCodeShape("CLAIM-10"))
+	assert.True(t, validFailureCodeShape("USAGE"))
+	assert.True(t, validFailureCodeShape("IO"))
+	assert.True(t, validFailureCodeShape("RENDER-CONTEXT-1"))
+}
+
+func TestAllowedPrefixesExcludeUndesignatedInternalPackages_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	allowed := allowedFailureCodePrefixes(t)
+	assert.NotContains(t, allowed, "CLOCK",
+		"internal/clock is not an ADR 0004 deep module and has no top-level Use")
+	assert.Contains(t, allowed, "CLAIM", "claim is a designated deep module")
+	assert.Contains(t, allowed, "READY", "ready is a top-level Use")
+	assert.Contains(t, allowed, "USAGE")
+	assert.Contains(t, allowed, "IO")
+	assert.Contains(t, allowed, "GENERAL")
+}
+
+func TestLedgerRowPrefixMustMatchDeclaredModule_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	swapped := ledgerRow{Code: "CLAIM-1", ModuleOrUse: "review"}
+	assert.NotEqual(t, failureCodePrefix(swapped.Code), armerrors.Prefix(swapped.ModuleOrUse),
+		"CLAIM-1 declared as review must not satisfy the per-row prefix rule")
+	matched := ledgerRow{Code: "CLAIM-1", ModuleOrUse: "claim"}
+	assert.Equal(t, armerrors.Prefix(matched.ModuleOrUse), failureCodePrefix(matched.Code))
+}
+
+func TestErrorObjectRejectsExtraKeys_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	exact := map[string]any{
+		"code": "CLAIM-1", "cause": "x", "next_actions": []any{}, "exit_code": 1.0,
+	}
+	assert.True(t, errorObjectHasExactContractKeys(exact))
+	extra := map[string]any{
+		"code": "CLAIM-1", "cause": "x", "next_actions": []any{}, "exit_code": 1.0, "hint": "nope",
+	}
+	assert.False(t, errorObjectHasExactContractKeys(extra))
+	missing := map[string]any{
+		"code": "CLAIM-1", "cause": "x", "next_actions": []any{},
+	}
+	assert.False(t, errorObjectHasExactContractKeys(missing))
 }
 
 func TestErrorObjectNotNestedInAOCEnvelope_REQ_LNGHZN_S6_T3(t *testing.T) {
@@ -111,6 +169,7 @@ func TestErrorObjectNotNestedInAOCEnvelope_REQ_LNGHZN_S6_T3(t *testing.T) {
 
 	errObj, ok := envelope["error"].(map[string]any)
 	require.True(t, ok, "stdout object must be {error:{...}}")
+	assert.True(t, errorObjectHasExactContractKeys(errObj), "error object must have exactly the four contractual keys")
 	assert.Equal(t, "CLAIM-1", errObj["code"])
 	assert.Equal(t, "issue missing", errObj["cause"])
 	assert.Equal(t, float64(1), errObj["exit_code"])
@@ -347,20 +406,56 @@ func resolveStringArg(expr ast.Expr, consts map[string]string) (string, bool) {
 	}
 }
 
+var reservedFailureCodePrefixes = map[string]struct{}{
+	"USAGE":   {},
+	"IO":      {},
+	"GENERAL": {},
+}
+
+// ADR 0004 designated deep modules. Not every internal/ directory.
+var designatedDeepModules = []string{
+	"ops", "claim", "traceability", "materialize", "sources", "validate", "output",
+}
+
+func validFailureCodeShape(code string) bool {
+	if code == "" {
+		return false
+	}
+	i := strings.LastIndex(code, "-")
+	if i < 0 {
+		return true
+	}
+	suffix := code[i+1:]
+	if !failureCodeNumber.MatchString(suffix) {
+		return true
+	}
+	n, err := strconv.Atoi(suffix)
+	if err != nil {
+		return false
+	}
+	return strconv.Itoa(n) == suffix
+}
+
+func errorObjectHasExactContractKeys(errObj map[string]any) bool {
+	if len(errObj) != 4 {
+		return false
+	}
+	for _, field := range []string{"code", "cause", "next_actions", "exit_code"} {
+		if _, present := errObj[field]; !present {
+			return false
+		}
+	}
+	return true
+}
+
 func allowedFailureCodePrefixes(t *testing.T) map[string]struct{} {
 	t.Helper()
-	allowed := map[string]struct{}{
-		"USAGE":   {},
-		"IO":      {},
-		"GENERAL": {},
+	allowed := make(map[string]struct{}, len(reservedFailureCodePrefixes)+len(designatedDeepModules))
+	for prefix := range reservedFailureCodePrefixes {
+		allowed[prefix] = struct{}{}
 	}
-	internalDir := filepath.Join(repoRoot(t), "internal")
-	entries, err := os.ReadDir(internalDir)
-	require.NoError(t, err)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			allowed[armerrors.Prefix(entry.Name())] = struct{}{}
-		}
+	for _, name := range designatedDeepModules {
+		allowed[armerrors.Prefix(name)] = struct{}{}
 	}
 	root := newRootCmd()
 	for _, cmd := range root.Commands() {
@@ -399,10 +494,7 @@ func assertAgentFailureEnvelope(t *testing.T, stdout string) *armerrors.CommandF
 	require.Len(t, envelope, 1)
 	errObj, ok := envelope["error"].(map[string]any)
 	require.True(t, ok, "stdout must be {error:{...}}")
-	for _, field := range []string{"code", "cause", "next_actions", "exit_code"} {
-		_, present := errObj[field]
-		assert.True(t, present, "error object missing %s", field)
-	}
+	assert.True(t, errorObjectHasExactContractKeys(errObj), "error object must have exactly the four contractual keys")
 
 	var typed commandFailureEnvelope
 	require.NoError(t, json.Unmarshal([]byte(raw), &typed))
