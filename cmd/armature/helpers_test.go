@@ -149,12 +149,53 @@ func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T)
 	_, hasWarnings := payload["warnings"]
 	assert.True(t, hasWarnings, "stdout must remain the validation report")
 
-	humanOut := new(bytes.Buffer)
-	code = executeThenHandleRootError(t, humanOut, new(bytes.Buffer), "validate", "--repo", repo, "--format", "agent")
+	agentOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, agentOut, new(bytes.Buffer), "validate", "--repo", repo, "--format", "agent")
 	assert.Equal(t, 1, code)
-	assert.Contains(t, humanOut.String(), "WARNING:")
-	assert.NotContains(t, humanOut.String(), `"code":"GENERAL-1"`)
-	assert.NotContains(t, humanOut.String(), "Error [GENERAL-1]")
+	assert.NotContains(t, agentOut.String(), `"code":"GENERAL-1"`)
+	assert.NotContains(t, agentOut.String(), "Error [GENERAL-1]")
+}
+
+// TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1 pins the ADR 0020
+// equivalence of json and agent: a failing `arm validate --format=agent` must
+// put the structured validation report on stdout, not the human renderer.
+// skipCommandFailure means handleRootError supplies no envelope of its own, so
+// a human report here would leave an agent consumer with non-JSON stdout.
+func TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	createOverlappingTask(t, repo, "tsk-a", "Implement ops overlap case")
+	createOverlappingTask(t, repo, "tsk-b", "Implement sibling ops overlap")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "validate", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasWarnings := payload["warnings"]
+	assert.True(t, hasWarnings, "agent format must emit the structured validation report")
+	_, hasError := payload["error"]
+	assert.False(t, hasError, "graph findings must not be presented as a Command Failure")
+}
+
+// TestDoctorAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1 is the doctor twin of
+// the validate case above: --format=agent must take the structured report
+// branch before skipCommandFailure suppresses the Command Failure.
+func TestDoctorAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	plantVerifiedTaskUnder(t, repo, "task-orphan", "src/orphan.go", "NO-SUCH-PARENT")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "doctor", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasChecks := payload["checks"]
+	assert.True(t, hasChecks, "agent format must emit the structured doctor report")
+	_, hasError := payload["error"]
+	assert.False(t, hasError, "doctor checks must not be presented as a Command Failure")
 }
 
 func TestDoctorFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
@@ -314,9 +355,17 @@ func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T
 	assert.Equal(t, 1, code)
 	raw := strings.TrimSpace(stdout.String())
 	require.True(t, json.Valid([]byte(raw)), "doctor --fix must emit exactly one JSON value on stdout, got %q", stdout.String())
-	assert.NotContains(t, raw, `"code":"GENERAL-1"`)
-	assert.NotContains(t, raw, `"error"`)
-	assert.NotEmpty(t, stderr.String(), "apply failure after the plan is written must still have a stderr cause")
+
+	// ADR 0020 §7 exempts doctor *checks*, not a failure while mutating state.
+	// The plan is not an apply result, so a failed append must reach stdout as
+	// a Command Failure -- and, because the plan is withheld until the apply
+	// succeeds, it is the only JSON value on the stream.
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(raw), &payload))
+	envelope, hasError := payload["error"].(map[string]any)
+	require.True(t, hasError, "a doctor --fix apply failure must be a Command Failure, got %q", raw)
+	assert.NotEmpty(t, envelope["code"], "Command Failure must carry a code")
+	assert.NotEmpty(t, envelope["cause"], "Command Failure must carry the apply cause")
 }
 
 // TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1 verifies that a
