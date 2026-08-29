@@ -85,7 +85,7 @@ func newDoctorCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
-			if format == "json" {
+			if format == "json" || format == "agent" {
 				data, _ := json.MarshalIndent(report, "", "  ") //nolint:errcheck // report struct contains only serializable values
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
@@ -143,19 +143,9 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 	actions := doctor.PlanFixes(allIssues, workerID, time.Now(), appCtx.RepoPath)
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if format == "json" {
-		data, _ := json.MarshalIndent(actions, "", "  ") //nolint:errcheck // actions struct contains only serializable values
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-	} else {
-		if len(actions) == 0 {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No expired claims to fix.")
-		}
-		for _, a := range actions {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", a.IssueID, a.Reason)
-		}
-	}
 
 	if dryRun || len(actions) == 0 {
+		renderDoctorFixPlan(cmd, format, actions)
 		return nil
 	}
 
@@ -163,15 +153,39 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 	// (dual-branch) and push (best-effort) each op immediately, rather than
 	// doctor.ApplyFixes's commit-only path, which left repairs unpushed until
 	// something else (e.g. `arm push-ops`) happened to run.
+	//
+	// The plan is withheld until every op lands. ADR 0020 §7 exempts doctor
+	// checks, not a failure while mutating state: an apply error is a real
+	// Command Failure, and printing the plan first would both concatenate a
+	// second value onto stdout and describe ops that were never attempted.
 	state := mustState(cmd)
 	for _, a := range actions {
 		for _, op := range a.Ops {
 			if err := appendHighStakesOp(state, logPath, op); err != nil {
-				return skipCommandFailure(err)
+				return err
 			}
 		}
 	}
+
+	renderDoctorFixPlan(cmd, format, actions)
 	return nil
+}
+
+// renderDoctorFixPlan writes the fix plan to stdout in the caller's format.
+// Callers invoke it for a dry run or after every op has been applied, so the
+// plan on stdout always describes work that was planned only or done in full.
+func renderDoctorFixPlan(cmd *cobra.Command, format string, actions []doctor.FixAction) {
+	if format == "json" || format == "agent" {
+		data, _ := json.MarshalIndent(actions, "", "  ") //nolint:errcheck // actions struct contains only serializable values
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		return
+	}
+	if len(actions) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No expired claims to fix.")
+	}
+	for _, a := range actions {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", a.IssueID, a.Reason)
+	}
 }
 
 func countBySeverity(r doctor.Report, s doctor.Severity) int {

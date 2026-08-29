@@ -693,7 +693,7 @@ func TestValidateQuiet(t *testing.T) {
 		"--dod", "Tests pass and feature works")
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "validate", "--quiet")
+	out, err := runTrls(t, repo, "validate", "--quiet", "--format", "human")
 	require.NoError(t, err)
 	assert.NotContains(t, out, "INFO:", "--quiet should suppress INFO lines")
 	assert.Contains(t, out, "COVERAGE:", "--quiet should still print COVERAGE lines")

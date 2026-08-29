@@ -37,7 +37,7 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	createOverlappingTask(t, repo, "tsk-a", "Implement ops overlap case")
 	createOverlappingTask(t, repo, "tsk-b", "Implement sibling ops overlap")
 
-	out, err := runTrls(t, repo, "validate")
+	out, err := runTrls(t, repo, "validate", "--format", "human")
 	require.Error(t, err, "default validate must fail closed when warnings exist")
 	assert.Contains(t, err.Error(), "validation failed")
 	assert.Contains(t, err.Error(), "warning(s)", "strict failure must distinguish promoted W-codes from E-codes")
@@ -47,7 +47,7 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	_, err = runTrls(t, repo, "link", "--source", "tsk-b", "--dep", "tsk-a")
 	require.NoError(t, err)
 
-	out, err = runTrls(t, repo, "validate")
+	out, err = runTrls(t, repo, "validate", "--format", "human")
 	require.NoError(t, err, "serialized overlap must be green")
 	lines := nonEmptyLines(out)
 	require.Len(t, lines, 1, "green output must be a single summary line, got %q", out)
@@ -89,7 +89,7 @@ func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
 	createOverlappingTask(t, repo, "tsk-a", "Implement ops overlap case")
 	createOverlappingTask(t, repo, "tsk-b", "Implement sibling ops overlap")
 
-	out, err := runTrls(t, repo, "validate", "--strict=false")
+	out, err := runTrls(t, repo, "validate", "--strict=false", "--format", "human")
 	require.NoError(t, err, "--strict=false must keep warnings as warnings (exit 0)")
 	assert.Contains(t, out, "WARNING: scope overlap", "--strict=false human output must list warning-level findings")
 	assert.NotContains(t, out, "ERROR: scope overlap")
@@ -126,7 +126,7 @@ func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	out, err := runTrls(t, repo, "validate", "--strict=false")
+	out, err := runTrls(t, repo, "validate", "--strict=false", "--format", "human")
 	require.NoError(t, err)
 	assert.Contains(t, out, "INFO: phantom scope", "--strict=false human output must list INFO findings")
 }
@@ -147,7 +147,7 @@ func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, appendRawCreate(logPath, workerID, "tsk-e9", longDoD, "internal/ops/*.go"))
 
-	out, err := runTrls(t, repo, "validate", "--strict=false")
+	out, err := runTrls(t, repo, "validate", "--strict=false", "--format", "human")
 	require.Error(t, err, "--strict=false must still fail closed on E-codes")
 	assert.Contains(t, err.Error(), "validation failed")
 	assert.Contains(t, out, "ERROR:")

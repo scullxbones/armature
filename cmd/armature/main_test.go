@@ -1709,7 +1709,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 		}
 		require.NoError(t, ops.AppendOp(logPath, sourceLinkOp))
 
-		out, err := runTrls(t, repo, "validate")
+		out, err := runTrls(t, repo, "validate", "--format", "human")
 		require.NoError(t, err)
 		// 1 source-linked out of 2 total, 0 accepted-risk → simple format
 		assert.Contains(t, out, "COVERAGE: 1/2 cited")
@@ -1728,7 +1728,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 		}
 		require.NoError(t, ops.AppendOp(logPath, citationAcceptedOp))
 
-		out, err := runTrls(t, repo, "validate")
+		out, err := runTrls(t, repo, "validate", "--format", "human")
 		require.NoError(t, err)
 		// 1 source-linked + 1 accepted-risk = 2/2 total cited → extended format
 		assert.Contains(t, out, "COVERAGE: 2/2 cited (1 source-linked, 1 accepted-risk)")
@@ -3554,7 +3554,7 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 		require.NoError(t, err)
 
 		// Validate: the issue should NOT appear as "uncited node" — it is source-linked.
-		validateOut, err := runTrls(t, repo, "validate")
+		validateOut, err := runTrls(t, repo, "validate", "--format", "human")
 		require.NoError(t, err)
 		assert.NotContains(t, validateOut, "uncited node: src-id-01", "source-linked issue should not appear as uncited")
 		assert.Contains(t, validateOut, "COVERAGE: ", "coverage line should be present")
