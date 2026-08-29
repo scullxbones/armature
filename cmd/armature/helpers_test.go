@@ -321,3 +321,31 @@ func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T
 	assert.NotContains(t, raw, `"error"`)
 	assert.NotEmpty(t, stderr.String(), "apply failure after the plan is written must still have a stderr cause")
 }
+
+// TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1 verifies that a
+// nonzero `arm worktree gc --format=json` run keeps stdout as exactly one
+// structured report. gc writes its result and then returns a nonzero error;
+// appending a Command Failure object to that same stream would make stdout
+// invalid JSON for the agent consumers this contract targets, so the gc exit
+// must be classified as a protocol exit like the doctor/validate reports.
+func TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo, issueID := setupAmbiguousGCRepo(t)
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr, "worktree", "gc", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasError := payload["error"]
+	assert.False(t, hasError, "a nonzero gc report must not be presented as a Command Failure")
+	assert.Contains(t, payload, "ambiguous", "stdout must remain the gc report")
+	assert.Contains(t, stderr.String(), "ambiguous", "the reason belongs on stderr")
+
+	dryOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, dryOut, new(bytes.Buffer), "worktree", "gc", "--dry-run", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	dryPayload := assertSingleJSONObject(t, dryOut.String())
+	_, hasDryError := dryPayload["error"]
+	assert.False(t, hasDryError, "a nonzero gc dry-run report must not be presented as a Command Failure")
+	assert.Contains(t, dryPayload["ambiguous"], issueID)
+}

@@ -206,7 +206,11 @@ func newWorktreeGCCmd() *cobra.Command {
 						}
 					}
 				}
-				return gcExitError(nil, result.GCAmbiguous)
+				// gc already wrote its report (the JSON result, or the human
+				// sections), so a nonzero dry-run exits on the report protocol
+				// (ADR 0020 §6): handleRootError must not append a Command
+				// Failure that would make --format=json stdout invalid JSON.
+				return skipCommandFailure(gcExitError(nil, result.GCAmbiguous))
 			}
 
 			// Actually remove worktrees. Route each removal through the
@@ -259,7 +263,8 @@ func newWorktreeGCCmd() *cobra.Command {
 				// ambiguous terminal issue is a non-zero exit regardless of output
 				// format, so gc never reports a misleading clean run.
 				if exitErr := gcExitError(failed, result.GCAmbiguous); exitErr != nil {
-					return exitErr
+					// Report already on the wire; see the dry-run branch above.
+					return skipCommandFailure(exitErr)
 				}
 			} else {
 				if len(removed) > 0 {
@@ -290,7 +295,8 @@ func newWorktreeGCCmd() *cobra.Command {
 					}
 				}
 				if exitErr := gcExitError(failed, result.GCAmbiguous); exitErr != nil {
-					return exitErr
+					// Report already on the wire; see the dry-run branch above.
+					return skipCommandFailure(exitErr)
 				}
 			}
 
