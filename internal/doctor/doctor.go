@@ -82,6 +82,11 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	checks = append(checks, checkD6UncitedIssues(allIssues))
 	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
 	checks = append(checks, checkD9UnrecognizedWorktrees(repoPath, allIssues, now))
+	configPath := ""
+	if repoPath != "" {
+		configPath = filepath.Join(repoPath, ".armature", "config.json")
+	}
+	checks = append(checks, CheckD10ConfigHealth(configPath))
 
 	return Report{Checks: checks}
 }
@@ -143,6 +148,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	checks = append(checks, checkD7WorkerIDMismatches(filterMismatchWarnings(warnings)))
 	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
 	checks = append(checks, checkD9UnrecognizedWorktrees(repoPath, allIssues, now))
+	checks = append(checks, CheckD10ConfigHealth(filepath.Join(issuesDir, "config.json")))
 
 	return Report{Checks: checks}, nil
 }

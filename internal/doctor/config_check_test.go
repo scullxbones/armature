@@ -17,8 +17,8 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 	t.Run("unknown_field_is_error_naming_key", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{"project_type":"go","mystery_knob":true}`)
-		f := doctor.CheckD9ConfigHealth(path)
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
 		assert.Contains(t, f.Items[0], "mystery_knob")
@@ -32,8 +32,8 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 			"token_budget": -1,
 			"low_stakes_push_threshold": -2
 		}`)
-		f := doctor.CheckD9ConfigHealth(path)
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		joined := strings.Join(f.Items, "\n")
 		assert.Contains(t, joined, "project_type")
@@ -51,8 +51,8 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 			"low_stakes_push_threshold": 5,
 			"hooks": [{"name": "lint", "command": ["make", "lint"], "required": false}]
 		}`)
-		f := doctor.CheckD9ConfigHealth(path)
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityOK, f.Severity)
 		assert.Empty(t, f.Items)
 	})
@@ -60,15 +60,15 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 	t.Run("omitted_fields_are_not_range_checked", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{}`)
-		f := doctor.CheckD9ConfigHealth(path)
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityOK, f.Severity)
 	})
 
 	t.Run("empty_hook_command_is_out_of_range", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{"hooks":[{"name":"lint","command":[]}]}`)
-		f := doctor.CheckD9ConfigHealth(path)
+		f := doctor.CheckD10ConfigHealth(path)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
 		assert.Contains(t, strings.Join(f.Items, "\n"), "hooks[0].command")
@@ -77,7 +77,7 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 	t.Run("empty_hook_name_is_out_of_range", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{"hooks":[{"name":"","command":["make","lint"]}]}`)
-		f := doctor.CheckD9ConfigHealth(path)
+		f := doctor.CheckD10ConfigHealth(path)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
 		assert.Contains(t, strings.Join(f.Items, "\n"), "hooks[0].name")
@@ -86,7 +86,7 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 	t.Run("empty_gate_command_is_out_of_range", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{"gates":{"full":{"command":[]}}}`)
-		f := doctor.CheckD9ConfigHealth(path)
+		f := doctor.CheckD10ConfigHealth(path)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
 		assert.Contains(t, strings.Join(f.Items, "\n"), "gates[full].command")
@@ -94,23 +94,23 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 
 	t.Run("missing_file_fails_open", func(t *testing.T) {
 		t.Parallel()
-		f := doctor.CheckD9ConfigHealth(filepath.Join(t.TempDir(), "config.json"))
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth(filepath.Join(t.TempDir(), "config.json"))
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityOK, f.Severity)
 	})
 
 	t.Run("empty_path_fails_open", func(t *testing.T) {
 		t.Parallel()
-		f := doctor.CheckD9ConfigHealth("")
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth("")
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityOK, f.Severity)
 	})
 
 	t.Run("null_document_is_error", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `null`)
-		f := doctor.CheckD9ConfigHealth(path)
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
 		assert.Contains(t, f.Items[0], "object")
@@ -119,11 +119,31 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 	t.Run("trailing_extra_json_is_error", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{"project_type":"go"}{"mystery_knob":1}`)
-		f := doctor.CheckD9ConfigHealth(path)
-		assert.Equal(t, "D9", f.Check)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
 		assert.Contains(t, f.Items[0], "trailing")
+	})
+
+	t.Run("zero_push_threshold_is_out_of_range", func(t *testing.T) {
+		t.Parallel()
+		path := writeConfig(t, `{"low_stakes_push_threshold":0}`)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		require.NotEmpty(t, f.Items)
+		assert.Contains(t, strings.Join(f.Items, "\n"), "low_stakes_push_threshold")
+	})
+
+	t.Run("empty_hook_executable_is_out_of_range", func(t *testing.T) {
+		t.Parallel()
+		path := writeConfig(t, `{"hooks":[{"name":"lint","command":[""]}]}`)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		require.NotEmpty(t, f.Items)
+		assert.Contains(t, strings.Join(f.Items, "\n"), "hooks[0].command[0]")
 	})
 }
 
