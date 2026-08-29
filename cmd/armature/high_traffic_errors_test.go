@@ -95,6 +95,24 @@ func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Equal(t, armerrors.CodeUSAGE, extraCF.Code)
 	assert.Contains(t, extraCF.Cause, "accepts at most")
 	require.NotEmpty(t, extraCF.NextActions)
+
+	invalidFrom := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, invalidFrom, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-01", "--worktree", "--from", repo, "--format", "agent")
+	assert.Equal(t, 2, code)
+	invalidFromCF := agentFailureFromStdout(t, invalidFrom.String())
+	assert.Equal(t, armerrors.CodeUSAGE, invalidFromCF.Code)
+	assert.Contains(t, invalidFromCF.Cause, "--from requires an explicit --worktree")
+	assert.Equal(t, 2, invalidFromCF.ExitCode)
+
+	invalidIssueID := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, invalidIssueID, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "team/task-01", "--worktree", "--format", "agent")
+	assert.Equal(t, 2, code)
+	invalidIssueIDCF := agentFailureFromStdout(t, invalidIssueID.String())
+	assert.Equal(t, armerrors.CodeUSAGE, invalidIssueIDCF.Code)
+	assert.Contains(t, invalidIssueIDCF.Cause, "path separators")
+	assert.Equal(t, 2, invalidIssueIDCF.ExitCode)
 }
 
 func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -151,6 +169,9 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Contains(t, strings.ToLower(parseCF.Cause), "parse")
 	parseJoined := strings.Join(parseCF.NextActions, "\n")
 	assert.Contains(t, parseJoined, "arm review")
+	assert.Contains(t, parseJoined, "jq empty")
+	assert.Contains(t, parseJoined, "--assessment")
+	assert.NotContains(t, parseJoined, "--output")
 	assert.NotContains(t, parseJoined, "--help")
 
 	extraCommits := new(bytes.Buffer)
@@ -162,6 +183,38 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Contains(t, extraCF.Cause, "accepts at most")
 	require.NotEmpty(t, extraCF.NextActions)
 	assert.Equal(t, 2, extraCF.ExitCode)
+
+	conflictingIssue := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, conflictingIssue, new(bytes.Buffer),
+		"review", "commits", "--repo", repo, "task-01", "--issue", "task-02", "--format", "agent")
+	assert.Equal(t, 2, code)
+	conflictingIssueCF := agentFailureFromStdout(t, conflictingIssue.String())
+	assert.Equal(t, armerrors.CodeUSAGE, conflictingIssueCF.Code)
+	assert.Contains(t, conflictingIssueCF.Cause, "conflicting issue ID")
+	assert.Equal(t, 2, conflictingIssueCF.ExitCode)
+
+	validAssessment := filepath.Join(repo, "valid-assessment.json")
+	require.NoError(t, os.WriteFile(validAssessment, []byte(`{
+		"schema_version":1,
+		"bundle_id":"bundle",
+		"contract_fingerprint":"contract",
+		"delivery_fingerprint":"delivery",
+		"results":[{"id":"definition_of_done","status":"satisfied","rationale":"verified"}]
+	}`), 0o600))
+	bundleDir, err := os.MkdirTemp(".", "{bundle}")
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, os.RemoveAll(bundleDir)) })
+	bundlePath := filepath.Join(bundleDir, "bundle.json")
+	require.NoError(t, os.WriteFile(bundlePath, []byte("not-json"), 0o600))
+
+	delimitedPath := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, delimitedPath, new(bytes.Buffer),
+		"review", "record", "--repo", repo, "--issue", "task-01",
+		"--assessment", validAssessment, "--bundle", bundlePath, "--format", "agent")
+	assert.Equal(t, 1, code)
+	delimitedPathCF := agentFailureFromStdout(t, delimitedPath.String())
+	assert.Contains(t, delimitedPathCF.Cause, "parse bundle JSON")
+	assert.NotContains(t, delimitedPathCF.Cause, "not JSON content")
 }
 
 func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -218,6 +271,17 @@ func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Equal(t, armerrors.CodeUSAGE, extraCF.Code)
 	assert.Contains(t, extraCF.Cause, "accepts at most")
 	require.NotEmpty(t, extraCF.NextActions)
+
+	run(t, repo, "git", "branch", "-M", "main")
+	branchDiscipline := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, branchDiscipline, new(bytes.Buffer),
+		"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
+		"--skip-delivery-gate", "--outcome", "verified remediation", "--format", "agent")
+	assert.Equal(t, 1, code)
+	branchDisciplineCF := agentFailureFromStdout(t, branchDiscipline.String())
+	assert.Equal(t, "TRANSITION-1", branchDisciplineCF.Code)
+	assert.Contains(t, branchDisciplineCF.Cause, "cannot transition to done")
+	assert.Contains(t, strings.Join(branchDisciplineCF.NextActions, "\n"), "--force")
 }
 
 func TestReadyAndRenderContextErrorsMapped_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -247,6 +311,17 @@ func TestReadyAndRenderContextErrorsMapped_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Equal(t, armerrors.CodeUSAGE, extra.Code)
 	assert.Contains(t, extra.Cause, "accepts at most")
 	require.NotEmpty(t, extra.NextActions)
+
+	invalidRevisionOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, invalidRevisionOut, new(bytes.Buffer),
+		"render-context", "--repo", repo, "--issue", "task-01", "--at", "no-such-revision", "--format", "agent")
+	assert.Equal(t, 1, code)
+	invalidRevision := agentFailureFromStdout(t, invalidRevisionOut.String())
+	assert.Equal(t, "RENDER-CONTEXT-1", invalidRevision.Code)
+	assert.Contains(t, invalidRevision.Cause, "materialize at no-such-revision")
+	invalidRevisionActions := strings.Join(invalidRevision.NextActions, "\n")
+	assert.Contains(t, invalidRevisionActions, "--at <reachable-sha>")
+	assert.Contains(t, invalidRevisionActions, "arm render-context --issue <issue-id>")
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	require.NoError(t, os.RemoveAll(opsDir))

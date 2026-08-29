@@ -46,7 +46,9 @@ func mapClaimError(err error) error {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "issue ID is required"),
+		strings.Contains(msg, "issue ID") && strings.Contains(msg, "must not"),
 		strings.Contains(msg, "--worktree is required"),
+		strings.Contains(msg, "--from requires an explicit --worktree"),
 		strings.Contains(msg, "accepts at most"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm claim --help"}, 2, err)
 	case strings.Contains(msg, "issue") && strings.Contains(msg, "not found") &&

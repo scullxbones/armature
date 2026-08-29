@@ -669,6 +669,12 @@ func mapTransitionError(err error) error {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
 	case strings.Contains(msg, "invalid status"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to done", "arm show"}, 1, err)
+	case strings.Contains(msg, "cannot transition to done"),
+		strings.Contains(msg, "Use --force"):
+		return armerrors.Wrap(codeTransition1, msg, []string{
+			"git switch task/<issue-id>",
+			"arm transition --to done --force",
+		}, 1, err)
 	case strings.Contains(msg, "delivery gate"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	default:
