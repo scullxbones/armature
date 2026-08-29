@@ -363,7 +363,7 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 
 ## doctor
 
-Run repository health checks (D1-D9).
+Run repository health checks (D1-D10).
 
 **Synopsis:**
 `arm doctor [flags]`
@@ -398,6 +398,12 @@ rather than merely printing it. Note that `arm worktree list` deliberately keeps
 exit code 0 on the same anomaly: it is the routine inventory command that exists to
 report it, so it must not fail on what it is designed to surface. Remediate by
 binding the worktree to its issue or removing the stray checkout.
+
+**D10 — Config health.** `.armature/config.json` must decode strictly (unknown
+fields rejected by name) and every present field must be in range. A missing
+file fails open. Malformed JSON, unknown keys, a zero `low_stakes_push_threshold`,
+an empty hook/gate executable, or a `default_ttl` that would overflow claim
+staleness arithmetic are errors, so `arm doctor` exits non-zero.
 
 ---
 

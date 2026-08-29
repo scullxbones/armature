@@ -231,7 +231,7 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 	issuesDir := filepath.Join(repoDir, ".armature")
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "ops"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "state", "issues"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "config.json"), []byte(`{"mode":"single-branch"}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "config.json"), []byte(`{}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "worker-01.log"), []byte(""), 0o644))
 
 	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), repoDir, false, time.Now())
@@ -245,6 +245,43 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 	// The anomaly must be a warning (fails --strict) not an error (fails plain doctor).
 	assert.True(t, report.HasWarnings(), "--strict must fail on the unrecognized worktree")
 	assert.False(t, report.HasErrors(), "plain doctor must not error on the unrecognized worktree")
+}
+
+func TestRun_IncludesConfigHealth_REQ_LNGHZN_S7_T2(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(issuesDir, "config.json"),
+		[]byte(`{"project_type":"go","token_budegt":1600}`),
+		0o644,
+	))
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	require.NoError(t, err)
+
+	d10 := findCheck(t, report, "D10")
+	assert.Equal(t, doctor.SeverityError, d10.Severity)
+	require.NotEmpty(t, d10.Items)
+	assert.Contains(t, strings.Join(d10.Items, "\n"), "token_budegt")
+}
+
+func TestRunChecks_IncludesConfigHealth_REQ_LNGHZN_S7_T2(t *testing.T) {
+	t.Parallel()
+	repoDir := t.TempDir()
+	armatureDir := filepath.Join(repoDir, ".armature")
+	require.NoError(t, os.MkdirAll(armatureDir, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(armatureDir, "config.json"),
+		[]byte(`{"project_type":"go","token_budegt":1600}`),
+		0o644,
+	))
+
+	report := doctor.RunChecks(nil, nil, nil, repoDir, time.Now())
+	d10 := findCheck(t, report, "D10")
+	assert.Equal(t, doctor.SeverityError, d10.Severity)
+	require.NotEmpty(t, d10.Items)
+	assert.Contains(t, strings.Join(d10.Items, "\n"), "token_budegt")
 }
 
 func findCheck(t *testing.T, report doctor.Report, checkID string) doctor.Finding {
@@ -268,7 +305,7 @@ func initIssuesDir(t *testing.T) string {
 	// Write a minimal config.json
 	require.NoError(t, os.WriteFile(
 		filepath.Join(issuesDir, "config.json"),
-		[]byte(`{"mode":"single-branch"}`),
+		[]byte(`{}`),
 		0644,
 	))
 	return issuesDir

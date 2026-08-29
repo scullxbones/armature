@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 )
 
@@ -79,8 +80,11 @@ func ValidatePresentFields(data []byte) []string {
 		}
 	}
 	if _, ok := raw["default_ttl"]; ok {
-		if cfg.DefaultTTL <= 0 {
+		switch {
+		case cfg.DefaultTTL <= 0:
 			problems = append(problems, fmt.Sprintf("default_ttl %d is out of range (must be > 0 minutes)", cfg.DefaultTTL))
+		case int64(cfg.DefaultTTL) > math.MaxInt64/60:
+			problems = append(problems, fmt.Sprintf("default_ttl %d is out of range (must not overflow claim TTL seconds)", cfg.DefaultTTL))
 		}
 	}
 	if _, ok := raw["token_budget"]; ok {
@@ -89,8 +93,8 @@ func ValidatePresentFields(data []byte) []string {
 		}
 	}
 	if _, ok := raw["low_stakes_push_threshold"]; ok {
-		if cfg.LowStakesPushThreshold < 0 {
-			problems = append(problems, fmt.Sprintf("low_stakes_push_threshold %d is out of range (must be >= 0)", cfg.LowStakesPushThreshold))
+		if cfg.LowStakesPushThreshold <= 0 {
+			problems = append(problems, fmt.Sprintf("low_stakes_push_threshold %d is out of range (must be > 0)", cfg.LowStakesPushThreshold))
 		}
 	}
 	if _, ok := raw["hooks"]; ok {
@@ -98,15 +102,21 @@ func ValidatePresentFields(data []byte) []string {
 			if hook.Name == "" {
 				problems = append(problems, fmt.Sprintf("hooks[%d].name is out of range (must be non-empty)", i))
 			}
-			if len(hook.Command) == 0 {
+			switch {
+			case len(hook.Command) == 0:
 				problems = append(problems, fmt.Sprintf("hooks[%d].command is out of range (must be non-empty)", i))
+			case hook.Command[0] == "":
+				problems = append(problems, fmt.Sprintf("hooks[%d].command[0] is out of range (must be non-empty)", i))
 			}
 		}
 	}
 	if _, ok := raw["gates"]; ok {
 		for name, gate := range cfg.Gates {
-			if len(gate.Command) == 0 {
+			switch {
+			case len(gate.Command) == 0:
 				problems = append(problems, fmt.Sprintf("gates[%s].command is out of range (must be non-empty)", name))
+			case gate.Command[0] == "":
+				problems = append(problems, fmt.Sprintf("gates[%s].command[0] is out of range (must be non-empty)", name))
 			}
 		}
 	}

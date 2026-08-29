@@ -29,6 +29,17 @@ func TestConfigRoundTrip(t *testing.T) {
 	assert.Equal(t, 60, loaded.DefaultTTL)
 }
 
+func TestLoadConfigRejectsUnknownField(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"project_type":"go","token_budegt":1600}`), 0o600))
+
+	_, err := LoadConfig(configPath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "token_budegt")
+}
+
 func TestDetectProjectType(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

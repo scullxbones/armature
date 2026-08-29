@@ -7,12 +7,13 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 )
 
-// CheckD9ConfigHealth validates that config.json decodes strictly (unknown
+// CheckD10ConfigHealth validates that config.json decodes strictly (unknown
 // fields rejected by key) and that every present field is within its valid
-// range. A missing file fails open, matching D1's I/O policy.
-func CheckD9ConfigHealth(configPath string) Finding {
+// range. A missing file fails open, matching D1's I/O policy. The check ID is
+// D10 because live D9 is unrecognized managed worktrees.
+func CheckD10ConfigHealth(configPath string) Finding {
 	f := Finding{
-		Check:    "D9",
+		Check:    "D10",
 		Severity: SeverityOK,
 		Message:  "Config decodes strictly and present fields are in range",
 	}

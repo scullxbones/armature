@@ -1,6 +1,9 @@
 package config
 
 import (
+	"math"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,4 +53,31 @@ func TestStrictDecodeRejectsTrailingJSON(t *testing.T) {
 	_, err := StrictDecode([]byte(`{"project_type":"go"}{"mystery_knob":1}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "trailing")
+}
+
+func TestValidatePresentFieldsRejectsZeroPushThreshold(t *testing.T) {
+	t.Parallel()
+
+	problems := ValidatePresentFields([]byte(`{"low_stakes_push_threshold":0}`))
+	require.NotEmpty(t, problems)
+	assert.Contains(t, strings.Join(problems, "\n"), "low_stakes_push_threshold")
+}
+
+func TestValidatePresentFieldsRejectsEmptyHookExecutable(t *testing.T) {
+	t.Parallel()
+
+	problems := ValidatePresentFields([]byte(`{"hooks":[{"name":"lint","command":[""]}]}`))
+	require.NotEmpty(t, problems)
+	assert.Contains(t, strings.Join(problems, "\n"), "hooks[0].command[0]")
+}
+
+func TestValidatePresentFieldsRejectsOverflowTTL(t *testing.T) {
+	t.Parallel()
+	if int64(math.MaxInt) <= math.MaxInt64/60 {
+		t.Skip("int cannot hold a TTL that overflows seconds on this platform")
+	}
+
+	problems := ValidatePresentFields([]byte(`{"default_ttl":` + strconv.FormatInt(math.MaxInt64, 10) + `}`))
+	require.NotEmpty(t, problems)
+	assert.Contains(t, strings.Join(problems, "\n"), "default_ttl")
 }

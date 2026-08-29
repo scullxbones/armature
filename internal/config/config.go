@@ -75,9 +75,13 @@ func WriteConfig(path string, cfg Config) error {
 }
 
 func LoadConfig(path string) (Config, error) {
-	var cfg Config
-	if err := adapters.LoadConfigFile(path, &cfg); err != nil {
-		return Config{}, err
+	data, err := os.ReadFile(path) //nolint:gosec // path is the repo's config.json
+	if err != nil {
+		return Config{}, fmt.Errorf("read config: %w", err)
+	}
+	cfg, err := StrictDecode(data)
+	if err != nil {
+		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 	return cfg, nil
 }

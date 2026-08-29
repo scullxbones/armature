@@ -21,7 +21,7 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Run repo health checks (D1-D7); --fix reconciles expired claims",
+		Short: "Run repo health checks (D1-D10); --fix reconciles expired claims",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Fall through to root PersistentPreRunE for normal config loading.
 			// This correctly sets the execution state in the command context.
