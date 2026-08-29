@@ -280,8 +280,11 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	if assessmentFile == "" {
 		return fmt.Errorf("--assessment is required")
 	}
+
 	if looksLikeJSONArg(bundleFile) {
-		return fmt.Errorf("--bundle expects a file path, not JSON content")
+		if _, err := os.Stat(filepath.Clean(bundleFile)); err != nil {
+			return fmt.Errorf("--bundle expects a file path, not JSON content")
+		}
 	}
 
 	// Decode input: read and parse assessment JSON
@@ -435,8 +438,15 @@ func mapReviewError(err error) error {
 		strings.Contains(msg, "--head is required"),
 		strings.Contains(msg, "--assessment is required"),
 		strings.Contains(msg, "issue ID is required"),
+		strings.Contains(msg, "conflicting issue ID"),
 		strings.Contains(msg, "accepts at most"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm review --help"}, 2, err)
+	case strings.Contains(msg, "read assessment file"),
+		strings.Contains(msg, "parse assessment JSON"):
+		return armerrors.Wrap(codeReview1, msg, []string{
+			"jq empty <assessment.json>",
+			"arm review record --assessment <assessment.json>",
+		}, 1, err)
 	case strings.Contains(msg, "not JSON content"),
 		strings.Contains(msg, "read bundle file"):
 		return armerrors.Wrap(codeReview1, msg, []string{

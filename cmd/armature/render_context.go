@@ -135,5 +135,11 @@ func mapRenderContextError(err error) error {
 	if strings.Contains(msg, "issue ID is required") || strings.Contains(msg, "accepts at most") {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, 2, err)
 	}
+	if strings.Contains(msg, "materialize at ") {
+		return armerrors.Wrap(codeRenderContext1, msg, []string{
+			"arm render-context --issue <issue-id> --at <reachable-sha>",
+			"arm render-context --issue <issue-id>",
+		}, 1, err)
+	}
 	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, 1, err)
 }
