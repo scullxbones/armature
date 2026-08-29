@@ -117,10 +117,7 @@ func executeThenHandleRootError(t *testing.T, stdout, stderr *bytes.Buffer, args
 	root := newRootCmd()
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	root.SetArgs(args)
-	err := root.Execute()
-	format, _ := root.PersistentFlags().GetString("format")
-	return handleRootError(stdout, stderr, format, false, err)
+	return executeRoot(root, args, stdout, stderr)
 }
 
 func assertSingleJSONObject(t *testing.T, stdout string) map[string]any {
@@ -348,4 +345,88 @@ func TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 	_, hasDryError := dryPayload["error"]
 	assert.False(t, hasDryError, "a nonzero gc dry-run report must not be presented as a Command Failure")
 	assert.Contains(t, dryPayload["ambiguous"], issueID)
+}
+
+// TestHookFlagParseErrorStaysOnGitProtocol_REQ_LNGHZN_S6_T1 verifies that a
+// malformed `arm hook` invocation keeps the git-hook protocol. Cobra fails
+// during flag parsing, before either PersistentPreRunE or the Args wrapper can
+// classify the error, so the classification has to happen at the Execute seam.
+func TestHookFlagParseErrorStaysOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr, "hook", "run", "pre-commit", "--repo", repo, "--format", "json", "--bad-flag")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, stdout.String(), "a flag error under `arm hook` must not put a Command Failure on git's stdout")
+	assert.Contains(t, stderr.String(), "bad-flag", "the git protocol is a non-zero exit plus a stderr reason")
+}
+
+// TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1 verifies
+// that a harness-hook failure raised before RunE can return an adapterExitError
+// leaves stdout alone. stdout is reserved for the harness's platform-native
+// decision (ADR 0020 §6), so an unexpected Command Failure object there can be
+// rejected or misread by the invoking harness.
+func TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	flagOut := new(bytes.Buffer)
+	flagErr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, flagOut, flagErr, "harness-hook", "--repo", repo, "--format", "json", "--bad-flag")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, flagOut.String(), "a flag error under harness-hook must not write to the platform's stdout")
+	assert.Contains(t, flagErr.String(), "bad-flag")
+
+	// A context-resolution failure in PersistentPreRunE is the same class.
+	notRepo := t.TempDir()
+	ctxOut := new(bytes.Buffer)
+	ctxErr := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, ctxOut, ctxErr, "harness-hook", "--repo", notRepo, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, ctxOut.String(), "a context-resolution failure under harness-hook must not write to the platform's stdout")
+	assert.NotEmpty(t, ctxErr.String(), "the reason belongs on stderr")
+}
+
+// TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1 verifies that a
+// non-TTY invocation with no explicit --format still renders its Command
+// Failure as the promised JSON object. Cobra returns before PersistentPreRunE
+// runs autoDetectTTYPolicy, so the implicit-format decision must be applied at
+// the Execute seam too, or agent consumers parsing stdout get a human line.
+func TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "show", "--bad-flag", "--repo", repo)
+	assert.Equal(t, 1, code)
+	payload := assertSingleJSONObject(t, stdout.String())
+	assert.Contains(t, payload, "error", "a parse failure must render the JSON failure object under the implicit agent format")
+	assert.NotContains(t, stdout.String(), "Error [GENERAL-1]")
+}
+
+// TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1 verifies the
+// platform protocol still holds when the offending flag precedes the subtree
+// token. Cobra's Find strips flags before matching a subcommand and skips the
+// token after one that takes a value (or that it does not recognize), so
+// `arm --bad-flag hook run pre-commit` never enters the hook subtree and
+// ExecuteC hands back the root command — the parent-chain walk alone would
+// classify it as an ordinary Command Failure and put a JSON object on the
+// stdout git owns.
+func TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"unknown flag before the git hook subtree", []string{"--bad-flag", "hook", "run", "pre-commit"}},
+		{"unknown flag before harness-hook", []string{"--bad-flag", "harness-hook"}},
+		{"value-taking flag swallows the subtree token", []string{"--repo", "hook", "run", "pre-commit"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout := new(bytes.Buffer)
+			stderr := new(bytes.Buffer)
+			code := executeThenHandleRootError(t, stdout, stderr, tc.args...)
+			assert.Equal(t, 1, code)
+			assert.Empty(t, stdout.String(), "the platform owns this stdout; a Command Failure must not land on it")
+			assert.NotEmpty(t, stderr.String(), "the platform protocol is a non-zero exit plus a stderr reason")
+		})
+	}
 }

@@ -28,20 +28,64 @@ func newHookCmd() *cobra.Command {
 	return cmd
 }
 
-func isGitHookCommand(cmd *cobra.Command) bool {
+// platformProtocolRoots names the command subtrees whose stdout belongs to an
+// external platform rather than to the agent error contract: git drives
+// `arm hook`, and the harness drives `arm harness-hook`. ADR 0020 §6 keeps both
+// on the platform/git protocol on the wire — non-zero exit plus a stderr
+// reason — even though they are Command Failures conceptually.
+var platformProtocolRoots = map[string]bool{
+	"hook":         true,
+	"harness-hook": true,
+}
+
+// staysOnPlatformProtocol reports whether cmd, or any ancestor of it, is one of
+// those subtrees. It walks the parent chain so a failure raised on a subcommand
+// (`arm hook run pre-commit`) is classified the same as one on its parent.
+func staysOnPlatformProtocol(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
-		if c.Name() == "hook" {
+		if platformProtocolRoots[c.Name()] {
 			return true
 		}
 	}
 	return false
 }
 
-func gitHookProtocol(cmd *cobra.Command, err error) error {
+// argvNamesPlatformProtocol reports whether argv mentions one of those subtrees
+// before a `--` terminator.
+//
+// It exists because the parent-chain walk cannot be trusted when cobra failed to
+// resolve a subcommand at all. Find strips flags before matching, skipping the
+// token after any flag it does not recognize or that takes a value, so both
+// `arm --bad-flag hook run pre-commit` (version skew between a hook script and
+// the binary) and `arm --repo hook run pre-commit` (an unquoted empty $REPO in a
+// wrapper) leave the hook subtree unentered and hand ExecuteC the root command.
+//
+// The rule is deliberately blunt — any bare `hook`/`harness-hook` token counts —
+// because the two outcomes are not symmetric. A false positive only moves the
+// reason for an already-unresolvable invocation from stdout to stderr; a false
+// negative writes a Command Failure object onto a stdout that git or the harness
+// owns, which is the violation this whole classification exists to prevent.
+func argvNamesPlatformProtocol(argv []string) bool {
+	for _, arg := range argv {
+		if arg == "--" {
+			return false
+		}
+		if platformProtocolRoots[arg] {
+			return true
+		}
+	}
+	return false
+}
+
+// platformProtocolError keeps err off the Command Failure wire when cmd is one
+// of those subtrees. Callers use it wherever an error can reach the root
+// handler without RunE having classified it: PersistentPreRunE, and the Execute
+// seam for the cobra parse and Args errors that precede PersistentPreRunE.
+func platformProtocolError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil
 	}
-	if isGitHookCommand(cmd) {
+	if staysOnPlatformProtocol(cmd) {
 		return skipCommandFailure(err)
 	}
 	return err

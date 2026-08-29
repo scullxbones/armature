@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/scullxbones/armature/internal/config"
@@ -58,14 +59,14 @@ func newRootCmd() *cobra.Command {
 			}
 			ctx, err := config.ResolveContext(repoPath)
 			if err != nil {
-				return gitHookProtocol(cmd, err)
+				return platformProtocolError(cmd, err)
 			}
 
 			// Detect old unmigrated dual-branch layout (.arm/.armature/) and refuse
 			// with clear guidance to run bootstrap. This check applies to all non-bootstrap
 			// commands; bootstrap has its own PersistentPreRunE override that bypasses this.
 			if config.DetectUnmigratedLayout(ctx.WorktreePath, ctx.IssuesDir) {
-				return gitHookProtocol(cmd, fmt.Errorf(
+				return platformProtocolError(cmd, fmt.Errorf(
 					"repo uses the pre-collapse .arm/.armature/ worktree layout; run `arm bootstrap` to migrate to the current layout",
 				))
 			}
@@ -274,12 +275,42 @@ func newRootCmd() *cobra.Command {
 	return root
 }
 
-func main() {
-	root := newRootCmd()
-	if err := root.Execute(); err != nil {
-		format, _ := root.PersistentFlags().GetString("format")
-		debug, _ := root.PersistentFlags().GetBool("debug")
-		os.Exit(handleRootError(os.Stdout, os.Stderr, format, debug, err))
+// executeRoot runs root and returns the process exit code. It is the single
+// Execute seam shared by main and the CLI tests.
+//
+// Cobra reports flag-parsing and Args errors from ExecuteC *before* the root
+// PersistentPreRunE runs, so at that point nothing has classified the error and
+// no implicit --format has been resolved. Both decisions are therefore repeated
+// here against the command cobra actually resolved:
+//
+//   - a `hook` or `harness-hook` failure stays on its platform protocol rather
+//     than putting a Command Failure object on a stdout the platform owns;
+//   - the implicit agent format is applied so a non-TTY parse failure renders
+//     the promised JSON object instead of a human error line.
+//
+// Both are idempotent on the path where PersistentPreRunE already ran.
+func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) int {
+	root.SetArgs(argv)
+	executed, err := root.ExecuteC()
+	if err == nil {
+		return exitcodes.ExitSuccess.Int()
 	}
-	os.Exit(exitcodes.ExitSuccess.Int())
+	target := executed
+	if target == nil {
+		target = root
+	}
+	err = platformProtocolError(target, err)
+	// When cobra could not resolve a subcommand it hands back the root command,
+	// so the parent-chain walk above sees nothing to classify. Fall back to argv
+	// in exactly that case; see argvNamesPlatformProtocol for why it is blunt.
+	if target == root && argvNamesPlatformProtocol(argv) {
+		err = skipCommandFailure(err)
+	}
+	format, _ := autoDetectTTYPolicy(root)
+	debug, _ := root.PersistentFlags().GetBool("debug")
+	return handleRootError(stdout, stderr, format, debug, err)
+}
+
+func main() {
+	os.Exit(executeRoot(newRootCmd(), os.Args[1:], os.Stdout, os.Stderr))
 }
