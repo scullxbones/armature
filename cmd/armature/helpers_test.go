@@ -479,3 +479,28 @@ func TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1(t *testin
 		})
 	}
 }
+
+// TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1 pins the gate
+// wire protocol: runGateProfile streams the child's output and its
+// `gate <profile> exit=<n>` status line to stdout before it returns. Appending
+// a Command Failure object to that same stream would leave an agent consumer
+// with arbitrary text followed by JSON instead of one parseable value, so the
+// nonzero return must be classified as a protocol exit (ADR 0020 §7).
+func TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	writeGatesConfig(t, repo, map[string][]string{"full": {"false"}})
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr, "gate", "run", "full", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.Contains(t, stdout.String(), "gate full exit=", "stdout must remain the gate status line")
+	assert.NotContains(t, stdout.String(), `"error"`, "a failing gate must not append a Command Failure to the streamed output")
+	assert.Contains(t, stderr.String(), "gate full exited", "the reason belongs on stderr")
+
+	agentOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, agentOut, new(bytes.Buffer), "gate", "run", "full", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	assert.NotContains(t, agentOut.String(), `"error"`)
+	assert.NotContains(t, agentOut.String(), "Error [")
+}

@@ -201,7 +201,12 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning: dirty tree — gate evidence recorded as uncommitted (not citable)")
 	}
 	if runErr != nil {
-		return fmt.Errorf("gate %s exited %d: %w", profile, exit, runErr)
+		// The child's output and the status line above are already on stdout:
+		// this is the gate's wire protocol, not a value handleRootError may
+		// append to. Classify the nonzero return as a protocol exit so no
+		// Command Failure object is concatenated after the streamed text
+		// (ADR 0020 §7); the reason still reaches stderr.
+		return skipCommandFailure(fmt.Errorf("gate %s exited %d: %w", profile, exit, runErr))
 	}
 	return nil
 }
