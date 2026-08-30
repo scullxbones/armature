@@ -504,3 +504,61 @@ func TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1(t *testing.
 	assert.NotContains(t, agentOut.String(), `"error"`)
 	assert.NotContains(t, agentOut.String(), "Error [")
 }
+
+// TestPreRenderedReportsAreNotConcatenatedCommandFailures_REQ_LNGHZN_S6_T1 pins
+// the remaining report-then-fail paths. `arm sources verify` prints a line per
+// source before returning an error for any non-OK entry, and a blocked
+// `arm confirm` / `arm dag transition` renders validation findings before
+// refusing the release. Both already completed their wire protocol, so
+// handleRootError must not append a Command Failure object to that stream
+// (ADR 0020 §7) — an agent would otherwise read report text followed by JSON.
+func TestPreRenderedReportsAreNotConcatenatedCommandFailures_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Run("sources verify", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		missing := filepath.Join(t.TempDir(), "gone.txt")
+		require.NoError(t, os.WriteFile(missing, []byte("content"), 0600))
+		_, err := runTrls(t, repo, "sources", "add", "--url", missing, "--type", "filesystem")
+		require.NoError(t, err)
+
+		for _, format := range []string{"json", "agent"} {
+			stdout := new(bytes.Buffer)
+			stderr := new(bytes.Buffer)
+			code := executeThenHandleRootError(t, stdout, stderr,
+				"sources", "verify", "--repo", repo, "--format", format)
+			assert.Equal(t, 1, code)
+			assert.Contains(t, stdout.String(), "MISSING", "stdout must remain the verify report")
+			assert.NotContains(t, stdout.String(), `"error"`,
+				"a failing verify must not append a Command Failure to the report")
+			assert.NotContains(t, stdout.String(), "Error [")
+			assert.NotEmpty(t, stderr.String(), "the reason belongs on stderr")
+		}
+	})
+
+	t.Run("blocked dag transition", func(t *testing.T) {
+		repo := initTempRepo(t)
+		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+		_, err := runTrls(t, repo, "bootstrap")
+		require.NoError(t, err)
+		_, err = runTrls(t, repo, "worker-init")
+		require.NoError(t, err)
+		_, err = runTrls(t, repo, "create",
+			"--type", "task",
+			"--title", "Draft overlap A",
+			"--id", "draft-a",
+			"--scope", "internal/ops/*.go",
+			"--dod", "Implement first overlapping draft",
+			"--acceptance", testAcceptance,
+		)
+		require.NoError(t, err)
+		createOverlappingTask(t, repo, "open-b", "Implement second overlapping task")
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, stderr,
+			"dag", "transition", "--issue", "draft-a", "--to", "verified", "--repo", repo, "--format", "json")
+		assert.Equal(t, 1, code)
+		assert.NotContains(t, stdout.String(), `"error"`,
+			"the validation findings are the report; a Command Failure must not follow them")
+		assert.Contains(t, stderr.String(), "cannot promote to verified", "the reason belongs on stderr")
+	})
+}

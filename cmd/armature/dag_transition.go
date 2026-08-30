@@ -87,7 +87,11 @@ func refusePlanRelease(cmd *cobra.Command) error {
 	if renderErr := output.RenderValidation(cmd.OutOrStdout(), result, false); renderErr != nil {
 		return fmt.Errorf("render validation: %w", renderErr)
 	}
-	return fmt.Errorf("cannot promote to verified: validation failed with %d error(s) and %d warning(s); "+
-		"withdraw the draft (arm dag revert / arm transition --to cancelled)",
-		len(result.Errors), len(result.Warnings))
+	// The findings were just rendered to stdout, so the refusal has already
+	// completed its wire protocol; appending a Command Failure would leave a
+	// structured consumer with report text followed by JSON (ADR 0020 §7).
+	return skipCommandFailure(fmt.Errorf(
+		"cannot promote to verified: validation failed with %d error(s) and %d warning(s); "+
+			"withdraw the draft (arm dag revert / arm transition --to cancelled)",
+		len(result.Errors), len(result.Warnings)))
 }
