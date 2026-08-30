@@ -81,6 +81,9 @@ func TestFailureCodePrefixMatchesModuleOrUse_REQ_LNGHZN_S6_T3(t *testing.T) {
 	for _, code := range registeredFailureCodes(t) {
 		assert.Truef(t, validFailureCodeShape(code),
 			"registered code %q must be PREFIX or PREFIX-N with no zero-padded suffix", code)
+		if _, reserved := reservedFailureCodes[code]; reserved {
+			continue
+		}
 		prefix := failureCodePrefix(code)
 		assert.Containsf(t, allowed, prefix,
 			"non-reserved prefix %q (from %q) must be ToUpper(designated deep module) or ToUpper(top-level Use)", prefix, code)
@@ -88,9 +91,14 @@ func TestFailureCodePrefixMatchesModuleOrUse_REQ_LNGHZN_S6_T3(t *testing.T) {
 	for _, row := range parseErrorContractLedger(t) {
 		assert.Truef(t, validFailureCodeShape(row.Code),
 			"ledger code %q must be PREFIX or PREFIX-N with no zero-padded suffix", row.Code)
+		if _, reserved := reservedFailureCodes[row.Code]; reserved {
+			continue
+		}
 		prefix := failureCodePrefix(row.Code)
-		assert.Containsf(t, allowed, prefix,
-			"ledger code %q prefix %q is not a reserved prefix, designated deep module, or top-level Use", row.Code, prefix)
+		if ledgerRowNeedsCurrentPrefixCheck(row) {
+			assert.Containsf(t, allowed, prefix,
+				"ledger code %q prefix %q is not a reserved prefix, designated deep module, or top-level Use", row.Code, prefix)
+		}
 		if _, reserved := reservedFailureCodePrefixes[prefix]; reserved {
 			continue
 		}
@@ -120,7 +128,26 @@ func TestAllowedPrefixesExcludeUndesignatedInternalPackages_REQ_LNGHZN_S6_T3(t *
 	assert.Contains(t, allowed, "READY", "ready is a top-level Use")
 	assert.Contains(t, allowed, "USAGE")
 	assert.Contains(t, allowed, "IO")
-	assert.Contains(t, allowed, "GENERAL")
+	assert.NotContains(t, allowed, "GENERAL",
+		"GENERAL is not a blanket-allowed prefix; only the exact code GENERAL-1 is reserved")
+}
+
+func TestGeneralExemptionLimitedToGeneral1_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	_, exempt := reservedFailureCodes["GENERAL-1"]
+	assert.True(t, exempt, "GENERAL-1 is the specific temporary expand-step wrapper and must be exempt")
+	_, exemptGeneral2 := reservedFailureCodes["GENERAL-2"]
+	assert.False(t, exemptGeneral2, "GENERAL-2 must not ride along on the GENERAL-1 exemption")
+	_, exemptGeneral := reservedFailureCodePrefixes["GENERAL"]
+	assert.False(t, exemptGeneral, "GENERAL must not be reserved as a whole prefix family")
+}
+
+func TestRetiredLedgerRowsSkipCurrentPrefixCheck_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	assert.False(t, ledgerRowNeedsCurrentPrefixCheck(ledgerRow{Code: "CLOCK-1", ModuleOrUse: "clock", Retired: true}),
+		"a retired code whose module was later removed must not fail the current-prefix gate")
+	assert.True(t, ledgerRowNeedsCurrentPrefixCheck(ledgerRow{Code: "CLAIM-1", ModuleOrUse: "claim", Retired: false}),
+		"live rows still validate against the current allowed-prefix set")
 }
 
 func TestLedgerRowPrefixMustMatchDeclaredModule_REQ_LNGHZN_S6_T3(t *testing.T) {
@@ -407,9 +434,25 @@ func resolveStringArg(expr ast.Expr, consts map[string]string) (string, bool) {
 }
 
 var reservedFailureCodePrefixes = map[string]struct{}{
-	"USAGE":   {},
-	"IO":      {},
-	"GENERAL": {},
+	"USAGE": {},
+	"IO":    {},
+}
+
+// reservedFailureCodes exempts exact codes from the allowed-prefix set,
+// rather than reserving their whole prefix family. GENERAL-1 is the
+// expand-step wrap for unmapped port errors (ADR 0020); a future
+// GENERAL-2 or bare GENERAL must not ride along on the same exemption.
+var reservedFailureCodes = map[string]struct{}{
+	"GENERAL-1": {},
+}
+
+// ledgerRowNeedsCurrentPrefixCheck reports whether a ledger row's prefix
+// must be present in the *current* allowed-prefix set. Retired rows are
+// exempt: a top-level command or deep module can be removed or renamed
+// after its code is retired, and the no-reuse rule requires keeping the
+// historical row regardless of whether its module still exists today.
+func ledgerRowNeedsCurrentPrefixCheck(row ledgerRow) bool {
+	return !row.Retired
 }
 
 // ADR 0004 designated deep modules. Not every internal/ directory.
