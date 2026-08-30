@@ -721,6 +721,33 @@ arm review record --issue TASK-001 --assessment assessment.json
 
 ---
 
+### review validate
+
+Validate a conformance assessment against a review bundle without recording it. Runs the same schema, criterion-ID, fingerprint, coverage, and citation line-bounds checks as `review record`, and prints an auto-fix suggestion for every failure. No ops are appended; `review record` remains the enforcement gate.
+
+**Synopsis:**
+`arm review validate [flags]`
+
+**Flags:**
+- `--assessment string`: Assessment file path or `-` for stdin (required).
+- `--bundle string`: Review bundle file path (required).
+
+**Output:**
+- Human: `Assessment is valid`, or `Assessment is invalid:` plus each failure and its suggestion.
+- JSON / agent: `{"valid":true}` or `{"valid":false,"failures":[{"message":"...","suggestion":"..."}]}`.
+
+**Exit codes:**
+- `0` — assessment is valid.
+- `1` — assessment is invalid (advisory; not a Command Failure).
+
+**Example:**
+```bash
+arm review validate --assessment assessment.json --bundle bundle.json
+arm review validate --assessment assessment.json --bundle bundle.json --format json
+```
+
+---
+
 ## scope-delete
 
 Remove an exact file path from all issue scopes.

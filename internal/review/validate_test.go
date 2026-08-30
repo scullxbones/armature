@@ -1496,3 +1496,23 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 		assert.Contains(t, err.Error(), "digest mismatch")
 	})
 }
+
+func TestSuggestValidateFix_BundleIntegrityBeforeBundleIDMismatch_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	integrity := "bundle integrity check failed: recomputed bundle_id sha256:aaa " +
+		"does not match bundle's recorded bundle_id sha256:bbb " +
+		"(bundle contents may have been altered since `arm review prepare` ran)"
+	got := review.SuggestValidateFix(integrity)
+	assert.Contains(t, got, "arm review prepare")
+	assert.NotContains(t, strings.ToLower(got), "set bundle_id")
+
+	mismatch := "assessment bundle_id sha256:aaa does not match bundle bundle_id sha256:bbb"
+	got = review.SuggestValidateFix(mismatch)
+	assert.Contains(t, got, "set bundle_id")
+	assert.NotContains(t, got, "arm review prepare")
+
+	column := "parse assessment JSON: decode conformance assessment: citation: column must be >= 1, got 0"
+	got = review.SuggestValidateFix(column)
+	assert.Contains(t, got, "1-based")
+}

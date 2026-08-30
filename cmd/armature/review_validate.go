@@ -81,6 +81,9 @@ func runReviewValidate(cmd *cobra.Command, assessmentFile, bundleFile string) er
 	if err != nil {
 		return emitReviewValidateResult(cmd, review.AnnotateValidateError(fmt.Errorf("parse bundle JSON: %w", err)))
 	}
+	if err := bundle.Valid(); err != nil {
+		return emitReviewValidateResult(cmd, review.AnnotateValidateError(err))
+	}
 
 	issueID := bundle.Issue.ID
 	if issueID == "" {
