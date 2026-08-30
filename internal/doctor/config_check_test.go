@@ -42,6 +42,22 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 		assert.Contains(t, joined, "low_stakes_push_threshold")
 	})
 
+	t.Run("retired_mode_is_ok", func(t *testing.T) {
+		t.Parallel()
+		path := writeConfig(t, `{
+			"mode": "dual-branch",
+			"project_type": "go",
+			"default_ttl": 60,
+			"token_budget": 1600,
+			"low_stakes_push_threshold": 5,
+			"hooks": []
+		}`)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
+		assert.Equal(t, doctor.SeverityOK, f.Severity)
+		assert.Empty(t, f.Items)
+	})
+
 	t.Run("valid_config_is_ok", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{

@@ -20,10 +20,15 @@ var validProjectTypes = map[string]struct{}{
 	"unknown": {},
 }
 
+// retiredConfigKeys were removed from Config (ADR 0006 deleted mode) but still
+// appear in pre-SB-ELIM config.json files. Strip them before DisallowUnknownFields
+// so LoadConfig preserves custom TTL/budget/hooks instead of rejecting the file.
+var retiredConfigKeys = []string{"mode"}
+
 // StrictDecode decodes exactly one JSON object, rejecting unknown fields,
 // a non-object document (including JSON null), and any trailing JSON value.
 // The returned error names the offending key when the unknown field is in
-// the object itself.
+// the object itself. Retired keys (see retiredConfigKeys) are ignored.
 func StrictDecode(data []byte) (Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 
@@ -45,13 +50,40 @@ func StrictDecode(data []byte) (Config, error) {
 		return Config{}, fmt.Errorf("strict config decode: unexpected trailing JSON data: %w", err)
 	}
 
+	stripped, err := stripRetiredConfigKeys(raw)
+	if err != nil {
+		return Config{}, fmt.Errorf("strict config decode: %w", err)
+	}
+
 	var cfg Config
-	strict := json.NewDecoder(bytes.NewReader(raw))
+	strict := json.NewDecoder(bytes.NewReader(stripped))
 	strict.DisallowUnknownFields()
 	if err := strict.Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("strict config decode: %w", err)
 	}
 	return cfg, nil
+}
+
+func stripRetiredConfigKeys(raw json.RawMessage) (json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	changed := false
+	for _, key := range retiredConfigKeys {
+		if _, ok := obj[key]; ok {
+			delete(obj, key)
+			changed = true
+		}
+	}
+	if !changed {
+		return raw, nil
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func isJSONObject(raw json.RawMessage) bool {

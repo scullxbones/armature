@@ -18,6 +18,34 @@ func TestStrictDecodeRejectsUnknownField_REQ_LNGHZN_S7_T2(t *testing.T) {
 	assert.Contains(t, err.Error(), "mystery_knob")
 }
 
+func TestStrictDecodeAcceptsRetiredModeField(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := StrictDecode([]byte(`{
+		"mode": "dual-branch",
+		"project_type": "go",
+		"default_ttl": 120,
+		"token_budget": 3200,
+		"low_stakes_push_threshold": 10,
+		"hooks": []
+	}`))
+	require.NoError(t, err)
+	assert.Equal(t, "go", cfg.ProjectType)
+	assert.Equal(t, 120, cfg.DefaultTTL)
+	assert.Equal(t, 3200, cfg.TokenBudget)
+	assert.Equal(t, 10, cfg.LowStakesPushThreshold)
+	assert.Empty(t, cfg.Hooks)
+}
+
+func TestStrictDecodeStillRejectsUnknownAlongsideRetiredMode(t *testing.T) {
+	t.Parallel()
+
+	_, err := StrictDecode([]byte(`{"mode":"dual-branch","mystery_knob":1}`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mystery_knob")
+	assert.NotContains(t, err.Error(), `"mode"`)
+}
+
 func TestStrictDecodeAcceptsKnownFields(t *testing.T) {
 	t.Parallel()
 
@@ -80,4 +108,11 @@ func TestValidatePresentFieldsRejectsOverflowTTL(t *testing.T) {
 	problems := ValidatePresentFields([]byte(`{"default_ttl":` + strconv.FormatInt(math.MaxInt64, 10) + `}`))
 	require.NotEmpty(t, problems)
 	assert.Contains(t, strings.Join(problems, "\n"), "default_ttl")
+}
+
+func TestValidatePresentFieldsIgnoresRetiredMode(t *testing.T) {
+	t.Parallel()
+
+	problems := ValidatePresentFields([]byte(`{"mode":"dual-branch","project_type":"go"}`))
+	assert.Empty(t, problems)
 }

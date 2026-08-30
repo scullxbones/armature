@@ -40,6 +40,28 @@ func TestLoadConfigRejectsUnknownField(t *testing.T) {
 	assert.Contains(t, err.Error(), "token_budegt")
 }
 
+func TestLoadConfigAcceptsRetiredModeField(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	// Live _armature config.json still carries pre-SB-ELIM "mode".
+	require.NoError(t, os.WriteFile(configPath, []byte(`{
+		"mode": "dual-branch",
+		"project_type": "go",
+		"default_ttl": 60,
+		"token_budget": 1600,
+		"low_stakes_push_threshold": 5,
+		"hooks": []
+	}`), 0o600))
+
+	loaded, err := LoadConfig(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "go", loaded.ProjectType)
+	assert.Equal(t, 60, loaded.DefaultTTL)
+	assert.Equal(t, 1600, loaded.TokenBudget)
+	assert.Equal(t, 5, loaded.LowStakesPushThreshold)
+}
+
 func TestDetectProjectType(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
