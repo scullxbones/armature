@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -548,20 +549,144 @@ func assertAgentFailureEnvelope(t *testing.T, stdout string) *armerrors.CommandF
 
 // assertNextActionsPolicy enforces the docs/error-contract.md Next Actions
 // rule: empty next_actions is allowed only on IO and GENERAL-1, and
-// "--help" is an allowed next action only on USAGE.
+// "--help" is an allowed next action only on USAGE and on GENERAL-1 (ADR
+// 0020: "--help is for USAGE / GENERAL" — GENERAL-1 is the sole reserved
+// GENERAL code; a future GENERAL-2 gets no exemption).
 func assertNextActionsPolicy(t *testing.T, cf *armerrors.CommandFailure) {
 	t.Helper()
-	prefix := failureCodePrefix(cf.Code)
-	if len(cf.NextActions) == 0 {
-		_, exempt := reservedFailureCodes[cf.Code]
-		assert.True(t, prefix == "IO" || exempt,
-			"empty next_actions is only allowed on IO or GENERAL-1, got code %q", cf.Code)
+	for _, issue := range nextActionsPolicyViolations(cf.Code, cf.NextActions) {
+		assert.Fail(t, issue)
 	}
-	for _, action := range cf.NextActions {
-		if strings.Contains(action, "--help") {
-			assert.Equal(t, "USAGE", prefix,
-				"--help next action is only allowed on USAGE, got code %q", cf.Code)
+}
+
+// nextActionsPolicyViolations is the pure policy check behind
+// assertNextActionsPolicy, reused by
+// TestNextActionsPolicyAppliesToEveryMapperCallSite_REQ_LNGHZN_S6_T3 so the
+// policy is checked at every armerrors.New/Wrap call site in cmd/, not only
+// the handful reached by the runtime "emit an agent envelope" tests.
+func nextActionsPolicyViolations(code string, nextActions []string) []string {
+	var issues []string
+	prefix := failureCodePrefix(code)
+	if len(nextActions) == 0 {
+		_, exempt := reservedFailureCodes[code]
+		if prefix != "IO" && !exempt {
+			issues = append(issues, fmt.Sprintf(
+				"empty next_actions is only allowed on IO or GENERAL-1, got code %q", code))
 		}
+	}
+	for _, action := range nextActions {
+		if strings.Contains(action, "--help") && prefix != "USAGE" && code != "GENERAL-1" {
+			issues = append(issues, fmt.Sprintf(
+				"--help next action is only allowed on USAGE or GENERAL-1, got code %q", code))
+		}
+	}
+	return issues
+}
+
+// TestNextActionsPolicyAppliesToEveryMapperCallSite_REQ_LNGHZN_S6_T3
+// statically scans every non-test cmd/armature/*.go file for
+// armerrors.New/armerrors.Wrap call sites and applies
+// nextActionsPolicyViolations to each one's (code, next_actions) pair. This
+// is the "systematic coverage" remedy: the runtime envelope tests above only
+// exercise five hand-picked commands, so a sixth mapper with a policy
+// violation would otherwise pass make check unnoticed.
+func TestNextActionsPolicyAppliesToEveryMapperCallSite_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	fset := token.NewFileSet()
+
+	consts := map[string]string{}
+	errorsPkgFile := filepath.Join(repoRoot(t), "internal", "errors", "errors.go")
+	ef, err := parser.ParseFile(fset, errorsPkgFile, nil, 0)
+	require.NoError(t, err, "parse %s", errorsPkgFile)
+	for k, v := range stringConsts(ef) {
+		consts[k] = v
+	}
+
+	dir := cmdDir(t)
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var files []*ast.File
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		require.NoError(t, err, "parse %s", path)
+		for k, v := range stringConsts(file) {
+			consts[k] = v
+		}
+		files = append(files, file)
+	}
+	require.NotEmpty(t, files, "expected cmd/armature source files")
+
+	checked := 0
+	for _, file := range files {
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			pkg, ok := sel.X.(*ast.Ident)
+			if !ok || pkg.Name != "armerrors" || (sel.Sel.Name != "New" && sel.Sel.Name != "Wrap") {
+				return true
+			}
+			if len(call.Args) < 3 {
+				return true
+			}
+			pos := fset.Position(call.Pos())
+			code, ok := resolveStringArg(call.Args[0], consts)
+			if !ok {
+				t.Errorf("%s: armerrors.%s() code argument is not a resolvable string constant", pos, sel.Sel.Name)
+				return true
+			}
+			actions, ok := resolveStringSliceArg(call.Args[2])
+			if !ok {
+				t.Errorf("%s: armerrors.%s() next_actions argument is not a resolvable string slice literal or nil", pos, sel.Sel.Name)
+				return true
+			}
+			checked++
+			for _, issue := range nextActionsPolicyViolations(code, actions) {
+				t.Errorf("%s: %s", pos, issue)
+			}
+			return true
+		})
+	}
+	require.Greater(t, checked, 0, "expected at least one armerrors.New/Wrap call site in cmd/armature")
+}
+
+// resolveStringSliceArg resolves a next_actions call argument that is
+// either the bare identifier "nil" or a []string{...} composite literal of
+// string literals. It returns false for anything else (a variable, a
+// function call, append(...), ...) so the caller can flag the call site as
+// unauditable rather than silently skip it.
+func resolveStringSliceArg(expr ast.Expr) ([]string, bool) {
+	switch v := expr.(type) {
+	case *ast.Ident:
+		if v.Name == "nil" {
+			return nil, true
+		}
+		return nil, false
+	case *ast.CompositeLit:
+		var out []string
+		for _, elt := range v.Elts {
+			lit, ok := elt.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return nil, false
+			}
+			s, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, true
+	default:
+		return nil, false
 	}
 }
 
