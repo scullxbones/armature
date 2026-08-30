@@ -191,9 +191,11 @@ func newSourcesVerifyCmd() *cobra.Command {
 				}
 			}
 
-			// Return error only when any source is not OK.
+			// The per-source lines above are the verify report and are already
+			// on stdout; a non-OK result is that report's payload, not a
+			// Command Failure (ADR 0020 §7). Exit non-zero on the protocol.
 			if err != nil {
-				return err
+				return skipCommandFailure(err)
 			}
 			return nil
 		},
