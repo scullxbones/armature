@@ -412,7 +412,11 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	return nil
 }
 
-const codeReview1 = "REVIEW-1"
+// codeReview1 uses the traceability deep module prefix (not "review"):
+// `arm review` is backed by the traceability deep module (see
+// docs/design/cli-command-audit.md), so under the error-contract prefix
+// rule it is not an orphan Use eligible for its own top-level prefix.
+const codeReview1 = "TRACEABILITY-1"
 
 func init() {
 	armerrors.Register(codeReview1)
