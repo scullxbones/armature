@@ -65,6 +65,32 @@ func TestResolveContext_UsesOpsWorktree(t *testing.T) {
 	assert.Equal(t, worktreePath, ctx.WorktreePath)
 }
 
+func TestResolveLayout_SurvivesUnreadableConfig(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+
+	worktreePath := filepath.Join(repo, ".armature")
+	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(worktreePath, "config.json"),
+		[]byte(`{"project_type":"go","mystery_knob":1}`),
+		0o600,
+	))
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "armature.ops-worktree-path", worktreePath)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git config: %s", out)
+
+	_, err = ResolveContext(repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mystery_knob")
+
+	layout, err := ResolveLayout(repo)
+	require.NoError(t, err)
+	assert.Equal(t, repo, layout.RepoPath)
+	assert.Equal(t, worktreePath, layout.WorktreePath)
+	assert.Equal(t, worktreePath, layout.IssuesDir)
+}
+
 // TestResolveContext_DualBranchWithStrayConfigJSONStillDetectedAsUnmigrated_REQ_LNGHZN_S1
 // guards against resolveIssuesDir's layout heuristic being fooled by a stray
 // config.json sitting at the .arm/ worktree root alongside the real nested

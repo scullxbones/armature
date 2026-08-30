@@ -110,6 +110,25 @@ func TestValidatePresentFieldsRejectsOverflowTTL(t *testing.T) {
 	assert.Contains(t, strings.Join(problems, "\n"), "default_ttl")
 }
 
+func TestValidatePresentFieldsRejectsOverflowTokenBudget(t *testing.T) {
+	t.Parallel()
+
+	problems := ValidatePresentFields([]byte(`{"token_budget":` + strconv.Itoa(math.MaxInt) + `}`))
+	require.NotEmpty(t, problems)
+	assert.Contains(t, strings.Join(problems, "\n"), "token_budget")
+}
+
+func TestValidatePresentFieldsRejectsRetiredGates(t *testing.T) {
+	t.Parallel()
+
+	problems := ValidatePresentFields([]byte(`{"gates":{"full":{"command":["make","check"]}}}`))
+	require.NotEmpty(t, problems)
+	joined := strings.Join(problems, "\n")
+	assert.Contains(t, joined, "gates")
+	assert.Contains(t, joined, GatesFileName)
+	assert.NotContains(t, joined, "command")
+}
+
 func TestValidatePresentFieldsIgnoresRetiredMode(t *testing.T) {
 	t.Parallel()
 

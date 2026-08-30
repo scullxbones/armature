@@ -74,3 +74,51 @@ func TestDoctorLegacyRepoEmitsDiagnostic(t *testing.T) {
 	assert.Contains(t, errOut, "legacy single-branch layout detected")
 	assert.Contains(t, errOut, "arm bootstrap")
 }
+
+// TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback verifies that a
+// modern ops worktree with a strict-decode failure is not mistaken for legacy
+// single-branch (empty WorktreePath). Live dual-branch repos have .armature/ops.
+func TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	bootstrapBuf := new(bytes.Buffer)
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetOut(bootstrapBuf)
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, bootstrapCmd.Execute())
+
+	configPath := filepath.Join(repo, ".armature", "config.json")
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"project_type":"go","mystery_knob":1}`), 0o600))
+
+	out, errOut, err := runTrlsWithStderr(t, repo, "doctor")
+	require.Error(t, err)
+	assert.NotContains(t, errOut, "legacy single-branch layout detected")
+	assert.Contains(t, out, "mystery_knob")
+}
+
+func TestDoctorFixReportsOutOfRangeConfig(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	bootstrapBuf := new(bytes.Buffer)
+	bootstrapCmd := newRootCmd()
+	bootstrapCmd.SetOut(bootstrapBuf)
+	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, bootstrapCmd.Execute())
+
+	configPath := filepath.Join(repo, ".armature", "config.json")
+	require.NoError(t, os.WriteFile(configPath, []byte(`{
+		"project_type": "go",
+		"default_ttl": 60,
+		"token_budget": -1,
+		"low_stakes_push_threshold": 5,
+		"hooks": []
+	}`), 0o600))
+
+	out, errOut, err := runTrlsWithStderr(t, repo, "doctor", "--fix", "--dry-run")
+	require.Error(t, err)
+	joined := out + errOut + err.Error()
+	assert.Contains(t, joined, "D10")
+	assert.Contains(t, joined, "token_budget")
+}

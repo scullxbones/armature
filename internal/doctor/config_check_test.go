@@ -1,8 +1,10 @@
 package doctor_test
 
 import (
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -105,7 +107,21 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 		f := doctor.CheckD10ConfigHealth(path)
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
-		assert.Contains(t, strings.Join(f.Items, "\n"), "gates[full].command")
+		joined := strings.Join(f.Items, "\n")
+		assert.Contains(t, joined, "gates")
+		assert.Contains(t, joined, "gates.json")
+	})
+
+	t.Run("present_gates_are_unsupported", func(t *testing.T) {
+		t.Parallel()
+		path := writeConfig(t, `{"gates":{"full":{"command":["make","check"]}}}`)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		require.NotEmpty(t, f.Items)
+		joined := strings.Join(f.Items, "\n")
+		assert.Contains(t, joined, "gates")
+		assert.Contains(t, joined, "gates.json")
 	})
 
 	t.Run("missing_file_fails_open", func(t *testing.T) {
@@ -160,6 +176,16 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 		assert.Equal(t, doctor.SeverityError, f.Severity)
 		require.NotEmpty(t, f.Items)
 		assert.Contains(t, strings.Join(f.Items, "\n"), "hooks[0].command[0]")
+	})
+
+	t.Run("overflow_token_budget_is_out_of_range", func(t *testing.T) {
+		t.Parallel()
+		path := writeConfig(t, `{"token_budget":`+strconv.Itoa(math.MaxInt)+`}`)
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		require.NotEmpty(t, f.Items)
+		assert.Contains(t, strings.Join(f.Items, "\n"), "token_budget")
 	})
 }
 
