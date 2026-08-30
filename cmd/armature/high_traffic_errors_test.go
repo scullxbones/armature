@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -113,6 +114,37 @@ func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Equal(t, armerrors.CodeUSAGE, invalidIssueIDCF.Code)
 	assert.Contains(t, invalidIssueIDCF.Cause, "path separators")
 	assert.Equal(t, 2, invalidIssueIDCF.ExitCode)
+
+	destination := filepath.Join(t.TempDir(), "new-wt")
+	unregisteredFrom := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, unregisteredFrom, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-01",
+		"--worktree", destination, "--from", filepath.Join(repo, "missing-wt"),
+		"--format", "agent")
+	assert.Equal(t, 1, code)
+	unregisteredFromCF := agentFailureFromStdout(t, unregisteredFrom.String())
+	assert.Equal(t, "CLAIM-1", unregisteredFromCF.Code)
+	assert.Contains(t, unregisteredFromCF.Cause, "not an existing worktree")
+	unregisteredFromActions := strings.Join(unregisteredFromCF.NextActions, "\n")
+	assert.Contains(t, unregisteredFromActions, "--from")
+	assert.NotContains(t, unregisteredFromActions, "arm doctor")
+	assert.NotContains(t, unregisteredFromActions, "arm show")
+
+	detachedParent := filepath.Join(repo, "detached-parent")
+	run(t, repo, "git", "worktree", "add", "--detach", detachedParent)
+	detachedFrom := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, detachedFrom, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-01",
+		"--worktree", filepath.Join(t.TempDir(), "detached-child"),
+		"--from", detachedParent, "--format", "agent")
+	assert.Equal(t, 1, code)
+	detachedFromCF := agentFailureFromStdout(t, detachedFrom.String())
+	assert.Equal(t, "CLAIM-1", detachedFromCF.Code)
+	assert.Contains(t, detachedFromCF.Cause, "must be on a branch")
+	detachedFromActions := strings.Join(detachedFromCF.NextActions, "\n")
+	assert.Contains(t, detachedFromActions, "--from")
+	assert.NotContains(t, detachedFromActions, "arm doctor")
+	assert.NotContains(t, detachedFromActions, "arm show")
 }
 
 func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -250,6 +282,59 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Contains(t, emptyResultsActions, "arm review record")
 	assert.NotContains(t, emptyResultsActions, "review prepare")
 	assert.NotContains(t, emptyResultsActions, "--output")
+
+	coverageMiss := filepath.Join(repo, "coverage-miss-assessment.json")
+	coverageFP := review.FingerprintContract(review.Contract{
+		DefinitionOfDone: "Task implementation is complete and verified",
+		Scope:            []string{"cmd/armature/task_01.go"},
+		Acceptance:       []string{},
+	})
+	require.NoError(t, os.WriteFile(coverageMiss, []byte(fmt.Sprintf(`{
+		"schema_version":1,
+		"bundle_id":"bundle",
+		"contract_fingerprint":%q,
+		"delivery_fingerprint":"delivery",
+		"results":[{"id":"acceptance[0]","status":"satisfied","rationale":"verified"}]
+	}`, coverageFP)), 0o600))
+	coverageOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, coverageOut, new(bytes.Buffer),
+		"review", "record", "--repo", repo, "--issue", "task-01",
+		"--assessment", coverageMiss, "--format", "agent")
+	assert.Equal(t, 1, code)
+	coverageCF := agentFailureFromStdout(t, coverageOut.String())
+	assert.Equal(t, "REVIEW-1", coverageCF.Code)
+	assert.Contains(t, coverageCF.Cause, "assessment coverage validation errors")
+	coverageActions := strings.Join(coverageCF.NextActions, "\n")
+	assert.Contains(t, coverageActions, "--assessment")
+	assert.Contains(t, coverageActions, "arm review record")
+	assert.NotContains(t, coverageActions, "review prepare")
+	assert.NotContains(t, coverageActions, "--output")
+
+	unknownBase := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, unknownBase, new(bytes.Buffer),
+		"review", "prepare", "--repo", repo, "--issue", "task-01",
+		"--base", "no-such-base", "--head", "HEAD", "--format", "agent")
+	assert.Equal(t, 1, code)
+	unknownBaseCF := agentFailureFromStdout(t, unknownBase.String())
+	assert.Equal(t, "REVIEW-1", unknownBaseCF.Code)
+	assert.Contains(t, unknownBaseCF.Cause, "failed to resolve base revision")
+	unknownBaseActions := strings.Join(unknownBaseCF.NextActions, "\n")
+	assert.Contains(t, unknownBaseActions, "--base <reachable-ref>")
+	assert.Contains(t, unknownBaseActions, "--head <reachable-ref>")
+	assert.NotContains(t, unknownBaseActions, "--output")
+
+	unknownHead := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, unknownHead, new(bytes.Buffer),
+		"review", "prepare", "--repo", repo, "--issue", "task-01",
+		"--base", "HEAD", "--head", "no-such-head", "--format", "agent")
+	assert.Equal(t, 1, code)
+	unknownHeadCF := agentFailureFromStdout(t, unknownHead.String())
+	assert.Equal(t, "REVIEW-1", unknownHeadCF.Code)
+	assert.Contains(t, unknownHeadCF.Cause, "failed to resolve head revision")
+	unknownHeadActions := strings.Join(unknownHeadCF.NextActions, "\n")
+	assert.Contains(t, unknownHeadActions, "--base <reachable-ref>")
+	assert.Contains(t, unknownHeadActions, "--head <reachable-ref>")
+	assert.NotContains(t, unknownHeadActions, "--output")
 }
 
 func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -371,4 +456,16 @@ func TestReadyAndRenderContextErrorsMapped_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.NotEqual(t, armerrors.CodeGeneral1, ready.Code)
 	require.NotEmpty(t, ready.NextActions)
 	assert.Contains(t, strings.Join(ready.NextActions, "\n"), "arm doctor")
+
+	snapshotOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, snapshotOut, new(bytes.Buffer),
+		"render-context", "--repo", repo, "--issue", "task-01", "--format", "agent")
+	assert.Equal(t, 1, code)
+	snapshotCF := agentFailureFromStdout(t, snapshotOut.String())
+	assert.Equal(t, "RENDER-CONTEXT-1", snapshotCF.Code)
+	assert.Contains(t, snapshotCF.Cause, "load snapshot")
+	snapshotActions := strings.Join(snapshotCF.NextActions, "\n")
+	assert.Contains(t, snapshotActions, "arm doctor")
+	assert.NotContains(t, snapshotActions, "arm list")
+	assert.NotContains(t, snapshotActions, "arm show")
 }

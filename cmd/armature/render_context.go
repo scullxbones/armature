@@ -141,5 +141,8 @@ func mapRenderContextError(err error) error {
 			"arm render-context --issue <issue-id>",
 		}, 1, err)
 	}
+	if strings.Contains(msg, "load snapshot") {
+		return armerrors.Wrap(codeRenderContext1, msg, []string{"arm doctor"}, 1, err)
+	}
 	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, 1, err)
 }

@@ -443,7 +443,8 @@ func mapReviewError(err error) error {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm review --help"}, 2, err)
 	case strings.Contains(msg, "read assessment file"),
 		strings.Contains(msg, "parse assessment JSON"),
-		strings.Contains(msg, "assessment validation failed"):
+		strings.Contains(msg, "assessment validation failed"),
+		strings.Contains(msg, "assessment coverage validation errors"):
 		return armerrors.Wrap(codeReview1, msg, []string{
 			"jq empty <assessment.json>",
 			"arm review record --assessment <assessment.json>",
@@ -451,6 +452,11 @@ func mapReviewError(err error) error {
 	case strings.Contains(msg, "failed to list commits"):
 		return armerrors.Wrap(codeReview1, msg, []string{
 			"arm review commits --issue <issue-id> --branch <reachable-branch>",
+		}, 1, err)
+	case strings.Contains(msg, "failed to resolve base revision"),
+		strings.Contains(msg, "failed to resolve head revision"):
+		return armerrors.Wrap(codeReview1, msg, []string{
+			"arm review prepare --issue <issue-id> --base <reachable-ref> --head <reachable-ref>",
 		}, 1, err)
 	case strings.Contains(msg, "not JSON content"),
 		strings.Contains(msg, "read bundle file"):
