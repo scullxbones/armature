@@ -7,10 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // seamHosts are the command files that previously mixed interactive TUI
@@ -103,19 +106,97 @@ func TestInteractiveTUIConstructionLivesInTuiFiles_REQ_LNGHZN_S6_T4(t *testing.T
 	}
 }
 
+// tuiSeamExcludePattern is the regexp Gremlins must compile from
+// .gremlins.yaml unleash.exclude-files to keep the TUI seam out of the
+// mutation gate. This is the decoded value, not the file's raw bytes: the
+// YAML scalar `"_tui\\.go$"` unmarshals to `_tui\.go$`.
+const tuiSeamExcludePattern = `_tui\.go$`
+
+// yamlQuoted renders a regexp as the double-quoted YAML scalar that encodes
+// it, e.g. `_tui\.go$` -> `"_tui\\.go$"`. Go and YAML agree on double-quoted
+// backslash escaping, so strconv.Quote is the right encoder.
+func yamlQuoted(pattern string) string {
+	return strconv.Quote(pattern)
+}
+
+// gremlinsConfig is the slice of .gremlins.yaml this guard reads: the
+// exclusion list Gremlins itself consults before mutating a file.
+type gremlinsConfig struct {
+	Unleash struct {
+		ExcludeFiles []string `yaml:"exclude-files"`
+	} `yaml:"unleash"`
+}
+
+// gremlinsExcludesPattern reports whether the Gremlins config at path excludes
+// pattern from mutation. It answers for the configuration Gremlins would act
+// on -- the parsed unleash.exclude-files list -- not for the file's raw text,
+// so a commented-out or misplaced entry reads as absent.
+func gremlinsExcludesPattern(t *testing.T, path, pattern string) bool {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var cfg gremlinsConfig
+	require.NoError(t, yaml.Unmarshal(raw, &cfg), "%s must be valid YAML", path)
+
+	return slices.Contains(cfg.Unleash.ExcludeFiles, pattern)
+}
+
 // TestGremlinsExcludesTUISeamFiles_REQ_LNGHZN_S6_T4 locks the mutation-gate
 // exclusion: .gremlins.yaml exclude-files must list the *_tui.go pattern,
 // same precedent as _windows.go.
 func TestGremlinsExcludesTUISeamFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join(repoRootFromCmd(t), ".gremlins.yaml"))
-	require.NoError(t, err)
-
-	// The YAML stores the regexp as a quoted string, matching the
-	// `_windows.go` precedent on the next line of exclude-files.
-	require.Contains(t, string(raw), `"_tui\\.go$"`,
+	path := filepath.Join(repoRootFromCmd(t), ".gremlins.yaml")
+	require.True(t, gremlinsExcludesPattern(t, path, tuiSeamExcludePattern),
 		".gremlins.yaml unleash.exclude-files must include the *_tui.go pattern")
+}
+
+// TestGremlinsExclusionCheckReadsActiveConfig_REQ_LNGHZN_S6_T4 guards the
+// guard: the exclusion check must go red when the pattern is present in the
+// file but inert -- commented out, or parked under a key Gremlins does not
+// read. A check that only greps raw text stays green in both cases while
+// Gremlins silently resumes mutating the seam files.
+func TestGremlinsExclusionCheckReadsActiveConfig_REQ_LNGHZN_S6_T4(t *testing.T) {
+	t.Parallel()
+
+	quoted := yamlQuoted(tuiSeamExcludePattern)
+	windows := yamlQuoted(`_windows\.go$`)
+
+	for _, tc := range []struct {
+		name string
+		yaml string
+		want bool
+	}{
+		{
+			name: "active entry",
+			yaml: "unleash:\n  exclude-files:\n    - " + windows + "\n    - " + quoted + "\n",
+			want: true,
+		},
+		{
+			name: "commented out",
+			yaml: "unleash:\n  exclude-files:\n    - " + windows + "\n    # - " + quoted + "\n",
+			want: false,
+		},
+		{
+			name: "parked under an unread key",
+			yaml: "unleash:\n  exclude-files:\n    - " + windows + "\nignored:\n  exclude-files:\n    - " + quoted + "\n",
+			want: false,
+		},
+		{
+			name: "exclude-files absent entirely",
+			yaml: "unleash:\n  workers: 4\n",
+			want: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), ".gremlins.yaml")
+			require.NoError(t, os.WriteFile(path, []byte(tc.yaml), 0o600))
+			require.Equal(t, tc.want, gremlinsExcludesPattern(t, path, tuiSeamExcludePattern))
+		})
+	}
 }
 
 func parseGoFile(t *testing.T, fset *token.FileSet, path string) *ast.File {
