@@ -18,14 +18,19 @@ in `{count, payload[], help[]}`. Human output is `Error [CODE]: cause` plus
   group per ADR 0011), as `ToUpper(module basename)`: `CLAIM-1`. Subcommands
   share the parent. Commands with no module use `ToUpper(top-level Use)` until
   a module exists (`RENDER-CONTEXT-1`). Reserved prefixes: `USAGE`, `IO`.
-  `GENERAL` is the expand-step wrap for unmapped port errors.
+  `GENERAL-1` is a specific reserved code — the temporary expand-step wrap
+  for unmapped port errors — not a `GENERAL` prefix family; a future
+  `GENERAL-2` must earn a real deep module or top-level Use like any other
+  code.
 - **No padding.** Codes are `PREFIX` or `PREFIX-N`, not `PREFIX-001`.
 - **No reuse.** Retired codes stay on this ledger and are never given a new
   meaning. Bidirectional registry↔ledger tests in `make check` enforce that
-  live registry codes match non-retired rows.
+  live registry codes match non-retired rows; retired rows are exempt from
+  the *current* allowed-prefix check (their module or Use may since have
+  been removed or renamed) but still hold their originally recorded shape.
 - **Next Actions** are recovery commands, not AOC `help[]`. Empty is allowed
-  on `IO` and on `GENERAL-1` while it lives. `--help` is for `USAGE` /
-  `GENERAL`, not a cop-out on a specific code.
+  on `IO` and on `GENERAL-1` while it lives. `--help` is for `USAGE`, not a
+  cop-out on a specific code.
 
 Graph Findings (`arm validate`) and doctor checks are not Command Failures;
 they remain the payload of a successful report. `harness-hook` / `arm hook`
