@@ -61,6 +61,8 @@ func mapClaimError(err error) error {
 		return armerrors.Wrap(codeClaim1, msg, []string{
 			"arm claim --worktree <new-path> --from <existing-branch-attached-worktree>",
 		}, 1, err)
+	case strings.Contains(msg, "confidence=inferred"):
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm confirm <node-id>"}, 1, err)
 	default:
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	}

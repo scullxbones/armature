@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,6 +146,34 @@ func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Contains(t, detachedFromActions, "--from")
 	assert.NotContains(t, detachedFromActions, "arm doctor")
 	assert.NotContains(t, detachedFromActions, "arm show")
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "task-inferred",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			Title:            "Inferred task",
+			NodeType:         "task",
+			Scope:            []string{"cmd/armature/task_inferred.go"},
+			DefinitionOfDone: "Task is confirmed",
+			Confidence:       "inferred",
+		},
+	}))
+	inferredOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, inferredOut, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-inferred", "--worktree", "--format", "agent")
+	assert.Equal(t, 1, code)
+	inferredCF := agentFailureFromStdout(t, inferredOut.String())
+	assert.Equal(t, "CLAIM-1", inferredCF.Code)
+	assert.Contains(t, inferredCF.Cause, "confidence=inferred")
+	inferredActions := strings.Join(inferredCF.NextActions, "\n")
+	assert.Contains(t, inferredActions, "arm confirm")
+	assert.NotContains(t, inferredActions, "arm doctor")
+	assert.NotContains(t, inferredActions, "arm show")
 }
 
 func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
