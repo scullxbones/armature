@@ -115,25 +115,37 @@ func resolveParentRepoFromWorktree(worktreePath string) (string, error) {
 	}
 }
 
-// ResolveContext resolves the issues directory path from the ops worktree.
-// It requires armature.ops-worktree-path to be set and returns a clear error if unset.
-func ResolveContext(repoPath string) (*Context, error) {
+// ResolveLayout locates the ops worktree and issues directory without loading
+// config.json. Use this when config decode failed but the modern worktree is
+// still the right place to diagnose or repair.
+func ResolveLayout(repoPath string) (*Context, error) {
 	probeResult, err := defaultRepoProbe{}.Probe(repoPath)
 	if err != nil {
 		return nil, err
 	}
-
-	issuesDir := resolveIssuesDir(probeResult.WorktreePath)
-	cfg, err := LoadConfig(filepath.Join(issuesDir, "config.json"))
-	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
+	if probeResult.WorktreePath == "" {
+		return nil, fmt.Errorf("armature.ops-worktree-path must be set")
 	}
+	return &Context{
+		RepoPath:     probeResult.RepoPath,
+		IssuesDir:    resolveIssuesDir(probeResult.WorktreePath),
+		WorktreePath: probeResult.WorktreePath,
+	}, nil
+}
 
-	ctx, err := ResolveContextWithProbe(repoPath, staticRepoProbe{result: probeResult}, cfg)
+// ResolveContext resolves the issues directory path from the ops worktree.
+// It requires armature.ops-worktree-path to be set and returns a clear error if unset.
+func ResolveContext(repoPath string) (*Context, error) {
+	ctx, err := ResolveLayout(repoPath)
 	if err != nil {
 		return nil, err
 	}
-	ctx.IssuesDir = issuesDir
+
+	cfg, err := LoadConfig(filepath.Join(ctx.IssuesDir, "config.json"))
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+	ctx.Config = cfg
 	return ctx, nil
 }
 

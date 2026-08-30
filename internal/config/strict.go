@@ -120,8 +120,11 @@ func ValidatePresentFields(data []byte) []string {
 		}
 	}
 	if _, ok := raw["token_budget"]; ok {
-		if cfg.TokenBudget <= 0 {
+		switch {
+		case cfg.TokenBudget <= 0:
 			problems = append(problems, fmt.Sprintf("token_budget %d is out of range (must be > 0)", cfg.TokenBudget))
+		case cfg.TokenBudget > math.MaxInt/4:
+			problems = append(problems, fmt.Sprintf("token_budget %d is out of range (must not overflow character budget)", cfg.TokenBudget))
 		}
 	}
 	if _, ok := raw["low_stakes_push_threshold"]; ok {
@@ -143,14 +146,7 @@ func ValidatePresentFields(data []byte) []string {
 		}
 	}
 	if _, ok := raw["gates"]; ok {
-		for name, gate := range cfg.Gates {
-			switch {
-			case len(gate.Command) == 0:
-				problems = append(problems, fmt.Sprintf("gates[%s].command is out of range (must be non-empty)", name))
-			case gate.Command[0] == "":
-				problems = append(problems, fmt.Sprintf("gates[%s].command[0] is out of range (must be non-empty)", name))
-			}
-		}
+		problems = append(problems, "gates is unsupported (arm gate run reads "+GatesFileName+" at HEAD)")
 	}
 	sort.Strings(problems)
 	return problems

@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +42,13 @@ func newDoctorCmd() *cobra.Command {
 			absRepoPath, pathErr := filepath.Abs(repoPath)
 			if pathErr != nil {
 				return pathErr
+			}
+
+			if layout, layoutErr := config.ResolveLayout(absRepoPath); layoutErr == nil &&
+				layout.WorktreePath != "" &&
+				!config.DetectUnmigratedLayout(layout.WorktreePath, layout.IssuesDir) {
+				attachDoctorExecutionState(cmd, layout)
+				return nil
 			}
 
 			legacyArmaturePath := filepath.Join(absRepoPath, ".armature")
@@ -130,6 +139,10 @@ func newDoctorCmd() *cobra.Command {
 // runDoctorFix plans and (unless dryRun) applies the deterministic claim-liveness
 // remediations described in docs/design/recovery-state-machine.md.
 func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error {
+	if err := doctorFixConfigHealth(appCtx); err != nil {
+		return err
+	}
+
 	_, allIssues, err := doctor.LoadState(appCtx.IssuesDir, appCtx.StateDir)
 	if err != nil {
 		return err
@@ -186,6 +199,37 @@ func renderDoctorFixPlan(cmd *cobra.Command, format string, actions []doctor.Fix
 	for _, a := range actions {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", a.IssueID, a.Reason)
 	}
+}
+
+func attachDoctorExecutionState(cmd *cobra.Command, ctx *config.Context) {
+	workerID, _ := worker.GetWorkerID(ctx.RepoPath) //nolint:errcheck // best-effort; missing worker ID falls back to empty
+	if workerID == "" {
+		workerID = "default"
+	}
+	workerID = workerIdentityWithSlot(workerID)
+	ctx.StateDir = stateDirFor(ctx, workerID)
+	state := &executionState{ctx: ctx}
+	state.pusher, state.tracker = initPushDeps(ctx)
+	baseCtx := cmd.Context()
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
+}
+
+func doctorFixConfigHealth(appCtx *config.Context) error {
+	if appCtx == nil {
+		return nil
+	}
+	health := doctor.CheckD10ConfigHealth(filepath.Join(appCtx.IssuesDir, "config.json"))
+	if health.Severity != doctor.SeverityError {
+		return nil
+	}
+	msg := health.Message
+	if len(health.Items) > 0 {
+		msg = msg + ": " + strings.Join(health.Items, "; ")
+	}
+	return skipCommandFailure(fmt.Errorf("doctor: %s: %s", health.Check, msg))
 }
 
 func countBySeverity(r doctor.Report, s doctor.Severity) int {
