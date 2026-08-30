@@ -56,6 +56,11 @@ func mapClaimError(err error) error {
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm ready", "arm list"}, 1, err)
 	case strings.Contains(msg, "use --force"):
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm claim --force --worktree"}, 1, err)
+	case strings.Contains(msg, "is not an existing worktree of this repository"),
+		strings.Contains(msg, "--from worktree") && strings.Contains(msg, "must be on a branch"):
+		return armerrors.Wrap(codeClaim1, msg, []string{
+			"arm claim --worktree <new-path> --from <existing-branch-attached-worktree>",
+		}, 1, err)
 	default:
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	}
