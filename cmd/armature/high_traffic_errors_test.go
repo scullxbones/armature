@@ -335,6 +335,36 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Contains(t, unknownHeadActions, "--base <reachable-ref>")
 	assert.Contains(t, unknownHeadActions, "--head <reachable-ref>")
 	assert.NotContains(t, unknownHeadActions, "--output")
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.RemoveAll(opsDir))
+	require.NoError(t, os.WriteFile(opsDir, []byte("not-a-directory"), 0o600))
+
+	prepareSnapshotOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, prepareSnapshotOut, new(bytes.Buffer),
+		"review", "prepare", "--repo", repo, "--issue", "task-01",
+		"--base", "HEAD", "--head", "HEAD", "--format", "agent")
+	assert.Equal(t, 1, code)
+	prepareSnapshotCF := agentFailureFromStdout(t, prepareSnapshotOut.String())
+	assert.Equal(t, "REVIEW-1", prepareSnapshotCF.Code)
+	assert.Contains(t, prepareSnapshotCF.Cause, "load snapshot")
+	prepareSnapshotActions := strings.Join(prepareSnapshotCF.NextActions, "\n")
+	assert.Contains(t, prepareSnapshotActions, "arm doctor")
+	assert.NotContains(t, prepareSnapshotActions, "review prepare")
+	assert.NotContains(t, prepareSnapshotActions, "--output")
+
+	recordSnapshotOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, recordSnapshotOut, new(bytes.Buffer),
+		"review", "record", "--repo", repo, "--issue", "task-01",
+		"--assessment", validAssessment, "--format", "agent")
+	assert.Equal(t, 1, code)
+	recordSnapshotCF := agentFailureFromStdout(t, recordSnapshotOut.String())
+	assert.Equal(t, "REVIEW-1", recordSnapshotCF.Code)
+	assert.Contains(t, recordSnapshotCF.Cause, "load snapshot")
+	recordSnapshotActions := strings.Join(recordSnapshotCF.NextActions, "\n")
+	assert.Contains(t, recordSnapshotActions, "arm doctor")
+	assert.NotContains(t, recordSnapshotActions, "review prepare")
+	assert.NotContains(t, recordSnapshotActions, "--output")
 }
 
 func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
@@ -349,10 +379,25 @@ func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.Equal(t, "TRANSITION-1", cf.Code)
 	assert.NotEqual(t, armerrors.CodeGeneral1, cf.Code)
 	assert.Contains(t, cf.Cause, "invalid status")
+	assert.Contains(t, cf.Cause, "valid values")
 	require.NotEmpty(t, cf.NextActions)
 	joined := strings.Join(cf.NextActions, "\n")
 	assert.Contains(t, joined, "arm transition")
+	assert.Contains(t, joined, "<valid-status>")
+	assert.NotContains(t, joined, "--to done")
 	assert.NotContains(t, joined, "--help")
+
+	mistypedMerged := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, mistypedMerged, new(bytes.Buffer),
+		"transition", "--repo", repo, "--issue", "task-01", "--to", "merge", "--format", "agent")
+	assert.Equal(t, 1, code)
+	mistypedCF := agentFailureFromStdout(t, mistypedMerged.String())
+	assert.Equal(t, "TRANSITION-1", mistypedCF.Code)
+	assert.Contains(t, mistypedCF.Cause, `invalid status "merge"`)
+	assert.Contains(t, mistypedCF.Cause, "merged")
+	mistypedJoined := strings.Join(mistypedCF.NextActions, "\n")
+	assert.Contains(t, mistypedJoined, "<valid-status>")
+	assert.NotContains(t, mistypedJoined, "--to done")
 
 	gate := mapTransitionError(fmt.Errorf("delivery gate check failed:\n  1. CleanTree: commit outstanding changes\n\nUse --skip-delivery-gate to override"))
 	var gateCF *armerrors.CommandFailure
