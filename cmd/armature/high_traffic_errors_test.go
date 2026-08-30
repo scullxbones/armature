@@ -215,6 +215,41 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	delimitedPathCF := agentFailureFromStdout(t, delimitedPath.String())
 	assert.Contains(t, delimitedPathCF.Cause, "parse bundle JSON")
 	assert.NotContains(t, delimitedPathCF.Cause, "not JSON content")
+
+	unknownBranch := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, unknownBranch, new(bytes.Buffer),
+		"review", "commits", "--repo", repo, "--issue", "task-01",
+		"--branch", "no-such-branch", "--format", "agent")
+	assert.Equal(t, 1, code)
+	unknownBranchCF := agentFailureFromStdout(t, unknownBranch.String())
+	assert.Equal(t, "REVIEW-1", unknownBranchCF.Code)
+	assert.Contains(t, unknownBranchCF.Cause, "failed to list commits")
+	unknownBranchActions := strings.Join(unknownBranchCF.NextActions, "\n")
+	assert.Contains(t, unknownBranchActions, "--branch <reachable-branch>")
+	assert.NotContains(t, unknownBranchActions, "review prepare")
+	assert.NotContains(t, unknownBranchActions, "--output")
+
+	emptyResults := filepath.Join(repo, "empty-results-assessment.json")
+	require.NoError(t, os.WriteFile(emptyResults, []byte(`{
+		"schema_version":1,
+		"bundle_id":"bundle",
+		"contract_fingerprint":"contract",
+		"delivery_fingerprint":"delivery",
+		"results":[]
+	}`), 0o600))
+	emptyResultsOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, emptyResultsOut, new(bytes.Buffer),
+		"review", "record", "--repo", repo, "--issue", "task-01",
+		"--assessment", emptyResults, "--format", "agent")
+	assert.Equal(t, 1, code)
+	emptyResultsCF := agentFailureFromStdout(t, emptyResultsOut.String())
+	assert.Equal(t, "REVIEW-1", emptyResultsCF.Code)
+	assert.Contains(t, emptyResultsCF.Cause, "assessment validation")
+	emptyResultsActions := strings.Join(emptyResultsCF.NextActions, "\n")
+	assert.Contains(t, emptyResultsActions, "--assessment")
+	assert.Contains(t, emptyResultsActions, "arm review record")
+	assert.NotContains(t, emptyResultsActions, "review prepare")
+	assert.NotContains(t, emptyResultsActions, "--output")
 }
 
 func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
