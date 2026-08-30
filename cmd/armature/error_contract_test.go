@@ -542,7 +542,27 @@ func assertAgentFailureEnvelope(t *testing.T, stdout string) *armerrors.CommandF
 	var typed commandFailureEnvelope
 	require.NoError(t, json.Unmarshal([]byte(raw), &typed))
 	require.NotNil(t, typed.Error)
+	assertNextActionsPolicy(t, typed.Error)
 	return typed.Error
+}
+
+// assertNextActionsPolicy enforces the docs/error-contract.md Next Actions
+// rule: empty next_actions is allowed only on IO and GENERAL-1, and
+// "--help" is an allowed next action only on USAGE.
+func assertNextActionsPolicy(t *testing.T, cf *armerrors.CommandFailure) {
+	t.Helper()
+	prefix := failureCodePrefix(cf.Code)
+	if len(cf.NextActions) == 0 {
+		_, exempt := reservedFailureCodes[cf.Code]
+		assert.True(t, prefix == "IO" || exempt,
+			"empty next_actions is only allowed on IO or GENERAL-1, got code %q", cf.Code)
+	}
+	for _, action := range cf.NextActions {
+		if strings.Contains(action, "--help") {
+			assert.Equal(t, "USAGE", prefix,
+				"--help next action is only allowed on USAGE, got code %q", cf.Code)
+		}
+	}
 }
 
 func cmdDir(t *testing.T) string {
