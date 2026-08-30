@@ -224,6 +224,128 @@ func TestReviewValidateSuggestsSchemaAndCriterionID_REQ_LNGHZN_S8_T1(t *testing.
 	})
 }
 
+func TestReviewValidateRejectsStructurallyInvalidBundle_REQ_LNGHZN_S8_T1(t *testing.T) {
+	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
+
+	t.Run("schema_version 99 with recomputed bundle_id", func(t *testing.T) {
+		invalidBundle, newID := rewriteBundleRecomputingID(t, repo, bundleFile, "bundle_schema99.json", func(b *review.ReviewBundle) {
+			b.SchemaVersion = 99
+		})
+		assessment := mutateAssessmentJSON(t, repo, validAssessment, "assessment_schema99_bundle.json", func(obj map[string]any) {
+			obj["bundle_id"] = newID
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", invalidBundle, "--assessment", assessment, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "schema")
+		assert.Contains(t, report.Failures[0].Suggestion, "schema_version")
+	})
+
+	t.Run("empty issue.type with recomputed bundle_id", func(t *testing.T) {
+		invalidBundle, newID := rewriteBundleRecomputingID(t, repo, bundleFile, "bundle_empty_type.json", func(b *review.ReviewBundle) {
+			b.Issue.Type = ""
+		})
+		assessment := mutateAssessmentJSON(t, repo, validAssessment, "assessment_empty_type_bundle.json", func(obj map[string]any) {
+			obj["bundle_id"] = newID
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", invalidBundle, "--assessment", assessment, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "type")
+	})
+}
+
+func TestReviewValidateSuggestsPrepareOnBundleIntegrity_REQ_LNGHZN_S8_T1(t *testing.T) {
+	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
+
+	tampered := filepath.Join(repo, "bundle_tampered.json")
+	data, err := os.ReadFile(bundleFile)
+	require.NoError(t, err)
+	var obj map[string]any
+	require.NoError(t, json.Unmarshal(data, &obj))
+	issue, ok := obj["issue"].(map[string]any)
+	require.True(t, ok)
+	issue["title"] = "tampered title"
+	out, err := json.MarshalIndent(obj, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(tampered, out, 0o644))
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"review", "validate", "--repo", repo, "--bundle", tampered, "--assessment", validAssessment, "--format", "json")
+	report := requireAdvisoryValidateReport(t, stdout.String(), code)
+	joined := strings.ToLower(report.Failures[0].Message + " " + report.Failures[0].Suggestion)
+	assert.Contains(t, joined, "integrity")
+	assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
+	assert.NotContains(t, strings.ToLower(report.Failures[0].Suggestion), "set bundle_id")
+}
+
+func TestReviewValidateRejectsInvalidCitationColumn_REQ_LNGHZN_S8_T1(t *testing.T) {
+	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
+
+	setColumn := func(t *testing.T, name string, column any) string {
+		t.Helper()
+		return mutateAssessmentJSON(t, repo, validAssessment, name, func(obj map[string]any) {
+			results, ok := obj["results"].([]any)
+			require.True(t, ok)
+			require.NotEmpty(t, results)
+			first, ok := results[0].(map[string]any)
+			require.True(t, ok)
+			citations, ok := first["citations"].([]any)
+			require.True(t, ok)
+			require.NotEmpty(t, citations)
+			cite, ok := citations[0].(map[string]any)
+			require.True(t, ok)
+			cite["column"] = column
+		})
+	}
+
+	t.Run("column 0", func(t *testing.T) {
+		path := setColumn(t, "assessment_column_0.json", 0)
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "column")
+		assert.NotEmpty(t, report.Failures[0].Suggestion)
+	})
+
+	t.Run("negative column", func(t *testing.T) {
+		path := setColumn(t, "assessment_column_neg.json", -3)
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "column")
+	})
+
+	t.Run("column omitted still valid", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", validAssessment, "--format", "json")
+		assert.Equal(t, 0, code)
+		report := decodeReviewValidateReport(t, stdout.String())
+		assert.True(t, report.Valid)
+	})
+}
+
+func rewriteBundleRecomputingID(t *testing.T, repo, src, name string, mut func(*review.ReviewBundle)) (string, string) {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	require.NoError(t, err)
+	bundle, err := review.DecodeReviewBundle(data)
+	require.NoError(t, err)
+	mut(&bundle)
+	bundle.BundleID = review.ComputeBundleID(bundle)
+	out, err := json.MarshalIndent(&bundle, "", "  ")
+	require.NoError(t, err)
+	dst := filepath.Join(repo, name)
+	require.NoError(t, os.WriteFile(dst, out, 0o644)) //nolint:gosec // G703: dst is filepath.Join of the test repo and a fixed filename
+	return dst, bundle.BundleID
+}
+
 func mutateAssessmentJSON(t *testing.T, repo, src, name string, mut func(map[string]any)) string {
 	t.Helper()
 	data, err := os.ReadFile(src)

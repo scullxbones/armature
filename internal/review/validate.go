@@ -148,6 +148,8 @@ func SuggestValidateFix(message string) string {
 		return fmt.Sprintf("set schema_version to %d", SchemaVersion)
 	case strings.Contains(msg, "unknown field"):
 		return "remove the unknown field or rename it to a documented schema property"
+	case strings.Contains(msg, "column must be"):
+		return "omit column or set it to a 1-based column number (>= 1)"
 	case strings.Contains(msg, "parse assessment json"),
 		strings.Contains(msg, "decode conformance assessment"),
 		strings.Contains(msg, "unexpected trailing json"):
@@ -180,6 +182,8 @@ func SuggestValidateFix(message string) string {
 	case strings.Contains(msg, "contract fingerprint") && strings.Contains(msg, "does not match"),
 		strings.Contains(msg, "contract_fingerprint") && strings.Contains(msg, "does not match"):
 		return "copy fingerprints.contract from the prepared review bundle (or re-run arm review prepare)"
+	case strings.Contains(msg, "bundle integrity"):
+		return "re-run arm review prepare --output <bundle.json>; do not edit the bundle file"
 	case strings.Contains(msg, "bundle_id") && strings.Contains(msg, "does not match"):
 		return "set bundle_id to the prepared bundle's bundle_id"
 	case strings.Contains(msg, "bundle was prepared for issue"):
@@ -213,8 +217,6 @@ func SuggestValidateFix(message string) string {
 		return "restore the activity log or re-run arm review prepare"
 	case strings.Contains(msg, "activity log validation"):
 		return "re-run arm review prepare so activity.digest matches the on-disk log"
-	case strings.Contains(msg, "bundle integrity"):
-		return "re-run arm review prepare --output <bundle.json>; do not edit the bundle file"
 	case strings.Contains(msg, "gate evidence"):
 		return "re-run arm review prepare after restoring original gate evidence logs"
 	case strings.Contains(msg, "build diff index"):

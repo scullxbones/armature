@@ -159,6 +159,32 @@ type Citation struct {
 	ActivityEntryDetails string `json:"activity_entry_details,omitempty"`
 }
 
+// UnmarshalJSON rejects an explicit citation column below the schema minimum of 1.
+// Omitted column is allowed (zero value); JSON Schema only constrains the field
+// when it is present.
+func (c *Citation) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if col, ok := raw["column"]; ok {
+		var n int
+		if err := json.Unmarshal(col, &n); err != nil {
+			return fmt.Errorf("citation: invalid column: %w", err)
+		}
+		if n < 1 {
+			return fmt.Errorf("citation: column must be >= 1, got %d", n)
+		}
+	}
+	type alias Citation
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*c = Citation(a)
+	return nil
+}
+
 // CriterionResult records the reviewer's assessment for a single criterion.
 type CriterionResult struct {
 	// ID uniquely identifies the criterion (e.g., "definition_of_done", "acceptance[0]").

@@ -2,6 +2,8 @@ package review_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/review"
@@ -336,6 +338,39 @@ func TestCriterionResult_MissingStatus(t *testing.T) {
 	err := json.Unmarshal([]byte(input), &result)
 	assert.Error(t, err, "expected error when status key is missing")
 	assert.Contains(t, err.Error(), "missing required field")
+}
+
+func TestDecodeConformanceAssessment_RejectsInvalidCitationColumn_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	valid := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "contract_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "delivery_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "done",
+      "citations": [{"path": "impl.go", "line": 1%s}]
+    }
+  ]
+}`
+
+	_, err := review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, "")))
+	require.NoError(t, err, "omitted column must remain valid")
+
+	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": 1`)))
+	require.NoError(t, err, "column >= 1 must remain valid")
+
+	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": 0`)))
+	require.Error(t, err, "explicit column 0 must be rejected")
+	assert.Contains(t, strings.ToLower(err.Error()), "column")
+
+	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": -1`)))
+	require.Error(t, err, "negative column must be rejected")
+	assert.Contains(t, strings.ToLower(err.Error()), "column")
 }
 
 func TestConformanceAssessment_Valid(t *testing.T) {
