@@ -35,12 +35,10 @@ func TestReviewerSkillTreatsBundleSetupReportsAsOperational_REQ_LNGHZN_S8_T2(t *
 	reviewer := readEmbedSkill(t, "armature-reviewer")
 	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
 
-	require.Contains(t, step5b, "arm review prepare",
-		"5b must classify a valid:false report whose suggestion is to re-run arm review prepare")
+	require.Contains(t, step5b, `"fixable": false`,
+		"5b must key setup reports off fixable false, not a prose taxonomy")
 	require.Contains(t, step5b, "Validation: error",
 		"bundle/setup reports must use the operational no-path shape, not assessment retries")
-	require.NotContains(t, step5b, "four attempts",
-		"setup reports must not consume the four-run assessment retry cap")
 }
 
 func TestReviewerSkillRegeneratesFindingsAfterValidateRewrites_REQ_LNGHZN_S8_T2(t *testing.T) {
@@ -130,12 +128,10 @@ func TestReviewerSkillTreatsStaleContractMismatchAsSetup_REQ_LNGHZN_S8_T2(t *tes
 	reviewer := readEmbedSkill(t, "armature-reviewer")
 	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
 
-	require.Contains(t, step5b, "issue contract",
-		"a contract fingerprint that matches the stale bundle but not the current issue is setup")
+	require.Contains(t, step5b, `"fixable": false`,
+		"stale-contract reports are fixable false; the skill must not retry them")
 	require.Contains(t, step5b, "Validation: error",
 		"stale-contract reports must use the operational no-path shape, not assessment retries")
-	require.NotContains(t, step5b, "four attempts",
-		"setup reports must not consume the four-run assessment retry cap")
 }
 
 func TestReviewerSkillRoutesNonAssessmentRepairsAsOperational_REQ_LNGHZN_S8_T2(t *testing.T) {
@@ -143,11 +139,9 @@ func TestReviewerSkillRoutesNonAssessmentRepairsAsOperational_REQ_LNGHZN_S8_T2(t
 	reviewer := readEmbedSkill(t, "armature-reviewer")
 	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
 
-	require.Contains(t, step5b, "no suggestion is assessment-applicable",
+	require.Contains(t, step5b, `"fixable": false`,
 		"compound remedies that first require issue-state or log repair are Validation: error")
 	require.Contains(t, step5b, "Validation: error")
-	require.NotContains(t, step5b, "four attempts",
-		"setup reports must not consume the four-run assessment retry cap")
 }
 
 func TestReviewerSkillReevaluatesStatusWhenDroppingCitations_REQ_LNGHZN_S8_T2(t *testing.T) {
@@ -161,12 +155,4 @@ func TestReviewerSkillReevaluatesStatusWhenDroppingCitations_REQ_LNGHZN_S8_T2(t 
 		"citation removal is not the whole fix; status must be re-evaluated against remaining evidence")
 	require.Contains(t, step5b, "not_satisfied",
 		"a behavioral criterion left with no remaining evidence must be lowered, not kept satisfied")
-
-	example := headingSection(t, reviewer, "**Example Workflow:**", "## Validation and Idempotence")
-	require.Contains(t, example, "re-evaluate",
-		"example workflow recap must re-evaluate status when a suggestion drops a citation")
-
-	validation := headingSection(t, reviewer, "## Validation and Idempotence", "## Error Handling")
-	require.Contains(t, validation, "re-evaluate",
-		"validation recap must re-evaluate status when a suggestion drops a citation")
 }

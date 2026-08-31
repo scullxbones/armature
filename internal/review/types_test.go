@@ -181,11 +181,33 @@ func TestCriterionResult_Valid(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid satisfied",
+			name: "satisfied without citations or missing_evidence",
+			result: review.CriterionResult{
+				ID:        "acceptance[1]",
+				Status:    review.Satisfied,
+				Rationale: "make check is green per the outcome text",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid satisfied with citations",
 			result: review.CriterionResult{
 				ID:        "definition_of_done",
 				Status:    review.Satisfied,
 				Rationale: "all requirements met",
+				Citations: []review.Citation{
+					{Path: "internal/review/types.go", Line: 10},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "satisfied with missing_evidence and no citations",
+			result: review.CriterionResult{
+				ID:              "acceptance[1]",
+				Status:          review.Satisfied,
+				Rationale:       "gate claim with no remaining citable evidence yet",
+				MissingEvidence: "dropped activity citation; no remaining evidence",
 			},
 			wantErr: false,
 		},
@@ -572,11 +594,17 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 						ID:        "definition_of_done",
 						Status:    review.Satisfied,
 						Rationale: "implemented correctly",
+						Citations: []review.Citation{
+							{Path: "internal/review/types.go", Line: 10},
+						},
 					},
 					{
 						ID:        "acceptance[0]",
 						Status:    review.Satisfied,
 						Rationale: "working as designed",
+						Citations: []review.Citation{
+							{Path: "internal/review/types.go", Line: 20},
+						},
 					},
 				},
 				ContractFingerprint: "sha256:contract123",

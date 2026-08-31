@@ -24,6 +24,15 @@ func errsContain(errs []string, substr string) bool {
 	return false
 }
 
+func citedSatisfied(id, rationale string) CriterionResult {
+	return CriterionResult{
+		ID:        id,
+		Status:    Satisfied,
+		Rationale: rationale,
+		Citations: []Citation{{Path: "impl.go", Line: 1}},
+	}
+}
+
 func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
 	// Create a minimal valid assessment
@@ -33,11 +42,7 @@ func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Implementation is complete.",
-			},
+			citedSatisfied("definition_of_done", "Implementation is complete."),
 		},
 	}
 
@@ -90,16 +95,8 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Implementation is complete.",
-			},
-			{
-				ID:        "acceptance[0]",
-				Status:    Satisfied,
-				Rationale: "Feature works as designed.",
-			},
+			citedSatisfied("definition_of_done", "Implementation is complete."),
+			citedSatisfied("acceptance[0]", "Feature works as designed."),
 		},
 	}
 
@@ -154,7 +151,7 @@ func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
 		ContractFingerprint: bundle.Fingerprints.Contract,
 		DeliveryFingerprint: bundle.Fingerprints.Delivery,
 		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "Done"},
+			citedSatisfied("definition_of_done", "Done"),
 		},
 	}
 
@@ -187,16 +184,8 @@ func TestRecord_WithIssueData_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		}),
 		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Implementation is complete.",
-			},
-			{
-				ID:        "acceptance[0]",
-				Status:    Satisfied,
-				Rationale: "Feature works.",
-			},
+			citedSatisfied("definition_of_done", "Implementation is complete."),
+			citedSatisfied("acceptance[0]", "Feature works."),
 		},
 	}
 
@@ -298,11 +287,7 @@ func TestRecord_BundleIssueMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Done",
-			},
+			citedSatisfied("definition_of_done", "Done"),
 		},
 	}
 
@@ -339,11 +324,7 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Done",
-			},
+			citedSatisfied("definition_of_done", "Done"),
 		},
 	}
 
@@ -369,11 +350,7 @@ func TestRecord_ContractFingerprintMismatch_RejectsWithoutBundle_REQ_ARCHIMP_S18
 		ContractFingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Done",
-			},
+			citedSatisfied("definition_of_done", "Done"),
 		},
 	}
 
@@ -416,11 +393,7 @@ func TestRecord_CoverageMissingCriterion_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		ContractFingerprint: FingerprintContract(contract),
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Done",
-			},
+			citedSatisfied("definition_of_done", "Done"),
 			// Missing acceptance[0]
 		},
 	}
@@ -462,21 +435,9 @@ func TestRecord_ValidCoverage_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		ContractFingerprint: FingerprintContract(contract),
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Implementation is complete.",
-			},
-			{
-				ID:        "acceptance[0]",
-				Status:    Satisfied,
-				Rationale: "Feature works as designed.",
-			},
-			{
-				ID:        "acceptance[1]",
-				Status:    Satisfied,
-				Rationale: "Edge cases properly handled.",
-			},
+			citedSatisfied("definition_of_done", "Implementation is complete."),
+			citedSatisfied("acceptance[0]", "Feature works as designed."),
+			citedSatisfied("acceptance[1]", "Edge cases properly handled."),
 		},
 	}
 
@@ -613,11 +574,7 @@ func TestRecordWithDuplicateCheck_Duplicate_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Done",
-			},
+			citedSatisfied("definition_of_done", "Done"),
 		},
 	}
 
@@ -648,11 +605,7 @@ func TestRecordWithDuplicateCheck_NotDuplicate_REQ_ARCHIMP_S18_T1(t *testing.T) 
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
-			{
-				ID:        "definition_of_done",
-				Status:    Satisfied,
-				Rationale: "Done",
-			},
+			citedSatisfied("definition_of_done", "Done"),
 		},
 	}
 

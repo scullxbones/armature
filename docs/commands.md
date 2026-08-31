@@ -734,7 +734,7 @@ Validate a conformance assessment against a review bundle without recording it. 
 
 **Output:**
 - Human: `Assessment is valid`, or `Assessment is invalid:` plus each failure and its suggestion.
-- JSON / agent: `{"valid":true}` or `{"valid":false,"failures":[{"message":"...","suggestion":"..."}]}`.
+- JSON / agent: `{"valid":true}` or `{"valid":false,"failures":[{"message":"...","suggestion":"...","fixable":true}]}`. `fixable` is true when rewriting the assessment can apply the suggestion.
 
 **Exit codes:**
 - `0` — assessment is valid.

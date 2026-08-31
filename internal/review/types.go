@@ -258,10 +258,11 @@ func (cr CriterionResult) Valid() error {
 	if cr.Rationale == "" {
 		return fmt.Errorf("criterion result: missing rationale")
 	}
-	// Non-satisfied criteria without citations must have missing evidence text.
-	if (cr.Status == NotSatisfied || cr.Status == PartiallySatisfied || cr.Status == Indeterminate) &&
-		len(cr.Citations) == 0 && cr.MissingEvidence == "" {
-		return fmt.Errorf("criterion result %s: missing evidence text required for status %s", cr.ID, cr.Status)
+	// Every status needs citations or missing_evidence. Evidence-free
+	// satisfaction is unrepresentable: dropping the last citation cannot
+	// leave status=satisfied with an empty evidence set.
+	if len(cr.Citations) == 0 && cr.MissingEvidence == "" {
+		return fmt.Errorf("criterion result %s: citations or missing_evidence required for status %s", cr.ID, cr.Status)
 	}
 	// Path and ActivityEntryID are mutually exclusive citation forms; a citation
 	// with both set would silently skip diff-index validation (since activity

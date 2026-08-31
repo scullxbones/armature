@@ -21,8 +21,8 @@ point to specific code, tests, or documentation that demonstrates fulfillment.
 - Edge cases and error handling are covered
 - No gaps or unfinished work
 
-**Citation requirement:** Highly recommended. Citations should point to specific
-files and lines that demonstrate the work.
+**Citation requirement:** Required. Citations, or `missing_evidence` if you
+cannot cite. Evidence-free `satisfied` is invalid.
 
 **Rationale examples:**
 - "TokenParser.Parse() method implemented with cases for all 8 token types; each covered by at least one test case."
@@ -335,12 +335,12 @@ status was assigned. Rationales are auditable and should be **specific**, **evid
 Before submitting your ConformanceAssessment, verify:
 
 - [ ] One result for `definition_of_done` + all acceptance criteria (no more, no fewer)
-- [ ] Each result has `id`, `status`, `rationale`, and (if status != satisfied) either `citations` or `missing_evidence`
+- [ ] Each result has `id`, `status`, `rationale`, and either `citations` or `missing_evidence`
 - [ ] `bundle_id` matches input ReviewBundle exactly
 - [ ] `contract_fingerprint` and `delivery_fingerprint` match input exactly
 - [ ] All citations point to files in `changed_files`
 - [ ] Rationales are concrete and evidence-based (no vague language like "looks good")
-- [ ] Status values are consistent (if no citations and status != satisfied, `missing_evidence` is present)
+- [ ] Status values are consistent (if no citations, `missing_evidence` is present — including for `satisfied`)
 - [ ] JSON is valid and passes schema validation
 
 ---

@@ -147,6 +147,8 @@ func TestReviewValidateSuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T) 
 	report := requireAdvisoryValidateReport(t, stdout.String(), code)
 	assert.Contains(t, strings.ToLower(report.Failures[0].Message), "citation")
 	assert.Contains(t, strings.ToLower(report.Failures[0].Suggestion), "path-level")
+	assert.True(t, report.Failures[0].Fixable, "out-of-bounds citations are rewritten on the assessment")
+	assert.Contains(t, stdout.String(), `"fixable":true`)
 
 	validStdout := new(bytes.Buffer)
 	code = executeThenHandleRootError(t, validStdout, new(bytes.Buffer),
@@ -428,6 +430,8 @@ func TestReviewValidateMalformedBundleEmitsPrepareSuggestion_REQ_LNGHZN_S8_T2(t 
 	report := requireAdvisoryValidateReport(t, stdout.String(), code)
 	assert.Contains(t, strings.ToLower(report.Failures[0].Message), "parse bundle")
 	assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
+	assert.False(t, report.Failures[0].Fixable, "a malformed bundle cannot be fixed by rewriting the assessment")
+	assert.Contains(t, stdout.String(), `"fixable":false`)
 	assert.NotContains(t, stdout.String(), `"error"`, "malformed-but-readable bundle is a valid:false report, not a Command Failure")
 }
 

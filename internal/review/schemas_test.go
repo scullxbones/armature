@@ -407,6 +407,30 @@ func TestConformanceAssessmentSchema_InvalidExample_REQ_TOPTIER_S2_T1(t *testing
 	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
 }
 
+// TestConformanceAssessmentSchema_RejectsSatisfiedWithoutEvidence_REQ_LNGHZN_S8_T2
+// asserts that evidence-free satisfaction is unrepresentable: a satisfied
+// result with neither citations nor missing_evidence is rejected, matching
+// CriterionResult.Valid().
+func TestConformanceAssessmentSchema_RejectsSatisfiedWithoutEvidence_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "acceptance[1]",
+      "status": "satisfied",
+      "rationale": "make check is green per the outcome text"
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
 // TestConformanceAssessmentSchema_RequiresMissingEvidenceWhenNoCitations_REQ_TOPTIER_S2_T1
 // asserts that the conformance-assessment schema rejects a non-satisfied
 // result that has no citations and no missing_evidence, matching the runtime

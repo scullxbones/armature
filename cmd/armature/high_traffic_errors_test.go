@@ -260,7 +260,7 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 		"bundle_id":"bundle",
 		"contract_fingerprint":"contract",
 		"delivery_fingerprint":"delivery",
-		"results":[{"id":"definition_of_done","status":"satisfied","rationale":"verified"}]
+		"results":[{"id":"definition_of_done","status":"satisfied","rationale":"verified","citations":[{"path":"impl.go","line":1}]}]
 	}`), 0o600))
 	bundleDir, err := os.MkdirTemp(".", "{bundle}")
 	require.NoError(t, err)
@@ -323,7 +323,7 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 		"bundle_id":"bundle",
 		"contract_fingerprint":%q,
 		"delivery_fingerprint":"delivery",
-		"results":[{"id":"acceptance[0]","status":"satisfied","rationale":"verified"}]
+		"results":[{"id":"acceptance[0]","status":"satisfied","rationale":"verified","citations":[{"path":"impl.go","line":1}]}]
 	}`, coverageFP)), 0o600))
 	coverageOut := new(bytes.Buffer)
 	code = executeThenHandleRootError(t, coverageOut, new(bytes.Buffer),
