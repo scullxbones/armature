@@ -239,7 +239,7 @@ func TestReviewValidateRejectsStructurallyInvalidBundle_REQ_LNGHZN_S8_T1(t *test
 			"review", "validate", "--repo", repo, "--bundle", invalidBundle, "--assessment", assessment, "--format", "json")
 		report := requireAdvisoryValidateReport(t, stdout.String(), code)
 		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "schema")
-		assert.Contains(t, report.Failures[0].Suggestion, "schema_version")
+		assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
 	})
 
 	t.Run("empty issue.type with recomputed bundle_id", func(t *testing.T) {
@@ -254,6 +254,126 @@ func TestReviewValidateRejectsStructurallyInvalidBundle_REQ_LNGHZN_S8_T1(t *test
 			"review", "validate", "--repo", repo, "--bundle", invalidBundle, "--assessment", assessment, "--format", "json")
 		report := requireAdvisoryValidateReport(t, stdout.String(), code)
 		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "type")
+		assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
+		assert.NotContains(t, strings.ToLower(report.Failures[0].Suggestion), "fix the assessment")
+	})
+
+	t.Run("issue.type outside schema enum with recomputed bundle_id", func(t *testing.T) {
+		invalidBundle, newID := rewriteBundleRecomputingID(t, repo, bundleFile, "bundle_nonsense_type.json", func(b *review.ReviewBundle) {
+			b.Issue.Type = "nonsense"
+		})
+		assessment := mutateAssessmentJSON(t, repo, validAssessment, "assessment_nonsense_type_bundle.json", func(obj map[string]any) {
+			obj["bundle_id"] = newID
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", invalidBundle, "--assessment", assessment, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		joined := strings.ToLower(report.Failures[0].Message + " " + report.Failures[0].Suggestion)
+		assert.Contains(t, joined, "type")
+		assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
+	})
+
+	t.Run("malformed delivery SHA with recomputed bundle_id", func(t *testing.T) {
+		invalidBundle, newID := rewriteBundleRecomputingID(t, repo, bundleFile, "bundle_bad_sha.json", func(b *review.ReviewBundle) {
+			b.Delivery.HeadSHA = "not-a-git-sha"
+		})
+		assessment := mutateAssessmentJSON(t, repo, validAssessment, "assessment_bad_sha_bundle.json", func(obj map[string]any) {
+			obj["bundle_id"] = newID
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", invalidBundle, "--assessment", assessment, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		joined := strings.ToLower(report.Failures[0].Message + " " + report.Failures[0].Suggestion)
+		assert.True(t, strings.Contains(joined, "sha") || strings.Contains(joined, "head_sha"),
+			"expected SHA contract failure, got %q", report.Failures[0].Message)
+		assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
+	})
+
+	t.Run("omitted delivery.changed_files with matching bundle_id", func(t *testing.T) {
+		var newID string
+		invalidBundle := mutateBundleJSON(t, repo, bundleFile, "bundle_no_changed_files.json", func(obj map[string]any) {
+			delivery, ok := obj["delivery"].(map[string]any)
+			require.True(t, ok)
+			delete(delivery, "changed_files")
+			raw, err := json.Marshal(obj)
+			require.NoError(t, err)
+			var bundle review.ReviewBundle
+			require.NoError(t, json.Unmarshal(raw, &bundle))
+			newID = review.ComputeBundleID(bundle)
+			obj["bundle_id"] = newID
+		})
+		assessment := mutateAssessmentJSON(t, repo, validAssessment, "assessment_no_changed_files.json", func(obj map[string]any) {
+			obj["bundle_id"] = newID
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", invalidBundle, "--assessment", assessment, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		joined := strings.ToLower(report.Failures[0].Message + " " + report.Failures[0].Suggestion)
+		assert.Contains(t, joined, "changed_files")
+		assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
+	})
+}
+
+func TestReviewValidateRejectsNullCitations_REQ_LNGHZN_S8_T1(t *testing.T) {
+	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
+
+	path := mutateAssessmentJSON(t, repo, validAssessment, "assessment_null_citations.json", func(obj map[string]any) {
+		results, ok := obj["results"].([]any)
+		require.True(t, ok)
+		require.NotEmpty(t, results)
+		first, ok := results[0].(map[string]any)
+		require.True(t, ok)
+		first["citations"] = nil
+	})
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+	report := requireAdvisoryValidateReport(t, stdout.String(), code)
+	joined := strings.ToLower(report.Failures[0].Message + " " + report.Failures[0].Suggestion)
+	assert.Contains(t, joined, "citations")
+	assert.Contains(t, joined, "array")
+}
+
+func TestReviewValidateSuggestsSpecificDecodeErrors_REQ_LNGHZN_S8_T1(t *testing.T) {
+	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
+
+	t.Run("invalid status", func(t *testing.T) {
+		path := mutateAssessmentJSON(t, repo, validAssessment, "assessment_status_passed.json", func(obj map[string]any) {
+			results, ok := obj["results"].([]any)
+			require.True(t, ok)
+			require.NotEmpty(t, results)
+			first, ok := results[0].(map[string]any)
+			require.True(t, ok)
+			first["status"] = "passed"
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		assert.Contains(t, strings.ToLower(report.Failures[0].Message), "status")
+		assert.Contains(t, report.Failures[0].Suggestion, "satisfied")
+		assert.NotContains(t, report.Failures[0].Suggestion, "schema_version")
+	})
+
+	t.Run("missing status", func(t *testing.T) {
+		path := mutateAssessmentJSON(t, repo, validAssessment, "assessment_missing_status.json", func(obj map[string]any) {
+			results, ok := obj["results"].([]any)
+			require.True(t, ok)
+			require.NotEmpty(t, results)
+			first, ok := results[0].(map[string]any)
+			require.True(t, ok)
+			delete(first, "status")
+		})
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", path, "--format", "json")
+		report := requireAdvisoryValidateReport(t, stdout.String(), code)
+		joined := strings.ToLower(report.Failures[0].Message + " " + report.Failures[0].Suggestion)
+		assert.Contains(t, joined, "status")
+		assert.NotContains(t, report.Failures[0].Suggestion, "schema_version")
 	})
 }
 
@@ -329,6 +449,20 @@ func TestReviewValidateRejectsInvalidCitationColumn_REQ_LNGHZN_S8_T1(t *testing.
 		report := decodeReviewValidateReport(t, stdout.String())
 		assert.True(t, report.Valid)
 	})
+}
+
+func mutateBundleJSON(t *testing.T, repo, src, name string, mut func(map[string]any)) string {
+	t.Helper()
+	data, err := os.ReadFile(src)
+	require.NoError(t, err)
+	var obj map[string]any
+	require.NoError(t, json.Unmarshal(data, &obj))
+	mut(obj)
+	out, err := json.MarshalIndent(obj, "", "  ")
+	require.NoError(t, err)
+	dst := filepath.Join(repo, name)
+	require.NoError(t, os.WriteFile(dst, out, 0o644))
+	return dst
 }
 
 func rewriteBundleRecomputingID(t *testing.T, repo, src, name string, mut func(*review.ReviewBundle)) (string, string) {

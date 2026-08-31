@@ -144,12 +144,20 @@ func AnnotateValidateError(err error) error {
 func SuggestValidateFix(message string) string {
 	msg := strings.ToLower(message)
 	switch {
+	case strings.Contains(msg, "review bundle:"):
+		return "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
 	case strings.Contains(msg, "unsupported schema version"):
 		return fmt.Sprintf("set schema_version to %d", SchemaVersion)
 	case strings.Contains(msg, "unknown field"):
 		return "remove the unknown field or rename it to a documented schema property"
 	case strings.Contains(msg, "column must be"):
 		return "omit column or set it to a 1-based column number (>= 1)"
+	case strings.Contains(msg, "citations must be"):
+		return "set citations to an array; use [] when there is no evidence to cite"
+	case strings.Contains(msg, "invalid criterion status"):
+		return `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`
+	case strings.Contains(msg, "missing required field"):
+		return "add the required field on the criterion result"
 	case strings.Contains(msg, "parse assessment json"),
 		strings.Contains(msg, "decode conformance assessment"),
 		strings.Contains(msg, "unexpected trailing json"):
@@ -157,10 +165,6 @@ func SuggestValidateFix(message string) string {
 	case strings.Contains(msg, "parse bundle json"),
 		strings.Contains(msg, "decode review bundle"):
 		return "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
-	case strings.Contains(msg, "invalid criterion status"):
-		return `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`
-	case strings.Contains(msg, "missing required field"):
-		return "add the required field on the criterion result"
 	case strings.Contains(msg, "missing bundle id"), strings.Contains(msg, "bundle id is empty"):
 		return "copy bundle_id from the prepared review bundle"
 	case strings.Contains(msg, "no results provided"):

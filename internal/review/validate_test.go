@@ -1516,3 +1516,31 @@ func TestSuggestValidateFix_BundleIntegrityBeforeBundleIDMismatch_REQ_LNGHZN_S8_
 	got = review.SuggestValidateFix(column)
 	assert.Contains(t, got, "1-based")
 }
+
+func TestSuggestValidateFix_SpecificDecodeBeforeGenericParse_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	status := "parse assessment JSON: decode conformance assessment: invalid criterion status: passed"
+	got := review.SuggestValidateFix(status)
+	assert.Contains(t, got, "satisfied")
+	assert.NotContains(t, got, "schema_version")
+
+	missing := `parse assessment JSON: decode conformance assessment: criterion result: missing required field "status"`
+	got = review.SuggestValidateFix(missing)
+	assert.Contains(t, strings.ToLower(got), "required field")
+	assert.NotContains(t, got, "schema_version")
+}
+
+func TestSuggestValidateFix_BundleValidFailuresSuggestPrepare_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	emptyType := "review bundle: missing issue type"
+	got := review.SuggestValidateFix(emptyType)
+	assert.Contains(t, got, "arm review prepare")
+	assert.NotContains(t, strings.ToLower(got), "fix the assessment")
+
+	schema := "review bundle: unsupported schema version 99"
+	got = review.SuggestValidateFix(schema)
+	assert.Contains(t, got, "arm review prepare")
+	assert.NotContains(t, got, "set schema_version")
+}
