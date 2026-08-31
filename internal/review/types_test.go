@@ -340,6 +340,74 @@ func TestCriterionResult_MissingStatus(t *testing.T) {
 	assert.Contains(t, err.Error(), "missing required field")
 }
 
+func TestDecodeReviewBundle_RejectsSchemaGaps_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	valid := mustMarshalBundleJSON(t, validDecodeBundle())
+
+	t.Run("issue type outside enum", func(t *testing.T) {
+		t.Parallel()
+		data := mutateRawJSON(t, valid, func(obj map[string]any) {
+			issue, ok := obj["issue"].(map[string]any)
+			require.True(t, ok)
+			issue["type"] = "nonsense"
+		})
+		_, err := review.DecodeReviewBundle(data)
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "type")
+	})
+
+	t.Run("malformed delivery SHA", func(t *testing.T) {
+		t.Parallel()
+		data := mutateRawJSON(t, valid, func(obj map[string]any) {
+			delivery, ok := obj["delivery"].(map[string]any)
+			require.True(t, ok)
+			delivery["head_sha"] = "not-a-git-sha"
+		})
+		_, err := review.DecodeReviewBundle(data)
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "sha")
+	})
+
+	t.Run("omitted changed_files", func(t *testing.T) {
+		t.Parallel()
+		data := mutateRawJSON(t, valid, func(obj map[string]any) {
+			delivery, ok := obj["delivery"].(map[string]any)
+			require.True(t, ok)
+			delete(delivery, "changed_files")
+		})
+		_, err := review.DecodeReviewBundle(data)
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "changed_files")
+	})
+}
+
+func TestDecodeConformanceAssessment_RejectsNullCitations_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	valid := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "contract_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "delivery_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "done",
+      "citations": [{"path": "impl.go", "line": 1}]
+    }
+  ]
+}`
+	_, err := review.DecodeConformanceAssessment([]byte(valid))
+	require.NoError(t, err)
+
+	nullCitations := strings.Replace(valid, `"citations": [{"path": "impl.go", "line": 1}]`, `"citations": null`, 1)
+	_, err = review.DecodeConformanceAssessment([]byte(nullCitations))
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(err.Error()), "citations")
+}
+
 func TestDecodeConformanceAssessment_RejectsInvalidCitationColumn_REQ_LNGHZN_S8_T1(t *testing.T) {
 	t.Parallel()
 
@@ -371,6 +439,49 @@ func TestDecodeConformanceAssessment_RejectsInvalidCitationColumn_REQ_LNGHZN_S8_
 	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": -1`)))
 	require.Error(t, err, "negative column must be rejected")
 	assert.Contains(t, strings.ToLower(err.Error()), "column")
+}
+
+func validDecodeBundle() review.ReviewBundle {
+	return review.ReviewBundle{
+		SchemaVersion: review.SchemaVersion,
+		BundleID:      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Issue: review.IssueInfo{
+			ID:      "TASK-1",
+			Type:    "task",
+			Title:   "Decode contract",
+			Outcome: "done",
+		},
+		Contract: review.Contract{
+			DefinitionOfDone: "tests pass",
+			Acceptance:       []string{"works"},
+		},
+		Delivery: review.Delivery{
+			BaseSHA:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			HeadSHA:      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			ChangedFiles: []string{"impl.go"},
+		},
+		Fingerprints: review.Fingerprints{
+			Contract: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Delivery: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		},
+	}
+}
+
+func mustMarshalBundleJSON(t *testing.T, bundle review.ReviewBundle) []byte {
+	t.Helper()
+	data, err := json.Marshal(bundle)
+	require.NoError(t, err)
+	return data
+}
+
+func mutateRawJSON(t *testing.T, src []byte, mut func(map[string]any)) []byte {
+	t.Helper()
+	var obj map[string]any
+	require.NoError(t, json.Unmarshal(src, &obj))
+	mut(obj)
+	out, err := json.Marshal(obj)
+	require.NoError(t, err)
+	return out
 }
 
 func TestConformanceAssessment_Valid(t *testing.T) {

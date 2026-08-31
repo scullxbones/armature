@@ -3,6 +3,7 @@
 package review
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -215,6 +216,11 @@ func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
 	}
 	if _, ok := raw["status"]; !ok {
 		return fmt.Errorf("criterion result: missing required field \"status\"")
+	}
+	if rawCitations, ok := raw["citations"]; ok {
+		if bytes.Equal(bytes.TrimSpace(rawCitations), []byte("null")) {
+			return fmt.Errorf("criterion result: citations must be an array")
+		}
 	}
 
 	// use type alias to avoid infinite recursion
