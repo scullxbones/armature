@@ -15,6 +15,7 @@ import (
 type reviewValidateFailure struct {
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion,omitempty"`
+	Fixable    bool   `json:"fixable"`
 }
 
 type reviewValidateReport struct {
@@ -173,17 +174,19 @@ func parseReviewValidateFailures(err error) []reviewValidateFailure {
 			continue
 		}
 		msg, suggestion := splitReviewValidateSuggestion(trimmed)
+		fix := review.ClassifyValidateFix(msg)
 		if suggestion == "" {
-			suggestion = review.SuggestValidateFix(msg)
+			suggestion = fix.Suggestion
 		}
-		failures = append(failures, reviewValidateFailure{Message: msg, Suggestion: suggestion})
+		failures = append(failures, reviewValidateFailure{Message: msg, Suggestion: suggestion, Fixable: fix.Fixable})
 	}
 	if len(failures) == 0 {
 		msg, suggestion := splitReviewValidateSuggestion(err.Error())
+		fix := review.ClassifyValidateFix(msg)
 		if suggestion == "" {
-			suggestion = review.SuggestValidateFix(msg)
+			suggestion = fix.Suggestion
 		}
-		failures = append(failures, reviewValidateFailure{Message: msg, Suggestion: suggestion})
+		failures = append(failures, reviewValidateFailure{Message: msg, Suggestion: suggestion, Fixable: fix.Fixable})
 	}
 	return failures
 }

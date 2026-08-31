@@ -139,102 +139,121 @@ func AnnotateValidateError(err error) error {
 	return fmt.Errorf("%s", strings.Join(lines, "\n"))
 }
 
+// ValidateFix is the reviewer-facing auto-fix for one validation failure.
+// Fixable is true when rewriting the assessment JSON can apply the suggestion.
+type ValidateFix struct {
+	Suggestion string
+	Fixable    bool
+}
+
 // SuggestValidateFix returns a reviewer-facing auto-fix for a validation
 // failure message from Record, Valid, or JSON decode.
 func SuggestValidateFix(message string) string {
+	return ClassifyValidateFix(message).Suggestion
+}
+
+// ClassifyValidateFix returns the auto-fix suggestion and whether rewriting
+// the assessment can apply it. Bundle and issue-state failures are not fixable.
+func ClassifyValidateFix(message string) ValidateFix {
 	msg := strings.ToLower(message)
+	fix := func(suggestion string) ValidateFix {
+		return ValidateFix{Suggestion: suggestion, Fixable: true}
+	}
+	setup := func(suggestion string) ValidateFix {
+		return ValidateFix{Suggestion: suggestion, Fixable: false}
+	}
 	switch {
 	case strings.Contains(msg, "review bundle:"):
-		return "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
+		return setup("re-run arm review prepare --output <bundle.json> and pass that file as --bundle")
 	case strings.Contains(msg, "unsupported schema version"):
-		return fmt.Sprintf("set schema_version to %d", SchemaVersion)
+		return fix(fmt.Sprintf("set schema_version to %d", SchemaVersion))
 	case strings.Contains(msg, "unknown field"):
-		return "remove the unknown field or rename it to a documented schema property"
+		return fix("remove the unknown field or rename it to a documented schema property")
 	case strings.Contains(msg, "column must be"):
-		return "omit column or set it to a 1-based column number (>= 1)"
+		return fix("omit column or set it to a 1-based column number (>= 1)")
 	case strings.Contains(msg, "line must be"):
-		return "omit line or set it to an integer; JSON null is not allowed"
+		return fix("omit line or set it to an integer; JSON null is not allowed")
 	case strings.Contains(msg, "citations must be"):
-		return "set citations to an array; use [] when there is no evidence to cite"
+		return fix("set citations to an array of evidence, or [] with missing_evidence")
 	case strings.Contains(msg, "invalid criterion status"):
-		return `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`
+		return fix(`set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`)
 	case strings.Contains(msg, "missing required field"):
-		return "add the required field on the criterion result"
+		return fix("add the required field on the criterion result")
 	case strings.Contains(msg, "parse assessment json"),
 		strings.Contains(msg, "decode conformance assessment"),
 		strings.Contains(msg, "unexpected trailing json"):
-		return fmt.Sprintf("emit JSON matching docs/schemas/conformance-assessment.schema.json with schema_version %d", SchemaVersion)
+		return fix(fmt.Sprintf("emit JSON matching docs/schemas/conformance-assessment.schema.json with schema_version %d", SchemaVersion))
 	case strings.Contains(msg, "parse bundle json"),
 		strings.Contains(msg, "decode review bundle"):
-		return "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
+		return setup("re-run arm review prepare --output <bundle.json> and pass that file as --bundle")
 	case strings.Contains(msg, "missing bundle id"), strings.Contains(msg, "bundle id is empty"):
-		return "copy bundle_id from the prepared review bundle"
+		return fix("copy bundle_id from the prepared review bundle")
 	case strings.Contains(msg, "no results provided"):
-		return "add one results[] entry per contract criterion"
+		return fix("add one results[] entry per contract criterion")
 	case strings.Contains(msg, "missing contract fingerprint"):
-		return "copy fingerprints.contract from the prepared review bundle"
+		return fix("copy fingerprints.contract from the prepared review bundle")
 	case strings.Contains(msg, "missing delivery fingerprint"):
-		return "copy fingerprints.delivery from the prepared review bundle"
+		return fix("copy fingerprints.delivery from the prepared review bundle")
 	case strings.Contains(msg, "missing id"):
-		return `set id to "definition_of_done" or "acceptance[N]"`
+		return fix(`set id to "definition_of_done" or "acceptance[N]"`)
 	case strings.Contains(msg, "missing rationale"):
-		return "add a rationale explaining the criterion status"
-	case strings.Contains(msg, "missing evidence"):
-		return "set missing_evidence to describe what is absent, or add citations"
+		return fix("add a rationale explaining the criterion status")
+	case strings.Contains(msg, "missing evidence"), strings.Contains(msg, "citations or missing_evidence"):
+		return fix("set missing_evidence to describe what is absent, or add citations")
 	case strings.Contains(msg, "mutually exclusive"):
-		return "keep either path or activity_entry_id on the citation, not both"
+		return fix("keep either path or activity_entry_id on the citation, not both")
 	case strings.Contains(msg, "delivery_fingerprint") && strings.Contains(msg, "does not match"):
-		return "copy fingerprints.delivery from the prepared review bundle"
+		return fix("copy fingerprints.delivery from the prepared review bundle")
 	case strings.Contains(msg, "issue contract fingerprint"):
-		return "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
+		return setup("re-run arm review prepare --output <bundle.json> and pass that file as --bundle")
 	case strings.Contains(msg, "contract fingerprint") && strings.Contains(msg, "does not match"),
 		strings.Contains(msg, "contract_fingerprint") && strings.Contains(msg, "does not match"):
-		return "copy fingerprints.contract from the prepared review bundle"
+		return fix("copy fingerprints.contract from the prepared review bundle")
 	case strings.Contains(msg, "bundle integrity"):
-		return "re-run arm review prepare --output <bundle.json>; do not edit the bundle file"
+		return setup("re-run arm review prepare --output <bundle.json>; do not edit the bundle file")
 	case strings.Contains(msg, "bundle_id") && strings.Contains(msg, "does not match"):
-		return "set bundle_id to the prepared bundle's bundle_id"
+		return fix("set bundle_id to the prepared bundle's bundle_id")
 	case strings.Contains(msg, "bundle was prepared for issue"):
-		return "validate against the bundle's issue or re-run arm review prepare for this issue"
+		return setup("validate against the bundle's issue or re-run arm review prepare for this issue")
 	case strings.Contains(msg, "duplicate id"):
-		return "keep a single result for this criterion id"
+		return fix("keep a single result for this criterion id")
 	case strings.Contains(msg, "unexpected criterion id"):
-		return `rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`
+		return fix(`rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`)
 	case strings.Contains(msg, "missing expected id"):
 		if id := firstQuoted(message); id != "" {
-			return fmt.Sprintf("add a criterion result with id %q", id)
+			return fix(fmt.Sprintf("add a criterion result with id %q", id))
 		}
-		return `add a criterion result with id "definition_of_done" or "acceptance[N]"`
+		return fix(`add a criterion result with id "definition_of_done" or "acceptance[N]"`)
 	case strings.Contains(msg, "no bundle activity section"), strings.Contains(msg, "cites activity log entries"):
-		return "re-run arm review prepare so the bundle includes activity, or drop activity_entry_id citations"
+		return fix("re-run arm review prepare so the bundle includes activity, or drop activity_entry_id citations")
 	case strings.Contains(msg, "invalid activity entry id"):
-		return "cite a numeric activity_entry_id from the bundle activity log"
+		return fix("cite a numeric activity_entry_id from the bundle activity log")
 	case strings.Contains(msg, "unknown activity entry"):
-		return "cite an activity_entry_id present in the activity log"
+		return fix("cite an activity_entry_id present in the activity log")
 	case strings.Contains(msg, "earlier commits"):
-		return "cite an activity entry executed at the delivery head_sha"
+		return fix("cite an activity entry executed at the delivery head_sha")
 	case strings.Contains(msg, "unknown exit code"):
-		return "do not use this entry to support satisfied; lower the status or cite an entry with a known zero exit code"
+		return fix("do not use this entry to support satisfied; lower the status or cite an entry with a known zero exit code")
 	case strings.Contains(msg, "failed exit code"):
-		return "do not use a failed command as satisfied evidence; lower the status or cite a passing entry"
+		return fix("do not use a failed command as satisfied evidence; lower the status or cite a passing entry")
 	case strings.Contains(msg, "upgrade-only"):
-		return "add a diff citation (path) for this implementation criterion"
+		return fix("add a diff citation (path) for this implementation criterion")
 	case strings.Contains(msg, "activity log digest mismatch"):
-		return "re-run arm review prepare so activity.digest matches the on-disk log"
+		return setup("re-run arm review prepare so activity.digest matches the on-disk log")
 	case strings.Contains(msg, "activity log missing or unreadable"):
-		return "restore the activity log or re-run arm review prepare"
+		return setup("restore the activity log or re-run arm review prepare")
 	case strings.Contains(msg, "activity log validation"):
-		return "re-run arm review prepare so activity.digest matches the on-disk log"
+		return setup("re-run arm review prepare so activity.digest matches the on-disk log")
 	case strings.Contains(msg, "gate evidence"):
-		return "re-run arm review prepare after restoring original gate evidence logs"
+		return setup("re-run arm review prepare after restoring original gate evidence logs")
 	case strings.Contains(msg, "build diff index"):
-		return "re-run arm review prepare so Delivery.Diff is a well-formed unified diff"
+		return setup("re-run arm review prepare so Delivery.Diff is a well-formed unified diff")
 	case strings.Contains(msg, "acceptance criteria"):
-		return "fix the issue acceptance JSON and re-run arm review prepare"
+		return setup("fix the issue acceptance JSON and re-run arm review prepare")
 	case strings.Contains(msg, "not in diff"):
-		return "remove the citation or cite a path present in the delivery diff"
+		return fix("remove the citation or cite a path present in the delivery diff")
 	default:
-		return "fix the assessment to satisfy this check, then re-run arm review validate"
+		return setup("fix the assessment to satisfy this check, then re-run arm review validate")
 	}
 }
 

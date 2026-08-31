@@ -421,7 +421,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 				Results: []review.CriterionResult{
-					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
 				},
 			},
 		})
@@ -453,7 +453,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: bundle.Fingerprints.Contract,
 				DeliveryFingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 				Results: []review.CriterionResult{
-					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
 				},
 			},
 		})
@@ -480,7 +480,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: review.FingerprintContract(contract),
 				DeliveryFingerprint: "sha256:bbbb",
 				Results: []review.CriterionResult{
-					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "Done"},
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "Done", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
 				},
 			},
 		})
@@ -1567,4 +1567,30 @@ func TestSuggestValidateFix_IssueContractMismatchSuggestsPrepare_REQ_LNGHZN_S8_T
 	got = review.SuggestValidateFix(bundle)
 	assert.Contains(t, strings.ToLower(got), "copy fingerprints.contract")
 	assert.NotContains(t, got, "arm review prepare")
+}
+
+func TestClassifyValidateFix_AssessmentVsSetup_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+
+	setup := review.ClassifyValidateFix("review bundle: missing issue type")
+	assert.False(t, setup.Fixable, "bundle structural errors are not assessment-rewritable")
+	assert.Contains(t, setup.Suggestion, "arm review prepare")
+
+	parseBundle := review.ClassifyValidateFix("parse bundle JSON: decode review bundle: unexpected EOF")
+	assert.False(t, parseBundle.Fixable)
+
+	staleContract := review.ClassifyValidateFix("assessment contract fingerprint aaa does not match issue contract fingerprint bbb")
+	assert.False(t, staleContract.Fixable)
+	assert.Contains(t, staleContract.Suggestion, "arm review prepare")
+
+	rationale := review.ClassifyValidateFix("criterion result 0: missing rationale")
+	assert.True(t, rationale.Fixable, "missing rationale is fixed by rewriting the assessment")
+	assert.Contains(t, strings.ToLower(rationale.Suggestion), "rationale")
+
+	copyFP := review.ClassifyValidateFix("assessment contract_fingerprint aaa does not match bundle contract_fingerprint bbb")
+	assert.True(t, copyFP.Fixable)
+	assert.Contains(t, strings.ToLower(copyFP.Suggestion), "copy fingerprints.contract")
+
+	dropActivity := review.ClassifyValidateFix("criterion result acceptance[1]: cites activity log entries but bundle has no bundle activity section")
+	assert.True(t, dropActivity.Fixable, "dropping activity_entry_id citations is an assessment rewrite")
 }

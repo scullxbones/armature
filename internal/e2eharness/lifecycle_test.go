@@ -138,10 +138,12 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 			ID:        "definition_of_done",
 			Status:    review.Satisfied,
 			Rationale: "The task completed the declared happy-path lifecycle.",
+			Citations: []review.Citation{{Path: "task.go", Line: 1}},
 		}, {
 			ID:        "acceptance[0]",
 			Status:    review.Satisfied,
 			Rationale: "The declared test-passes criterion was met by the lifecycle.",
+			Citations: []review.Citation{{Path: "task.go", Line: 1}},
 		}},
 	}
 	assessmentJSON, err := json.Marshal(assessment)

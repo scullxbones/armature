@@ -196,14 +196,16 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
    - The entire file is the relevant evidence (e.g., "this test file demonstrates the criterion")
    - Note: unlike line-number citations, a path-level citation to a **deleted** file is still valid (the file's entry is present in changed_files) — use it only to cite the deletion itself, not remaining file content
 
-4. **Citation array may be empty only if:**
-   - Status is `"satisfied"` and evidence is self-evident in the outcome
-   - (Rare; citations are highly recommended for all criteria)
+4. **Citation array may be empty only if `missing_evidence` is present.**
+   - This applies to every status, including `"satisfied"`.
+   - Evidence-free satisfaction is invalid: a `satisfied` result with neither
+     citations nor `missing_evidence` is rejected.
 
-5. **Citation array must be non-empty if:**
-   - Status is `"partially_satisfied"`, `"not_satisfied"`, or `"indeterminate"`
-   - AND `missing_evidence` field is not present
-   - (If status != satisfied but no citations exist, `missing_evidence` is mandatory)
+5. **Citation array must be non-empty OR `missing_evidence` must be present**
+   - For every status
+   - A dropped citation that leaves a criterion with no remaining evidence
+     cannot stay `satisfied` without `missing_evidence` (and a behavioral
+     gate claim in that position is `not_satisfied`)
 
 **Examples:**
 
@@ -263,7 +265,8 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
 **Failure action:** Reject the assessment if:
 - Any citation path is not in changed_files
 - Any citation line number is invalid (≤ 0, or does not exist in the diff)
-- Status is not `"satisfied"` but citations array is empty AND `missing_evidence` is absent
+- Citations array is empty AND `missing_evidence` is absent, for any status
+  including `"satisfied"`
 
 ---
 
@@ -275,12 +278,11 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
 **Validation rule:**
 
 1. **Required if:**
-   - Status is `"partially_satisfied"`, `"not_satisfied"`, or `"indeterminate"`
-   - AND citations array is empty or sparse
+   - Citations array is empty, for **every** status including `"satisfied"`
    - Explains what evidence would be needed to make a confident assessment
 
 2. **Optional if:**
-   - Status is `"satisfied"` (not needed when criterion is fully met)
+   - Citations are already present
    - Abundant citations already explain what was done
 
 3. **Should explain:**
@@ -326,8 +328,8 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
 }
 ```
 
-**Failure action:** Reject the assessment if status is not `"satisfied"` and both citations is empty
-and missing_evidence is absent.
+**Failure action:** Reject the assessment if citations is empty and missing_evidence is absent,
+for any status including `"satisfied"`.
 
 ---
 
@@ -355,42 +357,17 @@ This is valid for `partially_satisfied` and `indeterminate` statuses.
 
 ---
 
-## Validation Checklist (Step 5a)
+## Write and validate (Step 5b)
 
-Before writing the assessment and running Step 5b (`arm review validate`), verify each field against these rules:
-
-- [ ] `schema_version` is exactly `1`
-- [ ] `bundle_id` matches input ReviewBundle exactly
-- [ ] `contract_fingerprint` matches input fingerprint exactly
-- [ ] `delivery_fingerprint` matches input fingerprint exactly
-- [ ] `results` array has exactly (1 + number of acceptance criteria) elements
-- [ ] First result has id `"definition_of_done"`
-- [ ] Remaining results have ids `"acceptance[0]"`, `"acceptance[1]"`, etc. in order
-- [ ] Each result's `status` is one of: `"satisfied"`, `"partially_satisfied"`, `"not_satisfied"`, `"indeterminate"`
-- [ ] Each result's `rationale` is present and ≥ 10 characters
-- [ ] For status `"satisfied"`: citations are optional but recommended
-- [ ] For status not `"satisfied"`: either `citations` is non-empty OR `missing_evidence` is present
-- [ ] Every citation's `path` is in `delivery.changed_files`
-- [ ] Every citation's `line` (if present) exists in that file's diff hunk
-- [ ] Line numbers are positive integers (≥ 1)
-- [ ] JSON is valid and parseable
-
-**If any check fails, fix the assessment and repeat Step 5a.** Then write the
-file and run Step 5b:
+Write the assessment file, then run:
 
 ```bash
-arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
+arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE" --format json
 ```
 
-Apply each **assessment-fixable** `suggestion:` to the same `$ASSESSMENT`
-and retry per SKILL.md step 5b case 2 (re-evaluate status when a citation
-is dropped; at most 3 attempts after the first failure). If no suggestion
-is assessment-applicable, return `Validation: error` — do not retry.
-After any suggestion-driven rewrite, regenerate rating and actionable
-findings from the final validated assessment. Step 5a is not the return gate and is not a substitute for
-`arm review validate`. Do not return to the coordinator until Step 5b
-exits 0, or use step 6's exhausted-retry chat shape if the retry cap is
-reached.
+Retry and response shapes are in SKILL.md step 5b. Do not return to the
+coordinator until that command exits 0, or use step 6's exhausted-retry
+chat shape if the retry cap is reached.
 
 ---
 
@@ -403,7 +380,7 @@ reached.
 | `Invalid status` | Use only: `satisfied`, `partially_satisfied`, `not_satisfied`, `indeterminate` |
 | `Citation path not in changed_files` | Verify file path matches exactly; check for typos |
 | `Citation line does not exist` | Ensure line number appears in the file's diff hunk; verify 1-indexed |
-| `Missing citations for non-satisfied status` | Add citations pointing to evidence or add `missing_evidence` explanation |
+| `Missing citations for any status` | Add citations pointing to evidence or add `missing_evidence` explanation |
 | `Empty rationale` | Provide concrete, evidence-based explanation (≥ 10 characters) |
 | `Duplicate criterion IDs` | Ensure results array has no duplicate ids |
 | `Missing acceptance criterion` | Add missing `acceptance[N]` result to match contract |

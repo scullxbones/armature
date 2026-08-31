@@ -228,11 +228,13 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 						"id":        "definition_of_done",
 						"status":    "satisfied",
 						"rationale": "Golden transcript test validation",
+						"citations": []map[string]any{{"path": "test_output.txt", "line": 1}},
 					},
 					{
 						"id":        "acceptance[0]",
 						"status":    "satisfied",
 						"rationale": "Acceptance criterion covered by golden transcript",
+						"citations": []map[string]any{{"path": "test_output.txt", "line": 1}},
 					},
 				},
 			}
