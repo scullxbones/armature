@@ -1515,6 +1515,11 @@ func TestSuggestValidateFix_BundleIntegrityBeforeBundleIDMismatch_REQ_LNGHZN_S8_
 	column := "parse assessment JSON: decode conformance assessment: citation: column must be >= 1, got 0"
 	got = review.SuggestValidateFix(column)
 	assert.Contains(t, got, "1-based")
+
+	lineNull := "parse assessment JSON: decode conformance assessment: citation: line must be an integer, not null"
+	got = review.SuggestValidateFix(lineNull)
+	assert.Contains(t, strings.ToLower(got), "null")
+	assert.NotContains(t, got, "schema_version")
 }
 
 func TestSuggestValidateFix_SpecificDecodeBeforeGenericParse_REQ_LNGHZN_S8_T1(t *testing.T) {
@@ -1536,6 +1541,11 @@ func TestSuggestValidateFix_BundleValidFailuresSuggestPrepare_REQ_LNGHZN_S8_T1(t
 
 	emptyType := "review bundle: missing issue type"
 	got := review.SuggestValidateFix(emptyType)
+	assert.Contains(t, got, "arm review prepare")
+	assert.NotContains(t, strings.ToLower(got), "fix the assessment")
+
+	emptyTitle := "review bundle: missing issue title"
+	got = review.SuggestValidateFix(emptyTitle)
 	assert.Contains(t, got, "arm review prepare")
 	assert.NotContains(t, strings.ToLower(got), "fix the assessment")
 

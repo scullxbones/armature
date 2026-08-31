@@ -152,6 +152,8 @@ func SuggestValidateFix(message string) string {
 		return "remove the unknown field or rename it to a documented schema property"
 	case strings.Contains(msg, "column must be"):
 		return "omit column or set it to a 1-based column number (>= 1)"
+	case strings.Contains(msg, "line must be"):
+		return "omit line or set it to an integer; JSON null is not allowed"
 	case strings.Contains(msg, "citations must be"):
 		return "set citations to an array; use [] when there is no evidence to cite"
 	case strings.Contains(msg, "invalid criterion status"):

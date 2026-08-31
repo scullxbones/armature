@@ -160,21 +160,24 @@ type Citation struct {
 	ActivityEntryDetails string `json:"activity_entry_details,omitempty"`
 }
 
-// UnmarshalJSON rejects an explicit citation column below the schema minimum of 1.
-// Omitted column is allowed (zero value); JSON Schema only constrains the field
-// when it is present.
+// UnmarshalJSON rejects schema-invalid citation coordinates. JSON null unmarshals
+// into int as a no-op (leaving 0), which ValidateResult treats as an omitted
+// path-level coordinate; the published assessment schema allows an integer or
+// omission, not null. An explicit column below 1 is also rejected. Omitted
+// line/column remain valid.
 func (c *Citation) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	if col, ok := raw["column"]; ok {
-		var n int
-		if err := json.Unmarshal(col, &n); err != nil {
-			return fmt.Errorf("citation: invalid column: %w", err)
+	if line, ok := raw["line"]; ok {
+		if err := decodeCitationCoordinate("line", line, 0); err != nil {
+			return err
 		}
-		if n < 1 {
-			return fmt.Errorf("citation: column must be >= 1, got %d", n)
+	}
+	if col, ok := raw["column"]; ok {
+		if err := decodeCitationCoordinate("column", col, 1); err != nil {
+			return err
 		}
 	}
 	type alias Citation
@@ -183,6 +186,20 @@ func (c *Citation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*c = Citation(a)
+	return nil
+}
+
+func decodeCitationCoordinate(field string, raw json.RawMessage, min int) error {
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return fmt.Errorf("citation: %s must be an integer, not null", field)
+	}
+	var n int
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return fmt.Errorf("citation: invalid %s: %w", field, err)
+	}
+	if n < min {
+		return fmt.Errorf("citation: %s must be >= %d, got %d", field, min, n)
+	}
 	return nil
 }
 
@@ -351,6 +368,9 @@ func (rb ReviewBundle) Valid() error {
 	}
 	if rb.Issue.Type == "" {
 		return fmt.Errorf("review bundle: missing issue type")
+	}
+	if rb.Issue.Title == "" {
+		return fmt.Errorf("review bundle: missing issue title")
 	}
 	if rb.Fingerprints.Contract == "" {
 		return fmt.Errorf("review bundle: missing contract fingerprint")

@@ -315,6 +315,23 @@ func TestReviewBundle_Valid(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "missing issue title",
+			bundle: review.ReviewBundle{
+				SchemaVersion: 1,
+				BundleID:      "sha256:abc123",
+				Issue: review.IssueInfo{
+					ID:    "TASK-1",
+					Type:  "task",
+					Title: "",
+				},
+				Fingerprints: review.Fingerprints{
+					Contract: "sha256:contract123",
+					Delivery: "sha256:delivery123",
+				},
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -380,6 +397,30 @@ func TestDecodeReviewBundle_RejectsSchemaGaps_REQ_LNGHZN_S8_T1(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, strings.ToLower(err.Error()), "changed_files")
 	})
+
+	t.Run("empty issue title", func(t *testing.T) {
+		t.Parallel()
+		data := mutateRawJSON(t, valid, func(obj map[string]any) {
+			issue, ok := obj["issue"].(map[string]any)
+			require.True(t, ok)
+			issue["title"] = ""
+		})
+		_, err := review.DecodeReviewBundle(data)
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "title")
+	})
+
+	t.Run("omitted issue title", func(t *testing.T) {
+		t.Parallel()
+		data := mutateRawJSON(t, valid, func(obj map[string]any) {
+			issue, ok := obj["issue"].(map[string]any)
+			require.True(t, ok)
+			delete(issue, "title")
+		})
+		_, err := review.DecodeReviewBundle(data)
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "title")
+	})
 }
 
 func TestDecodeConformanceAssessment_RejectsNullCitations_REQ_LNGHZN_S8_T1(t *testing.T) {
@@ -439,6 +480,36 @@ func TestDecodeConformanceAssessment_RejectsInvalidCitationColumn_REQ_LNGHZN_S8_
 	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": -1`)))
 	require.Error(t, err, "negative column must be rejected")
 	assert.Contains(t, strings.ToLower(err.Error()), "column")
+}
+
+func TestDecodeConformanceAssessment_RejectsNullCitationLine_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
+
+	valid := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "contract_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "delivery_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "done",
+      "citations": [{"path": "impl.go"%s}]
+    }
+  ]
+}`
+
+	_, err := review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "line": 1`)))
+	require.NoError(t, err, "integer line must remain valid")
+
+	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, ``)))
+	require.NoError(t, err, "omitted line must remain valid")
+
+	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "line": null`)))
+	require.Error(t, err, "explicit line null must be rejected")
+	assert.Contains(t, strings.ToLower(err.Error()), "line")
+	assert.NotContains(t, strings.ToLower(err.Error()), "column")
 }
 
 func validDecodeBundle() review.ReviewBundle {
