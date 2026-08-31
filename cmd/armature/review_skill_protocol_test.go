@@ -109,3 +109,31 @@ func TestCoordinatorSkillRedispatchesAllAfterBundleRefresh_REQ_LNGHZN_S8_T2(t *t
 	require.NotContains(t, collect, "re-dispatch that reviewer **once**",
 		"re-dispatching only the failed reviewer leaves other assessments bound to the old bundle")
 }
+
+func TestCoordinatorSkillRefreshesActivityIndexAfterBundleRepair_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+	coord := readEmbedSkill(t, "armature-coordinator")
+	collect := headingSection(t, coord, "**Check each reviewer's response shape before collecting anything.**", "4. **Record every assessment**")
+
+	require.Contains(t, collect, "HAS_ACTIVITY",
+		"after Validation: error bundle refresh, recompute HAS_ACTIVITY from the new bundle")
+	require.Contains(t, collect, "INDEX_OUTPUT",
+		"after Validation: error bundle refresh, rebuild INDEX_OUTPUT before redispatch")
+	require.Contains(t, collect, "armature-activity-indexer",
+		"fresh evidence must be indexed; do not keep the step 2.1 index")
+	require.Contains(t, collect, "do not pass the old index",
+		"if activity first appeared or disappeared, drop the stale INDEX_OUTPUT")
+}
+
+func TestReviewerSkillTreatsStaleContractMismatchAsSetup_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+	reviewer := readEmbedSkill(t, "armature-reviewer")
+	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+
+	require.Contains(t, step5b, "issue contract",
+		"a contract fingerprint that matches the stale bundle but not the current issue is setup")
+	require.Contains(t, step5b, "Validation: error",
+		"stale-contract reports must use the operational no-path shape, not assessment retries")
+	require.NotContains(t, step5b, "four attempts",
+		"setup reports must not consume the four-run assessment retry cap")
+}

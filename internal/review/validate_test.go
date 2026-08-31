@@ -1554,3 +1554,17 @@ func TestSuggestValidateFix_BundleValidFailuresSuggestPrepare_REQ_LNGHZN_S8_T1(t
 	assert.Contains(t, got, "arm review prepare")
 	assert.NotContains(t, got, "set schema_version")
 }
+
+func TestSuggestValidateFix_IssueContractMismatchSuggestsPrepare_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+
+	issue := "assessment contract fingerprint aaa does not match issue contract fingerprint bbb"
+	got := review.SuggestValidateFix(issue)
+	assert.Contains(t, got, "arm review prepare")
+	assert.NotContains(t, strings.ToLower(got), "copy fingerprints")
+
+	bundle := "assessment contract_fingerprint aaa does not match bundle contract_fingerprint bbb"
+	got = review.SuggestValidateFix(bundle)
+	assert.Contains(t, strings.ToLower(got), "copy fingerprints.contract")
+	assert.NotContains(t, got, "arm review prepare")
+}

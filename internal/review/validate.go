@@ -185,9 +185,11 @@ func SuggestValidateFix(message string) string {
 		return "keep either path or activity_entry_id on the citation, not both"
 	case strings.Contains(msg, "delivery_fingerprint") && strings.Contains(msg, "does not match"):
 		return "copy fingerprints.delivery from the prepared review bundle"
+	case strings.Contains(msg, "issue contract fingerprint"):
+		return "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
 	case strings.Contains(msg, "contract fingerprint") && strings.Contains(msg, "does not match"),
 		strings.Contains(msg, "contract_fingerprint") && strings.Contains(msg, "does not match"):
-		return "copy fingerprints.contract from the prepared review bundle (or re-run arm review prepare)"
+		return "copy fingerprints.contract from the prepared review bundle"
 	case strings.Contains(msg, "bundle integrity"):
 		return "re-run arm review prepare --output <bundle.json>; do not edit the bundle file"
 	case strings.Contains(msg, "bundle_id") && strings.Contains(msg, "does not match"):
