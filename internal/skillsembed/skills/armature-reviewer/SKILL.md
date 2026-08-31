@@ -51,7 +51,8 @@ Assign status (satisfied, partially_satisfied, not_satisfied, indeterminate)
 Write ConformanceAssessment JSON once to a unique $ASSESSMENT path
     ↓
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
-    ↓ (invalid: apply suggestions to the same path, rewrite, re-validate;
+    ↓ (invalid: apply suggestions per 5b case 2, including re-evaluate
+       status when a citation is dropped; rewrite, re-validate;
        at most 3 attempts after the first failure)
     ↓ (valid)
 Return rating + findings + assessment path to coordinator
@@ -387,6 +388,13 @@ assessment-fixable — not on "was anything printed":
 2. **Non-zero with an assessment-fixable report** → apply every
    `suggestion:` to `$ASSESSMENT` (rewrite ids, citations, fingerprints,
    statuses, or `missing_evidence` as directed). Do not edit the bundle.
+   When a suggestion drops a citation (including `drop activity_entry_id
+   citations` on a bundle with no activity section), re-evaluate every
+   criterion that citation supported against remaining evidence in the
+   same rewrite. Lower the status if remaining citations cannot support
+   it. A behavioral gate claim with no remaining citable evidence
+   becomes `not_satisfied` with `missing_evidence` that the supporting citation
+   is gone. Rebuild rating and findings from that rewrite.
    Then:
    1. Re-run the same command against the same `$ASSESSMENT` and
       `$BUNDLE_FILE`.
@@ -646,7 +654,8 @@ ASSESSMENT=".armature/review/TASK-42-e3b0c442-r1.json"
 #    Do not write this path again in step 6 after validate succeeds.
 
 # 3. Self-validate; apply assessment-fixable suggestions to the same
-#    $ASSESSMENT and retry at most 3 times after the first failure (step 5b).
+#    $ASSESSMENT per step 5b case 2 (re-evaluate status when a citation
+#    is dropped) and retry at most 3 times after the first failure.
 #    Retry ONLY for valid:false reports you can fix by rewriting the
 #    assessment. A prepare-the-bundle suggestion or an {error:...} envelope
 #    is operational — do not retry. Prefer --format json and read .error.cause.
@@ -688,7 +697,8 @@ findings list the coordinator passes, not a reread of that file.
 **Validation:**
 ```bash
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
-# Apply each failure's suggestion, rewrite $ASSESSMENT, and re-run —
+# Apply each failure's suggestion per step 5b case 2 (re-evaluate status
+# when a citation is dropped), rewrite $ASSESSMENT, and re-run —
 # at most 3 attempts after the first failure. If it still fails, use
 # the exhausted-retry chat shape; do not return a recordable path.
 # Only retry when the command printed an assessment-fixable report.
@@ -706,7 +716,8 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
   the same rating without duplicating the record.
 - The reviewer never calls `arm review record`. If the review process is
   interrupted, re-run `arm review validate --assessment "$ASSESSMENT"
-  --bundle "$BUNDLE_FILE"` (apply suggestions and retry per step 5b) and
+  --bundle "$BUNDLE_FILE"` (apply suggestions and retry per step 5b case 2,
+  including re-evaluate status when a citation is dropped) and
   return the validated path — do not retry `arm review record`.
 
 ---
@@ -734,7 +745,8 @@ whose suggestions rewrite `$ASSESSMENT`):
 - `bundle_id` does not match input
 - Fingerprints do not match
 
-**Action:** Apply each reported suggestion to the assessment JSON and re-run
+**Action:** Apply each reported suggestion to the assessment JSON per step
+5b case 2 (re-evaluate status when a citation is dropped) and re-run
 `arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"`,
 at most 3 attempts after the first failure. If the command exits 0, return
 the success bounded-chat shape. If it is still invalid after the cap, return

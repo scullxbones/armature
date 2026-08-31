@@ -149,3 +149,24 @@ func TestReviewerSkillRoutesNonAssessmentRepairsAsOperational_REQ_LNGHZN_S8_T2(t
 	require.NotContains(t, step5b, "four attempts",
 		"setup reports must not consume the four-run assessment retry cap")
 }
+
+func TestReviewerSkillReevaluatesStatusWhenDroppingCitations_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+	reviewer := readEmbedSkill(t, "armature-reviewer")
+	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+
+	require.Contains(t, step5b, "supporting citation",
+		"a suggestion that drops citations must re-evaluate the criteria those citations supported")
+	require.Contains(t, step5b, "re-evaluate",
+		"citation removal is not the whole fix; status must be re-evaluated against remaining evidence")
+	require.Contains(t, step5b, "not_satisfied",
+		"a behavioral criterion left with no remaining evidence must be lowered, not kept satisfied")
+
+	example := headingSection(t, reviewer, "**Example Workflow:**", "## Validation and Idempotence")
+	require.Contains(t, example, "re-evaluate",
+		"example workflow recap must re-evaluate status when a suggestion drops a citation")
+
+	validation := headingSection(t, reviewer, "## Validation and Idempotence", "## Error Handling")
+	require.Contains(t, validation, "re-evaluate",
+		"validation recap must re-evaluate status when a suggestion drops a citation")
+}
