@@ -11,9 +11,9 @@ The `.armature/config.json` file is stored on the `_armature` branch and accesse
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `project_type` | string | auto-detected | Project type, auto-detected from repo markers. Possible values: `go`, `node`, `python`, `rust`, `make`, `unknown`. |
-| `default_ttl` | integer | `60` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted; an explicit `--ttl` always wins. The chosen value is written onto the claim op and drives claim staleness (see [Interaction with Stale Detection](#interaction-with-stale-detection)). If unset or 0, the builtin fallback is 60. |
-| `token_budget` | integer | `1600` | Default token budget for `arm render-context`. Used when `--budget` is omitted; an explicit `--budget` always wins. Truncation approximates 4 characters per token (see [Interaction with Context Assembly](#interaction-with-context-assembly)). If unset or 0, the builtin fallback is 4000. `arm bootstrap` writes 1600. |
-| `low_stakes_push_threshold` | integer | `5` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets. The field does not push `_armature` and does not change batch size; only a high-stakes op (claim, transition, assign) pushes. If unset or 0, the builtin fallback is 5. |
+| `default_ttl` | integer | `60` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted; an explicit `--ttl` always wins. The chosen value is written onto the claim op and drives claim staleness (see [Interaction with Stale Detection](#interaction-with-stale-detection)). If the field is omitted, the builtin fallback is 60. A present `0` is out of range: `arm doctor` D10 fails. |
+| `token_budget` | integer | `1600` | Default token budget for `arm render-context`. Used when `--budget` is omitted; an explicit `--budget` always wins. Truncation approximates 4 characters per token (see [Interaction with Context Assembly](#interaction-with-context-assembly)). If the field is omitted, the builtin fallback is 4000. A present `0` is out of range: `arm doctor` D10 fails. `arm bootstrap` writes 1600. |
+| `low_stakes_push_threshold` | integer | `5` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), the pending-push counter resets. The field does not push `_armature` and does not change batch size; only a high-stakes op pushes (committed and a `_armature` push attempted immediately). That class includes `claim`, `transition`, `assign`, `unassign`, `ready` when it claims, and `doctor --fix`; notes, heartbeats, and decisions are not in it. If the field is omitted, the builtin fallback is 5. A present `0` is out of range: `arm doctor` D10 fails. |
 | `hooks` | array | `[]` | Array of pre-transition hook configurations (see [Hooks](#hooks) below). |
 
 ### Project Type Detection
@@ -93,7 +93,7 @@ Edit `.armature/config.json` directly with a text editor. Changes take effect im
 
 ## Interaction with Context Assembly
 
-`arm render-context` takes its token budget from, in order: an explicit `--budget` flag, then `token_budget` in config when that value is greater than zero, then the builtin 4000. `--raw` skips truncation.
+`arm render-context` takes its token budget from, in order: an explicit `--budget` flag, then `token_budget` in config when that value is greater than zero, then the builtin 4000. `--raw` skips truncation. Command-path fallback for a missing or non-positive value does not make a present `0` valid: `arm doctor` D10 still fails.
 
 When assembled context exceeds `budget * 4` characters, lowest-priority layers are dropped until the bundle fits. At least one layer is always kept (typically the spec). Bootstrap's `token_budget: 1600` is about 6400 characters; if the spec itself is 4000 characters, only a few additional layers will remain.
 
@@ -103,10 +103,13 @@ When assembled context exceeds `budget * 4` characters, lowest-priority layers a
 
 ```
 last_activity = max(claimed_at, last_heartbeat, claiming_worker_activity)
-is_stale      = now > last_activity + claim_ttl * 60 seconds
+if claim_ttl <= 0:
+    never stale   # explicit `arm claim --ttl 0`; not the omitted-config fallback
+else:
+    is_stale = now > last_activity + claim_ttl * 60 seconds
 ```
 
-An explicit `--ttl` on `arm claim` overrides config for that claim only. Worker idle/stale classification also uses `default_ttl` when a claim recorded no TTL. See `arm list` for staleness indicators.
+An explicit `--ttl` on `arm claim` overrides config for that claim only. `--ttl 0` is accepted and never expires (`IsClaimStale` is false for TTL ≤ 0). That is distinct from omitting `default_ttl` in config, which falls back to 60, and from writing `"default_ttl": 0`, which is D10-invalid. Worker idle/stale classification also uses `default_ttl` when a claim recorded no TTL. See `arm list` for staleness indicators.
 
 ## See Also
 
