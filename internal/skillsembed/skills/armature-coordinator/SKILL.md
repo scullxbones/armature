@@ -473,7 +473,9 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
      retries. An assessment file may exist on disk, but it never validated.
    - `Validation: error` — `arm review validate` failed operationally
      (unreadable assessment or bundle path, bundle missing an issue ID,
-     snapshot load failure, issue absent from state). Nothing was assessed.
+     snapshot load failure, issue absent from state, Step 1 bundle
+     preflight, or a `valid: false` report whose only suggestion is to
+     re-run `arm review prepare`). Nothing recordable was assessed.
 
    For either shape, do **not** reconstruct or guess a
    `.armature/review/<issue>-<bundle8>-<token>.json` path, do **not** add one
@@ -481,27 +483,42 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    reviewer. A path you assembled yourself is not a validated assessment, and
    recording one asserts a review that did not happen. Instead:
 
+   Track **any unrecovered** no-path response. A nonempty `RESULT_FILES` does
+   **not** authorize recording when a sibling returned `Validation: failed`
+   or an unrepaired `Validation: error`.
+
    - `Validation: error` → repair what the reviewer reported (re-run
      `arm review prepare` for a fresh `$BUNDLE_FILE`; confirm the issue
-     exists in state), then re-dispatch that reviewer **once**. If it
-     returns the same shape again, escalate rather than looping.
+     exists in state). After refreshing `$BUNDLE_FILE`, drop every path
+     already in `RESULT_FILES` (those assessments are bound to the old
+     bundle) and re-dispatch **every reviewer whose result will be recorded**,
+     not only the failed one. Each re-dispatch is once. If
+     the repaired reviewer returns the same shape again, mark it
+     unrecovered and escalate rather than looping.
    - `Validation: failed` → the assessment is not recordable. Record the
-     reported failures on the issue and escalate to a human (Constitution
-     I7); do not treat the issue as reviewed.
+     reported failures on the issue, mark that reviewer unrecovered, and
+     escalate to a human (Constitution I7); do not treat the issue as
+     reviewed.
 
    ```bash
    arm note --issue "$TASK_ID" --msg "review not recorded: <shape> from <reviewer-token>; <reason>"
    ```
 
-   If **every** reviewer returned a non-path shape, `RESULT_FILES` is empty.
-   Do not proceed to step 4 with an empty array, do not synthesize a rating,
-   and do not treat an empty result as Green. Stop and escalate.
+   If **any unrecovered** no-path response remains, stop before step 4 even
+   when `RESULT_FILES` is nonempty. Do not record the Green siblings, do
+   not synthesize a rating, and do not treat a partial result as Green.
+   Stop and escalate.
 
    ```bash
    # Each reviewer writes a DISTINCT path and returns it. Confirm each
    # file exists and is JSON. Do not share one .armature/review/ file.
    # Only paths from success-shape responses belong here.
    RESULT_FILES=(.armature/review/TASK-ID-bundle8-r1.json .armature/review/TASK-ID-bundle8-r2.json)
+   UNRECOVERED=()  # append each token that returned a no-path shape that was not repaired
+   if [ ${#UNRECOVERED[@]} -ne 0 ]; then
+     echo "ERROR: unrecovered no-path reviewer(s): ${UNRECOVERED[*]}; escalate (I7); do not record" >&2
+     exit 1
+   fi
    if [ ${#RESULT_FILES[@]} -eq 0 ]; then
      echo "ERROR: no reviewer returned a validated assessment; escalate (I7)" >&2
      exit 1
@@ -686,13 +703,21 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
      do not start a new comprehensive review. Out-of-scope findings
      are recorded but block only at critical severity.
    ```
-   After the confirmation reviewer returns, assign the **new**
-   `$RESULT_FILE` (the path it returned; token `confirm-$CYCLE`) and
-   record it against the refreshed bundle. The refresh `unset` dropped
-   the first-pass path so it cannot be reused:
+   After the confirmation reviewer returns, apply the **same
+   response-shape branch** as initial collection **before** assigning
+   `$RESULT_FILE`:
+
+   - Success shape → assign the returned path (token `confirm-$CYCLE`) and
+     record it against the refreshed bundle. The refresh `unset` dropped
+     the first-pass path so it cannot be reused.
+   - `Validation: error` / `Validation: failed` / `Assessment: not returned` →
+     do **not** treat the chat as a filename, do **not**
+     `test -s` a guessed path, and do **not** call `arm review record`.
+     Route as in step 3: repair-once (and re-dispatch every reviewer whose result will be recorded) for `Validation: error`; `arm note`
+     and I7 escalate for `Validation: failed`.
    ```bash
-   # Path the confirmation reviewer returned (distinct token confirm-$CYCLE).
-   RESULT_FILE="<path from confirmation reviewer chat>"
+   # Only after a success-shape response (distinct token confirm-$CYCLE).
+   RESULT_FILE="<path from confirmation reviewer success chat>"
    test -s "$RESULT_FILE" || { echo "ERROR: confirmation assessment missing" >&2; exit 1; }
    arm review record --issue "$TASK_ID" --assessment "$RESULT_FILE" --bundle "$BUNDLE_FILE" \
      || { echo "ERROR: review record failed for $RESULT_FILE; do not enter a.3" >&2; exit 1; }

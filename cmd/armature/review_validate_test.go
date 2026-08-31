@@ -416,6 +416,41 @@ func TestReviewValidateSuggestsSpecificDecodeErrors_REQ_LNGHZN_S8_T1(t *testing.
 	})
 }
 
+func TestReviewValidateMalformedBundleEmitsPrepareSuggestion_REQ_LNGHZN_S8_T2(t *testing.T) {
+	repo, _, validAssessment, _ := prepareReviewValidateFixture(t)
+	malformed := filepath.Join(repo, "bundle_malformed.json")
+	require.NoError(t, os.WriteFile(malformed, []byte("{"), 0o644))
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr,
+		"review", "validate", "--repo", repo, "--bundle", malformed, "--assessment", validAssessment, "--format", "json")
+	report := requireAdvisoryValidateReport(t, stdout.String(), code)
+	assert.Contains(t, strings.ToLower(report.Failures[0].Message), "parse bundle")
+	assert.Contains(t, report.Failures[0].Suggestion, "arm review prepare")
+	assert.NotContains(t, stdout.String(), `"error"`, "malformed-but-readable bundle is a valid:false report, not a Command Failure")
+}
+
+func TestReviewValidateJSONOperationalFailureOnStdout_REQ_LNGHZN_S8_T2(t *testing.T) {
+	repo, _, validAssessment, _ := prepareReviewValidateFixture(t)
+	missing := filepath.Join(repo, "no-such-bundle.json")
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr,
+		"review", "validate", "--repo", repo, "--bundle", missing, "--assessment", validAssessment, "--format", "json")
+	assert.Equal(t, 1, code)
+	assert.Empty(t, stderr.String(), "json Command Failures must not land on stderr")
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasValid := payload["valid"]
+	assert.False(t, hasValid, "operational failure must not look like a validation report")
+	errObj, ok := payload["error"].(map[string]any)
+	require.True(t, ok, "stdout must be {error:{...}}")
+	cause, hasCause := errObj["cause"].(string)
+	require.True(t, hasCause, "error.cause must be a string")
+	assert.Contains(t, cause, "read bundle file")
+}
+
 func TestReviewValidateSuggestsPrepareOnBundleIntegrity_REQ_LNGHZN_S8_T1(t *testing.T) {
 	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
 
