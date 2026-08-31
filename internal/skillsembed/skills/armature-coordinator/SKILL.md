@@ -489,12 +489,16 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
 
    - `Validation: error` → repair what the reviewer reported (re-run
      `arm review prepare` for a fresh `$BUNDLE_FILE`; confirm the issue
-     exists in state). After refreshing `$BUNDLE_FILE`, drop every path
-     already in `RESULT_FILES` (those assessments are bound to the old
-     bundle) and re-dispatch **every reviewer whose result will be recorded**,
-     not only the failed one. Each re-dispatch is once. If
-     the repaired reviewer returns the same shape again, mark it
-     unrecovered and escalate rather than looping.
+     exists in state). After refreshing `$BUNDLE_FILE`, recompute
+     `HAS_ACTIVITY` from the new bundle and rebuild `$INDEX_OUTPUT`
+     (same procedure as step 2.1). If `HAS_ACTIVITY` is `yes`, re-dispatch
+     **armature-activity-indexer** on this new `$BUNDLE_FILE` into a fresh
+     `$INDEX_OUTPUT`. If `no`, leave `$INDEX_OUTPUT` unset — do not pass the old index.
+     Drop every path already in `RESULT_FILES` (those assessments are bound
+     to the old bundle) and re-dispatch **every reviewer whose result will be recorded**,
+     not only the failed one.
+     Each re-dispatch is once. If the repaired reviewer returns the same
+     shape again, mark it unrecovered and escalate rather than looping.
    - `Validation: failed` → the assessment is not recordable. Record the
      reported failures on the issue, mark that reviewer unrecovered, and
      escalate to a human (Constitution I7); do not treat the issue as

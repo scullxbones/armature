@@ -365,12 +365,15 @@ assessment-fixable — not on "was anything printed":
   invalid:` followed by `  - <message>` / `    suggestion: <fix>` lines;
   `--format json` prints an object carrying `valid` and `failures[]`.
   At least one `suggestion:` can be applied by rewriting `$ASSESSMENT`
-  (ids, citations, fingerprints, statuses, or `missing_evidence`).
-  Retryable (case 2).
+  (ids, citations, statuses, `missing_evidence`, or copying fingerprints
+  from the prepared bundle when that is the only fix). Retryable (case 2).
 - **Bundle/setup report** — same `valid: false` envelope, but every
   `suggestion:` is to re-run `arm review prepare` (parse-bundle /
-  decode-review-bundle, bundle integrity, or any report whose only fix
-  is regenerating the bundle). The assessment was never judged. **Not
+  decode-review-bundle, bundle integrity, an issue contract fingerprint
+  mismatch, or any report whose only fix is regenerating the bundle).
+  Copying `fingerprints.contract` from the prepared bundle cannot fix a
+  stale issue contract — the assessment already matches that bundle, and
+  a different fingerprint fails the earlier bundle check. **Not
   retryable.** Use case 3 (`Validation: error`); do not spend the retry
   cap on a bundle you are forbidden to edit.
 - **Operational envelope** — `--format json` prints an object with
@@ -410,8 +413,8 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE" --format 
 Prefer this form when classifying:
 
 - object with `valid` and assessment-fixable `failures[]` → case 2
-- object with `valid: false` whose only `suggestion:` is re-run
-  `arm review prepare` → case 3
+- object with `valid: false` whose `suggestion:` is re-run
+  `arm review prepare` (only fix, or an issue contract mismatch) → case 3
 - object with `"error"` and no `valid` → case 3; Error line is `.error.cause`
 
 This is the retry loop that used to land on the coordinator after
