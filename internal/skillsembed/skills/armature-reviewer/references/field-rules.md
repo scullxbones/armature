@@ -196,16 +196,14 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
    - The entire file is the relevant evidence (e.g., "this test file demonstrates the criterion")
    - Note: unlike line-number citations, a path-level citation to a **deleted** file is still valid (the file's entry is present in changed_files) — use it only to cite the deletion itself, not remaining file content
 
-4. **Citation array may be empty only if `missing_evidence` is present.**
-   - This applies to every status, including `"satisfied"`.
-   - Evidence-free satisfaction is invalid: a `satisfied` result with neither
-     citations nor `missing_evidence` is rejected.
+4. **`"satisfied"` requires a non-empty citation array.**
+   - `missing_evidence` cannot stand in for citations on a satisfied result.
+   - A `satisfied` result with an empty citation list is rejected.
 
-5. **Citation array must be non-empty OR `missing_evidence` must be present**
-   - For every status
+5. **Non-satisfied statuses: citation array non-empty OR `missing_evidence` present.**
    - A dropped citation that leaves a criterion with no remaining evidence
-     cannot stay `satisfied` without `missing_evidence` (and a behavioral
-     gate claim in that position is `not_satisfied`)
+     cannot stay `satisfied`. Lower the status; a behavioral gate claim in
+     that position is `not_satisfied` with `missing_evidence`.
 
 **Examples:**
 
@@ -265,8 +263,8 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
 **Failure action:** Reject the assessment if:
 - Any citation path is not in changed_files
 - Any citation line number is invalid (≤ 0, or does not exist in the diff)
-- Citations array is empty AND `missing_evidence` is absent, for any status
-  including `"satisfied"`
+- Status is `"satisfied"` and the citations array is empty
+- Citations array is empty AND `missing_evidence` is absent, for a non-satisfied status
 
 ---
 
@@ -278,8 +276,9 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
 **Validation rule:**
 
 1. **Required if:**
-   - Citations array is empty, for **every** status including `"satisfied"`
+   - Citations array is empty, for `"not_satisfied"`, `"partially_satisfied"`, or `"indeterminate"`
    - Explains what evidence would be needed to make a confident assessment
+   - Never a substitute for citations on `"satisfied"`
 
 2. **Optional if:**
    - Citations are already present
@@ -328,8 +327,8 @@ referencing specific code, tests, or documentation. See `references/rubric.md` f
 }
 ```
 
-**Failure action:** Reject the assessment if citations is empty and missing_evidence is absent,
-for any status including `"satisfied"`.
+**Failure action:** Reject the assessment if citations is empty and missing_evidence is absent
+on a non-satisfied status, or if status is `"satisfied"` with an empty citation list.
 
 ---
 
@@ -380,7 +379,8 @@ chat shape if the retry cap is reached.
 | `Invalid status` | Use only: `satisfied`, `partially_satisfied`, `not_satisfied`, `indeterminate` |
 | `Citation path not in changed_files` | Verify file path matches exactly; check for typos |
 | `Citation line does not exist` | Ensure line number appears in the file's diff hunk; verify 1-indexed |
-| `Missing citations for any status` | Add citations pointing to evidence or add `missing_evidence` explanation |
+| `Missing citations for satisfied` | Add citations, or lower the status and set `missing_evidence` |
+| `Missing citations for a non-satisfied status` | Add citations pointing to evidence or add `missing_evidence` explanation |
 | `Empty rationale` | Provide concrete, evidence-based explanation (≥ 10 characters) |
 | `Duplicate criterion IDs` | Ensure results array has no duplicate ids |
 | `Missing acceptance criterion` | Add missing `acceptance[N]` result to match contract |

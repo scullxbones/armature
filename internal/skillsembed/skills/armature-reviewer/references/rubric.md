@@ -21,8 +21,8 @@ point to specific code, tests, or documentation that demonstrates fulfillment.
 - Edge cases and error handling are covered
 - No gaps or unfinished work
 
-**Citation requirement:** Required. Citations, or `missing_evidence` if you
-cannot cite. Evidence-free `satisfied` is invalid.
+**Citation requirement:** Required. At least one citation. `missing_evidence`
+cannot keep a result `satisfied`.
 
 **Rationale examples:**
 - "TokenParser.Parse() method implemented with cases for all 8 token types; each covered by at least one test case."
@@ -340,7 +340,7 @@ Before submitting your ConformanceAssessment, verify:
 - [ ] `contract_fingerprint` and `delivery_fingerprint` match input exactly
 - [ ] All citations point to files in `changed_files`
 - [ ] Rationales are concrete and evidence-based (no vague language like "looks good")
-- [ ] Status values are consistent (if no citations, `missing_evidence` is present — including for `satisfied`)
+- [ ] Status values are consistent (`satisfied` has citations; other empty-citation statuses have `missing_evidence`)
 - [ ] JSON is valid and passes schema validation
 
 ---

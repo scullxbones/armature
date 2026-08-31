@@ -209,7 +209,7 @@ func TestCriterionResult_Valid(t *testing.T) {
 				Rationale:       "gate claim with no remaining citable evidence yet",
 				MissingEvidence: "dropped activity citation; no remaining evidence",
 			},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "valid with citations",
