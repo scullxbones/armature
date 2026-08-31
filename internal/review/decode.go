@@ -26,9 +26,12 @@ func DecodeReviewBundle(data []byte) (ReviewBundle, error) {
 
 // validateDecodedBundleContract enforces published bundle-schema constraints that
 // ReviewBundle.Valid and encoding/json zero values do not: issue.type enum,
-// 40-hex delivery SHAs, and a present delivery.changed_files array (omitted or
-// JSON null both decode as a nil slice).
+// nonempty issue.title, 40-hex delivery SHAs, and a present
+// delivery.changed_files array (omitted or JSON null both decode as a nil slice).
 func validateDecodedBundleContract(rb ReviewBundle) error {
+	if rb.Issue.Title == "" {
+		return fmt.Errorf("review bundle: missing issue title")
+	}
 	if rb.Issue.Type != "" && !issuetype.IsValid(rb.Issue.Type) {
 		return fmt.Errorf("review bundle: invalid issue type %q", rb.Issue.Type)
 	}
