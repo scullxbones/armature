@@ -383,11 +383,11 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE"
 ```
 
 Apply each **assessment-fixable** `suggestion:` to the same `$ASSESSMENT`
-and retry per SKILL.md step 5b (at most 3 attempts after the first
-failure). If no suggestion is assessment-applicable, return
-`Validation: error` — do not retry. After any suggestion-driven rewrite,
-regenerate rating and actionable findings from the final validated
-assessment. Step 5a is not the return gate and is not a substitute for
+and retry per SKILL.md step 5b case 2 (re-evaluate status when a citation
+is dropped; at most 3 attempts after the first failure). If no suggestion
+is assessment-applicable, return `Validation: error` — do not retry.
+After any suggestion-driven rewrite, regenerate rating and actionable
+findings from the final validated assessment. Step 5a is not the return gate and is not a substitute for
 `arm review validate`. Do not return to the coordinator until Step 5b
 exits 0, or use step 6's exhausted-retry chat shape if the retry cap is
 reached.
