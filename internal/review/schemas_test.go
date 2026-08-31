@@ -431,6 +431,31 @@ func TestConformanceAssessmentSchema_RejectsSatisfiedWithoutEvidence_REQ_LNGHZN_
 	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
 }
 
+// TestConformanceAssessmentSchema_RejectsSatisfiedWithOnlyMissingEvidence_REQ_LNGHZN_S8_T2
+// asserts that missing_evidence cannot stand in for citations on a satisfied
+// result: that shape is unrepresentable in the schema, matching
+// CriterionResult.Valid().
+func TestConformanceAssessmentSchema_RejectsSatisfiedWithOnlyMissingEvidence_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+
+	assessmentJSON := `{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "results": [
+    {
+      "id": "acceptance[1]",
+      "status": "satisfied",
+      "rationale": "make check is green per the outcome text",
+      "missing_evidence": "dropped activity citation; no remaining evidence"
+    }
+  ],
+  "contract_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "delivery_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}`
+
+	validateSchemaRejects(t, "conformance-assessment.schema.json", assessmentJSON)
+}
+
 // TestConformanceAssessmentSchema_RequiresMissingEvidenceWhenNoCitations_REQ_TOPTIER_S2_T1
 // asserts that the conformance-assessment schema rejects a non-satisfied
 // result that has no citations and no missing_evidence, matching the runtime

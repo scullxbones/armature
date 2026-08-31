@@ -198,6 +198,8 @@ func ClassifyValidateFix(message string) ValidateFix {
 		return fix(`set id to "definition_of_done" or "acceptance[N]"`)
 	case strings.Contains(msg, "missing rationale"):
 		return fix("add a rationale explaining the criterion status")
+	case strings.Contains(msg, "citations required"):
+		return fix("add at least one citation, or lower the status from satisfied and set missing_evidence")
 	case strings.Contains(msg, "missing evidence"), strings.Contains(msg, "citations or missing_evidence"):
 		return fix("set missing_evidence to describe what is absent, or add citations")
 	case strings.Contains(msg, "mutually exclusive"):

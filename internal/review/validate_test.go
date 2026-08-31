@@ -1593,4 +1593,9 @@ func TestClassifyValidateFix_AssessmentVsSetup_REQ_LNGHZN_S8_T2(t *testing.T) {
 
 	dropActivity := review.ClassifyValidateFix("criterion result acceptance[1]: cites activity log entries but bundle has no bundle activity section")
 	assert.True(t, dropActivity.Fixable, "dropping activity_entry_id citations is an assessment rewrite")
+
+	satisfiedNoCitations := review.ClassifyValidateFix("criterion result acceptance[1]: citations required for status satisfied")
+	assert.True(t, satisfiedNoCitations.Fixable, "evidence-free satisfied is an assessment rewrite, not a setup error")
+	assert.Contains(t, strings.ToLower(satisfiedNoCitations.Suggestion), "citation")
+	assert.NotContains(t, strings.ToLower(satisfiedNoCitations.Suggestion), "or [] with missing_evidence")
 }

@@ -78,7 +78,7 @@
           },
           "missing_evidence": {
             "type": "string",
-            "description": "Explicit statement of missing evidence when citations are absent (required for every status, including satisfied, when citations are empty)",
+            "description": "Explicit statement of missing evidence when citations are absent. Required for not_satisfied, partially_satisfied, and indeterminate when citations are empty. Satisfied results must include citations; missing_evidence cannot stand in for them.",
             "minLength": 1
           }
         },
@@ -95,6 +95,9 @@
           {
             "required": ["missing_evidence"],
             "properties": {
+              "status": {
+                "enum": ["not_satisfied", "partially_satisfied", "indeterminate"]
+              },
               "missing_evidence": {
                 "type": "string",
                 "minLength": 1

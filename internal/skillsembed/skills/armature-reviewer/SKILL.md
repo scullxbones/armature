@@ -165,7 +165,7 @@ assigning status.
     {"path": "pkg/parser/parser_test.go", "line": 120},
     {"path": "pkg/parser/types.go"}
   ],
-  "missing_evidence": "Required when citations are empty, for every status including satisfied"
+  "missing_evidence": "Required when citations are empty for not_satisfied, partially_satisfied, or indeterminate. Satisfied requires citations."
 }
 ```
 
@@ -283,7 +283,7 @@ the input ReviewBundle is validated separately against the [review-bundle schema
 - Each result must pass `CriterionResult.Valid()` — see `references/rubric.md` for details
 - **Every citation must correspond to a specific added/modified (`+`) line in a diff hunk** in the delivery.
   See `references/field-rules.md` for mandatory line-citation validation rules.
-- Every result must carry citations or `missing_evidence`. Evidence-free `satisfied` is invalid.
+- Every result must carry citations or `missing_evidence`. `satisfied` requires citations; `missing_evidence` cannot stand in.
 
 ### 5b. Self-Validate with `arm review validate` (Mandatory)
 
