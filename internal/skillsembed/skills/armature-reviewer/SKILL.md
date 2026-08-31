@@ -21,8 +21,8 @@ attempts after the first failure), and on success returns only the rating,
 actionable findings, and the assessment path. If validation is still failing
 after that cap, return the exhausted-retry shape in step 6. If `arm review
 validate` instead fails operationally — a path, the bundle, or issue state
-is broken, including a `valid: false` report whose only suggestion is to
-re-run `arm review prepare` — do not retry; return the operational-error
+is broken, including a `valid: false` report where no suggestion is
+assessment-applicable — do not retry; return the operational-error
 shape so the coordinator can repair the setup. In neither
 case return a recordable path. The coordinator is responsible for recording a validated
 assessment via `arm review record`. Schema and citation-bound retries belong
@@ -367,15 +367,15 @@ assessment-fixable — not on "was anything printed":
   At least one `suggestion:` can be applied by rewriting `$ASSESSMENT`
   (ids, citations, statuses, `missing_evidence`, or copying fingerprints
   from the prepared bundle when that is the only fix). Retryable (case 2).
-- **Bundle/setup report** — same `valid: false` envelope, but every
-  `suggestion:` is to re-run `arm review prepare` (parse-bundle /
-  decode-review-bundle, bundle integrity, an issue contract fingerprint
-  mismatch, or any report whose only fix is regenerating the bundle).
-  Copying `fingerprints.contract` from the prepared bundle cannot fix a
-  stale issue contract — the assessment already matches that bundle, and
-  a different fingerprint fails the earlier bundle check. **Not
-  retryable.** Use case 3 (`Validation: error`); do not spend the retry
-  cap on a bundle you are forbidden to edit.
+- **Bundle/setup report** — same `valid: false` envelope, but **no suggestion is assessment-applicable**
+  (cannot be applied by rewriting `$ASSESSMENT`). That includes re-run
+  `arm review prepare` reports (parse-bundle /
+  decode-review-bundle, bundle integrity), an issue contract fingerprint
+  mismatch, fixing issue acceptance JSON, restoring an activity log or
+  gate evidence logs, and any other external-state repair. Copying
+  `fingerprints.contract` from the prepared bundle cannot fix a stale
+  issue contract. **Not retryable.** Use case 3 (`Validation: error`);
+  do not spend the retry cap on a remedy you cannot apply.
 - **Operational envelope** — `--format json` prints an object with
   `"error"` and no `valid` (`renderCommandFailure` writes `{"error":...}`
   to stdout; stderr is normally empty). Extract `.error.cause` as the
@@ -413,8 +413,8 @@ arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE" --format 
 Prefer this form when classifying:
 
 - object with `valid` and assessment-fixable `failures[]` → case 2
-- object with `valid: false` whose `suggestion:` is re-run
-  `arm review prepare` (only fix, or an issue contract mismatch) → case 3
+- object with `valid: false` whose `failures[]` have no
+  assessment-applicable `suggestion:` → case 3
 - object with `"error"` and no `valid` → case 3; Error line is `.error.cause`
 
 This is the retry loop that used to land on the coordinator after
@@ -744,9 +744,9 @@ command exits 0.
 ### `arm review validate` operational failure
 
 `arm review validate` exits non-zero **without an assessment-fixable
-report** — either a `valid: false` report whose only `suggestion:` is to
-re-run `arm review prepare`, or an object with `"error"` and no `valid`
-(`.error.cause` on stdout under `--format json`):
+report** — a `valid: false` report where no suggestion is
+assessment-applicable (step 5b case 3), or an object with `"error"` and
+no `valid` (`.error.cause` on stdout under `--format json`):
 
 - `--assessment` or `--bundle` missing, unreadable, or not a file path
 - `--bundle` given JSON content instead of a path

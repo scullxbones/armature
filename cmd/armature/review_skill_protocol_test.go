@@ -137,3 +137,15 @@ func TestReviewerSkillTreatsStaleContractMismatchAsSetup_REQ_LNGHZN_S8_T2(t *tes
 	require.NotContains(t, step5b, "four attempts",
 		"setup reports must not consume the four-run assessment retry cap")
 }
+
+func TestReviewerSkillRoutesNonAssessmentRepairsAsOperational_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
+	reviewer := readEmbedSkill(t, "armature-reviewer")
+	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+
+	require.Contains(t, step5b, "no suggestion is assessment-applicable",
+		"compound remedies that first require issue-state or log repair are Validation: error")
+	require.Contains(t, step5b, "Validation: error")
+	require.NotContains(t, step5b, "four attempts",
+		"setup reports must not consume the four-run assessment retry cap")
+}
