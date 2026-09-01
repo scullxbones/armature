@@ -4926,3 +4926,4 @@
 ["note","ARM-S2-T4",1788263578,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). No .issues/ or .trellis/ tracked at root; .vscode/settings.json filters -/.arm (armature-era naming).","note_id":"note-1788263578878425559"}]
 ["transition","ARM-S2-T4",1788263579,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","ARM-S3-T1",1788263588,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). Skills are armature-named on main (internal/skillsembed/skills/armature-*); the single surviving trls path is a dated historical plan filename.","note_id":"note-1788263588728965499"}]
+["transition","ARM-S3-T1",1788263588,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
