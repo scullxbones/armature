@@ -4921,3 +4921,4 @@
 ["transition","ARM-S1-T1",1788263570,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","ARM-S1-T2",1788263573,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). go.mod module path is github.com/scullxbones/armature; no trellis import paths remain.","note_id":"note-1788263573573342760"}]
 ["transition","ARM-S1-T2",1788263573,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","ARM-S2-T3",1788263576,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). ARM_LOG_SLOT present in 7 files; the sole surviving TRLS_LOG_SLOT is a regression test asserting the legacy var is ignored (cmd/armature/main_test.go:2374).","note_id":"note-1788263576142776580"}]
