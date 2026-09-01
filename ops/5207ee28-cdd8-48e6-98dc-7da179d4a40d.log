@@ -4939,3 +4939,4 @@
 ["transition","E6-DOCFIX1-T2",1788263629,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","E6-DOCFIX1-T3",1788263632,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: ops-branch deliverable, verified by present-day effect (main-branch evidence is a category error for this scope). arm doctor D3 passes and arm validate reports 765/765 cited, which is precisely what this task repaired.","note_id":"note-1788263632167561570"}]
 ["transition","E6-DOCFIX1-T3",1788263632,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","E6-DOCFIX1-T4",1788263634,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). doctor --verbose present: internal/doctor/doctor.go:37 VerboseItems, :287 D3 file:line context.","note_id":"note-1788263634774710308"}]
