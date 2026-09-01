@@ -141,14 +141,16 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 	}
 
-	// Detect incremental vs full replay based on checkpoint. A checkpoint below
-	// CurrentStateVersion accompanies snapshots this build cannot interpret
-	// (see checkpoint.go), so it is treated exactly like no checkpoint at all:
-	// discard the cached issues and replay the log cold. allOps is always the
-	// complete log — callers read every op regardless of the checkpoint, which
-	// only gates whether prior state is preloaded — so a forced cold replay
-	// loses nothing but the preload.
-	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion < CurrentStateVersion
+	// Detect incremental vs full replay based on checkpoint. Any StateVersion
+	// mismatch — in either direction — accompanies snapshots this build cannot
+	// interpret (see checkpoint.go), so it is treated exactly like no checkpoint
+	// at all: discard the cached issues and replay the log cold. A newer version
+	// matters as much as an older one, because checking out an older release
+	// leaves this decoder silently dropping fields the newer snapshot's
+	// semantics depend on. allOps is always the complete log — callers read
+	// every op regardless of the checkpoint, which only gates whether prior
+	// state is preloaded — so a forced cold replay loses nothing but the preload.
+	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion != CurrentStateVersion
 	var state *State
 
 	// For incremental replay, load prior state from issuesStateDir
