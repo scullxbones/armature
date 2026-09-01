@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -729,4 +730,36 @@ func TestWriteFile_WritesContent(t *testing.T) {
 	if err != nil || string(data) != "written" {
 		t.Fatalf("expected 'written', got err=%v data=%q", err, data)
 	}
+}
+
+func TestRemoveIssueJSON_DeletesFileAndToleratesMissing_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "task-01.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"id":"task-01"}`), 0600))
+
+	require.NoError(t, RemoveIssueJSON(dir, "task-01"))
+	assert.NoFileExists(t, path)
+
+	// Removing what is already gone is the caller's goal, not an error.
+	assert.NoError(t, RemoveIssueJSON(dir, "task-01"))
+}
+
+func TestRemoveIssueJSON_SurfacesUnexpectedError_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("running as root; permission restrictions do not apply")
+	}
+	dir := t.TempDir()
+	locked := filepath.Join(dir, "locked")
+	require.NoError(t, os.Mkdir(locked, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(locked, "task-01.json"), []byte(`{}`), 0600))
+	require.NoError(t, os.Chmod(locked, 0555))
+	t.Cleanup(func() {
+		if err := os.Chmod(locked, 0755); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	assert.Error(t, RemoveIssueJSON(locked, "task-01"))
 }
