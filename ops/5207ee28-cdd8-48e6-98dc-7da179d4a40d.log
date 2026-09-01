@@ -4943,3 +4943,4 @@
 ["transition","E6-DOCFIX1-T4",1788263634,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","E6-DOCFIX1-T5",1788263637,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). Uncited-transition warning present: cmd/armature/transition.go:91-97 with source-link/accept-citation guidance and --force suppression.","note_id":"note-1788263637410399513"}]
 ["transition","E6-DOCFIX1-T5",1788263637,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","HKREFACT-T15",1788263651,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). Durable note deletion present: internal/ops/types.go:13 OpNoteDelete, cmd/armature/note.go:79 runNoteDelete.","note_id":"note-1788263651620640657"}]
