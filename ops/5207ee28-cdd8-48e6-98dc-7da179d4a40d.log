@@ -4931,3 +4931,4 @@
 ["transition","ARM-S3-T2",1788263591,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","ARM-S4-T1",1788263593,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). README.md, CLAUDE.md, AGENTS.md carry no trellis/trls references on main.","note_id":"note-1788263593992834423"}]
 ["transition","ARM-S4-T1",1788263594,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","ARM-S4-T2",1788263596,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). docs/getting-started.md and docs/use-cases.md clean; the 2 hits in docs/commands.md are deliberate worked examples for arm scope-rename.","note_id":"note-1788263596558983868"}]
