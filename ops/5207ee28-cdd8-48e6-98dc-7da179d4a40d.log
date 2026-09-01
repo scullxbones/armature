@@ -4919,3 +4919,4 @@
 ["transition","TOPTIER-S2",1788178450,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","ARM-S1-T1",1788263570,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). Repo-side half confirmed: module github.com/scullxbones/armature; only cmd/armature exists. OS-directory rename leaves no repo trace and is unverifiable by design.","note_id":"note-1788263570566928538"}]
 ["transition","ARM-S1-T1",1788263570,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","ARM-S1-T2",1788263573,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). go.mod module path is github.com/scullxbones/armature; no trellis import paths remain.","note_id":"note-1788263573573342760"}]
