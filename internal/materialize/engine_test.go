@@ -1100,6 +1100,70 @@ func TestRunRollup_CascadesToEpic(t *testing.T) {
 	assert.Equal(t, "merged", state.Issues["epic-01"].Status, "epic should cascade-merge when all stories merged")
 }
 
+func TestRunRollup_PromotesStoryWithCancelledChild_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// A descoped (cancelled) sibling must not block rollup: cancelled is terminal,
+	// so a parent waiting on it can never resolve. Mirrors the merged||cancelled
+	// predicate already used by internal/worktree/reconcile.go.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}}))
+
+	state.Issues["task-01"].Status = ops.StatusMerged
+	state.Issues["task-02"].Status = ops.StatusCancelled
+
+	state.RunRollup()
+	assert.Equal(t, "merged", state.Issues["story-01"].Status,
+		"story should roll up when every child is merged or cancelled")
+}
+
+func TestRunRollup_DoesNotPromoteWhenAllChildrenCancelled_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// Nothing shipped, so the parent must not claim delivery. At least one merged
+	// child is required before a parent rolls up to merged.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}}))
+
+	state.Issues["task-01"].Status = ops.StatusCancelled
+	state.Issues["task-02"].Status = ops.StatusCancelled
+
+	state.RunRollup()
+	assert.NotEqual(t, "merged", state.Issues["story-01"].Status,
+		"a wholly-cancelled story must not claim delivery")
+}
+
+func TestRunRollup_CascadesThroughCancelledChild_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// The stranding observed on HKREFACT: an epic whose story rolls up only
+	// because a cancelled child no longer blocks it.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "epic-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Epic", NodeType: "epic"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story", Parent: "epic-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 103,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}}))
+
+	state.Issues["task-01"].Status = ops.StatusMerged
+	state.Issues["task-02"].Status = ops.StatusCancelled
+
+	state.RunRollup()
+	assert.Equal(t, "merged", state.Issues["story-01"].Status)
+	assert.Equal(t, "merged", state.Issues["epic-01"].Status,
+		"epic should cascade once the cancelled child stops blocking its story")
+}
+
 func TestApplyUnlinkOp_BlockedByRel(t *testing.T) {
 	t.Parallel()
 	// Create two linked tasks then unlink them — exercises applyUnlink (engine.go:184, 445)

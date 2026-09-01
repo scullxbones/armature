@@ -586,7 +586,21 @@ func (s *State) promoteParentToInProgress(parentID string) {
 	}
 }
 
-// RunRollup promotes stories/epics to done/merged when all children are merged.
+// rollupSatisfied reports whether a child's status no longer blocks its parent
+// from rolling up. Both merged and cancelled are terminal; treating cancelled as
+// outstanding would leave the parent unresolvable for the life of the repo.
+func rollupSatisfied(status string) bool {
+	return status == ops.StatusMerged || status == ops.StatusCancelled
+}
+
+// RunRollup promotes stories/epics to merged when every child has reached a
+// terminal state and at least one of them actually shipped.
+//
+// A cancelled child satisfies rollup: cancelled is terminal, so counting it as
+// outstanding would strand its parent permanently (see TOPTIER-B1). This mirrors
+// the predicate already used by internal/worktree/reconcile.go. The
+// at-least-one-merged guard keeps a wholly-descoped parent from claiming
+// delivery when nothing was built.
 // Uses a single-pass topological sort algorithm achieving O(n) time complexity.
 // Algorithm: compute in-degree (unmerged children count) for each parent,
 // start with parents that have all merged children, and propagate promotions upward.
@@ -601,17 +615,22 @@ func (s *State) RunRollup() {
 			continue
 		}
 
-		unmergedCount := 0
+		unresolvedCount := 0
+		hasMerged := false
 		for _, childID := range issue.Children {
 			child, ok := s.Issues[childID]
-			if !ok || child.Status != ops.StatusMerged {
-				unmergedCount++
+			if !ok || !rollupSatisfied(child.Status) {
+				unresolvedCount++
+				continue
+			}
+			if child.Status == ops.StatusMerged {
+				hasMerged = true
 			}
 		}
-		inDegree[issue.ID] = unmergedCount
+		inDegree[issue.ID] = unresolvedCount
 
-		// If all children are merged, add to queue for processing
-		if unmergedCount == 0 {
+		// Every child is terminal and something shipped: ready to promote.
+		if unresolvedCount == 0 && hasMerged {
 			queue = append(queue, issue.ID)
 		}
 	}
