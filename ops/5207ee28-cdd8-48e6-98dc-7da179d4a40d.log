@@ -4971,3 +4971,4 @@
 ["claim","TOPTIER-B1",1788264161,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":60,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-B1","claim_token":"e691f46e8b83f4e43c45200bf8a9e50e"}]
 ["heartbeat","TOPTIER-B1",1788264198,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
 ["source-link","TOPTIER-B1",1788264432,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"f177ab50-73e2-456e-b8ae-e01d9799598b","source_url":"docs/dogfood/findings/raw/2026-09-01T1156Z-claude-materialize-rollup-strands-parents-with-cancelled-children.md"}]
+["source-link","TOPTIER-S18-T4",1788264433,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"719764dd-5970-4122-8393-1799554c480f","source_url":"docs/dogfood/findings/raw/2026-09-01T1156Z-claude-workflow-story-level-commits-erase-task-evidence.md"}]
