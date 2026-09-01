@@ -4929,3 +4929,4 @@
 ["transition","ARM-S3-T1",1788263588,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","ARM-S3-T2",1788263591,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). All armature-* SKILL.md files present on main under internal/skillsembed/skills/.","note_id":"note-1788263591198463466"}]
 ["transition","ARM-S3-T2",1788263591,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
+["note","ARM-S4-T1",1788263593,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). README.md, CLAUDE.md, AGENTS.md carry no trellis/trls references on main.","note_id":"note-1788263593992834423"}]
