@@ -197,6 +197,10 @@ func (s *State) applyTransition(op ops.Op) error {
 		issue.LastClaimingWorkerActivity = op.Timestamp
 	}
 	issue.Status = newStatus
+	// An op-asserted status supersedes any derived rollup promotion this issue
+	// was carrying, so the next RunRollup must not restore what the promotion
+	// replaced. Clearing here is what makes op assertion win over retraction.
+	issue.RollupStatusBefore = ""
 	issue.Updated = op.Timestamp
 	// A transition op may carry a WorktreePath ONLY when it is a claim rollback
 	// restoring the path that was overwritten by the (now-failed) claim attempt.
@@ -601,10 +605,29 @@ func rollupSatisfied(status string) bool {
 // the predicate already used by internal/worktree/reconcile.go. The
 // at-least-one-merged guard keeps a wholly-descoped parent from claiming
 // delivery when nothing was built.
+// Promotion is derived, not asserted, so it is retractable: every run first
+// restores issues promoted by an earlier run to the status that promotion
+// replaced, then recomputes from scratch. Without that, an incremental
+// materialization (which reloads the previous run's promotions from the state
+// cache — see pipeline.go's LoadAllIssues path) would keep a parent merged after
+// a terminal child was transitioned back to open, while a cold replay of the
+// same log left it unmerged. One log, two answers, decided by cache presence.
+// See TOPTIER-B1.
+//
 // Uses a single-pass topological sort algorithm achieving O(n) time complexity.
 // Algorithm: compute in-degree (unmerged children count) for each parent,
 // start with parents that have all merged children, and propagate promotions upward.
 func (s *State) RunRollup() {
+	// Retract prior derived promotions so this run computes over op-asserted
+	// statuses only, making the result independent of how many times rollup has
+	// already run over this state.
+	for _, issue := range s.Issues {
+		if issue.RollupStatusBefore != "" {
+			issue.Status = issue.RollupStatusBefore
+			issue.RollupStatusBefore = ""
+		}
+	}
+
 	// Compute initial in-degree (unmerged children count) for each parent
 	inDegree := make(map[string]int)
 	queue := make([]string, 0)
@@ -646,8 +669,10 @@ func (s *State) RunRollup() {
 			continue
 		}
 
-		// Promote this issue to merged
+		// Promote this issue to merged, remembering what the promotion replaced
+		// so a later run can retract it if the children stop justifying it.
 		if issue.Status != ops.StatusMerged {
+			issue.RollupStatusBefore = issue.Status
 			issue.Status = ops.StatusMerged
 
 			// Check parent: decrement its in-degree

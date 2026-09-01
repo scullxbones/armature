@@ -72,9 +72,17 @@ func (i *Issue) ClaimHeldBy(workerID, claimToken string) bool {
 
 // Issue represents the full materialized state of a single work item.
 type Issue struct {
-	ID                     string                         `json:"id"`
-	Type                   string                         `json:"type"`
-	Status                 string                         `json:"status"`
+	ID     string `json:"id"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	// RollupStatusBefore records the status RunRollup replaced when it promoted
+	// this issue to merged, marking that promotion as derived rather than
+	// asserted by an op. RunRollup restores it before recomputing, so a promoted
+	// parent whose child later leaves a terminal state is retracted instead of
+	// latching merged. Empty for every issue whose status came from the log —
+	// including one an op actually transitioned to merged, which rollup must
+	// never walk back. See TOPTIER-B1.
+	RollupStatusBefore     string                         `json:"rollup_status_before,omitempty"`
 	Title                  string                         `json:"title"`
 	Parent                 string                         `json:"parent,omitempty"`
 	Children               []string                       `json:"children"`
