@@ -141,8 +141,14 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 	}
 
-	// Detect incremental vs full replay based on checkpoint
-	fullReplay := len(cp.ByteOffsets) == 0
+	// Detect incremental vs full replay based on checkpoint. A checkpoint below
+	// CurrentStateVersion accompanies snapshots this build cannot interpret
+	// (see checkpoint.go), so it is treated exactly like no checkpoint at all:
+	// discard the cached issues and replay the log cold. allOps is always the
+	// complete log — callers read every op regardless of the checkpoint, which
+	// only gates whether prior state is preloaded — so a forced cold replay
+	// loses nothing but the preload.
+	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion < CurrentStateVersion
 	var state *State
 
 	// For incremental replay, load prior state from issuesStateDir
@@ -153,6 +159,10 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 		state = NewState()
 		state.Issues = loadedIssues
+		// Undo cached rollup promotions before any handler runs: they are
+		// derived, and handlers that branch on parent status would otherwise
+		// see state a cold replay never produces. See TOPTIER-B1.
+		state.RetractDerivedPromotions()
 	} else {
 		state = NewState()
 	}

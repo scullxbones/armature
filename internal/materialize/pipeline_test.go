@@ -1061,3 +1061,107 @@ func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
 	assert.Equal(t, 0, attestation.NotSatisfiedCount)
 	assert.Equal(t, 0, attestation.IndeterminateCount)
 }
+
+func TestIncremental_RetractsCachedPromotionBeforeReplay_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// I2: handlers must never observe a cached rollup promotion. RunRollup
+	// retracts derived promotions, but it runs after the whole log has been
+	// replayed, so promoteParentToInProgress would see the cached `merged`
+	// story and skip the promotion a cold replay performs.
+	dir := t.TempDir()
+	opsDir := filepath.Join(dir, "ops")
+	stateDir := filepath.Join(dir, "state")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+	logPath := filepath.Join(opsDir, "w1.log")
+
+	seed := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Story", NodeType: "story"}},
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}},
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 102, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusMerged}},
+	}
+	for _, op := range seed {
+		require.NoError(t, ops.AppendOp(logPath, op))
+	}
+
+	seedOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	info, err := os.Stat(logPath)
+	require.NoError(t, err)
+	seedState, _, err := MaterializeAndReturn(stateDir, seedOps,
+		map[string]int64{filepath.Base(logPath): info.Size()})
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusMerged, seedState.Issues["story-01"].Status,
+		"precondition: story promoted by rollup and cached as merged")
+
+	// The merged child reopens and is claimed again.
+	for _, op := range []ops.Op{
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 103, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusOpen}},
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 104, WorkerID: "w1",
+			Payload: ops.Payload{TTL: 60}},
+	} {
+		require.NoError(t, ops.AppendOp(logPath, op))
+	}
+
+	allOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	info2, err := os.Stat(logPath)
+	require.NoError(t, err)
+	incremental, incResult, err := MaterializeAndReturn(stateDir, allOps,
+		map[string]int64{filepath.Base(logPath): info2.Size()})
+	require.NoError(t, err)
+	require.False(t, incResult.FullReplay, "precondition: this run must be incremental")
+
+	coldState, _, err := MaterializeAndReturn(filepath.Join(dir, "state2"), allOps, nil)
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusInProgress, coldState.Issues["story-01"].Status,
+		"precondition: a cold replay promotes the story when its child is reclaimed")
+
+	assert.Equal(t, coldState.Issues["story-01"].Status, incremental.Issues["story-01"].Status,
+		"incremental materialization must agree with a cold replay of the same log")
+}
+
+func TestMaterialize_PreVersionCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// A snapshot written before RollupStatusBefore existed records a derived
+	// promotion as a bare `merged`, indistinguishable from an op-asserted one,
+	// so retraction cannot reach it. The checkpoint's state version is what
+	// makes that snapshot untrustworthy, forcing one cold replay.
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	issuesStateDir := filepath.Join(stateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesStateDir, 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(issuesStateDir, "story-01.json"), []byte(
+		`{"id":"story-01","type":"story","status":"merged","title":"Story","children":["task-01"]}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(issuesStateDir, "task-01.json"), []byte(
+		`{"id":"task-01","type":"task","status":"merged","title":"Task A","parent":"story-01"}`), 0644))
+	// A checkpoint from before the version field existed.
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "checkpoint.json"), []byte(
+		`{"last_materialized_commit":"","byte_offsets":{"w1.log":128}}`), 0644))
+
+	allOps := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Story", NodeType: "story"}},
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}},
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 102, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusMerged}},
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 103, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusOpen}},
+	}
+	state, result, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	require.NoError(t, err)
+
+	assert.True(t, result.FullReplay, "a pre-version checkpoint must force a cold replay")
+	assert.Equal(t, ops.StatusOpen, state.Issues["story-01"].Status,
+		"the stale derived promotion must not survive the upgrade")
+
+	cp, err := LoadCheckpoint(filepath.Join(stateDir, "checkpoint.json"))
+	require.NoError(t, err)
+	assert.Equal(t, CurrentStateVersion, cp.StateVersion,
+		"the rewritten checkpoint must carry the current state version")
+}
