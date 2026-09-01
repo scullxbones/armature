@@ -1203,3 +1203,44 @@ func TestMaterialize_NewerCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *testing.T
 	assert.Equal(t, ops.StatusOpen, state.Issues["story-01"].Status,
 		"snapshots this build cannot fully decode must not be trusted")
 }
+
+func TestMaterialize_FullReplayPurgesOrphanedSnapshots_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// A forced cold replay discards the cached issues in memory, but the write
+	// loop only overwrites what the replay produced. An issue the log no longer
+	// yields keeps its JSON file, and the checkpoint is then stamped as current
+	// — so the next incremental run loads the orphan back through LoadAllIssues
+	// and reports state the cold replay did not.
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	issuesStateDir := filepath.Join(stateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesStateDir, 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(issuesStateDir, "task-01.json"), []byte(
+		`{"id":"task-01","type":"task","status":"open","title":"Task A"}`), 0644))
+	// An issue only a newer build knew how to materialize.
+	require.NoError(t, os.WriteFile(filepath.Join(issuesStateDir, "task-99.json"), []byte(
+		`{"id":"task-99","type":"task","status":"open","title":"Ghost"}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "checkpoint.json"), []byte(
+		fmt.Sprintf(`{"last_materialized_commit":"","state_version":%d,"byte_offsets":{"w1.log":128}}`,
+			CurrentStateVersion+1)), 0644))
+
+	allOps := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Task A", NodeType: "task"}},
+	}
+	state, result, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	require.NoError(t, err)
+	require.True(t, result.FullReplay, "precondition: the version mismatch forces a cold replay")
+	require.NotContains(t, state.Issues, "task-99", "precondition: the replay does not yield the orphan")
+
+	assert.NoFileExists(t, filepath.Join(issuesStateDir, "task-99.json"),
+		"a snapshot the replay did not produce must not survive on disk")
+
+	// The next run is incremental, and must not resurrect the orphan.
+	next, nextResult, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	require.NoError(t, err)
+	require.False(t, nextResult.FullReplay, "precondition: the rewritten checkpoint enables incremental replay")
+	assert.NotContains(t, next.Issues, "task-99",
+		"incremental replay must not load an issue the log does not produce")
+}

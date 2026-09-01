@@ -478,6 +478,16 @@ func WriteIssueJSON(issuesDir string, issueID string, data any) error {
 	return os.WriteFile(path, jsonData, 0o600)
 }
 
+// RemoveIssueJSON deletes an issue's state file. A file that is already gone
+// is not an error: the caller's goal is that the snapshot no longer exist.
+func RemoveIssueJSON(issuesDir string, issueID string) error {
+	path := filepath.Join(issuesDir, issueID+".json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // LoadIssueJSON reads a JSON file and unmarshals it into the provided struct.
 func LoadIssueJSON(path string, v any) error {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path

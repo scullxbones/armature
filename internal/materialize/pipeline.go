@@ -118,6 +118,25 @@ func applyOpsWithTolerance(state *State, allOps []ops.Op, toleratedMissingTarget
 	return unhandledOps, nil
 }
 
+// purgeOrphanedIssues deletes every issue snapshot in issuesDir that is not in
+// keep. Callers pass the issues a completed replay produced, so what remains is
+// exactly the set no longer backed by the op log.
+func purgeOrphanedIssues(issuesDir string, keep map[string]*Issue) error {
+	issueIDs, err := adapters.ReadIssuesDir(issuesDir)
+	if err != nil {
+		return fmt.Errorf("read issues dir: %w", err)
+	}
+	for _, issueID := range issueIDs {
+		if _, ok := keep[issueID]; ok {
+			continue
+		}
+		if err := adapters.RemoveIssueJSON(issuesDir, issueID); err != nil {
+			return fmt.Errorf("remove orphaned issue %s: %w", issueID, err)
+		}
+	}
+	return nil
+}
+
 // runFullPipeline runs the full materialization pipeline.
 // If emitWarnings is true, unknown-op warnings are printed to stderr.
 // If writeStateFiles is false, disk-write operations are skipped.
@@ -190,6 +209,18 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 			}
 			if err := WriteIssue(issuesStateDir, *issue); err != nil {
 				return nil, Result{}, fmt.Errorf("write issue %s: %w", issue.ID, err)
+			}
+		}
+
+		// The write loop above only overwrites what this replay produced, so a
+		// snapshot the log no longer yields would survive on disk and be loaded
+		// back by the next incremental run — state no replay of this log can
+		// produce. Only a cold replay can strand one (an incremental run's state
+		// came from these same files), and the checkpoint is stamped current
+		// immediately below, so the purge has to happen here.
+		if fullReplay {
+			if err := purgeOrphanedIssues(issuesStateDir, state.Issues); err != nil {
+				return nil, Result{}, err
 			}
 		}
 
