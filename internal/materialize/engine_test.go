@@ -1164,6 +1164,130 @@ func TestRunRollup_CascadesThroughCancelledChild_REQ_TOPTIER_B1(t *testing.T) {
 		"epic should cascade once the cancelled child stops blocking its story")
 }
 
+func TestRunRollup_RetractsPromotionWhenCancelledChildReopens_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// A parent promoted only because a child was cancelled must lose that
+	// promotion when the child reopens. Rollup status is derived, so it has to
+	// track current child statuses rather than latch on the first promotion.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 103,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusMerged}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-02", Timestamp: 104,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusCancelled}}))
+
+	state.RunRollup()
+	require.Equal(t, ops.StatusMerged, state.Issues["story-01"].Status, "precondition: story rolled up")
+
+	// The cancelled child reopens; rerunning rollup over the same state (the
+	// incremental-materialization path) must retract the promotion.
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-02", Timestamp: 105,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusOpen}}))
+	state.RunRollup()
+
+	assert.Equal(t, ops.StatusOpen, state.Issues["story-01"].Status,
+		"story must fall back to its op-asserted status once the cancelled child reopens")
+}
+
+func TestRunRollup_IncrementalMatchesColdReplayAfterReopen_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// I2/I6: one append-only log must yield the same statuses whether it is
+	// replayed cold or materialized incrementally over cached state.
+	opLog := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "epic-01", Timestamp: 100, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Epic", NodeType: "epic"}},
+		{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 101, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Story", NodeType: "story", Parent: "epic-01"}},
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 102, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}},
+		{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 103, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Task B", NodeType: "task", Parent: "story-01"}},
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 104, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusMerged}},
+		{Type: ops.OpTransition, TargetID: "task-02", Timestamp: 105, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusCancelled}},
+		{Type: ops.OpTransition, TargetID: "task-02", Timestamp: 106, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusOpen}},
+	}
+
+	cold := NewState()
+	for _, op := range opLog {
+		require.NoError(t, cold.ApplyOp(op))
+	}
+	cold.RunRollup()
+
+	// Incremental: rollup runs after every op, and each run starts from the
+	// state the previous one left behind — including any promotion it made.
+	incremental := NewState()
+	for _, op := range opLog {
+		require.NoError(t, incremental.ApplyOp(op))
+		incremental.RunRollup()
+	}
+
+	for _, id := range []string{"epic-01", "story-01", "task-01", "task-02"} {
+		assert.Equal(t, cold.Issues[id].Status, incremental.Issues[id].Status,
+			"%s: incremental materialization must agree with cold replay", id)
+	}
+}
+
+func TestRunRollup_KeepsOpAssertedMergedStatus_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// Only rollup's own promotions are retractable. A merged status a worker
+	// actually asserted via a transition op is a fact in the log, and rollup
+	// must never walk it back, however its children look.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "story-01", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusMerged}}))
+
+	state.RunRollup()
+
+	assert.Equal(t, ops.StatusMerged, state.Issues["story-01"].Status,
+		"an op-asserted merged status must survive rollup")
+}
+
+func TestRunRollup_OpAssertedStatusWinsOverCachedPromotion_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// The retraction marker travels through the on-disk cache that incremental
+	// materialization reloads, and a later op asserting a status must take
+	// precedence over it rather than being reverted by the next rollup.
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Story", NodeType: "story"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101,
+		WorkerID: "w1", Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 102,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusMerged}}))
+	state.RunRollup()
+	require.Equal(t, ops.StatusMerged, state.Issues["story-01"].Status, "precondition: story rolled up")
+
+	issuesDir := t.TempDir()
+	for _, issue := range state.Issues {
+		require.NoError(t, WriteIssue(issuesDir, *issue))
+	}
+	reloaded, err := LoadAllIssues(issuesDir)
+	require.NoError(t, err)
+	cached := NewState()
+	cached.Issues = reloaded
+
+	// A worker asserts the story is cancelled; the next rollup must honour that
+	// op rather than restoring the status the retracted promotion replaced.
+	require.NoError(t, cached.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "story-01", Timestamp: 103,
+		WorkerID: "w1", Payload: ops.Payload{To: ops.StatusCancelled}}))
+	cached.RunRollup()
+
+	assert.Equal(t, ops.StatusCancelled, cached.Issues["story-01"].Status,
+		"an op asserted after a rollup promotion must win over the retraction marker")
+}
+
 func TestApplyUnlinkOp_BlockedByRel(t *testing.T) {
 	t.Parallel()
 	// Create two linked tasks then unlink them — exercises applyUnlink (engine.go:184, 445)
