@@ -2,6 +2,7 @@ package materialize
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -1164,4 +1165,41 @@ func TestMaterialize_PreVersionCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *test
 	require.NoError(t, err)
 	assert.Equal(t, CurrentStateVersion, cp.StateVersion,
 		"the rewritten checkpoint must carry the current state version")
+}
+
+func TestMaterialize_NewerCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *testing.T) {
+	t.Parallel()
+	// Checking out an older release after a newer one has materialized leaves a
+	// checkpoint from the future. This decoder silently drops fields it does not
+	// know, so those snapshots are no more trustworthy than pre-version ones:
+	// any version mismatch, in either direction, must replay cold.
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	issuesStateDir := filepath.Join(stateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesStateDir, 0755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(issuesStateDir, "story-01.json"), []byte(
+		`{"id":"story-01","type":"story","status":"merged","title":"Story","children":["task-01"]}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(issuesStateDir, "task-01.json"), []byte(
+		`{"id":"task-01","type":"task","status":"merged","title":"Task A","parent":"story-01"}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "checkpoint.json"), []byte(
+		fmt.Sprintf(`{"last_materialized_commit":"","state_version":%d,"byte_offsets":{"w1.log":128}}`,
+			CurrentStateVersion+1)), 0644))
+
+	allOps := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Story", NodeType: "story"}},
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101, WorkerID: "w1",
+			Payload: ops.Payload{Title: "Task A", NodeType: "task", Parent: "story-01"}},
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 102, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusMerged}},
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 103, WorkerID: "w1",
+			Payload: ops.Payload{To: ops.StatusOpen}},
+	}
+	state, result, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	require.NoError(t, err)
+
+	assert.True(t, result.FullReplay, "a checkpoint from a newer state version must force a cold replay")
+	assert.Equal(t, ops.StatusOpen, state.Issues["story-01"].Status,
+		"snapshots this build cannot fully decode must not be trusted")
 }

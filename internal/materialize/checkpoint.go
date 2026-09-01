@@ -6,9 +6,11 @@ import (
 
 // CurrentStateVersion is the schema version of the issue snapshots this build
 // writes. Bump it whenever materialized state gains a field that incremental
-// replay depends on but cannot reconstruct from a snapshot written by an
-// earlier build — a checkpoint below this version forces one cold replay
-// instead of trusting the cached issues (see runFullPipeline).
+// replay depends on but cannot reconstruct from a snapshot written by another
+// build — a checkpoint whose version differs from this one forces a cold
+// replay instead of trusting the cached issues (see runFullPipeline). The
+// check is a mismatch, not a lower-than: a snapshot from a newer build is
+// equally untrustworthy, since this decoder drops the fields it does not know.
 //
 // 1: Issue.RollupStatusBefore. Before it, a rollup promotion was recorded as a
 // bare merged status, indistinguishable from one an op asserted, so retraction
