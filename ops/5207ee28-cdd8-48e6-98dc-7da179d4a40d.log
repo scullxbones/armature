@@ -4934,3 +4934,4 @@
 ["note","ARM-S4-T2",1788263596,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: tier-2 feature-presence (no ID-tagged commit; deliverable verified on origin/main). docs/getting-started.md and docs/use-cases.md clean; the 2 hits in docs/commands.md are deliberate worked examples for arm scope-rename.","note_id":"note-1788263596558983868"}]
 ["transition","ARM-S4-T2",1788263596,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
 ["note","E6-DOCFIX1-T1",1788263626,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"merged-criterion: ops-branch deliverable, verified by present-day effect (main-branch evidence is a category error for this scope). arm doctor D3 passes and arm validate reports 765/765 cited, which is precisely what this task repaired.","note_id":"note-1788263626764534246"}]
+["transition","E6-DOCFIX1-T1",1788263626,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged"}]
