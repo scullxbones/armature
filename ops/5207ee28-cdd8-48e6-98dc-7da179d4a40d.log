@@ -4969,3 +4969,4 @@
 ["claim","TOPTIER-B1",1788264113,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":60,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-B1","claim_token":"ce75c54c4bb8b592a0f26d996c59f0d7"}]
 ["transition","TOPTIER-B1",1788264116,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"restore_claim":true,"clear_worktree_path":true,"to":"open","if_claim_token":"ce75c54c4bb8b592a0f26d996c59f0d7"}]
 ["claim","TOPTIER-B1",1788264161,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":60,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-B1","claim_token":"e691f46e8b83f4e43c45200bf8a9e50e"}]
+["heartbeat","TOPTIER-B1",1788264198,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
