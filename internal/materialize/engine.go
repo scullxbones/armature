@@ -597,6 +597,26 @@ func rollupSatisfied(status string) bool {
 	return status == ops.StatusMerged || status == ops.StatusCancelled
 }
 
+// RetractDerivedPromotions restores every issue that a previous RunRollup
+// promoted to the status that promotion replaced, clearing the marker. Rollup
+// promotion is derived state that is never written as an op, so any state
+// carrying it disagrees with a cold replay of the same log until it is undone.
+//
+// Incremental materialization must call this on the loaded snapshot BEFORE
+// replaying the log, not only inside RunRollup: op handlers read parent status
+// (promoteParentToInProgress skips a parent that is not open), so a cached
+// promotion left standing during replay silently suppresses transitions the
+// cold replay performs, and rollup's own retraction afterwards is too late to
+// put them back. See TOPTIER-B1.
+func (s *State) RetractDerivedPromotions() {
+	for _, issue := range s.Issues {
+		if issue.RollupStatusBefore != "" {
+			issue.Status = issue.RollupStatusBefore
+			issue.RollupStatusBefore = ""
+		}
+	}
+}
+
 // RunRollup promotes stories/epics to merged when every child has reached a
 // terminal state and at least one of them actually shipped.
 //
@@ -621,12 +641,7 @@ func (s *State) RunRollup() {
 	// Retract prior derived promotions so this run computes over op-asserted
 	// statuses only, making the result independent of how many times rollup has
 	// already run over this state.
-	for _, issue := range s.Issues {
-		if issue.RollupStatusBefore != "" {
-			issue.Status = issue.RollupStatusBefore
-			issue.RollupStatusBefore = ""
-		}
-	}
+	s.RetractDerivedPromotions()
 
 	// Compute initial in-degree (unmerged children count) for each parent
 	inDegree := make(map[string]int)
