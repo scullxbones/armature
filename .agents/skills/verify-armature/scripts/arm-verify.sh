@@ -166,57 +166,38 @@ Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to lau
 
 POINTER_LOCK="$CURRENT_RUN_FILE.lock"
 
-migrate_dir_lock() {
-  # A real directory at the lock path is the pre-symlink lock format left by an
-  # older run (or junk). `ln -s x dir` creates the link INSIDE the directory and
-  # reports success, which would hand out a lock that excludes nobody, so clear
-  # it first when its owner is gone.
-  [ -d "$POINTER_LOCK" ] && [ ! -L "$POINTER_LOCK" ] || return 0
-  local owner
-  owner=$(cat "$POINTER_LOCK/owner" 2>/dev/null || printf '')
-  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
-    rm -f "$POINTER_LOCK/owner"
-    rmdir "$POINTER_LOCK" 2>/dev/null || true
-  fi
-}
-
 pointer_lock_acquire() {
   # Every pointer mutation -- inspect, reclaim, reserve, release -- runs inside
-  # this lock. Compare-and-swap on the pointer alone cannot fix the underlying
-  # problem: each of those is a read followed by a write, and no sequence of
-  # atomic single-file operations makes the pair atomic. mkdir is atomic and
-  # POSIX, so it serializes the whole section instead.
+  # this lock, because each of those is a read followed by a write and no
+  # sequence of atomic single-file operations makes that pair atomic.
+  # The lock is a symlink whose target IS the owning pid, so taking it and
+  # publishing ownership are one atomic operation.
+  #
+  # There is deliberately no automatic takeover of a lock whose owner is gone.
+  # Reclaiming is inspect-then-replace -- a read followed by a write -- and no
+  # arrangement of atomic single-file operations makes that pair atomic, so
+  # every version of it (rm, compare-and-swap, rename-and-restore) left a window
+  # where two processes could enter the critical section. Since the section is
+  # three file operations long, a holder dying inside it is vanishingly rare;
+  # when it happens we fail closed and name the one command that fixes it,
+  # rather than racing to guess.
   local waited=0 owner
-  migrate_dir_lock
-  # symlink, not mkdir + owner file: creating the link publishes the owning pid
-  # in the same atomic operation, so a process killed mid-acquire can never
-  # leave an ownerless lock that wedges every later run.
+  # Checked BEFORE the first attempt, not inside the loop: `ln -s x dir` links
+  # INSIDE the directory and reports success, so a pre-symlink lock left by an
+  # older version would silently hand out a lock that excludes nobody.
+  if [ -d "$POINTER_LOCK" ] && [ ! -L "$POINTER_LOCK" ]; then
+    die "$POINTER_LOCK is a directory left by an older version.
+Remove it (rm -rf '$POINTER_LOCK') and retry."
+  fi
   while ! ln -s "$$" "$POINTER_LOCK" 2>/dev/null; do
-    waited=$((waited + 1))
-    if [ "$waited" -gt 100 ]; then
-      die "timed out waiting for $POINTER_LOCK (held by pid ${owner:-unknown})"
-    fi
-    # The lock is held across a few file operations only, so an unreadable owner
-    # or one whose process is gone means a killed holder; reclaim it. Same
-    # liveness caveats as the reservation marker (pid reuse, kill -0 across
-    # users).
     owner=$(readlink "$POINTER_LOCK" 2>/dev/null || printf '')
     if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
-      # Take the dead lock over by RENAME, not rm: rename consumes the link
-      # exactly once, so a second reclaimer observing the same dead pid fails
-      # here instead of deleting the winner's freshly created lock. If what we
-      # moved turns out not to be the link we inspected, put it straight back.
-      local stale moved
-      stale="$POINTER_LOCK.stale.$$"
-      if mv "$POINTER_LOCK" "$stale" 2>/dev/null; then
-        moved=$(readlink "$stale" 2>/dev/null || printf '')
-        if [ -n "$moved" ] && [ "$moved" != "$owner" ]; then
-          ln -s "$moved" "$POINTER_LOCK" 2>/dev/null || true
-        fi
-        rm -f "$stale"
-      fi
-      migrate_dir_lock
-      continue
+      die "$POINTER_LOCK is held by pid ${owner:-unknown}, which is gone (killed mid-run?).
+Remove it (rm -f '$POINTER_LOCK') and retry."
+    fi
+    waited=$((waited + 1))
+    if [ "$waited" -gt 100 ]; then
+      die "timed out waiting for $POINTER_LOCK (held by pid $owner)"
     fi
     sleep 0.1
   done
@@ -545,6 +526,11 @@ drive_bootstrap() {
   capture drive/01-bootstrap-before-git-worktree git -C "$TARGET_REPO" worktree list || true
   capture drive/02-bootstrap arm bootstrap
   assert_exit_0 drive/02-bootstrap
+  # Read the identity between the two calls: reading only at the end cannot tell
+  # "first bootstrap created it" from "second bootstrap created it", nor catch
+  # the idempotent run rotating it.
+  capture drive/02b-worker-id git -C "$TARGET_REPO" config --get armature.worker-id
+  assert_exit_0 drive/02b-worker-id
   capture drive/03-bootstrap-idempotent arm bootstrap
   assert_exit_0 drive/03-bootstrap-idempotent
   capture drive/04-git-worktree git -C "$TARGET_REPO" worktree list
@@ -607,12 +593,15 @@ drive_bootstrap() {
   [ "$ops_cfg_abs" = "$want_ops" ] || die "armature.ops-worktree-path is $ops_cfg (resolved $ops_cfg_abs), expected $want_ops"
   # features/bootstrap.md maps worker-identity creation as a bootstrap side
   # effect, so a bootstrap that stopped writing it must fail here.
-  local boot_worker
-  boot_worker=$(awk '$1 == "armature.worker-id" { print $2; exit }' "$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
-  case "$boot_worker" in
-    '' | *[!0-9a-fA-F-]*) die "bootstrap did not write a worker id (armature.worker-id=${boot_worker:-unset})" ;;
+  local first_worker boot_worker
+  first_worker=$(tr -d '\r' <"$EVIDENCE_DIR/drive/02b-worker-id/stdout.txt")
+  case "$first_worker" in
+    '' | *[!0-9a-fA-F-]*) die "the first bootstrap did not write a worker id (got '${first_worker}')" ;;
   esac
-  [ "${#boot_worker}" -eq 36 ] || die "bootstrap wrote an unexpected worker id: $boot_worker"
+  [ "${#first_worker}" -eq 36 ] || die "the first bootstrap wrote an unexpected worker id: $first_worker"
+  boot_worker=$(awk '$1 == "armature.worker-id" { print $2; exit }' "$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
+  [ "$boot_worker" = "$first_worker" ] ||
+    die "the idempotent bootstrap changed armature.worker-id: $first_worker -> ${boot_worker:-unset}"
   printf 'bootstrap proof ok\n'
 }
 
