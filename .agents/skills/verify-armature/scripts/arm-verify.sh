@@ -183,7 +183,28 @@ Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to lau
 
 POINTER_LOCK="$CURRENT_RUN_FILE.lock"
 
+POINTER_LOCK_DEPTH=0
+
+pointer_force_release() {
+  # Used by the failure paths: drop the lock if this process owns it, whatever
+  # the nesting depth. Without this, a failure inside the critical section would
+  # leave the lock behind for every later run.
+  POINTER_LOCK_DEPTH=0
+  local owner
+  owner=$(readlink "$POINTER_LOCK" 2>/dev/null || printf '')
+  if [ "$owner" = "$$" ]; then
+    rm -f "$POINTER_LOCK"
+  fi
+}
+
 pointer_lock_acquire() {
+  # Re-entrant for this process: cleanup paths call release_pointer_if_ours,
+  # which takes the same lock, and a non-reentrant lock would make the process
+  # wait on its own live pid and then abandon the lock.
+  if [ "$POINTER_LOCK_DEPTH" -gt 0 ]; then
+    POINTER_LOCK_DEPTH=$((POINTER_LOCK_DEPTH + 1))
+    return 0
+  fi
   # Every pointer mutation -- inspect, reclaim, reserve, release -- runs inside
   # this lock, because each of those is a read followed by a write and no
   # sequence of atomic single-file operations makes that pair atomic.
@@ -218,9 +239,13 @@ Remove it (rm -f '$POINTER_LOCK') and retry."
     fi
     sleep 0.1
   done
+  POINTER_LOCK_DEPTH=1
 }
 
 pointer_lock_release() {
+  [ "$POINTER_LOCK_DEPTH" -gt 0 ] || return 0
+  POINTER_LOCK_DEPTH=$((POINTER_LOCK_DEPTH - 1))
+  [ "$POINTER_LOCK_DEPTH" -eq 0 ] || return 0
   rm -f "$POINTER_LOCK"
 }
 
@@ -253,6 +278,7 @@ launch_partial_cleanup() {
     rm -f "$RUN_ENV"
   fi
   release_pointer_if_ours "${RUN_ENV:-}"
+  pointer_force_release
   exit "$status"
 }
 
@@ -730,9 +756,17 @@ drive_create_list() {
   jq_assert "$EVIDENCE_DIR/drive/02-list/stdout.txt" \
     'any(.[]; .id == "TASK-VERIFY-CREATE" and .status == "open" and .type == "task" and .title == "Verification create+list")' \
     "list has no TASK-VERIFY-CREATE entry with the expected status/type/title"
+  # The E6 fields matter as much as the identity ones: a task materialized
+  # without scope, definition_of_done or acceptance fails validation and cannot
+  # enter the ready flow, and nothing else in this drive would notice.
   jq_assert "$EVIDENCE_DIR/drive/03-show/stdout.txt" \
-    '.id == "TASK-VERIFY-CREATE" and .status == "open" and .title == "Verification create+list"' \
-    "show returned unexpected id/status/title"
+    '.id == "TASK-VERIFY-CREATE" and .status == "open" and .title == "Verification create+list"
+     and .type == "task" and .scope == ["verify-create.txt"]
+     and .definition_of_done == "Issue is listed and showable"
+     and (.acceptance | length) == 1
+     and .acceptance[0].type == "test_passes"
+     and .acceptance[0].description == "list and show return the created id"' \
+    "show returned unexpected id/status/title/type/scope/definition_of_done/acceptance"
   assert_exit_0 drive/05-log
   [ -f "$EVIDENCE_DIR/drive/06-ops/ops.log" ] || die "no ops log captured under drive/06-ops"
   # On disk each op is the positional array [op_type, target_id, ...] documented
@@ -845,6 +879,13 @@ drive_ready_claim() {
   [ "$claimed_by" = "$worker_id" ] || die "claim attributed to $claimed_by, expected $worker_id"
   jq_assert "$EVIDENCE_DIR/drive/07-show/stdout.txt" \
     '.status == "claimed"' "issue status is not claimed after claim"
+  # The materialized snapshot is a different read path from the op stream, so
+  # assert the claimant there too; a replay that drops or corrupts the claim
+  # payload would otherwise pass on status alone. (The snapshot carries no ttl
+  # field, so ttl is asserted on the response and both log reads instead.)
+  jq_assert "$EVIDENCE_DIR/drive/07-show/stdout.txt" \
+    ".claimed_by == \"$worker_id\"" \
+    "materialized issue is not attributed to the configured worker $worker_id"
   [ -d "$TARGET_REPO/.worktrees/TASK-VERIFY-READY" ] || die "managed worktree directory missing"
 
   # Inspect the captured inventories: a worktree on the wrong branch or with
@@ -933,6 +974,7 @@ cleanup_on_exit() {
   # Run in a subshell: cmd_cleanup may die(), and an exit from inside an EXIT
   # trap would mask the drive's real status.
   (cmd_cleanup) || printf 'arm-verify: cleanup failed after exit %s\n' "$status" >&2
+  pointer_force_release
   exit "$status"
 }
 
