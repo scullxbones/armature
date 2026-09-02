@@ -19,6 +19,11 @@ SOURCE_ROOT=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
 ARM_BIN_INHERITED=${ARM_BIN:-}
 ARM_BIN=${ARM_BIN:-"$SOURCE_ROOT/bin/arm"}
 EVIDENCE_ROOT="$SKILL_DIR/evidence"
+path_owner_uid() {
+  # Empty when stat is unavailable, which makes callers fail closed.
+  stat -c %u "$1" 2>/dev/null || stat -f %u "$1" 2>/dev/null || printf ''
+}
+
 parent_is_safe() {
   # Safe means: a real directory (not a symlink) that either belongs to this
   # user or is sticky, so other users cannot rename or replace entries we own.
@@ -27,10 +32,15 @@ parent_is_safe() {
     return 1
   fi
   [ -d "$p" ] || return 1
-  # Sticky (as /tmp is) is safe even when world-writable: only an entry's owner
-  # may rename or delete it.
+  # Sticky restricts renames to an entry's owner -- but NOT the directory's own
+  # owner, who may still rename or delete anything inside. So a sticky parent is
+  # only trustworthy when we own it or root does (as with /tmp).
   if [ -k "$p" ]; then
-    return 0
+    if [ -O "$p" ]; then
+      return 0
+    fi
+    [ "$(path_owner_uid "$p")" = "0" ]
+    return
   fi
   # Otherwise ownership alone is not enough -- a parent we own but that others
   # can write is a parent in which others can rename our leaf away.
@@ -1076,6 +1086,13 @@ cleanup_on_exit() {
 
 cmd_run() {
   local feature=${1:-create-list}
+  # load_run prefers ARM_VERIFY_RUN_ENV, so with it set the launch below would
+  # create one target while doctor/drive/cleanup operated on another -- cleanup
+  # tearing down the override's run and orphaning the one just created.
+  if [ -n "${ARM_VERIFY_RUN_ENV:-}" ]; then
+    die "ARM_VERIFY_RUN_ENV is set; 'run' creates its own run and would then operate on the override.
+Use the separate launch/doctor/drive/cleanup commands with that variable, or unset it."
+  fi
   cmd_launch
   # doctor/drive exit nonzero exactly when this verifier catches a regression —
   # the case where leaving the temp repo, its worktrees, the run env and the
