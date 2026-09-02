@@ -19,6 +19,23 @@ SOURCE_ROOT=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
 ARM_BIN_INHERITED=${ARM_BIN:-}
 ARM_BIN=${ARM_BIN:-"$SOURCE_ROOT/bin/arm"}
 EVIDENCE_ROOT="$SKILL_DIR/evidence"
+parent_is_safe() {
+  # Safe means: a real directory (not a symlink) that either belongs to this
+  # user or is sticky, so other users cannot rename or replace entries we own.
+  local p=$1
+  if [ -L "$p" ]; then
+    return 1
+  fi
+  [ -d "$p" ] || return 1
+  if [ -O "$p" ]; then
+    return 0
+  fi
+  if [ -k "$p" ]; then
+    return 0
+  fi
+  return 1
+}
+
 # State (run pointer, run env, lock) lives in a private per-user directory, not
 # a predictable world-writable /tmp path: launch SOURCES the run env, so another
 # account able to pre-create that path could run arbitrary code as this user.
@@ -27,7 +44,17 @@ state_dir() {
   if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ]; then
     base="$XDG_RUNTIME_DIR/arm-verify"
   else
-    base="${TMPDIR:-/tmp}/arm-verify-$(id -u)"
+    # The leaf's own 0700 mode does not stop another user from RENAMING it when
+    # the parent is a shared non-sticky directory, which would let them swap a
+    # directory in around our later checks. Require a parent we own or one with
+    # the sticky bit (as /tmp has), and fall back to /tmp when TMPDIR fails that.
+    local parent="${TMPDIR:-/tmp}"
+    if ! parent_is_safe "$parent"; then
+      parent=/tmp
+      parent_is_safe "$parent" ||
+        die "no safe parent for verification state (checked '${TMPDIR:-/tmp}' and /tmp); set XDG_RUNTIME_DIR"
+    fi
+    base="$parent/arm-verify-$(id -u)"
   fi
   # mkdir -p, chmod and test -O all FOLLOW symlinks, so a symlink planted at the
   # predictable fallback path would pass every check while its owner kept the
@@ -784,25 +811,44 @@ drive_create_list() {
   [ -f "$worker_log" ] || die "no ops log for the configured worker at $worker_log"
   cp "$worker_log" "$EVIDENCE_DIR/drive/06-ops/worker.log"
   jq_assert_slurp "$EVIDENCE_DIR/drive/06-ops/worker.log" \
-    "any(.[]; .[0] == \"create\" and .[1] == \"TASK-VERIFY-CREATE\" and .[3] == \"$worker_id\")" \
-    "the configured worker's own log has no create op for TASK-VERIFY-CREATE attributed to it"
+    "any(.[]; .[0] == \"create\" and .[1] == \"TASK-VERIFY-CREATE\" and .[3] == \"$worker_id\" and .[4].confidence == \"draft\")" \
+    "the configured worker's own log has no draft-confidence create op for TASK-VERIFY-CREATE attributed to it"
   jq_assert_slurp "$EVIDENCE_DIR/drive/05-log/stdout.txt" \
-    "any(.[]; .type == \"create\" and .target_id == \"TASK-VERIFY-CREATE\" and .worker_id == \"$worker_id\")" \
-    "arm log --json shows no create op for TASK-VERIFY-CREATE by $worker_id"
+    "any(.[]; .type == \"create\" and .target_id == \"TASK-VERIFY-CREATE\" and .worker_id == \"$worker_id\" and .payload.confidence == \"draft\")" \
+    "arm log --json shows no draft-confidence create op for TASK-VERIFY-CREATE by $worker_id"
   printf 'create-list proof ok\n'
   printf 'proof: create TASK-VERIFY-CREATE then list/show/ops log\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
 drive_doctor() {
   require_bootstrapped
+  require_worker
+  # Seed a deterministic warning: an uncited issue is D6, which is warning
+  # severity. On a pristine repo there is nothing for --strict to promote, so a
+  # regression that ignored the flag would still exit 0 and be certified here.
+  capture drive/00-create-uncited arm create \
+    --id TASK-VERIFY-DOCTOR \
+    --title "Verification doctor warning" \
+    --type task \
+    --scope "verify-doctor.txt" \
+    --dod "Doctor reports an uncited-issue warning" \
+    --acceptance '[{"type":"test_passes"}]'
+  assert_exit_0 drive/00-create-uncited
   capture drive/01-doctor arm doctor
   assert_exit_0 drive/01-doctor
-  capture drive/02-doctor-strict arm doctor --strict
+  capture drive/02-doctor-strict arm doctor --strict || true
   local code severities
   for code in D1 D2 D3 D4 D5 D6 D7 D8 D9 D10; do
     jq_assert "$EVIDENCE_DIR/drive/01-doctor/stdout.txt" \
       "any(.checks[]; .check == \"$code\")" "doctor report is missing check $code"
   done
+  # features/doctor.md maps --strict as "warnings become failing", so prove both
+  # halves: the default run reports the warning and still exits 0, the strict run
+  # over the same state exits nonzero.
+  jq_assert "$EVIDENCE_DIR/drive/01-doctor/stdout.txt" \
+    'any(.checks[]; .check == "D6" and .severity == "warning")' \
+    "default doctor did not report the seeded uncited-issue warning as D6"
+  assert_exit_nonzero drive/02-doctor-strict
   severities=$(jq -r '[.checks[] | "\(.check)=\(.severity)"] | sort | join(" ")' \
     "$EVIDENCE_DIR/drive/01-doctor/stdout.txt")
   printf 'doctor proof ok; severities: %s\n' "$severities"

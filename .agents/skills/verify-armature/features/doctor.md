@@ -36,7 +36,9 @@ Raw equivalent:
 test -f "$TARGET/.armature/config.json"
 ```
 
-Proof: exit 0 on a fresh bootstrapped repo; stdout is a `checks` array containing D1–D10. Evidence: `evidence/<run-id>/drive/01-doctor/`.
+The drive first seeds a deterministic warning by creating an **uncited** issue (`TASK-VERIFY-DOCTOR`), which D6 reports at warning severity. Without it a pristine repo has nothing for `--strict` to promote, so a `--strict` that silently ignored the flag would still exit 0.
+
+Proof: default `doctor` exits 0 and reports `D6` at `warning` severity; the same state under `--strict` exits nonzero (`doctor --strict: N warning(s) promoted to errors`); stdout is a `checks` array containing D1–D10. Evidence: `evidence/<run-id>/drive/00-create-uncited/`, `01-doctor/` and `02-doctor-strict/`.
 
 To prove `--fix --dry-run` skips writes: capture `wc -c` of `.armature/ops/*.log` (or `arm log --json` line count) before and after; sizes must match. Empty plan prints JSON `null`.
 
