@@ -93,8 +93,26 @@ assert_no_live_run() {
   # Refuse to overwrite a pointer whose target repo still exists: that run's
   # later doctor/drive/cleanup would otherwise follow this pointer instead.
   [ -f "$CURRENT_RUN_FILE" ] || return 0
-  local env_file live
+  local env_file live marker_pid
   env_file=$(cat "$CURRENT_RUN_FILE")
+  # A reservation marker is an ACTIVE launch that has not yet written its run
+  # env, not a stale pointer: deleting it would let a second launch re-reserve
+  # and reopen the race the reservation exists to close. Only reclaim it when
+  # the reserving process is gone (a crashed launch). kill -0 on a pid owned by
+  # another user reports failure, which would reclaim early; verification runs
+  # single-user, and pid reuse is likewise accepted as the lesser risk against
+  # never reclaiming.
+  case "$env_file" in
+    "reserved by pid "*)
+      marker_pid=$(printf '%s\n' "$env_file" | awk '{print $4}')
+      if [ -n "$marker_pid" ] && kill -0 "$marker_pid" 2>/dev/null; then
+        die "another launch (pid $marker_pid) is reserving $CURRENT_RUN_FILE.
+Wait for it to finish, or set ARM_VERIFY_CURRENT=<other path> for a parallel session."
+      fi
+      rm -f "$CURRENT_RUN_FILE"
+      return 0
+      ;;
+  esac
   if [ -f "$env_file" ]; then
     live=$(
       # shellcheck disable=SC1090
