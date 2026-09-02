@@ -6,6 +6,10 @@ set -euo pipefail
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SKILL_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 SOURCE_ROOT=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
+# Not an override: launch always rebuilds and drives <source>/bin/arm, and the
+# verification doctor fails if ARM_BIN is anything else. An inherited value is
+# recorded here only so `doctor`/`drive` can report it before launch runs.
+ARM_BIN_INHERITED=${ARM_BIN:-}
 ARM_BIN=${ARM_BIN:-"$SOURCE_ROOT/bin/arm"}
 EVIDENCE_ROOT="$SKILL_DIR/evidence"
 # Per-checkout pointer: a bare /tmp/arm-verify-current is shared by every
@@ -61,7 +65,6 @@ Usage: arm-verify.sh <command> [args]
   run <feature>       launch → doctor → drive <feature> → cleanup (evidence kept)
 
 Environment:
-  ARM_BIN             Override binary path (default: <source>/bin/arm)
   ARM_VERIFY_CURRENT  Path to the current-run pointer file
                       (default: /tmp/arm-verify-current-<checkout hash>)
   ARM_VERIFY_RUN_ENV  Skip pointer file and load this run env directly
@@ -169,6 +172,11 @@ cmd_launch() {
   need_cmd make
   unset ARM_LOG_SLOT || true
   assert_no_live_run
+
+  if [ -n "$ARM_BIN_INHERITED" ] && [ "$ARM_BIN_INHERITED" != "$SOURCE_ROOT/bin/arm" ]; then
+    printf 'arm-verify: ignoring ARM_BIN=%s; verification always drives the binary it just built at %s/bin/arm\n' \
+      "$ARM_BIN_INHERITED" "$SOURCE_ROOT" >&2
+  fi
 
   EXPECTED_VERSION=$(git -C "$SOURCE_ROOT" describe --tags --always --dirty 2>/dev/null || printf 'dev')
   make -C "$SOURCE_ROOT" build
