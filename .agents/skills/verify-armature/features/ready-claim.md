@@ -27,7 +27,7 @@ On a TTY without `--non-interactive`, `arm ready` is a TUI. Always pass `--forma
 Preconditions: launch + doctor passed. Helper bootstraps, ensures worker id, commits `README.md` + `ready.go`, `sources add`/`sync`, creates `TASK-VERIFY-READY` with `--source`, `dag transition --issue TASK-VERIFY-READY`.
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive ready-claim
+.agents/skills/verify-armature/scripts/arm-verify.sh drive ready-claim
 ```
 
 Proof:

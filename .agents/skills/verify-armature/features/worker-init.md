@@ -24,7 +24,7 @@ Stdout is always the line `Worker ID: <uuid>` (not JSON, even with `--format age
 Preconditions: launch succeeded; target is bootstrapped (helper bootstraps if `.armature/` is missing). Do not intend to rotate identity.
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive worker-init
+.agents/skills/verify-armature/scripts/arm-verify.sh drive worker-init
 ```
 
 Raw equivalent:

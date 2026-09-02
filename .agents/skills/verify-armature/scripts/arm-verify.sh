@@ -46,7 +46,7 @@ Environment:
   ARM_VERIFY_RUN_ENV  Skip pointer file and load this run env directly
 
 Evidence is written under:
-  .cursor/skills/verify-armature/evidence/<run-id>/
+  .agents/skills/verify-armature/evidence/<run-id>/
 Cleanup never deletes that tree.
 EOF
 }

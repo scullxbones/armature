@@ -1,0 +1,3 @@
+removed_target=/tmp/arm-verify-target.lj6zpi
+evidence_kept=/workspace/armature/.agents/skills/verify-armature/evidence/20260902T013905Z-0b1e3a
+evidence_exists=yes

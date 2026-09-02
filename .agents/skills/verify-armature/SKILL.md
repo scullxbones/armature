@@ -28,7 +28,7 @@ test -x ./bin/arm
 **Isolated target repo** (never the source tree):
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh launch
+.agents/skills/verify-armature/scripts/arm-verify.sh launch
 ```
 
 That helper:
@@ -36,7 +36,7 @@ That helper:
 1. Runs `make -C <source> build`
 2. Creates `/tmp/arm-verify-target.XXXXXX` (`git init`, user.name/email, empty commit, `main`)
 3. Writes a run env file and pointer `/tmp/arm-verify-current`
-4. Records launch metadata under `.cursor/skills/verify-armature/evidence/<run-id>/launch/`
+4. Records launch metadata under `.agents/skills/verify-armature/evidence/<run-id>/launch/`
 
 Manual equivalent if you cannot use the helper:
 
@@ -66,7 +66,7 @@ This section is **not** the product command `arm doctor`. It answers: is *this v
 Run:
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh doctor
+.agents/skills/verify-armature/scripts/arm-verify.sh doctor
 ```
 
 Checks (all read-only):
@@ -112,17 +112,17 @@ For a **single user path** mid-task, use the isolated repo + CLI. Global flags o
 Helper:
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive create-list
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive bootstrap
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive worker-init
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive doctor
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive ready-claim
+.agents/skills/verify-armature/scripts/arm-verify.sh drive create-list
+.agents/skills/verify-armature/scripts/arm-verify.sh drive bootstrap
+.agents/skills/verify-armature/scripts/arm-verify.sh drive worker-init
+.agents/skills/verify-armature/scripts/arm-verify.sh drive doctor
+.agents/skills/verify-armature/scripts/arm-verify.sh drive ready-claim
 ```
 
 One-shot (launch → doctor → drive → cleanup, evidence kept):
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh run create-list
+.agents/skills/verify-armature/scripts/arm-verify.sh run create-list
 ```
 
 ### Command strings and observed shapes
@@ -224,7 +224,7 @@ Ops filename is `<worker-uuid>.log`, or `<worker-uuid>~<slot>.log` if `ARM_LOG_S
 Root (cleanup must not delete this tree):
 
 ```text
-.cursor/skills/verify-armature/evidence/<run-id>/
+.agents/skills/verify-armature/evidence/<run-id>/
 ```
 
 The helper writes:
@@ -252,7 +252,7 @@ Proof standard:
 ## Cleanup
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh cleanup
+.agents/skills/verify-armature/scripts/arm-verify.sh cleanup
 ```
 
 The helper:
@@ -261,7 +261,7 @@ The helper:
 - Refuses to delete unless `realpath(target)` matches `/tmp/arm-verify-target.*` and is not the source checkout
 - `git worktree remove --force` on extra worktrees (`.armature`, `.worktrees/*`), then `rm -rf` the temp repo
 - Deletes only that run env / pointer
-- Does **not** delete `.cursor/skills/verify-armature/evidence/`
+- Does **not** delete `.agents/skills/verify-armature/evidence/`
 - Does not `pkill arm` or match by process name (there is no daemon)
 - Does not touch `main`, merge, or force-push
 
@@ -273,17 +273,17 @@ git -C "$TARGET" worktree list --porcelain
 rm -rf "$TARGET"
 ```
 
-Confirm evidence still exists: `test -d .cursor/skills/verify-armature/evidence/<run-id>` and `test -f .../launch/meta.txt`.
+Confirm evidence still exists: `test -d .agents/skills/verify-armature/evidence/<run-id>` and `test -f .../launch/meta.txt`.
 
 ## Helpers
 
 Executable helper (this is the harness named in the feature files):
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh launch
-.cursor/skills/verify-armature/scripts/arm-verify.sh doctor
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive create-list
-.cursor/skills/verify-armature/scripts/arm-verify.sh cleanup
+.agents/skills/verify-armature/scripts/arm-verify.sh launch
+.agents/skills/verify-armature/scripts/arm-verify.sh doctor
+.agents/skills/verify-armature/scripts/arm-verify.sh drive create-list
+.agents/skills/verify-armature/scripts/arm-verify.sh cleanup
 ```
 
 Or `.../arm-verify.sh run create-list` for the full loop. Feature names: `bootstrap`, `worker-init`, `create-list`, `doctor`, `ready-claim`.
@@ -299,6 +299,6 @@ The script is bash, `chmod +x`. It records evidence itself. Do not reverse-engin
 - Task `create` is gated on E6 fields (`scope`, `acceptance`, `definition_of_done`). Citation is required to **promote**, not to create.
 - `claim --worktree` is mandatory; it provisions `.worktrees/<id>` on `task/<id>`.
 - Product `arm doctor` is D1–D10 on a **bootstrapped** repo. Unbootstrapped → `GENERAL-1` ops-worktree-path. Do not conflate with this skill's Doctor section.
-- No `.cursor/skills/` tree existed before this skill. Embedded workflow skills in `internal/skillsembed/skills/` are a different product.
+- Repo-local skills live under `.agents/skills/`. This skill is `.agents/skills/verify-armature/`. Embedded workflow skills in `internal/skillsembed/skills/` are a different product.
 - Secondary TUIs: `arm tui`, `arm dag summary`, and interactive `arm ready`. Drive with `--non-interactive`.
 - Isolation is a disposable git repo + `--repo` (and `ARM_LOG_SLOT` only for parallel same-clone writers). No ports.
