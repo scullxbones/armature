@@ -22,12 +22,22 @@ need_cmd() {
 }
 
 abs_path() {
-  python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
+  # Resolve to an absolute, symlink-free path with shell builtins only.
+  # AGENTS.md reserves Python for a last resort, and realpath/readlink -f are
+  # not guaranteed on every supported checkout.
+  local p=$1 dir base
+  if [ -d "$p" ]; then
+    (CDPATH= cd -P -- "$p" && pwd)
+    return
+  fi
+  dir=$(dirname -- "$p")
+  base=$(basename -- "$p")
+  printf '%s/%s\n' "$(CDPATH= cd -P -- "$dir" && pwd)" "$base"
 }
 
-json_get() {
-  # json_get <file> <python-expr-on-obj>
-  python3 -c 'import json,sys; obj=json.load(open(sys.argv[1])); print('"$2"')' "$1"
+jq_assert() {
+  # jq_assert <file> <filter> <message>
+  jq -e "$2" "$1" >/dev/null 2>&1 || die "$3 (see $1)"
 }
 
 usage() {
@@ -113,7 +123,7 @@ arm_json() {
 
 cmd_launch() {
   need_cmd git
-  need_cmd python3
+  need_cmd jq
   need_cmd make
   unset ARM_LOG_SLOT || true
 
@@ -127,7 +137,7 @@ cmd_launch() {
   printf '%s\n' "$ver_out" | grep -q "arm version" || die "arm version did not print expected prefix: $ver_out"
   "$ARM_BIN" version >/dev/null
 
-  RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(python3 -c 'import secrets; print(secrets.token_hex(3))')
+  RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
   STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   EVIDENCE_DIR="$EVIDENCE_ROOT/$RUN_ID"
   mkdir -p "$EVIDENCE_DIR/launch"
@@ -209,11 +219,16 @@ cmd_doctor() {
       fail=1
       ;;
   esac
-  if [ ! -d "$target/.git" ] && [ ! -f "$target/.git" ]; then
-    printf 'FAIL: target is not a git repo: %s\n' "$target" | tee -a "$report" >&2
+  # Ask git, not the filesystem: a leftover but corrupt .git would otherwise
+  # PASS here and let the product doctor's nonzero exit be excused as
+  # "expected before bootstrap", certifying an undrivable instance.
+  if ! git -C "$target" rev-parse --show-toplevel \
+    >"$EVIDENCE_DIR/doctor/target-toplevel.txt" \
+    2>"$EVIDENCE_DIR/doctor/target-toplevel.stderr.txt"; then
+    printf 'FAIL: git does not recognize target as a repo: %s\n' "$target" | tee -a "$report" >&2
     fail=1
   else
-    printf 'PASS: target is a git repo\n' >>"$report"
+    printf 'PASS: target is a git repo (toplevel=%s)\n' "$(cat "$EVIDENCE_DIR/doctor/target-toplevel.txt")" >>"$report"
   fi
 
   # Product health check: distinct from this verification doctor.
@@ -265,6 +280,7 @@ assert_exit_0() {
 cmd_drive() {
   local feature=${1:-}
   [ -n "$feature" ] || die "drive requires a feature name"
+  need_cmd jq
   load_run
   unset ARM_LOG_SLOT || true
   mkdir -p "$EVIDENCE_DIR/drive"
@@ -294,19 +310,31 @@ drive_bootstrap() {
     printf 'stdout (agent JSON) in drive/02-bootstrap/stdout.txt — expect repo_setup.status=initialized then already_initialized\n'
     printf 'side effects: .armature/ worktree on _armature; git config armature.ops-worktree-path\n'
   } >"$EVIDENCE_DIR/drive/SUMMARY.txt"
-  python3 - "$EVIDENCE_DIR" "$TARGET_REPO" <<'PY'
-import json, os, sys, pathlib
-ev, repo = sys.argv[1], sys.argv[2]
-first = json.loads(pathlib.Path(ev, "drive/02-bootstrap/stdout.txt").read_text())
-second = json.loads(pathlib.Path(ev, "drive/03-bootstrap-idempotent/stdout.txt").read_text())
-assert first["repo_setup"]["status"] == "initialized", first
-assert second["repo_setup"]["status"] == "already_initialized", second
-arm = pathlib.Path(repo, ".armature")
-assert arm.is_dir(), ".armature missing"
-assert (arm / "ops").is_dir(), ".armature/ops missing"
-assert (arm / "config.json").is_file(), "config.json missing"
-print("bootstrap proof ok")
-PY
+  jq_assert "$EVIDENCE_DIR/drive/02-bootstrap/stdout.txt" \
+    '.repo_setup.status == "initialized"' "bootstrap did not report status=initialized"
+  jq_assert "$EVIDENCE_DIR/drive/03-bootstrap-idempotent/stdout.txt" \
+    '.repo_setup.status == "already_initialized"' "second bootstrap did not report status=already_initialized"
+  [ -d "$TARGET_REPO/.armature" ] || die ".armature missing"
+  [ -d "$TARGET_REPO/.armature/ops" ] || die ".armature/ops missing"
+  [ -f "$TARGET_REPO/.armature/config.json" ] || die ".armature/config.json missing"
+
+  # Parse the captured git evidence rather than merely recording it: a plain
+  # .armature directory, a wrong branch binding, or a missing ops-worktree
+  # config must each fail the git-native bootstrap proof.
+  local ops_line ops_cfg
+  ops_line=$(awk '$1 ~ /\/\.armature$/ { print; exit }' "$EVIDENCE_DIR/drive/04-git-worktree/stdout.txt")
+  [ -n "$ops_line" ] || die ".armature is not a registered git worktree (see drive/04-git-worktree)"
+  case "$ops_line" in
+    *"[_armature]"*) ;;
+    *) die ".armature worktree is not bound to _armature: $ops_line" ;;
+  esac
+  ops_cfg=$(awk '$1 == "armature.ops-worktree-path" { print $2; exit }' "$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
+  [ -n "$ops_cfg" ] || die "git config armature.ops-worktree-path is unset (see drive/05-git-config)"
+  case "$ops_cfg" in
+    */.armature | .armature) ;;
+    *) die "armature.ops-worktree-path does not point at .armature: $ops_cfg" ;;
+  esac
+  printf 'bootstrap proof ok\n'
 }
 
 drive_worker_init() {
@@ -317,16 +345,15 @@ drive_worker_init() {
   # Do not rerun worker-init without --check: it overwrites the UUID.
   capture drive/03-check-after arm worker-init --check
   assert_exit_0 drive/03-check-after
-  python3 - "$EVIDENCE_DIR" <<'PY'
-from pathlib import Path
-import sys
-ev = Path(sys.argv[1])
-a = (ev / "drive/01-check-before/stdout.txt").read_text().strip()
-b = (ev / "drive/03-check-after/stdout.txt").read_text().strip()
-assert a.startswith("Worker ID: "), a
-assert a == b, (a, b)
-print("worker-init proof ok:", a)
-PY
+  local before after
+  before=$(tr -d '\r' <"$EVIDENCE_DIR/drive/01-check-before/stdout.txt")
+  after=$(tr -d '\r' <"$EVIDENCE_DIR/drive/03-check-after/stdout.txt")
+  case "$before" in
+    "Worker ID: "*) ;;
+    *) die "worker-init --check did not print a Worker ID: $before" ;;
+  esac
+  [ "$before" = "$after" ] || die "worker-init --check is not stable: '$before' vs '$after'"
+  printf 'worker-init proof ok: %s\n' "$before"
   printf 'proof: worker-init --check is stable; do not rerun without --check\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
@@ -354,24 +381,17 @@ drive_create_list() {
   fi
   cp -a "$TARGET_REPO/.armature/ops/SCHEMA" "$EVIDENCE_DIR/drive/06-ops/SCHEMA" 2>/dev/null || true
   capture drive/07-git-worktree git -C "$TARGET_REPO" worktree list
-  python3 - "$EVIDENCE_DIR" <<'PY'
-import json, sys
-from pathlib import Path
-ev = Path(sys.argv[1])
-created = json.loads((ev / "drive/01-create/stdout.txt").read_text())
-assert created == {"id": "TASK-VERIFY-CREATE", "status": "created"}, created
-issues = json.loads((ev / "drive/02-list/stdout.txt").read_text())
-ids = [i["id"] for i in issues]
-assert "TASK-VERIFY-CREATE" in ids, issues
-shown = json.loads((ev / "drive/03-show/stdout.txt").read_text())
-assert shown["id"] == "TASK-VERIFY-CREATE"
-assert shown["status"] == "open"
-assert shown["title"] == "Verification create+list"
-ops = (ev / "drive/06-ops/ops.log").read_text()
-assert '"create"' in ops or "create" in ops
-assert "TASK-VERIFY-CREATE" in ops
-print("create-list proof ok")
-PY
+  jq_assert "$EVIDENCE_DIR/drive/01-create/stdout.txt" \
+    '. == {"id": "TASK-VERIFY-CREATE", "status": "created"}' "create did not return the expected object"
+  jq_assert "$EVIDENCE_DIR/drive/02-list/stdout.txt" \
+    'any(.[]; .id == "TASK-VERIFY-CREATE")' "list does not contain TASK-VERIFY-CREATE"
+  jq_assert "$EVIDENCE_DIR/drive/03-show/stdout.txt" \
+    '.id == "TASK-VERIFY-CREATE" and .status == "open" and .title == "Verification create+list"' \
+    "show returned unexpected id/status/title"
+  [ -f "$EVIDENCE_DIR/drive/06-ops/ops.log" ] || die "no ops log captured under drive/06-ops"
+  grep -q 'create' "$EVIDENCE_DIR/drive/06-ops/ops.log" || die "ops log records no create op"
+  grep -q 'TASK-VERIFY-CREATE' "$EVIDENCE_DIR/drive/06-ops/ops.log" || die "ops log does not mention TASK-VERIFY-CREATE"
+  printf 'create-list proof ok\n'
   printf 'proof: create TASK-VERIFY-CREATE then list/show/ops log\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
@@ -380,16 +400,14 @@ drive_doctor() {
   capture drive/01-doctor arm doctor
   assert_exit_0 drive/01-doctor
   capture drive/02-doctor-strict arm doctor --strict
-  python3 - "$EVIDENCE_DIR" <<'PY'
-import json, sys
-from pathlib import Path
-ev = Path(sys.argv[1])
-report = json.loads((ev / "drive/01-doctor/stdout.txt").read_text())
-checks = {c["check"]: c for c in report["checks"]}
-for code in ("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"):
-    assert code in checks, code
-print("doctor proof ok; severities:", {k: checks[k]["severity"] for k in sorted(checks)})
-PY
+  local code severities
+  for code in D1 D2 D3 D4 D5 D6 D7 D8 D9 D10; do
+    jq_assert "$EVIDENCE_DIR/drive/01-doctor/stdout.txt" \
+      "any(.checks[]; .check == \"$code\")" "doctor report is missing check $code"
+  done
+  severities=$(jq -r '[.checks[] | "\(.check)=\(.severity)"] | sort | join(" ")' \
+    "$EVIDENCE_DIR/drive/01-doctor/stdout.txt")
+  printf 'doctor proof ok; severities: %s\n' "$severities"
   printf 'proof: product arm doctor JSON report with D1-D10\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
@@ -400,12 +418,16 @@ drive_ready_claim() {
   printf 'package ready\n' >"$TARGET_REPO/ready.go"
   git -C "$TARGET_REPO" add README.md ready.go
   git -C "$TARGET_REPO" commit -q -m "docs: seed files for ready-claim"
-  capture drive/01-sources-add arm sources add --url README.md --type filesystem --title "README"
+  # Absolute URL: the filesystem provider resolves a relative source URL
+  # against the process cwd, not --repo, so a relative README.md would cite
+  # the caller's checkout (or fail) instead of this isolated target repo.
+  capture drive/01-sources-add arm sources add --url "$TARGET_REPO/README.md" --type filesystem --title "README"
   assert_exit_0 drive/01-sources-add
   capture drive/02-sources-sync arm sources sync
   assert_exit_0 drive/02-sources-sync
   local src_id
-  src_id=$(python3 -c 'import re,sys; t=open(sys.argv[1]).read(); m=re.search(r"[0-9a-f-]{36}", t); print(m.group(0) if m else "")' "$EVIDENCE_DIR/drive/01-sources-add/stdout.txt")
+  src_id=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+    "$EVIDENCE_DIR/drive/01-sources-add/stdout.txt" | head -n 1)
   [ -n "$src_id" ] || die "could not parse source UUID from sources add"
   printf '%s\n' "$src_id" >"$EVIDENCE_DIR/drive/source-id.txt"
   capture drive/03-create arm create \
@@ -426,21 +448,29 @@ drive_ready_claim() {
   capture drive/07-show arm_json show TASK-VERIFY-READY
   capture drive/08-worktree-list arm worktree list
   capture drive/09-git-worktree git -C "$TARGET_REPO" worktree list
-  python3 - "$EVIDENCE_DIR" "$TARGET_REPO" <<'PY'
-import json, sys
-from pathlib import Path
-ev, repo = Path(sys.argv[1]), Path(sys.argv[2])
-ready = json.loads((ev / "drive/05-ready/stdout.txt").read_text())
-assert any(e.get("issue") == "TASK-VERIFY-READY" for e in ready), ready
-claim = json.loads((ev / "drive/06-claim/stdout.txt").read_text())
-assert claim["issue"] == "TASK-VERIFY-READY"
-assert "claimed_by" in claim
-shown = json.loads((ev / "drive/07-show/stdout.txt").read_text())
-assert shown["status"] == "claimed"
-wt = repo / ".worktrees" / "TASK-VERIFY-READY"
-assert wt.is_dir(), wt
-print("ready-claim proof ok")
-PY
+  assert_exit_0 drive/08-worktree-list
+  assert_exit_0 drive/09-git-worktree
+  jq_assert "$EVIDENCE_DIR/drive/05-ready/stdout.txt" \
+    'any(.[]; .issue == "TASK-VERIFY-READY")' "ready queue omits TASK-VERIFY-READY"
+  jq_assert "$EVIDENCE_DIR/drive/06-claim/stdout.txt" \
+    '.issue == "TASK-VERIFY-READY" and has("claimed_by")' "claim did not report the issue and claimant"
+  jq_assert "$EVIDENCE_DIR/drive/07-show/stdout.txt" \
+    '.status == "claimed"' "issue status is not claimed after claim"
+  [ -d "$TARGET_REPO/.worktrees/TASK-VERIFY-READY" ] || die "managed worktree directory missing"
+
+  # Inspect the captured inventories: a worktree on the wrong branch or with
+  # no armature binding would otherwise pass every assertion above.
+  jq_assert "$EVIDENCE_DIR/drive/08-worktree-list/stdout.txt" \
+    'any(.bound[]?; . == "TASK-VERIFY-READY")' "arm worktree list does not report TASK-VERIFY-READY as bound"
+  local wt_line
+  wt_line=$(awk '$1 ~ /\/\.worktrees\/TASK-VERIFY-READY$/ { print; exit }' \
+    "$EVIDENCE_DIR/drive/09-git-worktree/stdout.txt")
+  [ -n "$wt_line" ] || die "git worktree list has no entry for .worktrees/TASK-VERIFY-READY"
+  case "$wt_line" in
+    *"[task/TASK-VERIFY-READY]"*) ;;
+    *) die "claimed worktree is not on task/TASK-VERIFY-READY: $wt_line" ;;
+  esac
+  printf 'ready-claim proof ok\n'
   printf 'proof: ready queue then claim --worktree; status=claimed; .worktrees/TASK-VERIFY-READY\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
@@ -488,11 +518,25 @@ cmd_cleanup() {
   printf 'cleanup complete; evidence remains at %s\n' "$EVIDENCE_DIR"
 }
 
+cleanup_on_exit() {
+  local status=$?
+  trap - EXIT
+  # Run in a subshell: cmd_cleanup may die(), and an exit from inside an EXIT
+  # trap would mask the drive's real status.
+  (cmd_cleanup) || printf 'arm-verify: cleanup failed after exit %s\n' "$status" >&2
+  exit "$status"
+}
+
 cmd_run() {
   local feature=${1:-create-list}
   cmd_launch
+  # doctor/drive exit nonzero exactly when this verifier catches a regression —
+  # the case where leaving the temp repo, its worktrees, the run env and the
+  # current-run pointer behind would orphan the target on the next launch.
+  trap cleanup_on_exit EXIT
   cmd_doctor
   cmd_drive "$feature"
+  trap - EXIT
   cmd_cleanup
 }
 
