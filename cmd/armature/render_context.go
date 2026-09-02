@@ -31,11 +31,9 @@ func newRenderContextCmd() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer func() { err = mapRenderContextError(err) }()
-			if rcIssue == "" && len(args) > 0 {
-				rcIssue = args[0]
-			}
-			if rcIssue == "" {
-				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			rcIssue, err = resolveIssueID(rcIssue, args)
+			if err != nil {
+				return err
 			}
 
 			appCtx := currentCtx(cmd)

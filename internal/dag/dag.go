@@ -17,41 +17,43 @@ type Node struct {
 	Blocks    []string
 }
 
-// DAG represents the directed acyclic graph of work items.
-type DAG struct {
+// Graph is the issue dependency graph: ancestry, descendants, blockers,
+// hierarchy, cycle detection, and depth. Callers that previously built a
+// mutable DAG and then wrapped it should use New/AddNode or FromIndex.
+type Graph struct {
 	nodes map[string]*Node
 }
 
-// New creates an empty DAG.
-func New() *DAG {
-	return &DAG{
+// New creates an empty Graph.
+func New() *Graph {
+	return &Graph{
 		nodes: make(map[string]*Node),
 	}
 }
 
-// AddNode adds a node to the DAG.
-func (d *DAG) AddNode(n *Node) error {
-	if _, exists := d.nodes[n.ID]; exists {
+// AddNode adds a node to the graph.
+func (g *Graph) AddNode(n *Node) error {
+	if _, exists := g.nodes[n.ID]; exists {
 		return fmt.Errorf("node %s already exists", n.ID)
 	}
-	d.nodes[n.ID] = n
+	g.nodes[n.ID] = n
 	return nil
 }
 
 // Node retrieves a node by ID.
-func (d *DAG) Node(id string) *Node {
-	return d.nodes[id]
+func (g *Graph) Node(id string) *Node {
+	return g.nodes[id]
 }
 
 // HasCycle checks for cycles using DFS across both the parent-child hierarchy
 // and the blocking dependency graph simultaneously.
-func (d *DAG) HasCycle() bool {
+func (g *Graph) HasCycle() bool {
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
 
-	for id := range d.nodes {
+	for id := range g.nodes {
 		if !visited[id] {
-			if d.hasCycleDFS(id, visited, recStack) {
+			if g.hasCycleDFS(id, visited, recStack) {
 				return true
 			}
 		}
@@ -59,18 +61,18 @@ func (d *DAG) HasCycle() bool {
 	return false
 }
 
-func (d *DAG) hasCycleDFS(nodeID string, visited, recStack map[string]bool) bool {
+func (g *Graph) hasCycleDFS(nodeID string, visited, recStack map[string]bool) bool {
 	visited[nodeID] = true
 	recStack[nodeID] = true
 
-	node := d.nodes[nodeID]
+	node := g.nodes[nodeID]
 	if node == nil {
 		recStack[nodeID] = false
 		return false
 	}
 	for _, childID := range node.Children {
 		if !visited[childID] {
-			if d.hasCycleDFS(childID, visited, recStack) {
+			if g.hasCycleDFS(childID, visited, recStack) {
 				return true
 			}
 		} else if recStack[childID] {
@@ -80,7 +82,7 @@ func (d *DAG) hasCycleDFS(nodeID string, visited, recStack map[string]bool) bool
 
 	for _, blockedID := range node.BlockedBy {
 		if !visited[blockedID] {
-			if d.hasCycleDFS(blockedID, visited, recStack) {
+			if g.hasCycleDFS(blockedID, visited, recStack) {
 				return true
 			}
 		} else if recStack[blockedID] {
@@ -93,10 +95,10 @@ func (d *DAG) hasCycleDFS(nodeID string, visited, recStack map[string]bool) bool
 }
 
 // ValidateParentChild checks that parent-child relationships are consistent.
-func (d *DAG) ValidateParentChild() error {
-	for id, node := range d.nodes {
+func (g *Graph) ValidateParentChild() error {
+	for id, node := range g.nodes {
 		if node.Parent != "" {
-			parent := d.nodes[node.Parent]
+			parent := g.nodes[node.Parent]
 			if parent == nil {
 				return fmt.Errorf("node %s has unknown parent %s", id, node.Parent)
 			}
@@ -109,26 +111,11 @@ func (d *DAG) ValidateParentChild() error {
 	return nil
 }
 
-// Graph is a read-only projection of the DAG that provides a unified interface
-// for querying ancestry, descendants, blockers, blocks, hierarchy, cycle detection,
-// and depth of nodes.
-type Graph struct {
-	dag *DAG
-}
-
-// NewGraph creates a new Graph projection from the given DAG.
-func NewGraph(d *DAG) *Graph {
-	if d == nil {
-		panic("NewGraph: DAG must not be nil")
-	}
-	return &Graph{dag: d}
-}
-
 // Ancestry returns the chain of hierarchical parent nodes from the given node up to the root.
 func (g *Graph) Ancestry(id string) []string {
 	ancestors := []string{}
 	visited := map[string]bool{id: true}
-	node := g.dag.nodes[id]
+	node := g.nodes[id]
 	if node == nil {
 		return ancestors
 	}
@@ -140,7 +127,7 @@ func (g *Graph) Ancestry(id string) []string {
 		}
 		visited[current] = true
 		ancestors = append(ancestors, current)
-		parentNode := g.dag.nodes[current]
+		parentNode := g.nodes[current]
 		if parentNode == nil {
 			break
 		}
@@ -165,7 +152,7 @@ func (g *Graph) Descendants(id string) []string {
 		}
 		visited[current] = true
 
-		node := g.dag.nodes[current]
+		node := g.nodes[current]
 		if node == nil {
 			continue
 		}
@@ -183,7 +170,7 @@ func (g *Graph) Descendants(id string) []string {
 
 // Blockers returns all direct blocked_by dependencies of a node.
 func (g *Graph) Blockers(id string) []string {
-	node := g.dag.nodes[id]
+	node := g.nodes[id]
 	if node == nil {
 		return nil
 	}
@@ -194,7 +181,7 @@ func (g *Graph) Blockers(id string) []string {
 
 // Blocks returns all nodes that this node directly blocks.
 func (g *Graph) Blocks(id string) []string {
-	node := g.dag.nodes[id]
+	node := g.nodes[id]
 	if node == nil {
 		return nil
 	}
@@ -205,18 +192,13 @@ func (g *Graph) Blocks(id string) []string {
 
 // Hierarchy returns the parent and children of a node as (parentID, childIDs).
 func (g *Graph) Hierarchy(id string) (string, []string) {
-	node := g.dag.nodes[id]
+	node := g.nodes[id]
 	if node == nil {
 		return "", nil
 	}
 	result := make([]string, len(node.Children))
 	copy(result, node.Children)
 	return node.Parent, result
-}
-
-// HasCycle returns true if the graph contains a cycle.
-func (g *Graph) HasCycle() bool {
-	return g.dag.HasCycle()
 }
 
 // ScopedHasCycle checks for cycles within a restricted set of node IDs.
@@ -273,7 +255,7 @@ func (g *Graph) ScopedHasCycle(id string, scope map[string]bool) bool {
 func (g *Graph) Depth(id string) int {
 	visited := map[string]bool{}
 	depth := 0
-	node := g.dag.nodes[id]
+	node := g.nodes[id]
 	if node == nil {
 		return depth
 	}
@@ -285,7 +267,7 @@ func (g *Graph) Depth(id string) int {
 		}
 		visited[current] = true
 		depth++
-		parentNode := g.dag.nodes[current]
+		parentNode := g.nodes[current]
 		if parentNode == nil {
 			break
 		}
@@ -295,65 +277,11 @@ func (g *Graph) Depth(id string) int {
 }
 
 // FromIndex constructs a Graph from a map of node IDs to Node pointers.
-// It creates a new DAG with all nodes from the index and returns a Graph projection.
 func FromIndex(index map[string]*Node) *Graph {
-	d := New()
+	g := New()
 	for _, node := range index {
 		// We don't check for errors here since we own the nodes from the index
-		_ = d.AddNode(node) //nolint:errcheck // AddNode only errors on duplicate IDs; ID uniqueness is enforced by caller
+		_ = g.AddNode(node) //nolint:errcheck // AddNode only errors on duplicate IDs; ID uniqueness is enforced by caller
 	}
-	return NewGraph(d)
-}
-
-// BuildGraph constructs a Graph from a node index map.
-// This is a convenience helper that converts a map of Node pointers into a Graph suitable
-// for context assembly and ready-queue computation.
-// All slices are defensively copied.
-// Previously named GraphFromState — renamed to avoid ambiguity with materialize.GraphFromState,
-// which takes a *materialize.State rather than a map[string]*dag.Node.
-func BuildGraph(index map[string]*Node) *Graph {
-	nodeIndex := make(map[string]*Node)
-	for id, node := range index {
-		copiedNode := &Node{
-			ID:        node.ID,
-			Title:     node.Title,
-			Type:      node.Type,
-			Parent:    node.Parent,
-			Children:  make([]string, len(node.Children)),
-			BlockedBy: make([]string, len(node.BlockedBy)),
-			Blocks:    make([]string, len(node.Blocks)),
-		}
-		copy(copiedNode.Children, node.Children)
-		copy(copiedNode.BlockedBy, node.BlockedBy)
-		copy(copiedNode.Blocks, node.Blocks)
-		nodeIndex[id] = copiedNode
-	}
-	return FromIndex(nodeIndex)
-}
-
-// isLegalHierarchy validates that a node index has consistent parent-child relationships.
-// It returns true if every node's parent reference is satisfied and every parent's
-// Children list contains consistent entries. An empty index is considered valid.
-func isLegalHierarchy(index map[string]*Node) bool {
-	// Empty index is valid
-	if len(index) == 0 {
-		return true
-	}
-
-	// Check parent-child consistency
-	for id, node := range index {
-		// Check that if a node has a parent, the parent exists
-		if node.Parent != "" {
-			parent, exists := index[node.Parent]
-			if !exists {
-				return false
-			}
-			// Check that the parent actually lists this node as a child
-			if !slices.Contains(parent.Children, id) {
-				return false
-			}
-		}
-	}
-
-	return true
+	return g
 }

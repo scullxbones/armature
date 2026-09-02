@@ -40,7 +40,7 @@ func Assemble(issueID string, state *materialize.State, reader FileReader) (*Con
 	}
 
 	// Derive graph internally from state
-	graph := graphFromState(state)
+	graph := materialize.GraphFromState(state)
 
 	var layers []Layer
 
@@ -331,23 +331,4 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
 	return Layer{Name: "sibling_outcomes", Priority: 8, Content: content}
-}
-
-// graphFromState constructs a dag.Graph from a materialize.State.
-// This is the canonical way to build a graph for context assembly and other operations
-// that need to traverse the issue hierarchy and dependencies.
-func graphFromState(state *materialize.State) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node, len(state.Issues))
-	for id, issue := range state.Issues {
-		nodeIndex[id] = &dag.Node{
-			ID:        issue.ID,
-			Title:     issue.Title,
-			Type:      issue.Type,
-			Parent:    issue.Parent,
-			Children:  append([]string(nil), issue.Children...),
-			BlockedBy: append([]string(nil), issue.BlockedBy...),
-			Blocks:    append([]string(nil), issue.Blocks...),
-		}
-	}
-	return dag.BuildGraph(nodeIndex)
 }
