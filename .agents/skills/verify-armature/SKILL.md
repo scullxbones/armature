@@ -202,8 +202,11 @@ Draft issues (`confidence=draft` at birth) are excluded from the ready queue. Pr
 `dag transition` requires a strict-green `arm validate` of the graph (cited source, no E6, no scope overlap). Seed a filesystem source first:
 
 ```bash
-"$ARM" --repo "$TARGET" sources add --url README.md --type filesystem --title "README"
-# human: "added source <uuid> (README.md)"  (not JSON)
+"$ARM" --repo "$TARGET" sources add --url "$TARGET/README.md" --type filesystem --title "README"
+# human: "added source <uuid> ($TARGET/README.md)"  (not JSON)
+# Absolute path required: the filesystem provider resolves a relative URL
+# against the process cwd, not --repo, so `README.md` would cite whichever
+# checkout you happen to be standing in (or fail to sync).
 "$ARM" --repo "$TARGET" sources sync
 "$ARM" --repo "$TARGET" sources verify
 ```
