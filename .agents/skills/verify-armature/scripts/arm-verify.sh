@@ -82,6 +82,7 @@ load_run() {
     env_file=$(cat "$CURRENT_RUN_FILE")
   fi
   [ -f "$env_file" ] || die "run env not found: $env_file"
+  RUN_ENV_FILE=$env_file
   # shellcheck disable=SC1090
   . "$env_file"
   [ -n "${RUN_ID:-}" ] || die "run env missing RUN_ID"
@@ -126,6 +127,40 @@ Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to lau
   fi
   # Stale pointer (target already gone): safe to replace.
   rm -f "$CURRENT_RUN_FILE"
+}
+
+pointer_is_ours() {
+  # The pointer belongs to this process while it holds the reservation, or once
+  # it names the run env this process wrote/loaded. Anything else is a newer
+  # launch that has already taken over, and must not be disturbed.
+  [ -f "$CURRENT_RUN_FILE" ] || return 1
+  local cur
+  cur=$(cat "$CURRENT_RUN_FILE")
+  case "$cur" in
+    "reserved by pid $$ "*) return 0 ;;
+  esac
+  [ -n "${1:-}" ] && [ "$cur" = "$1" ]
+}
+
+launch_partial_cleanup() {
+  local status=$?
+  trap - EXIT
+  # cmd_run's trap is only installed after launch returns, so a launch that
+  # fails part-way (build error, git init failure) would otherwise strand its
+  # reservation and any temp repo it had already created. Evidence is kept, as
+  # on every other path.
+  if [ -n "${TARGET_REPO:-}" ] && [ -d "$TARGET_REPO" ]; then
+    case "$TARGET_REPO" in
+      /tmp/arm-verify-target.*) rm -rf "$TARGET_REPO" ;;
+    esac
+  fi
+  if [ -n "${RUN_ENV:-}" ]; then
+    rm -f "$RUN_ENV"
+  fi
+  if pointer_is_ours "${RUN_ENV:-}"; then
+    rm -f "$CURRENT_RUN_FILE"
+  fi
+  exit "$status"
 }
 
 reserve_run_pointer() {
@@ -205,6 +240,7 @@ cmd_launch() {
   need_cmd make
   unset ARM_LOG_SLOT || true
   reserve_run_pointer
+  trap launch_partial_cleanup EXIT
 
   if [ -n "$ARM_BIN_INHERITED" ] && [ "$ARM_BIN_INHERITED" != "$SOURCE_ROOT/bin/arm" ]; then
     printf 'arm-verify: ignoring ARM_BIN=%s; verification always drives the binary it just built at %s/bin/arm\n' \
@@ -256,6 +292,7 @@ cmd_launch() {
   git -C "$TARGET_REPO" rev-parse --show-toplevel >"$EVIDENCE_DIR/launch/target-toplevel.txt"
   git -C "$TARGET_REPO" worktree list >"$EVIDENCE_DIR/launch/worktree-list.txt"
   printf '%s\n' "$ver_out" >"$EVIDENCE_DIR/launch/arm-version.txt"
+  trap - EXIT
 }
 
 cmd_doctor() {
@@ -597,6 +634,7 @@ drive_ready_claim() {
   capture drive/09-git-worktree git -C "$TARGET_REPO" worktree list
   capture drive/10-log "$ARM_BIN" --repo "$TARGET_REPO" log --json
   assert_exit_0 drive/10-log
+  capture drive/12-worker-id git -C "$TARGET_REPO" config --get armature.worker-id
   mkdir -p "$EVIDENCE_DIR/drive/11-ops"
   if ls "$TARGET_REPO/.armature/ops/"*.log >/dev/null 2>&1; then
     cat "$TARGET_REPO/.armature/ops/"*.log >"$EVIDENCE_DIR/drive/11-ops/ops.log"
@@ -607,6 +645,15 @@ drive_ready_claim() {
     'any(.[]; .issue == "TASK-VERIFY-READY")' "ready queue omits TASK-VERIFY-READY"
   jq_assert "$EVIDENCE_DIR/drive/06-claim/stdout.txt" \
     '.issue == "TASK-VERIFY-READY" and has("claimed_by")' "claim did not report the issue and claimant"
+  # has("claimed_by") alone would accept an empty or wrong claimant, so tie the
+  # attribution to this repo's registered worker.
+  assert_exit_0 drive/12-worker-id
+  local worker_id claimed_by
+  worker_id=$(tr -d '\r' <"$EVIDENCE_DIR/drive/12-worker-id/stdout.txt")
+  [ -n "$worker_id" ] || die "target has no armature.worker-id after claim"
+  claimed_by=$(jq -r '.claimed_by // ""' "$EVIDENCE_DIR/drive/06-claim/stdout.txt")
+  [ -n "$claimed_by" ] || die "claim reported an empty claimed_by"
+  [ "$claimed_by" = "$worker_id" ] || die "claim attributed to $claimed_by, expected $worker_id"
   jq_assert "$EVIDENCE_DIR/drive/07-show/stdout.txt" \
     '.status == "claimed"' "issue status is not claimed after claim"
   [ -d "$TARGET_REPO/.worktrees/TASK-VERIFY-READY" ] || die "managed worktree directory missing"
@@ -668,12 +715,15 @@ cmd_cleanup() {
     printf 'evidence_exists=%s\n' "$( [ -d "$EVIDENCE_DIR" ] && printf yes || printf no )"
   } | tee "$EVIDENCE_DIR/cleanup/meta.txt"
 
-  if [ -n "${ARM_VERIFY_RUN_ENV:-}" ]; then
-    :
-  else
-    if [ -f "$CURRENT_RUN_FILE" ]; then
-      env_file=$(cat "$CURRENT_RUN_FILE")
-      rm -f "$env_file" "$CURRENT_RUN_FILE"
+  if [ -z "${ARM_VERIFY_RUN_ENV:-}" ]; then
+    # Only release the pointer if it still refers to THIS run: a same-checkout
+    # launch racing this cleanup may already have taken it, and deleting its
+    # reservation would let a third launch in and orphan a target.
+    if pointer_is_ours "${RUN_ENV_FILE:-}"; then
+      rm -f "$CURRENT_RUN_FILE"
+    fi
+    if [ -n "${RUN_ENV_FILE:-}" ]; then
+      rm -f "$RUN_ENV_FILE"
     fi
   fi
 
