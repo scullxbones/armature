@@ -1,0 +1,9 @@
+run_id=20260902T013905Z-0b1e3a
+source_root=/workspace/armature
+arm_bin=/workspace/armature/bin/arm
+expected_version=b15ab0e
+arm_version=arm version b15ab0e
+target_repo=/tmp/arm-verify-target.lj6zpi
+evidence_dir=/workspace/armature/.cursor/skills/verify-armature/evidence/20260902T013905Z-0b1e3a
+run_env=/tmp/arm-verify-run.vRuZCM.env
+started_at=2026-09-02T01:39:05Z

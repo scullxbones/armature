@@ -1,0 +1,7 @@
+cmd: arm create --id TASK-VERIFY-CREATE --title Verification create+list --type task --scope verify-create.txt --dod Issue is listed and showable --acceptance [{"type":"test_passes","description":"list and show return the created id"}]
+exit: 0
+--- stdout ---
+{"id":"TASK-VERIFY-CREATE","status":"created"}
+
+--- stderr ---
+

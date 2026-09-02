@@ -1,0 +1,9 @@
+cmd: /workspace/armature/bin/arm --repo /tmp/arm-verify-target.lj6zpi show --issue TASK-VERIFY-CREATE --field status,title,type
+exit: 0
+--- stdout ---
+open
+Verification create+list
+task
+
+--- stderr ---
+

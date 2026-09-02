@@ -1,0 +1,11 @@
+verification doctor
+source_root=/workspace/armature
+target_repo=/tmp/arm-verify-target.lj6zpi
+arm_bin=/workspace/armature/bin/arm
+expected_version=b15ab0e
+arm_version=arm version b15ab0e
+PASS: version matches build (b15ab0e)
+PASS: target is an isolated temp repo
+PASS: target is a git repo
+product arm doctor: exit 1 (expected before bootstrap; see product-doctor.stdout.txt)
+PASS: verification instance is worth driving

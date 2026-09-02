@@ -1,0 +1,14 @@
+cmd: arm list
+exit: 0
+--- stdout ---
+[
+  {
+    "id": "TASK-VERIFY-CREATE",
+    "type": "task",
+    "status": "open",
+    "title": "Verification create+list"
+  }
+]
+
+--- stderr ---
+

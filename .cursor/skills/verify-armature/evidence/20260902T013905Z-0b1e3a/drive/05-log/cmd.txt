@@ -1,0 +1,1 @@
+/workspace/armature/bin/arm --repo /tmp/arm-verify-target.lj6zpi log --json

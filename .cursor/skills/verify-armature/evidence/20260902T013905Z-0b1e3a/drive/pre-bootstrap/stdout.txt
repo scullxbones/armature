@@ -1,0 +1,27 @@
+{
+  "repo_setup": {
+    "status": "initialized"
+  },
+  "harness_setup": [
+    {
+      "platform": "claude",
+      "artifact": "skills",
+      "status": "ok",
+      "action": "install",
+      "note": "Deployed to /tmp/arm-verify-target.lj6zpi/.claude/skills"
+    },
+    {
+      "platform": "claude",
+      "artifact": "plugin_metadata",
+      "status": "ok",
+      "action": "install",
+      "note": "Deployed to /tmp/arm-verify-target.lj6zpi/.claude/plugins/armature"
+    },
+    {
+      "platform": "claude",
+      "artifact": "harness_hook_config",
+      "status": "skipped",
+      "action": "skip"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+proof: create TASK-VERIFY-CREATE then list/show/ops log

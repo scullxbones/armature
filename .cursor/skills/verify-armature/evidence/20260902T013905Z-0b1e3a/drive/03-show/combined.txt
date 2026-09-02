@@ -1,0 +1,22 @@
+cmd: arm_json show TASK-VERIFY-CREATE
+exit: 0
+--- stdout ---
+{
+  "id": "TASK-VERIFY-CREATE",
+  "title": "Verification create+list",
+  "type": "task",
+  "status": "open",
+  "definition_of_done": "Issue is listed and showable",
+  "scope": [
+    "verify-create.txt"
+  ],
+  "acceptance": [
+    {
+      "type": "test_passes",
+      "description": "list and show return the created id"
+    }
+  ]
+}
+
+--- stderr ---
+
