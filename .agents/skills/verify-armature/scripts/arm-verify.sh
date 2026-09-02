@@ -22,18 +22,24 @@ EVIDENCE_ROOT="$SKILL_DIR/evidence"
 parent_is_safe() {
   # Safe means: a real directory (not a symlink) that either belongs to this
   # user or is sticky, so other users cannot rename or replace entries we own.
-  local p=$1
+  local p=$1 perms
   if [ -L "$p" ]; then
     return 1
   fi
   [ -d "$p" ] || return 1
-  if [ -O "$p" ]; then
-    return 0
-  fi
+  # Sticky (as /tmp is) is safe even when world-writable: only an entry's owner
+  # may rename or delete it.
   if [ -k "$p" ]; then
     return 0
   fi
-  return 1
+  # Otherwise ownership alone is not enough -- a parent we own but that others
+  # can write is a parent in which others can rename our leaf away.
+  [ -O "$p" ] || return 1
+  perms=$(ls -ld "$p" | cut -c1-10)
+  case "$perms" in
+    ?????w???? | ????????w?) return 1 ;;
+  esac
+  return 0
 }
 
 # State (run pointer, run env, lock) lives in a private per-user directory, not
@@ -757,6 +763,11 @@ drive_worker_init() {
 drive_create_list() {
   require_bootstrapped
   require_worker
+  # Read the identity BEFORE create: capturing it only afterwards would let a
+  # create that rotated armature.worker-id pass, since the new log filename and
+  # both worker fields would agree with the replacement.
+  capture drive/00-worker-id-before git -C "$TARGET_REPO" config --get armature.worker-id
+  assert_exit_0 drive/00-worker-id-before
   capture drive/01-create arm create \
     --id TASK-VERIFY-CREATE \
     --title "Verification create+list" \
@@ -814,8 +825,12 @@ drive_create_list() {
   # require the materialized read to agree on worker_id. Concatenating every log
   # would pass even if the op landed under another worker or filename.
   assert_exit_0 drive/08-worker-id
-  local worker_id
+  local worker_id worker_id_before
   worker_id=$(tr -d '\r' <"$EVIDENCE_DIR/drive/08-worker-id/stdout.txt")
+  worker_id_before=$(tr -d '\r' <"$EVIDENCE_DIR/drive/00-worker-id-before/stdout.txt")
+  assert_uuid "$worker_id_before" "armature.worker-id before create"
+  [ "$worker_id" = "$worker_id_before" ] ||
+    die "create changed armature.worker-id: $worker_id_before -> ${worker_id:-unset}"
   assert_uuid "$worker_id" "armature.worker-id"
   local worker_log="$TARGET_REPO/.armature/ops/$worker_id.log"
   [ -f "$worker_log" ] || die "no ops log for the configured worker at $worker_log"
@@ -914,6 +929,11 @@ drive_ready_claim() {
   assert_exit_0 drive/04-dag-transition
   capture drive/05-ready arm ready
   assert_exit_0 drive/05-ready
+  # Same reasoning as create-list: read the identity before the command under
+  # test, so a claim that rotated it cannot satisfy every attribution check
+  # against its own replacement.
+  capture drive/05b-worker-id-before git -C "$TARGET_REPO" config --get armature.worker-id
+  assert_exit_0 drive/05b-worker-id-before
   capture drive/06-claim arm claim --issue TASK-VERIFY-READY --worktree
   assert_exit_0 drive/06-claim
   capture drive/07-show arm_json show TASK-VERIFY-READY
@@ -943,8 +963,12 @@ drive_ready_claim() {
   # has("claimed_by") alone would accept an empty or wrong claimant, so tie the
   # attribution to this repo's registered worker.
   assert_exit_0 drive/12-worker-id
-  local worker_id claimed_by
+  local worker_id claimed_by worker_id_before
   worker_id=$(tr -d '\r' <"$EVIDENCE_DIR/drive/12-worker-id/stdout.txt")
+  worker_id_before=$(tr -d '\r' <"$EVIDENCE_DIR/drive/05b-worker-id-before/stdout.txt")
+  assert_uuid "$worker_id_before" "armature.worker-id before claim"
+  [ "$worker_id" = "$worker_id_before" ] ||
+    die "claim changed armature.worker-id: $worker_id_before -> ${worker_id:-unset}"
   [ -n "$worker_id" ] || die "target has no armature.worker-id after claim"
   claimed_by=$(jq -r '.claimed_by // ""' "$EVIDENCE_DIR/drive/06-claim/stdout.txt")
   [ -n "$claimed_by" ] || die "claim reported an empty claimed_by"
