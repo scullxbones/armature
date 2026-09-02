@@ -110,7 +110,7 @@ assert_no_live_run() {
         die "another launch (pid $marker_pid) is reserving $CURRENT_RUN_FILE.
 Wait for it to finish, or set ARM_VERIFY_CURRENT=<other path> for a parallel session."
       fi
-      rm -f "$CURRENT_RUN_FILE"
+      reclaim_stale_pointer "$env_file" || true
       return 0
       ;;
   esac
@@ -126,7 +126,28 @@ Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to lau
     fi
   fi
   # Stale pointer (target already gone): safe to replace.
-  rm -f "$CURRENT_RUN_FILE"
+  reclaim_stale_pointer "$env_file" || true
+}
+
+reclaim_stale_pointer() {
+  # reclaim_stale_pointer <value-we-inspected>
+  # Removing a stale pointer with a bare rm is check-then-delete: a concurrent
+  # launch could have replaced it with its own reservation in between, and we
+  # would delete that. rename() is atomic and fails once the source is gone, so
+  # moving the pointer aside is the compare-and-swap: at most one process takes
+  # this exact file, and the value is re-checked before it is discarded. Failure
+  # here is not fatal -- the noclobber create in reserve_run_pointer is the
+  # single arbiter, and reports "another launch reserved ..." if we lost.
+  local inspected=$1
+  local mine="$CURRENT_RUN_FILE.reclaim.$$"
+  mv "$CURRENT_RUN_FILE" "$mine" 2>/dev/null || return 1
+  local cur
+  cur=$(cat "$mine" 2>/dev/null || printf '')
+  if [ "$cur" != "$inspected" ]; then
+    mv "$mine" "$CURRENT_RUN_FILE" 2>/dev/null || rm -f "$mine"
+    return 1
+  fi
+  rm -f "$mine"
 }
 
 pointer_is_ours() {
