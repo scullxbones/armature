@@ -12,12 +12,28 @@ SOURCE_ROOT=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
 ARM_BIN_INHERITED=${ARM_BIN:-}
 ARM_BIN=${ARM_BIN:-"$SOURCE_ROOT/bin/arm"}
 EVIDENCE_ROOT="$SKILL_DIR/evidence"
-# Per-checkout pointer: a bare /tmp/arm-verify-current is shared by every
-# session on the host, so a second launch would silently retarget the first
-# session's doctor/drive/cleanup and orphan its temp repo. cksum keeps this to
-# POSIX tools. Two sessions in the SAME checkout are caught by the live-pointer
-# guard in cmd_launch; pass ARM_VERIFY_CURRENT to run them in parallel.
-CURRENT_RUN_FILE=${ARM_VERIFY_CURRENT:-/tmp/arm-verify-current-$(printf '%s' "$SOURCE_ROOT" | cksum | awk '{print $1}')}
+# State (run pointer, run env, lock) lives in a private per-user directory, not
+# a predictable world-writable /tmp path: launch SOURCES the run env, so another
+# account able to pre-create that path could run arbitrary code as this user.
+state_dir() {
+  local base
+  if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ]; then
+    base="$XDG_RUNTIME_DIR/arm-verify"
+  else
+    base="${TMPDIR:-/tmp}/arm-verify-$(id -u)"
+  fi
+  mkdir -p "$base" 2>/dev/null || die "cannot create state directory $base"
+  chmod 700 "$base" 2>/dev/null || true
+  [ -O "$base" ] || die "state directory $base is not owned by this user; refusing to use it"
+  printf '%s\n' "$base"
+}
+
+STATE_DIR=$(state_dir)
+# Per-checkout pointer: one shared pointer would let a second launch silently
+# retarget the first session's doctor/drive/cleanup and orphan its temp repo.
+# cksum keeps this to POSIX tools. Two sessions in the SAME checkout are caught
+# by the reservation in cmd_launch; pass ARM_VERIFY_CURRENT to run in parallel.
+CURRENT_RUN_FILE=${ARM_VERIFY_CURRENT:-$STATE_DIR/current-$(printf '%s' "$SOURCE_ROOT" | cksum | awk '{print $1}')}
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_TERMINAL_PROMPT=0
 
@@ -28,6 +44,23 @@ die() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+assert_safe_to_source() {
+  # This file is sourced, so a file we do not own, or one others can write, is
+  # arbitrary code execution as this user. Refuse rather than run it.
+  local f=$1 perms
+  if [ -L "$f" ]; then
+    die "run env is a symlink, refusing to source it: $f"
+  fi
+  [ -f "$f" ] || die "run env is not a regular file: $f"
+  [ -O "$f" ] || die "run env is not owned by this user, refusing to source it: $f"
+  # ls -ld columns: 1 type, 2-4 user, 5-7 group, 8-10 other. Group write is
+  # column 6, other write is column 9.
+  perms=$(ls -ld "$f" | cut -c1-10)
+  case "$perms" in
+    ?????w???? | ????????w?) die "run env is group- or world-writable, refusing to source it: $f ($perms)" ;;
+  esac
 }
 
 abs_path() {
@@ -65,8 +98,8 @@ Usage: arm-verify.sh <command> [args]
   run <feature>       launch → doctor → drive <feature> → cleanup (evidence kept)
 
 Environment:
-  ARM_VERIFY_CURRENT  Path to the current-run pointer file
-                      (default: /tmp/arm-verify-current-<checkout hash>)
+  ARM_VERIFY_CURRENT  Path to the current-run pointer file (default:
+                      <XDG_RUNTIME_DIR or $TMPDIR>/arm-verify.../current-<hash>)
   ARM_VERIFY_RUN_ENV  Skip pointer file and load this run env directly
 
 Evidence is written under:
@@ -82,6 +115,7 @@ load_run() {
     env_file=$(cat "$CURRENT_RUN_FILE")
   fi
   [ -f "$env_file" ] || die "run env not found: $env_file"
+  assert_safe_to_source "$env_file"
   RUN_ENV_FILE=$env_file
   # shellcheck disable=SC1090
   . "$env_file"
@@ -115,6 +149,7 @@ Wait for it to finish, or set ARM_VERIFY_CURRENT=<other path> for a parallel ses
       ;;
   esac
   if [ -f "$env_file" ]; then
+    assert_safe_to_source "$env_file"
     live=$(
       # shellcheck disable=SC1090
       . "$env_file" >/dev/null 2>&1
@@ -167,9 +202,19 @@ pointer_lock_acquire() {
     # users).
     owner=$(readlink "$POINTER_LOCK" 2>/dev/null || printf '')
     if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
-      # Anything unreadable as an owner is unowned; leaving it would wedge every
-      # later run.
-      rm -f "$POINTER_LOCK" 2>/dev/null || true
+      # Take the dead lock over by RENAME, not rm: rename consumes the link
+      # exactly once, so a second reclaimer observing the same dead pid fails
+      # here instead of deleting the winner's freshly created lock. If what we
+      # moved turns out not to be the link we inspected, put it straight back.
+      local stale moved
+      stale="$POINTER_LOCK.stale.$$"
+      if mv "$POINTER_LOCK" "$stale" 2>/dev/null; then
+        moved=$(readlink "$stale" 2>/dev/null || printf '')
+        if [ -n "$moved" ] && [ "$moved" != "$owner" ]; then
+          ln -s "$moved" "$POINTER_LOCK" 2>/dev/null || true
+        fi
+        rm -f "$stale"
+      fi
       migrate_dir_lock
       continue
     fi
@@ -333,7 +378,7 @@ cmd_launch() {
   EVIDENCE_DIR="$EVIDENCE_ROOT/$RUN_ID"
   mkdir -p "$EVIDENCE_DIR/launch"
   TARGET_REPO=$(mktemp -d /tmp/arm-verify-target.XXXXXX)
-  RUN_ENV=$(mktemp /tmp/arm-verify-run.XXXXXX.env)
+  RUN_ENV=$(mktemp "$STATE_DIR/run.XXXXXX.env")
 
   git init -q "$TARGET_REPO"
   git -C "$TARGET_REPO" config user.email "arm-verify@example.com"
@@ -560,6 +605,14 @@ drive_bootstrap() {
     *) ops_cfg_abs=$(abs_path "$TARGET_REPO/$ops_cfg" 2>/dev/null || printf '%s' "$ops_cfg") ;;
   esac
   [ "$ops_cfg_abs" = "$want_ops" ] || die "armature.ops-worktree-path is $ops_cfg (resolved $ops_cfg_abs), expected $want_ops"
+  # features/bootstrap.md maps worker-identity creation as a bootstrap side
+  # effect, so a bootstrap that stopped writing it must fail here.
+  local boot_worker
+  boot_worker=$(awk '$1 == "armature.worker-id" { print $2; exit }' "$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
+  case "$boot_worker" in
+    '' | *[!0-9a-fA-F-]*) die "bootstrap did not write a worker id (armature.worker-id=${boot_worker:-unset})" ;;
+  esac
+  [ "${#boot_worker}" -eq 36 ] || die "bootstrap wrote an unexpected worker id: $boot_worker"
   printf 'bootstrap proof ok\n'
 }
 
@@ -634,8 +687,11 @@ drive_create_list() {
   capture drive/08-worker-id git -C "$TARGET_REPO" config --get armature.worker-id
   jq_assert "$EVIDENCE_DIR/drive/01-create/stdout.txt" \
     '. == {"id": "TASK-VERIFY-CREATE", "status": "created"}' "create did not return the expected object"
+  # Assert the list projection itself, not just presence of the id: list is its
+  # own output path and the structured show assertion cannot certify it.
   jq_assert "$EVIDENCE_DIR/drive/02-list/stdout.txt" \
-    'any(.[]; .id == "TASK-VERIFY-CREATE")' "list does not contain TASK-VERIFY-CREATE"
+    'any(.[]; .id == "TASK-VERIFY-CREATE" and .status == "open" and .type == "task" and .title == "Verification create+list")' \
+    "list has no TASK-VERIFY-CREATE entry with the expected status/type/title"
   jq_assert "$EVIDENCE_DIR/drive/03-show/stdout.txt" \
     '.id == "TASK-VERIFY-CREATE" and .status == "open" and .title == "Verification create+list"' \
     "show returned unexpected id/status/title"
