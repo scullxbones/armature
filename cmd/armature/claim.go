@@ -1182,11 +1182,9 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			if worktreePath != defaultWorktreeFlagValue && issueID != "" && len(args) > 0 {
 				return fmt.Errorf("accepts at most 1 arg(s), received %d", len(args)+1)
 			}
-			if issueID == "" && len(args) > 0 {
-				issueID = args[0]
-			}
-			if issueID == "" {
-				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			issueID, err = resolveIssueID(issueID, args)
+			if err != nil {
+				return err
 			}
 			if worktreePath == "" {
 				return fmt.Errorf("--worktree is required")

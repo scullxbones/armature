@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -38,14 +37,8 @@ be set directly. Links establish the DAG structure and drive ready-queue eligibi
 			if err := appendOp(ctx, logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]string{"source": sourceID, "dep": dep, "rel": rel}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Linked %s → %s (%s)\n", sourceID, dep, rel)
-			}
+			writeCommandResult(cmd, map[string]string{"source": sourceID, "dep": dep, "rel": rel},
+				"Linked %s → %s (%s)\n", sourceID, dep, rel)
 			return nil
 		},
 	}

@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -17,11 +14,10 @@ func newDecisionCmd() *cobra.Command {
 		Short: "Record an architectural decision",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if issueID == "" && len(args) > 0 {
-				issueID = args[0]
-			}
-			if issueID == "" {
-				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			var err error
+			issueID, err = resolveIssueID(issueID, args)
+			if err != nil {
+				return err
 			}
 
 			state := mustState(cmd)
@@ -36,14 +32,8 @@ func newDecisionCmd() *cobra.Command {
 			if err := appendLowStakesOp(state, logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]string{"issue": issueID, "topic": topic, "choice": choice}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Decision recorded on %s: %s → %s\n", issueID, topic, choice)
-			}
+			writeCommandResult(cmd, map[string]string{"issue": issueID, "topic": topic, "choice": choice},
+				"Decision recorded on %s: %s → %s\n", issueID, topic, choice)
 			return nil
 		},
 	}

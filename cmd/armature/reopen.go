@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -15,11 +13,10 @@ func newReopenCmd() *cobra.Command {
 		Short: "Reopen a done or blocked issue",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if issueID == "" && len(args) > 0 {
-				issueID = args[0]
-			}
-			if issueID == "" {
-				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			var err error
+			issueID, err = resolveIssueID(issueID, args)
+			if err != nil {
+				return err
 			}
 
 			state := mustState(cmd)

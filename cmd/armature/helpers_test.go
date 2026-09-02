@@ -13,6 +13,7 @@ import (
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -561,4 +562,42 @@ func TestPreRenderedReportsAreNotConcatenatedCommandFailures_REQ_LNGHZN_S6_T1(t 
 			"the validation findings are the report; a Command Failure must not follow them")
 		assert.Contains(t, stderr.String(), "cannot promote to verified", "the reason belongs on stderr")
 	})
+}
+
+func TestResolveIssueID(t *testing.T) {
+	t.Parallel()
+	id, err := resolveIssueID("", []string{"T1"})
+	require.NoError(t, err)
+	assert.Equal(t, "T1", id)
+
+	id, err = resolveIssueID("flag-id", []string{"pos"})
+	require.NoError(t, err)
+	assert.Equal(t, "flag-id", id)
+
+	_, err = resolveIssueID("", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "issue ID is required (via --issue flag or positional argument)")
+}
+
+func TestWriteCommandResult(t *testing.T) {
+	t.Parallel()
+	root := &cobra.Command{Use: "arm"}
+	root.PersistentFlags().String("format", "human", "")
+	cmd := &cobra.Command{Use: "heartbeat"}
+	root.AddCommand(cmd)
+
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	writeCommandResult(cmd, map[string]string{"issue": "T1", "heartbeat": "sent"}, "Heartbeat recorded for %s\n", "T1")
+	assert.Equal(t, "Heartbeat recorded for T1\n", buf.String())
+
+	require.NoError(t, root.PersistentFlags().Set("format", "json"))
+	buf.Reset()
+	writeCommandResult(cmd, map[string]string{"issue": "T1", "heartbeat": "sent"}, "Heartbeat recorded for %s\n", "T1")
+	assert.JSONEq(t, `{"heartbeat":"sent","issue":"T1"}`, strings.TrimSpace(buf.String()))
+
+	require.NoError(t, root.PersistentFlags().Set("format", "agent"))
+	buf.Reset()
+	writeCommandResult(cmd, map[string]string{"issue": "T1", "heartbeat": "sent"}, "Heartbeat recorded for %s\n", "T1")
+	assert.JSONEq(t, `{"heartbeat":"sent","issue":"T1"}`, strings.TrimSpace(buf.String()))
 }

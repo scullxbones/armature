@@ -21,11 +21,10 @@ func newAmendCmd() *cobra.Command {
 		Short: "Amend fields on an existing issue (type, scope, acceptance, definition_of_done)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if issueID == "" && len(args) > 0 {
-				issueID = args[0]
-			}
-			if issueID == "" {
-				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			var err error
+			issueID, err = resolveIssueID(issueID, args)
+			if err != nil {
+				return err
 			}
 
 			if nodeType != "" && !issuetype.IsValid(nodeType) {
@@ -82,14 +81,8 @@ func newAmendCmd() *cobra.Command {
 			if err := appendLowStakesOp(state, logPath, op); err != nil {
 				return err
 			}
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]string{"issue": issueID, "status": "amended"}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Amended %s\n", issueID)
-			}
+			writeCommandResult(cmd, map[string]string{"issue": issueID, "status": "amended"},
+				"Amended %s\n", issueID)
 			return nil
 		},
 	}

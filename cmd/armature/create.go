@@ -110,14 +110,8 @@ func newCreateCmd() *cobra.Command {
 				return err
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]string{"id": id, "status": "created"}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %s\n", id)
-			}
+			writeCommandResult(cmd, map[string]string{"id": id, "status": "created"},
+				"Created %s\n", id)
 			return nil
 		},
 	}

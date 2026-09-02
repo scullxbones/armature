@@ -49,11 +49,9 @@ This enforces branch + PR discipline.`,
 		},
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer func() { err = mapTransitionError(err) }()
-			if issueID == "" && len(args) > 0 {
-				issueID = args[0]
-			}
-			if issueID == "" {
-				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			issueID, err = resolveIssueID(issueID, args)
+			if err != nil {
+				return err
 			}
 			if to == "" {
 				return fmt.Errorf(`required flag(s) "to" not set`)

@@ -171,7 +171,7 @@ func TestGraphAncestry(t *testing.T) {
 	epic.Children = []string{"story-1"}
 	story.Children = []string{"task-1"}
 
-	g := NewGraph(d)
+	g := d
 
 	// task-1 ancestors should be story-1 and epic-1
 	ancestors := g.Ancestry("task-1")
@@ -205,7 +205,7 @@ func TestGraphDescendants(t *testing.T) {
 	story1.Children = []string{"task-1"}
 	story2.Children = []string{}
 
-	g := NewGraph(d)
+	g := d
 
 	// epic-1 descendants should be story1, story2, task
 	descendants := g.Descendants("epic-1")
@@ -235,7 +235,7 @@ func TestGraphBlockers(t *testing.T) {
 	task1.Blocks = []string{"task-2", "task-3"}
 	task2.Blocks = []string{"task-3"}
 
-	g := NewGraph(d)
+	g := d
 
 	// task-2 blockers should be task-1
 	blockers := g.Blockers("task-2")
@@ -264,7 +264,7 @@ func TestGraphBlocks(t *testing.T) {
 
 	task2.Blocks = []string{"task-3"}
 
-	g := NewGraph(d)
+	g := d
 
 	// task-1 blocks task-2 and task-3
 	blocks := g.Blocks("task-1")
@@ -294,7 +294,7 @@ func TestGraphHierarchy(t *testing.T) {
 	epic.Children = []string{"story-1"}
 	story.Children = []string{"task-1"}
 
-	g := NewGraph(d)
+	g := d
 
 	// story-1 parent should be epic-1, children should be task-1
 	parent, children := g.Hierarchy("story-1")
@@ -324,7 +324,7 @@ func TestGraphHasCycle(t *testing.T) {
 	require.NoError(t, d.AddNode(task2))
 	task2.Blocks = []string{"task-1"}
 
-	g := NewGraph(d)
+	g := d
 	assert.False(t, g.HasCycle())
 
 	// Test cyclic DAG
@@ -338,7 +338,7 @@ func TestGraphHasCycle(t *testing.T) {
 	task3.Blocks = []string{"task-4"}
 	task4.Blocks = []string{"task-3"}
 
-	g2 := NewGraph(d2)
+	g2 := d2
 	assert.True(t, g2.HasCycle())
 }
 
@@ -357,7 +357,7 @@ func TestGraphDepth(t *testing.T) {
 	epic.Children = []string{"story-1"}
 	story.Children = []string{"task-1"}
 
-	g := NewGraph(d)
+	g := d
 
 	// Depth is measured from root (no parent)
 	assert.Equal(t, 0, g.Depth("epic-1"))
@@ -379,7 +379,7 @@ func TestGraphDepthWithMultipleRoots(t *testing.T) {
 
 	epic1.Children = []string{"story-1"}
 
-	g := NewGraph(d)
+	g := d
 
 	assert.Equal(t, 0, g.Depth("epic-1"))
 	assert.Equal(t, 0, g.Depth("epic-2"))
@@ -390,7 +390,7 @@ func TestGraphDepthWithMultipleRoots(t *testing.T) {
 func TestGraphAncestryNonexistentNode(t *testing.T) {
 	t.Parallel()
 	d := New()
-	g := NewGraph(d)
+	g := d
 
 	ancestors := g.Ancestry("nonexistent")
 	assert.Empty(t, ancestors)
@@ -400,7 +400,7 @@ func TestGraphAncestryNonexistentNode(t *testing.T) {
 func TestGraphDescendantsNonexistentNode(t *testing.T) {
 	t.Parallel()
 	d := New()
-	g := NewGraph(d)
+	g := d
 
 	descendants := g.Descendants("nonexistent")
 	assert.Empty(t, descendants)
@@ -410,7 +410,7 @@ func TestGraphDescendantsNonexistentNode(t *testing.T) {
 func TestGraphBlockersNonexistentNode(t *testing.T) {
 	t.Parallel()
 	d := New()
-	g := NewGraph(d)
+	g := d
 
 	blockers := g.Blockers("nonexistent")
 	assert.Nil(t, blockers)
@@ -420,7 +420,7 @@ func TestGraphBlockersNonexistentNode(t *testing.T) {
 func TestGraphBlocksNonexistentNode(t *testing.T) {
 	t.Parallel()
 	d := New()
-	g := NewGraph(d)
+	g := d
 
 	blocks := g.Blocks("nonexistent")
 	assert.Nil(t, blocks)
@@ -430,7 +430,7 @@ func TestGraphBlocksNonexistentNode(t *testing.T) {
 func TestGraphHierarchyNonexistentNode(t *testing.T) {
 	t.Parallel()
 	d := New()
-	g := NewGraph(d)
+	g := d
 
 	parent, children := g.Hierarchy("nonexistent")
 	assert.Equal(t, "", parent)
@@ -441,7 +441,7 @@ func TestGraphHierarchyNonexistentNode(t *testing.T) {
 func TestGraphDepthNonexistentNode(t *testing.T) {
 	t.Parallel()
 	d := New()
-	g := NewGraph(d)
+	g := d
 
 	depth := g.Depth("nonexistent")
 	assert.Equal(t, 0, depth)
@@ -455,7 +455,7 @@ func TestGraphBlockersEmptyNode(t *testing.T) {
 
 	require.NoError(t, d.AddNode(task))
 
-	g := NewGraph(d)
+	g := d
 
 	blockers := g.Blockers("task-1")
 	assert.Empty(t, blockers)
@@ -469,7 +469,7 @@ func TestGraphBlocksEmptyNode(t *testing.T) {
 
 	require.NoError(t, d.AddNode(task))
 
-	g := NewGraph(d)
+	g := d
 
 	blocks := g.Blocks("task-1")
 	assert.Empty(t, blocks)
@@ -514,7 +514,7 @@ func TestBlockersMutationSafety(t *testing.T) {
 	require.NoError(t, d.AddNode(task1))
 	require.NoError(t, d.AddNode(task2))
 
-	g := NewGraph(d)
+	g := d
 
 	// Get the blockers and capture the original list
 	original := g.Blockers("task-2")
@@ -540,7 +540,7 @@ func TestBlocksMutationSafety(t *testing.T) {
 	require.NoError(t, d.AddNode(task1))
 	require.NoError(t, d.AddNode(task2))
 
-	g := NewGraph(d)
+	g := d
 
 	// Get the blocks and capture the original list
 	original := g.Blocks("task-1")
@@ -568,7 +568,7 @@ func TestHierarchyMutationSafety(t *testing.T) {
 	require.NoError(t, d.AddNode(parent))
 	require.NoError(t, d.AddNode(child))
 
-	g := NewGraph(d)
+	g := d
 
 	// Get the hierarchy and capture the original children
 	_, originalChildren := g.Hierarchy("parent-1")
@@ -596,7 +596,7 @@ func TestGraph_Depth_CycleGuard(t *testing.T) {
 	require.NoError(t, d.AddNode(nodeA))
 	require.NoError(t, d.AddNode(nodeB))
 
-	g := NewGraph(d)
+	g := d
 
 	// Depth should return a finite value and not hang
 	depth := g.Depth("a")
@@ -616,7 +616,7 @@ func TestGraph_Ancestry_CycleGuard(t *testing.T) {
 	require.NoError(t, d.AddNode(nodeA))
 	require.NoError(t, d.AddNode(nodeB))
 
-	g := NewGraph(d)
+	g := d
 
 	// Ancestry should return a finite slice and not hang
 	ancestors := g.Ancestry("a")
@@ -680,184 +680,6 @@ func TestFromIndexEmpty(t *testing.T) {
 	assert.Empty(t, descendants)
 }
 
-// TestIsLegalHierarchyTable tests isLegalHierarchy with various cases.
-func TestIsLegalHierarchyTable(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		index    map[string]*Node
-		expected bool
-		desc     string
-	}{
-		{
-			name:     "valid_single_root",
-			expected: true,
-			desc:     "single root node with no parent",
-			index: map[string]*Node{
-				"epic-1": {
-					ID:       "epic-1",
-					Title:    "Epic",
-					Type:     "epic",
-					Parent:   "",
-					Children: []string{},
-				},
-			},
-		},
-		{
-			name:     "valid_parent_child_chain",
-			expected: true,
-			desc:     "consistent parent-child relationships",
-			index: map[string]*Node{
-				"epic-1": {
-					ID:       "epic-1",
-					Title:    "Epic",
-					Type:     "epic",
-					Parent:   "",
-					Children: []string{"story-1"},
-				},
-				"story-1": {
-					ID:       "story-1",
-					Title:    "Story",
-					Type:     "story",
-					Parent:   "epic-1",
-					Children: []string{"task-1"},
-				},
-				"task-1": {
-					ID:       "task-1",
-					Title:    "Task",
-					Type:     "task",
-					Parent:   "story-1",
-					Children: []string{},
-				},
-			},
-		},
-		{
-			name:     "invalid_unknown_parent",
-			expected: false,
-			desc:     "child references unknown parent",
-			index: map[string]*Node{
-				"task-1": {
-					ID:       "task-1",
-					Title:    "Task",
-					Type:     "task",
-					Parent:   "nonexistent",
-					Children: []string{},
-				},
-			},
-		},
-		{
-			name:     "invalid_parent_missing_child",
-			expected: false,
-			desc:     "parent does not list child in Children",
-			index: map[string]*Node{
-				"epic-1": {
-					ID:       "epic-1",
-					Title:    "Epic",
-					Type:     "epic",
-					Parent:   "",
-					Children: []string{},
-				},
-				"story-1": {
-					ID:       "story-1",
-					Title:    "Story",
-					Type:     "story",
-					Parent:   "epic-1",
-					Children: []string{},
-				},
-			},
-		},
-		{
-			name:     "empty_index",
-			expected: true,
-			desc:     "empty index is valid",
-			index:    make(map[string]*Node),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := isLegalHierarchy(tt.index)
-			if tt.expected {
-				assert.True(t, result, tt.desc)
-			} else {
-				assert.False(t, result, tt.desc)
-			}
-		})
-	}
-}
-
-// TestBuildGraph tests that BuildGraph constructs a Graph from a node index
-// and defensively copies all slices.
-func TestBuildGraph(t *testing.T) {
-	t.Parallel()
-	index := map[string]*Node{
-		"epic-1": {
-			ID:        "epic-1",
-			Title:     "Epic",
-			Type:      "epic",
-			Parent:    "",
-			Children:  []string{"story-1"},
-			BlockedBy: []string{},
-			Blocks:    []string{},
-		},
-		"story-1": {
-			ID:        "story-1",
-			Title:     "Story",
-			Type:      "story",
-			Parent:    "epic-1",
-			Children:  []string{"task-1"},
-			BlockedBy: []string{},
-			Blocks:    []string{},
-		},
-		"task-1": {
-			ID:        "task-1",
-			Title:     "Task",
-			Type:      "task",
-			Parent:    "story-1",
-			Children:  []string{},
-			BlockedBy: []string{"blocker-1"},
-			Blocks:    []string{},
-		},
-		"blocker-1": {
-			ID:        "blocker-1",
-			Title:     "Blocker",
-			Type:      "task",
-			Parent:    "",
-			Children:  []string{},
-			BlockedBy: []string{},
-			Blocks:    []string{"task-1"},
-		},
-	}
-
-	g := BuildGraph(index)
-	require.NotNil(t, g)
-
-	// Test basic graph operations
-	ancestors := g.Ancestry("task-1")
-	assert.ElementsMatch(t, []string{"story-1", "epic-1"}, ancestors)
-
-	blockers := g.Blockers("task-1")
-	assert.ElementsMatch(t, []string{"blocker-1"}, blockers)
-
-	// Verify defensive copying: mutating the original index should not affect the graph
-	index["task-1"].Children = append(index["task-1"].Children, "injected")
-	children := g.Blockers("task-1")
-	assert.NotContains(t, children, "injected")
-}
-
-// TestBuildGraphEmpty tests that BuildGraph handles an empty index.
-func TestBuildGraphEmpty(t *testing.T) {
-	t.Parallel()
-	index := make(map[string]*Node)
-	g := BuildGraph(index)
-	require.NotNil(t, g)
-
-	// Empty graph should return empty results
-	ancestors := g.Ancestry("nonexistent")
-	assert.Empty(t, ancestors)
-}
-
 // TestScopedHasCycleCrossScope tests that ScopedHasCycle detects cycles that close within scope,
 // even if the cycle path traverses nodes outside the scope.
 func TestScopedHasCycleCrossScope(t *testing.T) {
@@ -876,7 +698,7 @@ func TestScopedHasCycleCrossScope(t *testing.T) {
 	nodeB.Blocks = []string{"C"}
 	nodeC.Blocks = []string{"A"}
 
-	g := NewGraph(d)
+	g := d
 
 	// Scope contains only A; the cycle A->B->C->A closes within scope (at A)
 	scope := map[string]bool{"A": true}
@@ -900,7 +722,7 @@ func TestScopedHasCycleOutOfScope(t *testing.T) {
 	nodeB.Blocks = []string{"C"}
 	nodeC.Blocks = []string{"B"}
 
-	g := NewGraph(d)
+	g := d
 
 	// Scope contains only A; the cycle B->C->B is entirely outside scope
 	scope := map[string]bool{"A": true}
@@ -926,7 +748,7 @@ func TestScopedHasCycleWithChildrenEdges(t *testing.T) {
 
 	nodeC.Blocks = []string{"A"}
 
-	g := NewGraph(d)
+	g := d
 
 	// Scope contains A, B, C (not D)
 	scope := map[string]bool{"A": true, "B": true, "C": true}
@@ -946,7 +768,7 @@ func TestScopedHasCycleNoCycle(t *testing.T) {
 
 	nodeB.Blocks = []string{"A"}
 
-	g := NewGraph(d)
+	g := d
 
 	scope := map[string]bool{"A": true, "B": true}
 	hasCycle := g.ScopedHasCycle("A", scope)

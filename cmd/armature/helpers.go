@@ -235,6 +235,30 @@ func nowEpoch() int64 {
 	return time.Now().Unix()
 }
 
+// resolveIssueID returns the --issue flag value, or args[0] when the flag is
+// unset. The error text is shared by every command that accepts either form.
+func resolveIssueID(flag string, args []string) (string, error) {
+	if flag == "" && len(args) > 0 {
+		flag = args[0]
+	}
+	if flag == "" {
+		return "", fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+	}
+	return flag, nil
+}
+
+// writeCommandResult emits json/agent as a single JSON object, otherwise the
+// human line. Callers must include a trailing newline in humanFormat.
+func writeCommandResult(cmd *cobra.Command, jsonValue any, humanFormat string, humanArgs ...any) {
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	if format == "json" || format == "agent" {
+		data, _ := json.Marshal(jsonValue) //nolint:errcheck // result values are maps/structs of serializable fields
+		fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		return
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), humanFormat, humanArgs...)
+}
+
 // short truncates a fingerprint string to 8 characters for display, returning
 // the string unchanged if it is already shorter than that to avoid a panic.
 func short(fp string) string {
@@ -346,10 +370,6 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 			return err
 		}
 		if n >= threshold {
-			if ctx.WorktreePath != "" {
-				pushGC := adapters.New(ctx.WorktreePath)
-				_ = pushGC
-			}
 			tracker.Reset() //nolint:errcheck,gosec
 		}
 	}
