@@ -8,7 +8,12 @@ SKILL_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 SOURCE_ROOT=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
 ARM_BIN=${ARM_BIN:-"$SOURCE_ROOT/bin/arm"}
 EVIDENCE_ROOT="$SKILL_DIR/evidence"
-CURRENT_RUN_FILE=${ARM_VERIFY_CURRENT:-/tmp/arm-verify-current}
+# Per-checkout pointer: a bare /tmp/arm-verify-current is shared by every
+# session on the host, so a second launch would silently retarget the first
+# session's doctor/drive/cleanup and orphan its temp repo. cksum keeps this to
+# POSIX tools. Two sessions in the SAME checkout are caught by the live-pointer
+# guard in cmd_launch; pass ARM_VERIFY_CURRENT to run them in parallel.
+CURRENT_RUN_FILE=${ARM_VERIFY_CURRENT:-/tmp/arm-verify-current-$(printf '%s' "$SOURCE_ROOT" | cksum | awk '{print $1}')}
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_TERMINAL_PROMPT=0
 
@@ -57,7 +62,8 @@ Usage: arm-verify.sh <command> [args]
 
 Environment:
   ARM_BIN             Override binary path (default: <source>/bin/arm)
-  ARM_VERIFY_CURRENT  Path to the current-run pointer file (default: /tmp/arm-verify-current)
+  ARM_VERIFY_CURRENT  Path to the current-run pointer file
+                      (default: /tmp/arm-verify-current-<checkout hash>)
   ARM_VERIFY_RUN_ENV  Skip pointer file and load this run env directly
 
 Evidence is written under:
@@ -78,6 +84,27 @@ load_run() {
   [ -n "${RUN_ID:-}" ] || die "run env missing RUN_ID"
   [ -n "${TARGET_REPO:-}" ] || die "run env missing TARGET_REPO"
   [ -n "${EVIDENCE_DIR:-}" ] || die "run env missing EVIDENCE_DIR"
+}
+
+assert_no_live_run() {
+  # Refuse to overwrite a pointer whose target repo still exists: that run's
+  # later doctor/drive/cleanup would otherwise follow this pointer instead.
+  [ -f "$CURRENT_RUN_FILE" ] || return 0
+  local env_file live
+  env_file=$(cat "$CURRENT_RUN_FILE")
+  if [ -f "$env_file" ]; then
+    live=$(
+      # shellcheck disable=SC1090
+      . "$env_file" >/dev/null 2>&1
+      printf '%s' "${TARGET_REPO:-}"
+    )
+    if [ -n "$live" ] && [ -d "$live" ]; then
+      die "a verification run is already active for this checkout (target $live).
+Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to launch a parallel session."
+    fi
+  fi
+  # Stale pointer (target already gone): safe to replace.
+  rm -f "$CURRENT_RUN_FILE"
 }
 
 write_run_env() {
@@ -141,6 +168,7 @@ cmd_launch() {
   need_cmd jq
   need_cmd make
   unset ARM_LOG_SLOT || true
+  assert_no_live_run
 
   EXPECTED_VERSION=$(git -C "$SOURCE_ROOT" describe --tags --always --dirty 2>/dev/null || printf 'dev')
   make -C "$SOURCE_ROOT" build
@@ -333,12 +361,35 @@ drive_bootstrap() {
   {
     printf 'proof: bootstrap\n'
     printf 'stdout (agent JSON) in drive/02-bootstrap/stdout.txt — expect repo_setup.status=initialized then already_initialized\n'
-    printf 'side effects: .armature/ worktree on _armature; git config armature.ops-worktree-path\n'
+    printf 'side effects: .armature/ worktree on _armature; git config armature.ops-worktree-path;\n'
+    printf '  .claude/skills + .claude/plugins/armature deployed (harness_hook_config skipped)\n'
   } >"$EVIDENCE_DIR/drive/SUMMARY.txt"
   jq_assert "$EVIDENCE_DIR/drive/02-bootstrap/stdout.txt" \
     '.repo_setup.status == "initialized"' "bootstrap did not report status=initialized"
   jq_assert "$EVIDENCE_DIR/drive/03-bootstrap-idempotent/stdout.txt" \
     '.repo_setup.status == "already_initialized"' "second bootstrap did not report status=already_initialized"
+
+  # Local harness deploy is part of the mapped bootstrap feature, so an
+  # all-skipped or all-unsupported harness_setup must not pass as a proof.
+  local first="$EVIDENCE_DIR/drive/02-bootstrap/stdout.txt"
+  jq_assert "$first" 'has("harness_setup") and (.harness_setup | length) > 0' \
+    "bootstrap reported no harness_setup results"
+  jq_assert "$first" 'all(.harness_setup[]; .status == "ok" or .status == "skipped")' \
+    "bootstrap reported a failing harness_setup result"
+  jq_assert "$first" \
+    'any(.harness_setup[]; .platform == "claude" and .artifact == "skills" and .status == "ok" and .action == "install")' \
+    "bootstrap did not install claude skills"
+  jq_assert "$first" \
+    'any(.harness_setup[]; .platform == "claude" and .artifact == "plugin_metadata" and .status == "ok" and .action == "install")' \
+    "bootstrap did not install claude plugin metadata"
+  # Hooks are documented as skipped without --with-hooks, which this drive omits.
+  jq_assert "$first" \
+    'any(.harness_setup[]; .artifact == "harness_hook_config" and .status == "skipped")' \
+    "bootstrap did not report harness_hook_config as skipped"
+  [ -d "$TARGET_REPO/.claude/skills" ] || die ".claude/skills was not deployed"
+  ls "$TARGET_REPO/.claude/skills/" >/dev/null 2>&1 || die ".claude/skills is unreadable"
+  [ -n "$(ls -A "$TARGET_REPO/.claude/skills")" ] || die ".claude/skills was deployed empty"
+  [ -d "$TARGET_REPO/.claude/plugins/armature" ] || die ".claude/plugins/armature was not deployed"
   [ -d "$TARGET_REPO/.armature" ] || die ".armature missing"
   [ -d "$TARGET_REPO/.armature/ops" ] || die ".armature/ops missing"
   [ -f "$TARGET_REPO/.armature/config.json" ] || die ".armature/config.json missing"

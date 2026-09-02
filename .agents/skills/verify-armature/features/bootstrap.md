@@ -37,9 +37,11 @@ git -C "$TARGET" worktree list
 git -C "$TARGET" config --get armature.ops-worktree-path
 test -d "$TARGET/.armature/ops"
 test -f "$TARGET/.armature/config.json"
+test -d "$TARGET/.claude/skills"
+test -d "$TARGET/.claude/plugins/armature"
 ```
 
-Proof: first stdout `repo_setup.status` is `initialized` (exit 0); second is `already_initialized`; `git worktree list` shows `$TARGET/.armature` on `_armature`; ops dir exists. Evidence: `evidence/<run-id>/drive/02-bootstrap/`.
+Proof: first stdout `repo_setup.status` is `initialized` (exit 0); second is `already_initialized`; `git worktree list` shows `$TARGET/.armature` on `_armature`; `git config armature.ops-worktree-path` points at it; ops dir exists; and `harness_setup` reports `ok`/`install` for claude `skills` and `plugin_metadata` (with `harness_hook_config` skipped, since the drive omits `--with-hooks`) with the matching directories present and non-empty. Evidence: `evidence/<run-id>/drive/02-bootstrap/`.
 
 ## Gotchas
 
