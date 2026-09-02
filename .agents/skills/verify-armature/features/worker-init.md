@@ -21,7 +21,7 @@ Stdout is always the line `Worker ID: <uuid>` (not JSON, even with `--format age
 
 ## Driving it with arm-verify.sh
 
-Preconditions: launch succeeded; target is bootstrapped (helper bootstraps if `.armature/` is missing). Do not intend to rotate identity.
+Preconditions: launch succeeded; target is bootstrapped (helper bootstraps if `.armature/` is missing). The drive rotates the identity **inside the temp repo only** — it clears `armature.worker-id` first, because bootstrap already wrote one and driving `--check` alone would never exercise identity creation.
 
 ```bash
 .agents/skills/verify-armature/scripts/arm-verify.sh drive worker-init
@@ -30,12 +30,15 @@ Preconditions: launch succeeded; target is bootstrapped (helper bootstraps if `.
 Raw equivalent:
 
 ```bash
+git -C "$TARGET" config --unset armature.worker-id     # temp repo only
+"$ARM" --repo "$TARGET" worker-init --check            # must fail when unset
+"$ARM" --repo "$TARGET" worker-init                    # creates the uuid
 "$ARM" --repo "$TARGET" worker-init --check
 git -C "$TARGET" config --get armature.worker-id
-"$ARM" --repo "$TARGET" worker-init --check   # second read: same uuid
+"$ARM" --repo "$TARGET" worker-init --check            # second read: same uuid
 ```
 
-Proof: both `--check` lines match; git config value equals the printed uuid. Evidence: `evidence/<run-id>/drive/01-check-before/` and `03-check-after/`.
+Proof: `--check` exits nonzero while unset; unflagged `worker-init` writes the id and echoes it; both later `--check` lines match each other and equal `Worker ID: <git config value>`. Evidence: `evidence/<run-id>/drive/02-check-unset/` through `06-check-again/`.
 
 ## Gotchas
 
