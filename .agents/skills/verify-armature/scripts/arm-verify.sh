@@ -41,7 +41,10 @@ parent_is_safe() {
 # account able to pre-create that path could run arbitrary code as this user.
 state_dir() {
   local base
-  if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ]; then
+  # XDG_RUNTIME_DIR gets the same parent test as the fallback: existing is not
+  # the same as safe, and a shared non-sticky value here would leave the leaf
+  # swappable exactly as an unsafe TMPDIR would.
+  if [ -n "${XDG_RUNTIME_DIR:-}" ] && parent_is_safe "$XDG_RUNTIME_DIR"; then
     base="$XDG_RUNTIME_DIR/arm-verify"
   else
     # The leaf's own 0700 mode does not stop another user from RENAMING it when
@@ -666,6 +669,13 @@ drive_bootstrap() {
   [ -d "$TARGET_REPO/.armature" ] || die ".armature missing"
   [ -d "$TARGET_REPO/.armature/ops" ] || die ".armature/ops missing"
   [ -f "$TARGET_REPO/.armature/config.json" ] || die ".armature/config.json missing"
+  # Present in the worktree is not the same as committed: coordination state that
+  # was never committed to _armature vanishes in every other clone.
+  capture drive/06-config-on-branch git -C "$TARGET_REPO" show _armature:config.json
+  assert_exit_0 drive/06-config-on-branch
+  jq_assert "$EVIDENCE_DIR/drive/06-config-on-branch/stdout.txt" \
+    'type == "object" and (.default_ttl | type) == "number"' \
+    "config.json committed on _armature is not a decodable config object"
 
   # Parse the captured git evidence rather than merely recording it: a plain
   # .armature directory, a wrong branch binding, or a missing ops-worktree
@@ -848,7 +858,23 @@ drive_doctor() {
   jq_assert "$EVIDENCE_DIR/drive/01-doctor/stdout.txt" \
     'any(.checks[]; .check == "D6" and .severity == "warning")' \
     "default doctor did not report the seeded uncited-issue warning as D6"
+  # A bare nonzero exit would also be satisfied by an unknown flag or a crash,
+  # so require the strict run to still be a full D1-D10 report carrying the
+  # seeded warning, plus the documented promotion diagnostic.
   assert_exit_nonzero drive/02-doctor-strict
+  for code in D1 D2 D3 D4 D5 D6 D7 D8 D9 D10; do
+    jq_assert "$EVIDENCE_DIR/drive/02-doctor-strict/stdout.txt" \
+      "any(.checks[]; .check == \"$code\")" "strict doctor report is missing check $code"
+  done
+  jq_assert "$EVIDENCE_DIR/drive/02-doctor-strict/stdout.txt" \
+    'any(.checks[]; .check == "D6" and .severity == "warning")' \
+    "strict doctor did not carry the seeded uncited-issue warning"
+  local strict_err
+  strict_err=$(cat "$EVIDENCE_DIR/drive/02-doctor-strict/stderr.txt")
+  case "$strict_err" in
+    *"promoted to errors"*) ;;
+    *) die "strict doctor failed without the warning-promotion diagnostic: $strict_err" ;;
+  esac
   severities=$(jq -r '[.checks[] | "\(.check)=\(.severity)"] | sort | join(" ")' \
     "$EVIDENCE_DIR/drive/01-doctor/stdout.txt")
   printf 'doctor proof ok; severities: %s\n' "$severities"
