@@ -799,6 +799,16 @@ drive_create_list() {
   want_fields=$(printf 'open\nVerification create+list\ntask')
   [ "$fields_out" = "$want_fields" ] ||
     die "show --field status,title,type projected unexpected values (see $EVIDENCE_DIR/drive/04-show-fields/stdout.txt)"
+  # Materialized proof of draft-at-birth. `arm show` does not project
+  # provenance.confidence (its keys are id/type/status/title/scope/
+  # definition_of_done/acceptance), so assert the consequence instead: a draft
+  # issue must not reach the ready queue. A create corrupted to `verified` on
+  # replay would surface here even though both log assertions passed.
+  capture drive/04b-ready arm ready
+  assert_exit_0 drive/04b-ready
+  jq_assert "$EVIDENCE_DIR/drive/04b-ready/stdout.txt" \
+    '(. // []) | map(select(.issue == "TASK-VERIFY-CREATE")) | length == 0' \
+    "draft TASK-VERIFY-CREATE reached the ready queue; materialized confidence is not draft"
   capture drive/05-log "$ARM_BIN" --repo "$TARGET_REPO" log --json
   mkdir -p "$EVIDENCE_DIR/drive/06-ops"
   if ls "$TARGET_REPO/.armature/ops/"*.log >/dev/null 2>&1; then
