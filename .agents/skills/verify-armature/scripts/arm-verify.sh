@@ -3,6 +3,13 @@
 # Never points --repo at the source tree. Never deletes evidence/.
 set -euo pipefail
 
+# Defined first: state_dir below runs at load time and calls die, so a later
+# definition would leave every one of its guards a no-op.
+die() {
+  printf 'arm-verify: %s\n' "$*" >&2
+  exit 1
+}
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SKILL_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 SOURCE_ROOT=$(git -C "$SKILL_DIR" rev-parse --show-toplevel)
@@ -22,9 +29,24 @@ state_dir() {
   else
     base="${TMPDIR:-/tmp}/arm-verify-$(id -u)"
   fi
-  mkdir -p "$base" 2>/dev/null || die "cannot create state directory $base"
+  # mkdir -p, chmod and test -O all FOLLOW symlinks, so a symlink planted at the
+  # predictable fallback path would pass every check while its owner kept the
+  # directory entry and could retarget it. Reject the symlink itself.
+  if [ -L "$base" ]; then
+    die "state directory $base is a symlink; refusing to use it"
+  fi
+  mkdir "$base" 2>/dev/null || true
+  if [ -L "$base" ]; then
+    die "state directory $base is a symlink; refusing to use it"
+  fi
+  [ -d "$base" ] || die "cannot create state directory $base"
   chmod 700 "$base" 2>/dev/null || true
   [ -O "$base" ] || die "state directory $base is not owned by this user; refusing to use it"
+  local perms
+  perms=$(ls -ld "$base" | cut -c1-10)
+  case "$perms" in
+    ?????w???? | ????????w?) die "state directory $base is group- or world-writable ($perms); refusing to use it" ;;
+  esac
   printf '%s\n' "$base"
 }
 
@@ -36,11 +58,6 @@ STATE_DIR=$(state_dir)
 CURRENT_RUN_FILE=${ARM_VERIFY_CURRENT:-$STATE_DIR/current-$(printf '%s' "$SOURCE_ROOT" | cksum | awk '{print $1}')}
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_TERMINAL_PROMPT=0
-
-die() {
-  printf 'arm-verify: %s\n' "$*" >&2
-  exit 1
-}
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
@@ -283,7 +300,16 @@ EVIDENCE_DIR=$(printf '%q' "$EVIDENCE_DIR")
 EXPECTED_VERSION=$(printf '%q' "$EXPECTED_VERSION")
 STARTED_AT=$(printf '%q' "$STARTED_AT")
 EOF
+  # Hand the pointer from reservation to run env under the lock, and only while
+  # it is still OUR reservation: a bare truncate+write here is a window in which
+  # another launch sees an empty pointer, calls it stale, and installs its own.
+  pointer_lock_acquire
+  if ! pointer_is_ours ""; then
+    pointer_lock_release
+    die "our reservation of $CURRENT_RUN_FILE was taken over by another launch; aborting"
+  fi
   printf '%s\n' "$RUN_ENV" >"$CURRENT_RUN_FILE"
+  pointer_lock_release
 }
 
 capture() {
@@ -776,8 +802,11 @@ drive_ready_claim() {
   ls "$TARGET_REPO/.armature/ops/" >"$EVIDENCE_DIR/drive/11-ops/listing.txt" 2>&1 || true
   assert_exit_0 drive/08-worktree-list
   assert_exit_0 drive/09-git-worktree
+  # Assert the ready projection itself: claim reads materialized state, so a
+  # corrupt agent-facing ready entry would otherwise go uncaught.
   jq_assert "$EVIDENCE_DIR/drive/05-ready/stdout.txt" \
-    'any(.[]; .issue == "TASK-VERIFY-READY")' "ready queue omits TASK-VERIFY-READY"
+    'any(.[]; .issue == "TASK-VERIFY-READY" and .type == "task" and .title == "Verification ready+claim" and .scope == ["ready.go"])' \
+    "ready queue has no TASK-VERIFY-READY entry with the expected type/title/scope"
   jq_assert "$EVIDENCE_DIR/drive/06-claim/stdout.txt" \
     '.issue == "TASK-VERIFY-READY" and has("claimed_by")' "claim did not report the issue and claimant"
   # has("claimed_by") alone would accept an empty or wrong claimant, so tie the
