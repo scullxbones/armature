@@ -39,7 +39,7 @@ Proof:
 5. `arm worktree list` has `bound: ["TASK-VERIFY-READY"]`
 6. ops log has a `claim` op (also visible via `arm log --json`)
 
-Evidence: `evidence/<run-id>/drive/05-ready/` through `09-git-worktree/`.
+Evidence: `evidence/<run-id>/drive/05-ready/` through `11-ops/`. Proof 6 is asserted twice: on the raw `.armature/ops/*.log` positional arrays (`11-ops/`) for durability, and on the materialized `arm log --json` objects (`10-log/`).
 
 ## Gotchas
 

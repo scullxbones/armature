@@ -36,8 +36,13 @@ abs_path() {
 }
 
 jq_assert() {
-  # jq_assert <file> <filter> <message>
+  # jq_assert <file> <filter> <message>  — single JSON document
   jq -e "$2" "$1" >/dev/null 2>&1 || die "$3 (see $1)"
+}
+
+jq_assert_slurp() {
+  # jq_assert_slurp <file> <filter> <message>  — JSONL, slurped into an array
+  jq -se "$2" "$1" >/dev/null 2>&1 || die "$3 (see $1)"
 }
 
 usage() {
@@ -96,10 +101,20 @@ capture() {
   local dir="$EVIDENCE_DIR/$label"
   mkdir -p "$dir"
   printf '%s\n' "$*" >"$dir/cmd.txt"
+  # Remember the caller's errexit state instead of restoring -e unconditionally:
+  # require_worker deliberately turns it off so it can branch on a nonzero
+  # `worker-init --check`, and re-enabling -e here would exit the shell before
+  # that documented `--check || worker-init` recovery could run.
+  local errexit=off
+  case $- in
+    *e*) errexit=on ;;
+  esac
   set +e
   "$@" >"$dir/stdout.txt" 2>"$dir/stderr.txt"
   local ec=$?
-  set -e
+  if [ "$errexit" = on ]; then
+    set -e
+  fi
   printf '%s\n' "$ec" >"$dir/exit.txt"
   {
     printf 'cmd: %s\n' "$*"
@@ -134,7 +149,10 @@ cmd_launch() {
 
   local ver_out
   ver_out=$("$ARM_BIN" version)
-  printf '%s\n' "$ver_out" | grep -q "arm version" || die "arm version did not print expected prefix: $ver_out"
+  case "$ver_out" in
+    "arm version "*) ;;
+    *) die "arm version did not print expected prefix: $ver_out" ;;
+  esac
   "$ARM_BIN" version >/dev/null
 
   RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
@@ -277,6 +295,13 @@ assert_exit_0() {
   [ "$ec" = "0" ] || die "$label exited $ec (see $EVIDENCE_DIR/$label/combined.txt)"
 }
 
+assert_exit_nonzero() {
+  local label=$1
+  local ec
+  ec=$(cat "$EVIDENCE_DIR/$label/exit.txt")
+  [ "$ec" != "0" ] || die "$label unexpectedly exited 0 (see $EVIDENCE_DIR/$label/combined.txt)"
+}
+
 cmd_drive() {
   local feature=${1:-}
   [ -n "$feature" ] || die "drive requires a feature name"
@@ -339,22 +364,39 @@ drive_bootstrap() {
 
 drive_worker_init() {
   require_bootstrapped
-  capture drive/01-check-before arm worker-init --check
-  assert_exit_0 drive/01-check-before
-  capture drive/02-git-config-before git -C "$TARGET_REPO" config --get armature.worker-id
-  # Do not rerun worker-init without --check: it overwrites the UUID.
-  capture drive/03-check-after arm worker-init --check
-  assert_exit_0 drive/03-check-after
-  local before after
-  before=$(tr -d '\r' <"$EVIDENCE_DIR/drive/01-check-before/stdout.txt")
-  after=$(tr -d '\r' <"$EVIDENCE_DIR/drive/03-check-after/stdout.txt")
-  case "$before" in
-    "Worker ID: "*) ;;
-    *) die "worker-init --check did not print a Worker ID: $before" ;;
+  # Bootstrap already writes armature.worker-id, so driving --check alone would
+  # certify a regressed unflagged worker-init. Clear the identity first and walk
+  # the documented `worker-init --check || worker-init` session idiom.
+  capture drive/01-config-unset git -C "$TARGET_REPO" config --unset armature.worker-id || true
+  capture drive/02-check-unset arm worker-init --check || true
+  assert_exit_nonzero drive/02-check-unset
+  capture drive/03-worker-init arm worker-init
+  assert_exit_0 drive/03-worker-init
+  capture drive/04-check-after arm worker-init --check
+  assert_exit_0 drive/04-check-after
+  capture drive/05-git-config git -C "$TARGET_REPO" config --get armature.worker-id
+  assert_exit_0 drive/05-git-config
+  # Second read only: unflagged worker-init would rotate the UUID.
+  capture drive/06-check-again arm worker-init --check
+  assert_exit_0 drive/06-check-again
+  local created after again cfg
+  created=$(tr -d '\r' <"$EVIDENCE_DIR/drive/03-worker-init/stdout.txt")
+  after=$(tr -d '\r' <"$EVIDENCE_DIR/drive/04-check-after/stdout.txt")
+  again=$(tr -d '\r' <"$EVIDENCE_DIR/drive/06-check-again/stdout.txt")
+  cfg=$(tr -d '\r' <"$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
+  [ -n "$cfg" ] || die "worker-init did not write armature.worker-id"
+  case "$created" in
+    *"$cfg"*) ;;
+    *) die "worker-init output does not mention the id it wrote ($cfg): $created" ;;
   esac
-  [ "$before" = "$after" ] || die "worker-init --check is not stable: '$before' vs '$after'"
-  printf 'worker-init proof ok: %s\n' "$before"
-  printf 'proof: worker-init --check is stable; do not rerun without --check\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
+  case "$after" in
+    "Worker ID: $cfg") ;;
+    *) die "worker-init --check disagrees with git config ($cfg): $after" ;;
+  esac
+  [ "$after" = "$again" ] || die "worker-init --check is not stable: '$after' vs '$again'"
+  printf 'worker-init proof ok: %s\n' "$after"
+  printf 'proof: --check fails when unset, worker-init creates the id, --check is then stable and matches git config\n' \
+    >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
 drive_create_list() {
@@ -388,9 +430,17 @@ drive_create_list() {
   jq_assert "$EVIDENCE_DIR/drive/03-show/stdout.txt" \
     '.id == "TASK-VERIFY-CREATE" and .status == "open" and .title == "Verification create+list"' \
     "show returned unexpected id/status/title"
+  assert_exit_0 drive/05-log
   [ -f "$EVIDENCE_DIR/drive/06-ops/ops.log" ] || die "no ops log captured under drive/06-ops"
-  grep -q 'create' "$EVIDENCE_DIR/drive/06-ops/ops.log" || die "ops log records no create op"
-  grep -q 'TASK-VERIFY-CREATE' "$EVIDENCE_DIR/drive/06-ops/ops.log" || die "ops log does not mention TASK-VERIFY-CREATE"
+  # On disk each op is the positional array [op_type, target_id, ...] documented
+  # in .armature/ops/SCHEMA; `arm log --json` materializes the same ops as
+  # objects. Assert both so a durable append and its read path are each proven.
+  jq_assert_slurp "$EVIDENCE_DIR/drive/06-ops/ops.log" \
+    'any(.[]; .[0] == "create" and .[1] == "TASK-VERIFY-CREATE")' \
+    "ops log has no create op for TASK-VERIFY-CREATE"
+  jq_assert_slurp "$EVIDENCE_DIR/drive/05-log/stdout.txt" \
+    'any(.[]; .type == "create" and .target_id == "TASK-VERIFY-CREATE")' \
+    "arm log --json shows no create op for TASK-VERIFY-CREATE"
   printf 'create-list proof ok\n'
   printf 'proof: create TASK-VERIFY-CREATE then list/show/ops log\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
@@ -426,8 +476,9 @@ drive_ready_claim() {
   capture drive/02-sources-sync arm sources sync
   assert_exit_0 drive/02-sources-sync
   local src_id
-  src_id=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
-    "$EVIDENCE_DIR/drive/01-sources-add/stdout.txt" | head -n 1)
+  # `sources add` prints "added source <uuid> (<path>)" as text, not JSON.
+  src_id=$(awk '{ for (i = 1; i <= NF; i++) if (length($i) == 36 && $i ~ /^[0-9a-f-]+$/) { print $i; exit } }' \
+    "$EVIDENCE_DIR/drive/01-sources-add/stdout.txt")
   [ -n "$src_id" ] || die "could not parse source UUID from sources add"
   printf '%s\n' "$src_id" >"$EVIDENCE_DIR/drive/source-id.txt"
   capture drive/03-create arm create \
@@ -448,6 +499,12 @@ drive_ready_claim() {
   capture drive/07-show arm_json show TASK-VERIFY-READY
   capture drive/08-worktree-list arm worktree list
   capture drive/09-git-worktree git -C "$TARGET_REPO" worktree list
+  capture drive/10-log "$ARM_BIN" --repo "$TARGET_REPO" log --json
+  assert_exit_0 drive/10-log
+  mkdir -p "$EVIDENCE_DIR/drive/11-ops"
+  if ls "$TARGET_REPO/.armature/ops/"*.log >/dev/null 2>&1; then
+    cat "$TARGET_REPO/.armature/ops/"*.log >"$EVIDENCE_DIR/drive/11-ops/ops.log"
+  fi
   assert_exit_0 drive/08-worktree-list
   assert_exit_0 drive/09-git-worktree
   jq_assert "$EVIDENCE_DIR/drive/05-ready/stdout.txt" \
@@ -470,8 +527,19 @@ drive_ready_claim() {
     *"[task/TASK-VERIFY-READY]"*) ;;
     *) die "claimed worktree is not on task/TASK-VERIFY-READY: $wt_line" ;;
   esac
+
+  # Proof 6 from features/ready-claim.md: the claim must be durably appended to
+  # the ops log, not merely reflected in command output and materialized state.
+  [ -f "$EVIDENCE_DIR/drive/11-ops/ops.log" ] || die "no ops log captured under drive/11-ops"
+  jq_assert_slurp "$EVIDENCE_DIR/drive/11-ops/ops.log" \
+    'any(.[]; .[0] == "claim" and .[1] == "TASK-VERIFY-READY")' \
+    "ops log has no claim op for TASK-VERIFY-READY"
+  jq_assert_slurp "$EVIDENCE_DIR/drive/10-log/stdout.txt" \
+    'any(.[]; .type == "claim" and .target_id == "TASK-VERIFY-READY")' \
+    "arm log --json shows no claim op for TASK-VERIFY-READY"
   printf 'ready-claim proof ok\n'
-  printf 'proof: ready queue then claim --worktree; status=claimed; .worktrees/TASK-VERIFY-READY\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
+  printf 'proof: ready queue then claim --worktree; status=claimed; .worktrees/TASK-VERIFY-READY on task/; claim op in the ops log\n' \
+    >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
 cmd_cleanup() {
