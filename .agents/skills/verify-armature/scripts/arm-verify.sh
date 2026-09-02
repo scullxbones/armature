@@ -110,6 +110,21 @@ Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to lau
   rm -f "$CURRENT_RUN_FILE"
 }
 
+reserve_run_pointer() {
+  assert_no_live_run
+  # write_run_env only lands at the END of launch, so a liveness check alone
+  # leaves a window in which two launches from this checkout both proceed and
+  # the loser's target is orphaned. noclobber makes this create-or-fail, so the
+  # pointer is reserved before anything is built or created.
+  if ! (
+    set -C
+    printf 'reserved by pid %s at %s\n' "$$" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$CURRENT_RUN_FILE"
+  ) 2>/dev/null; then
+    die "another launch reserved $CURRENT_RUN_FILE first.
+Wait for it to finish (or run 'arm-verify.sh cleanup'), or set ARM_VERIFY_CURRENT=<other path> for a parallel session."
+  fi
+}
+
 write_run_env() {
   umask 077
   cat >"$RUN_ENV" <<EOF
@@ -171,7 +186,7 @@ cmd_launch() {
   need_cmd jq
   need_cmd make
   unset ARM_LOG_SLOT || true
-  assert_no_live_run
+  reserve_run_pointer
 
   if [ -n "$ARM_BIN_INHERITED" ] && [ "$ARM_BIN_INHERITED" != "$SOURCE_ROOT/bin/arm" ]; then
     printf 'arm-verify: ignoring ARM_BIN=%s; verification always drives the binary it just built at %s/bin/arm\n' \
@@ -405,19 +420,23 @@ drive_bootstrap() {
   # Parse the captured git evidence rather than merely recording it: a plain
   # .armature directory, a wrong branch binding, or a missing ops-worktree
   # config must each fail the git-native bootstrap proof.
-  local ops_line ops_cfg
-  ops_line=$(awk '$1 ~ /\/\.armature$/ { print; exit }' "$EVIDENCE_DIR/drive/04-git-worktree/stdout.txt")
-  [ -n "$ops_line" ] || die ".armature is not a registered git worktree (see drive/04-git-worktree)"
+  local want_ops ops_line ops_cfg ops_cfg_abs
+  want_ops=$(abs_path "$TARGET_REPO")/.armature
+  ops_line=$(awk -v want="$want_ops" '$1 == want { print; exit }' "$EVIDENCE_DIR/drive/04-git-worktree/stdout.txt")
+  [ -n "$ops_line" ] || die "$want_ops is not a registered git worktree (see drive/04-git-worktree)"
   case "$ops_line" in
     *"[_armature]"*) ;;
     *) die ".armature worktree is not bound to _armature: $ops_line" ;;
   esac
   ops_cfg=$(awk '$1 == "armature.ops-worktree-path" { print $2; exit }' "$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
   [ -n "$ops_cfg" ] || die "git config armature.ops-worktree-path is unset (see drive/05-git-config)"
+  # Resolve and require equality with the registered worktree: a suffix match
+  # would accept any other path that merely ends in .armature.
   case "$ops_cfg" in
-    */.armature | .armature) ;;
-    *) die "armature.ops-worktree-path does not point at .armature: $ops_cfg" ;;
+    /*) ops_cfg_abs=$(abs_path "$ops_cfg" 2>/dev/null || printf '%s' "$ops_cfg") ;;
+    *) ops_cfg_abs=$(abs_path "$TARGET_REPO/$ops_cfg" 2>/dev/null || printf '%s' "$ops_cfg") ;;
   esac
+  [ "$ops_cfg_abs" = "$want_ops" ] || die "armature.ops-worktree-path is $ops_cfg (resolved $ops_cfg_abs), expected $want_ops"
   printf 'bootstrap proof ok\n'
 }
 
