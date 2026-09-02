@@ -144,7 +144,11 @@ reclaim_stale_pointer() {
   local cur
   cur=$(cat "$mine" 2>/dev/null || printf '')
   if [ "$cur" != "$inspected" ]; then
-    mv "$mine" "$CURRENT_RUN_FILE" 2>/dev/null || rm -f "$mine"
+    # Restore what we displaced, but never over a reservation a third launch
+    # created while the pointer was briefly absent: mv replaces the destination
+    # by default, so use the same noclobber create used to reserve.
+    (set -C; cat "$mine" >"$CURRENT_RUN_FILE") 2>/dev/null || true
+    rm -f "$mine"
     return 1
   fi
   rm -f "$mine"
@@ -570,6 +574,13 @@ drive_create_list() {
   assert_exit_0 drive/03-show
   capture drive/04-show-fields "$ARM_BIN" --repo "$TARGET_REPO" show --issue TASK-VERIFY-CREATE --field status,title,type
   assert_exit_0 drive/04-show-fields
+  # Exit 0 alone would accept empty, reordered or wrong values; --field is its
+  # own output path, so assert the projection itself.
+  local fields_out want_fields
+  fields_out=$(tr -d '\r' <"$EVIDENCE_DIR/drive/04-show-fields/stdout.txt")
+  want_fields=$(printf 'open\nVerification create+list\ntask')
+  [ "$fields_out" = "$want_fields" ] ||
+    die "show --field status,title,type projected unexpected values (see $EVIDENCE_DIR/drive/04-show-fields/stdout.txt)"
   capture drive/05-log "$ARM_BIN" --repo "$TARGET_REPO" log --json
   mkdir -p "$EVIDENCE_DIR/drive/06-ops"
   if ls "$TARGET_REPO/.armature/ops/"*.log >/dev/null 2>&1; then
