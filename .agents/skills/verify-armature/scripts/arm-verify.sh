@@ -110,7 +110,7 @@ assert_no_live_run() {
         die "another launch (pid $marker_pid) is reserving $CURRENT_RUN_FILE.
 Wait for it to finish, or set ARM_VERIFY_CURRENT=<other path> for a parallel session."
       fi
-      reclaim_stale_pointer "$env_file" || true
+      rm -f "$CURRENT_RUN_FILE"
       return 0
       ;;
   esac
@@ -126,32 +126,40 @@ Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to lau
     fi
   fi
   # Stale pointer (target already gone): safe to replace.
-  reclaim_stale_pointer "$env_file" || true
+  rm -f "$CURRENT_RUN_FILE"
 }
 
-reclaim_stale_pointer() {
-  # reclaim_stale_pointer <value-we-inspected>
-  # Removing a stale pointer with a bare rm is check-then-delete: a concurrent
-  # launch could have replaced it with its own reservation in between, and we
-  # would delete that. rename() is atomic and fails once the source is gone, so
-  # moving the pointer aside is the compare-and-swap: at most one process takes
-  # this exact file, and the value is re-checked before it is discarded. Failure
-  # here is not fatal -- the noclobber create in reserve_run_pointer is the
-  # single arbiter, and reports "another launch reserved ..." if we lost.
-  local inspected=$1
-  local mine="$CURRENT_RUN_FILE.reclaim.$$"
-  mv "$CURRENT_RUN_FILE" "$mine" 2>/dev/null || return 1
-  local cur
-  cur=$(cat "$mine" 2>/dev/null || printf '')
-  if [ "$cur" != "$inspected" ]; then
-    # Restore what we displaced, but never over a reservation a third launch
-    # created while the pointer was briefly absent: mv replaces the destination
-    # by default, so use the same noclobber create used to reserve.
-    (set -C; cat "$mine" >"$CURRENT_RUN_FILE") 2>/dev/null || true
-    rm -f "$mine"
-    return 1
-  fi
-  rm -f "$mine"
+POINTER_LOCK="$CURRENT_RUN_FILE.lock"
+
+pointer_lock_acquire() {
+  # Every pointer mutation -- inspect, reclaim, reserve, release -- runs inside
+  # this lock. Compare-and-swap on the pointer alone cannot fix the underlying
+  # problem: each of those is a read followed by a write, and no sequence of
+  # atomic single-file operations makes the pair atomic. mkdir is atomic and
+  # POSIX, so it serializes the whole section instead.
+  local waited=0 owner
+  while ! mkdir "$POINTER_LOCK" 2>/dev/null; do
+    # The lock is held across a few file operations only, so a lock whose owner
+    # is gone was left by a killed process; reclaim it. Same liveness caveats as
+    # the reservation marker (pid reuse, kill -0 across users).
+    owner=$(cat "$POINTER_LOCK/owner" 2>/dev/null || printf '')
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      rm -f "$POINTER_LOCK/owner"
+      rmdir "$POINTER_LOCK" 2>/dev/null || true
+      continue
+    fi
+    waited=$((waited + 1))
+    if [ "$waited" -gt 100 ]; then
+      die "timed out waiting for $POINTER_LOCK (held by pid ${owner:-unknown})"
+    fi
+    sleep 0.1
+  done
+  printf '%s\n' "$$" >"$POINTER_LOCK/owner"
+}
+
+pointer_lock_release() {
+  rm -f "$POINTER_LOCK/owner"
+  rmdir "$POINTER_LOCK" 2>/dev/null || true
 }
 
 pointer_is_ours() {
@@ -182,13 +190,16 @@ launch_partial_cleanup() {
   if [ -n "${RUN_ENV:-}" ]; then
     rm -f "$RUN_ENV"
   fi
-  if pointer_is_ours "${RUN_ENV:-}"; then
-    rm -f "$CURRENT_RUN_FILE"
-  fi
+  release_pointer_if_ours "${RUN_ENV:-}"
   exit "$status"
 }
 
 reserve_run_pointer() {
+  # Inspect, reclaim and reserve as one critical section: assert_no_live_run
+  # deletes a stale pointer, and without the lock another launch could reserve
+  # in that gap and have its reservation removed.
+  pointer_lock_acquire
+  trap 'pointer_lock_release' EXIT
   assert_no_live_run
   # write_run_env only lands at the END of launch, so a liveness check alone
   # leaves a window in which two launches from this checkout both proceed and
@@ -201,6 +212,19 @@ reserve_run_pointer() {
     die "another launch reserved $CURRENT_RUN_FILE first.
 Wait for it to finish (or run 'arm-verify.sh cleanup'), or set ARM_VERIFY_CURRENT=<other path> for a parallel session."
   fi
+  pointer_lock_release
+  trap - EXIT
+}
+
+release_pointer_if_ours() {
+  # release_pointer_if_ours <run-env-path>
+  # Ownership check and deletion must not straddle the lock: a launch could
+  # reclaim the pointer between them and lose its reservation to our rm.
+  pointer_lock_acquire
+  if pointer_is_ours "${1:-}"; then
+    rm -f "$CURRENT_RUN_FILE"
+  fi
+  pointer_lock_release
 }
 
 write_run_env() {
@@ -671,6 +695,7 @@ drive_ready_claim() {
   if ls "$TARGET_REPO/.armature/ops/"*.log >/dev/null 2>&1; then
     cat "$TARGET_REPO/.armature/ops/"*.log >"$EVIDENCE_DIR/drive/11-ops/ops.log"
   fi
+  ls "$TARGET_REPO/.armature/ops/" >"$EVIDENCE_DIR/drive/11-ops/listing.txt" 2>&1 || true
   assert_exit_0 drive/08-worktree-list
   assert_exit_0 drive/09-git-worktree
   jq_assert "$EVIDENCE_DIR/drive/05-ready/stdout.txt" \
@@ -706,12 +731,22 @@ drive_ready_claim() {
   # Proof 6 from features/ready-claim.md: the claim must be durably appended to
   # the ops log, not merely reflected in command output and materialized state.
   [ -f "$EVIDENCE_DIR/drive/11-ops/ops.log" ] || die "no ops log captured under drive/11-ops"
-  jq_assert_slurp "$EVIDENCE_DIR/drive/11-ops/ops.log" \
-    'any(.[]; .[0] == "claim" and .[1] == "TASK-VERIFY-READY")' \
-    "ops log has no claim op for TASK-VERIFY-READY"
+  # I3 -- each worker writes exclusively to its own log file -- so it is not
+  # enough that SOME log carries the claim: assert it in the claiming worker's
+  # own file, with the positional worker field matching, and require the
+  # materialized read to agree on worker_id too.
+  case "$worker_id" in
+    *[!0-9a-fA-F-]* | '') die "unexpected worker id shape: $worker_id" ;;
+  esac
+  local worker_log="$TARGET_REPO/.armature/ops/$worker_id.log"
+  [ -f "$worker_log" ] || die "no ops log for the claiming worker at $worker_log (see drive/11-ops/listing.txt)"
+  cp "$worker_log" "$EVIDENCE_DIR/drive/11-ops/worker.log"
+  jq_assert_slurp "$EVIDENCE_DIR/drive/11-ops/worker.log" \
+    "any(.[]; .[0] == \"claim\" and .[1] == \"TASK-VERIFY-READY\" and .[3] == \"$worker_id\")" \
+    "the claiming worker's own log has no claim op for TASK-VERIFY-READY attributed to it"
   jq_assert_slurp "$EVIDENCE_DIR/drive/10-log/stdout.txt" \
-    'any(.[]; .type == "claim" and .target_id == "TASK-VERIFY-READY")' \
-    "arm log --json shows no claim op for TASK-VERIFY-READY"
+    "any(.[]; .type == \"claim\" and .target_id == \"TASK-VERIFY-READY\" and .worker_id == \"$worker_id\")" \
+    "arm log --json shows no claim op for TASK-VERIFY-READY by $worker_id"
   printf 'ready-claim proof ok\n'
   printf 'proof: ready queue then claim --worktree; status=claimed; .worktrees/TASK-VERIFY-READY on task/; claim op in the ops log\n' \
     >"$EVIDENCE_DIR/drive/SUMMARY.txt"
@@ -751,9 +786,7 @@ cmd_cleanup() {
     # Only release the pointer if it still refers to THIS run: a same-checkout
     # launch racing this cleanup may already have taken it, and deleting its
     # reservation would let a third launch in and orphan a target.
-    if pointer_is_ours "${RUN_ENV_FILE:-}"; then
-      rm -f "$CURRENT_RUN_FILE"
-    fi
+    release_pointer_if_ours "${RUN_ENV_FILE:-}"
     if [ -n "${RUN_ENV_FILE:-}" ]; then
       rm -f "$RUN_ENV_FILE"
     fi
