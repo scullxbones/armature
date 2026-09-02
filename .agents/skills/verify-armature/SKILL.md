@@ -35,7 +35,7 @@ That helper:
 
 1. Runs `make -C <source> build`
 2. Creates `/tmp/arm-verify-target.XXXXXX` (`git init`, user.name/email, empty commit, `main`)
-3. Writes a run env file and pointer `/tmp/arm-verify-current`
+3. Writes a run env file and a per-checkout pointer `/tmp/arm-verify-current-<checkout hash>` (override with `ARM_VERIFY_CURRENT`; `launch` refuses to overwrite a pointer whose target repo still exists)
 4. Records launch metadata under `.agents/skills/verify-armature/evidence/<run-id>/launch/`
 
 Manual equivalent if you cannot use the helper:
@@ -257,7 +257,7 @@ Proof standard:
 
 The helper:
 
-- Reads the current run env (`/tmp/arm-verify-current` → `/tmp/arm-verify-run.*.env`)
+- Reads the current run env (`/tmp/arm-verify-current-<checkout hash>` → `/tmp/arm-verify-run.*.env`)
 - Refuses to delete unless `realpath(target)` matches `/tmp/arm-verify-target.*` and is not the source checkout
 - `git worktree remove --force` on extra worktrees (`.armature`, `.worktrees/*`), then `rm -rf` the temp repo
 - Deletes only that run env / pointer
