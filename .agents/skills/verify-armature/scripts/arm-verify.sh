@@ -603,6 +603,13 @@ drive_bootstrap() {
   ls "$TARGET_REPO/.claude/skills/" >/dev/null 2>&1 || die ".claude/skills is unreadable"
   [ -n "$(ls -A "$TARGET_REPO/.claude/skills")" ] || die ".claude/skills was deployed empty"
   [ -d "$TARGET_REPO/.claude/plugins/armature" ] || die ".claude/plugins/armature was not deployed"
+  # An empty plugin directory would satisfy a directory-only check while leaving
+  # the harness unusable, so require the metadata file itself to be valid JSON
+  # naming the plugin.
+  [ -f "$TARGET_REPO/.claude/plugins/armature/plugin.json" ] ||
+    die ".claude/plugins/armature/plugin.json was not deployed"
+  jq_assert "$TARGET_REPO/.claude/plugins/armature/plugin.json" \
+    '.name == "armature"' "deployed plugin.json is not valid metadata for the armature plugin"
   [ -d "$TARGET_REPO/.armature" ] || die ".armature missing"
   [ -d "$TARGET_REPO/.armature/ops" ] || die ".armature/ops missing"
   [ -f "$TARGET_REPO/.armature/config.json" ] || die ".armature/config.json missing"
@@ -669,10 +676,11 @@ drive_worker_init() {
   [ "$cfg" = "$cfg_before" ] ||
     die "worker-init --check changed armature.worker-id: $cfg_before -> ${cfg:-unset}"
   [ -n "$cfg" ] || die "worker-init did not write armature.worker-id"
-  case "$created" in
-    *"$cfg"*) ;;
-    *) die "worker-init output does not mention the id it wrote ($cfg): $created" ;;
-  esac
+  # The documented contract is exactly `Worker ID: <uuid>`; a substring check
+  # would accept malformed output such as `created <uuid>`, and the exact checks
+  # below only cover the separate --check branch.
+  [ "$created" = "Worker ID: $cfg_before" ] ||
+    die "worker-init did not print 'Worker ID: $cfg_before': $created"
   case "$after" in
     "Worker ID: $cfg") ;;
     *) die "worker-init --check disagrees with git config ($cfg): $after" ;;
