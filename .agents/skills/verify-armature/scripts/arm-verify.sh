@@ -521,6 +521,16 @@ assert_exit_0() {
   [ "$ec" = "0" ] || die "$label exited $ec (see $EVIDENCE_DIR/$label/combined.txt)"
 }
 
+assert_uuid() {
+  # Canonical 8-4-4-4-12 hex grammar. An alphabet-plus-length check accepts
+  # nonsense like 36 hyphens, which would let an identity regression pass.
+  local v=$1 label=$2
+  case "$v" in
+    [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]-[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;;
+    *) die "$label is not a canonical UUID: '$v'" ;;
+  esac
+}
+
 assert_exit_nonzero() {
   local label=$1
   local ec
@@ -621,10 +631,7 @@ drive_bootstrap() {
   # effect, so a bootstrap that stopped writing it must fail here.
   local first_worker boot_worker
   first_worker=$(tr -d '\r' <"$EVIDENCE_DIR/drive/02b-worker-id/stdout.txt")
-  case "$first_worker" in
-    '' | *[!0-9a-fA-F-]*) die "the first bootstrap did not write a worker id (got '${first_worker}')" ;;
-  esac
-  [ "${#first_worker}" -eq 36 ] || die "the first bootstrap wrote an unexpected worker id: $first_worker"
+  assert_uuid "$first_worker" "the worker id written by the first bootstrap"
   boot_worker=$(awk '$1 == "armature.worker-id" { print $2; exit }' "$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
   [ "$boot_worker" = "$first_worker" ] ||
     die "the idempotent bootstrap changed armature.worker-id: $first_worker -> ${boot_worker:-unset}"
@@ -641,6 +648,10 @@ drive_worker_init() {
   assert_exit_nonzero drive/02-check-unset
   capture drive/03-worker-init arm worker-init
   assert_exit_0 drive/03-worker-init
+  # Read the config BEFORE the first --check: reading only afterwards cannot
+  # catch a --check that rewrites the identity it is supposed to report.
+  capture drive/03b-git-config git -C "$TARGET_REPO" config --get armature.worker-id
+  assert_exit_0 drive/03b-git-config
   capture drive/04-check-after arm worker-init --check
   assert_exit_0 drive/04-check-after
   capture drive/05-git-config git -C "$TARGET_REPO" config --get armature.worker-id
@@ -648,11 +659,15 @@ drive_worker_init() {
   # Second read only: unflagged worker-init would rotate the UUID.
   capture drive/06-check-again arm worker-init --check
   assert_exit_0 drive/06-check-again
-  local created after again cfg
+  local created after again cfg cfg_before
   created=$(tr -d '\r' <"$EVIDENCE_DIR/drive/03-worker-init/stdout.txt")
+  cfg_before=$(tr -d '\r' <"$EVIDENCE_DIR/drive/03b-git-config/stdout.txt")
   after=$(tr -d '\r' <"$EVIDENCE_DIR/drive/04-check-after/stdout.txt")
   again=$(tr -d '\r' <"$EVIDENCE_DIR/drive/06-check-again/stdout.txt")
   cfg=$(tr -d '\r' <"$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
+  assert_uuid "$cfg_before" "the id written by worker-init"
+  [ "$cfg" = "$cfg_before" ] ||
+    die "worker-init --check changed armature.worker-id: $cfg_before -> ${cfg:-unset}"
   [ -n "$cfg" ] || die "worker-init did not write armature.worker-id"
   case "$created" in
     *"$cfg"*) ;;
@@ -722,9 +737,7 @@ drive_create_list() {
   assert_exit_0 drive/08-worker-id
   local worker_id
   worker_id=$(tr -d '\r' <"$EVIDENCE_DIR/drive/08-worker-id/stdout.txt")
-  case "$worker_id" in
-    *[!0-9a-fA-F-]* | '') die "unexpected worker id shape: $worker_id" ;;
-  esac
+  assert_uuid "$worker_id" "armature.worker-id"
   local worker_log="$TARGET_REPO/.armature/ops/$worker_id.log"
   [ -f "$worker_log" ] || die "no ops log for the configured worker at $worker_log"
   cp "$worker_log" "$EVIDENCE_DIR/drive/06-ops/worker.log"
@@ -807,8 +820,12 @@ drive_ready_claim() {
   jq_assert "$EVIDENCE_DIR/drive/05-ready/stdout.txt" \
     'any(.[]; .issue == "TASK-VERIFY-READY" and .type == "task" and .title == "Verification ready+claim" and .scope == ["ready.go"])' \
     "ready queue has no TASK-VERIFY-READY entry with the expected type/title/scope"
+  # ttl too: an omitted or 0 ttl (never expires) is broken claim-expiry
+  # semantics that every other assertion here would miss. 60 is the documented
+  # default for a fresh bootstrap, which this drive uses.
   jq_assert "$EVIDENCE_DIR/drive/06-claim/stdout.txt" \
-    '.issue == "TASK-VERIFY-READY" and has("claimed_by")' "claim did not report the issue and claimant"
+    '.issue == "TASK-VERIFY-READY" and has("claimed_by") and .ttl == 60' \
+    "claim did not report the issue, claimant and ttl=60"
   # has("claimed_by") alone would accept an empty or wrong claimant, so tie the
   # attribution to this repo's registered worker.
   assert_exit_0 drive/12-worker-id
@@ -842,18 +859,16 @@ drive_ready_claim() {
   # enough that SOME log carries the claim: assert it in the claiming worker's
   # own file, with the positional worker field matching, and require the
   # materialized read to agree on worker_id too.
-  case "$worker_id" in
-    *[!0-9a-fA-F-]* | '') die "unexpected worker id shape: $worker_id" ;;
-  esac
+  assert_uuid "$worker_id" "armature.worker-id"
   local worker_log="$TARGET_REPO/.armature/ops/$worker_id.log"
   [ -f "$worker_log" ] || die "no ops log for the claiming worker at $worker_log (see drive/11-ops/listing.txt)"
   cp "$worker_log" "$EVIDENCE_DIR/drive/11-ops/worker.log"
   jq_assert_slurp "$EVIDENCE_DIR/drive/11-ops/worker.log" \
-    "any(.[]; .[0] == \"claim\" and .[1] == \"TASK-VERIFY-READY\" and .[3] == \"$worker_id\")" \
-    "the claiming worker's own log has no claim op for TASK-VERIFY-READY attributed to it"
+    "any(.[]; .[0] == \"claim\" and .[1] == \"TASK-VERIFY-READY\" and .[3] == \"$worker_id\" and .[4].ttl == 60)" \
+    "the claiming worker's own log has no claim op for TASK-VERIFY-READY attributed to it with ttl=60"
   jq_assert_slurp "$EVIDENCE_DIR/drive/10-log/stdout.txt" \
-    "any(.[]; .type == \"claim\" and .target_id == \"TASK-VERIFY-READY\" and .worker_id == \"$worker_id\")" \
-    "arm log --json shows no claim op for TASK-VERIFY-READY by $worker_id"
+    "any(.[]; .type == \"claim\" and .target_id == \"TASK-VERIFY-READY\" and .worker_id == \"$worker_id\" and .payload.ttl == 60)" \
+    "arm log --json shows no claim op for TASK-VERIFY-READY by $worker_id with ttl=60"
   printf 'ready-claim proof ok\n'
   printf 'proof: ready queue then claim --worktree; status=claimed; .worktrees/TASK-VERIFY-READY on task/; claim op in the ops log\n' \
     >"$EVIDENCE_DIR/drive/SUMMARY.txt"
