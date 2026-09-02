@@ -131,6 +131,20 @@ Run 'arm-verify.sh cleanup' first, or set ARM_VERIFY_CURRENT=<other path> to lau
 
 POINTER_LOCK="$CURRENT_RUN_FILE.lock"
 
+migrate_dir_lock() {
+  # A real directory at the lock path is the pre-symlink lock format left by an
+  # older run (or junk). `ln -s x dir` creates the link INSIDE the directory and
+  # reports success, which would hand out a lock that excludes nobody, so clear
+  # it first when its owner is gone.
+  [ -d "$POINTER_LOCK" ] && [ ! -L "$POINTER_LOCK" ] || return 0
+  local owner
+  owner=$(cat "$POINTER_LOCK/owner" 2>/dev/null || printf '')
+  if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
+    rm -f "$POINTER_LOCK/owner"
+    rmdir "$POINTER_LOCK" 2>/dev/null || true
+  fi
+}
+
 pointer_lock_acquire() {
   # Every pointer mutation -- inspect, reclaim, reserve, release -- runs inside
   # this lock. Compare-and-swap on the pointer alone cannot fix the underlying
@@ -138,28 +152,33 @@ pointer_lock_acquire() {
   # atomic single-file operations makes the pair atomic. mkdir is atomic and
   # POSIX, so it serializes the whole section instead.
   local waited=0 owner
-  while ! mkdir "$POINTER_LOCK" 2>/dev/null; do
-    # The lock is held across a few file operations only, so a lock whose owner
-    # is gone was left by a killed process; reclaim it. Same liveness caveats as
-    # the reservation marker (pid reuse, kill -0 across users).
-    owner=$(cat "$POINTER_LOCK/owner" 2>/dev/null || printf '')
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
-      rm -f "$POINTER_LOCK/owner"
-      rmdir "$POINTER_LOCK" 2>/dev/null || true
-      continue
-    fi
+  migrate_dir_lock
+  # symlink, not mkdir + owner file: creating the link publishes the owning pid
+  # in the same atomic operation, so a process killed mid-acquire can never
+  # leave an ownerless lock that wedges every later run.
+  while ! ln -s "$$" "$POINTER_LOCK" 2>/dev/null; do
     waited=$((waited + 1))
     if [ "$waited" -gt 100 ]; then
       die "timed out waiting for $POINTER_LOCK (held by pid ${owner:-unknown})"
     fi
+    # The lock is held across a few file operations only, so an unreadable owner
+    # or one whose process is gone means a killed holder; reclaim it. Same
+    # liveness caveats as the reservation marker (pid reuse, kill -0 across
+    # users).
+    owner=$(readlink "$POINTER_LOCK" 2>/dev/null || printf '')
+    if [ -z "$owner" ] || ! kill -0 "$owner" 2>/dev/null; then
+      # Anything unreadable as an owner is unowned; leaving it would wedge every
+      # later run.
+      rm -f "$POINTER_LOCK" 2>/dev/null || true
+      migrate_dir_lock
+      continue
+    fi
     sleep 0.1
   done
-  printf '%s\n' "$$" >"$POINTER_LOCK/owner"
 }
 
 pointer_lock_release() {
-  rm -f "$POINTER_LOCK/owner"
-  rmdir "$POINTER_LOCK" 2>/dev/null || true
+  rm -f "$POINTER_LOCK"
 }
 
 pointer_is_ours() {
@@ -612,6 +631,7 @@ drive_create_list() {
   fi
   cp -a "$TARGET_REPO/.armature/ops/SCHEMA" "$EVIDENCE_DIR/drive/06-ops/SCHEMA" 2>/dev/null || true
   capture drive/07-git-worktree git -C "$TARGET_REPO" worktree list
+  capture drive/08-worker-id git -C "$TARGET_REPO" config --get armature.worker-id
   jq_assert "$EVIDENCE_DIR/drive/01-create/stdout.txt" \
     '. == {"id": "TASK-VERIFY-CREATE", "status": "created"}' "create did not return the expected object"
   jq_assert "$EVIDENCE_DIR/drive/02-list/stdout.txt" \
@@ -624,12 +644,25 @@ drive_create_list() {
   # On disk each op is the positional array [op_type, target_id, ...] documented
   # in .armature/ops/SCHEMA; `arm log --json` materializes the same ops as
   # objects. Assert both so a durable append and its read path are each proven.
-  jq_assert_slurp "$EVIDENCE_DIR/drive/06-ops/ops.log" \
-    'any(.[]; .[0] == "create" and .[1] == "TASK-VERIFY-CREATE")' \
-    "ops log has no create op for TASK-VERIFY-CREATE"
+  # I3 also means exclusive per-worker log files, so assert the create in the
+  # configured worker's OWN log with the positional worker field matching, and
+  # require the materialized read to agree on worker_id. Concatenating every log
+  # would pass even if the op landed under another worker or filename.
+  assert_exit_0 drive/08-worker-id
+  local worker_id
+  worker_id=$(tr -d '\r' <"$EVIDENCE_DIR/drive/08-worker-id/stdout.txt")
+  case "$worker_id" in
+    *[!0-9a-fA-F-]* | '') die "unexpected worker id shape: $worker_id" ;;
+  esac
+  local worker_log="$TARGET_REPO/.armature/ops/$worker_id.log"
+  [ -f "$worker_log" ] || die "no ops log for the configured worker at $worker_log"
+  cp "$worker_log" "$EVIDENCE_DIR/drive/06-ops/worker.log"
+  jq_assert_slurp "$EVIDENCE_DIR/drive/06-ops/worker.log" \
+    "any(.[]; .[0] == \"create\" and .[1] == \"TASK-VERIFY-CREATE\" and .[3] == \"$worker_id\")" \
+    "the configured worker's own log has no create op for TASK-VERIFY-CREATE attributed to it"
   jq_assert_slurp "$EVIDENCE_DIR/drive/05-log/stdout.txt" \
-    'any(.[]; .type == "create" and .target_id == "TASK-VERIFY-CREATE")' \
-    "arm log --json shows no create op for TASK-VERIFY-CREATE"
+    "any(.[]; .type == \"create\" and .target_id == \"TASK-VERIFY-CREATE\" and .worker_id == \"$worker_id\")" \
+    "arm log --json shows no create op for TASK-VERIFY-CREATE by $worker_id"
   printf 'create-list proof ok\n'
   printf 'proof: create TASK-VERIFY-CREATE then list/show/ops log\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
