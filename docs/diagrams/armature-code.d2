@@ -283,12 +283,6 @@ presentation: {
     description: "Top-level Bubble Tea routing and filesystem refresh"
   }
 
-  tui_dagsum: {
-    class: presentation
-    label: "internal/tui/dagsum"
-    description: "Dependency-graph summary interaction"
-  }
-
   tui_dagsummary: {
     class: presentation
     label: "internal/tui/dagsummary"
@@ -354,12 +348,6 @@ infrastructure: {
     class: infrastructure
     label: "internal/config"
     description: "Repository/worker configuration and command context"
-  }
-
-  platform: {
-    class: infrastructure
-    label: "internal/platform"
-    description: "Git-config-backed platform values"
   }
 
   clock: {
@@ -456,7 +444,7 @@ usecases.snapshot -> domain.materialize
 usecases.snapshot -> domain.ops
 usecases.sync -> domain.materialize
 usecases.sync -> domain.ops
-usecases.worker -> infrastructure.platform
+usecases.worker -> infrastructure.adapters
 usecases.worktree -> domain.materialize
 usecases.worktree -> domain.ops
 usecases.hooks -> infrastructure.adapters
@@ -517,8 +505,6 @@ presentation.tui_app -> domain.materialize
 presentation.tui_app -> usecases.snapshot
 presentation.tui_app -> presentation.tui_core
 presentation.tui_app -> presentation.tui_detail
-presentation.tui_dagsum -> domain.materialize
-presentation.tui_dagsum -> presentation.tui_core
 presentation.tui_dagsummary -> presentation.tui_core
 presentation.tui_dagtree -> domain.materialize
 presentation.tui_dagtree -> presentation.tui_core
@@ -540,7 +526,6 @@ presentation.tui_workers -> presentation.tui_core
 # Infrastructure imports.
 infrastructure.adapters -> infrastructure.filelock
 infrastructure.config -> infrastructure.adapters
-infrastructure.platform -> infrastructure.adapters
 
 legend: {
   label: "Reading the map"
