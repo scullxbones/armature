@@ -1,3 +1,4 @@
+// Package main implements the arm CLI.
 package main
 
 import (
