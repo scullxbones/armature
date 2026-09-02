@@ -31,7 +31,7 @@ Create stdout: `{"id":"TASK-VERIFY-CREATE","status":"created"}`. List stdout: JS
 Preconditions: launch + doctor passed. Helper will bootstrap and `worker-init --check` if needed. Target working tree may be empty of issues. Pick a unique `--id` and a scope that does not overlap another open task.
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive create-list
+.agents/skills/verify-armature/scripts/arm-verify.sh drive create-list
 ```
 
 Proof (helper asserts all of these):

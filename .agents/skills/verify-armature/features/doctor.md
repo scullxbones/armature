@@ -25,7 +25,7 @@ Human prints `✓ D1: ...` lines. Unbootstrapped repos fail with `GENERAL-1` / `
 Preconditions: launch succeeded; target is bootstrapped (helper bootstraps if needed). This drive is the **product** command, not `arm-verify.sh doctor`.
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive doctor
+.agents/skills/verify-armature/scripts/arm-verify.sh drive doctor
 ```
 
 Raw equivalent:

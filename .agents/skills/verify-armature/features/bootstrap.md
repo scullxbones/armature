@@ -25,7 +25,7 @@ Human mode prints `Bootstrap complete.` Agent/json prints the `repo_setup` + `ha
 Preconditions: `scripts/arm-verify.sh launch` (and `doctor`) succeeded. Target is an unbootstrapped git repo on `main` with a clean tree. `ARM_LOG_SLOT` unset.
 
 ```bash
-.cursor/skills/verify-armature/scripts/arm-verify.sh drive bootstrap
+.agents/skills/verify-armature/scripts/arm-verify.sh drive bootstrap
 ```
 
 Raw equivalent:
