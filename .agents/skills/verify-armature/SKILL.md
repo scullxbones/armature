@@ -35,7 +35,7 @@ That helper:
 
 1. Runs `make -C <source> build`
 2. Creates `/tmp/arm-verify-target.XXXXXX` (`git init`, user.name/email, empty commit, `main`)
-3. Writes a run env file and a per-checkout pointer `/tmp/arm-verify-current-<checkout hash>` (override with `ARM_VERIFY_CURRENT`; `launch` refuses to overwrite a pointer whose target repo still exists)
+3. Writes a run env file and a per-checkout pointer inside a private per-user state directory — `$XDG_RUNTIME_DIR/arm-verify` when set, else `${TMPDIR:-/tmp}/arm-verify-<uid>`, created 0700 and refused unless this user owns it — as `<state dir>/current-<checkout hash>` and `<state dir>/run.XXXXXX.env`. The run env is sourced, so it is refused if it is a symlink, not owned by this user, or group/world-writable. Override the pointer with `ARM_VERIFY_CURRENT`; `launch` refuses to overwrite a pointer whose target repo still exists, and holds `<pointer>.lock` (a symlink naming the owning pid) while mutating it.
 4. Records launch metadata under `.agents/skills/verify-armature/evidence/<run-id>/launch/`
 
 Manual equivalent if you cannot use the helper:
@@ -260,7 +260,7 @@ Proof standard:
 
 The helper:
 
-- Reads the current run env (`/tmp/arm-verify-current-<checkout hash>` → `/tmp/arm-verify-run.*.env`)
+- Reads the current run env (`<state dir>/current-<checkout hash>` → `<state dir>/run.*.env`, where `<state dir>` is `$XDG_RUNTIME_DIR/arm-verify` or `${TMPDIR:-/tmp}/arm-verify-<uid>`)
 - Refuses to delete unless `realpath(target)` matches `/tmp/arm-verify-target.*` and is not the source checkout
 - `git worktree remove --force` on extra worktrees (`.armature`, `.worktrees/*`), then `rm -rf` the temp repo
 - Deletes only that run env / pointer
