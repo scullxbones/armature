@@ -1,0 +1,8 @@
+[
+  {
+    "id": "TASK-VERIFY-CREATE",
+    "type": "task",
+    "status": "open",
+    "title": "Verification create+list"
+  }
+]
