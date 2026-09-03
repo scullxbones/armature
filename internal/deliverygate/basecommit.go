@@ -55,19 +55,9 @@ func ParentBranchConfigKey(branchName string) string {
 // actual upstream tip workers branched from.
 var CandidateBaseRefs = []string{"origin/main", "origin/master", "main", "master"}
 
-// ResolveWorktreeGitDir resolves the actual git directory for a worktree path.
-// In a git worktree, the .git entry is a file (not a directory) containing
-// "gitdir: <path>" pointing to the real git dir (e.g., <parent>/.git/worktrees/<name>).
-// This function reads that file and returns the resolved absolute path.
-// Shared by claim, harness-hook, and the delivery gate so all read from the
-// same location.
-func ResolveWorktreeGitDir(worktreePath string) (string, error) {
-	return worktree.ResolveGitDir(worktreePath)
-}
-
 // ResolveWorktreeRoot resolves path to the top-level directory of the git
 // worktree that contains it, walking up through parent directories the way
-// git itself does (via `git rev-parse --show-toplevel`). ResolveWorktreeGitDir
+// git itself does (via `git rev-parse --show-toplevel`). worktree.ResolveGitDir
 // (and the checks built on it, e.g. VerifyIssueWorktreeBinding) stat
 // `<path>/.git` directly with no walk-up, so passing a subdirectory of a
 // worktree fails with "stat .git: no such file or directory" even though the
@@ -93,7 +83,7 @@ func ResolveWorktreeRoot(path string) (string, error) {
 // worktree for issueID, which would let a dirty or out-of-scope claimed
 // worktree pass because the wrong directory was checked instead.
 func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
-	gitDir, err := ResolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return fmt.Errorf("resolve git dir for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
 	}
@@ -189,7 +179,7 @@ func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy string
 // claimed after this mechanism was introduced, so callers can fall back to
 // GetBaseCommit.
 func RecordedBaseCommit(worktreePath string) (string, error) {
-	actualGitDir, err := ResolveWorktreeGitDir(worktreePath)
+	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return "", fmt.Errorf("resolve worktree git dir: %w", err)
 	}
@@ -215,7 +205,7 @@ func RecordedBaseCommit(worktreePath string) (string, error) {
 // git dir) is returned as an error so it isn't silently treated the same as
 // "not recorded".
 func RecordedClaimedBranch(worktreePath string) (string, bool, error) {
-	actualGitDir, err := ResolveWorktreeGitDir(worktreePath)
+	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return "", false, fmt.Errorf("resolve worktree git dir: %w", err)
 	}

@@ -175,7 +175,7 @@ This enforces branch + PR discipline.`,
 					gateRepoPath = "."
 				}
 				// Resolve to the worktree's top level before gating:
-				// ResolveWorktreeGitDir (used by VerifyIssueWorktreeBinding
+				// worktree.ResolveGitDir (used by VerifyIssueWorktreeBinding
 				// and friends) stats "<gateRepoPath>/.git" with no walk-up,
 				// so the default "." fails with "stat .git" when arm
 				// transition is invoked from a subdirectory of the worktree
@@ -483,7 +483,7 @@ func deliverygateRequired(repoRoot, invokingRepoPath, issueID string, gateIssue 
 // checkout, not be silently redirected elsewhere), and "unbound" (fall
 // through to a repo-wide scan for the live binding).
 func worktreeIssueBinding(worktreePath string) (string, error) {
-	gitDir, err := deliverygate.ResolveWorktreeGitDir(worktreePath)
+	gitDir, err := resolveWorktreeGitDir(worktreePath)
 	if err != nil {
 		return "", err
 	}

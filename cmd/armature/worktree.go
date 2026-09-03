@@ -36,7 +36,7 @@ func newWorktreeListCmd() *cobra.Command {
 			// failure instead of proceeding on an empty inventory: an empty list
 			// from a transient git error would mislabel every live claim a ghost
 			// and make gc silently remove nothing.
-			worktrees, err := readManagedWorktrees(ctx.RepoPath)
+			worktrees, err := worktree.ListManaged(ctx.RepoPath)
 			if err != nil {
 				return worktreeLifecycleError(
 					"read managed worktrees", "git inventory unavailable",
@@ -149,7 +149,7 @@ func newWorktreeGCCmd() *cobra.Command {
 
 			// Read all managed worktrees; abort on a git failure rather than
 			// proceeding on an empty inventory (see list command).
-			worktrees, err := readManagedWorktrees(ctx.RepoPath)
+			worktrees, err := worktree.ListManaged(ctx.RepoPath)
 			if err != nil {
 				return worktreeLifecycleError(
 					"read managed worktrees", "git inventory unavailable",
@@ -309,50 +309,12 @@ func newWorktreeGCCmd() *cobra.Command {
 	return cmd
 }
 
-// readManagedWorktrees reads all managed worktrees from git worktree list --porcelain.
-// ListManaged includes canonical-root worktrees and non-main worktrees carrying an
-// issue binding, including explicit destinations. A git failure is returned as an
-// error (not swallowed into an empty list): callers must fail closed, since an empty
-// inventory from a transient failure would mislabel live claims as ghosts and make
-// gc a silent no-op.
-func readManagedWorktrees(repoPath string) ([]worktree.Meta, error) {
-	return worktree.ListManaged(repoPath)
-}
-
-// isManaged reports whether path is a managed worktree: it must live directly
-// under this repo's <repoPath>/.worktrees/ directory. A substring test on
-// ".worktrees" would misclassify unrelated paths (e.g. a sibling repo that
-// merely contains the string) as managed, making them gc-removal candidates.
-// Both sides are symlink-normalized so a symlinked repo root still matches.
-func isManaged(repoPath, path string) bool {
-	root := managedWorktreeRoot(repoPath)
-	normalized := worktree.NormalizePath(path)
-	return normalized != root && worktree.IsUnderRoot(normalized, root)
-}
-
-// managedWorktreeRoot returns this clone's canonical managed worktree directory
-// as a normalized root (<repoPath>/.worktrees). It remains the canonical-root
-// classifier used by existing callers; lifecycle reconciliation uses
-// managedWorktreeRoots so explicit in-repository destinations are local too.
-func managedWorktreeRoot(repoPath string) string {
-	// Resolve repoPath to an absolute path first. In production ctx.RepoPath
-	// defaults to "." (the cwd) when --repo is not passed; git worktree list
-	// always emits absolute paths, so a relative prefix here would never match
-	// and every managed worktree would be misclassified as not-managed,
-	// silently emptying reconcile.
-	abs := repoPath
-	if resolved, err := filepath.Abs(repoPath); err == nil {
-		abs = resolved
-	}
-	return worktree.NormalizePath(filepath.Join(abs, ".worktrees"))
-}
-
 func managedWorktreeRoots(repoPath string) []string {
 	abs := repoPath
 	if resolved, err := filepath.Abs(repoPath); err == nil {
 		abs = resolved
 	}
-	return []string{managedWorktreeRoot(repoPath), worktree.NormalizePath(abs)}
+	return []string{worktree.CanonicalRoot(repoPath), worktree.NormalizePath(abs)}
 }
 
 // loadIssuesForReconcile loads current-truth issues the same way production read

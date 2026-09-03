@@ -468,14 +468,17 @@ func WorkerIDFromFilename(logPath string) string {
 
 // ===== Materialize State File Operations (from materialize/state.go) =====
 
-// WriteIssueJSON writes a JSON-marshalable issue to a file.
-func WriteIssueJSON(issuesDir string, issueID string, data any) error {
+func writeJSONFile(path string, data any, kind string) error {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal issue: %w", err)
+		return fmt.Errorf("marshal %s: %w", kind, err)
 	}
-	path := filepath.Join(issuesDir, issueID+".json")
 	return os.WriteFile(path, jsonData, 0o600)
+}
+
+// WriteIssueJSON writes a JSON-marshalable issue to a file.
+func WriteIssueJSON(issuesDir string, issueID string, data any) error {
+	return writeJSONFile(filepath.Join(issuesDir, issueID+".json"), data, "issue")
 }
 
 // RemoveIssueJSON deletes an issue's state file. A file that is already gone
@@ -525,11 +528,7 @@ func ReadIssuesDir(issuesDir string) ([]string, error) {
 
 // WriteCheckpointJSON writes a JSON checkpoint to a file.
 func WriteCheckpointJSON(path string, data any) error {
-	jsonData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal checkpoint: %w", err)
-	}
-	return os.WriteFile(path, jsonData, 0o600)
+	return writeJSONFile(path, data, "checkpoint")
 }
 
 // LoadCheckpointJSON reads and unmarshals a checkpoint file.
@@ -626,11 +625,7 @@ func ReadCacheFile(path string, id string) ([]byte, error) {
 
 // WriteConfigFile writes JSON config data to a file.
 func WriteConfigFile(path string, data any) error {
-	jsonData, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	return os.WriteFile(path, jsonData, 0o600)
+	return writeJSONFile(path, data, "config")
 }
 
 // LoadConfigFile reads and unmarshals a config file.

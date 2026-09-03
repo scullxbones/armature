@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -57,13 +56,11 @@ func newAmendCmd() *cobra.Command {
 				payload.ContextFiles = contextFiles
 			}
 
-			if acceptanceJSON != "" {
-				var raw json.RawMessage
-				if err := json.Unmarshal([]byte(acceptanceJSON), &raw); err != nil {
-					return fmt.Errorf("invalid --acceptance JSON: %w", err)
-				}
-				payload.Acceptance = raw
+			raw, err := parseAcceptanceJSON(acceptanceJSON)
+			if err != nil {
+				return err
 			}
+			payload.Acceptance = raw
 
 			if payload.NodeType == "" && !scopeChanged &&
 				!contextFilesChanged && !clearContextFiles &&

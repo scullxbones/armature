@@ -106,7 +106,12 @@ func TestRootMembershipAndIssueLookupUseBoundaries(t *testing.T) {
 	assert.True(t, IsUnderRoot(filepath.Join(root, "task-01"), root))
 	assert.False(t, IsUnderRoot(root+"-old", root))
 	assert.False(t, IsUnderRoot(filepath.Join(filepath.Dir(root), "other"), root))
+}
 
+func TestCanonicalRoot_RelativeRepoPathIsAbsolute(t *testing.T) {
+	t.Parallel()
+	root := CanonicalRoot(".")
+	assert.True(t, filepath.IsAbs(root), "canonical root must be absolute, got %q", root)
 }
 
 // TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6 verifies that selection

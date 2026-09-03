@@ -22,17 +22,4 @@ var (
 
 	// Muted de-emphasises secondary content (dark grey).
 	Muted = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
-
-	// ActionRequired highlights that the user must take an action
-	// (bold white foreground on xterm 196 background).
-	ActionRequired = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")).
-			Background(lipgloss.Color("196")).
-			Bold(true)
-
-	// MyClaim indicates a task claimed by the current worker (bright green).
-	MyClaim = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
-
-	// TheirClaim indicates a task claimed by another worker (bright blue).
-	TheirClaim = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
 )
