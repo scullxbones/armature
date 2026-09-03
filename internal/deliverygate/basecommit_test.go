@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // writeIssueBindingFile writes the armature-issue-id marker file into the
@@ -17,7 +18,7 @@ import (
 // importing the (unimportable) cmd/armature main package.
 func writeIssueBindingFile(t *testing.T, worktreePath, issueID string) {
 	t.Helper()
-	gitDir, err := ResolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "armature-issue-id"), []byte(issueID), 0o600))
 }
@@ -119,7 +120,7 @@ func TestRecordedBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 	assert.Error(t, err)
 
 	// Present: returns the recorded SHA.
-	gitDir, err := ResolveWorktreeGitDir(tmpDir)
+	gitDir, err := worktree.ResolveGitDir(tmpDir)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, BaseCommitFileName), []byte(sha+"\n"), 0o600))
 
@@ -144,7 +145,7 @@ func TestVerifyIssueBranchBinding_FailsClosedWhenAmendedTypeHasNoBranchMapping_R
 
 	// Simulate claim time: record the branch the issue was actually claimed
 	// under (task/issue-1), as writeClaimedBranchFileIfAbsent would.
-	gitDir, err := ResolveWorktreeGitDir(tmpDir)
+	gitDir, err := worktree.ResolveGitDir(tmpDir)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, ClaimedBranchFileName), []byte("task/issue-1"), 0o600))
 
@@ -179,7 +180,7 @@ func TestRecordedClaimedBranch_REQ_LNGHZN_S4(t *testing.T) {
 	assert.Empty(t, branch)
 
 	// Present: returns the recorded branch name.
-	gitDir, err := ResolveWorktreeGitDir(tmpDir)
+	gitDir, err := worktree.ResolveGitDir(tmpDir)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, ClaimedBranchFileName), []byte("task/issue-1\n"), 0o600))
 
@@ -258,7 +259,7 @@ func TestGatedBaseCommit_REQ_LNGHZN_S4(t *testing.T) {
 
 	// Once the recorded SHA file exists, GatedBaseCommit returns it (tier:
 	// RecordedBaseCommit, since no parent-branch config is set).
-	gitDir, err := ResolveWorktreeGitDir(tmpDir)
+	gitDir, err := worktree.ResolveGitDir(tmpDir)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, BaseCommitFileName), []byte(baseSHA), 0o600))
 
@@ -307,7 +308,7 @@ func TestResolveBaseCommit_FallbackChain_REQ_LNGHZN_S4_T3(t *testing.T) {
 		worktreePath, baseSHA, git := setup(t)
 		// git config absent (tier 1 unavailable): fall through to the
 		// claim-time recorded SHA file.
-		gitDir, err := ResolveWorktreeGitDir(worktreePath)
+		gitDir, err := worktree.ResolveGitDir(worktreePath)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(gitDir, BaseCommitFileName), []byte(baseSHA), 0o600))
 

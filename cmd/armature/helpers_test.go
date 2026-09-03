@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/config"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
@@ -600,4 +601,26 @@ func TestWriteCommandResult(t *testing.T) {
 	buf.Reset()
 	writeCommandResult(cmd, map[string]string{"issue": "T1", "heartbeat": "sent"}, "Heartbeat recorded for %s\n", "T1")
 	assert.JSONEq(t, `{"heartbeat":"sent","issue":"T1"}`, strings.TrimSpace(buf.String()))
+}
+
+func TestParseAcceptanceJSON(t *testing.T) {
+	t.Parallel()
+	raw, err := parseAcceptanceJSON("")
+	require.NoError(t, err)
+	assert.Nil(t, raw)
+
+	raw, err = parseAcceptanceJSON(`["done"]`)
+	require.NoError(t, err)
+	assert.JSONEq(t, `["done"]`, string(raw))
+
+	_, err = parseAcceptanceJSON("{")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid --acceptance JSON")
+}
+
+func TestGitCommitterNilWhenNoWorktree(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, gitCommitter(nil))
+	assert.Nil(t, gitCommitter(&config.Context{}))
+	assert.Nil(t, asGitCommitter(nil))
 }

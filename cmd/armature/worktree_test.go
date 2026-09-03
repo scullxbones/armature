@@ -580,56 +580,18 @@ func TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, out, "task-gc")
 }
 
-// TestReadManagedWorktrees_GitFailureIsError_REQ_LNGHZN_S5_T2 verifies that a
-// `git worktree list` failure is surfaced as a non-nil error rather than
-// swallowed into an empty inventory. An empty list from a transient git failure
-// would mislabel every live claim as a ghost and make gc a silent no-op, so the
-// commands must fail closed instead.
-func TestReadManagedWorktrees_GitFailureIsError_REQ_LNGHZN_S5_T2(t *testing.T) {
+// TestManagedWorktreeRoots_RelativeRepoPath_REQ_LNGHZN_S5_T2 pins the fix for
+// the reconcile no-op that survived F1: in production ctx.RepoPath defaults
+// to "." when --repo is not passed, while `git worktree list` emits absolute
+// paths. Both local-evidence roots must be absolute even for a relative
+// repoPath. `worktree.ListManaged` fail-closed on a git inventory error is
+// covered in internal/worktree.
+func TestManagedWorktreeRoots_RelativeRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
-	// A plain temp dir is not a git repository, so `git -C <dir> worktree list`
-	// exits non-zero.
-	nonRepo := t.TempDir()
-
-	worktrees, err := readManagedWorktrees(nonRepo)
-	require.Error(t, err, "a git worktree list failure must return an error, not empty success")
-	assert.Nil(t, worktrees, "no inventory should be returned on git failure")
-}
-
-// TestIsManaged_PrefixMatch_REQ_LNGHZN_S5_T2 verifies isManaged uses a
-// path-prefix test rooted at <repo>/.worktrees/, not a naive substring match.
-func TestIsManaged_PrefixMatch_REQ_LNGHZN_S5_T2(t *testing.T) {
-	t.Parallel()
-	repo := t.TempDir()
-
-	managed := filepath.Join(repo, ".worktrees", "task-01")
-	assert.True(t, isManaged(repo, managed), "path under repo/.worktrees must be managed")
-
-	// A sibling directory that merely contains the substring ".worktrees" but is
-	// not under this repo's managed root must NOT be classified as managed.
-	notManaged := filepath.Join(t.TempDir(), ".worktrees-backup", "task-01")
-	assert.False(t, isManaged(repo, notManaged), "unrelated path must not be managed")
-
-	// The managed root itself (no trailing child) is not a managed worktree.
-	assert.False(t, isManaged(repo, filepath.Join(repo, ".worktrees")), "bare .worktrees dir is not a worktree")
-}
-
-// TestManagedWorktreeRoot_RelativeRepoPath_REQ_LNGHZN_S5_T2 pins the fix for the
-// reconcile no-op that survived F1: in production ctx.RepoPath defaults to "."
-// (cwd) when --repo is not passed, while `git worktree list` emits ABSOLUTE
-// paths. A relative managed root would never prefix-match those, so every
-// managed worktree was misclassified as not-managed and reconcile came back
-// empty. The root must be absolute even for a relative repoPath.
-func TestManagedWorktreeRoot_RelativeRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
-	root := managedWorktreeRoot(".")
-	assert.True(t, filepath.IsAbs(root), "managed root must be absolute, got %q", root)
-
-	// An absolute worktree path under the cwd's .worktrees must match even when
-	// the repo path was given relatively.
-	cwd, err := os.Getwd()
-	require.NoError(t, err)
-	assert.True(t, isManaged(".", filepath.Join(cwd, ".worktrees", "task-01")),
-		"absolute worktree under cwd must be managed when repoPath is \".\"")
+	roots := managedWorktreeRoots(".")
+	require.Len(t, roots, 2)
+	assert.True(t, filepath.IsAbs(roots[0]), "canonical root must be absolute, got %q", roots[0])
+	assert.True(t, filepath.IsAbs(roots[1]), "repo root must be absolute, got %q", roots[1])
 }
 
 // TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3 drives `arm claim --worktree`

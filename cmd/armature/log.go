@@ -22,20 +22,20 @@ func newLogCmd() *cobra.Command {
 			appCtx := currentCtx(cmd)
 			opsDir := appCtx.IssuesDir + "/ops"
 
-			// Read all log files from opsDir
-			logFiles, err := listLogFiles(opsDir)
+			logFiles, err := adapters.ListLogFiles(opsDir)
 			if err != nil {
 				return fmt.Errorf("list log files: %w", err)
 			}
 
 			var logContents []string
 			for _, logPath := range logFiles {
-				lines, err := readLogLines(logPath)
+				lines, err := adapters.ReadLog(logPath)
 				if err != nil {
-					// Skip unreadable logs
 					continue
 				}
-				logContents = append(logContents, lines...)
+				for _, line := range lines {
+					logContents = append(logContents, string(line))
+				}
 			}
 
 			f := audit.Filter{
@@ -146,23 +146,4 @@ func logPayloadSummary(op ops.Op) string {
 	default:
 		return ""
 	}
-}
-
-// listLogFiles finds all *.log files in the opsDir directory.
-func listLogFiles(opsDir string) ([]string, error) {
-	return adapters.ListLogFiles(opsDir)
-}
-
-// readLogLines reads all lines from a log file as raw log content strings.
-func readLogLines(logPath string) ([]string, error) {
-	lines, err := adapters.ReadLog(logPath)
-	if err != nil {
-		return nil, err
-	}
-	// Convert [][]byte to []string
-	result := make([]string, len(lines))
-	for i, line := range lines {
-		result[i] = string(line)
-	}
-	return result, nil
 }

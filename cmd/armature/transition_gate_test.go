@@ -960,7 +960,7 @@ func TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
 // `arm transition --to done` (with no --repo flag, so gateRepoPath defaults
 // to ".") succeeds when run from a subdirectory of the claimed worktree, not
 // only from the worktree's top level. Before the fix, gateRepoPath was
-// passed unresolved into VerifyIssueWorktreeBinding -> ResolveWorktreeGitDir,
+// passed unresolved into VerifyIssueWorktreeBinding -> worktree.ResolveGitDir,
 // which stats "<gateRepoPath>/.git" with no walk-up, so running from a
 // subdirectory failed with "stat .git: no such file or directory" even
 // though the subdirectory genuinely is inside the bound worktree.

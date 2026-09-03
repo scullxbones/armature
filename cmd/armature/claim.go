@@ -73,12 +73,10 @@ func mapClaimError(err error) error {
 const defaultWorktreeFlagValue = ".armature-default-worktree"
 
 // resolveWorktreeGitDir resolves the actual git directory for a worktree path.
-// It is used by both claim and harness-hook so that both read from the same
-// location. Delegates to internal/deliverygate.ResolveWorktreeGitDir, the
-// single source of truth also used by the delivery gate's read-side
-// base-commit resolution.
+// Shared by claim, harness-hook, merged, and transition so they all read the
+// same location as worktree inventory (worktree.ResolveGitDir).
 func resolveWorktreeGitDir(worktreePath string) (string, error) {
-	return deliverygate.ResolveWorktreeGitDir(worktreePath)
+	return worktree.ResolveGitDir(worktreePath)
 }
 
 // worktreePathExists checks if a worktree exists at the given path.

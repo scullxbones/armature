@@ -235,6 +235,38 @@ func nowEpoch() int64 {
 	return time.Now().Unix()
 }
 
+// worktreeGit returns a git client for the ops worktree, or nil when the
+// command is not running in dual-branch mode.
+func worktreeGit(ctx *config.Context) *adapters.Client {
+	if ctx == nil || ctx.WorktreePath == "" {
+		return nil
+	}
+	return adapters.New(ctx.WorktreePath)
+}
+
+func gitCommitter(ctx *config.Context) ops.GitCommitter {
+	return asGitCommitter(worktreeGit(ctx))
+}
+
+func asGitCommitter(gc *adapters.Client) ops.GitCommitter {
+	if gc == nil {
+		return nil
+	}
+	return gc
+}
+
+// parseAcceptanceJSON decodes --acceptance flag JSON shared by create and amend.
+func parseAcceptanceJSON(acceptanceJSON string) (json.RawMessage, error) {
+	if acceptanceJSON == "" {
+		return nil, nil
+	}
+	var raw json.RawMessage
+	if err := json.Unmarshal([]byte(acceptanceJSON), &raw); err != nil {
+		return nil, fmt.Errorf("invalid --acceptance JSON: %w", err)
+	}
+	return raw, nil
+}
+
 // resolveIssueID returns the --issue flag value, or args[0] when the flag is
 // unset. The error text is shared by every command that accepts either form.
 func resolveIssueID(flag string, args []string) (string, error) {
@@ -272,15 +304,14 @@ func short(fp string) string {
 // If a worktree path is present: AppendCommitAndPush with FilePushTracker.
 // Otherwise: NoPusher + NoTracker.
 func initPushDeps(ctx *config.Context) (ops.Pusher, ops.PendingPushTracker) {
-	if ctx.WorktreePath == "" {
-		return ops.NoPusher{}, ops.NoTracker{}
+	if gc := worktreeGit(ctx); gc != nil {
+		return &ops.AppendCommitAndPush{
+			Pusher:  gc,
+			Branch:  "_armature",
+			Backoff: nil, // use defaults: 1s, 2s, 4s
+		}, ops.NewFilePushTracker(ctx.StateDir)
 	}
-	gc := adapters.New(ctx.WorktreePath)
-	return &ops.AppendCommitAndPush{
-		Pusher:  gc,
-		Branch:  "_armature",
-		Backoff: nil, // use defaults: 1s, 2s, 4s
-	}, ops.NewFilePushTracker(ctx.StateDir)
+	return ops.NoPusher{}, ops.NoTracker{}
 }
 
 // appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.
@@ -291,11 +322,7 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
 		return err
 	}
-	var gc ops.GitCommitter
-	if ctx.WorktreePath != "" {
-		gc = adapters.New(ctx.WorktreePath)
-	}
-	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc)
+	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gitCommitter(ctx))
 }
 
 // appendHighStakesOp appends an op, commits it (dual-branch), and attempts to push.
@@ -310,22 +337,15 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
 		return err
 	}
-	var gc ops.GitCommitter
-	if ctx.WorktreePath != "" {
-		gc = adapters.New(ctx.WorktreePath)
-	}
-	// Append and commit — this is not best-effort
-	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
+	gc := worktreeGit(ctx)
+	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, asGitCommitter(gc)); err != nil {
 		return err
 	}
-	// Push is best-effort: push via the pusher (which handles retries) but ignore errors
-	if ctx.WorktreePath != "" {
-		// Use the underlying git client for push attempts
-		gc2 := adapters.New(ctx.WorktreePath)
-		if err := gc2.Push("_armature"); err != nil {
-			// Best-effort: attempt fetch+rebase and retry once
-			if rbErr := gc2.FetchAndRebase("_armature"); rbErr == nil {
-				gc2.Push("_armature") //nolint:errcheck,gosec
+	// Push is best-effort: push via the git client (which handles retries) but ignore errors
+	if gc != nil {
+		if err := gc.Push("_armature"); err != nil {
+			if rbErr := gc.FetchAndRebase("_armature"); rbErr == nil {
+				gc.Push("_armature") //nolint:errcheck,gosec
 			}
 		}
 		tracker.Reset() //nolint:errcheck,gosec
@@ -353,10 +373,7 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 	if err := refuseIntroduction(ctx, proposed); err != nil {
 		return err
 	}
-	var gc ops.GitCommitter
-	if ctx.WorktreePath != "" {
-		gc = adapters.New(ctx.WorktreePath)
-	}
+	gc := gitCommitter(ctx)
 	threshold := ctx.Config.LowStakesPushThreshold
 	if threshold <= 0 {
 		threshold = 5

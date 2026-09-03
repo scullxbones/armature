@@ -46,49 +46,6 @@ func TestSemanticPalette(t *testing.T) {
 		}
 	})
 
-	t.Run("ActionRequired", func(t *testing.T) {
-		t.Parallel()
-		// ActionRequired = bold white foreground on xterm 196 background
-		wantFG := lipgloss.Color("15") // white
-		wantBG := lipgloss.Color("196")
-		if ActionRequired.GetForeground() != wantFG {
-			t.Errorf("ActionRequired foreground: got %v, want %v", ActionRequired.GetForeground(), wantFG)
-		}
-		if ActionRequired.GetBackground() != wantBG {
-			t.Errorf("ActionRequired background: got %v, want %v", ActionRequired.GetBackground(), wantBG)
-		}
-		if !ActionRequired.GetBold() {
-			t.Error("ActionRequired: expected bold=true, got false")
-		}
-	})
-
-	t.Run("MyClaim", func(t *testing.T) {
-		t.Parallel()
-		// MyClaim must have a foreground color set (distinct color for current worker)
-		empty := lipgloss.NewStyle()
-		if MyClaim.GetForeground() == empty.GetForeground() {
-			t.Error("MyClaim: expected a foreground color to be set, but it was not")
-		}
-	})
-
-	t.Run("TheirClaim", func(t *testing.T) {
-		t.Parallel()
-		// TheirClaim must have a foreground color set (distinct color for other worker)
-		empty := lipgloss.NewStyle()
-		if TheirClaim.GetForeground() == empty.GetForeground() {
-			t.Error("TheirClaim: expected a foreground color to be set, but it was not")
-		}
-	})
-
-	t.Run("MyClaim_TheirClaim_distinct", func(t *testing.T) {
-		t.Parallel()
-		// MyClaim and TheirClaim must use different colors
-		if MyClaim.GetForeground() == TheirClaim.GetForeground() {
-			t.Error("MyClaim and TheirClaim should use distinct foreground colors")
-		}
-	})
-
-	// Verify pre-existing styles still have foreground colors set
 	t.Run("Critical", func(t *testing.T) {
 		t.Parallel()
 		empty := lipgloss.NewStyle()

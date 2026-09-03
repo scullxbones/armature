@@ -36,56 +36,29 @@ func resolveIssueBinding(gitDir string) string {
 	return os.Getenv("ARMATURE_ISSUE_ID")
 }
 
-// sanitizeLogField strips newlines and carriage returns from a value before it
-// is interpolated into a single-line log entry, preventing log injection where
-// a crafted tool name or decision message could forge or mask a violation/decision
-// line (finding 8). Delegates to harnesshook.SanitizeLogField, the single shared
-// implementation also used by internal/harnesshook's pass-through-violation logger.
-func sanitizeLogField(s string) string {
-	return harnesshook.SanitizeLogField(s)
-}
-
-// appendHookLog appends a single line to <git-dir>/armature-hook.log, prefixed
-// with an RFC3339 UTC timestamp so operators can correlate entries with specific
-// git operations. This is the single shared implementation behind
-// logPassThrough/logDecision/logViolation (finding 6).
-func appendHookLog(gitDir string, line string) error {
-	logPath := filepath.Join(gitDir, "armature-hook.log")
-	// #nosec G304 - logPath is derived from a trusted git directory
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = f.Close() //nolint:errcheck // closing log file, error is not actionable
-	}()
-	ts := time.Now().UTC().Format(time.RFC3339)
-	_, err = fmt.Fprintf(f, "%s %s\n", ts, line)
-	return err
-}
-
 // logPassThrough logs a pass-through event to <git-dir>/armature-hook.log.
 func logPassThrough(gitDir string, reason string) error {
-	return appendHookLog(gitDir, "pass-through: "+sanitizeLogField(reason))
+	return harnesshook.AppendHookLogLine(gitDir, "pass-through: "+harnesshook.SanitizeLogField(reason))
 }
 
 // logDecision logs a complete decision to <git-dir>/armature-hook.log.
 // Each entry includes: issue ID, resolution step, event kind, tool, decision, and optional block reason.
 func logDecision(gitDir string, issueID string, resolutionStep string, eventKind string, tool string, decision string, blockReason string) error {
 	entry := fmt.Sprintf("decision: issue_id=%s resolution_step=%s event=%s tool=%s decision=%s",
-		sanitizeLogField(issueID), sanitizeLogField(resolutionStep), sanitizeLogField(eventKind),
-		sanitizeLogField(tool), sanitizeLogField(decision))
+		harnesshook.SanitizeLogField(issueID), harnesshook.SanitizeLogField(resolutionStep),
+		harnesshook.SanitizeLogField(eventKind), harnesshook.SanitizeLogField(tool),
+		harnesshook.SanitizeLogField(decision))
 	if blockReason != "" {
-		entry += fmt.Sprintf(" block_reason=%s", sanitizeLogField(blockReason))
+		entry += fmt.Sprintf(" block_reason=%s", harnesshook.SanitizeLogField(blockReason))
 	}
-	return appendHookLog(gitDir, entry)
+	return harnesshook.AppendHookLogLine(gitDir, entry)
 }
 
 // logViolation logs a violation entry for file writes that resolve to no binding.
 // Violations are distinguished from pass-throughs: they indicate an enforcement gap
 // (unbound file write when enforcement was expected).
 func logViolation(gitDir string, reason string) error {
-	return appendHookLog(gitDir, "violation: "+sanitizeLogField(reason))
+	return harnesshook.AppendHookLogLine(gitDir, "violation: "+harnesshook.SanitizeLogField(reason))
 }
 
 // logStalePassThroughScopeViolation checks the event's paths against the stale
