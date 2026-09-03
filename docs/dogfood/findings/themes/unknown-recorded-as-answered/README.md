@@ -138,6 +138,41 @@ Three alternative framings were considered against this evidence:
   covers the *missing metadata*; this one covers the fact that its absence is reported
   as a negative finding rather than as an inability to answer.
 
+### The 2026-08-31 → 2026-09-02 additions
+
+- [`arm sync` skips every done issue because `branch` is never recorded](../../raw/2026-08-31T1142Z-claude-workflow-sync-skips-every-issue-branch-never-recorded.md) —
+  This resolves the discrepancy noted at the bottom of this file, in favour of the
+  verification: the population is not merely mis-examined, it is **never examined**.
+  80 of 80 `done` issues have no `branch`; `DetectMerges` `continue`s before any
+  ancestry call. `No merged branches detected.` is a claim about the world produced
+  by a loop that inspected nothing, and it has never meant anything else in this repo.
+- [`arm merged` exits 1 after the transition already succeeded](../../raw/2026-08-31T1150Z-claude-workflow-arm-merged-reports-failure-after-succeeding.md) —
+  The mirror image, and the reason "just read the exit code" is not the fix. Here
+  the durable state is correct and the command reports `general_error` because a
+  disposable admin directory would not unlink. Both directions cost the same thing:
+  the exit code is not a statement about what was established.
+- [The harness hook's direct-commit block matches only a bare `git`](../../raw/2026-08-23T2010Z-claude-validation-direct-commit-block-trivially-bypassed.md) —
+  The same shape one layer down, at the seam. `isDirectCommitCommand` returns false
+  unless `fields[0] == "git"`, so `cd sub && git commit`, `/usr/bin/git commit`,
+  `sh -c '…'` and `env git commit` all pass through — none of them adversarial
+  constructions. Nothing is logged when the guard declines to match, so "not matched"
+  is indistinguishable from "checked and allowed". Per ADR 0007 the hook is
+  deliberately best-effort, not a sandbox; the finding is that this matcher's
+  *breadth* is narrower than its message implies, and that extending the mechanism to
+  state-transition verbs would inherit the porousness on day one.
+- [A properly source-linked issue still fails the stop hook as "uncited"](../../raw/2026-09-01T1221Z-claude-validation-source-link-alone-fails-the-stop-hook.md) —
+  Not a missing check but two checks with different definitions of the same predicate.
+  `arm validate` counts source-linked and accepted-risk as alternatives and reports
+  `767/767 cited`; `harnesspolicy/resolver.go:94-108` marks a link `Accepted` only via
+  an acceptance op, in *both* branches, so `CheckCitations` blocks a real, registered,
+  synced source. The natural repair inverts the meaning of `accept-citation` — which
+  exists to record *accepted risk* — so the 72 accepted-risk entries stop counting
+  undersourced work. Separately, `arm dag apply` writes a source-link op carrying only
+  `source_id` where `arm sources link` writes `source_id` *and* `source_url`: two
+  commands creating the same relationship produce different ops. Because the hook
+  evaluates only the *claimed* issue, the identical gap on the sibling issue went
+  unreported until someone claims it.
+
 ## The shared mechanism
 
 Concretely, and in the order a fix would address them:
