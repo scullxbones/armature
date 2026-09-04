@@ -54,14 +54,10 @@ func (e protocolExitError) Unwrap() error {
 }
 
 func skipCommandFailure(err error) error {
-	return skipCommandFailureCode(err, 1)
-}
-
-func skipCommandFailureCode(err error, code int) error {
 	if err == nil {
 		return nil
 	}
-	return protocolExitError{err: err, code: code}
+	return protocolExitError{err: err, code: 1}
 }
 
 type commandFailureEnvelope struct {
@@ -491,14 +487,8 @@ func renderStringSlice(values []string) string {
 // Returns empty slice if directory doesn't exist.
 // Logs warnings for any validation failures (mismatched worker IDs, corrupt lines).
 func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
-	items, warnings, err := ops.LoadFromDirValidated(opsDir)
-	if err != nil {
-		return nil, err
-	}
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
-	return ops.ExtractOps(items), nil
+	all, _, err := readAllOpsFromDirWithOffsets(opsDir)
+	return all, err
 }
 
 // readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.

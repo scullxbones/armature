@@ -72,13 +72,6 @@ func mapClaimError(err error) error {
 // form while allowing --worktree <path> for a caller-selected new worktree.
 const defaultWorktreeFlagValue = ".armature-default-worktree"
 
-// resolveWorktreeGitDir resolves the actual git directory for a worktree path.
-// Shared by claim, harness-hook, merged, and transition so they all read the
-// same location as worktree inventory (worktree.ResolveGitDir).
-func resolveWorktreeGitDir(worktreePath string) (string, error) {
-	return worktree.ResolveGitDir(worktreePath)
-}
-
 // worktreePathExists checks if a worktree exists at the given path.
 func worktreePathExists(path string) (bool, error) {
 	gitFile := filepath.Join(path, ".git")
@@ -114,7 +107,7 @@ func isWorktreeOf(repoPath, worktreePath string) bool {
 // worktree is bound to a different issue or is on a mismatched branch, preventing
 // silent overwrite of the binding (fix for worktree mismatch governance gap).
 func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) error {
-	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return nil // can't resolve git dir; let later steps surface the error
 	}
@@ -156,15 +149,6 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 	}
 
 	return nil
-}
-
-// deriveBranchName determines the branch name for a worktree based on issue type.
-// Returns an empty string for types that do not receive a worktree (e.g., epic).
-// claim creates worktrees for task, bug, feature, and story; merged uses this to tear them down.
-// Delegates to materialize.DeriveBranchName, the shared implementation also used
-// by internal/doctor for missing-worktree detection.
-func deriveBranchName(issueType, issueID string) string {
-	return materialize.DeriveBranchName(issueType, issueID)
 }
 
 // canonicalWorktreePath validates the issue ID before it is used in any
@@ -386,7 +370,7 @@ func writeClaimExclusionMarker(worktreePath, pattern string) error {
 	if pattern == "" {
 		return nil
 	}
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
@@ -406,7 +390,7 @@ func writeClaimExclusionMarker(worktreePath, pattern string) error {
 }
 
 func readClaimExclusionMarker(worktreePath string) (string, bool, error) {
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return "", false, fmt.Errorf("resolve worktree git dir: %w", err)
 	}
@@ -669,7 +653,7 @@ func createWorktreeAndBranchWithExclusion(
 	sourceArgs ...string,
 ) error {
 	// Determine branch name based on issue type
-	branchName := deriveBranchName(issue.Type, issueID)
+	branchName := materialize.DeriveBranchName(issue.Type, issueID)
 
 	// Safety guard: empty branch name indicates an issue type that should not have a worktree
 	if branchName == "" {
@@ -932,7 +916,7 @@ func hasTrustedBranchPointMetadata(gitClient *adapters.Client, worktreePath, bra
 	if _, err := deliverygate.RecordedBaseCommit(worktreePath); err == nil {
 		return true
 	}
-	parentBranch, err := gitClient.ReadGitConfig(parentBranchConfigKey(branchName))
+	parentBranch, err := gitClient.ReadGitConfig(deliverygate.ParentBranchConfigKey(branchName))
 	return err == nil && parentBranch != "" && parentBranch != "HEAD"
 }
 
@@ -994,116 +978,63 @@ func persistBranchPointMetadata(
 	return nil
 }
 
-// baseCommitFileName is the name of the file (written into a worktree's
-// actual git directory, alongside armature-issue-id) that records the SHA
-// the task branch diverged from at claim time. The delivery gate reads this
-// (see internal/deliverygate.RecordedBaseCommit) to scope-check against the
-// real branch-point rather than merge-basing against a default branch, which
-// is wrong whenever the task branch was cut from a story branch containing
-// completed sibling-task commits. Aliased to the deliverygate constant so
-// the write side (here) and read side (deliverygate) can never drift apart.
-const baseCommitFileName = deliverygate.BaseCommitFileName
-
-// parentBranchConfigKey returns the git config key used to durably record,
-// on the shared (main-repo) git config, the branch a task branch was cut
-// from. Recorded as git config rather than a per-worktree file: git config
-// --local written from a linked worktree lands in the main repo's shared
-// .git/config (armature does not enable the worktreeConfig extension), so
-// the record survives `arm merged` removing the worktree, and stays
-// addressable by branch name if the worktree is later recreated. Delegates
-// to internal/deliverygate.ParentBranchConfigKey, the same key the delivery
-// gate's read side (DynamicBaseCommit) resolves.
-func parentBranchConfigKey(branchName string) string {
-	return deliverygate.ParentBranchConfigKey(branchName)
-}
-
 // writeParentBranchConfigIfAbsent records parentBranch as the branch
 // branchName diverged from, but only if no such record exists yet — the
-// same idempotency guard as writeBaseCommitFileIfAbsent, and for the same
+// same idempotency guard as writeGitDirFileIfAbsent, and for the same
 // reason: an existing record reflects the true original parent and must
 // never be overwritten by a later, possibly different, "current branch".
 func writeParentBranchConfigIfAbsent(gitClient *adapters.Client, branchName, parentBranch string) error {
-	key := parentBranchConfigKey(branchName)
+	key := deliverygate.ParentBranchConfigKey(branchName)
 	if existing, err := gitClient.ReadGitConfig(key); err == nil && existing != "" {
 		return nil
 	}
 	return gitClient.SetGitConfig(key, parentBranch)
 }
 
-// writeBaseCommitFileIfAbsent records headSHA as the task branch's
-// branch-point, but only if no such record exists yet. Claim is idempotent
-// and may be re-run against an already-created branch; without the
-// absence-check, a later HEAD would silently overwrite the true origin
-// branch-point.
-func writeBaseCommitFileIfAbsent(worktreePath, headSHA string) error {
-	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+// writeGitDirFileIfAbsent writes content to <git-dir>/filename unless that
+// file already exists. Claim is idempotent and may re-run against an
+// already-created branch; without the absence-check, a later value would
+// silently overwrite the true origin record.
+func writeGitDirFileIfAbsent(worktreePath, filename, content string) error {
+	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
-
-	baseCommitFile := filepath.Join(actualGitDir, baseCommitFileName)
-	if _, err := os.Stat(baseCommitFile); err == nil {
-		// Already recorded from the original claim; leave it alone.
+	path := filepath.Join(actualGitDir, filename)
+	if _, err := os.Stat(path); err == nil {
 		return nil
 	}
-
-	if err := os.WriteFile(baseCommitFile, []byte(headSHA), 0o600); err != nil {
-		return fmt.Errorf("write base commit file: %w", err)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", filename, err)
 	}
 	return nil
 }
 
-// claimedBranchFileName is the name of the file (written into a worktree's
-// actual git directory, alongside armature-base-commit) that records the
-// branch name the issue was claimed under. Aliased to the deliverygate
-// constant so the write side (here) and read side (deliverygate) can never
-// drift apart, matching the baseCommitFileName pattern above.
-const claimedBranchFileName = deliverygate.ClaimedBranchFileName
+func writeBaseCommitFileIfAbsent(worktreePath, headSHA string) error {
+	return writeGitDirFileIfAbsent(worktreePath, deliverygate.BaseCommitFileName, headSHA)
+}
 
 // writeClaimedBranchFileIfAbsent records branchName as the branch the issue
-// was claimed under, but only if no such record exists yet (the same
-// idempotency guard as writeBaseCommitFileIfAbsent, and for the same reason:
-// an existing record reflects the true original claim and must never be
-// overwritten by a later, possibly different, value). Skips writing entirely
-// when branchName is "" — a legitimately branchless issue type (e.g. epic,
-// story before it gets a worktree) has nothing to record, and writing an
-// empty record would be indistinguishable from "not yet recorded" on the
-// read side, defeating the pre-migration fallback in
-// deliverygate.RecordedClaimedBranch.
+// was claimed under. Skips writing when branchName is "" — a legitimately
+// branchless issue type has nothing to record, and writing an empty record
+// would be indistinguishable from "not yet recorded" on the read side.
 func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {
 	if branchName == "" {
 		return nil
 	}
-
-	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
-	if err != nil {
-		return fmt.Errorf("resolve worktree git dir: %w", err)
-	}
-
-	claimedBranchFile := filepath.Join(actualGitDir, claimedBranchFileName)
-	if _, err := os.Stat(claimedBranchFile); err == nil {
-		// Already recorded from the original claim; leave it alone.
-		return nil
-	}
-
-	if err := os.WriteFile(claimedBranchFile, []byte(branchName), 0o600); err != nil {
-		return fmt.Errorf("write claimed branch file: %w", err)
-	}
-	return nil
+	return writeGitDirFileIfAbsent(worktreePath, deliverygate.ClaimedBranchFileName, branchName)
 }
 
 // clearParentBranchMetadata unsets shared parent-branch configuration after a
 // successful removal. Per-worktree base and claimed-branch files disappear
 // with their worktree and must stay intact if removal fails.
 func clearParentBranchMetadata(gitClient *adapters.Client, branchName string) {
-	_ = gitClient.UnsetGitConfig(parentBranchConfigKey(branchName)) //nolint:errcheck // best-effort cleanup
+	_ = gitClient.UnsetGitConfig(deliverygate.ParentBranchConfigKey(branchName)) //nolint:errcheck // best-effort cleanup
 }
 
 // updateIssueIDFile writes the issue ID to the armature-issue-id file in the worktree's .git directory.
-// In a git worktree, .git is a file (not a directory) that points to the actual git directory.
-// We use resolveWorktreeGitDir to find the real git directory.
 func updateIssueIDFile(worktreePath, issueID string) error {
-	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
@@ -1298,7 +1229,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 
 			// Determine the expected branch for this issue type.
 			// Issues with no branch mapping (epic, unknown) cannot use --worktree.
-			expectedBranch := deriveBranchName(issue.Type, issueID)
+			expectedBranch := materialize.DeriveBranchName(issue.Type, issueID)
 			if expectedBranch == "" {
 				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
 			}
@@ -1312,7 +1243,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 						"existing branch %s tip %s does not match --from tip %s; use a new issue branch or align it manually",
 						expectedBranch, existingTip, fromTip)
 				}
-				existingParent, exists, configErr := branchConfigIfExists(ctx.RepoPath, parentBranchConfigKey(expectedBranch))
+				existingParent, exists, configErr := branchConfigIfExists(ctx.RepoPath, deliverygate.ParentBranchConfigKey(expectedBranch))
 				if configErr != nil {
 					return configErr
 				}
@@ -1596,14 +1527,8 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]any{"issue": issueID, "claimed_by": workerID, "ttl": ttl}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed %s\n", issueID)
-			}
+			writeCommandResult(cmd, map[string]any{"issue": issueID, "claimed_by": workerID, "ttl": ttl},
+				"Claimed %s\n", issueID)
 			return nil
 		},
 	}

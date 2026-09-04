@@ -13,6 +13,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +72,7 @@ func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(
 	// issue marker, producing a duplicate-marker set.
 	legacyPath := filepath.Join(t.TempDir(), "legacy-worktree")
 	run(t, repo, "git", "worktree", "add", legacyPath, "-b", "legacy/task-01")
-	legacyGitDir, err := resolveWorktreeGitDir(legacyPath)
+	legacyGitDir, err := worktree.ResolveGitDir(legacyPath)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(legacyGitDir, "armature-issue-id"),
 		[]byte("task-01\n"), 0o600))
@@ -222,7 +223,7 @@ func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 			require.True(t, recorded)
 			recordedBase, baseErr := deliverygate.RecordedBaseCommit(worktreePath)
 			require.NoError(t, baseErr)
-			parentBefore := strings.TrimSpace(runGitOutput(t, repo, "config", "--get", parentBranchConfigKey(recordedBranch)))
+			parentBefore := strings.TrimSpace(runGitOutput(t, repo, "config", "--get", deliverygate.ParentBranchConfigKey(recordedBranch)))
 			require.NotEmpty(t, parentBefore)
 
 			tc.prepare(t, repo, worktreePath)
@@ -249,7 +250,7 @@ func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 			baseAfter, baseErr := deliverygate.RecordedBaseCommit(worktreePath)
 			require.NoError(t, baseErr)
 			assert.Equal(t, recordedBase, baseAfter)
-			assert.Equal(t, parentBefore, strings.TrimSpace(runGitOutput(t, repo, "config", "--get", parentBranchConfigKey(recordedBranch))))
+			assert.Equal(t, parentBefore, strings.TrimSpace(runGitOutput(t, repo, "config", "--get", deliverygate.ParentBranchConfigKey(recordedBranch))))
 			if tc.name == "tracked changes" {
 				contents, readErr := os.ReadFile(filepath.Join(worktreePath, "tracked.txt"))
 				require.NoError(t, readErr)
@@ -628,7 +629,7 @@ func TestMergedUnreadableHookLogFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
 	claim, err := runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err, claim)
 
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 	require.NoError(t, os.Mkdir(filepath.Join(gitDir, "armature-hook.log"), 0o700), "a directory at the log path is unreadable as a log")
 
@@ -964,7 +965,7 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 
 	// Verify there is NO armature-issue-id binding file in the git dir.
 	// This is the key difference: a real claimed worktree would have this file.
-	gitDir, err := resolveWorktreeGitDir(unboundWorktreePath)
+	gitDir, err := worktree.ResolveGitDir(unboundWorktreePath)
 	require.NoError(t, err)
 	bindingPath := filepath.Join(gitDir, "armature-issue-id")
 	assert.NoFileExists(t, bindingPath, "unbound worktree should have no armature-issue-id file")
@@ -1018,7 +1019,7 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 
 	// Verify worktree exists and IS bound
 	assert.DirExists(t, worktreePath, "claimed worktree should exist")
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 	bindingPath := filepath.Join(gitDir, "armature-issue-id")
 	assert.FileExists(t, bindingPath, "claimed worktree should have armature-issue-id file")
@@ -1311,7 +1312,7 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 	worktreePath := filepath.Join(t.TempDir(), "unbound-worktree")
 	run(t, repo, "git", "worktree", "add", worktreePath, "-b", "task/task-01")
 
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 	require.NoFileExists(t, filepath.Join(gitDir, "armature-issue-id"))
 

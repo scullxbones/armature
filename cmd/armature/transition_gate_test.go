@@ -11,6 +11,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -864,7 +865,7 @@ func TestDeliveryGateFallsBackWhenParentBranchConfigIsLiteralHEAD_REQ_LNGHZN_S4_
 	// would have been written before commit 978405cc's idempotency guard
 	// existed.
 	git := adapters.New(repo)
-	require.NoError(t, git.SetGitConfig(parentBranchConfigKey("gate-09"), "HEAD"))
+	require.NoError(t, git.SetGitConfig(deliverygate.ParentBranchConfigKey("gate-09"), "HEAD"))
 
 	require.NoError(t, os.WriteFile(filepath.Join(wt, "foo.go"), []byte("package foo\n"), 0o644))
 	run(t, wt, "git", "add", "foo.go")

@@ -21,6 +21,7 @@ import (
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
+	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
@@ -137,7 +138,7 @@ func isKnownWorktreeGitDir(repoPath, candidateGitDir string) bool {
 	}
 
 	// The main repo's own .git always counts.
-	if mainGitDir, err := resolveWorktreeGitDir(repoPath); err == nil {
+	if mainGitDir, err := worktree.ResolveGitDir(repoPath); err == nil {
 		if abs := resolvePathForComparison(mainGitDir); abs != "" && abs == candidateAbs {
 			return true
 		}
@@ -154,7 +155,7 @@ func isKnownWorktreeGitDir(repoPath, candidateGitDir string) bool {
 		if !ok {
 			continue
 		}
-		wtGitDir, err := resolveWorktreeGitDir(wtPath)
+		wtGitDir, err := worktree.ResolveGitDir(wtPath)
 		if err != nil {
 			continue
 		}
@@ -337,7 +338,7 @@ func newHarnessHookCmd() *cobra.Command {
 			if rawRepo == "" {
 				rawRepo = "."
 			}
-			gitDir, err := resolveWorktreeGitDir(rawRepo)
+			gitDir, err := worktree.ResolveGitDir(rawRepo)
 			if err != nil {
 				// Fall back to the conventional path if resolution fails (e.g., bare repo or
 				// unusual layout); the binding file may not exist but we degrade gracefully.

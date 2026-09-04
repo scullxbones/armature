@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/issuetype"
@@ -79,17 +78,11 @@ with an explicit error message.`,
 				return err
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]string{"issue": issueID, "new_parent": newParent, "status": "reparented"}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			result := map[string]string{"issue": issueID, "new_parent": newParent, "status": "reparented"}
+			if newParent == "" {
+				writeCommandResult(cmd, result, "Reparented %s to root\n", issueID)
 			} else {
-				if newParent == "" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reparented %s to root\n", issueID)
-				} else {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reparented %s to %s\n", issueID, newParent)
-				}
+				writeCommandResult(cmd, result, "Reparented %s to %s\n", issueID, newParent)
 			}
 			return nil
 		},

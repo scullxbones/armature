@@ -18,6 +18,7 @@ import (
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
+	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -348,7 +349,7 @@ func TestIsKnownWorktreeGitDir_SymlinkedWorktree_NotFalselyRejected(t *testing.T
 	worktreePath := filepath.Join(linkParent, "wt")
 	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
 
-	actualGitDir, err := resolveWorktreeGitDir(worktreePath)
+	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 
 	assert.True(t, isKnownWorktreeGitDir(repo, actualGitDir),
@@ -555,7 +556,7 @@ func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
 
 	var out bytes.Buffer
 	hookCmd := newRootCmd()
-	// Point --repo at the worktree so resolveWorktreeGitDir reads the .git file there.
+	// Point --repo at the worktree so worktree.ResolveGitDir reads the .git file there.
 	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -732,7 +733,7 @@ func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.
 	require.NoError(t, err, "stale binding must fail open: exit 0")
 	assert.NotContains(t, out.String(), `"decision":"block"`, "stale binding must pass through, not block")
 
-	worktreeGitDir, gErr := resolveWorktreeGitDir(worktreeDir)
+	worktreeGitDir, gErr := worktree.ResolveGitDir(worktreeDir)
 	require.NoError(t, gErr)
 	logData, err := os.ReadFile(filepath.Join(worktreeGitDir, "armature-hook.log"))
 	require.NoError(t, err)
@@ -792,7 +793,7 @@ func TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER
 	err = cmd.Execute()
 	require.NoError(t, err, "stale binding must fail open: exit 0")
 
-	worktreeGitDir, gErr := resolveWorktreeGitDir(worktreeDir)
+	worktreeGitDir, gErr := worktree.ResolveGitDir(worktreeDir)
 	require.NoError(t, gErr)
 	logData, err := os.ReadFile(filepath.Join(worktreeGitDir, "armature-hook.log"))
 	require.NoError(t, err)
