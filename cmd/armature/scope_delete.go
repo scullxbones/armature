@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -104,19 +103,12 @@ func newScopeDeleteCmd() *cobra.Command {
 				}
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]any{
-					"deleted_path":   deletedPath,
-					"affected_count": len(affected),
-					"affected":       affected,
-				}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deleted scope %q from %d issue(s): %s\n",
-					deletedPath, len(affected), strings.Join(affected, ", "))
-			}
+			writeCommandResult(cmd, map[string]any{
+				"deleted_path":   deletedPath,
+				"affected_count": len(affected),
+				"affected":       affected,
+			}, "Deleted scope %q from %d issue(s): %s\n",
+				deletedPath, len(affected), strings.Join(affected, ", "))
 			return nil
 		},
 	}

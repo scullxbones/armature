@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -85,20 +84,13 @@ func newScopeRenameCmd() *cobra.Command {
 				return fmt.Errorf("refresh snapshot: %w", err)
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]any{
-					"old_path":       oldPath,
-					"new_path":       newPath,
-					"affected_count": len(affected),
-					"affected":       affected,
-				}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Renamed scope %q -> %q in %d issue(s): %s\n",
-					oldPath, newPath, len(affected), strings.Join(affected, ", "))
-			}
+			writeCommandResult(cmd, map[string]any{
+				"old_path":       oldPath,
+				"new_path":       newPath,
+				"affected_count": len(affected),
+				"affected":       affected,
+			}, "Renamed scope %q -> %q in %d issue(s): %s\n",
+				oldPath, newPath, len(affected), strings.Join(affected, ", "))
 			return nil
 		},
 	}

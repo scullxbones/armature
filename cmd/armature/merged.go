@@ -113,7 +113,7 @@ func findGateTarget(repoPath string, issue materialize.Issue) (gitDir, binding s
 		return "", "", false, nil
 	}
 
-	gitDir, err = resolveWorktreeGitDir(worktreePath)
+	gitDir, err = worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		// A located-but-unresolvable worktree is UNREADABLE, not "not found":
 		// propagate so callers fail closed instead of skipping the gate.
@@ -130,7 +130,7 @@ func findGateTarget(repoPath string, issue materialize.Issue) (gitDir, binding s
 // or to explain a refusal (the removal warning). A worktree bound to a
 // different issue is never returned — its binding says whose it is.
 func unboundWorktreeOnBranch(worktrees []worktree.Meta, issue materialize.Issue) string {
-	branchName := deriveBranchName(issue.Type, issue.ID)
+	branchName := materialize.DeriveBranchName(issue.Type, issue.ID)
 	if branchName == "" {
 		return ""
 	}
@@ -256,7 +256,7 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 		if path := unboundWorktreeOnBranch(worktrees, issue); path != "" {
 			_, _ = fmt.Fprintf(errWriter,
 				"Warning: worktree at %s is on branch %s but not bound to %s; skipping removal\n",
-				path, deriveBranchName(issue.Type, issue.ID), issue.ID)
+				path, materialize.DeriveBranchName(issue.Type, issue.ID), issue.ID)
 		}
 		return worktreeSkipped, nil
 	}
@@ -290,7 +290,7 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 		return worktreeSkipped, nil
 	}
 
-	gitDir, err := resolveWorktreeGitDir(selected.Path)
+	gitDir, err := worktree.ResolveGitDir(selected.Path)
 	if err != nil {
 		return worktreeSkipped, fmt.Errorf("resolve selected worktree %s: %w", selected.Path, err)
 	}
@@ -319,7 +319,7 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 		return worktreeSkipped, fmt.Errorf("read recorded claimed branch for %s: %w", issue.ID, err)
 	}
 	if !recorded {
-		branchName = deriveBranchName(issue.Type, issue.ID)
+		branchName = materialize.DeriveBranchName(issue.Type, issue.ID)
 	}
 	claimExclusionPattern, hasClaimExclusion, err := readClaimExclusionMarker(selected.Path)
 	if err != nil {

@@ -141,12 +141,6 @@ usecases: {
     label: "internal/worktree"
     description: "Provision, bind, reconcile, inspect, and garbage-collect worktrees"
   }
-
-  hooks: {
-    class: usecase
-    label: "internal/hooks"
-    description: "Run configured Git hook behavior"
-  }
 }
 
 governance: {
@@ -447,8 +441,6 @@ usecases.sync -> domain.ops
 usecases.worker -> infrastructure.adapters
 usecases.worktree -> domain.materialize
 usecases.worktree -> domain.ops
-usecases.hooks -> infrastructure.adapters
-usecases.hooks -> infrastructure.config
 
 # Governance imports.
 governance.audit -> usecases.claim

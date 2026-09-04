@@ -135,29 +135,8 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 // Each op's worker ID is compared against the full filename worker ID (with slot suffix preserved).
 // Mismatched ops are excluded, and warnings are returned for them.
 func LoadFromDirValidated(opsDir string) ([]OpItem, []string, error) {
-	// List all log files in the directory
-	logFiles, err := adapters.ListLogFiles(opsDir)
-	if err != nil {
-		return nil, nil, err // real I/O error — propagate it
-	}
-	// logFiles == nil means dir didn't exist (ListLogFiles converts ErrNotExist to nil,nil)
-	if logFiles == nil {
-		return []OpItem{}, []string{}, nil
-	}
-
-	stream := NewValidatedOpStream()
-
-	// Register each log file with its expected worker ID from the filename
-	// Note: we use the full filename-derived worker ID (including slot suffix).
-	// ExtractWorkerIDFromFilename preserves the slot suffix (e.g., "3357fe85~a"),
-	// unlike adapters.WorkerIDFromFilename which strips it (e.g., "3357fe85").
-	// We preserve the slot here because ops include the full worker ID with slot in validation.
-	for _, logPath := range logFiles {
-		expectedWorkerID := ExtractWorkerIDFromFilename(logPath)
-		stream.AddFile(logPath, expectedWorkerID)
-	}
-
-	return stream.Load()
+	items, _, warnings, err := LoadFromDirWithOffsetsValidated(opsDir)
+	return items, warnings, err
 }
 
 // LoadFromDirWithOffsetsValidated loads all ops from a directory of .log files,

@@ -22,6 +22,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 // alwaysOwns is the stillOwns callback for createWorktreeAndBranch tests
@@ -654,60 +655,6 @@ func TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5(t *testing.T)
 	assert.Contains(t, err.Error(), "path separators")
 }
 
-// TestDeriveBranchName verifies that deriveBranchName returns correct branch names for all issue types.
-func TestDeriveBranchName(t *testing.T) {
-	tests := []struct {
-		issueType    string
-		issueID      string
-		expectedName string
-		description  string
-	}{
-		{
-			issueType:    "bug",
-			issueID:      "ARCHIMP-B1",
-			expectedName: "fix/ARCHIMP-B1",
-			description:  "bug issues should have fix/ prefix",
-		},
-		{
-			issueType:    "feature",
-			issueID:      "ARCHIMP-F1",
-			expectedName: "feat/ARCHIMP-F1",
-			description:  "feature issues should have feat/ prefix",
-		},
-		{
-			issueType:    "task",
-			issueID:      "ARCHIMP-T1",
-			expectedName: "task/ARCHIMP-T1",
-			description:  "task issues should have task/ prefix",
-		},
-		{
-			issueType:    "story",
-			issueID:      "ARCHIMP-S5",
-			expectedName: "feat/ARCHIMP-S5",
-			description:  "story issues should have feat/ prefix",
-		},
-		{
-			issueType:    "epic",
-			issueID:      "ARCHIMP-E1",
-			expectedName: "",
-			description:  "epic issues should return empty string",
-		},
-		{
-			issueType:    "unknown",
-			issueID:      "ARCHIMP-U1",
-			expectedName: "",
-			description:  "unknown issue types should return empty string",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.description, func(t *testing.T) {
-			result := deriveBranchName(tt.issueType, tt.issueID)
-			assert.Equal(t, tt.expectedName, result)
-		})
-	}
-}
-
 // TestCreateWorktreeAndBranchInheritsFilesFromHEAD verifies that the worktree branch
 // contains files from HEAD (not an orphan branch).
 func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
@@ -906,15 +853,15 @@ func TestCreateWorktreeAndBranchAdoptionUsesAdoptedBranchPoint_REQ_LNGHZN_S5(t *
 	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
 	require.NoError(t, err)
 
-	gitPath, err := resolveWorktreeGitDir(canonicalPath)
+	gitPath, err := worktree.ResolveGitDir(canonicalPath)
 	require.NoError(t, err)
-	baseData, err := os.ReadFile(filepath.Join(gitPath, baseCommitFileName))
+	baseData, err := os.ReadFile(filepath.Join(gitPath, deliverygate.BaseCommitFileName))
 	require.NoError(t, err, "adopted worktree must record a branch point")
 	assert.Equal(t, parentTip, strings.TrimSpace(string(baseData)),
 		"adopted worktree base must come from the adopted branch, not coordinator HEAD")
 	assert.NotEqual(t, coordinatorTip, strings.TrimSpace(string(baseData)))
 
-	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", parentBranchConfigKey("task/task-01"))
+	getCmd := exec.CommandContext(context.Background(), "git", "config", "--get", deliverygate.ParentBranchConfigKey("task/task-01"))
 	getCmd.Dir = repo
 	_, err = getCmd.Output()
 	assert.Error(t, err, "adoption must not invent a parent branch from the coordinator checkout")
@@ -2155,7 +2102,7 @@ func TestClaimAutoProvisionsWorktreeAtDefaultRoot_REQ_LNGHZN_S5_T4(t *testing.T)
 	assert.True(t, isWorktreeOf(repo, expected), "provisioned path must be a registered linked worktree of the repo")
 
 	// The worktree must be bound to the claimed issue.
-	gitDir, err := resolveWorktreeGitDir(expected)
+	gitDir, err := worktree.ResolveGitDir(expected)
 	require.NoError(t, err)
 	bindingBytes, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
 	require.NoError(t, err)
@@ -2396,7 +2343,7 @@ func TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4
 	require.DirExists(t, worktreePath)
 
 	// The recreated worktree must be checked out on the issue's derived branch.
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 	headBytes, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
 	require.NoError(t, err)
@@ -2422,7 +2369,7 @@ func TestClaimFromFlagCreatesBranchFromParentWorktree_REQ_LNGHZN_S9_T1(t *testin
 	assert.Equal(t, parentTip, strings.TrimSpace(runGitOutput(t, childPath, "rev-parse", "HEAD")))
 	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent"))
 	assert.Equal(t, "feature-parent", parentBranch)
-	childGitDir, err := resolveWorktreeGitDir(childPath)
+	childGitDir, err := worktree.ResolveGitDir(childPath)
 	require.NoError(t, err)
 	baseCommit, err := os.ReadFile(filepath.Join(childGitDir, "armature-base-commit"))
 	require.NoError(t, err)
@@ -2456,7 +2403,7 @@ func TestCreateWorktreeAndBranchRejectsUnavailableValidatedSource_REQ_LNGHZN_S9_
 	assert.NoDirExists(t, destination)
 	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
 	assert.Error(t, branchErr, "source failure must not create the task branch")
-	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", parentBranchConfigKey("task/task-01")).Output()
+	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", deliverygate.ParentBranchConfigKey("task/task-01")).Output()
 	assert.Error(t, configErr, "source failure must not persist parent provenance")
 }
 
@@ -2534,7 +2481,7 @@ exec "$real_git" "$@"
 	assert.DirExists(t, backupPath, "the test source worktree must be moved away, not destroyed")
 	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()
 	assert.Error(t, branchErr, "source disappearance must not create the task branch")
-	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", parentBranchConfigKey("task/task-01")).Output()
+	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", deliverygate.ParentBranchConfigKey("task/task-01")).Output()
 	assert.Error(t, configErr, "source disappearance must not persist parent provenance")
 	status, statusErr := runTrls(t, repo, "show", "task-01", "--field", "status")
 	require.NoError(t, statusErr)
@@ -2553,7 +2500,7 @@ func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T)
 	bind.SetOut(new(bytes.Buffer))
 	bind.SetArgs([]string{"claim", "task-02", "--repo", repo, "--worktree", boundPath})
 	require.NoError(t, bind.Execute())
-	boundGitDir, err := resolveWorktreeGitDir(boundPath)
+	boundGitDir, err := worktree.ResolveGitDir(boundPath)
 	require.NoError(t, err)
 	bindingBefore, err := os.ReadFile(filepath.Join(boundGitDir, "armature-issue-id"))
 	require.NoError(t, err)
@@ -2583,7 +2530,7 @@ func TestClaimReusesPrunableCustomDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.DirExists(t, destination)
-	gitDir, err := resolveWorktreeGitDir(destination)
+	gitDir, err := worktree.ResolveGitDir(destination)
 	require.NoError(t, err)
 	binding, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
 	require.NoError(t, err)
@@ -2694,7 +2641,7 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 
 	t.Run("conflicting parent is preserved and rejected", func(t *testing.T) {
 		repo, parentPath, _, destination := setup(t)
-		parentKey := parentBranchConfigKey("task/task-01")
+		parentKey := deliverygate.ParentBranchConfigKey("task/task-01")
 		run(t, repo, "git", "config", parentKey, "other-parent")
 
 		claim := newRootCmd()
@@ -2709,7 +2656,7 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 
 	t.Run("unused base config does not override canonical marker", func(t *testing.T) {
 		repo, parentPath, sourceTip, destination := setup(t)
-		parentKey := parentBranchConfigKey("task/task-01")
+		parentKey := deliverygate.ParentBranchConfigKey("task/task-01")
 		baseKey := "branch.task/task-01.armature-base-commit"
 		run(t, repo, "git", "config", parentKey, "feature-parent")
 		staleBase := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
@@ -2740,7 +2687,7 @@ func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
 	existing.SetOut(new(bytes.Buffer))
 	existing.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
 	require.NoError(t, existing.Execute())
-	gitDir, err := resolveWorktreeGitDir(canonicalPath)
+	gitDir, err := worktree.ResolveGitDir(canonicalPath)
 	require.NoError(t, err)
 	binding, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
 	require.NoError(t, err)
@@ -2763,7 +2710,7 @@ func TestClaimFromFlagRequiresExplicitNewWorktreePath_REQ_LNGHZN_S9_T1(t *testin
 		setup.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
 		require.NoError(t, setup.Execute())
 
-		gitDir, err := resolveWorktreeGitDir(canonicalPath)
+		gitDir, err := worktree.ResolveGitDir(canonicalPath)
 		require.NoError(t, err)
 		bindingBefore, err := os.ReadFile(filepath.Join(gitDir, "armature-issue-id"))
 		require.NoError(t, err)
@@ -3213,7 +3160,7 @@ func TestWriteClaimExclusionMarkerFailsClosedOnUnreadableMarker_REQ_LNGHZN_S9_T1
 	worktreePath := filepath.Join(t.TempDir(), "unreadable-marker-wt")
 	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
 
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 	markerPath := filepath.Join(gitDir, claimExclusionMarkerName)
 	require.NoError(t, os.WriteFile(markerPath, []byte("/custom-a/\n"), 0o600))
@@ -3236,7 +3183,7 @@ func TestReadClaimExclusionMarkerRejectsEmptyMarker_REQ_LNGHZN_S9_T1(t *testing.
 	worktreePath := filepath.Join(t.TempDir(), "empty-marker-wt")
 	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
 
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, claimExclusionMarkerName), []byte("\n"), 0o600))
 

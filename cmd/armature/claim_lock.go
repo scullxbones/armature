@@ -57,7 +57,7 @@ import (
 // impossible rather than merely unlikely.
 //
 // The lock file lives in the MAIN repo's git common dir (resolved the same
-// way resolveWorktreeGitDir resolves any other worktree's git dir; for the
+// way worktree.ResolveGitDir resolves any other worktree's git dir; for the
 // main repo this is simply <repoPath>/.git), so it is shared across every
 // linked worktree of this clone and survives worktree creation/removal.
 // It is intentionally never deleted: reacquiring it later (a legitimate

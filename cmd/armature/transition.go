@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,7 +13,6 @@ import (
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
-	"github.com/scullxbones/armature/internal/hooks"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worktree"
@@ -126,7 +124,7 @@ This enforces branch + PR discipline.`,
 				ToStatus:   to,
 				WorkerID:   workerID,
 			}
-			if err := hooks.RunPreTransition(&cfg, hookInput); err != nil {
+			if err := config.RunPreTransition(&cfg, hookInput); err != nil {
 				return err
 			}
 
@@ -239,14 +237,8 @@ This enforces branch + PR discipline.`,
 				return nil
 			}
 
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				result := map[string]string{"issue": issueID, "status": to}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s → %s\n", issueID, to)
-			}
+			writeCommandResult(cmd, map[string]string{"issue": issueID, "status": to},
+				"%s → %s\n", issueID, to)
 			return nil
 		},
 	}
@@ -483,7 +475,7 @@ func deliverygateRequired(repoRoot, invokingRepoPath, issueID string, gateIssue 
 // checkout, not be silently redirected elsewhere), and "unbound" (fall
 // through to a repo-wide scan for the live binding).
 func worktreeIssueBinding(worktreePath string) (string, error) {
-	gitDir, err := resolveWorktreeGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return "", err
 	}
@@ -529,7 +521,7 @@ func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool, error)
 		return "", false, fmt.Errorf("list worktrees: %w", err)
 	}
 	for _, worktreePath := range paths {
-		gitDir, err := resolveWorktreeGitDir(worktreePath)
+		gitDir, err := worktree.ResolveGitDir(worktreePath)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				// Worktree directory no longer exists (stale/prunable

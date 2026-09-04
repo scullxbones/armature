@@ -32,6 +32,22 @@ type HookConfig struct {
 	Required bool     `json:"required"`
 }
 
+// RunPreTransition runs every pre-transition hook in cfg. Returns nil when
+// cfg is nil or has no hooks. Each hook is invoked with JSON HookInput on
+// stdin and must emit JSON HookResult on stdout; a non-zero exit or invalid
+// output blocks the transition.
+func RunPreTransition(cfg *Config, input adapters.HookInput) error {
+	if cfg == nil || len(cfg.Hooks) == 0 {
+		return nil
+	}
+	for _, hook := range cfg.Hooks {
+		if err := adapters.ExecuteHook(hook.Name, hook.Command, input); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GateConfig is a named command profile invoked by `arm gate run`.
 type GateConfig struct {
 	Command []string `json:"command"`
