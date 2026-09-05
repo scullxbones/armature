@@ -46,25 +46,3 @@ func ReadLogFromOffset(logPath string, offset int64) ([]Op, error) {
 	}
 	return ops, nil
 }
-
-// ReadLogValidated reads ops and filters out those with mismatched worker IDs.
-func ReadLogValidated(logPath string, expectedWorkerID string) ([]Op, error) {
-	all, err := ReadLog(logPath)
-	if err != nil {
-		return nil, err
-	}
-	var valid []Op
-	for _, op := range all {
-		if op.WorkerID == expectedWorkerID {
-			valid = append(valid, op)
-		}
-	}
-	return valid, nil
-}
-
-// WorkerIDFromFilename extracts the worker ID from a log filename.
-// Plain log:   "3357fe85.log"   -> "3357fe85"
-// Slotted log: "3357fe85~a.log" -> "3357fe85"  (slot suffix stripped)
-func WorkerIDFromFilename(logPath string) string {
-	return adapters.WorkerIDFromFilename(logPath)
-}

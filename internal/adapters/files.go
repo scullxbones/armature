@@ -628,18 +628,6 @@ func WriteConfigFile(path string, data any) error {
 	return writeJSONFile(path, data, "config")
 }
 
-// LoadConfigFile reads and unmarshals a config file.
-func LoadConfigFile(path string, v any) error {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
-	if err != nil {
-		return fmt.Errorf("read config: %w", err)
-	}
-	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("parse config: %w", err)
-	}
-	return nil
-}
-
 // StatFile checks if a file exists and returns true if it does.
 func StatFile(path string) bool {
 	_, err := os.Stat(path)

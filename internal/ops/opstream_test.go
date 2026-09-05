@@ -290,18 +290,19 @@ func TestLoadFile_LineNumberPopulated(t *testing.T) {
 	assert.Equal(t, 3, items[1].LineNumber, "second accepted op should be from physical line 3")
 }
 
-// ===== Tests for package-level LoadFromDirValidated and LoadFromDirWithOffsetsValidated =====
+// ===== Tests for package-level LoadFromDirWithOffsetsValidated =====
 
-func TestLoadFromDirValidated_DirDoesNotExist(t *testing.T) {
+func TestLoadFromDirWithOffsetsValidated_DirDoesNotExist(t *testing.T) {
 	t.Parallel()
-	items, warnings, err := LoadFromDirValidated("/nonexistent/directory/path")
+	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated("/nonexistent/directory/path")
 
 	require.NoError(t, err)
 	assert.Len(t, items, 0)
+	assert.Len(t, offsets, 0)
 	assert.Len(t, warnings, 0)
 }
 
-func TestLoadFromDirValidated_DirWithValidLogs(t *testing.T) {
+func TestLoadFromDirWithOffsetsValidated_DirWithValidLogs(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath1 := filepath.Join(dir, "worker-a1.log")
@@ -315,7 +316,7 @@ func TestLoadFromDirValidated_DirWithValidLogs(t *testing.T) {
 	require.NoError(t, AppendOp(logPath1, op1))
 	require.NoError(t, AppendOp(logPath2, op2))
 
-	items, warnings, err := LoadFromDirValidated(dir)
+	items, _, warnings, err := LoadFromDirWithOffsetsValidated(dir)
 
 	require.NoError(t, err)
 	assert.Len(t, warnings, 0)
@@ -325,7 +326,7 @@ func TestLoadFromDirValidated_DirWithValidLogs(t *testing.T) {
 	assert.Equal(t, "worker-b2", items[1].Op.WorkerID)
 }
 
-func TestLoadFromDirValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
+func TestLoadFromDirWithOffsetsValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "custom-id~slot-x.log")
@@ -335,7 +336,7 @@ func TestLoadFromDirValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
 
 	require.NoError(t, AppendOp(logPath, op))
 
-	items, warnings, err := LoadFromDirValidated(dir)
+	items, _, warnings, err := LoadFromDirWithOffsetsValidated(dir)
 
 	require.NoError(t, err)
 	assert.Len(t, warnings, 0)

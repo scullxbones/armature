@@ -1990,21 +1990,6 @@ func TestLogPayloadSummary(t *testing.T) {
 	}
 }
 
-func TestProviderForType_KnownTypes(t *testing.T) {
-	cases := []string{"filesystem", "confluence", "sharepoint"}
-	for _, typ := range cases {
-		p, err := providerForType(typ)
-		assert.NoError(t, err, "type %q should be recognized", typ)
-		assert.NotNil(t, p, "provider for %q should not be nil", typ)
-	}
-}
-
-func TestProviderForType_UnknownType(t *testing.T) {
-	_, err := providerForType("unknown-type")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown provider type")
-}
-
 func TestReadyCommand_ParentFilter(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

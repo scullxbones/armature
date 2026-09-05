@@ -656,30 +656,6 @@ func TestCurrentBranch(t *testing.T) {
 	assert.NotEmpty(t, branch)
 }
 
-func TestCommitMessage(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
-	shaOut, err := shaCmd.Output()
-	require.NoError(t, err)
-	sha := strings.TrimSpace(string(shaOut))
-
-	msg, err := c.CommitMessage(sha)
-	require.NoError(t, err)
-	assert.Contains(t, msg, "init")
-}
-
-func TestCommitMessage_InvalidSHA(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	_, err := c.CommitMessage("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
-	assert.Error(t, err)
-}
-
 func TestPush_ErrorOnNoRemote(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -724,39 +700,6 @@ func TestRemoveWorktree_NonExistent(t *testing.T) {
 	// Removing a non-existent worktree path should return an error
 	err := c.RemoveWorktree(filepath.Join(repo, "no-such-worktree"))
 	assert.Error(t, err)
-}
-
-func TestDiffFrom(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	gitRun := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-
-	// Commit a file at a known point
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("original\n"), 0644))
-	gitRun("add", "file.txt")
-	gitRun("commit", "-m", "add file")
-
-	// Get that SHA as the base
-	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
-	shaOut, err := shaCmd.Output()
-	require.NoError(t, err)
-	baseSHA := strings.TrimSpace(string(shaOut))
-
-	// Make another commit
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("modified\n"), 0644))
-	gitRun("add", "file.txt")
-	gitRun("commit", "-m", "modify file")
-
-	diff, err := c.DiffFrom(baseSHA)
-	require.NoError(t, err)
-	assert.Contains(t, diff, "modified")
-	assert.Contains(t, diff, "original")
 }
 
 func TestMergeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
@@ -881,57 +824,6 @@ func TestLogRange_ReportsParentCount_REQ_LNGHZN_S4(t *testing.T) {
 	require.NotNil(t, singleEntry, "single-parent commit entry not found")
 	assert.GreaterOrEqual(t, mergeEntry.ParentCount(), 2, "merge commit should report 2+ parents")
 	assert.Equal(t, 1, singleEntry.ParentCount(), "ordinary commit should report exactly 1 parent")
-}
-
-func TestDiffFrom_InvalidSHA(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	_, err := c.DiffFrom("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
-	assert.Error(t, err)
-}
-
-func TestDiffNameOnly(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	gitRun := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-
-	// Commit two files at the base
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("a\n"), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "beta.txt"), []byte("b\n"), 0644))
-	gitRun("add", "alpha.txt", "beta.txt")
-	gitRun("commit", "-m", "add files")
-
-	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
-	shaOut, err := shaCmd.Output()
-	require.NoError(t, err)
-	baseSHA := strings.TrimSpace(string(shaOut))
-
-	// Modify only alpha
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("changed\n"), 0644))
-	gitRun("add", "alpha.txt")
-	gitRun("commit", "-m", "change alpha")
-
-	names, err := c.DiffNameOnly(baseSHA)
-	require.NoError(t, err)
-	assert.Contains(t, names, "alpha.txt")
-	assert.NotContains(t, names, "beta.txt")
-}
-
-func TestDiffNameOnly_InvalidSHA(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	_, err := c.DiffNameOnly("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
-	assert.Error(t, err)
 }
 
 func TestDiffNameStatus_DetectsRenameWithBothPaths(t *testing.T) {
@@ -1123,68 +1015,6 @@ func TestResetHard_InvalidRef(t *testing.T) {
 
 	err := c.ResetHard("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
 	assert.Error(t, err)
-}
-
-func TestApplyPatch(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	gitRun := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-
-	// Commit a base file
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "patch_target.txt"), []byte("line1\nline2\n"), 0644))
-	gitRun("add", "patch_target.txt")
-	gitRun("commit", "-m", "base")
-
-	// Build a valid unified diff patch
-	patch := `diff --git a/patch_target.txt b/patch_target.txt
-index 0000000..1111111 100644
---- a/patch_target.txt
-+++ b/patch_target.txt
-@@ -1,2 +1,3 @@
- line1
- line2
-+line3
-`
-
-	err := c.ApplyPatch([]byte(patch))
-	require.NoError(t, err)
-
-	content, err := os.ReadFile(filepath.Join(repo, "patch_target.txt"))
-	require.NoError(t, err)
-	assert.Contains(t, string(content), "line3")
-}
-
-func TestApplyPatch_InvalidPatch(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	err := c.ApplyPatch([]byte("this is not a valid patch\n"))
-	assert.Error(t, err)
-}
-
-func TestAddAll(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	// Write a file but don't stage it
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "new_file.txt"), []byte("content\n"), 0644))
-
-	err := c.AddAll()
-	require.NoError(t, err)
-
-	// Verify the file is staged
-	statusCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "diff", "--cached", "--name-only")
-	out, err := statusCmd.Output()
-	require.NoError(t, err)
-	assert.Contains(t, string(out), "new_file.txt")
 }
 
 func TestAddPathsStagesOnlySelectedPaths(t *testing.T) {

@@ -8,63 +8,6 @@ import (
 	"testing"
 )
 
-func TestRunCommand_Success(t *testing.T) {
-	t.Parallel()
-	out, err := RunCommand("echo", "hello")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "hello" {
-		t.Fatalf("expected 'hello', got %q", out)
-	}
-}
-
-func TestRunCommand_Error(t *testing.T) {
-	t.Parallel()
-	_, err := RunCommand("false")
-	if err == nil {
-		t.Fatal("expected error from false")
-	}
-}
-
-func TestRunCommandOutput_Success(t *testing.T) {
-	t.Parallel()
-	out, err := RunCommandOutput("echo", "world")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "world" {
-		t.Fatalf("expected 'world', got %q", out)
-	}
-}
-
-func TestRunCommandOutput_Error(t *testing.T) {
-	t.Parallel()
-	_, err := RunCommandOutput("false")
-	if err == nil {
-		t.Fatal("expected error from false")
-	}
-}
-
-func TestRunShellScript_Success(t *testing.T) {
-	t.Parallel()
-	out, err := RunShellScript("cat", []byte("test input"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(out) != "test input" {
-		t.Fatalf("expected 'test input', got %q", out)
-	}
-}
-
-func TestRunShellScript_Error(t *testing.T) {
-	t.Parallel()
-	_, err := RunShellScript("exit 1", nil)
-	if err == nil {
-		t.Fatal("expected error from failing script")
-	}
-}
-
 func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 	t.Parallel()
 	var stdout strings.Builder
@@ -112,37 +55,6 @@ func TestGitLog_InvalidRepo(t *testing.T) {
 	}
 	if out != "" {
 		t.Fatalf("expected empty output for invalid repo, got %q", out)
-	}
-}
-
-func TestParseWorktreePorcelain_ExcludesPrunableWorktreeBranches(t *testing.T) {
-	t.Parallel()
-	out := "worktree /repo\n" +
-		"HEAD abc123\n" +
-		"branch refs/heads/main\n" +
-		"\n" +
-		"worktree /path/to/deleted/worktree\n" +
-		"HEAD def456\n" +
-		"branch refs/heads/task/foo\n" +
-		"prunable gitdir file points to non-existent location\n" +
-		"\n" +
-		"worktree /path/to/live/worktree\n" +
-		"HEAD ghi789\n" +
-		"branch refs/heads/task/bar\n"
-
-	branches := parseWorktreePorcelain(out)
-
-	if !branches["main"] {
-		t.Error("expected main (no prunable line) to be live")
-	}
-	if branches["task/foo"] {
-		t.Error("expected task/foo (prunable worktree) to be excluded")
-	}
-	if !branches["task/bar"] {
-		t.Error("expected task/bar (no prunable line, no trailing blank) to be live")
-	}
-	if len(branches) != 2 {
-		t.Errorf("expected exactly 2 live branches, got %d: %v", len(branches), branches)
 	}
 }
 

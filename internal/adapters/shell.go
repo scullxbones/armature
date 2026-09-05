@@ -60,53 +60,6 @@ func RunProcessWithEnv(ctx context.Context, workdir string, cmdArgs []string, ex
 	return ProcessClean, nil
 }
 
-// ===== Shell Execution (from hooks/runner.go, worker/identity.go, config/context.go, doctor/doctor.go) =====
-
-// LookPath reports whether a binary is available in PATH.
-// It wraps exec.LookPath so callers do not need to import os/exec directly.
-func LookPath(file string) (string, error) {
-	return exec.LookPath(file)
-}
-
-// RunCommand executes a shell command with args and returns combined output.
-// Returns error if exit code is non-zero.
-func RunCommand(name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204: callers are internal; name is never raw user input
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to run %q: %s: %w", name, out, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-// RunCommandOutput executes a shell command with args and returns stdout output.
-// Returns error if exit code is non-zero.
-func RunCommandOutput(name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204: callers are internal; name is never raw user input
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to run %q: %w", name, err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-// RunShellScript executes a shell script (-c) with stdin input and returns stdout output.
-// scriptCmd is the command to pass to sh -c.
-// stdin provides input to the script's stdin.
-// Returns error if the command fails or output cannot be parsed as JSON.
-func RunShellScript(scriptCmd string, stdin []byte) ([]byte, error) {
-	cmd := exec.CommandContext(context.Background(), "sh", "-c", scriptCmd) //nolint:gosec // G204: script is caller-controlled hook command, not user input
-	cmd.Stdin = bytes.NewReader(stdin)
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("script execution failed: %w", err)
-	}
-
-	return stdout.Bytes(), nil
-}
-
 // GitConfig reads a git config value from a repo.
 // repoPath is the repo root; key is the config key (e.g. "armature.worker-id").
 // Returns error if the key is not set or git fails.
@@ -139,84 +92,6 @@ func GitLog(repoPath string, args ...string) (string, error) {
 		return "", nil
 	}
 	return string(out), nil
-}
-
-// GitWorktreeBranches returns the set of branch names that currently have a live
-// worktree registered against repoPath (via `git worktree list --porcelain`).
-// Used to detect claims whose task worktree was torn down (or never existed)
-// out from under an active claim.
-//
-// If repoPath is empty, this is treated as a deliberate "no repo to check"
-// request: it returns an empty set with a nil error. Any other failure (git
-// not found, `-C repoPath` not a git repo, a transient git error) is
-// propagated as a non-nil error — callers MUST NOT treat an error as "no live
-// worktrees exist"; a git failure means liveness could not be determined, and
-// a caller that used that empty map to conclude "no worktree" for every
-// branch would misfire the same way for a transient failure as for a real
-// missing worktree.
-func GitWorktreeBranches(repoPath string) (map[string]bool, error) {
-	if repoPath == "" {
-		return map[string]bool{}, nil
-	}
-	//nolint:gosec // G204: "git" is constant; args are internal
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git worktree list --porcelain in %s: %w", repoPath, err)
-	}
-	return parseWorktreePorcelain(string(out)), nil
-}
-
-// parseWorktreePorcelain parses `git worktree list --porcelain` output into
-// the set of branch names with a live (non-prunable) worktree.
-//
-// Porcelain output is a sequence of blocks separated by blank lines, one per
-// worktree, e.g.:
-//
-//	worktree /path/to/worktree
-//	branch refs/heads/task/foo
-//
-// A worktree whose directory was deleted without `git worktree remove`/
-// `prune` gets an additional `prunable ...` line in its block:
-//
-//	worktree /path/to/deleted/worktree
-//	branch refs/heads/task/foo
-//	prunable gitdir file points to non-existent location
-//
-// Branches belonging to a block containing a `prunable` line are excluded —
-// their worktree is stale and should not be treated as live.
-func parseWorktreePorcelain(out string) map[string]bool {
-	const branchPrefix = "branch refs/heads/"
-	const prunablePrefix = "prunable "
-
-	branches := make(map[string]bool)
-	var blockBranch string
-	var blockPrunable bool
-
-	flush := func() {
-		if blockBranch != "" && !blockPrunable {
-			branches[blockBranch] = true
-		}
-		blockBranch = ""
-		blockPrunable = false
-	}
-
-	for line := range strings.SplitSeq(out, "\n") {
-		if line == "" {
-			flush()
-			continue
-		}
-		if after, ok := strings.CutPrefix(line, branchPrefix); ok {
-			blockBranch = after
-			continue
-		}
-		if strings.HasPrefix(line, prunablePrefix) {
-			blockPrunable = true
-		}
-	}
-	flush()
-
-	return branches
 }
 
 // ===== Hook Execution (from hooks/runner.go) =====

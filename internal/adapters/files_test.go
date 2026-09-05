@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -431,8 +432,12 @@ func TestWriteAndLoadConfigFile(t *testing.T) {
 	if err := WriteConfigFile(path, cfg{Mode: "dual"}); err != nil {
 		t.Fatal(err)
 	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var got cfg
-	if err := LoadConfigFile(path, &got); err != nil {
+	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.Mode != "dual" {
