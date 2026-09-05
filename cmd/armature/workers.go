@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
@@ -95,7 +96,7 @@ func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 
 	result := make(map[string][]ops.Op)
 	for _, logPath := range logFiles {
-		workerID := ops.WorkerIDFromFilename(logPath)
+		workerID := adapters.WorkerIDFromFilename(logPath)
 		logOps, err := ops.ReadLog(logPath)
 		if err != nil {
 			continue

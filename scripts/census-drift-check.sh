@@ -339,7 +339,7 @@ compare_lists "Relationship type (accepted input)" "$CODE_RELS" "$CENSUS_INPUT_R
 echo "Checking Provider Types..."
 
 CODE_PROVIDERS=$(awk '
-    /^func providerForType\(/ { in_func = 1; next }
+    /func \(r \*DefaultProviderRegistry\) ProviderForType\(/ { in_func = 1; next }
     in_func && /^}/ { exit }
     in_func && /case "/ {
         if (match($0, /case "[^"]+"/)) {
@@ -349,7 +349,7 @@ CODE_PROVIDERS=$(awk '
             print s
         }
     }
-' "$REPO_ROOT/cmd/armature/sources.go" | sort -u)
+' "$REPO_ROOT/internal/sources/lifecycle.go" | sort -u)
 
 CENSUS_PROVIDERS=$(sed -n '/^## Provider Types/,/^## [^#]/p' "$CENSUS_FILE" | \
     grep '| `' | sed 's/^| `\([^`]*\)`.*/\1/' | sort -u)

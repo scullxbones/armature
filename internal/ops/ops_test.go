@@ -170,9 +170,12 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 		Payload: Payload{Title: "Bad", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, op))
 
-	ops, err := ReadLogValidated(logPath, "worker-a1")
+	stream := NewValidatedOpStream()
+	stream.AddFile(logPath, "worker-a1")
+	items, warnings, err := stream.Load()
 	require.NoError(t, err)
-	assert.Len(t, ops, 0) // rejected — worker ID mismatch
+	assert.Len(t, items, 0) // rejected — worker ID mismatch
+	assert.NotEmpty(t, warnings)
 }
 
 func TestGenerateSchema(t *testing.T) {
@@ -309,22 +312,4 @@ func TestReadLogFromOffset_ManyOps(t *testing.T) {
 	result, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	assert.Len(t, result, count)
-}
-
-func TestWorkerIDFromFilename_PlainLog(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85.log"))
-}
-
-func TestWorkerIDFromFilename_SlottedLog(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85~a.log"))
-	assert.Equal(t, "3357fe85", WorkerIDFromFilename("/issues/ops/3357fe85~slot-99.log"))
-}
-
-func TestWorkerIDFromFilename_BasenameOnly(t *testing.T) {
-	t.Parallel()
-	// no directory prefix
-	assert.Equal(t, "worker-x", WorkerIDFromFilename("worker-x.log"))
-	assert.Equal(t, "worker-x", WorkerIDFromFilename("worker-x~b.log"))
 }

@@ -129,16 +129,6 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 	return items, physicalEOF, warnings, nil
 }
 
-// LoadFromDirValidated loads all ops from a directory of .log files, validating
-// that each op's worker ID matches its filename's worker ID (including slot suffix).
-// Returns items, warnings, and error.
-// Each op's worker ID is compared against the full filename worker ID (with slot suffix preserved).
-// Mismatched ops are excluded, and warnings are returned for them.
-func LoadFromDirValidated(opsDir string) ([]OpItem, []string, error) {
-	items, _, warnings, err := LoadFromDirWithOffsetsValidated(opsDir)
-	return items, warnings, err
-}
-
 // LoadFromDirWithOffsetsValidated loads all ops from a directory of .log files,
 // validating worker IDs and returning byte offsets for checkpoint tracking.
 // Returns items, a map of log filename -> byte offset (end position), warnings, and error.

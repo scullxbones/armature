@@ -451,7 +451,7 @@ func TestSourcesSyncCommand_WithFilesystemSource(t *testing.T) {
 		"--url", docFile, "--type", "filesystem", "--title", "Spec"})
 	require.NoError(t, cmd1.Execute())
 
-	// Sync — triggers providerForType
+	// Sync through the lifecycle provider registry.
 	buf := new(bytes.Buffer)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf)

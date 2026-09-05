@@ -187,16 +187,6 @@ func (c *Client) CurrentBranch() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// CommitMessage returns the commit message for a given SHA.
-func (c *Client) CommitMessage(sha string) (string, error) {
-	cmd := c.cmd("log", "-1", "--pretty=%B", sha)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get commit message for %s: %w", sha, err)
-	}
-	return string(output), nil
-}
-
 // IsCommitOnBranch checks if a commit is reachable on a branch.
 func (c *Client) IsCommitOnBranch(sha, branch string) (bool, error) {
 	cmd := c.cmd("merge-base", "--is-ancestor", sha, branch)
@@ -952,31 +942,6 @@ func (c *Client) RemovePartiallyProvisionedWorktree(path string) error {
 	return nil
 }
 
-// DiffFrom returns the unified diff between the given base commit and HEAD.
-func (c *Client) DiffFrom(baseSHA string) (string, error) {
-	cmd := c.cmd("diff", baseSHA, "HEAD")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git diff %s HEAD: %w", baseSHA, err)
-	}
-	return string(out), nil
-}
-
-// DiffNameOnly returns the list of file names that differ between the given
-// base commit and HEAD.
-func (c *Client) DiffNameOnly(baseSHA string) ([]string, error) {
-	cmd := c.cmd("diff", "--name-only", baseSHA, "HEAD")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git diff --name-only %s HEAD: %w", baseSHA, err)
-	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return []string{}, nil
-	}
-	return strings.Split(raw, "\n"), nil
-}
-
 // DiffStatusEntry represents one line of `git diff --name-status` output.
 // Status is the raw git status code (e.g. "A", "M", "D", or "R100" for a
 // rename with a 100% similarity score). For renames, OldPath is the source
@@ -1007,17 +972,6 @@ func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
 	return parseNameStatusZ(out), nil
 }
 
-// CommitDiffTreeStatus returns the per-path status (added/modified/deleted/
-// renamed/copied) that a single commit sha introduced relative to its first
-// parent (`git diff-tree --no-commit-id --name-status -M -C -z -r <sha^1>
-// <sha>`), with rename/copy detection enabled so a content-preserving rename
-// reports
-// both its source and destination paths rather than collapsing to a
-// delete+add. Like DiffNameStatus, -z is used so non-ASCII/special-character
-// paths are returned unquoted and unescaped rather than requiring the caller
-// to decode git's quoted diff-header path format.
-//
-// A bare "diff-tree ... <sha>" (no explicit parent) suppresses output
 // parseNameStatusZ parses the NUL-delimited output shared by `git diff
 // --name-status -z` and `git diff-tree --name-status -z`: a flat sequence of
 // NUL-terminated fields (no per-line \t separator): status, path, status,
@@ -1055,26 +1009,6 @@ func (c *Client) ResetHard(ref string) error {
 	cmd := c.cmd("reset", "--hard", ref)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git reset --hard %s: %w\n%s", ref, err, out)
-	}
-	return nil
-}
-
-// ApplyPatch applies a unified-diff patch to the working tree via
-// "git apply". Returns an error if the patch cannot be applied.
-func (c *Client) ApplyPatch(patch []byte) error {
-	cmd := c.cmd("apply")
-	cmd.Stdin = strings.NewReader(string(patch))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git apply: %w\n%s", err, out)
-	}
-	return nil
-}
-
-// AddAll stages all changes in the working tree (equivalent to "git add -A").
-func (c *Client) AddAll() error {
-	out, err := c.runMutatingWithRetry("git add -A", "add", "-A")
-	if err != nil {
-		return fmt.Errorf("git add -A: %w\n%s", err, out)
 	}
 	return nil
 }

@@ -202,20 +202,6 @@ func newSourcesVerifyCmd() *cobra.Command {
 	}
 }
 
-// providerForType returns the appropriate Provider for the given type string.
-func providerForType(providerType string) (sources.Provider, error) {
-	switch providerType {
-	case "filesystem":
-		return &sources.FilesystemProvider{}, nil
-	case "confluence":
-		return sources.NewConfluenceProvider("", sources.Credentials{}), nil
-	case "sharepoint":
-		return sources.NewSharePointProvider("", sources.Credentials{}), nil
-	default:
-		return nil, fmt.Errorf("unknown provider type %q", providerType)
-	}
-}
-
 func newSourcesLinkCmd() *cobra.Command {
 	cmd := newSourceLinkCmd()
 	cmd.Use = "link [issue-id]"
