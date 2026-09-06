@@ -373,8 +373,8 @@ func TestApplyClaimOp_DoesNotOverrideActiveClaimFromDifferentWorker(t *testing.T
 
 // TestApplyHeartbeatOp_NonClaimantHeartbeatDoesNotBumpLastHeartbeat verifies
 // that a heartbeat op from a worker who is NOT the current claimant does not
-// extend LastHeartbeat. LastHeartbeat feeds directly into claim.IsClaimStale /
-// doctor's claimExpired staleness formula, so an errant or malicious
+// extend LastHeartbeat. LastHeartbeat feeds directly into claim.IsClaimStale,
+// so an errant or malicious
 // non-claimant heartbeat must not be able to mask a genuinely stale claim
 // (PR #84 review: "Ignore non-claimant heartbeats for expiry").
 func TestApplyHeartbeatOp_NonClaimantHeartbeatDoesNotBumpLastHeartbeat(t *testing.T) {

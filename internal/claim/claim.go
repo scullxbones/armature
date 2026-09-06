@@ -50,12 +50,13 @@ func HasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
 // when available, or 0 when the caller has no such value (max() with 0 is a
 // no-op, preserving prior behavior at call sites that can't source it).
 //
-// This mirrors claimExpired in internal/doctor/fix.go: a claim transitioned by
-// its claimant (e.g. claimed->in-progress) moments before the naive TTL window
-// closes bumps LastClaimingWorkerActivity without touching LastHeartbeat, which
-// is reserved for explicit heartbeat ops. Folding claimingWorkerActivity into
-// the staleness calculation prevents that fresh transition from being read as
-// an expired claim.
+// materialize.Issue.ClaimStale delegates here so ready, doctor --fix, and
+// claim races share one formula: a claim transitioned by its claimant (e.g.
+// claimed->in-progress) moments before the naive TTL window closes bumps
+// LastClaimingWorkerActivity without touching LastHeartbeat, which is reserved
+// for explicit heartbeat ops. Folding claimingWorkerActivity into the
+// staleness calculation prevents that fresh transition from being read as an
+// expired claim.
 func IsClaimStale(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMinutes int, now int64) bool {
 	if ttlMinutes <= 0 {
 		return false

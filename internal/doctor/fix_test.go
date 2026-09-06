@@ -281,7 +281,7 @@ func TestPlanFixes_InProgressTransitionCountsAsActivity(t *testing.T) {
 }
 
 // TestPlanFixes_ThirdPartyNoteDoesNotResetClaimExpiry reproduces the P1 finding
-// from the deep review of PR #84: claimExpired originally folded
+// from the deep review of PR #84: claim expiry originally folded
 // issue.Updated into its liveness formula, but Updated is bumped by every op
 // handler in internal/materialize/engine.go (applyNote, applyLink, etc.), none
 // of which check op.WorkerID against issue.ClaimedBy. So a coordinator (or any
