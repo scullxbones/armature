@@ -105,7 +105,7 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 		if issue == nil || issue.Status != ops.StatusInProgress || fixed[id] {
 			continue
 		}
-		if !claimExpired(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, nowUnix) {
+		if !issue.ClaimStale(nowUnix) {
 			continue
 		}
 		actions = append(actions, blockStarvedInProgress(id, issue, workerID, nowUnix))
@@ -190,33 +190,6 @@ func ApplyFixes(logPath, worktreePath string, actions []FixAction, gc ops.GitCom
 		}
 	}
 	return nil
-}
-
-// claimExpired mirrors the staleness formula used by ready.StaleClaims, for the
-// in-progress case that StaleClaims itself does not cover (it only inspects
-// StatusClaimed). It additionally folds in `claimingWorkerActivity`
-// (materialize.Issue.LastClaimingWorkerActivity) alongside
-// claimedAt/lastHeartbeat: applyTransition in internal/materialize/engine.go
-// deliberately leaves LastHeartbeat untouched on a claimed->in-progress
-// transition (that field is reserved for explicit heartbeat ops), so without
-// this a claim transitioned to in-progress moments before its TTL window
-// closes would read as claim-expired here even though the transition itself is
-// fresh worker activity.
-//
-// LastClaimingWorkerActivity is bumped only by applyClaim, applyHeartbeat, and
-// applyTransition, and only when the op's WorkerID matches the issue's
-// ClaimedBy — unlike the general-purpose Issue.Updated field (bumped by every
-// op handler regardless of author), this field can't be reset by a third
-// party's note, link, or other unrelated op. See the P1 finding on PR #84: a
-// naive use of Updated here would let ANY worker's activity on the issue mask
-// the claiming worker's actual staleness, causing doctor --fix and `arm ready`
-// to disagree about whether a claim is expired.
-func claimExpired(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMinutes int, now int64) bool {
-	if ttlMinutes <= 0 {
-		return false
-	}
-	lastActivity := max(claimedAt, lastHeartbeat, claimingWorkerActivity)
-	return now > lastActivity+int64(ttlMinutes)*60
 }
 
 func releaseExpiredClaim(id string, issue *materialize.Issue, workerID string, now int64) FixAction {

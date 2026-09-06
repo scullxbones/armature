@@ -34,9 +34,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		currentTime = now[0]
 	}
 
-	// Build a Graph projection for depth calculations during sorting.
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
+	graph := graphFromIndex(index)
 
 	var ready []ReadyEntry
 
@@ -60,10 +58,8 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		if issue != nil && issue.Provenance.Confidence == "draft" {
 			continue
 		}
-		if issue != nil && issue.ClaimedBy != "" {
-			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, currentTime) {
-				continue
-			}
+		if issue != nil && issue.ClaimedBy != "" && !issue.ClaimStale(currentTime) {
+			continue
 		}
 
 		re := ReadyEntry{
@@ -114,10 +110,8 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 			continue
 		}
 		// Skip issues that are actively claimed (not stale).
-		if issue != nil && issue.ClaimedBy != "" {
-			if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, currentTime) {
-				continue
-			}
+		if issue != nil && issue.ClaimedBy != "" && !issue.ClaimStale(currentTime) {
+			continue
 		}
 
 		// Check each gate in order and record the first failing one.
@@ -178,19 +172,6 @@ func allBlockersMerged(blockers []string, index materialize.Index) bool {
 	return true
 }
 
-// isClaimStale mirrors claim.IsClaimStale, folding claimingWorkerActivity
-// (materialize.Issue.LastClaimingWorkerActivity) into the staleness window so
-// `arm ready`'s expired-claims computation agrees with doctor --fix about
-// whether a claim is expired.
-func isClaimStale(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMinutes int, now int64) bool {
-	if ttlMinutes <= 0 {
-		return false
-	}
-	lastActivity := max(claimedAt, lastHeartbeat, claimingWorkerActivity)
-	ttlSeconds := int64(ttlMinutes) * 60
-	return now > lastActivity+ttlSeconds
-}
-
 var priorityOrder = map[string]int{
 	"critical": 0,
 	"high":     1,
@@ -245,9 +226,7 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 
 // CollectDescendants returns the set of all descendant IDs of root (not including root itself).
 func CollectDescendants(root string, index materialize.Index) map[string]bool {
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-	descendants := graph.Descendants(root)
+	descendants := graphFromIndex(index).Descendants(root)
 
 	result := make(map[string]bool)
 	for _, id := range descendants {
@@ -256,23 +235,20 @@ func CollectDescendants(root string, index materialize.Index) map[string]bool {
 	return result
 }
 
-// materializeIndexToNodeIndex converts a materialize.Index to a map suitable for dag.FromIndex.
-func materializeIndexToNodeIndex(index materialize.Index) map[string]*dag.Node {
-	nodeIndex := make(map[string]*dag.Node)
+// graphFromIndex projects a materialize.Index into a dag.Graph. Slices are
+// copied so callers can mutate index entries without corrupting the graph.
+func graphFromIndex(index materialize.Index) *dag.Graph {
+	nodeIndex := make(map[string]*dag.Node, len(index))
 	for id, entry := range index {
-		node := &dag.Node{
+		nodeIndex[id] = &dag.Node{
 			ID:        id,
 			Title:     entry.Title,
 			Type:      entry.Type,
 			Parent:    entry.Parent,
-			Children:  make([]string, len(entry.Children)),
-			BlockedBy: make([]string, len(entry.BlockedBy)),
-			Blocks:    make([]string, len(entry.Blocks)),
+			Children:  append([]string(nil), entry.Children...),
+			BlockedBy: append([]string(nil), entry.BlockedBy...),
+			Blocks:    append([]string(nil), entry.Blocks...),
 		}
-		copy(node.Children, entry.Children)
-		copy(node.BlockedBy, entry.BlockedBy)
-		copy(node.Blocks, entry.Blocks)
-		nodeIndex[id] = node
 	}
-	return nodeIndex
+	return dag.FromIndex(nodeIndex)
 }

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/claim"
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +22,6 @@ func TestComputeWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1(t *testing.T) {
 		{Issue: "task-4", Title: "Task 4", Priority: "high", Scope: []string{"src/util/**"}},
 	}
 
-	// Build minimal index and graph
 	index := materialize.Index{
 		"task-1": {Title: "Task 1", Type: "task"},
 		"task-2": {Title: "Task 2", Type: "task"},
@@ -31,10 +29,7 @@ func TestComputeWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-4": {Title: "Task 4", Type: "task"},
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	// Verify that critical tasks come in waves before high-priority tasks
 	// Find the last wave index containing critical tasks
@@ -72,7 +67,7 @@ func TestComputeWaves_CustomPriorityTiersAreDeterministicAndComplete(t *testing.
 		{Issue: "custom-beta", Priority: "beta", Scope: []string{"beta/**"}},
 	}
 
-	waves := PartitionWaves(entries, materialize.Index{}, nil)
+	waves := PartitionWaves(entries, materialize.Index{})
 
 	var got []string
 	for _, wave := range waves {
@@ -86,7 +81,7 @@ func TestComputeWaves_CustomPriorityTiersAreDeterministicAndComplete(t *testing.
 
 	reversed := []ReadyEntry{entries[4], entries[3], entries[2], entries[1], entries[0]}
 	var gotReversed []string
-	for _, wave := range PartitionWaves(reversed, materialize.Index{}, nil) {
+	for _, wave := range PartitionWaves(reversed, materialize.Index{}) {
 		for _, entry := range wave {
 			gotReversed = append(gotReversed, entry.Issue)
 		}
@@ -114,10 +109,7 @@ func TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.T)
 		"task-4": {Title: "Task 4", Type: "task"},
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	// Verify that items with high conflict are placed before items with low conflict
 	// task-1, task-2, task-4 all have overlapping scopes with each other
@@ -150,34 +142,12 @@ func TestComputeWaves_AncestorDescendantExclusion_REQ_LNGHZN_S2_T1(t *testing.T)
 	}
 
 	index := materialize.Index{
-		"story-1": {Title: "Story 1", Type: "story"},
+		"story-1": {Title: "Story 1", Type: "story", Children: []string{"task-1"}},
 		"task-1":  {Title: "Task 1", Type: "task", Parent: "story-1"},
 		"task-2":  {Title: "Task 2", Type: "task"},
 	}
 
-	nodeIndex := map[string]*dag.Node{
-		"story-1": {
-			ID:       "story-1",
-			Title:    "Story 1",
-			Type:     "story",
-			Children: []string{"task-1"},
-		},
-		"task-1": {
-			ID:     "task-1",
-			Title:  "Task 1",
-			Type:   "task",
-			Parent: "story-1",
-		},
-		"task-2": {
-			ID:    "task-2",
-			Title: "Task 2",
-			Type:  "task",
-		},
-	}
-
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	// Verify that story-1 and task-1 are not in the same wave
 	for _, wave := range waves {
@@ -218,10 +188,7 @@ func TestComputeWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-5": {Title: "Task 5", Type: "task"},
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	// Verify that the number of waves is reasonable
 	// We have 5 entries with 3 disjoint scope families (auth, api, db)
@@ -255,10 +222,7 @@ func TestComputeWaves_EmptyInput_REQ_LNGHZN_S2_T1(t *testing.T) {
 
 	entries := []ReadyEntry{}
 	index := materialize.Index{}
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	assert.Empty(t, waves, "Empty input should produce empty output")
 }
@@ -275,10 +239,7 @@ func TestComputeWaves_SingleEntry_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-1": {Title: "Task 1", Type: "task"},
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	require.Len(t, waves, 1, "Single entry should produce one wave")
 	require.Len(t, waves[0], 1, "Single entry wave should have one entry")
@@ -302,10 +263,7 @@ func TestComputeWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-3": {Title: "Task 3", Type: "task"},
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	// All entries should fit in a single wave since scopes don't overlap
 	require.Len(t, waves, 1, "All disjoint scopes should fit in one wave")
@@ -336,10 +294,7 @@ func TestComputeWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-3": {Title: "Task 3", Type: "task"},
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	// All entries have overlapping scopes, so they should be in separate waves
 	require.Len(t, waves, 3, "All conflicting scopes should create separate waves")
@@ -368,10 +323,7 @@ func TestComputeWaves_SiblingFilesInSameDirectoryShareAWave_REQ_LNGHZN_S10_T6(t 
 		"task-2": {Title: "Task 2", Type: "task"},
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
-
-	waves := PartitionWaves(entries, index, graph)
+	waves := PartitionWaves(entries, index)
 
 	require.Len(t, waves, 1, "distinct sibling files in the same directory must not conflict, so both entries share one wave")
 	require.Len(t, waves[0], 2, "both entries should be in the single wave")

@@ -16,10 +16,11 @@ import (
 // so items likely to conflict are considered first for placement.
 // Ancestor/descendant pairs are excluded from being placed in the same wave.
 // Returns a slice of waves, where each wave is a slice of ReadyEntry.
-func PartitionWaves(entries []ReadyEntry, index materialize.Index, graph *dag.Graph) [][]ReadyEntry {
+func PartitionWaves(entries []ReadyEntry, index materialize.Index) [][]ReadyEntry {
 	if len(entries) == 0 {
 		return [][]ReadyEntry{}
 	}
+	graph := graphFromIndex(index)
 
 	// Group entries by priority tier
 	tierMap := make(map[string][]ReadyEntry)

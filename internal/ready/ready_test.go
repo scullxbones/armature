@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -217,45 +216,6 @@ func TestReadyTask_NoWorkerID_NoAssignmentOrdering(t *testing.T) {
 	assert.Equal(t, "task-b", ready[1].Issue)
 }
 
-func TestIsClaimStale_ExactBoundary_NotStale(t *testing.T) {
-	t.Parallel()
-	// claimedAt=0, ttl=1min, now=60 — exactly at boundary, should NOT be stale
-	assert.False(t, isClaimStale(0, 0, 0, 1, 60), "at exact TTL boundary should not be stale")
-}
-
-func TestIsClaimStale_OnePastBoundary_IsStale(t *testing.T) {
-	t.Parallel()
-	// now=61 (1 second past 1-minute TTL)
-	assert.True(t, isClaimStale(0, 0, 0, 1, 61))
-}
-
-func TestIsClaimStale_ZeroTTL_NeverStale(t *testing.T) {
-	t.Parallel()
-	assert.False(t, isClaimStale(0, 0, 0, 0, 99999))
-}
-
-func TestIsClaimStale_HeartbeatExtends(t *testing.T) {
-	t.Parallel()
-	// Claimed at 0, heartbeat at 100, TTL=1min
-	// Without heartbeat: stale at now=61
-	// With heartbeat: not stale until now=160
-	assert.False(t, isClaimStale(0, 100, 0, 1, 130))
-	assert.True(t, isClaimStale(0, 100, 0, 1, 161))
-}
-
-// TestIsClaimStale_ClaimingWorkerActivityExtends verifies that ready's
-// isClaimStale folds LastClaimingWorkerActivity into the staleness window the
-// same way internal/claim.IsClaimStale and internal/doctor's claimExpired do,
-// so `arm ready`'s expired-claims computation agrees with `doctor --fix` about
-// whether a claim is expired (PR #84 review: "Count claiming-worker
-// transitions in ready expiry").
-func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
-	t.Parallel()
-	// claimedAt=0, lastHeartbeat=0, claimingWorkerActivity=100, TTL=1min.
-	assert.False(t, isClaimStale(0, 0, 100, 1, 130))
-	assert.True(t, isClaimStale(0, 0, 100, 1, 161))
-}
-
 func TestStaleClaims_ClaimingWorkerActivityPreventsStale(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(200, 0)
@@ -380,8 +340,7 @@ func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 		index[id] = materialize.IndexEntry{Parent: parent}
 	}
 
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
+	graph := graphFromIndex(index)
 	d := graph.Depth("issue-24")
 	assert.Equal(t, 24, d, "depth should be 24 (distance to root)")
 }
@@ -423,16 +382,14 @@ func TestDepth_NoParent(t *testing.T) {
 	index := materialize.Index{
 		"task-01": {Parent: ""},
 	}
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
+	graph := graphFromIndex(index)
 	assert.Equal(t, 0, graph.Depth("task-01"))
 }
 
 func TestDepth_MissingFromIndex(t *testing.T) {
 	t.Parallel()
 	index := materialize.Index{}
-	nodeIndex := materializeIndexToNodeIndex(index)
-	graph := dag.FromIndex(nodeIndex)
+	graph := graphFromIndex(index)
 	assert.Equal(t, 0, graph.Depth("missing"))
 }
 

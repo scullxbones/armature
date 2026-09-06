@@ -20,7 +20,7 @@ func StaleClaims(issues map[string]*materialize.Issue, now time.Time) []string {
 		if issue.Status != ops.StatusClaimed {
 			continue
 		}
-		if isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, nowUnix) {
+		if issue.ClaimStale(nowUnix) {
 			stale = append(stale, id)
 		}
 	}
@@ -58,7 +58,7 @@ func ExpiredClaims(issues map[string]*materialize.Issue, now time.Time) []Expire
 		if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
 			continue
 		}
-		if !isClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, nowUnix) {
+		if !issue.ClaimStale(nowUnix) {
 			continue
 		}
 		expired = append(expired, ExpiredClaimEntry{

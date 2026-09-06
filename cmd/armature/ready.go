@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/scullxbones/armature/internal/dag"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -114,25 +113,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			switch {
 			case format == "json" || format == "agent" || tui.IsNonInteractive():
 				if waves {
-					// Partition ready entries into scope-disjoint waves
-					nodeIndex := make(map[string]*dag.Node)
-					for id, entry := range index {
-						node := &dag.Node{
-							ID:        id,
-							Title:     entry.Title,
-							Type:      entry.Type,
-							Parent:    entry.Parent,
-							Children:  make([]string, len(entry.Children)),
-							BlockedBy: make([]string, len(entry.BlockedBy)),
-							Blocks:    make([]string, len(entry.Blocks)),
-						}
-						copy(node.Children, entry.Children)
-						copy(node.BlockedBy, entry.BlockedBy)
-						copy(node.Blocks, entry.Blocks)
-						nodeIndex[id] = node
-					}
-					graph := dag.FromIndex(nodeIndex)
-					wavesData := ready.PartitionWaves(entries, index, graph)
+					wavesData := ready.PartitionWaves(entries, index)
 					if err := output.RenderReadyWaves(cmd.OutOrStdout(), wavesData); err != nil {
 						return err
 					}

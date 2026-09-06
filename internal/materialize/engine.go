@@ -141,10 +141,9 @@ func (s *State) applyHeartbeat(op ops.Op) error {
 		return nil
 	}
 	issue.Updated = op.Timestamp
-	// LastHeartbeat feeds directly into claim.IsClaimStale / doctor's
-	// claimExpired staleness formula, so only the claiming worker's heartbeat
-	// may extend it — a non-claimant's heartbeat must not be able to mask a
-	// genuinely stale claim.
+	// LastHeartbeat feeds directly into claim.IsClaimStale, so only the
+	// claiming worker's heartbeat may extend it — a non-claimant's heartbeat
+	// must not be able to mask a genuinely stale claim.
 	if op.WorkerID == issue.ClaimedBy {
 		issue.LastHeartbeat = op.Timestamp
 		issue.LastClaimingWorkerActivity = op.Timestamp
