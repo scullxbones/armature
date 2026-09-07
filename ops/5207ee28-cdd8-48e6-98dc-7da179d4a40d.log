@@ -5071,3 +5071,4 @@
 ["citation-accepted","HOOKMSG-1",1788821760,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"The dogfood finding is the originating evidence for this bug: it captured the JSON-prefixed commit subject, the stdout error-envelope mechanism, and the hook source, all of which the fix acts on directly."}]
 ["transition","AOC-S1-T3",1788822473,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"136"}]
 ["heartbeat","HOOKMSG-1",1788823054,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
+["transition","AOC-S1-T3",1788824399,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","outcome":"Retroactive evidence: PR #136 merged to main at fdf3f3b6 2026-09-07T22:52:44Z. Original merged transition at 23:07:53Z recorded no branch or PR; appended per I2 (never rewritten).","branch":"task/AOC-S1-T3","pr":"136"}]
