@@ -1,1 +1,0 @@
-/workspace/armature/bin/arm --repo /tmp/arm-verify-target.lj6zpi show --issue TASK-VERIFY-CREATE --field status,title,type

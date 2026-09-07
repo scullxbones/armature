@@ -1,3 +1,0 @@
-open
-Verification create+list
-task
