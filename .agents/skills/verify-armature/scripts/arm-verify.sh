@@ -926,13 +926,27 @@ drive_ready_claim() {
   # commit runs prepare-commit-msg/post-commit. Their failures (no origin to
   # push ops to; the active-claim lookup) print error envelopes that would
   # otherwise escape to the operator's terminal with no evidence trail.
-  capture drive/00-seed-commit git -C "$TARGET_REPO" commit -q -m "docs: seed files for ready-claim"
+  # Hooks invoke bare `arm`; launch only builds $SOURCE_ROOT/bin/arm and never
+  # puts that directory on PATH. Without it, command-not-found is suppressed
+  # (commit still exits 0, empty evidence) or an older installed arm is used.
+  capture drive/00-seed-commit env "PATH=$(dirname -- "$ARM_BIN"):$PATH" git -C "$TARGET_REPO" commit -q -m "docs: seed files for ready-claim"
   assert_exit_0 drive/00-seed-commit
   # prepare-commit-msg writes the active-claim error into COMMIT_EDITMSG, not
   # the commit process's stdout/stderr. Capture the subject before cleanup
   # deletes the only repo that still has it.
   capture drive/00-seed-commit-subject git -C "$TARGET_REPO" log -1 --format=%s
   assert_exit_0 drive/00-seed-commit-subject
+  local seed_subject seed_err
+  seed_subject=$(tr -d '\r' <"$EVIDENCE_DIR/drive/00-seed-commit-subject/stdout.txt")
+  case "$seed_subject" in
+    *GENERAL-1*|*'active-claim'*) ;;
+    *) die "seed commit subject was not mutated by prepare-commit-msg (built arm not on PATH?): $seed_subject" ;;
+  esac
+  seed_err=$(cat "$EVIDENCE_DIR/drive/00-seed-commit/stderr.txt")
+  case "$seed_err" in
+    *'push-ops: push failed'*) ;;
+    *) die "seed commit stderr did not capture post-commit push-ops failure (built arm not on PATH?); see $EVIDENCE_DIR/drive/00-seed-commit/stderr.txt" ;;
+  esac
   # Absolute URL: the filesystem provider resolves a relative source URL
   # against the process cwd, not --repo, so a relative README.md would cite
   # the caller's checkout (or fail) instead of this isolated target repo.

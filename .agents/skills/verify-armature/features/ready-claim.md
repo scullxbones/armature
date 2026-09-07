@@ -49,7 +49,7 @@ Evidence: `evidence/<run-id>/drive/05-ready/` through `11-ops/`. Proof 6 is asse
 - `claim` without `--worktree` is usage failure.
 - Claim also refuses on worktree-integrity grounds the happy path never shows: a `--worktree` path that `is not an existing worktree of this repository`; a worktree `already bound to` a **different** issue; an **unbound** detached HEAD; or an issue at `confidence=inferred` (which routes you to `arm confirm`). Re-claim of a worktree already bound to the **same** issue succeeds, including a detached HEAD mid-rebase (`checkExistingWorktreeBinding` in `cmd/armature/claim.go`).
 - A **lost claim race** does not fail: it returns a different, wider object (`{issue, claimed:false, claimed_by, reason:"lost_claim_race", superseded_by_same_worker}`). Success has no `claimed` field (`{issue, claimed_by, ttl}`). Reject the explicit `claimed:false` / `reason:"lost_claim_race"` shape; do not treat a missing `claimed` as failure.
-- The target repo's git hooks fire on the seed commit this drive makes; see the hook landmine in [bootstrap.md](bootstrap.md).
+- The target repo's git hooks fire on the seed commit this drive makes; see the hook landmine in [bootstrap.md](bootstrap.md). The helper puts the just-built `$SOURCE_ROOT/bin` first on `PATH` for that commit so hooks invoke this checkout's `arm`, not a missing or older binary.
 - Interactive `arm ready` can claim from the TUI; that is not the agent path.
 - Expired claims are **not** in the ready array; they print as a JSON array on **stderr** under agent/json.
 - Scope overlap with another claimed/in-progress task warns; `--force` to proceed.
