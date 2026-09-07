@@ -278,25 +278,6 @@ func TestHookPreRunAndArgsStayOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.NotEmpty(t, preErr.String(), "git protocol requires a stderr reason when context resolution fails")
 	assert.NotContains(t, preErr.String(), `"code":"GENERAL-1"`)
 
-	ctx := getTestContext(t, repo)
-	workerID, logPath, err := resolveWorkerAndLog(ctx)
-	require.NoError(t, err)
-	require.NoError(t, ops.AppendOp(logPath, ops.Op{
-		Type:      ops.OpClaim,
-		TargetID:  "task-01",
-		Timestamp: nowEpoch(),
-		WorkerID:  workerID,
-		Payload:   ops.Payload{TTL: 60},
-	}))
-
-	ioOut := new(bytes.Buffer)
-	ioErr := new(bytes.Buffer)
-	missing := filepath.Join(notRepo, "COMMIT_EDITMSG")
-	code = executeThenHandleRootError(t, ioOut, ioErr, "hook", "run", "prepare-commit-msg", missing, "--repo", repo, "--format", "json")
-	assert.Equal(t, 1, code)
-	assert.Empty(t, ioOut.String(), "prepare-commit-msg IO must not emit a Command Failure on stdout")
-	assert.Contains(t, ioErr.String(), "commit message file")
-	assert.NotContains(t, ioErr.String(), `"code":"GENERAL-1"`)
 }
 
 func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {

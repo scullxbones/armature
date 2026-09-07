@@ -87,7 +87,7 @@ For each combination, it specifies:
 
 **Prevention:**
 
-- Use `prepare-commit-msg` hook to stamp issue ID in commits automatically.
+- Follow the mandatory conventional-commit scope (`type(ISSUE-ID): ...`, see `docs/conventions.md`) so every commit carries its issue ID.
 - `arm doctor D1` should trigger before any merge to protected main.
 - Coordinator should verify `arm doctor` passes before opening PRs.
 
