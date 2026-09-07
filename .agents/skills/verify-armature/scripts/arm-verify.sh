@@ -928,6 +928,11 @@ drive_ready_claim() {
   # otherwise escape to the operator's terminal with no evidence trail.
   capture drive/00-seed-commit git -C "$TARGET_REPO" commit -q -m "docs: seed files for ready-claim"
   assert_exit_0 drive/00-seed-commit
+  # prepare-commit-msg writes the active-claim error into COMMIT_EDITMSG, not
+  # the commit process's stdout/stderr. Capture the subject before cleanup
+  # deletes the only repo that still has it.
+  capture drive/00-seed-commit-subject git -C "$TARGET_REPO" log -1 --format=%s
+  assert_exit_0 drive/00-seed-commit-subject
   # Absolute URL: the filesystem provider resolves a relative source URL
   # against the process cwd, not --repo, so a relative README.md would cite
   # the caller's checkout (or fail) instead of this isolated target repo.
