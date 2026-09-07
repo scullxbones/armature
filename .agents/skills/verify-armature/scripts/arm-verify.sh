@@ -464,6 +464,9 @@ cmd_launch() {
   git -C "$TARGET_REPO" config user.name "arm-verify"
   git -C "$TARGET_REPO" config commit.gpgsign false
   git -C "$TARGET_REPO" config init.defaultBranch main
+  # GIT_CONFIG_NOSYSTEM does not ignore ~/.gitconfig. A global core.hooksPath
+  # (hook managers) would skip $TARGET/.git/hooks after bootstrap; pin local.
+  git -C "$TARGET_REPO" config core.hooksPath "$TARGET_REPO/.git/hooks"
   git -C "$TARGET_REPO" commit --allow-empty -q -m "init"
   git -C "$TARGET_REPO" branch -M main
 
@@ -929,7 +932,7 @@ drive_ready_claim() {
   # Hooks invoke bare `arm`; launch only builds $SOURCE_ROOT/bin/arm and never
   # puts that directory on PATH. Without it, command-not-found is suppressed
   # (commit still exits 0, empty evidence) or an older installed arm is used.
-  capture drive/00-seed-commit env "PATH=$(dirname -- "$ARM_BIN"):$PATH" git -C "$TARGET_REPO" commit -q -m "docs: seed files for ready-claim"
+  capture drive/00-seed-commit env "PATH=$(dirname -- "$ARM_BIN"):$PATH" git -C "$TARGET_REPO" -c "core.hooksPath=$TARGET_REPO/.git/hooks" commit -q -m "docs: seed files for ready-claim"
   assert_exit_0 drive/00-seed-commit
   # prepare-commit-msg writes the active-claim error into COMMIT_EDITMSG, not
   # the commit process's stdout/stderr. Capture the subject before cleanup
