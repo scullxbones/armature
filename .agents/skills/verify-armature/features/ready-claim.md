@@ -9,6 +9,7 @@
 - `--waves` partitions ready items by disjoint scope (json/agent only)
 - `claim --worktree` required; omit the value for `.worktrees/<issue-id>` on branch `task/<id>` (or `fix/` / `feat/` by type)
 - `--ttl` minutes (default 60); `--force` overrides scope-overlap warning
+- `--from <parent-worktree-path>` creates the new task worktree from that parent worktree's current branch and tip; it requires an explicit `--worktree <new-path>` destination and refuses a detached-HEAD source
 - Claim stdout: `{"claimed_by":"<worker-uuid>","issue":"<id>","ttl":60}`
 
 ## How to get to it (user POV)
@@ -46,6 +47,9 @@ Evidence: `evidence/<run-id>/drive/05-ready/` through `11-ops/`. Proof 6 is asse
 - Fresh `create` is draft → `arm ready` prints `null` (empty). Promote with `arm dag transition --issue <id>` after `arm validate` is green.
 - `dag transition` fails on uncited nodes and other Graph Findings. Attach `--source` at create (or `sources link`) first.
 - `claim` without `--worktree` is usage failure.
+- Claim also refuses on worktree-integrity grounds the happy path never shows: a `--worktree` path that `is not an existing worktree of this repository`, one `already bound to <issue>`, one with `a detached HEAD`, or an issue at `confidence=inferred` (which routes you to `arm confirm`).
+- A **lost claim race** does not fail: it returns a different, wider object (`{issue, claimed:false, claimed_by, reason:"lost_claim_race", superseded_by_same_worker}`). Assert on `claimed` before trusting `claimed_by`.
+- The target repo's git hooks fire on the seed commit this drive makes; see the hook landmine in [bootstrap.md](bootstrap.md).
 - Interactive `arm ready` can claim from the TUI; that is not the agent path.
 - Expired claims are **not** in the ready array; they print as a JSON array on **stderr** under agent/json.
 - Scope overlap with another claimed/in-progress task warns; `--force` to proceed.

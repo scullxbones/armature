@@ -922,7 +922,12 @@ drive_ready_claim() {
   printf '# verify source\n' >"$TARGET_REPO/README.md"
   printf 'package ready\n' >"$TARGET_REPO/ready.go"
   git -C "$TARGET_REPO" add README.md ready.go
-  git -C "$TARGET_REPO" commit -q -m "docs: seed files for ready-claim"
+  # Captured, not bare: bootstrap installs git hooks unconditionally, so this
+  # commit runs prepare-commit-msg/post-commit. Their failures (no origin to
+  # push ops to; the active-claim lookup) print error envelopes that would
+  # otherwise escape to the operator's terminal with no evidence trail.
+  capture drive/00-seed-commit git -C "$TARGET_REPO" commit -q -m "docs: seed files for ready-claim"
+  assert_exit_0 drive/00-seed-commit
   # Absolute URL: the filesystem provider resolves a relative source URL
   # against the process cwd, not --repo, so a relative README.md would cite
   # the caller's checkout (or fail) instead of this isolated target repo.
