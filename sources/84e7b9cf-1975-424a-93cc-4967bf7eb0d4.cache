@@ -1181,7 +1181,7 @@ The ready-task blocker rule requires `status == "merged"`, not `done`. This ensu
 
 `arm bootstrap` installs hooks from `.armature/hooks/` into `.git/hooks/`. **Git hooks are convenience, never enforcement.** Every action a git hook performs is also available as an explicit CLI command. The system is correct without git hooks installed.
 
-**Important distinction:** Git hooks (this section) are convenience automation for heartbeats, commit-message stamping, and merge promotion. Pre-transition verification hooks (section 12) configured as `required: true` in `.armature/config.json` are **enforcement** — the CLI refuses to emit a `done` transition if a required verification hook fails, regardless of whether git hooks are installed. These are separate mechanisms with different trust models.
+**Important distinction:** Git hooks (this section) are convenience automation for heartbeats, commit-message stamping, and merge promotion. Pre-transition verification hooks (section 12) in `.armature/config.json` are **enforcement** — the CLI refuses to append the transition unless every hook exits 0 and prints `{"allowed":true}`. The `required` field is unused; there is no optional-failure path and hooks are not limited to `--to done`. These are separate mechanisms with different trust models.
 
 | Hook | Trigger | Action |
 |---|---|---|
@@ -1216,22 +1216,21 @@ Verification hooks are configured in `.armature/config.json` on the ops branch, 
   "hooks": [
     {
       "name": "tests",
-      "command": ["npm", "test", "--", "--testPathPattern={scope}"],
-      "required": true
+      "command": ["sh", "-c", "make test >/dev/null && echo '{\"allowed\":true}'"]
     },
     {
       "name": "typecheck",
-      "command": ["npx", "tsc", "--noEmit"],
-      "required": true
+      "command": ["sh", "-c", "npx tsc --noEmit >/dev/null && echo '{\"allowed\":true}'"]
     },
     {
       "name": "lint",
-      "command": ["npx", "eslint", "{scope}"],
-      "required": false
+      "command": ["sh", "-c", "make lint >/dev/null && echo '{\"allowed\":true}'"]
     }
   ]
 }
 ```
+
+Each hook has `name` (identifier) and `command` (argv). A `required` key still decodes but the runner ignores it. The command must print JSON on stdout: `{"allowed":true}` or `{"allowed":false,"message":"..."}`. A non-zero exit, invalid JSON, or `allowed: false` rejects the transition. Ordinary command output (test logs, compiler text) is invalid JSON and blocks even on exit 0. See [configuration.md](../configuration.md) for the field-level schema.
 
 ### Project Type Detection
 
@@ -1248,23 +1247,24 @@ Verification hooks are configured in `.armature/config.json` on the ops branch, 
 
 The detected project type is recorded in `.armature/config.json` as `project_type`. However, **no pre-transition hooks are auto-configured** — bootstrap creates an empty `hooks` array. If you want to add pre-transition verification (tests, linting, typechecking), manually edit `.armature/config.json` and add hook entries to the `hooks` field. See the "Hook Configuration" section above for the JSON structure and examples.
 
-### `{scope}` Interpolation
+### No `{scope}` interpolation
 
-Replaced at runtime with the task's `scope.modify` paths (space-separated for CLI args, or glob patterns depending on the tool). This is the bridge between the ops data model and the code verification tools.
+The runner does not rewrite `command`. A literal `{scope}` token is passed through to the process. Put the paths you want in the argv yourself.
 
-### Required vs Optional Hooks
+### Every hook is blocking
 
-Required hooks block the transition — if they fail, the CLI refuses to emit the `done` op. Optional hooks report results but do not block. This distinction lets teams include aspirational checks (lint) without gating on them.
+`HookConfig.required` is unused. Hooks run in array order on every `arm transition`, not only `--to done`. Any hook that fails, prints invalid JSON, or returns `allowed: false` blocks the transition; there is no aspirational / report-only hook.
 
-### Exit Code Semantics
+### Allow protocol
 
-| Exit Code | Meaning | Worker Action |
+| Result | Meaning | Worker action |
 |---|---|---|
-| `0` | Pass | Proceed with transition |
-| `1` | Test/lint failure (actionable) | Fix code, re-run |
-| Other | Environment error (not actionable) | Report issue, move on |
+| exit 0 and `{"allowed":true}` | Pass | Proceed with transition |
+| `{"allowed":false,"message":"..."}` | Rejected | Fix the stated reason, re-run |
+| non-zero exit | Hook failed | Fix the command or the code it checks |
+| exit 0, non-JSON stdout | Invalid output | Change the command so success prints `{"allowed":true}` |
 
-This distinction matters for AI agents: a test failure means "fix your code," an environment error means "report the issue and move on."
+Passing tests still block unless stdout is that JSON object. Hooks inherit the caller's process cwd (typically the code worktree); the runner does not set the command directory to the ops worktree.
 
 ### Phase Separation
 
@@ -1702,28 +1702,20 @@ The transition op records `branch` and `pr` fields, bridging the ops history (on
 
 ```json
 {
-  "version": 1,
+  "project_type": "go",
+  "default_ttl": 60,
   "token_budget": 1600,
-  "claim_ttl_default": 60,
-  "staleness_threshold_days": 7,
-  "max_dod_length": 200,
-  "max_description_length": 500,
-  "required_acceptance_types": ["test_passes", "no_regression"],
-  "pre_transition_hooks": [
+  "low_stakes_push_threshold": 5,
+  "hooks": [
     {
-      "cmd": "npm test -- --testPathPattern={scope}",
-      "label": "tests",
-      "required": true,
-      "exit_codes": {"0": "pass", "1": "test_failure", "*": "environment_error"}
+      "name": "tests",
+      "command": ["sh", "-c", "make test >/dev/null && echo '{\"allowed\":true}'"]
     }
-  ],
-  "templates": {
-    "task": ".armature/templates/task.json",
-    "story": ".armature/templates/story.json",
-    "epic": ".armature/templates/epic.json"
-  }
+  ]
 }
 ```
+
+Unknown keys fail strict decode. A present `0` for `default_ttl`, `token_budget`, or `low_stakes_push_threshold` is D10-invalid; omit the field to get the builtin fallback. Hook objects are `name` plus `command` argv; `required` is unused and `{scope}` is not interpolated. See [configuration.md](../configuration.md).
 
 ### Worker Configuration
 
@@ -1835,7 +1827,7 @@ These decisions are locked and should not be revisited without significant new e
 - Free-text structured citation (not tagged source doc annotation) for v1
 - File-level (not section-level) fingerprinting for v1
 - `state/` directory is materialized output, local-only (never committed to ops branch), never source of truth
-- Git hooks are convenience; pre-transition verification hooks configured as `required` in config.json are enforcement
+- Git hooks are convenience; pre-transition verification hooks in config.json are enforcement (JSON allow protocol; any failure blocks the transition)
 - Decision conflicts resolved by last-write-wins (timestamp), with W8 validation warning
 - Compaction deferred until materialization is measured slow
 - Adversarial decomposition deferred, human gate is sufficient
