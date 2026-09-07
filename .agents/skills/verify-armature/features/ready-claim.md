@@ -9,7 +9,7 @@
 - `--waves` partitions ready items by disjoint scope (json/agent only)
 - `claim --worktree` required; omit the value for `.worktrees/<issue-id>` on branch `task/<id>` (or `fix/` / `feat/` by type)
 - `--ttl` minutes (default 60); `--force` overrides scope-overlap warning
-- `--from <parent-worktree-path>` creates the new task worktree from that parent worktree's current branch and tip; it requires an explicit `--worktree <new-path>` destination and refuses a detached-HEAD source
+- `--from <parent-worktree-path>` creates the new task worktree from that parent worktree's current branch and tip. `--from` must already be a worktree of this repository (`is not an existing worktree of this repository`) and must be on a branch. It requires an explicit `--worktree <new-path>` destination, which must not already exist (`new worktree path … must not exist`).
 - Claim stdout: `{"claimed_by":"<worker-uuid>","issue":"<id>","ttl":60}`
 
 ## How to get to it (user POV)
@@ -47,7 +47,7 @@ Evidence: `evidence/<run-id>/drive/05-ready/` through `11-ops/`. Proof 6 is asse
 - Fresh `create` is draft → `arm ready` prints `null` (empty). Promote with `arm dag transition --issue <id>` after `arm validate` is green.
 - `dag transition` fails on uncited nodes and other Graph Findings. Attach `--source` at create (or `sources link`) first.
 - `claim` without `--worktree` is usage failure.
-- Claim also refuses on worktree-integrity grounds the happy path never shows: a `--worktree` path that `is not an existing worktree of this repository`; a worktree `already bound to` a **different** issue; an **unbound** detached HEAD; or an issue at `confidence=inferred` (which routes you to `arm confirm`). Re-claim of a worktree already bound to the **same** issue succeeds, including a detached HEAD mid-rebase (`checkExistingWorktreeBinding` in `cmd/armature/claim.go`).
+- Claim also refuses on worktree-integrity grounds the happy path never shows: `--from` that `is not an existing worktree of this repository` (or is detached HEAD); an explicit `--worktree` destination that already exists; a worktree `already bound to` a **different** issue; an **unbound** detached HEAD; or an issue at `confidence=inferred` (which routes you to `arm confirm`). Re-claim of a worktree already bound to the **same** issue succeeds, including a detached HEAD mid-rebase (`checkExistingWorktreeBinding` in `cmd/armature/claim.go`). Do not pre-create the `--worktree` destination for `--from`.
 - A **lost claim race** does not fail: it returns a different, wider object (`{issue, claimed:false, claimed_by, reason:"lost_claim_race", superseded_by_same_worker}`). Success has no `claimed` field (`{issue, claimed_by, ttl}`). Reject the explicit `claimed:false` / `reason:"lost_claim_race"` shape; do not treat a missing `claimed` as failure.
 - The target repo's git hooks fire on the seed commit this drive makes; see the hook landmine in [bootstrap.md](bootstrap.md). The helper puts the just-built `$SOURCE_ROOT/bin` first on `PATH` for that commit so hooks invoke this checkout's `arm`, not a missing or older binary.
 - Interactive `arm ready` can claim from the TUI; that is not the agent path.
