@@ -152,11 +152,12 @@ func TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6(t *testing.T) {
 	assert.Equal(t, Ambiguous, res)
 }
 
-// TestAnyBound_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6 pins the difference
-// between the two questions. Existence asks "is any worktree bound to this
-// issue?" and answers YES where selection refuses, because finding one PREVENTS
-// a destructive act (doctor releasing a live claim) rather than causing one.
-func TestAnyBound_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
+// TestLocateBinding_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6 pins the
+// difference between the two questions. Existence is LocateBinding !=
+// BindingNone: it answers YES where selection refuses, because finding one
+// PREVENTS a destructive act (doctor releasing a live claim) rather than
+// causing one.
+func TestLocateBinding_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
 	t.Parallel()
 
 	dup := []Meta{
@@ -164,23 +165,28 @@ func TestAnyBound_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
 		{Path: "/repo/.worktrees/task-01", Binding: "task-01"},
 	}
 
-	// The defining case: selection is Ambiguous here, existence is true. A live
-	// claim owning two bound worktrees must never be reported as having none.
+	// The defining case: selection is Ambiguous here, existence is not none. A
+	// live claim owning two bound worktrees must never be reported as having none.
 	_, res := SelectByIssue(dup, "task-01", "")
 	require.Equal(t, Ambiguous, res)
-	assert.True(t, AnyBound(dup, "task-01", ""))
+	loc, _ := LocateBinding(dup, "task-01", "")
+	assert.Equal(t, BindingAmbiguous, loc)
 
-	// No bound entry -> false.
-	assert.False(t, AnyBound([]Meta{{Path: "/other", Binding: "other"}}, "task-01", ""))
+	// No bound entry -> none.
+	loc, _ = LocateBinding([]Meta{{Path: "/other", Binding: "other"}}, "task-01", "")
+	assert.Equal(t, BindingNone, loc)
 
-	// One bound entry, no recorded path -> true.
+	// One bound entry, no recorded path -> at recorded path.
 	single := []Meta{{Path: "/legacy/explicit", Binding: "task-01"}}
-	assert.True(t, AnyBound(single, "task-01", ""))
+	loc, _ = LocateBinding(single, "task-01", "")
+	assert.Equal(t, BindingAtRecordedPath, loc)
 
 	// A recorded path may drift after `git worktree move`; the binding is still
 	// live evidence and must suppress destructive claim release.
-	assert.True(t, AnyBound(dup, "task-01", "/repo/.worktrees/task-01"))
-	assert.True(t, AnyBound(single, "task-01", "/repo/.worktrees/task-01"))
+	loc, _ = LocateBinding(dup, "task-01", "/repo/.worktrees/task-01")
+	assert.NotEqual(t, BindingNone, loc)
+	loc, _ = LocateBinding(single, "task-01", "/repo/.worktrees/task-01")
+	assert.Equal(t, BindingElsewhere, loc)
 }
 
 // TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5 verifies a managed

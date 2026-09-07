@@ -197,7 +197,9 @@ const (
 // disambiguate anything.
 //
 // For the opposite question — "is ANY worktree bound to this issue?", where
-// over-inclusion is the safe direction — use AnyBound.
+// over-inclusion is the safe direction — use LocateBinding and treat
+// BindingNone as absence. BindingAmbiguous and BindingElsewhere are still
+// live evidence (doctor must not release a claim that still owns a worktree).
 func SelectByIssue(items []Meta, id, worktreePath string) (Meta, Resolution) {
 	bound := boundEntries(items, id)
 	switch len(bound) {
@@ -250,27 +252,6 @@ func LocateBinding(items []Meta, id, recordedPath string) (BindingLocation, stri
 		return BindingAtRecordedPath, path
 	}
 	return BindingElsewhere, path
-}
-
-// AnyBound reports whether any inventory entry is bound to id.
-//
-// This is an EXISTENCE question: "does this issue still own a live worktree
-// here?" It is deliberately over-inclusive, and NEVER usable to choose a
-// target — it returns no entry precisely so its answer cannot reach a
-// destructive operation. Use SelectByIssue for that.
-//
-// Over-inclusion is the safe direction here because a positive answer PREVENTS
-// an action: doctor uses this to decide whether a claimed issue's worktree has
-// vanished, and answering "none" for an issue that owns two bound worktrees
-// would release a live worker's claim. Where SelectByIssue reports Ambiguous,
-// this reports true.
-//
-// A binding at a different path is still positive evidence: `git worktree
-// move` retains the binding while the historical claim path remains unchanged.
-// Doctor reports that path drift but must never release the live claim.
-func AnyBound(items []Meta, id, worktreePath string) bool {
-	location, _ := LocateBinding(items, id, worktreePath)
-	return location != BindingNone
 }
 
 // boundEntries returns the entries whose binding names id.

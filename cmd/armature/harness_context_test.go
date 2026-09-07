@@ -3,12 +3,11 @@ package main
 import (
 	"testing"
 
-	"github.com/scullxbones/armature/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildHarnessStructuredContext_IncludesIssueIDAndCoreLayer(t *testing.T) {
+func TestRenderContext_IncludesIssueIDAndCoreLayer(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -24,11 +23,7 @@ func TestBuildHarnessStructuredContext_IncludesIssueIDAndCoreLayer(t *testing.T)
 	)
 	require.NoError(t, err)
 
-	appCtx, err := config.ResolveContext(repo)
-	require.NoError(t, err)
-	appCtx.Config.TokenBudget = 1 // keep heuristic; force aggressive truncation
-
-	rendered, err := buildHarnessStructuredContext(appCtx, "TASK-CTX")
+	rendered, err := runTrls(t, repo, "render-context", "--issue", "TASK-CTX", "--format", "agent", "--budget", "1")
 	require.NoError(t, err)
 
 	assert.Contains(t, rendered, `"issue_id": "TASK-CTX"`)

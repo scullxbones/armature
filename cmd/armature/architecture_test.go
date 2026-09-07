@@ -35,7 +35,7 @@ func TestHandlersDoNotReloadStateDirectly_REQ_ARCHIMP_S14_T6(t *testing.T) {
 	// actively protects them against regressions).
 	scope := []string{
 		"create.go", "assign.go", "dagsum.go", "confirm.go", "list.go",
-		"context_history.go", "decompose.go", "harness_context.go", "hook.go",
+		"context_history.go", "decompose.go", "hook.go",
 		"scope_delete.go", "merged.go", "scope_rename.go", "ready.go",
 		"reparent.go", "show.go", "stalereview.go", "sync.go", "tui.go", "validate.go",
 		"transition.go",
