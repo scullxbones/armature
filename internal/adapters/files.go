@@ -707,19 +707,6 @@ func MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// ReadDir lists all entries in a directory.
-// Returns empty slice if directory does not exist.
-func ReadDir(dir string) ([]os.DirEntry, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []os.DirEntry{}, nil
-		}
-		return nil, err
-	}
-	return entries, nil
-}
-
 // Stat returns file info for a path.
 // Returns nil if path does not exist.
 func Stat(path string) (os.FileInfo, error) {

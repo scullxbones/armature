@@ -16,8 +16,7 @@ type EvaluatorConfig struct {
 
 // DefaultEvaluator is the standard policy evaluator for harness hook events.
 type DefaultEvaluator struct {
-	cfg                 EvaluatorConfig
-	lastScopeViolations []string // violations from the most recent PreToolUse evaluation
+	cfg EvaluatorConfig
 }
 
 // NewEvaluator constructs a DefaultEvaluator from the provided config.
@@ -38,9 +37,6 @@ func (e *DefaultEvaluator) Evaluate(_ context.Context, event Event) (Decision, e
 }
 
 func (e *DefaultEvaluator) evaluatePreToolUse(event Event) Decision {
-	// Clear any previous scope violations
-	e.lastScopeViolations = nil
-
 	if isDirectCommitCommand(event.Command) {
 		return Decision{
 			Action:  DecisionBlock,
@@ -52,19 +48,9 @@ func (e *DefaultEvaluator) evaluatePreToolUse(event Event) Decision {
 	}
 	result := e.cfg.ScopePolicy.CheckPaths(event.Paths)
 	if !result.Allowed {
-		// Record the scope violations for logging
-		for _, v := range result.Violations {
-			e.lastScopeViolations = append(e.lastScopeViolations, v.Path)
-		}
 		return Decision{Action: DecisionBlock, Message: result.Message()}
 	}
 	return Decision{Action: DecisionAllow, Message: "path is within task scope"}
-}
-
-// LastScopeViolations returns the scope violations detected in the most recent PreToolUse evaluation.
-// The hook can use this to log violations even when the decision is allow/block/none.
-func (e *DefaultEvaluator) LastScopeViolations() []string {
-	return e.lastScopeViolations
 }
 
 func (e *DefaultEvaluator) evaluateStop() Decision {

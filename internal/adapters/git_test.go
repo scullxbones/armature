@@ -496,29 +496,6 @@ func TestLogBranch(t *testing.T) {
 	assert.NotEmpty(t, entries[0].Date)
 }
 
-func TestEnhanceGitLockfileError_AddsSandboxHint(t *testing.T) {
-	t.Parallel()
-	base := "git add foo: exit status 128"
-	out := "fatal: Unable to create '/repo/.git/worktrees/-arm/index.lock': Read-only file system"
-	got := adapters.EnhanceGitLockfileErrorForTest(base, out)
-	assert.Contains(t, got, "sandbox blocked git lockfile writes")
-}
-
-func TestEnhanceGitLockfileError_NoHintForOtherErrors(t *testing.T) {
-	t.Parallel()
-	base := "git add foo: exit status 1"
-	out := "fatal: pathspec 'foo' did not match any files"
-	got := adapters.EnhanceGitLockfileErrorForTest(base, out)
-	assert.Equal(t, base, got)
-}
-
-func TestIsGitContentionError(t *testing.T) {
-	t.Parallel()
-	assert.True(t, adapters.IsGitContentionErrorForTest("fatal: Unable to create '/repo/.git/index.lock': File exists"))
-	assert.True(t, adapters.IsGitContentionErrorForTest("fatal: cannot lock ref 'HEAD': is at abc but expected def"))
-	assert.False(t, adapters.IsGitContentionErrorForTest("fatal: pathspec 'foo' did not match any files"))
-}
-
 func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

@@ -657,34 +657,6 @@ func TestMkdirAll_CreatesDirectory(t *testing.T) {
 	}
 }
 
-func TestReadDir_ReturnsDirEntries(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte(""), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	entries, err := ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
-}
-
-func TestReadDir_MissingDir_ReturnsEmpty(t *testing.T) {
-	t.Parallel()
-
-	entries, err := ReadDir("/nonexistent/dir")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("expected empty, got %v", entries)
-	}
-}
-
 func TestStat_ReturnsFileInfo(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

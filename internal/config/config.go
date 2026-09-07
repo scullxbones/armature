@@ -71,21 +71,6 @@ func ParseGates(data []byte) (map[string]GateConfig, error) {
 	return gates, nil
 }
 
-// LoadGates reads the worktree gates.json at checkoutRoot. A missing file is
-// an empty map (no error). arm gate run does not use this: it reads the
-// HEAD blob via ShowFileAtCommit so skip-worktree cannot substitute a command.
-func LoadGates(checkoutRoot string) (map[string]GateConfig, error) {
-	path := filepath.Join(checkoutRoot, GatesFileName)
-	if !adapters.StatFile(path) {
-		return nil, nil
-	}
-	data, err := os.ReadFile(path) //nolint:gosec // path is checkoutRoot/gates.json
-	if err != nil {
-		return nil, err
-	}
-	return ParseGates(data)
-}
-
 func WriteConfig(path string, cfg Config) error {
 	return adapters.WriteConfigFile(path, cfg)
 }

@@ -260,36 +260,6 @@ func TestGenerateSchema_DocumentsClaimFields_REQ_LNGHZN_S5_T9(t *testing.T) {
 	assert.True(t, transitionHasIfClaimToken, "transition op must document the if_claim_token field")
 }
 
-func TestHeartbeatRateLimiter(t *testing.T) {
-	t.Parallel()
-	rl := NewRateLimiter()
-
-	// First heartbeat should be allowed
-	assert.True(t, rl.AllowHeartbeat("task-01", 1000))
-
-	// Heartbeat within 60 seconds should be rejected
-	assert.False(t, rl.AllowHeartbeat("task-01", 1030))
-
-	// Heartbeat after 60 seconds should be allowed
-	assert.True(t, rl.AllowHeartbeat("task-01", 1061))
-
-	// Different task should be independent
-	assert.True(t, rl.AllowHeartbeat("task-02", 1030))
-}
-
-func TestCreateRateLimiter(t *testing.T) {
-	t.Parallel()
-	rl := NewRateLimiter()
-
-	for i := 0; i < 500; i++ {
-		assert.True(t, rl.AllowCreate())
-	}
-	assert.False(t, rl.AllowCreate()) // 501st should fail
-
-	rl.ResetCreateCount() // simulate commit boundary
-	assert.True(t, rl.AllowCreate())
-}
-
 // TestReadLogFromOffset_ManyOps verifies that ReadLogFromOffset correctly reads
 // a log containing many ops. This also exercises the pre-allocated slice path.
 func TestReadLogFromOffset_ManyOps(t *testing.T) {

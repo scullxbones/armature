@@ -183,22 +183,10 @@ const (
 	worktreeRemoved
 )
 
-// removeClaimExclusionAfterWorktreeRemoval removes a custom exclusion only
-// after Git has removed the linked worktree. The exclusion lock serializes this
-// check with claim-time exclusion updates, and the live inventory check keeps a
-// concurrently recreated destination protected.
-func removeClaimExclusionAfterWorktreeRemoval(repoPath, destination, pattern string) error {
-	if pattern == "" {
-		return nil
-	}
-	release, err := acquireGitExcludeLock(repoPath)
-	if err != nil {
-		return err
-	}
-	defer release()
-	return removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, destination, pattern)
-}
-
+// removeClaimExclusionAfterWorktreeRemovalLocked removes a custom exclusion
+// only after Git has removed the linked worktree. Callers must hold the
+// exclusion lock. The live inventory check keeps a concurrently recreated
+// destination protected.
 func removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, destination, pattern string) error {
 	if pattern == "" {
 		return nil

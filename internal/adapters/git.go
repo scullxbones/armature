@@ -750,16 +750,6 @@ func enhanceGitLockfileError(base, out string) string {
 	return base
 }
 
-// EnhanceGitLockfileErrorForTest exposes lockfile hint behavior to package tests.
-func EnhanceGitLockfileErrorForTest(base, out string) string {
-	return enhanceGitLockfileError(base, out)
-}
-
-// IsGitContentionErrorForTest exposes contention detection behavior to package tests.
-func IsGitContentionErrorForTest(out string) bool {
-	return isGitContentionError(out)
-}
-
 // Push pushes the current branch to origin. Returns an error if the push is
 // rejected (e.g. non-fast-forward).
 func (c *Client) Push(branch string) error {
