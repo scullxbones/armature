@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +67,15 @@ func TestCompletionCommand_UnknownShell(t *testing.T) {
 
 	err := root.Execute()
 	assert.Error(t, err, "unknown shell should return an error")
+}
+
+func TestCompletionCommandIsAlwaysArtifactOutput_REQ_AOC_S1_T3(t *testing.T) {
+	t.Parallel()
+
+	cmd := newCompletionCmd()
+	require.Equal(t, output.CitationShellCompletionGrammar, cmd.Annotations[output.ArtifactCitationKey])
+	require.Equal(t, output.ChannelArtifactOutput, output.Classify(cmd.Annotations))
+	require.Equal(t, output.ChannelArtifactOutput, output.ClassifyFlags(cmd.Annotations, map[string]bool{"help": true}))
 }
 
 func TestCompletionCommand_NoArgs(t *testing.T) {

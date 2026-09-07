@@ -3,13 +3,17 @@ package main
 import (
 	"fmt"
 
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 )
 
 func newCompletionCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:               "completion [bash|zsh|fish|powershell]",
-		Short:             "Generate shell completion script",
+		Use:   "completion [bash|zsh|fish|powershell]",
+		Short: "Generate shell completion script",
+		Annotations: output.MarkArtifactOutput(nil, output.ArtifactMode{
+			Citation: output.CitationShellCompletionGrammar,
+		}),
 		Args:              cobra.ExactArgs(1),
 		ValidArgs:         []string{"bash", "zsh", "fish", "powershell"},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },

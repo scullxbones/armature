@@ -13,6 +13,7 @@ import (
 	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +29,10 @@ func newDecomposeApplyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "apply",
 		Short: "Apply a decomposition plan to the issue graph",
+		Annotations: output.MarkArtifactOutput(nil, output.ArtifactMode{
+			Citation:       output.CitationPlanSchema,
+			WhenAnyFlagSet: []string{"schema", "example"},
+		}),
 		Long: `Create multiple related issues from a structured decomposition plan (JSON file).
 
 This command reads a JSON plan describing a hierarchy of issues (epics, stories, tasks)
