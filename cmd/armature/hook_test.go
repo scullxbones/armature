@@ -76,57 +76,6 @@ func TestHookRunPreCommit_SingleBranch(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestHookRunPrepareCommitMsg_NoActiveClaim verifies prepare-commit-msg is a no-op without active claim.
-func TestHookRunPrepareCommitMsg_NoActiveClaim(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Write a commit message file
-	msgFile := filepath.Join(t.TempDir(), "COMMIT_EDITMSG")
-	require.NoError(t, os.WriteFile(msgFile, []byte("feat: my commit\n"), 0644))
-
-	_, err := runTrls(t, repo, "hook", "run", "prepare-commit-msg", msgFile)
-	require.NoError(t, err)
-
-	// Without active claim, commit message should be unchanged
-	content, err := os.ReadFile(msgFile)
-	require.NoError(t, err)
-	assert.Equal(t, "feat: my commit\n", string(content))
-}
-
-// TestHookRunPrepareCommitMsg_WithActiveClaim verifies prepare-commit-msg prepends claim ID.
-func TestHookRunPrepareCommitMsg_WithActiveClaim(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Claim the task
-	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
-	require.NoError(t, err)
-
-	// Write a commit message file
-	msgFile := filepath.Join(t.TempDir(), "COMMIT_EDITMSG")
-	require.NoError(t, os.WriteFile(msgFile, []byte("feat: my commit\n"), 0644))
-
-	_, err = runTrls(t, repo, "hook", "run", "prepare-commit-msg", msgFile)
-	require.NoError(t, err)
-
-	// Should prepend task-01 to the commit message
-	content, err := os.ReadFile(msgFile)
-	require.NoError(t, err)
-	assert.Contains(t, string(content), "task-01")
-	assert.Contains(t, string(content), "feat: my commit")
-}
-
-// TestHookRunPrepareCommitMsg_MissingFile verifies error when commit msg file is missing.
-func TestHookRunPrepareCommitMsg_MissingFile(t *testing.T) {
-	repo := setupRepoWithTask(t)
-
-	// Claim the task
-	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
-	require.NoError(t, err)
-
-	_, err = runTrls(t, repo, "hook", "run", "prepare-commit-msg", "/nonexistent/COMMIT_EDITMSG")
-	assert.Error(t, err)
-}
-
 // TestHookSubcommandHelp verifies the hook subcommand help text.
 func TestHookSubcommandHelp(t *testing.T) {
 	buf := new(bytes.Buffer)
@@ -334,7 +283,7 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 //	→ scope-rename op for "task-index-only" is emitted → assertion PASSES.
 //
 // This approach is immune to the installed arm binary triggering materialization via
-// git hooks (prepare-commit-msg calls arm show, which materializes), since we're not
+// git hooks (post-commit sends a heartbeat, which materializes), since we're not
 // relying on checkpoint.json mtime but rather on what entries hookDetectScopeChanges sees.
 func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
@@ -345,9 +294,8 @@ func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 
 	// Add the scoped file, commit it, then rename it and commit again so that
 	// hookDetectScopeChanges sees a rename in HEAD~1..HEAD.
-	// All git commits are done BEFORE injecting the fake entry to ensure that the
-	// installed prepare-commit-msg hook (which calls arm show active-claim →
-	// snapshot.Load → materialization) cannot overwrite the fake entry.
+	// All git commits are done BEFORE injecting the fake entry so that an installed
+	// hook that materializes as a side effect cannot overwrite it.
 	writeFile(t, repo, "src/checkpoint.go", "package checkpoint")
 	run(t, repo, "git", "add", "src/checkpoint.go")
 	run(t, repo, "git", "commit", "-m", "add checkpoint.go")

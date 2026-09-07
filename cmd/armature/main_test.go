@@ -1069,21 +1069,6 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	assert.Contains(t, content, "arm push-ops")
 }
 
-func TestInit_WritesPrepareCommitMsgHookTemplate(t *testing.T) {
-	repo := initTempRepo(t)
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-
-	_, err := runTrls(t, repo, "bootstrap")
-	require.NoError(t, err)
-
-	hookPath := filepath.Join(repo, ".armature", "hooks", "prepare-commit-msg.sh.template")
-	data, err := os.ReadFile(hookPath)
-	require.NoError(t, err)
-	content := string(data)
-	assert.Contains(t, content, "claim")
-	assert.Contains(t, content, "prepare-commit-msg")
-}
-
 func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1091,14 +1076,12 @@ func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	// Check that all three hook templates are installed to .git/hooks/
+	// Check that the hook templates are installed to .git/hooks/
 	postCommitPath := filepath.Join(repo, ".git", "hooks", "post-commit")
 	postMergePath := filepath.Join(repo, ".git", "hooks", "post-merge")
-	prepareCommitMsgPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
 
 	assert.FileExists(t, postCommitPath)
 	assert.FileExists(t, postMergePath)
-	assert.FileExists(t, prepareCommitMsgPath)
 
 	// Check that hooks are executable
 	info, err := os.Stat(postCommitPath)
@@ -1108,10 +1091,6 @@ func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
 	info, err = os.Stat(postMergePath)
 	require.NoError(t, err)
 	assert.True(t, info.Mode()&0111 != 0, "post-merge hook should be executable")
-
-	info, err = os.Stat(prepareCommitMsgPath)
-	require.NoError(t, err)
-	assert.True(t, info.Mode()&0111 != 0, "prepare-commit-msg hook should be executable")
 }
 
 func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
@@ -1124,12 +1103,10 @@ func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
 	// Check that hooks are installed to .git/hooks/
 	postCommitPath := filepath.Join(repo, ".git", "hooks", "post-commit")
 	postMergePath := filepath.Join(repo, ".git", "hooks", "post-merge")
-	prepareCommitMsgPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
 	preCommitPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
 
 	assert.FileExists(t, postCommitPath)
 	assert.FileExists(t, postMergePath)
-	assert.FileExists(t, prepareCommitMsgPath)
 	assert.FileExists(t, preCommitPath)
 }
 

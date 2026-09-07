@@ -414,29 +414,6 @@ arm heartbeat 2>/dev/null
 arm push-ops 2>/dev/null || true
 `
 
-const prepareCommitMsgHookTemplate = `#!/bin/sh
-# armature:managed
-# Armature prepare-commit-msg hook: prepend active claim ID to commit message.
-# Branch-aware: skips on _armature since ops logs use automated messages.
-# To activate: cp this file to .git/hooks/prepare-commit-msg && chmod +x .git/hooks/prepare-commit-msg
-
-# Skip on _armature branch where ops logs use automated messages
-current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$current_branch" = "_armature" ]; then
-  exit 0
-fi
-
-# Get the active claim ID
-claim_id=$(arm show active-claim --field id 2>/dev/null)
-
-# If there's an active claim, prepend it to the commit message
-if [ -n "$claim_id" ]; then
-  commit_msg_file=$1
-  original_msg=$(cat "$commit_msg_file")
-  echo "$claim_id: $original_msg" > "$commit_msg_file"
-fi
-`
-
 const preCommitHookTemplate = `#!/bin/sh
 # armature:managed
 # Armature pre-commit hook: block ops log commits on code branches.
@@ -472,7 +449,7 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 		return nil, fmt.Errorf("create .git/hooks directory: %w", err)
 	}
 
-	hooks := []string{"pre-commit", "post-commit", "post-merge", "prepare-commit-msg"}
+	hooks := []string{"pre-commit", "post-commit", "post-merge"}
 	var skipped []string
 
 	for _, hook := range hooks {
@@ -489,10 +466,7 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 
 		// Skip hooks that exist but were not written by Armature.
 		if existing, readErr := os.ReadFile(hookPath); readErr == nil { //nolint:gosec // G304: internal hooks path
-			isArmatureManaged := strings.Contains(string(existing), "# armature:managed")
-			isLegacyArmatureHook := strings.HasPrefix(strings.TrimSpace(string(existing)), "#!/bin/sh") &&
-				strings.Contains(string(existing), "\n# Armature ")
-			if !isArmatureManaged && !isLegacyArmatureHook {
+			if !isArmatureManagedHook(string(existing)) {
 				skipped = append(skipped, hook)
 				continue
 			}
@@ -505,7 +479,55 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 		}
 	}
 
+	if err := removeObsoleteHooks(gitHooksDir, hooksDir); err != nil {
+		return skipped, err
+	}
+
 	return skipped, nil
+}
+
+// isArmatureManagedHook reports whether an installed hook's content was
+// written by Armature and is therefore safe to overwrite or remove. The
+// legacy form predates the explicit marker. This is the single decision point
+// for "do we own this hook file" so install and removal cannot drift on it.
+func isArmatureManagedHook(content string) bool {
+	if strings.Contains(content, "# armature:managed") {
+		return true
+	}
+	return strings.HasPrefix(strings.TrimSpace(content), "#!/bin/sh") &&
+		strings.Contains(content, "\n# Armature ")
+}
+
+// obsoleteHooks names hooks Armature used to install and no longer ships.
+// Dropping a template is not enough on its own: installHooks skips absent
+// templates, so an already-installed copy would keep running forever in every
+// existing clone. Bootstrap therefore removes our own copy, and leaves a hook
+// the user has since taken ownership of alone.
+var obsoleteHooks = []string{"prepare-commit-msg"}
+
+func removeObsoleteHooks(gitHooksDir, hooksDir string) error {
+	for _, hook := range obsoleteHooks {
+		templatePath := filepath.Join(hooksDir, hook+".sh.template")
+		if err := os.Remove(templatePath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove obsolete hook template %s: %w", hook, err)
+		}
+
+		hookPath := filepath.Join(gitHooksDir, hook)
+		existing, err := os.ReadFile(hookPath) //nolint:gosec // G304: internal hooks path
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("check obsolete hook %s: %w", hook, err)
+		}
+		if !isArmatureManagedHook(string(existing)) {
+			continue
+		}
+		if err := os.Remove(hookPath); err != nil {
+			return fmt.Errorf("remove obsolete hook %s: %w", hook, err)
+		}
+	}
+	return nil
 }
 
 // migrateLegacySingleBranchOps detects and migrates a pre-existing single-branch .armature/ops layout
@@ -1569,10 +1591,9 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	// Write hook templates to .armature/hooks/
 	hookTemplates := map[string]string{
-		"post-merge.sh.template":         postMergeHookTemplate,
-		"post-commit.sh.template":        postCommitHookTemplate,
-		"prepare-commit-msg.sh.template": prepareCommitMsgHookTemplate,
-		"pre-commit.sh.template":         preCommitHookTemplate,
+		"post-merge.sh.template":  postMergeHookTemplate,
+		"post-commit.sh.template": postCommitHookTemplate,
+		"pre-commit.sh.template":  preCommitHookTemplate,
 	}
 
 	for hookName, hookContent := range hookTemplates {

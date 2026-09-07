@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -101,13 +100,11 @@ Supported hooks:
   pre-commit          Block .armature/ops/ commits on code branches in dual-branch mode
   post-commit         Send heartbeat for active claim; push ops in dual-branch mode
   post-merge          Sync merged branches and auto-transition done issues
-  prepare-commit-msg  Prepend active claim ID to commit message
 
 Examples:
   arm hook run pre-commit
   arm hook run post-commit
-  arm hook run post-merge
-  arm hook run prepare-commit-msg .git/COMMIT_EDITMSG`,
+  arm hook run post-merge`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.MinimumNArgs(1)(cmd, args); err != nil {
 				return skipCommandFailure(err)
@@ -116,7 +113,6 @@ Examples:
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			hookName := args[0]
-			hookArgs := args[1:]
 
 			var err error
 			switch hookName {
@@ -126,10 +122,8 @@ Examples:
 				runPostCommitHook(cmd)
 			case "post-merge":
 				err = runPostMergeHook(cmd)
-			case "prepare-commit-msg":
-				err = runPrepareCommitMsgHook(cmd, hookArgs)
 			default:
-				err = fmt.Errorf("unknown hook %q: supported hooks are pre-commit, post-commit, post-merge, prepare-commit-msg", hookName)
+				err = fmt.Errorf("unknown hook %q: supported hooks are pre-commit, post-commit, post-merge", hookName)
 			}
 			// ADR 0020 §6: arm hook stays on the git protocol, not the
 			// agent Command Failure wire.
@@ -433,34 +427,3 @@ func runPostMergeHook(cmd *cobra.Command) error {
 
 // runPrepareCommitMsgHook implements the prepare-commit-msg hook logic natively.
 // If there is an active claim, prepends its ID to the commit message file.
-func runPrepareCommitMsgHook(cmd *cobra.Command, args []string) error {
-	appCtx := currentCtx(cmd)
-	if len(args) == 0 {
-		return fmt.Errorf("prepare-commit-msg requires a commit message file path argument")
-	}
-
-	// Skip on _armature branch
-	branch := hookCurrentBranch(appCtx.RepoPath)
-	if branch == "_armature" {
-		return nil
-	}
-
-	claimID := hookFindActiveClaimID(appCtx)
-	if claimID == "" {
-		return nil
-	}
-
-	msgFile := args[0]
-	original, err := os.ReadFile(msgFile) //nolint:gosec // G304: msgFile is the git-supplied commit message path from hook args
-	if err != nil {
-		return fmt.Errorf("read commit message file %q: %w", msgFile, err)
-	}
-
-	updated := claimID + ": " + string(original)
-	if err := os.WriteFile(msgFile, []byte(updated), 0o600); err != nil { //nolint:gosec // msgFile is git's COMMIT_EDITMSG path, not user-controlled
-		return fmt.Errorf("write commit message file %q: %w", msgFile, err)
-	}
-
-	_ = cmd // cmd not used directly for output in this hook
-	return nil
-}

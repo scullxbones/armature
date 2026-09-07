@@ -314,6 +314,46 @@ func TestRunRepoSetupWritesConfig(t *testing.T) {
 	require.NoError(t, statErr, "config.json should be created in worktree")
 }
 
+// TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1 guards the HOOKMSG-1 fix.
+// The hook prefixed the subject with the claim ID, which docs/conventions.md already requires
+// inside the commit scope; the prefix broke commitref's ^-anchored pattern and so the delivery
+// gate. Dropping the template alone would leave every existing clone running the old copy.
+func TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	hookPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
+	require.NoError(t, os.MkdirAll(filepath.Dir(hookPath), 0o750))
+	require.NoError(t, os.WriteFile(hookPath,
+		[]byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o755))
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, hookPath, "an Armature-managed prepare-commit-msg hook must be removed")
+	assert.NoFileExists(t, filepath.Join(repo, ".armature", "hooks", "prepare-commit-msg.sh.template"),
+		"the obsolete template must not be written back")
+}
+
+// TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1 verifies the removal is
+// scoped to hooks Armature wrote. A hook the user owns is theirs, not ours to delete.
+func TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	hookPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
+	require.NoError(t, os.MkdirAll(filepath.Dir(hookPath), 0o750))
+	userHook := "#!/bin/sh\n# my own hook\nexit 0\n"
+	require.NoError(t, os.WriteFile(hookPath, []byte(userHook), 0o755))
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(hookPath)
+	require.NoError(t, err)
+	assert.Equal(t, userHook, string(content), "a user-owned hook must be left untouched")
+}
+
 // TestInstallHooksExecutable verifies that installHooks makes hook files executable.
 func TestInstallHooksExecutable(t *testing.T) {
 	repo := initTempRepo(t)

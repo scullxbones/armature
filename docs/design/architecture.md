@@ -120,7 +120,7 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
   hooks/
     post-commit                # hook templates installed to .git/hooks/
     post-merge
-    prepare-commit-msg
+    pre-commit
   review/
     dag-summary.md             # generated at decomposition, audit artifact
 ```
@@ -193,7 +193,7 @@ The transition op records metadata needed for merge detection:
 ["transition","task-01",1740700900,"worker-a1",{"to":"done","outcome":"...","branch":"feat/task-01","pr":"#142"}]
 ```
 
-`branch` (feature branch name) and `pr` (PR/MR number) are both optional. They are used by the merge detection algorithm (section 10). The `prepare-commit-msg` hook ensures issue IDs appear in commit messages as the primary detection anchor.
+`branch` (feature branch name) and `pr` (PR/MR number) are both optional. They are used by the merge detection algorithm (section 10). The mandatory conventional-commit scope — `type(ISSUE-ID): ...`, see `docs/conventions.md` — is what puts issue IDs in commit messages as the primary detection anchor.
 
 ### Issue Statuses
 
@@ -1167,7 +1167,7 @@ The ready-task blocker rule requires `status == "merged"`, not `done`. This ensu
 
 ### Edge Cases
 
-**Squash-merge:** Commit-message scan (not ancestry) is the primary detection method, so squash-merges work as long as the issue ID appears in the squash commit message. The `prepare-commit-msg` hook ensures this.
+**Squash-merge:** Commit-message scan (not ancestry) is the primary detection method, so squash-merges work as long as the issue ID appears in the squash commit message. The conventional-commit scope required by `docs/conventions.md` provides it.
 
 **Abandoned PRs:** A task stuck at `done` with no PR merge triggers a staleness check. Configurable threshold (default: N days after `done` with no merge detected). Same pattern as expired claims — surfaced via `arm status`.
 
@@ -1181,15 +1181,16 @@ The ready-task blocker rule requires `status == "merged"`, not `done`. This ensu
 
 `arm bootstrap` installs hooks from `.armature/hooks/` into `.git/hooks/`. **Git hooks are convenience, never enforcement.** Every action a git hook performs is also available as an explicit CLI command. The system is correct without git hooks installed.
 
-**Important distinction:** Git hooks (this section) are convenience automation for heartbeats, commit-message stamping, and merge promotion. Pre-transition verification hooks (section 12) in `.armature/config.json` are **enforcement** — the CLI refuses to append the transition unless every hook exits 0 and prints `{"allowed":true}`. The `required` field is unused; there is no optional-failure path and hooks are not limited to `--to done`. These are separate mechanisms with different trust models.
+**Important distinction:** Git hooks (this section) are convenience automation for heartbeats and merge promotion. Pre-transition verification hooks (section 12) in `.armature/config.json` are **enforcement** — the CLI refuses to append the transition unless every hook exits 0 and prints `{"allowed":true}`. The `required` field is unused; there is no optional-failure path and hooks are not limited to `--to done`. These are separate mechanisms with different trust models.
 
 | Hook | Trigger | Action |
 |---|---|---|
 | `post-commit` | After any commit on a feature branch | Auto-emits heartbeat if worker has active claim; pushes to ops branch |
 | `post-merge` | After `git pull` brings new commits to main | Runs `arm materialize` to pick up newly merged tasks and auto-promote `done` → `merged` |
-| `prepare-commit-msg` | Before commit message editor opens | Prepends active claim's issue ID to commit message |
 
-The `post-commit` hook is the highest-leverage automation: every code commit becomes a heartbeat, eliminating the "remember to heartbeat" burden. The `prepare-commit-msg` hook ensures the commit-message convention needed for merge detection is enforced mechanically.
+The `post-commit` hook is the highest-leverage automation: every code commit becomes a heartbeat, eliminating the "remember to heartbeat" burden.
+
+A `prepare-commit-msg` hook that prepended the active claim's issue ID was removed (HOOKMSG-1). The ID it added was already mandatory inside the conventional-commit scope, and prefixing it ahead of `type(ISSUE-ID):` broke the `^`-anchored pattern in `internal/commitref` that the delivery gate and merge detection both rely on — so the hook could only ever damage the convention it was meant to enforce. `arm bootstrap` removes an Armature-managed copy from existing clones.
 
 ### Installation and Bypass
 
@@ -1683,7 +1684,7 @@ Git tags on the ops branch mark sprint boundaries. Example: `git tag sprint-12 _
 
 ### Code-Ops Correlation
 
-The transition op records `branch` and `pr` fields, bridging the ops history (on `_armature`) with the code history (on `main` and feature branches). Given an ops commit, you can find the corresponding code PR. Given a code commit, the issue ID in the commit message (from the `prepare-commit-msg` hook) links back to the ops.
+The transition op records `branch` and `pr` fields, bridging the ops history (on `_armature`) with the code history (on `main` and feature branches). Given an ops commit, you can find the corresponding code PR. Given a code commit, the issue ID in the commit message (from the mandatory conventional-commit scope) links back to the ops.
 
 ---
 
@@ -1861,4 +1862,4 @@ These decisions are locked and should not be revisited without significant new e
 | L9 | Worker impersonation via spoofed log filename (new file with fake UUID) | Low | Requires repo push access (git host ACL is primary control). Optional worker-registry.json cross-references git committer identity. |
 | L10 | Scope path validation (W10) cannot distinguish "create new file" from "typo in path" | Low | Warning only. Decomposition reviewers verify scope correctness at `dag summary` gate. |
 | L11 | Claim-time scope overlap check uses glob matching, which is approximate | Low | Same as L2. Advisory only — warns but does not block. |
-| L12 | Merge detection coverage degrades silently without `prepare-commit-msg` hook | Low | W9 validation warning monitors coverage. `arm validate` surfaces low coverage rate. Fallback detection methods remain available. |
+| L12 | Merge detection coverage degrades silently when commits omit the conventional-commit scope | Low | The delivery gate's Commit Reference check refuses `done` without a matching commit. W9 validation warning monitors coverage; `arm validate` surfaces a low coverage rate. Fallback detection methods remain available. |
