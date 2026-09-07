@@ -4981,3 +4981,4 @@
 ["claim","HOOKMSG-1",1788818632,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120,"worktree_path":"/home/brian/development/armature/.worktrees/HOOKMSG-1","claim_token":"dbfa72d9edfb8f06e3a862e9fba0cb86"}]
 ["transition","HOOKMSG-1",1788818635,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"restore_claim":true,"clear_worktree_path":true,"to":"open","if_claim_token":"dbfa72d9edfb8f06e3a862e9fba0cb86"}]
 ["claim","HOOKMSG-1",1788818660,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120,"worktree_path":"/home/brian/development/armature/.worktrees/HOOKMSG-1","claim_token":"6c98d5e1f366c93552305ecc888bbb33"}]
+["heartbeat","HOOKMSG-1",1788818762,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
