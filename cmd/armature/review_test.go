@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,6 +68,17 @@ func TestReviewPrepareCommand_Success(t *testing.T) {
 	assert.NotEmpty(t, bundle.Fingerprints.Delivery)
 	assert.Equal(t, base, bundle.Delivery.BaseSHA)
 	assert.Equal(t, head, bundle.Delivery.HeadSHA)
+}
+
+func TestReviewPrepareArtifactModeIsStdoutOnly_REQ_AOC_S1_T3(t *testing.T) {
+	t.Parallel()
+
+	cmd := newReviewPrepareCmd()
+	require.Equal(t, output.CitationReviewBundleSchema, cmd.Annotations[output.ArtifactCitationKey])
+	require.Equal(t, output.ChannelArtifactOutput, output.Classify(cmd.Annotations),
+		"review prepare with --output unset is Artifact Output")
+	require.Equal(t, output.ChannelAgentFacing, output.ClassifyFlags(cmd.Annotations, map[string]bool{"output": true}),
+		"review prepare --output <file> remains agent-facing")
 }
 
 func TestReviewPrepareCommand_RequiresIssue(t *testing.T) {

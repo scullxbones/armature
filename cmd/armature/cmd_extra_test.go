@@ -14,6 +14,7 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1731,6 +1732,18 @@ func TestReadyExplain(t *testing.T) {
 	// task-01 and task-02 are ready (not blocked), so they must NOT appear in explain output
 	assert.NotContains(t, out, "task-01", "--explain must not include ready tasks")
 	assert.NotContains(t, out, "task-02", "--explain must not include ready tasks")
+}
+
+func TestDagApplyArtifactModesAreSchemaAndExample_REQ_AOC_S1_T3(t *testing.T) {
+	t.Parallel()
+
+	cmd := newDecomposeApplyCmd()
+	require.Equal(t, output.CitationPlanSchema, cmd.Annotations[output.ArtifactCitationKey])
+	require.Equal(t, output.ChannelAgentFacing, output.Classify(cmd.Annotations),
+		"dag apply without --schema/--example stays agent-facing")
+	require.Equal(t, output.ChannelArtifactOutput, output.ClassifyFlags(cmd.Annotations, map[string]bool{"schema": true}))
+	require.Equal(t, output.ChannelArtifactOutput, output.ClassifyFlags(cmd.Annotations, map[string]bool{"example": true}))
+	require.Equal(t, output.ChannelAgentFacing, output.ClassifyFlags(cmd.Annotations, map[string]bool{"dry-run": true}))
 }
 
 // TestCommandLongAndExampleFields verifies that high-priority commands have

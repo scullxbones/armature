@@ -13,6 +13,7 @@ import (
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/spf13/cobra"
 )
@@ -43,6 +44,10 @@ func newReviewPrepareCmd() *cobra.Command {
 		Long: `Prepare a review bundle for an issue by gathering issue metadata and computing the delivery diff.
 
 The bundle is output as JSON to stdout or to a file specified by --output.`,
+		Annotations: output.MarkArtifactOutput(nil, output.ArtifactMode{
+			Citation:          output.CitationReviewBundleSchema,
+			WhenAllFlagsUnset: []string{"output"},
+		}),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return mapReviewError(runReviewPrepare(cmd, issueID, base, head, outputFile))
 		},
