@@ -219,6 +219,73 @@ func TestW1IgnoresTerminalAndEpicIssues_REQ_W1TYPE_1(t *testing.T) {
 		"terminal issues and type=epic must not participate in W1 even when scopes overlap")
 }
 
+func TestW1ExcludesPassiveAggregateParents_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	// In-progress story whose only child is done still carries rolled-up scope.
+	// W1 must not treat that parent as a competitor against unrelated live work;
+	// the terminal child is already ignored.
+	state := makeState(
+		&materialize.Issue{
+			ID:       "STORY-ROLLUP",
+			Type:     "story",
+			Status:   "in_progress",
+			Scope:    []string{"cmd/armature/claim.go"},
+			Children: []string{"TSK-DONE"},
+		},
+		&materialize.Issue{
+			ID:     "TSK-DONE",
+			Type:   "task",
+			Parent: "STORY-ROLLUP",
+			Status: "done",
+			Scope:  []string{"cmd/armature/claim.go"},
+		},
+		&materialize.Issue{
+			ID:    "TSK-NEW",
+			Type:  "task",
+			Scope: []string{"cmd/armature/claim.go"},
+		},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	assert.False(t, containsWarning(result, "scope overlap"),
+		"passive aggregate story must not W1 against an unrelated live task on rolled-up files")
+}
+
+func TestW1ActiveChildStillCompetesUnderAggregateParent_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{
+			ID:       "STORY-1",
+			Type:     "story",
+			Scope:    []string{"internal/ops/*.go"},
+			Children: []string{"TSK-LIVE"},
+		},
+		&materialize.Issue{
+			ID:     "TSK-LIVE",
+			Type:   "task",
+			Parent: "STORY-1",
+			Scope:  []string{"internal/ops/*.go"},
+		},
+		&materialize.Issue{
+			ID:    "TSK-OTHER",
+			Type:  "task",
+			Scope: []string{"internal/ops/*.go"},
+		},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsWarning(result, "scope overlap"),
+		"active child under an aggregate story must still W1 against an unrelated live task")
+	var cited []string
+	for _, f := range result.Findings {
+		if f.Rule == "W1" {
+			cited = f.CitedIDs
+			break
+		}
+	}
+	assert.Contains(t, cited, "TSK-LIVE")
+	assert.Contains(t, cited, "TSK-OTHER")
+	assert.NotContains(t, cited, "STORY-1")
+}
+
 func TestW2NoTestCriteria(t *testing.T) {
 	t.Parallel()
 	state := makeState(

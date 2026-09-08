@@ -552,9 +552,16 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	var findings []Finding
 
 	// Collect every non-terminal ready-eligible issue (task, bug, feature, story).
+	// Story/feature parents with descendants are skipped: their stored scope is a
+	// rollup (often still including terminal children's files). Live work is
+	// represented by the descendants themselves. Leaf stories/features with no
+	// descendants still compete on their declared scope.
 	var tasks []*materialize.Issue
 	for _, issue := range issues {
 		if !issuetype.IsReadyEligible(issue.Type) || isTerminalStatus(issue.Status) {
+			continue
+		}
+		if isPassiveAggregateParent(issue, graph) {
 			continue
 		}
 		tasks = append(tasks, issue)
@@ -597,6 +604,20 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		}
 	}
 	return findings
+}
+
+
+// isPassiveAggregateParent reports whether issue is a story/feature whose
+// competing scope would be a descendant rollup. Those parents stay out of W1;
+// active children (and leaf stories/features with no descendants) compete.
+func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph) bool {
+	if issue.Type != "story" && issue.Type != "feature" {
+		return false
+	}
+	if graph == nil {
+		return false
+	}
+	return len(graph.Descendants(issue.ID)) > 0
 }
 
 // isAncestorOrDescendant reports whether a and b are in the same parent/child
