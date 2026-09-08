@@ -34,7 +34,7 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 		currentTime = now[0]
 	}
 
-	graph := graphFromIndex(index)
+	graph := materialize.GraphFromIndex(index)
 
 	var ready []ReadyEntry
 
@@ -226,29 +226,11 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 
 // CollectDescendants returns the set of all descendant IDs of root (not including root itself).
 func CollectDescendants(root string, index materialize.Index) map[string]bool {
-	descendants := graphFromIndex(index).Descendants(root)
+	descendants := materialize.GraphFromIndex(index).Descendants(root)
 
 	result := make(map[string]bool)
 	for _, id := range descendants {
 		result[id] = true
 	}
 	return result
-}
-
-// graphFromIndex projects a materialize.Index into a dag.Graph. Slices are
-// copied so callers can mutate index entries without corrupting the graph.
-func graphFromIndex(index materialize.Index) *dag.Graph {
-	nodeIndex := make(map[string]*dag.Node, len(index))
-	for id, entry := range index {
-		nodeIndex[id] = &dag.Node{
-			ID:        id,
-			Title:     entry.Title,
-			Type:      entry.Type,
-			Parent:    entry.Parent,
-			Children:  append([]string(nil), entry.Children...),
-			BlockedBy: append([]string(nil), entry.BlockedBy...),
-			Blocks:    append([]string(nil), entry.Blocks...),
-		}
-	}
-	return dag.FromIndex(nodeIndex)
 }

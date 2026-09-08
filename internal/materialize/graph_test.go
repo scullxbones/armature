@@ -63,6 +63,25 @@ func TestGraphFromState_DefensiveCopy(t *testing.T) {
 	assert.NotContains(t, children, "MUTATED")
 }
 
+func TestGraphFromIndex_MatchesStateProjection(t *testing.T) {
+	t.Parallel()
+	index := materialize.Index{
+		"E1": {Type: "epic", Title: "Epic", Children: []string{"S1"}},
+		"S1": {Type: "story", Title: "Story", Parent: "E1", Children: []string{"T1"}},
+		"T1": {Type: "task", Title: "Task", Parent: "S1"},
+	}
+
+	graph := materialize.GraphFromIndex(index)
+	descendants := graph.Descendants("E1")
+	assert.Contains(t, descendants, "S1")
+	assert.Contains(t, descendants, "T1")
+
+	index["E1"].Children[0] = "MUTATED"
+	_, children := graph.Hierarchy("E1")
+	assert.Contains(t, children, "S1")
+	assert.NotContains(t, children, "MUTATED")
+}
+
 func TestGraphFromState_Descendants(t *testing.T) {
 	t.Parallel()
 	state := materialize.NewState()

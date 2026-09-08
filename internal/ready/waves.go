@@ -1,7 +1,6 @@
 package ready
 
 import (
-	"slices"
 	"sort"
 
 	"github.com/scullxbones/armature/internal/claim"
@@ -20,7 +19,7 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index) [][]ReadyEntr
 	if len(entries) == 0 {
 		return [][]ReadyEntry{}
 	}
-	graph := graphFromIndex(index)
+	graph := materialize.GraphFromIndex(index)
 
 	// Group entries by priority tier
 	tierMap := make(map[string][]ReadyEntry)
@@ -139,28 +138,9 @@ func canAddToWave(candidate ReadyEntry, wave []ReadyEntry, graph *dag.Graph) boo
 		}
 
 		// Also check if they are direct ancestors/descendants (even if scopes don't overlap)
-		if isAncestorOrDescendant(candidate.Issue, existing.Issue, graph) {
+		if claim.IsAncestorOrDescendant(graph, candidate.Issue, existing.Issue) {
 			return false
 		}
 	}
 	return true
-}
-
-// isAncestorOrDescendant checks if one issue is an ancestor or descendant of another
-func isAncestorOrDescendant(issueA, issueB string, graph *dag.Graph) bool {
-	if graph == nil {
-		return false
-	}
-
-	// Check if issueA is an ancestor of issueB (issueB is a descendant of issueA)
-	if slices.Contains(graph.Descendants(issueA), issueB) {
-		return true
-	}
-
-	// Check if issueB is an ancestor of issueA (issueA is a descendant of issueB)
-	if slices.Contains(graph.Descendants(issueB), issueA) {
-		return true
-	}
-
-	return false
 }

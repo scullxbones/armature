@@ -3,7 +3,6 @@ package dag
 
 import (
 	"fmt"
-	"slices"
 )
 
 // Node represents a work item in the DAG.
@@ -94,23 +93,6 @@ func (g *Graph) hasCycleDFS(nodeID string, visited, recStack map[string]bool) bo
 	return false
 }
 
-// ValidateParentChild checks that parent-child relationships are consistent.
-func (g *Graph) ValidateParentChild() error {
-	for id, node := range g.nodes {
-		if node.Parent != "" {
-			parent := g.nodes[node.Parent]
-			if parent == nil {
-				return fmt.Errorf("node %s has unknown parent %s", id, node.Parent)
-			}
-			// Check that parent actually lists this as a child
-			if !slices.Contains(parent.Children, id) {
-				return fmt.Errorf("node %s lists parent %s, but parent doesn't list it as child", id, node.Parent)
-			}
-		}
-	}
-	return nil
-}
-
 // Ancestry returns the chain of hierarchical parent nodes from the given node up to the root.
 func (g *Graph) Ancestry(id string) []string {
 	ancestors := []string{}
@@ -176,17 +158,6 @@ func (g *Graph) Blockers(id string) []string {
 	}
 	result := make([]string, len(node.BlockedBy))
 	copy(result, node.BlockedBy)
-	return result
-}
-
-// Blocks returns all nodes that this node directly blocks.
-func (g *Graph) Blocks(id string) []string {
-	node := g.nodes[id]
-	if node == nil {
-		return nil
-	}
-	result := make([]string, len(node.Blocks))
-	copy(result, node.Blocks)
 	return result
 }
 

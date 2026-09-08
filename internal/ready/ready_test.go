@@ -340,7 +340,7 @@ func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 		index[id] = materialize.IndexEntry{Parent: parent}
 	}
 
-	graph := graphFromIndex(index)
+	graph := materialize.GraphFromIndex(index)
 	d := graph.Depth("issue-24")
 	assert.Equal(t, 24, d, "depth should be 24 (distance to root)")
 }
@@ -382,14 +382,14 @@ func TestDepth_NoParent(t *testing.T) {
 	index := materialize.Index{
 		"task-01": {Parent: ""},
 	}
-	graph := graphFromIndex(index)
+	graph := materialize.GraphFromIndex(index)
 	assert.Equal(t, 0, graph.Depth("task-01"))
 }
 
 func TestDepth_MissingFromIndex(t *testing.T) {
 	t.Parallel()
 	index := materialize.Index{}
-	graph := graphFromIndex(index)
+	graph := materialize.GraphFromIndex(index)
 	assert.Equal(t, 0, graph.Depth("missing"))
 }
 

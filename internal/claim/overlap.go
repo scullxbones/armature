@@ -31,25 +31,20 @@ func ScopesOverlap(scopeA, scopeB []string) bool {
 // A parent story's scope is by design the union of its children's scopes,
 // so parent/child scope overlap is not a real conflict and should not be reported.
 func ScopesOverlapEx(scopeA, scopeB []string, graph HierarchyGraph, issueA, issueB string) bool {
-	// If no graph is provided, fall back to basic scope overlap check
-	if graph == nil {
-		return ScopesOverlap(scopeA, scopeB)
-	}
-
-	// Check if issueA is an ancestor of issueB (issueB is a descendant of issueA)
-	if slices.Contains(graph.Descendants(issueA), issueB) {
-		// issueA is ancestor of issueB — exclude from overlap detection
+	if IsAncestorOrDescendant(graph, issueA, issueB) {
 		return false
 	}
-
-	// Check if issueB is an ancestor of issueA (issueA is a descendant of issueB)
-	if slices.Contains(graph.Descendants(issueB), issueA) {
-		// issueB is ancestor of issueA — exclude from overlap detection
-		return false
-	}
-
-	// Neither is an ancestor of the other — check scope overlap normally
 	return ScopesOverlap(scopeA, scopeB)
+}
+
+// IsAncestorOrDescendant reports whether one issue sits on the other's
+// parent-child chain. A nil graph is treated as no relationship.
+func IsAncestorOrDescendant(graph HierarchyGraph, issueA, issueB string) bool {
+	if graph == nil {
+		return false
+	}
+	return slices.Contains(graph.Descendants(issueA), issueB) ||
+		slices.Contains(graph.Descendants(issueB), issueA)
 }
 
 // globOverlaps delegates to scopematch.Overlaps, the single canonical

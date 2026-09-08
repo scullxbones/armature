@@ -226,10 +226,9 @@ func TestDynamicBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 
 // TestGatedBaseCommit_REQ_LNGHZN_S4 verifies GatedBaseCommit trusts claim-time
 // recorded facts (the dynamically-recomputed parent-branch merge-base, or the
-// SHA recorded once at claim time) but fails closed — rather than falling
-// through to GetBaseCommit's default-branch guess — when NEITHER recorded
-// fact is available, even though that guess would happily resolve in this
-// repo shape.
+// SHA recorded once at claim time) but fails closed when NEITHER recorded
+// fact is available, even though a default-branch merge-base would resolve
+// in this repo shape.
 func TestGatedBaseCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -243,19 +242,11 @@ func TestGatedBaseCommit_REQ_LNGHZN_S4(t *testing.T) {
 	git := adapters.New(tmpDir)
 
 	// Neither a parent-branch config (dynamic tier) nor a recorded
-	// base-commit file exists yet: GatedBaseCommit must fail closed, even
-	// though GetBaseCommit's default-branch guess would resolve via "main"
-	// in this same repo shape.
+	// base-commit file exists yet: GatedBaseCommit must fail closed rather
+	// than guessing a default-branch merge-base.
 	_, err := GatedBaseCommit(tmpDir, "issue-1", git)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "issue-1")
-
-	// Sanity check: GetBaseCommit DOES succeed in this same repo shape,
-	// proving GatedBaseCommit is deliberately more conservative, not that
-	// both merely fail for an unrelated reason.
-	guessed, guessErr := GetBaseCommit(git)
-	require.NoError(t, guessErr)
-	assert.Equal(t, baseSHA, guessed)
 
 	// Once the recorded SHA file exists, GatedBaseCommit returns it (tier:
 	// RecordedBaseCommit, since no parent-branch config is set).
@@ -266,67 +257,4 @@ func TestGatedBaseCommit_REQ_LNGHZN_S4(t *testing.T) {
 	got, err := GatedBaseCommit(tmpDir, "issue-1", git)
 	require.NoError(t, err)
 	assert.Equal(t, baseSHA, got)
-}
-
-// TestResolveBaseCommit_FallbackChain_REQ_LNGHZN_S4_T3 exercises the
-// three-tier base-commit fallback chain (dynamic parent-branch merge-base ->
-// claim-time recorded SHA -> default-branch merge-base) end-to-end, with
-// each tier's data source deliberately missing in turn, asserting the
-// correct next tier is used and produces a valid base-commit SHA.
-func TestResolveBaseCommit_FallbackChain_REQ_LNGHZN_S4_T3(t *testing.T) {
-	t.Parallel()
-
-	// Shared repo shape for all scenarios: the repo's default branch ("main",
-	// per this environment's init.defaultBranch) holds the base commit;
-	// task/issue-1 branches off it and gets one extra commit. Using "main"
-	// itself as the parent (rather than a separately named branch) lets the
-	// tier-3 scenario exercise GetBaseCommit's default-branch candidate list
-	// (see CandidateBaseRefs) without any extra setup.
-	setup := func(t *testing.T) (worktreePath, baseSHA string, git *adapters.Client) {
-		t.Helper()
-		tmpDir := t.TempDir()
-		initGitRepo(t, tmpDir)
-		runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
-		base := getHeadSHA(t, tmpDir)
-		runGit(t, tmpDir, "checkout", "-b", "task/issue-1")
-		runGit(t, tmpDir, "commit", "--allow-empty", "-m", "task work")
-		return tmpDir, base, adapters.New(tmpDir)
-	}
-
-	t.Run("tier1_dynamic_parent_branch_config_present", func(t *testing.T) {
-		t.Parallel()
-		worktreePath, baseSHA, git := setup(t)
-		require.NoError(t, git.SetGitConfig(ParentBranchConfigKey("task/issue-1"), "main"))
-
-		got, err := ResolveBaseCommit(worktreePath, git)
-		require.NoError(t, err)
-		assert.Equal(t, baseSHA, got, "tier 1 (dynamic merge-base) should be used when parent-branch config is present")
-	})
-
-	t.Run("tier2_recorded_sha_when_dynamic_absent", func(t *testing.T) {
-		t.Parallel()
-		worktreePath, baseSHA, git := setup(t)
-		// git config absent (tier 1 unavailable): fall through to the
-		// claim-time recorded SHA file.
-		gitDir, err := worktree.ResolveGitDir(worktreePath)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(gitDir, BaseCommitFileName), []byte(baseSHA), 0o600))
-
-		got, err := ResolveBaseCommit(worktreePath, git)
-		require.NoError(t, err)
-		assert.Equal(t, baseSHA, got, "tier 2 (recorded SHA) should be used when tier 1 is unavailable")
-	})
-
-	t.Run("tier3_default_branch_merge_base_when_both_absent", func(t *testing.T) {
-		t.Parallel()
-		worktreePath, baseSHA, git := setup(t)
-		// Neither git config (tier 1) nor the recorded-SHA file (tier 2)
-		// exists — simulating a very old worktree that predates both
-		// mechanisms. Falls through to GetBaseCommit's default-branch
-		// candidate list (see CandidateBaseRefs), which resolves "main".
-
-		got, err := ResolveBaseCommit(worktreePath, git)
-		require.NoError(t, err)
-		assert.Equal(t, baseSHA, got, "tier 3 (default-branch merge-base) should be used when tiers 1 and 2 are both unavailable")
-	})
 }

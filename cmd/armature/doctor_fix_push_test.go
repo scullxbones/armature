@@ -16,10 +16,10 @@ import (
 // TestDoctorFixPushesToOriginInDualBranchMode verifies that `arm doctor --fix`
 // pushes its repair ops to origin after committing them, the same way the
 // high-stakes op path (claim/transition/assign, via appendHighStakesOp) does.
-// Before the fix, ApplyFixes only appended and committed the repair ops
-// locally — doctor --fix never called Push — so a coordinator could report
-// stale-claim repairs as applied while every other clone kept replaying the
-// old _armature branch until someone manually ran `arm push-ops`.
+// Before the fix, doctor --fix only appended and committed the repair ops
+// locally and never called Push, so a coordinator could report stale-claim
+// repairs as applied while every other clone kept replaying the old
+// _armature branch until someone manually ran `arm push-ops`.
 func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	bareDir := t.TempDir()
 	run(t, bareDir, "git", "init", "--bare")

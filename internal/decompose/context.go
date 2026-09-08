@@ -114,11 +114,6 @@ func defaultConstraints() map[string]any {
 	}
 }
 
-// PlanContext returns a summary of the plan suitable for use as context.
-func PlanContext(plan *Plan) string {
-	return fmt.Sprintf("Plan: %s (%d issues)", plan.Title, len(plan.Issues))
-}
-
 func defaultPlanSchema() map[string]any {
 	return map[string]any{
 		"version": 1,
