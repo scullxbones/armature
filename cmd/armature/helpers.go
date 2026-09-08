@@ -421,6 +421,7 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	return validate.CheckIntroduction(state, check, validate.Options{
 		Strict:       true,
 		ManifestData: manifestData,
+		Now:          nowEpoch(),
 	})
 }
 

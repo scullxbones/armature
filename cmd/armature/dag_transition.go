@@ -77,7 +77,7 @@ planner cannot release a dirty plan. Demotion to draft is not gated.`,
 }
 
 func refusePlanRelease(cmd *cobra.Command) error {
-	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true})
+	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true, Now: nowEpoch()})
 	if valErr != nil {
 		return valErr
 	}

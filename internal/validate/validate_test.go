@@ -250,6 +250,10 @@ func TestW1ExcludesPassiveAggregateParents_REQ_W1TYPE_1(t *testing.T) {
 		"passive aggregate story must not W1 against an unrelated live task on rolled-up files")
 }
 
+// w1ClaimNow pins the evaluation clock for the claim-freshness W1 tests so
+// claim expiry is deterministic rather than wall-clock dependent.
+const w1ClaimNow int64 = 1_700_000_000
+
 func TestW1KeepsExplicitlyClaimedAggregateParent_REQ_W1TYPE_1(t *testing.T) {
 	t.Parallel()
 	// A story can be claimed directly (see cmd/armature/claim_test.go's direct
@@ -259,12 +263,15 @@ func TestW1KeepsExplicitlyClaimedAggregateParent_REQ_W1TYPE_1(t *testing.T) {
 	// validate is the only remaining safeguard for this case.
 	state := makeState(
 		&materialize.Issue{
-			ID:        "STORY-CLAIMED",
-			Type:      "story",
-			Status:    ops.StatusClaimed,
-			ClaimedBy: "worker-a",
-			Scope:     []string{"cmd/armature/claim.go"},
-			Children:  []string{"TSK-DONE"},
+			ID:            "STORY-CLAIMED",
+			Type:          "story",
+			Status:        ops.StatusClaimed,
+			ClaimedBy:     "worker-a",
+			ClaimedAt:     w1ClaimNow - 60,
+			LastHeartbeat: w1ClaimNow - 60,
+			ClaimTTL:      3600,
+			Scope:         []string{"cmd/armature/claim.go"},
+			Children:      []string{"TSK-DONE"},
 		},
 		&materialize.Issue{
 			ID:     "TSK-DONE",
@@ -279,7 +286,7 @@ func TestW1KeepsExplicitlyClaimedAggregateParent_REQ_W1TYPE_1(t *testing.T) {
 			Scope: []string{"cmd/armature/claim.go"},
 		},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := Validate(state, graphFromState(state), Options{Now: w1ClaimNow})
 	require.True(t, containsWarning(result, "scope overlap"),
 		"an explicitly claimed story must still W1 against an unrelated live task")
 	var cited []string
@@ -323,6 +330,45 @@ func TestW1InProgressRollupParentWithoutClaimantStaysPassive_REQ_W1TYPE_1(t *tes
 	result := Validate(state, graphFromState(state), Options{})
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"a rollup parent promoted to in-progress without a claimant must stay out of W1")
+}
+
+// TestW1ExcludesExpiredAggregateClaim_REQ_W1TYPE_1 covers the third state a
+// claimed aggregate parent can be in: materialization leaves Status and
+// ClaimedBy populated after a lease outlives its TTL, so those fields alone
+// would keep an abandoned parent "active" in W1 forever -- and under
+// CheckIntroduction(..., Strict: true) that stale rollup could reject later
+// creates and amendments with no worker actually holding it. Claim freshness
+// decides, matching what the ready and recovery paths already do.
+func TestW1ExcludesExpiredAggregateClaim_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{
+			ID:            "STORY-EXPIRED",
+			Type:          "story",
+			Status:        ops.StatusClaimed,
+			ClaimedBy:     "worker-a",
+			ClaimedAt:     w1ClaimNow - 7200,
+			LastHeartbeat: w1ClaimNow - 7200,
+			ClaimTTL:      60,
+			Scope:         []string{"cmd/armature/claim.go"},
+			Children:      []string{"TSK-DONE"},
+		},
+		&materialize.Issue{
+			ID:     "TSK-DONE",
+			Type:   "task",
+			Parent: "STORY-EXPIRED",
+			Status: "done",
+			Scope:  []string{"cmd/armature/claim.go"},
+		},
+		&materialize.Issue{
+			ID:    "TSK-NEW",
+			Type:  "task",
+			Scope: []string{"cmd/armature/claim.go"},
+		},
+	)
+	result := Validate(state, graphFromState(state), Options{Now: w1ClaimNow})
+	assert.False(t, containsWarning(result, "scope overlap"),
+		"an aggregate parent whose claim outlived its TTL must fall back to passive")
 }
 
 func TestW1ActiveChildStillCompetesUnderAggregateParent_REQ_W1TYPE_1(t *testing.T) {
@@ -1262,7 +1308,7 @@ func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfSc
 	}
 	require.NotContains(t, scoped, "TSK-B", "test setup: TSK-B must be outside the scoped subset")
 
-	warns := checkW1ScopeOverlap(scoped, state, graphFromState(state))
+	warns := checkW1ScopeOverlap(scoped, state, graphFromState(state), w1ClaimNow)
 	for _, w := range warns {
 		assert.NotContains(t, w, "scope overlap",
 			"scope overlap should be suppressed when the transitive blocked_by chain passes through an out-of-scope issue: %s", w)
