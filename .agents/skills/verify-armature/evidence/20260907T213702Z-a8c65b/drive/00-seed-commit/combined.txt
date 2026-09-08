@@ -1,0 +1,8 @@
+cmd: git -C /tmp/arm-verify-target.DtfyEJ commit -q -m docs: seed files for ready-claim
+exit: 0
+--- stdout ---
+
+--- stderr ---
+{"error":{"code":"GENERAL-1","cause":"issue ID is required (via --issue flag or positional argument)","next_actions":[],"exit_code":1}}
+{"error":{"code":"GENERAL-1","cause":"push-ops: push failed: git push origin _armature: exit status 128\nfatal: 'origin' does not appear to be a git repository\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.\n","next_actions":[],"exit_code":1}}
+

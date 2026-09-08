@@ -1,0 +1,3 @@
+removed_target=/tmp/arm-verify-target.GCF9xD
+evidence_kept=/home/brian/development/armature/.agents/skills/verify-armature/evidence/20260907T213423Z-542975
+evidence_exists=yes

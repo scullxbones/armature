@@ -1,0 +1,9 @@
+cmd: git -C /tmp/arm-verify-target.GCF9xD worktree list
+exit: 0
+--- stdout ---
+/tmp/arm-verify-target.GCF9xD                              a3fa4ad [main]
+/tmp/arm-verify-target.GCF9xD/.armature                    cb9ab25 [_armature]
+/tmp/arm-verify-target.GCF9xD/.worktrees/TASK-VERIFY-READY a3fa4ad [task/TASK-VERIFY-READY]
+
+--- stderr ---
+

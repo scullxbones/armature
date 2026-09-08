@@ -1,0 +1,11 @@
+cmd: /home/brian/development/armature/bin/arm --repo /tmp/arm-verify-target.DtfyEJ log --json
+exit: 0
+--- stdout ---
+{"timestamp":1788817023,"worker_id":"737bde61-d1ad-42a7-9b26-4ec6b9450b73","target_id":"3627f8bd-25e5-44f3-a5d2-5a178fe49e12","type":"source-fingerprint","payload":{"sha":"6c71c26817e22e9146a85987d46acaf355926c475be7341bcf08200bd2402aa7","provider":"filesystem"}}
+{"timestamp":1788817023,"worker_id":"737bde61-d1ad-42a7-9b26-4ec6b9450b73","target_id":"TASK-VERIFY-READY","type":"create","payload":{"title":"Verification ready+claim","type":"task","scope":["ready.go"],"acceptance":[{"type":"test_passes"}],"definition_of_done":"Claimed with a managed worktree","confidence":"draft"}}
+{"timestamp":1788817023,"worker_id":"737bde61-d1ad-42a7-9b26-4ec6b9450b73","target_id":"TASK-VERIFY-READY","type":"source-link","payload":{"source_id":"3627f8bd-25e5-44f3-a5d2-5a178fe49e12","source_url":"/tmp/arm-verify-target.DtfyEJ/README.md"}}
+{"timestamp":1788817023,"worker_id":"737bde61-d1ad-42a7-9b26-4ec6b9450b73","target_id":"TASK-VERIFY-READY","type":"dag-transition","payload":{"to":"verified","issue_id":"TASK-VERIFY-READY"}}
+{"timestamp":1788817023,"worker_id":"737bde61-d1ad-42a7-9b26-4ec6b9450b73","target_id":"TASK-VERIFY-READY","type":"claim","payload":{"ttl":60,"worktree_path":"/tmp/arm-verify-target.DtfyEJ/.worktrees/TASK-VERIFY-READY","claim_token":"723dac44b90fc00155c13443540d033b"}}
+
+--- stderr ---
+

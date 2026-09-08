@@ -1,0 +1,7 @@
+cmd: arm sources sync
+exit: 0
+--- stdout ---
+synced 3627f8bd-25e5-44f3-a5d2-5a178fe49e12  fp=6c71c268
+
+--- stderr ---
+

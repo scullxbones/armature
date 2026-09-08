@@ -1,0 +1,1 @@
+{"error":{"code":"GENERAL-1","cause":"armature.ops-worktree-path must be set: git config armature.ops-worktree-path: exit status 1","next_actions":[],"exit_code":1}}

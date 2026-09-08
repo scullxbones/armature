@@ -1,0 +1,10 @@
+[
+  {
+    "issue": "TASK-VERIFY-READY",
+    "type": "task",
+    "title": "Verification ready+claim",
+    "scope": [
+      "ready.go"
+    ]
+  }
+]

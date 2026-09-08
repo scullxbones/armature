@@ -1,0 +1,7 @@
+cmd: git -C /tmp/arm-verify-target.jL8dW4 config --get armature.worker-id
+exit: 0
+--- stdout ---
+6f0048ca-40dd-41c8-a1a2-672b2a2781af
+
+--- stderr ---
+

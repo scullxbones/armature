@@ -1,0 +1,8 @@
+cmd: git -C /tmp/arm-verify-target.jL8dW4 worktree list
+exit: 0
+--- stdout ---
+/tmp/arm-verify-target.jL8dW4           ed7020a [main]
+/tmp/arm-verify-target.jL8dW4/.armature a35712f [_armature]
+
+--- stderr ---
+

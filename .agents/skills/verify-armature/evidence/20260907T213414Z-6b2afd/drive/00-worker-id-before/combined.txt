@@ -1,0 +1,7 @@
+cmd: git -C /tmp/arm-verify-target.ghvE84 config --get armature.worker-id
+exit: 0
+--- stdout ---
+f5efe593-9230-4e7b-95c7-00e3f8b5bf2f
+
+--- stderr ---
+

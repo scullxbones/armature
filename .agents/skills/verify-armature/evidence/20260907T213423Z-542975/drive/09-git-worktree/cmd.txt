@@ -1,0 +1,1 @@
+git -C /tmp/arm-verify-target.GCF9xD worktree list

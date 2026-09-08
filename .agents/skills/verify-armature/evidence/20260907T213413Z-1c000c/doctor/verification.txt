@@ -1,0 +1,11 @@
+verification doctor
+source_root=/home/brian/development/armature
+target_repo=/tmp/arm-verify-target.EmQCHp
+arm_bin=/home/brian/development/armature/bin/arm
+expected_version=v0.0.2-351-ga42071d2
+arm_version=arm version v0.0.2-351-ga42071d2
+PASS: version matches build (v0.0.2-351-ga42071d2)
+PASS: target is an isolated temp repo
+PASS: target is a git repo (toplevel=/tmp/arm-verify-target.EmQCHp)
+product arm doctor: exit 1 (expected before bootstrap; see product-doctor.stdout.txt)
+PASS: verification instance is worth driving

@@ -1,0 +1,9 @@
+run_id=20260907T213414Z-6b2afd
+source_root=/home/brian/development/armature
+arm_bin=/home/brian/development/armature/bin/arm
+expected_version=v0.0.2-351-ga42071d2
+arm_version=arm version v0.0.2-351-ga42071d2
+target_repo=/tmp/arm-verify-target.ghvE84
+evidence_dir=/home/brian/development/armature/.agents/skills/verify-armature/evidence/20260907T213414Z-6b2afd
+run_env=/run/user/1000/arm-verify/run.srMKAj.env
+started_at=2026-09-07T21:34:14Z

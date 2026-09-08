@@ -1,0 +1,1 @@
+{"timestamp":1788816854,"worker_id":"f5efe593-9230-4e7b-95c7-00e3f8b5bf2f","target_id":"TASK-VERIFY-CREATE","type":"create","payload":{"title":"Verification create+list","type":"task","scope":["verify-create.txt"],"acceptance":[{"type":"test_passes","description":"list and show return the created id"}],"definition_of_done":"Issue is listed and showable","confidence":"draft"}}

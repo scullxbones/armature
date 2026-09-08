@@ -1,0 +1,7 @@
+cmd: arm create --id TASK-VERIFY-DOCTOR --title Verification doctor warning --type task --scope verify-doctor.txt --dod Doctor reports an uncited-issue warning --acceptance [{"type":"test_passes"}]
+exit: 0
+--- stdout ---
+{"id":"TASK-VERIFY-DOCTOR","status":"created"}
+
+--- stderr ---
+

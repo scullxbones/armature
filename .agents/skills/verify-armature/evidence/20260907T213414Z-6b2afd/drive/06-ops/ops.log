@@ -1,0 +1,1 @@
+["create","TASK-VERIFY-CREATE",1788816854,"f5efe593-9230-4e7b-95c7-00e3f8b5bf2f",{"title":"Verification create+list","type":"task","scope":["verify-create.txt"],"acceptance":[{"type":"test_passes","description":"list and show return the created id"}],"definition_of_done":"Issue is listed and showable","confidence":"draft"}]

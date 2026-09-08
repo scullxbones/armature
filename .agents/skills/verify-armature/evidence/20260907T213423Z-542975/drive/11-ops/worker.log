@@ -1,0 +1,5 @@
+["source-fingerprint","5fc428f6-03dc-487c-978b-6b2e0d0cb581",1788816864,"2a37a593-f4da-46ae-9d8a-c7853290b843",{"sha":"6c71c26817e22e9146a85987d46acaf355926c475be7341bcf08200bd2402aa7","provider":"filesystem"}]
+["create","TASK-VERIFY-READY",1788816864,"2a37a593-f4da-46ae-9d8a-c7853290b843",{"title":"Verification ready+claim","type":"task","scope":["ready.go"],"acceptance":[{"type":"test_passes"}],"definition_of_done":"Claimed with a managed worktree","confidence":"draft"}]
+["source-link","TASK-VERIFY-READY",1788816864,"2a37a593-f4da-46ae-9d8a-c7853290b843",{"source_id":"5fc428f6-03dc-487c-978b-6b2e0d0cb581","source_url":"/tmp/arm-verify-target.GCF9xD/README.md"}]
+["dag-transition","TASK-VERIFY-READY",1788816864,"2a37a593-f4da-46ae-9d8a-c7853290b843",{"to":"verified","issue_id":"TASK-VERIFY-READY"}]
+["claim","TASK-VERIFY-READY",1788816864,"2a37a593-f4da-46ae-9d8a-c7853290b843",{"ttl":60,"worktree_path":"/tmp/arm-verify-target.GCF9xD/.worktrees/TASK-VERIFY-READY","claim_token":"a0f21f09f5e577682d0c42823e7a7560"}]

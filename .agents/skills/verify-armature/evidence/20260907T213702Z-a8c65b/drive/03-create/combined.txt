@@ -1,0 +1,7 @@
+cmd: arm create --id TASK-VERIFY-READY --title Verification ready+claim --type task --scope ready.go --dod Claimed with a managed worktree --acceptance [{"type":"test_passes"}] --source 3627f8bd-25e5-44f3-a5d2-5a178fe49e12
+exit: 0
+--- stdout ---
+{"id":"TASK-VERIFY-READY","status":"created"}
+
+--- stderr ---
+

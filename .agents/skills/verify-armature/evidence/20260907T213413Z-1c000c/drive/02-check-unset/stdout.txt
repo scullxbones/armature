@@ -1,0 +1,1 @@
+{"error":{"code":"GENERAL-1","cause":"no worker ID configured — run 'arm worker-init'","next_actions":[],"exit_code":1}}

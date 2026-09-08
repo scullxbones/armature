@@ -1,0 +1,7 @@
+cmd: git -C /tmp/arm-verify-target.EmQCHp config --get armature.worker-id
+exit: 0
+--- stdout ---
+ee140eaa-1a7d-40b0-a00e-b67b8c1fc204
+
+--- stderr ---
+

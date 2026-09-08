@@ -1,0 +1,4 @@
+proof: bootstrap
+stdout (agent JSON) in drive/02-bootstrap/stdout.txt — expect repo_setup.status=initialized then already_initialized
+side effects: .armature/ worktree on _armature; git config armature.ops-worktree-path;
+  .claude/skills + .claude/plugins/armature deployed (harness_hook_config skipped)

@@ -1,0 +1,1 @@
+/home/brian/development/armature/bin/arm --repo /tmp/arm-verify-target.ghvE84 log --json

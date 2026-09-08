@@ -1,0 +1,1 @@
+doctor --strict: 1 warning(s) promoted to errors

@@ -1,0 +1,40 @@
+# Trellis Op Log Schema v1
+#
+# Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]
+#
+# Position 0: op_type (string) - one of: create, claim, heartbeat, transition, note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign, amend, citation-accepted, scope-rename, scope-delete, reparent, assessment-attested, gate-evidence
+# Position 1: target_id (string) - issue/node/source ID this op targets
+# Position 2: timestamp (integer) - Unix epoch seconds
+# Position 3: worker_id (string) - UUID of the worker emitting this op
+# Position 4: payload (object) - op-type-specific fields (see below)
+#
+# Forward compatibility: new fields may be appended to the array.
+# Readers MUST ignore extra positions. Missing positions get defaults.
+#
+# Payload fields by op type:
+#   create:            title, parent, type, scope, context_files, acceptance, definition_of_done,
+#                     clear_context_files, context, source_citation, priority,
+#                     estimated_complexity, confidence, preferred_model
+#   claim:             ttl, worktree_path (optional), claim_token
+#   heartbeat:         (empty object)
+#   transition:        to, outcome, branch (optional), pr (optional),
+#                        skipped_delivery_gate (optional)
+#                        restore_claim snapshot fields (rollback only)
+#                        if_claim_token (conditional compensating rollback only)
+#   note:              msg, note_id
+#   note-delete:       note_id
+#   link:              dep, rel
+#   unlink:            dep, rel
+#   source-link:       source_id, source_url, section, anchor, quote, title
+#   source-fingerprint: sha, version_id, provider
+#   dag-transition:    to, issue_id, confirmed, confirmed_noninteractively, uncovered_acknowledged
+#   decision:          topic, choice, rationale, affects
+#   assign:            assigned_to (empty string to unassign)
+#   amend:             type, scope, context_files, clear_context_files, acceptance, definition_of_done
+#   citation-accepted: source_entry_id, confirmed_noninteractively
+#   scope-rename:      old_path, new_path
+#   scope-delete:      deleted_path
+#   reparent:          parent
+#   assessment-attested: assessment
+#   gate-evidence:     profile, command, head_sha, start, end, exit, uncommitted,
+#                     output_hash, output_head, output_tail, log_path

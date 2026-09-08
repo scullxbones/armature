@@ -1,0 +1,1 @@
+arm claim --issue TASK-VERIFY-READY --worktree

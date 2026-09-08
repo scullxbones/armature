@@ -1,0 +1,9 @@
+cmd: git -C /tmp/arm-verify-target.DtfyEJ worktree list
+exit: 0
+--- stdout ---
+/tmp/arm-verify-target.DtfyEJ                              807f5d4 [main]
+/tmp/arm-verify-target.DtfyEJ/.armature                    0450e3d [_armature]
+/tmp/arm-verify-target.DtfyEJ/.worktrees/TASK-VERIFY-READY 807f5d4 [task/TASK-VERIFY-READY]
+
+--- stderr ---
+

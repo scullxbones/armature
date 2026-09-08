@@ -1,0 +1,7 @@
+{
+  "project_type": "unknown",
+  "default_ttl": 60,
+  "token_budget": 1600,
+  "low_stakes_push_threshold": 5,
+  "hooks": []
+}

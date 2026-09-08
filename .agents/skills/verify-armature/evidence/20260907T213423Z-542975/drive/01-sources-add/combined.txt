@@ -1,0 +1,7 @@
+cmd: arm sources add --url /tmp/arm-verify-target.GCF9xD/README.md --type filesystem --title README
+exit: 0
+--- stdout ---
+added source 5fc428f6-03dc-487c-978b-6b2e0d0cb581 (/tmp/arm-verify-target.GCF9xD/README.md)
+
+--- stderr ---
+

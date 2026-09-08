@@ -1,0 +1,7 @@
+cmd: arm dag transition --issue TASK-VERIFY-READY
+exit: 0
+--- stdout ---
+{"issue":"TASK-VERIFY-READY","promoted_to":"verified"}
+
+--- stderr ---
+

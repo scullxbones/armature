@@ -1,0 +1,8 @@
+cmd: git -C /tmp/arm-verify-target.ghvE84 worktree list
+exit: 0
+--- stdout ---
+/tmp/arm-verify-target.ghvE84           2612637 [main]
+/tmp/arm-verify-target.ghvE84/.armature 35eb4dd [_armature]
+
+--- stderr ---
+

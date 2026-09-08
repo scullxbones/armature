@@ -1,0 +1,7 @@
+cmd: arm worker-init --check
+exit: 0
+--- stdout ---
+Worker ID: cc090c7b-0f61-4a3a-883b-389cd2869ed7
+
+--- stderr ---
+

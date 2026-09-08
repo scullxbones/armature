@@ -1,0 +1,12 @@
+cmd: git -C /tmp/arm-verify-target.jL8dW4 show _armature:config.json
+exit: 0
+--- stdout ---
+{
+  "project_type": "unknown",
+  "default_ttl": 60,
+  "token_budget": 1600,
+  "low_stakes_push_threshold": 5,
+  "hooks": []
+}
+--- stderr ---
+

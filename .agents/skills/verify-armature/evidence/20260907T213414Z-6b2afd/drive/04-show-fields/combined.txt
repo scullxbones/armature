@@ -1,0 +1,9 @@
+cmd: /home/brian/development/armature/bin/arm --repo /tmp/arm-verify-target.ghvE84 show --issue TASK-VERIFY-CREATE --field status,title,type
+exit: 0
+--- stdout ---
+open
+Verification create+list
+task
+
+--- stderr ---
+

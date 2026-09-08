@@ -1,0 +1,1 @@
+git -C /tmp/arm-verify-target.DtfyEJ config --get armature.worker-id

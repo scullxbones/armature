@@ -1,0 +1,57 @@
+{
+  "checks": [
+    {
+      "check": "D1",
+      "severity": "ok",
+      "message": "No git/armature divergence detected"
+    },
+    {
+      "check": "D2",
+      "severity": "ok",
+      "message": "No stale claims"
+    },
+    {
+      "check": "D3",
+      "severity": "ok",
+      "message": "No orphaned ops"
+    },
+    {
+      "check": "D4",
+      "severity": "ok",
+      "message": "No broken parent refs"
+    },
+    {
+      "check": "D5",
+      "severity": "ok",
+      "message": "No dependency cycles"
+    },
+    {
+      "check": "D6",
+      "severity": "warning",
+      "message": "Issues without source-link or accept-citation",
+      "items": [
+        "TASK-VERIFY-DOCTOR"
+      ]
+    },
+    {
+      "check": "D7",
+      "severity": "ok",
+      "message": "No worker-ID mismatches detected"
+    },
+    {
+      "check": "D8",
+      "severity": "ok",
+      "message": "No out-of-scope artifacts detected"
+    },
+    {
+      "check": "D9",
+      "severity": "ok",
+      "message": "No unrecognized managed worktrees"
+    },
+    {
+      "check": "D10",
+      "severity": "ok",
+      "message": "Config decodes strictly and present fields are in range"
+    }
+  ]
+}

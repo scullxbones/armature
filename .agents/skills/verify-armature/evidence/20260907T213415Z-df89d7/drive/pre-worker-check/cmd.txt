@@ -1,0 +1,1 @@
+arm worker-init --check

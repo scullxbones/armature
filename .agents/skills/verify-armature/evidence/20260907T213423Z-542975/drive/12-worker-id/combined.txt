@@ -1,0 +1,7 @@
+cmd: git -C /tmp/arm-verify-target.GCF9xD config --get armature.worker-id
+exit: 0
+--- stdout ---
+2a37a593-f4da-46ae-9d8a-c7853290b843
+
+--- stderr ---
+

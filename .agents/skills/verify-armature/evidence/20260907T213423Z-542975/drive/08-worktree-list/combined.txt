@@ -1,0 +1,16 @@
+cmd: arm worktree list
+exit: 0
+--- stdout ---
+{
+  "ambiguous": [],
+  "bound": [
+    "TASK-VERIFY-READY"
+  ],
+  "gc_ready": [],
+  "ghosts": [],
+  "orphans": [],
+  "unrecognized": []
+}
+
+--- stderr ---
+

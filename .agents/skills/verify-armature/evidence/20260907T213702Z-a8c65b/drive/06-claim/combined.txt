@@ -1,0 +1,7 @@
+cmd: arm claim --issue TASK-VERIFY-READY --worktree
+exit: 0
+--- stdout ---
+{"claimed_by":"737bde61-d1ad-42a7-9b26-4ec6b9450b73","issue":"TASK-VERIFY-READY","ttl":60}
+
+--- stderr ---
+

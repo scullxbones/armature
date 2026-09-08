@@ -1,0 +1,16 @@
+{
+  "id": "TASK-VERIFY-READY",
+  "title": "Verification ready+claim",
+  "type": "task",
+  "status": "claimed",
+  "definition_of_done": "Claimed with a managed worktree",
+  "scope": [
+    "ready.go"
+  ],
+  "claimed_by": "2a37a593-f4da-46ae-9d8a-c7853290b843",
+  "acceptance": [
+    {
+      "type": "test_passes"
+    }
+  ]
+}
