@@ -609,6 +609,13 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 // isPassiveAggregateParent reports whether issue is a story/feature whose
 // competing scope would be a descendant rollup. Those parents stay out of W1;
 // active children (and leaf stories/features with no descendants) compete.
+//
+// An explicitly claimed parent is not passive: claiming a story or feature
+// directly is supported, and its holder is editing the declared files right
+// now. The claim-time overlap scan filters out non-task holders, so W1 is the
+// only remaining safeguard for that case. ClaimedBy is the discriminator
+// rather than status alone, because applyClaim promotes a parent to
+// in-progress on a child's claim without ever setting a claimant on it.
 func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph) bool {
 	if issue.Type != "story" && issue.Type != "feature" {
 		return false
@@ -616,7 +623,20 @@ func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph) bool {
 	if graph == nil {
 		return false
 	}
+	if isActivelyClaimed(issue) {
+		return false
+	}
 	return len(graph.Descendants(issue.ID)) > 0
+}
+
+// isActivelyClaimed reports whether issue currently has a worker holding it,
+// mirroring the claimed/in-progress holder states cmd/armature's claim-time
+// scan treats as competing.
+func isActivelyClaimed(issue *materialize.Issue) bool {
+	if issue.ClaimedBy == "" {
+		return false
+	}
+	return issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress
 }
 
 // isAncestorOrDescendant reports whether a and b are in the same parent/child

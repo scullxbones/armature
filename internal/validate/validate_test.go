@@ -250,6 +250,81 @@ func TestW1ExcludesPassiveAggregateParents_REQ_W1TYPE_1(t *testing.T) {
 		"passive aggregate story must not W1 against an unrelated live task on rolled-up files")
 }
 
+func TestW1KeepsExplicitlyClaimedAggregateParent_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	// A story can be claimed directly (see cmd/armature/claim_test.go's direct
+	// story claim coverage). A worker holding that claim is editing the story's
+	// files right now, so it is active work rather than a passive rollup and must
+	// still compete in W1 -- the claim-time scan filters out non-task holders, so
+	// validate is the only remaining safeguard for this case.
+	state := makeState(
+		&materialize.Issue{
+			ID:        "STORY-CLAIMED",
+			Type:      "story",
+			Status:    ops.StatusClaimed,
+			ClaimedBy: "worker-a",
+			Scope:     []string{"cmd/armature/claim.go"},
+			Children:  []string{"TSK-DONE"},
+		},
+		&materialize.Issue{
+			ID:     "TSK-DONE",
+			Type:   "task",
+			Parent: "STORY-CLAIMED",
+			Status: "done",
+			Scope:  []string{"cmd/armature/claim.go"},
+		},
+		&materialize.Issue{
+			ID:    "TSK-NEW",
+			Type:  "task",
+			Scope: []string{"cmd/armature/claim.go"},
+		},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsWarning(result, "scope overlap"),
+		"an explicitly claimed story must still W1 against an unrelated live task")
+	var cited []string
+	for _, f := range result.Findings {
+		if f.Rule == "W1" {
+			cited = f.CitedIDs
+			break
+		}
+	}
+	assert.Contains(t, cited, "STORY-CLAIMED")
+	assert.Contains(t, cited, "TSK-NEW")
+}
+
+// TestW1InProgressRollupParentWithoutClaimantStaysPassive_REQ_W1TYPE_1 guards
+// the other side of the claim check: applyClaim promotes a parent to
+// in-progress without setting ClaimedBy, so an in-progress status alone is not
+// evidence of a direct claim and must not drag the rollup back into W1.
+func TestW1InProgressRollupParentWithoutClaimantStaysPassive_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{
+			ID:       "STORY-PROMOTED",
+			Type:     "story",
+			Status:   ops.StatusInProgress,
+			Scope:    []string{"cmd/armature/claim.go"},
+			Children: []string{"TSK-DONE"},
+		},
+		&materialize.Issue{
+			ID:     "TSK-DONE",
+			Type:   "task",
+			Parent: "STORY-PROMOTED",
+			Status: "done",
+			Scope:  []string{"cmd/armature/claim.go"},
+		},
+		&materialize.Issue{
+			ID:    "TSK-NEW",
+			Type:  "task",
+			Scope: []string{"cmd/armature/claim.go"},
+		},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	assert.False(t, containsWarning(result, "scope overlap"),
+		"a rollup parent promoted to in-progress without a claimant must stay out of W1")
+}
+
 func TestW1ActiveChildStillCompetesUnderAggregateParent_REQ_W1TYPE_1(t *testing.T) {
 	t.Parallel()
 	state := makeState(
