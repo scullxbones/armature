@@ -606,7 +606,6 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	return findings
 }
 
-
 // isPassiveAggregateParent reports whether issue is a story/feature whose
 // competing scope would be a descendant rollup. Those parents stay out of W1;
 // active children (and leaf stories/features with no descendants) compete.
