@@ -48,13 +48,6 @@ func ParentBranchConfigKey(branchName string) string {
 	return "branch." + branchName + ".armature-parent"
 }
 
-// CandidateBaseRefs are tried in order to find the branch a task diverged
-// from. Remote-tracking refs are preferred over local branches: a local
-// `main`/`master` in a long-lived coordinator checkout is frequently stale
-// (fast-forwarded only on release), whereas `origin/main` reflects the
-// actual upstream tip workers branched from.
-var CandidateBaseRefs = []string{"origin/main", "origin/master", "main", "master"}
-
 // ResolveWorktreeRoot resolves path to the top-level directory of the git
 // worktree that contains it, walking up through parent directories the way
 // git itself does (via `git rev-parse --show-toplevel`). worktree.ResolveGitDir
@@ -176,8 +169,7 @@ func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy string
 // RecordedBaseCommit reads the branch-point SHA persisted at claim time
 // (see writeBaseCommitFileIfAbsent in cmd/armature/claim.go) from the
 // worktree's actual git directory. Returns an error if the worktree wasn't
-// claimed after this mechanism was introduced, so callers can fall back to
-// GetBaseCommit.
+// claimed after this mechanism was introduced.
 func RecordedBaseCommit(worktreePath string) (string, error) {
 	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
@@ -249,8 +241,7 @@ func DynamicBaseCommit(git *adapters.Client) (string, error) {
 	// collapsing the merge-base to the task's HEAD and making every commit
 	// range for CommitReferenceCheck empty. Treat it the same as an
 	// absent/empty value so old bad records self-heal by falling back to
-	// RecordedBaseCommit / GetBaseCommit instead of silently producing a
-	// wrong (empty) range.
+	// RecordedBaseCommit instead of silently producing a wrong (empty) range.
 	if parentBranch == "HEAD" {
 		return "", fmt.Errorf("recorded parent branch for %s is the literal value \"HEAD\"\n"+
 			"(stale pre-fix record): treating as no usable parent branch", currentBranch)
@@ -265,25 +256,6 @@ func DynamicBaseCommit(git *adapters.Client) (string, error) {
 	return base, nil
 }
 
-// GetBaseCommit finds the merge-base between HEAD and the first candidate
-// base ref (CandidateBaseRefs) that resolves in this repo.
-func GetBaseCommit(git *adapters.Client) (string, error) {
-	var lastErr error
-	for _, ref := range CandidateBaseRefs {
-		if _, err := git.ResolveRevision(ref); err != nil {
-			lastErr = err
-			continue
-		}
-		base, err := git.MergeBase("HEAD", ref)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		return base, nil
-	}
-	return "", fmt.Errorf("no candidate base branch (%v) resolves: %w", CandidateBaseRefs, lastErr)
-}
-
 // GatedBaseCommit returns the base commit the delivery gate must scope-check
 // against, trusting ONLY facts actually recorded at claim time: the
 // dynamically-recomputed merge-base against the recorded parent branch
@@ -296,15 +268,12 @@ func GetBaseCommit(git *adapters.Client) (string, error) {
 // SHA recorded once at claim time (RecordedBaseCommit) if no parent-branch
 // record exists (worktrees claimed before that config was introduced).
 //
-// Deliberately does NOT fall through to GetBaseCommit: that tier has no
-// recorded claim-time fact behind it at all — it merge-bases against
-// whatever candidate default branch (origin/main, etc.) happens to resolve
-// RIGHT NOW, so letting it stand in for gating purposes would let the gate
-// pass against data nobody actually recorded for this claim, using the
-// repository's current shape as if it were the claim's actual base. If
-// neither a parent-branch config nor a recorded base-commit file exists for
-// worktreePath (e.g. it was claimed before either mechanism existed), that
-// must fail the gate closed rather than falling through to that guess.
+// Deliberately does NOT guess a default-branch merge-base: that tier has no
+// recorded claim-time fact behind it at all, so letting it stand in for
+// gating purposes would let the gate pass against data nobody actually
+// recorded for this claim. If neither a parent-branch config nor a recorded
+// base-commit file exists for worktreePath (e.g. it was claimed before
+// either mechanism existed), that must fail the gate closed.
 func GatedBaseCommit(worktreePath, issueID string, git *adapters.Client) (string, error) {
 	baseCommit, err := DynamicBaseCommit(git)
 	if err == nil {
@@ -321,32 +290,4 @@ func GatedBaseCommit(worktreePath, issueID string, git *adapters.Client) (string
 		"no recorded base commit for claimed issue %s (dynamic parent-branch merge-base failed: %v; recorded base-commit file also failed: %w)\n"+
 			"this worktree predates delivery-gate claim recording: re-claim it, or use --skip-delivery-gate to bypass",
 		issueID, dynamicErr, err)
-}
-
-// ResolveBaseCommit runs the three-tier base-commit fallback chain for
-// NON-GATING callers that want the best available guess at a task branch's
-// divergence point (e.g. informational/reporting use). Gating (arm
-// transition --to done) must use GatedBaseCommit instead — see its doc
-// comment for why the fallback tiers here are unsafe as a gating input.
-func ResolveBaseCommit(worktreePath string, git *adapters.Client) (string, error) {
-	var lastErr error
-
-	baseCommit, err := DynamicBaseCommit(git)
-	if err == nil {
-		return baseCommit, nil
-	}
-	lastErr = err
-
-	baseCommit, err = RecordedBaseCommit(worktreePath)
-	if err == nil {
-		return baseCommit, nil
-	}
-	lastErr = fmt.Errorf("%w; recorded base commit also failed: %w", lastErr, err)
-
-	baseCommit, err = GetBaseCommit(git)
-	if err != nil {
-		lastErr = fmt.Errorf("%w; default base branch lookup also failed: %w", lastErr, err)
-		return "", fmt.Errorf("failed to determine base commit for delivery gate check: %w", lastErr)
-	}
-	return baseCommit, nil
 }

@@ -592,14 +592,10 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 		return err
 	}
 
-	// Get the base commit to scope-check against. Gating trusts ONLY the SHA
-	// recorded once at claim time (deliverygate.GatedBaseCommit) — unlike
-	// ResolveBaseCommit's three-tier fallback (used by non-gating callers),
-	// this deliberately does NOT fall back to a dynamically recomputed or
-	// default-branch-guessed base commit: either guess can silently stand in
-	// for a claim record that is stale or was never made, letting the gate
-	// pass against data nobody actually recorded for this claim. See
-	// GatedBaseCommit's doc comment for the full rationale.
+	// Get the base commit to scope-check against. Gating trusts only
+	// claim-time recorded facts (deliverygate.GatedBaseCommit): the
+	// parent-branch merge-base, then the SHA recorded at claim. It does not
+	// guess a default-branch merge-base. See GatedBaseCommit's doc comment.
 	git := adapters.New(worktreePath)
 	baseCommit, err := deliverygate.GatedBaseCommit(worktreePath, issueID, git)
 	if err != nil {

@@ -94,7 +94,7 @@ func CleanTreeCheck(worktreePath string) CheckResult {
 // or (Pass: false, Remediation: "...message...") if any file is outside scope.
 //
 // Precondition: baseCommit must already be an actual merge-base of the
-// current branch (as produced by ResolveBaseCommit), not an arbitrary ref —
+// current branch (as produced by GatedBaseCommit), not an arbitrary ref —
 // the diff below uses two-dot (baseCommit..HEAD) semantics, which silently
 // includes commits reachable from baseCommit but not from HEAD if baseCommit
 // is a raw branch tip rather than a merge-base.
@@ -161,7 +161,7 @@ func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 // single commit.
 //
 // Precondition: baseCommit must already be an actual merge-base of the
-// current branch (as produced by ResolveBaseCommit), not an arbitrary ref —
+// current branch (as produced by GatedBaseCommit), not an arbitrary ref —
 // LogRange and the net diff below use two-dot (baseCommit..HEAD) semantics,
 // which is only correct when baseCommit is the real divergence point.
 func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {

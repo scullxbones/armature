@@ -189,10 +189,9 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 // persist a parent-branch git config (see the comment above the
 // persistBranchPointMetadata call in claim.go's existing-worktree branch —
 // there is no reliable signal for the true parent branch name from the
-// worktree alone), deliverygate.ResolveBaseCommit's tier-1
-// DynamicBaseCommit (self-correcting on rebase) can never succeed for a
-// worktree claimed this way. It permanently falls back to tier-2
-// RecordedBaseCommit, the static SHA computed once at claim time — so if the
+// worktree alone), deliverygate.DynamicBaseCommit (self-correcting on rebase)
+// can never succeed for a worktree claimed this way. It permanently falls back
+// to RecordedBaseCommit, the static SHA computed once at claim time — so if the
 // task branch is later rebased onto an updated parent tip, the delivery
 // gate keeps scope-checking against the pre-rebase fork point instead of the
 // new one. This is intentional (documented in claim.go), not a regression;

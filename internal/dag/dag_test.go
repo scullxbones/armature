@@ -2,6 +2,7 @@ package dag
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/leanovate/gopter"
@@ -115,8 +116,8 @@ func TestPropertyParentChildConsistency(t *testing.T) {
 				return false
 			}
 
-			err := d.ValidateParentChild()
-			return err == nil
+			parentNode := d.Node(parentID)
+			return parentNode != nil && slices.Contains(parentNode.Children, childID)
 		},
 		gen.AlphaString(),
 		gen.AlphaString(),
@@ -248,35 +249,6 @@ func TestGraphBlockers(t *testing.T) {
 	// task-1 has no blockers
 	blockers = g.Blockers("task-1")
 	assert.Empty(t, blockers)
-}
-
-// TestGraphBlocks tests that Graph.Blocks returns nodes that this node directly blocks.
-func TestGraphBlocks(t *testing.T) {
-	t.Parallel()
-	d := New()
-	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Blocks: []string{"task-2", "task-3"}}
-	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
-	task3 := &Node{ID: "task-3", Title: "Task 3", Type: "task", BlockedBy: []string{"task-1", "task-2"}}
-
-	require.NoError(t, d.AddNode(task1))
-	require.NoError(t, d.AddNode(task2))
-	require.NoError(t, d.AddNode(task3))
-
-	task2.Blocks = []string{"task-3"}
-
-	g := d
-
-	// task-1 blocks task-2 and task-3
-	blocks := g.Blocks("task-1")
-	assert.ElementsMatch(t, []string{"task-2", "task-3"}, blocks)
-
-	// task-2 blocks task-3
-	blocks = g.Blocks("task-2")
-	assert.ElementsMatch(t, []string{"task-3"}, blocks)
-
-	// task-3 blocks nothing
-	blocks = g.Blocks("task-3")
-	assert.Empty(t, blocks)
 }
 
 // TestGraphHierarchy tests that Graph.Hierarchy returns parent and children.
@@ -416,16 +388,6 @@ func TestGraphBlockersNonexistentNode(t *testing.T) {
 	assert.Nil(t, blockers)
 }
 
-// TestGraphBlocksNonexistentNode tests that Blocks returns nil for nonexistent nodes.
-func TestGraphBlocksNonexistentNode(t *testing.T) {
-	t.Parallel()
-	d := New()
-	g := d
-
-	blocks := g.Blocks("nonexistent")
-	assert.Nil(t, blocks)
-}
-
 // TestGraphHierarchyNonexistentNode tests that Hierarchy handles nonexistent nodes.
 func TestGraphHierarchyNonexistentNode(t *testing.T) {
 	t.Parallel()
@@ -459,20 +421,6 @@ func TestGraphBlockersEmptyNode(t *testing.T) {
 
 	blockers := g.Blockers("task-1")
 	assert.Empty(t, blockers)
-}
-
-// TestGraphBlocksEmptyNode tests that a node with no blocks returns empty slice.
-func TestGraphBlocksEmptyNode(t *testing.T) {
-	t.Parallel()
-	d := New()
-	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
-
-	require.NoError(t, d.AddNode(task))
-
-	g := d
-
-	blocks := g.Blocks("task-1")
-	assert.Empty(t, blocks)
 }
 
 // TestGraphNode uses the Node method to test node retrieval.
@@ -527,32 +475,6 @@ func TestBlockersMutationSafety(t *testing.T) {
 	assert.NotContains(t, g.Blockers("task-2"), "injected")
 	// Verify that the mutated slice is different from the graph's current state
 	assert.NotEqual(t, len(g.Blockers("task-2")), len(mutated))
-}
-
-// TestBlocksMutationSafety tests that mutating the returned slice from Blocks
-// does not affect the graph's internal state.
-func TestBlocksMutationSafety(t *testing.T) {
-	t.Parallel()
-	d := New()
-	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Blocks: []string{"task-2"}}
-	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
-
-	require.NoError(t, d.AddNode(task1))
-	require.NoError(t, d.AddNode(task2))
-
-	g := d
-
-	// Get the blocks and capture the original list
-	original := g.Blocks("task-1")
-
-	// Mutate the returned slice by appending to it
-	mutated := append(g.Blocks("task-1"), "injected")
-
-	// Verify that the mutation did not affect the graph's internal state
-	assert.ElementsMatch(t, original, g.Blocks("task-1"))
-	assert.NotContains(t, g.Blocks("task-1"), "injected")
-	// Verify that the mutated slice is different from the graph's current state
-	assert.NotEqual(t, len(g.Blocks("task-1")), len(mutated))
 }
 
 // TestHierarchyMutationSafety tests that mutating the returned children slice from Hierarchy

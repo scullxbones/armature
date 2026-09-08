@@ -274,25 +274,6 @@ func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
 	assert.Empty(t, entries)
 }
 
-// --- Task 27: PlanContext tests ---
-
-func TestPlanContext(t *testing.T) {
-	t.Parallel()
-	plan := &Plan{
-		Version: 1,
-		Title:   "My Plan",
-		Issues: []PlanIssue{
-			{ID: "PLAN-001"},
-			{ID: "PLAN-002"},
-			{ID: "PLAN-003"},
-		},
-	}
-
-	result := PlanContext(plan)
-	assert.Contains(t, result, "My Plan")
-	assert.Contains(t, result, "3")
-}
-
 func TestDecomposeContextNoSources(t *testing.T) {
 	t.Parallel()
 	plan := &Plan{Title: "Plan", Issues: []PlanIssue{}}

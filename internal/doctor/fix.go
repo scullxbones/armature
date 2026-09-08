@@ -13,7 +13,7 @@ import (
 )
 
 // FixAction is a single deterministic remediation planned by PlanFixes.
-// Ops is the exact sequence of ops that ApplyFixes will append for this action.
+// Ops is the exact sequence of ops that `arm doctor --fix` will append.
 type FixAction struct {
 	IssueID string   `json:"issue_id"`
 	Reason  string   `json:"reason"`
@@ -79,8 +79,8 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 //     "I just don't have visibility into another machine's worktree".
 //
 // Each action is expressed purely as ops to append; PlanFixes never mutates or
-// removes existing op log lines. Calling PlanFixes again after ApplyFixes has
-// appended its output is idempotent: the affected issues are no longer
+// removes existing op log lines. Calling PlanFixes again after those ops have
+// been appended is idempotent: the affected issues are no longer
 // claimed/in-progress with a broken claim, so no further action is planned for them.
 //
 // Deliberately out of scope: reopening `done` issues that lack a corroborating git
@@ -171,25 +171,6 @@ func reportAmbiguousWorktreeBinding(id string) FixAction {
 		IssueID: id,
 		Reason:  "claimed + ambiguous worktree binding: claim preserved; disambiguate manually",
 	}
-}
-
-// ApplyFixes appends the ops for each planned fix to the given ops log, in
-// order, committing each one to the worktree's branch the same way
-// high-stakes ops (claim, transition, assign) do — via ops.AppendAndCommit —
-// rather than writing to the local ops log file only. Pass worktreePath=""
-// and gc=nil for single-branch mode, where AppendAndCommit skips the commit
-// step. A nil or empty actions slice is a no-op.
-func ApplyFixes(logPath, worktreePath string, actions []FixAction, gc ops.GitCommitter) error {
-	for _, a := range actions {
-		for _, op := range a.Ops {
-			// Exempt from refuseIntroduction: recovery compensating
-			// transitions must remain landable on a dirty graph.
-			if err := ops.AppendAndCommit(logPath, worktreePath, op, gc); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func releaseExpiredClaim(id string, issue *materialize.Issue, workerID string, now int64) FixAction {

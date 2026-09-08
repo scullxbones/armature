@@ -163,9 +163,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 	}
 
 	// Append via the same high-stakes path claim/transition/assign use: commit
-	// (dual-branch) and push (best-effort) each op immediately, rather than
-	// doctor.ApplyFixes's commit-only path, which left repairs unpushed until
-	// something else (e.g. `arm push-ops`) happened to run.
+	// (dual-branch) and push (best-effort) each op immediately.
 	//
 	// The plan is withheld until every op lands. ADR 0020 §7 exempts doctor
 	// checks, not a failure while mutating state: an apply error is a real
