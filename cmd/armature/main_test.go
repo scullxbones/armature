@@ -1667,6 +1667,12 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "amend", "--issue", "COV-002", "--acceptance", `[{"type":"test_passes"}]`)
 	require.NoError(t, err)
+	// Promote both out of draft: headline coverage is the Verified band (ADR 0021),
+	// and `create` lands issues as draft.
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "COV-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "dag", "transition", "--issue", "COV-002")
+	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -3511,6 +3517,10 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 		)
 		require.NoError(t, err)
 
+		// Headline coverage is the Verified band (ADR 0021); `create` lands drafts.
+		_, err = runTrls(t, repo, "dag", "transition", "--issue", "src-id-01")
+		require.NoError(t, err)
+
 		// Materialize and confirm the issue exists.
 		_, err = runTrls(t, repo, "materialize")
 		require.NoError(t, err)
@@ -3534,6 +3544,9 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 			"--dod", "Source-linked task by path is complete",
 			"--acceptance", `[{"type":"test_passes"}]`,
 		)
+		require.NoError(t, err)
+
+		_, err = runTrls(t, repo, "dag", "transition", "--issue", "src-url-01")
 		require.NoError(t, err)
 
 		_, err = runTrls(t, repo, "materialize")

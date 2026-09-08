@@ -14,6 +14,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestToTraceabilityRefs_CarriesConfidence_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	issues := map[string]*Issue{
+		"task-draft":    {ID: "task-draft", Provenance: Provenance{Confidence: "draft"}},
+		"task-verified": {ID: "task-verified", Provenance: Provenance{Confidence: "verified"}},
+	}
+
+	got := make(map[string]string, len(issues))
+	for _, ref := range toTraceabilityRefs(issues) {
+		got[ref.ID] = ref.Confidence
+	}
+
+	assert.Equal(t, "draft", got["task-draft"])
+	assert.Equal(t, "verified", got["task-verified"])
+}
+
 func TestMaterialize_IncrementalReplayNormalizesLoadedIssues(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
