@@ -925,25 +925,23 @@ drive_ready_claim() {
   printf '# verify source\n' >"$TARGET_REPO/README.md"
   printf 'package ready\n' >"$TARGET_REPO/ready.go"
   git -C "$TARGET_REPO" add README.md ready.go
-  # Captured, not bare: bootstrap installs git hooks unconditionally, so this
-  # commit runs prepare-commit-msg/post-commit. Their failures (no origin to
-  # push ops to; the active-claim lookup) print error envelopes that would
+  # Captured, not bare: bootstrap still installs post-commit, so this commit
+  # can print a push-ops failure envelope when there is no origin. That would
   # otherwise escape to the operator's terminal with no evidence trail.
   # Hooks invoke bare `arm`; launch only builds $SOURCE_ROOT/bin/arm and never
   # puts that directory on PATH. Without it, command-not-found is suppressed
   # (commit still exits 0, empty evidence) or an older installed arm is used.
   capture drive/00-seed-commit env "PATH=$(dirname -- "$ARM_BIN"):$PATH" git -C "$TARGET_REPO" -c "core.hooksPath=$TARGET_REPO/.git/hooks" commit -q -m "docs: seed files for ready-claim"
   assert_exit_0 drive/00-seed-commit
-  # prepare-commit-msg writes the active-claim error into COMMIT_EDITMSG, not
-  # the commit process's stdout/stderr. Capture the subject before cleanup
-  # deletes the only repo that still has it.
+  # prepare-commit-msg is retired (HOOKMSG-1); the subject must reach git
+  # unmodified. Capture it before cleanup deletes the only repo that still has it.
   capture drive/00-seed-commit-subject git -C "$TARGET_REPO" log -1 --format=%s
   assert_exit_0 drive/00-seed-commit-subject
   local seed_subject seed_err
   seed_subject=$(tr -d '\r' <"$EVIDENCE_DIR/drive/00-seed-commit-subject/stdout.txt")
   case "$seed_subject" in
-    *GENERAL-1*|*'active-claim'*) ;;
-    *) die "seed commit subject was not mutated by prepare-commit-msg (built arm not on PATH?): $seed_subject" ;;
+    'docs: seed files for ready-claim') ;;
+    *) die "seed commit subject was mutated after prepare-commit-msg retirement: $seed_subject" ;;
   esac
   seed_err=$(cat "$EVIDENCE_DIR/drive/00-seed-commit/stderr.txt")
   case "$seed_err" in

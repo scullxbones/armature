@@ -530,6 +530,36 @@ func removeObsoleteHooks(gitHooksDir, hooksDir string) error {
 	return nil
 }
 
+// commitObsoleteHookTemplateRemovals records tracked template deletions on
+// _armature. removeObsoleteHooks uses os.Remove, which leaves a dirty ops
+// worktree when the template is already tracked; later worker-log commits do
+// not stage that deletion, so FetchAndRebase's rebase then refuses to run.
+func commitObsoleteHookTemplateRemovals(worktreePath string, isCollapsedLayout bool) error {
+	client := adapters.New(worktreePath)
+	prefix := "hooks/"
+	if !isCollapsedLayout {
+		prefix = config.StateDirName + "/hooks/"
+	}
+	var paths []string
+	for _, hook := range obsoleteHooks {
+		rel := prefix + hook + ".sh.template"
+		if !client.IsTracked(rel) {
+			continue
+		}
+		if err := client.RemoveTree(rel); err != nil {
+			return fmt.Errorf("remove tracked obsolete hook template %s: %w", rel, err)
+		}
+		paths = append(paths, rel)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	if err := client.CommitPathsNoVerify("chore: remove obsolete hook templates", paths...); err != nil {
+		return fmt.Errorf("commit obsolete hook template removal: %w", err)
+	}
+	return nil
+}
+
 // migrateLegacySingleBranchOps detects and migrates a pre-existing single-branch .armature/ops layout
 // to the new dual-branch layout. If legacy ops exist in repoPath/.armature/ops, they are moved to
 // a timestamped backup directory .armature.migrated-<timestamp>, and the new dual-branch structure
@@ -1612,6 +1642,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	// Print warnings for skipped hooks to stderr
 	for _, hookName := range skippedHooks {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping git hook %s (not Armature-managed)\n", hookName)
+	}
+
+	if err := commitObsoleteHookTemplateRemovals(worktreePath, isCollapsedLayout); err != nil {
+		return RepoSetupResult{}, err
 	}
 
 	// Write config if not already written during migration
