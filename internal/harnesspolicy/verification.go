@@ -93,11 +93,14 @@ func (VerificationService) CheckCitations(checks []CitationCheck) VerificationRe
 	}
 	if len(uncited) == 0 {
 		result.Passed = true
-		result.Message = "all sources cited"
+		result.Message = "all Citation Acceptances recorded"
 		return result
 	}
 
-	result.Message = fmt.Sprintf("uncited source(s): %s", strings.Join(uncited, ", "))
+	result.Message = fmt.Sprintf(
+		"missing Citation Acceptance for %s; run arm sources accept-citation",
+		strings.Join(uncited, ", "),
+	)
 	return result
 }
 

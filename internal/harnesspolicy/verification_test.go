@@ -58,6 +58,23 @@ func TestVerificationServiceCheckCitationsRejectsUncitedSource(t *testing.T) {
 	assert.Contains(t, result.Message, "src-2")
 }
 
+func TestMissingAcceptanceIsNamedNotCalledUncited_REQ_CITEGATE_T1(t *testing.T) {
+	t.Parallel()
+	service := NewVerificationService()
+	checks := []CitationCheck{
+		{SourceEntryID: "src-2", Accepted: false},
+	}
+
+	result := service.CheckCitations(checks)
+
+	assert.False(t, result.Passed)
+	assert.Equal(t, CheckCitations, result.Name)
+	assert.Contains(t, result.Message, "Citation Acceptance")
+	assert.Contains(t, result.Message, "missing")
+	assert.Contains(t, result.Message, "arm sources accept-citation")
+	assert.NotContains(t, result.Message, "uncited source")
+}
+
 func TestVerificationServiceCheckCitationsAcceptsEmptyChecks(t *testing.T) {
 	t.Parallel()
 	service := NewVerificationService()
