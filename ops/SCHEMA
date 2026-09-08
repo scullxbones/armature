@@ -2,7 +2,7 @@
 #
 # Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]
 #
-# Position 0: op_type (string) - one of: create, claim, heartbeat, transition, note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign, amend, citation-accepted, scope-rename, scope-delete, reparent, assessment-attested
+# Position 0: op_type (string) - one of: create, claim, heartbeat, transition, note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign, amend, citation-accepted, scope-rename, scope-delete, reparent, assessment-attested, gate-evidence
 # Position 1: target_id (string) - issue/node/source ID this op targets
 # Position 2: timestamp (integer) - Unix epoch seconds
 # Position 3: worker_id (string) - UUID of the worker emitting this op
@@ -15,9 +15,12 @@
 #   create:            title, parent, type, scope, context_files, acceptance, definition_of_done,
 #                     clear_context_files, context, source_citation, priority,
 #                     estimated_complexity, confidence, preferred_model
-#   claim:             ttl
+#   claim:             ttl, worktree_path (optional), claim_token
 #   heartbeat:         (empty object)
-#   transition:        to, outcome, branch (optional), pr (optional)
+#   transition:        to, outcome, branch (optional), pr (optional),
+#                        skipped_delivery_gate (optional)
+#                        restore_claim snapshot fields (rollback only)
+#                        if_claim_token (conditional compensating rollback only)
 #   note:              msg, note_id
 #   note-delete:       note_id
 #   link:              dep, rel
@@ -33,3 +36,5 @@
 #   scope-delete:      deleted_path
 #   reparent:          parent
 #   assessment-attested: assessment
+#   gate-evidence:     profile, command, head_sha, start, end, exit, uncommitted,
+#                     output_hash, output_head, output_tail, log_path
