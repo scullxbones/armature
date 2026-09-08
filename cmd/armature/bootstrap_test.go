@@ -335,6 +335,48 @@ func TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T
 		"the obsolete template must not be written back")
 }
 
+// TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1 guards the upgrade path
+// where _armature already tracks the retired template. os.Remove alone leaves an unstaged
+// deletion; later CommitWorktreeOp stages only the worker log, so FetchAndRebase's rebase
+// refuses the dirty ops worktree. The deletion must land on _armature.
+func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	templateRel := "hooks/prepare-commit-msg.sh.template"
+	templatePath := filepath.Join(opsWT, templateRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(templatePath), 0o750))
+	require.NoError(t, os.WriteFile(templatePath, []byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o600))
+	opsGit := adapters.New(opsWT)
+	require.NoError(t, opsGit.AddPaths([]string{templateRel}))
+	require.NoError(t, opsGit.CommitPathsNoVerify("chore: plant legacy prepare-commit-msg template", templateRel))
+
+	hookPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
+	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o755))
+
+	_, err = runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, templatePath, "tracked obsolete template must be removed")
+	assert.NoFileExists(t, hookPath, "Armature-managed prepare-commit-msg hook must be removed")
+
+	status := runOutput(t, opsWT, "status", "--porcelain")
+	for _, line := range strings.Split(strings.TrimSpace(status), "\n") {
+		if line == "" || strings.HasPrefix(line, "??") {
+			continue
+		}
+		assert.Fail(t, "ops worktree has tracked dirty state after removing obsolete template: "+line)
+	}
+
+	lsTree := runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature")
+	assert.NotContains(t, lsTree, templateRel, "obsolete template must not remain on _armature")
+	assert.Contains(t, runOutput(t, repo, "log", "_armature", "--oneline"), "remove obsolete hook templates")
+}
+
 // TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1 verifies the removal is
 // scoped to hooks Armature wrote. A hook the user owns is theirs, not ours to delete.
 func TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T) {
