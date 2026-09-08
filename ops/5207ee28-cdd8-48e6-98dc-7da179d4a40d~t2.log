@@ -1,2 +1,3 @@
 ["claim","CITEGATE-T2",1788839080,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t2",{"ttl":180,"worktree_path":"/home/brian/development/armature/.worktrees/CITEGATE-T2","claim_token":"f0ad7a43cd1ecf99eae5e3a8e8cebf93"}]
 ["note","CITEGATE-T2",1788839608,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t2",{"msg":"ADR 0021: grounding gated on Confidence at Plan Release. Compute splits Draft/Verified coverage; Graph Findings only for ungrounded Verified.","note_id":"note-1788839608982243286"}]
+["citation-accepted","CITEGATE-T2",1788839889,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t2",{"confirmed_noninteractively":true,"rationale":"Grounded in CONTEXT.md: Confidence vs status; Draft legal ungrounded; Verified requires grounding at Plan Release."}]
