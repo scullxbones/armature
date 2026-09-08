@@ -254,18 +254,18 @@ considered, so E13 does not fire against already-merged history.
 
 Warnings highlight potential issues but do not prevent execution. Use `--strict` to treat them as errors.
 
-#### W1: Scope Overlap Between Siblings
+#### W1: Scope Overlap Between Ready-Eligible Issues
 
-**Trigger:** Two sibling tasks (same parent, not in terminal status) modify overlapping files, and neither blocks the other.
+**Trigger:** Two non-terminal ready-eligible issues (`task`, `bug`, `feature`, or `story`) have overlapping scope globs, neither is an ancestor/descendant of the other, and neither blocks the other (directly or transitively). Comparisons are graph-wide, including cross-parent pairs. Epics and terminal issues are ignored. Parent/child pairs are suppressed because a parent's scope is the union of its descendants.
 
-**Message:** `scope overlap: <task-a> and <task-b> both modify <file-list>`
+**Message:** `scope overlap: <issue-a> and <issue-b> both modify <file-list>`
 
-**Context:** Scope overlap is expected if tasks execute serially (one blocks the other). This warning indicates potential parallel-execution conflicts.
+**Context:** Scope overlap is expected if issues execute serially (one blocks the other). This warning indicates potential parallel-execution conflicts across any ready-eligible types, not only sibling tasks.
 
 **Fix:**
-1. If tasks should run in sequence, add a dependency: `arm link --source <task-b> --rel blocked_by --dep <task-a>`
-2. If scope truly overlaps and can be parallelized, narrow one task's scope: `arm amend <task-b> --scope '...'`
-3. If this is intentional (e.g., refactoring one file in parallel), add a note explaining: `arm note <task-a> --msg "Intentional scope overlap with <task-b>"`
+1. If issues should run in sequence, add a dependency: `arm link --source <issue-b> --rel blocked_by --dep <issue-a>`
+2. If scope truly overlaps and can be parallelized, narrow one issue's scope: `arm amend <issue-b> --scope '...'`
+3. If this is intentional (e.g., refactoring one file in parallel), add a note explaining: `arm note <issue-a> --msg "Intentional scope overlap with <issue-b>"`
 
 ---
 
