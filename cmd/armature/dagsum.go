@@ -65,11 +65,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			tracePath := store.StatePath("traceability.json")
 			cov, _ := traceability.Read(tracePath) //nolint:errcheck // best-effort read of derived traceability state
 
-			// Build a set of uncited IDs for fast lookup.
-			uncitedSet := make(map[string]struct{}, len(cov.Uncited))
-			for _, id := range cov.Uncited {
-				uncitedSet[id] = struct{}{}
-			}
+			uncitedSet := uncitedLookup(cov)
 
 			// Collect draft nodes from the subtree (or globally if no --issue given).
 			var draftIssues []*materialize.Issue
@@ -208,6 +204,21 @@ mode (agents) to auto-approve all pending draft items.`,
 
 // collectDraftSubtree walks the issue subtree rooted at rootID and returns
 // all issues with confidence == "draft".
+// uncitedLookup builds a set of uncited IDs for fast lookup. Draft nodes are
+// deliberately absent from Coverage.Uncited (they are legally ungrounded, not a
+// Finding), so their own uncited list is folded in here: sign-off still requires
+// explicit per-node acknowledgment for an unlinked draft.
+func uncitedLookup(cov traceability.Coverage) map[string]struct{} {
+	set := make(map[string]struct{}, len(cov.Uncited)+len(cov.DraftUncited))
+	for _, id := range cov.Uncited {
+		set[id] = struct{}{}
+	}
+	for _, id := range cov.DraftUncited {
+		set[id] = struct{}{}
+	}
+	return set
+}
+
 func collectDraftSubtree(state *materialize.State, rootID string) []*materialize.Issue {
 	root, ok := state.Issues[rootID]
 	if !ok {

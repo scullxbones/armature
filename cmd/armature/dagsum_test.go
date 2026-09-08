@@ -5,9 +5,26 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// An unlinked draft must still be presented as uncited in dag summary, so the
+// TUI keeps its type-the-ID acknowledgment (CITEGATE-T2 / ADR 0021).
+func TestUncitedLookup_IncludesDraftUncited_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	cov := traceability.Coverage{
+		Uncited:      []string{"VER-1"},
+		DraftUncited: []string{"DRAFT-1"},
+	}
+
+	lookup := uncitedLookup(cov)
+
+	assert.Contains(t, lookup, "VER-1")
+	assert.Contains(t, lookup, "DRAFT-1")
+	assert.NotContains(t, lookup, "DRAFT-2")
+}
 
 // setupRepoWithDraftNode creates a bootstrapped repo with a draft-confidence task.
 func setupRepoWithDraftNode(t *testing.T) string {

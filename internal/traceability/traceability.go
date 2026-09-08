@@ -42,22 +42,26 @@ type Finding struct {
 // Headline totals and CoveragePct are the Verified band so the percentage
 // stays meaningful; Draft is reported separately and does not mix in.
 type Coverage struct {
-	TotalNodes          int       `json:"total_nodes"`
-	CitedNodes          int       `json:"cited_nodes"`
-	CoveragePct         float64   `json:"coverage_pct"`
-	AcceptedRiskNodes   int       `json:"accepted_risk_nodes"`
-	AcceptedRiskPct     float64   `json:"accepted_risk_pct"`
-	Uncited             []string  `json:"uncited"`
-	Findings            []Finding `json:"findings"`
-	DraftTotal          int       `json:"draft_total"`
-	DraftCited          int       `json:"draft_cited"`
-	DraftCoveragePct    float64   `json:"draft_coverage_pct"`
-	VerifiedTotal       int       `json:"verified_total"`
-	VerifiedCited       int       `json:"verified_cited"`
-	VerifiedCoveragePct float64   `json:"verified_coverage_pct"`
-	InferredTotal       int       `json:"inferred_total"`
-	InferredCited       int       `json:"inferred_cited"`
-	InferredCoveragePct float64   `json:"inferred_coverage_pct"`
+	TotalNodes        int       `json:"total_nodes"`
+	CitedNodes        int       `json:"cited_nodes"`
+	CoveragePct       float64   `json:"coverage_pct"`
+	AcceptedRiskNodes int       `json:"accepted_risk_nodes"`
+	AcceptedRiskPct   float64   `json:"accepted_risk_pct"`
+	Uncited           []string  `json:"uncited"`
+	Findings          []Finding `json:"findings"`
+	// DraftUncited lists draft nodes with no source link. Drafts are legally
+	// ungrounded, so they are absent from Uncited and Findings — but dag summary
+	// needs their citation status to require per-node acknowledgment at sign-off.
+	DraftUncited        []string `json:"draft_uncited"`
+	DraftTotal          int      `json:"draft_total"`
+	DraftCited          int      `json:"draft_cited"`
+	DraftCoveragePct    float64  `json:"draft_coverage_pct"`
+	VerifiedTotal       int      `json:"verified_total"`
+	VerifiedCited       int      `json:"verified_cited"`
+	VerifiedCoveragePct float64  `json:"verified_coverage_pct"`
+	InferredTotal       int      `json:"inferred_total"`
+	InferredCited       int      `json:"inferred_cited"`
+	InferredCoveragePct float64  `json:"inferred_coverage_pct"`
 }
 
 // Compute calculates traceability coverage from a slice of IssueRef values.
@@ -75,6 +79,7 @@ func Compute(refs []IssueRef) Coverage {
 	draftCited := 0
 	inferredTotal := 0
 	inferredCited := 0
+	var draftUncited []string
 	var uncited []string
 	var findings []Finding
 
@@ -84,6 +89,8 @@ func Compute(refs []IssueRef) Coverage {
 			draftTotal++
 			if ref.SourceLinkCount > 0 {
 				draftCited++
+			} else {
+				draftUncited = append(draftUncited, ref.ID)
 			}
 			continue
 		case ConfidenceInferred:
@@ -115,6 +122,7 @@ func Compute(refs []IssueRef) Coverage {
 	}
 
 	sort.Strings(uncited)
+	sort.Strings(draftUncited)
 	sort.Slice(findings, func(i, j int) bool {
 		return findings[i].Message < findings[j].Message
 	})
@@ -147,6 +155,7 @@ func Compute(refs []IssueRef) Coverage {
 		AcceptedRiskPct:     acceptedRiskPct,
 		Uncited:             uncited,
 		Findings:            findings,
+		DraftUncited:        draftUncited,
 		DraftTotal:          draftTotal,
 		DraftCited:          draftCited,
 		DraftCoveragePct:    draftPct,
