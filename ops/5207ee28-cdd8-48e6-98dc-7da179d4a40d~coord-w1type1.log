@@ -1,1 +1,2 @@
 ["note","W1TYPE-1",1788827943,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~coord-w1type1",{"msg":"Coordinator wave 1: claimed with --worktree at .worktrees/W1TYPE-1 on fix/W1TYPE-1 (parent=main, base=8eca601517d4625771706e23628857ff4b9310a3). WAVE_TYPE=code. Shared main checkout left in place; other agents are on sibling worktrees.","note_id":"note-1788827943135695953"}]
+["amend","W1TYPE-1",1788830474,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~coord-w1type1",{"scope":["internal/validate/validate.go","internal/validate/validate_test.go","cmd/armature/claim_test.go"]}]
