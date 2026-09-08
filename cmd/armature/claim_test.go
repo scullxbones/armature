@@ -1245,11 +1245,11 @@ func TestClaimIgnoresNonTaskIssuesInOverlapCheck_REQ_LNGHZN_S10_T8(t *testing.T)
 	_, err = runTrls(t, repo, "amend", "--issue", "story-other", "--scope", "cmd/armature/claim.go")
 	require.NoError(t, err)
 
-	// Task to claim, unrelated to story-other.
-	_, err = runTrls(t, repo, "create", "--title", "Task to claim", "--type", "task", "--id", "task-target")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "amend", "--issue", "task-target", "--scope", "cmd/armature/claim.go")
-	require.NoError(t, err)
+	// Task to claim, unrelated to story-other. W1 now compares every
+	// ready-eligible type at the Introduction door, so a CLI amend that
+	// overlaps the live story is refused. Plant the overlapping scope via
+	// a raw op so this test still covers claim-time type filtering.
+	plantVerifiedTask(t, repo, "task-target", "cmd/armature/claim.go")
 
 	// Put story-other into in-progress, held by a different worker, without
 	// any of its children actually being claimed.
