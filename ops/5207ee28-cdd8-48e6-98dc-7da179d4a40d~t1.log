@@ -1,2 +1,3 @@
 ["claim","CITEGATE-T1",1788827993,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t1",{"ttl":120,"worktree_path":"/home/brian/development/armature/.worktrees/CITEGATE-T1","claim_token":"8f35681653690ae78ee93d1ebe395942"}]
 ["transition","CITEGATE",1788827995,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t1",{"to":"in-progress"}]
+["citation-accepted","CITEGATE-T1",1788828870,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~t1",{"confirmed_noninteractively":true,"rationale":"Grounded in CONTEXT.md glossary (Source Link vs Citation Acceptance); T1 is the vocabulary fix for CheckCitations."}]
