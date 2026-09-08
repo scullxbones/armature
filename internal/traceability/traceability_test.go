@@ -32,6 +32,7 @@ func TestCoverageAllCited(t *testing.T) {
 
 func TestCoverageNoneCited(t *testing.T) {
 	t.Parallel()
+	// Empty Confidence is Verified (CITEGATE-T2); unlabeled uncited nodes remain Graph Findings.
 	refs := []traceability.IssueRef{
 		{ID: "ISSUE-A", SourceLinkCount: 0},
 		{ID: "ISSUE-B", SourceLinkCount: 0},
@@ -64,6 +65,7 @@ func TestCoverageNoneCited(t *testing.T) {
 
 func TestCoveragePartial(t *testing.T) {
 	t.Parallel()
+	// Empty Confidence is Verified (CITEGATE-T2); mixed unlabeled coverage is the Verified band.
 	refs := []traceability.IssueRef{
 		{ID: "ISSUE-1", SourceLinkCount: 1},
 		{ID: "ISSUE-2", SourceLinkCount: 0},
@@ -175,4 +177,75 @@ func TestCompute_BothSourceLinkAndAcceptance_CountsAsSourceLinked(t *testing.T) 
 	if len(cov.Uncited) != 0 {
 		t.Errorf("expected empty Uncited, got %v", cov.Uncited)
 	}
+}
+
+func TestUngroundedDraftIsNotAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	refs := []traceability.IssueRef{
+		{ID: "DRAFT-1", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 0},
+	}
+
+	cov := traceability.Compute(refs)
+
+	if len(cov.Findings) != 0 {
+		t.Errorf("ungrounded Draft must not be a Graph Finding, got %v", cov.Findings)
+	}
+	if containsID(cov.Uncited, "DRAFT-1") {
+		t.Errorf("ungrounded Draft must not appear in Uncited, got %v", cov.Uncited)
+	}
+}
+
+func TestUngroundedVerifiedIsAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	refs := []traceability.IssueRef{
+		{ID: "VER-1", Confidence: traceability.ConfidenceVerified, SourceLinkCount: 0},
+	}
+
+	cov := traceability.Compute(refs)
+
+	if len(cov.Findings) != 1 {
+		t.Fatalf("ungrounded Verified must be a Graph Finding, got %v", cov.Findings)
+	}
+	if !containsID(cov.Findings[0].CitedIDs, "VER-1") {
+		t.Errorf("Graph Finding must cite VER-1, got %v", cov.Findings[0].CitedIDs)
+	}
+	if !containsID(cov.Uncited, "VER-1") {
+		t.Errorf("ungrounded Verified must appear in Uncited, got %v", cov.Uncited)
+	}
+}
+
+func TestCoverageSeparatesDraftFromVerified_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	refs := []traceability.IssueRef{
+		{ID: "DRAFT-1", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 0},
+		{ID: "VER-1", Confidence: traceability.ConfidenceVerified, SourceLinkCount: 1},
+	}
+
+	cov := traceability.Compute(refs)
+
+	if cov.VerifiedTotal != 1 || cov.VerifiedCited != 1 || cov.VerifiedCoveragePct != 100.0 {
+		t.Errorf("verified coverage: total=%d cited=%d pct=%f, want 1/1 100%%",
+			cov.VerifiedTotal, cov.VerifiedCited, cov.VerifiedCoveragePct)
+	}
+	if cov.DraftTotal != 1 || cov.DraftCited != 0 || cov.DraftCoveragePct != 0.0 {
+		t.Errorf("draft coverage: total=%d cited=%d pct=%f, want 1/0 0%%",
+			cov.DraftTotal, cov.DraftCited, cov.DraftCoveragePct)
+	}
+	// Mixing Draft and Verified would report 50% and make the percentage lie.
+	if cov.CoveragePct != 100.0 {
+		t.Errorf("CoveragePct must be verified-only (100), got %f", cov.CoveragePct)
+	}
+	if cov.TotalNodes != 1 || cov.CitedNodes != 1 {
+		t.Errorf("headline totals must be verified-only: TotalNodes=%d CitedNodes=%d, want 1/1",
+			cov.TotalNodes, cov.CitedNodes)
+	}
+}
+
+func containsID(ids []string, want string) bool {
+	for _, id := range ids {
+		if id == want {
+			return true
+		}
+	}
+	return false
 }
