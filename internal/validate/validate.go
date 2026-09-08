@@ -571,11 +571,11 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	for i, task1 := range tasks {
 		for j := i + 1; j < len(tasks); j++ {
 			task2 := tasks[j]
-			if isAncestorOrDescendant(graph, task1.ID, task2.ID) {
-				continue
-			}
 			matchedA, matchedB, overlaps := firstGlobOverlapPair(task1.Scope, task2.Scope)
 			if !overlaps {
+				continue
+			}
+			if isAncestorOrDescendant(graph, task1.ID, task2.ID) {
 				continue
 			}
 			if hasSerialDependency(task1, task2, blocks) {
