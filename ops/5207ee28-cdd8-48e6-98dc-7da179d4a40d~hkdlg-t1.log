@@ -1,0 +1,1 @@
+["citation-accepted","HKDLG-T1",1788828379,"5207ee28-cdd8-48e6-98dc-7da179d4a40d~hkdlg-t1",{"confirmed_noninteractively":true,"rationale":"Sourced from HOOKMSG-1 dogfood finding: post-commit shell calls bare arm heartbeat which prints GENERAL-1 on stdout; native runPostCommitHook already implements claim-aware heartbeat."}]
