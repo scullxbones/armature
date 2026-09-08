@@ -214,6 +214,50 @@ func TestUngroundedVerifiedIsAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 	}
 }
 
+func TestInferredIsNotInVerifiedBand_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	refs := []traceability.IssueRef{
+		{ID: "INF-1", Confidence: traceability.ConfidenceInferred, SourceLinkCount: 0},
+	}
+
+	cov := traceability.Compute(refs)
+
+	if len(cov.Findings) != 0 {
+		t.Errorf("ungrounded Inferred must not be a Graph Finding, got %v", cov.Findings)
+	}
+	if containsID(cov.Uncited, "INF-1") {
+		t.Errorf("ungrounded Inferred must not appear in Uncited, got %v", cov.Uncited)
+	}
+	if cov.VerifiedTotal != 0 {
+		t.Errorf("expected VerifiedTotal=0, got %d", cov.VerifiedTotal)
+	}
+	if cov.InferredTotal != 1 || cov.InferredCited != 0 {
+		t.Errorf("inferred band: total=%d cited=%d, want 1/0", cov.InferredTotal, cov.InferredCited)
+	}
+	if cov.DraftTotal != 0 {
+		t.Errorf("expected Inferred to stay out of the Draft band, got DraftTotal=%d", cov.DraftTotal)
+	}
+}
+
+func TestAcceptedRiskIsNotAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	refs := []traceability.IssueRef{
+		{ID: "VER-1", Confidence: traceability.ConfidenceVerified, SourceLinkCount: 0, CitationAcceptanceCount: 1},
+	}
+
+	cov := traceability.Compute(refs)
+
+	if cov.AcceptedRiskNodes != 1 {
+		t.Errorf("expected AcceptedRiskNodes=1, got %d", cov.AcceptedRiskNodes)
+	}
+	if !containsID(cov.Uncited, "VER-1") {
+		t.Errorf("accepted-risk node must still appear in Uncited, got %v", cov.Uncited)
+	}
+	if len(cov.Findings) != 0 {
+		t.Errorf("accepted-risk node must not be an E7 Finding, got %v", cov.Findings)
+	}
+}
+
 func TestCoverageSeparatesDraftFromVerified_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
 	refs := []traceability.IssueRef{

@@ -40,6 +40,7 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 			ID:                      id,
 			SourceLinkCount:         len(issue.SourceLinks),
 			CitationAcceptanceCount: len(issue.CitationAcceptances),
+			Confidence:              issue.Provenance.Confidence,
 		})
 	}
 	return refs

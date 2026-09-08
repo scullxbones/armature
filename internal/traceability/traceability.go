@@ -11,9 +11,12 @@ import (
 
 // Confidence values on IssueRef. Empty Confidence is treated as Verified
 // (legacy default). Grounding is gated on Confidence, not status (ADR 0021).
+// Only Verified (and the legacy empty value) is a grounded band: Draft and
+// Inferred both await human confirmation and are reported separately.
 const (
 	ConfidenceDraft    = "draft"
 	ConfidenceVerified = "verified"
+	ConfidenceInferred = "inferred"
 )
 
 // IssueRef is a minimal description of an issue used for coverage computation.
@@ -52,6 +55,9 @@ type Coverage struct {
 	VerifiedTotal       int       `json:"verified_total"`
 	VerifiedCited       int       `json:"verified_cited"`
 	VerifiedCoveragePct float64   `json:"verified_coverage_pct"`
+	InferredTotal       int       `json:"inferred_total"`
+	InferredCited       int       `json:"inferred_cited"`
+	InferredCoveragePct float64   `json:"inferred_coverage_pct"`
 }
 
 // Compute calculates traceability coverage from a slice of IssueRef values.
@@ -67,14 +73,23 @@ func Compute(refs []IssueRef) Coverage {
 	acceptedRisk := 0
 	draftTotal := 0
 	draftCited := 0
+	inferredTotal := 0
+	inferredCited := 0
 	var uncited []string
 	var findings []Finding
 
 	for _, ref := range refs {
-		if ref.Confidence == ConfidenceDraft {
+		switch ref.Confidence {
+		case ConfidenceDraft:
 			draftTotal++
 			if ref.SourceLinkCount > 0 {
 				draftCited++
+			}
+			continue
+		case ConfidenceInferred:
+			inferredTotal++
+			if ref.SourceLinkCount > 0 {
+				inferredCited++
 			}
 			continue
 		}
@@ -84,10 +99,14 @@ func Compute(refs []IssueRef) Coverage {
 			verifiedCited++
 			continue
 		}
+		uncited = append(uncited, ref.ID)
+		// An acceptance record is an explicitly accepted risk, not a violation:
+		// E7 fires only when both source links and acceptances are absent, matching
+		// the checkE7E8E12Citations predicate in internal/validate.
 		if ref.CitationAcceptanceCount > 0 {
 			acceptedRisk++
+			continue
 		}
-		uncited = append(uncited, ref.ID)
 		findings = append(findings, Finding{
 			Rule:     "E7",
 			Message:  fmt.Sprintf("uncited node: %s", ref.ID),
@@ -115,6 +134,11 @@ func Compute(refs []IssueRef) Coverage {
 		draftPct = float64(draftCited) / float64(draftTotal) * 100.0
 	}
 
+	var inferredPct float64
+	if inferredTotal > 0 {
+		inferredPct = float64(inferredCited) / float64(inferredTotal) * 100.0
+	}
+
 	return Coverage{
 		TotalNodes:          verifiedTotal,
 		CitedNodes:          verifiedCited,
@@ -129,6 +153,9 @@ func Compute(refs []IssueRef) Coverage {
 		VerifiedTotal:       verifiedTotal,
 		VerifiedCited:       verifiedCited,
 		VerifiedCoveragePct: pct,
+		InferredTotal:       inferredTotal,
+		InferredCited:       inferredCited,
+		InferredCoveragePct: inferredPct,
 	}
 }
 
