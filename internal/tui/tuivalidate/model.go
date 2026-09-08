@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/validate"
@@ -33,7 +34,10 @@ func (m *Model) SetState(state *materialize.State) {
 	m.state = state
 	if state != nil {
 		graph := materialize.GraphFromState(state)
-		m.results = validate.Validate(state, graph, validate.Options{})
+		// Now must be supplied: validate cannot reach a clock itself (depguard),
+		// and without one an aggregate parent whose claim has expired would read
+		// as actively claimed forever and show a false W1 overlap.
+		m.results = validate.Validate(state, graph, validate.Options{Now: clock.System()})
 	}
 }
 
