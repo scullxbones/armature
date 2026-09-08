@@ -5190,3 +5190,4 @@
 ["heartbeat","CITEGATE-T1",1788828064,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
 ["amend","HKDLG-T1",1788828122,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/bootstrap.go","cmd/armature/bootstrap_test.go","cmd/armature/main_test.go"],"context_files":["cmd/armature/hook.go"]}]
 ["note","HKDLG-T1",1788828123,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Coordinator: widened scope to include cmd/armature/main_test.go because TestInit_WritesPostCommitHookTemplate and TestInit_HooksAreBranchAware assert the old shell post-commit body (arm heartbeat / arm push-ops / _armature). Those tests live outside the original scope and would fail make check after the template becomes a one-line arm hook run. hook.go is context-only; T2 still owns it. Do not implement push-ops in Go here.","note_id":"note-1788828123171407138"}]
+["heartbeat","HKDLG-T1",1788828194,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source":"hook"}]
