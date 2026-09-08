@@ -214,6 +214,32 @@ func TestUngroundedVerifiedIsAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 	}
 }
 
+func TestDraftCitationStatusIsPreserved_REQ_CITEGATE_T2(t *testing.T) {
+	t.Parallel()
+	refs := []traceability.IssueRef{
+		{ID: "DRAFT-UNCITED", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 0},
+		{ID: "DRAFT-CITED", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 1},
+	}
+
+	cov := traceability.Compute(refs)
+
+	// Drafts stay out of the headline Uncited list and out of Findings...
+	if len(cov.Findings) != 0 {
+		t.Errorf("draft must not be a Graph Finding, got %v", cov.Findings)
+	}
+	if containsID(cov.Uncited, "DRAFT-UNCITED") {
+		t.Errorf("draft must not appear in Uncited, got %v", cov.Uncited)
+	}
+	// ...but their citation status is still reported, so dag summary can require
+	// per-node acknowledgment for an unlinked draft.
+	if !containsID(cov.DraftUncited, "DRAFT-UNCITED") {
+		t.Errorf("expected DRAFT-UNCITED in DraftUncited, got %v", cov.DraftUncited)
+	}
+	if containsID(cov.DraftUncited, "DRAFT-CITED") {
+		t.Errorf("source-linked draft must not appear in DraftUncited, got %v", cov.DraftUncited)
+	}
+}
+
 func TestInferredIsNotInVerifiedBand_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
 	refs := []traceability.IssueRef{
