@@ -24,6 +24,12 @@ type Options struct {
 	// PreExpandedScopes maps issue ID to pre-expanded file paths (for W10 phantom scope check)
 	// If nil, W10 phantom scope checks are skipped
 	PreExpandedScopes map[string][]string
+	// Now is the evaluation time in Unix seconds, used to age claims out for
+	// W1's claimed-aggregate-parent exception. This package sits behind a
+	// depguard boundary that forbids a clock dependency, so callers inject the
+	// timestamp. Zero means "freshness unknown", which keeps a claimed parent in
+	// W1 rather than silently dropping a live conflict from a warning-only rule.
+	Now int64
 }
 
 type Result struct {
@@ -78,7 +84,7 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 		findings = append(findings, checkE7E8E12Citations(targets, opts.ManifestData)...)
 	}
 
-	findings = append(findings, checkW1ScopeOverlap(targets, state, graph)...)
+	findings = append(findings, checkW1ScopeOverlap(targets, state, graph, opts.Now)...)
 	findings = append(findings, checkW2NoTestCriteria(targets)...)
 	findings = append(findings, checkW3BudgetExceeded(targets)...)
 	findings = append(findings, checkW4BroadScope(targets)...)
@@ -548,7 +554,7 @@ func checkE10ScopeGlobs(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State, graph *dag.Graph) []Finding {
+func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State, graph *dag.Graph, now int64) []Finding {
 	var findings []Finding
 
 	// Collect every non-terminal ready-eligible issue (task, bug, feature, story).
@@ -561,7 +567,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		if !issuetype.IsReadyEligible(issue.Type) || isTerminalStatus(issue.Status) {
 			continue
 		}
-		if isPassiveAggregateParent(issue, graph) {
+		if isPassiveAggregateParent(issue, graph, now) {
 			continue
 		}
 		tasks = append(tasks, issue)
@@ -615,15 +621,16 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 // now. The claim-time overlap scan filters out non-task holders, so W1 is the
 // only remaining safeguard for that case. ClaimedBy is the discriminator
 // rather than status alone, because applyClaim promotes a parent to
-// in-progress on a child's claim without ever setting a claimant on it.
-func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph) bool {
+// in-progress on a child's claim without ever setting a claimant on it, and
+// the claim must still be within its TTL -- an expired lease has no holder.
+func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph, now int64) bool {
 	if issue.Type != "story" && issue.Type != "feature" {
 		return false
 	}
 	if graph == nil {
 		return false
 	}
-	if isActivelyClaimed(issue) {
+	if isActivelyClaimed(issue, now) {
 		return false
 	}
 	return len(graph.Descendants(issue.ID)) > 0
@@ -631,12 +638,19 @@ func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph) bool {
 
 // isActivelyClaimed reports whether issue currently has a worker holding it,
 // mirroring the claimed/in-progress holder states cmd/armature's claim-time
-// scan treats as competing.
-func isActivelyClaimed(issue *materialize.Issue) bool {
+// scan treats as competing. A claim past its TTL is not a holder: materialization
+// leaves Status and ClaimedBy populated on an expired lease, so freshness comes
+// from materialize.Issue.ClaimStale -- the same predicate the ready and recovery
+// paths use -- rather than from those fields alone. A zero now means the caller
+// supplied no clock, so freshness is simply not evaluated.
+func isActivelyClaimed(issue *materialize.Issue, now int64) bool {
 	if issue.ClaimedBy == "" {
 		return false
 	}
-	return issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress
+	if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
+		return false
+	}
+	return now == 0 || !issue.ClaimStale(now)
 }
 
 // isAncestorOrDescendant reports whether a and b are in the same parent/child

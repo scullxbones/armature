@@ -115,7 +115,7 @@ func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (validate.Re
 	if issue.Provenance.Confidence == "verified" {
 		return validate.Result{}, fmt.Errorf("issue %s is already verified", issueID)
 	}
-	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true})
+	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true, Now: nowEpoch()})
 	if valErr != nil {
 		return validate.Result{}, valErr
 	}

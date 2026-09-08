@@ -54,6 +54,7 @@ Use --quiet to suppress INFO lines on a failing run.`,
 			}
 			opts := validate.Options{
 				Strict: strict,
+				Now:    nowEpoch(),
 			}
 			result, err := runGraphValidation(cmd, opts)
 			if err != nil {
