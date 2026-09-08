@@ -162,7 +162,61 @@ func TestW1ScopeOverlap_SkipsNonTaskIssues(t *testing.T) {
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
-	assert.False(t, containsWarning(result, "scope overlap"), "story-level aggregate scopes should not trigger worker collision warnings")
+	assert.True(t, containsWarning(result, "scope overlap"), "sibling ready-eligible stories with overlapping scope must emit W1")
+}
+
+func TestW1ReportsOverlapBetweenBugAndTask_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"cmd/armature/*.go"}},
+		&materialize.Issue{ID: "BUG-1", Type: "bug", Scope: []string{"cmd/armature/bootstrap.go", "cmd/armature/bootstrap_test.go"}},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	require.True(t, containsWarning(result, "scope overlap"), "a bug overlapping a live task must emit W1")
+	var cited []string
+	for _, f := range result.Findings {
+		if f.Rule == "W1" {
+			cited = f.CitedIDs
+			break
+		}
+	}
+	assert.Contains(t, cited, "TSK-1")
+	assert.Contains(t, cited, "BUG-1")
+}
+
+func TestW1SuppressesParentChildScopeUnion_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{
+			ID:       "STORY-1",
+			Type:     "story",
+			Scope:    []string{"internal/ops/*.go"},
+			Children: []string{"TSK-1"},
+		},
+		&materialize.Issue{
+			ID:     "TSK-1",
+			Type:   "task",
+			Parent: "STORY-1",
+			Scope:  []string{"internal/ops/*.go"},
+		},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	assert.False(t, containsWarning(result, "scope overlap"),
+		"a parent story's scope is the union of its children's and must not emit W1")
+}
+
+func TestW1IgnoresTerminalAndEpicIssues_REQ_W1TYPE_1(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{ID: "TSK-LIVE", Type: "task", Scope: []string{"internal/ops/*.go"}},
+		&materialize.Issue{ID: "BUG-DONE", Type: "bug", Status: "done", Scope: []string{"internal/ops/*.go"}},
+		&materialize.Issue{ID: "FEAT-MERGED", Type: "feature", Status: "merged", Scope: []string{"internal/ops/*.go"}},
+		&materialize.Issue{ID: "STORY-CANCELLED", Type: "story", Status: "cancelled", Scope: []string{"internal/ops/*.go"}},
+		&materialize.Issue{ID: "EPIC-1", Type: "epic", Scope: []string{"internal/ops/*.go"}},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	assert.False(t, containsWarning(result, "scope overlap"),
+		"terminal issues and type=epic must not participate in W1 even when scopes overlap")
 }
 
 func TestW2NoTestCriteria(t *testing.T) {
@@ -1066,7 +1120,7 @@ func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfSc
 	}
 	require.NotContains(t, scoped, "TSK-B", "test setup: TSK-B must be outside the scoped subset")
 
-	warns := checkW1ScopeOverlap(scoped, state)
+	warns := checkW1ScopeOverlap(scoped, state, graphFromState(state))
 	for _, w := range warns {
 		assert.NotContains(t, w, "scope overlap",
 			"scope overlap should be suppressed when the transitive blocked_by chain passes through an out-of-scope issue: %s", w)

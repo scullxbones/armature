@@ -78,7 +78,7 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 		findings = append(findings, checkE7E8E12Citations(targets, opts.ManifestData)...)
 	}
 
-	findings = append(findings, checkW1ScopeOverlap(targets, state)...)
+	findings = append(findings, checkW1ScopeOverlap(targets, state, graph)...)
 	findings = append(findings, checkW2NoTestCriteria(targets)...)
 	findings = append(findings, checkW3BudgetExceeded(targets)...)
 	findings = append(findings, checkW4BroadScope(targets)...)
@@ -548,13 +548,13 @@ func checkE10ScopeGlobs(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State) []Finding {
+func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State, graph *dag.Graph) []Finding {
 	var findings []Finding
 
-	// Collect all active (non-terminal) tasks across all stories
+	// Collect every non-terminal ready-eligible issue (task, bug, feature, story).
 	var tasks []*materialize.Issue
 	for _, issue := range issues {
-		if issue.Type != "task" || isTerminalStatus(issue.Status) {
+		if !issuetype.IsReadyEligible(issue.Type) || isTerminalStatus(issue.Status) {
 			continue
 		}
 		tasks = append(tasks, issue)
@@ -566,11 +566,14 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	// suppress a warning without materializing an all-pairs transitive closure.
 	blocks := directBlocks(state.Issues)
 
-	// Compare all pairs of tasks (including cross-story pairs).
+	// Compare all pairs (including cross-story pairs).
 	// Use i < j to avoid duplicate reporting of the same pair.
 	for i, task1 := range tasks {
 		for j := i + 1; j < len(tasks); j++ {
 			task2 := tasks[j]
+			if isAncestorOrDescendant(graph, task1.ID, task2.ID) {
+				continue
+			}
 			matchedA, matchedB, overlaps := firstGlobOverlapPair(task1.Scope, task2.Scope)
 			if !overlaps {
 				continue
@@ -594,6 +597,17 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		}
 	}
 	return findings
+}
+
+// isAncestorOrDescendant reports whether a and b are in the same parent/child
+// chain. A parent's scope is the union of its descendants', so that pair is
+// not a W1 collision. Duplicated from claim.ScopesOverlapEx so validate does
+// not import internal/claim (depguard: scopematch is the shared leaf).
+func isAncestorOrDescendant(graph *dag.Graph, a, b string) bool {
+	if graph == nil {
+		return false
+	}
+	return slices.Contains(graph.Descendants(a), b) || slices.Contains(graph.Descendants(b), a)
 }
 
 // directBlocks indexes the direct blocks relationship. It accepts both Blocks
