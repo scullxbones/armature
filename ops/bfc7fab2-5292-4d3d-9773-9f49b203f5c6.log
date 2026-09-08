@@ -4,3 +4,4 @@
 ["link","TOPTIER-S13-T2",1788840223,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S11","rel":"blocked_by"}]
 ["link","LNGHZN-S7-T6",1788840223,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S12","rel":"blocked_by"}]
 ["link","TOPTIER-S18-T4",1788840224,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S12","rel":"blocked_by"}]
+["link","bug-1783480206",1788840224,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S18-T4","rel":"blocked_by"}]
