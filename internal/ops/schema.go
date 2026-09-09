@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -53,11 +54,42 @@ func SchemaDocumentedOpTypes() []string {
 	return types
 }
 
+// ScaffoldingVersion identifies the generation of scaffolding this binary
+// produces. Bump it whenever GenerateSchema's output changes shape. Bootstrap
+// compares it against the version recorded in a repo's tracked SCHEMA and only
+// republishes when this binary is strictly newer, so an older clone run after an
+// upgrade cannot commit a downgrade and set two clones fighting over the shared
+// _armature branch (AGENTS.md I3).
+const ScaffoldingVersion = 1
+
+// scaffoldingVersionPrefix marks the SCHEMA line carrying ScaffoldingVersion.
+const scaffoldingVersionPrefix = "# scaffolding-version: "
+
+// ParseScaffoldingVersion reads the scaffolding version recorded in SCHEMA
+// content. It reports false when no version line is present — as in a SCHEMA
+// written before versioning — so callers treat that as older than any generator
+// rather than as version zero.
+func ParseScaffoldingVersion(schema string) (int, bool) {
+	for _, line := range strings.Split(schema, "\n") {
+		rest, found := strings.CutPrefix(line, scaffoldingVersionPrefix)
+		if !found {
+			continue
+		}
+		v, err := strconv.Atoi(strings.TrimSpace(rest))
+		if err != nil {
+			return 0, false
+		}
+		return v, true
+	}
+	return 0, false
+}
+
 // GenerateSchema returns the SCHEMA file content defining positional array format.
 func GenerateSchema() string {
 	var b strings.Builder
 
 	b.WriteString("# Trellis Op Log Schema v1\n")
+	fmt.Fprintf(&b, "%s%d\n", scaffoldingVersionPrefix, ScaffoldingVersion)
 	b.WriteString("#\n")
 	b.WriteString("# Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]\n")
 	b.WriteString("#\n")

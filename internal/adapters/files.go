@@ -181,6 +181,11 @@ state/
 gates/
 review/
 
+# Hook templates, regenerated from this binary's constants on every bootstrap
+# and read only by the bootstrap that wrote them. Local; never commit, so two
+# clones on different versions cannot fight over them (architecture.md I3).
+hooks/*.sh.template
+
 # Lock and pending-marker sidecar files for AppendRawLines. Never commit;
 # these are ephemeral, worker-local coordination files, not ops state.
 **/` + appendMetaSubdir + `/
