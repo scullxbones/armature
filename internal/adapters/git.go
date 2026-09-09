@@ -1036,11 +1036,31 @@ func (c *Client) RemoveTree(path string) error {
 
 // RemoveFromIndex removes a path from the git index using "git rm --cached".
 // This is used to mark tracked files/directories for deletion without deleting
-// the working tree files. Returns nil if the path is not tracked.
+// the working tree files. An untracked path is a no-op (--ignore-unmatch), but
+// any other failure — a locked or unwritable index, say — is returned, so a
+// caller cannot mistake a still-tracked path for a successful untrack.
 func (c *Client) RemoveFromIndex(path string) error {
-	cmd := c.cmd("rm", "-r", "--cached", "--quiet", path)
-	_ = cmd.Run() //nolint:errcheck // path might not be tracked in git
+	cmd := c.cmd("rm", "-r", "--cached", "--quiet", "--ignore-unmatch", "--", path)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git rm -r --cached %s: %w\n%s", path, err, out)
+	}
 	return nil
+}
+
+// StagedPaths returns the repository-relative paths with staged changes.
+func (c *Client) StagedPaths() ([]string, error) {
+	out, err := c.cmd("diff", "--cached", "--name-only", "-z").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff --cached --name-only: %w", err)
+	}
+	var paths []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
 }
 
 // IsTracked checks if a path is tracked by git (exists in the index).

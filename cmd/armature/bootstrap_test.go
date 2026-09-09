@@ -337,6 +337,39 @@ func TestBootstrapUntracksAlreadyCommittedSidecars(t *testing.T) {
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
+// TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork verifies that
+// bootstrap refuses to untrack sidecars when the ops worktree's index carries
+// anything else. The untracking commit is unscoped (a path-scoped commit cannot
+// record an index-only removal), so it would otherwise sweep a worker's staged
+// log into a cleanup commit.
+func TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	require.NoError(t, os.MkdirAll(filepath.Join(opsWT, "gates"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(opsWT, "gates", "full-1.log"), []byte("ok\n"), 0o600))
+	run(t, opsWT, "git", "add", "--force", "gates")
+	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: legacy committed sidecar")
+
+	workerLog := filepath.Join(opsWT, "ops", "worker-unrelated.log")
+	require.NoError(t, os.WriteFile(workerLog, []byte("{}\n"), 0o600))
+	run(t, opsWT, "git", "add", "ops/worker-unrelated.log")
+
+	_, err = runRepoSetup(cmd, repo)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ops/worker-unrelated.log")
+
+	lsTree := runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature")
+	assert.NotContains(t, lsTree, "ops/worker-unrelated.log", "unrelated staged work must not be swept into a cleanup commit")
+	assert.Contains(t, lsTree, "gates/full-1.log", "the sidecar stays tracked until the index is clear")
+}
+
 // TestRunRepoSetupWritesSchemaFile verifies that runRepoSetup writes the SCHEMA file.
 // In dual-branch mode, the SCHEMA file is in the worktree's ops directory.
 func TestRunRepoSetupWritesSchemaFile(t *testing.T) {

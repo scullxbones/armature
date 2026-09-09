@@ -563,12 +563,38 @@ func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 // the local copies. .gitignore has no effect on already-tracked paths, so a repo
 // that committed them before the ignore rules existed — or migrated from a
 // legacy layout, whose setup path stages review/ — keeps tracking them, leaving
-// the ops worktree permanently dirty and blocking FetchAndRebase. The removal
-// gets its own unscoped commit because a path-scoped commit would re-read those
-// paths from the working tree, where the files still exist.
+// the ops worktree permanently dirty and blocking FetchAndRebase.
+//
+// The removal gets its own unscoped commit, because a path-scoped commit re-reads
+// those paths from the working tree, where the files still exist. An unscoped
+// commit takes whatever else is in this worktree's index, so anything unrelated
+// staged there — a worker's log mid-append, say — would be swept into the cleanup
+// commit. Refuse rather than sweep: the sidecars stay tracked until the index is
+// clear, and the next bootstrap untracks them.
 func untrackSidecars(client *adapters.Client, prefix string) error {
+	sidecars := []string{prefix + "gates", prefix + "review"}
+	tracked := false
+	for _, sidecar := range sidecars {
+		if client.IsTracked(sidecar) {
+			tracked = true
+			break
+		}
+	}
+	if !tracked {
+		return nil
+	}
+	staged, err := client.StagedPaths()
+	if err != nil {
+		return fmt.Errorf("inspect ops index before untracking sidecars: %w", err)
+	}
+	if len(staged) > 0 {
+		return fmt.Errorf(
+			"refusing to untrack gate/review sidecars: unrelated staged changes in the ops worktree would be swept into the cleanup commit: %s",
+			strings.Join(staged, ", "),
+		)
+	}
 	removed := false
-	for _, sidecar := range []string{prefix + "gates", prefix + "review"} {
+	for _, sidecar := range sidecars {
 		if !client.IsTracked(sidecar) {
 			continue
 		}

@@ -1904,3 +1904,28 @@ func TestDirtyEntriesIncludingSubmodules_NotARepo(t *testing.T) {
 	_, err := adapters.New(t.TempDir()).DirtyEntriesIncludingSubmodules()
 	require.Error(t, err)
 }
+
+// TestRemoveFromIndexReportsRealFailures verifies that RemoveFromIndex
+// distinguishes a genuine git failure from the benign "path is not tracked"
+// case. Swallowing the former lets a caller believe a path was untracked when
+// it is still in the index.
+func TestRemoveFromIndexReportsRealFailures(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	// Untracked path: nothing to do, and not an error.
+	require.NoError(t, c.RemoveFromIndex("never-tracked"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("x\n"), 0o600))
+	require.NoError(t, c.AddPaths([]string{"tracked.txt"}))
+	require.NoError(t, c.CommitPathsNoVerify("chore: add tracked file", "tracked.txt"))
+
+	// A real failure — here an unwritable index — must surface.
+	indexPath := filepath.Join(repo, ".git", "index")
+	require.NoError(t, os.Chmod(filepath.Dir(indexPath), 0o500))
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(indexPath), 0o700) }) //nolint:errcheck // best-effort test cleanup
+	err := c.RemoveFromIndex("tracked.txt")
+	require.Error(t, err, "an unwritable index must not be reported as a successful untrack")
+	assert.Contains(t, err.Error(), "tracked.txt")
+}
