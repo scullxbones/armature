@@ -35,7 +35,7 @@ Derived from `docs/design/deterministic-quality-guardrails.md`, adapted to Go an
 `go test -count=1 ./...` — all tests must pass.
 
 What is in place:
-- Port interfaces defined for every external dependency (`GitCommitter`, `GitPusher`, `PendingPushTracker`, `MergeChecker`, `GitConfigPort`, `Provider`, `Screen`).
+- Port interfaces defined for every external dependency (`GitCommitter`, `PendingPushTracker`, `MergeChecker`, `Provider`, `Screen`). Git push/rebase is `adapters.Client.Push` / `FetchAndRebase` on the high-stakes CLI path, not a separate ops port.
 - Test fakes defined per port in `*_test.go` files adjacent to the package under test.
 - No mock framework in `go.mod`.
 
@@ -117,10 +117,8 @@ For each port interface that has both a fake (used in unit tests) and a real imp
 
 | Port | Fake | Real adapter |
 |---|---|---|
-| `GitCommitter` | `fakeCommitter` in `ops/commit_test.go` | `ops.RealCommitter` (git subprocess) |
-| `GitPusher` | `fakePusher` in `ops/pusher_test.go` | `ops.RealPusher` (git subprocess) |
-| `MergeChecker` | `stubMergeChecker` in `sync/sync_test.go` | git-backed implementation |
-| `GitConfigPort` | inline fake in `platform` tests | `platform.RealGitConfig` |
+| `GitCommitter` | `FakeCommitter` in `ops/committer_contract_test.go` | `adapters.Client` (git subprocess) |
+| `MergeChecker` | `FakeMergeChecker` in `sync/mergechecker_contract_test.go` | `adapters.Client.BranchMergedInto` |
 
 Contract tests for git-backed ports would run in integration scope (tagged `//go:build integration`) and require a real git repo fixture.
 
