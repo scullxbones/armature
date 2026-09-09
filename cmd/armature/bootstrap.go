@@ -530,6 +530,32 @@ func removeObsoleteHooks(gitHooksDir, hooksDir string) error {
 	return nil
 }
 
+// commitOpsScaffolding stages and commits the files runRepoSetup regenerates
+// on every call (.gitignore, ops/SCHEMA, hook templates). Leaving them dirty
+// blocks FetchAndRebase on the next ops push. No-ops when the files already
+// match HEAD.
+func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
+	client := adapters.New(worktreePath)
+	prefix := ""
+	if !isCollapsedLayout {
+		prefix = config.StateDirName + "/"
+	}
+	paths := []string{
+		prefix + ".gitignore",
+		prefix + "ops/SCHEMA",
+		prefix + "hooks/post-merge.sh.template",
+		prefix + "hooks/post-commit.sh.template",
+		prefix + "hooks/pre-commit.sh.template",
+	}
+	if err := client.AddPaths(paths); err != nil {
+		return fmt.Errorf("stage ops scaffolding: %w", err)
+	}
+	if err := client.CommitPathsNoVerify("chore: refresh ops scaffolding", paths...); err != nil {
+		return fmt.Errorf("commit ops scaffolding: %w", err)
+	}
+	return nil
+}
+
 // commitObsoleteHookTemplateRemovals records tracked template deletions on
 // _armature. removeObsoleteHooks uses os.Remove, which leaves a dirty ops
 // worktree when the template is already tracked; later worker-log commits do
@@ -1742,6 +1768,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to write .gitignore after migration: %v\n", err)
 			}
 		}
+	}
+
+	if err := commitOpsScaffolding(worktreePath, isCollapsedLayout); err != nil {
+		return RepoSetupResult{}, err
 	}
 
 	var status string

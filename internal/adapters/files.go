@@ -176,6 +176,11 @@ const OpsGitignore = `# Materialized state — derived from ops logs, regenerate
 # Never commit. See architecture.md §2 (Directory Structure).
 state/
 
+# Gate-run logs and reviewer assessment JSON. Local sidecars; durable
+# records are gate-evidence and assessment-attested ops. Never commit.
+gates/
+review/
+
 # Lock and pending-marker sidecar files for AppendRawLines. Never commit;
 # these are ephemeral, worker-local coordination files, not ops state.
 **/` + appendMetaSubdir + `/
