@@ -79,8 +79,7 @@ func newRootCmd() *cobra.Command {
 			workerID = workerIdentityWithSlot(workerID)
 			ctx.StateDir = stateDirFor(ctx, workerID)
 
-			state := &executionState{ctx: ctx}
-			state.pusher, state.tracker = initPushDeps(ctx)
+			state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
 			baseCtx := cmd.Context()
 			if baseCtx == nil {
 				baseCtx = context.Background()

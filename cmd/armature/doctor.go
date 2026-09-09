@@ -64,8 +64,7 @@ func newDoctorCmd() *cobra.Command {
 					StateDir:  filepath.Join(legacyArmaturePath, "state"),
 					// Note: WorktreePath is empty for legacy repos, which is expected
 				}
-				state := &executionState{ctx: legacyCtx}
-				state.pusher, state.tracker = initPushDeps(legacyCtx)
+				state := &executionState{ctx: legacyCtx, tracker: initPushDeps(legacyCtx)}
 				baseCtx := cmd.Context()
 				if baseCtx == nil {
 					baseCtx = context.Background()
@@ -206,8 +205,7 @@ func attachDoctorExecutionState(cmd *cobra.Command, ctx *config.Context) {
 	}
 	workerID = workerIdentityWithSlot(workerID)
 	ctx.StateDir = stateDirFor(ctx, workerID)
-	state := &executionState{ctx: ctx}
-	state.pusher, state.tracker = initPushDeps(ctx)
+	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
 	baseCtx := cmd.Context()
 	if baseCtx == nil {
 		baseCtx = context.Background()
