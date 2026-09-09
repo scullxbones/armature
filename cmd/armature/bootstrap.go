@@ -395,23 +395,8 @@ arm sync
 
 const postCommitHookTemplate = `#!/bin/sh
 # armature:managed
-# Armature post-commit hook: emit heartbeat and push ops.
-# Branch-aware: skips on _armature since ops are committed directly there.
-# To activate: cp this file to .git/hooks/post-commit && chmod +x .git/hooks/post-commit
-
-# Skip on _armature branch where ops logs are committed directly
-current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$current_branch" = "_armature" ]; then
-  exit 0
-fi
-
-# Send heartbeat for active claim (if any)
-arm heartbeat 2>/dev/null
-
-# Push ops logs after each commit. A failed push (no network, no remote,
-# permission denied) must never block or break the commit that already
-# happened, so its exit status is explicitly ignored here.
-arm push-ops 2>/dev/null || true
+# Armature post-commit hook: delegate to native arm hook run.
+arm hook run post-commit
 `
 
 const preCommitHookTemplate = `#!/bin/sh

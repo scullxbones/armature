@@ -1065,8 +1065,9 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 	data, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	content := string(data)
-	assert.Contains(t, content, "arm heartbeat")
-	assert.Contains(t, content, "arm push-ops")
+	assert.Contains(t, content, "arm hook run post-commit")
+	assert.NotContains(t, content, "arm heartbeat")
+	assert.NotContains(t, content, "arm push-ops")
 }
 
 func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
@@ -1117,12 +1118,12 @@ func TestInit_HooksAreBranchAware(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	// Check that post-commit hook contains branch awareness logic
+	// post-commit delegates to native Go (branch skip lives in runPostCommitHook)
 	postCommitPath := filepath.Join(repo, ".git", "hooks", "post-commit")
 	data, err := os.ReadFile(postCommitPath)
 	require.NoError(t, err)
 	content := string(data)
-	assert.Contains(t, content, "_armature")
+	assert.Contains(t, content, "arm hook run post-commit")
 
 	// Check that post-merge hook contains branch awareness logic
 	postMergePath := filepath.Join(repo, ".git", "hooks", "post-merge")
