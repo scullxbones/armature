@@ -298,6 +298,45 @@ func TestBootstrapCommitsOpsScaffoldingAndLeavesWorktreeClean(t *testing.T) {
 	assert.Contains(t, runOutput(t, repo, "log", "_armature", "--oneline"), "refresh ops scaffolding")
 }
 
+// TestBootstrapUntracksAlreadyCommittedSidecars verifies that bootstrap removes
+// gate/review sidecars from the index when a repo already committed them (an
+// upgrade from a build that predates the ignore rules, or a legacy migration
+// whose setup path staged review/). .gitignore does not affect tracked paths,
+// so without this the sidecars keep leaving the ops worktree dirty and blocking
+// FetchAndRebase. Local copies must survive; only the tracking goes away.
+func TestBootstrapUntracksAlreadyCommittedSidecars(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	gateLog := filepath.Join(opsWT, "gates", "full-1.log")
+	assessment := filepath.Join(opsWT, "review", "TASK-1.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(gateLog), 0o750))
+	require.NoError(t, os.WriteFile(gateLog, []byte("ok\n"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Dir(assessment), 0o750))
+	require.NoError(t, os.WriteFile(assessment, []byte("{}\n"), 0o600))
+
+	// Simulate the pre-ignore-rules state: the sidecars are already tracked.
+	run(t, opsWT, "git", "add", "--force", "gates", "review")
+	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: legacy committed sidecars")
+	require.Contains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), "gates/full-1.log")
+
+	_, err = runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	lsTree := runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature")
+	assert.NotContains(t, lsTree, "gates/full-1.log")
+	assert.NotContains(t, lsTree, "review/TASK-1.json")
+	assert.FileExists(t, gateLog, "untracking must keep the local sidecar")
+	assert.FileExists(t, assessment, "untracking must keep the local sidecar")
+	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
+}
+
 // TestRunRepoSetupWritesSchemaFile verifies that runRepoSetup writes the SCHEMA file.
 // In dual-branch mode, the SCHEMA file is in the worktree's ops directory.
 func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
