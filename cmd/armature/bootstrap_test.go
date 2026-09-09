@@ -245,6 +245,7 @@ func TestRunRepoSetupWritesGitignore(t *testing.T) {
 	assert.Contains(t, string(content), "state/")
 	assert.Contains(t, string(content), "gates/")
 	assert.Contains(t, string(content), "review/")
+	assert.Contains(t, string(content), fmt.Sprintf("# scaffolding-version: %d\n", ops.ScaffoldingVersion))
 }
 
 // TestBootstrapIgnoresGateAndReviewSidecars verifies that gate logs and
@@ -444,6 +445,138 @@ func TestBootstrapDoesNotDowngradeSchema(t *testing.T) {
 	got, readErr := os.ReadFile(schemaPath)
 	require.NoError(t, readErr)
 	assert.Equal(t, fromNewer, string(got), "an older generator must not overwrite a newer SCHEMA")
+	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
+}
+
+// TestBootstrapDoesNotDowngradeGitignore verifies that an older binary run
+// against a repo whose ops .gitignore was written by a newer one leaves the
+// tracked file alone. Ignore rules are generated from the running binary, so
+// without this an older clone silently commits a downgrade and the two versions
+// fight over _armature.
+func TestBootstrapDoesNotDowngradeGitignore_REQ_OPSCLEAN_1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	gitignorePath := filepath.Join(opsWT, ".gitignore")
+
+	fromNewer := fmt.Sprintf("# scaffolding-version: %d\n# written by a newer arm\nstate/\n", ops.ScaffoldingVersion+1)
+	require.NoError(t, os.WriteFile(gitignorePath, []byte(fromNewer), 0o600))
+	run(t, opsWT, "git", "add", ".gitignore")
+	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: gitignore from a newer arm")
+
+	_, err = runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	got, readErr := os.ReadFile(gitignorePath)
+	require.NoError(t, readErr)
+	assert.Equal(t, fromNewer, string(got), "an older generator must not overwrite a newer ops .gitignore")
+	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
+}
+
+// interceptGitCommit prepends a git wrapper that fails any `commit` invocation.
+// Used to inject cleanup/migration commit failures without chmod (no-op as root)
+// or commit.gpgsign (this environment's git commits successfully when gpg.program
+// is missing).
+func interceptGitCommit(t *testing.T) func() {
+	t.Helper()
+	origPath := os.Getenv("PATH")
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	wrapperDir := t.TempDir()
+	script := fmt.Sprintf(`#!/bin/sh
+for arg in "$@"; do
+  if [ "$arg" = "commit" ]; then
+    echo "injected git commit failure" >&2
+    exit 1
+  fi
+done
+exec %q "$@"
+`, realGit)
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	require.NoError(t, os.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+origPath))
+	return func() {
+		_ = os.Setenv("PATH", origPath)
+	}
+}
+
+// TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN_1
+// verifies that a failed unscoped cleanup commit does not leave dangling staged
+// deletions. The failure is injected via a PATH git wrapper (not directory
+// permissions, which are a no-op as root in CI). After restore, a retry can
+// still see the sidecar as tracked and finish the untrack.
+func TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN_1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	gateLog := filepath.Join(opsWT, "gates", "full-1.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(gateLog), 0o750))
+	require.NoError(t, os.WriteFile(gateLog, []byte("ok\n"), 0o600))
+	run(t, opsWT, "git", "add", "--force", "gates")
+	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: legacy committed sidecar")
+
+	client := adapters.New(opsWT)
+	restoreGit := interceptGitCommit(t)
+	err = untrackLocalOnlyPaths(client, "")
+	restoreGit()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "commit local-only untracking")
+
+	assert.True(t, client.IsTracked("gates/full-1.log") || client.IsTracked("gates"),
+		"failed cleanup must restore the sidecar to the index")
+	staged, stagedErr := client.StagedPaths()
+	require.NoError(t, stagedErr)
+	assert.Empty(t, staged, "failed cleanup must not leave staged deletions")
+	assert.FileExists(t, gateLog)
+
+	require.NoError(t, untrackLocalOnlyPaths(client, ""))
+	assert.False(t, client.IsTracked("gates"))
+	assert.False(t, client.IsTracked("gates/full-1.log"))
+	assert.FileExists(t, gateLog)
+	assert.NotContains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), "gates/full-1.log")
+}
+
+// TestUntrackLocalOnlyPathsFinishesStagedDeletionsOnRetry_REQ_OPSCLEAN_1
+// verifies that leftover staged deletions (IsTracked false, index still dirty)
+// are recognized and committed rather than skipped.
+func TestUntrackLocalOnlyPathsFinishesStagedDeletionsOnRetry_REQ_OPSCLEAN_1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	gateLog := filepath.Join(opsWT, "gates", "full-1.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(gateLog), 0o750))
+	require.NoError(t, os.WriteFile(gateLog, []byte("ok\n"), 0o600))
+	run(t, opsWT, "git", "add", "--force", "gates")
+	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: legacy committed sidecar")
+
+	client := adapters.New(opsWT)
+	require.NoError(t, client.RemoveFromIndex("gates"))
+	require.False(t, client.IsTracked("gates"))
+	staged, stagedErr := client.StagedPaths()
+	require.NoError(t, stagedErr)
+	require.NotEmpty(t, staged)
+
+	require.NoError(t, untrackLocalOnlyPaths(client, ""))
+	assert.False(t, client.IsTracked("gates"))
+	assert.FileExists(t, gateLog)
+	assert.NotContains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), "gates/full-1.log")
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
@@ -2578,21 +2711,17 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy setup")
 
-	// Force a deterministic commit failure without relying on user hooks.
-	// A bogus signing key trips git commit before the migration can complete.
-	run(t, repo, "git", "config", "commit.gpgsign", "true")
-	run(t, repo, "git", "config", "gpg.program", "/nonexistent-gpg-program")
-
-	// Record the state before migration
+	// Fail the migration commit without chmod or gpgsign (see interceptGitCommit).
 	gitClient := adapters.New(repo)
 	wasTrackedBefore := gitClient.IsTracked(".armature")
 	require.True(t, wasTrackedBefore, ".armature should be tracked before migration")
 
-	// Call migrateLegacySingleBranchOps, which should encounter the pre-commit hook rejection
+	restoreGit := interceptGitCommit(t)
 	migratedFlag, backupDir, preMigrationSHA, _, err := migrateLegacySingleBranchOps(repo)
+	restoreGit()
 
 	// The migration should fail
-	require.Error(t, err, "migration should fail because the pre-commit hook rejects the commit")
+	require.Error(t, err, "migration should fail because git commit was intercepted")
 	assert.False(t, migratedFlag, "migrated flag should be false when migration fails")
 	assert.Empty(t, backupDir, "backupDir should be empty when migration fails")
 	assert.NotEmpty(t, preMigrationSHA, "preMigrationSHA should be recorded before rollback")
@@ -2624,10 +2753,7 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, dirty, "working tree should be clean after rollback (no dangling staged removals)")
 
-	// 5. Verify that a retry of the migration can still detect the legacy layout
-	// Clear the signing configuration and verify the migration can succeed on retry.
-	run(t, repo, "git", "config", "commit.gpgsign", "false")
-	run(t, repo, "git", "config", "--unset-all", "gpg.program")
+	// 5. Verify that a retry of the migration can still detect the legacy layout.
 	migratedRetry, backupDirRetry, preMigrationSHARetry, _, errRetry := migrateLegacySingleBranchOps(repo)
 	require.NoError(t, errRetry, "retry migration (without signing failure) should succeed")
 	assert.True(t, migratedRetry, "retry migration should report success")

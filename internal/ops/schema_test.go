@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,20 @@ func TestGenerateSchemaCarriesScaffoldingVersion(t *testing.T) {
 
 	got, ok := ParseScaffoldingVersion(schema)
 	require.True(t, ok, "the generated SCHEMA must be parseable by the version reader")
+	assert.Equal(t, ScaffoldingVersion, got)
+}
+
+// TestGenerateOpsGitignoreCarriesScaffoldingVersion verifies that the committed
+// ops .gitignore records the same generator version SCHEMA does, so bootstrap
+// can refuse to downgrade ignore rules from an older binary.
+func TestGenerateOpsGitignoreCarriesScaffoldingVersion(t *testing.T) {
+	t.Parallel()
+	gitignore := GenerateOpsGitignore()
+	assert.Contains(t, gitignore, fmt.Sprintf("# scaffolding-version: %d\n", ScaffoldingVersion))
+	assert.Contains(t, gitignore, adapters.OpsGitignore)
+
+	got, ok := ParseScaffoldingVersion(gitignore)
+	require.True(t, ok, "the generated ops gitignore must be parseable by the version reader")
 	assert.Equal(t, ScaffoldingVersion, got)
 }
 
