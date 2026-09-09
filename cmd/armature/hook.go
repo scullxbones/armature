@@ -241,8 +241,11 @@ func runPreCommitHook(cmd *cobra.Command) error {
 // Sends a heartbeat for any active claim and, in dual-branch mode, pushes ops.
 func runPostCommitHook(cmd *cobra.Command) {
 	appCtx := currentCtx(cmd)
-	// Skip on _armature branch
-	branch := hookCurrentBranch(appCtx.RepoPath)
+	// Skip on _armature using the invoking worktree. ResolveContext walks a
+	// linked worktree up to the parent, so appCtx.RepoPath is the code checkout
+	// even when git invoked this hook from .armature; a heartbeat commit would
+	// otherwise re-enter this hook forever.
+	branch := hookCurrentBranch(invocationRepoPath(cmd))
 	if branch == "_armature" {
 		return
 	}
@@ -280,7 +283,9 @@ func runPostCommitHook(cmd *cobra.Command) {
 func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 	appCtx := currentCtx(cmd)
 	// --name-status with diff-filter covers renames (R*) and deletions (D).
-	gitCmd := adapters.NonInteractiveGitCommand(appCtx.RepoPath, "diff", "--name-status", "--diff-filter=RD", "HEAD~1", "HEAD")
+	// Use the invoking worktree so a claimed-worktree commit diffs that HEAD,
+	// not the parent checkout's.
+	gitCmd := adapters.NonInteractiveGitCommand(invocationRepoPath(cmd), "diff", "--name-status", "--diff-filter=RD", "HEAD~1", "HEAD")
 	out, err := gitCmd.Output()
 	if err != nil {
 		// HEAD~1 absent on initial commit, or any other git error — skip silently.
