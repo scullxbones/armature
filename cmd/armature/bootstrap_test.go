@@ -3539,7 +3539,9 @@ exec %q "$@"
 			heartbeats++
 		}
 	}
-	assert.Equal(t, 1, heartbeats, "expected exactly one heartbeat for task-01 (no ops-worktree recursion) in %s; stdout=%q stderr=%q", logPath, stdout.String(), stderr.String())
+	assert.Equal(t, 1, heartbeats,
+		"expected exactly one heartbeat for task-01 (no recursion) in %s; stdout=%q stderr=%q",
+		logPath, stdout.String(), stderr.String())
 }
 
 func buildWorktreeArm(t *testing.T) string {
