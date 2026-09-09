@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,51 @@ func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
+}
+
+// TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1 verifies a post-commit
+// invoked from the _armature worktree is skipped even when the parent checkout
+// has a live claim (ResolveContext collapses --repo to the parent RepoPath).
+func TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "skip probe", "--id", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	require.DirExists(t, opsWT)
+	branch := strings.TrimSpace(runOutput(t, opsWT, "rev-parse", "--abbrev-ref", "HEAD"))
+	require.Equal(t, "_armature", branch)
+
+	ctx := getTestContext(t, repo)
+	_, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	before, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	heartbeatsBefore := 0
+	for _, op := range before {
+		if op.Type == ops.OpHeartbeat && op.TargetID == "task-01" {
+			heartbeatsBefore++
+		}
+	}
+
+	out, err := runTrls(t, opsWT, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "Heartbeat recorded")
+
+	logged, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	heartbeatsAfter := 0
+	for _, op := range logged {
+		if op.Type == ops.OpHeartbeat && op.TargetID == "task-01" {
+			heartbeatsAfter++
+		}
+	}
+	assert.Equal(t, heartbeatsBefore, heartbeatsAfter, "ops-worktree post-commit must not record a heartbeat")
 }
 
 // TestHookRunPreCommit_SingleBranch verifies pre-commit is a no-op in single-branch mode.

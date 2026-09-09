@@ -394,6 +394,9 @@ arm sync
 const postCommitHookTemplate = `#!/bin/sh
 # armature:managed
 # Armature post-commit hook: delegate to native arm hook run.
+# Git exports GIT_DIR / GIT_INDEX_FILE / … for this hook; nested git against
+# the ops worktree must not inherit them (index would mis-resolve).
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 arm hook run post-commit
 `
 

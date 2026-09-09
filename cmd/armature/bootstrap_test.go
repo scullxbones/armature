@@ -3481,7 +3481,10 @@ func TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1(t *testing.T) {
 		}
 		body = append(body, trimmed)
 	}
-	require.Equal(t, []string{"arm hook run post-commit"}, body)
+	require.Equal(t, []string{
+		"unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR",
+		"arm hook run post-commit",
+	}, body)
 	assert.NotContains(t, postCommitHookTemplate, "arm heartbeat")
 	assert.NotContains(t, postCommitHookTemplate, "arm push-ops")
 }
@@ -3503,19 +3506,12 @@ func TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1(t *testing.T) {
 	wt := filepath.Join(repo, ".worktrees", "task-01")
 	require.DirExists(t, wt)
 
-	// runPostCommitHook skips on appCtx.RepoPath (the parent checkout), so an
-	// ops-worktree commit re-enters this hook and recurses. Disable hooks only
-	// on the _armature worktree; the claimed worktree still runs the real template.
-	opsHooks := t.TempDir()
-	run(t, repo, "git", "config", "extensions.worktreeConfig", "true")
-	run(t, filepath.Join(repo, ".armature"), "git", "config", "--worktree", "core.hooksPath", opsHooks)
-
+	// Production template unsets Git hook env and skips _armature by
+	// invoking-worktree branch. Do not disable ops-worktree hooks or wrap
+	// env isolation — those hid the production recursion / dirty-index bugs.
 	armBin := buildWorktreeArm(t)
 	wrapperDir := t.TempDir()
-	// Git sets GIT_DIR for hooks; nested arm git clients must not inherit it
-	// or _armature commits recurse into the same hook and hang.
 	script := fmt.Sprintf(`#!/bin/sh
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 exec %q "$@"
 `, armBin)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
@@ -3537,14 +3533,13 @@ exec %q "$@"
 	require.NoError(t, err)
 	logged, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	found := false
+	heartbeats := 0
 	for _, op := range logged {
 		if op.Type == ops.OpHeartbeat && op.TargetID == "task-01" {
-			found = true
-			break
+			heartbeats++
 		}
 	}
-	assert.True(t, found, "expected heartbeat op for task-01 in %s; stdout=%q stderr=%q", logPath, stdout.String(), stderr.String())
+	assert.Equal(t, 1, heartbeats, "expected exactly one heartbeat for task-01 (no ops-worktree recursion) in %s; stdout=%q stderr=%q", logPath, stdout.String(), stderr.String())
 }
 
 func buildWorktreeArm(t *testing.T) string {
