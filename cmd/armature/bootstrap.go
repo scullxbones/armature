@@ -608,14 +608,12 @@ func untrackLocalOnlyPaths(client *adapters.Client, prefix string) error {
 				continue
 			}
 			if err := client.RemoveFromIndex(sidecar); err != nil {
-				_ = client.RestoreIndexFromHEAD(removedPaths)
-				return fmt.Errorf("untrack sidecar %s: %w", sidecar, err)
+				return restoreIndexKeeping(client, removedPaths, fmt.Errorf("untrack sidecar %s: %w", sidecar, err))
 			}
 		}
 		stagedAfter, stagedErr := client.StagedPaths()
 		if stagedErr != nil {
-			_ = client.RestoreIndexFromHEAD(removedPaths)
-			return fmt.Errorf("inspect ops index after untracking sidecars: %w", stagedErr)
+			return restoreIndexKeeping(client, removedPaths, fmt.Errorf("inspect ops index after untracking sidecars: %w", stagedErr))
 		}
 		removedPaths = stagedAfter
 	}
@@ -623,12 +621,19 @@ func untrackLocalOnlyPaths(client *adapters.Client, prefix string) error {
 		return nil
 	}
 	if err := client.CommitIndexNoVerify("chore: untrack local-only ops scaffolding"); err != nil {
-		if restoreErr := client.RestoreIndexFromHEAD(removedPaths); restoreErr != nil {
-			return fmt.Errorf("commit local-only untracking: %w (also restore staged removals: %v)", err, restoreErr)
-		}
-		return fmt.Errorf("commit local-only untracking: %w", err)
+		return restoreIndexKeeping(client, removedPaths, fmt.Errorf("commit local-only untracking: %w", err))
 	}
 	return nil
+}
+
+// restoreIndexKeeping puts staged sidecar removals back to HEAD. Primary is
+// returned as-is when restore succeeds; a restore failure is appended so neither
+// error is discarded.
+func restoreIndexKeeping(client *adapters.Client, paths []string, primary error) error {
+	if restoreErr := client.RestoreIndexFromHEAD(paths); restoreErr != nil {
+		return fmt.Errorf("%w (also restore staged removals: %v)", primary, restoreErr)
+	}
+	return primary
 }
 
 // partitionLocalOnlyStaged splits staged paths into sidecar untracks (gates/,

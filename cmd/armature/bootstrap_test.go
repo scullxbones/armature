@@ -499,10 +499,12 @@ done
 exec %q "$@"
 `, realGit)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
-	require.NoError(t, os.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+origPath))
-	return func() {
-		_ = os.Setenv("PATH", origPath)
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+origPath)
+	restore := func() {
+		require.NoError(t, os.Setenv("PATH", origPath))
 	}
+	t.Cleanup(restore)
+	return restore
 }
 
 // TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN_1
