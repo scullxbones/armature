@@ -376,8 +376,6 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 	return results, nil
 }
 
-const issuesGitignore = adapters.OpsGitignore
-
 const postMergeHookTemplate = `#!/bin/sh
 # armature:managed
 # Armature post-merge hook: auto-detect merged branches and transition done issues to merged.
@@ -531,9 +529,8 @@ func removeObsoleteHooks(gitHooksDir, hooksDir string) error {
 }
 
 // commitOpsScaffolding stages and commits the files runRepoSetup regenerates
-// on every call (.gitignore, ops/SCHEMA, hook templates). Leaving them dirty
-// blocks FetchAndRebase on the next ops push. No-ops when the files already
-// match HEAD.
+// on every call (.gitignore, ops/SCHEMA). Leaving them dirty blocks
+// FetchAndRebase on the next ops push. No-ops when the files already match HEAD.
 func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 	client := adapters.New(worktreePath)
 	prefix := ""
@@ -541,8 +538,9 @@ func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 		prefix = config.StateDirName + "/"
 	}
 	// Hook templates are deliberately absent: they are local-only (see
-	// untrackLocalOnlyPaths). SCHEMA is here but only ever moves forward, because
-	// writeSchemaMonotonic refuses to regenerate it from an older binary.
+	// untrackLocalOnlyPaths). SCHEMA and .gitignore are here but only ever move
+	// forward, because writeSchemaMonotonic / writeGitignoreMonotonic refuse to
+	// regenerate them from an older binary.
 	paths := []string{
 		prefix + ".gitignore",
 		prefix + "ops/SCHEMA",
@@ -571,7 +569,10 @@ func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 // commit takes whatever else is in this worktree's index, so anything unrelated
 // staged there — a worker's log mid-append, say — would be swept into the cleanup
 // commit. Refuse rather than sweep: the sidecars stay tracked until the index is
-// clear, and the next bootstrap untracks them.
+// clear, and the next bootstrap untracks them. If git rm --cached succeeds and the
+// cleanup commit then fails, RestoreIndexFromHEAD puts the paths back in the index
+// so a retry still sees them as tracked; leftover staged deletions from an older
+// binary are recognized and finished instead of skipped.
 func untrackLocalOnlyPaths(client *adapters.Client, prefix string) error {
 	sidecars := []string{prefix + "gates", prefix + "review", prefix + "hooks/*.sh.template"}
 	tracked := false
@@ -581,34 +582,104 @@ func untrackLocalOnlyPaths(client *adapters.Client, prefix string) error {
 			break
 		}
 	}
-	if !tracked {
-		return nil
-	}
 	staged, err := client.StagedPaths()
 	if err != nil {
 		return fmt.Errorf("inspect ops index before untracking sidecars: %w", err)
 	}
-	if len(staged) > 0 {
+	pending, unrelated := partitionLocalOnlyStaged(staged, prefix)
+	if len(unrelated) > 0 && (tracked || len(pending) > 0) {
 		return fmt.Errorf(
 			"refusing to untrack local-only ops paths: unrelated staged changes in the ops worktree would be swept into the cleanup commit: %s",
-			strings.Join(staged, ", "),
+			strings.Join(unrelated, ", "),
 		)
 	}
-	removed := false
-	for _, sidecar := range sidecars {
-		if !client.IsTracked(sidecar) {
-			continue
-		}
-		if err := client.RemoveFromIndex(sidecar); err != nil {
-			return fmt.Errorf("untrack sidecar %s: %w", sidecar, err)
-		}
-		removed = true
+	// IsTracked is false after a successful git rm --cached. If a previous
+	// cleanup commit then failed, the index still holds those staged deletions.
+	// Treat that leftover as work to finish rather than returning early and
+	// leaving the ops index dirty forever.
+	if !tracked && len(pending) == 0 {
+		return nil
 	}
-	if !removed {
+
+	removedPaths := append([]string(nil), pending...)
+	if tracked {
+		for _, sidecar := range sidecars {
+			if !client.IsTracked(sidecar) {
+				continue
+			}
+			if err := client.RemoveFromIndex(sidecar); err != nil {
+				_ = client.RestoreIndexFromHEAD(removedPaths)
+				return fmt.Errorf("untrack sidecar %s: %w", sidecar, err)
+			}
+		}
+		stagedAfter, stagedErr := client.StagedPaths()
+		if stagedErr != nil {
+			_ = client.RestoreIndexFromHEAD(removedPaths)
+			return fmt.Errorf("inspect ops index after untracking sidecars: %w", stagedErr)
+		}
+		removedPaths = stagedAfter
+	}
+	if len(removedPaths) == 0 {
 		return nil
 	}
 	if err := client.CommitIndexNoVerify("chore: untrack local-only ops scaffolding"); err != nil {
+		if restoreErr := client.RestoreIndexFromHEAD(removedPaths); restoreErr != nil {
+			return fmt.Errorf("commit local-only untracking: %w (also restore staged removals: %v)", err, restoreErr)
+		}
 		return fmt.Errorf("commit local-only untracking: %w", err)
+	}
+	return nil
+}
+
+// partitionLocalOnlyStaged splits staged paths into sidecar untracks (gates/,
+// review/, hook templates) and everything else. The cleanup commit is unscoped,
+// so unrelated staged paths must not be mixed in.
+func partitionLocalOnlyStaged(staged []string, prefix string) (pending, unrelated []string) {
+	for _, p := range staged {
+		if isLocalOnlyUntrackPath(p, prefix) {
+			pending = append(pending, p)
+			continue
+		}
+		unrelated = append(unrelated, p)
+	}
+	return pending, unrelated
+}
+
+func isLocalOnlyUntrackPath(path, prefix string) bool {
+	switch {
+	case path == prefix+"gates" || strings.HasPrefix(path, prefix+"gates/"):
+		return true
+	case path == prefix+"review" || strings.HasPrefix(path, prefix+"review/"):
+		return true
+	case strings.HasPrefix(path, prefix+"hooks/") && strings.HasSuffix(path, ".sh.template"):
+		return true
+	default:
+		return false
+	}
+}
+
+// writeGitignoreMonotonic regenerates the ops .gitignore from this binary, unless
+// the file already there was written by a newer one. Ignore rules are derived
+// from adapters.OpsGitignore, so an older clone run after an upgrade would
+// otherwise overwrite newer rules and commit a downgrade to the shared
+// _armature branch, leaving the two versions to fight over the same path on
+// every rebase (AGENTS.md I3). Same policy as writeSchemaMonotonic: stay
+// tracked (new clones must inherit the rules) and only move the content
+// forward. A gitignore with no version line predates versioning and is always
+// upgraded.
+func writeGitignoreMonotonic(gitignorePath string, warn io.Writer) error {
+	existing, err := os.ReadFile(gitignorePath) //nolint:gosec // G304: gitignorePath is derived from controlled repo paths
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read .gitignore: %w", err)
+	}
+	if tracked, ok := ops.ParseScaffoldingVersion(string(existing)); ok && tracked > ops.ScaffoldingVersion {
+		_, _ = fmt.Fprintf(warn,
+			"Warning: %s was written by a newer arm (scaffolding version %d > %d); leaving it alone. Upgrade arm to regenerate it.\n",
+			gitignorePath, tracked, ops.ScaffoldingVersion)
+		return nil
+	}
+	if err := os.WriteFile(gitignorePath, []byte(ops.GenerateOpsGitignore()), 0o600); err != nil {
+		return fmt.Errorf("write .gitignore: %w", err)
 	}
 	return nil
 }
@@ -1717,7 +1788,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	// Write .gitignore to prevent state/ from being committed
 	gitignorePath := filepath.Join(issuesDir, ".gitignore")
-	if err := os.WriteFile(gitignorePath, []byte(issuesGitignore), 0o600); err != nil {
+	if err := writeGitignoreMonotonic(gitignorePath, cmd.ErrOrStderr()); err != nil {
 		return RepoSetupResult{}, fmt.Errorf("write %s/.gitignore: %w", config.StateDirName, err)
 	}
 
@@ -1850,7 +1921,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			// include it, so the final collapsed worktree would otherwise have no
 			// protection against state/ (per-worker derived data that must never be
 			// committed) being swept up by a broad `git add .`. Re-write it here.
-			if err := os.WriteFile(filepath.Join(issuesDir, ".gitignore"), []byte(issuesGitignore), 0o600); err != nil {
+			if err := writeGitignoreMonotonic(filepath.Join(issuesDir, ".gitignore"), cmd.ErrOrStderr()); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to write .gitignore after migration: %v\n", err)
 			}
 		}

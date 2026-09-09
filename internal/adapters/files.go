@@ -168,10 +168,11 @@ const pendingMarkerSuffix = ".pending"
 // slot suffix) never pick up a sidecar file instead of the log itself.
 const appendMetaSubdir = ".arm-append-meta"
 
-// OpsGitignore is the canonical .gitignore content `arm bootstrap` writes to
-// the ops worktree root. It is the single source of truth for what must
-// never be committed there — bootstrap.go writes it verbatim, and tests
-// reference it directly instead of depending on an on-disk copy.
+// OpsGitignore is the ignore body `arm bootstrap` writes into the ops worktree
+// .gitignore (via ops.GenerateOpsGitignore, which prefixes scaffolding-version).
+// It is the single source of truth for what must never be committed there —
+// bootstrap.go writes it through the generator, and tests reference this
+// constant directly instead of depending on an on-disk copy.
 const OpsGitignore = `# Materialized state — derived from ops logs, regenerated locally by each worker.
 # Never commit. See architecture.md §2 (Directory Structure).
 state/

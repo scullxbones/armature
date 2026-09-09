@@ -70,10 +70,10 @@ Use `--platform` to restrict bootstrap to specific platforms (can be repeated); 
 The command is idempotent: running it multiple times has the same effect as running it once.
 It regenerates ops scaffolding on every run, so a later ops `FetchAndRebase` is not
 blocked by dirty tracked scaffolding. Only `.gitignore` and `ops/SCHEMA` are committed
-on `_armature`, and only when they differ from HEAD. `ops/SCHEMA` propagates
-monotonically: it carries a scaffolding-version header, and a clone rewrites it only
-when its own `arm` is at least that new, so an older binary reads it rather than
-committing a downgrade.
+on `_armature`, and only when they differ from HEAD. Both propagate monotonically:
+each carries a scaffolding-version header, and a clone rewrites them only when its
+own `arm` is at least that new, so an older binary reads them rather than committing
+a downgrade. Bump `ops.ScaffoldingVersion` whenever either generator's output changes.
 
 Hook templates are local-only, regenerated from the running binary on every bootstrap
 and read only by the bootstrap that wrote them. Gate logs and reviewer assessment JSON

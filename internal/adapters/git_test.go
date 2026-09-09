@@ -1899,6 +1899,31 @@ func TestCheckIgnoreSource_Gitignore_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, ".gitignore", src)
 }
 
+func TestRestoreIndexFromHEADUnstagesCachedRemoval(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("x\n"), 0o600))
+	require.NoError(t, c.AddPaths([]string{"tracked.txt"}))
+	require.NoError(t, c.CommitPathsNoVerify("chore: add tracked file", "tracked.txt"))
+
+	require.NoError(t, c.RemoveFromIndex("tracked.txt"))
+	staged, err := c.StagedPaths()
+	require.NoError(t, err)
+	require.Equal(t, []string{"tracked.txt"}, staged)
+	assert.False(t, c.IsTracked("tracked.txt"))
+
+	require.NoError(t, c.RestoreIndexFromHEAD([]string{"tracked.txt"}))
+	staged, err = c.StagedPaths()
+	require.NoError(t, err)
+	assert.Empty(t, staged)
+	assert.True(t, c.IsTracked("tracked.txt"))
+	got, readErr := os.ReadFile(filepath.Join(repo, "tracked.txt"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "x\n", string(got), "restore must keep the working-tree copy")
+}
+
 func TestDirtyEntriesIncludingSubmodules_NotARepo(t *testing.T) {
 	t.Parallel()
 	_, err := adapters.New(t.TempDir()).DirtyEntriesIncludingSubmodules()

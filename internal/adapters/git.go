@@ -1048,6 +1048,22 @@ func (c *Client) RemoveFromIndex(path string) error {
 	return nil
 }
 
+// RestoreIndexFromHEAD puts the given repository-relative paths back into the
+// index as they are at HEAD, without touching the working tree. Used to undo
+// a `git rm --cached` when the follow-up commit fails, so a retry still sees
+// the paths as tracked instead of as dangling staged deletions.
+func (c *Client) RestoreIndexFromHEAD(paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	args := append([]string{"reset", "-q", "HEAD", "--"}, paths...)
+	out, err := c.cmd(args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git reset HEAD -- <paths>: %w\n%s", err, out)
+	}
+	return nil
+}
+
 // StagedPaths returns the repository-relative paths with staged changes.
 func (c *Client) StagedPaths() ([]string, error) {
 	out, err := c.cmd("diff", "--cached", "--name-only", "-z").Output()

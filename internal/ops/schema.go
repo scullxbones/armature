@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 type schemaOpDoc struct {
@@ -55,20 +57,21 @@ func SchemaDocumentedOpTypes() []string {
 }
 
 // ScaffoldingVersion identifies the generation of scaffolding this binary
-// produces. Bump it whenever GenerateSchema's output changes shape. Bootstrap
-// compares it against the version recorded in a repo's tracked SCHEMA and only
-// republishes when this binary is strictly newer, so an older clone run after an
-// upgrade cannot commit a downgrade and set two clones fighting over the shared
-// _armature branch (AGENTS.md I3).
-const ScaffoldingVersion = 1
+// produces. Bump it whenever GenerateSchema or GenerateOpsGitignore output
+// changes. Bootstrap compares it against the version recorded in a repo's
+// tracked SCHEMA and ops .gitignore and only republishes when this binary is
+// strictly newer, so an older clone run after an upgrade cannot commit a
+// downgrade and set two clones fighting over the shared _armature branch
+// (AGENTS.md I3).
+const ScaffoldingVersion = 2
 
 // scaffoldingVersionPrefix marks the SCHEMA line carrying ScaffoldingVersion.
 const scaffoldingVersionPrefix = "# scaffolding-version: "
 
-// ParseScaffoldingVersion reads the scaffolding version recorded in SCHEMA
-// content. It reports false when no version line is present — as in a SCHEMA
-// written before versioning — so callers treat that as older than any generator
-// rather than as version zero.
+// ParseScaffoldingVersion reads the scaffolding version recorded in SCHEMA or
+// ops .gitignore content. It reports false when no version line is present — as
+// in a file written before versioning — so callers treat that as older than any
+// generator rather than as version zero.
 func ParseScaffoldingVersion(schema string) (int, bool) {
 	for _, line := range strings.Split(schema, "\n") {
 		rest, found := strings.CutPrefix(line, scaffoldingVersionPrefix)
@@ -115,4 +118,13 @@ func GenerateSchema() string {
 	}
 
 	return b.String()
+}
+
+// GenerateOpsGitignore returns the ops-worktree .gitignore this binary writes.
+// The scaffolding-version header is the same mechanism SCHEMA uses: bootstrap
+// refuses to overwrite a committed gitignore whose recorded version is newer
+// than this binary, so clones on different arm versions cannot fight over
+// _armature (AGENTS.md I3). The ignore body itself lives in adapters.OpsGitignore.
+func GenerateOpsGitignore() string {
+	return scaffoldingVersionPrefix + strconv.Itoa(ScaffoldingVersion) + "\n" + adapters.OpsGitignore
 }
