@@ -32,7 +32,11 @@ if git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
 	[ -n "$fmt" ] && git -C "$REPO_DIR" config --local gpg.format "$fmt"
 	[ -n "$key" ] && git -C "$REPO_DIR" config --local user.signingkey "$key"
 	[ -n "$sshprog" ] && git -C "$REPO_DIR" config --local gpg.ssh.program "$sshprog"
-	[ -n "$sign" ] && git -C "$REPO_DIR" config --local commit.gpgsign "$sign"
+	# Global `commit.gpgsign=false` is this script's own fallback sentinel
+	# (set below). Copying it on a later run would overwrite a preserved
+	# local `true` and leave subsequent agent commits unsigned. Only copy a
+	# managed signing-on value.
+	[ "$sign" = "true" ] && git -C "$REPO_DIR" config --local commit.gpgsign true
 fi
 
 # Neutralize signing globally so test-spawned git subprocesses match CI.
