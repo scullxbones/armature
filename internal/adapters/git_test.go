@@ -1921,11 +1921,12 @@ func TestRemoveFromIndexReportsRealFailures(t *testing.T) {
 	require.NoError(t, c.AddPaths([]string{"tracked.txt"}))
 	require.NoError(t, c.CommitPathsNoVerify("chore: add tracked file", "tracked.txt"))
 
-	// A real failure — here an unwritable index — must surface.
-	indexPath := filepath.Join(repo, ".git", "index")
-	require.NoError(t, os.Chmod(filepath.Dir(indexPath), 0o500))
-	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(indexPath), 0o700) }) //nolint:errcheck // best-effort test cleanup
+	// A real failure must surface. A held index.lock is the deterministic way to
+	// produce one: git refuses to write the index regardless of the caller's
+	// privileges, whereas revoking directory permissions is a no-op under root,
+	// which is how test suites commonly run in containers.
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".git", "index.lock"), nil, 0o600))
 	err := c.RemoveFromIndex("tracked.txt")
-	require.Error(t, err, "an unwritable index must not be reported as a successful untrack")
+	require.Error(t, err, "a locked index must not be reported as a successful untrack")
 	assert.Contains(t, err.Error(), "tracked.txt")
 }
