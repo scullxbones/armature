@@ -1099,6 +1099,22 @@ func (c *Client) CommitWithMessage(message string) error {
 	return nil
 }
 
+// CommitIndexNoVerify commits whatever is currently staged, skipping hooks. It
+// takes no pathspec, unlike CommitPathsNoVerify, because a path-scoped commit
+// re-reads those paths from the working tree and so cannot record an index-only
+// change such as a `git rm --cached` removal of a file that stays on disk.
+// No-op (nil) when the index is clean.
+func (c *Client) CommitIndexNoVerify(message string) error {
+	if err := c.cmd("diff", "--cached", "--quiet").Run(); err == nil {
+		return nil
+	}
+	out, err := c.runMutatingWithRetry("git commit", "commit", "--no-verify", "-m", message)
+	if err != nil {
+		return fmt.Errorf("git commit --no-verify: %w\n%s", err, out)
+	}
+	return nil
+}
+
 // BranchMergedInto checks if branch has been fully merged into target.
 // Returns (false, nil) if the branch does not exist, rather than an error.
 func (c *Client) BranchMergedInto(branch, target string) (bool, error) {

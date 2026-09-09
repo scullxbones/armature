@@ -547,11 +547,41 @@ func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 		prefix + "hooks/post-commit.sh.template",
 		prefix + "hooks/pre-commit.sh.template",
 	}
+	if err := untrackSidecars(client, prefix); err != nil {
+		return err
+	}
 	if err := client.AddPaths(paths); err != nil {
 		return fmt.Errorf("stage ops scaffolding: %w", err)
 	}
 	if err := client.CommitPathsNoVerify("chore: refresh ops scaffolding", paths...); err != nil {
 		return fmt.Errorf("commit ops scaffolding: %w", err)
+	}
+	return nil
+}
+
+// untrackSidecars drops committed gate/review sidecars from the index, keeping
+// the local copies. .gitignore has no effect on already-tracked paths, so a repo
+// that committed them before the ignore rules existed — or migrated from a
+// legacy layout, whose setup path stages review/ — keeps tracking them, leaving
+// the ops worktree permanently dirty and blocking FetchAndRebase. The removal
+// gets its own unscoped commit because a path-scoped commit would re-read those
+// paths from the working tree, where the files still exist.
+func untrackSidecars(client *adapters.Client, prefix string) error {
+	removed := false
+	for _, sidecar := range []string{prefix + "gates", prefix + "review"} {
+		if !client.IsTracked(sidecar) {
+			continue
+		}
+		if err := client.RemoveFromIndex(sidecar); err != nil {
+			return fmt.Errorf("untrack sidecar %s: %w", sidecar, err)
+		}
+		removed = true
+	}
+	if !removed {
+		return nil
+	}
+	if err := client.CommitIndexNoVerify("chore: untrack gate and review sidecars"); err != nil {
+		return fmt.Errorf("commit sidecar untracking: %w", err)
 	}
 	return nil
 }
