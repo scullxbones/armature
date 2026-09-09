@@ -35,7 +35,7 @@ Derived from `docs/design/deterministic-quality-guardrails.md`, adapted to Go an
 `go test -count=1 ./...` — all tests must pass.
 
 What is in place:
-- Port interfaces defined for every external dependency (`GitCommitter`, `PendingPushTracker`, `MergeChecker`, `Provider`, `Screen`). Git push/rebase is `adapters.Client.Push` / `FetchAndRebase` on the high-stakes CLI path, not a separate ops port.
+- Port interfaces defined for every external dependency (`GitCommitter`, `PendingPushTracker`, `MergeChecker`, `Provider`, `Screen`). There is no `ops.Pusher` / `GitPusher` port. CLI append/commit/push goes through `appendOp`, `appendHighStakesOp`, and `appendLowStakesOps` in `cmd/armature`; dual-branch push/rebase is `adapters.Client.Push` / `FetchAndRebase` on that path.
 - Test fakes defined per port in `*_test.go` files adjacent to the package under test.
 - No mock framework in `go.mod`.
 
