@@ -52,19 +52,29 @@ func (s *ValidatedOpStream) AddFile(logPath, expectedWorkerID string) *FileEntry
 // Ops with mismatched worker IDs are excluded and logged as warnings.
 // Corrupt lines are skipped and logged as warnings.
 func (s *ValidatedOpStream) Load() ([]OpItem, []string, error) {
+	items, _, warnings, err := s.loadAll()
+	return items, warnings, err
+}
+
+// loadAll loads every registered file once, returning items, per-file physical
+// EOF offsets, and warnings. Checkpoint offsets are physical EOF; accepted-op
+// offsets cannot exceed that, so they are not max'd separately.
+func (s *ValidatedOpStream) loadAll() ([]OpItem, map[string]int64, []string, error) {
 	var items []OpItem
 	var warnings []string
+	offsets := make(map[string]int64)
 
 	for _, entry := range s.files {
-		fileItems, _, fileWarnings, err := s.loadFile(entry)
+		fileItems, physicalEOF, fileWarnings, err := s.loadFile(entry)
 		if err != nil {
-			return nil, nil, fmt.Errorf("load file %s: %w", entry.LogPath, err)
+			return nil, nil, nil, fmt.Errorf("load file %s: %w", entry.LogPath, err)
 		}
 		items = append(items, fileItems...)
 		warnings = append(warnings, fileWarnings...)
+		offsets[filepath.Base(entry.LogPath)] = physicalEOF
 	}
 
-	return items, warnings, nil
+	return items, offsets, warnings, nil
 }
 
 // loadFile loads ops from a single file, returning items, physical EOF offset, warnings, and error.
@@ -151,35 +161,10 @@ func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64,
 	// unlike adapters.WorkerIDFromFilename which strips it (e.g., "3357fe85").
 	// We preserve the slot here because ops include the full worker ID with slot in validation.
 	for _, logPath := range logFiles {
-		expectedWorkerID := ExtractWorkerIDFromFilename(logPath)
-		stream.AddFile(logPath, expectedWorkerID)
+		stream.AddFile(logPath, ExtractWorkerIDFromFilename(logPath))
 	}
 
-	var items []OpItem
-	var warnings []string
-	offsets := make(map[string]int64)
-
-	// Load files and track offsets in a single pass per file
-	for _, entry := range stream.files {
-		fileItems, physicalEOF, fileWarnings, err := stream.loadFile(entry)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("load file %s: %w", entry.LogPath, err)
-		}
-		items = append(items, fileItems...)
-		warnings = append(warnings, fileWarnings...)
-
-		logName := filepath.Base(entry.LogPath)
-		// Set offset to physical EOF (end of last line, or 0 if empty)
-		offsets[logName] = physicalEOF
-		// If there are accepted ops, take the maximum
-		for _, item := range fileItems {
-			if item.Offset > offsets[logName] {
-				offsets[logName] = item.Offset
-			}
-		}
-	}
-
-	return items, offsets, warnings, nil
+	return stream.loadAll()
 }
 
 // ExtractOps converts a slice of OpItems to a slice of Ops for compatibility

@@ -966,8 +966,7 @@ func setupSingleWorkerClaimStore(t *testing.T, ctx *config.Context, claimTimesta
 // through the root command's PersistentPreRunE.
 func rollbackClaimTestCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{}
-	state := &executionState{ctx: ctx}
-	state.pusher, state.tracker = initPushDeps(ctx)
+	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
 	cmd.SetContext(context.WithValue(context.Background(), executionStateKey{}, state))
 	return cmd
 }

@@ -120,7 +120,6 @@ func handleRootError(stdout, stderr io.Writer, format string, debug bool, err er
 
 type executionState struct {
 	ctx     *config.Context
-	pusher  ops.Pusher
 	tracker ops.PendingPushTracker
 }
 
@@ -296,18 +295,13 @@ func short(fp string) string {
 	return fp[:8]
 }
 
-// initPushDeps wires up the pusher and tracker based on the current context.
-// If a worktree path is present: AppendCommitAndPush with FilePushTracker.
-// Otherwise: NoPusher + NoTracker.
-func initPushDeps(ctx *config.Context) (ops.Pusher, ops.PendingPushTracker) {
-	if gc := worktreeGit(ctx); gc != nil {
-		return &ops.AppendCommitAndPush{
-			Pusher:  gc,
-			Branch:  "_armature",
-			Backoff: nil, // use defaults: 1s, 2s, 4s
-		}, ops.NewFilePushTracker(ctx.StateDir)
+// initPushDeps returns the pending-push tracker for the current context.
+// Dual-branch mode uses a file-backed counter; otherwise the tracker is a no-op.
+func initPushDeps(ctx *config.Context) ops.PendingPushTracker {
+	if ctx != nil && ctx.WorktreePath != "" {
+		return ops.NewFilePushTracker(ctx.StateDir)
 	}
-	return ops.NoPusher{}, ops.NoTracker{}
+	return ops.NoTracker{}
 }
 
 // appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.

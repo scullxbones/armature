@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -209,22 +208,6 @@ func (c *Client) MergeBase(rev1, rev2 string) (string, error) {
 		return "", fmt.Errorf("failed to find merge-base of %s and %s: %w", rev1, rev2, err)
 	}
 	return strings.TrimSpace(string(output)), nil
-}
-
-// RevListCount returns the number of commits reachable from `to` but not
-// from `from` (i.e. `git rev-list --count from..to`). Used to prove
-// non-divergence: a count of 0 means `to` has not moved past `from`.
-func (c *Client) RevListCount(from, to string) (int, error) {
-	cmd := c.cmd("rev-list", "--count", from+".."+to)
-	output, err := cmd.Output()
-	if err != nil {
-		return 0, fmt.Errorf("failed to count commits %s..%s: %w", from, to, err)
-	}
-	count, convErr := strconv.Atoi(strings.TrimSpace(string(output)))
-	if convErr != nil {
-		return 0, fmt.Errorf("failed to parse rev-list count output %q: %w", output, convErr)
-	}
-	return count, nil
 }
 
 // IsWorkingTreeDirty checks if the working tree has uncommitted changes to tracked files.
@@ -608,24 +591,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	restore := c.cmd("checkout", priorBranch)
 	if out, err := restore.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout %s: %w\n%s", priorBranch, err, out)
-	}
-	return nil
-}
-
-// CreateBranchFrom creates a branch from a base branch (with full history).
-// If the branch already exists, this is a no-op (idempotent).
-// Unlike CreateOrphanBranch, this new branch includes all commits and files from baseBranch.
-func (c *Client) CreateBranchFrom(branch, baseBranch string) error {
-	// Check if branch already exists — idempotent fast-path
-	check := c.cmd("rev-parse", "--verify", "refs/heads/"+branch)
-	if err := check.Run(); err == nil {
-		return nil
-	}
-
-	// Create branch from baseBranch using git branch <branch> <baseBranch>
-	cmd := c.cmd("branch", branch, baseBranch)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git branch %s %s: %w\n%s", branch, baseBranch, err, out)
 	}
 	return nil
 }
@@ -1169,32 +1134,6 @@ func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 	sha := strings.TrimSpace(string(tipOut))
 
 	return c.IsCommitOnBranch(sha, target)
-}
-
-// CommitChangedFiles returns the file paths touched by a single commit,
-// diffed against its first parent (`git diff-tree --no-commit-id --name-only
-// -M -r <sha>`). Rename detection (-M) is enabled for consistency with
-// DiffNameStatus: without it, a pure rename is reported as a delete of the
-// old path plus an add of the new path instead of a single renamed entry.
-// With --name-only specifically (unlike --name-status), git does not emit a
-// separate old-path line or similarity-score prefix for a detected rename —
-// it simply reports the new (post-image) path alone, so no output-parsing
-// change is needed here to accommodate -M; verified against actual git
-// behavior, not assumed. Returns an empty (non-nil) slice for a no-op/empty
-// commit (e.g. one created with `git commit --allow-empty`), which callers
-// use to distinguish a commit with real content from one that only satisfies
-// a message-shape check.
-func (c *Client) CommitChangedFiles(sha string) ([]string, error) {
-	cmd := c.cmd("diff-tree", "--no-commit-id", "--name-only", "-M", "-r", sha)
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git diff-tree --no-commit-id --name-only -M -r %s: %w", sha, err)
-	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return []string{}, nil
-	}
-	return strings.Split(raw, "\n"), nil
 }
 
 // ResolveRevision resolves a git revision (ref, SHA, tag, etc.) to its full commit SHA.

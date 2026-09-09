@@ -194,35 +194,6 @@ func TestSetAndReadGitConfig(t *testing.T) {
 	assert.Equal(t, "/some/path", val)
 }
 
-func TestCreateBranchFrom_DoesNotUseTags(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	// init repo and make an initial commit
-	run := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-	run("init")
-	run("config", "user.email", "test@test.com")
-	run("config", "user.name", "Test")
-	run("config", "commit.gpgsign", "false")
-	run("commit", "--allow-empty", "-m", "init")
-
-	// Create a tag with the same name as the would-be branch
-	run("tag", "task/fix-123")
-
-	c := adapters.New(dir)
-	err := c.CreateBranchFrom("task/fix-123", "HEAD")
-	require.NoError(t, err, "CreateBranchFrom should succeed even when a tag of the same name exists")
-
-	// Verify the branch was actually created (not just the tag)
-	checkCmd := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "--verify", "refs/heads/task/fix-123")
-	assert.NoError(t, checkCmd.Run(), "refs/heads/task/fix-123 branch must exist after CreateBranchFrom")
-}
-
 func TestReadGitConfig_Unset(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -877,41 +848,6 @@ func TestDiffNameStatus_NonRenameChangesHaveNoOldPath(t *testing.T) {
 	assert.Equal(t, "D", byPath["beta.txt"].Status)
 }
 
-// TestCommitChangedFiles_DetectsRenameAsSinglePath verifies that a pure
-// rename commit is reported by CommitChangedFiles as its single (new) path,
-// consistent with DiffNameStatus's rename detection (-M), rather than as a
-// delete-of-old-path plus add-of-new-path pair. Before this fix,
-// CommitChangedFiles ran `git diff-tree` without -M, so a pure rename showed
-// up as two unrelated paths instead of one, inconsistent with DiffNameStatus.
-func TestCommitChangedFiles_DetectsRenameAsSinglePath(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	gitRun := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-
-	content := strings.Repeat("line of content\n", 20)
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.txt"), []byte(content), 0644))
-	gitRun("add", "a.txt")
-	gitRun("commit", "-m", "add a.txt")
-
-	gitRun("mv", "a.txt", "b.txt")
-	gitRun("commit", "-m", "rename a.txt to b.txt")
-
-	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
-	shaOut, err := shaCmd.Output()
-	require.NoError(t, err)
-	sha := strings.TrimSpace(string(shaOut))
-
-	files, err := c.CommitChangedFiles(sha)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"b.txt"}, files, "pure rename should report only the new path, not a delete+add pair")
-}
-
 // TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4 verifies that
 // DiffNameStatus reports the literal path for a filename containing
 // non-ASCII characters, rather than git's default octal-escaped quoted form
@@ -1045,85 +981,6 @@ func TestCommitWithMessage_NothingStaged(t *testing.T) {
 	// No staged changes — should return an error
 	err := c.CommitWithMessage("test: empty commit")
 	assert.Error(t, err)
-}
-
-func TestCreateBranchFrom(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	gitRun := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-
-	// Create a commit on main so we have something to branch from
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content\n"), 0644))
-	gitRun("add", "file.txt")
-	gitRun("commit", "-m", "initial commit")
-
-	// Get current branch (main or master)
-	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
-	branchOut, err := branchCmd.Output()
-	require.NoError(t, err)
-	mainBranch := strings.TrimSpace(string(branchOut))
-
-	// Create a branch from main
-	newBranch := "feature/test-branch"
-	err = c.CreateBranchFrom(newBranch, mainBranch)
-	require.NoError(t, err)
-
-	// Verify branch exists
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "branch", "--list", newBranch)
-	out, err := cmd.Output()
-	require.NoError(t, err)
-	assert.Contains(t, string(out), newBranch)
-
-	// Verify the new branch contains the commit from main
-	// by checking out the branch and verifying the file exists
-	gitRun("checkout", newBranch)
-	_, err = os.Stat(filepath.Join(repo, "file.txt"))
-	require.NoError(t, err, "file should exist in the new branch (inherited from main)")
-}
-
-func TestCreateBranchFrom_Idempotent(t *testing.T) {
-	t.Parallel()
-	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	gitRun := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-
-	// Create a commit on main
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content\n"), 0644))
-	gitRun("add", "file.txt")
-	gitRun("commit", "-m", "initial commit")
-
-	// Get current branch
-	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
-	branchOut, err := branchCmd.Output()
-	require.NoError(t, err)
-	mainBranch := strings.TrimSpace(string(branchOut))
-
-	newBranch := "feature/test-branch"
-
-	// First call creates the branch
-	err = c.CreateBranchFrom(newBranch, mainBranch)
-	require.NoError(t, err)
-
-	// Second call should not error (idempotent)
-	err = c.CreateBranchFrom(newBranch, mainBranch)
-	assert.NoError(t, err)
-
-	// Verify branch still exists and is correct
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "branch", "--list", newBranch)
-	out, err := cmd.Output()
-	require.NoError(t, err)
-	assert.Contains(t, string(out), newBranch)
 }
 
 func TestResolveRevision(t *testing.T) {
