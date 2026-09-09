@@ -68,6 +68,10 @@ Use `--with-hooks` to also write harness hook configuration (both require `--pla
 Use `--platform` to restrict bootstrap to specific platforms (can be repeated); default is all verified platforms.
 
 The command is idempotent: running it multiple times has the same effect as running it once.
+It regenerates ops scaffolding (`.gitignore`, `ops/SCHEMA`, hook templates) and commits
+those files on `_armature` when they differ from HEAD, so a later ops `FetchAndRebase`
+is not blocked by dirty tracked scaffolding. Gate logs and reviewer assessment JSON
+under `.armature/gates/` and `.armature/review/` stay gitignored.
 
 **Flags:**
 - `--global`: Deploy to `~/.claude/` instead of `.claude/` (local).

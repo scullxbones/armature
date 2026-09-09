@@ -1074,7 +1074,11 @@ func (c *Client) commitPaths(message string, noVerify bool, paths ...string) err
 	if err == nil {
 		return nil
 	}
-	if strings.Contains(string(out), "nothing to commit") {
+	// Pathspec commits report "nothing to commit" when the index is clean,
+	// and "nothing added to commit" when the pathspec is clean but other
+	// untracked files exist. Both are a no-op for the caller.
+	if strings.Contains(string(out), "nothing to commit") ||
+		strings.Contains(string(out), "nothing added to commit") {
 		return nil
 	}
 	return fmt.Errorf("git commit: %w\n%s", err, out)
