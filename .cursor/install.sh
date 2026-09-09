@@ -10,7 +10,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-GOBIN_DIR="$(go env GOPATH)/bin"
+# go install writes to GOBIN when set; GOPATH/bin is only the default.
+GOBIN_DIR="$(go env GOBIN)"
+if [ -z "${GOBIN_DIR}" ]; then
+	GOBIN_DIR="$(go env GOPATH)/bin"
+fi
 export PATH="${GOBIN_DIR}:${PATH}"
 
 # gremlins is pinned to the version CI uses; golangci-lint tracks CI's @latest.
