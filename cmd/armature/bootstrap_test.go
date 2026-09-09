@@ -3466,3 +3466,105 @@ func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ
 	postSHA := strings.TrimSpace(runOutput(t, customWorktreePath, "rev-parse", "HEAD"))
 	assert.Equal(t, preSHA, postSHA, "custom worktree history must not be rewound")
 }
+
+// TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1 verifies the post-commit
+// template is a one-line delegation to arm hook run, with the managed marker kept
+// and the bare arm heartbeat / arm push-ops / _armature skip removed.
+func TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1(t *testing.T) {
+	require.Contains(t, postCommitHookTemplate, "# armature:managed")
+
+	var body []string
+	for _, line := range strings.Split(postCommitHookTemplate, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		body = append(body, trimmed)
+	}
+	require.Equal(t, []string{"arm hook run post-commit"}, body)
+	assert.NotContains(t, postCommitHookTemplate, "arm heartbeat")
+	assert.NotContains(t, postCommitHookTemplate, "arm push-ops")
+}
+
+// TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1 commits in a claimed
+// worktree and asserts the installed post-commit hook records a heartbeat op
+// without printing a GENERAL-1 envelope on stdout.
+func TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "heartbeat probe", "--id", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	require.DirExists(t, wt)
+
+	// runPostCommitHook skips on appCtx.RepoPath (the parent checkout), so an
+	// ops-worktree commit re-enters this hook and recurses. Disable hooks only
+	// on the _armature worktree; the claimed worktree still runs the real template.
+	opsHooks := t.TempDir()
+	run(t, repo, "git", "config", "extensions.worktreeConfig", "true")
+	run(t, filepath.Join(repo, ".armature"), "git", "config", "--worktree", "core.hooksPath", opsHooks)
+
+	armBin := buildWorktreeArm(t)
+	wrapperDir := t.TempDir()
+	// Git sets GIT_DIR for hooks; nested arm git clients must not inherit it
+	// or _armature commits recurse into the same hook and hang.
+	script := fmt.Sprintf(`#!/bin/sh
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+exec %q "$@"
+`, armBin)
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	commitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	commit := exec.CommandContext(commitCtx, "git", "commit", "--allow-empty", "-m", "probe heartbeat")
+	commit.Dir = wt
+	var stdout, stderr bytes.Buffer
+	commit.Stdout = &stdout
+	commit.Stderr = &stderr
+	err = commit.Run()
+	require.NoError(t, err, "git commit stdout=%q stderr=%q", stdout.String(), stderr.String())
+	assert.NotContains(t, stdout.String(), "GENERAL-1")
+
+	ctx := getTestContext(t, repo)
+	_, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	logged, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	found := false
+	for _, op := range logged {
+		if op.Type == ops.OpHeartbeat && op.TargetID == "task-01" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected heartbeat op for task-01 in %s; stdout=%q stderr=%q", logPath, stdout.String(), stderr.String())
+}
+
+func buildWorktreeArm(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	require.NoError(t, err)
+	for {
+		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("go.mod not found from test working directory")
+		}
+		dir = parent
+	}
+	dest := filepath.Join(t.TempDir(), "arm")
+	cmd := exec.CommandContext(context.Background(), "go", "build", "-o", dest, "./cmd/armature")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "go build: %s", out)
+	return dest
+}
