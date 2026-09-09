@@ -370,6 +370,83 @@ func TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork(t *testing.T) 
 	assert.Contains(t, lsTree, "gates/full-1.log", "the sidecar stays tracked until the index is clear")
 }
 
+// TestBootstrapKeepsHookTemplatesLocal verifies that hook templates are never
+// committed to the shared _armature branch. Nothing reads them across clones —
+// each bootstrap rewrites them from this binary's own constants before
+// installing — so tracking them only invites competing writes between clones on
+// different versions.
+func TestBootstrapKeepsHookTemplatesLocal(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	assert.NotContains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), ".sh.template")
+	assert.FileExists(t, filepath.Join(opsWT, "hooks", "pre-commit.sh.template"), "templates must still be generated locally")
+	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
+}
+
+// TestBootstrapUntracksPreviouslyCommittedHookTemplates verifies that a repo
+// upgrading from a build that committed hook templates gets them dropped from
+// the index, keeping the local copies.
+func TestBootstrapUntracksPreviouslyCommittedHookTemplates(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	templatePath := filepath.Join(opsWT, "hooks", "pre-commit.sh.template")
+	run(t, opsWT, "git", "add", "--force", "hooks/pre-commit.sh.template")
+	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: legacy committed hook template")
+	require.Contains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), "hooks/pre-commit.sh.template")
+
+	_, err = runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	assert.NotContains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), "hooks/pre-commit.sh.template")
+	assert.FileExists(t, templatePath, "untracking must keep the local template")
+	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
+}
+
+// TestBootstrapDoesNotDowngradeSchema verifies that an older binary run against
+// a repo whose SCHEMA was written by a newer one leaves the tracked file alone.
+// SCHEMA is generated from the running binary, so without this an older clone
+// silently commits a downgrade and the two versions fight over _armature.
+func TestBootstrapDoesNotDowngradeSchema(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	_, err := runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	opsWT := filepath.Join(repo, ".armature")
+	schemaPath := filepath.Join(opsWT, "ops", "SCHEMA")
+
+	// Stand in for a newer generator having written this repo's SCHEMA.
+	fromNewer := fmt.Sprintf("# Trellis Op Log Schema v1\n# scaffolding-version: %d\n# written by a newer arm\n", ops.ScaffoldingVersion+1)
+	require.NoError(t, os.WriteFile(schemaPath, []byte(fromNewer), 0o600))
+	run(t, opsWT, "git", "add", "ops/SCHEMA")
+	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: schema from a newer arm")
+
+	_, err = runRepoSetup(cmd, repo)
+	require.NoError(t, err)
+
+	got, readErr := os.ReadFile(schemaPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, fromNewer, string(got), "an older generator must not overwrite a newer SCHEMA")
+	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
+}
+
 // TestRunRepoSetupWritesSchemaFile verifies that runRepoSetup writes the SCHEMA file.
 // In dual-branch mode, the SCHEMA file is in the worktree's ops directory.
 func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
@@ -478,7 +555,9 @@ func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T
 	require.NoError(t, os.MkdirAll(filepath.Dir(templatePath), 0o750))
 	require.NoError(t, os.WriteFile(templatePath, []byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o600))
 	opsGit := adapters.New(opsWT)
-	require.NoError(t, opsGit.AddPaths([]string{templateRel}))
+	// --force: hook templates are gitignored now, and this fixture is deliberately
+	// reproducing a repo from a build that tracked them.
+	run(t, opsWT, "git", "add", "--force", templateRel)
 	require.NoError(t, opsGit.CommitPathsNoVerify("chore: plant legacy prepare-commit-msg template", templateRel))
 
 	hookPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")

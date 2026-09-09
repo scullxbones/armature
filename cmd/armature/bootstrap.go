@@ -540,14 +540,14 @@ func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 	if !isCollapsedLayout {
 		prefix = config.StateDirName + "/"
 	}
+	// Hook templates are deliberately absent: they are local-only (see
+	// untrackLocalOnlyPaths). SCHEMA is here but only ever moves forward, because
+	// writeSchemaMonotonic refuses to regenerate it from an older binary.
 	paths := []string{
 		prefix + ".gitignore",
 		prefix + "ops/SCHEMA",
-		prefix + "hooks/post-merge.sh.template",
-		prefix + "hooks/post-commit.sh.template",
-		prefix + "hooks/pre-commit.sh.template",
 	}
-	if err := untrackSidecars(client, prefix); err != nil {
+	if err := untrackLocalOnlyPaths(client, prefix); err != nil {
 		return err
 	}
 	if err := client.AddPaths(paths); err != nil {
@@ -559,11 +559,12 @@ func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 	return nil
 }
 
-// untrackSidecars drops committed gate/review sidecars from the index, keeping
-// the local copies. .gitignore has no effect on already-tracked paths, so a repo
-// that committed them before the ignore rules existed — or migrated from a
-// legacy layout, whose setup path stages review/ — keeps tracking them, leaving
-// the ops worktree permanently dirty and blocking FetchAndRebase.
+// untrackLocalOnlyPaths drops committed gate/review sidecars and hook templates
+// from the index, keeping the local copies. .gitignore has no effect on
+// already-tracked paths, so a repo that committed them before the ignore rules
+// existed — or migrated from a legacy layout, whose setup path stages review/ —
+// keeps tracking them, leaving the ops worktree permanently dirty and blocking
+// FetchAndRebase.
 //
 // The removal gets its own unscoped commit, because a path-scoped commit re-reads
 // those paths from the working tree, where the files still exist. An unscoped
@@ -571,8 +572,8 @@ func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
 // staged there — a worker's log mid-append, say — would be swept into the cleanup
 // commit. Refuse rather than sweep: the sidecars stay tracked until the index is
 // clear, and the next bootstrap untracks them.
-func untrackSidecars(client *adapters.Client, prefix string) error {
-	sidecars := []string{prefix + "gates", prefix + "review"}
+func untrackLocalOnlyPaths(client *adapters.Client, prefix string) error {
+	sidecars := []string{prefix + "gates", prefix + "review", prefix + "hooks/*.sh.template"}
 	tracked := false
 	for _, sidecar := range sidecars {
 		if client.IsTracked(sidecar) {
@@ -589,7 +590,7 @@ func untrackSidecars(client *adapters.Client, prefix string) error {
 	}
 	if len(staged) > 0 {
 		return fmt.Errorf(
-			"refusing to untrack gate/review sidecars: unrelated staged changes in the ops worktree would be swept into the cleanup commit: %s",
+			"refusing to untrack local-only ops paths: unrelated staged changes in the ops worktree would be swept into the cleanup commit: %s",
 			strings.Join(staged, ", "),
 		)
 	}
@@ -606,8 +607,32 @@ func untrackSidecars(client *adapters.Client, prefix string) error {
 	if !removed {
 		return nil
 	}
-	if err := client.CommitIndexNoVerify("chore: untrack gate and review sidecars"); err != nil {
-		return fmt.Errorf("commit sidecar untracking: %w", err)
+	if err := client.CommitIndexNoVerify("chore: untrack local-only ops scaffolding"); err != nil {
+		return fmt.Errorf("commit local-only untracking: %w", err)
+	}
+	return nil
+}
+
+// writeSchemaMonotonic regenerates ops/SCHEMA from this binary, unless the file
+// already there was written by a newer one. SCHEMA is derived from the running
+// binary's op-type list, so an older clone run after an upgrade would otherwise
+// overwrite it and commit a downgrade to the shared _armature branch, leaving
+// the two versions to fight over the same path on every rebase (AGENTS.md I3).
+// Propagation is therefore monotonic: newer generators publish, older ones read.
+// A SCHEMA with no version line predates versioning and is always upgraded.
+func writeSchemaMonotonic(schemaPath string, warn io.Writer) error {
+	existing, err := os.ReadFile(schemaPath) //nolint:gosec // G304: schemaPath is derived from controlled repo paths
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read SCHEMA: %w", err)
+	}
+	if tracked, ok := ops.ParseScaffoldingVersion(string(existing)); ok && tracked > ops.ScaffoldingVersion {
+		_, _ = fmt.Fprintf(warn,
+			"Warning: %s was written by a newer arm (scaffolding version %d > %d); leaving it alone. Upgrade arm to regenerate it.\n",
+			schemaPath, tracked, ops.ScaffoldingVersion)
+		return nil
+	}
+	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0o600); err != nil {
+		return fmt.Errorf("write SCHEMA: %w", err)
 	}
 	return nil
 }
@@ -880,7 +905,12 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 			sourcesDebrisPaths = append(sourcesDebrisPaths, entry.Path)
 			continue
 		}
-		if entry.Untracked {
+		// DirtyEntries runs `git status --ignored`, so gitignored paths arrive here
+		// as entries that are not flagged Untracked. They can be neither committed
+		// nor stashed, so they must never refuse a migration: the ops worktree holds
+		// ignored local-only scaffolding (state/, gates/, review/, hook templates) on
+		// every normal run.
+		if entry.Untracked || entry.Ignored {
 			continue
 		}
 		return false, "", fmt.Errorf(
@@ -1693,8 +1723,8 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	// Write SCHEMA file
 	schemaPath := filepath.Join(issuesDir, "ops", "SCHEMA")
-	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0o600); err != nil {
-		return RepoSetupResult{}, fmt.Errorf("write SCHEMA: %w", err)
+	if err := writeSchemaMonotonic(schemaPath, cmd.ErrOrStderr()); err != nil {
+		return RepoSetupResult{}, err
 	}
 
 	if backups := listMigrationBackups(repoPath); len(backups) > 0 {
