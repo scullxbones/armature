@@ -54,4 +54,11 @@ go mod download
 echo "Building arm binary..."
 make build
 
+# Reconcile git commit signing so `make check`'s git-shelling tests match a
+# clean CI environment. Also invoked per-boot by start.sh; running it here
+# covers non-build environments where install runs during agent provisioning
+# (after Cursor's git setup) and start-only builds alike. See the script for
+# the full rationale.
+./.cursor/reconcile-git-signing.sh "$(pwd)"
+
 echo "Install complete: $(./bin/arm version)"
