@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/tabwriter"
 )
 
 // BytesPerToken is the token_budget convention: character budget = tokens * 4.
@@ -18,7 +17,10 @@ const BytesPerToken = 4
 
 // EstimationMethod is documented in both human and JSON output so a reader
 // does not have to look up how estimated_tokens was computed.
-const EstimationMethod = "estimated tokens = bytes/4 (integer division), matching the token_budget convention used by render-context (character budget = tokens * 4). Dynamic structured command payloads are out of scope (AOC-S3-T2)."
+const EstimationMethod = "estimated tokens = bytes/4 (integer division), " +
+	"matching the token_budget convention used by render-context " +
+	"(character budget = tokens * 4). " +
+	"Dynamic structured command payloads are out of scope (AOC-S3-T2)."
 
 const (
 	ClassSkill    = "skill"
@@ -198,13 +200,11 @@ func RenderHuman(report Report) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Context report (static agent-facing artifacts)\n")
 	fmt.Fprintf(&b, "Estimation method: %s\n\n", report.EstimationMethod)
-	tw := tabwriter.NewWriter(&b, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, "PATH\tCLASS\tBYTES\tEST_TOKENS\n")
+	fmt.Fprintf(&b, "%-52s %-12s %10s %10s\n", "PATH", "CLASS", "BYTES", "EST_TOKENS")
 	for _, a := range report.Artifacts {
-		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\n", a.Path, a.Class, a.Bytes, a.EstimatedTokens)
+		fmt.Fprintf(&b, "%-52s %-12s %10d %10d\n", a.Path, a.Class, a.Bytes, a.EstimatedTokens)
 	}
-	fmt.Fprintf(tw, "TOTAL\t\t%d\t%d\n", report.TotalBytes, report.TotalEstimatedTokens)
-	_ = tw.Flush()
+	fmt.Fprintf(&b, "%-52s %-12s %10d %10d\n", "TOTAL", "", report.TotalBytes, report.TotalEstimatedTokens)
 	return b.String()
 }
 
