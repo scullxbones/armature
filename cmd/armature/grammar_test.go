@@ -64,6 +64,7 @@ func checkHyphenatedUses(root *cobra.Command) []string {
 		"harness-hook":    true, // Internal integration entry point
 		"worker-init":     true, // Pending architectural decision; kept flat
 		"render-context":  true, // Diagnostic/agent-facing tool; no plain alternative
+		"context-report":  true, // Diagnostic meter; no plain alternative
 	}
 
 	// Allowed hyphenated subcommands under specific parent commands
@@ -559,6 +560,7 @@ func TestNoHyphenatedRootTopLevel_REQ_NXTTN_S5_T4(t *testing.T) {
 		"harness-hook":    true,
 		"worker-init":     true,
 		"render-context":  true,
+		"context-report":  true,
 	}
 
 	for _, cmd := range root.Commands() {
