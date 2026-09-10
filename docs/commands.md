@@ -612,7 +612,7 @@ An empty ready queue is still the envelope: `{count: 0, "issues": [], "help": [.
 - `--parent string`: Filter to descendants of this issue ID.
 - `--worker string`: Worker ID for assignment-aware sorting.
 - `--assigned-to string`: Filter to tasks assigned to this worker ID.
-- `--explain`: Diagnose why open tasks are not in the ready queue.
+- `--explain`: Diagnose why open tasks are not in the ready queue. Structured output stays on the same envelope: `issues[]` rows are `{id, type, status, title, reason}` for excluded open tasks. Empty diagnosis is `{count: 0, "issues": [], "help": [...]}`. Human format stays `ID: reason` lines.
 - `--waves`: Partition ready entries into scope-disjoint waves. Structured output adds a `waves` adjunct of issue-id groups and does not drop or cap `issues`.
 
 **Description:**
