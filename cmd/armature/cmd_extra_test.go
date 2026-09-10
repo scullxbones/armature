@@ -647,10 +647,17 @@ func TestListCmd_Group_JSONIgnoresGroupFlag(t *testing.T) {
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "list", "--group"})
 	require.NoError(t, cmd.Execute())
 
-	var entries []listEntry
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &entries),
-		"--group must not break JSON output")
-	assert.NotEmpty(t, entries)
+	var env struct {
+		Count  int         `json:"count"`
+		Issues []listEntry `json:"issues"`
+		Groups []listGroup `json:"groups"`
+		Help   []string    `json:"help"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &env),
+		"--group must emit a structured envelope")
+	assert.NotEmpty(t, env.Issues)
+	assert.Equal(t, len(env.Issues), env.Count)
+	assert.NotEmpty(t, env.Groups)
 }
 
 func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
@@ -1159,11 +1166,15 @@ func TestListCmd_JSONFormat(t *testing.T) {
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "list", "--parent", "story-01"})
 	require.NoError(t, cmd.Execute())
 
-	var entries []listEntry
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &entries))
-	require.Len(t, entries, 1)
-	assert.Equal(t, "task-01", entries[0].ID)
-	assert.Equal(t, "story-01", entries[0].Parent)
+	var env struct {
+		Count  int         `json:"count"`
+		Issues []listEntry `json:"issues"`
+		Help   []string    `json:"help"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &env))
+	require.Len(t, env.Issues, 1)
+	assert.Equal(t, 1, env.Count)
+	assert.Equal(t, "task-01", env.Issues[0].ID)
 }
 
 func TestListCmd_StatusFilter(t *testing.T) {
@@ -1215,10 +1226,16 @@ func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
 	cmd.SetArgs([]string{"--format", "agent", "--repo", repo, "list"})
 	require.NoError(t, cmd.Execute())
 
-	var entries []listEntry
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &entries),
-		"agent format must emit valid JSON")
-	assert.NotEmpty(t, entries)
+	var env struct {
+		Count  int         `json:"count"`
+		Issues []listEntry `json:"issues"`
+		Help   []string    `json:"help"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &env),
+		"agent format must emit a valid envelope")
+	assert.NotEmpty(t, env.Issues)
+	assert.Equal(t, len(env.Issues), env.Count)
+	assert.NotEmpty(t, env.Help)
 }
 
 // TestDecomposeApplyUncitedPlan verifies apply --strict is gone and an
