@@ -303,11 +303,11 @@ user-visible errors. Do not duplicate T5 tables in Cobra.
 
 | Task | What | Blocked by |
 |---|---|---|
-| T1 | `PlanClaim` + tests; `CONTEXT.md` Claim Plan and Claim Compensation | — |
-| T2 | Overlap command adapter | T1, `LNGHZN-S6-T2` |
+| T1 | `PlanClaim` + tests; `CONTEXT.md` Claim Plan, Claim Compensation, and Worktree Provision Plan; Split table sync | — |
+| T2 | Overlap command adapter | T1, `LNGHZN-S7` until merged |
 | T3 | `PlanCompensation` + tests (parallel with T1) | — |
 | T4 | `rollbackClaim` calls `PlanCompensation` | T2, T3 |
-| T5 | `PlanProvision` + tests; `CONTEXT.md` Worktree Provision Plan | T1 |
+| T5 | `PlanProvision` + tests (no `CONTEXT.md`) | — |
 | T6 | Command calls `PlanProvision`, then existing git | T2, T4, T5 |
 
 T2 does not wire compensation or provision. T4 does not extract provision.
