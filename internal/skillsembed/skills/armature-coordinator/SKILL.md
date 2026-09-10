@@ -306,8 +306,8 @@ arm list --status in-progress         # any stragglers?
 If a worker returned but their task remains `in-progress` or `done` without running `arm transition` (e.g., the worker forgot or the agent timed out), manually transition the task:
 
 ```bash
-# List all tasks still in-progress or done
-arm list --parent STORY-ID --format json | grep -E '"status":\s*"(in-progress|done)"'
+# List all tasks still in-progress or done (parse .issues; do not grep the envelope)
+arm list --parent STORY-ID | jq '.issues[] | select(.status=="in-progress" or .status=="done")'
 
 # For each task that should be transitioned, manually run:
 arm transition TASK-ID --to done --outcome "CONCRETE_OUTCOME_DESCRIPTION"
