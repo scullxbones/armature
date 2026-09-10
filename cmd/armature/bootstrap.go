@@ -402,24 +402,17 @@ arm hook run post-commit
 
 const preCommitHookTemplate = `#!/bin/sh
 # armature:managed
-# Armature pre-commit hook: block ops log commits on code branches.
-# Ops live on _armature — never on a code branch.
-# To activate: cp this file to .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
-#
-# This is defense-in-depth; .armature/.gitignore also blocks ops/ from being staged.
-
-# Allow commits on _armature — that's exactly where ops belong.
+# Armature pre-commit hook: delegate to native arm hook run.
+# Git exports GIT_DIR / GIT_INDEX_FILE / … for this hook; nested git against
+# the ops worktree must not inherit them (index would mis-resolve).
+# Fail-loud on code branches (I3). Skip _armature before exec so ops commits
+# do not require config.json / arm on PATH (bootstrap and create write here).
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [ "$current_branch" = "_armature" ]; then
   exit 0
 fi
-
-# Only block additions/modifications — deletions are allowed (cleanup commits).
-if git diff --cached --name-only --diff-filter=AM | grep -q '\.armature/ops/'; then
-  echo "ERROR: Refusing to commit .armature/ops/ changes on a code branch."
-  echo "Ops are written directly to the _armature branch."
-  exit 1
-fi
+arm hook run pre-commit
 `
 
 // installHooks copies hook templates from .armature/hooks/ to .git/hooks/ and makes them executable.
