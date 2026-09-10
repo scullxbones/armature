@@ -241,6 +241,34 @@ func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "refusing to commit .armature/ops/")
 }
 
+// TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG
+// proves pre-commit inspects the claiming worktree's branch and cached diff,
+// not the parent checkout ResolveContext walks up to. Staging .armature/ops/
+// only in .worktrees/<id> must refuse while the parent index stays empty.
+func TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "worktree ops guard", "--id", "task-01")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	require.DirExists(t, wt)
+	parentCached := strings.TrimSpace(runOutput(t, repo, "diff", "--cached", "--name-only"))
+	require.Empty(t, parentCached, "parent checkout must be clean so a RepoPath-based guard would miss the worktree index")
+
+	probeRel := filepath.Join("leaked", ".armature", "ops", "probe.log")
+	writeFile(t, wt, probeRel, "ops must not land on a claimed worktree branch\n")
+	run(t, wt, "git", "add", "--force", probeRel)
+
+	_, err = runTrls(t, wt, "hook", "run", "pre-commit")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "refusing to commit .armature/ops/")
+}
+
 func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
