@@ -184,6 +184,9 @@ func TestHookPostCommit_ScopeRename(t *testing.T) {
 // for issues whose scope exactly matches the deleted path.
 func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-delete-01", "src/gone.go")
+	// Keep a second scope entry so Introduction (E6) still allows the delete op.
+	_, err := runTrls(t, repo, "amend", "task-delete-01", "--scope", "src/gone.go", "--scope", "src/keep.go")
+	require.NoError(t, err)
 
 	// Add a file then delete it.
 	writeFile(t, repo, "src/gone.go", "package gone")
@@ -194,7 +197,7 @@ func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	run(t, repo, "git", "commit", "-m", "delete src/gone.go")
 
 	// Claim the task so there's an active claim and a log path.
-	_, err := runTrls(t, repo, "claim", "task-delete-01", "--worktree")
+	_, err = runTrls(t, repo, "claim", "task-delete-01", "--worktree")
 	require.NoError(t, err)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
@@ -383,6 +386,158 @@ func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	assert.Contains(t, out, "task-checkpoint-scope")
 	assert.Contains(t, out, "task-index-only",
 		"task-index-only must appear in output, proving store.ReadIndex was used (not store.Load)")
+}
+
+func commitNoHooks(t *testing.T, repo, msg string) {
+	t.Helper()
+	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "commit", "-m", msg)
+}
+
+func readScopeDriftOps(t *testing.T, repo string) (renames, deletes []ops.Op) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	_, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	logged, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	for _, op := range logged {
+		switch op.Type {
+		case ops.OpScopeRename:
+			renames = append(renames, op)
+		case ops.OpScopeDelete:
+			deletes = append(deletes, op)
+		}
+	}
+	return renames, deletes
+}
+
+// TestScopeDriftDetectionEmitsRenameOp_REQ_HKDLG_T2 verifies a git mv of a scoped
+// file emits a scope-rename op (and not a scope-delete), even when the repo has
+// diff.renames disabled — the hook must pass --find-renames.
+func TestScopeDriftDetectionEmitsRenameOp_REQ_HKDLG_T2(t *testing.T) {
+	const (
+		taskID  = "task-drift-rename-01"
+		oldPath = "src/scoped.go"
+		newPath = "src/scoped-renamed.go"
+	)
+	repo := setupRepoWithScopedTask(t, taskID, oldPath)
+	run(t, repo, "git", "config", "diff.renames", "false")
+
+	writeFile(t, repo, oldPath, "package scoped")
+	run(t, repo, "git", "add", oldPath)
+	commitNoHooks(t, repo, "add scoped.go")
+
+	_, err := runTrls(t, repo, "claim", taskID, "--worktree")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "mv", oldPath, newPath)
+	commitNoHooks(t, repo, "rename scoped.go")
+
+	renamesBefore, deletesBefore := readScopeDriftOps(t, repo)
+
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope-rename")
+	assert.Contains(t, out, taskID)
+	assert.NotContains(t, out, "scope-delete")
+
+	renamesAfter, deletesAfter := readScopeDriftOps(t, repo)
+	require.Equal(t, len(renamesBefore)+1, len(renamesAfter), "expected exactly one new scope-rename op")
+	assert.Len(t, deletesAfter, len(deletesBefore), "git mv must not emit scope-delete")
+
+	got := renamesAfter[len(renamesAfter)-1]
+	assert.Equal(t, taskID, got.TargetID)
+	assert.Equal(t, oldPath, got.Payload.OldPath)
+	assert.Equal(t, newPath, got.Payload.NewPath)
+}
+
+// TestScopeDriftDetectionEmitsDeleteOp_REQ_HKDLG_T2 verifies a git rm of a scoped
+// file emits a scope-delete op and no scope-rename.
+func TestScopeDriftDetectionEmitsDeleteOp_REQ_HKDLG_T2(t *testing.T) {
+	const (
+		taskID = "task-drift-delete-01"
+		path   = "src/gone.go"
+	)
+	repo := setupRepoWithScopedTask(t, taskID, path)
+	// Introduction refuses a scope-delete that would empty E6-required scope.
+	_, err := runTrls(t, repo, "amend", taskID, "--scope", path, "--scope", "src/keep.go")
+	require.NoError(t, err)
+
+	writeFile(t, repo, path, "package gone")
+	run(t, repo, "git", "add", path)
+	commitNoHooks(t, repo, "add gone.go")
+
+	_, err = runTrls(t, repo, "claim", taskID, "--worktree")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "rm", path)
+	commitNoHooks(t, repo, "delete gone.go")
+
+	renamesBefore, deletesBefore := readScopeDriftOps(t, repo)
+
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.Contains(t, out, "scope-delete")
+	assert.Contains(t, out, taskID)
+	assert.NotContains(t, out, "scope-rename")
+
+	renamesAfter, deletesAfter := readScopeDriftOps(t, repo)
+	require.Equal(t, len(deletesBefore)+1, len(deletesAfter), "expected exactly one new scope-delete op")
+	assert.Len(t, renamesAfter, len(renamesBefore), "git rm must not emit scope-rename")
+
+	got := deletesAfter[len(deletesAfter)-1]
+	assert.Equal(t, taskID, got.TargetID)
+	assert.Equal(t, path, got.Payload.DeletedPath)
+}
+
+// TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2 verifies git mv / git rm
+// of paths that are not in any issue scope emit no scope-rename or scope-delete ops.
+func TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2(t *testing.T) {
+	const taskID = "task-drift-unscoped-01"
+	repo := setupRepoWithScopedTask(t, taskID, "src/scoped.go")
+
+	writeFile(t, repo, "unscoped.txt", "unscoped")
+	run(t, repo, "git", "add", "unscoped.txt")
+	commitNoHooks(t, repo, "add unscoped.txt")
+
+	writeFile(t, repo, "unscoped-rm.txt", "also unscoped")
+	run(t, repo, "git", "add", "unscoped-rm.txt")
+	commitNoHooks(t, repo, "add unscoped-rm.txt")
+
+	_, err := runTrls(t, repo, "claim", taskID, "--worktree")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "mv", "unscoped.txt", "unscoped-moved.txt")
+	commitNoHooks(t, repo, "rename unscoped.txt")
+
+	renamesBefore, deletesBefore := readScopeDriftOps(t, repo)
+
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "scope-rename")
+	assert.NotContains(t, out, "scope-delete")
+
+	renamesAfter, deletesAfter := readScopeDriftOps(t, repo)
+	assert.Len(t, renamesAfter, len(renamesBefore), "unscoped git mv must not emit scope-rename")
+	assert.Len(t, deletesAfter, len(deletesBefore), "unscoped git mv must not emit scope-delete")
+
+	run(t, repo, "git", "rm", "unscoped-rm.txt")
+	commitNoHooks(t, repo, "delete unscoped-rm.txt")
+
+	out, err = runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "scope-rename")
+	assert.NotContains(t, out, "scope-delete")
+
+	renamesAfter, deletesAfter = readScopeDriftOps(t, repo)
+	assert.Len(t, renamesAfter, len(renamesBefore), "unscoped git rm must not emit scope-rename")
+	assert.Len(t, deletesAfter, len(deletesBefore), "unscoped git rm must not emit scope-delete")
 }
 
 // setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.
