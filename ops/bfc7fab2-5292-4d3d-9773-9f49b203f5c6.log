@@ -74,3 +74,4 @@
 ["transition","ARCHIMP-S20-T6",1789042227,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PlanProvision adapter; REQ T6 green; PR 153 merged into feat/ARCHIMP-S20.","branch":"task/ARCHIMP-S20-T6","pr":"153","skipped_delivery_gate":true}]
 ["transition","ARCHIMP-S20-T6",1789042229,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"153"}]
 ["transition","ARCHIMP-S20",1789042232,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"All children T1–T6 merged into feat/ARCHIMP-S20 (PRs 147–153).","skipped_delivery_gate":true}]
+["note","AOC",1789066569,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"msg":"Planner truth-up 2026-09-10: fix AOC phantoms, unlink cancelled AOC-S2-T6 edges, drop redundant TOPTIER-S11 story block on AOC-S2-T3, align NXTTN-S3 DoDs with AOC-S3-T2 (dynamic payloads). No status transitions.","note_id":"note-1789066569370901704"}]
