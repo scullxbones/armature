@@ -132,6 +132,26 @@ func TestCanonicalRoot_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.T) {
 	assert.Equal(t, CanonicalRoot(realRepo), got)
 }
 
+// TestCanonicalPath_MissingThroughSymlinkAgreesWithRoot_REQ_ARCHIMP_S20 pins
+// Codex 154 P2: CanonicalPath must share CanonicalRoot's spelling when
+// .worktrees does not exist yet under a symlink, so filepath.Rel cannot treat
+// a valid issue ID as an escape.
+func TestCanonicalPath_MissingThroughSymlinkAgreesWithRoot_REQ_ARCHIMP_S20(t *testing.T) {
+	t.Parallel()
+	realRepo := t.TempDir()
+	linkParent := t.TempDir()
+	link := filepath.Join(linkParent, "repo-link")
+	require.NoError(t, os.Symlink(realRepo, link))
+
+	const issueID = "ISSUE-01"
+	root := CanonicalRoot(link)
+	path := CanonicalPath(link, issueID)
+	rel, err := filepath.Rel(root, path)
+	require.NoError(t, err)
+	assert.Equal(t, issueID, rel)
+	assert.Equal(t, CanonicalPath(realRepo, issueID), path)
+}
+
 // TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6 verifies that selection
 // reports THREE outcomes, not two. A single bool cannot distinguish "nothing to
 // act on" from "more than one candidate and no way to choose", and callers that

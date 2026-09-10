@@ -142,13 +142,11 @@ func CanonicalRoot(repoPath string) string {
 }
 
 // CanonicalPath returns the canonical path for an issue ID. Callers must
-// validate the issue ID before using this path for mutation.
+// validate the issue ID before using this path for mutation. Derived from
+// CanonicalRoot so a missing .worktrees under a symlinked repoPath uses the
+// same resolved spelling (otherwise filepath.Rel treats every ID as an escape).
 func CanonicalPath(repoPath, issueID string) string {
-	abs, err := filepath.Abs(repoPath)
-	if err != nil {
-		abs = repoPath
-	}
-	return filepath.Join(abs, ".worktrees", issueID)
+	return filepath.Join(CanonicalRoot(repoPath), issueID)
 }
 
 // IsUnderRoot reports whether path is root itself or a descendant of root.
