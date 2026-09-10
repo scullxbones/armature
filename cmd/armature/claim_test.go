@@ -3266,3 +3266,183 @@ func TestCleanupClaimExclusionsLockedPreservesProtectedPattern_REQ_LNGHZN_S9_T1(
 	require.NoError(t, readErr)
 	assert.Contains(t, string(content), "/still-here/", "an exclusion protecting a live worktree must not be removed")
 }
+
+func plantForeignClaim(t *testing.T, repo, issueID, workerID string) {
+	t.Helper()
+	logPath := filepath.Join(repo, ".armature", "ops", workerID+".log")
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  issueID,
+		Timestamp: time.Now().Unix(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{TTL: 60},
+	}))
+}
+
+func claimOpsFor(t *testing.T, repo, issueID string) []ops.Op {
+	t.Helper()
+	allOps, err := readAllOpsFromDir(filepath.Join(repo, ".armature", "ops"))
+	require.NoError(t, err)
+	var found []ops.Op
+	for _, op := range allOps {
+		if op.Type == ops.OpClaim && op.TargetID == issueID {
+			found = append(found, op)
+		}
+	}
+	return found
+}
+
+// TestClaimBlockedPrintsAllReasonsAndCreatesNoWorktreeOrClaimOp_REQ_ARCHIMP_S20_T2
+// pins the T2 adapter: a blocked plan prints every foreign overlap reason and
+// writes nothing (no Claim Op, no worktree).
+func TestClaimBlockedPrintsAllReasonsAndCreatesNoWorktreeOrClaimOp_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	plantVerifiedTask(t, repo, "task-01", "cmd/armature/claim.go")
+	plantVerifiedTask(t, repo, "task-02", "cmd/armature/claim.go")
+	plantVerifiedTask(t, repo, "task-03", "cmd/armature/claim.go")
+	plantForeignClaim(t, repo, "task-01", "other-worker-aaa")
+	plantForeignClaim(t, repo, "task-03", "other-worker-ccc")
+
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "task-02", "--worktree")
+	require.Error(t, claimErr)
+	combined := stderr + "\n" + claimErr.Error()
+	assert.Contains(t, combined, "scope overlap with task-01")
+	assert.Contains(t, combined, "scope overlap with task-03")
+	assert.Contains(t, combined, "other-worker-aaa")
+	assert.Contains(t, combined, "other-worker-ccc")
+	assert.Contains(t, stderr, "Error:")
+	assert.NotContains(t, combined, "Warning:")
+
+	_, statErr := os.Stat(filepath.Join(repo, ".worktrees", "task-02"))
+	assert.True(t, os.IsNotExist(statErr), "blocked claim must not provision a worktree")
+	assert.Empty(t, claimOpsFor(t, repo, "task-02"), "blocked claim must not append a Claim Op")
+}
+
+// TestClaimForceWritesReciprocalNotesInOrder_REQ_ARCHIMP_S20_T2 verifies --force
+// persists PlanClaim's reciprocal notes in candidate-ID order (target, other,
+// target, other) before the Claim Op.
+func TestClaimForceWritesReciprocalNotesInOrder_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	plantVerifiedTask(t, repo, "task-01", "cmd/armature/claim.go")
+	plantVerifiedTask(t, repo, "task-02", "cmd/armature/claim.go")
+	plantVerifiedTask(t, repo, "task-03", "cmd/armature/claim.go")
+	plantForeignClaim(t, repo, "task-01", "other-worker-aaa")
+	plantForeignClaim(t, repo, "task-03", "other-worker-ccc")
+
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "task-02", "--force", "--worktree")
+	require.NoError(t, claimErr, "stderr: %s", stderr)
+	assert.Contains(t, stderr, "Warning:")
+	assert.Contains(t, stderr, "task-01")
+	assert.Contains(t, stderr, "task-03")
+
+	ctx := getTestContext(t, repo)
+	_, logPath, resolveErr := resolveWorkerAndLog(ctx)
+	require.NoError(t, resolveErr)
+	logged, readErr := ops.ReadLog(logPath)
+	require.NoError(t, readErr)
+
+	var notes []ops.Op
+	claimIdx := -1
+	for i, op := range logged {
+		if op.Type == ops.OpNote && strings.Contains(op.Payload.Msg, "detected at claim time") {
+			notes = append(notes, op)
+		}
+		if op.Type == ops.OpClaim && op.TargetID == "task-02" && claimIdx < 0 {
+			claimIdx = i
+		}
+	}
+	require.Len(t, notes, 4)
+	assert.Equal(t, "task-02", notes[0].TargetID)
+	assert.Equal(t, "Scope overlap with task-01 detected at claim time", notes[0].Payload.Msg)
+	assert.Equal(t, "task-01", notes[1].TargetID)
+	assert.Equal(t, "Scope overlap with task-02 detected at claim time", notes[1].Payload.Msg)
+	assert.Equal(t, "task-02", notes[2].TargetID)
+	assert.Equal(t, "Scope overlap with task-03 detected at claim time", notes[2].Payload.Msg)
+	assert.Equal(t, "task-03", notes[3].TargetID)
+	assert.Equal(t, "Scope overlap with task-02 detected at claim time", notes[3].Payload.Msg)
+
+	require.GreaterOrEqual(t, claimIdx, 0, "force claim must still append a Claim Op")
+	firstNoteIdx := -1
+	for i, op := range logged {
+		if op.Type == ops.OpNote && strings.Contains(op.Payload.Msg, "detected at claim time") {
+			firstNoteIdx = i
+			break
+		}
+	}
+	assert.Less(t, firstNoteIdx, claimIdx, "notes must be persisted before the Claim Op")
+	assert.DirExists(t, filepath.Join(repo, ".worktrees", "task-02"))
+}
+
+// TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2 is fail-closed:
+// if overlap notes cannot be persisted, refuse the Claim Op and worktree.
+func TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	plantOverlappingFooPair(t, repo)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	_, logPath, resolveErr := resolveWorkerAndLog(ctx)
+	require.NoError(t, resolveErr)
+	require.NoError(t, os.Chmod(logPath, 0o444))
+	t.Cleanup(func() {
+		_ = os.Chmod(logPath, 0o644) //nolint:errcheck // restore so TempDir cleanup can remove the log
+	})
+
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--worktree")
+	require.Error(t, claimErr, "note write failure must refuse the claim. stderr: %s", stderr)
+
+	assert.Empty(t, claimOpsFor(t, repo, "task-02"), "fail-closed note write must not append a Claim Op")
+	_, statErr := os.Stat(filepath.Join(repo, ".worktrees", "task-02"))
+	assert.True(t, os.IsNotExist(statErr), "fail-closed note write must not provision a worktree")
+}
+
+// TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2 verifies Force does
+// not turn a same-worker overlap into a foreign override: it stays a dismissal.
+func TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	plantOverlappingFooPair(t, repo)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-02", "--force", "--worktree")
+	require.NoError(t, claimErr, "same-worker overlap under --force must still claim. stderr: %s", stderr)
+	assert.NotContains(t, stderr, "Warning:")
+	assert.NotContains(t, stderr, "Error:")
+
+	allOps, readErr := readAllOpsFromDir(filepath.Join(repo, ".armature", "ops"))
+	require.NoError(t, readErr)
+	var dismissals, forceNotes int
+	for _, op := range allOps {
+		if op.Type != ops.OpNote {
+			continue
+		}
+		if strings.Contains(op.Payload.Msg, "Serial claim: scope overlap with task-01 (same worker, dismissed)") {
+			dismissals++
+		}
+		if strings.Contains(op.Payload.Msg, "detected at claim time") {
+			forceNotes++
+		}
+	}
+	assert.Equal(t, 1, dismissals)
+	assert.Zero(t, forceNotes, "same-worker overlap must remain a dismissal under --force")
+	assert.NotEmpty(t, claimOpsFor(t, repo, "task-02"))
+	assert.DirExists(t, filepath.Join(repo, ".worktrees", "task-02"))
+}

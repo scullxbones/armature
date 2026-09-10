@@ -1047,6 +1047,55 @@ func updateIssueIDFile(worktreePath, issueID string) error {
 	return nil
 }
 
+func planInputFromSnapshot(targetID string, targetScope []string, workerID string, force bool, snap *snapshot.Snapshot, prior []ops.Op) claimPkg.PlanInput {
+	issues := map[string]claimPkg.IssueFacts{}
+	if snap != nil && snap.State != nil {
+		issues = make(map[string]claimPkg.IssueFacts, len(snap.State.Issues))
+		for id, iss := range snap.State.Issues {
+			if iss == nil {
+				continue
+			}
+			issues[id] = claimPkg.IssueFacts{
+				Type:      iss.Type,
+				Status:    iss.Status,
+				ClaimedBy: iss.ClaimedBy,
+				Title:     iss.Title,
+				Scope:     iss.Scope,
+			}
+		}
+	}
+	var graph claimPkg.HierarchyGraph
+	if snap != nil && snap.State != nil {
+		graph = materialize.GraphFromState(snap.State)
+	}
+	return claimPkg.PlanInput{
+		TargetID:    targetID,
+		TargetScope: targetScope,
+		WorkerID:    workerID,
+		Force:       force,
+		Issues:      issues,
+		Graph:       graph,
+		PriorOps:    prior,
+	}
+}
+
+func persistClaimPlanNotes(state *executionState, logPath, workerID string, notes []claimPkg.NoteIntent) error {
+	if len(notes) == 0 {
+		return nil
+	}
+	proposed := make([]ops.Op, 0, len(notes))
+	for _, note := range notes {
+		proposed = append(proposed, ops.Op{
+			Type:      ops.OpNote,
+			TargetID:  note.IssueID,
+			Timestamp: nowEpoch(),
+			WorkerID:  workerID,
+			Payload:   ops.Payload{Msg: note.Message},
+		})
+	}
+	return appendLowStakesOps(state, logPath, proposed)
+}
+
 func newClaimCmd() *cobra.Command {
 	var issueID string
 	var ttl int
@@ -1203,9 +1252,8 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 			}
 
-			// allOps is retained here because HasOverlapDismissalNote (below) needs the raw
-			// op log to detect prior dismissal notes — data the store's Index does not expose.
-			// The store.Load call below independently materializes state; this read is not redundant.
+			// allOps is PriorOps for PlanClaim (dismissal dedup). The store Load below
+			// independently materializes state; this read is not redundant.
 			allOps, err := readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
@@ -1310,48 +1358,21 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 
 			index := store.Index()
-			// Build a graph from the materialized state for ancestor/descendant checking
-			graph := materialize.GraphFromState(snapshot.State)
-
-			for id, entry := range index {
-				// Only issues a worker can actually hold compete for scope: type
-				// task, in claimed/in-progress state. A story's scope is by
-				// design the union of its children's scopes, so an in-progress
-				// story (which can persist long after the child that put it
-				// there was claimed/completed by someone else) must never be
-				// treated as a competing claimant. Mirrors the non-task filter
-				// internal/validate applies in its W1 check.
-				if id == issueID || entry.Type != "task" || (entry.Status != ops.StatusClaimed && entry.Status != ops.StatusInProgress) {
-					continue
-				}
-				if claimPkg.ScopesOverlapEx(issue.Scope, entry.Scope, graph, issueID, id) {
-					holder := entry.Assignee
-					if holder == "" {
-						holder = "unknown"
-					}
-					msg := fmt.Sprintf("scope overlap with %s (%s), a %s %s held by %s", id, entry.Title, entry.Type, entry.Status, holder)
-					// Same worker claiming serially: auto-dismiss — log a note, no error or warning.
-					if entry.Assignee == workerID {
-						// Only write the dismissal note if it hasn't been written before for this pair.
-						if !claimPkg.HasOverlapDismissalNote(allOps, issueID, id) {
-							noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
-								WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", id)}}
-							appendOp(ctx, logPath, noteOp) //nolint:errcheck,gosec,gosec
-						}
-						continue
-					}
-					if !force {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s\n", msg)
-						return fmt.Errorf("cannot claim %s: %s — use --force to override", issueID, msg)
-					}
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", msg)
-					noteOp := ops.Op{Type: ops.OpNote, TargetID: issueID, Timestamp: nowEpoch(),
-						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", id)}}
-					appendOp(ctx, logPath, noteOp) //nolint:errcheck,gosec
-					noteOp2 := ops.Op{Type: ops.OpNote, TargetID: id, Timestamp: nowEpoch(),
-						WorkerID: workerID, Payload: ops.Payload{Msg: fmt.Sprintf("Scope overlap with %s detected at claim time", issueID)}}
-					appendOp(ctx, logPath, noteOp2) //nolint:errcheck,gosec
-				}
+			plan, err := claimPkg.PlanClaim(planInputFromSnapshot(issueID, issue.Scope, workerID, force, snapshot, allOps))
+			if err != nil {
+				return err
+			}
+			for _, reason := range plan.BlockReasons {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s\n", reason)
+			}
+			for _, warning := range plan.Warnings {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %s\n", warning)
+			}
+			if len(plan.BlockReasons) > 0 {
+				return fmt.Errorf("cannot claim %s: %s — use --force to override", issueID, strings.Join(plan.BlockReasons, "; "))
+			}
+			if err := persistClaimPlanNotes(mustState(cmd), logPath, workerID, plan.Notes); err != nil {
+				return fmt.Errorf("persist claim overlap notes: %w", err)
 			}
 
 			// The canonical managed-worktree root must be excluded before the claim
