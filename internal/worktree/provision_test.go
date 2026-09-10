@@ -143,6 +143,22 @@ func TestPlanProvision_RefuseWrongBranch_REQ_ARCHIMP_S20_T5(t *testing.T) {
 			"finish or abandon the in-progress git operation there and check out task/ARCHIMP-S20-T5 before claiming",
 			plan.RefuseReason)
 	})
+
+	t.Run("list porcelain detached token", func(t *testing.T) {
+		t.Parallel()
+		in := provisionBase()
+		in.Inventory = []worktree.InventoryRow{
+			boundRow("/legacy/ARCHIMP-S20-T5", "detached"),
+		}
+
+		plan, err := worktree.PlanProvision(in)
+		require.NoError(t, err)
+		assert.Equal(t, worktree.ProvisionRefuse, plan.Action)
+		assert.Equal(t, "worktree at /legacy/ARCHIMP-S20-T5 is bound to ARCHIMP-S20-T5 "+
+			"but is on detached HEAD, not task/ARCHIMP-S20-T5; "+
+			"finish or abandon the in-progress git operation there and check out task/ARCHIMP-S20-T5 before claiming",
+			plan.RefuseReason)
+	})
 }
 
 func TestPlanProvision_RefuseAdoptWithoutProvenance_REQ_ARCHIMP_S20_T5(t *testing.T) {

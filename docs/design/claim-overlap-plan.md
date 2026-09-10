@@ -265,10 +265,15 @@ paths when naming them.
    `issue %s is bound to %d worktrees (%s); remove the armature-issue-id binding from the ones you do not want before claiming`
    with bound paths sorted.
 5. If exactly one bound row:
-   - If its path is the dest: `already_at_dest`.
-   - If its `Branch` is not `refs/heads/`+`ExpectedBranch` (empty branch means
-     detached): refuse. Preserve phrasing:
-     `worktree at %s is bound to %s but is on %s, not %s; finish or abandon the in-progress git operation there and check out %s before claiming`.
+   - If its path is the dest: `already_at_dest` **before** branch or
+     provenance checks. A path-equal bound row is already at dest even if
+     HEAD is detached or on another branch; dest-local branch/HEAD checks
+     stay in `cmd/` (`checkExistingWorktreeBinding`). Do not reorder this.
+   - If its `Branch` is not `refs/heads/`+`ExpectedBranch` (empty branch or
+     the porcelain token `detached` means detached HEAD): refuse. Preserve
+     phrasing:
+     `worktree at %s is bound to %s but is on %s, not %s; finish or abandon the in-progress git operation there and check out %s before claiming`
+     (render empty/`detached` as `detached HEAD`).
    - If `!ProvenanceOK`: refuse. Preserve phrasing:
      `adopted worktree has no recorded branch-point provenance; re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override`.
    - Otherwise: `adopt` with `AdoptFrom` set to that path.
@@ -281,10 +286,25 @@ them.
 
 ### Command adapter (T6)
 
-Gather inventory and dest facts, call `PlanProvision`, then existing git:
-refuse returns the reason; adopt moves; already-at-dest rebinds; fresh
-detaches and checks out. Do not change Claim Op ordering relative to
-provision (still Claim first, then provision, then rollback on failure).
+`PlanProvision` is called from two command sites:
+
+1. **Early dest-only refuse** (`refuseCustomWorktreeDestination`) — empty
+   inventory, real `ExpectedBranch`, before the Claim Op. Nested dest and
+   in-repo-outside-canonical refuses only. Binding cardinality is not
+   decided here.
+2. **Full inventory** — `evaluateProvisionPlan` (via `worktree.List` /
+   `provisionInputFromInventory`) before the Claim Op, and again inside
+   `createWorktreeAndBranch` after the Claim Op when create still runs.
+
+Existing-dest re-claim (`worktreeExists`) must consult the inventory-backed
+plan for Ambiguous Binding before appending the Claim Op or treating the
+claim as provisioned. Skip `createWorktreeAndBranch` only when dest exists
+and the plan is `already_at_dest` or `fresh` (unbound dest, no other
+binding). Adopt with dest present still runs create and fails closed.
+
+When dest is missing, refuse still returns the reason; adopt moves;
+already-at-dest rebinds; fresh detaches and checks out. Create-path
+failures after a won Claim Op still roll back.
 
 ### Tests
 
