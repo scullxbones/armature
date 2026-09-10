@@ -135,12 +135,10 @@
       "id": "AOC-S2-T2",
       "title": "arm list conforms to the contract",
       "type": "task",
-      "scope": "cmd/armature/list.go, cmd/armature/list_test.go, docs/commands.md",
+      "scope": "cmd/armature/list.go, cmd/armature/list_test.go (new), docs/commands.md",
       "priority": "high",
       "parent": "AOC-S2",
-      "blocked_by": [
-        "AOC-S1-T3"
-      ],
+      "blocked_by": [],
       "notes": [
         "Carries the measured saving: 342,560 bytes to roughly 89,000 on a 738-issue graph.",
         "--group is currently accepted and silently inert in non-TTY while two deployed skills instruct agents to use it.",
@@ -167,10 +165,7 @@
       "priority": "high",
       "parent": "AOC-S2",
       "blocked_by": [
-        "LNGHZN-S6-T2",
-        "LNGHZN-S6-T4",
-        "AOC-S2-T2",
-        "AOC-S1-T3"
+        "AOC-S2-T2"
       ],
       "notes": [
         "Chosen as the first migration because it is the highest-traffic command and the one that currently splits data across channels, so it proves the hardest part of the contract first.",
@@ -196,10 +191,8 @@
       "priority": "high",
       "parent": "AOC-S2",
       "blocked_by": [
-        "TOPTIER-S11",
         "TOPTIER-S11-T2",
         "AOC-S2-T1",
-        "NXTTN-S3-T3",
         "NXTTN-S4-T3"
       ],
       "notes": [
@@ -227,7 +220,7 @@
       "id": "AOC-S2-T4",
       "title": "Remaining structured commands conform to the contract",
       "type": "task",
-      "scope": "cmd/armature/context_history.go, cmd/armature/context_history_test.go, cmd/armature/workers.go, cmd/armature/workers_test.go, cmd/armature/validate.go, cmd/armature/worktree.go, cmd/armature/review.go, cmd/armature/review_test.go, cmd/armature/decompose.go, cmd/armature/cmd_extra_test.go, docs/commands.md",
+      "scope": "cmd/armature/context_history.go, cmd/armature/context_history_test.go (new), cmd/armature/workers.go, cmd/armature/workers_test.go (new), cmd/armature/validate.go, cmd/armature/worktree.go, cmd/armature/review.go, cmd/armature/review_test.go, cmd/armature/decompose.go, cmd/armature/cmd_extra_test.go, docs/commands.md",
       "priority": "medium",
       "parent": "AOC-S2",
       "blocked_by": [
@@ -264,7 +257,6 @@
       "priority": "high",
       "parent": "AOC-S2",
       "blocked_by": [
-        "LNGHZN-S6-T1",
         "NXTTN-S4-T1",
         "ARCHIMP-S20-T2",
         "AOC-S2-T4"
@@ -295,11 +287,7 @@
       "scope": "docs/commands.md",
       "priority": "medium",
       "parent": "AOC-S2",
-      "blocked_by": [
-        "AOC-S2-T4",
-        "AOC-S2-T5",
-        "LNGHZN-S6-T1"
-      ],
+      "blocked_by": [],
       "notes": [
         "Cancelled; retained in this plan for history. Status is cancelled in the live graph (no status field in this schema)."
       ],
@@ -338,8 +326,7 @@
       "priority": "high",
       "parent": "AOC-S3",
       "blocked_by": [
-        "AOC-S2-T5",
-        "LNGHZN-S6-T1"
+        "AOC-S2-T5"
       ],
       "notes": [
         "Contract step: safe only once no caller remains.",
@@ -370,7 +357,7 @@
         "NXTTN-S3 and NXTTN-S3-T1 currently exclude dynamic artifacts as a known limitation; this task closes that gap and both DoDs should be amended to drop the exclusion.",
         "Prices must be measured against checked-in fixtures, not a live repo, or the gate's output varies with how many issues the developer happens to have."
       ],
-      "dod": "internal/contextreport prices structured command payloads using the same bytes/4 convention as static artifacts, measured against a checked-in fixture graph so the number is reproducible. Dynamic payloads join the existing budgets file and shrink-only ratchet, with initial values seeded at or above current measured size so the gate starts green. NXTTN-S3 and NXTTN-S3-T1 have their dynamic-artifacts-out-of-scope clause removed.",
+      "dod": "internal/contextreport prices structured command payloads using the same bytes/4 convention as static artifacts, measured against a checked-in fixture graph so the number is reproducible. Dynamic payloads join the existing budgets file and shrink-only ratchet, with initial values seeded at or above current measured size so the gate starts green.",
       "acceptance": [
         "TestContextReportPricesDynamicPayloads_REQ_AOC_S3_T2 passes",
         "TestDynamicPricingIsFixtureDeterministic_REQ_AOC_S3_T2 passes",
@@ -417,8 +404,7 @@
       "priority": "medium",
       "parent": "AOC-S3",
       "blocked_by": [
-        "AOC-S3-T3",
-        "LNGHZN-S8-T1"
+        "AOC-S3-T3"
       ],
       "notes": [
         "census-drift-check already compares CLI commands and flags bidirectionally; this extends the same mechanism to the surfaces the Surface glossary amendment brought into scope."
@@ -485,11 +471,10 @@
       "id": "AOC-S4-T1",
       "title": "Payload-keyed transition idempotency and ADR 0018",
       "type": "task",
-      "scope": "cmd/armature/transition.go, cmd/armature/transition_test.go, internal/ops/types.go, docs/adr/0018-payload-keyed-op-idempotency.md (new)",
+      "scope": "cmd/armature/transition.go, cmd/armature/transition_test.go (new), internal/ops/types.go, docs/adr/0018-payload-keyed-op-idempotency.md (new)",
       "priority": "medium",
       "parent": "AOC-S4",
       "blocked_by": [
-        "LNGHZN-S6-T2",
         "TOPTIER-S11-T1"
       ],
       "notes": [
