@@ -282,10 +282,13 @@ func runPostCommitHook(cmd *cobra.Command) {
 // It skips silently when HEAD~1 is absent (initial commit) and swallows all errors.
 func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 	appCtx := currentCtx(cmd)
-	// --name-status with diff-filter covers renames (R*) and deletions (D).
-	// Use the invoking worktree so a claimed-worktree commit diffs that HEAD,
-	// not the parent checkout's.
-	gitCmd := adapters.NonInteractiveGitCommand(invocationRepoPath(cmd), "diff", "--name-status", "--diff-filter=RD", "HEAD~1", "HEAD")
+	// --name-status with --find-renames and diff-filter covers renames (R*) and
+	// deletions (D). Use the invoking worktree so a claimed-worktree commit diffs
+	// that HEAD, not the parent checkout's.
+	// --find-renames overrides diff.renames=false so a git mv is reported as R*,
+	// not as a deletion plus an untracked add (which --diff-filter=RD would treat
+	// as a scope-delete).
+	gitCmd := adapters.NonInteractiveGitCommand(invocationRepoPath(cmd), "diff", "--name-status", "--find-renames", "--diff-filter=RD", "HEAD~1", "HEAD")
 	out, err := gitCmd.Output()
 	if err != nil {
 		// HEAD~1 absent on initial commit, or any other git error — skip silently.
@@ -331,7 +334,10 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 								NewPath: newPath,
 							},
 						}
-						_ = appendLowStakesOp(mustState(cmd), logPath, op) //nolint:errcheck // low-stakes op; failure is non-critical
+						if err := appendLowStakesOp(mustState(cmd), logPath, op); err != nil {
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to record scope-rename: %v\n", err)
+							break
+						}
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-rename: %s %s -> %s\n", issueID, oldPath, newPath)
 						break
 					}
@@ -351,7 +357,10 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 							DeletedPath: deletedPath,
 						},
 					}
-					_ = appendLowStakesOp(mustState(cmd), logPath, op) //nolint:errcheck // low-stakes op; failure is non-critical
+					if err := appendLowStakesOp(mustState(cmd), logPath, op); err != nil {
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to record scope-delete: %v\n", err)
+						continue
+					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scope-delete: %s %s\n", issueID, deletedPath)
 				}
 			}
