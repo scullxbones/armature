@@ -603,7 +603,7 @@ Show tasks ready to be claimed. Structured output (`--format json`, `--format ag
 
 `--waves` stays on the same envelope. `issues` is still the flat complete list. A `waves` adjunct lists id groups, each inner array one scope-disjoint wave. Rows are not duplicated into the adjunct (N2). Human format is unchanged and does not print waves.
 
-An empty ready queue is still the envelope: `{count: 0, "issues": [], "help": [...]}` with exit 0. `help` names why the queue is empty and still points at `arm show`.
+An empty ready queue is still the envelope: `{count: 0, "issues": [], "help": [...]}` with exit 0. `help` names why the queue is empty and still points at `arm show`. When `--parent` or `--assigned-to` filtered the queue to nothing, `help[0]` names that filter instead of blaming blockers or claims. When the empty queue has expired claims and no filter, `help[0]` names the `expired_claims` adjunct.
 
 **Synopsis:**
 `arm ready [flags]`

@@ -195,6 +195,9 @@ func TestReadyExpiredClaimsInEnvelopeNotStderr_REQ_AOC_S2_T1(t *testing.T) {
 	var help []string
 	require.NoError(t, json.Unmarshal(decoded["help"], &help))
 	require.NotEmpty(t, help)
+	assert.Contains(t, help[0], "expired_claims")
+	assert.NotContains(t, help[0], "blockers")
+	assert.Contains(t, help, readyExpiredHelp)
 }
 
 func TestReadyEmptyStateIsDefinitive_REQ_AOC_S2_T1(t *testing.T) {
@@ -244,4 +247,119 @@ func TestReadyEmptyStateIsDefinitive_REQ_AOC_S2_T1(t *testing.T) {
 	var waveIDs [][]string
 	require.NoError(t, json.Unmarshal(wavesDecoded["waves"], &waveIDs))
 	assert.Empty(t, waveIDs)
+}
+
+func TestReadyHelpEmptyReasonNamesFilterAndExpired(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		n          int
+		waves      bool
+		expiredN   int
+		parent     string
+		assignedTo string
+		wantFirst  string
+		wantAll    []string
+	}{
+		{
+			name:      "unfiltered empty blames blockers",
+			wantFirst: readyEmptyHelp,
+			wantAll:   []string{readyEmptyHelp, readyShowHelp},
+		},
+		{
+			name:      "parent filter names --parent",
+			parent:    "STORY-01",
+			wantFirst: "no issues match --parent STORY-01",
+			wantAll:   []string{"no issues match --parent STORY-01", readyShowHelp},
+		},
+		{
+			name:       "assigned-to filter names --assigned-to",
+			assignedTo: "worker-a",
+			wantFirst:  "no issues match --assigned-to worker-a",
+			wantAll:    []string{"no issues match --assigned-to worker-a", readyShowHelp},
+		},
+		{
+			name:       "both filters name both flags",
+			parent:     "STORY-01",
+			assignedTo: "worker-a",
+			wantFirst:  "no issues match --parent STORY-01 and --assigned-to worker-a",
+			wantAll:    []string{"no issues match --parent STORY-01 and --assigned-to worker-a", readyShowHelp},
+		},
+		{
+			name:      "expired-only empty names expired_claims not blockers",
+			expiredN:  1,
+			wantFirst: readyEmptyExpiredHelp,
+			wantAll:   []string{readyEmptyExpiredHelp, readyShowHelp, readyExpiredHelp},
+		},
+		{
+			name:      "parent filter plus expired names filter and keeps expired adjunct help",
+			parent:    "STORY-01",
+			expiredN:  1,
+			wantFirst: "no issues match --parent STORY-01",
+			wantAll:   []string{"no issues match --parent STORY-01", readyShowHelp, readyExpiredHelp},
+		},
+		{
+			name:      "non-empty ignores filters",
+			n:         2,
+			parent:    "STORY-01",
+			wantFirst: readyClaimHelp,
+			wantAll:   []string{readyClaimHelp, readyShowHelp},
+		},
+		{
+			name:      "waves non-empty keeps wave help",
+			n:         2,
+			waves:     true,
+			wantFirst: readyWavesHelp,
+			wantAll:   []string{readyWavesHelp, readyShowHelp},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := readyHelp(tc.n, tc.waves, tc.expiredN, tc.parent, tc.assignedTo)
+			assert.Equal(t, tc.wantFirst, got[0])
+			assert.Equal(t, tc.wantAll, got)
+			if tc.n == 0 && (tc.parent != "" || tc.assignedTo != "" || tc.expiredN > 0) {
+				assert.NotContains(t, got[0], "blockers", "empty help must not blame blockers when a filter or expired claim is the context")
+			}
+		})
+	}
+}
+
+func TestReadyEmptyHelpNamesActiveFilter_REQ_AOC_S2_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	parentOut, _ := runReadyJSON(t, repo, "--parent", "nonexistent-parent")
+	parentDecoded := decodeReadyEnvelope(t, parentOut)
+	var count int
+	require.NoError(t, json.Unmarshal(parentDecoded["count"], &count))
+	assert.Equal(t, 0, count)
+	var parentHelp []string
+	require.NoError(t, json.Unmarshal(parentDecoded["help"], &parentHelp))
+	require.NotEmpty(t, parentHelp)
+	assert.Contains(t, parentHelp[0], "--parent")
+	assert.Contains(t, parentHelp[0], "nonexistent-parent")
+	assert.NotContains(t, parentHelp[0], "blockers")
+
+	assignedOut, _ := runReadyJSON(t, repo, "--assigned-to", "worker-nobody")
+	assignedDecoded := decodeReadyEnvelope(t, assignedOut)
+	require.NoError(t, json.Unmarshal(assignedDecoded["count"], &count))
+	assert.Equal(t, 0, count)
+	var assignedHelp []string
+	require.NoError(t, json.Unmarshal(assignedDecoded["help"], &assignedHelp))
+	require.NotEmpty(t, assignedHelp)
+	assert.Contains(t, assignedHelp[0], "--assigned-to")
+	assert.Contains(t, assignedHelp[0], "worker-nobody")
+	assert.NotContains(t, assignedHelp[0], "blockers")
+
+	bothOut, _ := runReadyJSON(t, repo, "--parent", "nonexistent-parent", "--assigned-to", "worker-nobody")
+	bothDecoded := decodeReadyEnvelope(t, bothOut)
+	var bothHelp []string
+	require.NoError(t, json.Unmarshal(bothDecoded["help"], &bothHelp))
+	require.NotEmpty(t, bothHelp)
+	assert.Contains(t, bothHelp[0], "--parent")
+	assert.Contains(t, bothHelp[0], "--assigned-to")
+	assert.NotContains(t, bothHelp[0], "blockers")
 }
