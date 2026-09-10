@@ -58,8 +58,7 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 				if !ok {
 					continue
 				}
-				// Ready output uses "issue" field, not "id"
-				if id, ok := taskMap["issue"].(string); ok && id == taskID {
+				if id, ok := taskMap["id"].(string); ok && id == taskID {
 					found = true
 					break
 				}
@@ -287,11 +286,10 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 
 	t.Run("arm ready returns JSON array", func(t *testing.T) {
 		readyTasks := repo.Ready(t)
-		// readyTasks is already a []interface{}, so just verify it's not nil
 		if readyTasks == nil {
-			t.Fatalf("expected JSON array from arm ready, got nil")
+			t.Fatalf("expected issues payload from arm ready, got nil")
 		}
-		t.Logf("arm ready returned array of %d items", len(readyTasks))
+		t.Logf("arm ready returned issues payload of %d items", len(readyTasks))
 	})
 
 	t.Run("arm render-context returns JSON object with issue_id and layers", func(t *testing.T) {
