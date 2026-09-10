@@ -161,6 +161,18 @@ _Avoid_: Claimed by, worker
 The worker currently holding the active claim on an issue. `Claimed By` records current reservation, not long-term assignment.
 _Avoid_: Assigned worker, owner
 
+**Claim Plan**:
+The overlap decision for a proposed Claim, produced before any Op is appended. It names block reasons, warnings, and note intents. Distinct from the Claim Op itself.
+_Avoid_: Resolver, overlap check, claim result
+
+**Claim Compensation**:
+The planned Transition that restores or releases a Claim after a failed post-Claim step, produced before any compensating Op is appended. Distinct from the Claim Op and from git rollback.
+_Avoid_: Rollback, resolver, claim result
+
+**Worktree Provision Plan**:
+The decision for a proposed Managed Worktree destination, produced before any git or filesystem mutation. Outcomes are refuse, adopt, already-at-destination, or provision-fresh. Distinct from Adoption (one outcome) and from the Claim Op.
+_Avoid_: Resolver, worktree create, checkout
+
 **Ops Branch**:
 The git branch that stores Armature's coordination data under `.armature/`. It is the branch of record for append-only operational history.
 _Avoid_: Main branch, code branch
