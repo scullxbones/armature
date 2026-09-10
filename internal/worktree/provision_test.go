@@ -325,7 +325,10 @@ func TestPlanProvision_InvalidInput_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	}{
 		{name: "empty IssueID", in: worktree.ProvisionInput{Dest: base.Dest, ExpectedBranch: base.ExpectedBranch}},
 		{name: "empty Dest", in: worktree.ProvisionInput{IssueID: base.IssueID, ExpectedBranch: base.ExpectedBranch}},
-		{name: "empty ExpectedBranch", in: worktree.ProvisionInput{IssueID: base.IssueID, Dest: base.Dest}},
+		{name: "empty ExpectedBranch with inventory", in: worktree.ProvisionInput{
+			IssueID: base.IssueID, Dest: base.Dest,
+			Inventory: []worktree.InventoryRow{boundRow("/legacy", heads(base.ExpectedBranch))},
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -335,4 +338,12 @@ func TestPlanProvision_InvalidInput_REQ_ARCHIMP_S20_T5(t *testing.T) {
 			assert.Equal(t, worktree.ProvisionPlan{}, plan)
 		})
 	}
+
+	t.Run("empty ExpectedBranch with empty inventory is dest-only", func(t *testing.T) {
+		t.Parallel()
+		in := worktree.ProvisionInput{IssueID: base.IssueID, Dest: base.Dest}
+		plan, err := worktree.PlanProvision(in)
+		require.NoError(t, err)
+		assert.Equal(t, worktree.ProvisionFresh, plan.Action)
+	})
 }
