@@ -31,7 +31,7 @@ help:
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
-	@echo "  make context-report      - Price static agent-facing artifacts (bytes and bytes/4 tokens)"
+	@echo "  make context-report      - Price fixture-measured main-path CLI payloads (bytes and bytes/4 tokens)"
 	@echo "  make clean               - Remove build artifacts and test outputs"
 	@echo "  make build               - Build CLI binary to ./bin/arm"
 	@echo "  make crosscompile        - Build (no test) every platform .goreleaser.yaml ships, to catch platform-specific compile breakage"

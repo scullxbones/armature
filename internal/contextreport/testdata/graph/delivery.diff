@@ -1,0 +1,10 @@
+diff --git a/hello.go b/hello.go
+--- a/hello.go
++++ b/hello.go
+@@ -0,0 +1,6 @@
++package hello
++
++// Hello is the fixture delivery file priced by context-report.
++func Hello() string {
++	return "fixture-measured"
++}

@@ -20,7 +20,11 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 		cmd.SetArgs([]string{"context-report", "--repo", rootDir, "--format", "human"})
 		require.NoError(t, cmd.Execute())
 		out := buf.String()
-		assert.Contains(t, out, "armature-coordinator")
+		assert.Contains(t, out, "list")
+		assert.Contains(t, out, "ready")
+		assert.Contains(t, out, "show")
+		assert.Contains(t, out, "render-context")
+		assert.Contains(t, out, "review")
 		assert.Contains(t, out, "bytes/4")
 		assert.Contains(t, out, "token_budget")
 	})
@@ -44,6 +48,7 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 		cmd.SetArgs([]string{"context-report", "--repo", rootDir, "--format", "agent"})
 		require.NoError(t, cmd.Execute())
 		assert.Contains(t, buf.String(), `"estimation_method"`)
+		assert.Contains(t, buf.String(), `"invocation"`)
 	})
 
 	t.Run("missing repo", func(t *testing.T) {
@@ -53,6 +58,6 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 		cmd.SetArgs([]string{"context-report", "--repo", t.TempDir()})
 		err := cmd.Execute()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "skills")
+		assert.Contains(t, err.Error(), "ops.jsonl")
 	})
 }

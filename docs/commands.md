@@ -172,6 +172,27 @@ arm context-history --issue TASK-001 --limit 50
 
 ---
 
+## context-report
+
+Price fixture-measured structured stdout for main-path CLI commands.
+
+**Synopsis:**
+`arm context-report`
+
+**Description:**
+Measures json/agent payload bytes for `list`, `ready`, `show`, `render-context`,
+and `review` against the checked-in fixture graph, plus a fixture
+`render-context` bundle. Estimated tokens use bytes/4 (integer division),
+matching the `token_budget` convention.
+
+**Example:**
+```bash
+arm context-report --repo . --format json
+make context-report
+```
+
+---
+
 ## create
 
 Create a new work item.
