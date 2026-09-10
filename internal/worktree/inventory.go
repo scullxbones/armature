@@ -136,7 +136,9 @@ func CanonicalRoot(repoPath string) string {
 	if err != nil {
 		abs = repoPath
 	}
-	return NormalizePath(filepath.Join(abs, ".worktrees"))
+	// AllowingMissing so a not-yet-created .worktrees root still resolves
+	// through a symlinked repo path (e.g. /tmp -> /private/tmp on macOS).
+	return NormalizePathAllowingMissing(filepath.Join(abs, ".worktrees"))
 }
 
 // CanonicalPath returns the canonical path for an issue ID. Callers must

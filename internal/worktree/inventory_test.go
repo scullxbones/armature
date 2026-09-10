@@ -114,6 +114,24 @@ func TestCanonicalRoot_RelativeRepoPathIsAbsolute(t *testing.T) {
 	assert.True(t, filepath.IsAbs(root), "canonical root must be absolute, got %q", root)
 }
 
+// TestCanonicalRoot_MissingThroughSymlink_REQ_ARCHIMP_S20 pins Codex 153 P2:
+// a not-yet-created .worktrees under a symlinked repo root must still resolve
+// through the symlink (e.g. /tmp -> /private/tmp), matching NormalizePath of
+// an existing sibling under the resolved root.
+func TestCanonicalRoot_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.T) {
+	t.Parallel()
+	realRepo := t.TempDir()
+	linkParent := t.TempDir()
+	link := filepath.Join(linkParent, "repo-link")
+	require.NoError(t, os.Symlink(realRepo, link))
+
+	got := CanonicalRoot(link)
+	want := NormalizePathAllowingMissing(filepath.Join(realRepo, ".worktrees"))
+	assert.Equal(t, want, got)
+	// And equal to resolving via the real path directly.
+	assert.Equal(t, CanonicalRoot(realRepo), got)
+}
+
 // TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6 verifies that selection
 // reports THREE outcomes, not two. A single bool cannot distinguish "nothing to
 // act on" from "more than one candidate and no way to choose", and callers that

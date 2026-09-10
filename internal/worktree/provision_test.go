@@ -200,6 +200,24 @@ func TestPlanProvision_AlreadyAtDest_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	assertInputUnchanged(t, before, inv, in)
 }
 
+func TestPlanProvision_AlreadyAtDestPathNormalize_REQ_ARCHIMP_S20_T5(t *testing.T) {
+	t.Parallel()
+	in := provisionBase()
+	in.ProvenanceOK = false
+	// Equivalent unclean path must still count as already-at-dest (Codex 148).
+	in.Inventory = []worktree.InventoryRow{
+		boundRow("/repo/foo/../.worktrees/ARCHIMP-S20-T5", "refs/heads/scratch"),
+	}
+	before, inv := snapshot(in)
+
+	plan, err := worktree.PlanProvision(in)
+	require.NoError(t, err)
+	assert.Equal(t, worktree.ProvisionAlreadyAtDest, plan.Action)
+	assert.Empty(t, plan.AdoptFrom)
+	assert.Empty(t, plan.RefuseReason)
+	assertInputUnchanged(t, before, inv, in)
+}
+
 func TestPlanProvision_Fresh_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Parallel()
 	in := provisionBase()

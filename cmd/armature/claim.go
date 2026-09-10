@@ -838,6 +838,10 @@ func createWorktreeAndBranchWithExclusion(
 			if moveErr := gitClient.MoveWorktree(worktreePath, adoptedFrom); moveErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: failed to restore adopted worktree at %s: %v\n", adoptedFrom, moveErr)
 			}
+		} else if alreadyAtDest {
+			// Destination predates this claim attempt. A later metadata write
+			// failure must not git-worktree-remove --force a checkout that may
+			// hold dirty worker changes.
 		} else if rmErr := gitClient.RemovePartiallyProvisionedWorktree(worktreePath); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to clean up partial worktree at %s: %v\n", worktreePath, rmErr)
 		}
