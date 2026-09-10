@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -798,6 +799,75 @@ func TestAssessmentAttestation_WithActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 
 	// Verify ActivityDigest is preserved
 	assert.Equal(t, attestation.ActivityDigest, decoded.ActivityDigest)
+}
+
+func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
+	t.Parallel()
+
+	attestation := review.AssessmentAttestation{
+		SchemaVersion:           review.SchemaVersion,
+		BundleID:                "sha256:bundle123",
+		ContractFingerprint:     "fp_contract",
+		DeliveryFingerprint:     "fp_delivery",
+		BaseSHA:                 "abc123",
+		HeadSHA:                 "def456",
+		Rating:                  review.Green,
+		ResultFingerprint:       "fp_result",
+		SatisfiedCount:          1,
+		PartiallySatisfiedCount: 0,
+		NotSatisfiedCount:       0,
+		IndeterminateCount:      0,
+		InputTokens:             2100,
+		OutputTokens:            480,
+	}
+
+	data, err := json.Marshal(attestation)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"input_tokens":2100`)
+	assert.Contains(t, string(data), `"output_tokens":480`)
+
+	op := ops.Op{
+		Type:      ops.OpAssessmentAttested,
+		TargetID:  "TOPTIER-S11-T1",
+		Timestamp: 1740700800,
+		WorkerID:  "reviewer-r1",
+		Payload:   ops.Payload{Assessment: data},
+	}
+	line, err := ops.MarshalOp(op)
+	require.NoError(t, err)
+
+	parsed, err := ops.ParseLine(line)
+	require.NoError(t, err)
+	assert.Equal(t, ops.OpAssessmentAttested, parsed.Type)
+
+	var decoded review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(parsed.Payload.Assessment, &decoded))
+	assert.Equal(t, 2100, decoded.InputTokens)
+	assert.Equal(t, 480, decoded.OutputTokens)
+	assert.Equal(t, "fp_result", decoded.ResultFingerprint)
+
+	legacyJSON := []byte(`{"schema_version":1,"bundle_id":"sha256:bundle123","contract_fingerprint":"fp_contract","delivery_fingerprint":"fp_delivery","base_sha":"abc123","head_sha":"def456","rating":"green","result_fingerprint":"fp_result","satisfied_count":1,"partially_satisfied_count":0,"not_satisfied_count":0,"indeterminate_count":0}`)
+	var legacy review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(legacyJSON, &legacy), "legacy assessment without token fields must still decode")
+	assert.Equal(t, 0, legacy.InputTokens)
+	assert.Equal(t, 0, legacy.OutputTokens)
+	assert.Equal(t, "fp_result", legacy.ResultFingerprint)
+
+	withoutCounts := review.AssessmentAttestation{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            "sha256:bundle123",
+		ContractFingerprint: "fp_contract",
+		DeliveryFingerprint: "fp_delivery",
+		BaseSHA:             "abc123",
+		HeadSHA:             "def456",
+		Rating:              review.Green,
+		ResultFingerprint:   "fp_result",
+		SatisfiedCount:      1,
+	}
+	omitted, err := json.Marshal(withoutCounts)
+	require.NoError(t, err)
+	assert.NotContains(t, string(omitted), "input_tokens")
+	assert.NotContains(t, string(omitted), "output_tokens")
 }
 
 func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T) {

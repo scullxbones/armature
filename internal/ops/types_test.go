@@ -84,3 +84,65 @@ func TestPayload_SourceEntryID_OmittedWhenEmpty(t *testing.T) {
 		t.Errorf("expected source_entry_id to be absent from JSON when empty, got: %s", data)
 	}
 }
+
+func TestOutcomeOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
+	t.Parallel()
+
+	op := Op{
+		Type:      OpTransition,
+		TargetID:  "TOPTIER-S11-T1",
+		Timestamp: 1740700800,
+		WorkerID:  "worker-a1",
+		Payload: Payload{
+			To:           StatusDone,
+			Outcome:      "Recorded optional token counts on the existing outcome op",
+			InputTokens:  1200,
+			OutputTokens: 340,
+		},
+	}
+	line, err := MarshalOp(op)
+	if err != nil {
+		t.Fatalf("marshal outcome op: %v", err)
+	}
+	if !bytes.Contains(line, []byte(`"input_tokens":1200`)) {
+		t.Errorf("expected input_tokens in outcome op JSON, got: %s", line)
+	}
+	if !bytes.Contains(line, []byte(`"output_tokens":340`)) {
+		t.Errorf("expected output_tokens in outcome op JSON, got: %s", line)
+	}
+
+	parsed, err := ParseLine(line)
+	if err != nil {
+		t.Fatalf("parse outcome op: %v", err)
+	}
+	if parsed.Type != OpTransition {
+		t.Errorf("expected type %q, got %q", OpTransition, parsed.Type)
+	}
+	if parsed.Payload.InputTokens != 1200 {
+		t.Errorf("expected InputTokens 1200, got %d", parsed.Payload.InputTokens)
+	}
+	if parsed.Payload.OutputTokens != 340 {
+		t.Errorf("expected OutputTokens 340, got %d", parsed.Payload.OutputTokens)
+	}
+
+	legacy := []byte(`["transition","TOPTIER-S11-T1",1740700800,"worker-a1",{"to":"done","outcome":"legacy outcome without token fields"}]`)
+	legacyOp, err := ParseLine(legacy)
+	if err != nil {
+		t.Fatalf("legacy outcome op must still decode: %v", err)
+	}
+	if legacyOp.Payload.Outcome != "legacy outcome without token fields" {
+		t.Errorf("expected legacy outcome preserved, got %q", legacyOp.Payload.Outcome)
+	}
+	if legacyOp.Payload.InputTokens != 0 || legacyOp.Payload.OutputTokens != 0 {
+		t.Errorf("expected absent token fields to decode as 0, got input=%d output=%d",
+			legacyOp.Payload.InputTokens, legacyOp.Payload.OutputTokens)
+	}
+
+	omitted, err := json.Marshal(Payload{To: StatusDone, Outcome: "no usage telemetry"})
+	if err != nil {
+		t.Fatalf("marshal payload without token counts: %v", err)
+	}
+	if bytes.Contains(omitted, []byte("input_tokens")) || bytes.Contains(omitted, []byte("output_tokens")) {
+		t.Errorf("expected token fields omitted when zero, got: %s", omitted)
+	}
+}

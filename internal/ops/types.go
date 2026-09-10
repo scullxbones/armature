@@ -129,8 +129,14 @@ type Payload struct {
 	Source string `json:"source,omitempty"`
 
 	// transition
-	To                  string `json:"to,omitempty"`
-	Outcome             string `json:"outcome,omitempty"`
+	To      string `json:"to,omitempty"`
+	Outcome string `json:"outcome,omitempty"`
+	// InputTokens and OutputTokens record LLM usage at coordinator/worker
+	// dispatch on the same transition that writes an outcome (G1.1). They are
+	// optional: omitempty keeps every legacy op valid. Absent fields decode as
+	// 0. No new op type.
+	InputTokens         int    `json:"input_tokens,omitempty"`
+	OutputTokens        int    `json:"output_tokens,omitempty"`
 	Branch              string `json:"branch,omitempty"`
 	PR                  string `json:"pr,omitempty"`
 	SkippedDeliveryGate bool   `json:"skipped_delivery_gate,omitempty"`
