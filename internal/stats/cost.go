@@ -87,7 +87,7 @@ func DefaultRates() RateTable {
 // LoadRateTable reads a JSON object {"models": {name: {input_usd_per_mtok, output_usd_per_mtok}}}.
 // Unknown models still fall back to the "default" entry after merge with DefaultRates.
 func LoadRateTable(path string) (RateTable, error) {
-	data, err := os.ReadFile(filepath.Clean(path)) //nolint:gosec // operator-supplied rate table path
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("read rate table: %w", err)
 	}
