@@ -513,24 +513,32 @@ func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken stri
 }
 
 // rollbackClaim releases (or restores) the claim after a post-claim worktree
-// setup step fails, then returns the error to surface. A same-worker ACTIVE
-// claim keeps its prior status; a stale same-worker claim or a different-worker
-// takeover is released to open. opLabel names the failed step in the returned
-// error. Shared by the create-worktree and update-issue-ID failure paths.
+// setup step fails, then returns the error to surface. After ownership reload
+// confirms this Claim still holds, PlanCompensation builds the compensating
+// Transition (live same-Worker restore vs stale/foreign release to open).
+// opLabel names the failed step in the returned error. Shared by the
+// create-worktree and update-issue-ID failure paths.
 //
 // It consults claimStillOwnedBy as a fast-path check (using claimToken, the
 // unique nonce of the claim op this process just appended) so a superseded
 // claim can be reported clearly without appending a doomed op. But the real
-// correctness guarantee is downstream: the compensating transition op below
-// always stamps Payload.IfClaimToken = claimToken, so even if a second
-// worker's legitimate takeover (a new claim op with a different token) lands
-// — or a different command's transition of this issue to in-progress or
-// blocked lands — between this check and the append below, or anywhere else
-// in the append-only, last-write-wins op log relative to this op, replay
-// itself (materialize.applyTransition, via Issue.ClaimHeldBy — the single
-// canonical ownership predicate this function's own check also delegates to)
-// refuses to apply the compensating op once the claim it targets no longer
-// holds. Log ordering no longer matters.
+// correctness guarantee is downstream: PlanCompensation stamps
+// Payload.IfClaimToken = claimToken, so even if a second worker's legitimate
+// takeover (a new claim op with a different token) lands — or a different
+// command's transition of this issue to in-progress or blocked lands —
+// between this check and the append below, or anywhere else in the
+// append-only, last-write-wins op log relative to this op, replay itself
+// (materialize.applyTransition, via Issue.ClaimHeldBy — the single canonical
+// ownership predicate this function's own check also delegates to) refuses
+// to apply the compensating op once the claim it targets no longer holds.
+// Log ordering no longer matters.
+func rollbackClaim(
+	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
+	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
+) error {
+	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, false, exclusionSets...)
+}
+
 func rollbackClaimLocked(
 	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
 	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
@@ -568,49 +576,32 @@ func rollbackClaimWithExclusionLock(
 		return finish(fmt.Errorf("%s: %w (claim superseded; no rollback appended)", opLabel, cause))
 	}
 
-	rollbackStatus := ops.StatusOpen
-	priorWasActive := prior.claimedBy == workerID &&
-		!claimPkg.IsClaimStale(prior.claimedAt, prior.lastHeartbeat, prior.claimingWorkerActivity, prior.claimTTL, nowEpoch())
-	payload := ops.Payload{To: rollbackStatus}
-	if priorWasActive {
-		rollbackStatus = prior.status
-		payload.To = rollbackStatus
-	}
-	// The claim op already refreshed all lease timestamps before worktree setup
-	// ran. Carry the complete pre-claim snapshot in the compensating op so replay
-	// restores the exact lease, rather than only status and path. For stale or
-	// foreign takeovers, the zero-valued snapshot deliberately clears every
-	// lease field while the status transition releases the claim.
-	payload.RestoreClaim = true
-	if priorWasActive {
-		payload.RestoreClaimedBy = prior.claimedBy
-		payload.RestoreClaimedAt = prior.claimedAt
-		payload.RestoreClaimTTL = prior.claimTTL
-		payload.RestoreLastHeartbeat = prior.lastHeartbeat
-		payload.RestoreLastClaimingWorkerActivity = prior.claimingWorkerActivity
-		payload.RestoreClaimToken = prior.claimToken
-	}
-	// IfClaimToken makes this a conditional compensating op: replay applies it
-	// only if the issue's ClaimToken still equals claimToken (the exact claim
-	// this rollback is for) and ClaimedBy still equals workerID. See the
-	// function doc comment above for why this — not the precheck above — is
-	// what actually makes the rollback race-proof.
-	payload.IfClaimToken = claimToken
-	// Always restore the pre-claim path, regardless of whether the failed claim
-	// was a first claim, stale takeover, or active retry. The claim op is
-	// append-only and materializes its canonical path before provisioning; if
-	// provisioning fails that path may have been removed, so retaining it would
-	// leave state pointing at a nonexistent worktree. An explicit clear signal
-	// preserves an empty legacy path instead of being mistaken for "no change".
-	if prior.worktreePath != "" {
-		payload.WorktreePath = prior.worktreePath
-	} else {
-		payload.ClearWorktreePath = true
+	now := nowEpoch()
+	// PlanCompensation is the restore-vs-release kernel. Ownership reload
+	// stays here; the compensating Transition is appended below with
+	// IfClaimToken = claimToken (the Claim this rollback compensates).
+	payload, planErr := claimPkg.PlanCompensation(claimPkg.CompensationInput{
+		Prior: claimPkg.LeaseFacts{
+			Status:                 prior.status,
+			ClaimedBy:              prior.claimedBy,
+			ClaimedAt:              prior.claimedAt,
+			LastHeartbeat:          prior.lastHeartbeat,
+			ClaimTTL:               prior.claimTTL,
+			ClaimingWorkerActivity: prior.claimingWorkerActivity,
+			WorktreePath:           prior.worktreePath,
+			ClaimToken:             prior.claimToken,
+		},
+		WorkerID:   workerID,
+		Now:        now,
+		ClaimToken: claimToken,
+	})
+	if planErr != nil {
+		return finish(fmt.Errorf("%s: %w; also failed to plan claim compensation: %v (manual cleanup may be needed)", opLabel, cause, planErr))
 	}
 	rollbackOp := ops.Op{
 		Type:      ops.OpTransition,
 		TargetID:  issueID,
-		Timestamp: nowEpoch(),
+		Timestamp: now,
 		WorkerID:  workerID,
 		Payload:   payload,
 	}
