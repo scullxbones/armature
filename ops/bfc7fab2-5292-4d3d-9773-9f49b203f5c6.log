@@ -100,3 +100,4 @@
 ["unlink","AOC-S2-T5",1789073099,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"ARCHIMP-S20-T2","rel":"blocked_by"}]
 ["claim","AOC-S2-T2",1789074354,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/AOC-S2-T2","claim_token":"7cea7c72ebc1da28061640d40851d2e4"}]
 ["transition","AOC-S2",1789074356,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"in-progress"}]
+["transition","AOC-S2-T2",1789075134,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"arm list structured stdout is {count,issues[],help[]} via output.NewEnvelope; default row id/type/status/title; outcome omitted; --group adds groups adjunct; empty is count 0. PR 156 head c1f52c90. Tests TestListDefaultRowIsFourFields/OmitsOutcome/GroupHonoured/CountIsTrueTotal_REQ_AOC_S2_T2. --skip-delivery-gate: claim baseline advanced to delivery HEAD after syncing CA tip into worktree; commit feat(AOC-S2-T2) is the delivery.","skipped_delivery_gate":true}]
