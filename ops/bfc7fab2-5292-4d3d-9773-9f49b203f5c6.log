@@ -83,3 +83,4 @@
 ["unlink","AOC-S2-T6",1789066578,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"LNGHZN-S6-T1","rel":"blocked_by"}]
 ["unlink","AOC-S2-T3",1789066578,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S11","rel":"blocked_by"}]
 ["unlink","AOC-S2-T3",1789066578,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"NXTTN-S3-T3","rel":"blocked_by"}]
+["amend","NXTTN-S3",1789066579,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"definition_of_done":"Tokens are a governed budget the way coverage already is: make context-report prices every static agent-facing artifact (skills, glossary, key docs) using a bytes/4 token estimate, per-artifact budgets grouped by class with a shrink-only ratchet are enforced by a check wired into make check, and the coordinator skill is trimmed as the first application. Dynamic agent-facing payloads (--format agent / structured envelopes) are priced by AOC-S3-T2 on the same reporter and ratchet."}]
