@@ -140,18 +140,23 @@ func (tr *TestRepo) CreateTask(t *testing.T, parent, title string, scope []strin
 	return issueID
 }
 
-// Ready returns the list of ready issues in JSON format.
+// Ready returns the issues payload from structured arm ready output.
 func (tr *TestRepo) Ready(t *testing.T) []interface{} {
 	t.Helper()
 
 	output := tr.runArm(t, "ready", "--format", "json")
 
-	var result []interface{}
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
+	var envelope struct {
+		Issues []interface{} `json:"issues"`
+	}
+	if err := json.Unmarshal([]byte(output), &envelope); err != nil {
 		t.Fatalf("failed to parse ready output as JSON: %v", err)
 	}
+	if envelope.Issues == nil {
+		t.Fatalf("ready envelope missing issues array: %s", output)
+	}
 
-	return result
+	return envelope.Issues
 }
 
 // Claim claims an issue with a worktree and returns the worktree path.
