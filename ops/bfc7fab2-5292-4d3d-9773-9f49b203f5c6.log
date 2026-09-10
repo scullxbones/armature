@@ -88,3 +88,4 @@
 ["amend","AOC-S3-T2",1789066579,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"definition_of_done":"internal/contextreport prices structured command payloads using the same bytes/4 convention as static artifacts, measured against a checked-in fixture graph so the number is reproducible. Dynamic payloads join the existing budgets file and shrink-only ratchet, with initial values seeded at or above current measured size so the gate starts green."}]
 ["unlink","AOC-S2-T2",1789066579,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"AOC-S1-T3","rel":"blocked_by"}]
 ["unlink","AOC-S2-T1",1789066580,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"LNGHZN-S6-T2","rel":"blocked_by"}]
+["unlink","AOC-S2-T1",1789066580,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"LNGHZN-S6-T4","rel":"blocked_by"}]
