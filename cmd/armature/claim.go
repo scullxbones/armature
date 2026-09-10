@@ -208,8 +208,9 @@ func nestedRegisteredWorktree(repoPath, destination string) (string, error) {
 }
 
 // refuseCustomWorktreeDestination gathers dest facts and asks PlanProvision
-// whether an explicit destination is legal. Inventory is empty so binding
-// outcomes stay after the Claim Op (createWorktreeAndBranch).
+// whether an explicit destination is legal. Inventory is empty so this call
+// only covers nested/in-repo dest refuses (before the Claim Op). Binding
+// cardinality uses evaluateProvisionPlan with worktree.List inventory.
 func refuseCustomWorktreeDestination(repoPath, destination, issueID, expectedBranch string) error {
 	nestedUnder, err := nestedRegisteredWorktree(repoPath, destination)
 	if err != nil {
@@ -231,6 +232,17 @@ func refuseCustomWorktreeDestination(repoPath, destination, issueID, expectedBra
 		return errors.New(plan.RefuseReason)
 	}
 	return nil
+}
+
+// evaluateProvisionPlan lists clone inventory and asks PlanProvision. Used
+// before the Claim Op so dest-present re-claim cannot skip Ambiguous Binding
+// (or other inventory-backed refuses) that the create path already consults.
+func evaluateProvisionPlan(repoPath, dest, issueID, expectedBranch string) (worktree.ProvisionPlan, error) {
+	inventory, err := worktree.List(repoPath)
+	if err != nil {
+		return worktree.ProvisionPlan{}, fmt.Errorf("inspect existing worktrees: %w", err)
+	}
+	return worktree.PlanProvision(provisionInputFromInventory(repoPath, dest, issueID, expectedBranch, inventory))
 }
 
 func provisionInputFromInventory(repoPath, dest, issueID, expectedBranch string, inventory []worktree.Meta) worktree.ProvisionInput {
@@ -1209,14 +1221,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			// serializes the check/remove performed by merged and GC with the
 			// claim's check-through-provisioning handoff, so a teardown cannot
 			// remove an exclusion after a new claim has reused the destination.
-			// Destination legality uses PlanProvision with empty inventory so
-			// nested/in-repo refuses happen before the Claim Op and before
-			// --from revalidation (git worktree list ordering).
-			if customWorktreePath {
-				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, "worktree"); err != nil {
-					return err
-				}
-			}
 			if fromWorktreePath != "" {
 				fromWorktreePath, err = filepath.Abs(fromWorktreePath)
 				if err != nil {
@@ -1266,6 +1270,15 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			expectedBranch := materialize.DeriveBranchName(issue.Type, issueID)
 			if expectedBranch == "" {
 				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
+			}
+			// Destination legality uses PlanProvision with empty inventory so
+			// nested/in-repo refuses happen before the Claim Op. ExpectedBranch
+			// is the real issue branch; inventory stays empty so binding
+			// outcomes are decided by evaluateProvisionPlan / createWorktree.
+			if customWorktreePath {
+				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, expectedBranch); err != nil {
+					return err
+				}
 			}
 			if fromWorktreePath != "" {
 				existingTip, exists, tipErr := branchTipIfExists(ctx.RepoPath, expectedBranch)
@@ -1320,6 +1333,18 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if err := checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch); err != nil {
 					return err
 				}
+			}
+
+			// Inventory-backed PlanProvision runs before the Claim Op so
+			// Ambiguous Binding cannot be skipped when dest already exists.
+			// Dest-only nested/in-repo refuses already ran above for custom
+			// dest; this call supplies real worktree.List inventory.
+			provisionPlan, err := evaluateProvisionPlan(ctx.RepoPath, worktreePath, issueID, expectedBranch)
+			if err != nil {
+				return err
+			}
+			if provisionPlan.Action == worktree.ProvisionRefuse {
+				return errors.New(provisionPlan.RefuseReason)
 			}
 
 			workerID, logPath, err := resolveWorkerAndLog(ctx)
@@ -1488,7 +1513,14 @@ it creates a new task worktree from the parent worktree's current branch and tip
 
 			// Worktree setup is deferred to here so it only happens after all claim
 			// validations pass and this worker has won the claim race.
-			if !worktreeExists {
+			// Skip create only when dest already exists and PlanProvision says
+			// already_at_dest or fresh (unbound dest, no other binding). Adopt
+			// with dest present still runs createWorktree, which fails closed
+			// rather than writing a second binding.
+			rebindExistingDest := worktreeExists &&
+				(provisionPlan.Action == worktree.ProvisionAlreadyAtDest ||
+					provisionPlan.Action == worktree.ProvisionFresh)
+			if !rebindExistingDest {
 				var sourceArgs []string
 				if fromWorktreePath != "" {
 					sourceArgs = []string{fromWorktreePath, fromBranch, fromTip}
