@@ -21,7 +21,7 @@ issues ready for workers to claim.
   identity. Skip that step entirely.
 - Have a source document, spec, or design doc before you start. Every issue you
   create must be citable. If no source exists yet, write one first or be
-  prepared to use `arm sources accept-citation` with a clear rationale.
+  prepared to use `arm sources accept-citation` `[escape hatch]` with a clear rationale.
 
 ## DAG Hygiene Mandate
 
@@ -45,31 +45,30 @@ Warnings from other stories must be resolved, not ignored. If `arm doctor` repor
 digraph planner_loop {
     "Start: objective/spec" [shape=box];
     "Single task?" [shape=diamond];
-    "arm create" [shape=box];
-    "Write plan.json" [shape=box];
+    "one-issue plan.json" [shape=box];
     "dag apply --dry-run" [shape=box];
     "OK?" [shape=diamond];
     "dag apply --plan plan.json" [shape=box];
     "dag transition" [shape=box];
-    "sources add/sync/verify" [shape=box];
-    "sources link / sources accept-citation" [shape=box];
+    "sources add/sync" [shape=box];
+    "cite at apply" [shape=box];
     "arm link (deps)" [shape=box];
     "arm validate" [shape=box];
     "arm doctor" [shape=box];
     "Release to Coordinator" [shape=doublecircle];
 
     "Start: objective/spec" -> "Single task?";
-    "Single task?" -> "arm create" [label="yes"];
+    "Single task?" -> "one-issue plan.json" [label="yes"];
     "Single task?" -> "Write plan.json" [label="no"];
-    "arm create" -> "sources add/sync/verify";
+    "one-issue plan.json" -> "dag apply --dry-run";
     "Write plan.json" -> "dag apply --dry-run";
     "dag apply --dry-run" -> "OK?" ;
     "OK?" -> "Write plan.json" [label="fix errors"];
     "OK?" -> "dag apply --plan plan.json" [label="yes"];
     "dag apply --plan plan.json" -> "dag transition";
-    "dag transition" -> "sources add/sync/verify";
-    "sources add/sync/verify" -> "sources link / sources accept-citation";
-    "sources link / sources accept-citation" -> "arm link (deps)";
+    "dag transition" -> "sources add/sync";
+    "sources add/sync" -> "cite at apply";
+    "cite at apply" -> "arm link (deps)";
     "arm link (deps)" -> "arm validate";
     "arm validate" -> "arm doctor";
     "arm doctor" -> "Release to Coordinator";
@@ -86,20 +85,13 @@ at creation time rather than doing a remediation pass later.
 ```bash
 arm sources add --url path/to/spec.md --title "Feature Spec" --type filesystem
 arm sources sync       # fetch and fingerprint all registered sources
-arm sources verify     # confirm all show OK (not MISSING)
 ```
 
-If `arm sources verify` shows MISSING entries, re-run `arm sources sync` until
-they resolve. Do not proceed with issue creation while sources are MISSING.
+Prefer `--source` on each plan issue at apply time. `arm sources verify` `[escape hatch]` re-checks the cache. Do not proceed while sources are missing.
 
 ### 2. Create or Decompose
 
-**For a single task:**
-```bash
-arm create --title "Task title" --type task --parent STORY-ID
-```
-
-Valid types: `task`, `feature`, `bug`, `story`
+**For a single task:** one-issue `plan.json` then `arm dag apply`. Not `arm create` `[escape hatch]`.
 
 **For a full decomposition (most common):**
 
@@ -118,9 +110,12 @@ Workers cannot claim draft issues. Do not skip this step.
 
 ### 4. Link Issues to Sources
 
-Every issue must be cited before `arm validate` will pass.
+Every issue must be cited before `arm validate` will pass. The paved road is
+the plan `source` field at `dag apply`. These are `[escape hatch]` post-hoc
+citation:
 
 ```bash
+# [escape hatch] Prefer --source at apply.
 # Link each issue to a registered source
 arm sources link --issue ISSUE-ID --source-id UUID
 
@@ -128,8 +123,7 @@ arm sources link --issue ISSUE-ID --source-id UUID
 arm sources accept-citation --issue ISSUE-ID --rationale "No external spec; requirements captured in issue body" --ci
 ```
 
-Do this at creation time — not as a post-hoc remediation pass. Citation debt
-accumulates silently and blocks validation.
+Do this at apply time. Citation debt blocks validation.
 
 ### 5. Resolve Dependencies
 
@@ -158,7 +152,7 @@ This section is critical. **Every issue in the plan MUST have a `source` (source
 entry ID) or `arm dag apply` will refuse the plan.** Apply is source-atomic:
 each create is emitted with its source-link in the same batch. **Every task
 MUST have `dod`, `scope`, and `acceptance` fields or Plan Release (`dag
-transition` / `confirm`) will fail.** Validate the plan JSON against
+transition`) will fail.** Validate the plan JSON against
 [the plan schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/plan.schema.json) before submitting; see `docs/json-schema-examples.md`
 for worked examples.
 
@@ -313,22 +307,28 @@ arm sources add --url docs/design/feature-spec.md --title "Feature Spec" --type 
 
 # 2. Sync to fingerprint it
 arm sources sync
+```
 
-# 3. Verify it shows OK
+Put the source UUID in each plan issue's `source` field, then `dag apply`.
+
+`[escape hatch]` post-hoc link if an issue was born without `source`:
+
+```bash
+# [escape hatch]
 arm sources verify
-
-# 4. Link each issue (get UUID from sources verify output)
 arm sources link --issue ISSUE-ID --source-id UUID
 ```
 
 ### Path B: No source document exists
 
 ```bash
+# [escape hatch] No source document. Prefer writing a spec and --source at apply.
 arm sources accept-citation --issue ISSUE-ID --rationale "Requirements captured in issue body; no external spec exists" --ci
 ```
 
 To bulk-cite multiple issues at once, pass `--issue` multiple times:
 ```bash
+# [escape hatch]
 arm sources accept-citation --issue A --issue B --issue C --rationale "same rationale applies to all" --ci
 ```
 
@@ -342,10 +342,10 @@ later.
 
 - Register sources **before** creating issues, not after.
 - Do not leave any issue uncited. Check coverage with `arm validate`.
-- If `arm validate` reports `uncited node: ID`, either `sources link` the
-  issue or use `sources accept-citation` on that issue before releasing to workers.
+- If `arm validate` reports `uncited node: ID`, either `sources link` `[escape hatch]` the
+  issue or use `sources accept-citation` `[escape hatch]` on that issue before releasing to workers.
 - If `arm validate` reports `unknown source: UUID`, the source UUID is not in
-  the manifest — re-run `arm sources sync` then `arm sources verify`.
+  the manifest — re-run `arm sources sync` then `arm sources verify` `[escape hatch]`.
 
 For dependency linking and overlap resolution, see `references/dependency-management.md`.
 
@@ -407,10 +407,7 @@ Do not release until all seven checks pass.
 ## Quick Reference
 
 ```bash
-# Single issue creation
-arm create --title "X" --type task --parent STORY-ID
-
-# Decomposition
+# Decomposition (paved road)
 arm dag apply --example                         # inspect schema
 arm dag apply --plan plan.json --dry-run        # preview without writing; iterate here
 arm dag apply --plan plan.json                  # apply the plan (source-atomic; Introduction check)
@@ -421,13 +418,9 @@ arm dag transition --issue ROOT-ID                    # promote root + all child
 # Source management
 arm sources add --url PATH --title "TEXT" --type filesystem
 arm sources sync                                      # fetch and fingerprint
-arm sources verify                                    # confirm all show OK
-arm sources link --issue ID --source-id UUID           # link issue to source
-arm sources accept-citation --issue ID --rationale "..." --ci # accept risk (no source)
 
 # Dependency management
 arm link --source A --dep B                           # A runs after B
-arm unlink --source A --dep B                         # remove dependency
 
 # Validation
 arm validate                                          # graph + citation check
@@ -436,8 +429,15 @@ arm doctor                                            # repo health check
 arm doctor --strict                                   # warnings as errors
 arm list --group                                      # grouped by status
 arm list --parent STORY-ID                            # tasks under a story
+```
 
-# Scope maintenance (after refactoring renames or deletions)
-arm scope-rename OLD-PATH NEW-PATH        # rename path/prefix across all scopes
-arm scope-delete PATH                    # remove exact path from all scopes
+```bash
+# [escape hatch] Not the paved road. Prefer dag apply, plan source, and arm link.
+arm create --title "X" --type task --parent STORY-ID
+arm sources verify
+arm sources link --issue ID --source-id UUID
+arm sources accept-citation --issue ID --rationale "..." --ci
+arm unlink --source A --dep B
+arm scope-rename OLD-PATH NEW-PATH
+arm scope-delete PATH
 ```

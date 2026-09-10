@@ -361,6 +361,7 @@ This is valid for `partially_satisfied` and `indeterminate` statuses.
 Write the assessment file, then run:
 
 ```bash
+# [escape hatch]
 arm review validate --assessment "$ASSESSMENT" --bundle "$BUNDLE_FILE" --format json
 ```
 

@@ -1,6 +1,6 @@
 # Violation Gate and Worktree Teardown
 
-`arm merged --issue TASK-ID` reads the task worktree's `armature-hook.log`. Entries:
+`arm merged --issue TASK-ID` `[escape hatch]` reads the task worktree's `armature-hook.log`. Entries:
 
 - `decision:` resolved scope allow/block
 - `pass-through:` no binding (warning only; does not block merge)
@@ -16,7 +16,7 @@ if [ -n "$WT" ]; then
 fi
 ```
 
-When `arm merged --issue TASK-ID` runs:
+When `arm merged --issue TASK-ID` `[escape hatch]` runs:
 
 1. Violations and no `--force`: error, worktree kept, status stays `done`. Review, remediate, or override.
 2. Violations with `--force`: acknowledged, task `merged`, worktree torn down.
@@ -25,6 +25,7 @@ When `arm merged --issue TASK-ID` runs:
 A wave with `violation:` entries must not integrate to main without operator review.
 
 ```bash
+# [escape hatch]
 arm merged --issue TASK-ID --force
 ```
 

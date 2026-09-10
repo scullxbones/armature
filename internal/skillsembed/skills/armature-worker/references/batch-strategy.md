@@ -10,6 +10,6 @@ high token usage. Instead:
    time).
 3. **Verify each Chunk:** Run tests/linting after each chunk to ensure no
    regressions were introduced.
-4. **Heartbeat:** Call `arm heartbeat ID` after each chunk.
+4. **Heartbeat:** Call `arm heartbeat ID` `[escape hatch]` after each chunk.
 5. **Final Review:** Once all files are processed, run a final global check
    before transitioning the task to `done`.

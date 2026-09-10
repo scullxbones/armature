@@ -37,7 +37,7 @@ arm worker-init --check || arm worker-init
 Writes that introduce a Graph Finding on an issue they created or targeted
 are refused (Introduction). Happy-path errors name the finding, the fix
 (narrow `--scope`, add `context_files`, or `arm link`), and withdraw-the-draft
-(`arm dag revert` / `arm transition --to cancelled`). Do not look for a skip
+(`arm dag revert` `[escape hatch]` / `arm transition --to cancelled`). Do not look for a skip
 flag. Birth is always draft.
 
 Before transitioning any task to `done` and after completing your work, run:
@@ -77,7 +77,7 @@ The issue is already claimed. Do NOT run `arm claim`. Do NOT run `arm worker-ini
 again.
 
 If this is a **remediation** dispatch, the coordinator has already run
-`arm reopen` and `arm claim --worktree` (reusing the existing worktree).
+`arm reopen` `[escape hatch]` and `arm claim --worktree` (reusing the existing worktree).
 Confirm with `arm show ISSUE-ID` that status is `claimed` or `in-progress`
 before you edit files. If status is still `done` or `merged`, **stop** —
 the harness hook treats those bindings as stale and passes through (no
@@ -115,16 +115,18 @@ arm decision ISSUE-ID --topic X --choice Y --rationale Z
 
 **The harness hook automatically emits rate-limited heartbeats on every tool use
 (PreToolUse events) for bound, non-stale claims** — one heartbeat per 5-minute window.
-You only need to manually call `arm heartbeat ISSUE-ID` during **long stretches of
+You only need to manually call `arm heartbeat ISSUE-ID` `[escape hatch]` during **long stretches of
 non-tool thinking work** (reading docs, analyzing code, etc.) where no tool calls
 happen for more than 5 minutes. Without heartbeats, claims expire after the TTL and
 another worker may steal the claim.
 
 ### 4. Cite Every Issue Touched
 
-Before completing work, cite every issue you touched or created:
+Before completing work, cite every issue you touched or created. Prefer the plan
+`source` field at apply time. These commands are `[escape hatch]` post-hoc citation:
 
 ```
+# [escape hatch]
 arm sources link ISSUE-ID --source-id SOURCE-UUID        # if a source doc exists
 # or
 arm sources accept-citation ISSUE-ID --rationale "No external source; self-citing" --ci  # if no source exists
@@ -218,16 +220,17 @@ If any check fails, the transition is refused. The error message lists each fail
 - **Scope Containment failure:** Narrow the diff to the declared scope or broaden the scope if the changes are justified.
 - **Commit Reference failure:** Add at least one properly-formatted commit (e.g., `feat(LNGHZN-S4-T3): document delivery gate`).
 
-**Skipping the Gate:**
+**Skipping the Gate (`[escape hatch]`):**
 
-The `--skip-delivery-gate` flag bypasses all three checks only with `--to done`; other target states reject it. Use this **only when the gate assumption does not hold** — for example, in a docs-only or demo-transcript task where you are not doing real delivery work, or when an external constraint makes gate compliance impossible.
+`--skip-delivery-gate` `[escape hatch]` bypasses all three checks only with `--to done`; other target states reject it. Use only when the gate assumption does not hold (demo-transcript, or an external constraint that makes compliance impossible). Prefer fixing the tree, scope, or commit messages.
 
 ```bash
+# [escape hatch]
 arm transition LNGHZN-S4-T3 --to done --skip-delivery-gate \
   --outcome "Skipped gate: demo-transcript task does not execute real delivery"
 ```
 
-When you skip the gate, the transition op records `Payload.SkippedDeliveryGate` as an audit flag and its `outcome` records your supplied reason. **However, prefer fixing the underlying issue over reaching for the override** — if you have uncommitted changes, commit them; if scope has drifted, narrow it; if commits are missing conventional-format messages, add them.
+The transition op records `Payload.SkippedDeliveryGate` and your `--outcome` reason.
 
 ### 6. Complete and Commit
 
@@ -262,8 +265,8 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `style`, `polish`
 See `docs/conventions.md` (commit format section) in the armature repo for the full commit format specification and examples.
 
 **Branch discipline:** `arm transition --to done` will fail if you are on the
-main or master branch (unless you use `--force`). The `--force` flag should only
-be used in exceptional cases (e.g., emergency hotfixes to main).
+main or master branch (unless you use `--force` `[escape hatch]`). Use `--force`
+only for exceptional cases (e.g., emergency hotfixes to main).
 
 ## Valid Transition Targets
 
@@ -322,10 +325,10 @@ Examples:
 | Skipping commit after task | Small commits make review and revert tractable |
 | Using `git commit -am` | `-a` only stages tracked files — new files and directories are silently skipped; always use explicit `git add <scope files>` |
 | Including `.armature/` in `git add` | Stages stale data; ops are already on `_armature` branch — omit `.armature/` from code commits |
-| Leave issues uncited | Run `arm sources link` or `arm sources accept-citation --ci` before returning |
+| Leave issues uncited | Run `arm sources link` `[escape hatch]` or `arm sources accept-citation --ci` `[escape hatch]` before returning |
 | Running `transition` before committing | The delivery gate requires a clean tree and an existing commit *before* you transition — stage scoped files and commit first, then run `arm transition ID --to done ...` (see Section 5c) |
-| Transitioning to done while on main | `arm transition --to done` will fail on main/master branch — use feature branch or `--force` only in emergencies |
+| Transitioning to done while on main | `arm transition --to done` will fail on main/master branch — use feature branch or `--force` `[escape hatch]` only in emergencies |
 | Scope overlap WARNING on `arm validate` | Add `arm link --source ISSUE-A --dep ISSUE-B` so overlapping tasks execute serially, not in parallel |
-| MISSING entries in `arm sources verify` | Run `arm sources sync` to fetch and fingerprint; re-run `arm sources verify` until all show OK |
+| MISSING entries in `arm sources verify` `[escape hatch]` | Run `arm sources sync` to fetch and fingerprint; re-run `arm sources verify` `[escape hatch]` until all show OK |
 | Test function named `TestFoo` instead of `TestFoo_REQ_ID` | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_ISSUE_ID`; see Test Naming and Traceability section |
 | Struct-only tests when task touches a JSON-documented Go type | Tests are green but end-to-end serialization is broken; your skill documents `"status":"satisfied"` but Go unmarshals 0 or vice versa | Add a round-trip JSON fixture test (unmarshal from string, assert Go value; marshal Go value, assert string form). See Section 5b and `examples/json-roundtrip-test.go` |

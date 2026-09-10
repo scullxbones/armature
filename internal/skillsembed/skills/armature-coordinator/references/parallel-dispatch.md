@@ -38,32 +38,26 @@ Each wave is a suggested grouping of tasks that can proceed in parallel without 
 
 Use parallel dispatch for tasks with no dependencies between them.
 
-**a. Assign log slots and pre-assign workers (optional but recommended):**
-```bash
-arm assign --issue T1-ID --worker WORKER-A
-arm assign --issue T2-ID --worker WORKER-B
-```
-
-**b. Claim all tasks in the wave:**
+**a. Claim all tasks in the wave** (`arm assign` `[escape hatch]` is soft assignment without a claim; dispatch uses `claim --worktree`):
 ```bash
 arm claim --issue T1-ID --worktree
 arm claim --issue T2-ID --worktree
 ```
 
-**c. Render context for each:**
+**b. Render context for each:**
 ```bash
 arm render-context --issue T1-ID --budget 4000
 arm render-context --issue T2-ID --budget 4000
 ```
 
-**d. Dispatch all workers concurrently** — include the slot and full context in
+**c. Dispatch all workers concurrently** — include the slot and full context in
 each prompt (see Dispatch Protocol in the main skill and Log Slots below).
 
-**e. Wait for all workers to return before proceeding.**
+**d. Wait for all workers to return before proceeding.**
 
-**f. Record wave manifest** — Before proceeding to integration, record the actual tasks dispatched in this wave by capturing `WAVE_TASK_IDS` and `WAVE_BASE_SHA` as described in the "Record Wave Manifest" step elsewhere in the Coordinator skill. This prose-recorded manifest is unchanged and required, even if you used `arm ready --waves` to plan the wave. The wave manifest remains the authoritative source of truth for what was actually dispatched.
+**e. Record wave manifest** — Before proceeding to integration, record the actual tasks dispatched in this wave by capturing `WAVE_TASK_IDS` and `WAVE_BASE_SHA` as described in the "Record Wave Manifest" step elsewhere in the Coordinator skill. This prose-recorded manifest is unchanged and required, even if you used `arm ready --waves` to plan the wave. The wave manifest remains the authoritative source of truth for what was actually dispatched.
 
-**g. Verify and integrate** (see After Workers Return in the main skill).
+**f. Verify and integrate** (see After Workers Return in the main skill).
 
 ---
 

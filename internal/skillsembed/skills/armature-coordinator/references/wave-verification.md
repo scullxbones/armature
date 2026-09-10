@@ -1,6 +1,6 @@
 # Wave Verification Gate
 
-Do not run `arm merged` until this gate passes. Failed tasks stay `done` so they remain visible.
+Do not run `arm merged` `[escape hatch]` until this gate passes. Failed tasks stay `done` so they remain visible.
 
 ## Manifest sanity
 

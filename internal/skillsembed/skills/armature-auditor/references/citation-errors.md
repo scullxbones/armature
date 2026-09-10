@@ -14,6 +14,7 @@ An issue has neither a `sources link` nor an `sources accept-citation`. It is co
 
 ```bash
 # Link to a source document
+# [escape hatch] Prefer --source at apply.
 arm sources link ISSUE-ID --source-id SOURCE-UUID
 
 # Or accept the citation risk explicitly (for issues with no recoverable source)
@@ -32,7 +33,7 @@ An issue's `sources link` points to a UUID that no longer exists in the sources 
 
 ```bash
 arm sources sync          # refresh manifest; re-fingerprint all sources
-arm sources verify        # confirm all show OK
+arm sources verify        # [escape hatch] confirm all show OK
 arm validate              # re-run — E8 should be gone if the source was re-found
 ```
 
@@ -40,7 +41,7 @@ If the source is gone permanently, register a replacement and re-link:
 
 ```bash
 arm sources add --url /path/to/replacement --type filesystem
-arm sources link ISSUE-ID --source-id SOURCE-UUID  # link to the new source UUID
+arm sources link ISSUE-ID --source-id SOURCE-UUID  # [escape hatch] link to the new source UUID
 arm validate              # confirm E8 is resolved
 ```
 
@@ -58,16 +59,16 @@ arm validate              # confirm E8 is resolved
 
 ## Source Freshness
 
-Source fingerprints go stale when the underlying document changes after initial registration. `arm sources verify` detects this; `arm sources sync` re-fetches and re-fingerprints all sources.
+`arm sources verify` `[escape hatch]` detects stale fingerprints; `arm sources sync` refreshes them.
 
 Workflow when sources are stale:
 
 ```bash
-arm sources verify        # identify MISSING or changed sources
+arm sources verify        # [escape hatch] identify MISSING or changed sources
 arm sources sync          # re-fingerprint
-arm sources verify        # confirm all OK
-arm sources stale-review  # if content changed, review delta before accepting
+arm sources verify        # [escape hatch] confirm all OK
+arm sources stale-review  # [escape hatch] if content changed, review delta before accepting
 arm validate              # confirm no new E8 errors from stale UUIDs
 ```
 
-Sources can also go stale silently between the time a worker registers them and the time the auditor runs. Always run `arm sources verify` as step 2 of the audit — do not assume sources registered during implementation are still current.
+Always run `arm sources verify` `[escape hatch]` as audit step 2.

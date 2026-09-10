@@ -4,6 +4,7 @@ Use `arm link` to express ordering constraints between tasks.
 
 ```bash
 arm link --source A --dep B    # A is blocked_by B (A runs after B completes)
+# [escape hatch] The road adds blocked_by edges; it does not routinely delete them.
 arm unlink --source A --dep B  # remove a dependency
 ```
 

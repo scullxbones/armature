@@ -64,6 +64,7 @@ arm validate --ci
 ### Step 2 — Source Freshness
 
 ```bash
+# [escape hatch] Add and sync are the paved road. Re-check cache here.
 arm sources verify
 ```
 
@@ -73,7 +74,7 @@ If sources show `MISSING`:
 
 ```bash
 arm sources sync        # fetch and re-fingerprint all sources
-arm sources verify      # re-run until all show OK
+arm sources verify      # [escape hatch] re-run until all show OK
 ```
 
 If a source is gone entirely, re-register it:
@@ -85,6 +86,7 @@ arm sources add --url /path/to/source --type filesystem
 If source content changed and you need to review the delta before accepting it:
 
 ```bash
+# [escape hatch] Not the daily loop. Review sources whose cache drifted.
 arm sources stale-review        # interactive review of sources whose content changed
 ```
 
@@ -143,12 +145,13 @@ If two tasks genuinely do not overlap despite the warning, document the rational
 
 #### Context Files Resolution
 
-The W5 warning fires when a task's `context_files` is empty AND its scope spans 3+ distinct directories (broad scope). Context files are informational references to files that inform the task but are not modified directly. Resolve this warning by either narrowing the scope to fewer directories or by adding context_files declarations.
+The W5 warning fires when `context_files` is empty and scope spans 3+ directories. Narrow scope or add context_files.
 
 ```bash
 # View context_files warnings
 arm validate
 
+# [escape hatch] Amend only to clear W5.
 # Option 1: Narrow the scope to cover fewer directories (< 3)
 arm amend TASK-01 --scope "src/**/*.go"
 
@@ -156,7 +159,7 @@ arm amend TASK-01 --scope "src/**/*.go"
 arm amend TASK-01 --context-file docs/notes.md --context-file docs/spec.md
 ```
 
-Choose Option 1 if the task can be more tightly scoped. Choose Option 2 if the task genuinely works across multiple directories and context files will help the worker understand the cross-directory dependencies.
+Choose Option 1 if the task can be tighter. Choose Option 2 if it genuinely spans directories.
 
 #### Using --strict
 
@@ -200,7 +203,7 @@ Before approving the story transition, all five checks must be green:
 | Check | Command | Pass Condition |
 |-------|---------|----------------|
 | Citation integrity | `arm validate` | Zero ERRORs, `COVERAGE: N/N cited` |
-| Source freshness | `arm sources verify` | Zero MISSING |
+| Source freshness | `arm sources verify` `[escape hatch]` | Zero MISSING |
 | Outcome quality | `arm render-context --issue ID` for each done task | All outcomes concrete, all acceptance criteria addressed |
 | Validation warnings | `arm validate --strict` | Zero scope overlap warnings, zero context_files warnings |
 | Repo health | `arm doctor --strict` | Exit zero (zero ERRORs, zero WARNINGs) |
@@ -213,4 +216,4 @@ Only after all five pass should you approve the story for transition and PR.
 |---|---|---|
 | Trusting D6 alone for citation integrity | `arm doctor` D6 checks field presence only — it will pass even if the source UUID is invalid (E8) | Always run `arm validate` after `arm doctor`; D6 and E8 check different things |
 | Accepting vague outcomes ("done", "fixed") | Worker transitions without writing a concrete outcome | Use `arm render-context --issue ID` to cross-check outcome against `acceptance` criteria; require workers to amend before sign-off |
-| Skipping `arm sources verify` | Source fingerprints go stale silently when documents are updated after initial registration | Always run `arm sources verify` as step 2; run `arm sources sync` to refresh, then re-verify |
+| Skipping `arm sources verify` `[escape hatch]` | Source fingerprints go stale silently when documents are updated after initial registration | Always run `arm sources verify` `[escape hatch]` as step 2; run `arm sources sync` to refresh, then re-verify |

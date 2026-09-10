@@ -9,66 +9,68 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 
 # Armature Command Reference
 
-## Setup
+Paved-road commands only. Pipeline: bootstrap, plan, dispatch, work, review, sync.
+See `docs/paved-road.md`. Off-road verbs are marked `[escape hatch]` there, not here.
+
+## 1. Bootstrap
 
 ```
-arm bootstrap                                           # initialize repo and deploy bundled skills
-arm worker-init --check || arm worker-init              # register once per clone
+arm bootstrap
+arm worker-init --check || arm worker-init
+arm version
 ```
 
-## Finding and Starting Work
+## 2. Plan / decompose
 
 ```
-arm ready                                               # list actionable issues
-arm claim ID --worktree --ttl 60                        # claim an issue with worktree
-arm render-context ID --budget 4000                      # get task context
+arm sources add --url PATH --title "TEXT" --type filesystem
+arm sources sync
+arm dag context
+arm dag apply --plan plan.json --dry-run
+arm dag apply --plan plan.json
+arm dag transition --issue ID
+arm link --source A --dep B
 ```
 
-## During Work
+Cite with the plan `source` field at apply time.
+
+## 3. Wave dispatch
 
 ```
-arm note --issue ID --msg "..."                         # log progress
-arm decision --issue ID --topic "X" --choice "Y" \
-              --rationale "Z"                            # record a decision
-arm heartbeat --issue ID                                # keep claim alive (max 1/min)
-arm transition --issue ID --to STATUS --outcome "..."   # complete or block work
+arm list
+arm doctor
+arm ready
+arm claim ID --worktree --ttl 60
+arm render-context ID --budget 4000
+arm worktree list
+arm show ISSUE-ID
+```
+
+## 4. Work
+
+```
+arm note --issue ID --msg "..."
+arm decision --issue ID --topic "X" --choice "Y" --rationale "Z"
+arm validate --ci
+arm gate run full
+arm transition --issue ID --to STATUS --outcome "..."
 ```
 
 Valid `--to` values: `in-progress`, `done`, `cancelled`, `blocked`
 
-## Issue Management
+## 5. Review
 
 ```
-arm create --title "X" --type task --parent ID          # create sub-issue
-arm list --parent ID --type TYPE --status STATUS        # list issues
-arm show ISSUE-ID                                       # show issue details
-arm dag apply --plan plan.json --dry-run          # bulk load issues
-arm dag transition --issue ID                           # promote draft issues
-arm validate --ci                                       # validate citation coverage
-arm doctor --strict                                     # repo health check
+arm review prepare --issue ID --base BASE-SHA --head HEAD-SHA
+arm review record --issue ID --assessment assessment.json
+arm review commits ID
 ```
 
-## Citation
+Use `armature-reviewer` with the prepare bundle; persist with `review record`.
+
+## 6. Sync
 
 ```
-arm sources add --url PATH --title "TEXT" --type filesystem
-arm sources sync && arm sources verify
-arm sources link ID --source-id UUID
-arm sources accept-citation ID --rationale TEXT --ci
+arm push-ops
+arm sync
 ```
-
-## Scope Management
-
-```
-arm scope-rename OLD-PATH NEW-PATH
-arm scope-delete PATH
-```
-
-## Semantic Conformance Review
-
-```
-arm review prepare --issue ID --base BASE-SHA --head HEAD-SHA # create review bundle
-arm review record --issue ID --assessment assessment.json     # record reviewer output
-```
-
-Semantic review validates that delivered work conforms to acceptance criteria and scope. Use the `armature-reviewer` skill with the bundle from `review prepare`; persist results with `review record`.

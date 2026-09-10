@@ -8,5 +8,5 @@
 | Parallel reviews clobber one assessment file | Path unique only by issue + bundle | Distinct `<reviewer-token>`; consolidate findings before `arm review record` |
 | Build breaks after parallel merges | Skipped wave verification | Run the gate in `references/wave-verification.md` before the next wave |
 | Semantic revert on parallel task branches | Same file touched by two tasks | Overlap audit in `references/overlap-audit.md` before `merged` |
-| Story `done` fails on uncited nodes | Transitioned before citation coverage | `arm validate`; `arm sources link` or `arm sources accept-citation --ci` |
+| Story `done` fails on uncited nodes | Transitioned before citation coverage | `arm validate`; `arm sources link` `[escape hatch]` or `arm sources accept-citation --ci` `[escape hatch]` |
 | Ops dirty on push | Single-branch leftover | After story transition, `git status`; commit `.armature/` only in single-branch mode |

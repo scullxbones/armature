@@ -12,6 +12,7 @@ compatibility: Designed for Claude Code and Gemini CLI. Requires arm on PATH.
 
 The coordinator manages execution flow. It does not implement features.
 Survey the story DAG, dispatch workers for each ready wave, integrate, close.
+Off-road `arm` commands in this skill are marked `[escape hatch]`. Prefer `docs/paved-road.md`.
 
 On-demand references (open when needed, not on every turn):
 
@@ -20,7 +21,7 @@ On-demand references (open when needed, not on every turn):
 - `references/commands.md` — JSON field extraction
 - `references/overlap-audit.md` — post-wave semantic overlap
 - `references/wave-verification.md` — publish-gate profiles
-- `references/violation-gate.md` — `arm merged` and worktree teardown
+- `references/violation-gate.md` — `arm merged` `[escape hatch]` and worktree teardown
 - `references/failure-modes.md` — recovery table
 
 ## Prerequisites
@@ -312,9 +313,9 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    shapes deliberately carry no path, and both end in
    `Assessment: not returned`:
 
-   - `Validation: failed` — the reviewer exhausted its `arm review validate`
+   - `Validation: failed` — the reviewer exhausted review validate
      retries. An assessment file may exist on disk, but it never validated.
-   - `Validation: error` — `arm review validate` failed operationally
+   - `Validation: error` — review validate failed operationally
      (unreadable assessment or bundle path, bundle missing an issue ID,
      snapshot load failure, issue absent from state, Step 1 bundle
      preflight, or a `valid: false` report whose only suggestion is to
@@ -455,8 +456,8 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
 5. **Reopen and reclaim before remediating.** Semantic review runs after the
    worker has already transitioned to `done`. The remediator must re-enter
    the live-claim lifecycle before writing. Do this **before** any
-   remediating edit, and **before** `arm merged` (merged is terminal —
-   `arm reopen` refuses it).
+   remediating edit, and **before** `arm merged` `[escape hatch]` (merged is terminal —
+   `arm reopen` `[escape hatch]` refuses it).
 
    `applyHeartbeat` requires `op.WorkerID == issue.ClaimedBy`. ClaimedBy is
    the slotted identity written at claim time (`<worker-id>~<slot>`). Claim
@@ -499,7 +500,7 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    # Run this block as one shell invocation. ARM_LOG_SLOT is a one-shot prefix
    # on claim — do not split the prefix and arm claim across tool calls.
    REMEDIATOR_SLOT="rem-${TASK_ID}"
-   arm reopen "$TASK_ID"
+   arm reopen "$TASK_ID"  # [escape hatch]
    ARM_LOG_SLOT="$REMEDIATOR_SLOT" arm claim "$TASK_ID" --ttl 120 --worktree
    CLAIMED_BY=$(arm show "$TASK_ID" --field claimed_by)
    BASE_ID=$(arm worker-init --check | awk '/^Worker ID:/{print $3}')
@@ -606,7 +607,7 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
        if [ "$CYCLE" -ge 3 ]; then
          CLAIMED_BY=$(arm show "$TASK_ID" --field claimed_by)
          arm note --issue "$TASK_ID" --msg "a.2 cycle 3/3 $RATING; escalated (I7); claim=${CLAIMED_BY:-unset} worktree=.worktrees/$TASK_ID"
-         echo "ERROR: cycle $CYCLE still $RATING; escalate I7; do not enter a.3 / arm merged" >&2
+         echo "ERROR: cycle $CYCLE still $RATING; escalate I7; do not enter a.3 / merged promotion" >&2
          exit 1
        fi
        CYCLE=$((CYCLE + 1))
@@ -639,10 +640,10 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    - **Yellow or red, and `CYCLE` was already 3:** the snippet noted the
      surviving claim and worktree, then exited. The agent escalates to
      the human (Constitution I7). Do not enter a.3, do not merge this
-     task branch, do not run `arm merged` for this task.
+     task branch, do not run `arm merged` `[escape hatch]` for this task.
 
    Confirmation-green tasks may proceed to a.3 / merge individually.
-   Cycle-3 escalated tasks stay out of a.3, `arm merged`, and branch
+   Cycle-3 escalated tasks stay out of a.3, `arm merged` `[escape hatch]`, and branch
    merge pending the human (I7). The wave is not stalled on one
    escalation. A non-green confirmation never enters a.3.
 
@@ -658,13 +659,14 @@ After a.2 and a.3, merge each `task/TASK-ID` into `feat/STORY-ID`. Resolve confl
 
 ### c. Wave Verification Gate
 
-Do not run `arm merged` until `references/wave-verification.md` passes. Failed tasks stay `done`.
+Do not run `arm merged` `[escape hatch]` until `references/wave-verification.md` passes. Failed tasks stay `done`.
 
 ### d. Mark completed tasks merged (with violation gate)
 
-Promote `done` → `merged` only after the gate. `arm merged --issue TASK-ID` fails closed on `violation:` entries unless `--force`. Procedure: `references/violation-gate.md`.
+Promote `done` → `merged` only after the gate. `arm merged --issue TASK-ID` `[escape hatch]` fails closed on `violation:` entries unless `--force`. Prefer `arm sync` after the PR lands. Procedure: `references/violation-gate.md`.
 
 ```bash
+# [escape hatch] Prefer arm sync after the PR lands.
 for TASK_ID in $WAVE_TASK_IDS; do
   arm merged --issue TASK_ID
 done
@@ -679,6 +681,7 @@ arm validate
 Uncited node:
 
 ```bash
+# [escape hatch] Prefer --source at plan apply.
 arm sources link --issue ID --source-id SOURCE-UUID
 # or
 arm sources accept-citation --issue ID --rationale "No external source; self-citing" --ci
@@ -708,7 +711,7 @@ When `arm ready` is empty and all tasks are `done`:
 
 ### 1. Run the Auditor (pre-merge gate)
 
-Dispatch **armature-auditor** (`Skill("armature-auditor")`) before any story transition. Five checks: `arm validate`, `arm sources verify`, outcome quality, `arm validate --strict`, `arm doctor --strict`. Do not proceed until all five are green.
+Dispatch **armature-auditor** (`Skill("armature-auditor")`) before any story transition. Five checks: `arm validate`, `arm sources verify` `[escape hatch]`, outcome quality, `arm validate --strict`, `arm doctor --strict`. Do not proceed until all five are green.
 
 ### 2. Transition the story
 
