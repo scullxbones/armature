@@ -368,14 +368,7 @@ func sortOpsByTimestamp(allOps []ops.Op) {
 	})
 }
 
-// SortOpsByTimestamp is the materializer's replay order: timestamp ascending,
-// creates before same-timestamp links, note-deletes last. Introduction
-// projection must use this so the write door cannot drift from arm validate.
-func SortOpsByTimestamp(allOps []ops.Op) {
-	sortOpsByTimestamp(allOps)
-}
-
-// ApplyOpsSorted applies proposed ops in SortOpsByTimestamp order, then
+// ApplyOpsSorted applies proposed ops in materializer replay order, then
 // RunRollup. Callers that project a write (Introduction) and the full
 // materializer share this path so they cannot disagree on parent/link
 // back-edges or rollup-derived status.
@@ -394,7 +387,7 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	return nil
 }
 
-// ReplayOpsTolerant replays historical ops in SortOpsByTimestamp order,
+// ReplayOpsTolerant replays historical ops in the same timestamp order as ApplyOpsSorted,
 // skipping ApplyOp failures (backdated claim/link) and then running rollup.
 // skipped is the number of apply failures; firstErr is the first of them.
 func ReplayOpsTolerant(allOps []ops.Op) (state *State, skipped int, firstErr error) {

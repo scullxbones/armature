@@ -44,7 +44,7 @@ func TestApplyPlan_CreatesOps(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state)
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 
@@ -69,7 +69,7 @@ func TestApplyPlan_EmitsDraftConfidence(t *testing.T) {
 
 	state := materialize.NewState()
 
-	_, err := ApplyPlan(plan, dir, workerID, state)
+	_, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 
 	logPath := filepath.Join(dir, workerID+".log")
@@ -94,7 +94,7 @@ func TestApplyPlan_PreservesContextFiles(t *testing.T) {
 
 	state := materialize.NewState()
 
-	_, err := ApplyPlan(plan, dir, workerID, state)
+	_, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 
 	logPath := filepath.Join(dir, workerID+".log")
@@ -121,7 +121,7 @@ func TestApplyPlan_SkipsExisting(t *testing.T) {
 	state := materialize.NewState()
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 
-	count, err := ApplyPlan(plan, dir, workerID, state)
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 }
@@ -146,7 +146,7 @@ func TestRevertPlan_CancelsOpen(t *testing.T) {
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 	state.Issues["PLAN-002"] = &materialize.Issue{ID: "PLAN-002", Status: "open"}
 
-	count, err := RevertPlan(plan, dir, workerID, state)
+	count, err := RevertPlan(plan, dir, workerID, state, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 }
@@ -169,14 +169,14 @@ func TestRevertPlan_SkipsNonOpen(t *testing.T) {
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 	state.Issues["PLAN-002"] = &materialize.Issue{ID: "PLAN-002", Status: "done"}
 
-	count, err := RevertPlan(plan, dir, workerID, state)
+	count, err := RevertPlan(plan, dir, workerID, state, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 }
 
 // --- QLTYCNTRL-S2-T3: Clock injection for RevertPlan ---
 
-func TestRevertPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
+func TestRevertPlan_InjectsClockTimestamp(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
@@ -194,7 +194,7 @@ func TestRevertPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 	fixedClock := clock.Fixed(fixedTimestamp)
 
-	count, err := RevertPlanWithOptions(plan, dir, workerID, state, fixedClock)
+	count, err := RevertPlan(plan, dir, workerID, state, fixedClock)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -324,7 +324,7 @@ func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state)
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -350,7 +350,7 @@ func TestApplyPlan_HandlesEmptyAcceptance(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state)
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.Error(t, err, "Introduction must refuse a task create that introduces E6")
 	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "missing required field")

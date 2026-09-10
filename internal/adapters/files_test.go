@@ -19,7 +19,7 @@ func TestAppendLogAppend_REQ_ARCHIMP_S19_T2(t *testing.T) {
 	if err := NewAppendLog(logPath).Append([]byte("{\"a\":1}\n{\"b\":2}\n")); err != nil {
 		t.Fatal(err)
 	}
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestAppendLogTornWriteRecovery_REQ_ARCHIMP_S19_T2(t *testing.T) {
 	require.NoError(t, os.WriteFile(logPath, line, 0o600))
 	require.NoError(t, NewAppendLog(logPath).Append(retry))
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line}, lines)
 	contents, err := os.ReadFile(logPath)
@@ -70,7 +70,7 @@ func TestAppendLog_PreservesLegitimateRepeatedCompleteRecord(t *testing.T) {
 	require.NoError(t, os.WriteFile(logPath, initial, 0o600))
 	require.NoError(t, NewAppendLog(logPath).Append(repeat))
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line, line}, lines)
 }
@@ -89,7 +89,7 @@ func TestAppendLog_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *testing.
 	require.NoError(t, SimulatePendingMarker(logPath, int64(len(initial)), repeat))
 	require.NoError(t, NewAppendLog(logPath).Append(repeat))
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line, line}, lines)
 }
@@ -117,7 +117,7 @@ func TestAppendLog_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *tes
 
 	require.NoError(t, NewAppendLog(logPath).Append(buf))
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line}, lines)
 	contents, err := os.ReadFile(logPath)
@@ -145,7 +145,7 @@ func TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
 
 	require.NoError(t, NewAppendLog(logPath).Append(buf))
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line1, line2}, lines)
 	contents, err := os.ReadFile(logPath)
@@ -196,7 +196,7 @@ func TestAppendLog_TornWriteWithDifferentRetryCompletesPendingRecord_REQ_TOPTIER
 	// originally attempted op is not lost.
 	require.Equal(t, string(prior)+string(intended)+string(newRecord), string(raw))
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{
 		priorLine,
@@ -227,7 +227,7 @@ func TestAppendLog_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line[:len(line)-1], line[:len(line)-1]}, lines)
 }
@@ -244,7 +244,7 @@ func TestAppendLog_DeduplicatesOnlyFinalRecord(t *testing.T) {
 	require.NoError(t, os.WriteFile(logPath, initial, 0o600))
 	require.NoError(t, NewAppendLog(logPath).Append(append(append([]byte{}, line...), '\n')))
 
-	lines, err := ReadLog(logPath)
+	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line, other, line}, lines)
 }
@@ -268,7 +268,7 @@ func TestReadLogFromOffset(t *testing.T) {
 
 func TestReadLog_MissingFile(t *testing.T) {
 	t.Parallel()
-	_, err := ReadLog("/nonexistent/path/x.log")
+	_, err := ReadLogFromOffset("/nonexistent/path/x.log", 0)
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}

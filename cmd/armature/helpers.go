@@ -240,10 +240,7 @@ func worktreeGit(ctx *config.Context) *adapters.Client {
 }
 
 func gitCommitter(ctx *config.Context) ops.GitCommitter {
-	return asGitCommitter(worktreeGit(ctx))
-}
-
-func asGitCommitter(gc *adapters.Client) ops.GitCommitter {
+	gc := worktreeGit(ctx)
 	if gc == nil {
 		return nil
 	}
@@ -328,7 +325,7 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 		return err
 	}
 	gc := worktreeGit(ctx)
-	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, asGitCommitter(gc)); err != nil {
+	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
 		return err
 	}
 	// Push is best-effort: push via the git client (which handles retries) but ignore errors
@@ -400,10 +397,11 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	// (creates before same-timestamp links) and rollup validate uses. File-concat
 	// ApplyOp can drop a later-file create's inbound link under I3 interleaving.
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
-	allOps, err := readAllOpsFromDir(opsDir)
+	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
 	if err != nil {
 		return fmt.Errorf("load ops for introduction check: %w", err)
 	}
+
 	state, skipped, firstApplyErr := materialize.ReplayOpsTolerant(allOps)
 	if skipped > 0 {
 		fmt.Fprintf(os.Stderr, "warning: introduction replay skipped %d op(s); first error: %v\n", skipped, firstApplyErr)
@@ -476,14 +474,6 @@ func renderStringSlice(values []string) string {
 		return "[]"
 	}
 	return string(rendered)
-}
-
-// readAllOpsFromDir reads all ops from a directory of .log files using validated loading.
-// Returns empty slice if directory doesn't exist.
-// Logs warnings for any validation failures (mismatched worker IDs, corrupt lines).
-func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
-	all, _, err := readAllOpsFromDirWithOffsets(opsDir)
-	return all, err
 }
 
 // readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.

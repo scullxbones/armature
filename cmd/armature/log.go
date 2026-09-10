@@ -29,7 +29,7 @@ func newLogCmd() *cobra.Command {
 
 			var logContents []string
 			for _, logPath := range logFiles {
-				lines, err := adapters.ReadLog(logPath)
+				lines, err := adapters.ReadLogFromOffset(logPath, 0)
 				if err != nil {
 					continue
 				}
