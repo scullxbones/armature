@@ -3,8 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/stats"
 	"github.com/spf13/cobra"
 )
 
@@ -39,6 +43,11 @@ func newShowCmd() *cobra.Command {
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
+
+			costReport, issueInfo, costErr := loadSpendReport(ctx, snap)
+			if costErr != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: spend-to-date unavailable: %s\n", costErr)
+			}
 
 			// Multi-issue JSON: emit a JSON array using the canonical output.IssueJSON schema
 			if format == "json" && len(ids) > 1 {
@@ -91,6 +100,10 @@ func newShowCmd() *cobra.Command {
 				if err := output.RenderIssue(cmd.OutOrStdout(), &issue, false); err != nil {
 					return err
 				}
+				if fieldFlag == "" && costReport != nil {
+					spend := stats.Rollup(*costReport, id, issueInfo)
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), stats.FormatSpend(spend))
+				}
 			}
 			return nil
 		},
@@ -100,4 +113,18 @@ func newShowCmd() *cobra.Command {
 	cmd.Flags().StringVar(&fieldFlag, "field", "", "comma-separated list of fields to extract (e.g., status or status,outcome,title)")
 
 	return cmd
+}
+
+func loadSpendReport(ctx *config.Context, snap *snapshot.Snapshot) (*stats.Report, map[string]stats.IssueInfo, error) {
+	rates, err := stats.ResolveRates("", ctx.IssuesDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	opList, err := stats.LoadOps(filepath.Join(ctx.IssuesDir, "ops"))
+	if err != nil {
+		return nil, nil, err
+	}
+	issues := snapshotIssueInfo(snap)
+	report := stats.Estimate(stats.CollectUsage(opList), issues, rates)
+	return &report, issues, nil
 }

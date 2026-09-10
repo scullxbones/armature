@@ -136,6 +136,7 @@ Zero unclassified leaf commands is a gate.
 - `arm sources link` — Attach a source after the fact. Prefer --source at create/apply.
 - `arm sources stale-review` — Review sources whose cache drifted. Not the daily loop.
 - `arm sources verify` — Re-check cached sources. Add and sync are the road.
+- `arm stats` — Derived ops-log cost view. Use when diagnosing spend, not when dispatching.
 - `arm tui` — Interactive kanban. Agents use list, ready, and show.
 - `arm unassign` — Claim is the dispatch reservation. Unassign is recovery.
 - `arm unlink` — Remove a dependency. The road adds blocked_by edges; it does not routinely delete them.

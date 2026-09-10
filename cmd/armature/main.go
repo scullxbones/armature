@@ -215,6 +215,10 @@ func newRootCmd() *cobra.Command {
 	logCmd.GroupID = "admin"
 	root.AddCommand(logCmd)
 
+	statsCmd := newStatsCmd()
+	statsCmd.GroupID = "admin"
+	root.AddCommand(statsCmd)
+
 	workersCmd := newWorkersCmd()
 	workersCmd.GroupID = "admin"
 	root.AddCommand(workersCmd)
@@ -398,6 +402,7 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"validate doc-examples":   {Kind: pavedRoadKindEscape, Note: "Hidden make-check helper. Not an agent verb."},
 	"render-context":          {Kind: pavedRoadKindPaved},
 	"log":                     {Kind: pavedRoadKindEscape, Note: "Ops audit log. Use when diagnosing, not when dispatching."},
+	"stats":                   {Kind: pavedRoadKindEscape, Note: "Derived ops-log cost view. Use when diagnosing spend, not when dispatching."},
 	"workers":                 {Kind: pavedRoadKindEscape, Note: "Worker activity dump. Ready and list cover the dispatch loop."},
 	"sources":                 {Kind: pavedRoadKindPaved},
 	"sources add":             {Kind: pavedRoadKindPaved},
