@@ -9,3 +9,4 @@
 ["link","ARCHIMP-S20-T2",1788840225,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"HKDLG-T1","rel":"blocked_by"}]
 ["citation-accepted","OPSCLEAN-1",1788919611,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"confirmed_noninteractively":true,"rationale":"Grounded in observed dirty ops worktree blocking FetchAndRebase, same failure class as HOOKMSG-1, implemented on GitHub PR 141."}]
 ["transition","HKDLG-T1",1789002865,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"open","outcome":"Claim expired without worker transition; re-opening"}]
+["note","HKDLG-T1",1789002865,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"msg":"doctor --fix: released expired claim (previously claimed by 5207ee28-cdd8-48e6-98dc-7da179d4a40d)","note_id":"doctor-fix-HKDLG-T1-1789002865"}]
