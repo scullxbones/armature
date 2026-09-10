@@ -2,29 +2,31 @@
 
 ## Querying JSON Output
 
-Most `arm` commands emit newline-delimited JSON. Use `grep` for quick
-field extraction without requiring `jq`:
+Structured `arm` output (including `arm list`) is one JSON envelope object
+per command: `{count, issues[], help[]}`. Parse and count entries in
+`.issues`. Do not `grep` / `grep -c` the envelope as if each issue were its
+own line — the whole envelope is one line, so a line match is 1 whenever
+any issue matches.
 
 ```bash
-# Extract a single field from each object
-arm list --parent STORY-ID | grep -o '"status":"[^"]*"'
+# Extract a single field from each issue
+arm list --parent STORY-ID | jq -r '.issues[].status'
 
-# Filter objects where a field matches a value
-arm list --parent STORY-ID | grep '"status":"done"'
+# Filter issues where a field matches a value
+arm list --parent STORY-ID | jq '.issues[] | select(.status=="done")'
 
-# Count matches
-arm list --parent STORY-ID | grep -c '"status":"done"'
+# Count matches (use jq length, not grep -c)
+arm list --parent STORY-ID | jq '[.issues[] | select(.status=="done")] | length'
 
 # Extract IDs of all blocked tasks
-arm list --status blocked | grep -o '"id":"[^"]*"'
+arm list --status blocked | jq -r '.issues[].id'
 
 # Show title alongside status for a quick overview
-arm list --parent STORY-ID | grep -o '"id":"[^"]*"\|"title":"[^"]*"\|"status":"[^"]*"'
+arm list --parent STORY-ID | jq -r '.issues[] | [.id, .title, .status] | @tsv'
 ```
 
-These patterns work in any shell without additional tooling. If `jq` is
-available you can use it for more complex queries, but `grep` is sufficient
-for the common coordinator workflow.
+`.count` is the length of `.issues` after CLI filters (`--parent`,
+`--status`, …). Use `jq` select for subsets of that payload.
 
 ---
 
