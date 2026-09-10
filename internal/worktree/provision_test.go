@@ -100,7 +100,8 @@ func TestPlanProvision_RefuseAmbiguousBinding_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, worktree.ProvisionRefuse, plan.Action)
 	assert.Empty(t, plan.AdoptFrom)
-	assert.Equal(t, "issue ARCHIMP-S20-T5 is bound to 3 worktrees (/wt/a, /wt/m, /wt/z); remove the armature-issue-id binding from the ones you do not want before claiming",
+	assert.Equal(t, "issue ARCHIMP-S20-T5 is bound to 3 worktrees (/wt/a, /wt/m, /wt/z); "+
+		"remove the armature-issue-id binding from the ones you do not want before claiming",
 		plan.RefuseReason)
 	assertInputUnchanged(t, before, inv, in)
 }
@@ -120,7 +121,9 @@ func TestPlanProvision_RefuseWrongBranch_REQ_ARCHIMP_S20_T5(t *testing.T) {
 		plan, err := worktree.PlanProvision(in)
 		require.NoError(t, err)
 		assert.Equal(t, worktree.ProvisionRefuse, plan.Action)
-		assert.Equal(t, "worktree at /legacy/ARCHIMP-S20-T5 is bound to ARCHIMP-S20-T5 but is on refs/heads/scratch, not task/ARCHIMP-S20-T5; finish or abandon the in-progress git operation there and check out task/ARCHIMP-S20-T5 before claiming",
+		assert.Equal(t, "worktree at /legacy/ARCHIMP-S20-T5 is bound to ARCHIMP-S20-T5 "+
+			"but is on refs/heads/scratch, not task/ARCHIMP-S20-T5; "+
+			"finish or abandon the in-progress git operation there and check out task/ARCHIMP-S20-T5 before claiming",
 			plan.RefuseReason)
 		assertInputUnchanged(t, before, inv, in)
 	})
@@ -135,7 +138,9 @@ func TestPlanProvision_RefuseWrongBranch_REQ_ARCHIMP_S20_T5(t *testing.T) {
 		plan, err := worktree.PlanProvision(in)
 		require.NoError(t, err)
 		assert.Equal(t, worktree.ProvisionRefuse, plan.Action)
-		assert.Equal(t, "worktree at /legacy/ARCHIMP-S20-T5 is bound to ARCHIMP-S20-T5 but is on detached HEAD, not task/ARCHIMP-S20-T5; finish or abandon the in-progress git operation there and check out task/ARCHIMP-S20-T5 before claiming",
+		assert.Equal(t, "worktree at /legacy/ARCHIMP-S20-T5 is bound to ARCHIMP-S20-T5 "+
+			"but is on detached HEAD, not task/ARCHIMP-S20-T5; "+
+			"finish or abandon the in-progress git operation there and check out task/ARCHIMP-S20-T5 before claiming",
 			plan.RefuseReason)
 	})
 }
@@ -153,7 +158,8 @@ func TestPlanProvision_RefuseAdoptWithoutProvenance_REQ_ARCHIMP_S20_T5(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, worktree.ProvisionRefuse, plan.Action)
 	assert.Empty(t, plan.AdoptFrom)
-	assert.Equal(t, "adopted worktree has no recorded branch-point provenance; re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override",
+	assert.Equal(t, "adopted worktree has no recorded branch-point provenance; "+
+		"re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override",
 		plan.RefuseReason)
 	assertInputUnchanged(t, before, inv, in)
 }
@@ -251,7 +257,8 @@ func TestPlanProvision_InventoryOrderInvariant_REQ_ARCHIMP_S20_T5(t *testing.T) 
 	for i := 1; i < len(reasons); i++ {
 		assert.Equal(t, reasons[0], reasons[i])
 	}
-	assert.Equal(t, "issue ARCHIMP-S20-T5 is bound to 2 worktrees (/wt/a, /wt/z); remove the armature-issue-id binding from the ones you do not want before claiming",
+	assert.Equal(t, "issue ARCHIMP-S20-T5 is bound to 2 worktrees (/wt/a, /wt/z); "+
+		"remove the armature-issue-id binding from the ones you do not want before claiming",
 		reasons[0])
 
 	adoptOrders := [][]worktree.InventoryRow{

@@ -112,8 +112,9 @@ func PlanProvision(in ProvisionInput) (ProvisionPlan, error) {
 		}
 		if !in.ProvenanceOK {
 			return ProvisionPlan{
-				Action:       ProvisionRefuse,
-				RefuseReason: "adopted worktree has no recorded branch-point provenance; re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override",
+				Action: ProvisionRefuse,
+				RefuseReason: "adopted worktree has no recorded branch-point provenance; " +
+					"re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override",
 			}, nil
 		}
 		return ProvisionPlan{Action: ProvisionAdopt, AdoptFrom: row.Path}, nil
