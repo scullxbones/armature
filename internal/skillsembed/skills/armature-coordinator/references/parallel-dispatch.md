@@ -1,5 +1,7 @@
 # Parallel Dispatch
 
+Load this for independent tasks in one wave. The dispatch prompt format stays in `SKILL.md`.
+
 ## Wave Planning with `arm ready --waves`
 
 Before attempting manual scope analysis, use `arm ready --waves` to compute scope-disjoint wave partitions automatically:
@@ -28,7 +30,7 @@ Each wave is a suggested grouping of tasks that can proceed in parallel without 
 
 **Advisory guidance only:** The `--waves` output is pre-dispatch planning guidance computed at query time. It is NOT a persisted record and does NOT replace the Coordinator's existing wave manifest step (described below). If issues are claimed or transitioned between the `--waves` query and actual dispatch, the output can diverge from what actually gets dispatched.
 
-**Post-wave overlap audit is mandatory:** Even when using `--waves` to plan a wave, the Coordinator must continue to run its post-wave Parallel Branch Overlap Audit (documented in the "Record Wave Manifest" step below) after the wave completes. This audit catches semantic conflicts and shared-contract drift that file-level partitioning cannot see.
+**Post-wave overlap audit is mandatory:** Even when using `--waves` to plan a wave, run `references/overlap-audit.md` after the wave completes. That audit catches semantic conflicts and shared-contract drift that file-level partitioning cannot see.
 
 ---
 
