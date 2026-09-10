@@ -9,7 +9,7 @@ import (
 
 // TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1 verifies that
 // `arm ready --waves --format json` groups ready issues into scope-disjoint
-// waves and emits the documented {"waves": [[...], ...]} shape.
+// waves as a waves adjunct on the Agent Output Contract envelope.
 func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	t.Parallel()
 
@@ -39,29 +39,33 @@ func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	out, err := runTrls(t, repo, "ready", "--waves", "--format", "json")
 	require.NoError(t, err)
 
-	var result struct {
-		Waves [][]map[string]any `json:"waves"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(out), &result), "output should be valid JSON matching {\"waves\": [[...], ...]}: %s", out)
+	decoded := decodeReadyEnvelope(t, out)
+	require.Contains(t, decoded, "waves")
 
-	require.NotEmpty(t, result.Waves, "expected at least one wave")
+	var waveIDs [][]string
+	require.NoError(t, json.Unmarshal(decoded["waves"], &waveIDs), "waves adjunct must be id groups: %s", out)
+	require.NotEmpty(t, waveIDs, "expected at least one wave")
+
+	var issues []readyIssueRow
+	require.NoError(t, json.Unmarshal(decoded["issues"], &issues))
+	require.NotEmpty(t, issues, "rows stay in issues; waves is an adjunct")
 
 	totalIssues := 0
-	for _, wave := range result.Waves {
+	for _, wave := range waveIDs {
 		totalIssues += len(wave)
 	}
 	require.GreaterOrEqual(t, totalIssues, 1, "expected at least one issue across all waves")
+	require.Equal(t, len(issues), totalIssues)
 
 	// task-01 and task-04 share scope, so they must not land in the same wave.
-	for _, wave := range result.Waves {
+	for _, wave := range waveIDs {
 		hasTask01 := false
 		hasTask04 := false
-		for _, entry := range wave {
-			issue, ok := entry["issue"].(string)
-			if ok && issue == "task-01" {
+		for _, id := range wave {
+			if id == "task-01" {
 				hasTask01 = true
 			}
-			if issue == "task-04" {
+			if id == "task-04" {
 				hasTask04 = true
 			}
 		}

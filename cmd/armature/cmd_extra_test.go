@@ -133,7 +133,16 @@ func TestReadyCommand_JSONFormat(t *testing.T) {
 
 	err = cmd.Execute()
 	require.NoError(t, err)
-	assert.Contains(t, buf.String(), "[")
+	decoded := decodeReadyEnvelope(t, buf.String())
+	var issues []readyIssueRow
+	require.NoError(t, json.Unmarshal(decoded["issues"], &issues))
+	found := false
+	for _, row := range issues {
+		if row.ID == "ready-json-01" {
+			found = true
+		}
+	}
+	assert.True(t, found, "ready-json-01 must appear in the issues payload")
 }
 
 // TestReadyExpiredClaims_REQ_TOPTIER_S4_T3 verifies `arm ready` surfaces an
@@ -159,14 +168,18 @@ func TestReadyExpiredClaims_REQ_TOPTIER_S4_T3(t *testing.T) {
 
 	jsonOut, jsonErrOut, err := runTrlsWithStderr(t, repo, "ready", "--format", "json")
 	require.NoError(t, err)
-	// stdout ready-queue shape is unchanged: task-01 is claimed, not open, so it
-	// must not appear in the ready array itself.
-	assert.NotContains(t, jsonOut, "task-01", "claimed+expired issue must not appear in the ready queue's own JSON array")
+	decoded := decodeReadyEnvelope(t, jsonOut)
+	var issues []readyIssueRow
+	require.NoError(t, json.Unmarshal(decoded["issues"], &issues))
+	for _, row := range issues {
+		assert.NotEqual(t, "task-01", row.ID, "claimed+expired issue must not appear in issues")
+	}
 	var expiredClaims []map[string]any
-	require.NoError(t, json.Unmarshal([]byte(jsonErrOut), &expiredClaims), "stderr must be a valid JSON array of expired claims")
+	require.NoError(t, json.Unmarshal(decoded["expired_claims"], &expiredClaims), "expired claims belong on the stdout envelope")
 	require.Len(t, expiredClaims, 1)
-	assert.Equal(t, "task-01", expiredClaims[0]["issue"])
+	assert.Equal(t, "task-01", expiredClaims[0]["id"])
 	assert.Equal(t, "expired-worker", expiredClaims[0]["claimed_by"])
+	assert.False(t, strings.HasPrefix(strings.TrimSpace(jsonErrOut), "["), "expired claims must not be a stderr JSON array")
 }
 
 // TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
@@ -207,25 +220,13 @@ func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
 	require.NoError(t, err)
 
 	// task-outside is not a descendant of E7: --parent E7 must not surface
-	// its expired claim. RenderExpiredClaims emits nothing at all when there
-	// are no (in-scope) expired claims, so an empty stderr is the expected,
-	// correctly-scoped result.
-	jsonErrOut := readyExpiredClaimsStderr(t, repo, "--parent", "E7")
-	if jsonErrOut != "" {
-		var expiredClaims []map[string]any
-		require.NoError(t, json.Unmarshal([]byte(jsonErrOut), &expiredClaims), "stderr must be a valid JSON array of expired claims")
-		assert.Empty(t, expiredClaims, "expired claim for task-outside must not leak into --parent E7 scoped ready")
-	}
-}
-
-// readyExpiredClaimsStderr runs `arm ready --format json` with the given
-// extra args and returns the stderr JSON payload (the expired-claims channel).
-func readyExpiredClaimsStderr(t *testing.T, repo string, extraArgs ...string) string {
-	t.Helper()
-	args := append([]string{"ready", "--format", "json"}, extraArgs...)
-	_, jsonErrOut, err := runTrlsWithStderr(t, repo, args...)
-	require.NoError(t, err)
-	return jsonErrOut
+	// its expired claim. expired_claims lives on the stdout envelope.
+	out, errOut := runReadyJSON(t, repo, "--parent", "E7")
+	decoded := decodeReadyEnvelope(t, out)
+	var expiredClaims []map[string]any
+	require.NoError(t, json.Unmarshal(decoded["expired_claims"], &expiredClaims))
+	assert.Empty(t, expiredClaims, "expired claim for task-outside must not leak into --parent E7 scoped ready")
+	assert.False(t, strings.HasPrefix(strings.TrimSpace(errOut), "["), "expired claims must not be a stderr JSON array")
 }
 
 func TestImportCommand_DryRun_CSV(t *testing.T) {
