@@ -846,7 +846,20 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 	assert.Equal(t, 480, decoded.OutputTokens)
 	assert.Equal(t, "fp_result", decoded.ResultFingerprint)
 
-	legacyJSON := []byte(`{"schema_version":1,"bundle_id":"sha256:bundle123","contract_fingerprint":"fp_contract","delivery_fingerprint":"fp_delivery","base_sha":"abc123","head_sha":"def456","rating":"green","result_fingerprint":"fp_result","satisfied_count":1,"partially_satisfied_count":0,"not_satisfied_count":0,"indeterminate_count":0}`)
+	legacyJSON := []byte(`{` +
+		`"schema_version":1,` +
+		`"bundle_id":"sha256:bundle123",` +
+		`"contract_fingerprint":"fp_contract",` +
+		`"delivery_fingerprint":"fp_delivery",` +
+		`"base_sha":"abc123",` +
+		`"head_sha":"def456",` +
+		`"rating":"green",` +
+		`"result_fingerprint":"fp_result",` +
+		`"satisfied_count":1,` +
+		`"partially_satisfied_count":0,` +
+		`"not_satisfied_count":0,` +
+		`"indeterminate_count":0` +
+		`}`)
 	var legacy review.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(legacyJSON, &legacy), "legacy assessment without token fields must still decode")
 	assert.Equal(t, 0, legacy.InputTokens)
