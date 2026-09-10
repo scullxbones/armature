@@ -12,3 +12,4 @@
 ["note","HKDLG-T1",1789002865,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"msg":"doctor --fix: released expired claim (previously claimed by 5207ee28-cdd8-48e6-98dc-7da179d4a40d)","note_id":"doctor-fix-HKDLG-T1-1789002865"}]
 ["transition","HKDLG-T1",1789002877,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR 143 merged: post-commit template delegates to arm hook run; heartbeat e2e + env isolation + ops-worktree skip landed on main.","branch":"fix/HKDLG-T1","pr":"143","skipped_delivery_gate":true}]
 ["transition","HKDLG-T1",1789002885,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"143"}]
+["claim","HKDLG-T2",1789002899,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/HKDLG-T2","claim_token":"5147212706404af5927137923ac1e7e6"}]
