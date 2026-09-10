@@ -505,13 +505,19 @@ Add a dependency link between issues.
 
 ## list
 
-List issues with optional filters. In non-TTY environments (agent context) the output is a JSON array automatically.
+List issues with optional filters. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare array.
+
+Default `issues[]` rows have exactly four string keys: `id`, `type`, `status`, `title`. `outcome` is omitted entirely (not truncated). Use `arm show <id>` for outcome, scope, and acceptance. `count` is the true length of `issues` and is not capped.
+
+`--group` is honoured in structured output. `issues` stays the flat complete list. A `groups` adjunct lists status buckets in workflow order, each `{status, ids}`. Human format still prints `=== STATUS ===` section headers.
+
+An empty match is still the envelope: `{count: 0, "issues": [], "help": [...]}` with exit 0.
 
 **Synopsis:**
 `arm list [flags]`
 
 **Flags:**
-- `--group`: Group issues under `=== STATUS ===` section headers sorted by workflow priority (human output only).
+- `--group`: Group issues by status. Human format uses `=== STATUS ===` headers sorted by workflow priority. Structured output adds a `groups` adjunct and does not drop or cap `issues`.
 - `--parent string`: Filter by parent issue ID.
 - `--status string`: Filter by status: `open`, `in-progress`, `done`, `merged`, `cancelled`, `blocked`.
 - `--type string`: Filter by issue type: `task`, `story`, `feature`, `bug`.
