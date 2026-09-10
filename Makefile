@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile
+.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile context-report
 
 # Variables
 GO ?= go
@@ -31,6 +31,7 @@ help:
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
+	@echo "  make context-report      - Price static agent-facing artifacts (bytes and bytes/4 tokens)"
 	@echo "  make clean               - Remove build artifacts and test outputs"
 	@echo "  make build               - Build CLI binary to ./bin/arm"
 	@echo "  make crosscompile        - Build (no test) every platform .goreleaser.yaml ships, to catch platform-specific compile breakage"
@@ -45,6 +46,9 @@ validate-graph: build
 
 trace-report:
 	@$(PYTHON) scripts/trace_report.py .
+
+context-report: build
+	@./bin/arm context-report --repo .
 
 test: build
 	@tmp=$$(mktemp); \
