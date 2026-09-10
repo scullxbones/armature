@@ -95,3 +95,4 @@
 ["unlink","AOC-S3-T4",1789066581,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"LNGHZN-S8-T1","rel":"blocked_by"}]
 ["unlink","AOC-S4-T1",1789066581,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"LNGHZN-S6-T2","rel":"blocked_by"}]
 ["amend","NXTTN-S4-T1",1789072081,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"scope":["docs/paved-road.md (new)","cmd/armature/main.go","cmd/armature/paved_road_test.go (new)"]}]
+["unlink","NXTTN-S4-T1",1789072081,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"LNGHZN-S6-T1","rel":"blocked_by"}]
