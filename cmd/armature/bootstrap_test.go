@@ -3612,6 +3612,7 @@ func TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3(t *testing.T) {
 		"if [ \"$current_branch\" = \"_armature\" ]; then",
 		"exit 0",
 		"fi",
+		"command -v arm >/dev/null 2>&1 || exit 0",
 		"arm hook run pre-commit",
 	}, body)
 	assert.NotContains(t, preCommitHookTemplate, "git diff --cached")
