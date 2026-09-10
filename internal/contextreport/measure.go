@@ -1,7 +1,6 @@
 package contextreport
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -116,29 +115,22 @@ func Collect(repoRoot string) (Report, error) {
 }
 
 func loadFixtureOps(path string) ([]ops.Op, error) {
-	f, err := os.Open(path) //nolint:gosec // path is testdata under the repo root
+	data, err := os.ReadFile(path) //nolint:gosec // path is testdata under the repo root
 	if err != nil {
 		return nil, fmt.Errorf("open fixture ops %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
 
 	var all []ops.Op
-	scanner := bufio.NewScanner(f)
-	lineNo := 0
-	for scanner.Scan() {
-		lineNo++
-		line := bytes.TrimSpace(scanner.Bytes())
+	for lineNo, raw := range bytes.Split(data, []byte("\n")) {
+		line := bytes.TrimSpace(raw)
 		if len(line) == 0 {
 			continue
 		}
 		op, err := ops.ParseLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("parse fixture ops %s:%d: %w", path, lineNo, err)
+			return nil, fmt.Errorf("parse fixture ops %s:%d: %w", path, lineNo+1, err)
 		}
 		all = append(all, op)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read fixture ops %s: %w", path, err)
 	}
 	if len(all) == 0 {
 		return nil, fmt.Errorf("fixture ops %s is empty", path)
