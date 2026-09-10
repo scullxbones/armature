@@ -23,6 +23,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testArmBin is a CLI built once in TestMain and placed on PATH so git hooks
+// that delegate to `arm hook run` can spawn it from package tests.
+var testArmBin string
+
+// TestMain builds arm and prepends it to PATH. Bootstrap installs a pre-commit
+// hook that execs `arm`; ops commits from create/claim share .git/hooks and
+// would otherwise fail with "arm: not found" in sandboxes that have no arm.
+func TestMain(m *testing.M) {
+	code := 1
+	dir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: getwd: %v\n", err)
+		os.Exit(code)
+	}
+	for {
+		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			fmt.Fprintln(os.Stderr, "TestMain: go.mod not found")
+			os.Exit(code)
+		}
+		dir = parent
+	}
+	wrapperDir, err := os.MkdirTemp("", "armature-test-arm-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: mkdir: %v\n", err)
+		os.Exit(code)
+	}
+	testArmBin = filepath.Join(wrapperDir, "arm")
+	build := exec.CommandContext(context.Background(), "go", "build", "-o", testArmBin, "./cmd/armature")
+	build.Dir = dir
+	if out, err := build.CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: go build: %v\n%s\n", err, out)
+		os.Exit(code)
+	}
+	if err := os.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: PATH: %v\n", err)
+		os.Exit(code)
+	}
+	code = m.Run()
+	if err := os.RemoveAll(wrapperDir); err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: cleanup: %v\n", err)
+	}
+	os.Exit(code)
+}
+
 // TestBootstrapDeploySkillsDeploysFiles verifies that deploySkills (moved to bootstrap_deploy.go)
 // copies every skill entry from the provided FS into the target directory.
 func TestBootstrapDeploySkillsDeploysFiles(t *testing.T) {
@@ -3544,8 +3592,76 @@ exec %q "$@"
 		logPath, stdout.String(), stderr.String())
 }
 
+// TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3 verifies the pre-commit
+// template is a one-line delegation to arm hook run, with the managed marker
+// kept and the in-shell branch skip / grep refusal removed.
+func TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3(t *testing.T) {
+	require.Contains(t, preCommitHookTemplate, "# armature:managed")
+
+	var body []string
+	for _, line := range strings.Split(preCommitHookTemplate, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		body = append(body, trimmed)
+	}
+	require.Equal(t, []string{
+		"unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR",
+		"current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)",
+		"if [ \"$current_branch\" = \"_armature\" ]; then",
+		"exit 0",
+		"fi",
+		"command -v arm >/dev/null 2>&1 || exit 0",
+		"arm hook run pre-commit",
+	}, body)
+	assert.NotContains(t, preCommitHookTemplate, "git diff --cached")
+	assert.NotContains(t, preCommitHookTemplate, "grep -q")
+}
+
+// TestPreCommitRefusalReachesStderrWithRemediation_REQ_HKDLG_T3 commits a
+// staged .armature/ops/ path through the installed pre-commit hook and asserts
+// the Go refusal (including arm bootstrap --dual-branch) reaches stderr.
+func TestPreCommitRefusalReachesStderrWithRemediation_REQ_HKDLG_T3(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	armBin := buildWorktreeArm(t)
+	wrapperDir := t.TempDir()
+	script := fmt.Sprintf(`#!/bin/sh
+exec %q "$@"
+`, armBin)
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
+	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// Parent gitignore and the ops worktree both try to keep ops/ unstaged;
+	// --force plants a path the Go hook's strings.Contains check still sees.
+	probeRel := filepath.Join("leaked", ".armature", "ops", "probe.log")
+	writeFile(t, repo, probeRel, "ops must not land on a code branch\n")
+	run(t, repo, "git", "add", "--force", probeRel)
+
+	commitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	commit := exec.CommandContext(commitCtx, "git", "commit", "-m", "should be refused")
+	commit.Dir = repo
+	var stdout, stderr bytes.Buffer
+	commit.Stdout = &stdout
+	commit.Stderr = &stderr
+	err = commit.Run()
+	require.Error(t, err, "pre-commit must fail-loud; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	assert.NotContains(t, stdout.String(), "GENERAL-1")
+	assert.Contains(t, stderr.String(), "ERROR: Refusing to commit .armature/ops/")
+	assert.Contains(t, stderr.String(), "arm bootstrap --dual-branch")
+}
+
 func buildWorktreeArm(t *testing.T) string {
 	t.Helper()
+	if testArmBin != "" {
+		return testArmBin
+	}
 	dir, err := os.Getwd()
 	require.NoError(t, err)
 	for {
