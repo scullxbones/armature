@@ -107,3 +107,4 @@
 ["transition","AOC-S2-T1",1789076217,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
 ["transition","TOPTIER-S11-T1",1789078576,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Optional input_tokens/output_tokens on ops.Payload and AssessmentAttestation; omitempty; legacy decode intact. PR 158 head c36cfb45. Named REQ_TOPTIER_S11_T1 tests. --force: branch gate false-positive on worktree after CA sync; PR 158 is open on feat/TOPTIER-S11-T1.","skipped_delivery_gate":true}]
 ["transition","TOPTIER-S11-T1",1789078602,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
+["transition","NXTTN-S4-T1",1789078821,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Paved-road classification map in main.go; [escape hatch] in --help; docs/paved-road.md generated; TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1. PR 159 head 08e15dcb. --force/--skip-delivery-gate: CA tip synced; PR open on feat/NXTTN-S4-T1.","skipped_delivery_gate":true}]
