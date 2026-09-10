@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -169,37 +168,25 @@ func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 	return path, nil
 }
 
-// rejectInRepositoryCustomWorktreeDestination prevents an explicit worktree
-// path inside the coordinator repository from using a clone-wide
-// .git/info/exclude entry. That file is shared by every linked worktree, so a
-// path-specific entry for an arbitrary repository-relative destination could
-// silently hide unrelated files from another worktree. The canonical
-// .worktrees root is safe because its one shared exclusion is an established
-// repository invariant.
-func rejectInRepositoryCustomWorktreeDestination(repoPath, destination string) error {
+// destLocationFacts reports whether destination sits inside the coordinator
+// repository and, if so, whether it is under the canonical .worktrees root.
+func destLocationFacts(repoPath, destination string) (inRepo, underCanonical bool) {
 	repoRoot := worktree.NormalizePath(repoPath)
 	normalizedDestination := worktree.NormalizePathAllowingMissing(destination)
-	if !worktree.IsUnderRoot(normalizedDestination, repoRoot) {
-		return nil
-	}
-	if !worktree.IsUnderRoot(normalizedDestination, worktree.CanonicalRoot(repoPath)) {
-		return fmt.Errorf(
-			"custom worktree destination %s is inside the repository; explicit destinations must be outside the repository or under canonical .worktrees",
-			destination)
-	}
-	return nil
+	inRepo = worktree.IsUnderRoot(normalizedDestination, repoRoot)
+	underCanonical = worktree.IsUnderRoot(normalizedDestination, worktree.CanonicalRoot(repoPath))
+	return inRepo, underCanonical
 }
 
-// rejectNestedWorktreeDestination refuses a custom destination below any
-// linked worktree registered in this clone. The main coordinator worktree is
-// intentionally absent from RegisteredPaths, so repository-relative custom
-// destinations remain allowed there. Git interprets info/exclude relative to
-// each worktree root; nesting would otherwise let the parent stage the child
-// checkout as an embedded repository.
-func rejectNestedWorktreeDestination(repoPath, destination string) error {
+// nestedRegisteredWorktree returns the registered worktree path that contains
+// destination, or empty when the dest is not nested. The main coordinator
+// worktree is absent from RegisteredPaths. Equal dest/registration is treated
+// as nested unless the registration is prunable (git's leftover after a
+// deleted directory), matching the pre-PlanProvision refuse.
+func nestedRegisteredWorktree(repoPath, destination string) (string, error) {
 	registeredPaths, err := worktree.RegisteredPaths(repoPath)
 	if err != nil {
-		return fmt.Errorf("inspect registered worktree destinations: %w", err)
+		return "", fmt.Errorf("inspect registered worktree destinations: %w", err)
 	}
 	normalizedDestination := worktree.NormalizePathAllowingMissing(destination)
 	for _, registeredPath := range registeredPaths {
@@ -207,17 +194,87 @@ func rejectNestedWorktreeDestination(repoPath, destination string) error {
 		if normalizedDestination == normalizedRegisteredPath {
 			prunable, err := worktree.HasPrunableRegistration(repoPath, registeredPath)
 			if err != nil {
-				return fmt.Errorf("inspect registered worktree %s: %w", registeredPath, err)
+				return "", fmt.Errorf("inspect registered worktree %s: %w", registeredPath, err)
 			}
 			if prunable {
 				continue
 			}
 		}
 		if worktree.IsUnderRoot(normalizedDestination, normalizedRegisteredPath) {
-			return fmt.Errorf("custom worktree destination %s is nested inside registered worktree %s", destination, registeredPath)
+			return registeredPath, nil
 		}
 	}
+	return "", nil
+}
+
+// refuseCustomWorktreeDestination gathers dest facts and asks PlanProvision
+// whether an explicit destination is legal. Inventory is empty so binding
+// outcomes stay after the Claim Op (createWorktreeAndBranch).
+func refuseCustomWorktreeDestination(repoPath, destination, issueID, expectedBranch string) error {
+	nestedUnder, err := nestedRegisteredWorktree(repoPath, destination)
+	if err != nil {
+		return err
+	}
+	inRepo, underCanonical := destLocationFacts(repoPath, destination)
+	plan, err := worktree.PlanProvision(worktree.ProvisionInput{
+		IssueID:        issueID,
+		Dest:           destination,
+		ExpectedBranch: expectedBranch,
+		NestedUnder:    nestedUnder,
+		InRepo:         inRepo,
+		UnderCanonical: underCanonical,
+	})
+	if err != nil {
+		return err
+	}
+	if plan.Action == worktree.ProvisionRefuse {
+		return errors.New(plan.RefuseReason)
+	}
 	return nil
+}
+
+func provisionInputFromInventory(repoPath, dest, issueID, expectedBranch string, inventory []worktree.Meta) worktree.ProvisionInput {
+	rows := make([]worktree.InventoryRow, 0, len(inventory))
+	normalizedDest := worktree.NormalizePathAllowingMissing(dest)
+	var adoptCandidate string
+	bound := 0
+	for _, item := range inventory {
+		path := worktree.NormalizePath(item.Path)
+		rows = append(rows, worktree.InventoryRow{
+			Path:    path,
+			Branch:  item.Branch,
+			Binding: item.Binding,
+		})
+		if item.Binding == issueID {
+			bound++
+			if path != normalizedDest {
+				adoptCandidate = item.Path
+			}
+		}
+	}
+	provenanceOK := false
+	if bound == 1 && adoptCandidate != "" {
+		provenanceOK = hasTrustedBranchPointMetadata(adapters.New(adoptCandidate), adoptCandidate, expectedBranch)
+	}
+	inRepo, underCanonical := destLocationFacts(repoPath, dest)
+	return worktree.ProvisionInput{
+		IssueID:        issueID,
+		Dest:           normalizedDest,
+		ExpectedBranch: expectedBranch,
+		Inventory:      rows,
+		InRepo:         inRepo,
+		UnderCanonical: underCanonical,
+		ProvenanceOK:   provenanceOK,
+	}
+}
+
+func adoptSourcePath(inventory []worktree.Meta, adoptFrom string) string {
+	for _, item := range inventory {
+		if worktree.NormalizePath(item.Path) == adoptFrom {
+			return item.Path
+		}
+	}
+	return adoptFrom
 }
 
 func sourceAdvancedOnlyByArmature(repoPath, sourcePath, oldTip, newTip string) (bool, error) {
@@ -706,101 +763,52 @@ func createWorktreeAndBranchWithExclusion(
 	}
 	adopted := false
 	adoptedFrom := ""
-	// Deliberate checked-out-branch policy: if the issue already owns a bound
-	// worktree elsewhere, adopt it by moving the registered worktree to the
-	// canonical path. This preserves its branch and uncommitted files and avoids
-	// Git's branch-already-checked-out guard.
-	//
-	// Selection is by BINDING, never by branch. A worktree bound to this issue is
-	// this issue's worktree whether it is on the issue branch, detached mid-rebase,
-	// or parked on a scratch branch; filtering on branch here would skip it and
-	// provision a SECOND canonical worktree for the same issue. The materialized
-	// path would then select the new one at `arm merged`, leaving the original as
-	// the sole terminal GC candidate for a `git worktree remove --force` that
-	// discards whatever in-flight work it still held.
-	//
-	// An unbound or differently-bound worktree is never adopted; the
-	// detached-first path will fail closed and clean up its temporary
-	// registration instead.
+	alreadyAtDest := false
+	// PlanProvision is the dest/binding decision. Git I/O below executes that
+	// plan: refuse returns the reason; adopt moves; already-at-dest rebinds;
+	// fresh detaches then checks out. Selection is by BINDING, never by branch
+	// (see PlanProvision). An unbound worktree holding the issue branch is cmd
+	// I/O, not the plan.
 	inventory, inventoryErr := worktree.List(repoPath)
 	if inventoryErr != nil {
 		return fmt.Errorf("inspect existing worktrees: %w", inventoryErr)
 	}
-	// Collect the FULL bound set before deciding anything. Stopping at the first
-	// match would adopt whichever worktree git happens to list first and never
-	// notice a second one carrying the same binding — leaving that duplicate
-	// behind as a force-removable candidate holding in-flight work. Ambiguity
-	// must be observed before it can be refused.
-	var bound []worktree.Meta
 	for _, item := range inventory {
-		if item.Binding == issueID {
-			bound = append(bound, item)
-			continue
-		}
-		// Someone else's worktree holding our branch is an error, but only
-		// because of the branch: an unrelated worktree elsewhere is fine.
-		if item.Branch == "refs/heads/"+branchName {
+		if item.Binding != issueID && item.Branch == "refs/heads/"+branchName {
 			return fmt.Errorf("branch %s is already checked out at %s; bind that worktree to %s before claiming", branchName, item.Path, issueID)
 		}
 	}
-	if len(bound) > 1 {
-		// Same condition worktree.SelectByIssue reports as Ambiguous and gc
-		// reports as GCAmbiguous. Adoption cannot pick one without guessing, and
-		// the loser of a guess stays behind as a --force removal candidate.
-		paths := make([]string, 0, len(bound))
-		for _, item := range bound {
-			paths = append(paths, item.Path)
-		}
-		slices.Sort(paths)
-		return fmt.Errorf(
-			"issue %s is bound to %d worktrees (%s); remove the armature-issue-id binding from the ones you do not want before claiming",
-			issueID, len(bound), strings.Join(paths, ", "))
+	plan, err := worktree.PlanProvision(provisionInputFromInventory(repoPath, worktreePath, issueID, branchName, inventory))
+	if err != nil {
+		return err
 	}
-	// At most one bound worktree survives the ambiguity check above.
-	if len(bound) == 1 {
-		item := bound[0]
+	if plan.Action == worktree.ProvisionRefuse {
+		return errors.New(plan.RefuseReason)
+	}
+	switch plan.Action {
+	case worktree.ProvisionAlreadyAtDest:
+		alreadyAtDest = true
+	case worktree.ProvisionAdopt:
+		adoptFrom := adoptSourcePath(inventory, plan.AdoptFrom)
+		_, statErr := os.Stat(worktreePath)
 		switch {
-		case worktree.NormalizePath(item.Path) == worktree.NormalizePath(worktreePath):
-			// Already at the canonical path; nothing to adopt.
-		case item.Branch != "refs/heads/"+branchName:
-			// Bound to this issue but not on the issue branch: detached (very
-			// likely mid-rebase) or moved to a scratch branch. FAIL CLOSED.
-			//
-			// Neither recovery is safe to automate. Moving it would relocate a
-			// working directory whose in-progress operation state under
-			// .git/worktrees/<n>/rebase-merge holds absolute paths that
-			// `git worktree move` does not rewrite; checking the branch out
-			// afterwards would destroy the very rebase the worker is running.
-			// Refusing preserves the uncommitted work by not acting on it, and
-			// matches how ambiguity is handled everywhere else in this lifecycle
-			// (I5: deterministic gates fail closed, a human disambiguates).
-			head := item.Branch
-			if head == "" {
-				head = "detached HEAD"
-			}
-			return fmt.Errorf(
-				"worktree at %s is bound to %s but is on %s, not %s; finish or abandon the in-progress git operation there and check out %s before claiming",
-				item.Path, issueID, head, branchName, branchName)
+		case statErr == nil:
+			// Dest occupied; leave the bound worktree alone and fall through to
+			// a fresh add, which fails closed rather than clobbering.
+		case !os.IsNotExist(statErr):
+			return fmt.Errorf("check canonical worktree path: %w", statErr)
 		default:
-			_, statErr := os.Stat(worktreePath)
-			switch {
-			case statErr == nil:
-				// Canonical path already occupied; leave the bound worktree alone.
-			case !os.IsNotExist(statErr):
-				return fmt.Errorf("check canonical worktree path: %w", statErr)
-			default:
-				if err := os.MkdirAll(filepath.Dir(worktreePath), 0o750); err != nil {
-					return fmt.Errorf("create canonical worktree root: %w", err)
-				}
-				if err := gitClient.MoveWorktree(item.Path, worktreePath); err != nil {
-					return fmt.Errorf("adopt bound worktree: %w", err)
-				}
-				adopted = true
-				adoptedFrom = item.Path
+			if err := os.MkdirAll(filepath.Dir(worktreePath), 0o750); err != nil {
+				return fmt.Errorf("create canonical worktree root: %w", err)
 			}
+			if err := gitClient.MoveWorktree(adoptFrom, worktreePath); err != nil {
+				return fmt.Errorf("adopt bound worktree: %w", err)
+			}
+			adopted = true
+			adoptedFrom = adoptFrom
 		}
 	}
-	if !adopted {
+	if !adopted && !alreadyAtDest {
 		if err := addWorktreeDetached(repoPath, worktreePath, detachRef); err != nil {
 			return fmt.Errorf("add worktree: %w", err)
 		}
@@ -839,23 +847,9 @@ func createWorktreeAndBranchWithExclusion(
 	// Create-or-checkout the issue branch inside the worktree. Because the
 	// worktree is detached, no other worktree holds the branch, so this never
 	// trips git's "branch already checked out" guard.
-	if !adopted {
+	if !adopted && !alreadyAtDest {
 		if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
 			return cleanupPartialWorktree(err, "checkout branch in worktree")
-		}
-	}
-
-	if adopted {
-		// Adoption moves a pre-existing worktree; it must never turn a
-		// merge-base against a default ref into claim-time provenance. Only
-		// metadata recorded by the original claim is trusted. Without it,
-		// reject the move and leave the legacy worktree where it was so the
-		// delivery gate cannot later misattribute sibling commits.
-		adoptedGitClient := adapters.New(worktreePath)
-		if !hasTrustedBranchPointMetadata(adoptedGitClient, worktreePath, branchName) {
-			return cleanupPartialWorktree(fmt.Errorf(
-				"adopted worktree has no recorded branch-point provenance; re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override"),
-				"adopt worktree")
 		}
 	}
 
@@ -874,10 +868,18 @@ func createWorktreeAndBranchWithExclusion(
 	}
 
 	if adopted {
-		// Keep any existing base/parent metadata untouched. The only new
-		// claim-time record that is safe to add is the immutable branch binding.
+		// Provenance was required by PlanProvision before the move. Keep any
+		// existing base/parent metadata untouched. The only new claim-time
+		// record that is safe to add is the immutable branch binding.
 		if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
 			return cleanupPartialWorktree(err, "persist claimed branch metadata")
+		}
+	} else if alreadyAtDest {
+		worktreeGitClient := adapters.New(worktreePath)
+		if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, branchName) {
+			if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
+				return cleanupPartialWorktree(err, "persist claimed branch metadata")
+			}
 		}
 	} else if err := persistBranchPointMetadata(gitClient, worktreePath, branchName, headSHA, headErr, parentBranch, parentErr); err != nil {
 		return cleanupPartialWorktree(err, "persist branch-point metadata")
@@ -1203,14 +1205,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			// serializes the check/remove performed by merged and GC with the
 			// claim's check-through-provisioning handoff, so a teardown cannot
 			// remove an exclusion after a new claim has reused the destination.
-			if customWorktreePath {
-				if err := rejectNestedWorktreeDestination(ctx.RepoPath, worktreePath); err != nil {
-					return err
-				}
-				if err := rejectInRepositoryCustomWorktreeDestination(ctx.RepoPath, worktreePath); err != nil {
-					return err
-				}
-			}
 			if fromWorktreePath != "" {
 				fromWorktreePath, err = filepath.Abs(fromWorktreePath)
 				if err != nil {
@@ -1260,6 +1254,14 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			expectedBranch := materialize.DeriveBranchName(issue.Type, issueID)
 			if expectedBranch == "" {
 				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
+			}
+			// Destination legality (nested / in-repo custom dest) uses
+			// PlanProvision with empty inventory so those refuses happen
+			// before the Claim Op. Binding adopt/fresh stays after Claim.
+			if customWorktreePath {
+				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, expectedBranch); err != nil {
+					return err
+				}
 			}
 			if fromWorktreePath != "" {
 				existingTip, exists, tipErr := branchTipIfExists(ctx.RepoPath, expectedBranch)
