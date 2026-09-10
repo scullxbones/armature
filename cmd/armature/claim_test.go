@@ -881,13 +881,9 @@ func TestCreateWorktreeAndBranchRejectsAdoptionWithoutProvenance_REQ_LNGHZN_S5(t
 }
 
 // TestCreateWorktreeAndBranchLeavesAdoptedWorktreeInPlaceWhenSuperseded covers
-// the adoption (move-back) arm of cleanupPartialWorktree. It reuses the same
-// provenance-rejection failure as
-// TestCreateWorktreeAndBranchRejectsAdoptionWithoutProvenance_REQ_LNGHZN_S5,
-// but with stillOwns reporting the claim has been superseded by a second
-// worker. cleanupPartialWorktree must not move the canonical path back to
-// legacyPath in that case: doing so would relocate whatever the second
-// worker's worktree now holds at the canonical path out from under them.
+// provenance refuse on the adopt candidate. PlanProvision decides before any
+// git move, so a superseded stillOwns callback is never reached: the bound
+// worktree stays at the legacy path.
 func TestCreateWorktreeAndBranchLeavesAdoptedWorktreeInPlaceWhenSuperseded(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
@@ -899,8 +895,8 @@ func TestCreateWorktreeAndBranchLeavesAdoptedWorktreeInPlaceWhenSuperseded(t *te
 		func() bool { return false })
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no recorded branch-point provenance")
-	assert.DirExists(t, canonicalPath, "a superseded claim must leave the second worker's worktree at the canonical path")
-	assert.NoDirExists(t, legacyPath, "a superseded claim must not move the worktree back to the legacy path")
+	assert.NoDirExists(t, canonicalPath, "PlanProvision must refuse adopt before moving the worktree")
+	assert.DirExists(t, legacyPath, "failed adoption must leave the original worktree in place")
 }
 
 // TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned covers
@@ -3514,4 +3510,57 @@ func TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2(t *testing.T) {
 	assert.Zero(t, forceNotes, "same-worker overlap must remain a dismissal under --force")
 	assert.NotEmpty(t, claimOpsFor(t, repo, "task-02"))
 	assert.DirExists(t, filepath.Join(repo, ".worktrees", "task-02"))
+}
+
+// TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6 is the T6 command adapter
+// proof: dest/binding decisions go through PlanProvision, then existing git.
+// Refuse, adopt, and fresh keep the same user-visible errors. T5 tables live
+// in internal/worktree, not here.
+func TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6(t *testing.T) {
+	t.Run("refuse", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		destination := filepath.Join(repo, "child")
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
+		err := claim.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "under canonical .worktrees")
+		status, statusErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+		require.NoError(t, statusErr)
+		assert.Equal(t, ops.StatusOpen+"\n", status, "dest refuse must precede the Claim Op")
+	})
+
+	t.Run("adopt", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+		run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
+		require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+		baseSHA := strings.TrimSpace(runGitOutput(t, legacyPath, "rev-parse", "HEAD"))
+		require.NoError(t, writeBaseCommitFileIfAbsent(legacyPath, baseSHA))
+
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+		require.NoError(t, claim.Execute())
+
+		canonical := filepath.Join(repo, ".worktrees", "task-01")
+		assert.DirExists(t, canonical)
+		assert.NoDirExists(t, legacyPath)
+		assert.Equal(t, "task/task-01", strings.TrimSpace(runOutput(t, canonical, "branch", "--show-current")))
+	})
+
+	t.Run("fresh", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		held := filepath.Join(t.TempDir(), "unbound-holder")
+		run(t, repo, "git", "worktree", "add", "-b", "task/task-01", held)
+
+		_, stderr, err := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
+		require.Error(t, err, "fresh provision must fail closed when the issue branch is already checked out. stderr: %s", stderr)
+		assert.Contains(t, err.Error()+stderr, "already checked out")
+		assert.Contains(t, err.Error()+stderr, held)
+		status, statusErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+		require.NoError(t, statusErr)
+		assert.Equal(t, ops.StatusOpen+"\n", status, "provision failure must still roll back the Claim Op")
+	})
 }
