@@ -597,7 +597,13 @@ arm note TASK-001 --msg "Started implementation after architectural review."
 
 ## ready
 
-Show tasks ready to be claimed.
+Show tasks ready to be claimed. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare array, never `null`, and never a second JSON value on stderr.
+
+`issues[]` rows include `id`, `type`, `status`, and `title`, plus ready-specific fields already useful to agents (`priority`, `scope`, `parent`, `estimated_complexity`, `requires_confirmation`, `assigned_worker` when set). `outcome` is omitted. `count` equals `len(issues)` and is not capped. Ready-queue rows are `open` issues only.
+
+`--waves` stays on the same envelope. `issues` is still the flat complete list. A `waves` adjunct lists id groups, each inner array one scope-disjoint wave. Rows are not duplicated into the adjunct (N2). Human format is unchanged and does not print waves.
+
+An empty ready queue is still the envelope: `{count: 0, "issues": [], "help": [...]}` with exit 0. `help` names why the queue is empty and still points at `arm show`.
 
 **Synopsis:**
 `arm ready [flags]`
@@ -607,7 +613,7 @@ Show tasks ready to be claimed.
 - `--worker string`: Worker ID for assignment-aware sorting.
 - `--assigned-to string`: Filter to tasks assigned to this worker ID.
 - `--explain`: Diagnose why open tasks are not in the ready queue.
-- `--waves`: Partition ready entries into scope-disjoint waves (JSON/agent output only).
+- `--waves`: Partition ready entries into scope-disjoint waves. Structured output adds a `waves` adjunct of issue-id groups and does not drop or cap `issues`.
 
 **Description:**
 The `--waves` flag partitions ready-eligible entries using a greedy first-fit algorithm that respects priority boundaries:
@@ -616,32 +622,35 @@ The `--waves` flag partitions ready-eligible entries using a greedy first-fit al
 - Ancestor/descendant pairs are excluded from the same wave (e.g., a parent story and its child task cannot be in the same wave).
 - Overlap detection uses glob-pattern matching on file scopes.
 
-**Output Format (with --waves):**
-When `--format json` or `--format agent` is used with `--waves`, the output is:
+**Structured output:**
 ```json
 {
+  "count": 2,
+  "issues": [
+    {"id": "TASK-001", "type": "task", "status": "open", "title": "First", "priority": "high", "scope": ["src/a/**"]},
+    {"id": "TASK-002", "type": "task", "status": "open", "title": "Second", "priority": "high", "scope": ["src/b/**"]}
+  ],
   "waves": [
-    [
-      {"issue": "TASK-001", "type": "task", "title": "...", "priority": "high", "scope": [...], ...},
-      {"issue": "TASK-002", "type": "task", "title": "...", "priority": "high", "scope": [...], ...}
-    ],
-    [
-      {"issue": "TASK-003", "type": "task", "title": "...", "priority": "high", "scope": [...], ...}
-    ]
+    ["TASK-001", "TASK-002"]
+  ],
+  "expired_claims": [],
+  "help": [
+    "dispatch one wave at a time",
+    "arm show <id> for outcome, scope, and acceptance"
   ]
 }
 ```
-Each inner array is a wave of ready issues that can be executed in parallel without scope conflicts.
+`waves` is present only when `--waves` is set. Each inner array is a wave of issue ids that can be claimed in parallel without scope conflicts. Full rows stay in `issues`.
 
 **Expired claims:** issues in `claimed` or `in-progress` status whose claim TTL has
 lapsed without renewal are never part of the ready queue itself (only `open` issues
-are), so they are surfaced in a distinct expired-claims section instead of being
-silently omitted or silently folded into the ready list:
+are). They are not folded into `issues`.
 - Text output: an "Expired claims (TTL lapsed without renewal):" section is always
   printed after the ready list (even when the ready list itself is non-empty).
-- `--format json` / `--format agent`: the ready queue's own JSON shape on stdout is
-  unchanged for backward compatibility; expired claims are printed as a separate JSON
-  array to stderr (same channel used for snapshot warnings) when any exist.
+- `--format json` / `--format agent`: expired claims are an `expired_claims` adjunct
+  on the stdout envelope (`id`, `title`, `status`, `claimed_by`, timestamps, TTL).
+  Structured stderr is not a results channel for that data. An agent that runs
+  `2>/dev/null` still sees them. `help` notes the adjunct when it is non-empty.
 
 ---
 

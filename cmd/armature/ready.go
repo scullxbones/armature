@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"time"
 
@@ -15,6 +16,122 @@ import (
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/spf13/cobra"
 )
+
+const (
+	readyShowHelp    = "arm show <id> for outcome, scope, and acceptance"
+	readyClaimHelp   = "arm claim --issue <id> --worktree"
+	readyEmptyHelp   = "no issues are ready to claim; blockers are unmerged or claims are active"
+	readyWavesHelp   = "dispatch one wave at a time"
+	readyExpiredHelp = "expired_claims lists TTL-lapsed claims; they are not in the ready queue"
+)
+
+// readyIssueRow is the structured ready-queue row: N4 keys plus ready-specific fields.
+type readyIssueRow struct {
+	ID                   string   `json:"id"`
+	Type                 string   `json:"type"`
+	Status               string   `json:"status"`
+	Title                string   `json:"title"`
+	Parent               string   `json:"parent,omitempty"`
+	Priority             string   `json:"priority,omitempty"`
+	Scope                []string `json:"scope,omitempty"`
+	EstComplexity        string   `json:"estimated_complexity,omitempty"`
+	RequiresConfirmation bool     `json:"requires_confirmation,omitempty"`
+	AssignedWorker       string   `json:"assigned_worker,omitempty"`
+}
+
+// expiredClaimRow is the expired_claims adjunct. Rows stay out of issues (N2).
+type expiredClaimRow struct {
+	ID                         string `json:"id"`
+	Title                      string `json:"title"`
+	Status                     string `json:"status"`
+	ClaimedBy                  string `json:"claimed_by"`
+	ClaimedAt                  int64  `json:"claimed_at"`
+	LastHeartbeat              int64  `json:"last_heartbeat"`
+	ClaimTTL                   int    `json:"claim_ttl"`
+	LastClaimingWorkerActivity int64  `json:"last_claiming_worker_activity,omitempty"`
+}
+
+func readyIssueRows(entries []ready.ReadyEntry) []readyIssueRow {
+	rows := make([]readyIssueRow, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, readyIssueRow{
+			ID:                   e.Issue,
+			Type:                 e.Type,
+			Status:               ops.StatusOpen,
+			Title:                e.Title,
+			Parent:               e.Parent,
+			Priority:             e.Priority,
+			Scope:                e.Scope,
+			EstComplexity:        e.EstComplexity,
+			RequiresConfirmation: e.RequiresConfirmation,
+			AssignedWorker:       e.AssignedWorker,
+		})
+	}
+	return rows
+}
+
+func readyWaveIDs(waves [][]ready.ReadyEntry) [][]string {
+	groups := make([][]string, 0, len(waves))
+	for _, wave := range waves {
+		ids := make([]string, 0, len(wave))
+		for _, e := range wave {
+			ids = append(ids, e.Issue)
+		}
+		groups = append(groups, ids)
+	}
+	return groups
+}
+
+func expiredClaimRows(claims []ready.ExpiredClaimEntry) []expiredClaimRow {
+	rows := make([]expiredClaimRow, 0, len(claims))
+	for _, c := range claims {
+		rows = append(rows, expiredClaimRow{
+			ID:                         c.Issue,
+			Title:                      c.Title,
+			Status:                     c.Status,
+			ClaimedBy:                  c.ClaimedBy,
+			ClaimedAt:                  c.ClaimedAt,
+			LastHeartbeat:              c.LastHeartbeat,
+			ClaimTTL:                   c.ClaimTTL,
+			LastClaimingWorkerActivity: c.LastClaimingWorkerActivity,
+		})
+	}
+	return rows
+}
+
+func readyHelp(n int, waves bool, expiredN int) []string {
+	help := make([]string, 0, 4)
+	switch {
+	case n == 0:
+		help = append(help, readyEmptyHelp)
+	case waves:
+		help = append(help, readyWavesHelp)
+	default:
+		help = append(help, readyClaimHelp)
+	}
+	help = append(help, readyShowHelp)
+	if expiredN > 0 {
+		help = append(help, readyExpiredHelp)
+	}
+	return help
+}
+
+func writeReadyEnvelope(w io.Writer, entries []ready.ReadyEntry, waves [][]ready.ReadyEntry, includeWaves bool, expired []ready.ExpiredClaimEntry) error {
+	rows := readyIssueRows(entries)
+	env, err := output.NewEnvelope("issues", rows, readyHelp(len(rows), includeWaves, len(expired)))
+	if err != nil {
+		return err
+	}
+	if includeWaves {
+		if err := env.AddAdjunct("waves", readyWaveIDs(waves)); err != nil {
+			return err
+		}
+	}
+	if err := env.AddAdjunct("expired_claims", expiredClaimRows(expired)); err != nil {
+		return err
+	}
+	return output.WriteEnvelope(w, env)
+}
 
 func newReadyCmd() *cobra.Command {
 	var workerID string
@@ -109,27 +226,15 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				expiredClaims = filteredExpired
 			}
 
-			format, _ := cmd.Flags().GetString("format")
+			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			switch {
 			case format == "json" || format == "agent" || tui.IsNonInteractive():
+				var wavesData [][]ready.ReadyEntry
 				if waves {
-					wavesData := ready.PartitionWaves(entries, index)
-					if err := output.RenderReadyWaves(cmd.OutOrStdout(), wavesData); err != nil {
-						return err
-					}
-				} else {
-					if err := output.RenderReady(cmd.OutOrStdout(), entries, true); err != nil {
-						return err
-					}
+					wavesData = ready.PartitionWaves(entries, index)
 				}
-				// Distinct expired-claims section: kept off stdout (which JSON/agent
-				// consumers parse as the ready queue) and printed to stderr, same as
-				// the snapshot warnings above — visible, but not part of the parsed
-				// payload shape.
-				if len(expiredClaims) > 0 {
-					if err := output.RenderExpiredClaims(cmd.ErrOrStderr(), expiredClaims, true); err != nil {
-						return err
-					}
+				if err := writeReadyEnvelope(cmd.OutOrStdout(), entries, wavesData, waves, expiredClaims); err != nil {
+					return err
 				}
 			case tui.IsInteractive():
 				selected, err := runReadyTUI(entries)

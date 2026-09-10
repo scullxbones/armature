@@ -179,16 +179,13 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	readyOut, err := runTrls(t, repo, "ready", "--format", "json")
 	require.NoError(t, err)
 
-	// Parse JSON array of ready entries
-	var entries []map[string]any
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(readyOut)), &entries))
+	decoded := decodeReadyEnvelope(t, readyOut)
+	var entries []readyIssueRow
+	require.NoError(t, json.Unmarshal(decoded["issues"], &entries))
 
-	// Extract IDs from the "issue" field
 	readyIDs := make(map[string]bool)
 	for _, entry := range entries {
-		if issue, ok := entry["issue"].(string); ok {
-			readyIDs[issue] = true
-		}
+		readyIDs[entry.ID] = true
 	}
 
 	// The cross-worker task should never be materialized, so it's not in the index
