@@ -100,7 +100,7 @@ func PlanProvision(in ProvisionInput) (ProvisionPlan, error) {
 		want := "refs/heads/" + in.ExpectedBranch
 		if row.Branch != want {
 			head := row.Branch
-			if head == "" {
+			if head == "" || head == "detached" {
 				head = "detached HEAD"
 			}
 			return ProvisionPlan{
