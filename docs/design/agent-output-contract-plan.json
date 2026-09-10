@@ -63,7 +63,7 @@
       "id": "AOC-S1-T2",
       "title": "Envelope and channel helpers, added alongside existing output",
       "type": "task",
-      "scope": "internal/output/envelope.go (new), internal/output/envelope_test.go (new), internal/output/classify.go (new), internal/output/classify_test.go (new), cmd/armature/harness_hook.go",
+      "scope": "internal/output/envelope.go (new), internal/output/envelope_test.go (new), internal/output/classify.go (new), internal/output/classify_test.go (new), cmd/armature/harness_hook.go, cmd/armature/harness_hook_test.go",
       "priority": "high",
       "parent": "AOC-S1",
       "blocked_by": [
@@ -94,7 +94,8 @@
       "parent": "AOC-S1",
       "blocked_by": [
         "AOC-S1-T2",
-        "LNGHZN-S6-T2"
+        "LNGHZN-S6-T2",
+        "LNGHZN-S8-T1"
       ],
       "notes": [
         "Remediation added after AOC-S1-T2 completed with only agent-facing and Protocol Output classifications. Preserve that history; this task extends the classifier rather than retroactively claiming T2 delivered the third class.",
@@ -166,10 +167,10 @@
       "priority": "high",
       "parent": "AOC-S2",
       "blocked_by": [
-        "AOC-S1-T3",
         "LNGHZN-S6-T2",
         "LNGHZN-S6-T4",
-        "AOC-S2-T2"
+        "AOC-S2-T2",
+        "AOC-S1-T3"
       ],
       "notes": [
         "Chosen as the first migration because it is the highest-traffic command and the one that currently splits data across channels, so it proves the hardest part of the contract first.",
@@ -197,9 +198,9 @@
       "blocked_by": [
         "TOPTIER-S11",
         "TOPTIER-S11-T2",
+        "AOC-S2-T1",
         "NXTTN-S3-T3",
-        "NXTTN-S4-T3",
-        "AOC-S2-T1"
+        "NXTTN-S4-T3"
       ],
       "notes": [
         "arm show currently handles only human and json and silently renders human prose when given --format agent.",
@@ -280,6 +281,32 @@
         "TestStructuredVersionPathsEmitEnvelope_REQ_AOC_S2_T5 passes",
         "TestBareArmShowsReadyQueueInRepo_REQ_AOC_S2_T5 passes",
         "TestBareArmOutsideRepoIsDefinitiveEmptyState_REQ_AOC_S2_T5 passes",
+        "make check green"
+      ],
+      "source": "63be1d55-5014-47cf-ac51-eea876931e93",
+      "context_files": [
+        "docs/design/agent-output-contract.md"
+      ]
+    },
+    {
+      "id": "AOC-S2-T6",
+      "title": "Command reference reflects the contract",
+      "type": "task",
+      "scope": "docs/commands.md",
+      "priority": "medium",
+      "parent": "AOC-S2",
+      "blocked_by": [
+        "AOC-S2-T4",
+        "AOC-S2-T5",
+        "LNGHZN-S6-T1"
+      ],
+      "notes": [
+        "Cancelled; retained in this plan for history. Status is cancelled in the live graph (no status field in this schema)."
+      ],
+      "dod": "docs/commands.md describes the contract envelope once and documents each command's payload key and help[] rather than repeating a shape per command. The stderr expired-claims paragraph and the backward-compatibility note that justified it are removed. Examples in docs/use-cases.md and README.md match real output, verified by make embed-examples.",
+      "acceptance": [
+        "make embed-examples green",
+        "make validate-doc-examples green",
         "make check green"
       ],
       "source": "63be1d55-5014-47cf-ac51-eea876931e93",
@@ -390,7 +417,8 @@
       "priority": "medium",
       "parent": "AOC-S3",
       "blocked_by": [
-        "AOC-S3-T3"
+        "AOC-S3-T3",
+        "LNGHZN-S8-T1"
       ],
       "notes": [
         "census-drift-check already compares CLI commands and flags bidirectionally; this extends the same mechanism to the surfaces the Surface glossary amendment brought into scope."
