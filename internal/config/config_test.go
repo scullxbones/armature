@@ -29,7 +29,7 @@ func TestConfigRoundTrip(t *testing.T) {
 	assert.Equal(t, 60, loaded.DefaultTTL)
 }
 
-func TestLoadConfigRejectsUnknownField(t *testing.T) {
+func TestLoadConfigRejectsUnknownField_REQ_LNGHZN_S7_T6(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
