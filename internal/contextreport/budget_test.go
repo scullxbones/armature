@@ -192,7 +192,7 @@ func TestCheckedInContextBudgetsHold(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, Enforce(report, budgets), "seeded budgets must be at or above measured size")
 
-	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(BudgetsRelPath))) //nolint:gosec // test reads the checked-in budgets file
+	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(BudgetsRelPath)))
 	require.NoError(t, err)
 	var decoded BudgetFile
 	require.NoError(t, json.Unmarshal(raw, &decoded))
