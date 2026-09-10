@@ -416,6 +416,7 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"gate run":                {Kind: pavedRoadKindPaved},
 	"tui":                     {Kind: pavedRoadKindEscape, Note: "Interactive kanban. Agents use list, ready, and show."},
 	"context-history":         {Kind: pavedRoadKindEscape, Note: "Scan git history for context changes. Diagnostic only."},
+	"context-report":          {Kind: pavedRoadKindEscape, Note: "Static artifact budget meter. Not an orchestration verb."},
 	"harness-hook":            {Kind: pavedRoadKindEscape, Note: "Internal harness entrypoint. Hidden from --help groups."},
 	"review":                  {Kind: pavedRoadKindPaved},
 	"review prepare":          {Kind: pavedRoadKindPaved},

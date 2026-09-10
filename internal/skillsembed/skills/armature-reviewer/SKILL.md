@@ -282,7 +282,7 @@ the input ReviewBundle is validated separately against the [review-bundle schema
   See `references/field-rules.md` for mandatory line-citation validation rules.
 - Every result must carry citations or `missing_evidence`. `satisfied` requires citations; `missing_evidence` cannot stand in.
 
-### 5b. Self-Validate (`arm review validate` `[escape hatch]`)
+### 5b. Self-Validate with `arm review validate` `[escape hatch]` (Mandatory)
 
 Choose a **unique** path under `.armature/review/` for `$ASSESSMENT` —
 include the issue id, a short bundle-id prefix, **and the reviewer token
