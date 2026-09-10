@@ -186,20 +186,6 @@ func (c *Client) CurrentBranch() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// IsCommitOnBranch checks if a commit is reachable on a branch.
-func (c *Client) IsCommitOnBranch(sha, branch string) (bool, error) {
-	cmd := c.cmd("merge-base", "--is-ancestor", sha, branch)
-	err := cmd.Run()
-	if err == nil {
-		return true, nil
-	}
-	// Exit code 1 means not an ancestor; other errors are real failures
-	if _, ok := err.(*exec.ExitError); ok {
-		return false, nil
-	}
-	return false, fmt.Errorf("failed to check if %s is on %s: %w", sha, branch, err)
-}
-
 // MergeBase returns the SHA of the merge-base between two revisions.
 func (c *Client) MergeBase(rev1, rev2 string) (string, error) {
 	cmd := c.cmd("merge-base", rev1, rev2)
@@ -1133,7 +1119,14 @@ func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 	}
 	sha := strings.TrimSpace(string(tipOut))
 
-	return c.IsCommitOnBranch(sha, target)
+	err = c.cmd("merge-base", "--is-ancestor", sha, target).Run()
+	if err == nil {
+		return true, nil
+	}
+	if _, ok := err.(*exec.ExitError); ok {
+		return false, nil
+	}
+	return false, fmt.Errorf("failed to check if %s is on %s: %w", sha, target, err)
 }
 
 // ResolveRevision resolves a git revision (ref, SHA, tag, etc.) to its full commit SHA.

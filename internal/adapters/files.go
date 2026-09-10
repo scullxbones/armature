@@ -386,11 +386,6 @@ func lastRecordMatches(f *os.File, size int64, line []byte) (bool, error) {
 	return bytes.Equal(record, line), nil
 }
 
-// ReadLog reads all lines from a log file as raw JSON lines.
-func ReadLog(logPath string) ([][]byte, error) {
-	return ReadLogFromOffset(logPath, 0)
-}
-
 // ReadLogFromOffset reads lines starting from a byte offset.
 func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
 	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path

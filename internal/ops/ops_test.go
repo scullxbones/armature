@@ -172,7 +172,7 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 
 	stream := NewValidatedOpStream()
 	stream.AddFile(logPath, "worker-a1")
-	items, warnings, err := stream.Load()
+	items, _, warnings, err := stream.loadAll()
 	require.NoError(t, err)
 	assert.Len(t, items, 0) // rejected — worker ID mismatch
 	assert.NotEmpty(t, warnings)

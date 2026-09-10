@@ -603,5 +603,4 @@ func TestGitCommitterNilWhenNoWorktree(t *testing.T) {
 	t.Parallel()
 	assert.Nil(t, gitCommitter(nil))
 	assert.Nil(t, gitCommitter(&config.Context{}))
-	assert.Nil(t, asGitCommitter(nil))
 }

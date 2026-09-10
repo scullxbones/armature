@@ -47,15 +47,6 @@ func (s *ValidatedOpStream) AddFile(logPath, expectedWorkerID string) *FileEntry
 	return entry
 }
 
-// Load reads all registered files and returns a slice of OpItems, warnings, and an error.
-// Each OpItem includes the op, its source file, byte offset, and log filename.
-// Ops with mismatched worker IDs are excluded and logged as warnings.
-// Corrupt lines are skipped and logged as warnings.
-func (s *ValidatedOpStream) Load() ([]OpItem, []string, error) {
-	items, _, warnings, err := s.loadAll()
-	return items, warnings, err
-}
-
 // loadAll loads every registered file once, returning items, per-file physical
 // EOF offsets, and warnings. Checkpoint offsets are physical EOF; accepted-op
 // offsets cannot exceed that, so they are not max'd separately.

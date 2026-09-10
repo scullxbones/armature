@@ -30,6 +30,17 @@ import (
 // pre-existing cleanup behavior (restore/force-remove on failure).
 func alwaysOwns() bool { return true }
 
+func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, sourceArgs ...string) error {
+	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", sourceArgs...)
+}
+
+func rollbackClaim(
+	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
+	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
+) error {
+	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, false, exclusionSets...)
+}
+
 // setupRepoWithEpic creates a repo with an epic issue.
 func setupRepoWithEpic(t *testing.T) string {
 	t.Helper()

@@ -227,7 +227,7 @@ plan, or --schema to view the JSON schema.`,
 			}
 
 			if dryRunFlag {
-				result, err := decompose.DryRunApplyPlanWithOptions(plan, state, applyOpts)
+				result, err := decompose.DryRunApplyPlan(plan, state, applyOpts)
 				if err != nil {
 					return err
 				}
@@ -244,7 +244,7 @@ plan, or --schema to view the JSON schema.`,
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.ApplyPlanWithOptions(plan, opsDir, workerID, state, applyOpts, clock.System)
+			count, err := decompose.ApplyPlan(plan, opsDir, workerID, state, applyOpts, clock.System)
 			if err != nil {
 				return err
 			}
@@ -317,7 +317,7 @@ It validates that no new children exist under the planned issues before removal.
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.RevertPlanWithOptions(plan, opsDir, workerID, state, clock.System)
+			count, err := decompose.RevertPlan(plan, opsDir, workerID, state, clock.System)
 			if err != nil {
 				return err
 			}

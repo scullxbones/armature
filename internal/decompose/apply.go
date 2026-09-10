@@ -164,12 +164,7 @@ func preparePlan(plan *Plan, opts ApplyOptions) *Plan {
 }
 
 // DryRunApplyPlan validates the plan and returns what would be created, without writing any ops.
-func DryRunApplyPlan(plan *Plan, state *materialize.State) (*DryRunResult, error) {
-	return DryRunApplyPlanWithOptions(plan, state, ApplyOptions{})
-}
-
-// DryRunApplyPlanWithOptions is like DryRunApplyPlan but respects ApplyOptions.
-func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts ApplyOptions) (*DryRunResult, error) {
+func DryRunApplyPlan(plan *Plan, state *materialize.State, opts ApplyOptions) (*DryRunResult, error) {
 	if err := validateTypes(plan); err != nil {
 		return nil, err
 	}
@@ -200,12 +195,7 @@ func DryRunApplyPlanWithOptions(plan *Plan, state *materialize.State, opts Apply
 // ApplyPlan appends create ops for each issue in the plan to the op log.
 // Skips issues that already exist in state (by ID).
 // Returns count of issues created.
-func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State) (int, error) {
-	return ApplyPlanWithOptions(plan, issuesDir, workerID, state, ApplyOptions{}, clock.System)
-}
-
-// ApplyPlanWithOptions is like ApplyPlan but respects ApplyOptions and accepts a clock.Clock parameter.
-func ApplyPlanWithOptions(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions, clk clock.Clock) (int, error) {
+func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions, clk clock.Clock) (int, error) {
 	if err := validateTypes(plan); err != nil {
 		return 0, err
 	}

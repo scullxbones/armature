@@ -38,6 +38,14 @@ func graphFromState(state *materialize.State) *dag.Graph {
 	return materialize.GraphFromState(state)
 }
 
+func introducedFindings(before, after Result, targeted []string) []Finding {
+	prior := make(map[string]struct{}, len(before.Findings))
+	for _, f := range before.Findings {
+		prior[f.identity()] = struct{}{}
+	}
+	return introducedOnTargets(before, after, prior, targeted)
+}
+
 func TestValidate_Clean(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -1974,7 +1982,7 @@ func TestIntroductionAllowsCountOnlyMessageChange_REQ_LNGHZN_S10_T12(t *testing.
 	after := Result{Findings: []Finding{
 		{Severity: "warning", Rule: "W11", CitedIDs: []string{"SHIP"}, Message: "vague outcome: SHIP outcome is 8 chars"},
 	}}
-	introduced := IntroducedOnTargets(before, after, []string{"SHIP"})
+	introduced := introducedFindings(before, after, []string{"SHIP"})
 	assert.Empty(t, introduced, "a finding whose message embeds a changing detail (not its Key) must not be re-introduced")
 }
 
@@ -2041,7 +2049,7 @@ func TestIntroductionRefusesSecondE6OnDifferentField_REQ_LNGHZN_S10_T12(t *testi
 	after := Result{Findings: []Finding{
 		{Severity: "error", Rule: "E6", CitedIDs: []string{"BARE2"}, Key: "definition_of_done", Message: "missing required field: definition_of_done on task BARE2"},
 	}}
-	introduced := IntroducedOnTargets(before, after, []string{"BARE2"})
+	introduced := introducedFindings(before, after, []string{"BARE2"})
 	require.Len(t, introduced, 1, "a second E6 finding on the same issue for a different required field must still be introduced")
 	assert.Contains(t, introduced[0].Message, "definition_of_done")
 }

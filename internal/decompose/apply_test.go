@@ -38,7 +38,7 @@ func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state)
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -76,7 +76,7 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state)
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -90,7 +90,7 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 
 // --- QLTYCNTRL-S2-T2: Clock injection ---
 
-func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
+func TestApplyPlan_InjectsClockTimestamp(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
@@ -107,7 +107,7 @@ func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 	state := materialize.NewState()
 	fixedClock := clock.Fixed(fixedTimestamp)
 
-	count, err := ApplyPlanWithOptions(plan, dir, workerID, state, ApplyOptions{}, fixedClock)
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, fixedClock)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -119,7 +119,7 @@ func TestApplyPlanWithOptions_InjectsClockTimestamp(t *testing.T) {
 		"injected clock timestamp should appear in written op")
 }
 
-func TestApplyPlanWithOptions_AppliesRootToTopLevelIssues(t *testing.T) {
+func TestApplyPlan_AppliesRootToTopLevelIssues(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	workerID := "worker-test"
@@ -134,7 +134,7 @@ func TestApplyPlanWithOptions_AppliesRootToTopLevelIssues(t *testing.T) {
 
 	state := materialize.NewState()
 	state.Issues["EPIC-001"] = &materialize.Issue{ID: "EPIC-001", Type: "epic", Status: ops.StatusOpen, Title: "Root epic"}
-	count, err := ApplyPlanWithOptions(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, clock.Fixed(42))
+	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, clock.Fixed(42))
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -158,7 +158,7 @@ func TestDryRunApplyPlan_ReturnsWouldCreate(t *testing.T) {
 	}
 	state := materialize.NewState()
 
-	result, err := DryRunApplyPlan(plan, state)
+	result, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.NoError(t, err)
 	assert.Len(t, result.WouldCreate, 2)
 }
@@ -177,7 +177,7 @@ func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
 	state := materialize.NewState()
 	state.Issues["PLAN-EXISTING"] = &materialize.Issue{ID: "PLAN-EXISTING"}
 
-	result, err := DryRunApplyPlan(plan, state)
+	result, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.NoError(t, err)
 	assert.Len(t, result.WouldCreate, 1)
 	assert.Equal(t, "PLAN-001", result.WouldCreate[0].ID)
@@ -195,13 +195,13 @@ func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	}
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, "worker-test", state)
+	count, err := ApplyPlan(plan, dir, "worker-test", state, ApplyOptions{}, clock.System)
 	require.Error(t, err, "plans without per-issue source must fail apply")
 	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "source")
 	assert.Contains(t, err.Error(), "PLAN-001")
 
-	_, err = DryRunApplyPlan(plan, state)
+	_, err = DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.Error(t, err, "dry-run must also refuse an uncited plan")
 	assert.Contains(t, err.Error(), "source")
 }
@@ -223,14 +223,14 @@ func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
 		}},
 	}
 	opts := ApplyOptions{ManifestData: []byte(`{"entries":{"src-real":{"id":"src-real"}}}`)}
-	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.Error(t, err, "apply must refuse a source ID that is not in the manifest")
 	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "00000000-0000-0000-0000-000000000001")
 	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
 	assert.True(t, os.IsNotExist(statErr), "a refused apply must not land an uncited create")
 
-	_, err = DryRunApplyPlanWithOptions(plan, materialize.NewState(), opts)
+	_, err = DryRunApplyPlan(plan, materialize.NewState(), opts)
 	require.Error(t, err, "dry-run must also refuse an unknown source")
 	assert.Contains(t, err.Error(), "00000000-0000-0000-0000-000000000001")
 }
@@ -256,7 +256,7 @@ func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 			taskPlanIssue("PLAN-002", "Second"),
 		},
 	}
-	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 	require.Len(t, batches, 1, "create + source_link (+links) must be one write, not one write per op")
@@ -272,7 +272,7 @@ func TestApplyPlan_UsesRealAppenderWhenUnset(t *testing.T) {
 		Title:   "Default appender",
 		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
 	}
-	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{}, clock.System)
+	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 	data, readErr := os.ReadFile(filepath.Join(dir, "worker-test.log"))
@@ -292,7 +292,7 @@ func TestApplyPlan_FailedAppendLeavesNoPartialLog(t *testing.T) {
 		Title:   "Failing plan",
 		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
 	}
-	count, err := ApplyPlanWithOptions(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.Error(t, err)
 	assert.Equal(t, 0, count)
 	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
@@ -331,7 +331,7 @@ func TestApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 	dir := t.TempDir()
 
 	// Invalid type is always fatal, regardless of other plan checks.
-	count, err := ApplyPlanWithOptions(plan, dir, "worker-1", state, ApplyOptions{}, clock.System)
+	count, err := ApplyPlan(plan, dir, "worker-1", state, ApplyOptions{}, clock.System)
 	require.Error(t, err)
 	assert.Equal(t, 0, count)
 	assert.Contains(t, err.Error(), "invalid type")
@@ -350,7 +350,7 @@ func TestDryRunApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 	}
 	state := materialize.NewState()
 
-	_, err := DryRunApplyPlanWithOptions(plan, state, ApplyOptions{})
+	_, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid type")
 }

@@ -194,16 +194,6 @@ func unsuppressionBaseline(current *materialize.State, proposed []ops.Op, opts O
 	return result.Findings, nil
 }
 
-// IntroducedOnTargets returns after-findings that were not present before
-// and that cite at least one targeted issue ID. Infos never block.
-func IntroducedOnTargets(before, after Result, targeted []string) []Finding {
-	prior := make(map[string]struct{}, len(before.Findings))
-	for _, f := range before.Findings {
-		prior[f.identity()] = struct{}{}
-	}
-	return introducedOnTargets(before, after, prior, targeted)
-}
-
 func introducedOnTargets(before, after Result, prior map[string]struct{}, targeted []string) []Finding {
 	targetSet := make(map[string]struct{}, len(targeted))
 	for _, id := range targeted {
