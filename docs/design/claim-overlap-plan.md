@@ -20,7 +20,7 @@ rule interface, or hypothetical adapter. Git and filesystem stay in `cmd/`.
 
 ## Glossary (workers add to `CONTEXT.md`)
 
-**T1** adds:
+**T1** adds all three glossary terms (T5 no longer edits `CONTEXT.md`):
 
 **Claim Plan**: The overlap decision for a proposed Claim, produced before any
 Op is appended. It names block reasons, warnings, and note intents. Distinct
@@ -31,8 +31,6 @@ _Avoid_: Resolver, overlap check, claim result
 Claim after a failed post-Claim step, produced before any compensating Op is
 appended. Distinct from the Claim Op and from git rollback.
 _Avoid_: Rollback, resolver, claim result
-
-**T5** adds:
 
 **Worktree Provision Plan**: The decision for a proposed Managed Worktree
 destination, produced before any git or filesystem mutation. Outcomes are
