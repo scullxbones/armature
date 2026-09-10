@@ -654,6 +654,21 @@ func TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5(t *testing.T)
 	assert.Contains(t, err.Error(), "path separators")
 }
 
+// TestCanonicalWorktreePath_MissingThroughSymlink_REQ_ARCHIMP_S20 pins that
+// default claim destinations stay under CanonicalRoot when repoPath is a
+// symlink and .worktrees does not exist yet (Codex 154 P2).
+func TestCanonicalWorktreePath_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.T) {
+	realRepo := t.TempDir()
+	link := filepath.Join(t.TempDir(), "repo-link")
+	require.NoError(t, os.Symlink(realRepo, link))
+
+	path, err := canonicalWorktreePath(link, "ISSUE-01")
+	require.NoError(t, err)
+	rel, err := filepath.Rel(worktree.CanonicalRoot(link), path)
+	require.NoError(t, err)
+	assert.Equal(t, "ISSUE-01", rel)
+}
+
 // TestCreateWorktreeAndBranchInheritsFilesFromHEAD verifies that the worktree branch
 // contains files from HEAD (not an orphan branch).
 func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
