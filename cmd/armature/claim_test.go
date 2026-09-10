@@ -30,17 +30,6 @@ import (
 // pre-existing cleanup behavior (restore/force-remove on failure).
 func alwaysOwns() bool { return true }
 
-func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, sourceArgs ...string) error {
-	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", sourceArgs...)
-}
-
-func rollbackClaim(
-	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
-	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
-) error {
-	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, false, exclusionSets...)
-}
-
 // setupRepoWithEpic creates a repo with an epic issue.
 func setupRepoWithEpic(t *testing.T) string {
 	t.Helper()
@@ -3460,6 +3449,9 @@ func TestClaimForceWritesReciprocalNotesInOrder_REQ_ARCHIMP_S20_T2(t *testing.T)
 // TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2 is fail-closed:
 // if overlap notes cannot be persisted, refuse the Claim Op and worktree.
 func TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: file permissions do not block writes")
+	}
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")

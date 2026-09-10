@@ -94,7 +94,7 @@ func PlanProvision(in ProvisionInput) (ProvisionPlan, error) {
 	}
 	if len(bound) == 1 {
 		row := bound[0]
-		if row.Path == in.Dest {
+		if NormalizePathAllowingMissing(row.Path) == NormalizePathAllowingMissing(in.Dest) {
 			return ProvisionPlan{Action: ProvisionAlreadyAtDest}, nil
 		}
 		want := "refs/heads/" + in.ExpectedBranch
