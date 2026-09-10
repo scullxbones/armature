@@ -10,12 +10,13 @@ import (
 func newContextReportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "context-report",
-		Short: "Price static agent-facing artifacts by bytes and estimated tokens",
-		Long: `Enumerate embedded skills, CONTEXT.md, docs/commands.md, docs/concepts.md,
-and docs/use-cases.md. Report byte size and estimated tokens using bytes/4
-(integer division), matching the token_budget convention.
+		Short: "Price fixture-measured main-path CLI payloads by bytes and estimated tokens",
+		Long: `Measure structured stdout (json/agent) for main-path commands
+list, ready, show, render-context, and review against the checked-in
+fixture graph, plus the fixture render-context bundle.
 
-Dynamic structured command payloads are out of scope (AOC-S3-T2).`,
+Tokens are bytes/4 (integer division), matching the token_budget
+convention (character budget = tokens * 4).`,
 		Args: cobra.NoArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			return nil

@@ -1,0 +1,6 @@
+["create","FX-STORY",1700000000,"fixture-worker",{"title":"Fixture story for context-report","type":"story","definition_of_done":"Story work is complete"}]
+["transition","FX-STORY",1700000001,"fixture-worker",{"to":"in-progress"}]
+["create","FX-READY",1700000002,"fixture-worker",{"title":"Ready task on the main path","type":"task","parent":"FX-STORY","scope":["hello.go"],"definition_of_done":"Ready queue lists this open task","acceptance":[{"type":"test_passes"}],"priority":"high"}]
+["create","FX-WORK",1700000003,"fixture-worker",{"title":"In-progress task for show and render-context","type":"task","parent":"FX-STORY","scope":["hello.go"],"context_files":["hello.go"],"definition_of_done":"Show, render-context, and review prepare are priced from this issue","acceptance":[{"type":"test_passes"}]}]
+["claim","FX-WORK",1700000004,"fixture-worker",{"ttl":60,"claim_token":"fixture-claim-1"}]
+["transition","FX-WORK",1700000005,"fixture-worker",{"to":"in-progress"}]
