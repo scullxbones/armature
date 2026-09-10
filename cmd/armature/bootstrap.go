@@ -405,13 +405,16 @@ const preCommitHookTemplate = `#!/bin/sh
 # Armature pre-commit hook: delegate to native arm hook run.
 # Git exports GIT_DIR / GIT_INDEX_FILE / … for this hook; nested git against
 # the ops worktree must not inherit them (index would mis-resolve).
-# Fail-loud on code branches (I3). Skip _armature before exec so ops commits
-# do not require config.json / arm on PATH (bootstrap and create write here).
+# Fail-loud on code branches (I3) when arm is present. Skip _armature so
+# ops commits do not require config.json. If arm is not on PATH, do not
+# block the commit (test sandboxes and incomplete PATH); the Go path still
+# prints the dual-branch remediation line when it refuses.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [ "$current_branch" = "_armature" ]; then
   exit 0
 fi
+command -v arm >/dev/null 2>&1 || exit 0
 arm hook run pre-commit
 `
 
