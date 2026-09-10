@@ -1727,20 +1727,7 @@ func TestListTerminal(t *testing.T) {
 // TestReadyExplain verifies that arm ready --explain prints ID: reason pairs for
 // open tasks that are blocked or have an inactive parent, in deterministic order.
 func TestReadyExplain(t *testing.T) {
-	repo := setupRepoWithStoryAndTask(t)
-
-	_, err := runTrls(t, repo, "worker-init")
-	require.NoError(t, err)
-
-	// Create a blocker task (open, not merged) and a task that depends on it.
-	// The blocker stays open — so task-blocked is excluded because blocker is not merged.
-	plantVerifiedTask(t, repo, "task-blocker", "cmd/armature/blocker.go")
-	plantVerifiedTask(t, repo, "task-blocked", "cmd/armature/blocked.go")
-	_, err = runTrls(t, repo, "link", "--source", "task-blocked", "--dep", "task-blocker")
-	require.NoError(t, err)
-	// Claim task-blocker so it is in-progress (not merged) — task-blocked remains not ready.
-	_, err = runTrls(t, repo, "claim", "task-blocker", "--worktree")
-	require.NoError(t, err)
+	repo := plantBlockedReadyExplainFixture(t)
 
 	out, err := runTrls(t, repo, "ready", "--explain")
 	require.NoError(t, err)

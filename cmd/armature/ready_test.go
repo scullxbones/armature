@@ -363,3 +363,105 @@ func TestReadyEmptyHelpNamesActiveFilter_REQ_AOC_S2_T1(t *testing.T) {
 	assert.Contains(t, bothHelp[0], "--assigned-to")
 	assert.NotContains(t, bothHelp[0], "blockers")
 }
+
+func plantBlockedReadyExplainFixture(t *testing.T) string {
+	t.Helper()
+	repo := setupRepoWithStoryAndTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	plantVerifiedTask(t, repo, "task-blocker", "cmd/armature/blocker.go")
+	plantVerifiedTask(t, repo, "task-blocked", "cmd/armature/blocked.go")
+	_, err = runTrls(t, repo, "link", "--source", "task-blocked", "--dep", "task-blocker")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "task-blocker", "--worktree")
+	require.NoError(t, err)
+	return repo
+}
+
+func TestReadyExplainEmitsEnvelope_REQ_AOC_S2_T1(t *testing.T) {
+	repo := plantBlockedReadyExplainFixture(t)
+
+	out, errOut := runReadyJSON(t, repo, "--explain")
+	raw := strings.TrimSpace(out)
+	assert.NotEqual(t, "null", raw)
+	require.True(t, strings.HasPrefix(raw, "{"), "explain must be an envelope object, not a bare map")
+	decoded := decodeReadyEnvelope(t, out)
+
+	var count int
+	require.NoError(t, json.Unmarshal(decoded["count"], &count))
+	var issues []struct {
+		ID     string `json:"id"`
+		Type   string `json:"type"`
+		Status string `json:"status"`
+		Title  string `json:"title"`
+		Reason string `json:"reason"`
+	}
+	require.NoError(t, json.Unmarshal(decoded["issues"], &issues))
+	assert.Equal(t, len(issues), count)
+	require.NotEmpty(t, issues)
+
+	found := false
+	for _, row := range issues {
+		assert.NotEmpty(t, row.ID)
+		assert.NotEmpty(t, row.Type)
+		assert.NotEmpty(t, row.Status)
+		assert.NotEmpty(t, row.Title)
+		assert.NotEmpty(t, row.Reason)
+		assert.NotEqual(t, "task-01", row.ID, "--explain must not include ready tasks")
+		assert.NotEqual(t, "task-02", row.ID, "--explain must not include ready tasks")
+		if row.ID == "task-blocked" {
+			found = true
+			assert.Equal(t, "task", row.Type)
+			assert.Equal(t, ops.StatusOpen, row.Status)
+			assert.Contains(t, row.Reason, "task-blocker")
+		}
+	}
+	assert.True(t, found, "task-blocked must appear in explain issues")
+
+	var rawIssues []map[string]any
+	require.NoError(t, json.Unmarshal(decoded["issues"], &rawIssues))
+	for _, row := range rawIssues {
+		_, hasOutcome := row["outcome"]
+		assert.False(t, hasOutcome, "explain row must not carry outcome")
+	}
+
+	var help []string
+	require.NoError(t, json.Unmarshal(decoded["help"], &help))
+	require.NotEmpty(t, help)
+	assert.Equal(t, readyExplainHelp, help[0])
+	foundShow := false
+	for _, h := range help {
+		if strings.Contains(h, "arm show") {
+			foundShow = true
+		}
+	}
+	assert.True(t, foundShow, "explain help must point at arm show")
+
+	trimmedErr := strings.TrimSpace(errOut)
+	if trimmedErr != "" {
+		assert.False(t, strings.HasPrefix(trimmedErr, "{"), "explain must not dump a stderr object")
+		assert.False(t, strings.HasPrefix(trimmedErr, "["), "explain must not dump a stderr array")
+	}
+
+	agentOut, err := runTrls(t, repo, "ready", "--explain", "--format", "agent")
+	require.NoError(t, err)
+	agentDecoded := decodeReadyEnvelope(t, agentOut)
+	require.Contains(t, agentDecoded, "count")
+	require.Contains(t, agentDecoded, "issues")
+	require.Contains(t, agentDecoded, "help")
+
+	emptyRepo := setupRepoWithTask(t)
+	emptyOut, _ := runReadyJSON(t, emptyRepo, "--explain")
+	emptyRaw := strings.TrimSpace(emptyOut)
+	assert.NotEqual(t, "{}", emptyRaw)
+	assert.NotEqual(t, "null", emptyRaw)
+	emptyDecoded := decodeReadyEnvelope(t, emptyOut)
+	var emptyCount int
+	require.NoError(t, json.Unmarshal(emptyDecoded["count"], &emptyCount))
+	assert.Equal(t, 0, emptyCount)
+	assert.Equal(t, "[]", strings.TrimSpace(string(emptyDecoded["issues"])))
+	var emptyHelp []string
+	require.NoError(t, json.Unmarshal(emptyDecoded["help"], &emptyHelp))
+	require.NotEmpty(t, emptyHelp)
+	assert.Equal(t, readyExplainEmptyHelp, emptyHelp[0])
+}

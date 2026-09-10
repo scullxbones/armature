@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +23,8 @@ const (
 	readyEmptyExpiredHelp = "no issues are ready to claim; expired_claims lists TTL-lapsed claims that are not in the queue"
 	readyWavesHelp        = "dispatch one wave at a time"
 	readyExpiredHelp      = "expired_claims lists TTL-lapsed claims; they are not in the ready queue"
+	readyExplainHelp      = "these issues are open but not ready to claim"
+	readyExplainEmptyHelp = "no open issues are excluded from the ready queue"
 )
 
 // readyIssueRow is the structured ready-queue row: N4 keys plus ready-specific fields.
@@ -38,6 +39,15 @@ type readyIssueRow struct {
 	EstComplexity        string   `json:"estimated_complexity,omitempty"`
 	RequiresConfirmation bool     `json:"requires_confirmation,omitempty"`
 	AssignedWorker       string   `json:"assigned_worker,omitempty"`
+}
+
+// readyExplainRow is the structured --explain row: N4 keys plus the exclusion reason.
+type readyExplainRow struct {
+	ID     string `json:"id"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Title  string `json:"title"`
+	Reason string `json:"reason"`
 }
 
 // expiredClaimRow is the expired_claims adjunct. Rows stay out of issues (N2).
@@ -132,6 +142,46 @@ func readyHelp(n int, waves bool, expiredN int, parent, assignedTo string) []str
 	return help
 }
 
+func readyExplainRows(index materialize.Index, notReady map[string]string) []readyExplainRow {
+	ids := make([]string, 0, len(notReady))
+	for id := range notReady {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	rows := make([]readyExplainRow, 0, len(ids))
+	for _, id := range ids {
+		entry := index[id]
+		rows = append(rows, readyExplainRow{
+			ID:     id,
+			Type:   entry.Type,
+			Status: entry.Status,
+			Title:  entry.Title,
+			Reason: notReady[id],
+		})
+	}
+	return rows
+}
+
+func explainHelp(n int) []string {
+	help := make([]string, 0, 2)
+	if n == 0 {
+		help = append(help, readyExplainEmptyHelp)
+	} else {
+		help = append(help, readyExplainHelp)
+	}
+	help = append(help, readyShowHelp)
+	return help
+}
+
+func writeReadyExplainEnvelope(w io.Writer, index materialize.Index, notReady map[string]string) error {
+	rows := readyExplainRows(index, notReady)
+	env, err := output.NewEnvelope("issues", rows, explainHelp(len(rows)))
+	if err != nil {
+		return err
+	}
+	return output.WriteEnvelope(w, env)
+}
+
 func writeReadyEnvelope(
 	w io.Writer,
 	entries []ready.ReadyEntry,
@@ -203,19 +253,17 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			// --explain: print why each open unclaimed task is not ready, then return.
 			if explain {
 				notReady := ready.ExplainNotReady(index, issues, nowEpoch())
-				format, _ := cmd.Flags().GetString("format")
+				format, _ := cmd.Root().PersistentFlags().GetString("format")
 				if format == "json" || format == "agent" || tui.IsNonInteractive() {
-					data, _ := json.MarshalIndent(notReady, "", "  ") //nolint:errcheck // slice of serializable structs
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-				} else {
-					ids := make([]string, 0, len(notReady))
-					for id := range notReady {
-						ids = append(ids, id)
-					}
-					sort.Strings(ids)
-					for _, id := range ids {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", id, notReady[id])
-					}
+					return writeReadyExplainEnvelope(cmd.OutOrStdout(), index, notReady)
+				}
+				ids := make([]string, 0, len(notReady))
+				for id := range notReady {
+					ids = append(ids, id)
+				}
+				sort.Strings(ids)
+				for _, id := range ids {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", id, notReady[id])
 				}
 				return nil
 			}
