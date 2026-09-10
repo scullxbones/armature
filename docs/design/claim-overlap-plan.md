@@ -246,8 +246,10 @@ type ProvisionPlan struct {
 func PlanProvision(ProvisionInput) (ProvisionPlan, error)
 ```
 
-Inputs borrowed and read-only. Empty `IssueID`, `Dest`, or `ExpectedBranch` is
-an input error. Never panic. No git. `internal/worktree` does not import
+Inputs borrowed and read-only. Empty `IssueID` or `Dest` is an input error.
+Empty `ExpectedBranch` is an input error when `Inventory` is non-empty.
+Dest-only nested/in-repo refuses (empty inventory, before `--from`) may omit
+`ExpectedBranch` rather than inventing a placeholder. Never panic. No git. `internal/worktree` does not import
 `issueid`, `adapters`, `deliverygate`, or `cmd`. Issue-ID validation stays in
 `cmd/` before this is called.
 
@@ -289,7 +291,8 @@ them.
 `PlanProvision` is called from two command sites:
 
 1. **Early dest-only refuse** (`refuseCustomWorktreeDestination`) — empty
-   inventory, real `ExpectedBranch`, before the Claim Op. Nested dest and
+   inventory, empty `ExpectedBranch`, before the Claim Op and before `--from`
+   revalidation (git worktree list ordering). Nested dest and
    in-repo-outside-canonical refuses only. Binding cardinality is not
    decided here.
 2. **Full inventory** — `evaluateProvisionPlan` (via `worktree.List` /

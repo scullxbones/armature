@@ -1221,6 +1221,16 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			// serializes the check/remove performed by merged and GC with the
 			// claim's check-through-provisioning handoff, so a teardown cannot
 			// remove an exclusion after a new claim has reused the destination.
+			// Destination legality uses PlanProvision with empty inventory so
+			// nested/in-repo refuses happen before the Claim Op and before
+			// --from revalidation (git worktree list ordering). ExpectedBranch
+			// is empty here: inventory is empty, so PlanProvision does not
+			// need a branch name.
+			if customWorktreePath {
+				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, ""); err != nil {
+					return err
+				}
+			}
 			if fromWorktreePath != "" {
 				fromWorktreePath, err = filepath.Abs(fromWorktreePath)
 				if err != nil {
@@ -1270,15 +1280,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			expectedBranch := materialize.DeriveBranchName(issue.Type, issueID)
 			if expectedBranch == "" {
 				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
-			}
-			// Destination legality uses PlanProvision with empty inventory so
-			// nested/in-repo refuses happen before the Claim Op. ExpectedBranch
-			// is the real issue branch; inventory stays empty so binding
-			// outcomes are decided by evaluateProvisionPlan / createWorktree.
-			if customWorktreePath {
-				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, expectedBranch); err != nil {
-					return err
-				}
 			}
 			if fromWorktreePath != "" {
 				existingTip, exists, tipErr := branchTipIfExists(ctx.RepoPath, expectedBranch)

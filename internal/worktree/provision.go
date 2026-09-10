@@ -16,9 +16,9 @@ type InventoryRow struct {
 }
 
 // ProvisionInput is the borrowed, read-only fact set for a proposed
-// Managed Worktree destination. Empty IssueID, Dest, or ExpectedBranch is
-// an input error. DestExists is supplied by the caller and unused by the
-// decision itself.
+// Managed Worktree destination. Empty IssueID or Dest is an input error.
+// Empty ExpectedBranch is an input error when Inventory is non-empty;
+// dest-only nested/in-repo checks may omit it.
 type ProvisionInput struct {
 	IssueID        string
 	Dest           string
@@ -53,8 +53,11 @@ type ProvisionPlan struct {
 // provision-fresh from inventory and destination facts. Evaluation order
 // is nested dest, in-repo dest, then bound-inventory cardinality.
 func PlanProvision(in ProvisionInput) (ProvisionPlan, error) {
-	if in.IssueID == "" || in.Dest == "" || in.ExpectedBranch == "" {
-		return ProvisionPlan{}, fmt.Errorf("provision: IssueID, Dest, and ExpectedBranch are required")
+	if in.IssueID == "" || in.Dest == "" {
+		return ProvisionPlan{}, fmt.Errorf("provision: IssueID and Dest are required")
+	}
+	if in.ExpectedBranch == "" && len(in.Inventory) > 0 {
+		return ProvisionPlan{}, fmt.Errorf("provision: ExpectedBranch is required when Inventory is non-empty")
 	}
 	if in.NestedUnder != "" {
 		return ProvisionPlan{
