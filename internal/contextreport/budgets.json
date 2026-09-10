@@ -1,0 +1,40 @@
+{
+  "artifacts": [
+    {
+      "path": "list",
+      "class": "invocation",
+      "max_bytes": 2048,
+      "target_bytes": 2048
+    },
+    {
+      "path": "ready",
+      "class": "invocation",
+      "max_bytes": 1024,
+      "target_bytes": 1024
+    },
+    {
+      "path": "show",
+      "class": "invocation",
+      "max_bytes": 2048,
+      "target_bytes": 2048
+    },
+    {
+      "path": "render-context",
+      "class": "invocation",
+      "max_bytes": 16000,
+      "target_bytes": 16000
+    },
+    {
+      "path": "review",
+      "class": "invocation",
+      "max_bytes": 4096,
+      "target_bytes": 4096
+    },
+    {
+      "path": "render-context.bundle",
+      "class": "bundle",
+      "max_bytes": 16000,
+      "target_bytes": 16000
+    }
+  ]
+}
