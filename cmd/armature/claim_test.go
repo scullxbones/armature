@@ -1947,6 +1947,75 @@ func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
 		"ClaimedBy must remain set since the claim never expires")
 }
 
+// TestClaimCompensationRestoreVsRelease_REQ_ARCHIMP_S20_T4 is the T4 adapter
+// proof: after a won Claim, worktree-setup failure still restore-vs-releases
+// via PlanCompensation (live same-Worker keeps the lease; stale/foreign
+// releases to open).
+func TestClaimCompensationRestoreVsRelease_REQ_ARCHIMP_S20_T4(t *testing.T) {
+	t.Run("restore live same-worker", func(t *testing.T) {
+		repo := setupRepoWithParentAndTask(t)
+		worktree1 := filepath.Join(repo, ".worktrees", "task-01")
+		_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+		require.NoError(t, err)
+
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+		before, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+		require.NoError(t, err)
+		require.Equal(t, ops.StatusClaimed, before.Status)
+
+		require.NoError(t, os.WriteFile(filepath.Join(worktree1, ".git"), []byte("gitdir: /nonexistent/git/dir"), 0o644))
+		_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
+		assert.Error(t, claimErr, "second claim with broken worktree should error. stderr: %s", stderr)
+
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+		after, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+		require.NoError(t, err)
+		assert.Equal(t, ops.StatusClaimed, after.Status, "live same-worker lease must be restored")
+		assert.Equal(t, before.ClaimedBy, after.ClaimedBy)
+		assert.Equal(t, before.WorktreePath, after.WorktreePath)
+	})
+
+	t.Run("release stale foreign", func(t *testing.T) {
+		repo := initTempRepo(t)
+		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+		_, err := runTrls(t, repo, "bootstrap")
+		require.NoError(t, err)
+		_, err = runTrls(t, repo, "create", "--title", "Task one", "--type", "task", "--id", "task-01")
+		require.NoError(t, err)
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+
+		otherWorker := "other-worker-uuid"
+		staleClaimTime := time.Now().Unix() - 7200
+		staleClaimOp := ops.Op{
+			Type:      ops.OpClaim,
+			TargetID:  "task-01",
+			Timestamp: staleClaimTime,
+			WorkerID:  otherWorker,
+			Payload:   ops.Payload{TTL: 1, WorktreePath: "/legacy/task-01"},
+		}
+		require.NoError(t, ops.AppendOp(filepath.Join(repo, ".armature", "ops", otherWorker+".log"), staleClaimOp))
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+
+		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+		require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(worktreePath, "blocking-file"), []byte("blocks worktree creation"), 0o644))
+		_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
+		assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
+
+		_, err = runTrls(t, repo, "materialize")
+		require.NoError(t, err)
+		after, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+		require.NoError(t, err)
+		assert.Equal(t, ops.StatusOpen, after.Status, "stale foreign lease must be released")
+		assert.Equal(t, "", after.ClaimedBy)
+		assert.Equal(t, "/legacy/task-01", after.WorktreePath)
+	})
+}
+
 // TestCheckExistingWorktreeBindingReadsLegacyTaskID verifies the P2 bug fix:
 // checkExistingWorktreeBinding should recognize legacy armature-task-id files
 // (from worktrees claimed before the rename to armature-issue-id).
