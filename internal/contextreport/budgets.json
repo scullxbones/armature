@@ -1,0 +1,64 @@
+{
+  "artifacts": [
+    {
+      "path": "internal/skillsembed/skills/armature",
+      "class": "skill",
+      "max_bytes": 2520
+    },
+    {
+      "path": "internal/skillsembed/skills/armature-activity-indexer",
+      "class": "skill",
+      "max_bytes": 14327
+    },
+    {
+      "path": "internal/skillsembed/skills/armature-auditor",
+      "class": "skill",
+      "max_bytes": 11410
+    },
+    {
+      "path": "internal/skillsembed/skills/armature-coordinator",
+      "class": "skill",
+      "max_bytes": 62099
+    },
+    {
+      "path": "internal/skillsembed/skills/armature-planner",
+      "class": "skill",
+      "max_bytes": 23036
+    },
+    {
+      "path": "internal/skillsembed/skills/armature-reviewer",
+      "class": "skill",
+      "max_bytes": 57671
+    },
+    {
+      "path": "internal/skillsembed/skills/armature-worker",
+      "class": "skill",
+      "max_bytes": 20430
+    },
+    {
+      "path": "internal/skillsembed/skills/test-skill",
+      "class": "skill",
+      "max_bytes": 86
+    },
+    {
+      "path": "CONTEXT.md",
+      "class": "glossary",
+      "max_bytes": 28888
+    },
+    {
+      "path": "docs/commands.md",
+      "class": "commands",
+      "max_bytes": 29045
+    },
+    {
+      "path": "docs/concepts.md",
+      "class": "concepts",
+      "max_bytes": 17013
+    },
+    {
+      "path": "docs/use-cases.md",
+      "class": "use-cases",
+      "max_bytes": 20924
+    }
+  ]
+}
