@@ -260,6 +260,10 @@ func newRootCmd() *cobra.Command {
 	contextHistoryCmd.GroupID = "admin"
 	root.AddCommand(contextHistoryCmd)
 
+	contextReportCmd := newContextReportCmd()
+	contextReportCmd.GroupID = "admin"
+	root.AddCommand(contextReportCmd)
+
 	harnessHookCmd := newHarnessHookCmd()
 	harnessHookCmd.GroupID = "admin"
 	root.AddCommand(harnessHookCmd)
