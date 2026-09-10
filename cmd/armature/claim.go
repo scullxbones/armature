@@ -694,6 +694,10 @@ func rollbackClaimWithExclusionLock(
 // predicate — so this contract is exactly "is the issue, right now, in
 // StatusClaimed with this exact workerID/claimToken pair", never a looser
 // or differently-scoped check assembled ad hoc at this call site.
+func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, sourceArgs ...string) error {
+	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", sourceArgs...)
+}
+
 func createWorktreeAndBranchWithExclusion(
 	repoPath, worktreePath, issueID string,
 	issue materialize.Issue,
@@ -1254,7 +1258,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 
 			// allOps is PriorOps for PlanClaim (dismissal dedup). The store Load below
 			// independently materializes state; this read is not redundant.
-			allOps, err := readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
+			allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
 			}

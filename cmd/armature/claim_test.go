@@ -3385,7 +3385,7 @@ func plantForeignClaim(t *testing.T, repo, issueID, workerID string) {
 
 func claimOpsFor(t *testing.T, repo, issueID string) []ops.Op {
 	t.Helper()
-	allOps, err := readAllOpsFromDir(filepath.Join(repo, ".armature", "ops"))
+	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(repo, ".armature", "ops"))
 	require.NoError(t, err)
 	var found []ops.Op
 	for _, op := range allOps {
@@ -3534,7 +3534,7 @@ func TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2(t *testing.T) {
 	assert.NotContains(t, stderr, "Warning:")
 	assert.NotContains(t, stderr, "Error:")
 
-	allOps, readErr := readAllOpsFromDir(filepath.Join(repo, ".armature", "ops"))
+	allOps, _, readErr := readAllOpsFromDirWithOffsets(filepath.Join(repo, ".armature", "ops"))
 	require.NoError(t, readErr)
 	var dismissals, forceNotes int
 	for _, op := range allOps {
