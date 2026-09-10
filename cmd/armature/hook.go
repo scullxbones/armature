@@ -211,15 +211,18 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 // runPreCommitHook implements the pre-commit hook logic natively.
 // Unconditionally blocks additions/modifications to .armature/ops/ on non-_armature branches.
 func runPreCommitHook(cmd *cobra.Command) error {
-	appCtx := currentCtx(cmd)
-	// Allow all commits on _armature branch
-	branch := hookCurrentBranch(appCtx.RepoPath)
+	// Use the invoking worktree. ResolveContext walks a linked worktree up to
+	// the parent, so appCtx.RepoPath is the code checkout even when git invoked
+	// this hook from .worktrees/<id>; a staged .armature/ops/ path in the
+	// claiming worktree would otherwise be checked against the parent index.
+	checkout := invocationRepoPath(cmd)
+	branch := hookCurrentBranch(checkout)
 	if branch == "_armature" {
 		return nil
 	}
 
 	// Check for staged .armature/ops/ additions/modifications
-	gitCmd := adapters.NonInteractiveGitCommand(appCtx.RepoPath, "diff", "--cached", "--name-only", "--diff-filter=AM")
+	gitCmd := adapters.NonInteractiveGitCommand(checkout, "diff", "--cached", "--name-only", "--diff-filter=AM")
 	out, err := gitCmd.Output()
 	if err != nil {
 		// If git fails (e.g., no commits yet), allow the commit
