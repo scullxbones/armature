@@ -804,12 +804,61 @@ arm scope-rename cmd/trellis cmd/armature
 
 ---
 
+## stats
+
+Derived metrics from the ops log.
+
+**Synopsis:**
+`arm stats [flags]`
+
+**Description:**
+The `--cost` view sums recorded token counts into per-story and per-wave
+dollar estimates. Counts come from optional `input_tokens` / `output_tokens`
+on transition outcome payloads and assessment attestations (G1.1). Zero or
+omitted means unset.
+
+Dollars are USD per million tokens. Built-in rates (not a billing guarantee):
+
+- `default` / `claude-sonnet-4-5`: $3.00 input / $15.00 output
+- `claude-haiku-4-5`: $1.00 input / $5.00 output
+- `claude-opus-4-5`: $15.00 input / $75.00 output
+- `gpt-4.1`: $2.00 input / $8.00 output
+- `gpt-4.1-mini`: $0.40 input / $1.60 out
+
+Override with `--rates` (JSON `{"models":{"name":{"input_usd_per_mtok":3,"output_usd_per_mtok":15}}}`)
+or `.armature/cost-rates.json`. Unlisted models keep built-in rates. Missing
+model identity uses `default`.
+
+Waves are greedy first-fit groups of issues that recorded usage and do not share
+overlapping scope. Stories roll up descendant usage.
+
+Without `--cost`, the command prints a hint. Latency and rework analytics are
+not implemented yet.
+
+**Flags:**
+- `--cost`: Aggregate recorded token counts into dollar estimates.
+- `--rates string`: JSON rate table path.
+
+**Example:**
+```bash
+arm stats --cost
+arm stats --cost --format json
+arm stats --cost --rates .armature/cost-rates.json
+```
+
+---
+
 ## show
 
 Show a human-readable summary of one or more issues.
 
 **Synopsis:**
 `arm show [issue-id ...] [flags]`
+
+**Description:**
+Human output includes a `Spend-to-date` line: dollars plus input/output token
+totals for the issue and its descendants. JSON/`--field` output is unchanged
+so later envelope work is not blocked.
 
 **Flags:**
 - `--field string`: Extract a single field value (e.g. `status`, `title`).

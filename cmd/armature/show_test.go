@@ -191,3 +191,25 @@ func TestShow_JSON_IncludesPriorityField(t *testing.T) {
 	require.True(t, ok, "JSON output from arm show must include the priority field")
 	assert.Equal(t, "high", priority, "priority field must reflect the value set at create time")
 }
+
+func TestShowDisplaysRunningSpend_REQ_TOPTIER_S11_T2(t *testing.T) {
+	repo := initCostFixture(t)
+
+	out, err := runTrls(t, repo, "show", "--format", "human", "STORY-COST")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Spend-to-date:")
+	assert.Contains(t, out, "$")
+	assert.Regexp(t, `Spend-to-date: \$[0-9]+\.[0-9]+ \([0-9]+ in / [0-9]+ out\)`, out)
+	// Story rollup includes descendant TASK-COST-A (1M in @ $3) and TASK-COST-B (haiku).
+	assert.NotContains(t, out, "$0.000000", "story spend-to-date must include recorded descendant tokens")
+
+	fieldOut, err := runTrls(t, repo, "show", "--field", "status", "STORY-COST")
+	require.NoError(t, err)
+	assert.NotContains(t, fieldOut, "Spend-to-date:", "--field must stay a scalar extractor")
+
+	jsonOut, err := runTrls(t, repo, "show", "--format", "json", "STORY-COST")
+	require.NoError(t, err)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(jsonOut)), &result),
+		"JSON show must remain a single IssueJSON object without a second writer")
+}

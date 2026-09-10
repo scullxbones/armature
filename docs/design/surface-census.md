@@ -163,6 +163,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `validate doc-examples` | validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Subcommand of `validate`. Used by `make check`. |
 | `render-context` | main.go, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
 | `log` | main.go, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
+| `stats` | main.go, stats.go | Derived ops-log metrics | **kept-evidence** | G1.2 cost view. `--cost` aggregates recorded token counts into per-story and per-wave dollar estimates. |
 | `workers` | main.go, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
 | `sources` | main.go, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. Subcommands: accept-citation, add, link, stale-review, sync, verify. |
 | `sources add` | sources.go | Add a source entry to the manifest | **kept-evidence** | Subcommand of `sources`. |
@@ -293,6 +294,8 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--json` | workers, log | bool | Output as JSONL | **kept-evidence** |
 | `--worker` | log | string | Filter ops by worker ID | **kept-evidence** |
 | `--since` | log | string | Filter ops since RFC3339 or YYYY-MM-DD | **kept-evidence** |
+| `--cost` | stats | bool | Aggregate recorded token counts into per-story and per-wave dollar estimates | **kept-evidence** |
+| `--rates` | stats | string | JSON per-model USD-per-MTok table (default: `.armature/cost-rates.json` or built-in rates) | **kept-evidence** |
 
 ### Diagnostic/Admin Flags
 

@@ -184,6 +184,7 @@ func checkStructuredOutputFormat(root *cobra.Command) []string {
 	structuredOutputCommands := [][]string{
 		{"list"},
 		{"log"},
+		{"stats"},
 		{"show"},
 		{"ready"},
 		{"validate"},
@@ -423,7 +424,7 @@ func TestCommandTreeStructure_REQ_NXTTN_S5_T4(t *testing.T) {
 		"link", "unlink",
 		"sync", "push-ops", "merged", "materialize", "import",
 		"version", "worker-init", "bootstrap",
-		"create", "reparent", "validate", "render-context", "log",
+		"create", "reparent", "validate", "render-context", "log", "stats",
 		"workers", "sources", "show", "list", "scope-rename", "scope-delete",
 		"doctor", "completion", "hook", "tui", "context-history", "harness-hook",
 		"review",
