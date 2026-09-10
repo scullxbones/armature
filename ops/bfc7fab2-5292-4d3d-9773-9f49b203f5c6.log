@@ -58,3 +58,4 @@
 ["transition","ARCHIMP-S20-T5",1789012599,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PlanProvision + 10 REQ tests; make check-fast green; PR 148 merged into feat/ARCHIMP-S20.","branch":"task/ARCHIMP-S20-T5","pr":"148"}]
 ["transition","ARCHIMP-S20-T1",1789012648,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PlanClaim + 13 REQ tests; CONTEXT glossary x3; Split table synced; PR 149 merged into feat/ARCHIMP-S20.","branch":"task/ARCHIMP-S20-T1","pr":"149"}]
 ["transition","ARCHIMP-S20-T1",1789012663,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"149"}]
+["transition","ARCHIMP-S20-T3",1789012665,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"147"}]
