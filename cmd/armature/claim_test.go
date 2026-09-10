@@ -933,6 +933,28 @@ func TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned(t *tes
 	assert.NoDirExists(t, canonicalPath, "an owned claim's partial worktree must still be force-removed on failure")
 }
 
+// TestCreateWorktreeAndBranchLeavesAlreadyAtDestOnMetadataFailure pins
+// cleanupPartialWorktree skipping force-remove when PlanProvision is
+// already_at_dest: a later metadata write must not delete the pre-existing
+// checkout.
+func TestCreateWorktreeAndBranchLeavesAlreadyAtDestOnMetadataFailure(t *testing.T) {
+	repo := setupRepoWithParentAndTask(t)
+	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", canonicalPath)
+	require.NoError(t, updateIssueIDFile(canonicalPath, "task-01"))
+	require.NoError(t, writeClaimExclusionMarker(canonicalPath, "/original/"))
+	keep := filepath.Join(canonicalPath, "keep-me.go")
+	require.NoError(t, os.WriteFile(keep, []byte("package keep\n"), 0o644))
+
+	err := createWorktreeAndBranchWithExclusion(
+		repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns, "/other/",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already records a different pattern")
+	assert.DirExists(t, canonicalPath, "AlreadyAtDest cleanup must not force-remove a pre-existing worktree")
+	assert.FileExists(t, keep)
+}
+
 // TestCreateWorktreeAndBranchLeavesFreshPartialWorktreeWhenSuperseded is the
 // same failure as TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned
 // but with stillOwns reporting the claim has been superseded: the force-remove
@@ -3532,6 +3554,38 @@ func TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repo, ".worktrees", "task-02"))
 }
 
+// TestClaimRefusesAmbiguousBindingWhenDestExists_REQ_ARCHIMP_S20 pins the
+// dest-present re-claim hole: two bindings for the issue plus an existing
+// canonical dest used to skip PlanProvision (checkExistingWorktreeBinding →
+// Claim Op → updateIssueIDFile). Dest missing already refuses via
+// createWorktreeAndBranch; dest present must refuse the same way.
+func TestClaimRefusesAmbiguousBindingWhenDestExists_REQ_ARCHIMP_S20(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	canonical := filepath.Join(repo, ".worktrees", "task-01")
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", canonical)
+	require.NoError(t, updateIssueIDFile(canonical, "task-01"))
+
+	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
+	head := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	run(t, repo, "git", "worktree", "add", "--detach", legacyPath, head)
+	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
+
+	_, stderr, err := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.Error(t, err, "dest-present re-claim must refuse Ambiguous Binding. stderr: %s", stderr)
+	combined := err.Error() + stderr
+	assert.Contains(t, combined, "bound to 2 worktrees")
+	assert.Contains(t, combined, canonical)
+	assert.Contains(t, combined, legacyPath)
+
+	status, statusErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, statusErr)
+	assert.Equal(t, ops.StatusOpen+"\n", status, "Ambiguous Binding must precede the Claim Op")
+	assert.DirExists(t, canonical)
+	assert.DirExists(t, legacyPath)
+	assert.Empty(t, claimOpsFor(t, repo, "task-01"))
+}
+
 // TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6 is the T6 command adapter
 // proof: dest/binding decisions go through PlanProvision, then existing git.
 // Refuse, adopt, and fresh keep the same user-visible errors. T5 tables live
@@ -3572,11 +3626,23 @@ func TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6(t *testing.T) {
 
 	t.Run("fresh", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
+		claim := newRootCmd()
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+		require.NoError(t, claim.Execute())
+
+		canonical := filepath.Join(repo, ".worktrees", "task-01")
+		assert.DirExists(t, canonical)
+		assert.Equal(t, "task/task-01", strings.TrimSpace(runOutput(t, canonical, "branch", "--show-current")))
+	})
+
+	t.Run("unbound branch checkout is cmd I/O", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
 		held := filepath.Join(t.TempDir(), "unbound-holder")
 		run(t, repo, "git", "worktree", "add", "-b", "task/task-01", held)
 
 		_, stderr, err := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
-		require.Error(t, err, "fresh provision must fail closed when the issue branch is already checked out. stderr: %s", stderr)
+		require.Error(t, err, "unbound holder of the issue branch must fail closed before PlanProvision fresh. stderr: %s", stderr)
 		assert.Contains(t, err.Error()+stderr, "already checked out")
 		assert.Contains(t, err.Error()+stderr, held)
 		status, statusErr := runTrls(t, repo, "show", "task-01", "--field", "status")
