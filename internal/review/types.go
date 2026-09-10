@@ -445,6 +445,11 @@ type AssessmentAttestation struct {
 	SkillVersion string `json:"skill_version,omitempty"`
 	// ModelIdentity identifies the model/provider when exposed by the harness.
 	ModelIdentity string `json:"model_identity,omitempty"`
+	// InputTokens and OutputTokens record reviewer LLM usage on the same
+	// assessment-attested op (G1.1). They are optional: omitempty keeps every
+	// legacy attestation valid. Absent fields decode as 0. No new op type.
+	InputTokens  int `json:"input_tokens,omitempty"`
+	OutputTokens int `json:"output_tokens,omitempty"`
 	// Rating is the derived conformance rating.
 	Rating Rating `json:"rating"`
 	// ResultFingerprint is the SHA-256 of the detailed result for idempotence detection.
