@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	readyShowHelp    = "arm show <id> for outcome, scope, and acceptance"
-	readyClaimHelp   = "arm claim --issue <id> --worktree"
-	readyEmptyHelp   = "no issues are ready to claim; blockers are unmerged or claims are active"
-	readyWavesHelp   = "dispatch one wave at a time"
-	readyExpiredHelp = "expired_claims lists TTL-lapsed claims; they are not in the ready queue"
+	readyShowHelp         = "arm show <id> for outcome, scope, and acceptance"
+	readyClaimHelp        = "arm claim --issue <id> --worktree"
+	readyEmptyHelp        = "no issues are ready to claim; blockers are unmerged or claims are active"
+	readyEmptyExpiredHelp = "no issues are ready to claim; expired_claims lists TTL-lapsed claims that are not in the queue"
+	readyWavesHelp        = "dispatch one wave at a time"
+	readyExpiredHelp      = "expired_claims lists TTL-lapsed claims; they are not in the ready queue"
 )
 
 // readyIssueRow is the structured ready-queue row: N4 keys plus ready-specific fields.
@@ -99,11 +100,26 @@ func expiredClaimRows(claims []ready.ExpiredClaimEntry) []expiredClaimRow {
 	return rows
 }
 
-func readyHelp(n int, waves bool, expiredN int) []string {
+func readyEmptyReason(parent, assignedTo string, expiredN int) string {
+	switch {
+	case parent != "" && assignedTo != "":
+		return fmt.Sprintf("no issues match --parent %s and --assigned-to %s", parent, assignedTo)
+	case parent != "":
+		return fmt.Sprintf("no issues match --parent %s", parent)
+	case assignedTo != "":
+		return fmt.Sprintf("no issues match --assigned-to %s", assignedTo)
+	case expiredN > 0:
+		return readyEmptyExpiredHelp
+	default:
+		return readyEmptyHelp
+	}
+}
+
+func readyHelp(n int, waves bool, expiredN int, parent, assignedTo string) []string {
 	help := make([]string, 0, 4)
 	switch {
 	case n == 0:
-		help = append(help, readyEmptyHelp)
+		help = append(help, readyEmptyReason(parent, assignedTo, expiredN))
 	case waves:
 		help = append(help, readyWavesHelp)
 	default:
@@ -116,9 +132,16 @@ func readyHelp(n int, waves bool, expiredN int) []string {
 	return help
 }
 
-func writeReadyEnvelope(w io.Writer, entries []ready.ReadyEntry, waves [][]ready.ReadyEntry, includeWaves bool, expired []ready.ExpiredClaimEntry) error {
+func writeReadyEnvelope(
+	w io.Writer,
+	entries []ready.ReadyEntry,
+	waves [][]ready.ReadyEntry,
+	includeWaves bool,
+	expired []ready.ExpiredClaimEntry,
+	parent, assignedTo string,
+) error {
 	rows := readyIssueRows(entries)
-	env, err := output.NewEnvelope("issues", rows, readyHelp(len(rows), includeWaves, len(expired)))
+	env, err := output.NewEnvelope("issues", rows, readyHelp(len(rows), includeWaves, len(expired), parent, assignedTo))
 	if err != nil {
 		return err
 	}
@@ -233,7 +256,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				if waves {
 					wavesData = ready.PartitionWaves(entries, index)
 				}
-				if err := writeReadyEnvelope(cmd.OutOrStdout(), entries, wavesData, waves, expiredClaims); err != nil {
+				if err := writeReadyEnvelope(cmd.OutOrStdout(), entries, wavesData, waves, expiredClaims, filterParent, assignedTo); err != nil {
 					return err
 				}
 			case tui.IsInteractive():
