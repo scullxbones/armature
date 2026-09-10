@@ -2,10 +2,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
@@ -272,6 +275,7 @@ func newRootCmd() *cobra.Command {
 	worktreeCmd.GroupID = "admin"
 	root.AddCommand(worktreeCmd)
 
+	applyPavedRoadMetadata(root)
 	return root
 }
 
@@ -313,4 +317,369 @@ func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) i
 
 func main() {
 	os.Exit(executeRoot(newRootCmd(), os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// Paved-road classification (NXTTN-S4-T1). Every cobra command is paved or
+// escape-hatch. Metadata on the tree is the source of truth for --help
+// markers and docs/paved-road.md.
+
+const (
+	pavedRoadAnnotationKey = "armature.paved-road"
+	pavedRoadKindPaved     = "paved"
+	pavedRoadKindEscape    = "escape-hatch"
+	escapeHatchHelpMarker  = "[escape hatch]"
+)
+
+type pavedRoadClass struct {
+	Kind string
+	Note string
+}
+
+type pavedRoadStep struct {
+	ID          string
+	Title       string
+	Description string
+	Commands    []string
+}
+
+type pavedRoadDefault struct {
+	Flag     string
+	Commands []string
+	Reason   string
+}
+
+// pavedRoadCommands classifies every registered command path (space-separated
+// names, no "arm" prefix). Root is "". Cobra's generated help command is marked
+// paved in applyPavedRoadMetadata and is not listed here.
+var pavedRoadCommands = map[string]pavedRoadClass{
+	"": {Kind: pavedRoadKindPaved},
+
+	"version":     {Kind: pavedRoadKindPaved},
+	"worker-init": {Kind: pavedRoadKindPaved},
+	"bootstrap":   {Kind: pavedRoadKindPaved},
+
+	"ready":      {Kind: pavedRoadKindPaved},
+	"claim":      {Kind: pavedRoadKindPaved},
+	"transition": {Kind: pavedRoadKindPaved},
+	"note":       {Kind: pavedRoadKindPaved},
+	"decision":   {Kind: pavedRoadKindPaved},
+	"unassign":   {Kind: pavedRoadKindEscape, Note: "Claim is the dispatch reservation. Unassign is recovery."},
+	"reopen":     {Kind: pavedRoadKindEscape, Note: "Rework after done. The road completes once, then syncs."},
+	"heartbeat":  {Kind: pavedRoadKindEscape, Note: "The harness hook heartbeats on tool use. Manual heartbeat is for long stretches with no tools."},
+	"amend":      {Kind: pavedRoadKindEscape, Note: "Correct fields after create or apply. Prefer getting the plan right."},
+	"confirm":    {Kind: pavedRoadKindEscape, Note: "Interactive promotion. The road uses dag transition after validate."},
+	"assign":     {Kind: pavedRoadKindEscape, Note: "Soft assignment without a claim. Dispatch uses claim --worktree."},
+
+	"dag":                  {Kind: pavedRoadKindPaved},
+	"dag apply":            {Kind: pavedRoadKindPaved},
+	"dag context":          {Kind: pavedRoadKindPaved},
+	"dag transition":       {Kind: pavedRoadKindPaved},
+	"dag revert":           {Kind: pavedRoadKindEscape, Note: "Undo a plan apply. Not part of the forward pipeline."},
+	"dag summary":          {Kind: pavedRoadKindEscape, Note: "Interactive draft survey. Prefer list and dag transition."},
+	"dag override-release": {Kind: pavedRoadKindEscape, Note: "Human Plan Release that skipped validate. Never a green release."},
+	"link":                 {Kind: pavedRoadKindPaved},
+	"unlink":               {Kind: pavedRoadKindEscape, Note: "Remove a dependency. The road adds blocked_by edges; it does not routinely delete them."},
+
+	"sync":        {Kind: pavedRoadKindPaved},
+	"push-ops":    {Kind: pavedRoadKindPaved},
+	"merged":      {Kind: pavedRoadKindEscape, Note: "Manual merged promotion. Prefer sync after the PR lands."},
+	"materialize": {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
+	"import":      {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},
+
+	"create":                  {Kind: pavedRoadKindEscape, Note: "Mint one issue by flags. Prefer dag apply."},
+	"reparent":                {Kind: pavedRoadKindEscape, Note: "Move an issue in the hierarchy after the fact."},
+	"validate":                {Kind: pavedRoadKindPaved},
+	"validate doc-examples":   {Kind: pavedRoadKindEscape, Note: "Hidden make-check helper. Not an agent verb."},
+	"render-context":          {Kind: pavedRoadKindPaved},
+	"log":                     {Kind: pavedRoadKindEscape, Note: "Ops audit log. Use when diagnosing, not when dispatching."},
+	"workers":                 {Kind: pavedRoadKindEscape, Note: "Worker activity dump. Ready and list cover the dispatch loop."},
+	"sources":                 {Kind: pavedRoadKindPaved},
+	"sources add":             {Kind: pavedRoadKindPaved},
+	"sources sync":            {Kind: pavedRoadKindPaved},
+	"sources verify":          {Kind: pavedRoadKindEscape, Note: "Re-check cached sources. Add and sync are the road."},
+	"sources link":            {Kind: pavedRoadKindEscape, Note: "Attach a source after the fact. Prefer --source at create/apply."},
+	"sources accept-citation": {Kind: pavedRoadKindEscape, Note: "Record citation acceptance. Grounding at plan time is the road."},
+	"sources stale-review":    {Kind: pavedRoadKindEscape, Note: "Review sources whose cache drifted. Not the daily loop."},
+	"show":                    {Kind: pavedRoadKindPaved},
+	"list":                    {Kind: pavedRoadKindPaved},
+	"scope-rename":            {Kind: pavedRoadKindEscape, Note: "Rewrite a scope glob across issues. Planning should not need this."},
+	"scope-delete":            {Kind: pavedRoadKindEscape, Note: "Drop a scope glob. Prefer amending the plan."},
+	"doctor":                  {Kind: pavedRoadKindPaved},
+	"completion":              {Kind: pavedRoadKindEscape, Note: "Shell completion script. Not an orchestration verb."},
+	"hook":                    {Kind: pavedRoadKindEscape, Note: "Git hook management. Bootstrap --with-hooks installs them."},
+	"hook run":                {Kind: pavedRoadKindEscape, Note: "Invoke a named git hook. Git and the harness call this, not agents."},
+	"gate":                    {Kind: pavedRoadKindPaved},
+	"gate run":                {Kind: pavedRoadKindPaved},
+	"tui":                     {Kind: pavedRoadKindEscape, Note: "Interactive kanban. Agents use list, ready, and show."},
+	"context-history":         {Kind: pavedRoadKindEscape, Note: "Scan git history for context changes. Diagnostic only."},
+	"harness-hook":            {Kind: pavedRoadKindEscape, Note: "Internal harness entrypoint. Hidden from --help groups."},
+	"review":                  {Kind: pavedRoadKindPaved},
+	"review prepare":          {Kind: pavedRoadKindPaved},
+	"review record":           {Kind: pavedRoadKindPaved},
+	"review commits":          {Kind: pavedRoadKindPaved},
+	"review validate":         {Kind: pavedRoadKindEscape, Note: "Advisory assessment check. Record remains the enforcement gate."},
+	"worktree":                {Kind: pavedRoadKindPaved},
+	"worktree list":           {Kind: pavedRoadKindPaved},
+	"worktree gc":             {Kind: pavedRoadKindEscape, Note: "Remove worktrees after merged/cancelled. Sync/merged teardown is the road."},
+}
+
+// pavedRoadPipeline maps Next-Ten pipeline steps onto concrete commands.
+var pavedRoadPipeline = []pavedRoadStep{
+	{
+		ID:          "bootstrap",
+		Title:       "Bootstrap",
+		Description: "Initialize the repo, register this clone as a worker, and confirm the binary.",
+		Commands:    []string{"bootstrap", "worker-init", "version"},
+	},
+	{
+		ID:          "plan",
+		Title:       "Plan / decompose",
+		Description: "Register sources, render plan context, apply the plan, promote drafts, and add dependency edges.",
+		Commands:    []string{"sources add", "sources sync", "dag context", "dag apply", "dag transition", "link"},
+	},
+	{
+		ID:          "dispatch",
+		Title:       "Wave dispatch",
+		Description: "Survey the graph, take the ready queue, claim with a worktree, and render the worker spec.",
+		Commands:    []string{"list", "doctor", "ready", "claim", "render-context", "worktree list", "show"},
+	},
+	{
+		ID:          "work",
+		Title:       "Work",
+		Description: "Record progress, keep the graph green, run the configured gate, and mark the issue done.",
+		Commands:    []string{"note", "decision", "validate", "gate run", "transition"},
+	},
+	{
+		ID:          "review",
+		Title:       "Review",
+		Description: "Prepare the bundle, record the assessment, and list delivery commits.",
+		Commands:    []string{"review prepare", "review record", "review commits"},
+	},
+	{
+		ID:          "sync",
+		Title:       "Sync",
+		Description: "Publish ops, then let merged PRs promote issues.",
+		Commands:    []string{"push-ops", "sync"},
+	},
+}
+
+// pavedRoadDefaultsAudit lists flags that exist to leave the paved road.
+// Skip and force flags stay labeled here until they are removed.
+var pavedRoadDefaultsAudit = []pavedRoadDefault{
+	{
+		Flag:     "--skip-delivery-gate",
+		Commands: []string{"transition"},
+		Reason:   "Bypasses the delivery gate on --to done. The paved road runs the gate.",
+	},
+	{
+		Flag:     "--force",
+		Commands: []string{"transition"},
+		Reason:   "Bypasses branch and PR discipline on --to done.",
+	},
+	{
+		Flag:     "--force",
+		Commands: []string{"claim"},
+		Reason:   "Bypasses claim overlap planning.",
+	},
+	{
+		Flag:     "--force",
+		Commands: []string{"merged"},
+		Reason:   "Bypasses hook-violation refusal at merge.",
+	},
+	{
+		Flag:     "--strict=false",
+		Commands: []string{"validate"},
+		Reason:   "Keeps warnings as warnings. The paved road is fail-closed (strict by default).",
+	},
+	{
+		Flag:     "--global",
+		Commands: []string{"bootstrap"},
+		Reason:   "Deploys skills outside the repo. The paved road deploys locally.",
+	},
+	{
+		Flag:     "--raw",
+		Commands: []string{"render-context"},
+		Reason:   "Skips the token budget. The paved road truncates to budget.",
+	},
+	{
+		Flag:     "--approve-all",
+		Commands: []string{"dag summary"},
+		Reason:   "Bulk-approves drafts. Plan release is dag transition after validate.",
+	},
+}
+
+func applyPavedRoadMetadata(root *cobra.Command) {
+	if root == nil {
+		return
+	}
+	walkPavedRoadCommands(root, func(cmd *cobra.Command) {
+		path := pavedRoadPath(cmd)
+		class, ok := pavedRoadCommands[path]
+		if !ok && cmd.Name() == "help" {
+			class = pavedRoadClass{Kind: pavedRoadKindPaved}
+			ok = true
+		}
+		if !ok {
+			return
+		}
+		if cmd.Annotations == nil {
+			cmd.Annotations = map[string]string{}
+		}
+		cmd.Annotations[pavedRoadAnnotationKey] = class.Kind
+		if class.Kind != pavedRoadKindEscape {
+			return
+		}
+		if strings.Contains(cmd.Short, escapeHatchHelpMarker) {
+			return
+		}
+		if strings.TrimSpace(cmd.Short) == "" {
+			cmd.Short = escapeHatchHelpMarker
+			return
+		}
+		cmd.Short = cmd.Short + " " + escapeHatchHelpMarker
+	})
+}
+
+func pavedRoadPath(cmd *cobra.Command) string {
+	if cmd == nil || cmd.Parent() == nil {
+		return ""
+	}
+	var parts []string
+	for c := cmd; c.Parent() != nil; c = c.Parent() {
+		parts = append([]string{c.Name()}, parts...)
+	}
+	return strings.Join(parts, " ")
+}
+
+func walkPavedRoadCommands(root *cobra.Command, visit func(*cobra.Command)) {
+	var walk func(*cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		visit(cmd)
+		for _, sub := range cmd.Commands() {
+			walk(sub)
+		}
+	}
+	walk(root)
+}
+
+func isPavedRoadLeaf(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	for _, sub := range cmd.Commands() {
+		if sub.IsAvailableCommand() {
+			return false
+		}
+	}
+	return cmd.Parent() != nil || cmd.Name() == "arm"
+}
+
+func pavedRoadKindOf(cmd *cobra.Command) string {
+	if cmd == nil || cmd.Annotations == nil {
+		return ""
+	}
+	return cmd.Annotations[pavedRoadAnnotationKey]
+}
+
+func generatePavedRoadDoc(root *cobra.Command) string {
+	var b bytes.Buffer
+	b.WriteString("# The Paved Road\n\n")
+	b.WriteString("Generated from cobra command metadata in `cmd/armature/main.go`. Do not edit by hand.\n")
+	b.WriteString("Regenerate: `UPDATE_PAVED_ROAD=1 go test ./cmd/armature -run TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1`.\n\n")
+	b.WriteString("## What this is\n\n")
+	b.WriteString("The paved road is the one blessed end-to-end pipeline: bootstrap, plan/decompose, wave dispatch, work, review, sync.\n")
+	b.WriteString("Agents should follow that pipeline. Everything else is an escape hatch.\n")
+	b.WriteString("Escape-hatch commands stay in their existing `--help` groups. They are marked `[escape hatch]` inline.\n")
+	b.WriteString("There is no separate escape-hatch group.\n\n")
+
+	b.WriteString("## Pipeline\n\n")
+	for i, step := range pavedRoadPipeline {
+		fmt.Fprintf(&b, "### %d. %s\n\n%s\n\n", i+1, step.Title, step.Description)
+		for _, path := range step.Commands {
+			fmt.Fprintf(&b, "- `arm %s`\n", path)
+		}
+		b.WriteString("\n")
+	}
+
+	var paved []string
+	var escape []string
+	var unclassified []string
+	walkPavedRoadCommands(root, func(cmd *cobra.Command) {
+		path := pavedRoadPath(cmd)
+		if path == "" {
+			return
+		}
+		if cmd.Name() == "help" {
+			return
+		}
+		kind := pavedRoadKindOf(cmd)
+		switch kind {
+		case pavedRoadKindPaved:
+			paved = append(paved, path)
+		case pavedRoadKindEscape:
+			escape = append(escape, path)
+		default:
+			unclassified = append(unclassified, path)
+		}
+	})
+	sort.Strings(paved)
+	sort.Strings(escape)
+	sort.Strings(unclassified)
+
+	b.WriteString("## Command classification\n\n")
+	b.WriteString("Every cobra command, including leaf subcommands, is paved or escape-hatch.\n")
+	b.WriteString("Zero unclassified leaf commands is a gate.\n\n")
+	b.WriteString("### Paved\n\n")
+	for _, path := range paved {
+		step := pavedRoadStepFor(path)
+		if step == "" {
+			fmt.Fprintf(&b, "- `arm %s`\n", path)
+			continue
+		}
+		fmt.Fprintf(&b, "- `arm %s` — %s\n", path, step)
+	}
+	b.WriteString("\n### Escape hatch\n\n")
+	for _, path := range escape {
+		note := pavedRoadCommands[path].Note
+		if note == "" {
+			fmt.Fprintf(&b, "- `arm %s`\n", path)
+			continue
+		}
+		fmt.Fprintf(&b, "- `arm %s` — %s\n", path, note)
+	}
+	b.WriteString("\n### Unclassified\n\n")
+	if len(unclassified) == 0 {
+		b.WriteString("None. Every registered command is classified.\n\n")
+	} else {
+		for _, path := range unclassified {
+			fmt.Fprintf(&b, "- `arm %s`\n", path)
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("## Defaults audit\n\n")
+	b.WriteString("These flags exist because the road was not always the default.\n")
+	b.WriteString("Skip and force flags stay listed here. They are not the paved-road invocation.\n\n")
+	b.WriteString("| Flag | Command | Why it exists |\n")
+	b.WriteString("| --- | --- | --- |\n")
+	for _, d := range pavedRoadDefaultsAudit {
+		cmds := make([]string, 0, len(d.Commands))
+		for _, c := range d.Commands {
+			cmds = append(cmds, "`arm "+c+"`")
+		}
+		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Flag, strings.Join(cmds, ", "), d.Reason)
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func pavedRoadStepFor(path string) string {
+	for _, step := range pavedRoadPipeline {
+		for _, c := range step.Commands {
+			if c == path {
+				return step.Title
+			}
+		}
+	}
+	return ""
 }
