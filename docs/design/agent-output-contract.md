@@ -155,6 +155,7 @@ slices, not horizontal layers" — and E13 is right: the doc belongs with the co
 changes it. But only one task may own a file at a time, so co-locating forces
 `AOC-S2-T2 → T1 → T3 → T4 → T5` into a sequence. The parallelism was never real; it
 was purchased by deferring documentation, which is the trade E13 exists to refuse.
+S1 including `AOC-S1-T3` is merged (PR #136); the live chain head is `AOC-S2-T2`.
 
 **The error-channel move folded into `LNGHZN-S6-T1`.** It was drafted as its own task
 (`AOC-S2-T6`, now cancelled) on the reasoning that chaining to `LNGHZN-S6` would stall
@@ -412,8 +413,8 @@ Non-conforming shapes (lint MUST reject for agent-facing commands):
 
 - **AOC-S1-T2** adds envelope constructors and classification beside existing
   writers. No command migrates there.
-- **AOC-S1-T3** adds the cited, mode-sensitive Artifact Output classification
-  omitted from T2. Existing output remains byte-identical.
+- **AOC-S1-T3** (merged, PR #136) added the cited, mode-sensitive Artifact Output
+  classification omitted from T2. Existing output remained byte-identical.
 - **AOC-S2** migrates agent-facing commands onto this envelope.
   `AOC-S2-T3` keeps `--field` as a scalar extractor. `AOC-S2-T4` migrates
   the remaining result modes of `review` and `dag apply` that T3 classified
