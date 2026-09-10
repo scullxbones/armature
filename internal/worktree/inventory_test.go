@@ -148,6 +148,7 @@ func TestCanonicalPath_MissingThroughSymlinkAgreesWithRoot_REQ_ARCHIMP_S20(t *te
 	path := CanonicalPath(link, issueID)
 	rel, err := filepath.Rel(root, path)
 	require.NoError(t, err)
+	t.Logf("symlink repo=%s real=%s CanonicalRoot=%s CanonicalPath=%s Rel=%s", link, realRepo, root, path, rel)
 	assert.Equal(t, issueID, rel)
 	assert.Equal(t, CanonicalPath(realRepo, issueID), path)
 }

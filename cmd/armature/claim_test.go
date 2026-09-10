@@ -664,8 +664,10 @@ func TestCanonicalWorktreePath_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.
 
 	path, err := canonicalWorktreePath(link, "ISSUE-01")
 	require.NoError(t, err)
-	rel, err := filepath.Rel(worktree.CanonicalRoot(link), path)
+	root := worktree.CanonicalRoot(link)
+	rel, err := filepath.Rel(root, path)
 	require.NoError(t, err)
+	t.Logf("canonicalWorktreePath Rel(%q, %q) = %q", root, path, rel)
 	assert.Equal(t, "ISSUE-01", rel)
 }
 
