@@ -27,6 +27,9 @@ const (
 	fixtureOpsName      = "testdata/graph/ops.jsonl"
 	fixtureDiffName     = "testdata/graph/delivery.diff"
 	fixtureWorkspaceDir = "testdata/graph/workspace"
+	// fixtureReadyNow is after every fixture claim TTL (claimed_at 1700000004, ttl 60)
+	// so expired_claims matches live arm ready against this graph.
+	fixtureReadyNow = int64(1_800_000_000)
 )
 
 type fixtureGit struct {
@@ -77,7 +80,7 @@ func Collect() (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	readyPayload, err := measureReady(index, state, time.Now())
+	readyPayload, err := measureReady(index, state, time.Unix(fixtureReadyNow, 0))
 	if err != nil {
 		return Report{}, err
 	}
