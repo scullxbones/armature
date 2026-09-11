@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/stats"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -212,4 +215,22 @@ func TestShowDisplaysRunningSpend_REQ_TOPTIER_S11_T2(t *testing.T) {
 	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(jsonOut)), &result),
 		"JSON show must remain a single IssueJSON object without a second writer")
+}
+
+func TestShowSkipsSpendLoadForJSONAndField(t *testing.T) {
+	repo := initCostFixture(t)
+	ctx := getTestContext(t, repo)
+	require.NoError(t, os.WriteFile(filepath.Join(ctx.IssuesDir, stats.DefaultRatesFile), []byte("{"), 0o600))
+
+	_, stderr, err := runTrlsWithStderr(t, repo, "show", "--format", "json", "STORY-COST")
+	require.NoError(t, err)
+	assert.NotContains(t, stderr, "spend-to-date unavailable", "JSON show must not parse ops for spend")
+
+	_, stderr, err = runTrlsWithStderr(t, repo, "show", "--field", "status", "STORY-COST")
+	require.NoError(t, err)
+	assert.NotContains(t, stderr, "spend-to-date unavailable", "--field must not parse ops for spend")
+
+	_, stderr, err = runTrlsWithStderr(t, repo, "show", "--format", "human", "STORY-COST")
+	require.NoError(t, err)
+	assert.Contains(t, stderr, "spend-to-date unavailable", "human show still loads spend and surfaces rate-table errors")
 }

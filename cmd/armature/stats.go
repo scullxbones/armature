@@ -36,7 +36,10 @@ Dollars use USD per million tokens. Built-in rates (override with --rates or
   gpt-4.1-mini                  $0.40 in / $1.60 out
 
 A --rates file is JSON: {"models":{"name":{"input_usd_per_mtok":3,"output_usd_per_mtok":15}}}.
-Unlisted models keep the built-in table. Missing model identity uses "default".
+Unlisted models keep the built-in table. Outcome records resolve model as
+payload preferred_model, then the issue preferred_model, then default.
+Assessment records use model_identity or default; they do not inherit the
+issue preferred_model.
 
 Waves are greedy first-fit groups of issues that recorded usage and do not
 share overlapping scope (same idea as arm ready --waves). Stories roll up
