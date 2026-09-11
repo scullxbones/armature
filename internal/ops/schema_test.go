@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -34,6 +35,35 @@ func TestGenerateOpsGitignoreCarriesScaffoldingVersion(t *testing.T) {
 	got, ok := ParseScaffoldingVersion(gitignore)
 	require.True(t, ok, "the generated ops gitignore must be parseable by the version reader")
 	assert.Equal(t, ScaffoldingVersion, got)
+}
+
+// TestGenerateSchema_DocumentsTransitionTokenFields_REQ_TOPTIER_S11_T1
+// verifies that ops/SCHEMA lists optional input_tokens and output_tokens on
+// transition, and that ScaffoldingVersion is new enough for bootstrap to
+// republish that SCHEMA into existing repos.
+func TestGenerateSchema_DocumentsTransitionTokenFields_REQ_TOPTIER_S11_T1(t *testing.T) {
+	t.Parallel()
+	schema := GenerateSchema()
+
+	transitionHeaderPrefix := "#   " + OpTransition + ":"
+	inTransitionBlock := false
+	var block strings.Builder
+	for _, line := range strings.Split(schema, "\n") {
+		switch {
+		case strings.HasPrefix(line, transitionHeaderPrefix):
+			inTransitionBlock = true
+		case strings.HasPrefix(line, "#   ") && strings.Contains(line, ":"):
+			inTransitionBlock = false
+		}
+		if inTransitionBlock {
+			block.WriteString(line)
+			block.WriteByte('\n')
+		}
+	}
+	documented := block.String()
+	assert.Contains(t, documented, "input_tokens (optional)", "transition payload must document optional input_tokens")
+	assert.Contains(t, documented, "output_tokens (optional)", "transition payload must document optional output_tokens")
+	assert.Greater(t, ScaffoldingVersion, 2, "bump ScaffoldingVersion so bootstrap republishes ops/SCHEMA")
 }
 
 // TestParseScaffoldingVersion covers the readings bootstrap depends on: a

@@ -20,6 +20,7 @@ var schemaOpDocs = []schemaOpDoc{
 	{OpType: OpClaim, PayloadField: "ttl, worktree_path (optional), claim_token"},
 	{OpType: OpHeartbeat, PayloadField: "(empty object)"},
 	{OpType: OpTransition, PayloadField: "to, outcome, branch (optional), pr (optional),"},
+	{OpType: OpTransition, PayloadField: "                       input_tokens (optional), output_tokens (optional),"},
 	{OpType: OpTransition, PayloadField: "                       skipped_delivery_gate (optional)"},
 	{OpType: OpTransition, PayloadField: "                       restore_claim snapshot fields (rollback only)"},
 	{OpType: OpTransition, PayloadField: "                       if_claim_token (conditional compensating rollback only)"},
@@ -63,7 +64,7 @@ func SchemaDocumentedOpTypes() []string {
 // strictly newer, so an older clone run after an upgrade cannot commit a
 // downgrade and set two clones fighting over the shared _armature branch
 // (AGENTS.md I3).
-const ScaffoldingVersion = 2
+const ScaffoldingVersion = 3
 
 // scaffoldingVersionPrefix marks the SCHEMA line carrying ScaffoldingVersion.
 const scaffoldingVersionPrefix = "# scaffolding-version: "
