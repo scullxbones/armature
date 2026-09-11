@@ -130,7 +130,30 @@ func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Res
 	opts.ManifestData = manifestData
 	opts.Coverage = cov
 	opts.PreExpandedScopes = adapters.ExpandGlobs(scopeGlobs)
-	return validate.Validate(state, materialize.GraphFromState(state), opts), nil
+	result := validate.Validate(state, materialize.GraphFromState(state), opts)
+	return attachSnapshotWarnings(result, snap.Warnings, opts.Strict), nil
+}
+
+const snapshotFindingRule = "snapshot"
+
+func attachSnapshotWarnings(result validate.Result, warnings []string, strict bool) validate.Result {
+	if len(warnings) == 0 {
+		return result
+	}
+	for _, w := range warnings {
+		result.Warnings = append(result.Warnings, w)
+		result.Findings = append(result.Findings, validate.Finding{
+			Severity: "warning",
+			Rule:     snapshotFindingRule,
+			Message:  w,
+		})
+	}
+	ok := len(result.Errors) == 0
+	if strict {
+		ok = ok && len(result.Warnings) == 0
+	}
+	result.OK = ok
+	return result
 }
 
 func validationSummary(result validate.Result) string {
@@ -149,7 +172,11 @@ type validateFindingRow struct {
 
 func writeValidateEnvelope(w io.Writer, result validate.Result) error {
 	rows := make([]validateFindingRow, 0, len(result.Findings))
+	hasSnapshot := false
 	for _, f := range result.Findings {
+		if f.Rule == snapshotFindingRule {
+			hasSnapshot = true
+		}
 		rows = append(rows, validateFindingRow{
 			Severity: f.Severity,
 			Rule:     f.Rule,
@@ -158,7 +185,9 @@ func writeValidateEnvelope(w io.Writer, result validate.Result) error {
 		})
 	}
 	help := []string{"see docs/validation-codes.md for Graph Finding codes"}
-	if len(rows) == 0 {
+	if hasSnapshot {
+		help = []string{"materialization excluded ops; findings include snapshot warnings", help[0]}
+	} else if len(rows) == 0 {
 		help = []string{"no graph findings", help[0]}
 	}
 	env, err := output.NewEnvelope("findings", rows, help)

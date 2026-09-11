@@ -107,7 +107,8 @@ func newContextHistoryCmd() *cobra.Command {
 
 			if structuredFormat(cmd) {
 				help := []string{"arm render-context --issue " + chIssue + " --at <sha> reconstructs context at a commit"}
-				if cmd.Flags().Changed("limit") {
+				bounded := chLimit > 0
+				if bounded {
 					help = []string{
 						fmt.Sprintf("result is bounded by --limit %d; omit --limit to scan complete history", chLimit),
 						help[0],
@@ -117,7 +118,7 @@ func newContextHistoryCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if cmd.Flags().Changed("limit") {
+				if bounded {
 					if err := env.AddAdjunct("limit", chLimit); err != nil {
 						return err
 					}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -114,6 +115,51 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.Contains(t, out, "scope overlap")
 	assert.NotContains(t, out, `"errors": [
     "scope overlap`)
+}
+
+// TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4: rejected ops must
+// appear in the structured envelope so agents cannot treat count:0 as clean.
+func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	logPath := filepath.Join(ctx.IssuesDir, "ops", "alice.log")
+	opLine := `["create","excluded-1",1000,"bob",{"title":"Excluded","type":"task","scope":[],"context_files":[]}]` + "\n"
+	require.NoError(t, os.WriteFile(logPath, []byte(opLine), 0644))
+
+	out, err := runTrls(t, repo, "validate", "--format", "json", "--strict=false")
+	require.NoError(t, err, "--strict=false keeps snapshot warnings as warnings")
+	decoded := decodeContractEnvelope(t, out, "findings")
+	var count int
+	require.NoError(t, json.Unmarshal(decoded["count"], &count))
+	assert.Greater(t, count, 0, "excluded ops must not produce a falsely clean count:0")
+
+	var findings []validateFindingRow
+	require.NoError(t, json.Unmarshal(decoded["findings"], &findings))
+	found := false
+	for _, f := range findings {
+		if strings.Contains(strings.ToLower(f.Message), "mismatch") {
+			found = true
+			assert.Equal(t, "warning", f.Severity)
+			assert.Equal(t, snapshotFindingRule, f.Rule)
+		}
+	}
+	assert.True(t, found, "envelope findings must include the snapshot warning, got %#v", findings)
+
+	var warnings []string
+	require.NoError(t, json.Unmarshal(decoded["warnings"], &warnings))
+	assert.NotEmpty(t, warnings)
+
+	out, err = runTrls(t, repo, "validate", "--format", "json")
+	require.Error(t, err, "default-strict validate must fail when materialization excluded ops")
+	decoded = decodeContractEnvelope(t, out, "findings")
+	require.NoError(t, json.Unmarshal(decoded["count"], &count))
+	assert.Greater(t, count, 0)
 }
 
 // TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4: silent green is

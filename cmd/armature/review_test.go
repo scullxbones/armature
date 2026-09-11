@@ -949,7 +949,7 @@ func TestReviewCommitsCommand_Success(t *testing.T) {
 	assert.Contains(t, out, "feat(task-01): add feature")
 }
 
-func TestReviewCommitsCommand_JSONFormat(t *testing.T) {
+func TestReviewCommitsCommand_JSONFormat_REQ_AOC_S2_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
