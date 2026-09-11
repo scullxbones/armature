@@ -73,7 +73,7 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 
 	out, err = h.RunArm("dag", "apply", "--repo", h.WorkDir, "--plan", planFile)
 	require.NoError(t, err, "dag apply failed: %s", out)
-	assert.Contains(t, out, "Applied", "dag apply should report applied issues")
+	assert.Contains(t, out, `"action":"created"`, "dag apply should report created issues in the envelope")
 
 	// Step 3b: Promote applied draft subtree to verified via dag transition
 	t.Logf("Step 3b: Promote to verified via dag transition")
