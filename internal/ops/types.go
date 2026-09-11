@@ -267,3 +267,13 @@ func RecordedTransitionPayload(status, outcome, branch, pr string, last Payload,
 	}
 	return Payload{To: status, Outcome: outcome, Branch: branch, PR: pr}
 }
+
+// IdenticalTransition reports whether proposed is a no-op against issueID's
+// current status and recorded transition payload.
+func IdenticalTransition(all []Op, issueID, status, outcome, branch, pr string, proposed Payload) bool {
+	if status != proposed.To {
+		return false
+	}
+	last, hasLast := LastTransitionPayload(all, issueID)
+	return PayloadsEqual(proposed, RecordedTransitionPayload(status, outcome, branch, pr, last, hasLast))
+}

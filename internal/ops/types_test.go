@@ -173,3 +173,20 @@ func TestRecordedTransitionPayload_UsesLastOpWhenStatusMatches_REQ_AOC_S4_T1(t *
 		t.Fatalf("expected synthesized payload without invented tokens, got %#v", synthesized)
 	}
 }
+
+func TestIdenticalTransition_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
+	proposed := Payload{To: StatusDone, Outcome: "Waiting on the upstream review to finish"}
+	all := []Op{{Type: OpTransition, TargetID: "T1", Payload: proposed}}
+	if !IdenticalTransition(all, "T1", StatusDone, proposed.Outcome, "", "", proposed) {
+		t.Fatal("identical done payload must be a no-op")
+	}
+	if IdenticalTransition(all, "T1", StatusInProgress, "", "", "", proposed) {
+		t.Fatal("status mismatch must not be a no-op")
+	}
+	richer := proposed
+	richer.Outcome = "Waiting on the upstream review, now with more detail"
+	if IdenticalTransition(all, "T1", StatusDone, proposed.Outcome, "", "", richer) {
+		t.Fatal("changed outcome must not be a no-op")
+	}
+}

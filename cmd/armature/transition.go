@@ -75,32 +75,6 @@ outcome) appends as an amendment at exit 0.`,
 			state := mustState(cmd)
 			appCtx := state.ctx
 
-			// Check branch discipline when transitioning to done (unless --force)
-			if to == "done" && !force {
-				repoPath := appCtx.RepoPath
-				gc := adapters.New(repoPath)
-				currentBranch, err := gc.CurrentBranch()
-				if err == nil {
-					// Only reject if we successfully detected we're on main/master
-					if currentBranch == "main" || currentBranch == "master" {
-						return fmt.Errorf("cannot transition to done while on %s branch: create a feature branch and open a PR\nUse --force to override", currentBranch)
-					}
-				}
-				// If we can't determine the branch, allow the transition (graceful degradation)
-			}
-
-			// Warn if transitioning to done and issue has no source-link or accept-citation (unless --force)
-			if to == "done" && !force {
-				if uncited := isIssueUncited(issueID, appCtx); uncited {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-						"WARNING: issue %s has no source citation.\n"+
-							"Run 'arm sources link --issue %s --source-id <UUID>' to link to a source document,\n"+
-							"or 'arm sources accept-citation --issue %s --rationale \"...\"' to accept a citation.\n"+
-							"Use --force to suppress this warning.\n",
-						issueID, issueID, issueID)
-				}
-			}
-
 			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
 				return err
@@ -134,22 +108,39 @@ outcome) appends as an amendment at exit 0.`,
 			sameStatusAmendment := false
 			if replayErr == nil && liveIssue != nil {
 				currentStatus = liveIssue.Status
-				last, hasLast := ops.LastTransitionPayload(allOps, issueID)
-				recorded := ops.RecordedTransitionPayload(liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, last, hasLast)
-				if liveIssue.Status == to && ops.PayloadsEqual(payload, recorded) {
-					if fieldFlag != "" {
-						transitionResult := &materialize.Issue{ID: issueID, Status: to}
-						fields := extractFieldsFromIssue(transitionResult, fieldFlag)
-						for _, field := range fields {
-							_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
-						}
-						return nil
-					}
-					writeCommandResult(cmd, map[string]any{"issue": issueID, "status": to, "noop": true},
-						"no-op: identical payload, nothing appended\n")
+				if ops.IdenticalTransition(allOps, issueID, liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, payload) {
+					writeTransitionNoOp(cmd, issueID, to, fieldFlag)
 					return nil
 				}
 				sameStatusAmendment = liveIssue.Status == to
+			}
+
+			// Check branch discipline when transitioning to done (unless --force).
+			// Identical-payload retries already returned above so a same-status
+			// done retry still exits 0 after the caller has switched to main.
+			if to == "done" && !force {
+				repoPath := appCtx.RepoPath
+				gc := adapters.New(repoPath)
+				currentBranch, err := gc.CurrentBranch()
+				if err == nil {
+					// Only reject if we successfully detected we're on main/master
+					if currentBranch == "main" || currentBranch == "master" {
+						return fmt.Errorf("cannot transition to done while on %s branch: create a feature branch and open a PR\nUse --force to override", currentBranch)
+					}
+				}
+				// If we can't determine the branch, allow the transition (graceful degradation)
+			}
+
+			// Warn if transitioning to done and issue has no source-link or accept-citation (unless --force)
+			if to == "done" && !force {
+				if uncited := isIssueUncited(issueID, appCtx); uncited {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+						"WARNING: issue %s has no source citation.\n"+
+							"Run 'arm sources link --issue %s --source-id <UUID>' to link to a source document,\n"+
+							"or 'arm sources accept-citation --issue %s --rationale \"...\"' to accept a citation.\n"+
+							"Use --force to suppress this warning.\n",
+						issueID, issueID, issueID)
+				}
 			}
 
 			hookInput := adapters.HookInput{
@@ -233,13 +224,31 @@ outcome) appends as an amendment at exit 0.`,
 				}
 			}
 
+			if testBarrierAfterIdempotencyCheck != nil {
+				testBarrierAfterIdempotencyCheck()
+			}
+
 			op := ops.Op{
 				Type: ops.OpTransition, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID,
 				Payload:  payload,
 			}
-			if err := appendHighStakesOp(state, logPath, op); err != nil {
+			wrote, err := appendHighStakesOpIf(state, logPath, op, func() (bool, error) {
+				live, all, replayErr := replayIssueOps(appCtx.IssuesDir, issueID)
+				if replayErr != nil || live == nil {
+					return true, nil
+				}
+				if ops.IdenticalTransition(all, issueID, live.Status, live.Outcome, live.Branch, live.PR, payload) {
+					return false, nil
+				}
+				return true, nil
+			})
+			if err != nil {
 				return err
+			}
+			if !wrote {
+				writeTransitionNoOp(cmd, issueID, to, fieldFlag)
+				return nil
 			}
 
 			// After successful transition, check if we should warn about parent story
@@ -285,6 +294,24 @@ outcome) appends as an amendment at exit 0.`,
 	cmd.Flags().BoolVar(&force, "force", false, "skip branch check when transitioning to done")
 	cmd.Flags().BoolVar(&skipDeliveryGate, "skip-delivery-gate", false, "skip delivery gate check when transitioning to done")
 	return cmd
+}
+
+// testBarrierAfterIdempotencyCheck, when set, runs after the unlocked
+// identical-payload check (and delivery-gate work) and before the locked
+// append. Tests use it to overlap in-flight retries.
+var testBarrierAfterIdempotencyCheck func()
+
+func writeTransitionNoOp(cmd *cobra.Command, issueID, to, fieldFlag string) {
+	if fieldFlag != "" {
+		transitionResult := &materialize.Issue{ID: issueID, Status: to}
+		fields := extractFieldsFromIssue(transitionResult, fieldFlag)
+		for _, field := range fields {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
+		}
+		return
+	}
+	writeCommandResult(cmd, map[string]any{"issue": issueID, "status": to, "noop": true},
+		"no-op: identical payload, nothing appended\n")
 }
 
 // replayIssueOps reads the append-only source of truth without updating
