@@ -1517,13 +1517,19 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					ctx.RepoPath, worktreePath, issueID, *issue,
 					stillOwnsClaim, "", sourceArgs...,
 				); err != nil {
-					return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimToken, true, claimExclusions)
+					return rollbackClaimWithExclusionLock(
+						cmd, store, logPath, issueID, workerID, "create worktree",
+						err, prior, claimToken, true, claimExclusions,
+					)
 				}
 			} else {
 				// Worktree exists and binding was already validated above; update the
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
-					return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, "update task ID file", err, prior, claimToken, true, claimExclusions)
+					return rollbackClaimWithExclusionLock(
+						cmd, store, logPath, issueID, workerID, "update task ID file",
+						err, prior, claimToken, true, claimExclusions,
+					)
 				}
 
 				// A pre-existing canonical worktree may already carry trusted
@@ -1536,7 +1542,10 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				worktreeGitClient := adapters.New(worktreePath)
 				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
 					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
-						return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, "persist claimed branch metadata", err, prior, claimToken, true, claimExclusions)
+						return rollbackClaimWithExclusionLock(
+							cmd, store, logPath, issueID, workerID, "persist claimed branch metadata",
+							err, prior, claimToken, true, claimExclusions,
+						)
 					}
 				}
 			}
