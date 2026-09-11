@@ -55,12 +55,28 @@ func newRootCmd() *cobra.Command {
 			tui.SetFormat(format)
 			tui.SetNonInteractive(nonInteractive)
 
+			if versionRequested(cmd) {
+				return nil
+			}
+
+			if cmd.Parent() == nil && tui.IsTerminal() && !nonInteractive {
+				return nil
+			}
+
 			repoPath, _ := cmd.Flags().GetString("repo")
 			if repoPath == "" {
 				repoPath = "."
 			}
 			ctx, err := config.ResolveContext(repoPath)
 			if err != nil {
+				if cmd.Parent() == nil {
+					baseCtx := cmd.Context()
+					if baseCtx == nil {
+						baseCtx = context.Background()
+					}
+					cmd.SetContext(context.WithValue(baseCtx, homeEmptyReasonKey{}, err.Error()))
+					return nil
+				}
 				return platformProtocolError(cmd, err)
 			}
 
@@ -88,12 +104,24 @@ func newRootCmd() *cobra.Command {
 			cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
 			return nil
 		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if versionRequested(cmd) {
+				return writeVersionOutput(cmd)
+			}
+			if tui.IsTerminal() && !tui.IsNonInteractive() {
+				return cmd.Help()
+			}
+			return writeReadyHome(cmd, homeEmptyReason(cmd))
+		},
 	}
 
 	root.PersistentFlags().Bool("debug", false, "dump debug diagnostics on error")
 	root.PersistentFlags().String("format", "human", "output format: human, json, agent")
 	root.PersistentFlags().String("repo", "", "repository path (default: current directory)")
 	root.PersistentFlags().Bool("non-interactive", false, "skip TUI and emit structured output (auto-set when --format=agent or non-TTY)")
+	root.Flags().BoolP("version", "v", false, "print version and exit")
+	root.Flags().BoolP("Version", "V", false, "print version and exit")
+	root.SetFlagErrorFunc(failLoudFlagError)
 
 	// Add command groups
 	root.AddGroup(&cobra.Group{ID: "workflow", Title: "Workflow Commands:"})

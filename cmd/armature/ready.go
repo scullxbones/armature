@@ -94,6 +94,34 @@ func writeReadyEnvelope(
 	return output.WriteReadyEnvelope(w, entries, waves, includeWaves, expired, parent, assignedTo)
 }
 
+func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
+	if emptyReason != "" {
+		help := []string{
+			"not an Armature repository: " + emptyReason,
+			"run arm bootstrap in a git repository",
+		}
+		return writeNamedEnvelope(cmd.OutOrStdout(), "issues", []readyIssueRow{}, help)
+	}
+	ctx := currentCtx(cmd)
+	store := newSnapshotStore(ctx)
+	snap, err := store.Load(cmd.Context())
+	if err != nil {
+		return mapReadyError(fmt.Errorf("load snapshot: %w", err))
+	}
+	entries := ready.ComputeReady(snap.Index, snap.Issues, "", nowEpoch())
+	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	if format == "json" || format == "agent" || tui.IsNonInteractive() {
+		return writeReadyEnvelope(cmd.OutOrStdout(), entries, nil, false, expiredClaims, "", "")
+	}
+	if len(entries) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
+	} else if err := output.RenderReady(cmd.OutOrStdout(), entries, false); err != nil {
+		return err
+	}
+	return output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims, false)
+}
+
 func newReadyCmd() *cobra.Command {
 	var workerID string
 	var filterParent string

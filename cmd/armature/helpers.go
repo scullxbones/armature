@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // adapterExitError represents a hook exit code from the platform adapter.
@@ -125,6 +127,16 @@ type executionState struct {
 }
 
 type executionStateKey struct{}
+
+type homeEmptyReasonKey struct{}
+
+func homeEmptyReason(cmd *cobra.Command) string {
+	if cmd == nil || cmd.Context() == nil {
+		return ""
+	}
+	reason, _ := cmd.Context().Value(homeEmptyReasonKey{}).(string)
+	return reason
+}
 
 func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
 	if cmd == nil {
@@ -295,6 +307,65 @@ func writeNamedEnvelope(w io.Writer, key string, items any, help []string) error
 		return err
 	}
 	return output.WriteEnvelope(w, env)
+}
+
+var unknownFlagNamePattern = regexp.MustCompile(`unknown (?:shorthand )?flag: ('[^']+'|--\S+|-\S+)`)
+
+func failLoudFlagError(cmd *cobra.Command, err error) error {
+	if err == nil {
+		return nil
+	}
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
+		return err
+	}
+	cause := err.Error()
+	if name := flagNameFromParseError(err); name != "" && !strings.Contains(cause, name) {
+		cause = "unknown flag: " + name
+	}
+	valid := validFlagNames(cmd)
+	if len(valid) > 0 {
+		cause = cause + "; valid flags: " + strings.Join(valid, ", ")
+	}
+	return armerrors.Wrap(armerrors.CodeUSAGE, cause, []string{"arm --help"}, exitcodes.ExitUsageError.Int(), err)
+}
+
+func flagNameFromParseError(err error) string {
+	if err == nil {
+		return ""
+	}
+	m := unknownFlagNamePattern.FindStringSubmatch(err.Error())
+	if len(m) < 2 {
+		return ""
+	}
+	return strings.Trim(m[1], "'")
+}
+
+func validFlagNames(cmd *cobra.Command) []string {
+	if cmd == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var names []string
+	add := func(name string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	visit := func(f *pflag.Flag) {
+		if f == nil || f.Hidden {
+			return
+		}
+		add("--" + f.Name)
+		if f.Shorthand != "" {
+			add("-" + f.Shorthand)
+		}
+	}
+	cmd.Flags().VisitAll(visit)
+	sort.Strings(names)
+	return names
 }
 
 // short truncates a fingerprint string to 8 characters for display, returning
