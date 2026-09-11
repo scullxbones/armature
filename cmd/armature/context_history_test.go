@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -87,7 +88,7 @@ func plantContextHistoryBeyondSilentCap(t *testing.T) (repo, createSHA, noteSHA 
 	createSHA = gitHeadSHA(t, ctx.WorktreePath)
 
 	for i := 0; i < 120; i++ {
-		cmd := exec.Command("git", "-C", ctx.WorktreePath, "commit", "--allow-empty", "-m", fmt.Sprintf("padding %d", i))
+		cmd := exec.CommandContext(context.Background(), "git", "-C", ctx.WorktreePath, "commit", "--allow-empty", "-m", fmt.Sprintf("padding %d", i))
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "padding commit %d: %s", i, out)
 	}
@@ -100,7 +101,7 @@ func plantContextHistoryBeyondSilentCap(t *testing.T) (repo, createSHA, noteSHA 
 
 func gitHeadSHA(t *testing.T, worktree string) string {
 	t.Helper()
-	out, err := exec.Command("git", "-C", worktree, "rev-parse", "HEAD").Output()
+	out, err := exec.CommandContext(context.Background(), "git", "-C", worktree, "rev-parse", "HEAD").Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(out))
 }
