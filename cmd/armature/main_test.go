@@ -719,7 +719,7 @@ func TestDecomposeApplyCommand(t *testing.T) {
 
 	err := cmd3.Execute()
 	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), "Applied")
+	decodeContractEnvelope(t, buf.String(), "issues")
 }
 
 func TestInitCommand_DualBranch(t *testing.T) {
@@ -2757,13 +2757,12 @@ func TestWorkersCommand_FormatJSON(t *testing.T) {
 
 	out, err := runTrls(t, repo, "workers", "--format", "json")
 	require.NoError(t, err)
-	// output is JSONL — parse first line
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	require.NotEmpty(t, lines)
-	var result map[string]any
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &result))
-	assert.NotNil(t, result["worker_id"])
-	assert.NotNil(t, result["status"])
+	decoded := decodeContractEnvelope(t, out, "workers")
+	var workers []WorkerStatus
+	require.NoError(t, json.Unmarshal(decoded["workers"], &workers))
+	require.NotEmpty(t, workers)
+	assert.NotEmpty(t, workers[0].WorkerID)
+	assert.NotEmpty(t, workers[0].Status)
 }
 
 // workers: --json flag still works for backward compatibility
@@ -2776,11 +2775,11 @@ func TestWorkersCommand_LegacyJSONFlag(t *testing.T) {
 
 	out, err := runTrls(t, repo, "workers", "--json")
 	require.NoError(t, err)
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	require.NotEmpty(t, lines)
-	var result map[string]any
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &result))
-	assert.NotNil(t, result["worker_id"])
+	decoded := decodeContractEnvelope(t, out, "workers")
+	var workers []WorkerStatus
+	require.NoError(t, json.Unmarshal(decoded["workers"], &workers))
+	require.NotEmpty(t, workers)
+	assert.NotEmpty(t, workers[0].WorkerID)
 }
 
 // TestWorkersCommand_SlottedLogs verifies that ops from slotted log files are

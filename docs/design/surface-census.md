@@ -293,7 +293,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--waves` | ready | bool | Partition ready queue into scope-disjoint dispatch waves (JSON/agent output only) | **kept-evidence** |
 | `--field` | show, transition | string | Extract specific fields | **kept-evidence** |
 | `--full` | show | bool | Return complete large text fields in structured show output; default truncates with total size stated | **kept-evidence** |
-| `--json` | workers, log | bool | Output as JSONL | **kept-evidence** |
+| `--json` | workers, log | bool | Output as JSON (workers: envelope; log: JSONL) | **kept-evidence** |
 | `--worker` | log | string | Filter ops by worker ID | **kept-evidence** |
 | `--since` | log | string | Filter ops since RFC3339 or YYYY-MM-DD | **kept-evidence** |
 | `--cost` | stats | bool | Aggregate recorded token counts into per-story and per-wave dollar estimates | **kept-evidence** |
@@ -315,7 +315,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--budget` | render-context | int | Token budget for truncation (default 4000) | **kept-evidence** |
 | `--raw` | render-context | bool | Skip truncation | **kept-evidence** |
 | `--at` | render-context | string | Replay context at git commit SHA | **kept-evidence** |
-| `--limit` | context-history | int | Max commits to scan (default 100) | **kept-evidence** |
+| `--limit` | context-history | int | Max commits to scan (default 0, complete history) | **kept-evidence** |
 | `--source` | import | string | Source ID to link imported items to | **kept-evidence** |
 | `--assessment` | review record, review validate | string | Assessment file or '-' for stdin | **kept-evidence** |
 | `--bundle` | review record, review validate | string | Review bundle file path (required for review validate; optional for review record) | **kept-evidence** |

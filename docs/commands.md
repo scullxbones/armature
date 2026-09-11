@@ -163,7 +163,9 @@ Show commits where an issue's context changed.
 
 **Flags:**
 - `--issue string`: Issue ID (required).
-- `--limit int`: Maximum number of commits to scan (default 100).
+- `--limit int`: Maximum number of commits to scan. Default is complete history (`0`). An explicit `--limit` is a disclosed query boundary.
+
+Structured output (`--format json`, `--format agent`) is one Agent Output Contract envelope: `{count, commits, help}`. Without `--limit` the command scans complete history. `--limit N` bounds the scan; `count` equals the matching commits inside that window, and the envelope discloses `limit` plus a help line that the result is bounded.
 
 **Example:**
 ```bash
@@ -237,6 +239,11 @@ Every issue in the plan must include a `source` (source entry ID). Apply is
 source-atomic: each create is emitted with its source-link in the same batch.
 Writes that would introduce a Graph Finding on a targeted issue are refused.
 `--dry-run` is how a planner iterates.
+
+`--schema` and `--example` remain Artifact Output (the plan schema and a sample
+plan, written verbatim). Ordinary apply and `--dry-run` are agent-facing:
+structured output is `{count, issues, help}` with each row's `action` set to
+`created` or `would_create`. Human output is unchanged.
 
 **Synopsis:**
 `arm dag apply [flags]`
@@ -726,6 +733,8 @@ List delivery commits for an issue across all conventional-commit types.
 - `--branch string`: Branch to scan for commits (default `HEAD`).
 - `--format string`: Output format.
 
+Structured output (`--format json`, `--format agent`) is `{count, commits, help}`.
+
 **Example:**
 ```bash
 arm review commits TASK-001
@@ -746,10 +755,16 @@ Create a semantic review bundle for an issue from its issue contract and deliver
 - `--base string`: Base git SHA (required).
 - `--head string`: Head git SHA (required).
 - `--format string`: Output format: `json`, `agent` (default "json").
+- `--output string`: Write the ReviewBundle artifact to a file.
+
+Stdout without `--output` is Artifact Output (the ReviewBundle schema, verbatim).
+`--output <file>` writes that artifact to disk and prints an agent-facing envelope
+`{count, bundles, help}` describing the file.
 
 **Example:**
 ```bash
 arm review prepare --issue TASK-001 --base abc123 --head def456
+arm review prepare --issue TASK-001 --base abc123 --head def456 --output bundle.json
 ```
 
 ---
@@ -764,6 +779,8 @@ Record a semantic conformance assessment for a completed task.
 **Flags:**
 - `--issue string`: Issue ID (required).
 - `--assessment string`: Path to assessment JSON file (required).
+
+Structured output (`--format json`, `--format agent`) is `{count, assessments, help}` with `status` `recorded` or `duplicate`.
 
 **Example:**
 ```bash
@@ -1087,7 +1104,9 @@ Validate the issue graph and documentation.
 Validation is **strict by default**: warnings fail the run, a green run prints a
 single summary line (`OK: no issues found` plus coverage when present), and any
 error or (under `--strict`) warning exits non-zero. Findings stay in their
-native buckets: JSON `warnings` still lists W-codes when strict. `--ci` is the
+native buckets: JSON `warnings` still lists W-codes when strict. Structured
+output is `{count, findings, help}` with `errors`, `warnings`, and `infos` as
+adjuncts. `--ci` is the
 CI alias for the same fail-closed contract (`make validate-graph`); it is not
 part of the per-task `make check` publish gate. `--ci --strict=false` is
 rejected as contradictory. There are no waivers and no scoping flags; the
@@ -1149,8 +1168,34 @@ Show worker activity status.
 **Synopsis:**
 `arm workers [flags]`
 
+Structured output (`--format json`, `--format agent`, or `--json`) is one Agent
+Output Contract envelope `{count, workers, help}`. It is never JSONL.
+
 **Flags:**
-- `--json`: Output as JSONL.
+- `--json`: Output as JSON envelope (legacy alias of `--format json`).
+
+---
+
+## worktree
+
+Manage managed worktrees and reconcile them against claim state.
+
+**Synopsis:**
+`arm worktree [command]`
+
+**Subcommands:**
+
+### worktree list
+
+List managed worktrees classified as bound, orphan, ghost, gc-ready, unrecognized, or ambiguous.
+
+Structured output is `{count, worktrees, help}` with class buckets as adjuncts (`bound`, `orphans`, `ghosts`, `gc_ready`, `unrecognized`, `ambiguous`).
+
+### worktree gc
+
+Remove worktrees for merged or cancelled issues. `--dry-run` previews removals.
+
+Structured output is `{count, worktrees, help}` with each row's `action` set to `removed`, `would_remove`, `skipped`, `failed`, or `ambiguous`.
 
 ---
 

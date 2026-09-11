@@ -17,6 +17,7 @@ import (
 	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/scullxbones/armature/internal/worker"
@@ -281,6 +282,19 @@ func writeCommandResult(cmd *cobra.Command, jsonValue any, humanFormat string, h
 		return
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), humanFormat, humanArgs...)
+}
+
+func structuredFormat(cmd *cobra.Command) bool {
+	format, _ := cmd.Root().PersistentFlags().GetString("format")
+	return format == "json" || format == "agent"
+}
+
+func writeNamedEnvelope(w io.Writer, key string, items any, help []string) error {
+	env, err := output.NewEnvelope(key, items, help)
+	if err != nil {
+		return err
+	}
+	return output.WriteEnvelope(w, env)
 }
 
 // short truncates a fingerprint string to 8 characters for display, returning

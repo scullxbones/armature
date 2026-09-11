@@ -131,6 +131,32 @@ func assertSingleJSONObject(t *testing.T, stdout string) map[string]any {
 	return payload
 }
 
+func decodeContractEnvelope(t *testing.T, stdout, payloadKey string) map[string]json.RawMessage {
+	t.Helper()
+	raw := strings.TrimSpace(stdout)
+	require.True(t, json.Valid([]byte(raw)), "stdout must be one JSON value, got %q", stdout)
+	require.True(t, strings.HasPrefix(raw, "{"), "envelope must be an object, not JSONL or an array")
+	require.Equal(t, 1, len(nonEmptyLines(raw)), "stdout must not be JSONL")
+
+	dec := json.NewDecoder(strings.NewReader(raw))
+	var decoded map[string]json.RawMessage
+	require.NoError(t, dec.Decode(&decoded))
+	require.False(t, dec.More(), "stdout must be exactly one JSON value")
+	require.Contains(t, decoded, "count")
+	require.Contains(t, decoded, payloadKey)
+	require.Contains(t, decoded, "help")
+	require.NotContains(t, decoded, "payload")
+	var count int
+	require.NoError(t, json.Unmarshal(decoded["count"], &count))
+	var items []json.RawMessage
+	require.NoError(t, json.Unmarshal(decoded[payloadKey], &items))
+	require.Equal(t, len(items), count, "count must equal payload length")
+	var help []string
+	require.NoError(t, json.Unmarshal(decoded["help"], &help))
+	require.NotEmpty(t, help)
+	return decoded
+}
+
 func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

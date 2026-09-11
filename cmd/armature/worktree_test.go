@@ -154,9 +154,18 @@ func listJSON(t *testing.T, repo string) map[string][]string {
 	out, err := runTrls(t, repo, "worktree", "list", "--format", "json")
 	require.NoError(t, err)
 
-	var raw map[string][]string
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &raw))
-	return raw
+	decoded := decodeContractEnvelope(t, out, "worktrees")
+	res := map[string][]string{}
+	for _, key := range []string{"bound", "orphans", "ghosts", "gc_ready", "unrecognized", "ambiguous"} {
+		raw, ok := decoded[key]
+		if !ok {
+			continue
+		}
+		var ids []string
+		require.NoError(t, json.Unmarshal(raw, &ids))
+		res[key] = ids
+	}
+	return res
 }
 
 // TestWorktreeListClassifiesEachClass_REQ_LNGHZN_S5_T2 asserts real reconciliation

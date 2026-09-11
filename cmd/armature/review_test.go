@@ -962,8 +962,9 @@ func TestReviewCommitsCommand_JSONFormat(t *testing.T) {
 	cmd.SetArgs([]string{"review", "commits", "task-01", "--repo", repo, "--format", "json"})
 	require.NoError(t, cmd.Execute())
 
+	decoded := decodeContractEnvelope(t, outBuf.String(), "commits")
 	var entries []adapters.LogEntry
-	require.NoError(t, json.Unmarshal(bytes.TrimSpace(outBuf.Bytes()), &entries))
+	require.NoError(t, json.Unmarshal(decoded["commits"], &entries))
 	require.Len(t, entries, 1)
 	assert.Contains(t, entries[0].Subject, "feat(task-01): add feature")
 }
@@ -1375,4 +1376,52 @@ func TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV(t *
 
 	require.NotNil(t, bundle.Activity, "activity section must be attached for an env-bound session whose ARMATURE_ISSUE_ID matches the prepared issue")
 	assert.Equal(t, review.FingerprintActivity(activityContent), bundle.Activity.Digest)
+}
+
+func TestReviewPrepareOutputModeEmitsEnvelope_REQ_AOC_S2_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
+	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	baseOut, err := baseCmd.Output()
+	require.NoError(t, err)
+	base := strings.TrimSpace(string(baseOut))
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
+	run(t, repo, "git", "add", "impl.go")
+	run(t, repo, "git", "commit", "-m", "commit 2")
+	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	headOut, err := headCmd.Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headOut))
+
+	outputFile := filepath.Join(repo, "bundle.json")
+	out, err := runTrls(t, repo, "review", "prepare",
+		"--issue", "task-01", "--base", base, "--head", head,
+		"--output", outputFile, "--format", "json")
+	require.NoError(t, err)
+
+	decoded := decodeContractEnvelope(t, out, "bundles")
+	var bundles []reviewBundleWriteRow
+	require.NoError(t, json.Unmarshal(decoded["bundles"], &bundles))
+	require.Len(t, bundles, 1)
+	assert.Equal(t, outputFile, bundles[0].Path)
+	assert.Equal(t, "task-01", bundles[0].Issue)
+	assert.FileExists(t, outputFile)
+
+	var onDisk review.ReviewBundle
+	data, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &onDisk))
+	assert.Equal(t, "task-01", onDisk.Issue.ID)
+	assert.Equal(t, onDisk.BundleID, bundles[0].BundleID)
+
+	artifactOut, err := runTrls(t, repo, "review", "prepare",
+		"--issue", "task-01", "--base", base, "--head", head)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(artifactOut)), &onDisk))
+	assert.Equal(t, "task-01", onDisk.Issue.ID)
+	assert.NotContains(t, artifactOut, `"help"`)
 }
