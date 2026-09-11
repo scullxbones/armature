@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const reviewerStep5bHeading = "### 5b. Self-Validate with `arm review validate` `[escape hatch]` (Mandatory)"
+
 func readEmbedSkill(t *testing.T, name string) string {
 	t.Helper()
 	path := filepath.Join(projectRootDir(t), "internal", "skillsembed", "skills", name, "SKILL.md")
@@ -33,7 +35,7 @@ func headingSection(t *testing.T, body, heading, nextHeading string) string {
 func TestReviewerSkillTreatsBundleSetupReportsAsOperational_REQ_LNGHZN_S8_T2(t *testing.T) {
 	t.Parallel()
 	reviewer := readEmbedSkill(t, "armature-reviewer")
-	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+	step5b := headingSection(t, reviewer, reviewerStep5bHeading, "### 6. Return the ConformanceAssessment")
 
 	require.Contains(t, step5b, `"fixable": false`,
 		"5b must key setup reports off fixable false, not a prose taxonomy")
@@ -65,7 +67,7 @@ func TestReviewerSkillMapsBundlePreflightToValidationError_REQ_LNGHZN_S8_T2(t *t
 func TestReviewerSkillReadsJSONOperationalFailuresFromStdout_REQ_LNGHZN_S8_T2(t *testing.T) {
 	t.Parallel()
 	reviewer := readEmbedSkill(t, "armature-reviewer")
-	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+	step5b := headingSection(t, reviewer, reviewerStep5bHeading, "### 6. Return the ConformanceAssessment")
 
 	require.Contains(t, step5b, ".error.cause",
 		"--format json operational failures write {error:...} to stdout; extract .error.cause")
@@ -126,7 +128,7 @@ func TestCoordinatorSkillRefreshesActivityIndexAfterBundleRepair_REQ_LNGHZN_S8_T
 func TestReviewerSkillTreatsStaleContractMismatchAsSetup_REQ_LNGHZN_S8_T2(t *testing.T) {
 	t.Parallel()
 	reviewer := readEmbedSkill(t, "armature-reviewer")
-	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+	step5b := headingSection(t, reviewer, reviewerStep5bHeading, "### 6. Return the ConformanceAssessment")
 
 	require.Contains(t, step5b, `"fixable": false`,
 		"stale-contract reports are fixable false; the skill must not retry them")
@@ -137,7 +139,7 @@ func TestReviewerSkillTreatsStaleContractMismatchAsSetup_REQ_LNGHZN_S8_T2(t *tes
 func TestReviewerSkillRoutesNonAssessmentRepairsAsOperational_REQ_LNGHZN_S8_T2(t *testing.T) {
 	t.Parallel()
 	reviewer := readEmbedSkill(t, "armature-reviewer")
-	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+	step5b := headingSection(t, reviewer, reviewerStep5bHeading, "### 6. Return the ConformanceAssessment")
 
 	require.Contains(t, step5b, `"fixable": false`,
 		"compound remedies that first require issue-state or log repair are Validation: error")
@@ -147,7 +149,7 @@ func TestReviewerSkillRoutesNonAssessmentRepairsAsOperational_REQ_LNGHZN_S8_T2(t
 func TestReviewerSkillReevaluatesStatusWhenDroppingCitations_REQ_LNGHZN_S8_T2(t *testing.T) {
 	t.Parallel()
 	reviewer := readEmbedSkill(t, "armature-reviewer")
-	step5b := headingSection(t, reviewer, "### 5b. Self-Validate with `arm review validate`", "### 6. Return the ConformanceAssessment")
+	step5b := headingSection(t, reviewer, reviewerStep5bHeading, "### 6. Return the ConformanceAssessment")
 
 	require.Contains(t, step5b, "supporting citation",
 		"a suggestion that drops citations must re-evaluate the criteria those citations supported")

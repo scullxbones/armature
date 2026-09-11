@@ -44,31 +44,31 @@ Warnings from other stories must be resolved, not ignored. If `arm doctor` repor
 ```dot
 digraph planner_loop {
     "Start: objective/spec" [shape=box];
+    "sources add/sync" [shape=box];
     "Single task?" [shape=diamond];
     "one-issue plan.json" [shape=box];
+    "cite at apply" [shape=box];
     "dag apply --dry-run" [shape=box];
     "OK?" [shape=diamond];
     "dag apply --plan plan.json" [shape=box];
     "dag transition" [shape=box];
-    "sources add/sync" [shape=box];
-    "cite at apply" [shape=box];
     "arm link (deps)" [shape=box];
     "arm validate" [shape=box];
     "arm doctor" [shape=box];
     "Release to Coordinator" [shape=doublecircle];
 
-    "Start: objective/spec" -> "Single task?";
+    "Start: objective/spec" -> "sources add/sync";
+    "sources add/sync" -> "Single task?";
     "Single task?" -> "one-issue plan.json" [label="yes"];
     "Single task?" -> "Write plan.json" [label="no"];
-    "one-issue plan.json" -> "dag apply --dry-run";
-    "Write plan.json" -> "dag apply --dry-run";
+    "one-issue plan.json" -> "cite at apply";
+    "Write plan.json" -> "cite at apply";
+    "cite at apply" -> "dag apply --dry-run";
     "dag apply --dry-run" -> "OK?" ;
     "OK?" -> "Write plan.json" [label="fix errors"];
     "OK?" -> "dag apply --plan plan.json" [label="yes"];
     "dag apply --plan plan.json" -> "dag transition";
-    "dag transition" -> "sources add/sync";
-    "sources add/sync" -> "cite at apply";
-    "cite at apply" -> "arm link (deps)";
+    "dag transition" -> "arm link (deps)";
     "arm link (deps)" -> "arm validate";
     "arm validate" -> "arm doctor";
     "arm doctor" -> "Release to Coordinator";

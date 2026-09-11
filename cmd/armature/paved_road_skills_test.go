@@ -95,6 +95,23 @@ func TestSkillsLeadWithPavedRoad_REQ_NXTTN_S4_T3(t *testing.T) {
 		require.Empty(t, unlabeled, "off-road arm commands must be labeled %s:\n%s",
 			escapeHatchHelpMarker, strings.Join(unlabeled, "\n"))
 	})
+
+	t.Run("plannerLoopRegistersSourcesBeforeApply", func(t *testing.T) {
+		body := readRepoFile(t, filepath.Join(root, "internal", "skillsembed", "skills", "armature-planner", "SKILL.md"))
+		start := strings.Index(body, "```dot")
+		require.GreaterOrEqual(t, start, 0, "planner skill must include a DOT loop diagram")
+		end := strings.Index(body[start:], "```\n")
+		require.GreaterOrEqual(t, end, 0, "planner DOT fence must close")
+		diagram := body[start : start+end]
+
+		require.Contains(t, diagram, `"Start: objective/spec" -> "sources add/sync"`,
+			"source registration must be the first loop step")
+		require.Contains(t, diagram, `"cite at apply" -> "dag apply --dry-run"`,
+			"plan source citation must precede dry-run/apply")
+		require.NotContains(t, diagram, `"dag transition" -> "sources add/sync"`,
+			"sources add/sync must not follow dag apply/transition")
+		require.NotContains(t, diagram, `"dag apply --plan plan.json" -> "sources add/sync"`)
+	})
 }
 
 func escapeHatchCommandPaths() []string {
