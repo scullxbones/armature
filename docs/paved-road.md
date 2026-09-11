@@ -115,6 +115,7 @@ Zero unclassified leaf commands is a gate.
 - `arm completion` — Shell completion script. Not an orchestration verb.
 - `arm confirm` — Interactive promotion. The road uses dag transition after validate.
 - `arm context-history` — Scan git history for context changes. Diagnostic only.
+- `arm context-report` — Price static agent artifacts. Diagnostic metering, not the daily loop.
 - `arm create` — Mint one issue by flags. Prefer dag apply.
 - `arm dag override-release` — Human Plan Release that skipped validate. Never a green release.
 - `arm dag revert` — Undo a plan apply. Not part of the forward pipeline.
