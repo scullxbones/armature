@@ -79,7 +79,7 @@ The domain glossary is loaded as a whole.
 
 Trim: split rarely cited terms into a secondary page that `CONTEXT.md` links but the default ingest does not include. Keep the terms agents actually resolve on the paved road.
 
-### commands: docs/commands.md (29045 bytes, ~7261 tokens)
+### commands: docs/commands.md (33372 bytes, ~8343 tokens)
 
 Full command reference. Agents ingest the whole file today.
 
