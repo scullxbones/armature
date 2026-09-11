@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 // BudgetsRelPath is the repo-relative location of the checked-in per-artifact budgets.
@@ -244,6 +245,52 @@ func ExplicitTargets(report Report, budgets BudgetFile) error {
 	sort.Strings(seeded)
 	return fmt.Errorf("explicit targets: measured-size-only seed (no named promise): %s",
 		strings.Join(seeded, ", "))
+}
+
+// HasDatedTrimPlan reports whether doc contains a markdown heading that names
+// path with an ISO date: "### YYYY-MM-DD <path> ...". Fenced code examples do
+// not count. A table row, the phrase "trim plan", or an unrelated date
+// elsewhere in the file is not a plan for that artifact.
+func HasDatedTrimPlan(doc, path string) bool {
+	if path == "" {
+		return false
+	}
+	inFence := false
+	for _, line := range strings.Split(doc, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		if datedTrimPlanHeading(line, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func datedTrimPlanHeading(line, path string) bool {
+	const prefix = "### "
+	if !strings.HasPrefix(line, prefix) {
+		return false
+	}
+	rest := line[len(prefix):]
+	if len(rest) < 11 {
+		return false
+	}
+	if _, err := time.Parse("2006-01-02", rest[:10]); err != nil {
+		return false
+	}
+	if rest[10] != ' ' {
+		return false
+	}
+	name := rest[11:]
+	return name == path ||
+		strings.HasPrefix(name, path+" ") ||
+		strings.HasPrefix(name, path+"(")
 }
 
 // RaisedBudgets returns paths whose max_bytes grew relative to previous.
