@@ -147,3 +147,4 @@
 ["transition","NXTTN-S3-T3",1789085027,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
 ["transition","NXTTN-S3",1789085048,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Runtime Context Economics delivered in ops: T1 PR166, T2 PR167, T4 PR165, T3 hygiene PR168. GitHub land is PJ. Supersedes static-census intent of PRs 160-163."}]
 ["transition","AOC-S4-T1",1789096332,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Payload-keyed transition idempotency: identical payload same-status is explicit no-op exit 0 (no append); changed payload appends amendment. ADR 0018. PR 172 head d6cc8de4. Named REQ_AOC_S4_T1 tests. --force/--skip-delivery-gate: CA tip synced; PR open.","skipped_delivery_gate":true}]
+["transition","AOC-S4-T1",1789096351,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
