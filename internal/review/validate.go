@@ -317,14 +317,6 @@ func IsDuplicate(a, b *AssessmentAttestation) bool {
 	return a.ResultFingerprint == b.ResultFingerprint
 }
 
-// Applicable returns true if the attestation's BundleID matches the given bundle.
-func Applicable(att *AssessmentAttestation, bundleID string) bool {
-	if att == nil {
-		return false
-	}
-	return att.BundleID == bundleID
-}
-
 // ValidateResultCoverage checks that a ConformanceAssessment covers all expected criterion IDs
 // from the contract and contains no duplicates. Returns a slice of validation error strings (empty = valid).
 func ValidateResultCoverage(assessment *ConformanceAssessment, contract Contract) []string {

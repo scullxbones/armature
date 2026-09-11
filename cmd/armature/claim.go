@@ -581,12 +581,12 @@ func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken stri
 	return issue.ClaimHeldBy(workerID, claimToken), nil
 }
 
-// rollbackClaim releases (or restores) the claim after a post-claim worktree
-// setup step fails, then returns the error to surface. After ownership reload
-// confirms this Claim still holds, PlanCompensation builds the compensating
-// Transition (live same-Worker restore vs stale/foreign release to open).
-// opLabel names the failed step in the returned error. Shared by the
-// create-worktree and update-issue-ID failure paths.
+// rollbackClaimWithExclusionLock releases (or restores) the claim after a
+// post-claim worktree setup step fails, then returns the error to surface.
+// After ownership reload confirms this Claim still holds, PlanCompensation
+// builds the compensating Transition (live same-Worker restore vs stale/foreign
+// release to open). opLabel names the failed step in the returned error.
+// Shared by the create-worktree and update-issue-ID failure paths.
 //
 // It consults claimStillOwnedBy as a fast-path check (using claimToken, the
 // unique nonce of the claim op this process just appended) so a superseded
@@ -601,20 +601,6 @@ func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken stri
 // ownership predicate this function's own check also delegates to) refuses
 // to apply the compensating op once the claim it targets no longer holds.
 // Log ordering no longer matters.
-func rollbackClaim(
-	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
-	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
-) error {
-	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, false, exclusionSets...)
-}
-
-func rollbackClaimLocked(
-	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
-	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
-) error {
-	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, true, exclusionSets...)
-}
-
 func rollbackClaimWithExclusionLock(
 	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
 	cause error, prior priorClaimState, claimToken string, exclusionLockHeld bool, exclusionSets ...[]claimExclusion,
@@ -680,24 +666,21 @@ func rollbackClaimWithExclusionLock(
 	return finish(fmt.Errorf("%s: %w (claim released; retry arm claim)", opLabel, cause))
 }
 
-// createWorktreeAndBranch creates a new worktree and branches for a task/bug.
-// It uses a git client to create a worktree at the given path with a derived branch name.
-// If the branch is already checked out in another worktree or if worktree creation fails,
-// it returns an error (the user should reuse the existing worktree or unassign/reassign the task).
+// createWorktreeAndBranchWithExclusion creates a new worktree and branches
+// for a task/bug. It uses a git client to create a worktree at the given path
+// with a derived branch name. If the branch is already checked out in another
+// worktree or if worktree creation fails, it returns an error (the user should
+// reuse the existing worktree or unassign/reassign the task).
 //
 // stillOwns is consulted by cleanupPartialWorktree before any destructive
 // action on failure (see that closure below for why: the same claim-took-
-// longer-than-TTL race that motivates rollbackClaim's ownership recheck
-// applies here too, and --force discards uncommitted work). Callers build
-// stillOwns from claimStillOwnedBy, which itself delegates to
+// longer-than-TTL race that motivates rollbackClaimWithExclusionLock's
+// ownership recheck applies here too, and --force discards uncommitted work).
+// Callers build stillOwns from claimStillOwnedBy, which itself delegates to
 // materialize.Issue's ClaimHeldBy — the single canonical ownership
 // predicate — so this contract is exactly "is the issue, right now, in
 // StatusClaimed with this exact workerID/claimToken pair", never a looser
 // or differently-scoped check assembled ad hoc at this call site.
-func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, sourceArgs ...string) error {
-	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", sourceArgs...)
-}
-
 func createWorktreeAndBranchWithExclusion(
 	repoPath, worktreePath, issueID string,
 	issue materialize.Issue,
@@ -1534,13 +1517,13 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					ctx.RepoPath, worktreePath, issueID, *issue,
 					stillOwnsClaim, "", sourceArgs...,
 				); err != nil {
-					return rollbackClaimLocked(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimToken, claimExclusions)
+					return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, "create worktree", err, prior, claimToken, true, claimExclusions)
 				}
 			} else {
 				// Worktree exists and binding was already validated above; update the
 				// task ID file to ensure the binding is current (idempotent).
 				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
-					return rollbackClaimLocked(cmd, store, logPath, issueID, workerID, "update task ID file", err, prior, claimToken, claimExclusions)
+					return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, "update task ID file", err, prior, claimToken, true, claimExclusions)
 				}
 
 				// A pre-existing canonical worktree may already carry trusted
@@ -1553,7 +1536,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				worktreeGitClient := adapters.New(worktreePath)
 				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
 					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
-						return rollbackClaimLocked(cmd, store, logPath, issueID, workerID, "persist claimed branch metadata", err, prior, claimToken, claimExclusions)
+						return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, "persist claimed branch metadata", err, prior, claimToken, true, claimExclusions)
 					}
 				}
 			}
