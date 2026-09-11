@@ -144,3 +144,4 @@
 ["transition","NXTTN-S4-T3",1789084409,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Paved-road-first workflow+skills; escape hatches labeled; TestSkillsLeadWithPavedRoad_REQ_NXTTN_S4_T3. PR 164 head 2b40b999. Held during S3 DoD rewrite; now closing claim. --force/--skip-delivery-gate: CA tip synced.","skipped_delivery_gate":true}]
 ["transition","NXTTN-S4-T3",1789084436,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
 ["transition","NXTTN-S3-T3",1789085008,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Documented coordinator skill hygiene as non-blocking for Context Economics (runtime T1/T2 + front-matter T4). PR 168 head 190511dd. --force/--skip-delivery-gate: CA tip synced; PR open.","skipped_delivery_gate":true}]
+["transition","NXTTN-S3-T3",1789085027,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
