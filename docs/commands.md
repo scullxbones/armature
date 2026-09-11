@@ -187,8 +187,9 @@ and the canonical agent-facing docs `CONTEXT.md`, `docs/commands.md`,
 
 Each row reports raw byte size and estimated tokens. Tokens are `bytes / 4`
 with integer division, matching the `token_budget` convention used by
-`render-context` (character budget = tokens × 4). Both human and JSON output
-print that estimation method.
+`render-context` (character budget = tokens × 4). Human output prints that
+method as a header line; structured output puts it on `estimation_method` and
+in `help[]`.
 
 Dynamic structured command payloads (`arm list`, `--format agent` on other
 commands, render-context bundles) are out of scope; those sizes depend on live
@@ -204,11 +205,17 @@ and all four required docs must exist. A missing skills directory or required
 doc fails the command.
 
 **Output formats:**
-- `human` (default): a table of `PATH`, `CLASS`, `BYTES`, `EST_TOKENS` plus a
-  `TOTAL` row and the estimation-method line.
-- `json` and `agent`: the same inventory as indented JSON with
-  `estimation_method`, `artifacts` (`path`, `class`, `bytes`,
-  `estimated_tokens`), `total_bytes`, and `total_estimated_tokens`.
+- `human` (TTY default): a table of `PATH`, `CLASS`, `BYTES`, `EST_TOKENS`
+  plus a `TOTAL` row and the estimation-method line. Pass `--format human`
+  to force this table.
+- `json` and `agent` (same envelope; also the non-TTY default when `--format`
+  is omitted): the Agent Output Contract object
+  `{count, artifacts[], help[]}` (`docs/design/agent-output-contract.md`
+  N1/N2). `count` equals `len(artifacts)`. Each artifact has `path`,
+  `class`, `bytes`, and `estimated_tokens`. Totals and the estimation
+  method are adjuncts: `total_bytes`, `total_estimated_tokens`,
+  `estimation_method`. `help[]` restates the bytes/4 method and that
+  dynamic structured payloads are `AOC-S3-T2`.
 
 Artifact `class` values are `skill`, `glossary`, `commands`, `concepts`, and
 `use-cases`. Rows are ordered by that class sequence, then by path.

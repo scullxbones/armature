@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/scullxbones/armature/internal/contextreport"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +19,14 @@ and docs/use-cases.md. Report byte size and estimated tokens using bytes/4
 
 Dynamic structured command payloads are out of scope (AOC-S3-T2).`,
 		Args: cobra.NoArgs,
+		// context-report bypasses the root PersistentPreRunE (config.ResolveContext
+		// would fail on a source tree that is not an Armature ops worktree), so it
+		// applies the same --non-interactive/--format auto-detection via the shared
+		// autoDetectTTYPolicy helper in main.go instead of a no-op. That keeps
+		// direct terminal-detection calls confined to main.go per the CLI Grammar
+		// Contract (docs/design/cli-grammar-contract.md).
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			autoDetectTTYPolicy(cmd.Root())
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,16 +47,39 @@ Dynamic structured command payloads are out of scope (AOC-S3-T2).`,
 				}
 			}
 			if format == "json" || format == "agent" {
-				out, err := contextreport.RenderJSON(report)
-				if err != nil {
-					return err
-				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-				return nil
+				return writeContextReportEnvelope(cmd.OutOrStdout(), report)
 			}
 			_, _ = fmt.Fprint(cmd.OutOrStdout(), contextreport.RenderHuman(report))
 			return nil
 		},
 	}
 	return cmd
+}
+
+func contextReportHelp() []string {
+	return []string{
+		"estimated tokens = bytes/4 (integer division), matching token_budget",
+		"dynamic structured command payloads are out of scope (AOC-S3-T2)",
+	}
+}
+
+func writeContextReportEnvelope(w io.Writer, report contextreport.Report) error {
+	artifacts := report.Artifacts
+	if artifacts == nil {
+		artifacts = []contextreport.Artifact{}
+	}
+	env, err := output.NewEnvelope("artifacts", artifacts, contextReportHelp())
+	if err != nil {
+		return err
+	}
+	if err := env.AddAdjunct("estimation_method", report.EstimationMethod); err != nil {
+		return err
+	}
+	if err := env.AddAdjunct("total_bytes", report.TotalBytes); err != nil {
+		return err
+	}
+	if err := env.AddAdjunct("total_estimated_tokens", report.TotalEstimatedTokens); err != nil {
+		return err
+	}
+	return output.WriteEnvelope(w, env)
 }
