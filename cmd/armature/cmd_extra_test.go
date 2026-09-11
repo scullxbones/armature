@@ -1380,7 +1380,7 @@ func TestShowCmd(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
 	// Human-readable output
-	out, err := runTrls(t, repo, "show", "--issue", "task-01")
+	out, err := runTrls(t, repo, "show", "--format", "human", "--issue", "task-01")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.Contains(t, out, "My Task")
@@ -1413,7 +1413,7 @@ func TestShowCmd_DisplaysAcceptance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Human-readable output includes acceptance
-	out, err := runTrls(t, repo, "show", "--issue", "task-01")
+	out, err := runTrls(t, repo, "show", "--format", "human", "--issue", "task-01")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Acceptance:", "human output should show Acceptance field")
 	assert.Contains(t, out, "test_passes", "human output should include acceptance criteria content")

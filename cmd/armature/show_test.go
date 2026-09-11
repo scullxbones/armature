@@ -103,14 +103,14 @@ func TestShow_BlockedBy(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("human-readable shows BlockedBy", func(t *testing.T) {
-		out, err := runTrls(t, repo, "show", "blk-2")
+		out, err := runTrls(t, repo, "show", "--format", "human", "blk-2")
 		require.NoError(t, err)
 		assert.Contains(t, out, "BlockedBy:", "blk-2 should show BlockedBy field")
 		assert.Contains(t, out, "blk-1", "blk-2 should list blk-1 as its blocker")
 	})
 
 	t.Run("human-readable shows Blocks", func(t *testing.T) {
-		out, err := runTrls(t, repo, "show", "blk-1")
+		out, err := runTrls(t, repo, "show", "--format", "human", "blk-1")
 		require.NoError(t, err)
 		assert.Contains(t, out, "Blocks:", "blk-1 should show Blocks field")
 		assert.Contains(t, out, "blk-2", "blk-1 should list blk-2 as what it blocks")
@@ -142,14 +142,14 @@ func TestShow_BlockedBy(t *testing.T) {
 
 	t.Run("omits BlockedBy when empty", func(t *testing.T) {
 		// blk-1 is not blocked by anything
-		out, err := runTrls(t, repo, "show", "blk-1")
+		out, err := runTrls(t, repo, "show", "--format", "human", "blk-1")
 		require.NoError(t, err)
 		assert.NotContains(t, out, "BlockedBy:", "blk-1 has no blockers and should not show BlockedBy")
 	})
 
 	t.Run("omits Blocks when empty", func(t *testing.T) {
 		// blk-2 does not block anything
-		out, err := runTrls(t, repo, "show", "blk-2")
+		out, err := runTrls(t, repo, "show", "--format", "human", "blk-2")
 		require.NoError(t, err)
 		assert.NotContains(t, out, "Blocks:", "blk-2 blocks nothing and should not show Blocks")
 	})
