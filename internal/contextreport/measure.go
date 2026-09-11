@@ -179,7 +179,9 @@ func measureShow(state *materialize.State) ([]byte, error) {
 		return nil, fmt.Errorf("fixture issue %s not found", FixtureShowIssue)
 	}
 	var buf bytes.Buffer
-	if err := output.RenderIssue(&buf, issue, true); err != nil {
+	// show.go emits JSON only for --format json. --format agent and the
+	// non-TTY agent default use human RenderIssue; price that payload.
+	if err := output.RenderIssue(&buf, issue, false); err != nil {
 		return nil, fmt.Errorf("render show payload: %w", err)
 	}
 	return buf.Bytes(), nil
