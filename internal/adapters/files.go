@@ -66,41 +66,62 @@ func NewAppendLog(path string) *AppendLog {
 // identical record for a retry. Calls for one log are serialized with an
 // advisory lock so they cannot overwrite or remove each other's marker.
 func (a *AppendLog) Append(buf []byte) error {
+	_, err := a.AppendIf(buf, nil)
+	return err
+}
+
+// AppendIf appends buf unless proceed returns false. proceed runs while the
+// per-log lock is held, after pending-marker recovery and before the write,
+// so a caller can revalidate an idempotency decision against the durable log
+// without a TOCTOU gap versus this file's next append. A nil proceed always
+// writes. wrote is false when the call skipped (empty buf, recovered exact
+// retry, or proceed returned false).
+func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (bool, error) {
 	logPath := a.Path
 	if len(buf) == 0 {
-		return nil
+		return false, nil
 	}
 
 	metaDir, err := appendMetaDir(logPath)
 	if err != nil {
-		return err
+		return false, err
 	}
 	metaBase := filepath.Join(metaDir, filepath.Base(logPath))
 
 	lock, err := lockLog(metaBase)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() { _ = lock.Close() }() //nolint:errcheck // close error in defer not actionable
 
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: internal state path
 	if err != nil {
-		return fmt.Errorf("open log %s: %w", logPath, err)
+		return false, fmt.Errorf("open log %s: %w", logPath, err)
 	}
 	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
 
 	markerPath := metaBase + pendingMarkerSuffix
 	retry, err := recoverPendingAppend(f, markerPath, buf)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if retry {
-		return nil
+		return false, nil
+	}
+
+	if proceed != nil {
+		ok, err := proceed()
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
 	}
 
 	info, err := f.Stat()
 	if err != nil {
-		return fmt.Errorf("stat log %s: %w", logPath, err)
+		return false, fmt.Errorf("stat log %s: %w", logPath, err)
 	}
 	firstLine, _, _ := bytes.Cut(buf, []byte{'\n'})
 
@@ -108,7 +129,7 @@ func (a *AppendLog) Append(buf []byte) error {
 	if info.Size() > 0 {
 		var tail [1]byte
 		if _, err := f.ReadAt(tail[:], info.Size()-1); err != nil {
-			return fmt.Errorf("read log tail %s: %w", logPath, err)
+			return false, fmt.Errorf("read log tail %s: %w", logPath, err)
 		}
 		wasTorn = tail[0] != '\n'
 	}
@@ -121,39 +142,39 @@ func (a *AppendLog) Append(buf []byte) error {
 	if wasTorn {
 		duplicate, err = lastRecordMatches(f, info.Size(), firstLine)
 		if err != nil {
-			return fmt.Errorf("read final log record %s: %w", logPath, err)
+			return false, fmt.Errorf("read final log record %s: %w", logPath, err)
 		}
 	}
 	if wasTorn {
 		if _, err := f.Write([]byte{'\n'}); err != nil {
-			return fmt.Errorf("delimit interrupted log record %s: %w", logPath, err)
+			return false, fmt.Errorf("delimit interrupted log record %s: %w", logPath, err)
 		}
 		info, err = f.Stat()
 		if err != nil {
-			return fmt.Errorf("stat delimited log %s: %w", logPath, err)
+			return false, fmt.Errorf("stat delimited log %s: %w", logPath, err)
 		}
 	}
 
 	if !duplicate {
 		marker := pendingAppend{Start: info.Size(), Data: buf}
 		if err := writePendingMarker(markerPath, marker); err != nil {
-			return err
+			return false, err
 		}
 		if _, err := f.Write(buf); err != nil {
-			return fmt.Errorf("write to log %s: %w", logPath, err)
+			return false, fmt.Errorf("write to log %s: %w", logPath, err)
 		}
 		if err := f.Sync(); err != nil {
-			return fmt.Errorf("sync log %s: %w", logPath, err)
+			return false, fmt.Errorf("sync log %s: %w", logPath, err)
 		}
 	}
 
 	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove pending marker %s: %w", markerPath, err)
+		return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
 	}
 	if err := syncDir(filepath.Dir(markerPath)); err != nil {
-		return fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
+		return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
 	}
-	return nil
+	return true, nil
 }
 
 // pendingMarkerSuffix names the sidecar file that records the record

@@ -232,6 +232,70 @@ func TestAppendLog_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 	require.Equal(t, [][]byte{line[:len(line)-1], line[:len(line)-1]}, lines)
 }
 
+func TestAppendIf_ProceedFalseSkipsWrite_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	wrote, err := NewAppendLog(logPath).AppendIf([]byte("{\"op\":\"transition\"}\n"), func() (bool, error) {
+		return false, nil
+	})
+	require.NoError(t, err)
+	assert.False(t, wrote)
+	_, err = os.Stat(logPath)
+	if err == nil {
+		lines, readErr := ReadLogFromOffset(logPath, 0)
+		require.NoError(t, readErr)
+		assert.Empty(t, lines)
+	}
+}
+
+func TestAppendIf_ProceedSeesPriorWriter_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	line := []byte("{\"op\":\"transition\"}\n")
+
+	start := make(chan struct{})
+	wroteCh := make(chan bool, 2)
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	proceed := func() (bool, error) {
+		lines, err := ReadLogFromOffset(logPath, 0)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return true, nil
+			}
+			return false, err
+		}
+		return len(lines) == 0, nil
+	}
+	for range 2 {
+		wg.Go(func() {
+			<-start
+			wrote, err := NewAppendLog(logPath).AppendIf(line, proceed)
+			errs <- err
+			wroteCh <- wrote
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	close(wroteCh)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	wroteTrue := 0
+	for wrote := range wroteCh {
+		if wrote {
+			wroteTrue++
+		}
+	}
+	assert.Equal(t, 1, wroteTrue)
+	lines, err := ReadLogFromOffset(logPath, 0)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{line[:len(line)-1]}, lines)
+}
+
 func TestAppendLog_DeduplicatesOnlyFinalRecord(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

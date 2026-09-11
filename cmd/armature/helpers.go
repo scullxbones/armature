@@ -316,17 +316,26 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 // Push errors are best-effort — the op is still committed locally.
 // Used for claim, transition, assign, unassign — ops that must not be delayed.
 func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
+	_, err := appendHighStakesOpIf(state, logPath, op, nil)
+	return err
+}
+
+// appendHighStakesOpIf is appendHighStakesOp with an optional proceed callback
+// that runs under the per-log append lock. wrote is false when proceed skipped
+// the append; push is then skipped as well.
+func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proceed func() (bool, error)) (bool, error) {
 	if state == nil || state.ctx == nil {
-		return fmt.Errorf("appendHighStakesOp: command context unavailable")
+		return false, fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
 	ctx := state.ctx
 	tracker := state.tracker
 	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
-		return err
+		return false, err
 	}
 	gc := worktreeGit(ctx)
-	if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
-		return err
+	wrote, err := ops.AppendAndCommitIf(logPath, ctx.WorktreePath, op, gc, proceed)
+	if err != nil || !wrote {
+		return wrote, err
 	}
 	// Push is best-effort: push via the git client (which handles retries) but ignore errors
 	if gc != nil {
@@ -337,7 +346,7 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 		}
 		tracker.Reset() //nolint:errcheck,gosec
 	}
-	return nil
+	return true, nil
 }
 
 // appendLowStakesOp appends an op, increments the pending counter, and only
