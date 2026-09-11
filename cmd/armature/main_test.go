@@ -17,6 +17,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
+	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -4131,6 +4132,8 @@ func TestVersionFlagVariantsExitZero_REQ_AOC_S2_T5(t *testing.T) {
 		{"--version", "--format", "human"},
 		{"-v", "--format", "human"},
 		{"-V", "--format", "human"},
+		{"version", "--format", "human", "--non-interactive"},
+		{"--version", "--format", "human", "--non-interactive"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			stdout := new(bytes.Buffer)
@@ -4150,6 +4153,10 @@ func TestStructuredVersionPathsEmitEnvelope_REQ_AOC_S2_T5(t *testing.T) {
 		{"-V", "--format", "json"},
 		{"version"},
 		{"--version"},
+		{"version", "--non-interactive"},
+		{"--version", "--non-interactive"},
+		{"-v", "--non-interactive"},
+		{"-V", "--non-interactive"},
 	}
 	for _, args := range paths {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -4217,4 +4224,105 @@ func TestBareArmOutsideRepoIsDefinitiveEmptyState_REQ_AOC_S2_T5(t *testing.T) {
 			strings.Contains(joined, "armature.ops-worktree-path") ||
 			strings.Contains(joined, "bootstrap"),
 		"help must name why the environment is empty, got %v", help)
+}
+
+func TestBareArmBrokenConfigIsError_REQ_AOC_S2_T5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	configPath := filepath.Join(repo, ".armature", "config.json")
+
+	cases := []struct {
+		name  string
+		setup func(t *testing.T)
+	}{
+		{
+			name: "missing",
+			setup: func(t *testing.T) {
+				require.NoError(t, os.Remove(configPath))
+			},
+		},
+		{
+			name: "malformed",
+			setup: func(t *testing.T) {
+				require.NoError(t, os.WriteFile(configPath, []byte(`{"project_type":`), 0o600))
+			},
+		},
+		{
+			name: "unreadable",
+			setup: func(t *testing.T) {
+				require.NoError(t, os.Remove(configPath))
+				require.NoError(t, os.Mkdir(configPath, 0o755))
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup(t)
+			stdout := new(bytes.Buffer)
+			code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "--repo", repo, "--format", "json")
+			assert.NotEqual(t, 0, code, "broken config must not look like an empty ready queue: %s", stdout.String())
+			payload := assertSingleJSONObject(t, stdout.String())
+			errObj, ok := payload["error"].(map[string]any)
+			require.True(t, ok, "expected Command Failure, got %s", stdout.String())
+			assert.NotEqual(t, "", errObj["cause"])
+			assert.NotContains(t, stdout.String(), `"issues"`)
+			assert.NotContains(t, stdout.String(), "not an Armature repository")
+		})
+	}
+}
+
+func TestNonInteractiveImpliesVersionEnvelope_REQ_AOC_S2_T5(t *testing.T) {
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
+	tui.SetFormat("human")
+	tui.SetNonInteractive(true)
+	t.Cleanup(func() {
+		tui.SetNonInteractive(false)
+		tui.SetFormat("")
+	})
+
+	cmd := newRootCmd()
+	stdout := new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	require.NoError(t, writeVersionOutput(cmd))
+	decoded := decodeContractEnvelope(t, stdout.String(), "versions")
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal(decoded["versions"], &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, Version, rows[0]["version"])
+}
+
+func TestBareArmForwardsSnapshotWarnings_REQ_AOC_S2_T5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	unknownLog := filepath.Join(opsDir, "worker-unknown.log")
+	require.NoError(t, ops.AppendOp(unknownLog, ops.Op{
+		Type:      "unknown_future_type",
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  "worker-unknown",
+	}))
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr, "--repo", repo, "--format", "json")
+	assert.Equal(t, 0, code, stdout.String())
+	assert.Contains(t, stderr.String(), "warning:")
+
+	readyErr := new(bytes.Buffer)
+	readyCode := executeThenHandleRootError(t, new(bytes.Buffer), readyErr,
+		"ready", "--repo", repo, "--format", "json")
+	assert.Equal(t, 0, readyCode)
+	assert.Contains(t, readyErr.String(), "warning:")
+}
+
+func TestBareArmRejectsUnknownRootArgs_REQ_AOC_S2_T5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"orchestrate", "--repo", repo, "--format", "json")
+	assert.NotEqual(t, 0, code)
+	out := stdout.String()
+	assert.Contains(t, out, "unknown command")
+	assert.Contains(t, out, "orchestrate")
 }

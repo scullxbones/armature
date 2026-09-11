@@ -141,6 +141,30 @@ func homeEmptyReason(cmd *cobra.Command) string {
 	return reason
 }
 
+// isAbsentArmatureLayout is true only when the repo has no Armature ops
+// worktree configured. Config load failures and other ResolveContext errors
+// (unreadable git metadata, worktree probe failures) stay errors.
+func isAbsentArmatureLayout(repoPath string, resolveErr error) bool {
+	if resolveErr == nil {
+		return false
+	}
+	_, layoutErr := config.ResolveLayout(repoPath)
+	if layoutErr == nil {
+		return false
+	}
+	return strings.Contains(layoutErr.Error(), "armature.ops-worktree-path must be set")
+}
+
+func rejectUnknownRootArgs(cmd *cobra.Command, args []string) error {
+	if versionRequested(cmd) {
+		return cobra.NoArgs(cmd, args)
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+}
+
 func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
 	if cmd == nil {
 		return nil, fmt.Errorf("command context unavailable")
