@@ -134,7 +134,10 @@ func homeEmptyReason(cmd *cobra.Command) string {
 	if cmd == nil || cmd.Context() == nil {
 		return ""
 	}
-	reason, _ := cmd.Context().Value(homeEmptyReasonKey{}).(string)
+	reason, ok := cmd.Context().Value(homeEmptyReasonKey{}).(string)
+	if !ok {
+		return ""
+	}
 	return reason
 }
 
