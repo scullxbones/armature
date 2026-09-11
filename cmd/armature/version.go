@@ -29,8 +29,10 @@ func versionRequested(cmd *cobra.Command) bool {
 }
 
 func writeVersionOutput(cmd *cobra.Command) error {
-	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if format == "json" || format == "agent" {
+	flags := cmd.Root().PersistentFlags()
+	format, _ := flags.GetString("format")
+	explicitHuman := flags.Changed("format") && format == "human"
+	if !explicitHuman && (format == "json" || format == "agent" || tui.IsNonInteractive()) {
 		return writeNamedEnvelope(cmd.OutOrStdout(), "versions", []versionRow{{Version: Version}}, []string{versionHelp})
 	}
 	_, err := fmt.Fprintf(cmd.OutOrStdout(), "arm version %s\n", Version)

@@ -108,6 +108,9 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	if err != nil {
 		return mapReadyError(fmt.Errorf("load snapshot: %w", err))
 	}
+	for _, w := range snap.Warnings {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+	}
 	entries := ready.ComputeReady(snap.Index, snap.Issues, "", nowEpoch())
 	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
 	format, _ := cmd.Root().PersistentFlags().GetString("format")

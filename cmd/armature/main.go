@@ -69,7 +69,7 @@ func newRootCmd() *cobra.Command {
 			}
 			ctx, err := config.ResolveContext(repoPath)
 			if err != nil {
-				if cmd.Parent() == nil {
+				if cmd.Parent() == nil && isAbsentArmatureLayout(repoPath, err) {
 					baseCtx := cmd.Context()
 					if baseCtx == nil {
 						baseCtx = context.Background()
@@ -104,6 +104,7 @@ func newRootCmd() *cobra.Command {
 			cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
 			return nil
 		},
+		Args: rejectUnknownRootArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if versionRequested(cmd) {
 				return writeVersionOutput(cmd)

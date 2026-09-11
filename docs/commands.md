@@ -15,7 +15,7 @@ Unknown or inapplicable flags fail by name at exit 2 (`USAGE`) and list the vali
 
 Root-only (not inherited by subcommands): `--version`, `-v`, and `-V` are the same version query as `arm version`.
 
-With no subcommand, a TTY still prints the command listing. A non-TTY prints the ready queue when `--repo` (or cwd) is an Armature repository. Outside a repository it prints an empty `{count, issues, help}` envelope whose `help` names the environment problem.
+With no subcommand, a TTY still prints the command listing. A non-TTY prints the ready queue when `--repo` (or cwd) is an Armature repository. Snapshot warnings from that home view go to stderr, the same as `arm ready`. Absence of an Armature layout (no `armature.ops-worktree-path`) is a successful empty `{count, issues, help}` envelope whose `help` names the missing layout. Config missing, malformed, or unreadable — and other context-resolution failures — remain non-zero Command Failures. Unknown root arguments (for example `arm orchestrate`) are unknown-command errors.
 
 ---
 
@@ -1152,9 +1152,9 @@ Hidden command used by `make check` to validate JSON examples in documentation a
 
 Print `arm` version. Root `--version`, `-v`, and `-V` are the same query.
 
-Human format (`--format human`, including a TTY default) prints the existing bare line `arm version <string>` and exits 0.
+Human format prints the existing bare line `arm version <string>` and exits 0 when `--format human` is explicit, or when the invocation is an interactive TTY default.
 
-Structured format (`--format json`, `--format agent`, `--non-interactive`, or a non-TTY default) is one Agent Output Contract envelope `{count, versions, help}` with `count` 1 and a single row whose `version` member is the version string.
+Structured format (`--format json`, `--format agent`, `--non-interactive` implying structured unless `--format human` is explicit, or a non-TTY default) is one Agent Output Contract envelope `{count, versions, help}` with `count` 1 and a single row whose `version` member is the version string.
 
 **Synopsis:**
 `arm version`
