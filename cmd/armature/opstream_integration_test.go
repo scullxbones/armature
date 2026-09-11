@@ -119,16 +119,21 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, badOp))
 
-	// Run validate and check output (which internally calls materialize)
+	// Run validate: mismatched ops stay excluded from the graph, but the
+	// structured envelope must report the snapshot warning (not a clean count:0).
 	validateOut, err := runTrls(t, repo, "validate", "--format", "json")
-	require.NoError(t, err, "validate output: %s", validateOut)
-
-	// Parse JSON output
-	var result map[string]any
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(validateOut)), &result))
-
-	// Verify that validation succeeded
-	assert.NotNil(t, result, "result should be a valid JSON object")
+	require.Error(t, err, "default-strict validate must fail when mismatched ops were excluded: %s", validateOut)
+	decoded := decodeContractEnvelope(t, validateOut, "findings")
+	var findings []validateFindingRow
+	require.NoError(t, json.Unmarshal(decoded["findings"], &findings))
+	foundSnapshot := false
+	for _, f := range findings {
+		if f.Rule == snapshotFindingRule && strings.Contains(f.Message, "mismatch") {
+			foundSnapshot = true
+			break
+		}
+	}
+	assert.True(t, foundSnapshot, "validate envelope must include the snapshot mismatch warning")
 
 	// Now verify the materialized state directly (validate calls materialize internally)
 	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
