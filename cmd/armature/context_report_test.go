@@ -61,3 +61,28 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 		assert.Contains(t, err.Error(), "ops.jsonl")
 	})
 }
+
+// TestContextReportNonTTYDefaultsToJSON verifies that when stdout is not a
+// terminal and --format is not explicitly set, context-report emits JSON.
+// The command's PersistentPreRunE bypasses root's hook (config.ResolveContext
+// is not needed for this diagnostic), so it must call autoDetectTTYPolicy
+// itself — the same pattern as bootstrap.
+func TestContextReportNonTTYDefaultsToJSON(t *testing.T) {
+	rootDir := projectRootDir(t)
+
+	buf := new(bytes.Buffer)
+	cmd := newRootCmd()
+	cmd.SetOut(buf)
+	cmd.SetArgs([]string{"context-report", "--repo", rootDir})
+
+	require.NoError(t, cmd.Execute())
+
+	output := buf.String()
+	var report contextreport.Report
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &report),
+		"context-report output should be valid JSON when stdout is not a terminal")
+	assert.Contains(t, report.EstimationMethod, "bytes/4")
+	assert.NotEmpty(t, report.Artifacts)
+	assert.NotContains(t, output, "Context report (fixture-measured main-path CLI)",
+		"should not emit the human table in non-TTY")
+}
