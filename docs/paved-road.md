@@ -85,6 +85,7 @@ Zero unclassified leaf commands is a gate.
 - `arm doctor` — Wave dispatch
 - `arm gate`
 - `arm gate run` — Work
+- `arm help`
 - `arm link` — Plan / decompose
 - `arm list` — Wave dispatch
 - `arm note` — Work
@@ -157,6 +158,7 @@ Skip and force flags stay listed here. They are not the paved-road invocation.
 | `--force` | `arm transition` | Bypasses branch and PR discipline on --to done. |
 | `--force` | `arm claim` | Bypasses claim overlap planning. |
 | `--force` | `arm merged` | Bypasses hook-violation refusal at merge. |
+| `--force` | `arm sources accept-citation` | Skips the confirmation prompt. The paved road cites sources at plan time. |
 | `--strict=false` | `arm validate` | Keeps warnings as warnings. The paved road is fail-closed (strict by default). |
 | `--global` | `arm bootstrap` | Deploys skills outside the repo. The paved road deploys locally. |
 | `--raw` | `arm render-context` | Skips the token budget. The paved road truncates to budget. |

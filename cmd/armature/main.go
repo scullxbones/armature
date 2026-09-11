@@ -275,6 +275,9 @@ func newRootCmd() *cobra.Command {
 	worktreeCmd.GroupID = "admin"
 	root.AddCommand(worktreeCmd)
 
+	// Cobra lazily adds `help` in ExecuteC. Install it first so the paved-road
+	// walk classifies every registered command, including help.
+	root.InitDefaultHelpCmd()
 	applyPavedRoadMetadata(root)
 	return root
 }
@@ -349,10 +352,12 @@ type pavedRoadDefault struct {
 }
 
 // pavedRoadCommands classifies every registered command path (space-separated
-// names, no "arm" prefix). Root is "". Cobra's generated help command is marked
-// paved in applyPavedRoadMetadata and is not listed here.
+// names, no "arm" prefix). Root is "". Cobra's generated help command is
+// installed in newRootCmd before applyPavedRoadMetadata so it is classified
+// here like every other registered command.
 var pavedRoadCommands = map[string]pavedRoadClass{
-	"": {Kind: pavedRoadKindPaved},
+	"":     {Kind: pavedRoadKindPaved},
+	"help": {Kind: pavedRoadKindPaved},
 
 	"version":     {Kind: pavedRoadKindPaved},
 	"worker-init": {Kind: pavedRoadKindPaved},
@@ -487,6 +492,11 @@ var pavedRoadDefaultsAudit = []pavedRoadDefault{
 		Reason:   "Bypasses hook-violation refusal at merge.",
 	},
 	{
+		Flag:     "--force",
+		Commands: []string{"sources accept-citation"},
+		Reason:   "Skips the confirmation prompt. The paved road cites sources at plan time.",
+	},
+	{
 		Flag:     "--strict=false",
 		Commands: []string{"validate"},
 		Reason:   "Keeps warnings as warnings. The paved road is fail-closed (strict by default).",
@@ -607,9 +617,6 @@ func generatePavedRoadDoc(root *cobra.Command) string {
 	walkPavedRoadCommands(root, func(cmd *cobra.Command) {
 		path := pavedRoadPath(cmd)
 		if path == "" {
-			return
-		}
-		if cmd.Name() == "help" {
 			return
 		}
 		kind := pavedRoadKindOf(cmd)

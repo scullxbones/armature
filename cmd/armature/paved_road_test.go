@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,9 +23,6 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 		found := map[string]bool{}
 		walkPavedRoadCommands(root, func(cmd *cobra.Command) {
 			path := pavedRoadPath(cmd)
-			if cmd.Name() == "help" {
-				return
-			}
 			found[path] = true
 			kind := pavedRoadKindOf(cmd)
 			if kind != pavedRoadKindPaved && kind != pavedRoadKindEscape {
@@ -73,9 +71,6 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 				if !child.IsAvailableCommand() {
 					continue
 				}
-				if child.Name() == "help" {
-					continue
-				}
 				kind := pavedRoadKindOf(child)
 				line := helpLineFor(help, child.Name())
 				require.NotEmpty(t, line, "expected %s in %s help", child.Name(), parent.CommandPath())
@@ -103,6 +98,8 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 		require.Contains(t, got, "### Unclassified\n\nNone.")
 		require.Contains(t, got, "## Defaults audit")
 		require.Contains(t, got, "--skip-delivery-gate")
+		require.Contains(t, got, "`arm sources accept-citation`")
+		require.Contains(t, got, "`arm help`")
 		for _, step := range pavedRoadPipeline {
 			require.Contains(t, got, step.Title)
 			for _, path := range step.Commands {
@@ -120,6 +117,41 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 		require.NoError(t, err, "docs/paved-road.md must exist; regenerate with UPDATE_PAVED_ROAD=1")
 		require.Equal(t, string(want), got,
 			"docs/paved-road.md drifted from metadata; regenerate with UPDATE_PAVED_ROAD=1")
+	})
+
+	t.Run("helpCommandIsInstalledAndClassified", func(t *testing.T) {
+		help := findPavedRoadCommand(root, "help")
+		require.NotNil(t, help, "cobra help must be installed before paved-road metadata")
+		require.Equal(t, pavedRoadKindPaved, pavedRoadKindOf(help))
+	})
+
+	t.Run("defaultsAuditCoversForceAndSkipFlags", func(t *testing.T) {
+		listed := map[string]bool{}
+		for _, d := range pavedRoadDefaultsAudit {
+			if d.Flag != "--force" && !strings.HasPrefix(d.Flag, "--skip-") {
+				continue
+			}
+			for _, path := range d.Commands {
+				listed[path+"\t"+d.Flag] = true
+			}
+		}
+		var missing []string
+		walkPavedRoadCommands(root, func(cmd *cobra.Command) {
+			path := pavedRoadPath(cmd)
+			if path == "" {
+				return
+			}
+			cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+				if f.Name != "force" && !strings.HasPrefix(f.Name, "skip-") {
+					return
+				}
+				key := path + "\t--" + f.Name
+				if !listed[key] {
+					missing = append(missing, "arm "+path+" --"+f.Name)
+				}
+			})
+		})
+		require.Empty(t, missing, "defaults audit omitted force/skip flags: %s", strings.Join(missing, ", "))
 	})
 }
 
