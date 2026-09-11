@@ -3090,7 +3090,8 @@ func TestCommandGroups(t *testing.T) {
 	syncExpected := []string{"sync", "merged", "materialize", "import", "push-ops"}
 	adminExpected := []string{
 		"worker-init", "workers", "bootstrap", "create", "validate", "doctor", "version",
-		"show", "list", "log", "stats", "render-context", "sources", "context-history", "hook", "completion", "tui", "reparent", "scope-rename", "scope-delete", "help",
+		"show", "list", "log", "stats", "render-context", "sources", "context-history",
+		"hook", "completion", "tui", "reparent", "scope-rename", "scope-delete", "help",
 	}
 
 	for groupID, expectedCmds := range map[string][]string{
