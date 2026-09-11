@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -408,7 +409,10 @@ func TestDecomposeApply_DraftConfidence(t *testing.T) {
 	// Apply the plan — all nodes should be created as draft
 	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile)
 	require.NoError(t, err)
-	assert.Contains(t, out, "Applied 3 issues")
+	applied := decodeContractEnvelope(t, out, "issues")
+	var count int
+	require.NoError(t, json.Unmarshal(applied["count"], &count))
+	assert.Equal(t, 3, count)
 
 	// trls ready should NOT list draft nodes
 	readyOut, err := runTrls(t, repo, "ready", "--format", "json")
@@ -1146,11 +1150,20 @@ func TestDecomposeApplyDryRun(t *testing.T) {
 	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--dry-run")
 	require.NoError(t, err)
 
-	// Output must mention the issue IDs (what would be created)
-	assert.Contains(t, out, "DRY-001")
-	assert.Contains(t, out, "DRY-002")
-	// Output must indicate dry-run (e.g. "would create")
-	assert.Contains(t, out, "would create")
+	decoded := decodeContractEnvelope(t, out, "issues")
+	var rows []applyIssueRow
+	require.NoError(t, json.Unmarshal(decoded["issues"], &rows))
+	ids := map[string]bool{}
+	for _, row := range rows {
+		ids[row.ID] = true
+		assert.Equal(t, "would_create", row.Action)
+	}
+	assert.True(t, ids["DRY-001"])
+	assert.True(t, ids["DRY-002"])
+	var help []string
+	require.NoError(t, json.Unmarshal(decoded["help"], &help))
+	require.NotEmpty(t, help)
+	assert.Contains(t, help[0], "dry-run")
 
 	// No new ops files should be written
 	entriesAfter, err := os.ReadDir(opsDir)
@@ -1316,7 +1329,10 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 
 	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--generate-ids")
 	require.NoError(t, err)
-	assert.Contains(t, out, "Applied 2 issues")
+	applied := decodeContractEnvelope(t, out, "issues")
+	var count int
+	require.NoError(t, json.Unmarshal(applied["count"], &count))
+	assert.Equal(t, 2, count)
 
 	// The plan IDs must NOT appear in the state after materialization.
 	_, err = runTrls(t, repo, "materialize")
@@ -1360,7 +1376,10 @@ func TestDecomposeApplyRoot(t *testing.T) {
 
 	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--root", "root-story-01")
 	require.NoError(t, err)
-	assert.Contains(t, out, "Applied 1 issues")
+	applied := decodeContractEnvelope(t, out, "issues")
+	var count int
+	require.NoError(t, json.Unmarshal(applied["count"], &count))
+	assert.Equal(t, 1, count)
 
 	// After materialization, ROOT-001 should have parent = root-story-01.
 	_, err = runTrls(t, repo, "materialize")
@@ -1748,6 +1767,102 @@ func TestDagApplyArtifactModesAreSchemaAndExample_REQ_AOC_S1_T3(t *testing.T) {
 	require.Equal(t, output.ChannelArtifactOutput, output.ClassifyFlags(cmd.Annotations, map[string]bool{"schema": true}))
 	require.Equal(t, output.ChannelArtifactOutput, output.ClassifyFlags(cmd.Annotations, map[string]bool{"example": true}))
 	require.Equal(t, output.ChannelAgentFacing, output.ClassifyFlags(cmd.Annotations, map[string]bool{"dry-run": true}))
+}
+
+func TestDagApplyResultModesEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
+	repo, planFile := plantDagApplyEnvelopeFixture(t)
+
+	dryOut, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--dry-run", "--format", "json")
+	require.NoError(t, err)
+	dry := decodeContractEnvelope(t, dryOut, "issues")
+	var dryIssues []applyIssueRow
+	require.NoError(t, json.Unmarshal(dry["issues"], &dryIssues))
+	require.Len(t, dryIssues, 2)
+	assert.Equal(t, "ENV-001", dryIssues[0].ID)
+	assert.Equal(t, "would_create", dryIssues[0].Action)
+
+	applyOut, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--format", "json")
+	require.NoError(t, err)
+	applied := decodeContractEnvelope(t, applyOut, "issues")
+	var created []applyIssueRow
+	require.NoError(t, json.Unmarshal(applied["issues"], &created))
+	require.Len(t, created, 2)
+	ids := map[string]bool{}
+	for _, row := range created {
+		ids[row.ID] = true
+		assert.Equal(t, "created", row.Action)
+	}
+	assert.True(t, ids["ENV-001"])
+	assert.True(t, ids["ENV-002"])
+}
+
+func TestAllAgentFacingCommandsEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	cases := []struct {
+		payload string
+		args    []string
+	}{
+		{"workers", []string{"workers", "--format", "json"}},
+		{"findings", []string{"validate", "--format", "json", "--strict=false"}},
+		{"worktrees", []string{"worktree", "list", "--format", "json"}},
+		{"worktrees", []string{"worktree", "gc", "--dry-run", "--format", "json"}},
+		{"commits", []string{"review", "commits", "task-01", "--format", "json"}},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			out, err := runTrls(t, repo, tc.args...)
+			if tc.payload == "findings" {
+				decodeContractEnvelope(t, out, tc.payload)
+				return
+			}
+			require.NoError(t, err)
+			decodeContractEnvelope(t, out, tc.payload)
+		})
+	}
+}
+
+func TestHarnessHookOutputUnchanged_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
+
+	cmd := newHarnessHookCmd()
+	require.Equal(t, output.ChannelProtocolOutput, output.Classify(cmd.Annotations))
+
+	result := harnesshook.RunResult{
+		Output:   []byte(`{"decision":"approve"}`),
+		ExitCode: 0,
+	}
+	var buf bytes.Buffer
+	require.NoError(t, applyRunResult(&buf, result))
+	assert.Equal(t, `{"decision":"approve"}`, buf.String())
+	assert.NotContains(t, buf.String(), `"count"`)
+	assert.NotContains(t, buf.String(), `"help"`)
+}
+
+func plantDagApplyEnvelopeFixture(t *testing.T) (string, string) {
+	t.Helper()
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	planData := `{"version":1,"title":"Envelope Plan","issues":[` +
+		`{"id":"ENV-001","title":"Envelope task one","type":"task","source":"src-test",` +
+		`"scope":"internal/ENV-001.go","dod":"Envelope task one is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]},` +
+		`{"id":"ENV-002","title":"Envelope task two","type":"task","source":"src-test",` +
+		`"scope":"internal/ENV-002.go","dod":"Envelope task two is complete and tested",` +
+		`"acceptance":[{"type":"test_passes"}]}` +
+		`]}`
+	planFile := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0o644))
+	return repo, planFile
 }
 
 // TestCommandLongAndExampleFields verifies that high-priority commands have

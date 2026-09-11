@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -63,19 +64,9 @@ Use --quiet to suppress INFO lines on a failing run.`,
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" || format == "agent" {
-				payload := map[string]any{
-					"errors":   result.Errors,
-					"warnings": result.Warnings,
-					"infos":    result.Infos,
-				}
-				if result.Coverage != nil {
-					payload["coverage"] = result.Coverage
-				}
-				out, err := json.MarshalIndent(payload, "", "  ")
-				if err != nil {
+				if err := writeValidateEnvelope(cmd.OutOrStdout(), result); err != nil {
 					return err
 				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 			} else if strict && result.OK {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), validationSummary(result))
 			} else if err := output.RenderValidation(cmd.OutOrStdout(), result, quiet); err != nil {
@@ -147,4 +138,46 @@ func validationSummary(result validate.Result) string {
 		return fmt.Sprintf("OK: no issues found (%s)", line)
 	}
 	return "OK: no issues found"
+}
+
+type validateFindingRow struct {
+	Severity string   `json:"severity"`
+	Rule     string   `json:"rule"`
+	Message  string   `json:"message"`
+	CitedIDs []string `json:"cited_ids,omitempty"`
+}
+
+func writeValidateEnvelope(w io.Writer, result validate.Result) error {
+	rows := make([]validateFindingRow, 0, len(result.Findings))
+	for _, f := range result.Findings {
+		rows = append(rows, validateFindingRow{
+			Severity: f.Severity,
+			Rule:     f.Rule,
+			Message:  f.Message,
+			CitedIDs: f.CitedIDs,
+		})
+	}
+	help := []string{"see docs/validation-codes.md for Graph Finding codes"}
+	if len(rows) == 0 {
+		help = []string{"no graph findings", help[0]}
+	}
+	env, err := output.NewEnvelope("findings", rows, help)
+	if err != nil {
+		return err
+	}
+	if err := env.AddAdjunct("errors", result.Errors); err != nil {
+		return err
+	}
+	if err := env.AddAdjunct("warnings", result.Warnings); err != nil {
+		return err
+	}
+	if err := env.AddAdjunct("infos", result.Infos); err != nil {
+		return err
+	}
+	if result.Coverage != nil {
+		if err := env.AddAdjunct("coverage", result.Coverage); err != nil {
+			return err
+		}
+	}
+	return output.WriteEnvelope(w, env)
 }

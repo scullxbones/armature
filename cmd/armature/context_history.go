@@ -7,8 +7,15 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 )
+
+type contextHistoryRow struct {
+	SHA     string `json:"sha"`
+	Date    string `json:"date"`
+	Subject string `json:"subject"`
+}
 
 func newContextHistoryCmd() *cobra.Command {
 	var (
@@ -58,13 +65,7 @@ func newContextHistoryCmd() *cobra.Command {
 				entries[i], entries[j] = entries[j], entries[i]
 			}
 
-			type changeEntry struct {
-				sha     string
-				date    string
-				subject string
-			}
-
-			var changes []changeEntry
+			var changes []contextHistoryRow
 			prevRendered := ""
 
 			for _, entry := range entries {
@@ -85,10 +86,10 @@ func newContextHistoryCmd() *cobra.Command {
 
 				rendered := context.RenderHuman(ctx)
 				if rendered != prevRendered {
-					changes = append(changes, changeEntry{
-						sha:     entry.SHA,
-						date:    entry.Date,
-						subject: entry.Subject,
+					changes = append(changes, contextHistoryRow{
+						SHA:     entry.SHA,
+						Date:    entry.Date,
+						Subject: entry.Subject,
 					})
 					prevRendered = rendered
 				}
@@ -98,18 +99,41 @@ func newContextHistoryCmd() *cobra.Command {
 				return fmt.Errorf("issue %q not found in any commit history", chIssue)
 			}
 
-			// Output newest-first
+			// Newest-first for both human and structured output.
+			rows := make([]contextHistoryRow, 0, len(changes))
 			for i := len(changes) - 1; i >= 0; i-- {
-				c := changes[i]
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", c.sha, c.date, c.subject)
+				rows = append(rows, changes[i])
 			}
 
+			if structuredFormat(cmd) {
+				help := []string{"arm render-context --issue " + chIssue + " --at <sha> reconstructs context at a commit"}
+				if cmd.Flags().Changed("limit") {
+					help = []string{
+						fmt.Sprintf("result is bounded by --limit %d; omit --limit to scan complete history", chLimit),
+						help[0],
+					}
+				}
+				env, err := output.NewEnvelope("commits", rows, help)
+				if err != nil {
+					return err
+				}
+				if cmd.Flags().Changed("limit") {
+					if err := env.AddAdjunct("limit", chLimit); err != nil {
+						return err
+					}
+				}
+				return output.WriteEnvelope(cmd.OutOrStdout(), env)
+			}
+
+			for _, c := range rows {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", c.SHA, c.Date, c.Subject)
+			}
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&chIssue, "issue", "", "Issue ID (required)")
-	cmd.Flags().IntVar(&chLimit, "limit", 100, "Maximum number of commits to scan")
+	cmd.Flags().IntVar(&chLimit, "limit", 0, "Maximum number of commits to scan (0 = complete history)")
 	_ = cmd.MarkFlagRequired("issue")
 
 	return cmd

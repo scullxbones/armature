@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -55,11 +54,11 @@ func newWorkersCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if jsonOut || format == "json" || format == "agent" {
-				for _, s := range statuses {
-					data, _ := json.Marshal(s) //nolint:errcheck // result struct contains only serializable values
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				help := []string{"arm show <id> for the issue a worker is claimed on"}
+				if len(statuses) == 0 {
+					help = []string{"no worker logs found", "arm worker-init registers a worker identity"}
 				}
-				return nil
+				return writeNamedEnvelope(cmd.OutOrStdout(), "workers", statuses, help)
 			}
 
 			if len(statuses) == 0 {
@@ -82,7 +81,7 @@ func newWorkersCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "output as JSONL")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "output as JSON envelope (alias of --format json)")
 	return cmd
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -231,6 +232,9 @@ plan, or --schema to view the JSON schema.`,
 				if err != nil {
 					return err
 				}
+				if structuredFormat(cmd) {
+					return writeDagApplyEnvelope(cmd, applyIssueRows(result.WouldCreate, "would_create"), true)
+				}
 				for _, entry := range result.WouldCreate {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would create: %s (%s)\n", entry.ID, entry.Title)
 				}
@@ -249,6 +253,37 @@ plan, or --schema to view the JSON schema.`,
 				return err
 			}
 
+			if structuredFormat(cmd) {
+				after, loadErr := store.Load(context.Background())
+				if loadErr != nil {
+					return fmt.Errorf("load snapshot: %w", loadErr)
+				}
+				beforeIDs := map[string]struct{}{}
+				if state != nil {
+					for id := range state.Issues {
+						beforeIDs[id] = struct{}{}
+					}
+				}
+				var created []applyIssueRow
+				if after.State != nil {
+					for id, issue := range after.State.Issues {
+						if _, existed := beforeIDs[id]; existed {
+							continue
+						}
+						title := ""
+						if issue != nil {
+							title = issue.Title
+						}
+						created = append(created, applyIssueRow{ID: id, Title: title, Action: "created"})
+					}
+				}
+				sort.Slice(created, func(i, j int) bool { return created[i].ID < created[j].ID })
+				if len(created) == 0 && count > 0 {
+					created = make([]applyIssueRow, 0, count)
+				}
+				return writeDagApplyEnvelope(cmd, created, false)
+			}
+
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Applied %d issues from plan\n", count)
 			return nil
 		},
@@ -261,6 +296,36 @@ plan, or --schema to view the JSON schema.`,
 	cmd.Flags().BoolVar(&generateIDsFlag, "generate-ids", false, "replace plan IDs with system-generated UUIDs")
 	cmd.Flags().StringVar(&rootFlag, "root", "", "override inferred root: attach top-level plan issues to this existing issue ID")
 	return cmd
+}
+
+type applyIssueRow struct {
+	ID     string `json:"id"`
+	Title  string `json:"title,omitempty"`
+	Action string `json:"action"`
+}
+
+func applyIssueRows(entries []decompose.DryRunEntry, action string) []applyIssueRow {
+	rows := make([]applyIssueRow, 0, len(entries))
+	for _, entry := range entries {
+		rows = append(rows, applyIssueRow{ID: entry.ID, Title: entry.Title, Action: action})
+	}
+	return rows
+}
+
+func writeDagApplyEnvelope(cmd *cobra.Command, rows []applyIssueRow, dryRun bool) error {
+	if rows == nil {
+		rows = []applyIssueRow{}
+	}
+	help := []string{"arm list shows created issues", "arm dag transition --issue <id> promotes draft nodes"}
+	if dryRun {
+		help = []string{"dry-run: no ops were written", "arm dag apply --plan <file> writes the creates"}
+		if len(rows) == 0 {
+			help = []string{"dry-run: no issues would be created", help[1]}
+		}
+	} else if len(rows) == 0 {
+		help = []string{"no issues were created", help[0]}
+	}
+	return writeNamedEnvelope(cmd.OutOrStdout(), "issues", rows, help)
 }
 
 func newDecomposeRevertCmd() *cobra.Command {

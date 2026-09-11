@@ -18,6 +18,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type reviewBundleWriteRow struct {
+	Path     string `json:"path"`
+	Issue    string `json:"issue"`
+	BundleID string `json:"bundle_id"`
+}
+
+type reviewAssessmentRow struct {
+	Issue    string `json:"issue"`
+	Status   string `json:"status"`
+	BundleID string `json:"bundle_id"`
+	Rating   string `json:"rating,omitempty"`
+}
+
+func writeReviewAssessmentEnvelope(cmd *cobra.Command, row reviewAssessmentRow) error {
+	help := []string{"arm review commits " + row.Issue + " lists delivery commits for the issue"}
+	if row.Status == "duplicate" {
+		help = []string{"assessment already recorded for this bundle; no op was appended", help[0]}
+	}
+	return writeNamedEnvelope(cmd.OutOrStdout(), "assessments", []reviewAssessmentRow{row}, help)
+}
+
 func newReviewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -155,6 +176,13 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 		if err := os.WriteFile(outputFile, bundleJSON, 0o600); err != nil {
 			return fmt.Errorf("write output file: %w", err)
 		}
+		if structuredFormat(cmd) {
+			row := reviewBundleWriteRow{Path: outputFile, Issue: issueID, BundleID: bundle.BundleID}
+			help := []string{
+				"arm review record --issue " + issueID + " --assessment <assessment.json> --bundle " + outputFile,
+			}
+			return writeNamedEnvelope(cmd.OutOrStdout(), "bundles", []reviewBundleWriteRow{row}, help)
+		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Review bundle written to %s\n", outputFile)
 	} else {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(bundleJSON))
@@ -259,20 +287,19 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 	// Output in JSON format when in agent context, otherwise human-readable
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {
-		data, err := json.Marshal(commits)
-		if err != nil {
-			return fmt.Errorf("failed to marshal commits: %w", err)
-		}
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-	} else {
-		// Human-readable output
+		help := []string{"arm review prepare --issue " + issueID + " --base <sha> --head <sha> builds a review bundle"}
 		if len(commits) == 0 {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No commits found for issue %s\n", issueID)
-		} else {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d commit(s) for issue %s:\n\n", len(commits), issueID)
-			for _, commit := range commits {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%.7s %s (%s, %s)\n", commit.SHA, commit.Subject, commit.Author, commit.Date)
-			}
+			help = []string{"no delivery commits found for " + issueID, help[0]}
+		}
+		return writeNamedEnvelope(cmd.OutOrStdout(), "commits", commits, help)
+	}
+
+	if len(commits) == 0 {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No commits found for issue %s\n", issueID)
+	} else {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d commit(s) for issue %s:\n\n", len(commits), issueID)
+		for _, commit := range commits {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%.7s %s (%s, %s)\n", commit.SHA, commit.Subject, commit.Author, commit.Date)
 		}
 	}
 
@@ -363,12 +390,13 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	if recordResult.IsDuplicate {
 		format, _ := cmd.Root().PersistentFlags().GetString("format")
 		if format == "json" || format == "agent" {
-			result := map[string]string{"issue": issueID, "status": "duplicate", "bundle_id": recordResult.Attestation.BundleID}
-			data, _ := json.Marshal(result) //nolint:errcheck
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-		} else {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assessment for bundle %s already recorded (idempotent)\n", recordResult.Attestation.BundleID)
+			return writeReviewAssessmentEnvelope(cmd, reviewAssessmentRow{
+				Issue:    issueID,
+				Status:   "duplicate",
+				BundleID: recordResult.Attestation.BundleID,
+			})
 		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assessment for bundle %s already recorded (idempotent)\n", recordResult.Attestation.BundleID)
 		return nil
 	}
 
@@ -401,20 +429,16 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	// Output result
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {
-		result := map[string]string{
-			"issue":     issueID,
-			"status":    "recorded",
-			"bundle_id": recordResult.Attestation.BundleID,
-			"rating":    recordResult.Attestation.Rating.String(),
-		}
-		data, _ := json.Marshal(result) //nolint:errcheck
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-	} else {
-		rating := recordResult.Attestation.Rating.String()
-		bundleID := recordResult.Attestation.BundleID
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assessment for bundle %s recorded with rating %s\n", bundleID, rating)
+		return writeReviewAssessmentEnvelope(cmd, reviewAssessmentRow{
+			Issue:    issueID,
+			Status:   "recorded",
+			BundleID: recordResult.Attestation.BundleID,
+			Rating:   recordResult.Attestation.Rating.String(),
+		})
 	}
-
+	rating := recordResult.Attestation.Rating.String()
+	bundleID := recordResult.Attestation.BundleID
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Assessment for bundle %s recorded with rating %s\n", bundleID, rating)
 	return nil
 }
 
