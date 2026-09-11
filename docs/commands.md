@@ -832,7 +832,9 @@ records resolve model as payload `preferred_model`, then the issue's
 `model_identity` or `default`; they do not inherit the issue's preferred model.
 
 Waves are greedy first-fit groups of issues that recorded usage and do not share
-overlapping scope. Stories roll up descendant usage.
+overlapping scope. Stories roll up descendant usage. Spend uses the same captured
+validated op set as snapshot materialization. Idempotent assessment attestations
+(same issue and `result_fingerprint`) are counted once.
 
 Without `--cost`, the command prints a hint. Latency and rework analytics are
 not implemented yet.
@@ -859,8 +861,9 @@ Show a human-readable summary of one or more issues.
 
 **Description:**
 Human output includes a `Spend-to-date` line: dollars plus input/output token
-totals for the issue and its descendants. JSON/`--field` output is unchanged
-and does not reparse ops to load spend, so later envelope work is not blocked.
+totals for the issue and its descendants, derived from the same captured
+validated op set as the snapshot. JSON/`--field` output is unchanged and does
+not load spend, so later envelope work is not blocked.
 
 **Flags:**
 - `--field string`: Extract a single field value (e.g. `status`, `title`).

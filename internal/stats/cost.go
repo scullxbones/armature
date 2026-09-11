@@ -119,6 +119,9 @@ func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
 // op stream as snapshot materialization. Ops whose worker_id does not match
 // the filename are excluded. Unreadable logs return an error rather than a
 // silently understated spend total.
+//
+// Command handlers that already have a Snapshot must use snap.Ops instead of
+// calling LoadOps, so spend and hierarchy share one captured op set.
 func LoadOps(opsDir string) ([]ops.Op, error) {
 	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
@@ -128,8 +131,11 @@ func LoadOps(opsDir string) ([]ops.Op, error) {
 }
 
 // CollectUsage extracts token-bearing outcome and assessment records. Zero is unset.
+// Assessment attestations are deduplicated by issue ID + ResultFingerprint, matching
+// materialize.applyAssessmentAttested, so concurrent idempotent appends are billed once.
 func CollectUsage(opList []ops.Op) []Usage {
 	var out []Usage
+	seenAttestation := map[attestationKey]struct{}{}
 	for _, op := range opList {
 		switch op.Type {
 		case ops.OpTransition:
@@ -148,6 +154,11 @@ func CollectUsage(opList []ops.Op) []Usage {
 			if err := json.Unmarshal(op.Payload.Assessment, &att); err != nil {
 				continue
 			}
+			key := attestationKey{issueID: op.TargetID, fingerprint: att.ResultFingerprint}
+			if _, dup := seenAttestation[key]; dup {
+				continue
+			}
+			seenAttestation[key] = struct{}{}
 			if att.InputTokens == 0 && att.OutputTokens == 0 {
 				continue
 			}
@@ -161,6 +172,11 @@ func CollectUsage(opList []ops.Op) []Usage {
 		}
 	}
 	return out
+}
+
+type attestationKey struct {
+	issueID     string
+	fingerprint string
 }
 
 // USDFromTokens converts token counts to dollars using the model's rate.

@@ -271,3 +271,50 @@ func TestLoadOps_UnreadableLogReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "broken.log")
 }
+
+func TestCollectUsage_DedupesIdempotentAssessments(t *testing.T) {
+	t.Parallel()
+
+	att := func(fp string, in, out int) json.RawMessage {
+		t.Helper()
+		body, err := json.Marshal(review.AssessmentAttestation{
+			SchemaVersion:       review.SchemaVersion,
+			BundleID:            "bundle-" + fp,
+			ContractFingerprint: "cf",
+			DeliveryFingerprint: "df",
+			BaseSHA:             "aa",
+			HeadSHA:             "bb",
+			ModelIdentity:       "claude-haiku-4-5",
+			InputTokens:         in,
+			OutputTokens:        out,
+			Rating:              review.Green,
+			ResultFingerprint:   fp,
+		})
+		require.NoError(t, err)
+		return body
+	}
+
+	usages := CollectUsage([]ops.Op{
+		{Type: ops.OpAssessmentAttested, TargetID: "TASK-A", Payload: ops.Payload{Assessment: att("fp-same", 1_000_000, 0)}},
+		{Type: ops.OpAssessmentAttested, TargetID: "TASK-A", Payload: ops.Payload{Assessment: att("fp-same", 1_000_000, 0)}},
+		{Type: ops.OpAssessmentAttested, TargetID: "TASK-B", Payload: ops.Payload{Assessment: att("fp-same", 1_000_000, 0)}},
+		{Type: ops.OpAssessmentAttested, TargetID: "TASK-A", Payload: ops.Payload{Assessment: att("fp-other", 500_000, 0)}},
+		{
+			Type:     ops.OpAssessmentAttested,
+			TargetID: "TASK-C",
+			Payload:  ops.Payload{Assessment: att("fp-zero-first", 0, 0)},
+		},
+		{
+			Type:     ops.OpAssessmentAttested,
+			TargetID: "TASK-C",
+			Payload:  ops.Payload{Assessment: att("fp-zero-first", 1_000_000, 0)},
+		},
+	})
+
+	require.Len(t, usages, 3)
+	assert.Equal(t, "TASK-A", usages[0].IssueID)
+	assert.Equal(t, 1_000_000, usages[0].InputTokens)
+	assert.Equal(t, "TASK-B", usages[1].IssueID)
+	assert.Equal(t, "TASK-A", usages[2].IssueID)
+	assert.Equal(t, 500_000, usages[2].InputTokens)
+}
