@@ -63,7 +63,7 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 
 	state, index, err := replayFixtureState()
 	require.NoError(t, err)
-	now := time.Unix(1_800_000_000, 0)
+	now := time.Unix(fixtureReadyNow, 0)
 
 	got, err := measureReady(index, state, now)
 	require.NoError(t, err)

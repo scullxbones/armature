@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
 )
 
@@ -50,7 +49,7 @@ func ReadyIssueRows(entries []ready.ReadyEntry) []ReadyIssue {
 		rows = append(rows, ReadyIssue{
 			ID:                   e.Issue,
 			Type:                 e.Type,
-			Status:               ops.StatusOpen,
+			Status:               "open",
 			Title:                e.Title,
 			Parent:               e.Parent,
 			Priority:             e.Priority,

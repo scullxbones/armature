@@ -5,20 +5,19 @@ import (
 	"sort"
 
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 )
 
 const ListShowHelp = "arm show <id> for outcome, scope, and acceptance"
 
 // listStatusOrder is display priority for --group output — lower number appears first.
 var listStatusOrder = map[string]int{
-	ops.StatusInProgress: 0,
-	ops.StatusClaimed:    1,
-	ops.StatusDone:       2,
-	ops.StatusOpen:       3,
-	ops.StatusBlocked:    4,
-	ops.StatusMerged:     5,
-	ops.StatusCancelled:  6,
+	"in-progress": 0,
+	"claimed":     1,
+	"done":        2,
+	"open":        3,
+	"blocked":     4,
+	"merged":      5,
+	"cancelled":   6,
 }
 
 // ListIssue is the N4 default list row: id, type, status, title only.
