@@ -22,8 +22,9 @@ const FixtureShowIssue = "FX-WORK"
 const EstimationMethod = "estimated tokens = bytes/4 (integer division), " +
 	"matching the token_budget convention used by render-context " +
 	"(character budget = tokens * 4). " +
-	"Primary rows are structured stdout (json/agent) for main-path CLI " +
-	"invocations measured against the checked-in fixture graph under " +
+	"Primary rows are json/agent stdout for list, ready, render-context, " +
+	"and review, plus the agent-mode show payload (human RenderIssue, not " +
+	"JSON). Measured against the embedded fixture graph under " +
 	"internal/contextreport/testdata/."
 
 const (

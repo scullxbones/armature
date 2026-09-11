@@ -180,14 +180,17 @@ Price fixture-measured structured stdout for main-path CLI commands.
 `arm context-report`
 
 **Description:**
-Measures json/agent payload bytes for `list`, `ready`, `show`, `render-context`,
-and `review` against the checked-in fixture graph, plus a fixture
-`render-context` bundle. Estimated tokens use bytes/4 (integer division),
-matching the `token_budget` convention.
+Measures json/agent payload bytes for `list`, `ready`, `render-context`, and
+`review`, plus the agent-mode `show` payload (human `RenderIssue`, matching
+`--format agent`), against the fixture graph embedded in the binary. Also prices
+a fixture `render-context` bundle. Estimated tokens use bytes/4 (integer
+division), matching the `token_budget` convention. `--repo` is not required.
+Non-TTY invocations without `--format` follow the shared TTY auto-detect
+(agent/JSON). `make context-report` passes `--format human` explicitly.
 
 **Example:**
 ```bash
-arm context-report --repo . --format json
+arm context-report --format json
 make context-report
 ```
 

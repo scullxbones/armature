@@ -48,7 +48,7 @@ trace-report:
 	@$(PYTHON) scripts/trace_report.py .
 
 context-report: build
-	@./bin/arm context-report --repo .
+	@./bin/arm context-report --format human
 
 test: build
 	@tmp=$$(mktemp); \
