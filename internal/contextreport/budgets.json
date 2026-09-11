@@ -18,7 +18,7 @@
     {
       "path": "internal/skillsembed/skills/armature-coordinator",
       "class": "skill",
-      "max_bytes": 62099
+      "max_bytes": 62358
     },
     {
       "path": "internal/skillsembed/skills/armature-planner",
@@ -48,7 +48,7 @@
     {
       "path": "docs/commands.md",
       "class": "commands",
-      "max_bytes": 31028
+      "max_bytes": 33372
     },
     {
       "path": "docs/concepts.md",
