@@ -112,13 +112,65 @@ func TestRuntimeBudgetCapsAreExplicitTargets_REQ_NXTTN_S3_T2(t *testing.T) {
 			t.Errorf("%q is a measured-size-only seed (PR 162 failure mode)", path)
 		}
 		if art.Bytes > row.TargetBytes {
-			assert.Contains(t, body, "trim plan")
-			assert.Regexp(t, `\d{4}-\d{2}-\d{2}`, body,
-				"dated trim plan required when measured bytes exceed target for %q", path)
-			assert.Contains(t, body, path)
+			assert.True(t, HasDatedTrimPlan(body, path),
+				"dated trim plan heading for %q required when measured bytes exceed target", path)
 		}
 	}
 	assert.NotContains(t, body, "internal/skillsembed/skills")
+}
+
+func TestHasDatedTrimPlanRequiresPathSpecificHeading(t *testing.T) {
+	t.Parallel()
+
+	weak := `# Context budgets
+
+trim plan
+
+Measured fixture sizes on 2026-09-10.
+
+| path | class | target_bytes | max_bytes |
+|---|---|---:|---:|
+| list | invocation | 2048 | 4096 |
+| ready | invocation | 1024 | 1024 |
+| show | invocation | 2048 | 2048 |
+| render-context | invocation | 16000 | 16000 |
+| review | invocation | 4096 | 4096 |
+| render-context.bundle | bundle | 16000 | 20000 |
+
+## Dated trim plan
+
+` + "```\n### 2026-10-01 render-context.bundle (measured M > target 16000)\n```\n"
+
+	assert.False(t, HasDatedTrimPlan(weak, "list"),
+		"table row, phrase, and dates must not count as a list trim plan")
+	assert.False(t, HasDatedTrimPlan(weak, "render-context.bundle"),
+		"fenced example heading must not count as a plan")
+	assert.False(t, HasDatedTrimPlan(weak, "render-context"))
+
+	planned := weak + "\n### 2026-10-01 list (measured 3000 > target 2048)\n"
+	assert.True(t, HasDatedTrimPlan(planned, "list"))
+	assert.False(t, HasDatedTrimPlan(planned, "listed"))
+	assert.False(t, HasDatedTrimPlan(planned, "render-context.bundle"))
+
+	bundled := planned + "\n### 2026-10-02 render-context.bundle\n"
+	assert.True(t, HasDatedTrimPlan(bundled, "render-context.bundle"))
+	assert.False(t, HasDatedTrimPlan(bundled, "render-context"),
+		"render-context must not inherit a bundle heading")
+}
+
+func TestCheckedInBudgetsDocHasNoFencedFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	root := moduleRoot(t)
+	docs, err := os.ReadFile(filepath.Join(root, "docs", "context-budgets.md"))
+	require.NoError(t, err)
+	body := string(docs)
+	for _, path := range []string{
+		"list", "ready", "show", "render-context", "review", "render-context.bundle",
+	} {
+		assert.False(t, HasDatedTrimPlan(body, path),
+			"checked-in example must not count as a trim plan for %q", path)
+	}
 }
 
 func TestExplicitTargetsRejectsMeasuredSizeOnlySeed(t *testing.T) {

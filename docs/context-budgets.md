@@ -67,7 +67,7 @@ The gate also fails when a measured path has no budget, when a budget path is no
 
 `TestBudgetGateFailsOverBudget_REQ_NXTTN_S3_T2` is the acceptance test for the over-budget case. It uses an in-memory fixture, not a live DAG.
 
-`TestRuntimeBudgetCapsAreExplicitTargets_REQ_NXTTN_S3_T2` is the acceptance test that every row names a `target_bytes` promise and is not a measured-size-only seed.
+`TestRuntimeBudgetCapsAreExplicitTargets_REQ_NXTTN_S3_T2` is the acceptance test that every row names a `target_bytes` promise and is not a measured-size-only seed. When measured bytes exceed `target_bytes` while staying under `max_bytes`, that test requires `HasDatedTrimPlan` to find a heading for that path. The phrase "trim plan", a date, or the path appearing in the table is not enough.
 
 ## Named promises (2026-09-10)
 
@@ -86,7 +86,7 @@ Measured fixture sizes on 2026-09-10 (T1 head `cf07d09c`): list 475, ready 189, 
 
 ## Dated trim plan
 
-No path is above target as of 2026-09-10. If a later measurement lands above `target_bytes`, add a dated subsection here before raising or holding a high `max_bytes`. Name the path, the measured bytes, the target, and the cut that brings it under. Example shape:
+No path is above target as of 2026-09-10. If a later measurement lands above `target_bytes`, add a dated subsection here before raising or holding a high `max_bytes`. `HasDatedTrimPlan` matches a real markdown heading of the form `### YYYY-MM-DD <path>`. Name the path, the measured bytes, the target, and the cut that brings it under. Fenced examples do not count. Example shape (this fence is not a plan):
 
 ```
 ### 2026-10-01 render-context.bundle (measured M > target 16000)
