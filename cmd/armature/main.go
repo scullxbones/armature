@@ -277,6 +277,7 @@ func newRootCmd() *cobra.Command {
 
 	// Cobra lazily adds `help` in ExecuteC. Install it first so the paved-road
 	// walk classifies every registered command, including help.
+	root.SetHelpCommandGroupID("admin")
 	root.InitDefaultHelpCmd()
 	applyPavedRoadMetadata(root)
 	return root
