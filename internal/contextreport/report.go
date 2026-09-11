@@ -23,8 +23,9 @@ const EstimationMethod = "estimated tokens = bytes/4 (integer division), " +
 	"matching the token_budget convention used by render-context " +
 	"(character budget = tokens * 4). " +
 	"Primary rows are json/agent stdout for list, ready, render-context, " +
-	"and review, plus the agent-mode show payload (human RenderIssue, not " +
-	"JSON). Measured against the embedded fixture graph under " +
+	"and review (compact envelopes from the shared writers), plus the " +
+	"agent-mode show payload (human RenderIssue plus FormatSpend). " +
+	"Measured against the embedded fixture graph under " +
 	"internal/contextreport/testdata/."
 
 const (

@@ -131,9 +131,16 @@ func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T
 	var human, asJSON bytes.Buffer
 	require.NoError(t, output.RenderIssue(&human, issue, false))
 	require.NoError(t, output.RenderIssue(&asJSON, issue, true))
+	got, err := measureShow(state)
+	require.NoError(t, err)
 
-	assert.Equal(t, human.Len(), show.Bytes,
-		"show row must price the agent-mode human RenderIssue payload")
+	assert.Equal(t, len(got), show.Bytes)
+	assert.True(t, bytes.HasPrefix(got, human.Bytes()),
+		"show row must start with the agent-mode human RenderIssue payload")
+	assert.Contains(t, string(got), "Spend-to-date:",
+		"agent show appends FormatSpend after RenderIssue when rates resolve")
+	assert.Greater(t, show.Bytes, human.Len(),
+		"spend adjunct must be included in the priced show payload")
 	assert.NotEqual(t, asJSON.Len(), show.Bytes,
 		"show row must not price the JSON renderer used only by --format json")
 	assert.False(t, json.Valid(bytes.TrimSpace(human.Bytes())),
