@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/output"
@@ -128,11 +127,7 @@ func loadSpendReport(ctx *config.Context, snap *snapshot.Snapshot) (*stats.Repor
 	if err != nil {
 		return nil, nil, err
 	}
-	opList, err := stats.LoadOps(filepath.Join(ctx.IssuesDir, "ops"))
-	if err != nil {
-		return nil, nil, err
-	}
 	issues := snapshotIssueInfo(snap)
-	report := stats.Estimate(stats.CollectUsage(opList), issues, rates)
+	report := stats.Estimate(stats.CollectUsage(snap.Ops), issues, rates)
 	return &report, issues, nil
 }
