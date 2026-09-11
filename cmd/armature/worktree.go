@@ -362,11 +362,9 @@ func worktreeListRows(result worktree.ReconcileResult) []worktreeRow {
 
 func writeWorktreeGCEnvelope(cmd *cobra.Command, removed, skipped, failed, ambiguous []string, dryRun bool) error {
 	rows := make([]worktreeRow, 0, len(removed)+len(skipped)+len(failed)+len(ambiguous))
-	action := "removed"
 	if dryRun {
-		action = "would_remove"
 		for _, id := range removed {
-			rows = append(rows, worktreeRow{ID: id, Action: action})
+			rows = append(rows, worktreeRow{ID: id, Action: "would_remove"})
 		}
 	} else {
 		for _, id := range removed {
