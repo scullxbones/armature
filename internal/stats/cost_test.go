@@ -259,3 +259,15 @@ func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	}})
 	assert.Empty(t, usages)
 }
+
+func TestLoadOps_UnreadableLogReturnsError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// ListLogFiles includes *.log entries that are not directories; a dangling
+	// symlink is listed then fails to open, which must not be swallowed.
+	require.NoError(t, os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "broken.log")))
+
+	_, err := LoadOps(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broken.log")
+}
