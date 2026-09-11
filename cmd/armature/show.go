@@ -44,11 +44,6 @@ func newShowCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
-			costReport, issueInfo, costErr := loadSpendReport(ctx, snap)
-			if costErr != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: spend-to-date unavailable: %s\n", costErr)
-			}
-
 			// Multi-issue JSON: emit a JSON array using the canonical output.IssueJSON schema
 			if format == "json" && len(ids) > 1 {
 				results := make([]output.IssueJSON, 0, len(ids))
@@ -65,6 +60,19 @@ func newShowCmd() *cobra.Command {
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
+			}
+
+			needSpend := fieldFlag == "" && format != "json"
+			var (
+				costReport *stats.Report
+				issueInfo  map[string]stats.IssueInfo
+			)
+			if needSpend {
+				var costErr error
+				costReport, issueInfo, costErr = loadSpendReport(ctx, snap)
+				if costErr != nil {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: spend-to-date unavailable: %s\n", costErr)
+				}
 			}
 
 			// Single or multi-issue non-JSON: iterate and print each, separated by "---"

@@ -826,8 +826,10 @@ Dollars are USD per million tokens. Built-in rates (not a billing guarantee):
 - `gpt-4.1-mini`: $0.40 input / $1.60 out
 
 Override with `--rates` (JSON `{"models":{"name":{"input_usd_per_mtok":3,"output_usd_per_mtok":15}}}`)
-or `.armature/cost-rates.json`. Unlisted models keep built-in rates. Missing
-model identity uses `default`.
+or `.armature/cost-rates.json`. Unlisted models keep built-in rates. Outcome
+records resolve model as payload `preferred_model`, then the issue's
+`preferred_model`, then `default`. Assessment records use attestation
+`model_identity` or `default`; they do not inherit the issue's preferred model.
 
 Waves are greedy first-fit groups of issues that recorded usage and do not share
 overlapping scope. Stories roll up descendant usage.
@@ -858,7 +860,7 @@ Show a human-readable summary of one or more issues.
 **Description:**
 Human output includes a `Spend-to-date` line: dollars plus input/output token
 totals for the issue and its descendants. JSON/`--field` output is unchanged
-so later envelope work is not blocked.
+and does not reparse ops to load spend, so later envelope work is not blocked.
 
 **Flags:**
 - `--field string`: Extract a single field value (e.g. `status`, `title`).

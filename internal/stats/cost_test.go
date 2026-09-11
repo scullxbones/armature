@@ -81,10 +81,31 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		},
 	}
 
+	anonAttJSON, err := json.Marshal(review.AssessmentAttestation{
+		SchemaVersion:       review.SchemaVersion,
+		BundleID:            "bundle-anon",
+		ContractFingerprint: "cf",
+		DeliveryFingerprint: "df",
+		BaseSHA:             "aa",
+		HeadSHA:             "bb",
+		InputTokens:         1_000_000,
+		OutputTokens:        0,
+		Rating:              review.Green,
+		ResultFingerprint:   "fp-anon",
+	})
+	require.NoError(t, err)
+	opList = append(opList, ops.Op{
+		Type:     ops.OpAssessmentAttested,
+		TargetID: "TASK-E",
+		Payload:  ops.Payload{Assessment: anonAttJSON},
+	})
+
 	usages := CollectUsage(opList)
-	require.Len(t, usages, 3, "zero/omitted token fields must not produce usage records")
+	require.Len(t, usages, 4, "zero/omitted token fields must not produce usage records")
 	assert.Equal(t, "outcome", usages[0].Source)
 	assert.Equal(t, "assessment", usages[1].Source)
+	assert.Equal(t, "assessment", usages[3].Source)
+	assert.Empty(t, usages[3].Model)
 
 	issues := map[string]IssueInfo{
 		"STORY-1": {ID: "STORY-1", Type: "story"},
@@ -93,6 +114,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		"TASK-B":  {ID: "TASK-B", Type: "task", Parent: "STORY-1", Scope: []string{"pkg/b.go"}},
 		"TASK-C":  {ID: "TASK-C", Type: "task", Parent: "STORY-1", Scope: []string{"pkg/c.go"}},
 		"TASK-D":  {ID: "TASK-D", Type: "task", Parent: "STORY-2", Scope: []string{"pkg/a.go"}},
+		"TASK-E":  {ID: "TASK-E", Type: "task", Parent: "STORY-1", Scope: []string{"pkg/e.go"}, PreferredModel: "claude-haiku-4-5"},
 	}
 
 	report := Estimate(usages, issues, DefaultRates())
@@ -103,9 +125,11 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		byStory[s.ID] = s
 	}
 	// TASK-A: 1M in @ default $3; TASK-B: 1M in + 1M out @ haiku $1/$5
-	assert.InDelta(t, 3.00+1.00+5.00, byStory["STORY-1"].USD, 1e-9)
-	assert.Equal(t, 2_000_000, byStory["STORY-1"].InputTokens)
+	// TASK-E: assessment without model_identity uses default $3, not issue PreferredModel (haiku $1)
+	assert.InDelta(t, 3.00+1.00+5.00+3.00, byStory["STORY-1"].USD, 1e-9)
+	assert.Equal(t, 3_000_000, byStory["STORY-1"].InputTokens)
 	assert.Equal(t, 1_000_000, byStory["STORY-1"].OutputTokens)
+	assert.InDelta(t, 3.00, report.ByIssue["TASK-E"].USD, 1e-9)
 	// TASK-D: 1M out @ sonnet $15
 	assert.InDelta(t, 15.00, byStory["STORY-2"].USD, 1e-9)
 
@@ -127,7 +151,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 
 	storySpend := Rollup(report, "STORY-1", issues)
 	assert.InDelta(t, byStory["STORY-1"].USD, storySpend.USD, 1e-9)
-	assert.Contains(t, FormatSpend(storySpend), "$9.000000")
+	assert.Contains(t, FormatSpend(storySpend), "$12.000000")
 }
 
 func TestLoadRateTableOverridesDefault(t *testing.T) {
@@ -173,23 +197,37 @@ func TestUSDFromTokensUsesPerMillion(t *testing.T) {
 func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	line, err := ops.MarshalOp(ops.Op{
+	owned, err := ops.MarshalOp(ops.Op{
 		Type:     ops.OpTransition,
 		TargetID: "T1",
+		WorkerID: "w",
 		Payload:  ops.Payload{InputTokens: 10, OutputTokens: 5},
 	})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "w.log"), append(line, '\n'), 0o600))
+	foreign, err := ops.MarshalOp(ops.Op{
+		Type:     ops.OpTransition,
+		TargetID: "T-FOREIGN",
+		WorkerID: "other-worker",
+		Payload:  ops.Payload{InputTokens: 999, OutputTokens: 999},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "w.log"), append(append(owned, '\n'), append(foreign, '\n')...), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "skip.txt"), []byte("not a log"), 0o600))
 
 	loaded, err := LoadOps(dir)
 	require.NoError(t, err)
-	require.Len(t, loaded, 1)
+	require.Len(t, loaded, 1, "ops whose worker_id mismatches the filename must be excluded")
+	assert.Equal(t, "T1", loaded[0].TargetID)
 	assert.Equal(t, 10, loaded[0].Payload.InputTokens)
 
 	missing, err := LoadOps(filepath.Join(dir, "no-such-ops"))
 	require.NoError(t, err)
 	assert.Empty(t, missing)
+
+	notADir := filepath.Join(dir, "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o600))
+	_, err = LoadOps(notADir)
+	require.Error(t, err, "unreadable ops dir must not silently understate spend")
 
 	_, err = LoadRateTable(filepath.Join(dir, "missing.json"))
 	require.Error(t, err)

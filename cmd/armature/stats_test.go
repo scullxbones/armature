@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,6 +33,37 @@ func TestStatsCostCLI_REQ_TOPTIER_S11_T2(t *testing.T) {
 	waves, ok := report["waves"].([]any)
 	require.True(t, ok)
 	require.NotEmpty(t, waves)
+}
+
+func TestStatsCostExcludesMismatchedWorkerOps(t *testing.T) {
+	repo := initCostFixture(t)
+	ctx := getTestContext(t, repo)
+	ghostPath := filepath.Join(ctx.IssuesDir, "ops", "worker-ghost.log")
+	require.NoError(t, appendOp(ctx, ghostPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  "TASK-COST-A",
+		Timestamp: nowEpoch(),
+		WorkerID:  "someone-else",
+		Payload: ops.Payload{
+			To:           ops.StatusDone,
+			Outcome:      "tokens from a filename that does not own this worker_id",
+			InputTokens:  1_000_000_000,
+			OutputTokens: 1_000_000_000,
+		},
+	}))
+
+	jsonOut, err := runTrls(t, repo, "stats", "--cost", "--format", "json")
+	require.NoError(t, err)
+	var report struct {
+		Stories []struct {
+			ID  string  `json:"id"`
+			USD float64 `json:"usd"`
+		} `json:"stories"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(jsonOut)), &report))
+	require.Len(t, report.Stories, 1)
+	assert.InDelta(t, 4.0, report.Stories[0].USD, 1e-9,
+		"spend must match materialized ops and ignore filename/worker_id mismatches")
 }
 
 func TestStatsWithoutCostFlagHints(t *testing.T) {

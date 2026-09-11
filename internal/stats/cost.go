@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
@@ -116,21 +115,16 @@ func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
 	return DefaultRates(), nil
 }
 
-// LoadOps parses every JSONL ops log under opsDir, skipping unreadable files.
+// LoadOps parses every JSONL ops log under opsDir using the same validated
+// op stream as snapshot materialization. Ops whose worker_id does not match
+// the filename are excluded. Unreadable logs return an error rather than a
+// silently understated spend total.
 func LoadOps(opsDir string) ([]ops.Op, error) {
-	files, err := adapters.ListLogFiles(opsDir)
+	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
-		return nil, fmt.Errorf("list ops logs: %w", err)
+		return nil, fmt.Errorf("load ops logs: %w", err)
 	}
-	var all []ops.Op
-	for _, path := range files {
-		chunk, err := ops.ReadLogFromOffset(path, 0)
-		if err != nil {
-			continue
-		}
-		all = append(all, chunk...)
-	}
-	return all, nil
+	return ops.ExtractOps(items), nil
 }
 
 // CollectUsage extracts token-bearing outcome and assessment records. Zero is unset.
@@ -200,7 +194,11 @@ func Estimate(usages []Usage, issues map[string]IssueInfo, rates RateTable) Repo
 	byIssue := make(map[string]Totals)
 	for _, u := range usages {
 		info := issues[u.IssueID]
-		rate := RateFor(rates, u.Model, info.PreferredModel)
+		preferred := ""
+		if u.Source != "assessment" {
+			preferred = info.PreferredModel
+		}
+		rate := RateFor(rates, u.Model, preferred)
 		cur := byIssue[u.IssueID]
 		cur.ID = u.IssueID
 		cur.InputTokens += u.InputTokens
