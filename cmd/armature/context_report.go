@@ -11,17 +11,18 @@ func newContextReportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "context-report",
 		Short: "Price fixture-measured main-path CLI payloads by bytes and estimated tokens",
-		Long: `Measure structured stdout (json/agent) for main-path commands
-list, ready, show, render-context, and review against the checked-in
-fixture graph, plus the fixture render-context bundle.
+		Long: `Measure json/agent stdout for main-path commands list, ready,
+render-context, and review, plus the agent-mode show payload, against the
+embedded fixture graph, plus the fixture render-context bundle.
 
 Tokens are bytes/4 (integer division), matching the token_budget
-convention (character budget = tokens * 4).`,
+convention (character budget = tokens * 4). Fixtures are embedded in the
+binary; --repo is not required.`,
 		Args: cobra.NoArgs,
 		// context-report bypasses the root PersistentPreRunE (it does not
-		// need config.ResolveContext; it prices fixtures off --repo), so it
-		// applies the same --non-interactive/--format auto-detection via the
-		// shared autoDetectTTYPolicy helper in main.go. That keeps direct
+		// need config.ResolveContext; fixtures are embedded), so it applies
+		// the same --non-interactive/--format auto-detection via the shared
+		// autoDetectTTYPolicy helper in main.go. That keeps direct
 		// terminal-detection calls confined to main.go per the CLI Grammar
 		// Contract (docs/design/cli-grammar-contract.md).
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -29,13 +30,7 @@ convention (character budget = tokens * 4).`,
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repo := "."
-			if cmd.Root() != nil {
-				if r, err := cmd.Root().PersistentFlags().GetString("repo"); err == nil && r != "" {
-					repo = r
-				}
-			}
-			report, err := contextreport.Collect(repo)
+			report, err := contextreport.Collect()
 			if err != nil {
 				return err
 			}

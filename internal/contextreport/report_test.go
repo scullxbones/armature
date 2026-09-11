@@ -3,25 +3,14 @@ package contextreport
 import (
 	"bytes"
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	ctxpkg "github.com/scullxbones/armature/internal/context"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func moduleRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller")
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-}
 
 func artifactByPath(t *testing.T, report Report, path string) Artifact {
 	t.Helper()
@@ -37,8 +26,7 @@ func artifactByPath(t *testing.T, report Report, path string) Artifact {
 func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	root := moduleRoot(t)
-	report, err := Collect(root)
+	report, err := Collect()
 	require.NoError(t, err)
 
 	want := []string{"list", "ready", "show", "render-context", "review"}
@@ -93,21 +81,50 @@ func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 	assert.Contains(t, string(raw), `"class": "invocation"`)
 }
 
-func TestContextReportShowPricesAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T) {
+func TestContextReportPricesRenderContextFixture_REQ_NXTTN_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	root := moduleRoot(t)
-	report, err := Collect(root)
+	report, err := Collect()
+	require.NoError(t, err)
+
+	bundle := artifactByPath(t, report, "render-context.bundle")
+	assert.Equal(t, ClassBundle, bundle.Class)
+	assert.Greater(t, bundle.Bytes, 0)
+	assert.Equal(t, bundle.Bytes/BytesPerToken, bundle.EstimatedTokens)
+
+	state, _, err := replayFixtureState()
+	require.NoError(t, err)
+	assembled, err := ctxpkg.Assemble(FixtureShowIssue, state, embedFileReader{})
+	require.NoError(t, err)
+	raw, err := ctxpkg.RenderAgent(assembled)
+	require.NoError(t, err)
+	assert.Equal(t, len(raw), bundle.Bytes, "bundle row is the fixture render-context artifact")
+	assert.Contains(t, raw, FixtureShowIssue)
+	assert.Contains(t, raw, "hello.go")
+
+	invocation := artifactByPath(t, report, "render-context")
+	assert.Equal(t, ClassInvocation, invocation.Class)
+	assert.Greater(t, invocation.Bytes, 0)
+}
+
+func TestCollectUsesEmbeddedFixturesIndependentOfRepo_REQ_NXTTN_S3_T1(t *testing.T) {
+	t.Parallel()
+
+	report, err := Collect()
+	require.NoError(t, err, "fixtures must be embedded; Collect must not read --repo testdata")
+	assert.NotEmpty(t, report.Artifacts)
+	assert.Greater(t, report.TotalBytes, 0)
+}
+
+func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T) {
+	t.Parallel()
+
+	report, err := Collect()
 	require.NoError(t, err)
 	show := artifactByPath(t, report, "show")
 
-	opsPath := filepath.Join(root, "internal", "contextreport", "testdata", "graph", "ops.jsonl")
-	allOps, err := loadFixtureOps(opsPath)
+	state, _, err := replayFixtureState()
 	require.NoError(t, err)
-	state := materialize.NewState()
-	for _, op := range allOps {
-		require.NoError(t, state.ApplyOp(op))
-	}
 	issue := state.Issues[FixtureShowIssue]
 	require.NotNil(t, issue)
 
@@ -121,68 +138,29 @@ func TestContextReportShowPricesAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T) 
 		"show row must not price the JSON renderer used only by --format json")
 	assert.False(t, json.Valid(bytes.TrimSpace(human.Bytes())),
 		"agent-mode show is human text, not a JSON object")
+	assert.True(t, json.Valid(bytes.TrimSpace(asJSON.Bytes())))
+	assert.Contains(t, human.String(), "ID:")
 }
 
-func TestContextReportPricesRenderContextFixture_REQ_NXTTN_S3_T1(t *testing.T) {
+func TestParseFixtureOpsEmpty(t *testing.T) {
 	t.Parallel()
-
-	root := moduleRoot(t)
-	report, err := Collect(root)
-	require.NoError(t, err)
-
-	bundle := artifactByPath(t, report, "render-context.bundle")
-	assert.Equal(t, ClassBundle, bundle.Class)
-	assert.Greater(t, bundle.Bytes, 0)
-	assert.Equal(t, bundle.Bytes/BytesPerToken, bundle.EstimatedTokens)
-
-	opsPath := filepath.Join(root, "internal", "contextreport", "testdata", "graph", "ops.jsonl")
-	allOps, err := loadFixtureOps(opsPath)
-	require.NoError(t, err)
-	state := materialize.NewState()
-	for _, op := range allOps {
-		require.NoError(t, state.ApplyOp(op))
-	}
-	workspace := filepath.Join(root, "internal", "contextreport", "testdata", "graph", "workspace")
-	assembled, err := ctxpkg.Assemble(FixtureShowIssue, state, &ctxpkg.OSFileReader{Root: workspace})
-	require.NoError(t, err)
-	raw, err := ctxpkg.RenderAgent(assembled)
-	require.NoError(t, err)
-	assert.Equal(t, len(raw), bundle.Bytes, "bundle row is the fixture render-context artifact")
-	assert.Contains(t, raw, FixtureShowIssue)
-	assert.Contains(t, raw, "hello.go")
-
-	invocation := artifactByPath(t, report, "render-context")
-	assert.Equal(t, ClassInvocation, invocation.Class)
-	assert.Greater(t, invocation.Bytes, 0)
-}
-
-func TestCollectErrorsWhenFixtureOpsMissing(t *testing.T) {
-	t.Parallel()
-	_, err := Collect(t.TempDir())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "ops.jsonl")
-}
-
-func TestCollectErrorsWhenFixtureOpsEmpty(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	path := filepath.Join(root, "internal", "contextreport", "testdata", "graph", "ops.jsonl")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte("\n"), 0o644))
-	_, err := Collect(root)
+	_, err := parseFixtureOps("ops.jsonl", []byte("\n"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }
 
-func TestCollectErrorsWhenFixtureOpsCorrupt(t *testing.T) {
+func TestParseFixtureOpsCorrupt(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	path := filepath.Join(root, "internal", "contextreport", "testdata", "graph", "ops.jsonl")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte("not-json\n"), 0o644))
-	_, err := Collect(root)
+	_, err := parseFixtureOps("ops.jsonl", []byte("not-json\n"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse fixture ops")
+}
+
+func TestEmbedFileReaderRejectsEscapingPath(t *testing.T) {
+	t.Parallel()
+	_, err := embedFileReader{}.ReadFile("../ops.jsonl")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid fixture path")
 }
 
 func TestEstimateTokensIntegerDivision(t *testing.T) {

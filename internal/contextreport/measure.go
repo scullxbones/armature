@@ -2,11 +2,13 @@ package contextreport
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
-	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	ctxpkg "github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -14,6 +16,15 @@ import (
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
 	"github.com/scullxbones/armature/internal/review"
+)
+
+//go:embed testdata/graph
+var fixtureGraph embed.FS
+
+const (
+	fixtureOpsName      = "testdata/graph/ops.jsonl"
+	fixtureDiffName     = "testdata/graph/delivery.diff"
+	fixtureWorkspaceDir = "testdata/graph/workspace"
 )
 
 // listEntry matches cmd/armature/list.go structured stdout (json/agent).
@@ -51,36 +62,25 @@ func (g fixtureGit) DiffNameOnlyRange(_, _ string) ([]string, error) {
 	return []string{g.changedFile}, nil
 }
 
-func fixtureDir(repoRoot string) string {
-	return filepath.Join(repoRoot, "internal", "contextreport", "testdata")
+// embedFileReader reads workspace files from the embedded fixture graph.
+type embedFileReader struct{}
+
+func (embedFileReader) ReadFile(relPath string) ([]byte, error) {
+	rel := path.Clean(filepath.ToSlash(relPath))
+	if rel == ".." || strings.HasPrefix(rel, "../") || path.IsAbs(rel) {
+		return nil, fmt.Errorf("invalid fixture path %q", relPath)
+	}
+	return fixtureGraph.ReadFile(path.Join(fixtureWorkspaceDir, rel))
 }
 
 // Collect inventories fixture-measured structured stdout for main-path CLI
-// commands plus the fixture render-context bundle.
-func Collect(repoRoot string) (Report, error) {
-	abs, err := filepath.Abs(repoRoot)
-	if err != nil {
-		return Report{}, fmt.Errorf("resolve repository path: %w", err)
-	}
-
-	root := fixtureDir(abs)
-	graphDir := filepath.Join(root, "graph")
-	opsPath := filepath.Join(graphDir, "ops.jsonl")
-	workspace := filepath.Join(graphDir, "workspace")
-	diffPath := filepath.Join(graphDir, "delivery.diff")
-
-	allOps, err := loadFixtureOps(opsPath)
+// commands plus the fixture render-context bundle. Fixtures are embedded in
+// the binary so the command does not depend on the --repo tree.
+func Collect() (Report, error) {
+	state, index, err := replayFixtureState()
 	if err != nil {
 		return Report{}, err
 	}
-
-	state := materialize.NewState()
-	for _, op := range allOps {
-		if err := state.ApplyOp(op); err != nil {
-			return Report{}, fmt.Errorf("replay fixture op %s %s: %w", op.Type, op.TargetID, err)
-		}
-	}
-	index := state.BuildIndex()
 
 	listPayload, err := measureList(index, state)
 	if err != nil {
@@ -94,11 +94,11 @@ func Collect(repoRoot string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	renderPayload, bundlePayload, err := measureRenderContext(state, workspace)
+	renderPayload, bundlePayload, err := measureRenderContext(state, embedFileReader{})
 	if err != nil {
 		return Report{}, err
 	}
-	reviewPayload, err := measureReview(state, diffPath)
+	reviewPayload, err := measureReview(state)
 	if err != nil {
 		return Report{}, err
 	}
@@ -114,12 +114,29 @@ func Collect(repoRoot string) (Report, error) {
 	return finalize(artifacts), nil
 }
 
-func loadFixtureOps(path string) ([]ops.Op, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path is testdata under the repo root
+func replayFixtureState() (*materialize.State, materialize.Index, error) {
+	allOps, err := loadEmbeddedOps()
 	if err != nil {
-		return nil, fmt.Errorf("open fixture ops %s: %w", path, err)
+		return nil, nil, err
 	}
+	state := materialize.NewState()
+	for _, op := range allOps {
+		if err := state.ApplyOp(op); err != nil {
+			return nil, nil, fmt.Errorf("replay fixture op %s %s: %w", op.Type, op.TargetID, err)
+		}
+	}
+	return state, state.BuildIndex(), nil
+}
 
+func loadEmbeddedOps() ([]ops.Op, error) {
+	data, err := fixtureGraph.ReadFile(fixtureOpsName)
+	if err != nil {
+		return nil, fmt.Errorf("open embedded fixture ops %s: %w", fixtureOpsName, err)
+	}
+	return parseFixtureOps(fixtureOpsName, data)
+}
+
+func parseFixtureOps(name string, data []byte) ([]ops.Op, error) {
 	var all []ops.Op
 	for lineNo, raw := range bytes.Split(data, []byte("\n")) {
 		line := bytes.TrimSpace(raw)
@@ -128,12 +145,12 @@ func loadFixtureOps(path string) ([]ops.Op, error) {
 		}
 		op, err := ops.ParseLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("parse fixture ops %s:%d: %w", path, lineNo+1, err)
+			return nil, fmt.Errorf("parse fixture ops %s:%d: %w", name, lineNo+1, err)
 		}
 		all = append(all, op)
 	}
 	if len(all) == 0 {
-		return nil, fmt.Errorf("fixture ops %s is empty", path)
+		return nil, fmt.Errorf("fixture ops %s is empty", name)
 	}
 	return all, nil
 }
@@ -187,8 +204,7 @@ func measureShow(state *materialize.State) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func measureRenderContext(state *materialize.State, workspace string) (invocation, bundle []byte, err error) {
-	reader := &ctxpkg.OSFileReader{Root: workspace}
+func measureRenderContext(state *materialize.State, reader ctxpkg.FileReader) (invocation, bundle []byte, err error) {
 	assembled, err := ctxpkg.Assemble(FixtureShowIssue, state, reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("assemble render-context: %w", err)
@@ -206,14 +222,14 @@ func measureRenderContext(state *materialize.State, workspace string) (invocatio
 	return append([]byte(agent), '\n'), []byte(raw), nil
 }
 
-func measureReview(state *materialize.State, diffPath string) ([]byte, error) {
+func measureReview(state *materialize.State) ([]byte, error) {
 	issue, ok := state.Issues[FixtureShowIssue]
 	if !ok || issue == nil {
 		return nil, fmt.Errorf("fixture issue %s not found", FixtureShowIssue)
 	}
-	diff, err := os.ReadFile(diffPath) //nolint:gosec // path is testdata under the repo root
+	diff, err := fixtureGraph.ReadFile(fixtureDiffName)
 	if err != nil {
-		return nil, fmt.Errorf("read fixture delivery diff: %w", err)
+		return nil, fmt.Errorf("read embedded fixture delivery diff: %w", err)
 	}
 	criteria, err := review.ParseAcceptanceCriteria(issue.Acceptance)
 	if err != nil {
