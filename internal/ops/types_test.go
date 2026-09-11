@@ -146,3 +146,30 @@ func TestOutcomeOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 		t.Errorf("expected token fields omitted when zero, got: %s", omitted)
 	}
 }
+
+func TestPayloadsEqual_LegacyOmitsTokens_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
+	legacy := Payload{To: StatusDone, Outcome: "legacy outcome without token fields"}
+	retry := Payload{To: StatusDone, Outcome: "legacy outcome without token fields"}
+	if !PayloadsEqual(legacy, retry) {
+		t.Fatal("absent token fields must not make a legacy retry look like a new payload")
+	}
+	withTokens := Payload{To: StatusDone, Outcome: "legacy outcome without token fields", InputTokens: 1200}
+	if PayloadsEqual(legacy, withTokens) {
+		t.Fatal("token counts already on a recorded payload must participate in equality")
+	}
+}
+
+func TestRecordedTransitionPayload_UsesLastOpWhenStatusMatches_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
+	last := Payload{To: StatusDone, Outcome: "recorded", InputTokens: 50, OutputTokens: 10}
+	got := RecordedTransitionPayload(StatusDone, "materialized", "", "", last, true)
+	if !PayloadsEqual(got, last) {
+		t.Fatalf("expected last transition payload when status matches, got %#v", got)
+	}
+	synthesized := RecordedTransitionPayload(StatusBlocked, "waiting on review now", "", "", last, true)
+	want := Payload{To: StatusBlocked, Outcome: "waiting on review now"}
+	if !PayloadsEqual(synthesized, want) {
+		t.Fatalf("expected synthesized payload without invented tokens, got %#v", synthesized)
+	}
+}

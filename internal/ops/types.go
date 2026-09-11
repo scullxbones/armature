@@ -1,7 +1,10 @@
 // Package ops defines the op-log schema (typed, append-only events), and provides parsing, commit, push, and rate-limiting for writing and reading that log.
 package ops
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+)
 
 // Op types — all 10 defined in architecture doc section 3, plus OpAssign for E3.
 const (
@@ -219,4 +222,48 @@ type Payload struct {
 
 	// assessment-attested
 	Assessment json.RawMessage `json:"assessment,omitempty"`
+}
+
+// PayloadsEqual reports whether a and b marshal to identical JSON bytes.
+// encoding/json omitempty means absent optional fields (including token
+// counts on legacy transition ops) match explicit zeros and do not need a
+// separate equality rule.
+func PayloadsEqual(a, b Payload) bool {
+	left, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	right, err := json.Marshal(b)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(left, right)
+}
+
+// LastTransitionPayload returns the payload of the last transition op for
+// issueID, if any. Scan is in log order; last write wins.
+func LastTransitionPayload(all []Op, issueID string) (Payload, bool) {
+	var last Payload
+	found := false
+	for _, op := range all {
+		if op.Type == OpTransition && op.TargetID == issueID {
+			last = op.Payload
+			found = true
+		}
+	}
+	return last, found
+}
+
+// RecordedTransitionPayload is the payload that currently represents the
+// issue's recorded transition state. When the last transition still names
+// this status, that op's payload is used in full, so optional fields such as
+// input_tokens/output_tokens participate in equality only if they were
+// already recorded. Otherwise the payload is synthesized from materialized
+// status fields without inventing token counts or other transition-only
+// flags.
+func RecordedTransitionPayload(status, outcome, branch, pr string, last Payload, hasLast bool) Payload {
+	if hasLast && last.To == status {
+		return last
+	}
+	return Payload{To: status, Outcome: outcome, Branch: branch, PR: pr}
 }

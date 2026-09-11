@@ -33,7 +33,12 @@ status with --to (required). You may optionally record an outcome description, b
 or PR number to document the completion context.
 
 When transitioning to done, you cannot be on main/master branch unless you use --force.
-This enforces branch + PR discipline.`,
+This enforces branch + PR discipline.
+
+Repeating a transition whose payload is byte-identical to the issue's current
+recorded state is a no-op at exit 0: nothing is appended, and the command says
+so. A same-status transition with a changed payload (for example a richer
+outcome) appends as an amendment at exit 0.`,
 		Example: `  # Transition an issue to done with an outcome
   $ arm transition E6-S4-T2 --to done --outcome "Implemented all required features"
 
@@ -116,6 +121,35 @@ This enforces branch + PR discipline.`,
 			if entry, ok := index[issueID]; ok {
 				currentStatus = entry.Status
 				currentEntry = &entry
+			}
+
+			payload := ops.Payload{
+				To:                  to,
+				Outcome:             outcome,
+				Branch:              branch,
+				PR:                  pr,
+				SkippedDeliveryGate: skipDeliveryGate,
+			}
+			liveIssue, allOps, replayErr := replayIssueOps(appCtx.IssuesDir, issueID)
+			sameStatusAmendment := false
+			if replayErr == nil && liveIssue != nil {
+				currentStatus = liveIssue.Status
+				last, hasLast := ops.LastTransitionPayload(allOps, issueID)
+				recorded := ops.RecordedTransitionPayload(liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, last, hasLast)
+				if liveIssue.Status == to && ops.PayloadsEqual(payload, recorded) {
+					if fieldFlag != "" {
+						transitionResult := &materialize.Issue{ID: issueID, Status: to}
+						fields := extractFieldsFromIssue(transitionResult, fieldFlag)
+						for _, field := range fields {
+							_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
+						}
+						return nil
+					}
+					writeCommandResult(cmd, map[string]any{"issue": issueID, "status": to, "noop": true},
+						"no-op: identical payload, nothing appended\n")
+					return nil
+				}
+				sameStatusAmendment = liveIssue.Status == to
 			}
 
 			hookInput := adapters.HookInput{
@@ -202,13 +236,7 @@ This enforces branch + PR discipline.`,
 			op := ops.Op{
 				Type: ops.OpTransition, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID,
-				Payload: ops.Payload{
-					To:                  to,
-					Outcome:             outcome,
-					Branch:              branch,
-					PR:                  pr,
-					SkippedDeliveryGate: skipDeliveryGate,
-				},
+				Payload:  payload,
 			}
 			if err := appendHighStakesOp(state, logPath, op); err != nil {
 				return err
@@ -237,6 +265,11 @@ This enforces branch + PR discipline.`,
 				return nil
 			}
 
+			if sameStatusAmendment {
+				writeCommandResult(cmd, map[string]any{"issue": issueID, "status": to, "amendment": true},
+					"%s → %s (amendment)\n", issueID, to)
+				return nil
+			}
 			writeCommandResult(cmd, map[string]string{"issue": issueID, "status": to},
 				"%s → %s\n", issueID, to)
 			return nil
@@ -254,24 +287,33 @@ This enforces branch + PR discipline.`,
 	return cmd
 }
 
+// replayIssueOps reads the append-only source of truth without updating
+// derived state. Delivery-gate decisions and payload-keyed idempotency must
+// not rely on a stale snapshot: amend, unassign, and transition --to open
+// append authoritative state changes but do not synchronously materialize them.
+func replayIssueOps(issuesDir, issueID string) (*materialize.Issue, []ops.Op, error) {
+	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+	if err != nil {
+		return nil, nil, fmt.Errorf("read ops: %w", err)
+	}
+	state, _, err := materialize.Run("", allOps, nil, materialize.Options{WriteStateFiles: false})
+	if err != nil {
+		return nil, allOps, fmt.Errorf("replay ops: %w", err)
+	}
+	issue, ok := state.Issues[issueID]
+	if !ok {
+		return nil, allOps, fmt.Errorf("issue not found in current ops")
+	}
+	return issue, allOps, nil
+}
+
 // currentIssueFromOps reads the append-only source of truth without updating
 // derived state. Delivery-gate decisions must not rely on a stale snapshot:
 // amend, unassign, and transition --to open append authoritative state changes
 // but do not synchronously materialize them.
 func currentIssueFromOps(issuesDir, issueID string) (*materialize.Issue, error) {
-	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
-	if err != nil {
-		return nil, fmt.Errorf("read ops: %w", err)
-	}
-	state, _, err := materialize.Run("", allOps, nil, materialize.Options{WriteStateFiles: false})
-	if err != nil {
-		return nil, fmt.Errorf("replay ops: %w", err)
-	}
-	issue, ok := state.Issues[issueID]
-	if !ok {
-		return nil, fmt.Errorf("issue not found in current ops")
-	}
-	return issue, nil
+	issue, _, err := replayIssueOps(issuesDir, issueID)
+	return issue, err
 }
 
 // isIssueUncited returns true if the issue has no source-link or accept-citation.
