@@ -3338,7 +3338,7 @@ func TestShowCommand_MultipleIDs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Show both in a single call using positional args
-	out, err := runTrls(t, repo, "show", "show-a", "show-b")
+	out, err := runTrls(t, repo, "show", "--format", "human", "show-a", "show-b")
 	require.NoError(t, err)
 
 	// Both issue IDs must appear in output
