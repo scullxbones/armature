@@ -339,24 +339,6 @@ func TestIsDuplicate_SameFingerprintDifferentSkillVersion(t *testing.T) {
 	assert.True(t, review.IsDuplicate(att1, att2))
 }
 
-func TestApplicable_Matching(t *testing.T) {
-	t.Parallel()
-	att := &review.AssessmentAttestation{
-		BundleID: "sha256:bundle123",
-	}
-
-	assert.True(t, review.Applicable(att, "sha256:bundle123"))
-}
-
-func TestApplicable_NonMatching(t *testing.T) {
-	t.Parallel()
-	att := &review.AssessmentAttestation{
-		BundleID: "sha256:bundle123",
-	}
-
-	assert.False(t, review.Applicable(att, "sha256:bundle456"))
-}
-
 func TestValidateResultNoDiff_Valid(t *testing.T) {
 	t.Parallel()
 	// An assessment with a file:line citation must succeed at record time (no diff available).

@@ -2,12 +2,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/config"
@@ -581,123 +579,4 @@ func walkPavedRoadCommands(root *cobra.Command, visit func(*cobra.Command)) {
 		}
 	}
 	walk(root)
-}
-
-func isPavedRoadLeaf(cmd *cobra.Command) bool {
-	if cmd == nil {
-		return false
-	}
-	for _, sub := range cmd.Commands() {
-		if sub.IsAvailableCommand() {
-			return false
-		}
-	}
-	return cmd.Parent() != nil || cmd.Name() == "arm"
-}
-
-func pavedRoadKindOf(cmd *cobra.Command) string {
-	if cmd == nil || cmd.Annotations == nil {
-		return ""
-	}
-	return cmd.Annotations[pavedRoadAnnotationKey]
-}
-
-func generatePavedRoadDoc(root *cobra.Command) string {
-	var b bytes.Buffer
-	b.WriteString("# The Paved Road\n\n")
-	b.WriteString("Generated from cobra command metadata in `cmd/armature/main.go`. Do not edit by hand.\n")
-	b.WriteString("Regenerate: `UPDATE_PAVED_ROAD=1 go test ./cmd/armature -run TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1`.\n\n")
-	b.WriteString("## What this is\n\n")
-	b.WriteString("The paved road is the one blessed end-to-end pipeline: bootstrap, plan/decompose, wave dispatch, work, review, sync.\n")
-	b.WriteString("Agents should follow that pipeline. Everything else is an escape hatch.\n")
-	b.WriteString("Escape-hatch commands stay in their existing `--help` groups. They are marked `[escape hatch]` inline.\n")
-	b.WriteString("There is no separate escape-hatch group.\n\n")
-
-	b.WriteString("## Pipeline\n\n")
-	for i, step := range pavedRoadPipeline {
-		fmt.Fprintf(&b, "### %d. %s\n\n%s\n\n", i+1, step.Title, step.Description)
-		for _, path := range step.Commands {
-			fmt.Fprintf(&b, "- `arm %s`\n", path)
-		}
-		b.WriteString("\n")
-	}
-
-	var paved []string
-	var escape []string
-	var unclassified []string
-	walkPavedRoadCommands(root, func(cmd *cobra.Command) {
-		path := pavedRoadPath(cmd)
-		if path == "" {
-			return
-		}
-		kind := pavedRoadKindOf(cmd)
-		switch kind {
-		case pavedRoadKindPaved:
-			paved = append(paved, path)
-		case pavedRoadKindEscape:
-			escape = append(escape, path)
-		default:
-			unclassified = append(unclassified, path)
-		}
-	})
-	sort.Strings(paved)
-	sort.Strings(escape)
-	sort.Strings(unclassified)
-
-	b.WriteString("## Command classification\n\n")
-	b.WriteString("Every cobra command, including leaf subcommands, is paved or escape-hatch.\n")
-	b.WriteString("Zero unclassified leaf commands is a gate.\n\n")
-	b.WriteString("### Paved\n\n")
-	for _, path := range paved {
-		step := pavedRoadStepFor(path)
-		if step == "" {
-			fmt.Fprintf(&b, "- `arm %s`\n", path)
-			continue
-		}
-		fmt.Fprintf(&b, "- `arm %s` — %s\n", path, step)
-	}
-	b.WriteString("\n### Escape hatch\n\n")
-	for _, path := range escape {
-		note := pavedRoadCommands[path].Note
-		if note == "" {
-			fmt.Fprintf(&b, "- `arm %s`\n", path)
-			continue
-		}
-		fmt.Fprintf(&b, "- `arm %s` — %s\n", path, note)
-	}
-	b.WriteString("\n### Unclassified\n\n")
-	if len(unclassified) == 0 {
-		b.WriteString("None. Every registered command is classified.\n\n")
-	} else {
-		for _, path := range unclassified {
-			fmt.Fprintf(&b, "- `arm %s`\n", path)
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString("## Defaults audit\n\n")
-	b.WriteString("These flags exist because the road was not always the default.\n")
-	b.WriteString("Skip and force flags stay listed here. They are not the paved-road invocation.\n\n")
-	b.WriteString("| Flag | Command | Why it exists |\n")
-	b.WriteString("| --- | --- | --- |\n")
-	for _, d := range pavedRoadDefaultsAudit {
-		cmds := make([]string, 0, len(d.Commands))
-		for _, c := range d.Commands {
-			cmds = append(cmds, "`arm "+c+"`")
-		}
-		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", d.Flag, strings.Join(cmds, ", "), d.Reason)
-	}
-	b.WriteString("\n")
-	return b.String()
-}
-
-func pavedRoadStepFor(path string) string {
-	for _, step := range pavedRoadPipeline {
-		for _, c := range step.Commands {
-			if c == path {
-				return step.Title
-			}
-		}
-	}
-	return ""
 }

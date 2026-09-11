@@ -40,6 +40,37 @@ func (r *MockRegistry) ProviderForType(providerType string) (Provider, error) {
 	return p, nil
 }
 
+func TestDefaultProviderRegistry_ProviderForType(t *testing.T) {
+	t.Parallel()
+	r := &DefaultProviderRegistry{}
+
+	fs, err := r.ProviderForType("filesystem")
+	if err != nil {
+		t.Fatalf("filesystem: %v", err)
+	}
+	if _, ok := fs.(*FilesystemProvider); !ok {
+		t.Fatalf("filesystem: got %T, want *FilesystemProvider", fs)
+	}
+
+	for _, typ := range []string{"confluence", "sharepoint"} {
+		_, err := r.ProviderForType(typ)
+		if err == nil {
+			t.Fatalf("%s: expected not-configured error", typ)
+		}
+		if !strings.Contains(err.Error(), "not configured") {
+			t.Fatalf("%s: got %v, want not configured", typ, err)
+		}
+	}
+
+	_, err = r.ProviderForType("unknown")
+	if err == nil {
+		t.Fatal("unknown: expected error")
+	}
+	if !strings.Contains(err.Error(), "unknown provider type") {
+		t.Fatalf("unknown: got %v", err)
+	}
+}
+
 func TestLifecycleRegister_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

@@ -301,20 +301,6 @@ func renderReadyJSON(w io.Writer, entries []ready.ReadyEntry) error {
 	return err
 }
 
-// RenderReadyWaves renders the ready queue partitioned into waves.
-// Output format: {"waves": [[...], [...], ...]}
-func RenderReadyWaves(w io.Writer, waves [][]ready.ReadyEntry) error {
-	wavesOutput := map[string]interface{}{
-		"waves": waves,
-	}
-	data, err := json.MarshalIndent(wavesOutput, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal waves JSON: %w", err)
-	}
-	_, err = fmt.Fprintln(w, string(data))
-	return err
-}
-
 // RenderExpiredClaims renders the distinct expired-claims section for `arm ready`.
 // If asJSON is true, renders a JSON array (even if empty); otherwise renders
 // human-readable text, and is a no-op when claims is empty (nothing to surface).
