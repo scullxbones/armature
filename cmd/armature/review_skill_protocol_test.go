@@ -156,3 +156,18 @@ func TestReviewerSkillReevaluatesStatusWhenDroppingCitations_REQ_LNGHZN_S8_T2(t 
 	require.Contains(t, step5b, "not_satisfied",
 		"a behavioral criterion left with no remaining evidence must be lowered, not kept satisfied")
 }
+
+func TestCoordinatorSkillCommandHelpIsDeployed_REQ_NXTTN_S3_T3(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(projectRootDir(t), "internal", "skillsembed", "skills", "armature-coordinator", "references", "commands.md")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	body := string(data)
+
+	require.NotContains(t, body, "docs/commands.md",
+		"bootstrap deploys only the embedded skills tree; Armature repo docs are absent in other repos")
+	require.Contains(t, body, "arm --help",
+		"command help must point at CLI help that exists whenever arm is on PATH")
+	require.Contains(t, body, "armature",
+		"command help must name the deployed armature skill as the in-tree reference")
+}

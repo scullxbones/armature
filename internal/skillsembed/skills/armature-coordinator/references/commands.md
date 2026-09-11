@@ -1,6 +1,6 @@
 # Command Reference
 
-Coordinator JSON extraction only. Full CLI help is `docs/commands.md`. Do not keep a second command cheat-sheet in this skill tree.
+Coordinator JSON extraction only. Full CLI help is `arm --help` and `arm <command> --help`, or the deployed `armature` skill. Bootstrap copies the embedded skills tree only — do not cite Armature-repo docs.
 
 ## Querying JSON Output
 
