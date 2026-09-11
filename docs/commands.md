@@ -172,6 +172,61 @@ arm context-history --issue TASK-001 --limit 50
 
 ---
 
+## context-report
+
+Price static agent-facing artifacts by bytes and estimated tokens.
+
+**Synopsis:**
+`arm context-report`
+
+**Description:**
+Enumerates embedded skills under `internal/skillsembed/skills/` (one row per
+skill directory that contains `SKILL.md`, including nested files in that tree)
+and the canonical agent-facing docs `CONTEXT.md`, `docs/commands.md`,
+`docs/concepts.md`, and `docs/use-cases.md`.
+
+Each row reports raw byte size and estimated tokens. Tokens are `bytes / 4`
+with integer division, matching the `token_budget` convention used by
+`render-context` (character budget = tokens × 4). Both human and JSON output
+print that estimation method.
+
+Dynamic structured command payloads (`arm list`, `--format agent` on other
+commands, render-context bundles) are out of scope; those sizes depend on live
+graph state (`AOC-S3-T2`).
+
+The command takes no positional arguments and no command-specific flags. Use
+the global `--repo` and `--format` flags.
+
+**Repository requirements:**
+`--repo` (default: current directory) must be an Armature source tree:
+`internal/skillsembed/skills/` must contain at least one skill with `SKILL.md`,
+and all four required docs must exist. A missing skills directory or required
+doc fails the command.
+
+**Output formats:**
+- `human` (default): a table of `PATH`, `CLASS`, `BYTES`, `EST_TOKENS` plus a
+  `TOTAL` row and the estimation-method line.
+- `json` and `agent`: the same inventory as indented JSON with
+  `estimation_method`, `artifacts` (`path`, `class`, `bytes`,
+  `estimated_tokens`), `total_bytes`, and `total_estimated_tokens`.
+
+Artifact `class` values are `skill`, `glossary`, `commands`, `concepts`, and
+`use-cases`. Rows are ordered by that class sequence, then by path.
+
+**Examples:**
+```bash
+# Human table from the current repository
+arm context-report
+
+# JSON inventory (also used by --format agent)
+arm context-report --repo . --format json
+
+# Makefile wrapper (builds ./bin/arm first)
+make context-report
+```
+
+---
+
 ## create
 
 Create a new work item.
