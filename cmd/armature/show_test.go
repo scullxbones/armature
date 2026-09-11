@@ -389,7 +389,10 @@ func TestCoordinatorShowRecoveryReadsEnvelope_REQ_AOC_S2_T3(t *testing.T) {
 	cycleRe := regexp.MustCompile(`a\.2 cycle (\d+)/3`)
 	maxCycle := 0
 	for _, n := range notes {
-		msg, _ := n.(string)
+		msg, ok := n.(string)
+		if !ok {
+			continue
+		}
 		m := cycleRe.FindStringSubmatch(msg)
 		if len(m) != 2 {
 			continue
