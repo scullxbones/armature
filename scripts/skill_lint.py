@@ -619,6 +619,27 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     return True, None
 
 
+def lint_show_cycle_recovery(code_block, skill_file_path="", block_idx=0):
+    """Reject arm show | jq parsers that read notes at the envelope top level.
+
+    Cycle recovery must use .issues[0].notes. A top-level .notes path is
+    undefined on the Agent Output Contract envelope and silently resets
+    remedia CYCLE to 0.
+    """
+    if "arm show" not in code_block:
+        return []
+    if not re.search(r"\|\s*jq\b", code_block):
+        return []
+    stripped = code_block.replace(".issues[0].notes", "")
+    if re.search(r"\.notes\b", stripped):
+        location = f"{skill_file_path}:block{block_idx}" if skill_file_path else "block"
+        return [
+            f"{location}: arm show | jq must read cycle notes from .issues[0].notes, "
+            "not a top-level .notes parser"
+        ]
+    return []
+
+
 def lint_skill_file(skill_file_path, valid_subcommands, valid_flags_cache=None):
     """Lint a single skill file.
 
@@ -651,6 +672,8 @@ def lint_skill_file(skill_file_path, valid_subcommands, valid_flags_cache=None):
             if not is_valid:
                 error_location = f"{skill_file_path}:block{block_idx}:cmd{cmd_idx}"
                 errors.append(f"{error_location}: {error_msg}")
+
+        errors.extend(lint_show_cycle_recovery(code_block, str(skill_file_path), block_idx))
 
     return errors
 

@@ -580,6 +580,37 @@ More info.
 		require.Error(t, err, "skill-lint should fail for invalid flags")
 		require.Contains(t, errOutput.String(), "invalid flags: --invalid-flag", "failure should be attributed to the invalid flag, not some other cause")
 	})
+
+	t.Run("ShowCycleRecoveryRejectsTopLevelNotesParser_REQ_AOC_S2_T3", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "```bash\nCYCLE=$(arm show TASK-01 --format json | jq -r '[.notes // [] | .[] | strings]')\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		errOutput := new(bytes.Buffer)
+		cmd.Stderr = errOutput
+		err := cmd.Run()
+		require.Error(t, err, "a top-level .notes parser must fail skill-lint")
+		require.Contains(t, errOutput.String(), ".issues[0].notes")
+	})
+
+	t.Run("ShowCycleRecoveryAcceptsEnvelopeNotesParser_REQ_AOC_S2_T3", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "```bash\nCYCLE=$(arm show TASK-01 --format json | jq -r '[.issues[0].notes // [] | .[] | strings]')\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		errOutput := new(bytes.Buffer)
+		cmd.Stderr = errOutput
+		err := cmd.Run()
+		require.NoError(t, err, "envelope .issues[0].notes parser must pass; stderr: %s", errOutput.String())
+	})
 }
 
 // fileExists checks if a file exists at the given path.

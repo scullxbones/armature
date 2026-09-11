@@ -17,6 +17,7 @@ from skill_lint import (
     extract_flags,
     find_lint_files,
     has_angle_bracket_placeholder,
+    lint_show_cycle_recovery,
     strip_redirects,
     tokenize_shell_line,
     validate_command,
@@ -291,6 +292,38 @@ class TestExtractArmCommands(unittest.TestCase):
     def test_prose_mention_of_arm_is_not_extracted(self):
         commands = extract_arm_commands("Run the arm binary, e.g. see docs.")
         self.assertEqual(commands, [])
+
+
+class TestShowCycleRecoveryParser(unittest.TestCase):
+    def test_rejects_top_level_notes_parser(self):
+        block = """CYCLE=$(arm show "$TASK_ID" --format json | jq -r '
+     [.notes // [] | .[] | strings
+       | capture("a\\\\.2 cycle (?<n>[0-9]+)/3")?
+       | select(.) | .n | tonumber]
+     | if length == 0 then 0 else max end
+   ')"""
+        errors = lint_show_cycle_recovery(block, "SKILL.md", 0)
+        self.assertTrue(errors)
+        self.assertIn(".issues[0].notes", errors[0])
+        self.assertIn("top-level .notes parser", errors[0])
+
+    def test_accepts_envelope_notes_parser(self):
+        block = """CYCLE=$(arm show "$TASK_ID" --format json | jq -r '
+     [.issues[0].notes // [] | .[] | strings
+       | capture("a\\\\.2 cycle (?<n>[0-9]+)/3")?
+       | select(.) | .n | tonumber]
+     | if length == 0 then 0 else max end
+   ')"""
+        errors = lint_show_cycle_recovery(block, "SKILL.md", 0)
+        self.assertEqual(errors, [])
+
+    def test_ignores_show_without_jq(self):
+        errors = lint_show_cycle_recovery(
+            'CLAIMED_BY=$(arm show "$TASK_ID" --field claimed_by)',
+            "SKILL.md",
+            0,
+        )
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

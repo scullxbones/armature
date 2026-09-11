@@ -1395,13 +1395,12 @@ func TestShowCmd(t *testing.T) {
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "show", "--issue", "task-01"})
 	require.NoError(t, cmd.Execute())
 
-	var result map[string]any
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &result))
-	assert.Equal(t, "task-01", result["id"])
-	assert.Equal(t, "My Task", result["title"])
-	assert.Equal(t, "task", result["type"])
-	assert.Equal(t, "open", result["status"])
-	assert.Equal(t, "story-01", result["parent"])
+	issue := decodeShowIssue(t, buf.String())
+	assert.Equal(t, "task-01", issue["id"])
+	assert.Equal(t, "My Task", issue["title"])
+	assert.Equal(t, "task", issue["type"])
+	assert.Equal(t, "open", issue["status"])
+	assert.Equal(t, "story-01", issue["parent"])
 }
 
 func TestShowCmd_DisplaysAcceptance(t *testing.T) {

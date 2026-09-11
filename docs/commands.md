@@ -878,20 +878,38 @@ arm stats --cost --rates .armature/cost-rates.json
 
 ## show
 
-Show a human-readable summary of one or more issues.
+Show a human-readable summary of one or more issues. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare issue object and never a top-level array.
+
+`issues[]` is the detail view. A found issue has `count` 1. Several positional IDs share one envelope whose `count` equals the number of issues shown. A missing ID is an error, not an empty envelope. Rows keep the existing issue fields (`id`, `type`, `status`, `title`, plus outcome, scope, notes, and the rest of the detail schema).
+
+Large text fields (`outcome`, `definition_of_done`) are truncated by default at 512 bytes. Truncation keeps a prefix, states the total size in a `truncated` adjunct (`field`, `shown_bytes`, `total_bytes`), and puts `--full` in `help[0]`. `--full` returns complete fields and omits the adjunct. `--full` is offered in `help` only when truncation actually happened.
+
+`--field` stays a scalar extractor (N1.5). Even with `--format json` or `--format agent`, stdout is the requested values as plain text, one per line, never the envelope. Command substitution such as `$(arm show ID --field claimed_by)` captures a bare value.
+
+Human TTY output still uses `RenderIssue` plus a `Spend-to-date` line. Structured and `--field` output do not load spend.
 
 **Synopsis:**
 `arm show [issue-id ...] [flags]`
 
-**Description:**
-Human output includes a `Spend-to-date` line: dollars plus input/output token
-totals for the issue and its descendants, derived from the same captured
-validated op set as the snapshot. JSON/`--field` output is unchanged and does
-not load spend, so later envelope work is not blocked.
-
 **Flags:**
-- `--field string`: Extract a single field value (e.g. `status`, `title`).
+- `--field string`: Extract field values as plain text, one per line (e.g. `status` or `status,outcome,title`). Never an envelope.
+- `--full`: Return complete large text fields in structured output.
 - `--issue string`: Issue ID to show.
+
+**Structured output:**
+```json
+{
+  "count": 1,
+  "issues": [
+    {"id": "TASK-001", "type": "task", "status": "open", "title": "Example"}
+  ],
+  "help": [
+    "arm show <id> --field <name> extracts a scalar value, never an envelope"
+  ]
+}
+```
+
+Coordinator remedia-cycle recovery reads notes from `.issues[0].notes`, not a top-level `.notes` parser.
 
 ---
 
