@@ -11,6 +11,12 @@ The following flags are available for all commands:
 - `--repo string`: Repository path (default: current directory).
 - `--non-interactive`: Skip TUI and emit structured output (auto-set when --format=agent or non-TTY).
 
+Unknown or inapplicable flags fail by name at exit 2 (`USAGE`) and list the valid flags for that command.
+
+Root-only (not inherited by subcommands): `--version`, `-v`, and `-V` are the same version query as `arm version`.
+
+With no subcommand, a TTY still prints the command listing. A non-TTY prints the ready queue when `--repo` (or cwd) is an Armature repository. Outside a repository it prints an empty `{count, issues, help}` envelope whose `help` names the environment problem.
+
 ---
 
 ## amend
@@ -1144,10 +1150,23 @@ Hidden command used by `make check` to validate JSON examples in documentation a
 
 ## version
 
-Print `arm` version.
+Print `arm` version. Root `--version`, `-v`, and `-V` are the same query.
+
+Human format (`--format human`, including a TTY default) prints the existing bare line `arm version <string>` and exits 0.
+
+Structured format (`--format json`, `--format agent`, `--non-interactive`, or a non-TTY default) is one Agent Output Contract envelope `{count, versions, help}` with `count` 1 and a single row whose `version` member is the version string.
 
 **Synopsis:**
 `arm version`
+
+**Structured output:**
+```json
+{
+  "count": 1,
+  "versions": [{"version": "dev"}],
+  "help": ["arm version reports the build identity of this binary"]
+}
+```
 
 ---
 

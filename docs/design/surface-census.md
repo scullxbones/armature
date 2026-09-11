@@ -154,7 +154,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 
 | Command | Defined | Purpose | Status | Notes |
 |---------|---------|---------|--------|-------|
-| `version` | main.go:78, version.go | Print arm version | **kept-evidence** | Diagnostic. |
+| `version` | main.go, version.go | Print arm version | **kept-evidence** | Agent-facing. Human/default is the bare `arm version <string>` line. json/agent (explicit or implied) is `{count, versions, help}` with count 1. Root-only `--version`, `-v`, and `-V` are the same fast path and are not persistent (so they fail loud on a subcommand). Bare `arm` on a non-TTY is the ready queue, not this command. |
 | `worker-init` | main.go:82, worker_init.go | Initialize worker ID | **kept-evidence** | One-time setup. Stores UUID in git config. |
 | `bootstrap` | main.go:86, bootstrap.go | Deploy harness hook to project | **kept-evidence** | Setup command. Installs pre-commit or post-merge hooks. |
 | `create` | main.go:189, create.go | Create new issue | **kept-evidence** | Direct issue creation (not decompose-based). |
@@ -205,6 +205,15 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--format` | string | human | Output format: human, json, agent | **kept-evidence** | Auto-set to agent for non-TTY. Inherited by every command except `dag context`, which defines its own command-local `--format` (see DAG/Decompose Flags below). |
 | `--repo` | string | "" (current directory) | Repository path | **kept-evidence** | Allows multi-repo operation. |
 | `--non-interactive` | bool | false | Skip TUI, use structured output | **kept-evidence** | Auto-set in CI. |
+
+### Root-only flags
+
+Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). They are not inherited, so a subcommand that is passed one of them fails loud as an unknown flag.
+
+| Flag | Type | Default | Usage | Status | Notes |
+|------|------|---------|-------|--------|-------|
+| `--version` / `-v` | bool | false | Print version and exit | **kept-evidence** | Same output as `arm version`. Structured format uses payload key `versions`. |
+| `--Version` / `-V` | bool | false | Print version and exit | **kept-evidence** | Alias of `--version` so `-V` matches the contract's named fast path. |
 
 ### Issue/Field Flags (common across commands)
 

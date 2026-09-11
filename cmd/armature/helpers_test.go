@@ -455,9 +455,12 @@ func TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1(t *testing.T) {
 
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "show", "--bad-flag", "--repo", repo)
-	assert.Equal(t, 1, code)
+	assert.Equal(t, 2, code)
 	payload := assertSingleJSONObject(t, stdout.String())
 	assert.Contains(t, payload, "error", "a parse failure must render the JSON failure object under the implicit agent format")
+	errObj, ok := payload["error"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "USAGE", errObj["code"])
 	assert.NotContains(t, stdout.String(), "Error [GENERAL-1]")
 }
 

@@ -248,14 +248,10 @@ func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, strin
 }
 
 func TestVersionCommand(t *testing.T) {
-	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
-	cmd.SetOut(buf)
-	cmd.SetArgs([]string{"version"})
-
-	err := cmd.Execute()
-	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), "arm version")
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "version", "--format", "human")
+	assert.Equal(t, 0, code)
+	assert.Contains(t, stdout.String(), "arm version")
 }
 
 func initTempRepo(t *testing.T) string {
@@ -4087,4 +4083,136 @@ func TestCommand_CustomOpsWorktreeLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 	if err != nil {
 		assert.NotContains(t, err.Error(), "pre-collapse")
 	}
+}
+
+func TestUnknownFlagRejectedWithValidFlagsListed_REQ_AOC_S2_T5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	t.Run("unknownFlag", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"ready", "--bogus-flag", "--repo", repo, "--format", "json")
+		assert.Equal(t, 2, code)
+		payload := assertSingleJSONObject(t, stdout.String())
+		errObj, ok := payload["error"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "USAGE", errObj["code"])
+		assert.Equal(t, float64(2), errObj["exit_code"])
+		cause, _ := errObj["cause"].(string)
+		assert.Contains(t, cause, "--bogus-flag")
+		assert.Contains(t, cause, "valid flags:")
+		assert.Contains(t, cause, "--parent")
+		assert.Contains(t, cause, "--format")
+	})
+
+	t.Run("inapplicableFlag", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"ready", "--group", "--repo", repo, "--format", "json")
+		assert.Equal(t, 2, code)
+		payload := assertSingleJSONObject(t, stdout.String())
+		errObj, ok := payload["error"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "USAGE", errObj["code"])
+		cause, _ := errObj["cause"].(string)
+		assert.Contains(t, cause, "--group")
+		assert.Contains(t, cause, "valid flags:")
+		assert.Contains(t, cause, "--waves")
+		assert.NotContains(t, cause, "--group,")
+	})
+}
+
+func TestVersionFlagVariantsExitZero_REQ_AOC_S2_T5(t *testing.T) {
+	want := fmt.Sprintf("arm version %s\n", Version)
+	for _, args := range [][]string{
+		{"version", "--format", "human"},
+		{"--version", "--format", "human"},
+		{"-v", "--format", "human"},
+		{"-V", "--format", "human"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stdout := new(bytes.Buffer)
+			code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), args...)
+			assert.Equal(t, 0, code)
+			assert.Equal(t, want, stdout.String())
+		})
+	}
+}
+
+func TestStructuredVersionPathsEmitEnvelope_REQ_AOC_S2_T5(t *testing.T) {
+	paths := [][]string{
+		{"version", "--format", "json"},
+		{"version", "--format", "agent"},
+		{"--version", "--format", "json"},
+		{"-v", "--format", "agent"},
+		{"-V", "--format", "json"},
+		{"version"},
+		{"--version"},
+	}
+	for _, args := range paths {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stdout := new(bytes.Buffer)
+			code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), args...)
+			assert.Equal(t, 0, code)
+			decoded := decodeContractEnvelope(t, stdout.String(), "versions")
+			var rows []map[string]any
+			require.NoError(t, json.Unmarshal(decoded["versions"], &rows))
+			require.Len(t, rows, 1)
+			assert.Equal(t, Version, rows[0]["version"])
+			var help []string
+			require.NoError(t, json.Unmarshal(decoded["help"], &help))
+			require.NotEmpty(t, help)
+		})
+	}
+}
+
+func TestBareArmShowsReadyQueueInRepo_REQ_AOC_S2_T5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "--repo", repo, "--format", "json")
+	assert.Equal(t, 0, code)
+	decoded := decodeContractEnvelope(t, stdout.String(), "issues")
+
+	readyOut := new(bytes.Buffer)
+	readyCode := executeThenHandleRootError(t, readyOut, new(bytes.Buffer),
+		"ready", "--repo", repo, "--format", "json")
+	assert.Equal(t, 0, readyCode)
+	assert.JSONEq(t, strings.TrimSpace(readyOut.String()), strings.TrimSpace(stdout.String()))
+
+	var rows []readyIssueRow
+	require.NoError(t, json.Unmarshal(decoded["issues"], &rows))
+	found := false
+	for _, row := range rows {
+		if row.ID == "task-01" {
+			found = true
+			assert.Equal(t, "task", row.Type)
+			assert.Equal(t, ops.StatusOpen, row.Status)
+		}
+	}
+	assert.True(t, found, "bare arm must show the ready queue, including task-01")
+}
+
+func TestBareArmOutsideRepoIsDefinitiveEmptyState_REQ_AOC_S2_T5(t *testing.T) {
+	outside := t.TempDir()
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "--repo", outside, "--format", "json")
+	assert.Equal(t, 0, code, "empty state is success, not a Command Failure: %s", stdout.String())
+	decoded := decodeContractEnvelope(t, stdout.String(), "issues")
+	var count int
+	require.NoError(t, json.Unmarshal(decoded["count"], &count))
+	assert.Equal(t, 0, count)
+	var rows []readyIssueRow
+	require.NoError(t, json.Unmarshal(decoded["issues"], &rows))
+	assert.Empty(t, rows)
+	var help []string
+	require.NoError(t, json.Unmarshal(decoded["help"], &help))
+	require.NotEmpty(t, help)
+	joined := strings.Join(help, "\n")
+	assert.True(t,
+		strings.Contains(joined, "not an Armature") ||
+			strings.Contains(joined, "armature.ops-worktree-path") ||
+			strings.Contains(joined, "bootstrap"),
+		"help must name why the environment is empty, got %v", help)
 }
