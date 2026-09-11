@@ -3349,7 +3349,7 @@ func TestShowCommand_MultipleIDs(t *testing.T) {
 }
 
 // TestShowCommand_MultipleIDs_JSON verifies that --format json with multiple IDs
-// outputs a JSON array.
+// outputs an envelope whose issues payload contains both rows.
 func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3364,8 +3364,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 	out, err := runTrls(t, repo, "show", "--format", "json", "show-j1", "show-j2")
 	require.NoError(t, err)
 
-	var results []map[string]any
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &results))
+	results := decodeShowIssues(t, out)
 	require.Len(t, results, 2)
 	ids := []string{results[0]["id"].(string), results[1]["id"].(string)} //nolint:errcheck // test helper; error checked via output assertions
 	assert.Contains(t, ids, "show-j1")

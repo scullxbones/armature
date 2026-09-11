@@ -1,8 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"io"
+	"unicode/utf8"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/output"
@@ -11,9 +12,79 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	showLargeFieldLimit = 512
+	showFieldHelp       = "arm show <id> --field <name> extracts a scalar value, never an envelope"
+)
+
+// showTruncation is the truncated adjunct: large text fields stay present,
+// with shown and total byte counts so agents can request --full.
+type showTruncation struct {
+	Field      string `json:"field"`
+	ShownBytes int    `json:"shown_bytes"`
+	TotalBytes int    `json:"total_bytes"`
+}
+
+func truncateShowText(s string, limit int) (string, int, bool) {
+	total := len(s)
+	if total <= limit {
+		return s, total, false
+	}
+	shown := s
+	for len(shown) > limit {
+		_, size := utf8.DecodeLastRuneInString(shown)
+		if size <= 0 {
+			break
+		}
+		shown = shown[:len(shown)-size]
+	}
+	return shown, total, true
+}
+
+func truncateShowIssue(row *output.IssueJSON) []showTruncation {
+	var hints []showTruncation
+	if shown, total, truncated := truncateShowText(row.Outcome, showLargeFieldLimit); truncated {
+		row.Outcome = shown
+		hints = append(hints, showTruncation{Field: "outcome", ShownBytes: len(shown), TotalBytes: total})
+	}
+	if shown, total, truncated := truncateShowText(row.DefinitionOfDone, showLargeFieldLimit); truncated {
+		row.DefinitionOfDone = shown
+		hints = append(hints, showTruncation{Field: "definition_of_done", ShownBytes: len(shown), TotalBytes: total})
+	}
+	return hints
+}
+
+func showHelp(ids []string, trunc []showTruncation) []string {
+	if len(trunc) == 0 {
+		return []string{showFieldHelp}
+	}
+	id := "<id>"
+	if len(ids) == 1 {
+		id = ids[0]
+	}
+	t := trunc[0]
+	line := fmt.Sprintf("%s truncated (%d of %d bytes); arm show %s --full for complete fields",
+		t.Field, t.ShownBytes, t.TotalBytes, id)
+	return []string{line, showFieldHelp}
+}
+
+func writeShowEnvelope(w io.Writer, ids []string, rows []output.IssueJSON, trunc []showTruncation) error {
+	env, err := output.NewEnvelope("issues", rows, showHelp(ids, trunc))
+	if err != nil {
+		return err
+	}
+	if len(trunc) > 0 {
+		if err := env.AddAdjunct("truncated", trunc); err != nil {
+			return err
+		}
+	}
+	return output.WriteEnvelope(w, env)
+}
+
 func newShowCmd() *cobra.Command {
 	var issueID string
 	var fieldFlag string
+	var full bool
 
 	cmd := &cobra.Command{
 		Use:   "show [issue-id ...]",
@@ -42,26 +113,40 @@ func newShowCmd() *cobra.Command {
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
+			structured := format == "json" || format == "agent"
 
-			// Multi-issue JSON: emit a JSON array using the canonical output.IssueJSON schema
-			if format == "json" && len(ids) > 1 {
-				results := make([]output.IssueJSON, 0, len(ids))
+			for _, id := range ids {
+				issuePtr, ok := snap.Issues[id]
+				if !ok || issuePtr == nil {
+					return fmt.Errorf("issue %q not found", id)
+				}
+			}
+
+			if fieldFlag != "" {
 				for _, id := range ids {
-					issuePtr, ok := snap.Issues[id]
-					if !ok || issuePtr == nil {
-						return fmt.Errorf("issue %q not found", id)
+					issue := *snap.Issues[id]
+					fields := extractFieldsFromIssue(&issue, fieldFlag)
+					for _, field := range fields {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
 					}
-					results = append(results, output.MarshalIssue(issuePtr))
 				}
-				data, err := json.MarshalIndent(results, "", "  ")
-				if err != nil {
-					return fmt.Errorf("marshal issues JSON: %w", err)
-				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
 
-			needSpend := fieldFlag == "" && format != "json"
+			if structured {
+				rows := make([]output.IssueJSON, 0, len(ids))
+				var trunc []showTruncation
+				for _, id := range ids {
+					row := output.MarshalIssue(snap.Issues[id])
+					if !full {
+						trunc = append(trunc, truncateShowIssue(&row)...)
+					}
+					rows = append(rows, row)
+				}
+				return writeShowEnvelope(cmd.OutOrStdout(), ids, rows, trunc)
+			}
+
+			needSpend := true
 			var (
 				costReport *stats.Report
 				issueInfo  map[string]stats.IssueInfo
@@ -74,40 +159,17 @@ func newShowCmd() *cobra.Command {
 				}
 			}
 
-			// Single or multi-issue non-JSON: iterate and print each, separated by "---"
 			for i, id := range ids {
-				issuePtr, ok := snap.Issues[id]
-				if !ok || issuePtr == nil {
-					return fmt.Errorf("issue %q not found", id)
-				}
-				issue := *issuePtr
+				issue := *snap.Issues[id]
 
 				if i > 0 {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "---")
 				}
 
-				// If --field flag is set, extract and print only the requested fields
-				if fieldFlag != "" {
-					fields := extractFieldsFromIssue(&issue, fieldFlag)
-					for _, field := range fields {
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
-					}
-					continue
-				}
-
-				if format == "json" {
-					// Route single-issue JSON through the canonical output package schema
-					if err := output.RenderIssue(cmd.OutOrStdout(), &issue, true); err != nil {
-						return err
-					}
-					continue
-				}
-
-				// Use output.RenderIssue for human-readable output
 				if err := output.RenderIssue(cmd.OutOrStdout(), &issue, false); err != nil {
 					return err
 				}
-				if fieldFlag == "" && costReport != nil {
+				if costReport != nil {
 					spend := stats.Rollup(*costReport, id, issueInfo)
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), stats.FormatSpend(spend))
 				}
@@ -118,6 +180,7 @@ func newShowCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID to show")
 	cmd.Flags().StringVar(&fieldFlag, "field", "", "comma-separated list of fields to extract (e.g., status or status,outcome,title)")
+	cmd.Flags().BoolVar(&full, "full", false, "return complete large text fields in structured output (default truncates with total size)")
 
 	return cmd
 }

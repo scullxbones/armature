@@ -547,7 +547,7 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    ```bash
    unset CYCLE
    CYCLE=$(arm show "$TASK_ID" --format json | jq -r '
-     [.notes // [] | .[] | strings
+     [.issues[0].notes // [] | .[] | strings
        | capture("a\\.2 cycle (?<n>[0-9]+)/3")?
        | select(.) | .n | tonumber]
      | if length == 0 then 0 else max end
@@ -640,7 +640,7 @@ Do not carry `CYCLE` from a previous task. Inside the remedia loop
    if [ "${CYCLE_FOR:-}" != "$TASK_ID" ]; then
      unset CYCLE
      CYCLE=$(arm show "$TASK_ID" --format json | jq -r '
-       [.notes // [] | .[] | strings
+       [.issues[0].notes // [] | .[] | strings
          | capture("a\\.2 cycle (?<n>[0-9]+)/3")?
          | select(.) | .n | tonumber]
        | if length == 0 then 0 else max end

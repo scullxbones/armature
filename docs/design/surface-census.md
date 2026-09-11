@@ -170,7 +170,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `sources stale-review` | sources.go, stalereview.go | Review stale sources | **kept-evidence** | Subcommand of `sources`. |
 | `sources sync` | sources.go | Sync source manifest state | **kept-evidence** | Subcommand of `sources`. |
 | `sources verify` | sources.go | Verify source manifest entries | **kept-evidence** | Subcommand of `sources`. |
-| `show` | main.go:231, show.go | Display issue details | **kept-evidence** | Query tool. Supports --field for extraction. |
+| `show` | main.go:231, show.go | Display issue details | **kept-evidence** | Query tool. Structured json/agent emit `{count, issues, help}`. `--field` stays a scalar extractor. `--full` returns complete large text fields. |
 | `list` | main.go:235, list.go | List issues | **kept-evidence** | Query tool. Supports filtering and grouping. |
 | `scope-rename` | main.go:239, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
 | `scope-delete` | main.go:243, scope_delete.go | Delete scope glob | **kept-evidence** | Cleanup. Removes from scope arrays. |
@@ -292,6 +292,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--explain` | ready | bool | Diagnose why tasks aren't ready | **kept-evidence** |
 | `--waves` | ready | bool | Partition ready queue into scope-disjoint dispatch waves (JSON/agent output only) | **kept-evidence** |
 | `--field` | show, transition | string | Extract specific fields | **kept-evidence** |
+| `--full` | show | bool | Return complete large text fields in structured show output; default truncates with total size stated | **kept-evidence** |
 | `--json` | workers, log | bool | Output as JSONL | **kept-evidence** |
 | `--worker` | log | string | Filter ops by worker ID | **kept-evidence** |
 | `--since` | log | string | Filter ops since RFC3339 or YYYY-MM-DD | **kept-evidence** |
