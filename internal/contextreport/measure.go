@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	ctxpkg "github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -16,6 +17,7 @@ import (
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
 	"github.com/scullxbones/armature/internal/review"
+	"github.com/scullxbones/armature/internal/stats"
 )
 
 //go:embed testdata/graph
@@ -26,17 +28,6 @@ const (
 	fixtureDiffName     = "testdata/graph/delivery.diff"
 	fixtureWorkspaceDir = "testdata/graph/workspace"
 )
-
-// listEntry matches cmd/armature/list.go structured stdout (json/agent).
-type listEntry struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Status    string `json:"status"`
-	Parent    string `json:"parent,omitempty"`
-	Title     string `json:"title"`
-	Outcome   string `json:"outcome,omitempty"`
-	ClaimedBy string `json:"claimed_by,omitempty"`
-}
 
 type fixtureGit struct {
 	diff        string
@@ -82,11 +73,11 @@ func Collect() (Report, error) {
 		return Report{}, err
 	}
 
-	listPayload, err := measureList(index, state)
+	listPayload, err := measureList(index)
 	if err != nil {
 		return Report{}, err
 	}
-	readyPayload, err := measureReady(index, state)
+	readyPayload, err := measureReady(index, state, time.Now())
 	if err != nil {
 		return Report{}, err
 	}
@@ -155,37 +146,26 @@ func parseFixtureOps(name string, data []byte) ([]ops.Op, error) {
 	return all, nil
 }
 
-func measureList(index materialize.Index, state *materialize.State) ([]byte, error) {
+func measureList(index materialize.Index) ([]byte, error) {
 	ids := make([]string, 0, len(index))
 	for id := range index {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 
-	entries := make([]listEntry, 0, len(ids))
-	for _, id := range ids {
-		e := index[id]
-		le := listEntry{
-			ID:      id,
-			Type:    e.Type,
-			Status:  e.Status,
-			Parent:  e.Parent,
-			Title:   e.Title,
-			Outcome: e.Outcome,
-		}
-		if issue := state.Issues[id]; issue != nil {
-			le.ClaimedBy = issue.ClaimedBy
-		}
-		entries = append(entries, le)
+	var buf bytes.Buffer
+	if err := output.WriteListEnvelope(&buf, output.ListRows(index, ids), nil, false, false); err != nil {
+		return nil, fmt.Errorf("render list envelope: %w", err)
 	}
-	return marshalCLIJSON(entries)
+	return buf.Bytes(), nil
 }
 
-func measureReady(index materialize.Index, state *materialize.State) ([]byte, error) {
+func measureReady(index materialize.Index, state *materialize.State, now time.Time) ([]byte, error) {
 	entries := ready.ComputeReady(index, state.Issues, "")
+	expired := ready.ExpiredClaims(state.Issues, now)
 	var buf bytes.Buffer
-	if err := output.RenderReady(&buf, entries, true); err != nil {
-		return nil, fmt.Errorf("render ready payload: %w", err)
+	if err := output.WriteReadyEnvelope(&buf, entries, nil, false, expired, "", ""); err != nil {
+		return nil, fmt.Errorf("render ready envelope: %w", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -201,7 +181,38 @@ func measureShow(state *materialize.State) ([]byte, error) {
 	if err := output.RenderIssue(&buf, issue, false); err != nil {
 		return nil, fmt.Errorf("render show payload: %w", err)
 	}
+	allOps, err := loadEmbeddedOps()
+	if err != nil {
+		return nil, err
+	}
+	rates, err := stats.ResolveRates("", "")
+	if err != nil {
+		return nil, fmt.Errorf("resolve fixture spend rates: %w", err)
+	}
+	info := issueInfoFromState(state)
+	spend := stats.Rollup(stats.Estimate(stats.CollectUsage(allOps), info, rates), issue.ID, info)
+	_, _ = fmt.Fprintln(&buf, stats.FormatSpend(spend))
 	return buf.Bytes(), nil
+}
+
+func issueInfoFromState(state *materialize.State) map[string]stats.IssueInfo {
+	out := make(map[string]stats.IssueInfo)
+	if state == nil {
+		return out
+	}
+	for id, issue := range state.Issues {
+		if issue == nil {
+			continue
+		}
+		out[id] = stats.IssueInfo{
+			ID:             issue.ID,
+			Type:           issue.Type,
+			Parent:         issue.Parent,
+			PreferredModel: issue.PreferredModel,
+			Scope:          issue.Scope,
+		}
+	}
+	return out
 }
 
 func measureRenderContext(state *materialize.State, reader ctxpkg.FileReader) (invocation, bundle []byte, err error) {

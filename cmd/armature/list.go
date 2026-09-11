@@ -12,33 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const listShowHelp = "arm show <id> for outcome, scope, and acceptance"
+const listShowHelp = output.ListShowHelp
 
-// statusOrder defines display priority for --group output — lower number appears first.
-var statusOrder = map[string]int{
-	ops.StatusInProgress: 0,
-	ops.StatusClaimed:    1,
-	ops.StatusDone:       2,
-	ops.StatusOpen:       3,
-	ops.StatusBlocked:    4,
-	ops.StatusMerged:     5,
-	ops.StatusCancelled:  6,
-}
-
-// listEntry is the N4 default list row: id, type, status, title only.
-type listEntry struct {
-	ID     string `json:"id"`
-	Type   string `json:"type"`
-	Status string `json:"status"`
-	Title  string `json:"title"`
-}
-
-// listGroup is the structured --group adjunct: status buckets in workflow order.
-// Issue rows stay in the issues payload (N2); groups only name ids.
-type listGroup struct {
-	Status string   `json:"status"`
-	IDs    []string `json:"ids"`
-}
+type listEntry = output.ListIssue
+type listGroup = output.ListGroup
 
 // terminalStatuses is the set of statuses that represent terminal (completed) states.
 var terminalStatuses = map[string]bool{
@@ -48,70 +25,19 @@ var terminalStatuses = map[string]bool{
 }
 
 func statusRank(status string) int {
-	if n, ok := statusOrder[status]; ok {
-		return n
-	}
-	return 99
+	return output.ListStatusRank(status)
 }
 
 func listRows(index materialize.Index, ids []string) []listEntry {
-	rows := make([]listEntry, 0, len(ids))
-	for _, id := range ids {
-		e := index[id]
-		rows = append(rows, listEntry{
-			ID:     id,
-			Type:   e.Type,
-			Status: e.Status,
-			Title:  e.Title,
-		})
-	}
-	return rows
+	return output.ListRows(index, ids)
 }
 
 func listGroupsByStatus(index materialize.Index, ids []string) []listGroup {
-	buckets := make(map[string][]string)
-	for _, id := range ids {
-		s := index[id].Status
-		buckets[s] = append(buckets[s], id)
-	}
-	statuses := make([]string, 0, len(buckets))
-	for s := range buckets {
-		statuses = append(statuses, s)
-	}
-	sort.Slice(statuses, func(i, j int) bool {
-		return statusRank(statuses[i]) < statusRank(statuses[j])
-	})
-	groups := make([]listGroup, 0, len(statuses))
-	for _, status := range statuses {
-		members := buckets[status]
-		sort.Strings(members)
-		groups = append(groups, listGroup{Status: status, IDs: members})
-	}
-	return groups
-}
-
-func listHelp(filtered bool, n int) []string {
-	if n == 0 {
-		reason := "no issues in the repository"
-		if filtered {
-			reason = "no issues match the filter"
-		}
-		return []string{reason, listShowHelp}
-	}
-	return []string{listShowHelp}
+	return output.ListGroupsByStatus(index, ids)
 }
 
 func writeListEnvelope(w io.Writer, rows []listEntry, groups []listGroup, grouped, filtered bool) error {
-	env, err := output.NewEnvelope("issues", rows, listHelp(filtered, len(rows)))
-	if err != nil {
-		return err
-	}
-	if grouped {
-		if err := env.AddAdjunct("groups", groups); err != nil {
-			return err
-		}
-	}
-	return output.WriteEnvelope(w, env)
+	return output.WriteListEnvelope(w, rows, groups, grouped, filtered)
 }
 
 func newListCmd() *cobra.Command {
