@@ -14,7 +14,7 @@ The cheapest deletion window this project will ever have is open now, and it clo
 This census governs the full **surface** space (`CONTEXT.md`): issue types, statuses, confidence states, fields, commands, flags. Explicitly **excluded**:
 
 - Config knobs — already audited by LH·D1 (the completed pilot this census generalizes).
-- Skills — governed by Context Economics (Next-Ten №03)'s token-budget work, not this census.
+- Skills — not this census. Context Economics (`NXTTN-S3`) gates model-invocable skill *front matter* (T4) and runtime CLI payload weight (T1/T2); skill *bodies* are optional load hygiene, not a census surface.
 - Ops-log event/op types — internal materialization plumbing, not user-facing.
 
 If a category surfaces mid-audit that fits none of the six buckets, note it but do not rule on it — out of scope for this pass.

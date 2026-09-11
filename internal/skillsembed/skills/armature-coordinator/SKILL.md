@@ -14,7 +14,7 @@ The coordinator manages execution flow — it does not implement features itself
 Its job is to survey the story DAG, dispatch workers for each wave of ready tasks,
 and close the story when all tasks are done.
 
-**Skill-load hygiene is not Context Economics delivery.** This `SKILL.md` body is optional load hygiene; trimming it here does not block NXTTN-S3-T1/T2. Context Economics (Next-Ten №03) still prices every agent-facing artifact, including skill bodies; T1/T2 runtime CLI budgets plus the NXTTN-S3-T4 front-matter sum gate own that meter.
+**Skill-load hygiene is not Context Economics.** This `SKILL.md` body is optional load hygiene; trimming it here does not block NXTTN-S3-T1/T2. Context Economics as delivered is the T1/T2 runtime CLI budgets plus the NXTTN-S3-T4 front-matter sum gate. Skill bodies are out of that meter; Next-Ten №03's original skill-tree census is superseded in the design docs.
 
 ## Prerequisites
 
