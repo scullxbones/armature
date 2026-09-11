@@ -16,6 +16,11 @@ type Snapshot struct {
 	Index    materialize.Index
 	Issues   map[string]*materialize.Issue
 	Warnings []string
+	// Ops is the validated op set used to materialize this snapshot. Callers that
+	// derive costs or other log-backed views must use this slice rather than
+	// re-reading logs, so concurrent appends cannot mix newer usage with older
+	// hierarchy/scope data.
+	Ops []ops.Op
 }
 
 // Load materializes state from opsDir and stateDir, returning a populated Snapshot.
@@ -27,6 +32,9 @@ func Load(opsDir, stateDir string) (*Snapshot, error) {
 	}
 
 	allOps := ops.ExtractOps(items)
+	if allOps == nil {
+		allOps = []ops.Op{}
+	}
 
 	state, result, err := materialize.MaterializeAndReturnQuiet(stateDir, allOps, offsets)
 	if err != nil {
@@ -48,6 +56,7 @@ func Load(opsDir, stateDir string) (*Snapshot, error) {
 		Index:    index,
 		Issues:   issues,
 		Warnings: append(warnings, result.Warnings...),
+		Ops:      allOps,
 	}, nil
 }
 

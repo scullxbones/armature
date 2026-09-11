@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -43,7 +42,9 @@ issue preferred_model.
 
 Waves are greedy first-fit groups of issues that recorded usage and do not
 share overlapping scope (same idea as arm ready --waves). Stories roll up
-descendant usage by walking parent links to the nearest story.
+descendant usage by walking parent links to the nearest story. Spend uses
+the same captured validated op set as the snapshot. Idempotent assessment
+attestations (same issue and result_fingerprint) are counted once.
 
 Latency and rework analytics from the long-horizon stats proposal are not
 implemented here. Pass --cost for the spend view.`,
@@ -79,13 +80,8 @@ func runStatsCost(cmd *cobra.Command, ratesPath string) error {
 		return err
 	}
 
-	opList, err := stats.LoadOps(filepath.Join(ctx.IssuesDir, "ops"))
-	if err != nil {
-		return err
-	}
-
 	issues := snapshotIssueInfo(snap)
-	report := stats.Estimate(stats.CollectUsage(opList), issues, rates)
+	report := stats.Estimate(stats.CollectUsage(snap.Ops), issues, rates)
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {

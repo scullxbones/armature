@@ -406,3 +406,15 @@ func TestCommandRuntimeIsolation_REQ_ARCHIMP_S18_T4(t *testing.T) {
 	require.NoError(t, cmd1.RunE(cmd1, nil))
 	require.NoError(t, cmd2.RunE(cmd2, nil))
 }
+
+func TestStatsAndShowDeriveSpendFromCapturedOps(t *testing.T) {
+	_, thisTestFile, _, _ := runtime.Caller(0)
+	baseDir := filepath.Dir(thisTestFile)
+	for _, name := range []string{"stats.go", "show.go"} {
+		src, err := os.ReadFile(filepath.Join(baseDir, name))
+		require.NoError(t, err)
+		if strings.Contains(string(src), "stats.LoadOps") {
+			t.Errorf("%s must estimate spend from snap.Ops, not a second stats.LoadOps read", name)
+		}
+	}
+}
