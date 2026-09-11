@@ -1,6 +1,7 @@
 package contextreport
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	ctxpkg "github.com/scullxbones/armature/internal/context"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +91,36 @@ func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 	assert.Equal(t, report.EstimationMethod, decoded.EstimationMethod)
 	assert.Contains(t, string(raw), "bytes/4")
 	assert.Contains(t, string(raw), `"class": "invocation"`)
+}
+
+func TestContextReportShowPricesAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T) {
+	t.Parallel()
+
+	root := moduleRoot(t)
+	report, err := Collect(root)
+	require.NoError(t, err)
+	show := artifactByPath(t, report, "show")
+
+	opsPath := filepath.Join(root, "internal", "contextreport", "testdata", "graph", "ops.jsonl")
+	allOps, err := loadFixtureOps(opsPath)
+	require.NoError(t, err)
+	state := materialize.NewState()
+	for _, op := range allOps {
+		require.NoError(t, state.ApplyOp(op))
+	}
+	issue := state.Issues[FixtureShowIssue]
+	require.NotNil(t, issue)
+
+	var human, asJSON bytes.Buffer
+	require.NoError(t, output.RenderIssue(&human, issue, false))
+	require.NoError(t, output.RenderIssue(&asJSON, issue, true))
+
+	assert.Equal(t, human.Len(), show.Bytes,
+		"show row must price the agent-mode human RenderIssue payload")
+	assert.NotEqual(t, asJSON.Len(), show.Bytes,
+		"show row must not price the JSON renderer used only by --format json")
+	assert.False(t, json.Valid(bytes.TrimSpace(human.Bytes())),
+		"agent-mode show is human text, not a JSON object")
 }
 
 func TestContextReportPricesRenderContextFixture_REQ_NXTTN_S3_T1(t *testing.T) {
