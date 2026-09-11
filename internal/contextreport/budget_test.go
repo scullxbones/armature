@@ -4,12 +4,20 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func moduleRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller")
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
 
 func runtimeBudgetFixture(overPath string, measured, max, target int) (Report, BudgetFile) {
 	mk := func(path, class string, bytes, maxBytes, targetBytes int) (Artifact, Budget) {
@@ -78,7 +86,7 @@ func TestRuntimeBudgetCapsAreExplicitTargets_REQ_NXTTN_S3_T2(t *testing.T) {
 	t.Parallel()
 
 	root := moduleRoot(t)
-	report, err := Collect(root)
+	report, err := Collect()
 	require.NoError(t, err)
 
 	budgets, err := LoadBudgets(filepath.Join(root, filepath.FromSlash(BudgetsRelPath)))
@@ -322,7 +330,7 @@ func TestCheckedInContextBudgetsHold(t *testing.T) {
 	t.Parallel()
 
 	root := moduleRoot(t)
-	report, err := Collect(root)
+	report, err := Collect()
 	require.NoError(t, err)
 
 	budgets, err := LoadBudgets(filepath.Join(root, filepath.FromSlash(BudgetsRelPath)))
