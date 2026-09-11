@@ -387,7 +387,7 @@ func TestDecomposeRevertCommand(t *testing.T) {
 // TestDecomposeApply_DraftConfidence verifies that nodes created by decompose-apply
 // have confidence=draft, are hidden from trls ready, and become visible after
 // dag-transition promotes them to verified.
-func TestDecomposeApply_DraftConfidence(t *testing.T) {
+func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1122,7 +1122,7 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 	assert.NotEmpty(t, issues)
 }
 
-func TestDecomposeApplyDryRun(t *testing.T) {
+func TestDecomposeApplyDryRun_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1309,7 +1309,7 @@ func TestDecomposeApplyRefusesUnknownSource(t *testing.T) {
 
 // TestDecomposeApplyGenerateIds verifies that --generate-ids replaces the
 // plan-specified IDs with system-generated UUIDs in the created issues.
-func TestDecomposeApplyGenerateIds(t *testing.T) {
+func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1352,7 +1352,7 @@ func TestDecomposeApplyGenerateIds(t *testing.T) {
 
 // TestDecomposeApplyRoot verifies that --root overrides the inferred root and
 // attaches top-level plan issues as children of the given root issue.
-func TestDecomposeApplyRoot(t *testing.T) {
+func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

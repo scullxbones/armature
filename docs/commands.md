@@ -163,9 +163,9 @@ Show commits where an issue's context changed.
 
 **Flags:**
 - `--issue string`: Issue ID (required).
-- `--limit int`: Maximum number of commits to scan. Default is complete history (`0`). An explicit `--limit` is a disclosed query boundary.
+- `--limit int`: Maximum number of commits to scan. Default is complete history (`0`). A positive `--limit` is a disclosed query boundary; `--limit 0` (and other nonpositive values) is unbounded.
 
-Structured output (`--format json`, `--format agent`) is one Agent Output Contract envelope: `{count, commits, help}`. Without `--limit` the command scans complete history. `--limit N` bounds the scan; `count` equals the matching commits inside that window, and the envelope discloses `limit` plus a help line that the result is bounded.
+Structured output (`--format json`, `--format agent`) is one Agent Output Contract envelope: `{count, commits, help}`. Without `--limit`, or with a nonpositive `--limit`, the command scans complete history and does not disclose a `limit` adjunct. A positive `--limit N` bounds the scan; `count` equals the matching commits inside that window, and the envelope discloses `limit` plus a help line that the result is bounded.
 
 **Example:**
 ```bash
@@ -1106,7 +1106,9 @@ single summary line (`OK: no issues found` plus coverage when present), and any
 error or (under `--strict`) warning exits non-zero. Findings stay in their
 native buckets: JSON `warnings` still lists W-codes when strict. Structured
 output is `{count, findings, help}` with `errors`, `warnings`, and `infos` as
-adjuncts. `--ci` is the
+adjuncts. Snapshot/materialization warnings (rejected or malformed ops) are
+included in `findings` and `warnings` so `count: 0` cannot mean a clean graph
+when ops were excluded; default-strict validate fails in that case. `--ci` is the
 CI alias for the same fail-closed contract (`make validate-graph`); it is not
 part of the per-task `make check` publish gate. `--ci --strict=false` is
 rejected as contradictory. There are no waivers and no scoping flags; the

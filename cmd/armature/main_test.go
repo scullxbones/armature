@@ -692,7 +692,7 @@ func TestValidateCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestDecomposeApplyCommand(t *testing.T) {
+func TestDecomposeApplyCommand_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2748,7 +2748,7 @@ func TestWorkersCommand_HumanOutput(t *testing.T) {
 }
 
 // workers: JSON when --format json (replaces --json)
-func TestWorkersCommand_FormatJSON(t *testing.T) {
+func TestWorkersCommand_FormatJSON_REQ_AOC_S2_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2766,7 +2766,7 @@ func TestWorkersCommand_FormatJSON(t *testing.T) {
 }
 
 // workers: --json flag still works for backward compatibility
-func TestWorkersCommand_LegacyJSONFlag(t *testing.T) {
+func TestWorkersCommand_LegacyJSONFlag_REQ_AOC_S2_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)

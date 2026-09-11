@@ -64,6 +64,36 @@ func TestContextHistoryExplicitLimitIsDisclosed_REQ_AOC_S2_T4(t *testing.T) {
 	assert.False(t, shas[createSHA], "a 10-commit window must exclude the oldest change")
 }
 
+func TestContextHistoryZeroLimitIsUnbounded_REQ_AOC_S2_T4(t *testing.T) {
+	repo, createSHA, noteSHA := plantContextHistoryBeyondSilentCap(t)
+
+	for _, limit := range []string{"0", "-1"} {
+		t.Run("limit="+limit, func(t *testing.T) {
+			out, err := runTrls(t, repo, "context-history", "--issue", "HIST-01", "--limit", limit, "--format", "json")
+			require.NoError(t, err)
+
+			decoded := decodeContractEnvelope(t, out, "commits")
+			_, hasLimit := decoded["limit"]
+			assert.False(t, hasLimit, "nonpositive --limit is complete history, not a disclosed bound")
+
+			var help []string
+			require.NoError(t, json.Unmarshal(decoded["help"], &help))
+			for _, line := range help {
+				assert.NotContains(t, line, "bounded")
+			}
+
+			var commits []contextHistoryRow
+			require.NoError(t, json.Unmarshal(decoded["commits"], &commits))
+			shas := map[string]bool{}
+			for _, c := range commits {
+				shas[c.SHA] = true
+			}
+			assert.True(t, shas[createSHA], "nonpositive --limit must scan complete history")
+			assert.True(t, shas[noteSHA], "nonpositive --limit must include the newest context change")
+		})
+	}
+}
+
 func plantContextHistoryBeyondSilentCap(t *testing.T) (repo, createSHA, noteSHA string) {
 	t.Helper()
 	repo = initTempRepo(t)
