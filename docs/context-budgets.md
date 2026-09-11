@@ -61,7 +61,7 @@ Cutoff: estimated tokens above 4000 (the render-context default).
 These artifacts already exceed that load on every skill or doc ingest.
 Budgets are seeded at current size so the gate is green. The plan is how to shrink later.
 
-### skill: armature-coordinator (62358 bytes, ~15589 tokens)
+### skill: armature-coordinator (62725 bytes, ~15681 tokens)
 
 Largest tree. `SKILL.md` is a long runbook. `references/commands.md` duplicates command help that `docs/commands.md` already holds.
 
