@@ -1,4 +1,5 @@
 # Trellis Op Log Schema v1
+# scaffolding-version: 3
 #
 # Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]
 #
@@ -18,6 +19,7 @@
 #   claim:             ttl, worktree_path (optional), claim_token
 #   heartbeat:         (empty object)
 #   transition:        to, outcome, branch (optional), pr (optional),
+#                        input_tokens (optional), output_tokens (optional),
 #                        skipped_delivery_gate (optional)
 #                        restore_claim snapshot fields (rollback only)
 #                        if_claim_token (conditional compensating rollback only)
