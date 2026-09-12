@@ -883,6 +883,62 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 	assert.NotContains(t, string(omitted), "output_tokens")
 }
 
+func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t *testing.T) {
+	t.Parallel()
+
+	attestation := review.AssessmentAttestation{
+		SchemaVersion:         review.SchemaVersion,
+		BundleID:              "sha256:bundle-new",
+		ContractFingerprint:   "fp_contract",
+		DeliveryFingerprint:   "fp_delivery",
+		BaseSHA:               "abc123",
+		HeadSHA:               "def456",
+		Rating:                review.Green,
+		EffectiveRating:       review.Red,
+		IsDisagreement:        true,
+		ConflictsWithBundleID: "sha256:bundle-prior",
+		ConflictsWithRating:   review.Red,
+		ResultFingerprint:     "fp_result",
+		SatisfiedCount:        1,
+	}
+	data, err := json.Marshal(attestation)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"effective_rating":"red"`)
+	assert.Contains(t, string(data), `"is_disagreement":true`)
+	assert.Contains(t, string(data), `"conflicts_with_bundle_id":"sha256:bundle-prior"`)
+	assert.Contains(t, string(data), `"conflicts_with_rating":"red"`)
+	assert.Contains(t, string(data), `"rating":"green"`)
+
+	var decoded review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, review.Green, decoded.Rating)
+	assert.Equal(t, review.Red, decoded.EffectiveRating)
+	assert.True(t, decoded.IsDisagreement)
+	assert.Equal(t, "sha256:bundle-prior", decoded.ConflictsWithBundleID)
+	assert.Equal(t, review.Red, decoded.ConflictsWithRating)
+
+	legacyJSON := []byte(`{` +
+		`"schema_version":1,` +
+		`"bundle_id":"sha256:bundle123",` +
+		`"contract_fingerprint":"fp_contract",` +
+		`"delivery_fingerprint":"fp_delivery",` +
+		`"base_sha":"abc123",` +
+		`"head_sha":"def456",` +
+		`"rating":"red",` +
+		`"result_fingerprint":"fp_result",` +
+		`"satisfied_count":0,` +
+		`"partially_satisfied_count":0,` +
+		`"not_satisfied_count":1,` +
+		`"indeterminate_count":0` +
+		`}`)
+	var legacy review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(legacyJSON, &legacy), "legacy assessment without disagreement fields must still decode")
+	assert.Equal(t, review.Red, legacy.Rating)
+	assert.Equal(t, review.Green, legacy.EffectiveRating)
+	assert.False(t, legacy.IsDisagreement)
+	assert.Empty(t, legacy.ConflictsWithBundleID)
+}
+
 func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 

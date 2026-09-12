@@ -154,3 +154,14 @@ func TestCountCriteria(t *testing.T) {
 	assert.Equal(t, 1, notSat)
 	assert.Equal(t, 1, indet)
 }
+
+func TestMaxRating_SeverityOrder_REQ_TOPTIER_S13_T1(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, review.Green, review.MaxRating())
+	assert.Equal(t, review.Green, review.MaxRating(review.Green))
+	assert.Equal(t, review.Yellow, review.MaxRating(review.Green, review.Yellow))
+	assert.Equal(t, review.Red, review.MaxRating(review.Green, review.Yellow, review.Red))
+	assert.Equal(t, review.Red, review.MaxRating(review.Red, review.Green))
+	assert.Equal(t, review.Yellow, review.MaxRating(review.Yellow, review.Yellow))
+	assert.Equal(t, review.Green, review.MaxRating(review.Rating(99), review.Green))
+}

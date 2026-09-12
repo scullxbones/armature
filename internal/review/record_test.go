@@ -1178,3 +1178,185 @@ func TestRecord_GateEvidenceMissingLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gate")
 }
+
+const disagreementDeliveryFP = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+func disagreementAssessment(bundleID, rationale string, status CriterionStatus) *ConformanceAssessment {
+	result := CriterionResult{
+		ID:        "definition_of_done",
+		Status:    status,
+		Rationale: rationale,
+	}
+	if status == Satisfied {
+		result.Citations = []Citation{{Path: "impl.go", Line: 1}}
+	} else {
+		result.MissingEvidence = "not demonstrated"
+	}
+	return &ConformanceAssessment{
+		SchemaVersion:       SchemaVersion,
+		BundleID:            bundleID,
+		ContractFingerprint: "sha256:aaaa",
+		DeliveryFingerprint: disagreementDeliveryFP,
+		Results:             []CriterionResult{result},
+	}
+}
+
+func recordDisagreementAttestation(t *testing.T, bundleID, rationale string, status CriterionStatus) AssessmentAttestation {
+	t.Helper()
+	result, err := Record(RecordInput{
+		Assessment: disagreementAssessment(bundleID, rationale, status),
+		IssueID:    "task-01",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Attestation)
+	return *result.Attestation
+}
+
+// TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13 covers G3.1/G3.3
+// disagreement enrichment on a newly accepted Assessment Attestation.
+func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no prior", func(t *testing.T) {
+		t.Parallel()
+		input := RecordInput{
+			Assessment: disagreementAssessment("bundle-new", "complete", Satisfied),
+			IssueID:    "task-01",
+		}
+		result, err := RecordWithDuplicateCheck(input, nil)
+		require.NoError(t, err)
+		require.NotNil(t, result.Attestation)
+		assert.False(t, result.IsDuplicate)
+		assert.Equal(t, Green, result.Attestation.Rating)
+		assert.Equal(t, Green, result.Attestation.EffectiveRating)
+		assert.False(t, result.Attestation.IsDisagreement)
+		assert.Empty(t, result.Attestation.ConflictsWithBundleID)
+		assert.Equal(t, Rating(0), result.Attestation.ConflictsWithRating)
+	})
+
+	t.Run("agreeing prior", func(t *testing.T) {
+		t.Parallel()
+		prior := recordDisagreementAttestation(t, "bundle-prior", "first green review", Satisfied)
+		snapshot := prior
+		input := RecordInput{
+			Assessment: disagreementAssessment("bundle-new", "second green review", Satisfied),
+			IssueID:    "task-01",
+		}
+		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{prior})
+		require.NoError(t, err)
+		require.NotNil(t, result.Attestation)
+		assert.False(t, result.IsDuplicate)
+		assert.Equal(t, Green, result.Attestation.Rating)
+		assert.Equal(t, Green, result.Attestation.EffectiveRating)
+		assert.False(t, result.Attestation.IsDisagreement)
+		assert.Empty(t, result.Attestation.ConflictsWithBundleID)
+		assert.Equal(t, snapshot, prior, "prior Assessment Attestation must not be rewritten")
+	})
+
+	t.Run("disagreeing prior", func(t *testing.T) {
+		t.Parallel()
+		prior := recordDisagreementAttestation(t, "bundle-green", "green review", Satisfied)
+		input := RecordInput{
+			Assessment: disagreementAssessment("bundle-red", "red review", NotSatisfied),
+			IssueID:    "task-01",
+		}
+		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{prior})
+		require.NoError(t, err)
+		require.NotNil(t, result.Attestation)
+		assert.False(t, result.IsDuplicate)
+		assert.Equal(t, Red, result.Attestation.Rating)
+		assert.Equal(t, Red, result.Attestation.EffectiveRating)
+		assert.True(t, result.Attestation.IsDisagreement)
+		assert.Equal(t, "bundle-green", result.Attestation.ConflictsWithBundleID)
+		assert.Equal(t, Green, result.Attestation.ConflictsWithRating)
+		assert.Equal(t, Green, prior.Rating)
+		assert.False(t, prior.IsDisagreement)
+		assert.Equal(t, Rating(0), prior.EffectiveRating)
+	})
+
+	t.Run("three mixed highest severity not most recent", func(t *testing.T) {
+		t.Parallel()
+		redPrior := recordDisagreementAttestation(t, "bundle-red", "older red", NotSatisfied)
+		yellowPrior := recordDisagreementAttestation(t, "bundle-yellow", "newer yellow", PartiallySatisfied)
+		otherDelivery := recordDisagreementAttestation(t, "bundle-other", "other delivery green", Satisfied)
+		otherDelivery.DeliveryFingerprint = "sha256:other-delivery"
+		priors := []AssessmentAttestation{redPrior, yellowPrior, otherDelivery}
+		input := RecordInput{
+			Assessment: disagreementAssessment("bundle-green", "incoming green", Satisfied),
+			IssueID:    "task-01",
+		}
+		result, err := RecordWithDuplicateCheck(input, priors)
+		require.NoError(t, err)
+		require.NotNil(t, result.Attestation)
+		assert.False(t, result.IsDuplicate)
+		assert.Equal(t, Green, result.Attestation.Rating)
+		assert.Equal(t, Red, result.Attestation.EffectiveRating)
+		assert.True(t, result.Attestation.IsDisagreement)
+		assert.Equal(t, "bundle-red", result.Attestation.ConflictsWithBundleID)
+		assert.Equal(t, Red, result.Attestation.ConflictsWithRating)
+		assert.Equal(t, Red, priors[0].Rating)
+		assert.Equal(t, Yellow, priors[1].Rating)
+		assert.False(t, priors[0].IsDisagreement)
+		assert.False(t, priors[1].IsDisagreement)
+	})
+
+	t.Run("equal severity cites most recently appended", func(t *testing.T) {
+		t.Parallel()
+		older := recordDisagreementAttestation(t, "bundle-yellow-old", "older yellow", PartiallySatisfied)
+		newer := recordDisagreementAttestation(t, "bundle-yellow-new", "newer yellow", PartiallySatisfied)
+		input := RecordInput{
+			Assessment: disagreementAssessment("bundle-green", "incoming green", Satisfied),
+			IssueID:    "task-01",
+		}
+		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{older, newer})
+		require.NoError(t, err)
+		require.NotNil(t, result.Attestation)
+		assert.True(t, result.Attestation.IsDisagreement)
+		assert.Equal(t, Yellow, result.Attestation.EffectiveRating)
+		assert.Equal(t, "bundle-yellow-new", result.Attestation.ConflictsWithBundleID)
+		assert.Equal(t, Yellow, result.Attestation.ConflictsWithRating)
+	})
+
+	t.Run("exact duplicate prior excluded", func(t *testing.T) {
+		t.Parallel()
+		duplicateOfIncoming := recordDisagreementAttestation(t, "bundle-dup", "same content", Satisfied)
+		disagreeing := recordDisagreementAttestation(t, "bundle-red", "conflicting red", NotSatisfied)
+		input := RecordInput{
+			Assessment: disagreementAssessment("bundle-dup", "same content", Satisfied),
+			IssueID:    "task-01",
+		}
+		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{disagreeing, duplicateOfIncoming})
+		require.NoError(t, err)
+		require.NotNil(t, result.Attestation)
+		assert.True(t, result.IsDuplicate, "exact ResultFingerprint match takes the duplicate path")
+		assert.False(t, result.Attestation.IsDisagreement)
+		assert.Empty(t, result.Attestation.ConflictsWithBundleID)
+		assert.Equal(t, Rating(0), result.Attestation.EffectiveRating)
+	})
+}
+
+// TestReviewRecord_ConformanceRatingNeverOverwritten_REQ_TOPTIER_S13_T1 asserts
+// the Assessment Attestation Conformance Rating stays DeriveRating of this
+// attestation's Criterion Results when EffectiveRating is stricter.
+func TestReviewRecord_ConformanceRatingNeverOverwritten_REQ_TOPTIER_S13_T1(t *testing.T) {
+	t.Parallel()
+	prior := recordDisagreementAttestation(t, "bundle-red", "prior red", NotSatisfied)
+	assessment := disagreementAssessment("bundle-green", "incoming green", Satisfied)
+	input := RecordInput{
+		Assessment: assessment,
+		IssueID:    "task-01",
+	}
+	result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{prior})
+	require.NoError(t, err)
+	require.NotNil(t, result.Attestation)
+	assert.Equal(t, DeriveRating(assessment.Results), result.Attestation.Rating)
+	assert.Equal(t, Green, result.Attestation.Rating)
+	assert.Equal(t, Red, result.Attestation.EffectiveRating)
+	assert.NotEqual(t, result.Attestation.Rating, result.Attestation.EffectiveRating)
+	assert.Equal(t, Red, prior.Rating)
+}
+
+func TestEnrichDisagreementFields_NilAttestation(t *testing.T) {
+	t.Parallel()
+	enrichDisagreementFields(nil, []AssessmentAttestation{{Rating: Red}})
+}
