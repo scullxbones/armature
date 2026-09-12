@@ -160,7 +160,7 @@ outcome) appends as an amendment at exit 0.`,
 			// the gate must catch a resulting dirty tree or out-of-scope file
 			// rather than checking a state that hooks are about to change.
 			if to == "done" && !skipDeliveryGate {
-				gateIssue, err := currentIssueFromOps(appCtx.IssuesDir, issueID)
+				gateIssue, _, err := replayIssueOps(appCtx.IssuesDir, issueID)
 				if err != nil {
 					return fmt.Errorf("determine current issue state for delivery gate %s: %w. Use --skip-delivery-gate to bypass", issueID, err)
 				}
@@ -332,15 +332,6 @@ func replayIssueOps(issuesDir, issueID string) (*materialize.Issue, []ops.Op, er
 		return nil, allOps, fmt.Errorf("issue not found in current ops")
 	}
 	return issue, allOps, nil
-}
-
-// currentIssueFromOps reads the append-only source of truth without updating
-// derived state. Delivery-gate decisions must not rely on a stale snapshot:
-// amend, unassign, and transition --to open append authoritative state changes
-// but do not synchronously materialize them.
-func currentIssueFromOps(issuesDir, issueID string) (*materialize.Issue, error) {
-	issue, _, err := replayIssueOps(issuesDir, issueID)
-	return issue, err
 }
 
 // isIssueUncited returns true if the issue has no source-link or accept-citation.
@@ -555,7 +546,7 @@ func worktreeIssueBinding(worktreePath string) (string, error) {
 // issue, regardless of which checkout `arm transition` is invoked from and
 // regardless of what branch that worktree currently has checked out. It
 // enumerates EVERY worktree linked to the repository via `git worktree list
-// --porcelain` (listAllWorktreePaths) and checks each one's own
+// --porcelain` (worktree.List) and checks each one's own
 // armature-issue-id marker file directly, rather than first narrowing to
 // "whichever worktree currently has refs/heads/feat/<id> checked out" via a
 // branch-name lookup. Branch-name lookup is not enough: a
@@ -585,11 +576,12 @@ func worktreeIssueBinding(worktreePath string) (string, error) {
 // than falling through to "not claimed", per the armature constitution's I5
 // (deterministic gates decide, never silently skip).
 func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool, error) {
-	paths, err := listAllWorktreePaths(repoPath)
+	items, err := worktree.List(repoPath)
 	if err != nil {
 		return "", false, fmt.Errorf("list worktrees: %w", err)
 	}
-	for _, worktreePath := range paths {
+	for _, item := range items {
+		worktreePath := item.Path
 		gitDir, err := worktree.ResolveGitDir(worktreePath)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -611,23 +603,6 @@ func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool, error)
 		}
 	}
 	return "", false, nil
-}
-
-// listAllWorktreePaths returns the path of every worktree git knows about for
-// the repository at repoPath (main worktree included), regardless of what
-// branch each one currently has checked out. Used by
-// resolveClaimedStoryWorktree, which must find a claimed worktree by its own
-// armature-issue-id marker independent of branch state.
-func listAllWorktreePaths(repoPath string) ([]string, error) {
-	items, err := worktree.List(repoPath)
-	if err != nil {
-		return nil, err
-	}
-	paths := make([]string, 0, len(items))
-	for _, item := range items {
-		paths = append(paths, item.Path)
-	}
-	return paths, nil
 }
 
 // runDeliveryGateCheck runs the delivery gate checks when transitioning to done.

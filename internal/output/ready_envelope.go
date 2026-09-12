@@ -42,8 +42,8 @@ type ExpiredClaim struct {
 	LastClaimingWorkerActivity int64  `json:"last_claiming_worker_activity,omitempty"`
 }
 
-// ReadyIssueRows maps compute-ready entries to envelope rows.
-func ReadyIssueRows(entries []ready.ReadyEntry) []ReadyIssue {
+// readyIssueRows maps compute-ready entries to envelope rows.
+func readyIssueRows(entries []ready.ReadyEntry) []ReadyIssue {
 	rows := make([]ReadyIssue, 0, len(entries))
 	for _, e := range entries {
 		rows = append(rows, ReadyIssue{
@@ -75,8 +75,8 @@ func ReadyWaveIDs(waves [][]ready.ReadyEntry) [][]string {
 	return groups
 }
 
-// ExpiredClaimRows maps expired-claim entries to the expired_claims adjunct.
-func ExpiredClaimRows(claims []ready.ExpiredClaimEntry) []ExpiredClaim {
+// expiredClaimRows maps expired-claim entries to the expired_claims adjunct.
+func expiredClaimRows(claims []ready.ExpiredClaimEntry) []ExpiredClaim {
 	rows := make([]ExpiredClaim, 0, len(claims))
 	for _, c := range claims {
 		rows = append(rows, ExpiredClaim{
@@ -93,8 +93,8 @@ func ExpiredClaimRows(claims []ready.ExpiredClaimEntry) []ExpiredClaim {
 	return rows
 }
 
-// ReadyEmptyReason names why a zero-length ready payload is empty.
-func ReadyEmptyReason(parent, assignedTo string, expiredN int) string {
+// readyEmptyReason names why a zero-length ready payload is empty.
+func readyEmptyReason(parent, assignedTo string, expiredN int) string {
 	switch {
 	case parent != "" && assignedTo != "":
 		return fmt.Sprintf("no issues match --parent %s and --assigned-to %s", parent, assignedTo)
@@ -114,7 +114,7 @@ func ReadyHelp(n int, waves bool, expiredN int, parent, assignedTo string) []str
 	help := make([]string, 0, 4)
 	switch {
 	case n == 0:
-		help = append(help, ReadyEmptyReason(parent, assignedTo, expiredN))
+		help = append(help, readyEmptyReason(parent, assignedTo, expiredN))
 	case waves:
 		help = append(help, ReadyWavesHelp)
 	default:
@@ -138,7 +138,7 @@ func WriteReadyEnvelope(
 	expired []ready.ExpiredClaimEntry,
 	parent, assignedTo string,
 ) error {
-	rows := ReadyIssueRows(entries)
+	rows := readyIssueRows(entries)
 	env, err := NewEnvelope("issues", rows, ReadyHelp(len(rows), includeWaves, len(expired), parent, assignedTo))
 	if err != nil {
 		return err
@@ -148,7 +148,7 @@ func WriteReadyEnvelope(
 			return err
 		}
 	}
-	if err := env.AddAdjunct("expired_claims", ExpiredClaimRows(expired)); err != nil {
+	if err := env.AddAdjunct("expired_claims", expiredClaimRows(expired)); err != nil {
 		return err
 	}
 	return WriteEnvelope(w, env)

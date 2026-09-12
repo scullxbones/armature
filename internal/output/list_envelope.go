@@ -81,8 +81,8 @@ func ListGroupsByStatus(index materialize.Index, ids []string) []ListGroup {
 	return groups
 }
 
-// ListHelp is the trailing help for a list envelope.
-func ListHelp(filtered bool, n int) []string {
+// listHelp is the trailing help for a list envelope.
+func listHelp(filtered bool, n int) []string {
 	if n == 0 {
 		reason := "no issues in the repository"
 		if filtered {
@@ -96,7 +96,7 @@ func ListHelp(filtered bool, n int) []string {
 // WriteListEnvelope emits the compact agent list object {count,issues,help}
 // and optional groups adjunct. This is the live arm list json/agent path.
 func WriteListEnvelope(w io.Writer, rows []ListIssue, groups []ListGroup, grouped, filtered bool) error {
-	env, err := NewEnvelope("issues", rows, ListHelp(filtered, len(rows)))
+	env, err := NewEnvelope("issues", rows, listHelp(filtered, len(rows)))
 	if err != nil {
 		return err
 	}

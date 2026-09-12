@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"sort"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -22,22 +21,6 @@ var terminalStatuses = map[string]bool{
 	ops.StatusDone:      true,
 	ops.StatusMerged:    true,
 	ops.StatusCancelled: true,
-}
-
-func statusRank(status string) int {
-	return output.ListStatusRank(status)
-}
-
-func listRows(index materialize.Index, ids []string) []listEntry {
-	return output.ListRows(index, ids)
-}
-
-func listGroupsByStatus(index materialize.Index, ids []string) []listGroup {
-	return output.ListGroupsByStatus(index, ids)
-}
-
-func writeListEnvelope(w io.Writer, rows []listEntry, groups []listGroup, grouped, filtered bool) error {
-	return output.WriteListEnvelope(w, rows, groups, grouped, filtered)
 }
 
 func newListCmd() *cobra.Command {
@@ -82,14 +65,13 @@ func newListCmd() *cobra.Command {
 			sort.Strings(ids)
 
 			filtered := filterParent != "" || filterType != "" || filterStatus != "" || terminal
-			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
-				rows := listRows(index, ids)
+			if structuredFormat(cmd) {
+				rows := output.ListRows(index, ids)
 				var groups []listGroup
 				if group {
-					groups = listGroupsByStatus(index, ids)
+					groups = output.ListGroupsByStatus(index, ids)
 				}
-				return writeListEnvelope(cmd.OutOrStdout(), rows, groups, group, filtered)
+				return output.WriteListEnvelope(cmd.OutOrStdout(), rows, groups, group, filtered)
 			}
 
 			if group {
@@ -103,7 +85,7 @@ func newListCmd() *cobra.Command {
 					statuses = append(statuses, s)
 				}
 				sort.Slice(statuses, func(i, j int) bool {
-					return statusRank(statuses[i]) < statusRank(statuses[j])
+					return output.ListStatusRank(statuses[i]) < output.ListStatusRank(statuses[j])
 				})
 				for _, status := range statuses {
 					label := status

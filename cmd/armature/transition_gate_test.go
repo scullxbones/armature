@@ -277,7 +277,7 @@ func TestTransitionDoneUnmaterializedStoryReplaysAuthoritativeOps_REQ_LNGHZN_S4_
 	_, err = runTrls(t, repo, "transition", "--issue", "gate-unmaterialized-story-01", "--to", "done", "--outcome", "test")
 	require.NoError(t, err)
 
-	issue, err := currentIssueFromOps(getTestContext(t, repo).IssuesDir, "gate-unmaterialized-story-01")
+	issue, _, err := replayIssueOps(getTestContext(t, repo).IssuesDir, "gate-unmaterialized-story-01")
 	require.NoError(t, err)
 	assert.Equal(t, "done", issue.Status)
 }
