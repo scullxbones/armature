@@ -24,5 +24,5 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0016](0016-three-door-validation.md) | Three-Door Validation | Accepted |
 | [0017](0017-agent-output-contract.md) | Agent Output Contract | Accepted |
 | [0018](0018-payload-keyed-op-idempotency.md) | Payload-Keyed Op Idempotency | Accepted |
-| 0019 | TOON park (planned; numbering reserved so this table does not collide when it lands) | — |
+| [0019](0019-park-toon-output-format.md) | Park TOON as an Agent Output Encoding | Accepted |
 | [0020](0020-agent-error-contract.md) | Agent-grade error contract | Accepted |

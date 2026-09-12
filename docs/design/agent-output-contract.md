@@ -68,7 +68,8 @@ empty-outcome `done`s in 15 minutes). True duplicates are 0.153% of the log.
 4. **One channel.** Everything an agent reads goes to stdout, errors included.
    stderr is diagnostics-only.
 5. **TOON is parked**, not rejected, behind a measurement gate with a written
-   re-entry criterion (ADR 0019, park-not-purge per ADR 0010).
+   re-entry criterion ([ADR 0019](../adr/0019-park-toon-output-format.md),
+   park-not-purge per [ADR 0010](../adr/0010-park-not-purge-subtractive-release.md)).
 6. **List rows carry `id`, `type`, `status`, `title`.** `outcome` is omitted from
    lists — not truncated — because the detail view already exists and a truncated
    preview × 638 rows is the worst of both. `help[]` trails the list, pointing at
@@ -112,14 +113,16 @@ empty-outcome `done`s in 15 minutes). True duplicates are 0.153% of the log.
     three-way classification is explicit in code and censused, and a carve-out must
     cite the harness protocol or governing schema that makes the envelope impossible,
     so neither "mark it Protocol" nor "mark it Artifact" can become an escape hatch.
-17. **Three ADRs**: 0017 the contract, 0018 payload-keyed idempotency, 0019 the TOON
-    park. The park gets its own file so its re-entry criterion stays findable.
+17. **Three ADRs**: [0017](../adr/0017-agent-output-contract.md) the contract,
+    [0018](../adr/0018-payload-keyed-op-idempotency.md) payload-keyed idempotency,
+    [0019](../adr/0019-park-toon-output-format.md) the TOON park. The park gets
+    its own file so its re-entry criterion stays findable.
 18. **Deliberately unversioned pre-1.0.** No `contract`/`v` field. `TOPTIER-S6-T3`
     (cut v0.1.0) is the freeze point.
 
 ## Deliberate deviations from AXI
 
-- **TOON (§1)** — parked, see decision 5.
+- **TOON (§1)** — parked, see decision 5 and [ADR 0019](../adr/0019-park-toon-output-format.md).
 - **Truncation in lists (§3)** — AXI says never omit a large field entirely. That is
   written for detail views and we follow it there. In a list we omit, per decision 6.
 - **Default limits (§2)** — we do not cap, per decision 7.
@@ -421,4 +424,5 @@ Non-conforming shapes (lint MUST reject for agent-facing commands):
   as agent-facing without changing bytes.
 - **AOC-S3** deletes the legacy writers and installs the cobra-enumerated
   shape lint against this document.
-- Alternate encodings are out of this spec.
+- Alternate encodings are out of this spec. TOON is parked; see
+  [ADR 0019](../adr/0019-park-toon-output-format.md).
