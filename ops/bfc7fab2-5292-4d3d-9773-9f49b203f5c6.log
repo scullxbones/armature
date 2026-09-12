@@ -228,3 +228,4 @@
 ["note","TOPTIER-S15",1789227439,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"msg":"Brian 2026-09-12: fold doctor onto AOC with S15. Envelope is the default agent shape; --explain adds structured fields when flagged.","note_id":"note-1789227439330667055"}]
 ["note","TOPTIER-S15-T1",1789227439,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"msg":"Scope includes golden doctor.json so fixture matches runtime (was envelope stub vs bare Report). jq path: .checks[] | {check,severity,explanation?,suggested?}.","note_id":"note-1789227439370182391"}]
 ["transition","TOPTIER-S15-T1",1789231213,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR #188 squash-merged: doctor AOC envelope + opt-in --explain","branch":"cursor/feat-toptier-s15-t1-doctor-aoc-explain-92a7","pr":"188","skipped_delivery_gate":true}]
+["transition","TOPTIER-S15-T1",1789231215,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"188"}]
