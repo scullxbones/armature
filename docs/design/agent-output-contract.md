@@ -425,4 +425,6 @@ Non-conforming shapes (lint MUST reject for agent-facing commands):
 - **AOC-S3** deletes the legacy writers and installs the cobra-enumerated
   shape lint against this document.
 - Alternate encodings are out of this spec. TOON is parked; see
-  [ADR 0019](../adr/0019-park-toon-output-format.md).
+  [ADR 0019](../adr/0019-park-toon-output-format.md). Re-entry byte
+  counts use that ADR's pinned TOON spec v4.1, `@toon-format/toon@4.1.1`,
+  and `{ indent: 2, delimiter: ",", keyFolding: "off" }`.
