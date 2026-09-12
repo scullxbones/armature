@@ -600,6 +600,7 @@ arm doctor [flags]
 
 --strict          Promote warnings to errors
 --verbose         Show file:line context for D3; name uncited IDs for D6
+--explain         Guided narrative and suggested remediation for non-OK checks
 --format string   Output format: human, json, agent
 ```
 

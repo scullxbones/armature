@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,7 @@ func newDoctorCmd() *cobra.Command {
 	var verbose bool
 	var fix bool
 	var dryRun bool
+	var explain bool
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -94,26 +96,11 @@ func newDoctorCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if format == "json" || format == "agent" {
-				data, _ := json.MarshalIndent(report, "", "  ") //nolint:errcheck // report struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-			} else {
-				for _, f := range report.Checks {
-					icon := "✓"
-					switch f.Severity {
-					case doctor.SeverityWarning:
-						icon = "⚠"
-					case doctor.SeverityError:
-						icon = "✗"
-					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", icon, f.Check, f.Message)
-					items := f.Items
-					if verbose && len(f.VerboseItems) > 0 {
-						items = f.VerboseItems
-					}
-					for _, item := range items {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    - %s\n", item)
-					}
+				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain); err != nil {
+					return err
 				}
+			} else {
+				renderDoctorHuman(cmd, report, verbose, explain)
 			}
 
 			// Determine exit condition. The report is already on stdout;
@@ -130,9 +117,110 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd.Flags().BoolVar(&strict, "strict", false, "promote warnings to errors")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "emit file path and line context for D3 violations; name uncited issue IDs for D6")
+	cmd.Flags().BoolVar(&explain, "explain", false, "guided narrative and suggested remediation for non-OK checks")
 	cmd.Flags().BoolVar(&fix, "fix", false, "reconcile expired claims (claimed->open, in-progress->blocked) by appending ops")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --fix, list planned fixes without writing any ops")
 	return cmd
+}
+
+const doctorCodesHelp = "see docs/validation-codes.md for doctor check codes"
+
+type doctorCheckRow struct {
+	Check        string          `json:"check"`
+	Severity     doctor.Severity `json:"severity"`
+	Message      string          `json:"message"`
+	Items        []string        `json:"items,omitempty"`
+	VerboseItems []string        `json:"verbose_items,omitempty"`
+	Explanation  string          `json:"explanation,omitempty"`
+	Suggested    string          `json:"suggested,omitempty"`
+}
+
+func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool) error {
+	rows := make([]doctorCheckRow, 0, len(report.Checks))
+	for _, f := range report.Checks {
+		row := doctorCheckRow{
+			Check:        f.Check,
+			Severity:     f.Severity,
+			Message:      f.Message,
+			Items:        f.Items,
+			VerboseItems: f.VerboseItems,
+		}
+		if explain && f.Severity != doctor.SeverityOK {
+			row.Explanation, row.Suggested = doctorCheckGuidance(f.Check)
+		}
+		rows = append(rows, row)
+	}
+	return writeNamedEnvelope(w, "checks", rows, doctorHelp(report))
+}
+
+func doctorHelp(report doctor.Report) []string {
+	if !report.HasErrors() && !report.HasWarnings() {
+		return []string{"all doctor checks passed", doctorCodesHelp}
+	}
+	return []string{doctorCodesHelp}
+}
+
+func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool) {
+	for _, f := range report.Checks {
+		icon := "✓"
+		switch f.Severity {
+		case doctor.SeverityWarning:
+			icon = "⚠"
+		case doctor.SeverityError:
+			icon = "✗"
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", icon, f.Check, f.Message)
+		if explain && f.Severity != doctor.SeverityOK {
+			explanation, suggested := doctorCheckGuidance(f.Check)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Explanation: %s\n", explanation)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", suggested)
+		}
+		items := f.Items
+		if verbose && len(f.VerboseItems) > 0 {
+			items = f.VerboseItems
+		}
+		for _, item := range items {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    - %s\n", item)
+		}
+	}
+}
+
+func doctorCheckGuidance(check string) (explanation, suggested string) {
+	switch check {
+	case "D1":
+		return "Git commits reference issue IDs that are not done or merged, so history and the issue graph have drifted.",
+			"arm transition <issue-id> --to done"
+	case "D2":
+		return "A worker's claim TTL expired without a heartbeat, which can block other workers from taking the issue.",
+			"arm doctor --fix"
+	case "D3":
+		return "Ops reference issue IDs that are not in the materialized graph, usually after a revert or a truncated log.",
+			"arm log --json"
+	case "D4":
+		return "A child issue names a parent that is not in the graph, so the hierarchy cannot be walked.",
+			"arm reparent --issue <child-id> --parent <parent-id>"
+	case "D5":
+		return "A blocked_by cycle makes every issue in the loop permanently unready.",
+			"arm unlink --source <issue-id> --dep <issue-id>"
+	case "D6":
+		return "Uncited issues have no documented origin, so they cannot be promoted until they cite a source or accept citation risk.",
+			"arm sources link <issue-id> --source-id <source-uuid>"
+	case "D7":
+		return "Ops were excluded because the log file name does not match the worker ID recorded in the op.",
+			"mv .armature/ops/<expected>.log .armature/ops/<got>.log"
+	case "D8":
+		return "Dirty or untracked paths sit outside the active task's declared scope.",
+			"arm scope-rename or remove the stray path"
+	case "D9":
+		return "A checkout lives under .worktrees/ with no issue binding, so it is an unmanaged stray worktree.",
+			"arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>"
+	case "D10":
+		return "config.json failed a strict decode or a present field is out of range.",
+			"edit .armature/config.json and re-run arm doctor"
+	default:
+		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
+			"see docs/validation-codes.md"
+	}
 }
 
 // runDoctorFix plans and (unless dryRun) applies the deterministic claim-liveness

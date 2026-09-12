@@ -298,7 +298,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--terminal` | list | bool | Filter to terminal statuses (done, merged, cancelled) | **kept-evidence** |
 | `--group` | list | bool | Group by status with headers | **kept-evidence** |
 | `--assigned-to` | ready | string | Filter to tasks assigned to worker | **kept-evidence** |
-| `--explain` | ready | bool | Diagnose why tasks aren't ready | **kept-evidence** |
+| `--explain` | ready, doctor | bool | ready: diagnose why tasks aren't ready. doctor: guided narrative and suggested remediation for non-OK checks (human and agent/json). | **kept-evidence** |
 | `--waves` | ready | bool | Partition ready queue into scope-disjoint dispatch waves (JSON/agent output only) | **kept-evidence** |
 | `--field` | show, transition | string | Extract specific fields | **kept-evidence** |
 | `--full` | show | bool | Return complete large text fields in structured show output; default truncates with total size stated | **kept-evidence** |

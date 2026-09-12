@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,4 +123,142 @@ func TestDoctorFixReportsOutOfRangeConfig(t *testing.T) {
 	joined := out + errOut + err.Error()
 	assert.Contains(t, joined, "D10")
 	assert.Contains(t, joined, "token_budget")
+}
+
+func TestDoctorAgentEnvelope_AOC_REQ_TOPTIER_S15_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	agentOut, err := runTrls(t, repo, "doctor", "--format", "agent")
+	require.NoError(t, err)
+	agentPayload := assertSingleJSONObject(t, agentOut)
+	assertDoctorAOCEnvelope(t, agentPayload)
+
+	jsonOut, err := runTrls(t, repo, "doctor", "--format", "json")
+	require.NoError(t, err)
+	jsonPayload := assertSingleJSONObject(t, jsonOut)
+	assertDoctorAOCEnvelope(t, jsonPayload)
+
+	assertNoExplainFields(t, agentPayload)
+	assertNoExplainFields(t, jsonPayload)
+
+	golden, err := os.ReadFile(filepath.Join(output.DefaultGoldenDir(), "doctor.json"))
+	require.NoError(t, err)
+	var goldenPayload map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(golden), &goldenPayload))
+	assertDoctorAOCEnvelope(t, goldenPayload)
+	_, hasFindings := goldenPayload["findings"]
+	assert.False(t, hasFindings, "golden must use checks[], not the stub findings[] payload")
+}
+
+func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing.T) {
+	t.Parallel()
+
+	_, d4 := doctorCheckGuidance("D4")
+	assert.Equal(t, "arm reparent --issue <child-id> --parent <parent-id>", d4,
+		"D4 must use required --issue/--parent flags; positionals are ignored")
+
+	_, d7 := doctorCheckGuidance("D7")
+	assert.Equal(t, "mv .armature/ops/<expected>.log .armature/ops/<got>.log", d7,
+		"D7 is a filename/worker_id mismatch; worker-init --check does not repair it")
+	assert.NotContains(t, d7, "worker-init --check")
+
+	_, d9 := doctorCheckGuidance("D9")
+	assert.Equal(t, "arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>", d9,
+		"D9 unrecognized paths are not GCRemovals; bind or remove the reported path")
+	assert.NotContains(t, d9, "worktree gc")
+}
+
+func TestDoctorExplainFlag_RendersGuidedNarrative_REQ_TOPTIER_S15_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	plain, err := runTrls(t, repo, "doctor", "--format", "human")
+	require.NoError(t, err)
+	assert.NotContains(t, plain, "Suggested:")
+	assert.NotContains(t, plain, "Explanation:")
+
+	out, err := runTrls(t, repo, "doctor", "--explain", "--format", "human")
+	require.NoError(t, err)
+	assert.Contains(t, out, "D6")
+	assert.Contains(t, out, "Explanation:")
+	assert.Contains(t, out, "Suggested:")
+	assert.Contains(t, out, "arm sources")
+}
+
+func TestDoctorExplainFlag_AgentFormatAddsStructuredFields_REQ_TOPTIER_S15_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	out, err := runTrls(t, repo, "doctor", "--explain", "--format", "agent")
+	require.NoError(t, err)
+	payload := assertSingleJSONObject(t, out)
+	assertDoctorAOCEnvelope(t, payload)
+	_, hasError := payload["error"]
+	assert.False(t, hasError, "doctor checks must not be presented as a Command Failure")
+
+	checks, ok := payload["checks"].([]any)
+	require.True(t, ok)
+	var sawNonOK bool
+	for _, raw := range checks {
+		row, ok := raw.(map[string]any)
+		require.True(t, ok)
+		sev, ok := row["severity"].(string)
+		require.True(t, ok, "severity must be a string")
+		if sev == "ok" {
+			_, hasExplanation := row["explanation"]
+			_, hasSuggested := row["suggested"]
+			assert.False(t, hasExplanation, "OK checks must omit explanation")
+			assert.False(t, hasSuggested, "OK checks must omit suggested")
+			continue
+		}
+		sawNonOK = true
+		explanation, ok := row["explanation"].(string)
+		require.True(t, ok, "non-OK check %v must carry explanation", row["check"])
+		suggested, ok := row["suggested"].(string)
+		require.True(t, ok, "non-OK check %v must carry suggested", row["check"])
+		assert.NotEmpty(t, explanation, "non-OK check %v must carry explanation", row["check"])
+		assert.NotEmpty(t, suggested, "non-OK check %v must carry suggested", row["check"])
+	}
+	require.True(t, sawNonOK, "fixture repo must include at least one non-OK doctor check")
+
+	jsonOut, err := runTrls(t, repo, "doctor", "--explain", "--format", "json")
+	require.NoError(t, err)
+	jsonPayload := assertSingleJSONObject(t, jsonOut)
+	assertDoctorAOCEnvelope(t, jsonPayload)
+}
+
+func assertDoctorAOCEnvelope(t *testing.T, payload map[string]any) {
+	t.Helper()
+	_, hasCount := payload["count"]
+	_, hasChecks := payload["checks"]
+	_, hasHelp := payload["help"]
+	_, hasError := payload["error"]
+	assert.True(t, hasCount, "AOC envelope must include count")
+	assert.True(t, hasChecks, "AOC envelope payload key must be checks")
+	assert.True(t, hasHelp, "AOC envelope must include help")
+	assert.False(t, hasError, "doctor report must not be a Command Failure")
+	help, ok := payload["help"].([]any)
+	require.True(t, ok, "help must be an array")
+	require.NotEmpty(t, help, "help must not be empty")
+	checks, ok := payload["checks"].([]any)
+	require.True(t, ok, "checks must be an array")
+	count, ok := payload["count"].(float64)
+	require.True(t, ok, "count must be a number")
+	assert.Equal(t, float64(len(checks)), count)
+}
+
+func assertNoExplainFields(t *testing.T, payload map[string]any) {
+	t.Helper()
+	checks, ok := payload["checks"].([]any)
+	require.True(t, ok)
+	for _, raw := range checks {
+		row, ok := raw.(map[string]any)
+		require.True(t, ok)
+		_, hasExplanation := row["explanation"]
+		_, hasSuggested := row["suggested"]
+		assert.False(t, hasExplanation, "without --explain, Finding fields stay as today (no explanation)")
+		assert.False(t, hasSuggested, "without --explain, Finding fields stay as today (no suggested)")
+	}
+	encoded, err := json.Marshal(payload)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), `"explanation"`)
+	assert.NotContains(t, string(encoded), `"suggested"`)
 }

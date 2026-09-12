@@ -1,1 +1,1 @@
-{"count":1,"findings":[{"id":"AOC-S3-T3"}],"help":["arm show <id> for outcome, scope, and acceptance"]}
+{"count":1,"checks":[{"check":"D1","severity":"ok","message":"No git/armature divergence detected"}],"help":["see docs/validation-codes.md for doctor check codes"]}

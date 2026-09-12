@@ -421,6 +421,7 @@ Run repository health checks (D1-D10).
 **Flags:**
 - `--strict`: Promote warnings to errors.
 - `--verbose`: Show file:line context for D3 violations; name uncited issue IDs for D6.
+- `--explain`: Guided narrative and Suggested remediation for non-OK checks. Human format prints Explanation/Suggested lines. Agent/json add structured `explanation` and `suggested` fields on those checks. Without `--explain`, Finding fields stay as today inside the `{count, checks[], help[]}` envelope.
 - `--fix`: Deterministically reconcile expired claims per the claim-liveness matrix in
   [docs/design/recovery-state-machine.md](./design/recovery-state-machine.md): a `claimed`
   issue with an expired TTL is released back to `open`; an `in-progress` issue with an
