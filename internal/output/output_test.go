@@ -640,12 +640,13 @@ func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 			rel = path
 		}
 		ast.Inspect(file, func(n ast.Node) bool {
-			switch node := n.(type) {
-			case *ast.Ident:
-				if reason, hit := banned[node.Name]; hit {
-					pos := fset.Position(node.Pos())
-					violations = append(violations, fmt.Sprintf("%s:%d: %s (%s)", rel, pos.Line, node.Name, reason))
-				}
+			ident, ok := n.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			if reason, hit := banned[ident.Name]; hit {
+				pos := fset.Position(ident.Pos())
+				violations = append(violations, fmt.Sprintf("%s:%d: %s (%s)", rel, pos.Line, ident.Name, reason))
 			}
 			return true
 		})
