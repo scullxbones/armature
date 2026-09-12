@@ -396,6 +396,7 @@ else
     echo "  PASS"
 fi
 
+if [[ $FAILURES -eq 0 ]]; then
     echo "All census-drift-check tests passed"
     exit 0
 else
