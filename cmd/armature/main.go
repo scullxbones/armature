@@ -59,7 +59,7 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
-			if cmd.Parent() == nil && tui.IsTerminal() && !nonInteractive {
+			if cmd.Parent() == nil && shouldPrintRootHelp(format, nonInteractive, tui.IsTerminal()) {
 				return nil
 			}
 
@@ -109,7 +109,8 @@ func newRootCmd() *cobra.Command {
 			if versionRequested(cmd) {
 				return writeVersionOutput(cmd)
 			}
-			if tui.IsTerminal() && !tui.IsNonInteractive() {
+			format, _ := cmd.Flags().GetString("format")
+			if shouldPrintRootHelp(format, tui.IsNonInteractive(), tui.IsTerminal()) {
 				return cmd.Help()
 			}
 			return writeReadyHome(cmd, homeEmptyReason(cmd))

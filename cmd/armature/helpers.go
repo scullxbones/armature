@@ -141,18 +141,52 @@ func homeEmptyReason(cmd *cobra.Command) string {
 	return reason
 }
 
-// isAbsentArmatureLayout is true only when the repo has no Armature ops
-// worktree configured. Config load failures and other ResolveContext errors
-// (unreadable git metadata, worktree probe failures) stay errors.
+// shouldPrintRootHelp is the bare-root TTY help fast-path. Explicit json/agent
+// (or --non-interactive) must still resolve the repo and emit the ready envelope.
+func shouldPrintRootHelp(format string, nonInteractive, isTTY bool) bool {
+	return isTTY && !nonInteractive && format == "human"
+}
+
+// isAbsentArmatureLayout is true only when the repo path is reachable and has
+// no Armature ops worktree configured. Nonexistent or inaccessible --repo
+// paths, config load failures, and other ResolveContext errors stay errors —
+// including GitConfig failures that happen to mention ops-worktree-path.
 func isAbsentArmatureLayout(repoPath string, resolveErr error) bool {
 	if resolveErr == nil {
+		return false
+	}
+	if !repoPathReachable(repoPath) {
 		return false
 	}
 	_, layoutErr := config.ResolveLayout(repoPath)
 	if layoutErr == nil {
 		return false
 	}
-	return strings.Contains(layoutErr.Error(), "armature.ops-worktree-path must be set")
+	return missingOpsWorktreePath(layoutErr)
+}
+
+func repoPathReachable(repoPath string) bool {
+	info, err := os.Stat(repoPath)
+	return err == nil && info.IsDir()
+}
+
+func missingOpsWorktreePath(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "armature.ops-worktree-path must be set") {
+		return false
+	}
+	// Wrapped GitConfig failures for missing/inaccessible paths mention the
+	// key even when git never read config. Those are not a missing layout.
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "no such file") ||
+		strings.Contains(lower, "cannot change to") ||
+		strings.Contains(lower, "permission denied") {
+		return false
+	}
+	return true
 }
 
 func rejectUnknownRootArgs(cmd *cobra.Command, args []string) error {

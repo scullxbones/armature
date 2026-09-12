@@ -4326,3 +4326,26 @@ func TestBareArmRejectsUnknownRootArgs_REQ_AOC_S2_T5(t *testing.T) {
 	assert.Contains(t, out, "unknown command")
 	assert.Contains(t, out, "orchestrate")
 }
+
+func TestBareArmNonexistentRepoIsError_REQ_AOC_S2_T5(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such-repo")
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"--repo", missing, "--format", "json")
+	assert.NotEqual(t, 0, code, "nonexistent --repo must not look like an empty ready queue: %s", stdout.String())
+	payload := assertSingleJSONObject(t, stdout.String())
+	errObj, ok := payload["error"].(map[string]any)
+	require.True(t, ok, "expected Command Failure, got %s", stdout.String())
+	assert.NotEqual(t, "", errObj["cause"])
+	assert.NotContains(t, stdout.String(), `"issues"`)
+	assert.NotContains(t, stdout.String(), "not an Armature repository")
+}
+
+func TestShouldPrintRootHelp_REQ_AOC_S2_T5(t *testing.T) {
+	assert.True(t, shouldPrintRootHelp("human", false, true))
+	assert.False(t, shouldPrintRootHelp("json", false, true), "TTY + --format json must not take the help fast-path")
+	assert.False(t, shouldPrintRootHelp("agent", false, true))
+	assert.False(t, shouldPrintRootHelp("human", true, true), "--non-interactive skips help")
+	assert.False(t, shouldPrintRootHelp("json", false, false), "non-TTY json is the ready envelope")
+	assert.False(t, shouldPrintRootHelp("human", false, false))
+}
