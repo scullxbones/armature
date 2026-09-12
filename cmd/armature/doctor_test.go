@@ -182,7 +182,8 @@ func TestDoctorExplainFlag_AgentFormatAddsStructuredFields_REQ_TOPTIER_S15_T1(t 
 	for _, raw := range checks {
 		row, ok := raw.(map[string]any)
 		require.True(t, ok)
-		sev, _ := row["severity"].(string)
+		sev, ok := row["severity"].(string)
+		require.True(t, ok, "severity must be a string")
 		if sev == "ok" {
 			_, hasExplanation := row["explanation"]
 			_, hasSuggested := row["suggested"]
@@ -191,8 +192,10 @@ func TestDoctorExplainFlag_AgentFormatAddsStructuredFields_REQ_TOPTIER_S15_T1(t 
 			continue
 		}
 		sawNonOK = true
-		explanation, _ := row["explanation"].(string)
-		suggested, _ := row["suggested"].(string)
+		explanation, ok := row["explanation"].(string)
+		require.True(t, ok, "non-OK check %v must carry explanation", row["check"])
+		suggested, ok := row["suggested"].(string)
+		require.True(t, ok, "non-OK check %v must carry suggested", row["check"])
 		assert.NotEmpty(t, explanation, "non-OK check %v must carry explanation", row["check"])
 		assert.NotEmpty(t, suggested, "non-OK check %v must carry suggested", row["check"])
 	}
