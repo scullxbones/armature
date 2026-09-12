@@ -73,7 +73,7 @@ func checkBashSyntax(text string) (err error) {
 	if err = tmp.Close(); err != nil {
 		return fmt.Errorf("close completion temp file: %w", err)
 	}
-	cmd := exec.CommandContext(context.Background(), bin, "-n", name)
+	cmd := exec.CommandContext(context.Background(), bin, "-n", name) //nolint:gosec // bash from PATH; -n on a temp file we own
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
