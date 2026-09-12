@@ -77,7 +77,7 @@ func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailu
 	if format == "json" || format == "agent" {
 		b, err := json.Marshal(commandFailureEnvelope{Error: cf})
 		if err != nil {
-			fallback := armerrors.Unmapped(err)
+			fallback := armerrors.Map(armerrors.CodeIO, err.Error(), nil, 1, err)
 			b, _ = json.Marshal(commandFailureEnvelope{Error: fallback}) //nolint:errcheck // fallback fields are always serializable
 		}
 		fmt.Fprintln(w, string(b))
@@ -113,7 +113,7 @@ func handleRootError(stdout, stderr io.Writer, format string, debug bool, err er
 		}
 		return pe.code
 	}
-	cf := armerrors.Unmapped(err)
+	cf := commandFailureAtPort(err)
 	renderCommandFailure(stdout, format, cf)
 	if debug {
 		fmt.Fprintf(stderr, "DEBUG: %+v\n", err)

@@ -316,6 +316,7 @@ func newRootCmd() *cobra.Command {
 	root.SetHelpCommandGroupID("admin")
 	root.InitDefaultHelpCmd()
 	applyPavedRoadMetadata(root)
+	installCommandFailureMapping(root)
 	return root
 }
 
@@ -350,6 +351,7 @@ func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) i
 	if target == root && argvNamesPlatformProtocol(argv) {
 		err = skipCommandFailure(err)
 	}
+	err = mapAgentFacingError(target, err)
 	format, _ := autoDetectTTYPolicy(root)
 	debug, _ := root.PersistentFlags().GetBool("debug")
 	return handleRootError(stdout, stderr, format, debug, err)

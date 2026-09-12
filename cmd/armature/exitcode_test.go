@@ -15,7 +15,7 @@ import (
 // TestExitJSON_Format verifies the Command Failure agent envelope on stdout.
 func TestExitJSON_Format(t *testing.T) {
 	buf := new(bytes.Buffer)
-	renderCommandFailure(buf, "json", armerrors.New("GENERAL-1", "something went wrong", nil, 1))
+	renderCommandFailure(buf, "json", armerrors.New("IO", "something went wrong", nil, 1))
 
 	out := strings.TrimSpace(buf.String())
 	require.True(t, json.Valid([]byte(out)), "must be valid JSON: %q", out)
@@ -25,7 +25,7 @@ func TestExitJSON_Format(t *testing.T) {
 	errObj, ok := m["error"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "something went wrong", errObj["cause"])
-	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, "IO", errObj["code"])
 	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
@@ -43,7 +43,7 @@ func TestExitJSON_UsageError(t *testing.T) {
 	assert.Equal(t, float64(2), errObj["exit_code"])
 }
 
-// TestExitJSON_NotFound verifies unmapped "not found" errors wrap as GENERAL-1.
+// TestExitJSON_NotFound verifies a port error without a command maps to IO, not GENERAL-1.
 func TestExitJSON_NotFound(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	code := handleRootError(stdout, new(bytes.Buffer), "json", false, fmt.Errorf("issue not found"))
@@ -54,12 +54,13 @@ func TestExitJSON_NotFound(t *testing.T) {
 	errObj, ok := m["error"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "issue not found", errObj["cause"])
-	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, "IO", errObj["code"])
 	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
-// TestUnmappedPortErrorsWrapAsGeneral1 verifies substring classification is gone.
-func TestUnmappedPortErrorsWrapAsGeneral1(t *testing.T) {
+// TestPortErrorsDoNotWrapAsGeneral1 verifies substring classification is gone
+// and the GENERAL-1 wrap is not used.
+func TestPortErrorsDoNotWrapAsGeneral1(t *testing.T) {
 	cases := []string{
 		"some unexpected problem",
 		"issue E1-S1-T1 not found",
@@ -74,10 +75,9 @@ func TestUnmappedPortErrorsWrapAsGeneral1(t *testing.T) {
 	}
 	for _, msg := range cases {
 		t.Run(msg, func(t *testing.T) {
-			cf := armerrors.Unmapped(fmt.Errorf("%s", msg))
+			cf := commandFailureAtPort(fmt.Errorf("%s", msg))
 			require.NotNil(t, cf)
-			assert.Equal(t, "GENERAL-1", cf.Code)
-			assert.Equal(t, 1, cf.ExitCode)
+			assert.NotEqual(t, "GENERAL-1", cf.Code)
 			assert.Equal(t, msg, cf.Cause)
 		})
 	}
@@ -104,7 +104,7 @@ func TestMain_JSONFormatError(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &m))
 	errObj, ok := m["error"].(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, "SHOW-1", errObj["code"])
 	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
@@ -128,7 +128,7 @@ func TestMain_AgentFormatError(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &m))
 	errObj, ok := m["error"].(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, "SHOW-1", errObj["code"])
 }
 
 // TestHandleRootError_Nil verifies nil maps to exit 0 and writes nothing.

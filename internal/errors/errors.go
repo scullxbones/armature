@@ -3,13 +3,12 @@
 package errors
 
 import (
-	stderrors "errors"
 	"fmt"
 	"strings"
 )
 
-// Failure Code constants reserved by ADR 0020. GENERAL-1 is the expand-step
-// wrap for unmapped port errors; USAGE and IO are reserved prefixes/codes.
+// Failure Code constants reserved by ADR 0020. GENERAL-1 was the expand-step
+// wrap and is retired; USAGE and IO remain reserved prefixes/codes.
 const (
 	CodeGeneral1 = "GENERAL-1"
 	CodeUSAGE    = "USAGE"
@@ -19,7 +18,6 @@ const (
 var registeredCodes = map[string]struct{}{}
 
 func init() {
-	Register(CodeGeneral1)
 	Register(CodeUSAGE)
 	Register(CodeIO)
 }
@@ -52,7 +50,7 @@ type CommandFailure struct {
 
 // New constructs a CommandFailure. A nil nextActions slice is stored as empty
 // so JSON encoding emits [] rather than null. Empty next_actions is allowed
-// on IO and GENERAL-1 (ADR 0020).
+// on IO (ADR 0020).
 func New(code, cause string, nextActions []string, exitCode int) *CommandFailure {
 	return Wrap(code, cause, nextActions, exitCode, nil)
 }
@@ -71,17 +69,9 @@ func Wrap(code, cause string, nextActions []string, exitCode int, err error) *Co
 	}
 }
 
-// Unmapped wraps an ordinary port error as GENERAL-1. A CommandFailure is
-// returned unchanged so later mapped codes survive the expand-step wrap.
-func Unmapped(err error) *CommandFailure {
-	if err == nil {
-		return nil
-	}
-	var cf *CommandFailure
-	if stderrors.As(err, &cf) {
-		return cf
-	}
-	return Wrap(CodeGeneral1, err.Error(), nil, 1, err)
+// Map is Wrap for a Failure Code chosen at the CLI port (command prefix).
+func Map(code, cause string, nextActions []string, exitCode int, err error) *CommandFailure {
+	return Wrap(code, cause, nextActions, exitCode, err)
 }
 
 func (e *CommandFailure) Error() string {
