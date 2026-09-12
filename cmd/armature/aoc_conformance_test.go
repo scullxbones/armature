@@ -112,7 +112,7 @@ func cobraWriterBind(cmd *cobra.Command) func(output.Mode, []byte, io.Writer, io
 	return func(_ output.Mode, golden []byte, stdout, stderr io.Writer) error {
 		cmd.SetOut(stdout)
 		cmd.SetErr(stderr)
-		_, err := io.WriteString(cmd.OutOrStdout(), string(golden))
+		_, err := cmd.OutOrStdout().Write(golden)
 		return err
 	}
 }

@@ -1,6 +1,7 @@
 package output
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -48,7 +49,7 @@ func isPowerShellCompletion(text string) bool {
 	return strings.Contains(text, "Register-ArgumentCompleter")
 }
 
-func checkBashSyntax(text string) error {
+func checkBashSyntax(text string) (err error) {
 	bin, err := exec.LookPath("bash")
 	if err != nil {
 		return nil
@@ -58,15 +59,21 @@ func checkBashSyntax(text string) error {
 		return fmt.Errorf("create completion temp file: %w", err)
 	}
 	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
-	if _, err := tmp.WriteString(text + "\n"); err != nil {
-		_ = tmp.Close()
+	defer func() {
+		if rmErr := os.Remove(name); rmErr != nil && err == nil {
+			err = fmt.Errorf("remove completion temp file: %w", rmErr)
+		}
+	}()
+	if _, err = tmp.WriteString(text + "\n"); err != nil {
+		if closeErr := tmp.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close completion temp file: %w", closeErr)
+		}
 		return fmt.Errorf("write completion temp file: %w", err)
 	}
-	if err := tmp.Close(); err != nil {
+	if err = tmp.Close(); err != nil {
 		return fmt.Errorf("close completion temp file: %w", err)
 	}
-	cmd := exec.Command(bin, "-n", name) //nolint:gosec // bash from PATH, fixture written to a temp file we own
+	cmd := exec.CommandContext(context.Background(), bin, "-n", name)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
