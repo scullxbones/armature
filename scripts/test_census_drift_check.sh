@@ -5,7 +5,7 @@
 # 1. The check passes (exit 0) on a clean checkout.
 # 2. The check fails (non-zero) and reports the expected message when a
 #    surface exists in code but not in the census (injected op type, command,
-#    or flag).
+#    flag, or output-mode classification).
 #
 # This is wired into `make check` via the `test-census-drift-check` target.
 
@@ -293,8 +293,109 @@ else
     echo "  PASS"
 fi
 
-echo ""
-if [[ $FAILURES -eq 0 ]]; then
+# ----------------------------------------------------------------------------
+# Test 9: TestCensusCoversOutputShape_REQ_AOC_S3_T4
+# A live classification change (agent-facing -> Protocol Output) without a
+# matching census row fails the drift check.
+# ----------------------------------------------------------------------------
+echo "Test 9: TestCensusCoversOutputShape_REQ_AOC_S3_T4 (classification drift)..."
+
+SHAPE_FIXTURE="$WORKDIR/shape-fixture"
+make_fixture "$SHAPE_FIXTURE"
+
+sed -i '/Use:   "list",/a\\		Annotations: output.MarkProtocolOutput(nil),' \
+    "$SHAPE_FIXTURE/cmd/armature/list.go"
+
+set +e
+OUTPUT=$("$SHAPE_FIXTURE/scripts/census-drift-check.sh" "$SHAPE_FIXTURE" 2>&1)
+STATUS=$?
+set -e
+
+if [[ $STATUS -eq 0 ]]; then
+    echo "  FAIL: expected non-zero exit when list is marked Protocol Output without a census row"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+elif ! grep -qF "Command output mode 'list||protocol-output|' in code but not in census" <<< "$OUTPUT"; then
+    echo "  FAIL: expected list protocol-output drift message not found"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+elif ! grep -qF "Command output mode 'list||agent-facing|' in census but not in code" <<< "$OUTPUT"; then
+    echo "  FAIL: expected list agent-facing census-without-code drift message not found"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "  PASS"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 10: TestCensusCoversModeSensitiveArtifactOutput_REQ_AOC_S3_T4
+# Changing Artifact selecting flags or the cited shape must fail the check.
+# ----------------------------------------------------------------------------
+echo "Test 10: TestCensusCoversModeSensitiveArtifactOutput_REQ_AOC_S3_T4 (artifact selector/citation drift)..."
+
+ARTIFACT_FIXTURE="$WORKDIR/artifact-fixture"
+make_fixture "$ARTIFACT_FIXTURE"
+
+sed -i 's/WhenAllFlagsUnset: \[\]string{"output"}/WhenAllFlagsUnset: []string{"bundle"}/' \
+    "$ARTIFACT_FIXTURE/cmd/armature/review.go"
+sed -i 's/Citation:          output.CitationReviewBundleSchema,/Citation:          output.CitationPlanSchema,/' \
+    "$ARTIFACT_FIXTURE/cmd/armature/review.go"
+
+set +e
+OUTPUT=$("$ARTIFACT_FIXTURE/scripts/census-drift-check.sh" "$ARTIFACT_FIXTURE" 2>&1)
+STATUS=$?
+set -e
+
+if [[ $STATUS -eq 0 ]]; then
+    echo "  FAIL: expected non-zero exit when review prepare artifact flags/citation change"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+elif ! grep -qF "review prepare|bundle|agent-facing|" <<< "$OUTPUT"; then
+    echo "  FAIL: expected review prepare --bundle selector drift not found"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+elif ! grep -q "docs/schemas/plan.schema.json" <<< "$OUTPUT"; then
+    echo "  FAIL: expected plan schema citation drift not found"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "  PASS"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 11: a phantom Command Output Modes census row fails
+# ----------------------------------------------------------------------------
+echo "Test 11: census-drift-check detects a phantom output-mode census row..."
+
+PHANTOM_MODE_FIXTURE="$WORKDIR/phantom-mode-fixture"
+make_fixture "$PHANTOM_MODE_FIXTURE"
+
+awk '
+    /^## Summary Statistics/ && !done {
+        print "| `fake-drift-mode` | | Protocol Output | host harness stdin/stdout protocol | | **kept-evidence** | phantom |"
+        done=1
+    }
+    { print }
+' "$PHANTOM_MODE_FIXTURE/docs/design/surface-census.md" > "$PHANTOM_MODE_FIXTURE/docs/design/surface-census.md.new"
+mv "$PHANTOM_MODE_FIXTURE/docs/design/surface-census.md.new" "$PHANTOM_MODE_FIXTURE/docs/design/surface-census.md"
+
+set +e
+OUTPUT=$("$PHANTOM_MODE_FIXTURE/scripts/census-drift-check.sh" "$PHANTOM_MODE_FIXTURE" 2>&1)
+STATUS=$?
+set -e
+
+if [[ $STATUS -eq 0 ]]; then
+    echo "  FAIL: expected non-zero exit when a phantom output-mode census row is injected"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+elif ! grep -qF "Command output mode 'fake-drift-mode||protocol-output|' in census but not in code" <<< "$OUTPUT"; then
+    echo "  FAIL: expected phantom output-mode drift message not found"
+    echo "$OUTPUT"
+    FAILURES=$((FAILURES + 1))
+else
+    echo "  PASS"
+fi
+
     echo "All census-drift-check tests passed"
     exit 0
 else
