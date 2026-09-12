@@ -1,6 +1,7 @@
 package output
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ func TestEveryAgentFacingCommandHasConformingFixture_REQ_AOC_S3_T3(t *testing.T)
 	root := sampleTree()
 	dir := t.TempDir()
 	writeAllSampleGoldens(t, dir)
+	attachBind(root, BindWriter())
 
 	require.NoError(t, Lint(root, dir), "every enumerated agent-facing mode must have a conforming golden")
 
@@ -35,6 +37,7 @@ func TestNewCommandWithoutFixtureFailsLint_REQ_AOC_S3_T3(t *testing.T) {
 	root.Children = append(root.Children, &Command{Name: "mystery", HasRun: true})
 	dir := t.TempDir()
 	writeAllSampleGoldens(t, dir)
+	attachBind(root, BindWriter())
 
 	err := Lint(root, dir)
 	require.Error(t, err)
@@ -55,6 +58,7 @@ func TestProtocolOutputExemptedByClassificationNotName_REQ_AOC_S3_T3(t *testing.
 	}
 	dir := t.TempDir()
 	writeGolden(t, dir, "_root.json", `{"count":0,"issues":[],"help":["not an Armature repository","run arm bootstrap in a git repository"]}`)
+	attachBind(root, BindWriter())
 
 	err := Lint(root, dir)
 	require.Error(t, err, "a command named harness-hook is still agent-facing without MarkProtocolOutput")
@@ -131,6 +135,7 @@ func TestArtifactOutputModesUseForeignShapeAndOtherModesConform_REQ_AOC_S3_T3(t 
 		"properties":{"version":{"type":"integer"}}
 	}`)
 	writeGolden(t, dir, "completion.artifact.sh", "# bash completion for arm\ncomplete -C arm arm\n")
+	attachBind(root, BindWriter())
 
 	require.NoError(t, Lint(root, dir))
 
@@ -206,6 +211,11 @@ func TestEnvelopeFixtureRejectsNonConformingShapes(t *testing.T) {
 			body: `{"count":1,"issues":[{"id":"X","type":"task","status":"open","title":"t","outcome":"no"}],"help":["arm show <id>"]}`,
 			want: "outcome",
 		},
+		{
+			name: "non-string list fields",
+			body: `{"count":1,"issues":[{"id":null,"type":[],"status":1,"title":{}}],"help":["arm show <id>"]}`,
+			want: "must be a JSON string",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -213,11 +223,108 @@ func TestEnvelopeFixtureRejectsNonConformingShapes(t *testing.T) {
 			d := t.TempDir()
 			writeGolden(t, d, "_root.json", `{"count":0,"issues":[],"help":["empty"]}`)
 			writeGolden(t, d, "list.json", tc.body)
+			attachBind(root, BindWriter())
 			err := Lint(root, d)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+func TestUnboundHandlerWriterFailsLint_REQ_AOC_S3_T3(t *testing.T) {
+	t.Parallel()
+	root := sampleTree()
+	dir := t.TempDir()
+	writeAllSampleGoldens(t, dir)
+	err := Lint(root, dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "handler writer is not bound")
+}
+
+func TestHandlerArrayDoesNotPassWithUnrelatedGolden_REQ_AOC_S3_T3(t *testing.T) {
+	t.Parallel()
+	root := sampleTree()
+	dir := t.TempDir()
+	writeAllSampleGoldens(t, dir)
+	attachBind(root, func(_ Mode, _ []byte, stdout, stderr io.Writer) error {
+		_, err := stdout.Write([]byte("[]\n"))
+		return err
+	})
+	err := Lint(root, dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "does not match captured handler stdout")
+}
+
+func TestStructuredStderrFailsLint_REQ_AOC_S3_T3(t *testing.T) {
+	t.Parallel()
+	root := sampleTree()
+	dir := t.TempDir()
+	writeAllSampleGoldens(t, dir)
+	attachBind(root, func(_ Mode, golden []byte, stdout, stderr io.Writer) error {
+		if _, err := stdout.Write(golden); err != nil {
+			return err
+		}
+		_, err := stderr.Write([]byte(`{"issues":[]}`))
+		return err
+	})
+	err := Lint(root, dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "stderr")
+}
+
+func TestReviewBundleFixtureMustSatisfyCitedSchema_REQ_AOC_S3_T3(t *testing.T) {
+	t.Parallel()
+	root := &Command{
+		Name:   "arm",
+		HasRun: true,
+		Children: []*Command{
+			{
+				Name:   "prepare",
+				HasRun: true,
+				Annotations: MarkArtifactOutput(nil, ArtifactMode{
+					Citation: CitationReviewBundleSchema,
+				}),
+			},
+		},
+	}
+	dir := t.TempDir()
+	writeGolden(t, dir, "_root.json", `{"count":0,"issues":[],"help":["empty home"]}`)
+	writeGolden(t, dir, "prepare.artifact.json", `{
+		"schema_version":null,
+		"bundle_id":null,
+		"issue":null,
+		"contract":null,
+		"delivery":null,
+		"fingerprints":null
+	}`)
+	attachBind(root, BindWriter())
+	err := Lint(root, dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "review bundle")
+}
+
+func TestInvalidShellCompletionFixtureFailsLint_REQ_AOC_S3_T3(t *testing.T) {
+	t.Parallel()
+	root := &Command{
+		Name:   "arm",
+		HasRun: true,
+		Children: []*Command{
+			{
+				Name:   "completion",
+				HasRun: true,
+				Annotations: MarkArtifactOutput(nil, ArtifactMode{
+					Citation: CitationShellCompletionGrammar,
+				}),
+			},
+		},
+	}
+	dir := t.TempDir()
+	writeGolden(t, dir, "_root.json", `{"count":0,"issues":[],"help":["empty home"]}`)
+	writeGolden(t, dir, "completion.artifact.sh", "not a completion script")
+	attachBind(root, BindWriter())
+	err := Lint(root, dir)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "completion-script grammar")
 }
 
 func sampleTree() *Command {
@@ -254,6 +361,16 @@ func writeGolden(t *testing.T, dir, name, body string) {
 		t.Fatalf("golden name %q must be a basename", name)
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+}
+
+func attachBind(root *Command, bind func(Mode, []byte, io.Writer, io.Writer) error) {
+	if root == nil {
+		return
+	}
+	root.Bind = bind
+	for _, child := range root.Children {
+		attachBind(child, bind)
+	}
 }
 
 const reviewBundleGolden = `{
