@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/scullxbones/armature/internal/sources"
+	"github.com/scullxbones/armature/internal/taskcontract"
 	"github.com/scullxbones/armature/internal/traceability"
 )
 
@@ -51,7 +53,7 @@ type Finding struct {
 	// Key is a rule-specific, stable discriminator used (alongside Rule and
 	// CitedIDs) to identify a Finding across writes. It exists so a rule that
 	// can emit more than one Finding per (Rule, CitedIDs) pair — currently
-	// checkE6RequiredFields, checkE10ScopeGlobs, and checkW8ConflictingDecisions
+	// checkE6RequiredFields, checkE10ScopeGlobs, checkE14TaskContract, and checkW8ConflictingDecisions
 	// — doesn't alias its distinct findings together. Key must never be
 	// derived from mutable detail (counts, overlap file lists, char lengths):
 	// Message is intentionally excluded from identity so a write that
@@ -79,6 +81,7 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	findings = append(findings, checkE10ScopeGlobs(targets)...)
 	// TODO(E4-S3): E11 check not yet implemented — spec definition pending.
 	findings = append(findings, checkE13VerticalSliceCoupling(targets)...)
+	findings = append(findings, checkE14TaskContract(targets)...)
 
 	if len(opts.ManifestData) > 0 {
 		findings = append(findings, checkE7E8E12Citations(targets, opts.ManifestData)...)
@@ -542,6 +545,105 @@ func checkE10ScopeGlobs(issues map[string]*materialize.Issue) []Finding {
 		}
 	}
 	return findings
+}
+
+const (
+	ruleE14                  = "E14"
+	e14KeyUnitOnlyAcceptance = "unit_only_acceptance"
+)
+
+func taskFromIssue(issue *materialize.Issue) taskcontract.Task {
+	return taskcontract.Task{
+		ID:               issue.ID,
+		Type:             issue.Type,
+		Status:           issue.Status,
+		DefinitionOfDone: issue.DefinitionOfDone,
+		Scope:            issue.Scope,
+	}
+}
+
+// checkE14TaskContract maps taskcontract.CheckTaskContract onto Graph Finding
+// E14 (doctor.run_wiring → E14) and the same-surface sibling: unit-only
+// Acceptance cannot stand alone beside a CLI DoD.
+func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
+	ids := make([]string, 0, len(issues))
+	for id := range issues {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+
+	var findings []Finding
+	for _, id := range ids {
+		issue := issues[id]
+		task := taskFromIssue(issue)
+		for _, v := range taskcontract.CheckTaskContract(task) {
+			if v.Rule != taskcontract.RuleDoctorRunWiring {
+				continue
+			}
+			findings = append(findings, Finding{
+				Severity: "error",
+				Rule:     ruleE14,
+				Message:  fmt.Sprintf("%s: %s", ruleE14, v.Message),
+				CitedIDs: []string{id},
+				Key:      taskcontract.RuleDoctorRunWiring,
+			})
+		}
+		if claimsDoctorRunWiringDoD(task) && unitOnlyAcceptance(issue.Acceptance) {
+			findings = append(findings, Finding{
+				Severity: "error",
+				Rule:     ruleE14,
+				Message: fmt.Sprintf(
+					"%s: %s unit-only Acceptance cannot stand alone beside a CLI DoD; name the same surface (arm doctor / gains check Dn)",
+					ruleE14, id,
+				),
+				CitedIDs: []string{id},
+				Key:      e14KeyUnitOnlyAcceptance,
+			})
+		}
+	}
+	return findings
+}
+
+// claimsDoctorRunWiringDoD reports whether the DoD is a doctor-run product claim
+// (not helper-only / ritual). Probe with a scope that cannot cover
+// DoctorRunWiringPath so CheckTaskContract's skip-if-wired path does not hide
+// the claim when the real scope already includes doctor.go.
+func claimsDoctorRunWiringDoD(task taskcontract.Task) bool {
+	probe := task
+	probe.Scope = []string{"internal/unrelated.go"}
+	return len(taskcontract.CheckTaskContract(probe)) > 0
+}
+
+// reArmDoctorSurface detects Acceptance that names the arm doctor CLI as the
+// tested surface. Broader than taskcontract's implement-claim matcher:
+// `arm doctor --format json` is same-surface proof, not a gains-check claim.
+var reArmDoctorSurface = regexp.MustCompile(`(?i)\barm\s+doctor\b`)
+
+func unitOnlyAcceptance(raw json.RawMessage) bool {
+	if len(raw) == 0 || string(raw) == "null" {
+		return false
+	}
+	// Object form (plan schema): unit-only iff every entry is type test_passes.
+	// review.ParseAcceptanceCriteria is off-limits here (validate-boundary
+	// depguard), so decode both supported array shapes locally.
+	var criteria []struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &criteria); err == nil && len(criteria) > 0 {
+		for _, c := range criteria {
+			if c.Type != "test_passes" {
+				return false
+			}
+		}
+		return !reArmDoctorSurface.Match(raw)
+	}
+	// Plain-string form: ["go test ./internal/doctor", "make check"] — same
+	// unit-only contract as test_passes unless a string names arm doctor.
+	var plain []string
+	if err := json.Unmarshal(raw, &plain); err != nil || len(plain) == 0 {
+		return false
+	}
+	return !reArmDoctorSurface.Match(raw)
 }
 
 func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State, graph *dag.Graph, now int64) []Finding {

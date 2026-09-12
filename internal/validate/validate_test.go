@@ -2204,3 +2204,202 @@ func TestIntroductionRefusesReopenBatchWithGenuinelyNewFinding_REQ_LNGHZN_S10_T1
 	require.Error(t, err, "a batch that reopens AND introduces a genuinely new finding on the target must still be refused")
 	assert.Contains(t, err.Error(), "invalid glob")
 }
+
+// s7T2Fixture is the LNGHZN-S7-T2 create-time contract from the dogfood
+// finding: DoD claims arm doctor / gains check D9, scope is four new helper
+// files (no internal/doctor/doctor.go), acceptance is named unit tests + make
+// check — not "arm doctor emits the new check."
+func s7T2Fixture() *materialize.Issue {
+	return &materialize.Issue{
+		ID:               "LNGHZN-S7-T2",
+		Type:             "task",
+		Status:           ops.StatusOpen,
+		Title:            "strict config decode + doctor config-health",
+		DefinitionOfDone: "arm doctor gains check D9 so the config file can never silently lie again",
+		Scope: []string{
+			"internal/config/strict.go",
+			"internal/config/strict_test.go",
+			"internal/doctor/config_check.go",
+			"internal/doctor/config_check_test.go",
+		},
+		Acceptance: json.RawMessage(`[
+			{"type":"test_passes","cmd":"go test ./internal/config/ -run TestStrictDecodeRejectsUnknownField"},
+			{"type":"test_passes","cmd":"go test ./internal/doctor/ -run TestDoctorConfigCheck"},
+			{"type":"test_passes","cmd":"make check"}
+		]`),
+		BlockedBy:  []string{},
+		Children:   []string{},
+		Provenance: materialize.Provenance{Confidence: "draft"},
+	}
+}
+
+func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
+	t.Parallel()
+
+	t.Run("s7_t2_fixture_emits_e14_wiring_and_unit_only_acceptance", func(t *testing.T) {
+		t.Parallel()
+		state := makeState(s7T2Fixture())
+		result := Validate(state, graphFromState(state), Options{})
+		assert.False(t, result.OK)
+
+		var wiring, unitOnly *Finding
+		for i := range result.Findings {
+			f := &result.Findings[i]
+			if f.Rule != "E14" {
+				continue
+			}
+			switch f.Key {
+			case "doctor.run_wiring":
+				wiring = f
+			case "unit_only_acceptance":
+				unitOnly = f
+			}
+		}
+		require.NotNil(t, wiring, "expected E14 doctor.run_wiring, findings=%v errors=%v", result.Findings, result.Errors)
+		assert.Equal(t, "error", wiring.Severity)
+		assert.Equal(t, []string{"LNGHZN-S7-T2"}, wiring.CitedIDs)
+		assert.Contains(t, wiring.Message, "E14")
+		assert.Contains(t, wiring.Message, "LNGHZN-S7-T2")
+		assert.Contains(t, wiring.Message, "internal/doctor/doctor.go")
+		assert.Contains(t, wiring.Message, "doctor.run_wiring")
+
+		require.NotNil(t, unitOnly, "expected E14 unit_only_acceptance beside CLI DoD, findings=%v", result.Findings)
+		assert.Equal(t, "error", unitOnly.Severity)
+		assert.Equal(t, []string{"LNGHZN-S7-T2"}, unitOnly.CitedIDs)
+		assert.Contains(t, unitOnly.Message, "E14")
+		assert.Contains(t, unitOnly.Message, "unit-only")
+		assert.Contains(t, unitOnly.Message, "LNGHZN-S7-T2")
+	})
+
+	t.Run("doctor_go_in_scope_still_refuses_unit_only_acceptance", func(t *testing.T) {
+		t.Parallel()
+		issue := s7T2Fixture()
+		issue.ID = "WIRED-UNIT"
+		issue.Scope = []string{"internal/doctor/doctor.go", "internal/doctor/doctor_test.go"}
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		assert.False(t, result.OK)
+		var sawWiring, sawUnit bool
+		for _, f := range result.Findings {
+			if f.Rule != "E14" {
+				continue
+			}
+			if f.Key == "doctor.run_wiring" {
+				sawWiring = true
+			}
+			if f.Key == "unit_only_acceptance" {
+				sawUnit = true
+			}
+		}
+		assert.False(t, sawWiring, "wiring file in scope must not emit doctor.run_wiring")
+		assert.True(t, sawUnit, "CLI DoD with unit-only Acceptance must still emit E14")
+	})
+
+	t.Run("plain_string_acceptance_is_unit_only", func(t *testing.T) {
+		t.Parallel()
+		issue := s7T2Fixture()
+		issue.ID = "PLAIN-UNIT"
+		issue.Scope = []string{"internal/doctor/doctor.go", "internal/doctor/doctor_test.go"}
+		issue.Acceptance = json.RawMessage(`["go test ./internal/doctor", "make check"]`)
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		assert.False(t, result.OK)
+		var sawWiring, sawUnit bool
+		for _, f := range result.Findings {
+			if f.Rule != "E14" {
+				continue
+			}
+			if f.Key == "doctor.run_wiring" {
+				sawWiring = true
+			}
+			if f.Key == "unit_only_acceptance" {
+				sawUnit = true
+			}
+		}
+		assert.False(t, sawWiring, "wiring file in scope must not emit doctor.run_wiring")
+		assert.True(t, sawUnit, "plain-string Acceptance is unit-only beside a CLI DoD")
+	})
+
+	t.Run("plain_string_arm_doctor_acceptance_is_same_surface", func(t *testing.T) {
+		t.Parallel()
+		issue := s7T2Fixture()
+		issue.ID = "PLAIN-CLI"
+		issue.Scope = []string{"internal/doctor/doctor.go"}
+		issue.Acceptance = json.RawMessage(`["arm doctor --format json", "make check"]`)
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "plain-string arm doctor Acceptance is same-surface, got %+v", f)
+		}
+	})
+
+	t.Run("cli_acceptance_and_doctor_go_ok", func(t *testing.T) {
+		t.Parallel()
+		issue := s7T2Fixture()
+		issue.ID = "WIRED-CLI"
+		issue.Scope = []string{"internal/doctor/doctor.go"}
+		issue.Acceptance = json.RawMessage(`[{"type":"test_passes","cmd":"arm doctor --format json"}]`)
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "well-formed CLI contract must not emit E14, got %+v", f)
+		}
+	})
+
+	t.Run("s15_t2_readme_pointer_is_not_e14", func(t *testing.T) {
+		t.Parallel()
+		issue := &materialize.Issue{
+			ID:     "TOPTIER-S15-T2",
+			Type:   "task",
+			Status: ops.StatusOpen,
+			Title:  "Troubleshooting appendix in quickstart",
+			DefinitionOfDone: "README quickstart gains an If something goes wrong appendix covering " +
+				"gopls/LSP false positives, checked-out-branch Managed Worktree failures, and worktree " +
+				"leak / wrong-checkout classes from docs/dogfood/findings/themes/git-worktree-friction/README.md, " +
+				"plus a pointer to arm doctor --explain and D9 Unrecognized Managed Worktree for doctor-visible cases.",
+			Scope:      []string{"README.md"},
+			Acceptance: json.RawMessage(`[{"type":"test_passes","cmd":"arm validate"}]`),
+			BlockedBy:  []string{},
+			Children:   []string{},
+		}
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "S15-T2 README pointer must not emit E14, got %+v", f)
+		}
+	})
+
+	t.Run("s18_t2_meta_validate_dod_is_not_e14", func(t *testing.T) {
+		t.Parallel()
+		issue := &materialize.Issue{
+			ID:     "TOPTIER-S18-T2",
+			Type:   "task",
+			Status: ops.StatusOpen,
+			Title:  "arm validate errors when DoD is not implementable in scope",
+			DefinitionOfDone: "arm validate Graph Finding E14 when task DoD claims arm doctor/gains check Dn " +
+				"whose wiring file is absent from Scope; unit-only Acceptance cannot stand alone beside CLI DoD. " +
+				"Tests cover S7-T2 fixture. No S14 dependency.",
+			Scope:      []string{"internal/validate/validate.go", "internal/validate/validate_test.go"},
+			Acceptance: json.RawMessage(`[{"type":"test_passes","cmd":"go test ./internal/validate/ -run TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2"}]`),
+			BlockedBy:  []string{},
+			Children:   []string{},
+		}
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "S18-T2 meta DoD must not self-hit E14, got %+v", f)
+		}
+	})
+
+	t.Run("helper_only_dod_skips_e14", func(t *testing.T) {
+		t.Parallel()
+		issue := s7T2Fixture()
+		issue.ID = "HELPER-T1"
+		issue.DefinitionOfDone = "arm doctor gains check D9 as an exported helper, not wired into Run"
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "helper-only DoD must not emit E14, got %+v", f)
+		}
+	})
+}
