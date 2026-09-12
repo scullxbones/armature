@@ -104,7 +104,7 @@ func TestDynamicPricingIsFixtureDeterministic_REQ_AOC_S3_T2(t *testing.T) {
 			require.NoError(t, os.WriteFile(out, payloads[path], 0o644))
 			continue
 		}
-		golden, err := os.ReadFile(out) //nolint:gosec // checked-in fixture
+		golden, err := os.ReadFile(out)
 		require.NoError(t, err, "golden for %s", path)
 		assert.Equal(t, golden, payloads[path],
 			"priced %s payload must match testdata/dynamic/%s.json", path, path)
