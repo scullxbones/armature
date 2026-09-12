@@ -38,13 +38,23 @@ var (
 	reGainsCheck = regexp.MustCompile(`(?i)gains(?:\s+a)?\s+check(?:\s*\(?D\d+\)?)?`)
 	reArmDoctor  = regexp.MustCompile(`(?i)\barm\s+doctor\b`)
 	reCheckDn    = regexp.MustCompile(`(?i)\bcheck\s+D\d+\b`)
-	reHelperOnly = regexp.MustCompile(`(?i)(?:exported helper|helper-only|not wired)`)
+	// Explicit wiring opt-out only. A bare "exported helper" mention is not an opt-out.
+	reHelperOnly = regexp.MustCompile(`(?i)(?:helper[-\s]only|not[-\s]wired)`)
+	// Completion-ritual mentions of `arm doctor`: the CLI as a pre-done quality
+	// gate, not a product-behavior claim. Ritual requires an explicit marker:
+	// "and arm validate" (optional --ci / before done|merge) or "before done|merge".
+	// "make check ...;" may precede those spans; it is not itself a ritual marker.
+	reDoctorRitual = regexp.MustCompile(`(?i)` +
+		`(?:run\s+)?arm\s+doctor\s+and\s+arm\s+validate(?:\s+--ci)?(?:\s+before\s+(?:done|merging|merge))?` +
+		`|` +
+		`(?:run\s+)?arm\s+doctor\s+before\s+(?:done|merging|merge)`)
 )
 
 // CheckTaskContract reports DoD∩scope violations for one issue. Today it encodes
-// doctor.run_wiring: a task DoD that claims `arm doctor` / `gains check Dn`
+// doctor.run_wiring: a task DoD that claims `arm doctor` behavior / `gains check Dn`
 // must include internal/doctor/doctor.go in Scope (or rewrite the DoD as
-// helper-only / not wired). Non-tasks and terminal issues are skipped.
+// helper-only / not wired). Completion-ritual mentions of arm doctor are not
+// claims. Non-tasks and terminal issues are skipped.
 func CheckTaskContract(task Task) []Violation {
 	if task.Type != "task" || isTerminal(task.Status) {
 		return nil
@@ -75,7 +85,14 @@ func claimsDoctorRunWiring(dod string) bool {
 	if reGainsCheck.MatchString(dod) {
 		return true
 	}
-	return reArmDoctor.MatchString(dod) && reCheckDn.MatchString(dod)
+	if reCheckDn.MatchString(dod) && reArmDoctor.MatchString(dod) {
+		return true
+	}
+	if !reArmDoctor.MatchString(dod) {
+		return false
+	}
+	stripped := reDoctorRitual.ReplaceAllString(dod, " ")
+	return reArmDoctor.MatchString(stripped)
 }
 
 func isTerminal(status string) bool {

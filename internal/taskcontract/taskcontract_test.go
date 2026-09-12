@@ -63,6 +63,46 @@ func TestCheckTaskContract_DoctorRunWiring_REQ_TOPTIER_S18_T0(t *testing.T) {
 		assert.Empty(t, got, "mentioning arm doctor as a completion check must not require doctor.go")
 	})
 
+	t.Run("arm_doctor_before_done_ritual_is_not_a_wiring_claim", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:               "SOME-T2",
+			Type:             "task",
+			Status:           "open",
+			DefinitionOfDone: "run arm doctor before done",
+			Scope:            []string{"internal/foo/foo.go"},
+		})
+		assert.Empty(t, got, "arm doctor as a pre-done quality-gate command is ritual, not a behavior claim")
+	})
+
+	t.Run("arm_doctor_behavior_claim_without_check_id_requires_wiring", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:               "PROD-T1",
+			Type:             "task",
+			Status:           "open",
+			DefinitionOfDone: "arm doctor reports malformed config as an error",
+			Scope:            []string{"internal/config/strict.go"},
+		})
+		require.Len(t, got, 1)
+		assert.Equal(t, taskcontract.RuleDoctorRunWiring, got[0].Rule)
+		assert.Equal(t, "PROD-T1", got[0].TaskID)
+		assert.Contains(t, got[0].Message, taskcontract.DoctorRunWiringPath)
+	})
+
+	t.Run("behavior_claim_plus_ritual_still_requires_wiring", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:               "PROD-T2",
+			Type:             "task",
+			Status:           "open",
+			DefinitionOfDone: "arm doctor reports malformed config as an error; arm doctor and arm validate --ci before done",
+			Scope:            []string{"internal/config/strict.go"},
+		})
+		require.Len(t, got, 1)
+		assert.Equal(t, taskcontract.RuleDoctorRunWiring, got[0].Rule)
+	})
+
 	t.Run("helper_only_dod_does_not_require_run_wiring", func(t *testing.T) {
 		t.Parallel()
 		got := taskcontract.CheckTaskContract(taskcontract.Task{
@@ -70,6 +110,32 @@ func TestCheckTaskContract_DoctorRunWiring_REQ_TOPTIER_S18_T0(t *testing.T) {
 			Type:             "task",
 			Status:           "open",
 			DefinitionOfDone: "arm doctor gains check D9 as an exported helper, not wired into Run",
+			Scope:            []string{"internal/doctor/config_check.go"},
+		})
+		assert.Empty(t, got)
+	})
+
+	t.Run("bare_exported_helper_does_not_opt_out_of_run_wiring", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:               "HELPER-T2",
+			Type:             "task",
+			Status:           "open",
+			DefinitionOfDone: "arm doctor gains check D11 through an exported helper",
+			Scope:            []string{"internal/doctor/config_check.go"},
+		})
+		require.Len(t, got, 1)
+		assert.Equal(t, taskcontract.RuleDoctorRunWiring, got[0].Rule)
+		assert.Equal(t, "HELPER-T2", got[0].TaskID)
+	})
+
+	t.Run("helper_only_phrase_opts_out", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:               "HELPER-T3",
+			Type:             "task",
+			Status:           "open",
+			DefinitionOfDone: "arm doctor gains check D11 helper-only",
 			Scope:            []string{"internal/doctor/config_check.go"},
 		})
 		assert.Empty(t, got)
