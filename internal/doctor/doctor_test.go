@@ -327,6 +327,22 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 	}
 }
 
+func TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0644))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	require.NoError(t, err)
+
+	runIDs := make([]string, 0, len(report.Checks))
+	for _, f := range report.Checks {
+		runIDs = append(runIDs, f.Check)
+	}
+	assert.Equal(t, doctor.LiveCheckIDs(), runIDs, "LiveCheckIDs must match the live Run path in order")
+	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"}, doctor.LiveCheckIDs())
+}
+
 func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
