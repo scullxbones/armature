@@ -95,14 +95,37 @@ All three conditions MUST hold for the same priced invocation path
    that path's `bytes` greater than that path's `target_bytes` in
    `internal/contextreport/budgets.json`.
 2. **TOON is the remaining cut that meets the promise.** Encode that
-   same payload as TOON. Count UTF-8 bytes the same way context-report
-   does (`len(payload)`). TOON `bytes` MUST be less than or equal to
+   same payload as TOON using the **canonical encoding** below. Count
+   UTF-8 bytes the same way context-report does (`len(payload)` on the
+   encoder's exact output, including a trailing newline if the encoder
+   emits one). TOON `bytes` MUST be less than or equal to
    `target_bytes`. Compact JSON `bytes` MUST remain greater than
    `target_bytes`.
 3. **The measured remainder still shows up.** TOON `bytes` MUST be at
    most 70 percent of compact JSON `bytes` for that payload. That is
    the share measured at park time (TOON 61,880 of compact JSON 89,082
-   on `arm list`).
+   on `arm list`). Re-entry counts MUST come from the canonical
+   encoding, not from a different spec, encoder, or option set that
+   happens to look similar.
+
+**Canonical TOON encoding.** Conditions 2 and 3 are byte-count tests.
+Delimiter, indent, key folding, and quoting rules change those counts,
+so the encoder is pinned:
+
+| knob | pin |
+| --- | --- |
+| Specification | [TOON Format Specification v4.1](https://github.com/toon-format/spec/blob/v4.1.0/SPEC.md) (2026-07-26) |
+| Encoder | npm `@toon-format/toon@4.1.1` (`encode` from that package; it depends on `@toon-format/spec@4.1.1`) |
+| Input | the same JSON value as the compact JSON payload `make context-report` priced (parse that stdout with `encoding/json`, then pass the value to `encode`) |
+| Options | `{ indent: 2, delimiter: ",", keyFolding: "off" }` — spec defaults; do not pass `flattenDepth` or a `replacer` |
+| Byte count | UTF-8 length of the `encode` return string, no trim |
+
+Do not substitute another language's TOON writer, a later `@toon-format/toon`
+release, tab/pipe delimiters, `keyFolding: "safe"`, or `indent: 0`. Those
+are valid TOON and they are a different byte count. The park-time
+61,880 figure is the historical `arm list` measurement recorded above;
+the re-entry test uses this pin even if a reproduction of that old
+inventory would not land on exactly 61,880.
 
 If (1) fails, JSON still holds the named promise and TOON stays parked.
 If (1) holds but (2) or (3) fails, trim the JSON payload. Do not add a
