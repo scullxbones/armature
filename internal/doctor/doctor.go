@@ -91,6 +91,20 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	return Report{Checks: checks}
 }
 
+// liveCheckIDs is the check-ID sequence Run appends. LiveCheckIDs is the
+// exported registry TOPTIER-S18-T3 will document; keep it in lockstep with
+// the append order below (proven by TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0).
+var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"}
+
+// LiveCheckIDs returns the doctor check IDs the live Run path emits, in Run
+// order (D1–D10). RunChecks omits D7 because worker-ID mismatches need the
+// validated ops stream. The returned slice is a copy.
+func LiveCheckIDs() []string {
+	out := make([]string, len(liveCheckIDs))
+	copy(out, liveCheckIDs)
+	return out
+}
+
 // Run executes all health checks and returns a Report.
 // verbose=true adds file path and line context to D3 violations via VerboseItems.
 // now is used for D2 stale claim detection.
