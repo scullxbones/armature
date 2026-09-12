@@ -33,7 +33,7 @@ arm validate       # zero ERRORs; all issues cited
 arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
 ```
 
-If either exits non-zero, fix the reported issues before releasing. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore. Graph Finding **E14** (Task Contract: DoD ∩ Scope ∩ Acceptance) is an error; do not release a plan that fails it.
+If either exits non-zero, fix the reported issues before releasing. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore. Graph Finding **E14** (doctor implement-claims: `doctor.run_wiring` and, beside those DoDs, `unit_only_acceptance`) is an error; do not release a plan that fails it.
 
 Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before planning your work. DAG health is cumulative.
 
@@ -143,7 +143,7 @@ arm validate                   # scope overlap WARNINGs appear here; resolve eac
 ### 6. Validate and Release
 
 ```bash
-arm validate --ci   # must exit 0 with no ERRORs; scope overlaps resolved; E14 Task Contract clean
+arm validate --ci   # must exit 0 with no ERRORs; scope overlaps resolved; E14 (doctor claims) clean
 arm doctor          # repo health; live IDs from doctor.LiveCheckIDs / docs/design/doctor-check-ids.md
 arm list --group    # final sanity check — all issues visible and in expected states
 ```
@@ -162,7 +162,10 @@ transition` / `confirm`) will fail.** Those three fields are one surface:
 the worker must be able to implement the DoD in the scoped files and prove it
 with Acceptance that names the same surface. Presence and DoD length (E6/E9)
 are not enough. Graph Finding **E14** (`arm validate`, leaf
-`internal/taskcontract`) is the code-enforced Task Contract. Validate the plan
+`internal/taskcontract`) code-enforces that contract for **`arm doctor`
+implement-claims** only (`doctor.run_wiring` and doctor-claim
+`unit_only_acceptance`). Same-surface for other CLIs is planner guidance, not
+currently emitted as E14. Validate the plan
 JSON against
 [the plan schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/plan.schema.json) before submitting; see `docs/json-schema-examples.md`
 for worked examples.
@@ -208,10 +211,13 @@ those.
 
 JSON array of specific criteria the worker can verify mechanically. Each entry
 should name a test, a command output, or an observable behavior. Acceptance
-must name the **same surface** as the DoD: a CLI DoD cannot stand next to
-unit-only Acceptance (`test_passes` entries, or `go test` / `make check`
-strings with no `arm doctor`). If DoD claims `arm doctor` / gains check `D<n>`,
-Acceptance must name that CLI (e.g. `arm doctor --format json`).
+should name the **same surface** as the DoD. **E14** `unit_only_acceptance`
+fires only when the DoD is an `arm doctor` implement-claim (`gains check D<n>`,
+wire into `Run`) and Acceptance is unit-only (`test_passes` entries, or
+`go test` / `make check` strings with no `arm doctor`). Then name that CLI
+(e.g. `arm doctor --format json`). A non-doctor CLI task (e.g. `arm validate`
+behavior + unit tests only) does **not** get E14; same-surface there is
+planner guidance / good practice, not currently code-enforced.
 
 **Spec traceability:** Name new tests using `Test<Description>_REQ_<RequirementID>`,
 where `RequirementID` is the story or task ID (e.g. `STORY-T1`). This makes the
@@ -223,7 +229,7 @@ a new test function.
 - Bad: `["TestParseTokenTypes passes"]` — test name won't appear in `make trace-report`
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
-- Bad: CLI DoD + `["TestFoo_REQ_… passes", "make check green"]` — unit-only; E14 `unit_only_acceptance`
+- Bad: `arm doctor` / gains-check DoD + `["TestFoo_REQ_… passes", "make check green"]` — unit-only; E14 `unit_only_acceptance` (doctor claims only)
 
 See `docs/conventions.md` (test naming and traceability section) in the armature repo for comprehensive documentation of test naming and all other naming conventions.
 
@@ -240,9 +246,11 @@ if not needed.
 
 ### Task Contract (E14)
 
-`arm validate` emits Graph Finding **E14** from `internal/taskcontract` (keys
-`doctor.run_wiring` and `unit_only_acceptance`). Treat it as a decomposition
-blocker, same as missing E6 fields.
+`arm validate` emits Graph Finding **E14** from `internal/taskcontract` only
+for doctor implement-claims (keys `doctor.run_wiring` and, beside those DoDs,
+`unit_only_acceptance`). Treat those as a decomposition blocker, same as
+missing E6 fields. Same-surface for other CLIs is planner guidance / good
+practice; it is not currently code-enforced as E14.
 
 **Doctor check IDs:** do not invent or grill a `Dn` from Story/LH prose. Read
 `doctor.LiveCheckIDs()` and
@@ -333,9 +341,9 @@ rewrite the DoD helper-only / not wired.
 | Missing `acceptance` field entirely | Plan Release / `arm validate` ERRORs | Add the field, even if `--example` omits it |
 | Plan without `version: 1, title, issues` wrapper | `arm dag apply` fails validation; bare task objects not accepted | Wrap all issues in `{ "version": 1, "title": "...", "issues": [...] }` |
 | `"TestFoo passes"` in acceptance | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_STORY_TX passes` |
-| Story/LH product sentence copied into Task DoD | Worker stays in Scope; wrap Yellow; E14 `doctor.run_wiring` | Write a Task DoD the scoped files can implement; keep product sentences on the Story |
+| Story/LH **doctor** product sentence copied into Task DoD | Worker stays in Scope; wrap Yellow; E14 `doctor.run_wiring` | Write a Task DoD the scoped files can implement; keep product sentences on the Story |
 | `arm doctor` / `gains check Dn` DoD without `internal/doctor/doctor.go` | E14: DoD not implementable in Scope | Add `doctor.go`, or rewrite DoD `helper-only` / `not wired` |
-| CLI DoD + unit-only Acceptance | E14 `unit_only_acceptance` | Name the same surface (`arm doctor` in Acceptance) |
+| `arm doctor` implement DoD + unit-only Acceptance | E14 `unit_only_acceptance` (doctor claims only) | Name `arm doctor` in Acceptance. Other CLI DoDs: same-surface is guidance, not E14 |
 | Grilled `Dn` without the registry | Collides with live `Run` or an open reservation | Allocate via `doctor.LiveCheckIDs` + `docs/design/doctor-check-ids.md` |
 
 > **Note:** `arm dag apply --example` omits `acceptance` in its output.
@@ -397,15 +405,15 @@ For dependency linking and overlap resolution, see `references/dependency-manage
 
 Run this checklist before handing work off to the Coordinator.
 
-1. **`arm validate`** — no ERRORs, citation coverage complete, E14 Task Contract clean
+1. **`arm validate`** — no ERRORs, citation coverage complete, E14 (doctor Task Contract) clean
    ```bash
    arm validate --ci   # exits non-zero on any error
    ```
    **Note:** If `arm validate` reports `context_files` WARNINGs, treat them as decomposition
    signals—break large tasks into smaller subtasks or add blocking dependencies to reduce
    context size. Re-run until no context_files WARNINGs remain. E14 (`doctor.run_wiring`
-   / `unit_only_acceptance`) is a decomposition defect: fix DoD, Scope, or Acceptance
-   before releasing.
+   / doctor-claim `unit_only_acceptance`) is a decomposition defect: fix DoD, Scope, or
+   Acceptance before releasing. Other CLI same-surface gaps are planner guidance, not E14.
 
 2. **`arm doctor`** — live checks from `doctor.LiveCheckIDs()` pass
    ```bash
@@ -442,7 +450,7 @@ Do not release until all seven checks pass.
 | Failure | Symptom | Prevention |
 |---|---|---|
 | Tasks missing `dod`, `scope`, or `acceptance` | Workers cannot self-verify completion; `arm validate` ERRORs | Write all three fields for every task; use the complete example in this skill as a template |
-| DoD / Scope / Acceptance not the same surface | E14 (`arm validate` + `taskcontract`); worker stays in Scope and wrap is Yellow | Same-surface rule above; `doctor.go` or helper-only DoD; no Story/LH product-sentence copy |
+| DoD / Scope / Acceptance not the same surface | Doctor implement-claims: E14 (`arm validate` + `taskcontract`). Other CLIs: planner guidance only (no E14). Worker stays in Scope and wrap is Yellow | Same-surface rule above; `doctor.go` or helper-only DoD; no Story/LH doctor product-sentence copy |
 | Issues created without source links | `arm validate` reports `uncited node: ID`; citation debt accumulates silently | Register sources first; `sources link` every issue at creation time |
 | Scope overlaps not resolved with `arm link` | Workers collide on the same files; merge conflicts during story close | Run `arm validate` after dag apply; resolve every scope overlap WARNING before releasing |
 | context_files WARNINGs not addressed | `arm validate` reports context_files WARNINGs, indicating tasks exceed context budget | Treat context_files WARNINGs as decomposition signals; break large tasks into smaller subtasks or add blocking dependencies; re-run `arm validate` until clear |
@@ -476,7 +484,7 @@ arm link --source A --dep B                           # A runs after B
 arm unlink --source A --dep B                         # remove dependency
 
 # Validation
-arm validate                                          # graph + citation + E14 Task Contract
+arm validate                                          # graph + citation + E14 (doctor claims)
 arm validate --ci                                     # exit non-zero on errors
 arm doctor                                            # repo health; IDs: doctor.LiveCheckIDs
 arm doctor --strict                                   # warnings as errors
