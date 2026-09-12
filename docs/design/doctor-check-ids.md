@@ -3,9 +3,10 @@
 Agent-facing registry of `arm doctor` check IDs.
 Live IDs come from `doctor.LiveCheckIDs()` (the `Run` path, in order).
 Open-task reservations come from `doctor.OpenReservations()`.
-Do not hand-edit the live table: regenerate this file from those functions.
+Do not hand-edit the live table. Regenerate with `go generate ./internal/doctor`.
+Equivalent: `UPDATE_CHECK_IDS_DOC=1 go test ./internal/doctor -run TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3`.
 The drift test `TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3`
-fails if they diverge.
+fails if they diverge (without UPDATE_CHECK_IDS_DOC it does not write).
 
 This is an allocation ledger, not the product reference for triggers and
 remediation — see [validation-codes.md](../validation-codes.md) and

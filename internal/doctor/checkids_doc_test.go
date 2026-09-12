@@ -14,16 +14,20 @@ import (
 )
 
 func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) {
-	t.Parallel()
-
 	want, err := doctor.RenderCheckIDsDoc()
 	require.NoError(t, err)
 
 	root := repoRoot(t)
+	if os.Getenv("UPDATE_CHECK_IDS_DOC") == "1" {
+		require.NoError(t, doctor.WriteCheckIDsDoc(root),
+			"UPDATE_CHECK_IDS_DOC=1 must rewrite %s from LiveCheckIDs + OpenReservations",
+			doctor.CheckIDsDocRelPath)
+	}
+
 	got, err := os.ReadFile(filepath.Join(root, doctor.CheckIDsDocRelPath))
-	require.NoError(t, err, "committed registry doc must exist at %s", doctor.CheckIDsDocRelPath)
-	assert.Equal(t, want, string(got),
-		"docs/design/doctor-check-ids.md must be generated from LiveCheckIDs + OpenReservations; do not hand-edit live rows")
+	require.NoError(t, err, "committed registry doc must exist at %s; regenerate with go generate ./internal/doctor", doctor.CheckIDsDocRelPath)
+	require.Equal(t, want, string(got),
+		"docs/design/doctor-check-ids.md drifted; regenerate with go generate ./internal/doctor (or UPDATE_CHECK_IDS_DOC=1 go test ./internal/doctor -run TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3)")
 
 	liveFromDoc := parseLiveCheckIDs(t, string(got))
 	assert.Equal(t, doctor.LiveCheckIDs(), liveFromDoc,
@@ -44,6 +48,52 @@ func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) 
 		_, clash := liveSet[row.id]
 		assert.False(t, clash, "reserved %s (%s) collides with a live check ID", row.id, row.issue)
 	}
+}
+
+func TestWriteCheckIDsDocRewritesRegistry_REQ_TOPTIER_S18_T3(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	stalePath := filepath.Join(root, doctor.CheckIDsDocRelPath)
+	require.NoError(t, doctor.WriteCheckIDsDoc(root), "WriteCheckIDsDoc must create CheckIDsDocRelPath")
+	require.NoError(t, os.WriteFile(stalePath, []byte("STALE HAND-COPIED REGISTRY\n"), 0o644))
+
+	require.NoError(t, doctor.WriteCheckIDsDoc(root))
+
+	got, err := os.ReadFile(stalePath)
+	require.NoError(t, err)
+	want, err := doctor.RenderCheckIDsDoc()
+	require.NoError(t, err)
+	assert.Equal(t, want, string(got), "WriteCheckIDsDoc must rewrite CheckIDsDocRelPath from RenderCheckIDsDoc")
+	assert.NotContains(t, string(got), "STALE HAND-COPIED")
+}
+
+func TestWriteCheckIDsDocReportsWriteError_REQ_TOPTIER_S18_T3(t *testing.T) {
+	t.Parallel()
+
+	blocked := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(blocked, []byte("file"), 0o644))
+	err := doctor.WriteCheckIDsDoc(blocked)
+	require.Error(t, err)
+}
+
+func TestCheckIDsDocDocumentsRegenCommand_REQ_TOPTIER_S18_T3(t *testing.T) {
+	t.Parallel()
+
+	doc, err := doctor.RenderCheckIDsDoc()
+	require.NoError(t, err)
+	assert.Contains(t, doc, "`go generate ./internal/doctor`",
+		"registry must name the executable regeneration command")
+	assert.Contains(t, doc, "UPDATE_CHECK_IDS_DOC=1",
+		"registry must name the drift-test update mode")
+}
+
+func TestCheckIDsDocGoGenerateDirective_REQ_TOPTIER_S18_T3(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile(filepath.Join(repoRoot(t), "internal", "doctor", "checkids_doc.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(src), "//go:generate go run generate_checkids_doc.go")
 }
 
 func TestOpenReservationsIncludesS12T2D11_REQ_TOPTIER_S18_T3(t *testing.T) {

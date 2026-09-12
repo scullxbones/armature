@@ -2,8 +2,12 @@ package doctor
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
+
+//go:generate go run generate_checkids_doc.go
 
 // CheckIDsDocRelPath is the companion registry document TOPTIER-S18-T3 owns.
 // Live rows are generated from LiveCheckIDs; reservation rows from OpenReservations.
@@ -13,6 +17,23 @@ const CheckIDsDocRelPath = "docs/design/doctor-check-ids.md"
 // LiveCheckIDs and OpenReservations. Live rows must not be hand-edited.
 func RenderCheckIDsDoc() (string, error) {
 	return renderCheckIDsDoc(LiveCheckIDs(), OpenReservations())
+}
+
+// WriteCheckIDsDoc renders LiveCheckIDs + OpenReservations and writes
+// CheckIDsDocRelPath under root. Used by go generate and UPDATE_CHECK_IDS_DOC=1.
+func WriteCheckIDsDoc(root string) error {
+	body, err := RenderCheckIDsDoc()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(root, CheckIDsDocRelPath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("write %s: %w", CheckIDsDocRelPath, err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", CheckIDsDocRelPath, err)
+	}
+	return nil
 }
 
 func renderCheckIDsDoc(live []string, reservations []CheckReservation) (string, error) {
@@ -25,9 +46,10 @@ func renderCheckIDsDoc(live []string, reservations []CheckReservation) (string, 
 	b.WriteString("Agent-facing registry of `arm doctor` check IDs.\n")
 	b.WriteString("Live IDs come from `doctor.LiveCheckIDs()` (the `Run` path, in order).\n")
 	b.WriteString("Open-task reservations come from `doctor.OpenReservations()`.\n")
-	b.WriteString("Do not hand-edit the live table: regenerate this file from those functions.\n")
+	b.WriteString("Do not hand-edit the live table. Regenerate with `go generate ./internal/doctor`.\n")
+	b.WriteString("Equivalent: `UPDATE_CHECK_IDS_DOC=1 go test ./internal/doctor -run TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3`.\n")
 	b.WriteString("The drift test `TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3`\n")
-	b.WriteString("fails if they diverge.\n\n")
+	b.WriteString("fails if they diverge (without UPDATE_CHECK_IDS_DOC it does not write).\n\n")
 	b.WriteString("This is an allocation ledger, not the product reference for triggers and\n")
 	b.WriteString("remediation — see [validation-codes.md](../validation-codes.md) and\n")
 	b.WriteString("[commands.md](../commands.md).\n\n")
