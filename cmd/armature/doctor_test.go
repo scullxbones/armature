@@ -150,6 +150,24 @@ func TestDoctorAgentEnvelope_AOC_REQ_TOPTIER_S15_T1(t *testing.T) {
 	assert.False(t, hasFindings, "golden must use checks[], not the stub findings[] payload")
 }
 
+func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing.T) {
+	t.Parallel()
+
+	_, d4 := doctorCheckGuidance("D4")
+	assert.Equal(t, "arm reparent --issue <child-id> --parent <parent-id>", d4,
+		"D4 must use required --issue/--parent flags; positionals are ignored")
+
+	_, d7 := doctorCheckGuidance("D7")
+	assert.Equal(t, "mv .armature/ops/<expected>.log .armature/ops/<got>.log", d7,
+		"D7 is a filename/worker_id mismatch; worker-init --check does not repair it")
+	assert.NotContains(t, d7, "worker-init --check")
+
+	_, d9 := doctorCheckGuidance("D9")
+	assert.Equal(t, "arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>", d9,
+		"D9 unrecognized paths are not GCRemovals; bind or remove the reported path")
+	assert.NotContains(t, d9, "worktree gc")
+}
+
 func TestDoctorExplainFlag_RendersGuidedNarrative_REQ_TOPTIER_S15_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

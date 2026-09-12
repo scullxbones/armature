@@ -198,7 +198,7 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 			"arm log --json"
 	case "D4":
 		return "A child issue names a parent that is not in the graph, so the hierarchy cannot be walked.",
-			"arm reparent <child-id> <parent-id>"
+			"arm reparent --issue <child-id> --parent <parent-id>"
 	case "D5":
 		return "A blocked_by cycle makes every issue in the loop permanently unready.",
 			"arm unlink --source <issue-id> --dep <issue-id>"
@@ -207,13 +207,13 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 			"arm sources link <issue-id> --source-id <source-uuid>"
 	case "D7":
 		return "Ops were excluded because the log file name does not match the worker ID recorded in the op.",
-			"arm worker-init --check"
+			"mv .armature/ops/<expected>.log .armature/ops/<got>.log"
 	case "D8":
 		return "Dirty or untracked paths sit outside the active task's declared scope.",
 			"arm scope-rename or remove the stray path"
 	case "D9":
 		return "A checkout lives under .worktrees/ with no issue binding, so it is an unmanaged stray worktree.",
-			"arm worktree gc"
+			"arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>"
 	case "D10":
 		return "config.json failed a strict decode or a present field is out of range.",
 			"edit .armature/config.json and re-run arm doctor"
