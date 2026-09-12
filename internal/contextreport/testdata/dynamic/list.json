@@ -1,0 +1,1 @@
+{"count":3,"issues":[{"id":"FX-READY","type":"task","status":"open","title":"Ready task on the main path"},{"id":"FX-STORY","type":"story","status":"in-progress","title":"Fixture story for context-report"},{"id":"FX-WORK","type":"task","status":"in-progress","title":"In-progress task for show and render-context"}],"help":["arm show <id> for outcome, scope, and acceptance"]}

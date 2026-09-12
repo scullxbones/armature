@@ -49,7 +49,7 @@ func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 	assert.Contains(t, report.EstimationMethod, "bytes/4")
 	assert.Contains(t, report.EstimationMethod, "token_budget")
 	assert.Contains(t, report.EstimationMethod, "testdata")
-	assert.NotContains(t, report.EstimationMethod, "AOC-S3-T2")
+	assert.Contains(t, report.EstimationMethod, "WriteShowEnvelope")
 
 	var summedBytes, summedTokens int
 	for _, a := range report.Artifacts {
@@ -116,7 +116,7 @@ func TestCollectUsesEmbeddedFixturesIndependentOfRepo_REQ_NXTTN_S3_T1(t *testing
 	assert.Greater(t, report.TotalBytes, 0)
 }
 
-func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T) {
+func TestContextReportShowMeasuresAOCEnvelope_REQ_NXTTN_S3_T1(t *testing.T) {
 	t.Parallel()
 
 	report, err := Collect()
