@@ -177,3 +177,4 @@
 ["note","TOPTIER-S15-T1",1789226218,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"msg":"--explain is cmd presentation over doctor.Report; no Finding field changes; not Next Actions; not Command Failure; ignored for --format agent/json (AOC).","note_id":"note-1789226218195500526"}]
 ["note","LNGHZN-S6-T5",1789226218,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"msg":"Design-audit S15 (2026-09-12): dropped Blocked By story TOPTIER-S15; retain TOPTIER-S15-T1 for doctor.go file ownership. --explain is successful-report presentation, not Command Failure mapping.","note_id":"note-1789226218229825015"}]
 ["unlink","LNGHZN-S6-T5",1789226262,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S13-T2","rel":"blocked_by"}]
+["amend","TOPTIER-S13",1789226262,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"scope":["internal/review/types.go","internal/review/record.go","internal/review/record_test.go"]}]
