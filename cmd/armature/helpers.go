@@ -483,16 +483,24 @@ func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proc
 	if err != nil || !wrote {
 		return wrote, err
 	}
-	// Push is best-effort: push via the git client (which handles retries) but ignore errors
+	pushOpsBranchBestEffort(gc, tracker)
+	return true, nil
+}
+
+// pushOpsBranchBestEffort publishes _armature the same way high-stakes does:
+// Push, and on error FetchAndRebase then a second Push, then tracker.Reset.
+// Git errors are swallowed so a local commit is never rolled back.
+func pushOpsBranchBestEffort(gc *adapters.Client, tracker ops.PendingPushTracker) {
 	if gc != nil {
 		if err := gc.Push("_armature"); err != nil {
 			if rbErr := gc.FetchAndRebase("_armature"); rbErr == nil {
 				gc.Push("_armature") //nolint:errcheck,gosec
 			}
 		}
+	}
+	if tracker != nil {
 		tracker.Reset() //nolint:errcheck,gosec
 	}
-	return true, nil
 }
 
 // appendLowStakesOp appends an op, increments the pending counter, and only
@@ -515,7 +523,7 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 	if err := refuseIntroduction(ctx, proposed); err != nil {
 		return err
 	}
-	gc := gitCommitter(ctx)
+	gc := worktreeGit(ctx)
 	threshold := ctx.Config.LowStakesPushThreshold
 	if threshold <= 0 {
 		threshold = 5
@@ -529,7 +537,7 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 			return err
 		}
 		if n >= threshold {
-			tracker.Reset() //nolint:errcheck,gosec
+			pushOpsBranchBestEffort(gc, tracker)
 		}
 	}
 	return nil

@@ -25,7 +25,7 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Run repo health checks (D1-D10); --fix reconciles expired claims",
+		Short: "Run repo health checks (D1-D10, D12); --fix reconciles expired claims",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Fall through to root PersistentPreRunE for normal config loading.
 			// This correctly sets the execution state in the command context.
@@ -88,7 +88,7 @@ func newDoctorCmd() *cobra.Command {
 				return runDoctorFix(cmd, appCtx, dryRun)
 			}
 
-			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath, verbose, time.Now())
+			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath, appCtx.WorktreePath, verbose, time.Now())
 			if err != nil {
 				return err
 			}
@@ -217,6 +217,9 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 	case "D10":
 		return "config.json failed a strict decode or a present field is out of range.",
 			"edit .armature/config.json and re-run arm doctor"
+	case "D12":
+		return "The ops worktree is behind origin/_armature, so this clone's coordination state is stale relative to the published ops branch.",
+			"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
 			"see docs/validation-codes.md"

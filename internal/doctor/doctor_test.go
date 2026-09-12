@@ -234,7 +234,7 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "config.json"), []byte(`{}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "worker-01.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), repoDir, false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), repoDir, "", false, time.Now())
 	require.NoError(t, err)
 
 	d9 := findCheck(t, report, "D9")
@@ -257,7 +257,7 @@ func TestRun_IncludesConfigHealth_REQ_LNGHZN_S7_T2(t *testing.T) {
 	))
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d10 := findCheck(t, report, "D10")
@@ -319,7 +319,7 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 	workerLog := filepath.Join(issuesDir, "ops", "test-worker.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 	// All checks should be OK on an empty repo.
 	for _, f := range report.Checks {
@@ -332,7 +332,7 @@ func TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	runIDs := make([]string, 0, len(report.Checks))
@@ -340,7 +340,7 @@ func TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0(t *testing.T) {
 		runIDs = append(runIDs, f.Check)
 	}
 	assert.Equal(t, doctor.LiveCheckIDs(), runIDs, "LiveCheckIDs must match the live Run path in order")
-	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"}, doctor.LiveCheckIDs())
+	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}, doctor.LiveCheckIDs())
 }
 
 func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testing.T) {
@@ -359,7 +359,7 @@ func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testi
 		Exit:    0,
 	}))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
@@ -384,7 +384,7 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, op))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	// D3 should be an error since ghost-issue-01 is not in the graph.
@@ -417,7 +417,7 @@ func TestRun_Integration_D3_SkipsDeletedNoteOnlyIssues(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOps(logPath, []ops.Op{noteOp, deleteOp}))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
@@ -442,7 +442,7 @@ func TestRun_Integration_D3_UndeletedNoteStillOrphans(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, noteOp))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
@@ -478,7 +478,7 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 	require.NoError(t, ops.AppendOp(mismatchWorkerLog, mismatchOp))
 
 	// Run doctor
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	// D3 should report mismatched-issue-01 as orphaned (it has no create op)
@@ -509,7 +509,7 @@ func TestRun_CorruptLineDoesNotTriggerD7(t *testing.T) {
 	logPath := filepath.Join(issuesDir, "ops", "worker-clean.log")
 	require.NoError(t, os.WriteFile(logPath, []byte("this is not valid json\n"), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d7 := findCheck(t, report, "D7")
@@ -535,7 +535,7 @@ func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOps(logPath, []ops.Op{createOp, claimOp}))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", false, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d2 := findCheck(t, report, "D2")
@@ -557,7 +557,7 @@ func TestRun_Integration_D3_Verbose_ShowsFileAndLine(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, op))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", true, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
@@ -577,7 +577,7 @@ func TestRun_Integration_Verbose_CleanRepo_NoExtraOutput(t *testing.T) {
 	workerLog := filepath.Join(issuesDir, "ops", "worker-clean.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", true, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
 	require.NoError(t, err)
 
 	for _, f := range report.Checks {
@@ -604,7 +604,7 @@ func TestDoctorRunUsesStateDir(t *testing.T) {
 
 	// doctor.Run should load the index from stateDir.
 	// We pass an empty repoPath to skip D1 git divergence.
-	report, err := doctor.Run(issuesDir, stateDir, "", false, time.Now())
+	report, err := doctor.Run(issuesDir, stateDir, "", "", false, time.Now())
 	require.NoError(t, err)
 
 	// D4 checks broken parent refs. If it saw T-001, it means it loaded the index.
@@ -705,7 +705,7 @@ func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, acceptedOp3))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", true, time.Now())
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")

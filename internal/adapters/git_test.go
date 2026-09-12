@@ -586,6 +586,79 @@ func TestFetchAndRebase_ReportsRebaseError(t *testing.T) {
 	assert.Contains(t, err.Error(), "git rebase origin/feature/missing")
 }
 
+func TestFetchTrackingRef_UpdatesOriginRef(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	runGitDir(t, t.TempDir(), "init", "--bare", origin)
+	runGitDir(t, repo, "checkout", "-b", "_armature")
+	runGitDir(t, repo, "remote", "add", "origin", origin)
+	runGitDir(t, repo, "push", "-u", "origin", "_armature")
+
+	other := t.TempDir()
+	runGitDir(t, t.TempDir(), "clone", origin, other)
+	runGitDir(t, other, "config", "user.email", "test@test.com")
+	runGitDir(t, other, "config", "user.name", "Test")
+	runGitDir(t, other, "config", "commit.gpgsign", "false")
+	runGitDir(t, other, "checkout", "_armature")
+	runGitDir(t, other, "commit", "--allow-empty", "-m", "remote ahead")
+	runGitDir(t, other, "push", "origin", "_armature")
+
+	before := runGitOutput(t, repo, "rev-parse", "origin/_armature")
+	c := adapters.New(repo)
+	require.NoError(t, c.FetchTrackingRef("_armature"))
+	after := runGitOutput(t, repo, "rev-parse", "origin/_armature")
+	assert.NotEqual(t, before, after)
+	remoteTip := runGitOutput(t, origin, "rev-parse", "refs/heads/_armature")
+	assert.Equal(t, remoteTip, after)
+}
+
+func TestFetchTrackingRef_ReportsErrorWithoutOrigin(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	err := c.FetchTrackingRef("_armature")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "git fetch origin _armature")
+}
+
+func TestRevListCount_ReportsBehind(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	base := runGitOutput(t, repo, "rev-parse", "HEAD")
+	runGitDir(t, repo, "commit", "--allow-empty", "-m", "ahead")
+	c := adapters.New(repo)
+	n, err := c.RevListCount(base + "..HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+}
+
+func TestRevListCount_ReportsErrorOnMissingRev(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	_, err := c.RevListCount("HEAD..origin/_armature")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "git rev-list --count")
+}
+
+func runGitDir(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+}
+
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err, "git %v", args)
+	return strings.TrimSpace(string(out))
+}
+
 func TestHeadSHA_InvalidRepo(t *testing.T) {
 	t.Parallel()
 	c := adapters.New(filepath.Join(t.TempDir(), "no-such-repo"))
