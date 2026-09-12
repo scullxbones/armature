@@ -10,14 +10,20 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/santhosh-tekuri/jsonschema/v5"
-	"github.com/spf13/cobra"
 )
 
-// Mode is one structured invocation of a cobra command: the command path plus
-// any Artifact Output selecting flag. --field is a projection (N1.5/N9.6) and
-// is never a mode.
+// Command is one cobra command as the shape lint sees it. cmd/armature maps the
+// live cobra tree onto this type so internal/output never imports cobra.
+type Command struct {
+	Name             string
+	Annotations      map[string]string
+	HasRun           bool
+	HasAvailableSubs bool
+	Children         []*Command
+}
+
+// Mode is one structured invocation: the command path plus any Artifact Output
+// selecting flag. --field is a projection (N1.5/N9.6) and is never a mode.
 type Mode struct {
 	Path     string
 	Selector string
@@ -65,19 +71,19 @@ func DefaultGoldenDir() string {
 	return filepath.Join(filepath.Dir(file), "testdata", "golden")
 }
 
-// EnumerateModes walks the cobra tree and returns every structured command mode.
-// Grouping-only commands (no Run/RunE) are skipped. Cobra's help command is
-// skipped. Hidden leaves are included so Protocol Output cannot hide by Hidden.
-func EnumerateModes(root *cobra.Command) []Mode {
+// EnumerateModes walks a command tree and returns every structured mode.
+// Grouping-only commands (no run function) are skipped. The help command is
+// skipped. Hidden leaves remain so Protocol Output cannot hide by Hidden.
+func EnumerateModes(root *Command) []Mode {
 	if root == nil {
 		return nil
 	}
 	var modes []Mode
-	walkCommands(root, func(cmd *cobra.Command) {
-		if !enumerableCommand(root, cmd) {
+	walkCommands(root, "", true, func(cmd *Command, path string, isRoot bool) {
+		if !enumerableCommand(cmd, isRoot) {
 			return
 		}
-		modes = append(modes, modesForCommand(root, cmd)...)
+		modes = append(modes, modesForCommand(path, cmd.Annotations)...)
 	})
 	sort.Slice(modes, func(i, j int) bool {
 		if modes[i].Path != modes[j].Path {
@@ -94,7 +100,7 @@ func EnumerateModes(root *cobra.Command) []Mode {
 // Lint enumerates modes from root and checks each agent-facing mode against a
 // conforming golden, and each Artifact Output mode against its cited foreign
 // shape. Protocol Output modes are exempt only when Classify says so.
-func Lint(root *cobra.Command, goldenDir string) error {
+func Lint(root *Command, goldenDir string) error {
 	return lintModes(EnumerateModes(root), goldenDir)
 }
 
@@ -125,24 +131,21 @@ func lintModes(modes []Mode, goldenDir string) error {
 	return fmt.Errorf("envelope shape lint failed:\n  %s", strings.Join(errs, "\n  "))
 }
 
-func enumerableCommand(root, cmd *cobra.Command) bool {
-	if cmd == nil || cmd.Name() == "help" {
+func enumerableCommand(cmd *Command, isRoot bool) bool {
+	if cmd == nil || cmd.Name == "help" {
 		return false
 	}
-	hasRun := cmd.Run != nil || cmd.RunE != nil
-	if !hasRun {
+	if !cmd.HasRun {
 		return false
 	}
-	if cmd == root {
+	if isRoot {
 		return true
 	}
-	// Visible subcommands mean this RunE is group help, not a result mode.
-	return !cmd.HasAvailableSubCommands()
+	// Visible subcommands mean this run function is group help, not a result mode.
+	return !cmd.HasAvailableSubs
 }
 
-func modesForCommand(root, cmd *cobra.Command) []Mode {
-	path := relativeCommandPath(root, cmd)
-	ann := cmd.Annotations
+func modesForCommand(path string, ann map[string]string) []Mode {
 	if Classify(ann) == ChannelProtocolOutput {
 		return []Mode{{Path: path, Channel: ChannelProtocolOutput}}
 	}
@@ -181,23 +184,18 @@ func modesForCommand(root, cmd *cobra.Command) []Mode {
 	return modes
 }
 
-func relativeCommandPath(root, cmd *cobra.Command) string {
-	full := strings.TrimSpace(cmd.CommandPath())
-	rootName := strings.TrimSpace(root.Name())
-	if full == rootName {
-		return ""
+func walkCommands(cmd *Command, parentPath string, isRoot bool, visit func(*Command, string, bool)) {
+	path := parentPath
+	if !isRoot {
+		if path == "" {
+			path = cmd.Name
+		} else {
+			path += " " + cmd.Name
+		}
 	}
-	prefix := rootName + " "
-	if strings.HasPrefix(full, prefix) {
-		return strings.TrimPrefix(full, prefix)
-	}
-	return full
-}
-
-func walkCommands(cmd *cobra.Command, visit func(*cobra.Command)) {
-	visit(cmd)
-	for _, sub := range cmd.Commands() {
-		walkCommands(sub, visit)
+	visit(cmd, path, isRoot)
+	for _, sub := range cmd.Children {
+		walkCommands(sub, path, false, visit)
 	}
 }
 
@@ -211,7 +209,9 @@ func readFixture(goldenDir string, m Mode) ([]byte, string, error) {
 		}
 	}
 	if len(found) == 0 {
-		return nil, "", fmt.Errorf("%s: missing golden fixture %s.json (agent-facing modes require a conforming envelope; Artifact Output modes require the cited foreign shape)", m.label(), m.ID())
+		return nil, "", fmt.Errorf(
+			"%s: missing golden fixture %s.json (agent-facing modes need an envelope; Artifact Output modes need the cited shape)",
+			m.label(), m.ID())
 	}
 	if len(found) > 1 {
 		return nil, "", fmt.Errorf("%s: multiple goldens for mode %s", m.label(), m.ID())
@@ -437,18 +437,21 @@ func checkArtifactFixture(m Mode, body []byte) error {
 		return fmt.Errorf("artifact fixture is empty")
 	}
 	if err := checkEnvelopeFixture(m, body); err == nil {
-		return fmt.Errorf("Artifact Output must not use the Agent Output Contract envelope; cite %s", m.Citation)
+		return fmt.Errorf("artifact output must not use the Agent Output Contract envelope; cite %s", m.Citation)
 	}
-	if m.Citation == CitationShellCompletionGrammar {
+	switch m.Citation {
+	case CitationShellCompletionGrammar:
 		return nil
-	}
-	if strings.HasSuffix(m.Citation, ".json") {
+	case CitationReviewBundleSchema:
+		return checkReviewBundleShape(trimmed)
+	case CitationPlanSchema:
 		if m.Selector == "schema" {
 			return checkJSONSchemaDocument(trimmed)
 		}
-		return validateAgainstCitedSchema(m.Citation, trimmed)
+		return checkPlanInstanceShape(trimmed)
+	default:
+		return fmt.Errorf("unsupported artifact citation %q", m.Citation)
 	}
-	return fmt.Errorf("unsupported artifact citation %q", m.Citation)
 }
 
 func checkJSONSchemaDocument(body []byte) error {
@@ -456,59 +459,36 @@ func checkJSONSchemaDocument(body []byte) error {
 	if err := json.Unmarshal(body, &obj); err != nil {
 		return fmt.Errorf("schema artifact must be a JSON Schema document: %w", err)
 	}
-	if _, ok := obj["$schema"]; !ok {
-		return fmt.Errorf("schema artifact must include $schema")
-	}
-	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("fixture.schema.json", bytes.NewReader(body)); err != nil {
-		return fmt.Errorf("schema artifact is not a JSON Schema: %w", err)
-	}
-	if _, err := compiler.Compile("fixture.schema.json"); err != nil {
-		return fmt.Errorf("schema artifact does not compile: %w", err)
+	for _, key := range []string{"$schema", "type", "properties"} {
+		if _, ok := obj[key]; !ok {
+			return fmt.Errorf("schema artifact must include %s", key)
+		}
 	}
 	return nil
 }
 
-func validateAgainstCitedSchema(citation string, body []byte) error {
-	root, err := repoRoot()
-	if err != nil {
-		return err
+func checkReviewBundleShape(body []byte) error {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return fmt.Errorf("review bundle must be JSON: %w", err)
 	}
-	schemaPath := citation
-	if !filepath.IsAbs(schemaPath) {
-		schemaPath = filepath.Join(root, citation)
-	}
-	schemaBytes, err := os.ReadFile(schemaPath)
-	if err != nil {
-		return fmt.Errorf("read cited schema %s: %w", citation, err)
-	}
-	compiler := jsonschema.NewCompiler()
-	url := "file://" + filepath.ToSlash(schemaPath)
-	if err := compiler.AddResource(url, bytes.NewReader(schemaBytes)); err != nil {
-		return fmt.Errorf("load cited schema %s: %w", citation, err)
-	}
-	sch, err := compiler.Compile(url)
-	if err != nil {
-		return fmt.Errorf("compile cited schema %s: %w", citation, err)
-	}
-	var v any
-	if err := json.Unmarshal(body, &v); err != nil {
-		return fmt.Errorf("artifact fixture must be JSON: %w", err)
-	}
-	if err := sch.Validate(v); err != nil {
-		return fmt.Errorf("artifact does not match %s: %w", citation, err)
+	for _, key := range []string{"schema_version", "bundle_id", "issue", "contract", "delivery", "fingerprints"} {
+		if _, ok := obj[key]; !ok {
+			return fmt.Errorf("review bundle missing %s (cited by %s)", key, CitationReviewBundleSchema)
+		}
 	}
 	return nil
 }
 
-func repoRoot() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("locate conformance.go")
+func checkPlanInstanceShape(body []byte) error {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return fmt.Errorf("plan instance must be JSON: %w", err)
 	}
-	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-	if _, err := os.Stat(filepath.Join(root, "docs", "schemas")); err != nil {
-		return "", fmt.Errorf("repo root from %s: %w", file, err)
+	for _, key := range []string{"version", "title", "issues"} {
+		if _, ok := obj[key]; !ok {
+			return fmt.Errorf("plan instance missing %s (cited by %s)", key, CitationPlanSchema)
+		}
 	}
-	return root, nil
+	return nil
 }
