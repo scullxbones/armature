@@ -1,0 +1,45 @@
+{
+  "issue_id": "FX-WORK",
+  "layers": [
+    {
+      "name": "core_spec",
+      "priority": 1,
+      "content": "# Issue: In-progress task for show and render-context\nType: task | Scope: hello.go | Priority: (none)\n\n## Definition of Done\nShow, render-context, and review prepare are priced from this issue"
+    },
+    {
+      "name": "context_files",
+      "priority": 2,
+      "content": "## Context Files\n### hello.go\n```text\npackage hello\n\n// Hello is the fixture delivery file priced by context-report.\nfunc Hello() string {\n\treturn \"fixture-measured\"\n}\n```"
+    },
+    {
+      "name": "snippets",
+      "priority": 3,
+      "content": ""
+    },
+    {
+      "name": "blocker_outcomes",
+      "priority": 3,
+      "content": ""
+    },
+    {
+      "name": "parent_chain",
+      "priority": 5,
+      "content": "## Parent Chain\n- FX-STORY: Fixture story for context-report [in-progress]"
+    },
+    {
+      "name": "decisions",
+      "priority": 6,
+      "content": ""
+    },
+    {
+      "name": "notes",
+      "priority": 7,
+      "content": ""
+    },
+    {
+      "name": "sibling_outcomes",
+      "priority": 8,
+      "content": ""
+    }
+  ]
+}
