@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"unicode/utf8"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/output"
@@ -12,73 +11,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	showLargeFieldLimit = 512
-	showFieldHelp       = "arm show <id> --field <name> extracts a scalar value, never an envelope"
-)
+const showLargeFieldLimit = output.ShowLargeFieldLimit
 
-// showTruncation is the truncated adjunct: large text fields stay present,
-// with shown and total byte counts so agents can request --full.
-type showTruncation struct {
-	Field      string `json:"field"`
-	ShownBytes int    `json:"shown_bytes"`
-	TotalBytes int    `json:"total_bytes"`
-}
-
-func truncateShowText(s string, limit int) (string, int, bool) {
-	total := len(s)
-	if total <= limit {
-		return s, total, false
-	}
-	shown := s
-	for len(shown) > limit {
-		_, size := utf8.DecodeLastRuneInString(shown)
-		if size <= 0 {
-			break
-		}
-		shown = shown[:len(shown)-size]
-	}
-	return shown, total, true
-}
+type showTruncation = output.ShowTruncation
 
 func truncateShowIssue(row *output.IssueJSON) []showTruncation {
-	var hints []showTruncation
-	if shown, total, truncated := truncateShowText(row.Outcome, showLargeFieldLimit); truncated {
-		row.Outcome = shown
-		hints = append(hints, showTruncation{Field: "outcome", ShownBytes: len(shown), TotalBytes: total})
-	}
-	if shown, total, truncated := truncateShowText(row.DefinitionOfDone, showLargeFieldLimit); truncated {
-		row.DefinitionOfDone = shown
-		hints = append(hints, showTruncation{Field: "definition_of_done", ShownBytes: len(shown), TotalBytes: total})
-	}
-	return hints
-}
-
-func showHelp(ids []string, trunc []showTruncation) []string {
-	if len(trunc) == 0 {
-		return []string{showFieldHelp}
-	}
-	id := "<id>"
-	if len(ids) == 1 {
-		id = ids[0]
-	}
-	t := trunc[0]
-	line := fmt.Sprintf("%s truncated (%d of %d bytes); arm show %s --full for complete fields",
-		t.Field, t.ShownBytes, t.TotalBytes, id)
-	return []string{line, showFieldHelp}
+	return output.TruncateShowIssue(row)
 }
 
 func writeShowEnvelope(w io.Writer, ids []string, rows []output.IssueJSON, trunc []showTruncation) error {
-	env, err := output.NewEnvelope("issues", rows, showHelp(ids, trunc))
-	if err != nil {
-		return err
-	}
-	if len(trunc) > 0 {
-		if err := env.AddAdjunct("truncated", trunc); err != nil {
-			return err
-		}
-	}
-	return output.WriteEnvelope(w, env)
+	return output.WriteShowEnvelope(w, ids, rows, trunc)
 }
 
 func newShowCmd() *cobra.Command {

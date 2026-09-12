@@ -49,7 +49,7 @@ func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 	assert.Contains(t, report.EstimationMethod, "bytes/4")
 	assert.Contains(t, report.EstimationMethod, "token_budget")
 	assert.Contains(t, report.EstimationMethod, "testdata")
-	assert.NotContains(t, report.EstimationMethod, "AOC-S3-T2")
+	assert.Contains(t, report.EstimationMethod, "WriteShowEnvelope")
 
 	var summedBytes, summedTokens int
 	for _, a := range report.Artifacts {
@@ -116,7 +116,7 @@ func TestCollectUsesEmbeddedFixturesIndependentOfRepo_REQ_NXTTN_S3_T1(t *testing
 	assert.Greater(t, report.TotalBytes, 0)
 }
 
-func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T) {
+func TestContextReportShowMeasuresAOCEnvelope_REQ_NXTTN_S3_T1(t *testing.T) {
 	t.Parallel()
 
 	report, err := Collect()
@@ -133,15 +133,21 @@ func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T
 	got, err := measureShow(state)
 	require.NoError(t, err)
 
+	row := output.MarshalIssue(issue)
+	trunc := output.TruncateShowIssue(&row)
+	var envelope bytes.Buffer
+	require.NoError(t, output.WriteShowEnvelope(&envelope, []string{issue.ID}, []output.IssueJSON{row}, trunc))
+
 	assert.Equal(t, len(got), show.Bytes)
-	assert.True(t, bytes.HasPrefix(got, human.Bytes()),
-		"show row must start with the agent-mode human RenderIssue payload")
-	assert.Contains(t, string(got), "Spend-to-date:",
-		"agent show appends FormatSpend after RenderIssue when rates resolve")
-	assert.Greater(t, show.Bytes, human.Len(),
-		"spend adjunct must be included in the priced show payload")
+	assert.Equal(t, envelope.Bytes(), got,
+		"show row must price the json/agent writeShowEnvelope payload")
+	assert.NotContains(t, string(got), "Spend-to-date:",
+		"FormatSpend stays on human show; json/agent show does not emit it")
+	assert.NotEqual(t, human.Len(), show.Bytes,
+		"show row must not price the human RenderIssue path")
 	assert.False(t, json.Valid(bytes.TrimSpace(human.Bytes())),
-		"agent-mode show is human text, not a JSON object")
+		"human show is prose, not a JSON object")
+	assert.True(t, json.Valid(bytes.TrimSpace(got)))
 	assert.Contains(t, human.String(), "ID:")
 }
 

@@ -68,7 +68,7 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	got, err := measureReady(index, state, now)
 	require.NoError(t, err)
 
-	entries := ready.ComputeReady(index, state.Issues, "")
+	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
 	expired := ready.ExpiredClaims(state.Issues, now)
 	require.NotEmpty(t, expired, "fixture in-progress claim must be TTL-expired at the frozen clock")
 
@@ -92,14 +92,4 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	require.NoError(t, json.Unmarshal(decoded["expired_claims"], &claims))
 	require.NotEmpty(t, claims)
 	assert.Equal(t, FixtureShowIssue, claims[0].ID)
-}
-
-func TestIssueInfoFromStateSkipsNil(t *testing.T) {
-	t.Parallel()
-	assert.Empty(t, issueInfoFromState(nil))
-	state, _, err := replayFixtureState()
-	require.NoError(t, err)
-	info := issueInfoFromState(state)
-	require.Contains(t, info, FixtureShowIssue)
-	assert.Equal(t, "task", info[FixtureShowIssue].Type)
 }
