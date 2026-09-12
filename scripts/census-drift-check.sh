@@ -357,6 +357,308 @@ CENSUS_PROVIDERS=$(sed -n '/^## Provider Types/,/^## [^#]/p' "$CENSUS_FILE" | \
 compare_lists "Provider type" "$CODE_PROVIDERS" "$CENSUS_PROVIDERS"
 
 # ============================================================================
+# COMMAND OUTPUT MODES (shape + classification)
+# ============================================================================
+echo "Checking Command Output Modes..."
+
+# Walk cmd/armature constructors the same way EnumerateModes walks cobra:
+# root is a mode; grouping parents with visible subcommands are not; hidden
+# leaves remain; MarkProtocolOutput / MarkArtifactOutput plus selecting flags
+# expand into path|selector|channel|citation keys.
+
+mapfile -t CENSUS_CMD_GO < <(find "$REPO_ROOT/cmd/armature" -maxdepth 1 -name '*.go' ! -name '*_test.go' | sort)
+
+CENSUS_CTOR_RECORDS=$(awk '
+function quoted_strings(s,    out, q) {
+    out = ""
+    while (match(s, /"[^"]+"/)) {
+        q = substr(s, RSTART + 1, RLENGTH - 2)
+        if (out != "") out = out ","
+        out = out q
+        s = substr(s, RSTART + RLENGTH)
+    }
+    return out
+}
+function reset() {
+    ctor = ""; use = ""; has_run = 0; hidden = 0; delegate = ""
+    channel = ""; citation = ""; any_set = ""; all_unset = ""; addcmds = ""
+    in_any = 0; in_all = 0; has_literal = 0
+    delete varctor
+}
+function flush() {
+    if (ctor == "") return
+    print ctor "|" use "|" has_run "|" hidden "|" delegate "|" channel "|" citation "|" any_set "|" all_unset "|" addcmds
+}
+function add_child(c) {
+    if (c == "" || c == ctor) return
+    if (addcmds != "") addcmds = addcmds ","
+    addcmds = addcmds c
+}
+BEGIN { reset() }
+/^func / {
+    flush()
+    reset()
+    if (match($0, /^func (new[A-Za-z0-9]+Cmd)\(/)) {
+        ctor = substr($0, RSTART + 5, RLENGTH - 6)
+    }
+    next
+}
+ctor == "" { next }
+/^[[:space:]]*(Use:[[:space:]]*"|cmd\.Use = ")/ {
+    if (match($0, /"[^"]+"/)) {
+        u = substr($0, RSTART + 1, RLENGTH - 2)
+        split(u, parts, " ")
+        if (parts[1] != "") use = parts[1]
+    }
+}
+/^[[:space:]]+RunE:/ { has_run = 1 }
+/^[[:space:]]+Run:/ { has_run = 1 }
+/^[[:space:]]+Hidden:[[:space:]]*true/ { hidden = 1 }
+/MarkProtocolOutput\(/ { channel = "protocol-output" }
+/MarkArtifactOutput\(/ { channel = "artifact-output" }
+/Citation:[[:space:]]/ {
+    if (match($0, /"[^"]+"/)) {
+        citation = substr($0, RSTART + 1, RLENGTH - 2)
+    } else if (match($0, /Citation[A-Za-z0-9]+/)) {
+        citation = substr($0, RSTART, RLENGTH)
+    }
+}
+/WhenAnyFlagSet:[[:space:]]*\[/ {
+    in_any = 1
+    extra = quoted_strings($0)
+    if (extra != "") {
+        if (any_set != "") any_set = any_set ","
+        any_set = any_set extra
+    }
+    if ($0 ~ /\]/) in_any = 0
+}
+in_any && !/WhenAnyFlagSet:[[:space:]]*\[/ {
+    extra = quoted_strings($0)
+    if (extra != "") {
+        if (any_set != "") any_set = any_set ","
+        any_set = any_set extra
+    }
+    if ($0 ~ /\]/) in_any = 0
+}
+/WhenAllFlagsUnset:[[:space:]]*\[/ {
+    in_all = 1
+    extra = quoted_strings($0)
+    if (extra != "") {
+        if (all_unset != "") all_unset = all_unset ","
+        all_unset = all_unset extra
+    }
+    if ($0 ~ /\]/) in_all = 0
+}
+in_all && !/WhenAllFlagsUnset:[[:space:]]*\[/ {
+    extra = quoted_strings($0)
+    if (extra != "") {
+        if (all_unset != "") all_unset = all_unset ","
+        all_unset = all_unset extra
+    }
+    if ($0 ~ /\]/) in_all = 0
+}
+/&cobra\.Command\{/ { has_literal = 1 }
+/AddCommand\(new[A-Za-z0-9]+Cmd\(\)\)/ {
+    if (match($0, /new[A-Za-z0-9]+Cmd/)) add_child(substr($0, RSTART, RLENGTH))
+}
+/AddCommand\([A-Za-z0-9_]+\)/ && $0 !~ /new[A-Za-z0-9]+Cmd\(\)/ {
+    if (match($0, /AddCommand\([A-Za-z0-9_]+\)/)) {
+        s = substr($0, RSTART, RLENGTH)
+        sub(/^AddCommand\(/, "", s)
+        sub(/\)$/, "", s)
+        if (s in varctor) add_child(varctor[s])
+    }
+}
+/:=/ && /new[A-Za-z0-9]+Cmd\(\)/ {
+    if (match($0, /[A-Za-z0-9_]+[[:space:]]*:=[[:space:]]*new[A-Za-z0-9]+Cmd\(\)/)) {
+        s = substr($0, RSTART, RLENGTH)
+        split(s, parts, /[[:space:]]*:=[[:space:]]*/)
+        varname = parts[1]
+        ctorname = parts[2]
+        sub(/\(\)$/, "", ctorname)
+        varctor[varname] = ctorname
+        if (!has_literal && delegate == "" && ctorname != ctor) delegate = ctorname
+    }
+}
+END { flush() }
+' "${CENSUS_CMD_GO[@]}")
+
+CENSUS_CITE_MAP=$(awk '
+    /^[[:space:]]+Citation[A-Za-z0-9]+[[:space:]]*=/ {
+        if (match($0, /Citation[A-Za-z0-9]+/)) name = substr($0, RSTART, RLENGTH)
+        if (match($0, /"[^"]+"/)) val = substr($0, RSTART + 1, RLENGTH - 2)
+        print name "=" val
+    }
+' "$REPO_ROOT/internal/output/classify.go")
+
+census_resolve_cite() {
+    local expr="$1"
+    [[ -z "$expr" ]] && { echo ""; return; }
+    if [[ "$expr" == *"/"* || "$expr" == *" "* ]]; then
+        echo "$expr"
+        return
+    fi
+    local line
+    line=$(printf '%s\n' "$CENSUS_CITE_MAP" | grep "^${expr}=" | head -1 || true)
+    if [[ -n "$line" ]]; then
+        echo "${line#*=}"
+    else
+        echo "$expr"
+    fi
+}
+
+census_expand_output_modes() {
+    local path="$1"
+    local channel="${2:-}"
+    local citation="${3:-}"
+    local any_set="${4:-}"
+    local all_unset="${5:-}"
+    if [[ "$channel" == "protocol-output" ]]; then
+        echo "${path}||protocol-output|"
+        return
+    fi
+    if [[ "$channel" != "artifact-output" || -z "$citation" ]]; then
+        echo "${path}||agent-facing|"
+        return
+    fi
+    if [[ -z "$any_set" && -z "$all_unset" ]]; then
+        echo "${path}||artifact-output|${citation}"
+        return
+    fi
+    local flag
+    local IFS=','
+    local -a flags
+    if [[ -n "$any_set" ]]; then
+        read -r -a flags <<< "$any_set"
+        for flag in "${flags[@]}"; do
+            [[ -z "$flag" ]] && continue
+            echo "${path}|${flag}|artifact-output|${citation}"
+        done
+        echo "${path}||agent-facing|"
+    fi
+    if [[ -n "$all_unset" ]]; then
+        echo "${path}||artifact-output|${citation}"
+        read -r -a flags <<< "$all_unset"
+        for flag in "${flags[@]}"; do
+            [[ -z "$flag" ]] && continue
+            echo "${path}|${flag}|agent-facing|"
+        done
+    fi
+}
+
+declare -A CENSUS_USE CENSUS_HAS_RUN CENSUS_HIDDEN CENSUS_DELEGATE CENSUS_CHANNEL CENSUS_CITE CENSUS_ANY CENSUS_ALL CENSUS_ADDS
+while IFS='|' read -r ctor use has_run hidden delegate channel citation any_set all_unset addcmds; do
+    [[ -z "$ctor" ]] && continue
+    CENSUS_USE[$ctor]=$use
+    CENSUS_HAS_RUN[$ctor]=$has_run
+    CENSUS_HIDDEN[$ctor]=$hidden
+    CENSUS_DELEGATE[$ctor]=$delegate
+    CENSUS_CHANNEL[$ctor]=$channel
+    CENSUS_CITE[$ctor]=$(census_resolve_cite "$citation")
+    CENSUS_ANY[$ctor]=$any_set
+    CENSUS_ALL[$ctor]=$all_unset
+    CENSUS_ADDS[$ctor]=$addcmds
+done <<< "$CENSUS_CTOR_RECORDS"
+
+census_inherit_ctor() {
+    local ctor="$1"
+    local d="${CENSUS_DELEGATE[$ctor]:-}"
+    local guard=0
+    while [[ -n "$d" && $guard -lt 8 ]]; do
+        if [[ "${CENSUS_HAS_RUN[$ctor]}" != "1" ]]; then
+            CENSUS_HAS_RUN[$ctor]=${CENSUS_HAS_RUN[$d]:-0}
+        fi
+        if [[ -z "${CENSUS_CHANNEL[$ctor]}" ]]; then
+            CENSUS_CHANNEL[$ctor]=${CENSUS_CHANNEL[$d]:-}
+            CENSUS_CITE[$ctor]=${CENSUS_CITE[$d]:-}
+            CENSUS_ANY[$ctor]=${CENSUS_ANY[$d]:-}
+            CENSUS_ALL[$ctor]=${CENSUS_ALL[$d]:-}
+        fi
+        if [[ -z "${CENSUS_USE[$ctor]}" ]]; then
+            CENSUS_USE[$ctor]=${CENSUS_USE[$d]:-}
+        fi
+        d=${CENSUS_DELEGATE[$d]:-}
+        guard=$((guard + 1))
+    done
+}
+
+for ctor in "${!CENSUS_USE[@]}"; do
+    census_inherit_ctor "$ctor"
+done
+
+census_visible_subs() {
+    local ctor="$1"
+    local child kids_str="${CENSUS_ADDS[$ctor]:-}"
+    local IFS=','
+    local -a kids
+    read -r -a kids <<< "$kids_str"
+    for child in "${kids[@]}"; do
+        [[ -z "$child" ]] && continue
+        if [[ "${CENSUS_HIDDEN[$child]:-0}" != "1" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+CENSUS_OUTPUT_QUEUE=("newRootCmd|arm|1")
+CODE_OUTPUT_MODES=""
+while [[ ${#CENSUS_OUTPUT_QUEUE[@]} -gt 0 ]]; do
+    item="${CENSUS_OUTPUT_QUEUE[0]}"
+    CENSUS_OUTPUT_QUEUE=("${CENSUS_OUTPUT_QUEUE[@]:1}")
+    ctor=${item%%|*}
+    rest=${item#*|}
+    path=${rest%%|*}
+    is_root=${rest##*|}
+    census_inherit_ctor "$ctor"
+    use=${CENSUS_USE[$ctor]:-}
+    has_run=${CENSUS_HAS_RUN[$ctor]:-0}
+    if [[ "$use" != "help" && "$has_run" == "1" ]]; then
+        if [[ "$is_root" == "1" ]] || ! census_visible_subs "$ctor"; then
+            CODE_OUTPUT_MODES+=$(census_expand_output_modes "$path" "${CENSUS_CHANNEL[$ctor]:-}" "${CENSUS_CITE[$ctor]:-}" "${CENSUS_ANY[$ctor]:-}" "${CENSUS_ALL[$ctor]:-}")$'\n'
+        fi
+    fi
+    kids_str="${CENSUS_ADDS[$ctor]:-}"
+    IFS=',' read -r -a kids <<< "$kids_str"
+    for child in "${kids[@]}"; do
+        [[ -z "$child" ]] && continue
+        census_inherit_ctor "$child"
+        cu=${CENSUS_USE[$child]:-}
+        [[ -z "$cu" ]] && continue
+        if [[ "$is_root" == "1" ]]; then
+            cpath="$cu"
+        else
+            cpath="$path $cu"
+        fi
+        CENSUS_OUTPUT_QUEUE+=("$child|$cpath|0")
+    done
+done
+CODE_OUTPUT_MODES=$(printf '%s' "$CODE_OUTPUT_MODES" | sed '/^$/d' | sort -u)
+
+CENSUS_OUTPUT_MODES=$(sed -n '/^## Command Output Modes/,/^## Summary Statistics/p' "$CENSUS_FILE" | awk -F'|' '
+    /^\| `[^`]+` / {
+        path = $2
+        sel = $3
+        class = $4
+        cite = $6
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", path)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", sel)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", class)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", cite)
+        gsub(/^`|`$/, "", path)
+        gsub(/^`|`$/, "", sel)
+        gsub(/^`|`$/, "", cite)
+        channel = "agent-facing"
+        if (class ~ /[Pp]rotocol/) channel = "protocol-output"
+        else if (class ~ /[Aa]rtifact/) channel = "artifact-output"
+        if (channel != "artifact-output") cite = ""
+        print path "|" sel "|" channel "|" cite
+    }
+' | sort -u)
+
+compare_lists "Command output mode" "$CODE_OUTPUT_MODES" "$CENSUS_OUTPUT_MODES"
+
+# ============================================================================
 # SUMMARY
 # ============================================================================
 if [[ $ERRORS -eq 0 ]]; then

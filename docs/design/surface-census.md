@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document inventories the actual surfaces of the armature system: issue types, statuses, confidence states, all fields on issue structs, all CLI commands and their flags. Each surface entry cites where it's defined and used in the corpus, and rules it as **kept-evidence** (actively used, has real callers/tests), **kept-justified** (exists for a documented reason even if lightly used), or **parked** (no evidence of use — includes a re-entry criterion).
+This document inventories the actual surfaces of the armature system: issue types, statuses, confidence states, all fields on issue structs, all CLI commands and their flags, and each enumerable command mode's structured output shape and agent-facing / Protocol Output / Artifact Output classification. Each surface entry cites where it's defined and used in the corpus, and rules it as **kept-evidence** (actively used, has real callers/tests), **kept-justified** (exists for a documented reason even if lightly used), or **parked** (no evidence of use — includes a re-entry criterion).
 
 ## Issue Types
 
@@ -383,6 +383,88 @@ Enumerated in `DefaultProviderRegistry.ProviderForType` (`internal/sources/lifec
 | `confluence` | sources.go:flag, tests | **kept-evidence** | Confluence wiki integration. |
 | `sharepoint` | sources.go:flag, tests | **kept-evidence** | SharePoint document integration. |
 
+## Command Output Modes
+
+This table is the census of **structured output shape** and **channel classification** for every cobra-enumerated command mode. It is the Surface glossary amendment from ADR 0017 / N9: every mode is agent-facing, Protocol Output, or Artifact Output. The default is agent-facing. Protocol Output and Artifact Output exist only as explicit constructor marks (`output.MarkProtocolOutput`, `output.MarkArtifactOutput`) plus, for Artifact Output, a governing-shape citation and any selecting flags.
+
+Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
+
+- Grouping constructors with no `Run`/`RunE` (`dag`, `sources`, `worktree`, `hook`, `gate`) are not modes.
+- A non-root command that has visible (non-hidden) subcommands is group help, not a mode (`review`).
+- Bare `arm` (root) is a mode even though it has children.
+- Hidden leaves remain (`harness-hook`, `validate doc-examples`). Protocol Output cannot hide by `Hidden`.
+- `--field` is a projection (N9.6). It is never a selecting flag and never a row in this table.
+
+**Selecting flag** is `Mode.Selector`: the cobra flag name without dashes. An empty cell is the default enumerated invocation (all artifact-selecting flags unset). `schema` means `--schema` is set. `output` on `review prepare` means `--output` is set, which is the agent-facing result mode; the empty selecting-flag row is the Artifact Output bundle on stdout.
+
+`scripts/census-drift-check.sh` compares `path|selector|channel|citation` with live annotations bidirectionally. A changed mark, a changed citation, a changed selecting flag, a new enumerable command without a row, or a phantom row without code fails `make check`.
+
+| Command path | Selecting flag | Classification | Structured shape | Citation | Status | Notes |
+|--------------|----------------|----------------|------------------|----------|--------|-------|
+| `amend` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `arm` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Bare `arm` home view. EnumerateModes path is empty (`_root` golden). |
+| `assign` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `bootstrap` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `claim` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `completion` |  | Artifact Output | cited foreign shape, verbatim | `shell completion-script grammar (bash/zsh/fish/powershell)` | **kept-evidence** | All modes. Citation is the shell completion-script grammar, not JSON. |
+| `confirm` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `context-history` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `context-report` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `create` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `dag apply` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Ordinary apply (neither `--schema` nor `--example`) is agent-facing. |
+| `dag apply` | `example` | Artifact Output | cited foreign shape, verbatim | `docs/schemas/plan.schema.json` | **kept-evidence** | Artifact when `--example` is set (`WhenAnyFlagSet`). |
+| `dag apply` | `schema` | Artifact Output | cited foreign shape, verbatim | `docs/schemas/plan.schema.json` | **kept-evidence** | Artifact when `--schema` is set (`WhenAnyFlagSet`). |
+| `dag context` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `dag override-release` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `dag revert` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `dag summary` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `dag transition` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `decision` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `doctor` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Sole Protocol Output. `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
+| `heartbeat` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `hook run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `import` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `link` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `list` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `log` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `materialize` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `merged` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `note` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `push-ops` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `render-context` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `reopen` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `reparent` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `review commits` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `review prepare` |  | Artifact Output | cited foreign shape, verbatim | `docs/schemas/review-bundle.schema.json` | **kept-evidence** | Artifact when `--output` is unset (`WhenAllFlagsUnset`). Governing shape: ReviewBundle schema. |
+| `review prepare` | `output` | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Result mode when `--output` is set. Envelope, not bundle bytes. |
+| `review record` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `review validate` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `scope-delete` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `scope-rename` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `show` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `sources accept-citation` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `sources add` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `sources link` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `sources stale-review` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `sources sync` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `sources verify` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `stats` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `sync` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `transition` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `tui` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `unassign` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `unlink` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `validate` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `validate doc-examples` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Hidden leaf of `validate`. Hidden does not hide a structured mode. |
+| `version` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `worker-init` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `workers` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `worktree gc` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `worktree list` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+
 ## Summary Statistics
 
 - **Issue Types**: 5 (all kept-evidence)
@@ -392,6 +474,7 @@ Enumerated in `DefaultProviderRegistry.ProviderForType` (`internal/sources/lifec
 - **Op Types**: 19 (all kept-evidence)
 - **CLI Commands**: 50 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
+- **Command output modes**: 63 (58 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 
@@ -443,6 +526,16 @@ grep -h "cmd.Flags()\.String\|cmd.Flags()\.Bool\|cmd.Flags()\.Int\|cmd.Flags()\.
 grep -r "\.Priority\|\.Assignee\|\.EstComplexity" internal/materialize/ --include="*.go" | grep -v test
 ```
 
+
+### Command output modes
+```bash
+# Live marks: MarkProtocolOutput / MarkArtifactOutput on cmd/armature constructors.
+# Citations: internal/output/classify.go Citation* constants.
+# Walk matches EnumerateModes: root plus leaves (hidden included; visible-sub grouping skipped).
+rg -n "MarkProtocolOutput|MarkArtifactOutput" cmd/armature -g '!*_test.go'
+```
+The mechanical comparison is `scripts/census-drift-check.sh` (Command output mode keys `path|selector|channel|citation`).
+
 To reproduce this census in the future:
 
 1. Run the grep recipes above to verify each surface
@@ -454,6 +547,7 @@ To reproduce this census in the future:
 
 ## Completeness Notes
 
+- **Included**: Command output modes (shape + classification), aligned with AOC-S3-T3 cobra enumeration.
 - **Not included**: Protocol buffers or RPC types (not used by armature; ops-based).
 - **Not included**: Internal cache structures or intermediate types (only public surfaces).
 - **Not included**: Test-only enums or fixtures (only production surfaces).
@@ -472,4 +566,4 @@ apart, so adding a row here without updating the map is caught at `make check`.
 
 | Surface | Doc Files | Notes |
 |---------|-----------|-------|
-| `cmd/**` | `docs/commands.md`, `docs/design/surface-census.md` | CLI commands and flags. A task adding a flag owns its census row and its command documentation. |
+| `cmd/**` | `docs/commands.md`, `docs/design/surface-census.md` | CLI commands, flags, and command-output-mode classification (shape + channel). A task adding a flag or a classified mode owns its census row and its command documentation. |
