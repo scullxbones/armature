@@ -33,7 +33,7 @@ arm validate       # zero ERRORs; all issues cited
 arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
 ```
 
-If either exits non-zero, fix the reported issues before releasing. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
+If either exits non-zero, fix the reported issues before releasing. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore. Graph Finding **E14** (Task Contract: DoD ∩ Scope ∩ Acceptance) is an error; do not release a plan that fails it.
 
 Warnings from other stories must be resolved, not ignored. If `arm doctor` reports a D1 (commits referencing non-done issues) or D2 (stale claims) from unrelated work, clean them up before planning your work. DAG health is cumulative.
 
@@ -143,8 +143,8 @@ arm validate                   # scope overlap WARNINGs appear here; resolve eac
 ### 6. Validate and Release
 
 ```bash
-arm validate --ci   # must exit 0 with no ERRORs; scope overlaps resolved
-arm doctor          # repo health check (D1-D6); fix any errors
+arm validate --ci   # must exit 0 with no ERRORs; scope overlaps resolved; E14 Task Contract clean
+arm doctor          # repo health; live IDs from doctor.LiveCheckIDs / docs/design/doctor-check-ids.md
 arm list --group    # final sanity check — all issues visible and in expected states
 ```
 
@@ -158,7 +158,12 @@ This section is critical. **Every issue in the plan MUST have a `source` (source
 entry ID) or `arm dag apply` will refuse the plan.** Apply is source-atomic:
 each create is emitted with its source-link in the same batch. **Every task
 MUST have `dod`, `scope`, and `acceptance` fields or Plan Release (`dag
-transition` / `confirm`) will fail.** Validate the plan JSON against
+transition` / `confirm`) will fail.** Those three fields are one surface:
+the worker must be able to implement the DoD in the scoped files and prove it
+with Acceptance that names the same surface. Presence and DoD length (E6/E9)
+are not enough. Graph Finding **E14** (`arm validate`, leaf
+`internal/taskcontract`) is the code-enforced Task Contract. Validate the plan
+JSON against
 [the plan schema](https://github.com/scullxbones/armature/blob/main/docs/schemas/plan.schema.json) before submitting; see `docs/json-schema-examples.md`
 for worked examples.
 
@@ -175,6 +180,10 @@ the `notes` array instead.
 - Bad: `"Done when it works"` — vague, not verifiable
 - Bad: `"Implement the feature"` — restates the title, adds no information
 - Bad: Long DoD over 500 chars — summarize and move details to `notes`
+- Bad: copying a Story or long-horizon **product sentence** into a Task DoD
+  (e.g. LH "arm doctor gains a check (next free D-number)") while Scope is
+  helper files only. Story DoD may stay the product outcome; Task DoD is what
+  the scoped files can implement.
 
 **`scope` — Files Affected**
 
@@ -185,10 +194,24 @@ that do not yet exist. Use precise paths, not vague descriptions.
 - Bad: `"the parser files"` — worker cannot determine what to touch
 - Bad: `"internal/"` — too broad, enables scope collisions
 
+If the Task DoD claims to implement `arm doctor` product behavior (`gains check
+D<n>`, add/wire check `D<n>` into `Run`, or `arm doctor` + implement verb),
+Scope **must** include `internal/doctor/doctor.go` (the `Run`/`RunChecks`
+wiring file). Otherwise rewrite the DoD as an exported helper **not wired**
+into `Run` — the DoD must say `helper-only` or `not wired`; a bare "exported
+helper" mention is not an opt-out. Completion-ritual `arm doctor` (paired with
+`arm validate` or `before done|merge`) and narrative pointers (README cites
+`arm doctor`) are not implement claims; E14 does not require `doctor.go` for
+those.
+
 **`acceptance` — Verifiable Criteria**
 
 JSON array of specific criteria the worker can verify mechanically. Each entry
-should name a test, a command output, or an observable behavior.
+should name a test, a command output, or an observable behavior. Acceptance
+must name the **same surface** as the DoD: a CLI DoD cannot stand next to
+unit-only Acceptance (`test_passes` entries, or `go test` / `make check`
+strings with no `arm doctor`). If DoD claims `arm doctor` / gains check `D<n>`,
+Acceptance must name that CLI (e.g. `arm doctor --format json`).
 
 **Spec traceability:** Name new tests using `Test<Description>_REQ_<RequirementID>`,
 where `RequirementID` is the story or task ID (e.g. `STORY-T1`). This makes the
@@ -200,6 +223,7 @@ a new test function.
 - Bad: `["TestParseTokenTypes passes"]` — test name won't appear in `make trace-report`
 - Bad: `[]` — empty array provides no acceptance signal
 - Bad: `["looks good"]` — not mechanically verifiable
+- Bad: CLI DoD + `["TestFoo_REQ_… passes", "make check green"]` — unit-only; E14 `unit_only_acceptance`
 
 See `docs/conventions.md` (test naming and traceability section) in the armature repo for comprehensive documentation of test naming and all other naming conventions.
 
@@ -213,6 +237,20 @@ if not needed.
 - Good: `["See RFC-2019-auth for security requirements", "Coordinate with infra team on deployment"]`
 - Good: `[]` — empty array if no additional notes
 - Bad: Using `notes` to store what should be in `dod` or `acceptance`
+
+### Task Contract (E14)
+
+`arm validate` emits Graph Finding **E14** from `internal/taskcontract` (keys
+`doctor.run_wiring` and `unit_only_acceptance`). Treat it as a decomposition
+blocker, same as missing E6 fields.
+
+**Doctor check IDs:** do not invent or grill a `Dn` from Story/LH prose. Read
+`doctor.LiveCheckIDs()` and
+[`docs/design/doctor-check-ids.md`](https://github.com/scullxbones/armature/blob/main/docs/design/doctor-check-ids.md)
+(live table + open reservations from `doctor.OpenReservations()`). Take the
+next unused `Dn` that appears in neither table. If the check is not yet in
+`Run`, add a reservation and put `internal/doctor/doctor.go` in Scope, or
+rewrite the DoD helper-only / not wired.
 
 ### Complete Well-Formed Task Example
 
@@ -295,6 +333,10 @@ if not needed.
 | Missing `acceptance` field entirely | Plan Release / `arm validate` ERRORs | Add the field, even if `--example` omits it |
 | Plan without `version: 1, title, issues` wrapper | `arm dag apply` fails validation; bare task objects not accepted | Wrap all issues in `{ "version": 1, "title": "...", "issues": [...] }` |
 | `"TestFoo passes"` in acceptance | Test skips `make trace-report`; requirement has no traceability | Use `TestFoo_REQ_STORY_TX passes` |
+| Story/LH product sentence copied into Task DoD | Worker stays in Scope; wrap Yellow; E14 `doctor.run_wiring` | Write a Task DoD the scoped files can implement; keep product sentences on the Story |
+| `arm doctor` / `gains check Dn` DoD without `internal/doctor/doctor.go` | E14: DoD not implementable in Scope | Add `doctor.go`, or rewrite DoD `helper-only` / `not wired` |
+| CLI DoD + unit-only Acceptance | E14 `unit_only_acceptance` | Name the same surface (`arm doctor` in Acceptance) |
+| Grilled `Dn` without the registry | Collides with live `Run` or an open reservation | Allocate via `doctor.LiveCheckIDs` + `docs/design/doctor-check-ids.md` |
 
 > **Note:** `arm dag apply --example` omits `acceptance` in its output.
 > Always add it manually to every task in your plan JSON.
@@ -355,18 +397,21 @@ For dependency linking and overlap resolution, see `references/dependency-manage
 
 Run this checklist before handing work off to the Coordinator.
 
-1. **`arm validate`** — no ERRORs, citation coverage complete
+1. **`arm validate`** — no ERRORs, citation coverage complete, E14 Task Contract clean
    ```bash
    arm validate --ci   # exits non-zero on any error
    ```
    **Note:** If `arm validate` reports `context_files` WARNINGs, treat them as decomposition
    signals—break large tasks into smaller subtasks or add blocking dependencies to reduce
-   context size. Re-run until no context_files WARNINGs remain.
+   context size. Re-run until no context_files WARNINGs remain. E14 (`doctor.run_wiring`
+   / `unit_only_acceptance`) is a decomposition defect: fix DoD, Scope, or Acceptance
+   before releasing.
 
-2. **`arm doctor`** — repo health checks D1-D6 pass
+2. **`arm doctor`** — live checks from `doctor.LiveCheckIDs()` pass
    ```bash
    arm doctor          # or arm doctor --strict (warnings as errors)
    ```
+   IDs and open reservations: `docs/design/doctor-check-ids.md`.
 
 3. **All issues promoted from draft**
    ```bash
@@ -397,6 +442,7 @@ Do not release until all seven checks pass.
 | Failure | Symptom | Prevention |
 |---|---|---|
 | Tasks missing `dod`, `scope`, or `acceptance` | Workers cannot self-verify completion; `arm validate` ERRORs | Write all three fields for every task; use the complete example in this skill as a template |
+| DoD / Scope / Acceptance not the same surface | E14 (`arm validate` + `taskcontract`); worker stays in Scope and wrap is Yellow | Same-surface rule above; `doctor.go` or helper-only DoD; no Story/LH product-sentence copy |
 | Issues created without source links | `arm validate` reports `uncited node: ID`; citation debt accumulates silently | Register sources first; `sources link` every issue at creation time |
 | Scope overlaps not resolved with `arm link` | Workers collide on the same files; merge conflicts during story close | Run `arm validate` after dag apply; resolve every scope overlap WARNING before releasing |
 | context_files WARNINGs not addressed | `arm validate` reports context_files WARNINGs, indicating tasks exceed context budget | Treat context_files WARNINGs as decomposition signals; break large tasks into smaller subtasks or add blocking dependencies; re-run `arm validate` until clear |
@@ -430,9 +476,9 @@ arm link --source A --dep B                           # A runs after B
 arm unlink --source A --dep B                         # remove dependency
 
 # Validation
-arm validate                                          # graph + citation check
+arm validate                                          # graph + citation + E14 Task Contract
 arm validate --ci                                     # exit non-zero on errors
-arm doctor                                            # repo health check
+arm doctor                                            # repo health; IDs: doctor.LiveCheckIDs
 arm doctor --strict                                   # warnings as errors
 arm list --group                                      # grouped by status
 arm list --parent STORY-ID                            # tasks under a story
