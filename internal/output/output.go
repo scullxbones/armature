@@ -23,12 +23,9 @@ type ListEntry struct {
 	AssignedTo string `json:"assigned_to,omitempty"`
 }
 
-// RenderIssue renders a single issue to the given writer.
-// If asJSON is true, renders as JSON; otherwise renders as human-readable text.
-func RenderIssue(w io.Writer, issue *materialize.Issue, asJSON bool) error {
-	if asJSON {
-		return renderIssueJSON(w, issue)
-	}
+// RenderIssue renders a single issue as human-readable text.
+// Structured show output goes through NewEnvelope/WriteEnvelope, not this helper.
+func RenderIssue(w io.Writer, issue *materialize.Issue) error {
 	return renderIssueHuman(w, issue)
 }
 
@@ -88,16 +85,6 @@ func MarshalIssue(issue *materialize.Issue) IssueJSON {
 		Notes:                  noteTexts,
 		AssessmentAttestations: attestationsJSON,
 	}
-}
-
-func renderIssueJSON(w io.Writer, issue *materialize.Issue) error {
-	out := MarshalIssue(issue)
-	data, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal issue JSON: %w", err)
-	}
-	_, err = fmt.Fprintln(w, string(data))
-	return err
 }
 
 // errWriter is a small helper that accumulates the first write error and
@@ -283,36 +270,16 @@ func RenderBoard(w io.Writer, entries []BoardEntry) error {
 	return nil
 }
 
-// RenderReady renders the ready queue to the given writer.
-// If asJSON is true, renders as JSON; otherwise renders as human-readable text.
-func RenderReady(w io.Writer, entries []ready.ReadyEntry, asJSON bool) error {
-	if asJSON {
-		return renderReadyJSON(w, entries)
-	}
+// RenderReady renders the ready queue as human-readable text.
+// Structured ready output goes through WriteReadyEnvelope, not this helper.
+func RenderReady(w io.Writer, entries []ready.ReadyEntry) error {
 	return renderReadyHuman(w, entries)
 }
 
-func renderReadyJSON(w io.Writer, entries []ready.ReadyEntry) error {
-	data, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal ready queue JSON: %w", err)
-	}
-	_, err = fmt.Fprintln(w, string(data))
-	return err
-}
-
-// RenderExpiredClaims renders the distinct expired-claims section for `arm ready`.
-// If asJSON is true, renders a JSON array (even if empty); otherwise renders
-// human-readable text, and is a no-op when claims is empty (nothing to surface).
-func RenderExpiredClaims(w io.Writer, claims []ready.ExpiredClaimEntry, asJSON bool) error {
-	if asJSON {
-		data, err := json.MarshalIndent(claims, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshal expired claims JSON: %w", err)
-		}
-		_, err = fmt.Fprintln(w, string(data))
-		return err
-	}
+// RenderExpiredClaims renders the distinct expired-claims section for `arm ready`
+// as human-readable text, and is a no-op when claims is empty (nothing to surface).
+// Structured expired claims go through WriteReadyEnvelope as an adjunct.
+func RenderExpiredClaims(w io.Writer, claims []ready.ExpiredClaimEntry) error {
 	if len(claims) == 0 {
 		return nil
 	}

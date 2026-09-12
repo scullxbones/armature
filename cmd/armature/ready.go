@@ -119,10 +119,10 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	}
 	if len(entries) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
-	} else if err := output.RenderReady(cmd.OutOrStdout(), entries, false); err != nil {
+	} else if err := output.RenderReady(cmd.OutOrStdout(), entries); err != nil {
 		return err
 	}
-	return output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims, false)
+	return output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims)
 }
 
 func newReadyCmd() *cobra.Command {
@@ -254,13 +254,13 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			default:
 				if len(entries) == 0 {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
-				} else if err := output.RenderReady(cmd.OutOrStdout(), entries, false); err != nil {
+				} else if err := output.RenderReady(cmd.OutOrStdout(), entries); err != nil {
 					return err
 				}
 				// Distinct expired-claims section, always shown (not just when the
 				// ready queue is empty) so expired claims are never silently omitted
 				// nor silently folded into the ready list.
-				if err := output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims, false); err != nil {
+				if err := output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims); err != nil {
 					return err
 				}
 				return nil
