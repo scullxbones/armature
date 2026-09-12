@@ -596,23 +596,25 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 }
 
 // TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1 fails if pre-contract structured
-// writers or the jsonErrorPayload path reappear. Production .go files only;
-// this test's own identifiers are not scanned.
+// writers or the jsonErrorPayload path reappear. Named retired decls are
+// scanned repo-wide. asJSON is only a dual-path parameter on functions in
+// internal/output, not a reserved identifier elsewhere. Production .go files
+// only; this test's own identifiers are not scanned.
 func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	banned := map[string]string{
+	bannedDecls := map[string]string{
 		"jsonErrorPayload": "pre-contract stderr JSON error payload",
 		"writeJSONError":   "pre-contract JSON error writer",
 		"renderIssueJSON":  "pre-contract issue JSON writer",
 		"renderReadyJSON":  "pre-contract ready JSON writer",
-		"asJSON":           "dual-path structured/human helper flag",
 	}
 
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	pkgDir := filepath.Dir(thisFile)
 	repoRoot := filepath.Clean(filepath.Join(pkgDir, "..", ".."))
+	outputPkg := filepath.Join(repoRoot, "internal", "output") + string(os.PathSeparator)
 
 	fset := token.NewFileSet()
 	var violations []string
@@ -639,14 +641,23 @@ func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 		if relErr != nil {
 			rel = path
 		}
+		inOutputPkg := strings.HasPrefix(path, outputPkg)
 		ast.Inspect(file, func(n ast.Node) bool {
 			ident, ok := n.(*ast.Ident)
-			if !ok {
-				return true
+			if ok {
+				if reason, hit := bannedDecls[ident.Name]; hit {
+					pos := fset.Position(ident.Pos())
+					violations = append(violations, fmt.Sprintf("%s:%d: %s (%s)", rel, pos.Line, ident.Name, reason))
+				}
 			}
-			if reason, hit := banned[ident.Name]; hit {
-				pos := fset.Position(ident.Pos())
-				violations = append(violations, fmt.Sprintf("%s:%d: %s (%s)", rel, pos.Line, ident.Name, reason))
+			if inOutputPkg {
+				fn, ok := n.(*ast.FuncDecl)
+				if ok {
+					for _, name := range dualPathParamNames(fn.Type) {
+						pos := fset.Position(name.Pos())
+						violations = append(violations, fmt.Sprintf("%s:%d: %s dual-path parameter on %s", rel, pos.Line, name.Name, fn.Name.Name))
+					}
+				}
 			}
 			return true
 		})
@@ -657,4 +668,19 @@ func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 		t.Fatalf("legacy structured output path remains; emit via NewEnvelope/WriteEnvelope only:\n%s",
 			strings.Join(violations, "\n"))
 	}
+}
+
+func dualPathParamNames(ft *ast.FuncType) []*ast.Ident {
+	if ft == nil || ft.Params == nil {
+		return nil
+	}
+	var names []*ast.Ident
+	for _, field := range ft.Params.List {
+		for _, name := range field.Names {
+			if name.Name == "asJSON" {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
 }
