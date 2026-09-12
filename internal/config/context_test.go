@@ -178,3 +178,12 @@ func TestResolveContext_GitWorktreeResolvedToParent_REQ_SB_T5(t *testing.T) {
 	assert.Equal(t, opsIssuesDir, ctx.IssuesDir)
 	assert.Equal(t, opsWorktree, ctx.WorktreePath)
 }
+
+func TestResolveLayout_NonexistentRepoIsNotMissingLayout_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
+	missing := filepath.Join(t.TempDir(), "no-such-repo")
+	_, err := ResolveLayout(missing)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "armature.ops-worktree-path must be set",
+		"inaccessible GitConfig failures must not be classified as a missing layout")
+}

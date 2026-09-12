@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -205,6 +206,9 @@ func (defaultRepoProbe) Probe(repoPath string) (RepoProbeResult, error) {
 
 	worktreePath, err := adapters.GitConfig(actualRepoPath, "armature.ops-worktree-path")
 	if err != nil {
+		if info, statErr := os.Stat(actualRepoPath); statErr != nil || info == nil || !info.IsDir() {
+			return RepoProbeResult{}, err
+		}
 		return RepoProbeResult{}, fmt.Errorf("armature.ops-worktree-path must be set: %w", err)
 	}
 

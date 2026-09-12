@@ -633,3 +633,17 @@ func TestGitCommitterNilWhenNoWorktree(t *testing.T) {
 	assert.Nil(t, gitCommitter(nil))
 	assert.Nil(t, gitCommitter(&config.Context{}))
 }
+
+func TestIsAbsentArmatureLayout_NonexistentRepo_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
+	missing := filepath.Join(t.TempDir(), "no-such-repo")
+	wrapped := fmt.Errorf("armature.ops-worktree-path must be set: git config armature.ops-worktree-path: cannot change to '%s': No such file or directory", missing)
+	assert.False(t, isAbsentArmatureLayout(missing, wrapped),
+		"wrapped GitConfig failures for a missing --repo must stay errors")
+
+	outside := t.TempDir()
+	_, err := config.ResolveLayout(outside)
+	require.Error(t, err)
+	assert.True(t, isAbsentArmatureLayout(outside, err),
+		"a reachable directory with no Armature layout is the empty home")
+}
