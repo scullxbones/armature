@@ -163,3 +163,4 @@
 ["transition","AOC-S3-T4",1789183563,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Census Command Output Modes table (63 rows) aligned with T3 EnumerateModes; census-drift-check bidirectional on path|selector|channel|citation; REQ_AOC_S3_T4 self-tests. PR 183 head 11e0304e stacked on 181. --force/--skip-delivery-gate: CA tip synced; PR open.","skipped_delivery_gate":true}]
 ["transition","AOC-S3-T4",1789183571,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
 ["transition","AOC-S3-T2",1789183602,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Dynamic AOC envelope pricing in context-report via live Write*Envelope; goldens + shrink-only caps under promised targets (not seeded). PR 182 head a0711444 stacked on T1. Named REQ_AOC_S3_T2. --force/--skip-delivery-gate: CA tip synced; PR open.","skipped_delivery_gate":true}]
+["transition","AOC-S3-T2",1789183610,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
