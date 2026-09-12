@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,6 +143,63 @@ func induceAgentFacingFailure(t *testing.T, path []string, repo string) (string,
 		}
 	}
 	return lastOut, lastCode
+}
+
+func TestOperationalInvalidArgumentFilenameIsNotUsage_REQ_LNGHZN_S6_T5(t *testing.T) {
+	t.Parallel()
+	importCmd := mustFindCommand(t, newRootCmd(), "import")
+	pathErr := &os.PathError{Op: "open", Path: "invalid argument.csv", Err: os.ErrNotExist}
+	mapped := mapAgentFacingError(importCmd, fmt.Errorf("read file: %w", pathErr))
+	var cf *armerrors.CommandFailure
+	require.ErrorAs(t, mapped, &cf)
+	assert.Equal(t, codeImport1, cf.Code, "filename text must not flip an operational import failure to USAGE")
+	assert.NotEqual(t, armerrors.CodeUSAGE, cf.Code)
+	assert.Equal(t, 1, cf.ExitCode)
+	assert.NotContains(t, strings.Join(cf.NextActions, "\n"), "arm --help")
+	assert.False(t, isUsageError(pathErr))
+	assert.False(t, isUsageError(fmt.Errorf("read file: %w", pathErr)))
+}
+
+func TestImportMissingFileNamedInvalidArgumentKeepsImport1_REQ_LNGHZN_S6_T5(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	missing := filepath.Join(repo, "invalid argument.csv")
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"import", missing, "--repo", repo, "--format", "agent", "--non-interactive")
+	assert.Equal(t, 1, code)
+	cf := assertAgentFailureEnvelope(t, stdout.String())
+	assert.Equal(t, codeImport1, cf.Code)
+	assert.Contains(t, cf.Cause, "invalid argument.csv")
+	assert.NotEqual(t, 2, cf.ExitCode)
+}
+
+func TestCobraQuotedInvalidArgumentRemainsUsage_REQ_LNGHZN_S6_T5(t *testing.T) {
+	t.Parallel()
+	quoted := fmt.Errorf(`invalid argument "powershell" for "arm completion"`)
+	assert.True(t, isUsageError(quoted))
+	mapped := mapAgentFacingError(mustFindCommand(t, newRootCmd(), "completion"), quoted)
+	var cf *armerrors.CommandFailure
+	require.ErrorAs(t, mapped, &cf)
+	assert.Equal(t, armerrors.CodeUSAGE, cf.Code)
+	assert.Equal(t, 2, cf.ExitCode)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"import", "a.csv", "b.csv", "--format", "agent", "--non-interactive")
+	assert.Equal(t, 2, code)
+	extra := assertAgentFailureEnvelope(t, stdout.String())
+	assert.Equal(t, armerrors.CodeUSAGE, extra.Code)
+}
+
+func mustFindCommand(t *testing.T, root *cobra.Command, name string) *cobra.Command {
+	t.Helper()
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == name {
+			return cmd
+		}
+	}
+	t.Fatalf("command %q not registered", name)
+	return nil
 }
 
 func protocolReportOnStdout(stdout string) bool {
