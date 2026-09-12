@@ -1,6 +1,6 @@
 ---
 date: 2026-09-12
-agent: cursor
+agent: bfc7fab2-5292-4d3d-9773-9f49b203f5c6~w-AOC-S4-T2
 area: workflow
 task: AOC-S4-T2
 tags: [transition, idempotency, worker-thrash, dogfood]
@@ -35,7 +35,7 @@ success. The ops log did what I2 requires: it recorded every write. It
 does not need a rewrite, a counter on an existing line, or a squash of
 history.
 
-## Why it matters
+## Impact
 
 Once AOC-S4-T1 / ADR 0018 keys `arm transition` idempotency on payload,
 those 14 true duplicates become no-ops: exit 0, append nothing, say so
@@ -53,6 +53,7 @@ harness fix.
 
 ## Evidence
 
+- Writer identity from `arm worker-init --check`: `bfc7fab2-5292-4d3d-9773-9f49b203f5c6`, slot `w-AOC-S4-T2`.
 - `ORCH-RUNTIME-V1-T3`: six byte-identical empty-outcome `done`
   transitions in 15 minutes (AOC-S4-T1 notes; ADR 0018 Context).
 - Corpus: 14 true duplicates / 1,367 transition ops (AOC-S4-T2
@@ -65,7 +66,7 @@ harness fix.
 - Contract item 9: `docs/design/agent-output-contract.md` (idempotency
   keyed on payload; worker thrash is a harness defect).
 
-## Suggested follow-up
+## Suggested Follow-Up
 
 Keep this finding open after payload-keyed no-op lands. Do not treat a
 quiet ops log as proof the loop is gone.
@@ -76,3 +77,4 @@ already the right answer for a retry; the loop should not retry.
 
 Do not add a duplicate counter to ops. That would rewrite history and
 race under I3.
+- Project convention: `docs/agents/dogfood-findings.md`.
