@@ -2211,10 +2211,10 @@ func TestIntroductionRefusesReopenBatchWithGenuinelyNewFinding_REQ_LNGHZN_S10_T1
 // check — not "arm doctor emits the new check."
 func s7T2Fixture() *materialize.Issue {
 	return &materialize.Issue{
-		ID:     "LNGHZN-S7-T2",
-		Type:   "task",
-		Status: ops.StatusOpen,
-		Title:  "strict config decode + doctor config-health",
+		ID:               "LNGHZN-S7-T2",
+		Type:             "task",
+		Status:           ops.StatusOpen,
+		Title:            "strict config decode + doctor config-health",
 		DefinitionOfDone: "arm doctor gains check D9 so the config file can never silently lie again",
 		Scope: []string{
 			"internal/config/strict.go",

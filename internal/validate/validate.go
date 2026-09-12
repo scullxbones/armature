@@ -547,7 +547,7 @@ func checkE10ScopeGlobs(issues map[string]*materialize.Issue) []Finding {
 }
 
 const (
-	ruleE14                 = "E14"
+	ruleE14                  = "E14"
 	e14KeyUnitOnlyAcceptance = "unit_only_acceptance"
 )
 
