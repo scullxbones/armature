@@ -14,6 +14,8 @@ import (
 )
 
 func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) {
+	t.Parallel()
+
 	want, err := doctor.RenderCheckIDsDoc()
 	require.NoError(t, err)
 
@@ -27,7 +29,7 @@ func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) 
 	got, err := os.ReadFile(filepath.Join(root, doctor.CheckIDsDocRelPath))
 	require.NoError(t, err, "committed registry doc must exist at %s; regenerate with go generate ./internal/doctor", doctor.CheckIDsDocRelPath)
 	require.Equal(t, want, string(got),
-		"docs/design/doctor-check-ids.md drifted; regenerate with go generate ./internal/doctor (or UPDATE_CHECK_IDS_DOC=1 go test ./internal/doctor -run TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3)")
+		"docs/design/doctor-check-ids.md drifted; regenerate with go generate ./internal/doctor")
 
 	liveFromDoc := parseLiveCheckIDs(t, string(got))
 	assert.Equal(t, doctor.LiveCheckIDs(), liveFromDoc,
