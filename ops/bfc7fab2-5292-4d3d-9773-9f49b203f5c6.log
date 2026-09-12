@@ -236,3 +236,4 @@
 ["transition","TOPTIER-S13-T2",1789233122,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR #195 squash-merged: disagreement aggregator","branch":"feat/TOPTIER-S13-T2-disagreement-aggregator","pr":"195","skipped_delivery_gate":true}]
 ["transition","TOPTIER-S13-T2",1789233125,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"195"}]
 ["transition","TOPTIER-S18-T3",1789233592,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR #193 squash-merged: doctor-check-ids registry + drift test","branch":"feat/TOPTIER-S18-T3-doctor-check-ids","pr":"193","skipped_delivery_gate":true}]
+["transition","TOPTIER-S18-T3",1789233595,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"193"}]
