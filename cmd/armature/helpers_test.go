@@ -21,7 +21,7 @@ import (
 
 func TestCommandFailureAgentEnvelope_REQ_LNGHZN_S6_T1(t *testing.T) {
 	t.Parallel()
-	cf := armerrors.New("GENERAL-1", "disk full", []string{"arm doctor"}, 1)
+	cf := armerrors.New("CLAIM-1", "disk full", []string{"arm doctor"}, 1)
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "agent", cf)
 
@@ -39,7 +39,7 @@ func TestCommandFailureAgentEnvelope_REQ_LNGHZN_S6_T1(t *testing.T) {
 
 	errObj, ok := envelope["error"].(map[string]any)
 	require.True(t, ok, "stdout object must be {error:{...}}")
-	assert.Equal(t, "GENERAL-1", errObj["code"])
+	assert.Equal(t, "CLAIM-1", errObj["code"])
 	assert.Equal(t, "disk full", errObj["cause"])
 	assert.Equal(t, float64(1), errObj["exit_code"])
 	actions, ok := errObj["next_actions"].([]any)
@@ -65,16 +65,16 @@ func TestCommandFailureAgentEnvelope_REQ_LNGHZN_S6_T1(t *testing.T) {
 
 func TestCommandFailureHumanRendering_REQ_LNGHZN_S6_T1(t *testing.T) {
 	t.Parallel()
-	cf := armerrors.New("GENERAL-1", "disk full", []string{"arm doctor", "arm --help"}, 1)
+	cf := armerrors.New("USAGE", "disk full", []string{"arm doctor", "arm --help"}, 2)
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "human", cf)
 	got := buf.String()
-	assert.Equal(t, "Error [GENERAL-1]: disk full\nTry: arm doctor\nTry: arm --help\n", got)
+	assert.Equal(t, "Error [USAGE]: disk full\nTry: arm doctor\nTry: arm --help\n", got)
 
-	empty := armerrors.New("GENERAL-1", "boom", nil, 1)
+	empty := armerrors.New("IO", "boom", nil, 1)
 	emptyBuf := new(bytes.Buffer)
 	renderCommandFailure(emptyBuf, "human", empty)
-	assert.Equal(t, "Error [GENERAL-1]: boom\n", emptyBuf.String())
+	assert.Equal(t, "Error [IO]: boom\n", emptyBuf.String())
 	assert.NotContains(t, emptyBuf.String(), "Try:")
 }
 
@@ -107,7 +107,7 @@ func TestHandleRootErrorWritesAgentEnvelopeToStdout_REQ_LNGHZN_S6_T1(t *testing.
 	code := handleRootError(stdout, stderr, "agent", true, fmt.Errorf("issue missing"))
 	assert.Equal(t, 1, code)
 	assert.NotContains(t, stdout.String(), `"count"`)
-	assert.Contains(t, stdout.String(), `"code":"GENERAL-1"`)
+	assert.Contains(t, stdout.String(), `"code":"IO"`)
 	assert.Contains(t, stderr.String(), "DEBUG:")
 	assert.NotContains(t, stderr.String(), `"error"`)
 }

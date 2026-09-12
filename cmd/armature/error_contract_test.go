@@ -100,6 +100,9 @@ func TestFailureCodePrefixMatchesModuleOrUse_REQ_LNGHZN_S6_T3(t *testing.T) {
 			assert.Containsf(t, allowed, prefix,
 				"ledger code %q prefix %q is not a reserved prefix, designated deep module, or top-level Use", row.Code, prefix)
 		}
+		if row.Retired {
+			continue
+		}
 		if _, reserved := reservedFailureCodePrefixes[prefix]; reserved {
 			continue
 		}
@@ -130,15 +133,15 @@ func TestAllowedPrefixesExcludeUndesignatedInternalPackages_REQ_LNGHZN_S6_T3(t *
 	assert.Contains(t, allowed, "USAGE")
 	assert.Contains(t, allowed, "IO")
 	assert.NotContains(t, allowed, "GENERAL",
-		"GENERAL is not a blanket-allowed prefix; only the exact code GENERAL-1 is reserved")
+		"GENERAL is not a blanket-allowed prefix; GENERAL-1 is retired and was never a prefix family")
 }
 
 func TestGeneralExemptionLimitedToGeneral1_REQ_LNGHZN_S6_T3(t *testing.T) {
 	t.Parallel()
-	_, exempt := reservedFailureCodes["GENERAL-1"]
-	assert.True(t, exempt, "GENERAL-1 is the specific temporary expand-step wrapper and must be exempt")
+	_, live := uniqueRegisteredCodes(t)["GENERAL-1"]
+	assert.False(t, live, "GENERAL-1 must not remain in the live registry after wrap deletion")
 	_, exemptGeneral2 := reservedFailureCodes["GENERAL-2"]
-	assert.False(t, exemptGeneral2, "GENERAL-2 must not ride along on the GENERAL-1 exemption")
+	assert.False(t, exemptGeneral2, "GENERAL-2 must not ride along on a GENERAL exemption")
 	_, exemptGeneral := reservedFailureCodePrefixes["GENERAL"]
 	assert.False(t, exemptGeneral, "GENERAL must not be reserved as a whole prefix family")
 }
@@ -439,13 +442,10 @@ var reservedFailureCodePrefixes = map[string]struct{}{
 	"IO":    {},
 }
 
-// reservedFailureCodes exempts exact codes from the allowed-prefix set,
-// rather than reserving their whole prefix family. GENERAL-1 is the
-// expand-step wrap for unmapped port errors (ADR 0020); a future
-// GENERAL-2 or bare GENERAL must not ride along on the same exemption.
-var reservedFailureCodes = map[string]struct{}{
-	"GENERAL-1": {},
-}
+// reservedFailureCodes exempts exact live codes from the allowed-prefix set,
+// rather than reserving their whole prefix family. GENERAL-1 is retired and
+// is no longer live, so it is not listed here.
+var reservedFailureCodes = map[string]struct{}{}
 
 // ledgerRowNeedsCurrentPrefixCheck reports whether a ledger row's prefix
 // must be present in the *current* allowed-prefix set. Retired rows are
@@ -548,10 +548,9 @@ func assertAgentFailureEnvelope(t *testing.T, stdout string) *armerrors.CommandF
 }
 
 // assertNextActionsPolicy enforces the docs/error-contract.md Next Actions
-// rule: empty next_actions is allowed only on IO and GENERAL-1, and
-// "--help" is an allowed next action only on USAGE and on GENERAL-1 (ADR
-// 0020: "--help is for USAGE / GENERAL" — GENERAL-1 is the sole reserved
-// GENERAL code; a future GENERAL-2 gets no exemption).
+// rule: empty next_actions is allowed only on IO, and "--help" is an allowed
+// next action only on USAGE (ADR 0020: "--help is for USAGE / GENERAL" —
+// GENERAL-1 is retired).
 func assertNextActionsPolicy(t *testing.T, cf *armerrors.CommandFailure) {
 	t.Helper()
 	for _, issue := range nextActionsPolicyViolations(cf.Code, cf.NextActions) {
@@ -567,17 +566,14 @@ func assertNextActionsPolicy(t *testing.T, cf *armerrors.CommandFailure) {
 func nextActionsPolicyViolations(code string, nextActions []string) []string {
 	var issues []string
 	prefix := failureCodePrefix(code)
-	if len(nextActions) == 0 {
-		_, exempt := reservedFailureCodes[code]
-		if prefix != "IO" && !exempt {
-			issues = append(issues, fmt.Sprintf(
-				"empty next_actions is only allowed on IO or GENERAL-1, got code %q", code))
-		}
+	if len(nextActions) == 0 && prefix != "IO" {
+		issues = append(issues, fmt.Sprintf(
+			"empty next_actions is only allowed on IO, got code %q", code))
 	}
 	for _, action := range nextActions {
-		if strings.Contains(action, "--help") && prefix != "USAGE" && code != "GENERAL-1" {
+		if strings.Contains(action, "--help") && prefix != "USAGE" {
 			issues = append(issues, fmt.Sprintf(
-				"--help next action is only allowed on USAGE or GENERAL-1, got code %q", code))
+				"--help next action is only allowed on USAGE, got code %q", action))
 		}
 	}
 	return issues
