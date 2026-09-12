@@ -7,7 +7,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -597,9 +597,10 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 
 // TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1 fails if pre-contract structured
 // writers or the jsonErrorPayload path reappear. Named retired decls are
-// scanned repo-wide. asJSON is only a dual-path parameter on functions in
-// internal/output, not a reserved identifier elsewhere. Production .go files
-// only; this test's own identifiers are not scanned.
+// scanned in tracked production Go files only, so linked worktrees such as
+// .worktrees/<issue> cannot poison the result. asJSON is only a dual-path
+// parameter on functions in internal/output, not a reserved identifier
+// elsewhere. This test's own identifiers are not scanned.
 func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 	t.Parallel()
 
@@ -614,34 +615,15 @@ func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 	require.True(t, ok)
 	pkgDir := filepath.Dir(thisFile)
 	repoRoot := filepath.Clean(filepath.Join(pkgDir, "..", ".."))
-	outputPkg := filepath.Join(repoRoot, "internal", "output") + string(os.PathSeparator)
+	outputPrefix := filepath.ToSlash(filepath.Join("internal", "output")) + "/"
 
 	fset := token.NewFileSet()
 	var violations []string
-	err := filepath.WalkDir(repoRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			name := d.Name()
-			switch name {
-			case ".git", "vendor", "testdata", "bin", "dist", "node_modules":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
+	for _, rel := range trackedProductionGoFiles(t, repoRoot) {
+		path := filepath.Join(repoRoot, rel)
 		file, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			return parseErr
-		}
-		rel, relErr := filepath.Rel(repoRoot, path)
-		if relErr != nil {
-			rel = path
-		}
-		inOutputPkg := strings.HasPrefix(path, outputPkg)
+		require.NoError(t, parseErr, "parse %s", rel)
+		inOutputPkg := strings.HasPrefix(filepath.ToSlash(rel), outputPrefix)
 		ast.Inspect(file, func(n ast.Node) bool {
 			ident, ok := n.(*ast.Ident)
 			if ok {
@@ -661,13 +643,42 @@ func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 			}
 			return true
 		})
-		return nil
-	})
-	require.NoError(t, err)
+	}
 	if len(violations) > 0 {
 		t.Fatalf("legacy structured output path remains; emit via NewEnvelope/WriteEnvelope only:\n%s",
 			strings.Join(violations, "\n"))
 	}
+}
+
+func trackedProductionGoFiles(t *testing.T, repoRoot string) []string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", repoRoot, "ls-files", "-z", "--", "*.go").Output()
+	require.NoError(t, err)
+	skipDir := map[string]bool{
+		".worktrees": true,
+		".armature":  true,
+		".claude":    true,
+		"vendor":     true,
+		"testdata":   true,
+	}
+	var files []string
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel == "" || strings.HasSuffix(rel, "_test.go") {
+			continue
+		}
+		skip := false
+		for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+			if skipDir[part] {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
+		files = append(files, rel)
+	}
+	return files
 }
 
 func dualPathParamNames(ft *ast.FuncType) []*ast.Ident {
