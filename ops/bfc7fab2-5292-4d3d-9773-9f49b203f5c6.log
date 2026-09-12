@@ -203,3 +203,4 @@
 ["unlink","TOPTIER-S18-T2",1789226769,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S14","rel":"blocked_by"}]
 ["amend","TOPTIER-S18-T2",1789226769,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"scope":["internal/validate/.s18-t2-placeholder"],"definition_of_done":"arm validate Graph Finding E14 when task DoD claims arm doctor/gains check Dn whose wiring file is absent from Scope; unit-only Acceptance cannot stand alone beside CLI DoD. Tests cover S7-T2 fixture. No S14 dependency."}]
 ["unlink","TOPTIER-S18-T2",1789226770,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S14-T1","rel":"blocked_by"}]
+["link","TOPTIER-S14-T1",1789226770,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S18-T2","rel":"blocked_by"}]
