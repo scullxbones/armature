@@ -1231,7 +1231,7 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 		assert.Equal(t, Green, result.Attestation.EffectiveRating)
 		assert.False(t, result.Attestation.IsDisagreement)
 		assert.Empty(t, result.Attestation.ConflictsWithBundleID)
-		assert.Equal(t, Rating(0), result.Attestation.ConflictsWithRating)
+		assert.Nil(t, result.Attestation.ConflictsWithRating)
 	})
 
 	t.Run("agreeing prior", func(t *testing.T) {
@@ -1268,7 +1268,8 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 		assert.Equal(t, Red, result.Attestation.EffectiveRating)
 		assert.True(t, result.Attestation.IsDisagreement)
 		assert.Equal(t, "bundle-green", result.Attestation.ConflictsWithBundleID)
-		assert.Equal(t, Green, result.Attestation.ConflictsWithRating)
+		require.NotNil(t, result.Attestation.ConflictsWithRating)
+		assert.Equal(t, Green, *result.Attestation.ConflictsWithRating)
 		assert.Equal(t, Green, prior.Rating)
 		assert.False(t, prior.IsDisagreement)
 		assert.Equal(t, Rating(0), prior.EffectiveRating)
@@ -1293,7 +1294,8 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 		assert.Equal(t, Red, result.Attestation.EffectiveRating)
 		assert.True(t, result.Attestation.IsDisagreement)
 		assert.Equal(t, "bundle-red", result.Attestation.ConflictsWithBundleID)
-		assert.Equal(t, Red, result.Attestation.ConflictsWithRating)
+		require.NotNil(t, result.Attestation.ConflictsWithRating)
+		assert.Equal(t, Red, *result.Attestation.ConflictsWithRating)
 		assert.Equal(t, Red, priors[0].Rating)
 		assert.Equal(t, Yellow, priors[1].Rating)
 		assert.False(t, priors[0].IsDisagreement)
@@ -1314,7 +1316,32 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 		assert.True(t, result.Attestation.IsDisagreement)
 		assert.Equal(t, Yellow, result.Attestation.EffectiveRating)
 		assert.Equal(t, "bundle-yellow-new", result.Attestation.ConflictsWithBundleID)
-		assert.Equal(t, Yellow, result.Attestation.ConflictsWithRating)
+		require.NotNil(t, result.Attestation.ConflictsWithRating)
+		assert.Equal(t, Yellow, *result.Attestation.ConflictsWithRating)
+	})
+
+	t.Run("incoming red cites disagreeing green not same-rating red", func(t *testing.T) {
+		t.Parallel()
+		greenPrior := recordDisagreementAttestation(t, "bundle-green", "older green", Satisfied)
+		redPrior := recordDisagreementAttestation(t, "bundle-red-prior", "newer same-rating red", NotSatisfied)
+		input := RecordInput{
+			Assessment: disagreementAssessment("bundle-red-new", "incoming red", NotSatisfied),
+			IssueID:    "task-01",
+		}
+		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{greenPrior, redPrior})
+		require.NoError(t, err)
+		require.NotNil(t, result.Attestation)
+		assert.False(t, result.IsDuplicate)
+		assert.Equal(t, Red, result.Attestation.Rating)
+		assert.Equal(t, Red, result.Attestation.EffectiveRating)
+		assert.True(t, result.Attestation.IsDisagreement)
+		assert.Equal(t, "bundle-green", result.Attestation.ConflictsWithBundleID)
+		require.NotNil(t, result.Attestation.ConflictsWithRating)
+		assert.Equal(t, Green, *result.Attestation.ConflictsWithRating)
+		assert.Equal(t, Green, greenPrior.Rating)
+		assert.Equal(t, Red, redPrior.Rating)
+		assert.False(t, greenPrior.IsDisagreement)
+		assert.False(t, redPrior.IsDisagreement)
 	})
 
 	t.Run("exact duplicate prior excluded", func(t *testing.T) {

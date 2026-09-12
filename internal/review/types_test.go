@@ -897,7 +897,7 @@ func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t 
 		EffectiveRating:       review.Red,
 		IsDisagreement:        true,
 		ConflictsWithBundleID: "sha256:bundle-prior",
-		ConflictsWithRating:   review.Red,
+		ConflictsWithRating:   ratingPtr(review.Red),
 		ResultFingerprint:     "fp_result",
 		SatisfiedCount:        1,
 	}
@@ -915,7 +915,23 @@ func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t 
 	assert.Equal(t, review.Red, decoded.EffectiveRating)
 	assert.True(t, decoded.IsDisagreement)
 	assert.Equal(t, "sha256:bundle-prior", decoded.ConflictsWithBundleID)
-	assert.Equal(t, review.Red, decoded.ConflictsWithRating)
+	require.NotNil(t, decoded.ConflictsWithRating)
+	assert.Equal(t, review.Red, *decoded.ConflictsWithRating)
+
+	greenConflict := attestation
+	greenConflict.ConflictsWithRating = ratingPtr(review.Green)
+	greenData, err := json.Marshal(greenConflict)
+	require.NoError(t, err)
+	assert.Contains(t, string(greenData), `"is_disagreement":true`)
+	assert.Contains(t, string(greenData), `"conflicts_with_bundle_id":"sha256:bundle-prior"`)
+	assert.Contains(t, string(greenData), `"conflicts_with_rating":"green"`,
+		"Green conflict rating must serialize; omitempty must not drop Rating zero")
+
+	var decodedGreen review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(greenData, &decodedGreen))
+	assert.True(t, decodedGreen.IsDisagreement)
+	require.NotNil(t, decodedGreen.ConflictsWithRating)
+	assert.Equal(t, review.Green, *decodedGreen.ConflictsWithRating)
 
 	legacyJSON := []byte(`{` +
 		`"schema_version":1,` +
@@ -937,6 +953,11 @@ func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t 
 	assert.Equal(t, review.Green, legacy.EffectiveRating)
 	assert.False(t, legacy.IsDisagreement)
 	assert.Empty(t, legacy.ConflictsWithBundleID)
+	assert.Nil(t, legacy.ConflictsWithRating)
+}
+
+func ratingPtr(r review.Rating) *review.Rating {
+	return &r
 }
 
 func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T) {

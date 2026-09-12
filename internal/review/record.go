@@ -282,6 +282,9 @@ func RecordWithDuplicateCheck(input RecordInput, existingAttestations []Assessme
 // ConflictsWith* on a newly accepted Assessment Attestation. Qualifying priors
 // share DeliveryFingerprint and are not ResultFingerprint duplicates. Only
 // this attestation is written; priors are read-only (I2/T2).
+// ConflictsWith* cites the highest-severity (then most recently appended)
+// qualifying prior whose Rating differs from att.Rating. Same-rating priors
+// still contribute to advisory EffectiveRating.
 func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentAttestation) {
 	if att == nil {
 		return
@@ -300,9 +303,10 @@ func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentA
 			continue
 		}
 		att.EffectiveRating = MaxRating(att.EffectiveRating, prior.Rating)
-		if prior.Rating != att.Rating {
-			att.IsDisagreement = true
+		if prior.Rating == att.Rating {
+			continue
 		}
+		att.IsDisagreement = true
 		if !haveCite || ratingSeverity(prior.Rating) >= ratingSeverity(citedRating) {
 			haveCite = true
 			citedBundle = prior.BundleID
@@ -312,6 +316,10 @@ func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentA
 
 	if att.IsDisagreement && haveCite {
 		att.ConflictsWithBundleID = citedBundle
-		att.ConflictsWithRating = citedRating
+		att.ConflictsWithRating = ratingPointer(citedRating)
 	}
+}
+
+func ratingPointer(r Rating) *Rating {
+	return &r
 }

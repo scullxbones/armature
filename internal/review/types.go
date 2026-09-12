@@ -463,10 +463,12 @@ type AssessmentAttestation struct {
 	// attestations and agreeing records compact.
 	IsDisagreement bool `json:"is_disagreement,omitempty"`
 	// ConflictsWithBundleID and ConflictsWithRating cite the highest-severity
-	// qualifying prior when IsDisagreement is true (equal severity → most
-	// recently appended). Unset when there is no disagreement.
-	ConflictsWithBundleID string `json:"conflicts_with_bundle_id,omitempty"`
-	ConflictsWithRating   Rating `json:"conflicts_with_rating,omitempty"`
+	// qualifying prior whose Rating differs from this attestation when
+	// IsDisagreement is true (equal severity → most recently appended).
+	// Unset when there is no disagreement. Pointer + omitempty so Green
+	// (Rating zero value) still serializes as "green" when a conflict is set.
+	ConflictsWithBundleID string  `json:"conflicts_with_bundle_id,omitempty"`
+	ConflictsWithRating   *Rating `json:"conflicts_with_rating,omitempty"`
 	// ResultFingerprint is the SHA-256 of the detailed result for idempotence detection.
 	ResultFingerprint string `json:"result_fingerprint"`
 	// SatisfiedCount is the number of satisfied criteria.
