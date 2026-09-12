@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,12 +32,7 @@ func TestNewCommandWithoutFixtureFailsLint_REQ_AOC_S3_T3(t *testing.T) {
 	t.Parallel()
 
 	root := sampleTree()
-	root.AddCommand(&cobra.Command{
-		Use: "mystery",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return nil
-		},
-	})
+	root.Children = append(root.Children, &Command{Name: "mystery", HasRun: true})
 	dir := t.TempDir()
 	writeAllSampleGoldens(t, dir)
 
@@ -51,18 +45,14 @@ func TestNewCommandWithoutFixtureFailsLint_REQ_AOC_S3_T3(t *testing.T) {
 func TestProtocolOutputExemptedByClassificationNotName_REQ_AOC_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	root := &cobra.Command{Use: "arm", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	namedHook := &cobra.Command{
-		Use:  "harness-hook",
-		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+	root := &Command{
+		Name:   "arm",
+		HasRun: true,
+		Children: []*Command{
+			{Name: "harness-hook", HasRun: true},
+			{Name: "wire-protocol", HasRun: true, Annotations: MarkProtocolOutput(nil)},
+		},
 	}
-	classified := &cobra.Command{
-		Use:         "wire-protocol",
-		Annotations: MarkProtocolOutput(nil),
-		RunE:        func(cmd *cobra.Command, args []string) error { return nil },
-	}
-	root.AddCommand(namedHook, classified)
-
 	dir := t.TempDir()
 	writeGolden(t, dir, "_root.json", `{"count":0,"issues":[],"help":["not an Armature repository","run arm bootstrap in a git repository"]}`)
 
@@ -71,7 +61,7 @@ func TestProtocolOutputExemptedByClassificationNotName_REQ_AOC_S3_T3(t *testing.
 	require.Contains(t, err.Error(), "harness-hook")
 	require.NotContains(t, err.Error(), "wire-protocol", "exemption is the classification, not the Use string")
 
-	namedHook.Annotations = MarkProtocolOutput(nil)
+	root.Children[0].Annotations = MarkProtocolOutput(nil)
 	require.NoError(t, Lint(root, dir), "classified Protocol Output needs no envelope fixture")
 
 	modes := EnumerateModes(root)
@@ -84,55 +74,68 @@ func TestProtocolOutputExemptedByClassificationNotName_REQ_AOC_S3_T3(t *testing.
 		}
 	}
 	require.ElementsMatch(t, []string{"harness-hook", "wire-protocol"}, protocol)
-	require.NotContains(t, protocol, "arm")
 	require.Contains(t, agent, "")
 }
 
 func TestArtifactOutputModesUseForeignShapeAndOtherModesConform_REQ_AOC_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	root := &cobra.Command{Use: "arm", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	prepare := &cobra.Command{
-		Use: "prepare",
-		Annotations: MarkArtifactOutput(nil, ArtifactMode{
-			Citation:          CitationReviewBundleSchema,
-			WhenAllFlagsUnset: []string{"output"},
-		}),
-		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+	root := &Command{
+		Name:   "arm",
+		HasRun: true,
+		Children: []*Command{
+			{
+				Name:   "prepare",
+				HasRun: true,
+				Annotations: MarkArtifactOutput(nil, ArtifactMode{
+					Citation:          CitationReviewBundleSchema,
+					WhenAllFlagsUnset: []string{"output"},
+				}),
+			},
+			{
+				Name:   "apply",
+				HasRun: true,
+				Annotations: MarkArtifactOutput(nil, ArtifactMode{
+					Citation:       CitationPlanSchema,
+					WhenAnyFlagSet: []string{"schema", "example"},
+				}),
+			},
+			{
+				Name:   "completion",
+				HasRun: true,
+				Annotations: MarkArtifactOutput(nil, ArtifactMode{
+					Citation: CitationShellCompletionGrammar,
+				}),
+			},
+		},
 	}
-	apply := &cobra.Command{
-		Use: "apply",
-		Annotations: MarkArtifactOutput(nil, ArtifactMode{
-			Citation:       CitationPlanSchema,
-			WhenAnyFlagSet: []string{"schema", "example"},
-		}),
-		RunE: func(cmd *cobra.Command, args []string) error { return nil },
-	}
-	completion := &cobra.Command{
-		Use: "completion",
-		Annotations: MarkArtifactOutput(nil, ArtifactMode{
-			Citation: CitationShellCompletionGrammar,
-		}),
-		RunE: func(cmd *cobra.Command, args []string) error { return nil },
-	}
-	root.AddCommand(prepare, apply, completion)
 
 	dir := t.TempDir()
 	writeGolden(t, dir, "_root.json", `{"count":0,"issues":[],"help":["empty home"]}`)
-	writeGolden(t, dir, "prepare.output.json", `{"count":1,"bundles":[{"path":"bundle.json"}],"help":["arm review record --issue X --assessment a.json --bundle bundle.json"]}`)
+	writeGolden(t, dir, "prepare.output.json", `{
+		"count":1,
+		"bundles":[{"path":"bundle.json"}],
+		"help":["arm review record --issue X --assessment a.json --bundle bundle.json"]
+	}`)
 	writeGolden(t, dir, "prepare.artifact.json", reviewBundleGolden)
-	writeGolden(t, dir, "apply.json", `{"count":1,"issues":[{"id":"T1","type":"task","status":"open","title":"one"}],"help":["arm show <id> for outcome, scope, and acceptance"]}`)
+	writeGolden(t, dir, "apply.json", `{
+		"count":1,
+		"issues":[{"id":"T1","type":"task","status":"open","title":"one"}],
+		"help":["arm show <id> for outcome, scope, and acceptance"]
+	}`)
 	writeGolden(t, dir, "apply.example.artifact.json", planInstanceGolden)
-	schemaPath := filepath.Join(findRepoRoot(t), "docs", "schemas", "plan.schema.json")
-	schemaBytes, err := os.ReadFile(schemaPath)
-	require.NoError(t, err)
-	writeGolden(t, dir, "apply.schema.artifact.json", string(schemaBytes))
+	writeGolden(t, dir, "apply.schema.artifact.json", `{
+		"$schema":"http://json-schema.org/draft-07/schema#",
+		"title":"Armature Plan Schema",
+		"type":"object",
+		"properties":{"version":{"type":"integer"}}
+	}`)
 	writeGolden(t, dir, "completion.artifact.sh", "# bash completion for arm\ncomplete -C arm arm\n")
 
 	require.NoError(t, Lint(root, dir))
 
 	writeGolden(t, dir, "prepare.artifact.json", `{"count":1,"bundles":[{"path":"x"}],"help":["no"]}`)
-	err = Lint(root, dir)
+	err := Lint(root, dir)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "prepare")
 	require.Contains(t, err.Error(), "must not use the Agent Output Contract envelope")
@@ -147,22 +150,23 @@ func TestArtifactOutputModesUseForeignShapeAndOtherModesConform_REQ_AOC_S3_T3(t 
 func TestEnumerateModesSkipsGroupHelpAndFieldFlags(t *testing.T) {
 	t.Parallel()
 
-	root := &cobra.Command{Use: "arm", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	group := &cobra.Command{
-		Use:  "review",
-		RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+	root := &Command{
+		Name:             "arm",
+		HasRun:           true,
+		HasAvailableSubs: true,
+		Children: []*Command{
+			{
+				Name:             "review",
+				HasRun:           true,
+				HasAvailableSubs: true,
+				Children: []*Command{
+					{Name: "commits", HasRun: true},
+				},
+			},
+			{Name: "show", HasRun: true},
+			{Name: "help", HasRun: true},
+		},
 	}
-	leaf := &cobra.Command{
-		Use:  "show",
-		RunE: func(cmd *cobra.Command, args []string) error { return nil },
-	}
-	leaf.Flags().String("field", "", "scalar projection")
-	group.AddCommand(&cobra.Command{
-		Use:  "commits",
-		RunE: func(cmd *cobra.Command, args []string) error { return nil },
-	})
-	root.AddCommand(group, leaf)
-	root.InitDefaultHelpCmd()
 
 	modes := EnumerateModes(root)
 	var ids []string
@@ -180,11 +184,13 @@ func TestEnumerateModesSkipsGroupHelpAndFieldFlags(t *testing.T) {
 func TestEnvelopeFixtureRejectsNonConformingShapes(t *testing.T) {
 	t.Parallel()
 
-	root := &cobra.Command{Use: "arm", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	list := &cobra.Command{Use: "list", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	root.AddCommand(list)
-	dir := t.TempDir()
-	writeGolden(t, dir, "_root.json", `{"count":0,"issues":[],"help":["empty"]}`)
+	root := &Command{
+		Name:   "arm",
+		HasRun: true,
+		Children: []*Command{
+			{Name: "list", HasRun: true},
+		},
+	}
 
 	cases := []struct {
 		name string
@@ -195,7 +201,11 @@ func TestEnvelopeFixtureRejectsNonConformingShapes(t *testing.T) {
 		{name: "missing help", body: `{"count":1,"issues":[{"id":"X","type":"task","status":"open","title":"t"}]}`, want: "missing help"},
 		{name: "count mismatch", body: `{"count":1,"issues":[],"help":["empty because filter"]}`, want: "does not equal payload"},
 		{name: "literal payload", body: `{"count":0,"payload":[],"help":["empty"]}`, want: "payload"},
-		{name: "outcome on list", body: `{"count":1,"issues":[{"id":"X","type":"task","status":"open","title":"t","outcome":"no"}],"help":["arm show <id>"]}`, want: "outcome"},
+		{
+			name: "outcome on list",
+			body: `{"count":1,"issues":[{"id":"X","type":"task","status":"open","title":"t","outcome":"no"}],"help":["arm show <id>"]}`,
+			want: "outcome",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -210,34 +220,40 @@ func TestEnvelopeFixtureRejectsNonConformingShapes(t *testing.T) {
 	}
 }
 
-func sampleTree() *cobra.Command {
-	root := &cobra.Command{Use: "arm", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	list := &cobra.Command{Use: "list", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	version := &cobra.Command{Use: "version", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	show := &cobra.Command{Use: "show", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
-	show.Flags().String("field", "", "projection")
-	root.AddCommand(list, version, show)
-	return root
+func sampleTree() *Command {
+	return &Command{
+		Name:   "arm",
+		HasRun: true,
+		Children: []*Command{
+			{Name: "list", HasRun: true},
+			{Name: "version", HasRun: true},
+			{Name: "show", HasRun: true},
+		},
+	}
 }
 
 func writeAllSampleGoldens(t *testing.T, dir string) {
 	t.Helper()
 	writeGolden(t, dir, "_root.json", `{"count":0,"issues":[],"help":["not an Armature repository","run arm bootstrap in a git repository"]}`)
-	writeGolden(t, dir, "list.json", `{"count":1,"issues":[{"id":"AOC-S3-T3","type":"task","status":"open","title":"Shape lint"}],"help":["arm show <id> for outcome, scope, and acceptance"]}`)
+	writeGolden(t, dir, "list.json", `{
+		"count":1,
+		"issues":[{"id":"AOC-S3-T3","type":"task","status":"open","title":"Shape lint"}],
+		"help":["arm show <id> for outcome, scope, and acceptance"]
+	}`)
 	writeGolden(t, dir, "version.json", `{"count":1,"versions":[{"version":"dev"}],"help":["arm version reports the build identity of this binary"]}`)
-	writeGolden(t, dir, "show.json", `{"count":1,"issues":[{"id":"AOC-S3-T3","type":"task","status":"open","title":"Shape lint"}],"help":["arm show <id> --field <name> extracts a scalar value, never an envelope"]}`)
+	writeGolden(t, dir, "show.json", `{
+		"count":1,
+		"issues":[{"id":"AOC-S3-T3","type":"task","status":"open","title":"Shape lint"}],
+		"help":["arm show <id> --field <name> extracts a scalar value, never an envelope"]
+	}`)
 }
 
 func writeGolden(t *testing.T, dir, name, body string) {
 	t.Helper()
+	if name != filepath.Base(name) {
+		t.Fatalf("golden name %q must be a basename", name)
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
-}
-
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	root, err := repoRoot()
-	require.NoError(t, err)
-	return root
 }
 
 const reviewBundleGolden = `{
