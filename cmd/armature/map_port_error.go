@@ -33,11 +33,11 @@ func markUsageBoundary(err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := errors.AsType[adapterExitError](err); ok {
-		return err
+	if ace, ok := errors.AsType[adapterExitError](err); ok {
+		return ace
 	}
-	if _, ok := errors.AsType[protocolExitError](err); ok {
-		return err
+	if pe, ok := errors.AsType[protocolExitError](err); ok {
+		return pe
 	}
 	var cf *armerrors.CommandFailure
 	if errors.As(err, &cf) {
@@ -55,10 +55,13 @@ func markUsageBoundary(err error) error {
 // for "invalid argument" is intentionally absent: a path such as
 // `invalid argument.csv` must not classify as USAGE.
 var (
-	cobraQuotedUsageErr   = regexp.MustCompile(`(?i)^(?:unknown command|invalid argument) ".+" for ".+"`)
-	cobraUnknownFlagErr   = regexp.MustCompile(`(?i)^unknown (?:shorthand )?flag:`)
-	cobraRequiredFlagErr  = regexp.MustCompile(`(?i)^required flag\(s\) `)
-	cobraArgCountErr      = regexp.MustCompile(`(?i)^(?:accepts (?:at most \d+|between \d+ and \d+|\d+) arg\(s\), received \d+|requires at least \d+ arg\(s\), only received \d+)$`)
+	cobraQuotedUsageErr  = regexp.MustCompile(`(?i)^(?:unknown command|invalid argument) ".+" for ".+"`)
+	cobraUnknownFlagErr  = regexp.MustCompile(`(?i)^unknown (?:shorthand )?flag:`)
+	cobraRequiredFlagErr = regexp.MustCompile(`(?i)^required flag\(s\) `)
+	cobraArgCountErr     = regexp.MustCompile(
+		`(?i)^(?:accepts (?:at most \d+|between \d+ and \d+|\d+) arg\(s\), received \d+|` +
+			`requires at least \d+ arg\(s\), only received \d+)$`,
+	)
 	cobraRequiresOneOfErr = regexp.MustCompile(`(?i)^requires one of\b`)
 	cobraFlagNeedsArgErr  = regexp.MustCompile(`(?i)^flag needs an argument:`)
 )
