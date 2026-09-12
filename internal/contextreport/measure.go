@@ -79,7 +79,9 @@ func Collect() (Report, error) {
 		return Report{}, err
 	}
 
-	artifacts := append(dynamic,
+	artifacts := make([]Artifact, 0, len(dynamic)+2)
+	artifacts = append(artifacts, dynamic...)
+	artifacts = append(artifacts,
 		price("review", ClassInvocation, reviewPayload),
 		price("render-context.bundle", ClassBundle, bundlePayload),
 	)
