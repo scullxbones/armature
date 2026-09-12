@@ -240,3 +240,4 @@
 ["transition","LNGHZN-S6-T5",1789233823,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR #194 squash-merged: delete GENERAL-1 wrap; migrate agent-facing errors","branch":"cursor/lnghzn-s6-t5-delete-general1-68cb","pr":"194","skipped_delivery_gate":true}]
 ["transition","LNGHZN-S6-T5",1789233825,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"194"}]
 ["transition","TOPTIER-S18-T2",1789234304,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR #192 squash-merged: validate E14 from taskcontract","branch":"feat/TOPTIER-S18-T2-validate-e14","pr":"192","skipped_delivery_gate":true}]
+["transition","TOPTIER-S18-T2",1789234306,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"192"}]
