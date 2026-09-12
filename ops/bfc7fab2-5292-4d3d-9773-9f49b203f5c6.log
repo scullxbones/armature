@@ -232,3 +232,4 @@
 ["transition","TOPTIER-S18-T0",1789231656,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR #189 squash-merged: taskcontract + LiveCheckIDs","branch":"cursor/toptier-s18-t0-taskcontract-livecheckids-6f9f","pr":"189","skipped_delivery_gate":true}]
 ["transition","TOPTIER-S18-T0",1789231659,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"189"}]
 ["transition","TOPTIER-S13-T1",1789232076,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"PR #190 squash-merged: disagreement fields on Assessment Attestation","branch":"cursor/toptier-s13-t1-disagreement-fields-0025","pr":"190","skipped_delivery_gate":true}]
+["transition","TOPTIER-S13-T1",1789232079,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"190"}]
