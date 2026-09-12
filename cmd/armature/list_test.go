@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,7 +111,7 @@ func TestListGroupHonouredInStructuredOutput_REQ_AOC_S2_T2(t *testing.T) {
 		assert.NotEmpty(t, g.Status)
 		assert.NotEmpty(t, g.IDs)
 		if i > 0 {
-			assert.LessOrEqual(t, statusRank(groups[i-1].Status), statusRank(g.Status))
+			assert.LessOrEqual(t, output.ListStatusRank(groups[i-1].Status), output.ListStatusRank(g.Status))
 		}
 		for _, id := range g.IDs {
 			assert.False(t, seen[id], "grouped ids must not duplicate")

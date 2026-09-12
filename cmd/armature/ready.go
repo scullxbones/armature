@@ -28,7 +28,6 @@ const (
 )
 
 type readyIssueRow = output.ReadyIssue
-type expiredClaimRow = output.ExpiredClaim
 
 // readyExplainRow is the structured --explain row: N4 keys plus the exclusion reason.
 type readyExplainRow struct {
@@ -37,10 +36,6 @@ type readyExplainRow struct {
 	Status string `json:"status"`
 	Title  string `json:"title"`
 	Reason string `json:"reason"`
-}
-
-func readyHelp(n int, waves bool, expiredN int, parent, assignedTo string) []string {
-	return output.ReadyHelp(n, waves, expiredN, parent, assignedTo)
 }
 
 func readyExplainRows(index materialize.Index, notReady map[string]string) []readyExplainRow {
@@ -83,17 +78,6 @@ func writeReadyExplainEnvelope(w io.Writer, index materialize.Index, notReady ma
 	return output.WriteEnvelope(w, env)
 }
 
-func writeReadyEnvelope(
-	w io.Writer,
-	entries []ready.ReadyEntry,
-	waves [][]ready.ReadyEntry,
-	includeWaves bool,
-	expired []ready.ExpiredClaimEntry,
-	parent, assignedTo string,
-) error {
-	return output.WriteReadyEnvelope(w, entries, waves, includeWaves, expired, parent, assignedTo)
-}
-
 func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	if emptyReason != "" {
 		help := []string{
@@ -115,7 +99,7 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" || tui.IsNonInteractive() {
-		return writeReadyEnvelope(cmd.OutOrStdout(), entries, nil, false, expiredClaims, "", "")
+		return output.WriteReadyEnvelope(cmd.OutOrStdout(), entries, nil, false, expiredClaims, "", "")
 	}
 	if len(entries) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
@@ -223,7 +207,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				if waves {
 					wavesData = ready.PartitionWaves(entries, index)
 				}
-				if err := writeReadyEnvelope(cmd.OutOrStdout(), entries, wavesData, waves, expiredClaims, filterParent, assignedTo); err != nil {
+				if err := output.WriteReadyEnvelope(cmd.OutOrStdout(), entries, wavesData, waves, expiredClaims, filterParent, assignedTo); err != nil {
 					return err
 				}
 			case tui.IsInteractive():

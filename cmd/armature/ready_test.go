@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -318,7 +319,7 @@ func TestReadyHelpEmptyReasonNamesFilterAndExpired(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := readyHelp(tc.n, tc.waves, tc.expiredN, tc.parent, tc.assignedTo)
+			got := output.ReadyHelp(tc.n, tc.waves, tc.expiredN, tc.parent, tc.assignedTo)
 			assert.Equal(t, tc.wantFirst, got[0])
 			assert.Equal(t, tc.wantAll, got)
 			if tc.n == 0 && (tc.parent != "" || tc.assignedTo != "" || tc.expiredN > 0) {
