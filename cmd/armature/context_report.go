@@ -11,9 +11,9 @@ func newContextReportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "context-report",
 		Short: "Price fixture-measured main-path CLI payloads by bytes and estimated tokens",
-		Long: `Measure json/agent stdout for main-path commands list, ready,
-render-context, and review, plus the agent-mode show payload, against the
-embedded fixture graph, plus the fixture render-context bundle.
+		Long: `Measure json/agent stdout for main-path commands list, ready, show,
+render-context, and review against the embedded fixture graph, plus the
+fixture render-context bundle.
 
 Tokens are bytes/4 (integer division), matching the token_budget
 convention (character budget = tokens * 4). Fixtures are embedded in the
