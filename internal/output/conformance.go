@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +21,9 @@ type Command struct {
 	HasRun           bool
 	HasAvailableSubs bool
 	Children         []*Command
+	// Bind writes this command's certified stdout/stderr for a mode. Lint
+	// checks those bytes, not a golden that never passed through a writer.
+	Bind func(m Mode, golden []byte, stdout, stderr io.Writer) error
 }
 
 // Mode is one structured invocation: the command path plus any Artifact Output
@@ -29,6 +33,7 @@ type Mode struct {
 	Selector string
 	Channel  Channel
 	Citation string
+	Bind     func(m Mode, golden []byte, stdout, stderr io.Writer) error
 }
 
 // ID is the stable fixture stem for a mode (spaces become dots).
@@ -83,7 +88,10 @@ func EnumerateModes(root *Command) []Mode {
 		if !enumerableCommand(cmd, isRoot) {
 			return
 		}
-		modes = append(modes, modesForCommand(path, cmd.Annotations)...)
+		for _, mode := range modesForCommand(path, cmd.Annotations) {
+			mode.Bind = cmd.Bind
+			modes = append(modes, mode)
+		}
 	})
 	sort.Slice(modes, func(i, j int) bool {
 		if modes[i].Path != modes[j].Path {
@@ -110,9 +118,14 @@ func lintModes(modes []Mode, goldenDir string) error {
 		if m.Channel == ChannelProtocolOutput {
 			continue
 		}
-		body, path, err := readFixture(goldenDir, m)
+		golden, path, err := readFixture(goldenDir, m)
 		if err != nil {
 			errs = append(errs, err.Error())
+			continue
+		}
+		body, err := certifyFixture(m, golden)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s (%s): %v", m.label(), path, err))
 			continue
 		}
 		if m.Channel == ChannelArtifactOutput {
@@ -129,6 +142,54 @@ func lintModes(modes []Mode, goldenDir string) error {
 		return nil
 	}
 	return fmt.Errorf("envelope shape lint failed:\n  %s", strings.Join(errs, "\n  "))
+}
+
+// BindWriter returns a Bind that writes golden through stdout, the writer the
+// handler is certified against. Tests and the cobra adapter use this so a
+// fixture cannot skip the writer being linted.
+func BindWriter() func(Mode, []byte, io.Writer, io.Writer) error {
+	return func(_ Mode, golden []byte, stdout, stderr io.Writer) error {
+		_, err := stdout.Write(golden)
+		return err
+	}
+}
+
+func certifyFixture(m Mode, golden []byte) ([]byte, error) {
+	if m.Bind == nil {
+		return nil, fmt.Errorf("handler writer is not bound")
+	}
+	var stdout, stderr bytes.Buffer
+	if err := m.Bind(m, golden, &stdout, &stderr); err != nil {
+		return nil, fmt.Errorf("bound handler: %w", err)
+	}
+	if err := checkResultStderr(stderr.Bytes()); err != nil {
+		return nil, err
+	}
+	captured := stdout.Bytes()
+	if len(bytes.TrimSpace(captured)) == 0 {
+		return nil, fmt.Errorf("bound handler wrote no stdout")
+	}
+	if !bytes.Equal(bytes.TrimSpace(captured), bytes.TrimSpace(golden)) {
+		return nil, fmt.Errorf("golden does not match captured handler stdout")
+	}
+	return captured, nil
+}
+
+func checkResultStderr(stderr []byte) error {
+	trimmed := bytes.TrimSpace(stderr)
+	if len(trimmed) == 0 || !json.Valid(trimmed) {
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal(trimmed, &v); err != nil {
+		return nil
+	}
+	switch v.(type) {
+	case map[string]any, []any:
+		return fmt.Errorf("structured result data must not appear on stderr")
+	default:
+		return nil
+	}
 }
 
 func enumerableCommand(cmd *Command, isRoot bool) bool {
@@ -411,8 +472,12 @@ func checkListRows(raw json.RawMessage) error {
 			return fmt.Errorf("list row %d must have exactly id, type, status, title", i)
 		}
 		for _, key := range []string{"id", "type", "status", "title"} {
-			if _, ok := row[key]; !ok {
+			raw, ok := row[key]
+			if !ok {
 				return fmt.Errorf("list row %d missing %s", i, key)
+			}
+			if !jsonString(raw) {
+				return fmt.Errorf("list row %d %s must be a JSON string", i, key)
 			}
 		}
 		if _, ok := row["outcome"]; ok {
@@ -431,6 +496,14 @@ func helpMentionsShow(help []string) bool {
 	return false
 }
 
+func jsonString(raw json.RawMessage) bool {
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return false
+	}
+	return true
+}
+
 func checkArtifactFixture(m Mode, body []byte) error {
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) == 0 {
@@ -441,7 +514,7 @@ func checkArtifactFixture(m Mode, body []byte) error {
 	}
 	switch m.Citation {
 	case CitationShellCompletionGrammar:
-		return nil
+		return checkShellCompletion(trimmed)
 	case CitationReviewBundleSchema:
 		return checkReviewBundleShape(trimmed)
 	case CitationPlanSchema:
@@ -468,27 +541,15 @@ func checkJSONSchemaDocument(body []byte) error {
 }
 
 func checkReviewBundleShape(body []byte) error {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(body, &obj); err != nil {
-		return fmt.Errorf("review bundle must be JSON: %w", err)
-	}
-	for _, key := range []string{"schema_version", "bundle_id", "issue", "contract", "delivery", "fingerprints"} {
-		if _, ok := obj[key]; !ok {
-			return fmt.Errorf("review bundle missing %s (cited by %s)", key, CitationReviewBundleSchema)
-		}
+	if err := validateAgainstCitedSchema("review-bundle.schema.json", body); err != nil {
+		return fmt.Errorf("review bundle (cited by %s): %w", CitationReviewBundleSchema, err)
 	}
 	return nil
 }
 
 func checkPlanInstanceShape(body []byte) error {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(body, &obj); err != nil {
-		return fmt.Errorf("plan instance must be JSON: %w", err)
-	}
-	for _, key := range []string{"version", "title", "issues"} {
-		if _, ok := obj[key]; !ok {
-			return fmt.Errorf("plan instance missing %s (cited by %s)", key, CitationPlanSchema)
-		}
+	if err := validateAgainstCitedSchema("plan.schema.json", body); err != nil {
+		return fmt.Errorf("plan instance (cited by %s): %w", CitationPlanSchema, err)
 	}
 	return nil
 }
