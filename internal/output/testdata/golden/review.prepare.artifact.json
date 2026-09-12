@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "issue": {
+    "id": "AOC-S3-T3",
+    "type": "task",
+    "title": "Shape lint enumerated from the cobra command tree",
+    "outcome": "Lint walks cobra modes and requires goldens"
+  },
+  "contract": {
+    "definition_of_done": "A lint enumerates every registered cobra command mode",
+    "scope": ["internal/output/conformance.go"],
+    "acceptance": ["TestEveryAgentFacingCommandHasConformingFixture_REQ_AOC_S3_T3"]
+  },
+  "delivery": {
+    "base_sha": "1234567890abcdef1234567890abcdef12345678",
+    "head_sha": "abcdef1234567890abcdef1234567890abcdef12",
+    "changed_files": ["internal/output/conformance.go"],
+    "diff": "--- a/internal/output/conformance.go\n+++ b/internal/output/conformance.go\n"
+  },
+  "fingerprints": {
+    "contract": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "delivery": "5d41402abc4b2a76b9719d911017c592250c71ed373cade4e832627b4f6c043a"
+  }
+}
