@@ -35,9 +35,13 @@ type Violation struct {
 }
 
 var (
-	reGainsCheck = regexp.MustCompile(`(?i)gains(?:\s+a)?\s+check(?:\s*\(?D\d+\)?)?`)
-	reArmDoctor  = regexp.MustCompile(`(?i)\barm\s+doctor\b`)
-	reCheckDn    = regexp.MustCompile(`(?i)\bcheck\s+D\d+\b`)
+	// Implement-claim only: an allocated or next-free check id, not the
+	// schematic placeholder "Dn" used when describing the E14 rule itself.
+	reGainsCheck = regexp.MustCompile(`(?i)gains(?:\s+a)?\s+check(?:\s*\(?D\d+\)?|\s+\(next\s+free)`)
+	reAddWireDn  = regexp.MustCompile(`(?i)(?:adds?|wires?)\s+(?:a\s+)?(?:check\s+)?D\d+(?:\s+into\s+Run)?`)
+	// Product-behavior claim: arm doctor + implement verb. A pointer, flag, or
+	// "DoD claims arm doctor" mention is not an implement claim.
+	reArmDoctorVerb = regexp.MustCompile(`(?i)\barm\s+doctor\s+(?:gains|reports|emits|enforces|adds|wires)`)
 	// Explicit wiring opt-out only. A bare "exported helper" mention is not an opt-out.
 	reHelperOnly = regexp.MustCompile(`(?i)(?:helper[-\s]only|not[-\s]wired)`)
 	// Completion-ritual mentions of `arm doctor`: the CLI as a pre-done quality
@@ -51,10 +55,13 @@ var (
 )
 
 // CheckTaskContract reports DoD∩scope violations for one issue. Today it encodes
-// doctor.run_wiring: a task DoD that claims `arm doctor` behavior / `gains check Dn`
-// must include internal/doctor/doctor.go in Scope (or rewrite the DoD as
-// helper-only / not wired). Completion-ritual mentions of arm doctor are not
-// claims. Non-tasks and terminal issues are skipped.
+// doctor.run_wiring: a task DoD that claims to implement `arm doctor` behavior
+// (gains/add/wire check D<n>, or arm doctor + implement verb) must include
+// internal/doctor/doctor.go in Scope (or rewrite the DoD as helper-only / not
+// wired). Narrative mentions — a README pointer to arm doctor, or a validate
+// rule that talks about "DoD claims arm doctor/gains check Dn" — are not
+// implement claims. Completion-ritual mentions of arm doctor are not claims.
+// Non-tasks and terminal issues are skipped.
 func CheckTaskContract(task Task) []Violation {
 	if task.Type != "task" || isTerminal(task.Status) {
 		return nil
@@ -82,17 +89,11 @@ func claimsDoctorRunWiring(dod string) bool {
 	if strings.TrimSpace(dod) == "" {
 		return false
 	}
-	if reGainsCheck.MatchString(dod) {
+	if reGainsCheck.MatchString(dod) || reAddWireDn.MatchString(dod) {
 		return true
-	}
-	if reCheckDn.MatchString(dod) && reArmDoctor.MatchString(dod) {
-		return true
-	}
-	if !reArmDoctor.MatchString(dod) {
-		return false
 	}
 	stripped := reDoctorRitual.ReplaceAllString(dod, " ")
-	return reArmDoctor.MatchString(stripped)
+	return reArmDoctorVerb.MatchString(stripped)
 }
 
 func isTerminal(status string) bool {

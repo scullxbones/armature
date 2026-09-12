@@ -2308,6 +2308,51 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		}
 	})
 
+	t.Run("s15_t2_readme_pointer_is_not_e14", func(t *testing.T) {
+		t.Parallel()
+		issue := &materialize.Issue{
+			ID:     "TOPTIER-S15-T2",
+			Type:   "task",
+			Status: ops.StatusOpen,
+			Title:  "Troubleshooting appendix in quickstart",
+			DefinitionOfDone: "README quickstart gains an If something goes wrong appendix covering " +
+				"gopls/LSP false positives, checked-out-branch Managed Worktree failures, and worktree " +
+				"leak / wrong-checkout classes from docs/dogfood/findings/themes/git-worktree-friction/README.md, " +
+				"plus a pointer to arm doctor --explain and D9 Unrecognized Managed Worktree for doctor-visible cases.",
+			Scope:      []string{"README.md"},
+			Acceptance: json.RawMessage(`[{"type":"test_passes","cmd":"arm validate"}]`),
+			BlockedBy:  []string{},
+			Children:   []string{},
+		}
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "S15-T2 README pointer must not emit E14, got %+v", f)
+		}
+	})
+
+	t.Run("s18_t2_meta_validate_dod_is_not_e14", func(t *testing.T) {
+		t.Parallel()
+		issue := &materialize.Issue{
+			ID:     "TOPTIER-S18-T2",
+			Type:   "task",
+			Status: ops.StatusOpen,
+			Title:  "arm validate errors when DoD is not implementable in scope",
+			DefinitionOfDone: "arm validate Graph Finding E14 when task DoD claims arm doctor/gains check Dn " +
+				"whose wiring file is absent from Scope; unit-only Acceptance cannot stand alone beside CLI DoD. " +
+				"Tests cover S7-T2 fixture. No S14 dependency.",
+			Scope:      []string{"internal/validate/validate.go", "internal/validate/validate_test.go"},
+			Acceptance: json.RawMessage(`[{"type":"test_passes","cmd":"go test ./internal/validate/ -run TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2"}]`),
+			BlockedBy:  []string{},
+			Children:   []string{},
+		}
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "S18-T2 meta DoD must not self-hit E14, got %+v", f)
+		}
+	})
+
 	t.Run("helper_only_dod_skips_e14", func(t *testing.T) {
 		t.Parallel()
 		issue := s7T2Fixture()

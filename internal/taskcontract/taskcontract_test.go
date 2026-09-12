@@ -153,6 +153,48 @@ func TestCheckTaskContract_DoctorRunWiring_REQ_TOPTIER_S18_T0(t *testing.T) {
 		assert.Empty(t, got)
 	})
 
+	t.Run("readme_pointer_to_doctor_is_not_a_wiring_claim", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:     "TOPTIER-S15-T2",
+			Type:   "task",
+			Status: "open",
+			DefinitionOfDone: "README quickstart gains an If something goes wrong appendix covering " +
+				"gopls/LSP false positives, checked-out-branch Managed Worktree failures, and worktree " +
+				"leak / wrong-checkout classes from docs/dogfood/findings/themes/git-worktree-friction/README.md, " +
+				"plus a pointer to arm doctor --explain and D9 Unrecognized Managed Worktree for doctor-visible cases.",
+			Scope: []string{"README.md"},
+		})
+		assert.Empty(t, got, "docs that point at arm doctor --explain must not require doctor.go")
+	})
+
+	t.Run("validate_e14_meta_dod_is_not_a_wiring_claim", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:     "TOPTIER-S18-T2",
+			Type:   "task",
+			Status: "open",
+			DefinitionOfDone: "arm validate Graph Finding E14 when task DoD claims arm doctor/gains check Dn " +
+				"whose wiring file is absent from Scope; unit-only Acceptance cannot stand alone beside CLI DoD. " +
+				"Tests cover S7-T2 fixture. No S14 dependency.",
+			Scope: []string{"internal/validate/validate.go", "internal/validate/validate_test.go"},
+		})
+		assert.Empty(t, got, "the E14 validate rule itself must not require doctor.go")
+	})
+
+	t.Run("wire_dn_into_run_without_doctor_go_violates", func(t *testing.T) {
+		t.Parallel()
+		got := taskcontract.CheckTaskContract(taskcontract.Task{
+			ID:               "WIRE-T1",
+			Type:             "task",
+			Status:           "open",
+			DefinitionOfDone: "wire D10 into Run",
+			Scope:            []string{"internal/doctor/config_check.go"},
+		})
+		require.Len(t, got, 1)
+		assert.Equal(t, taskcontract.RuleDoctorRunWiring, got[0].Rule)
+	})
+
 	t.Run("terminal_task_skipped", func(t *testing.T) {
 		t.Parallel()
 		got := taskcontract.CheckTaskContract(taskcontract.Task{

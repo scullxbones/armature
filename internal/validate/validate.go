@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -613,6 +614,11 @@ func claimsDoctorRunWiringDoD(task taskcontract.Task) bool {
 	return len(taskcontract.CheckTaskContract(probe)) > 0
 }
 
+// reArmDoctorSurface detects Acceptance that names the arm doctor CLI as the
+// tested surface. Broader than taskcontract's implement-claim matcher:
+// `arm doctor --format json` is same-surface proof, not a gains-check claim.
+var reArmDoctorSurface = regexp.MustCompile(`(?i)\barm\s+doctor\b`)
+
 func unitOnlyAcceptance(raw json.RawMessage) bool {
 	if len(raw) == 0 || string(raw) == "null" {
 		return false
@@ -628,14 +634,7 @@ func unitOnlyAcceptance(raw json.RawMessage) bool {
 			return false
 		}
 	}
-	probe := taskcontract.Task{
-		ID:               "acceptance-probe",
-		Type:             "task",
-		Status:           ops.StatusOpen,
-		DefinitionOfDone: string(raw),
-		Scope:            []string{"internal/unrelated.go"},
-	}
-	return len(taskcontract.CheckTaskContract(probe)) == 0
+	return !reArmDoctorSurface.Match(raw)
 }
 
 func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State, graph *dag.Graph, now int64) []Finding {
