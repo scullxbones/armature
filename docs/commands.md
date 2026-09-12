@@ -413,7 +413,7 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 
 ## doctor
 
-Run repository health checks (D1-D10).
+Run repository health checks (D1-D10, D12).
 
 **Synopsis:**
 `arm doctor [flags]`
@@ -455,6 +455,11 @@ fields rejected by name) and every present field must be in range. A missing
 file fails open. Malformed JSON, unknown keys, a zero `low_stakes_push_threshold`,
 an empty hook/gate executable, or a `default_ttl` that would overflow claim
 staleness arithmetic are errors, so `arm doctor` exits non-zero.
+
+**D12 — Ops worktree lag.** When the ops worktree exists, `arm doctor` best-effort
+fetches `origin/_armature` in that worktree and warns if HEAD is N>0 commits
+behind. Missing worktree or missing `origin/_armature` skips OK. D12 is not
+part of `doctor --fix`.
 
 ---
 

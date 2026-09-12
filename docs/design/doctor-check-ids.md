@@ -16,7 +16,8 @@ remediation — see [validation-codes.md](../validation-codes.md) and
 
 Generated from `doctor.LiveCheckIDs()`.
 `RunChecks` still omits D7 (worker-ID mismatches need the validated ops
-stream); that is documented, not changed.
+stream) and D12 (ops-worktree lag needs the ops worktree); that is
+documented, not changed.
 
 <!-- live-check-ids: generated; do not hand-edit -->
 | ID |
@@ -31,6 +32,7 @@ stream); that is documented, not changed.
 | `D8` |
 | `D9` |
 | `D10` |
+| `D12` |
 
 ## Open reservations
 

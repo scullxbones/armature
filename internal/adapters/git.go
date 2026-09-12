@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -724,6 +725,33 @@ func (c *Client) FetchAndRebase(branch string) error {
 		return fmt.Errorf("git rebase origin/%s: %w\n%s", branch, err, out)
 	}
 	return nil
+}
+
+// FetchTrackingRef updates refs/remotes/origin/<branch> from origin without
+// moving the local branch. Used by doctor D12's best-effort lag probe.
+func (c *Client) FetchTrackingRef(branch string) error {
+	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
+	}
+	return nil
+}
+
+// RevListCount returns git rev-list --count for rangeSpec (for example
+// "HEAD..origin/_armature").
+func (c *Client) RevListCount(rangeSpec string) (int, error) {
+	cmd := c.cmd("rev-list", "--count", rangeSpec)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("git rev-list --count %s: %w", rangeSpec, err)
+	}
+	n, convErr := strconv.Atoi(strings.TrimSpace(string(out)))
+	if convErr != nil {
+		return 0, fmt.Errorf("git rev-list --count %s: parse %q: %w", rangeSpec, strings.TrimSpace(string(out)), convErr)
+	}
+	return n, nil
 }
 
 // LogEntry represents a single git log entry.

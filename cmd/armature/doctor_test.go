@@ -166,6 +166,9 @@ func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing
 	assert.Equal(t, "arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>", d9,
 		"D9 unrecognized paths are not GCRemovals; bind or remove the reported path")
 	assert.NotContains(t, d9, "worktree gc")
+
+	_, d12 := doctorCheckGuidance("D12")
+	assert.Contains(t, d12, "origin/_armature")
 }
 
 func TestDoctorExplainFlag_RendersGuidedNarrative_REQ_TOPTIER_S15_T1(t *testing.T) {

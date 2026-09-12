@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -94,11 +95,12 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 // liveCheckIDs is the check-ID sequence Run appends. LiveCheckIDs is the
 // exported registry TOPTIER-S18-T3 will document; keep it in lockstep with
 // the append order below (proven by TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0).
-var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"}
+var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}
 
 // LiveCheckIDs returns the doctor check IDs the live Run path emits, in Run
-// order (D1–D10). RunChecks omits D7 because worker-ID mismatches need the
-// validated ops stream. The returned slice is a copy.
+// order (D1–D10, D12). RunChecks omits D7 (worker-ID mismatches need the
+// validated ops stream) and D12 (ops-worktree lag needs the ops worktree).
+// D11 remains reserved for TOPTIER-S12-T2. The returned slice is a copy.
 func LiveCheckIDs() []string {
 	out := make([]string, len(liveCheckIDs))
 	copy(out, liveCheckIDs)
@@ -108,7 +110,9 @@ func LiveCheckIDs() []string {
 // Run executes all health checks and returns a Report.
 // verbose=true adds file path and line context to D3 violations via VerboseItems.
 // now is used for D2 stale claim detection.
-func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now time.Time) (Report, error) {
+// worktreePath is the ops worktree (`_armature` checkout); D12 probes lag
+// against origin/_armature there. Empty or missing paths skip D12.
+func Run(issuesDir string, stateDir string, repoPath string, worktreePath string, verbose bool, now time.Time) (Report, error) {
 	// Read ops from the ops directory using validated stream (excludes worker-ID mismatches)
 	opsDir := filepath.Join(issuesDir, "ops")
 	opItems, _, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
@@ -163,6 +167,7 @@ func Run(issuesDir string, stateDir string, repoPath string, verbose bool, now t
 	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
 	checks = append(checks, checkD9UnrecognizedWorktrees(repoPath, allIssues, now))
 	checks = append(checks, CheckD10ConfigHealth(filepath.Join(issuesDir, "config.json")))
+	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
 
 	return Report{Checks: checks}, nil
 }
@@ -568,6 +573,39 @@ func EvaluateD9UnrecognizedWorktrees(unrecognized []string) Finding {
 		f.Severity = SeverityWarning
 		f.Message = "Managed worktrees with no issue binding"
 		f.Items = items
+	}
+	return f
+}
+
+// checkD12OpsWorktreeLag warns when the ops worktree HEAD is N>0 commits
+// behind origin/_armature. It best-effort fetches the tracking ref in the
+// ops worktree. Missing worktree or missing origin/_armature skips OK.
+// Not remediable by doctor --fix.
+func checkD12OpsWorktreeLag(worktreePath string) Finding {
+	skip := Finding{Check: "D12", Severity: SeverityOK, Message: "Ops worktree lag not checked"}
+	if strings.TrimSpace(worktreePath) == "" {
+		return skip
+	}
+	info, err := os.Stat(worktreePath)
+	if err != nil || !info.IsDir() {
+		return skip
+	}
+	gc := adapters.New(worktreePath)
+	_ = gc.FetchTrackingRef("_armature") //nolint:errcheck // best-effort refresh of origin/_armature
+	behind, err := gc.RevListCount("HEAD..origin/_armature")
+	if err != nil {
+		return skip
+	}
+	return EvaluateD12OpsWorktreeLag(behind)
+}
+
+// EvaluateD12OpsWorktreeLag turns a behind-count into a D12 finding.
+func EvaluateD12OpsWorktreeLag(behind int) Finding {
+	f := Finding{Check: "D12", Severity: SeverityOK, Message: "Ops worktree is not behind origin/_armature"}
+	if behind > 0 {
+		f.Severity = SeverityWarning
+		f.Message = fmt.Sprintf("Ops worktree is %d commit(s) behind origin/_armature", behind)
+		f.Items = []string{fmt.Sprintf("%d", behind)}
 	}
 	return f
 }

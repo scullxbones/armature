@@ -1,6 +1,6 @@
 # Validation & Doctor Codes Reference
 
-This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D6).
+This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D10, D12).
 
 ## Validation Codes (arm validate)
 
@@ -635,6 +635,7 @@ arm doctor [flags]
 | D4 | Doctor | Error | Broken parent refs |
 | D5 | Doctor | Error | Dependency cycles |
 | D6 | Doctor | Warning | Uncited issues |
+| D12 | Doctor | Warning | Ops worktree behind origin/_armature |
 
 ---
 

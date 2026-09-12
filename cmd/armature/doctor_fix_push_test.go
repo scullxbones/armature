@@ -38,7 +38,7 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	_, err = runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
 
-	refBefore := showRef(t, bareDir, "refs/heads/_armature")
+	refBefore := showArmatureRef(t, bareDir)
 
 	// Directly append a create + claim op with a claim far enough in the past
 	// to be stale, bypassing `arm claim` so the test doesn't depend on TTL
@@ -57,7 +57,7 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	out, err := runTrls(t, repo, "doctor", "--fix")
 	require.NoError(t, err, "doctor --fix output: %s", out)
 
-	refAfter := showRef(t, bareDir, "refs/heads/_armature")
+	refAfter := showArmatureRef(t, bareDir)
 	require.NotEqual(t, refBefore, refAfter,
 		"doctor --fix must push its repair ops to origin's _armature branch, not just commit them locally")
 
@@ -81,9 +81,9 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 		"origin's _armature branch must contain the doctor repair op for fixpush-01, not just an unrelated commit")
 }
 
-func showRef(t *testing.T, dir, ref string) string {
+func showArmatureRef(t *testing.T, dir string) string {
 	t.Helper()
-	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "--verify", "--quiet", ref)
+	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "--verify", "--quiet", "refs/heads/_armature")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
