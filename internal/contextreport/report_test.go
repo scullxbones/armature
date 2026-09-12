@@ -128,9 +128,8 @@ func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T
 	issue := state.Issues[FixtureShowIssue]
 	require.NotNil(t, issue)
 
-	var human, asJSON bytes.Buffer
-	require.NoError(t, output.RenderIssue(&human, issue, false))
-	require.NoError(t, output.RenderIssue(&asJSON, issue, true))
+	var human bytes.Buffer
+	require.NoError(t, output.RenderIssue(&human, issue))
 	got, err := measureShow(state)
 	require.NoError(t, err)
 
@@ -141,11 +140,8 @@ func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T
 		"agent show appends FormatSpend after RenderIssue when rates resolve")
 	assert.Greater(t, show.Bytes, human.Len(),
 		"spend adjunct must be included in the priced show payload")
-	assert.NotEqual(t, asJSON.Len(), show.Bytes,
-		"show row must not price the JSON renderer used only by --format json")
 	assert.False(t, json.Valid(bytes.TrimSpace(human.Bytes())),
 		"agent-mode show is human text, not a JSON object")
-	assert.True(t, json.Valid(bytes.TrimSpace(asJSON.Bytes())))
 	assert.Contains(t, human.String(), "ID:")
 }
 
