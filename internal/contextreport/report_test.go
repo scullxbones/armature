@@ -49,7 +49,7 @@ func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 	assert.Contains(t, report.EstimationMethod, "bytes/4")
 	assert.Contains(t, report.EstimationMethod, "token_budget")
 	assert.Contains(t, report.EstimationMethod, "testdata")
-	assert.NotContains(t, report.EstimationMethod, "AOC-S3-T2")
+	assert.Contains(t, report.EstimationMethod, "WriteShowEnvelope")
 
 	var summedBytes, summedTokens int
 	for _, a := range report.Artifacts {
@@ -116,7 +116,7 @@ func TestCollectUsesEmbeddedFixturesIndependentOfRepo_REQ_NXTTN_S3_T1(t *testing
 	assert.Greater(t, report.TotalBytes, 0)
 }
 
-func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T) {
+func TestContextReportShowMeasuresAOCEnvelope_REQ_NXTTN_S3_T1(t *testing.T) {
 	t.Parallel()
 
 	report, err := Collect()
@@ -128,9 +128,8 @@ func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T
 	issue := state.Issues[FixtureShowIssue]
 	require.NotNil(t, issue)
 
-	var human, asJSON bytes.Buffer
-	require.NoError(t, output.RenderIssue(&human, issue, false))
-	require.NoError(t, output.RenderIssue(&asJSON, issue, true))
+	var human bytes.Buffer
+	require.NoError(t, output.RenderIssue(&human, issue))
 	got, err := measureShow(state)
 	require.NoError(t, err)
 
@@ -146,8 +145,6 @@ func TestContextReportShowMeasuresAgentHumanPayload_REQ_NXTTN_S3_T1(t *testing.T
 		"FormatSpend stays on human show; json/agent show does not emit it")
 	assert.NotEqual(t, human.Len(), show.Bytes,
 		"show row must not price the human RenderIssue path")
-	assert.NotEqual(t, asJSON.Len(), show.Bytes,
-		"show row must not price a bare issue JSON object")
 	assert.False(t, json.Valid(bytes.TrimSpace(human.Bytes())),
 		"human show is prose, not a JSON object")
 	assert.True(t, json.Valid(bytes.TrimSpace(got)))

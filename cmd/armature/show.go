@@ -108,7 +108,7 @@ func newShowCmd() *cobra.Command {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "---")
 				}
 
-				if err := output.RenderIssue(cmd.OutOrStdout(), &issue, false); err != nil {
+				if err := output.RenderIssue(cmd.OutOrStdout(), &issue); err != nil {
 					return err
 				}
 				if costReport != nil {

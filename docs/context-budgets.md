@@ -2,7 +2,7 @@
 
 A runtime budget is a byte cap on one priced CLI payload.
 
-In Armature, the inventory is the same one `make context-report` prices: structured stdout for `list`, `ready`, `show`, `render-context`, and `review`, plus the fixture `render-context.bundle`. Tokens are not a second cap. They are `bytes / 4`, the `token_budget` heuristic, shown so a reader can compare to render-context.
+In Armature, the inventory is the same one `make context-report` prices: structured stdout for `list`, `ready`, `show`, `render-context`, and `review`, plus the fixture `render-context.bundle`. `list`, `ready`, and `show` are compact AOC envelopes from the shared writers. Tokens are not a second cap. They are `bytes / 4`, the `token_budget` heuristic, shown so a reader can compare to render-context.
 
 Skill trees and static docs are not rows here. Agents spend tokens on live command output and assembled context. Those files are not the runtime cost of the main-path calls.
 
@@ -82,11 +82,11 @@ These numbers are the product caps. They are not the fixture's current size.
 | review | invocation | 4096 | 4096 | Review prepare JSON for one fixture delivery. Four kilobytes is the promise. |
 | render-context.bundle | bundle | 16000 | 16000 | Same character budget as render-context. The untruncated fixture bundle must not exceed the default character budget. |
 
-Measured fixture sizes on 2026-09-10 (T1 head `cf07d09c`): list 475, ready 189, show 375, render-context 1164, review 1080, render-context.bundle 1163. Every row is under its target. No trim cycle is open.
+Measured fixture sizes on 2026-09-12 (AOC-S3-T2, stacked on T1): list 377, ready 592, show 415, render-context 1164. Caps stay at the named promises (2048 / 1024 / 2048 / 16000). Every dynamic row is under its target. Seeding `max_bytes` at today's measured size is not a cap.
 
 ## Dated trim plan
 
-No path is above target as of 2026-09-10. If a later measurement lands above `target_bytes`, add a dated subsection here before raising or holding a high `max_bytes`. `HasDatedTrimPlan` matches a real markdown heading of the form `### YYYY-MM-DD <path>`. Name the path, the measured bytes, the target, and the cut that brings it under. Fenced examples do not count. Example shape (this fence is not a plan):
+No path is above target as of 2026-09-12. If a later measurement lands above `target_bytes`, add a dated subsection here before raising or holding a high `max_bytes`. `HasDatedTrimPlan` matches a real markdown heading of the form `### YYYY-MM-DD <path>`. Name the path, the measured bytes, the target, and the cut that brings it under. Fenced examples do not count. Example shape (this fence is not a plan):
 
 ```
 ### 2026-10-01 render-context.bundle (measured M > target 16000)
@@ -108,4 +108,4 @@ Shrinking after a trim does not need a special commit. Mix it with the trim.
 
 ## Wiring note
 
-The task file list is `docs/context-budgets.md`, `internal/contextreport/budget.go`, `internal/contextreport/budget_test.go`, and `internal/contextreport/budgets.json`. No Makefile change. `make check` already runs this package through `coverage`. A second `check` prerequisite would run the suite twice and break the single-run rule in `docs/design/gate-efficiency.md` (D3). `make context-report` from NXTTN-S3-T1 stays the measurement command.
+The task file list is `docs/context-budgets.md`, `internal/contextreport/budget.go`, `internal/contextreport/budget_test.go`, `internal/contextreport/budgets.json`, `internal/contextreport/dynamic.go`, `internal/contextreport/dynamic_test.go`, and `internal/contextreport/testdata/`. No Makefile change. `make check` already runs this package through `coverage`. A second `check` prerequisite would run the suite twice and break the single-run rule in `docs/design/gate-efficiency.md` (D3). `make context-report` from NXTTN-S3-T1 stays the measurement command. Dynamic AOC envelope rows join this same file and ratchet. Do not raise `max_bytes` to match a new encoder.

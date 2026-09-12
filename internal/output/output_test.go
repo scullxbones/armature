@@ -3,6 +3,13 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,7 +35,7 @@ func TestRenderIssue_HumanReadable(t *testing.T) {
 		Scope:            []string{"file1.go", "file2.go"},
 	}
 	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, false)
+	err := RenderIssue(&buf, issue)
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "TASK-01")
@@ -39,26 +46,18 @@ func TestRenderIssue_HumanReadable(t *testing.T) {
 	assert.Contains(t, output, "high")
 }
 
-func TestRenderIssue_JSON(t *testing.T) {
+func TestMarshalIssue_CanonicalFields(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	got := MarshalIssue(&materialize.Issue{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "open",
 		Title:  "Test Issue",
-	}
-	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, true)
-	require.NoError(t, err)
-	output := buf.String()
-
-	var result map[string]interface{}
-	err = json.Unmarshal([]byte(output), &result)
-	require.NoError(t, err)
-	assert.Equal(t, "TASK-01", result["id"])
-	assert.Equal(t, "Test Issue", result["title"])
-	assert.Equal(t, "task", result["type"])
-	assert.Equal(t, "open", result["status"])
+	})
+	assert.Equal(t, "TASK-01", got.ID)
+	assert.Equal(t, "Test Issue", got.Title)
+	assert.Equal(t, "task", got.Type)
+	assert.Equal(t, "open", got.Status)
 }
 
 func TestRenderList_Empty(t *testing.T) {
@@ -109,7 +108,7 @@ func TestRenderReady_HumanReadable(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	err := RenderReady(&buf, entries, false)
+	err := RenderReady(&buf, entries)
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "TASK-01")
@@ -123,7 +122,7 @@ func TestRenderExpiredClaims_HumanReadable_REQ_TOPTIER_S4_T3(t *testing.T) {
 		{Issue: "TASK-01", Title: "Expired Task", Status: "claimed", ClaimedBy: "worker-1"},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, RenderExpiredClaims(&buf, claims, false))
+	require.NoError(t, RenderExpiredClaims(&buf, claims))
 	out := buf.String()
 	assert.Contains(t, out, "Expired claims")
 	assert.Contains(t, out, "TASK-01")
@@ -134,45 +133,8 @@ func TestRenderExpiredClaims_HumanReadable_REQ_TOPTIER_S4_T3(t *testing.T) {
 func TestRenderExpiredClaims_HumanReadable_Empty(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	require.NoError(t, RenderExpiredClaims(&buf, nil, false))
+	require.NoError(t, RenderExpiredClaims(&buf, nil))
 	assert.Empty(t, buf.String(), "nothing to surface when there are no expired claims")
-}
-
-func TestRenderExpiredClaims_JSON(t *testing.T) {
-	t.Parallel()
-	claims := []ready.ExpiredClaimEntry{
-		{Issue: "TASK-01", Title: "Expired Task", Status: "in-progress", ClaimedBy: "worker-1"},
-	}
-	var buf bytes.Buffer
-	require.NoError(t, RenderExpiredClaims(&buf, claims, true))
-	var result []map[string]interface{}
-	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
-	require.Len(t, result, 1)
-	assert.Equal(t, "TASK-01", result[0]["issue"])
-	assert.Equal(t, "in-progress", result[0]["status"])
-}
-
-func TestRenderReady_JSON(t *testing.T) {
-	t.Parallel()
-	entries := []ready.ReadyEntry{
-		{
-			Issue:    "TASK-01",
-			Type:     "task",
-			Title:    "Ready Task",
-			Priority: "high",
-		},
-	}
-	var buf bytes.Buffer
-	err := RenderReady(&buf, entries, true)
-	require.NoError(t, err)
-	output := buf.String()
-
-	var result []map[string]interface{}
-	err = json.Unmarshal([]byte(output), &result)
-	require.NoError(t, err)
-	assert.Len(t, result, 1)
-	assert.Equal(t, "TASK-01", result[0]["issue"])
-	assert.Equal(t, "Ready Task", result[0]["title"])
 }
 
 func TestRenderValidation_ErrorsOnly(t *testing.T) {
@@ -275,7 +237,7 @@ func TestRenderIssue_WithAllFields(t *testing.T) {
 		Acceptance: json.RawMessage(`{"scenario":"when task is done"}`),
 	}
 	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, false)
+	err := RenderIssue(&buf, issue)
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "TASK-01")
@@ -306,7 +268,7 @@ func TestRenderReady_RequiresConfirmation(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	err := RenderReady(&buf, entries, false)
+	err := RenderReady(&buf, entries)
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "TASK-01")
@@ -371,7 +333,7 @@ func TestRenderIssue_MinimalIssue(t *testing.T) {
 		Title:  "Major Initiative",
 	}
 	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, false)
+	err := RenderIssue(&buf, issue)
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "EPIC-01")
@@ -404,29 +366,15 @@ func TestRenderReady_Empty(t *testing.T) {
 	t.Parallel()
 	var entries []ready.ReadyEntry
 	var buf bytes.Buffer
-	err := RenderReady(&buf, entries, false)
+	err := RenderReady(&buf, entries)
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "No tasks ready.")
 }
 
-func TestRenderReady_EmptyJSON(t *testing.T) {
+func TestMarshalIssue_WithAllFields(t *testing.T) {
 	t.Parallel()
-	var entries []ready.ReadyEntry
-	var buf bytes.Buffer
-	err := RenderReady(&buf, entries, true)
-	require.NoError(t, err)
-	output := buf.String()
-
-	var result []interface{}
-	err = json.Unmarshal([]byte(output), &result)
-	require.NoError(t, err)
-	assert.Empty(t, result)
-}
-
-func TestRenderIssue_JSON_WithAllFields(t *testing.T) {
-	t.Parallel()
-	issue := &materialize.Issue{
+	got := MarshalIssue(&materialize.Issue{
 		ID:               "TASK-01",
 		Type:             "task",
 		Status:           "in-progress",
@@ -441,25 +389,22 @@ func TestRenderIssue_JSON_WithAllFields(t *testing.T) {
 		BlockedBy:        []string{"TASK-00"},
 		Blocks:           []string{"TASK-02"},
 		Acceptance:       json.RawMessage(`{}`),
-	}
-	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, true)
-	require.NoError(t, err)
-	output := buf.String()
-
-	var result map[string]interface{}
-	err = json.Unmarshal([]byte(output), &result)
-	require.NoError(t, err)
-	assert.Equal(t, "TASK-01", result["id"])
-	assert.Equal(t, "STORY-01", result["parent"])
-	assert.Equal(t, "high", result["priority"])
-	assert.Equal(t, "All tests pass", result["definition_of_done"])
-	assert.Equal(t, "Implementation done", result["outcome"])
+	})
+	assert.Equal(t, "TASK-01", got.ID)
+	assert.Equal(t, "STORY-01", got.Parent)
+	assert.Equal(t, "high", got.Priority)
+	assert.Equal(t, "All tests pass", got.DefinitionOfDone)
+	assert.Equal(t, "Implementation done", got.Outcome)
+	assert.Equal(t, []string{"file1.go"}, got.Scope)
+	assert.Equal(t, "worker-1", got.ClaimedBy)
+	assert.Equal(t, "worker-2", got.AssignedWorker)
+	assert.Equal(t, []string{"TASK-00"}, got.BlockedBy)
+	assert.Equal(t, []string{"TASK-02"}, got.Blocks)
 }
 
-func TestRenderIssue_JSON_IncludesNotes(t *testing.T) {
+func TestMarshalIssue_IncludesNotes(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	got := MarshalIssue(&materialize.Issue{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "open",
@@ -468,20 +413,8 @@ func TestRenderIssue_JSON_IncludesNotes(t *testing.T) {
 			{Msg: "Active note", Deleted: false},
 			{Msg: "Deleted note", Deleted: true},
 		},
-	}
-	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, true)
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(buf.Bytes(), &result)
-	require.NoError(t, err)
-	notes, ok := result["notes"]
-	require.True(t, ok, "notes field must be present in JSON output")
-	noteSlice, ok := notes.([]interface{})
-	require.True(t, ok)
-	assert.Len(t, noteSlice, 1, "only non-deleted notes should appear")
-	assert.Equal(t, "Active note", noteSlice[0])
+	})
+	require.Equal(t, []string{"Active note"}, got.Notes)
 }
 
 func TestRenderList_ColumnAlignment(t *testing.T) {
@@ -568,7 +501,7 @@ func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, false)
+	err := RenderIssue(&buf, issue)
 	require.NoError(t, err)
 	output := buf.String()
 
@@ -585,9 +518,9 @@ func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {
 	assert.Contains(t, output, "1 indeterminate")
 }
 
-func TestRenderIssue_WithAssessmentAttestations_JSON(t *testing.T) {
+func TestMarshalIssue_IncludesAttestations(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	got := MarshalIssue(&materialize.Issue{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "done",
@@ -600,22 +533,12 @@ func TestRenderIssue_WithAssessmentAttestations_JSON(t *testing.T) {
 				SatisfiedCount: 2,
 			},
 		},
-	}
-	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, true)
-	require.NoError(t, err)
-	output := buf.String()
-
-	var result map[string]interface{}
-	err = json.Unmarshal([]byte(output), &result)
-	require.NoError(t, err)
-
-	// Should have assessment_attestations field in JSON
-	attestations, ok := result["assessment_attestations"]
-	require.True(t, ok, "assessment_attestations field must be present in JSON output")
-	attestationSlice, ok := attestations.([]interface{})
-	require.True(t, ok)
-	assert.Len(t, attestationSlice, 1)
+	})
+	require.NotEmpty(t, got.AssessmentAttestations)
+	var attestations []review.AssessmentAttestation
+	require.NoError(t, json.Unmarshal(got.AssessmentAttestations, &attestations))
+	require.Len(t, attestations, 1)
+	assert.Equal(t, "sha256:abc123def456", attestations[0].BundleID)
 }
 
 func TestRenderIssue_NoAssessmentAttestations_Human(t *testing.T) {
@@ -628,7 +551,7 @@ func TestRenderIssue_NoAssessmentAttestations_Human(t *testing.T) {
 		AssessmentAttestations: []review.AssessmentAttestation{},
 	}
 	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, false)
+	err := RenderIssue(&buf, issue)
 	require.NoError(t, err)
 	output := buf.String()
 
@@ -658,7 +581,7 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	err := RenderIssue(&buf, issue, false)
+	err := RenderIssue(&buf, issue)
 	require.NoError(t, err)
 	output := buf.String()
 
@@ -670,4 +593,105 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 	assert.Contains(t, output, "eeeeeeffffff")
 	// Should not show the first attestation's hash digits
 	assert.NotContains(t, output, "aaaaaabb")
+}
+
+// TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1 fails if pre-contract structured
+// writers or the jsonErrorPayload path reappear. Named retired decls are
+// scanned in tracked production Go files only, so linked worktrees such as
+// .worktrees/<issue> cannot poison the result. asJSON is only a dual-path
+// parameter on functions in internal/output, not a reserved identifier
+// elsewhere. This test's own identifiers are not scanned.
+func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
+	t.Parallel()
+
+	bannedDecls := map[string]string{
+		"jsonErrorPayload": "pre-contract stderr JSON error payload",
+		"writeJSONError":   "pre-contract JSON error writer",
+		"renderIssueJSON":  "pre-contract issue JSON writer",
+		"renderReadyJSON":  "pre-contract ready JSON writer",
+	}
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	pkgDir := filepath.Dir(thisFile)
+	repoRoot := filepath.Clean(filepath.Join(pkgDir, "..", ".."))
+	outputPrefix := filepath.ToSlash(filepath.Join("internal", "output")) + "/"
+
+	fset := token.NewFileSet()
+	var violations []string
+	for _, rel := range trackedProductionGoFiles(t, repoRoot) {
+		path := filepath.Join(repoRoot, rel)
+		file, parseErr := parser.ParseFile(fset, path, nil, 0)
+		require.NoError(t, parseErr, "parse %s", rel)
+		inOutputPkg := strings.HasPrefix(filepath.ToSlash(rel), outputPrefix)
+		ast.Inspect(file, func(n ast.Node) bool {
+			ident, ok := n.(*ast.Ident)
+			if ok {
+				if reason, hit := bannedDecls[ident.Name]; hit {
+					pos := fset.Position(ident.Pos())
+					violations = append(violations, fmt.Sprintf("%s:%d: %s (%s)", rel, pos.Line, ident.Name, reason))
+				}
+			}
+			if inOutputPkg {
+				fn, ok := n.(*ast.FuncDecl)
+				if ok {
+					for _, name := range dualPathParamNames(fn.Type) {
+						pos := fset.Position(name.Pos())
+						violations = append(violations, fmt.Sprintf("%s:%d: %s dual-path parameter on %s", rel, pos.Line, name.Name, fn.Name.Name))
+					}
+				}
+			}
+			return true
+		})
+	}
+	if len(violations) > 0 {
+		t.Fatalf("legacy structured output path remains; emit via NewEnvelope/WriteEnvelope only:\n%s",
+			strings.Join(violations, "\n"))
+	}
+}
+
+func trackedProductionGoFiles(t *testing.T, repoRoot string) []string {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "git", "-C", repoRoot, "ls-files", "-z", "--", "*.go").Output()
+	require.NoError(t, err)
+	skipDir := map[string]bool{
+		".worktrees": true,
+		".armature":  true,
+		".claude":    true,
+		"vendor":     true,
+		"testdata":   true,
+	}
+	var files []string
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel == "" || strings.HasSuffix(rel, "_test.go") {
+			continue
+		}
+		skip := false
+		for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+			if skipDir[part] {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
+		files = append(files, rel)
+	}
+	return files
+}
+
+func dualPathParamNames(ft *ast.FuncType) []*ast.Ident {
+	if ft == nil || ft.Params == nil {
+		return nil
+	}
+	var names []*ast.Ident
+	for _, field := range ft.Params.List {
+		for _, name := range field.Names {
+			if name.Name == "asJSON" {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
 }

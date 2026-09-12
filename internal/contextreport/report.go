@@ -23,9 +23,10 @@ const EstimationMethod = "estimated tokens = bytes/4 (integer division), " +
 	"matching the token_budget convention used by render-context " +
 	"(character budget = tokens * 4). " +
 	"Primary rows are json/agent stdout for list, ready, show, " +
-	"render-context, and review (compact envelopes from the shared " +
-	"writers). Human show still appends FormatSpend; that adjunct is " +
-	"not priced here because json/agent show does not emit it. " +
+	"render-context, and review. list, ready, and show are compact AOC " +
+	"envelopes from WriteListEnvelope, WriteReadyEnvelope, and " +
+	"WriteShowEnvelope. Human show still appends FormatSpend; that " +
+	"adjunct is not priced here because json/agent show does not emit it. " +
 	"Measured against the embedded fixture graph under " +
 	"internal/contextreport/testdata/."
 
