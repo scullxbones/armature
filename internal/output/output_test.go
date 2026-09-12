@@ -652,7 +652,7 @@ func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 
 func trackedProductionGoFiles(t *testing.T, repoRoot string) []string {
 	t.Helper()
-	out, err := exec.Command("git", "-C", repoRoot, "ls-files", "-z", "--", "*.go").Output()
+	out, err := exec.CommandContext(t.Context(), "git", "-C", repoRoot, "ls-files", "-z", "--", "*.go").Output()
 	require.NoError(t, err)
 	skipDir := map[string]bool{
 		".worktrees": true,
