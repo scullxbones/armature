@@ -44,9 +44,9 @@ func TestApplyPlan_CreatesOps(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count)
+	assert.Len(t, created, 2)
 
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
@@ -121,9 +121,9 @@ func TestApplyPlan_SkipsExisting(t *testing.T) {
 	state := materialize.NewState()
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, created, 1)
 }
 
 // --- Task 27: RevertPlan tests ---
@@ -324,9 +324,9 @@ func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, created, 1)
 
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
@@ -350,8 +350,8 @@ func TestApplyPlan_HandlesEmptyAcceptance(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.Error(t, err, "Introduction must refuse a task create that introduces E6")
-	assert.Equal(t, 0, count)
+	assert.Empty(t, created)
 	assert.Contains(t, err.Error(), "missing required field")
 }

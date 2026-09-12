@@ -100,8 +100,10 @@ func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Res
 	if err != nil {
 		return validate.Result{}, fmt.Errorf("load snapshot: %w", err)
 	}
-	for _, w := range snap.Warnings {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+	if !structuredFormat(cmd) {
+		for _, w := range snap.Warnings {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
+		}
 	}
 
 	manifestData, err := adapters.ReadManifestFile(filepath.Join(appCtx.IssuesDir, "sources"))

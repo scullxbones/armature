@@ -38,9 +38,9 @@ func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, created, 1)
 
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
@@ -76,9 +76,9 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, created, 1)
 
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
@@ -107,9 +107,9 @@ func TestApplyPlan_InjectsClockTimestamp(t *testing.T) {
 	state := materialize.NewState()
 	fixedClock := clock.Fixed(fixedTimestamp)
 
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, fixedClock)
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, fixedClock)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, created, 1)
 
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
@@ -134,9 +134,9 @@ func TestApplyPlan_AppliesRootToTopLevelIssues(t *testing.T) {
 
 	state := materialize.NewState()
 	state.Issues["EPIC-001"] = &materialize.Issue{ID: "EPIC-001", Type: "epic", Status: ops.StatusOpen, Title: "Root epic"}
-	count, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, clock.Fixed(42))
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, clock.Fixed(42))
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, created, 1)
 
 	logPath := filepath.Join(dir, workerID+".log")
 	readOps, err := ops.ReadLog(logPath)
@@ -195,9 +195,9 @@ func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	}
 	state := materialize.NewState()
 
-	count, err := ApplyPlan(plan, dir, "worker-test", state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-test", state, ApplyOptions{}, clock.System)
 	require.Error(t, err, "plans without per-issue source must fail apply")
-	assert.Equal(t, 0, count)
+	assert.Empty(t, created)
 	assert.Contains(t, err.Error(), "source")
 	assert.Contains(t, err.Error(), "PLAN-001")
 
@@ -223,9 +223,9 @@ func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
 		}},
 	}
 	opts := ApplyOptions{ManifestData: []byte(`{"entries":{"src-real":{"id":"src-real"}}}`)}
-	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.Error(t, err, "apply must refuse a source ID that is not in the manifest")
-	assert.Equal(t, 0, count)
+	assert.Empty(t, created)
 	assert.Contains(t, err.Error(), "00000000-0000-0000-0000-000000000001")
 	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
 	assert.True(t, os.IsNotExist(statErr), "a refused apply must not land an uncited create")
@@ -256,9 +256,9 @@ func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 			taskPlanIssue("PLAN-002", "Second"),
 		},
 	}
-	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count)
+	assert.Len(t, created, 2)
 	require.Len(t, batches, 1, "create + source_link (+links) must be one write, not one write per op")
 	assert.Contains(t, batches[0], ops.OpCreate)
 	assert.Contains(t, batches[0], ops.OpSourceLink)
@@ -272,9 +272,9 @@ func TestApplyPlan_UsesRealAppenderWhenUnset(t *testing.T) {
 		Title:   "Default appender",
 		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
 	}
-	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{}, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, created, 1)
 	data, readErr := os.ReadFile(filepath.Join(dir, "worker-test.log"))
 	require.NoError(t, readErr, "an unset appendOps must fall back to ops.AppendOps")
 	assert.Contains(t, string(data), ops.OpCreate)
@@ -292,9 +292,9 @@ func TestApplyPlan_FailedAppendLeavesNoPartialLog(t *testing.T) {
 		Title:   "Failing plan",
 		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
 	}
-	count, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.Error(t, err)
-	assert.Equal(t, 0, count)
+	assert.Empty(t, created)
 	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
 	assert.True(t, os.IsNotExist(statErr), "a failed atomic append must not leave an uncited create")
 }
@@ -331,9 +331,9 @@ func TestApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 	dir := t.TempDir()
 
 	// Invalid type is always fatal, regardless of other plan checks.
-	count, err := ApplyPlan(plan, dir, "worker-1", state, ApplyOptions{}, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-1", state, ApplyOptions{}, clock.System)
 	require.Error(t, err)
-	assert.Equal(t, 0, count)
+	assert.Empty(t, created)
 	assert.Contains(t, err.Error(), "invalid type")
 	assert.Contains(t, err.Error(), "PLAN-002")
 }
@@ -353,4 +353,36 @@ func TestDryRunApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 	_, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid type")
+}
+
+// TestApplyPlan_ReturnsAppendedCreateIDs_REQ_AOC_S2_T4: envelope rows must
+// come from this invocation's create ops, not a later global Issues map.
+func TestApplyPlan_ReturnsAppendedCreateIDs_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	state := materialize.NewState()
+	state.Issues["FOREIGN-001"] = &materialize.Issue{
+		ID:     "FOREIGN-001",
+		Title:  "Other worker",
+		Type:   "task",
+		Status: ops.StatusOpen,
+	}
+	plan := &Plan{
+		Version: 1,
+		Title:   "This apply",
+		Issues: []PlanIssue{
+			taskPlanIssue("PLAN-001", "Mine"),
+			taskPlanIssue("FOREIGN-001", "Already exists"),
+		},
+	}
+	created, err := ApplyPlan(plan, dir, "worker-test", state, ApplyOptions{}, clock.System)
+	require.NoError(t, err)
+	require.Len(t, created, 1)
+	assert.Equal(t, "PLAN-001", created[0].ID)
+	assert.Equal(t, "Mine", created[0].Title)
+	assert.Equal(t, "task", created[0].Type)
+	assert.Equal(t, ops.StatusOpen, created[0].Status)
+
+	state.Issues["RACE-001"] = &materialize.Issue{ID: "RACE-001", Title: "Parallel create"}
+	assert.Equal(t, []string{"PLAN-001"}, []string{created[0].ID})
 }

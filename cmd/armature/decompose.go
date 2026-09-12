@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -248,43 +247,16 @@ plan, or --schema to view the JSON schema.`,
 			}
 
 			opsDir := issuesDir + "/ops"
-			count, err := decompose.ApplyPlan(plan, opsDir, workerID, state, applyOpts, clock.System)
+			created, err := decompose.ApplyPlan(plan, opsDir, workerID, state, applyOpts, clock.System)
 			if err != nil {
 				return err
 			}
 
 			if structuredFormat(cmd) {
-				after, loadErr := store.Load(context.Background())
-				if loadErr != nil {
-					return fmt.Errorf("load snapshot: %w", loadErr)
-				}
-				beforeIDs := map[string]struct{}{}
-				if state != nil {
-					for id := range state.Issues {
-						beforeIDs[id] = struct{}{}
-					}
-				}
-				var created []applyIssueRow
-				if after.State != nil {
-					for id, issue := range after.State.Issues {
-						if _, existed := beforeIDs[id]; existed {
-							continue
-						}
-						title := ""
-						if issue != nil {
-							title = issue.Title
-						}
-						created = append(created, applyIssueRow{ID: id, Title: title, Action: "created"})
-					}
-				}
-				sort.Slice(created, func(i, j int) bool { return created[i].ID < created[j].ID })
-				if len(created) == 0 && count > 0 {
-					created = make([]applyIssueRow, 0, count)
-				}
-				return writeDagApplyEnvelope(cmd, created, false)
+				return writeDagApplyEnvelope(cmd, applyIssueRows(created, "created"), false)
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Applied %d issues from plan\n", count)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Applied %d issues from plan\n", len(created))
 			return nil
 		},
 	}
@@ -300,14 +272,22 @@ plan, or --schema to view the JSON schema.`,
 
 type applyIssueRow struct {
 	ID     string `json:"id"`
-	Title  string `json:"title,omitempty"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Title  string `json:"title"`
 	Action string `json:"action"`
 }
 
 func applyIssueRows(entries []decompose.DryRunEntry, action string) []applyIssueRow {
 	rows := make([]applyIssueRow, 0, len(entries))
 	for _, entry := range entries {
-		rows = append(rows, applyIssueRow{ID: entry.ID, Title: entry.Title, Action: action})
+		rows = append(rows, applyIssueRow{
+			ID:     entry.ID,
+			Type:   entry.Type,
+			Status: entry.Status,
+			Title:  entry.Title,
+			Action: action,
+		})
 	}
 	return rows
 }

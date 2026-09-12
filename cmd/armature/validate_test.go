@@ -162,6 +162,32 @@ func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
 	assert.Greater(t, count, 0)
 }
 
+// TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4: structured
+// validate already puts snapshot warnings in the envelope; stderr must not
+// duplicate them.
+func TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	logPath := filepath.Join(ctx.IssuesDir, "ops", "alice.log")
+	opLine := `["create","excluded-1",1000,"bob",{"title":"Excluded","type":"task","scope":[],"context_files":[]}]` + "\n"
+	require.NoError(t, os.WriteFile(logPath, []byte(opLine), 0644))
+
+	out, stderr, err := runTrlsWithStderr(t, repo, "validate", "--format", "json", "--strict=false")
+	require.NoError(t, err)
+	decodeContractEnvelope(t, out, "findings")
+	assert.NotContains(t, stderr, "warning:", "structured validate must not duplicate snapshot findings on stderr")
+
+	_, humanErr, err := runTrlsWithStderr(t, repo, "validate", "--format", "human", "--strict=false")
+	require.NoError(t, err)
+	assert.Contains(t, humanErr, "warning:", "human validate still reports snapshot warnings on stderr")
+}
+
 // TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4: silent green is
 // strict-only; --strict=false must still print INFO lines.
 func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {

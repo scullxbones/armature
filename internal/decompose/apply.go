@@ -24,10 +24,12 @@ type DryRunResult struct {
 	Warnings []string
 }
 
-// DryRunEntry is a single would-be create entry.
+// DryRunEntry is a single would-be or appended create entry.
 type DryRunEntry struct {
-	ID    string
-	Title string
+	ID     string
+	Title  string
+	Type   string
+	Status string
 }
 
 // ApplyOptions controls optional behaviour for ApplyPlan / DryRunApplyPlan.
@@ -178,38 +180,33 @@ func DryRunApplyPlan(plan *Plan, state *materialize.State, opts ApplyOptions) (*
 	warnings := ValidatePlan(plan)
 
 	transformed := preparePlan(plan, opts)
-	if _, err := planOps(transformed, state, "dry-run", clock.System, opts); err != nil {
+	proposed, err := planOps(transformed, state, "dry-run", clock.System, opts)
+	if err != nil {
 		return nil, err
 	}
 
-	result := &DryRunResult{Warnings: warnings}
-	for _, issue := range transformed.Issues {
-		if _, exists := state.Issues[issue.ID]; exists {
-			continue
-		}
-		result.WouldCreate = append(result.WouldCreate, DryRunEntry{ID: issue.ID, Title: issue.Title})
-	}
-	return result, nil
+	return &DryRunResult{Warnings: warnings, WouldCreate: entriesForCreates(proposed)}, nil
 }
 
 // ApplyPlan appends create ops for each issue in the plan to the op log.
 // Skips issues that already exist in state (by ID).
-// Returns count of issues created.
-func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions, clk clock.Clock) (int, error) {
+// Returns the issues this invocation appended (create ops in the batch), not a
+// repository-wide state diff.
+func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State, opts ApplyOptions, clk clock.Clock) ([]DryRunEntry, error) {
 	if err := validateTypes(plan); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := validateIssueIDs(plan); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if err := validateSources(plan, opts.ManifestData); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	transformed := preparePlan(plan, opts)
 	proposed, err := planOps(transformed, state, workerID, clk, opts)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	appendOps := opts.appendOps
@@ -218,15 +215,25 @@ func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize
 	}
 	logPath := filepath.Join(issuesDir, workerID+".log")
 	if err := appendOps(logPath, proposed); err != nil {
-		return 0, fmt.Errorf("append plan ops: %w", err)
+		return nil, fmt.Errorf("append plan ops: %w", err)
 	}
-	count := 0
+	return entriesForCreates(proposed), nil
+}
+
+func entriesForCreates(proposed []ops.Op) []DryRunEntry {
+	var created []DryRunEntry
 	for _, op := range proposed {
-		if op.Type == ops.OpCreate {
-			count++
+		if op.Type != ops.OpCreate {
+			continue
 		}
+		created = append(created, DryRunEntry{
+			ID:     op.TargetID,
+			Title:  op.Payload.Title,
+			Type:   op.Payload.NodeType,
+			Status: ops.StatusOpen,
+		})
 	}
-	return count, nil
+	return created
 }
 
 func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Clock, opts ApplyOptions) ([]ops.Op, error) {
