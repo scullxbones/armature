@@ -17,11 +17,11 @@ func mapAgentFacingError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := errors.AsType[adapterExitError](err); ok {
-		return err
+	if ace, ok := errors.AsType[adapterExitError](err); ok {
+		return ace
 	}
-	if _, ok := errors.AsType[protocolExitError](err); ok {
-		return err
+	if pe, ok := errors.AsType[protocolExitError](err); ok {
+		return pe
 	}
 	if staysOnPlatformProtocol(cmd) {
 		return skipCommandFailure(err)
