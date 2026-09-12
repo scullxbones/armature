@@ -69,6 +69,7 @@ or landed.
 | `dotdir-collapse.md` | Planners | Current — resolved, awaiting `/to-issues` |
 | `bootstrap-agent-integration.md` | Planners | Current — draft proposal |
 | `codebase-architecture-improvements.md` | Planners | Current — proposed |
+| `ops-branch-shared-sync-policy.md` | Planners | Sketch — Candidate B shared `opsync.Branch` (not tasked) |
 | `dag-documentation-deep-dive.md` | Planners | Current — proposed |
 | `graph-facts-refactor-follow-up.md` | Planners | Current — proposed |
 | `harness-hooks-review-and-retooling.md` | Planners | Current — proposed |
