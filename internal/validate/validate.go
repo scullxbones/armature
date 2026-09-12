@@ -623,16 +623,25 @@ func unitOnlyAcceptance(raw json.RawMessage) bool {
 	if len(raw) == 0 || string(raw) == "null" {
 		return false
 	}
+	// Object form (plan schema): unit-only iff every entry is type test_passes.
+	// review.ParseAcceptanceCriteria is off-limits here (validate-boundary
+	// depguard), so decode both supported array shapes locally.
 	var criteria []struct {
 		Type string `json:"type"`
 	}
-	if err := json.Unmarshal(raw, &criteria); err != nil || len(criteria) == 0 {
-		return false
-	}
-	for _, c := range criteria {
-		if c.Type != "test_passes" {
-			return false
+	if err := json.Unmarshal(raw, &criteria); err == nil && len(criteria) > 0 {
+		for _, c := range criteria {
+			if c.Type != "test_passes" {
+				return false
+			}
 		}
+		return !reArmDoctorSurface.Match(raw)
+	}
+	// Plain-string form: ["go test ./internal/doctor", "make check"] — same
+	// unit-only contract as test_passes unless a string names arm doctor.
+	var plain []string
+	if err := json.Unmarshal(raw, &plain); err != nil || len(plain) == 0 {
+		return false
 	}
 	return !reArmDoctorSurface.Match(raw)
 }

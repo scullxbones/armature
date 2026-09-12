@@ -2295,6 +2295,44 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		assert.True(t, sawUnit, "CLI DoD with unit-only Acceptance must still emit E14")
 	})
 
+	t.Run("plain_string_acceptance_is_unit_only", func(t *testing.T) {
+		t.Parallel()
+		issue := s7T2Fixture()
+		issue.ID = "PLAIN-UNIT"
+		issue.Scope = []string{"internal/doctor/doctor.go", "internal/doctor/doctor_test.go"}
+		issue.Acceptance = json.RawMessage(`["go test ./internal/doctor", "make check"]`)
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		assert.False(t, result.OK)
+		var sawWiring, sawUnit bool
+		for _, f := range result.Findings {
+			if f.Rule != "E14" {
+				continue
+			}
+			if f.Key == "doctor.run_wiring" {
+				sawWiring = true
+			}
+			if f.Key == "unit_only_acceptance" {
+				sawUnit = true
+			}
+		}
+		assert.False(t, sawWiring, "wiring file in scope must not emit doctor.run_wiring")
+		assert.True(t, sawUnit, "plain-string Acceptance is unit-only beside a CLI DoD")
+	})
+
+	t.Run("plain_string_arm_doctor_acceptance_is_same_surface", func(t *testing.T) {
+		t.Parallel()
+		issue := s7T2Fixture()
+		issue.ID = "PLAIN-CLI"
+		issue.Scope = []string{"internal/doctor/doctor.go"}
+		issue.Acceptance = json.RawMessage(`["arm doctor --format json", "make check"]`)
+		state := makeState(issue)
+		result := Validate(state, graphFromState(state), Options{})
+		for _, f := range result.Findings {
+			assert.NotEqual(t, "E14", f.Rule, "plain-string arm doctor Acceptance is same-surface, got %+v", f)
+		}
+	})
+
 	t.Run("cli_acceptance_and_doctor_go_ok", func(t *testing.T) {
 		t.Parallel()
 		issue := s7T2Fixture()
