@@ -266,11 +266,60 @@ func RecordWithDuplicateCheck(input RecordInput, existingAttestations []Assessme
 	// Check for duplicate attestations
 	for _, existingAtt := range existingAttestations {
 		if IsDuplicate(result.Attestation, &existingAtt) {
-			// Idempotent: duplicate is acceptable
+			// Idempotent: duplicate is acceptable. Exact ResultFingerprint
+			// matches take this path and are excluded from disagreement
+			// comparison (I2: priors are not rewritten).
 			result.IsDuplicate = true
 			return result, nil
 		}
 	}
 
+	enrichDisagreementFields(result.Attestation, existingAttestations)
 	return result, nil
+}
+
+// enrichDisagreementFields populates EffectiveRating / IsDisagreement /
+// ConflictsWith* on a newly accepted Assessment Attestation. Qualifying priors
+// share DeliveryFingerprint and are not ResultFingerprint duplicates. Only
+// this attestation is written; priors are read-only (I2/T2).
+// ConflictsWith* cites the highest-severity (then most recently appended)
+// qualifying prior whose Rating differs from att.Rating. Same-rating priors
+// still contribute to advisory EffectiveRating.
+func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentAttestation) {
+	if att == nil {
+		return
+	}
+	att.EffectiveRating = att.Rating
+
+	var citedBundle string
+	var citedRating Rating
+	haveCite := false
+
+	for _, prior := range existing {
+		if prior.DeliveryFingerprint != att.DeliveryFingerprint {
+			continue
+		}
+		if prior.ResultFingerprint == att.ResultFingerprint {
+			continue
+		}
+		att.EffectiveRating = MaxRating(att.EffectiveRating, prior.Rating)
+		if prior.Rating == att.Rating {
+			continue
+		}
+		att.IsDisagreement = true
+		if !haveCite || ratingSeverity(prior.Rating) >= ratingSeverity(citedRating) {
+			haveCite = true
+			citedBundle = prior.BundleID
+			citedRating = prior.Rating
+		}
+	}
+
+	if att.IsDisagreement && haveCite {
+		att.ConflictsWithBundleID = citedBundle
+		att.ConflictsWithRating = ratingPointer(citedRating)
+	}
+}
+
+func ratingPointer(r Rating) *Rating {
+	return &r
 }

@@ -53,3 +53,34 @@ func CountCriteria(results []CriterionResult) (int, int, int, int) {
 
 	return satisfied, partiallySatisfied, notSatisfied, indeterminate
 }
+
+// ratingSeverity ranks Conformance Ratings for disagreement enrichment.
+// Order: Green < Yellow < Red. Unknown values sort below Green.
+func ratingSeverity(r Rating) int {
+	switch r {
+	case Green:
+		return 1
+	case Yellow:
+		return 2
+	case Red:
+		return 3
+	default:
+		return 0
+	}
+}
+
+// MaxRating returns the highest-severity Conformance Rating (Green < Yellow < Red).
+// With no arguments it returns Green. EffectiveRating built from this helper is
+// advisory only and does not confer merge authority (Constitution I5/N4).
+func MaxRating(ratings ...Rating) Rating {
+	if len(ratings) == 0 {
+		return Green
+	}
+	max := ratings[0]
+	for _, r := range ratings[1:] {
+		if ratingSeverity(r) > ratingSeverity(max) {
+			max = r
+		}
+	}
+	return max
+}

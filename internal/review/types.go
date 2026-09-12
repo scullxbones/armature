@@ -452,6 +452,23 @@ type AssessmentAttestation struct {
 	OutputTokens int `json:"output_tokens,omitempty"`
 	// Rating is the derived conformance rating.
 	Rating Rating `json:"rating"`
+	// EffectiveRating is the severity-max of this Conformance Rating and
+	// qualifying same-DeliveryFingerprint priors (Green < Yellow < Red).
+	// It is advisory only: it does not overwrite Rating and confers no merge
+	// authority (Constitution I5/N4). Populated at RecordWithDuplicateCheck
+	// for newly accepted (non-duplicate) attestations.
+	EffectiveRating Rating `json:"effective_rating,omitempty"`
+	// IsDisagreement is true iff any qualifying prior has a different overall
+	// Conformance Rating than this attestation's own. Omitempty keeps legacy
+	// attestations and agreeing records compact.
+	IsDisagreement bool `json:"is_disagreement,omitempty"`
+	// ConflictsWithBundleID and ConflictsWithRating cite the highest-severity
+	// qualifying prior whose Rating differs from this attestation when
+	// IsDisagreement is true (equal severity → most recently appended).
+	// Unset when there is no disagreement. Pointer + omitempty so Green
+	// (Rating zero value) still serializes as "green" when a conflict is set.
+	ConflictsWithBundleID string  `json:"conflicts_with_bundle_id,omitempty"`
+	ConflictsWithRating   *Rating `json:"conflicts_with_rating,omitempty"`
 	// ResultFingerprint is the SHA-256 of the detailed result for idempotence detection.
 	ResultFingerprint string `json:"result_fingerprint"`
 	// SatisfiedCount is the number of satisfied criteria.
