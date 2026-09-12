@@ -1,0 +1,1 @@
+{"count":2,"issues":[{"id":"AOC-S2-T2","type":"task","status":"open","title":"arm list conforms to the contract"},{"id":"AOC-S2-T1","type":"task","status":"open","title":"arm ready conforms to the contract"}],"expired_claims":[],"help":["arm claim --issue <id> --worktree","arm show <id> for outcome, scope, and acceptance"]}

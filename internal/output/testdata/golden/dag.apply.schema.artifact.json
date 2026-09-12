@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Armature Plan Schema",
+  "description": "Schema for Armature decomposition plan files (arm decompose-apply input)",
+  "type": "object",
+  "required": ["version", "title", "issues"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Plan schema version (currently 1)",
+      "enum": [1]
+    },
+    "title": {
+      "type": "string",
+      "description": "Title of the plan",
+      "minLength": 1
+    },
+    "issues": {
+      "type": "array",
+      "description": "List of issues to be created or modified by this plan",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Issue identifier (e.g., FEATURE-S1-T1 or a UUID)",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Issue title",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "description": "Issue type",
+            "enum": ["epic", "story", "feature", "task", "bug"]
+          },
+          "scope": {
+            "type": "string",
+            "description": "Scope of the issue (file paths, modules, or areas affected)"
+          },
+          "context_files": {
+            "type": ["array", "null"],
+            "description": "Additional context files relevant to this issue (may be null)",
+            "items": {
+              "type": "string"
+            }
+          },
+          "priority": {
+            "type": "string",
+            "description": "Priority level (any string is accepted; the CLI does not validate priority values)"
+          },
+          "dod": {
+            "type": "string",
+            "description": "Definition of Done for this issue (may be empty; the CLI does not require it to be non-empty)"
+          },
+          "parent": {
+            "type": "string",
+            "description": "Parent issue ID (empty string if root)"
+          },
+          "blocked_by": {
+            "description": "List of issue IDs that block this issue (may be null)",
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": ["array", "null"],
+            "description": "Additional notes for this issue (may be null)",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance": {
+            "description": "Acceptance criteria (can be a string array or object, or null)",
+            "type": ["array", "null"],
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {"type": "object"}
+              ]
+            }
+          },
+          "source": {
+            "type": "string",
+            "description": "Source entry ID (UUID) cited for this issue. Required by apply; apply is source-atomic."
+          }
+        }
+      },
+      "minItems": 1
+    }
+  }
+}
