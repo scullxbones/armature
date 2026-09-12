@@ -103,7 +103,10 @@ func applyJSONSchema(schema map[string]any, instance any, path string) error {
 				}
 			}
 		}
-		props, _ := schema["properties"].(map[string]any)
+		props, ok := schema["properties"].(map[string]any)
+		if !ok {
+			props = map[string]any{}
+		}
 		for key, value := range inst {
 			sub, ok := props[key].(map[string]any)
 			if !ok {
