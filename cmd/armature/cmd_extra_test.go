@@ -1157,6 +1157,9 @@ func TestDecomposeApplyDryRun_REQ_AOC_S2_T4(t *testing.T) {
 	for _, row := range rows {
 		ids[row.ID] = true
 		assert.Equal(t, "would_create", row.Action)
+		assert.Equal(t, "task", row.Type)
+		assert.Equal(t, "open", row.Status)
+		assert.NotEmpty(t, row.Title)
 	}
 	assert.True(t, ids["DRY-001"])
 	assert.True(t, ids["DRY-002"])
@@ -1780,6 +1783,9 @@ func TestDagApplyResultModesEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
 	require.Len(t, dryIssues, 2)
 	assert.Equal(t, "ENV-001", dryIssues[0].ID)
 	assert.Equal(t, "would_create", dryIssues[0].Action)
+	assert.Equal(t, "task", dryIssues[0].Type)
+	assert.Equal(t, "open", dryIssues[0].Status)
+	assert.NotEmpty(t, dryIssues[0].Title)
 
 	applyOut, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--format", "json")
 	require.NoError(t, err)
@@ -1791,9 +1797,46 @@ func TestDagApplyResultModesEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
 	for _, row := range created {
 		ids[row.ID] = true
 		assert.Equal(t, "created", row.Action)
+		assert.Equal(t, "task", row.Type)
+		assert.Equal(t, "open", row.Status)
+		assert.NotEmpty(t, row.Title)
 	}
 	assert.True(t, ids["ENV-001"])
 	assert.True(t, ids["ENV-002"])
+}
+
+// TestDagApplyEnvelopeIgnoresForeignCreates_REQ_AOC_S2_T4: a sibling worker's
+// issue in global state must not appear as this apply's created rows.
+func TestDagApplyEnvelopeIgnoresForeignCreates_REQ_AOC_S2_T4(t *testing.T) {
+	repo, planFile := plantDagApplyEnvelopeFixture(t)
+	_, err := runTrls(t, repo, "create",
+		"--id", "FOREIGN-001",
+		"--title", "Other worker issue",
+		"--type", "task",
+		"--scope", "internal/FOREIGN-001.go",
+		"--dod", "Foreign issue exists before this apply",
+		"--acceptance", `[{"type":"test_passes"}]`,
+	)
+	require.NoError(t, err)
+
+	applyOut, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--format", "json")
+	require.NoError(t, err)
+	applied := decodeContractEnvelope(t, applyOut, "issues")
+	var created []applyIssueRow
+	require.NoError(t, json.Unmarshal(applied["issues"], &created))
+	ids := map[string]bool{}
+	for _, row := range created {
+		ids[row.ID] = true
+		assert.Equal(t, "created", row.Action)
+		assert.Equal(t, "task", row.Type)
+		assert.Equal(t, "open", row.Status)
+	}
+	assert.True(t, ids["ENV-001"])
+	assert.True(t, ids["ENV-002"])
+	assert.False(t, ids["FOREIGN-001"], "parallel/sibling creates must not appear as this apply's created rows")
+	var count int
+	require.NoError(t, json.Unmarshal(applied["count"], &count))
+	assert.Equal(t, 2, count)
 }
 
 func TestAllAgentFacingCommandsEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
