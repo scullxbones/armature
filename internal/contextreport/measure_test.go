@@ -68,7 +68,7 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	got, err := measureReady(index, state, now)
 	require.NoError(t, err)
 
-	entries := ready.ComputeReady(index, state.Issues, "")
+	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
 	expired := ready.ExpiredClaims(state.Issues, now)
 	require.NotEmpty(t, expired, "fixture in-progress claim must be TTL-expired at the frozen clock")
 
@@ -94,12 +94,39 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	assert.Equal(t, FixtureShowIssue, claims[0].ID)
 }
 
-func TestIssueInfoFromStateSkipsNil(t *testing.T) {
+func TestMeasureShowMatchesWriteShowEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	t.Parallel()
-	assert.Empty(t, issueInfoFromState(nil))
+
 	state, _, err := replayFixtureState()
 	require.NoError(t, err)
-	info := issueInfoFromState(state)
-	require.Contains(t, info, FixtureShowIssue)
-	assert.Equal(t, "task", info[FixtureShowIssue].Type)
+	issue := state.Issues[FixtureShowIssue]
+	require.NotNil(t, issue)
+
+	got, err := measureShow(state)
+	require.NoError(t, err)
+
+	row := output.MarshalIssue(issue)
+	trunc := output.TruncateShowIssue(&row)
+	var want bytes.Buffer
+	require.NoError(t, output.WriteShowEnvelope(&want, []string{issue.ID}, []output.IssueJSON{row}, trunc))
+	assert.Equal(t, want.Bytes(), got, "show meter must price writeShowEnvelope bytes, not RenderIssue+FormatSpend")
+
+	raw := bytes.TrimSpace(got)
+	require.True(t, json.Valid(raw))
+	require.True(t, bytes.HasPrefix(raw, []byte("{")), "agent show is a compact envelope object")
+	assert.False(t, bytes.Contains(got, []byte("\n  ")), "envelope is compact, not MarshalIndent")
+	assert.NotContains(t, string(got), "Spend-to-date:",
+		"FormatSpend is human-only after AOC-S2-T3; agent show does not emit it")
+
+	var decoded map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &decoded))
+	require.Contains(t, decoded, "count")
+	require.Contains(t, decoded, "issues")
+	require.Contains(t, decoded, "help")
+	require.NotContains(t, decoded, "payload")
+
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal(decoded["issues"], &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, FixtureShowIssue, rows[0]["id"])
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
 	"github.com/scullxbones/armature/internal/review"
-	"github.com/scullxbones/armature/internal/stats"
 )
 
 //go:embed testdata/graph
@@ -164,7 +163,7 @@ func measureList(index materialize.Index) ([]byte, error) {
 }
 
 func measureReady(index materialize.Index, state *materialize.State, now time.Time) ([]byte, error) {
-	entries := ready.ComputeReady(index, state.Issues, "")
+	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
 	expired := ready.ExpiredClaims(state.Issues, now)
 	var buf bytes.Buffer
 	if err := output.WriteReadyEnvelope(&buf, entries, nil, false, expired, "", ""); err != nil {
@@ -178,44 +177,15 @@ func measureShow(state *materialize.State) ([]byte, error) {
 	if !ok || issue == nil {
 		return nil, fmt.Errorf("fixture issue %s not found", FixtureShowIssue)
 	}
+	row := output.MarshalIssue(issue)
+	trunc := output.TruncateShowIssue(&row)
 	var buf bytes.Buffer
-	// show.go emits JSON only for --format json. --format agent and the
-	// non-TTY agent default use human RenderIssue; price that payload.
-	if err := output.RenderIssue(&buf, issue, false); err != nil {
-		return nil, fmt.Errorf("render show payload: %w", err)
+	// json/agent show is writeShowEnvelope. FormatSpend is human-only
+	// (AOC-S2-T3) and must not be priced on this row.
+	if err := output.WriteShowEnvelope(&buf, []string{issue.ID}, []output.IssueJSON{row}, trunc); err != nil {
+		return nil, fmt.Errorf("render show envelope: %w", err)
 	}
-	allOps, err := loadEmbeddedOps()
-	if err != nil {
-		return nil, err
-	}
-	rates, err := stats.ResolveRates("", "")
-	if err != nil {
-		return nil, fmt.Errorf("resolve fixture spend rates: %w", err)
-	}
-	info := issueInfoFromState(state)
-	spend := stats.Rollup(stats.Estimate(stats.CollectUsage(allOps), info, rates), issue.ID, info)
-	_, _ = fmt.Fprintln(&buf, stats.FormatSpend(spend))
 	return buf.Bytes(), nil
-}
-
-func issueInfoFromState(state *materialize.State) map[string]stats.IssueInfo {
-	out := make(map[string]stats.IssueInfo)
-	if state == nil {
-		return out
-	}
-	for id, issue := range state.Issues {
-		if issue == nil {
-			continue
-		}
-		out[id] = stats.IssueInfo{
-			ID:             issue.ID,
-			Type:           issue.Type,
-			Parent:         issue.Parent,
-			PreferredModel: issue.PreferredModel,
-			Scope:          issue.Scope,
-		}
-	}
-	return out
 }
 
 func measureRenderContext(state *materialize.State, reader ctxpkg.FileReader) (invocation, bundle []byte, err error) {

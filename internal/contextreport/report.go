@@ -22,9 +22,10 @@ const FixtureShowIssue = "FX-WORK"
 const EstimationMethod = "estimated tokens = bytes/4 (integer division), " +
 	"matching the token_budget convention used by render-context " +
 	"(character budget = tokens * 4). " +
-	"Primary rows are json/agent stdout for list, ready, render-context, " +
-	"and review (compact envelopes from the shared writers), plus the " +
-	"agent-mode show payload (human RenderIssue plus FormatSpend). " +
+	"Primary rows are json/agent stdout for list, ready, show, " +
+	"render-context, and review (compact envelopes from the shared " +
+	"writers). Human show still appends FormatSpend; that adjunct is " +
+	"not priced here because json/agent show does not emit it. " +
 	"Measured against the embedded fixture graph under " +
 	"internal/contextreport/testdata/."
 
