@@ -168,3 +168,4 @@
 ["transition","AOC-S3-T5",1789184214,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
 ["transition","AOC-S4-T2",1789187351,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Raw dogfood finding 2026-09-12T0421Z-cursor-workflow-worker-thrash-identical-done.md: ORCH-RUNTIME-V1-T3 six identical empty dones/15m; 14/1367 corpus dups; harness defect not ops rewrite. PR 187 head 2ff33b67. --force/--skip-delivery-gate: CA tip synced; PR open.","skipped_delivery_gate":true}]
 ["transition","AOC-S4-T2",1789187360,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged"}]
+["unlink","LNGHZN-S6-T5",1789226217,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"dep":"TOPTIER-S15","rel":"blocked_by"}]
