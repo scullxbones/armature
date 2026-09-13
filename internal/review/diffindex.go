@@ -3,7 +3,6 @@ package review
 import (
 	"bufio"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -146,14 +145,4 @@ func (d *DiffIndex) ContainsLine(file string, line int) bool {
 func (d *DiffIndex) ContainsFile(file string) bool {
 	_, exists := d.fileLines[file]
 	return exists
-}
-
-// Files returns the list of files present in the diff index, sorted alphabetically.
-func (d *DiffIndex) Files() []string {
-	files := make([]string, 0, len(d.fileLines))
-	for file := range d.fileLines {
-		files = append(files, file)
-	}
-	sort.Strings(files)
-	return files
 }

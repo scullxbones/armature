@@ -77,7 +77,7 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 
 	checks = append(checks, checkD1GitDivergence(repoPath, index))
 	checks = append(checks, checkD2StaleClaims(allIssues, now))
-	checks = append(checks, checkD3OrphanedOpsFromList(index, opsTargetIDs))
+	checks = append(checks, checkD3OrphanedOpsFromListWithContext(index, opsTargetIDs, nil))
 	checks = append(checks, checkD4BrokenParentRefs(index))
 	checks = append(checks, checkD5DependencyCycles(index))
 	checks = append(checks, checkD6UncitedIssues(allIssues))
@@ -261,21 +261,12 @@ type opLocation struct {
 // We use this directly for D3 verbose output.
 func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
 	result := make(map[string][]opLocation)
-
-	// Group by target ID
-	targetToLocs := make(map[string][]opLocation)
 	for _, item := range items {
 		targetID := item.Op.TargetID
-		logName := filepath.Base(item.LogFilename)
-		loc := opLocation{file: logName, line: item.LineNumber}
-		targetToLocs[targetID] = append(targetToLocs[targetID], loc)
-	}
-
-	// Copy to result, removing duplicates and sorting
-	for targetID, locs := range targetToLocs {
-		if len(locs) > 0 {
-			result[targetID] = locs
-		}
+		result[targetID] = append(result[targetID], opLocation{
+			file: filepath.Base(item.LogFilename),
+			line: item.LineNumber,
+		})
 	}
 	return result
 }

@@ -105,7 +105,7 @@ func TestApplyPlan_InjectsClockTimestamp(t *testing.T) {
 	}
 
 	state := materialize.NewState()
-	fixedClock := clock.Fixed(fixedTimestamp)
+	fixedClock := func() int64 { return fixedTimestamp }
 
 	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{}, fixedClock)
 	require.NoError(t, err)
@@ -134,7 +134,7 @@ func TestApplyPlan_AppliesRootToTopLevelIssues(t *testing.T) {
 
 	state := materialize.NewState()
 	state.Issues["EPIC-001"] = &materialize.Issue{ID: "EPIC-001", Type: "epic", Status: ops.StatusOpen, Title: "Root epic"}
-	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, clock.Fixed(42))
+	created, err := ApplyPlan(plan, dir, workerID, state, ApplyOptions{Root: "EPIC-001"}, func() int64 { return 42 })
 	require.NoError(t, err)
 	assert.Len(t, created, 1)
 

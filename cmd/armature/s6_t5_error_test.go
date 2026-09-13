@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func TestAgentFacingRunEReturnsCommandFailure_REQ_LNGHZN_S6_T5(t *testing.T) {
 		path := commandArgv(cmd)
 		t.Run(strings.Join(path, " "), func(t *testing.T) {
 			checked++
-			if isProtocolOutputCommand(cmd) {
+			if staysOnPlatformProtocol(cmd) || output.Classify(cmd.Annotations) == output.ChannelProtocolOutput {
 				stdout := new(bytes.Buffer)
 				stderr := new(bytes.Buffer)
 				_ = executeThenHandleRootError(t, stdout, stderr, failureArgv(path, broken)...)

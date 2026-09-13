@@ -430,7 +430,7 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		// Terminal-status issues have already been delivered; skip required-field checks.
-		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, field := range issuetype.RequiredFields(issue.Type) {
@@ -897,7 +897,7 @@ func checkW3BudgetExceeded(issues map[string]*materialize.Issue) []Finding {
 func checkW4BroadScope(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, glob := range issue.Scope {
@@ -922,7 +922,7 @@ func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []Finding 
 		if isW5ContainerType(issue.Type) {
 			continue
 		}
-		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		if len(issue.ContextFiles) > 0 {
@@ -1040,56 +1040,29 @@ func isTerminalStatus(status string) bool {
 func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string, allIssues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		// Terminal-status issues have already been delivered; their scope no longer needs to exist.
-		if issue.Status == ops.StatusMerged || issue.Status == ops.StatusDone || issue.Status == ops.StatusCancelled {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		expandedFiles, ok := preExpandedScopes[id]
 		if !ok {
-			// No pre-expanded data for this issue; skip check
 			continue
 		}
-
-		// If expandedFiles is not empty, at least some globs matched files
-		// If it's empty, no globs matched any files
 		hasMatches := len(expandedFiles) > 0
-
-		// Collect all "(new)" files declared by blocking tasks. Traverse from the
-		// full issue set so a legitimate blocker is found even when the caller
-		// passed a narrowed target map (library tests).
 		blockerNewFiles := collectBlockerNewFiles(issue, allIssues)
 
-		// Check each scope entry against the expanded files
 		for _, entry := range issue.Scope {
-			// Legacy ops may store multiple comma-separated paths as one entry; check each individually.
-			for _, path := range splitSeq(entry, ", ") {
-				path = strings.TrimSpace(path) // trim whitespace
-				// "(new)" entries are planned files not yet created; skip them.
-				if hasNewSuffix(path) {
+			for _, path := range strings.Split(entry, ", ") {
+				path = strings.TrimSpace(path)
+				if strings.HasSuffix(path, " (new)") {
 					continue
 				}
-				// Determine if this path is phantom
-				isPhantom := false
-				if !hasMatches {
-					// No files matched any globs — this entry is phantom
-					isPhantom = true
-				} else if !isGlobPattern(path) && !slices.Contains(expandedFiles, path) {
-					// This is a literal path and it doesn't appear in the expanded files
-					isPhantom = true
-				}
-				// If it's a glob pattern and we have matches, assume it matched (can't validate further without the glob)
-
-				if isPhantom {
-					// Check if a blocker declares this file with "(new)" suffix
-					// If yes, suppress the phantom scope warning since the file is legitimately
-					// pending upstream creation
-					if !blockerNewFiles[path] {
-						findings = append(findings, Finding{
-							Severity: "info", Rule: "W10",
-							Message:  fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id),
-							CitedIDs: []string{id},
-						})
-					}
+				phantom := !hasMatches || (!isGlobPattern(path) && !slices.Contains(expandedFiles, path))
+				if phantom && !blockerNewFiles[path] {
+					findings = append(findings, Finding{
+						Severity: "info", Rule: "W10",
+						Message:  fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id),
+						CitedIDs: []string{id},
+					})
 				}
 			}
 		}
@@ -1124,12 +1097,10 @@ func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materia
 
 		// Collect all "(new)"-suffixed files from this blocker's scope
 		for _, entry := range blocker.Scope {
-			for _, path := range splitSeq(entry, ", ") {
+			for _, path := range strings.Split(entry, ", ") {
 				path = strings.TrimSpace(path)
-				if hasNewSuffix(path) {
-					// Remove the " (new)" suffix to get the base filename
-					basePath := strings.TrimSuffix(path, " (new)")
-					result[basePath] = true
+				if strings.HasSuffix(path, " (new)") {
+					result[strings.TrimSuffix(path, " (new)")] = true
 				}
 			}
 		}
@@ -1144,17 +1115,6 @@ func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materia
 // isGlobPattern checks if a string contains glob characters
 func isGlobPattern(s string) bool {
 	return strings.ContainsAny(s, "*?[]")
-}
-
-// splitSeq is a helper that splits a string on a separator using strings.Split.
-func splitSeq(s, sep string) []string {
-	return strings.Split(s, sep)
-}
-
-// hasNewSuffix checks if a string ends with " (new)".
-func hasNewSuffix(s string) bool {
-	const newSuffix = " (new)"
-	return len(s) >= len(newSuffix) && s[len(s)-len(newSuffix):] == newSuffix
 }
 
 const minOutcomeLength = 20

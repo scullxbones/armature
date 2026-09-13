@@ -42,9 +42,7 @@ func TestBuildDiffIndex_SimpleFile(t *testing.T) {
 	// Line 6 is context, should not be marked as changed
 	assert.False(t, idx.ContainsLine("internal/review/test.go", 6))
 
-	files := idx.Files()
-	assert.Len(t, files, 1)
-	assert.Contains(t, files, "internal/review/test.go")
+	assert.True(t, idx.ContainsFile("internal/review/test.go"))
 }
 
 func TestBuildDiffIndex_MultipleFiles(t *testing.T) {
@@ -68,10 +66,8 @@ func TestBuildDiffIndex_MultipleFiles(t *testing.T) {
 	idx, err := review.BuildDiffIndex(diff)
 	require.NoError(t, err)
 
-	files := idx.Files()
-	assert.Len(t, files, 2)
-	assert.Contains(t, files, "file1.go")
-	assert.Contains(t, files, "file2.go")
+	assert.True(t, idx.ContainsFile("file1.go"))
+	assert.True(t, idx.ContainsFile("file2.go"))
 
 	// file1.go has a + at line 1
 	assert.True(t, idx.ContainsLine("file1.go", 1))
@@ -141,9 +137,6 @@ func TestBuildDiffIndex_EmptyDiff(t *testing.T) {
 	idx, err := review.BuildDiffIndex(diff)
 	require.NoError(t, err)
 	require.NotNil(t, idx)
-
-	files := idx.Files()
-	assert.Len(t, files, 0)
 }
 
 func TestBuildDiffIndex_InvalidFormat(t *testing.T) {
@@ -210,10 +203,6 @@ func TestBuildDiffIndex_BinaryOnlyDelivery(t *testing.T) {
 
 	// Binary file should be indexed
 	assert.True(t, idx.ContainsFile("logo.svg"))
-	// Should appear in the files list
-	files := idx.Files()
-	assert.Len(t, files, 1)
-	assert.Contains(t, files, "logo.svg")
 	// But should not have line-level changes
 	assert.False(t, idx.ContainsLine("logo.svg", 1))
 }
@@ -245,10 +234,6 @@ Binary files a/data.bin and b/data.bin differ
 
 	// Text file should have line changes
 	assert.True(t, idx.ContainsLine("main.go", 2))
-
-	files := idx.Files()
-	assert.Len(t, files, 3)
-	assert.Equal(t, []string{"data.bin", "image.png", "main.go"}, files)
 }
 
 func TestContainsLine_NonexistentFile(t *testing.T) {
@@ -264,31 +249,6 @@ func TestContainsLine_NonexistentFile(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, idx.ContainsLine("nonexistent.go", 1))
-}
-
-func TestFiles_Sorted(t *testing.T) {
-	t.Parallel()
-	diff := `--- a/z.go
-+++ b/z.go
-@@ -1,1 +1,2 @@
-+added
---- a/a.go
-+++ b/a.go
-@@ -1,1 +1,2 @@
-+added
---- a/m.go
-+++ b/m.go
-@@ -1,1 +1,2 @@
-+added
-`
-
-	idx, err := review.BuildDiffIndex(diff)
-	require.NoError(t, err)
-
-	files := idx.Files()
-	assert.Len(t, files, 3)
-	// Files should be returned in sorted order
-	assert.Equal(t, []string{"a.go", "m.go", "z.go"}, files)
 }
 
 func TestDiffIndexContainsFile(t *testing.T) {
@@ -347,10 +307,6 @@ func TestBuildDiffIndex_DeletedFile(t *testing.T) {
 
 	// The deleted file should be in the index
 	assert.True(t, idx.ContainsFile("deleted_file.go"))
-
-	// Files list should contain the deleted file
-	files := idx.Files()
-	assert.Contains(t, files, "deleted_file.go")
 }
 
 func TestBuildDiffIndex_BinaryFileDeleted(t *testing.T) {
@@ -390,10 +346,6 @@ func TestBuildDiffIndex_MixedAdditionAndDeletion(t *testing.T) {
 	// Both files should be in the index
 	assert.True(t, idx.ContainsFile("deleted.go"))
 	assert.True(t, idx.ContainsFile("new.go"))
-
-	files := idx.Files()
-	assert.Len(t, files, 2)
-	assert.Equal(t, []string{"deleted.go", "new.go"}, files)
 
 	// The new file should have line markers for added lines
 	assert.True(t, idx.ContainsLine("new.go", 1))

@@ -699,8 +699,13 @@ func TestApplyDecisionOp_LastWriteWins(t *testing.T) {
 	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpDecision, TargetID: "task-01", Timestamp: 300,
 		WorkerID: "w2", Payload: ops.Payload{Topic: "db", Choice: "sqlite", Rationale: "simpler"}}))
 	decisions := state.Issues["task-01"].Decisions
-	active := activeDecisionForTopic(decisions, "db")
-	assert.Equal(t, "sqlite", active.Choice)
+	var latest Decision
+	for _, d := range decisions {
+		if d.Topic == "db" && d.Timestamp > latest.Timestamp {
+			latest = d
+		}
+	}
+	assert.Equal(t, "sqlite", latest.Choice)
 }
 
 func TestMaterializePipeline(t *testing.T) {

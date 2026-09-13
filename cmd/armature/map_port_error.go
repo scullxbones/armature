@@ -7,7 +7,6 @@ import (
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/exitcodes"
-	"github.com/scullxbones/armature/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -165,16 +164,6 @@ func commandFailureAtPort(err error) *armerrors.CommandFailure {
 		return cf
 	}
 	return armerrors.New(armerrors.CodeIO, err.Error(), nil, 1)
-}
-
-func isProtocolOutputCommand(cmd *cobra.Command) bool {
-	if cmd == nil {
-		return false
-	}
-	if staysOnPlatformProtocol(cmd) {
-		return true
-	}
-	return output.Classify(cmd.Annotations) == output.ChannelProtocolOutput
 }
 
 func installCommandFailureMapping(root *cobra.Command) {

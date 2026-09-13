@@ -92,7 +92,7 @@ type SyncResult struct {
 
 // Sync synchronizes a single source by fetching its content, computing a fingerprint,
 // updating the manifest, and caching the content.
-func (l *Lifecycle) Sync(ctx context.Context, id string) SyncResult {
+func (l *Lifecycle) sync(ctx context.Context, id string) SyncResult {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
 		return SyncResult{
@@ -231,7 +231,7 @@ const (
 )
 
 // Verify checks if the cached content for a source matches its stored fingerprint.
-func (l *Lifecycle) Verify(id string) VerifyResult {
+func (l *Lifecycle) verify(id string) VerifyResult {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
 		return VerifyResult{
@@ -329,8 +329,8 @@ func (l *Lifecycle) VerifyAll() ([]VerifyResult, error) {
 }
 
 // IsFresh returns true if the source's cached content matches its stored fingerprint.
-func (l *Lifecycle) IsFresh(id string) (bool, error) {
-	result := l.Verify(id)
+func (l *Lifecycle) isFresh(id string) (bool, error) {
+	result := l.verify(id)
 	if result.Error != nil {
 		return false, result.Error
 	}

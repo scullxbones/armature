@@ -739,17 +739,6 @@ func (s *State) BuildIndex() Index {
 	return index
 }
 
-// activeDecisionForTopic returns the latest decision for a given topic.
-func activeDecisionForTopic(decisions []Decision, topic string) Decision {
-	var latest Decision
-	for _, d := range decisions {
-		if d.Topic == topic && d.Timestamp > latest.Timestamp {
-			latest = d
-		}
-	}
-	return latest
-}
-
 // confidenceOrDefault returns the confidence value from an op payload,
 // defaulting to "verified" when the field is absent or empty.
 func confidenceOrDefault(confidence string) string {

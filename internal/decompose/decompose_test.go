@@ -192,7 +192,7 @@ func TestRevertPlan_InjectsClockTimestamp(t *testing.T) {
 
 	state := materialize.NewState()
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
-	fixedClock := clock.Fixed(fixedTimestamp)
+	fixedClock := func() int64 { return fixedTimestamp }
 
 	count, err := RevertPlan(plan, dir, workerID, state, fixedClock)
 	require.NoError(t, err)

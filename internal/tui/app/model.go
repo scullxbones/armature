@@ -14,7 +14,6 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
-	"github.com/scullxbones/armature/internal/tui/detail"
 )
 
 // ScreenID identifies one of the four main screens.
@@ -57,7 +56,6 @@ type Model struct {
 	height         int
 	watcher        *fsnotify.Watcher
 	liveMode       bool // true = fsnotify active, false = poll fallback
-	detail         detail.Model
 }
 
 // New constructs the root model. Screens are constructed lazily with placeholder

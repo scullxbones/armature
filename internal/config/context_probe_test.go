@@ -7,39 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeRepoProbe struct {
-	worktreePath string
-}
-
-func (f fakeRepoProbe) Probe(repoPath string) (RepoProbeResult, error) {
-	return RepoProbeResult{
-		RepoPath:     repoPath,
-		WorktreePath: f.worktreePath,
-	}, nil
-}
-
 func TestResolveContextAlwaysUsesOpsWorktree_REQ_SB_T5(t *testing.T) {
 	t.Parallel()
-	probe := fakeRepoProbe{
-		worktreePath: "/repo/.arm",
-	}
-
-	ctx, err := ResolveContextWithProbe("/repo", probe, Config{})
-
-	require.NoError(t, err)
-	assert.Equal(t, "/repo", ctx.RepoPath)
-	assert.Equal(t, "/repo/.arm/.armature", ctx.IssuesDir)
-	assert.Equal(t, "/repo/.arm", ctx.WorktreePath)
+	assert.Equal(t, "/repo/.arm/.armature", issuesDirFor("/repo/.arm"))
+	assert.Equal(t, "/repo/.armature", issuesDirFor("/repo/.armature"))
 }
 
 func TestResolveContextErrorsWhenOpsWorktreePathEmpty_REQ_SB_T5(t *testing.T) {
 	t.Parallel()
-	probe := fakeRepoProbe{
-		worktreePath: "",
-	}
-
-	_, err := ResolveContextWithProbe("/repo", probe, Config{})
-
+	_, err := ResolveLayout(initTestRepo(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "armature.ops-worktree-path")
 }
