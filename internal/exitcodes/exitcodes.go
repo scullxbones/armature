@@ -35,26 +35,3 @@ const (
 func (c Code) Int() int {
 	return int(c)
 }
-
-// String returns a short machine-readable label for the exit code.
-// These labels are used in structured JSON error output.
-func (c Code) String() string {
-	switch c {
-	case ExitSuccess:
-		return "success"
-	case ExitGeneralError:
-		return "general_error"
-	case ExitUsageError:
-		return "usage_error"
-	case ExitNotFound:
-		return "not_found"
-	case ExitConflict:
-		return "conflict"
-	case ExitIOError:
-		return "io_error"
-	case ExitInvalidState:
-		return "invalid_state"
-	default:
-		return "unknown"
-	}
-}

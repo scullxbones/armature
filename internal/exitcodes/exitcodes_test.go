@@ -66,27 +66,3 @@ func TestExitCodeInt(t *testing.T) {
 		t.Errorf("ExitNotFound.Int() expected 3, got %d", exitcodes.ExitNotFound.Int())
 	}
 }
-
-func TestExitCodeString(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		code exitcodes.Code
-		want string
-	}{
-		{exitcodes.ExitSuccess, "success"},
-		{exitcodes.ExitGeneralError, "general_error"},
-		{exitcodes.ExitUsageError, "usage_error"},
-		{exitcodes.ExitNotFound, "not_found"},
-		{exitcodes.ExitConflict, "conflict"},
-		{exitcodes.ExitIOError, "io_error"},
-		{exitcodes.ExitInvalidState, "invalid_state"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			t.Parallel()
-			if tt.code.String() != tt.want {
-				t.Errorf("expected String() = %q, got %q", tt.want, tt.code.String())
-			}
-		})
-	}
-}

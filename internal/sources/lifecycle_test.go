@@ -127,7 +127,7 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 
 	// Sync the source.
 	ctx := context.Background()
-	result := lc.Sync(ctx, "test-1")
+	result := lc.sync(ctx, "test-1")
 
 	if result.Error != nil {
 		t.Fatalf("Sync failed: %v", result.Error)
@@ -181,7 +181,7 @@ func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 
 	// Sync should fail.
 	ctx := context.Background()
-	result := lc.Sync(ctx, "test-1")
+	result := lc.sync(ctx, "test-1")
 
 	if result.Error == nil {
 		t.Fatal("expected Sync to fail but it didn't")
@@ -265,13 +265,13 @@ func TestLifecycleVerify_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	syncResult := lc.Sync(ctx, "test-1")
+	syncResult := lc.sync(ctx, "test-1")
 	if syncResult.Error != nil {
 		t.Fatalf("Sync failed: %v", syncResult.Error)
 	}
 
 	// Verify should report OK.
-	verifyResult := lc.Verify("test-1")
+	verifyResult := lc.verify("test-1")
 	if verifyResult.Status != VerifyOK {
 		t.Errorf("expected VerifyOK, got %v", verifyResult.Status)
 	}
@@ -305,7 +305,7 @@ func TestLifecycleVerifyStale_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	// Verify should report STALE.
-	verifyResult := lc.Verify("test-1")
+	verifyResult := lc.verify("test-1")
 	if verifyResult.Status != VerifyStale {
 		t.Errorf("expected VerifyStale, got %v", verifyResult.Status)
 	}
@@ -329,7 +329,7 @@ func TestLifecycleVerifyMissing_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	// Verify should report MISSING.
-	verifyResult := lc.Verify("test-1")
+	verifyResult := lc.verify("test-1")
 	if verifyResult.Status != VerifyMissing {
 		t.Errorf("expected VerifyMissing, got %v", verifyResult.Status)
 	}
@@ -359,13 +359,13 @@ func TestLifecycleIsFresh_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	syncResult := lc.Sync(ctx, "test-1")
+	syncResult := lc.sync(ctx, "test-1")
 	if syncResult.Error != nil {
 		t.Fatalf("Sync failed: %v", syncResult.Error)
 	}
 
 	// IsFresh should return true.
-	fresh, err := lc.IsFresh("test-1")
+	fresh, err := lc.isFresh("test-1")
 	if err != nil {
 		t.Fatalf("IsFresh failed: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	if _, err := lc.Register(entry); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	if result := lc.Sync(context.Background(), entry.ID); result.Error != nil {
+	if result := lc.sync(context.Background(), entry.ID); result.Error != nil {
 		t.Fatalf("Sync failed: %v", result.Error)
 	}
 
@@ -513,7 +513,7 @@ func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("WriteCache failed: %v", err)
 	}
 
-	result := lc.Verify(entry.ID)
+	result := lc.verify(entry.ID)
 	if result.Status != VerifyChanged {
 		t.Fatalf("expected VerifyChanged, got %v", result.Status)
 	}
@@ -611,7 +611,7 @@ func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	result := lc.Sync(context.Background(), "fs-1")
+	result := lc.sync(context.Background(), "fs-1")
 	if result.Error != nil {
 		t.Fatalf("Sync via FilesystemProvider failed: %v", result.Error)
 	}
@@ -622,7 +622,7 @@ func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Errorf("expected ProviderType filesystem, got %q", result.ProviderType)
 	}
 
-	verify := lc.Verify("fs-1")
+	verify := lc.verify("fs-1")
 	if verify.Status != VerifyOK {
 		t.Errorf("expected VerifyOK after sync, got %v", verify.Status)
 	}
@@ -781,7 +781,7 @@ func TestLifecycleSyncWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 
 	// Sync the single source
 	ctx := context.Background()
-	result := lc.Sync(ctx, "test-1")
+	result := lc.sync(ctx, "test-1")
 	if result.Error != nil {
 		t.Fatalf("Sync failed: %v", result.Error)
 	}

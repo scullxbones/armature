@@ -21,15 +21,10 @@ type Context struct {
 	Config       Config // loaded from IssuesDir/config.json
 }
 
-// RepoProbeResult holds the repository facts collected through adapter-backed probing.
-type RepoProbeResult struct {
+// repoProbeResult holds the repository facts collected through adapter-backed probing.
+type repoProbeResult struct {
 	RepoPath     string
 	WorktreePath string
-}
-
-// RepoProbe collects repository facts needed to derive a Context.
-type RepoProbe interface {
-	Probe(repoPath string) (RepoProbeResult, error)
 }
 
 // issuesDirFor derives the issues directory for callers that cannot probe the
@@ -120,7 +115,7 @@ func resolveParentRepoFromWorktree(worktreePath string) (string, error) {
 // config.json. Use this when config decode failed but the modern worktree is
 // still the right place to diagnose or repair.
 func ResolveLayout(repoPath string) (*Context, error) {
-	probeResult, err := defaultRepoProbe{}.Probe(repoPath)
+	probeResult, err := defaultRepoProbe{}.probe(repoPath)
 	if err != nil {
 		return nil, err
 	}
@@ -150,29 +145,6 @@ func ResolveContext(repoPath string) (*Context, error) {
 	return ctx, nil
 }
 
-// ResolveContextWithProbe derives a Context from probe results and config without
-// performing filesystem or git I/O itself.
-// It requires armature.ops-worktree-path to be set.
-func ResolveContextWithProbe(repoPath string, probe RepoProbe, cfg Config) (*Context, error) {
-	probeResult, err := probe.Probe(repoPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if probeResult.WorktreePath == "" {
-		return nil, fmt.Errorf("armature.ops-worktree-path must be set")
-	}
-
-	issuesDir := issuesDirFor(probeResult.WorktreePath)
-
-	return &Context{
-		RepoPath:     probeResult.RepoPath,
-		IssuesDir:    issuesDir,
-		WorktreePath: probeResult.WorktreePath,
-		Config:       cfg,
-	}, nil
-}
-
 // DetectUnmigratedLayout checks if the issues directory is nested below the ops
 // worktree, which identifies the old dual-branch layout regardless of a custom
 // ops worktree path.
@@ -180,39 +152,31 @@ func DetectUnmigratedLayout(worktreePath, issuesDir string) bool {
 	return filepath.Clean(worktreePath) != filepath.Clean(issuesDir)
 }
 
-type staticRepoProbe struct {
-	result RepoProbeResult
-}
-
-func (s staticRepoProbe) Probe(string) (RepoProbeResult, error) {
-	return s.result, nil
-}
-
 type defaultRepoProbe struct{}
 
-func (defaultRepoProbe) Probe(repoPath string) (RepoProbeResult, error) {
+func (defaultRepoProbe) probe(repoPath string) (repoProbeResult, error) {
 	isWorktree, err := isGitWorktree(repoPath)
 	if err != nil {
-		return RepoProbeResult{}, fmt.Errorf("check git worktree: %w", err)
+		return repoProbeResult{}, fmt.Errorf("check git worktree: %w", err)
 	}
 
 	actualRepoPath := repoPath
 	if isWorktree {
 		actualRepoPath, err = resolveParentRepoFromWorktree(repoPath)
 		if err != nil {
-			return RepoProbeResult{}, fmt.Errorf("resolve parent repo from worktree: %w", err)
+			return repoProbeResult{}, fmt.Errorf("resolve parent repo from worktree: %w", err)
 		}
 	}
 
 	worktreePath, err := adapters.GitConfig(actualRepoPath, "armature.ops-worktree-path")
 	if err != nil {
 		if info, statErr := os.Stat(actualRepoPath); statErr != nil || info == nil || !info.IsDir() {
-			return RepoProbeResult{}, err
+			return repoProbeResult{}, err
 		}
-		return RepoProbeResult{}, fmt.Errorf("armature.ops-worktree-path must be set: %w", err)
+		return repoProbeResult{}, fmt.Errorf("armature.ops-worktree-path must be set: %w", err)
 	}
 
-	return RepoProbeResult{
+	return repoProbeResult{
 		RepoPath:     actualRepoPath,
 		WorktreePath: worktreePath,
 	}, nil
