@@ -177,6 +177,14 @@ const (
 	fixCopyContractFP   = "copy fingerprints.contract from the prepared review bundle"
 	fixActivityDigest   = "re-run arm review prepare so activity.digest matches the on-disk log"
 	fixDefaultCriterion = `add a criterion result with id "definition_of_done" or "acceptance[N]"`
+	fixAssessmentJSON   = "emit JSON matching docs/schemas/conformance-assessment.schema.json with schema_version %d"
+	fixDropActivityCite = "re-run arm review prepare so the bundle includes activity, or drop activity_entry_id citations"
+	fixUnknownExit      = "do not use this entry to support satisfied; lower the status or cite an entry with a known zero exit code"
+	fixFailedExit       = "do not use a failed command as satisfied evidence; lower the status or cite a passing entry"
+	fixCitationsReq     = "add at least one citation, or lower the status from satisfied and set missing_evidence"
+	fixInvalidStatus    = `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`
+	fixUnexpectedID     = `rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`
+	fixUnknownField     = "remove the unknown field or rename it to a documented schema property"
 )
 
 type validateFixRule struct {
@@ -208,13 +216,16 @@ func (r validateFixRule) match(msg string) bool {
 var validateFixRules = []validateFixRule{
 	{any: []string{"review bundle:"}, text: fixPrepareBundle},
 	{any: []string{"unsupported schema version"}, fixable: true, text: "set schema_version to %d", schema: true},
-	{any: []string{"unknown field"}, fixable: true, text: "remove the unknown field or rename it to a documented schema property"},
+	{any: []string{"unknown field"}, fixable: true, text: fixUnknownField},
 	{any: []string{"column must be"}, fixable: true, text: "omit column or set it to a 1-based column number (>= 1)"},
 	{any: []string{"line must be"}, fixable: true, text: "omit line or set it to an integer; JSON null is not allowed"},
 	{any: []string{"citations must be"}, fixable: true, text: "set citations to an array of evidence, or [] with missing_evidence"},
-	{any: []string{"invalid criterion status"}, fixable: true, text: `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`},
+	{any: []string{"invalid criterion status"}, fixable: true, text: fixInvalidStatus},
 	{any: []string{"missing required field"}, fixable: true, text: "add the required field on the criterion result"},
-	{any: []string{"parse assessment json", "decode conformance assessment", "unexpected trailing json"}, fixable: true, text: "emit JSON matching docs/schemas/conformance-assessment.schema.json with schema_version %d", schema: true},
+	{
+		any:     []string{"parse assessment json", "decode conformance assessment", "unexpected trailing json"},
+		fixable: true, text: fixAssessmentJSON, schema: true,
+	},
 	{any: []string{"parse bundle json", "decode review bundle"}, text: fixPrepareBundle},
 	{any: []string{"missing bundle id", "bundle id is empty"}, fixable: true, text: "copy bundle_id from the prepared review bundle"},
 	{any: []string{"no results provided"}, fixable: true, text: "add one results[] entry per contract criterion"},
@@ -222,7 +233,7 @@ var validateFixRules = []validateFixRule{
 	{any: []string{"missing delivery fingerprint"}, fixable: true, text: fixCopyDeliveryFP},
 	{any: []string{"missing id"}, fixable: true, text: `set id to "definition_of_done" or "acceptance[N]"`},
 	{any: []string{"missing rationale"}, fixable: true, text: "add a rationale explaining the criterion status"},
-	{any: []string{"citations required"}, fixable: true, text: "add at least one citation, or lower the status from satisfied and set missing_evidence"},
+	{any: []string{"citations required"}, fixable: true, text: fixCitationsReq},
 	{any: []string{"missing evidence", "citations or missing_evidence"}, fixable: true, text: "set missing_evidence to describe what is absent, or add citations"},
 	{any: []string{"mutually exclusive"}, fixable: true, text: "keep either path or activity_entry_id on the citation, not both"},
 	{all: []string{"delivery_fingerprint", "does not match"}, fixable: true, text: fixCopyDeliveryFP},
@@ -233,14 +244,14 @@ var validateFixRules = []validateFixRule{
 	{all: []string{"bundle_id", "does not match"}, fixable: true, text: "set bundle_id to the prepared bundle's bundle_id"},
 	{any: []string{"bundle was prepared for issue"}, text: "validate against the bundle's issue or re-run arm review prepare for this issue"},
 	{any: []string{"duplicate id"}, fixable: true, text: "keep a single result for this criterion id"},
-	{any: []string{"unexpected criterion id"}, fixable: true, text: `rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`},
+	{any: []string{"unexpected criterion id"}, fixable: true, text: fixUnexpectedID},
 	{any: []string{"missing expected id"}, fixable: true, text: fixDefaultCriterion, quoted: true},
-	{any: []string{"no bundle activity section", "cites activity log entries"}, fixable: true, text: "re-run arm review prepare so the bundle includes activity, or drop activity_entry_id citations"},
+	{any: []string{"no bundle activity section", "cites activity log entries"}, fixable: true, text: fixDropActivityCite},
 	{any: []string{"invalid activity entry id"}, fixable: true, text: "cite a numeric activity_entry_id from the bundle activity log"},
 	{any: []string{"unknown activity entry"}, fixable: true, text: "cite an activity_entry_id present in the activity log"},
 	{any: []string{"earlier commits"}, fixable: true, text: "cite an activity entry executed at the delivery head_sha"},
-	{any: []string{"unknown exit code"}, fixable: true, text: "do not use this entry to support satisfied; lower the status or cite an entry with a known zero exit code"},
-	{any: []string{"failed exit code"}, fixable: true, text: "do not use a failed command as satisfied evidence; lower the status or cite a passing entry"},
+	{any: []string{"unknown exit code"}, fixable: true, text: fixUnknownExit},
+	{any: []string{"failed exit code"}, fixable: true, text: fixFailedExit},
 	{any: []string{"upgrade-only"}, fixable: true, text: "add a diff citation (path) for this implementation criterion"},
 	{any: []string{"activity log digest mismatch"}, text: fixActivityDigest},
 	{any: []string{"activity log missing or unreadable"}, text: "restore the activity log or re-run arm review prepare"},
