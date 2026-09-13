@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	ReadyShowHelp         = "arm show <id> for outcome, scope, and acceptance"
+	ReadyShowHelp         = ListShowHelp
 	ReadyClaimHelp        = "arm claim --issue <id> --worktree"
 	ReadyEmptyHelp        = "no issues are ready to claim; blockers are unmerged or claims are active"
 	ReadyEmptyExpiredHelp = "no issues are ready to claim; expired_claims lists TTL-lapsed claims that are not in the queue"
@@ -62,8 +62,7 @@ func readyIssueRows(entries []ready.ReadyEntry) []ReadyIssue {
 	return rows
 }
 
-// ReadyWaveIDs maps partitioned waves to id-only adjunct groups.
-func ReadyWaveIDs(waves [][]ready.ReadyEntry) [][]string {
+func readyWaveIDs(waves [][]ready.ReadyEntry) [][]string {
 	groups := make([][]string, 0, len(waves))
 	for _, wave := range waves {
 		ids := make([]string, 0, len(wave))
@@ -144,7 +143,7 @@ func WriteReadyEnvelope(
 		return err
 	}
 	if includeWaves {
-		if err := env.AddAdjunct("waves", ReadyWaveIDs(waves)); err != nil {
+		if err := env.AddAdjunct("waves", readyWaveIDs(waves)); err != nil {
 			return err
 		}
 	}

@@ -17,21 +17,18 @@ type Node struct {
 }
 
 // Graph is the issue dependency graph: ancestry, descendants, blockers,
-// hierarchy, cycle detection, and depth. Callers that previously built a
-// mutable DAG and then wrapped it should use New/AddNode or FromIndex.
+// hierarchy, cycle detection, and depth. Callers build graphs with FromIndex.
 type Graph struct {
 	nodes map[string]*Node
 }
 
-// New creates an empty Graph.
-func New() *Graph {
+func newGraph() *Graph {
 	return &Graph{
 		nodes: make(map[string]*Node),
 	}
 }
 
-// AddNode adds a node to the graph.
-func (g *Graph) AddNode(n *Node) error {
+func (g *Graph) addNode(n *Node) error {
 	if _, exists := g.nodes[n.ID]; exists {
 		return fmt.Errorf("node %s already exists", n.ID)
 	}
@@ -39,8 +36,7 @@ func (g *Graph) AddNode(n *Node) error {
 	return nil
 }
 
-// Node retrieves a node by ID.
-func (g *Graph) Node(id string) *Node {
+func (g *Graph) node(id string) *Node {
 	return g.nodes[id]
 }
 
@@ -150,8 +146,7 @@ func (g *Graph) Descendants(id string) []string {
 	return descendants
 }
 
-// Blockers returns all direct blocked_by dependencies of a node.
-func (g *Graph) Blockers(id string) []string {
+func (g *Graph) blockers(id string) []string {
 	node := g.nodes[id]
 	if node == nil {
 		return nil
@@ -196,7 +191,7 @@ func (g *Graph) ScopedHasCycle(id string, scope map[string]bool) bool {
 
 		// Walk BlockedBy edges: follow ALL blockers (including out-of-scope ones)
 		// to detect cross-scope cycles that affect scoped nodes.
-		for _, dep := range g.Blockers(nodeID) {
+		for _, dep := range g.blockers(nodeID) {
 			if dfs(dep) {
 				return true
 			}
@@ -249,10 +244,10 @@ func (g *Graph) Depth(id string) int {
 
 // FromIndex constructs a Graph from a map of node IDs to Node pointers.
 func FromIndex(index map[string]*Node) *Graph {
-	g := New()
+	g := newGraph()
 	for _, node := range index {
 		// We don't check for errors here since we own the nodes from the index
-		_ = g.AddNode(node) //nolint:errcheck // AddNode only errors on duplicate IDs; ID uniqueness is enforced by caller
+		_ = g.addNode(node) //nolint:errcheck // addNode only errors on duplicate IDs; ID uniqueness is enforced by caller
 	}
 	return g
 }

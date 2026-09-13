@@ -50,13 +50,13 @@ func TestWriteShowEnvelopeCompactAndTruncates(t *testing.T) {
 
 func TestTruncateShowTextUTF8Safe(t *testing.T) {
 	t.Parallel()
-	shown, total, truncated := TruncateShowText("abc", 10)
+	shown, total, truncated := truncateShowText("abc", 10)
 	assert.Equal(t, "abc", shown)
 	assert.Equal(t, 3, total)
 	assert.False(t, truncated)
 
 	s := "éééé"
-	shown, total, truncated = TruncateShowText(s, 3)
+	shown, total, truncated = truncateShowText(s, 3)
 	assert.True(t, truncated)
 	assert.Equal(t, len(s), total)
 	assert.True(t, json.Valid([]byte(`"`+shown+`"`)))

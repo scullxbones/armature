@@ -21,8 +21,7 @@ type ShowTruncation struct {
 	TotalBytes int    `json:"total_bytes"`
 }
 
-// TruncateShowText returns a UTF-8-safe prefix of s no longer than limit.
-func TruncateShowText(s string, limit int) (shown string, total int, truncated bool) {
+func truncateShowText(s string, limit int) (shown string, total int, truncated bool) {
 	total = len(s)
 	if total <= limit {
 		return s, total, false
@@ -41,11 +40,11 @@ func TruncateShowText(s string, limit int) (shown string, total int, truncated b
 // TruncateShowIssue mutates row in place, capping outcome and definition_of_done.
 func TruncateShowIssue(row *IssueJSON) []ShowTruncation {
 	var hints []ShowTruncation
-	if shown, total, truncated := TruncateShowText(row.Outcome, ShowLargeFieldLimit); truncated {
+	if shown, total, truncated := truncateShowText(row.Outcome, ShowLargeFieldLimit); truncated {
 		row.Outcome = shown
 		hints = append(hints, ShowTruncation{Field: "outcome", ShownBytes: len(shown), TotalBytes: total})
 	}
-	if shown, total, truncated := TruncateShowText(row.DefinitionOfDone, ShowLargeFieldLimit); truncated {
+	if shown, total, truncated := truncateShowText(row.DefinitionOfDone, ShowLargeFieldLimit); truncated {
 		row.DefinitionOfDone = shown
 		hints = append(hints, ShowTruncation{
 			Field:      "definition_of_done",
@@ -56,8 +55,7 @@ func TruncateShowIssue(row *IssueJSON) []ShowTruncation {
 	return hints
 }
 
-// ShowHelp is the trailing help for a show envelope.
-func ShowHelp(ids []string, trunc []ShowTruncation) []string {
+func showHelp(ids []string, trunc []ShowTruncation) []string {
 	if len(trunc) == 0 {
 		return []string{ShowFieldHelp}
 	}
@@ -74,7 +72,7 @@ func ShowHelp(ids []string, trunc []ShowTruncation) []string {
 // WriteShowEnvelope emits the compact agent show object {count,issues,help}
 // and optional truncated adjunct. This is the live arm show json/agent path.
 func WriteShowEnvelope(w io.Writer, ids []string, rows []IssueJSON, trunc []ShowTruncation) error {
-	env, err := NewEnvelope("issues", rows, ShowHelp(ids, trunc))
+	env, err := NewEnvelope("issues", rows, showHelp(ids, trunc))
 	if err != nil {
 		return err
 	}

@@ -23,8 +23,8 @@ func TestValidatedOpStream_LoadSingleFile(t *testing.T) {
 	require.NoError(t, AppendOps(logPath, []Op{op1, op2}))
 
 	// Load via ValidatedOpStream
-	stream := NewValidatedOpStream()
-	entry := stream.AddFile(logPath, "worker-a1")
+	stream := newValidatedOpStream()
+	entry := stream.addFile(logPath, "worker-a1")
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -50,9 +50,9 @@ func TestValidatedOpStream_MultipleFiles(t *testing.T) {
 	require.NoError(t, AppendOp(logPath1, op1))
 	require.NoError(t, AppendOp(logPath2, op2))
 
-	stream := NewValidatedOpStream()
-	entry1 := stream.AddFile(logPath1, "worker-a1")
-	entry2 := stream.AddFile(logPath2, "worker-b2")
+	stream := newValidatedOpStream()
+	entry1 := stream.addFile(logPath1, "worker-a1")
+	entry2 := stream.addFile(logPath2, "worker-b2")
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -75,8 +75,8 @@ func TestValidatedOpStream_RejectsWorkerIDMismatch(t *testing.T) {
 
 	require.NoError(t, AppendOp(logPath, op))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "worker-a1") // expect worker-a1, not worker-b2
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "worker-a1") // expect worker-a1, not worker-b2
 
 	items, _, warnings, err := stream.loadAll()
 
@@ -99,8 +99,8 @@ func TestValidatedOpStream_ReturnsOffsets(t *testing.T) {
 		Payload: Payload{Msg: "Second"}}
 	require.NoError(t, AppendOp(logPath, op2))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "worker-a1")
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "worker-a1")
 	items, _, _, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -124,8 +124,8 @@ func TestValidatedOpStream_PreservesLogFilename(t *testing.T) {
 
 	require.NoError(t, AppendOp(logPath, op))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "custom-worker-id~slot")
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "custom-worker-id~slot")
 	items, _, _, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -155,8 +155,8 @@ func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
 		Payload: Payload{Msg: "Also valid"}}
 	require.NoError(t, AppendOp(logPath, op2))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "worker-a1")
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "worker-a1")
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -167,8 +167,8 @@ func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
 
 func TestValidatedOpStream_FileNotFound(t *testing.T) {
 	t.Parallel()
-	stream := NewValidatedOpStream()
-	stream.AddFile("/nonexistent/path/worker.log", "worker-a1")
+	stream := newValidatedOpStream()
+	stream.addFile("/nonexistent/path/worker.log", "worker-a1")
 	items, _, warnings, err := stream.loadAll()
 
 	// Should fail gracefully
@@ -179,7 +179,7 @@ func TestValidatedOpStream_FileNotFound(t *testing.T) {
 
 func TestValidatedOpStream_Empty(t *testing.T) {
 	t.Parallel()
-	stream := NewValidatedOpStream()
+	stream := newValidatedOpStream()
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -203,9 +203,9 @@ func TestValidatedOpStream_MultipleFiles_MixedValidity(t *testing.T) {
 		Payload: Payload{Title: "Bad", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath2, op2))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath1, "worker-a1")
-	stream.AddFile(logPath2, "worker-b2") // expect b2, not worker-wrong
+	stream := newValidatedOpStream()
+	stream.addFile(logPath1, "worker-a1")
+	stream.addFile(logPath2, "worker-b2") // expect b2, not worker-wrong
 
 	items, _, warnings, err := stream.loadAll()
 
@@ -225,8 +225,8 @@ func TestValidatedOpStream_SlottedLogFilename(t *testing.T) {
 
 	require.NoError(t, AppendOp(logPath, op))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "3357fe85~a")
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "3357fe85~a")
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -246,8 +246,8 @@ func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
 
 	require.NoError(t, AppendOp(logPath, op))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "worker-alpha~slot-a")
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "worker-alpha~slot-a")
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
@@ -277,8 +277,8 @@ func TestLoadFile_LineNumberPopulated(t *testing.T) {
 		Payload: Payload{Msg: "Third"}}
 	require.NoError(t, AppendOp(logPath, op3))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "worker-w1")
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "worker-w1")
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)

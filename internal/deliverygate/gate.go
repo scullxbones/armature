@@ -34,16 +34,16 @@ type GateResult struct {
 // Performs no state mutation — only reads and reports.
 func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *GateResult {
 	return &GateResult{
-		CleanTree:        CleanTreeCheck(worktreePath),
-		ScopeContainment: ScopeContainmentCheck(worktreePath, baseCommit, scope),
-		CommitReference:  CommitReferenceCheck(worktreePath, baseCommit, issueID),
+		CleanTree:        cleanTreeCheck(worktreePath),
+		ScopeContainment: scopeContainmentCheck(worktreePath, baseCommit, scope),
+		CommitReference:  commitReferenceCheck(worktreePath, baseCommit, issueID),
 	}
 }
 
 // CleanTreeCheck verifies that git status --porcelain is empty.
 // Returns (Pass: true, Remediation: "") if the tree is clean,
 // or (Pass: false, Remediation: "...message...") if there are uncommitted changes.
-func CleanTreeCheck(worktreePath string) CheckResult {
+func cleanTreeCheck(worktreePath string) CheckResult {
 	git := adapters.New(worktreePath)
 
 	// Get all dirty entries (both tracked and untracked)
@@ -98,7 +98,7 @@ func CleanTreeCheck(worktreePath string) CheckResult {
 // the diff below uses two-dot (baseCommit..HEAD) semantics, which silently
 // includes commits reachable from baseCommit but not from HEAD if baseCommit
 // is a raw branch tip rather than a merge-base.
-func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) CheckResult {
+func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) CheckResult {
 	git := adapters.New(worktreePath)
 
 	// Get the list of file changes since base commit, with rename detection
@@ -164,7 +164,7 @@ func ScopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 // current branch (as produced by GatedBaseCommit), not an arbitrary ref —
 // LogRange and the net diff below use two-dot (baseCommit..HEAD) semantics,
 // which is only correct when baseCommit is the real divergence point.
-func CommitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
+func commitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
 	git := adapters.New(worktreePath)
 
 	// Get only commits strictly after baseCommit (exclusive) up to HEAD.

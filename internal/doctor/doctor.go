@@ -202,11 +202,10 @@ func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
 	for id, entry := range index {
 		statuses[id] = entry.Status
 	}
-	return EvaluateD1GitDivergence(lines, statuses)
+	return evaluateD1GitDivergence(lines, statuses)
 }
 
-// EvaluateD1GitDivergence evaluates already-collected git subjects and issue statuses.
-func EvaluateD1GitDivergence(commitSubjects []string, statuses map[string]string) Finding {
+func evaluateD1GitDivergence(commitSubjects []string, statuses map[string]string) Finding {
 	f := Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
 	seen := make(map[string]bool)
 	var diverged []string

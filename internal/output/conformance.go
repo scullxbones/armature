@@ -76,10 +76,7 @@ func DefaultGoldenDir() string {
 	return filepath.Join(filepath.Dir(file), "testdata", "golden")
 }
 
-// EnumerateModes walks a command tree and returns every structured mode.
-// Grouping-only commands (no run function) are skipped. The help command is
-// skipped. Hidden leaves remain so Protocol Output cannot hide by Hidden.
-func EnumerateModes(root *Command) []Mode {
+func enumerateModes(root *Command) []Mode {
 	if root == nil {
 		return nil
 	}
@@ -109,7 +106,7 @@ func EnumerateModes(root *Command) []Mode {
 // conforming golden, and each Artifact Output mode against its cited foreign
 // shape. Protocol Output modes are exempt only when Classify says so.
 func Lint(root *Command, goldenDir string) error {
-	return lintModes(EnumerateModes(root), goldenDir)
+	return lintModes(enumerateModes(root), goldenDir)
 }
 
 func lintModes(modes []Mode, goldenDir string) error {

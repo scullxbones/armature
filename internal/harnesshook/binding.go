@@ -152,10 +152,7 @@ func ResolveBindingFromDir(dir string) (ResolvedBinding, error) {
 	}
 }
 
-// ResolveBindingFromFilePath walks up the directory tree from filePath to find
-// the containing worktree's .git directory and reads the armature-issue-id file.
-// It delegates to ResolveBindingFromDir by starting the walk from the file's parent directory.
-func ResolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
+func resolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
 	return ResolveBindingFromDir(filepath.Dir(filePath))
 }
 
@@ -215,7 +212,7 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 
 		// Step 1: Try path-based resolution from tool_input.file_path
 		if abs, ok := absolutizeFilePath(eventInfo.FilePath, eventInfo.Cwd); ok {
-			pathBinding, err := ResolveBindingFromFilePath(abs)
+			pathBinding, err := resolveBindingFromFilePath(abs)
 			if err != nil {
 				return ResolvedBinding{}, err
 			}

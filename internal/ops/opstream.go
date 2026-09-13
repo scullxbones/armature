@@ -30,15 +30,13 @@ type ValidatedOpStream struct {
 	files []*FileEntry
 }
 
-// NewValidatedOpStream creates a new stream for loading ops from multiple files.
-func NewValidatedOpStream() *ValidatedOpStream {
+func newValidatedOpStream() *ValidatedOpStream {
 	return &ValidatedOpStream{
 		files: make([]*FileEntry, 0),
 	}
 }
 
-// AddFile registers a log file to be loaded, with the expected worker ID from the filename.
-func (s *ValidatedOpStream) AddFile(logPath, expectedWorkerID string) *FileEntry {
+func (s *ValidatedOpStream) addFile(logPath, expectedWorkerID string) *FileEntry {
 	entry := &FileEntry{
 		LogPath:          logPath,
 		ExpectedWorkerID: expectedWorkerID,
@@ -144,15 +142,15 @@ func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64,
 		return []OpItem{}, make(map[string]int64), []string{}, nil
 	}
 
-	stream := NewValidatedOpStream()
+	stream := newValidatedOpStream()
 
 	// Register each log file with its expected worker ID from the filename
 	// Note: we use the full filename-derived worker ID (including slot suffix).
-	// ExtractWorkerIDFromFilename preserves the slot suffix (e.g., "3357fe85~a"),
+	// extractWorkerIDFromFilename preserves the slot suffix (e.g., "3357fe85~a"),
 	// unlike adapters.WorkerIDFromFilename which strips it (e.g., "3357fe85").
 	// We preserve the slot here because ops include the full worker ID with slot in validation.
 	for _, logPath := range logFiles {
-		stream.AddFile(logPath, ExtractWorkerIDFromFilename(logPath))
+		stream.addFile(logPath, extractWorkerIDFromFilename(logPath))
 	}
 
 	return stream.loadAll()
@@ -168,13 +166,9 @@ func ExtractOps(items []OpItem) []Op {
 	return ops
 }
 
-// ExtractWorkerIDFromFilename extracts the full worker ID from a log filename,
+// extractWorkerIDFromFilename extracts the full worker ID from a log filename,
 // preserving any slot suffix (the part after ~).
-// Examples:
-// - "3357fe85.log" -> "3357fe85"
-// - "3357fe85~a.log" -> "3357fe85~a"
-// - "worker-x~slot-99.log" -> "worker-x~slot-99"
-func ExtractWorkerIDFromFilename(logPath string) string {
+func extractWorkerIDFromFilename(logPath string) string {
 	base := filepath.Base(logPath)
 	name := strings.TrimSuffix(base, ".log")
 	return name

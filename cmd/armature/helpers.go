@@ -63,6 +63,15 @@ func skipCommandFailure(err error) error {
 	return protocolExitError{err: err, code: 1}
 }
 
+func isTerminalStatus(status string) bool {
+	switch status {
+	case ops.StatusDone, ops.StatusMerged, ops.StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
 type commandFailureEnvelope struct {
 	Error *armerrors.CommandFailure `json:"error"`
 }

@@ -17,15 +17,6 @@ const (
 	PlatformDevin       Platform = "devin"
 )
 
-// ArtifactKind identifies a bootstrap artifact category.
-type ArtifactKind string
-
-const (
-	ArtifactSkills            ArtifactKind = "skills"
-	ArtifactPluginMetadata    ArtifactKind = "plugin_metadata"
-	ArtifactHarnessHookConfig ArtifactKind = "harness_hook_config"
-)
-
 // ActionKind is the per-cell plan decision.
 type ActionKind string
 
