@@ -42,11 +42,10 @@ func (r *DefaultProviderRegistry) ProviderForType(providerType string) (Provider
 // NewLifecycle creates a new source lifecycle manager.
 // manifestPath is the directory where manifest.json and cache files are stored.
 func NewLifecycle(manifestPath string) *Lifecycle {
-	return NewLifecycleWithRegistry(manifestPath, &DefaultProviderRegistry{})
+	return newLifecycleWithRegistry(manifestPath, &DefaultProviderRegistry{})
 }
 
-// NewLifecycleWithRegistry creates a new source lifecycle manager with a custom provider registry.
-func NewLifecycleWithRegistry(manifestPath string, registry ProviderRegistry) *Lifecycle {
+func newLifecycleWithRegistry(manifestPath string, registry ProviderRegistry) *Lifecycle {
 	return &Lifecycle{
 		manifestPath: manifestPath,
 		provider:     registry,

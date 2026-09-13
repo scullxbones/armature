@@ -20,7 +20,7 @@ func TestEveryAgentFacingCommandHasConformingFixture_REQ_AOC_S3_T3(t *testing.T)
 
 	require.NoError(t, Lint(root, dir), "every enumerated agent-facing mode must have a conforming golden")
 
-	modes := EnumerateModes(root)
+	modes := enumerateModes(root)
 	var paths []string
 	for _, m := range modes {
 		paths = append(paths, m.ID()+"/"+string(m.Channel))
@@ -68,7 +68,7 @@ func TestProtocolOutputExemptedByClassificationNotName_REQ_AOC_S3_T3(t *testing.
 	root.Children[0].Annotations = MarkProtocolOutput(nil)
 	require.NoError(t, Lint(root, dir), "classified Protocol Output needs no envelope fixture")
 
-	modes := EnumerateModes(root)
+	modes := enumerateModes(root)
 	var protocol, agent []string
 	for _, m := range modes {
 		if m.Channel == ChannelProtocolOutput {
@@ -173,7 +173,7 @@ func TestEnumerateModesSkipsGroupHelpAndFieldFlags(t *testing.T) {
 		},
 	}
 
-	modes := EnumerateModes(root)
+	modes := enumerateModes(root)
 	var ids []string
 	for _, m := range modes {
 		ids = append(ids, m.Path+"|"+m.Selector+"|"+string(m.Channel))

@@ -226,7 +226,7 @@ func RecordedClaimedBranch(worktreePath string) (string, bool, error) {
 // mechanism exists to prevent. Returns an error if the current branch can't
 // be determined, no parent is recorded (worktrees claimed before this
 // existed), or the parent ref no longer resolves.
-func DynamicBaseCommit(git *adapters.Client) (string, error) {
+func dynamicBaseCommit(git *adapters.Client) (string, error) {
 	currentBranch, err := git.CurrentBranch()
 	if err != nil || currentBranch == "" {
 		return "", fmt.Errorf("determine current branch: %w", err)
@@ -275,7 +275,7 @@ func DynamicBaseCommit(git *adapters.Client) (string, error) {
 // base-commit file exists for worktreePath (e.g. it was claimed before
 // either mechanism existed), that must fail the gate closed.
 func GatedBaseCommit(worktreePath, issueID string, git *adapters.Client) (string, error) {
-	baseCommit, err := DynamicBaseCommit(git)
+	baseCommit, err := dynamicBaseCommit(git)
 	if err == nil {
 		return baseCommit, nil
 	}

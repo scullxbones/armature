@@ -15,13 +15,13 @@ import (
 // TestAddNodeDuplicate tests that adding a duplicate node fails.
 func TestAddNodeDuplicate(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	node := &Node{ID: "task-1", Title: "Test", Type: "task"}
 
-	err := d.AddNode(node)
+	err := d.addNode(node)
 	require.NoError(t, err)
 
-	err = d.AddNode(node)
+	err = d.addNode(node)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 }
@@ -29,15 +29,15 @@ func TestAddNodeDuplicate(t *testing.T) {
 // TestNoCycleInAcyclicDAG tests that acyclic DAGs are detected correctly.
 func TestNoCycleInAcyclicDAG(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create a simple tree: epic -> story -> task
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
 	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
 	task := &Node{ID: "task-1", Title: "Task", Type: "task", Parent: "story-1"}
 
-	require.NoError(t, d.AddNode(epic))
-	require.NoError(t, d.AddNode(story))
-	require.NoError(t, d.AddNode(task))
+	require.NoError(t, d.addNode(epic))
+	require.NoError(t, d.addNode(story))
+	require.NoError(t, d.addNode(task))
 
 	// Set up children relationships
 	epic.Children = []string{"story-1"}
@@ -49,12 +49,12 @@ func TestNoCycleInAcyclicDAG(t *testing.T) {
 // TestCycleDetection tests that cycles are detected.
 func TestCycleDetection(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", BlockedBy: []string{"task-2"}}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
 
-	require.NoError(t, d.AddNode(task1))
-	require.NoError(t, d.AddNode(task2))
+	require.NoError(t, d.addNode(task1))
+	require.NoError(t, d.addNode(task2))
 
 	assert.True(t, d.HasCycle())
 }
@@ -69,14 +69,14 @@ func TestPropertyNoSelfCycles(t *testing.T) {
 
 	properties.Property("no node can block itself", prop.ForAll(
 		func(nodeID string) bool {
-			d := New()
+			d := newGraph()
 			node := &Node{
 				ID:        nodeID,
 				Title:     "Test",
 				Type:      "task",
 				BlockedBy: []string{nodeID}, // Self-blocking
 			}
-			if err := d.AddNode(node); err != nil {
+			if err := d.addNode(node); err != nil {
 				return false
 			}
 			// A self-blocking node creates a cycle
@@ -103,20 +103,20 @@ func TestPropertyParentChildConsistency(t *testing.T) {
 				return true // Skip invalid cases
 			}
 
-			d := New()
+			d := newGraph()
 			parent := &Node{ID: parentID, Title: "Parent", Type: "story"}
 			child := &Node{ID: childID, Title: "Child", Type: "task", Parent: parentID}
 
 			parent.Children = []string{childID}
 
-			if err := d.AddNode(parent); err != nil {
+			if err := d.addNode(parent); err != nil {
 				return false
 			}
-			if err := d.AddNode(child); err != nil {
+			if err := d.addNode(child); err != nil {
 				return false
 			}
 
-			parentNode := d.Node(parentID)
+			parentNode := d.node(parentID)
 			return parentNode != nil && slices.Contains(parentNode.Children, childID)
 		},
 		gen.AlphaString(),
@@ -131,7 +131,7 @@ func TestPropertyParentChildConsistency(t *testing.T) {
 // nodes are added without populating Children slices, so parent-child edges
 // are not exercised in the DFS traversal.
 func BenchmarkCycleDetection(b *testing.B) {
-	d := New()
+	d := newGraph()
 
 	// Create a tree of 100 nodes
 	for i := range 100 {
@@ -145,7 +145,7 @@ func BenchmarkCycleDetection(b *testing.B) {
 			Type:   "task",
 			Parent: parent,
 		}
-		if err := d.AddNode(node); err != nil {
+		if err := d.addNode(node); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -159,15 +159,15 @@ func BenchmarkCycleDetection(b *testing.B) {
 // TestGraphAncestry tests that Graph.Ancestry returns all upstream nodes.
 func TestGraphAncestry(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create a chain: epic -> story -> task1
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
 	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", Parent: "story-1"}
 
-	require.NoError(t, d.AddNode(epic))
-	require.NoError(t, d.AddNode(story))
-	require.NoError(t, d.AddNode(task1))
+	require.NoError(t, d.addNode(epic))
+	require.NoError(t, d.addNode(story))
+	require.NoError(t, d.addNode(task1))
 
 	epic.Children = []string{"story-1"}
 	story.Children = []string{"task-1"}
@@ -190,17 +190,17 @@ func TestGraphAncestry(t *testing.T) {
 // TestGraphDescendants tests that Graph.Descendants returns all downstream nodes.
 func TestGraphDescendants(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create a tree: epic -> story1, story2 -> task
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
 	story1 := &Node{ID: "story-1", Title: "Story 1", Type: "story", Parent: "epic-1"}
 	story2 := &Node{ID: "story-2", Title: "Story 2", Type: "story", Parent: "epic-1"}
 	task := &Node{ID: "task-1", Title: "Task 1", Type: "task", Parent: "story-1"}
 
-	require.NoError(t, d.AddNode(epic))
-	require.NoError(t, d.AddNode(story1))
-	require.NoError(t, d.AddNode(story2))
-	require.NoError(t, d.AddNode(task))
+	require.NoError(t, d.addNode(epic))
+	require.NoError(t, d.addNode(story1))
+	require.NoError(t, d.addNode(story2))
+	require.NoError(t, d.addNode(task))
 
 	epic.Children = []string{"story-1", "story-2"}
 	story1.Children = []string{"task-1"}
@@ -224,14 +224,14 @@ func TestGraphDescendants(t *testing.T) {
 // TestGraphBlockers tests that Graph.Blockers returns direct blocked_by dependencies.
 func TestGraphBlockers(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
 	task3 := &Node{ID: "task-3", Title: "Task 3", Type: "task", BlockedBy: []string{"task-1", "task-2"}}
 
-	require.NoError(t, d.AddNode(task1))
-	require.NoError(t, d.AddNode(task2))
-	require.NoError(t, d.AddNode(task3))
+	require.NoError(t, d.addNode(task1))
+	require.NoError(t, d.addNode(task2))
+	require.NoError(t, d.addNode(task3))
 
 	task1.Blocks = []string{"task-2", "task-3"}
 	task2.Blocks = []string{"task-3"}
@@ -239,29 +239,29 @@ func TestGraphBlockers(t *testing.T) {
 	g := d
 
 	// task-2 blockers should be task-1
-	blockers := g.Blockers("task-2")
+	blockers := g.blockers("task-2")
 	assert.ElementsMatch(t, []string{"task-1"}, blockers)
 
 	// task-3 blockers should be task-1 and task-2
-	blockers = g.Blockers("task-3")
+	blockers = g.blockers("task-3")
 	assert.ElementsMatch(t, []string{"task-1", "task-2"}, blockers)
 
 	// task-1 has no blockers
-	blockers = g.Blockers("task-1")
+	blockers = g.blockers("task-1")
 	assert.Empty(t, blockers)
 }
 
 // TestGraphHierarchy tests that Graph.Hierarchy returns parent and children.
 func TestGraphHierarchy(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
 	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
 	task := &Node{ID: "task-1", Title: "Task", Type: "task", Parent: "story-1"}
 
-	require.NoError(t, d.AddNode(epic))
-	require.NoError(t, d.AddNode(story))
-	require.NoError(t, d.AddNode(task))
+	require.NoError(t, d.addNode(epic))
+	require.NoError(t, d.addNode(story))
+	require.NoError(t, d.addNode(task))
 
 	epic.Children = []string{"story-1"}
 	story.Children = []string{"task-1"}
@@ -288,24 +288,24 @@ func TestGraphHierarchy(t *testing.T) {
 func TestGraphHasCycle(t *testing.T) {
 	t.Parallel()
 	// Test acyclic DAG
-	d := New()
+	d := newGraph()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task", BlockedBy: []string{"task-2"}}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task"}
 
-	require.NoError(t, d.AddNode(task1))
-	require.NoError(t, d.AddNode(task2))
+	require.NoError(t, d.addNode(task1))
+	require.NoError(t, d.addNode(task2))
 	task2.Blocks = []string{"task-1"}
 
 	g := d
 	assert.False(t, g.HasCycle())
 
 	// Test cyclic DAG
-	d2 := New()
+	d2 := newGraph()
 	task3 := &Node{ID: "task-3", Title: "Task 3", Type: "task", BlockedBy: []string{"task-4"}}
 	task4 := &Node{ID: "task-4", Title: "Task 4", Type: "task", BlockedBy: []string{"task-3"}}
 
-	require.NoError(t, d2.AddNode(task3))
-	require.NoError(t, d2.AddNode(task4))
+	require.NoError(t, d2.addNode(task3))
+	require.NoError(t, d2.addNode(task4))
 
 	task3.Blocks = []string{"task-4"}
 	task4.Blocks = []string{"task-3"}
@@ -317,14 +317,14 @@ func TestGraphHasCycle(t *testing.T) {
 // TestGraphDepth tests that Graph.Depth returns the depth of a node from root.
 func TestGraphDepth(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	epic := &Node{ID: "epic-1", Title: "Epic", Type: "epic"}
 	story := &Node{ID: "story-1", Title: "Story", Type: "story", Parent: "epic-1"}
 	task := &Node{ID: "task-1", Title: "Task", Type: "task", Parent: "story-1"}
 
-	require.NoError(t, d.AddNode(epic))
-	require.NoError(t, d.AddNode(story))
-	require.NoError(t, d.AddNode(task))
+	require.NoError(t, d.addNode(epic))
+	require.NoError(t, d.addNode(story))
+	require.NoError(t, d.addNode(task))
 
 	epic.Children = []string{"story-1"}
 	story.Children = []string{"task-1"}
@@ -340,14 +340,14 @@ func TestGraphDepth(t *testing.T) {
 // TestGraphDepthWithMultipleRoots tests depth calculation with multiple root nodes.
 func TestGraphDepthWithMultipleRoots(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	epic1 := &Node{ID: "epic-1", Title: "Epic 1", Type: "epic"}
 	epic2 := &Node{ID: "epic-2", Title: "Epic 2", Type: "epic"}
 	story1 := &Node{ID: "story-1", Title: "Story 1", Type: "story", Parent: "epic-1"}
 
-	require.NoError(t, d.AddNode(epic1))
-	require.NoError(t, d.AddNode(epic2))
-	require.NoError(t, d.AddNode(story1))
+	require.NoError(t, d.addNode(epic1))
+	require.NoError(t, d.addNode(epic2))
+	require.NoError(t, d.addNode(story1))
 
 	epic1.Children = []string{"story-1"}
 
@@ -361,7 +361,7 @@ func TestGraphDepthWithMultipleRoots(t *testing.T) {
 // TestGraphAncestryNonexistentNode tests that Ancestry handles nonexistent nodes.
 func TestGraphAncestryNonexistentNode(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	g := d
 
 	ancestors := g.Ancestry("nonexistent")
@@ -371,7 +371,7 @@ func TestGraphAncestryNonexistentNode(t *testing.T) {
 // TestGraphDescendantsNonexistentNode tests that Descendants handles nonexistent nodes.
 func TestGraphDescendantsNonexistentNode(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	g := d
 
 	descendants := g.Descendants("nonexistent")
@@ -381,17 +381,17 @@ func TestGraphDescendantsNonexistentNode(t *testing.T) {
 // TestGraphBlockersNonexistentNode tests that Blockers returns nil for nonexistent nodes.
 func TestGraphBlockersNonexistentNode(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	g := d
 
-	blockers := g.Blockers("nonexistent")
+	blockers := g.blockers("nonexistent")
 	assert.Nil(t, blockers)
 }
 
 // TestGraphHierarchyNonexistentNode tests that Hierarchy handles nonexistent nodes.
 func TestGraphHierarchyNonexistentNode(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	g := d
 
 	parent, children := g.Hierarchy("nonexistent")
@@ -402,7 +402,7 @@ func TestGraphHierarchyNonexistentNode(t *testing.T) {
 // TestGraphDepthNonexistentNode tests that Depth returns 0 for nonexistent nodes.
 func TestGraphDepthNonexistentNode(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	g := d
 
 	depth := g.Depth("nonexistent")
@@ -412,30 +412,30 @@ func TestGraphDepthNonexistentNode(t *testing.T) {
 // TestGraphBlockersEmptyNode tests that a node with no blockers returns empty slice.
 func TestGraphBlockersEmptyNode(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 
-	require.NoError(t, d.AddNode(task))
+	require.NoError(t, d.addNode(task))
 
 	g := d
 
-	blockers := g.Blockers("task-1")
+	blockers := g.blockers("task-1")
 	assert.Empty(t, blockers)
 }
 
 // TestGraphNode uses the Node method to test node retrieval.
 func TestGraphNode(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	task := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 
-	require.NoError(t, d.AddNode(task))
+	require.NoError(t, d.addNode(task))
 
-	retrieved := d.Node("task-1")
+	retrieved := d.node("task-1")
 	assert.NotNil(t, retrieved)
 	assert.Equal(t, "task-1", retrieved.ID)
 
-	notFound := d.Node("nonexistent")
+	notFound := d.node("nonexistent")
 	assert.Nil(t, notFound)
 }
 
@@ -443,9 +443,9 @@ func TestGraphNode(t *testing.T) {
 // when a node has a child reference to a node that does not exist in the DAG.
 func TestHasCycle_DanglingChildReference(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	node := &Node{ID: "a", Title: "Node A", Type: "task", Children: []string{"nonexistent"}}
-	require.NoError(t, d.AddNode(node))
+	require.NoError(t, d.addNode(node))
 
 	// Should not panic and should return false (no cycle)
 	assert.False(t, d.HasCycle())
@@ -455,40 +455,40 @@ func TestHasCycle_DanglingChildReference(t *testing.T) {
 // does not affect the graph's internal state.
 func TestBlockersMutationSafety(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	task1 := &Node{ID: "task-1", Title: "Task 1", Type: "task"}
 	task2 := &Node{ID: "task-2", Title: "Task 2", Type: "task", BlockedBy: []string{"task-1"}}
 
-	require.NoError(t, d.AddNode(task1))
-	require.NoError(t, d.AddNode(task2))
+	require.NoError(t, d.addNode(task1))
+	require.NoError(t, d.addNode(task2))
 
 	g := d
 
 	// Get the blockers and capture the original list
-	original := g.Blockers("task-2")
+	original := g.blockers("task-2")
 
 	// Mutate the returned slice by appending to it
-	mutated := append(g.Blockers("task-2"), "injected")
+	mutated := append(g.blockers("task-2"), "injected")
 
 	// Verify that the mutation did not affect the graph's internal state
-	assert.ElementsMatch(t, original, g.Blockers("task-2"))
-	assert.NotContains(t, g.Blockers("task-2"), "injected")
+	assert.ElementsMatch(t, original, g.blockers("task-2"))
+	assert.NotContains(t, g.blockers("task-2"), "injected")
 	// Verify that the mutated slice is different from the graph's current state
-	assert.NotEqual(t, len(g.Blockers("task-2")), len(mutated))
+	assert.NotEqual(t, len(g.blockers("task-2")), len(mutated))
 }
 
 // TestHierarchyMutationSafety tests that mutating the returned children slice from Hierarchy
 // does not affect the graph's internal state.
 func TestHierarchyMutationSafety(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	parent := &Node{ID: "parent-1", Title: "Parent", Type: "story"}
 	child := &Node{ID: "child-1", Title: "Child", Type: "task", Parent: "parent-1"}
 
 	parent.Children = []string{"child-1"}
 
-	require.NoError(t, d.AddNode(parent))
-	require.NoError(t, d.AddNode(child))
+	require.NoError(t, d.addNode(parent))
+	require.NoError(t, d.addNode(child))
 
 	g := d
 
@@ -510,13 +510,13 @@ func TestHierarchyMutationSafety(t *testing.T) {
 // TestGraph_Depth_CycleGuard tests that Depth handles parent cycles without hanging.
 func TestGraph_Depth_CycleGuard(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create a cycle: a.Parent=b, b.Parent=a
 	nodeA := &Node{ID: "a", Title: "Node A", Type: "task", Parent: "b"}
 	nodeB := &Node{ID: "b", Title: "Node B", Type: "task", Parent: "a"}
 
-	require.NoError(t, d.AddNode(nodeA))
-	require.NoError(t, d.AddNode(nodeB))
+	require.NoError(t, d.addNode(nodeA))
+	require.NoError(t, d.addNode(nodeB))
 
 	g := d
 
@@ -530,13 +530,13 @@ func TestGraph_Depth_CycleGuard(t *testing.T) {
 // TestGraph_Ancestry_CycleGuard tests that Ancestry handles parent cycles without hanging.
 func TestGraph_Ancestry_CycleGuard(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create a cycle: a.Parent=b, b.Parent=a
 	nodeA := &Node{ID: "a", Title: "Node A", Type: "task", Parent: "b"}
 	nodeB := &Node{ID: "b", Title: "Node B", Type: "task", Parent: "a"}
 
-	require.NoError(t, d.AddNode(nodeA))
-	require.NoError(t, d.AddNode(nodeB))
+	require.NoError(t, d.addNode(nodeA))
+	require.NoError(t, d.addNode(nodeB))
 
 	g := d
 
@@ -606,15 +606,15 @@ func TestFromIndexEmpty(t *testing.T) {
 // even if the cycle path traverses nodes outside the scope.
 func TestScopedHasCycleCrossScope(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create a cycle: A -> B -> C -> A, where only A is in scope
 	nodeA := &Node{ID: "A", Title: "A", Type: "task", BlockedBy: []string{"C"}}
 	nodeB := &Node{ID: "B", Title: "B", Type: "task", BlockedBy: []string{"A"}}
 	nodeC := &Node{ID: "C", Title: "C", Type: "task", BlockedBy: []string{"B"}}
 
-	require.NoError(t, d.AddNode(nodeA))
-	require.NoError(t, d.AddNode(nodeB))
-	require.NoError(t, d.AddNode(nodeC))
+	require.NoError(t, d.addNode(nodeA))
+	require.NoError(t, d.addNode(nodeB))
+	require.NoError(t, d.addNode(nodeC))
 
 	nodeA.Blocks = []string{"B"}
 	nodeB.Blocks = []string{"C"}
@@ -631,15 +631,15 @@ func TestScopedHasCycleCrossScope(t *testing.T) {
 // TestScopedHasCycleOutOfScope tests that ScopedHasCycle ignores cycles entirely outside the scope.
 func TestScopedHasCycleOutOfScope(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create cycle B -> C -> B, with A not in the cycle
 	nodeA := &Node{ID: "A", Title: "A", Type: "task"}
 	nodeB := &Node{ID: "B", Title: "B", Type: "task", BlockedBy: []string{"C"}}
 	nodeC := &Node{ID: "C", Title: "C", Type: "task", BlockedBy: []string{"B"}}
 
-	require.NoError(t, d.AddNode(nodeA))
-	require.NoError(t, d.AddNode(nodeB))
-	require.NoError(t, d.AddNode(nodeC))
+	require.NoError(t, d.addNode(nodeA))
+	require.NoError(t, d.addNode(nodeB))
+	require.NoError(t, d.addNode(nodeC))
 
 	nodeB.Blocks = []string{"C"}
 	nodeC.Blocks = []string{"B"}
@@ -655,7 +655,7 @@ func TestScopedHasCycleOutOfScope(t *testing.T) {
 // TestScopedHasCycleWithChildrenEdges tests that ScopedHasCycle respects scope boundaries on Children edges.
 func TestScopedHasCycleWithChildrenEdges(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	// Create hierarchy: A -> B -> C, all in scope
 	// Also B -> D (out of scope), C -> A (closing parent-child cycle within scope)
 	nodeA := &Node{ID: "A", Title: "A", Type: "epic", Children: []string{"B"}}
@@ -663,10 +663,10 @@ func TestScopedHasCycleWithChildrenEdges(t *testing.T) {
 	nodeC := &Node{ID: "C", Title: "C", Type: "task", Parent: "B", BlockedBy: []string{"A"}}
 	nodeD := &Node{ID: "D", Title: "D", Type: "task", Parent: "B"}
 
-	require.NoError(t, d.AddNode(nodeA))
-	require.NoError(t, d.AddNode(nodeB))
-	require.NoError(t, d.AddNode(nodeC))
-	require.NoError(t, d.AddNode(nodeD))
+	require.NoError(t, d.addNode(nodeA))
+	require.NoError(t, d.addNode(nodeB))
+	require.NoError(t, d.addNode(nodeC))
+	require.NoError(t, d.addNode(nodeD))
 
 	nodeC.Blocks = []string{"A"}
 
@@ -681,12 +681,12 @@ func TestScopedHasCycleWithChildrenEdges(t *testing.T) {
 // TestScopedHasCycleNoCycle tests that ScopedHasCycle returns false when there's no cycle.
 func TestScopedHasCycleNoCycle(t *testing.T) {
 	t.Parallel()
-	d := New()
+	d := newGraph()
 	nodeA := &Node{ID: "A", Title: "A", Type: "task", BlockedBy: []string{"B"}}
 	nodeB := &Node{ID: "B", Title: "B", Type: "task"}
 
-	require.NoError(t, d.AddNode(nodeA))
-	require.NoError(t, d.AddNode(nodeB))
+	require.NoError(t, d.addNode(nodeA))
+	require.NoError(t, d.addNode(nodeB))
 
 	nodeB.Blocks = []string{"A"}
 

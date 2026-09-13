@@ -66,7 +66,7 @@ func TestWriteReadyEnvelopeIncludesExpiredClaims(t *testing.T) {
 	}}, claims)
 
 	waves := [][]ready.ReadyEntry{entries}
-	assert.Equal(t, [][]string{{"R1"}}, ReadyWaveIDs(waves))
+	assert.Equal(t, [][]string{{"R1"}}, readyWaveIDs(waves))
 	var withWaves bytes.Buffer
 	require.NoError(t, WriteReadyEnvelope(&withWaves, entries, waves, true, nil, "", ""))
 	assert.Contains(t, withWaves.String(), `"waves"`)

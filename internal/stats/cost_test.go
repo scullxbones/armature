@@ -117,7 +117,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		"TASK-E":  {ID: "TASK-E", Type: "task", Parent: "STORY-1", Scope: []string{"pkg/e.go"}, PreferredModel: "claude-haiku-4-5"},
 	}
 
-	report := Estimate(usages, issues, DefaultRates())
+	report := Estimate(usages, issues, defaultRates())
 
 	require.Len(t, report.Stories, 2)
 	byStory := map[string]Totals{}
@@ -161,13 +161,13 @@ func TestLoadRateTableOverridesDefault(t *testing.T) {
 	body := []byte(`{"models":{"default":{"input_usd_per_mtok":10,"output_usd_per_mtok":20}}}`)
 	require.NoError(t, os.WriteFile(path, body, 0o600))
 
-	rates, err := LoadRateTable(path)
+	rates, err := loadRateTable(path)
 	require.NoError(t, err)
 	assert.Equal(t, 10.0, rates[DefaultModel].InputUSDPerMTok)
 	assert.Equal(t, 20.0, rates[DefaultModel].OutputUSDPerMTok)
 	assert.Equal(t, 1.0, rates["claude-haiku-4-5"].InputUSDPerMTok, "unmentioned models keep built-in rates")
 
-	usd := USDFromTokens(1_000_000, 1_000_000, RateFor(rates, "", ""))
+	usd := usdFromTokens(1_000_000, 1_000_000, rateFor(rates, "", ""))
 	assert.InDelta(t, 30.0, usd, 1e-9)
 }
 
@@ -184,14 +184,14 @@ func TestResolveRatesPrefersRepoFile(t *testing.T) {
 
 	defaults, err := ResolveRates("", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, DefaultRates()[DefaultModel], defaults[DefaultModel])
+	assert.Equal(t, defaultRates()[DefaultModel], defaults[DefaultModel])
 }
 
 func TestUSDFromTokensUsesPerMillion(t *testing.T) {
 	t.Parallel()
-	assert.InDelta(t, 3.0, USDFromTokens(1_000_000, 0, DefaultRates()[DefaultModel]), 1e-9)
-	assert.InDelta(t, 15.0, USDFromTokens(0, 1_000_000, DefaultRates()[DefaultModel]), 1e-9)
-	assert.InDelta(t, 0.0, USDFromTokens(0, 0, DefaultRates()[DefaultModel]), 1e-9)
+	assert.InDelta(t, 3.0, usdFromTokens(1_000_000, 0, defaultRates()[DefaultModel]), 1e-9)
+	assert.InDelta(t, 15.0, usdFromTokens(0, 1_000_000, defaultRates()[DefaultModel]), 1e-9)
+	assert.InDelta(t, 0.0, usdFromTokens(0, 0, defaultRates()[DefaultModel]), 1e-9)
 }
 
 func TestLoadOpsAndRateFallbacks(t *testing.T) {
@@ -214,25 +214,25 @@ func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "w.log"), append(append(owned, '\n'), append(foreign, '\n')...), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "skip.txt"), []byte("not a log"), 0o600))
 
-	loaded, err := LoadOps(dir)
+	loaded, err := loadOps(dir)
 	require.NoError(t, err)
 	require.Len(t, loaded, 1, "ops whose worker_id mismatches the filename must be excluded")
 	assert.Equal(t, "T1", loaded[0].TargetID)
 	assert.Equal(t, 10, loaded[0].Payload.InputTokens)
 
-	missing, err := LoadOps(filepath.Join(dir, "no-such-ops"))
+	missing, err := loadOps(filepath.Join(dir, "no-such-ops"))
 	require.NoError(t, err)
 	assert.Empty(t, missing)
 
 	notADir := filepath.Join(dir, "not-a-dir")
 	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o600))
-	_, err = LoadOps(notADir)
+	_, err = loadOps(notADir)
 	require.Error(t, err, "unreadable ops dir must not silently understate spend")
 
-	_, err = LoadRateTable(filepath.Join(dir, "missing.json"))
+	_, err = loadRateTable(filepath.Join(dir, "missing.json"))
 	require.Error(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.json"), []byte("{"), 0o600))
-	_, err = LoadRateTable(filepath.Join(dir, "bad.json"))
+	_, err = loadRateTable(filepath.Join(dir, "bad.json"))
 	require.Error(t, err)
 
 	flagPath := filepath.Join(dir, "flag.json")
@@ -241,15 +241,15 @@ func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1.0, rates[DefaultModel].InputUSDPerMTok)
 
-	assert.Equal(t, DefaultRates()[DefaultModel], RateFor(nil, "", ""))
-	assert.Equal(t, DefaultRates()["claude-haiku-4-5"], RateFor(DefaultRates(), "claude-haiku-4-5", ""))
+	assert.Equal(t, defaultRates()[DefaultModel], rateFor(nil, "", ""))
+	assert.Equal(t, defaultRates()["claude-haiku-4-5"], rateFor(defaultRates(), "claude-haiku-4-5", ""))
 
 	issues := map[string]IssueInfo{
 		"A": {ID: "A", Type: "task", Parent: "B"},
 		"B": {ID: "B", Type: "task", Parent: "A"},
 	}
-	assert.NotEmpty(t, StoryRoot("A", issues))
-	assert.Equal(t, "missing", StoryRoot("missing", issues))
+	assert.NotEmpty(t, storyRoot("A", issues))
+	assert.Equal(t, "missing", storyRoot("missing", issues))
 	assert.False(t, Under("ghost", "STORY", issues))
 
 	usages := CollectUsage([]ops.Op{{
@@ -267,7 +267,7 @@ func TestLoadOps_UnreadableLogReturnsError(t *testing.T) {
 	// symlink is listed then fails to open, which must not be swallowed.
 	require.NoError(t, os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "broken.log")))
 
-	_, err := LoadOps(dir)
+	_, err := loadOps(dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "broken.log")
 }

@@ -170,8 +170,8 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 		Payload: Payload{Title: "Bad", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, op))
 
-	stream := NewValidatedOpStream()
-	stream.AddFile(logPath, "worker-a1")
+	stream := newValidatedOpStream()
+	stream.addFile(logPath, "worker-a1")
 	items, _, warnings, err := stream.loadAll()
 	require.NoError(t, err)
 	assert.Len(t, items, 0) // rejected — worker ID mismatch

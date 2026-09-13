@@ -111,7 +111,7 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	// Register a source first.
 	entry := SourceEntry{
@@ -165,7 +165,7 @@ func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"mock": &MockProvider{err: testErr},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	// Register a source.
 	entry := SourceEntry{
@@ -206,7 +206,7 @@ func TestLifecycleSyncAll_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	// Register multiple sources.
 	for i := 1; i <= 3; i++ {
@@ -250,7 +250,7 @@ func TestLifecycleVerify_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	// Register and sync a source.
 	entry := SourceEntry{
@@ -289,7 +289,7 @@ func TestLifecycleVerifyStale_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	// Register a source.
 	entry := SourceEntry{
@@ -344,7 +344,7 @@ func TestLifecycleIsFresh_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	// Register and sync a source.
 	entry := SourceEntry{
@@ -493,7 +493,7 @@ func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"mock": &MockProvider{data: []byte("original content")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	entry := SourceEntry{
 		ID:           "changed-1",
@@ -535,7 +535,7 @@ func TestLifecycleSyncAll_PartialFailure_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"failing": &MockProvider{err: errors.New("fetch exploded")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	for id, provider := range map[string]string{"good-1": "mock", "bad-1": "failing"} {
 		if _, err := lc.Register(SourceEntry{ID: id, URL: "https://example.com/" + id, Title: id, ProviderType: provider}); err != nil {
@@ -572,7 +572,7 @@ func TestLifecycleSyncAll_AllFail_REQ_ARCHIMP_S18_T2(t *testing.T) {
 			"failing": &MockProvider{err: errors.New("fetch exploded")},
 		},
 	}
-	lc := NewLifecycleWithRegistry(dir, registry)
+	lc := newLifecycleWithRegistry(dir, registry)
 
 	for _, id := range []string{"bad-1", "bad-2"} {
 		if _, err := lc.Register(SourceEntry{ID: id, URL: "https://example.com/" + id, Title: id, ProviderType: "failing"}); err != nil {

@@ -16,13 +16,6 @@ const listShowHelp = output.ListShowHelp
 type listEntry = output.ListIssue
 type listGroup = output.ListGroup
 
-// terminalStatuses is the set of statuses that represent terminal (completed) states.
-var terminalStatuses = map[string]bool{
-	ops.StatusDone:      true,
-	ops.StatusMerged:    true,
-	ops.StatusCancelled: true,
-}
-
 func newListCmd() *cobra.Command {
 	var filterParent string
 	var filterType string
@@ -57,7 +50,7 @@ func newListCmd() *cobra.Command {
 				if filterStatus != "" && entry.Status != filterStatus {
 					continue
 				}
-				if terminal && !terminalStatuses[entry.Status] {
+				if terminal && !isTerminalStatus(entry.Status) {
 					continue
 				}
 				ids = append(ids, id)

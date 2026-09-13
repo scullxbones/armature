@@ -1485,21 +1485,21 @@ func TestSuggestValidateFix_BundleIntegrityBeforeBundleIDMismatch_REQ_LNGHZN_S8_
 	integrity := "bundle integrity check failed: recomputed bundle_id sha256:aaa " +
 		"does not match bundle's recorded bundle_id sha256:bbb " +
 		"(bundle contents may have been altered since `arm review prepare` ran)"
-	got := review.SuggestValidateFix(integrity)
+	got := review.ClassifyValidateFix(integrity).Suggestion
 	assert.Contains(t, got, "arm review prepare")
 	assert.NotContains(t, strings.ToLower(got), "set bundle_id")
 
 	mismatch := "assessment bundle_id sha256:aaa does not match bundle bundle_id sha256:bbb"
-	got = review.SuggestValidateFix(mismatch)
+	got = review.ClassifyValidateFix(mismatch).Suggestion
 	assert.Contains(t, got, "set bundle_id")
 	assert.NotContains(t, got, "arm review prepare")
 
 	column := "parse assessment JSON: decode conformance assessment: citation: column must be >= 1, got 0"
-	got = review.SuggestValidateFix(column)
+	got = review.ClassifyValidateFix(column).Suggestion
 	assert.Contains(t, got, "1-based")
 
 	lineNull := "parse assessment JSON: decode conformance assessment: citation: line must be an integer, not null"
-	got = review.SuggestValidateFix(lineNull)
+	got = review.ClassifyValidateFix(lineNull).Suggestion
 	assert.Contains(t, strings.ToLower(got), "null")
 	assert.NotContains(t, got, "schema_version")
 }
@@ -1508,12 +1508,12 @@ func TestSuggestValidateFix_SpecificDecodeBeforeGenericParse_REQ_LNGHZN_S8_T1(t 
 	t.Parallel()
 
 	status := "parse assessment JSON: decode conformance assessment: invalid criterion status: passed"
-	got := review.SuggestValidateFix(status)
+	got := review.ClassifyValidateFix(status).Suggestion
 	assert.Contains(t, got, "satisfied")
 	assert.NotContains(t, got, "schema_version")
 
 	missing := `parse assessment JSON: decode conformance assessment: criterion result: missing required field "status"`
-	got = review.SuggestValidateFix(missing)
+	got = review.ClassifyValidateFix(missing).Suggestion
 	assert.Contains(t, strings.ToLower(got), "required field")
 	assert.NotContains(t, got, "schema_version")
 }
@@ -1522,17 +1522,17 @@ func TestSuggestValidateFix_BundleValidFailuresSuggestPrepare_REQ_LNGHZN_S8_T1(t
 	t.Parallel()
 
 	emptyType := "review bundle: missing issue type"
-	got := review.SuggestValidateFix(emptyType)
+	got := review.ClassifyValidateFix(emptyType).Suggestion
 	assert.Contains(t, got, "arm review prepare")
 	assert.NotContains(t, strings.ToLower(got), "fix the assessment")
 
 	emptyTitle := "review bundle: missing issue title"
-	got = review.SuggestValidateFix(emptyTitle)
+	got = review.ClassifyValidateFix(emptyTitle).Suggestion
 	assert.Contains(t, got, "arm review prepare")
 	assert.NotContains(t, strings.ToLower(got), "fix the assessment")
 
 	schema := "review bundle: unsupported schema version 99"
-	got = review.SuggestValidateFix(schema)
+	got = review.ClassifyValidateFix(schema).Suggestion
 	assert.Contains(t, got, "arm review prepare")
 	assert.NotContains(t, got, "set schema_version")
 }
@@ -1541,12 +1541,12 @@ func TestSuggestValidateFix_IssueContractMismatchSuggestsPrepare_REQ_LNGHZN_S8_T
 	t.Parallel()
 
 	issue := "assessment contract fingerprint aaa does not match issue contract fingerprint bbb"
-	got := review.SuggestValidateFix(issue)
+	got := review.ClassifyValidateFix(issue).Suggestion
 	assert.Contains(t, got, "arm review prepare")
 	assert.NotContains(t, strings.ToLower(got), "copy fingerprints")
 
 	bundle := "assessment contract_fingerprint aaa does not match bundle contract_fingerprint bbb"
-	got = review.SuggestValidateFix(bundle)
+	got = review.ClassifyValidateFix(bundle).Suggestion
 	assert.Contains(t, strings.ToLower(got), "copy fingerprints.contract")
 	assert.NotContains(t, got, "arm review prepare")
 }

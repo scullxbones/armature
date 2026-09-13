@@ -313,7 +313,7 @@ func TestValidatePlan_DoesNotWarnOnInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {
 		},
 	}
 
-	warnings := ValidatePlan(plan)
+	warnings := validatePlan(plan)
 	assert.Empty(t, warnings, "invalid type should not be reported as an advisory warning")
 }
 

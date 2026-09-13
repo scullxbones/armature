@@ -426,10 +426,18 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 }
 
 // checkE6RequiredFields checks that each issue has the required fields for its type.
+func e6Missing(id, typ, field string) Finding {
+	return Finding{
+		Severity: "error", Rule: "E6",
+		Message:  fmt.Sprintf("missing required field: %s on %s %s", field, typ, id),
+		CitedIDs: []string{id},
+		Key:      field,
+	}
+}
+
 func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		// Terminal-status issues have already been delivered; skip required-field checks.
 		if isTerminalStatus(issue.Status) {
 			continue
 		}
@@ -437,30 +445,15 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 			switch field {
 			case "scope":
 				if len(issue.Scope) == 0 {
-					findings = append(findings, Finding{
-						Severity: "error", Rule: "E6",
-						Message:  fmt.Sprintf("missing required field: scope on %s %s", issue.Type, id),
-						CitedIDs: []string{id},
-						Key:      field,
-					})
+					findings = append(findings, e6Missing(id, issue.Type, field))
 				}
 			case "acceptance":
 				if len(issue.Acceptance) == 0 || string(issue.Acceptance) == "null" {
-					findings = append(findings, Finding{
-						Severity: "error", Rule: "E6",
-						Message:  fmt.Sprintf("missing required field: acceptance on %s %s", issue.Type, id),
-						CitedIDs: []string{id},
-						Key:      field,
-					})
+					findings = append(findings, e6Missing(id, issue.Type, field))
 				}
 			case "definition_of_done":
 				if issue.DefinitionOfDone == "" {
-					findings = append(findings, Finding{
-						Severity: "error", Rule: "E6",
-						Message:  fmt.Sprintf("missing required field: definition_of_done on %s %s", issue.Type, id),
-						CitedIDs: []string{id},
-						Key:      field,
-					})
+					findings = append(findings, e6Missing(id, issue.Type, field))
 				}
 			}
 		}

@@ -134,7 +134,7 @@ func AnnotateValidateError(err error) error {
 			continue
 		}
 		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-		lines[i] = indent + bullet + body + suggestionMarker + SuggestValidateFix(body) + ")"
+		lines[i] = indent + bullet + body + suggestionMarker + ClassifyValidateFix(body).Suggestion + ")"
 	}
 	return fmt.Errorf("%s", strings.Join(lines, "\n"))
 }
@@ -146,117 +146,120 @@ type ValidateFix struct {
 	Fixable    bool
 }
 
-// SuggestValidateFix returns a reviewer-facing auto-fix for a validation
-// failure message from Record, Valid, or JSON decode.
-func SuggestValidateFix(message string) string {
-	return ClassifyValidateFix(message).Suggestion
-}
-
 // ClassifyValidateFix returns the auto-fix suggestion and whether rewriting
 // the assessment can apply it. Bundle and issue-state failures are not fixable.
 func ClassifyValidateFix(message string) ValidateFix {
 	msg := strings.ToLower(message)
-	fix := func(suggestion string) ValidateFix {
-		return ValidateFix{Suggestion: suggestion, Fixable: true}
-	}
-	setup := func(suggestion string) ValidateFix {
-		return ValidateFix{Suggestion: suggestion, Fixable: false}
-	}
-	switch {
-	case strings.Contains(msg, "review bundle:"):
-		return setup("re-run arm review prepare --output <bundle.json> and pass that file as --bundle")
-	case strings.Contains(msg, "unsupported schema version"):
-		return fix(fmt.Sprintf("set schema_version to %d", SchemaVersion))
-	case strings.Contains(msg, "unknown field"):
-		return fix("remove the unknown field or rename it to a documented schema property")
-	case strings.Contains(msg, "column must be"):
-		return fix("omit column or set it to a 1-based column number (>= 1)")
-	case strings.Contains(msg, "line must be"):
-		return fix("omit line or set it to an integer; JSON null is not allowed")
-	case strings.Contains(msg, "citations must be"):
-		return fix("set citations to an array of evidence, or [] with missing_evidence")
-	case strings.Contains(msg, "invalid criterion status"):
-		return fix(`set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`)
-	case strings.Contains(msg, "missing required field"):
-		return fix("add the required field on the criterion result")
-	case strings.Contains(msg, "parse assessment json"),
-		strings.Contains(msg, "decode conformance assessment"),
-		strings.Contains(msg, "unexpected trailing json"):
-		return fix(fmt.Sprintf("emit JSON matching docs/schemas/conformance-assessment.schema.json with schema_version %d", SchemaVersion))
-	case strings.Contains(msg, "parse bundle json"),
-		strings.Contains(msg, "decode review bundle"):
-		return setup("re-run arm review prepare --output <bundle.json> and pass that file as --bundle")
-	case strings.Contains(msg, "missing bundle id"), strings.Contains(msg, "bundle id is empty"):
-		return fix("copy bundle_id from the prepared review bundle")
-	case strings.Contains(msg, "no results provided"):
-		return fix("add one results[] entry per contract criterion")
-	case strings.Contains(msg, "missing contract fingerprint"):
-		return fix("copy fingerprints.contract from the prepared review bundle")
-	case strings.Contains(msg, "missing delivery fingerprint"):
-		return fix("copy fingerprints.delivery from the prepared review bundle")
-	case strings.Contains(msg, "missing id"):
-		return fix(`set id to "definition_of_done" or "acceptance[N]"`)
-	case strings.Contains(msg, "missing rationale"):
-		return fix("add a rationale explaining the criterion status")
-	case strings.Contains(msg, "citations required"):
-		return fix("add at least one citation, or lower the status from satisfied and set missing_evidence")
-	case strings.Contains(msg, "missing evidence"), strings.Contains(msg, "citations or missing_evidence"):
-		return fix("set missing_evidence to describe what is absent, or add citations")
-	case strings.Contains(msg, "mutually exclusive"):
-		return fix("keep either path or activity_entry_id on the citation, not both")
-	case strings.Contains(msg, "delivery_fingerprint") && strings.Contains(msg, "does not match"):
-		return fix("copy fingerprints.delivery from the prepared review bundle")
-	case strings.Contains(msg, "issue contract fingerprint"):
-		return setup("re-run arm review prepare --output <bundle.json> and pass that file as --bundle")
-	case strings.Contains(msg, "contract fingerprint") && strings.Contains(msg, "does not match"),
-		strings.Contains(msg, "contract_fingerprint") && strings.Contains(msg, "does not match"):
-		return fix("copy fingerprints.contract from the prepared review bundle")
-	case strings.Contains(msg, "bundle integrity"):
-		return setup("re-run arm review prepare --output <bundle.json>; do not edit the bundle file")
-	case strings.Contains(msg, "bundle_id") && strings.Contains(msg, "does not match"):
-		return fix("set bundle_id to the prepared bundle's bundle_id")
-	case strings.Contains(msg, "bundle was prepared for issue"):
-		return setup("validate against the bundle's issue or re-run arm review prepare for this issue")
-	case strings.Contains(msg, "duplicate id"):
-		return fix("keep a single result for this criterion id")
-	case strings.Contains(msg, "unexpected criterion id"):
-		return fix(`rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`)
-	case strings.Contains(msg, "missing expected id"):
-		if id := firstQuoted(message); id != "" {
-			return fix(fmt.Sprintf("add a criterion result with id %q", id))
+	for _, rule := range validateFixRules {
+		if !rule.match(msg) {
+			continue
 		}
-		return fix(`add a criterion result with id "definition_of_done" or "acceptance[N]"`)
-	case strings.Contains(msg, "no bundle activity section"), strings.Contains(msg, "cites activity log entries"):
-		return fix("re-run arm review prepare so the bundle includes activity, or drop activity_entry_id citations")
-	case strings.Contains(msg, "invalid activity entry id"):
-		return fix("cite a numeric activity_entry_id from the bundle activity log")
-	case strings.Contains(msg, "unknown activity entry"):
-		return fix("cite an activity_entry_id present in the activity log")
-	case strings.Contains(msg, "earlier commits"):
-		return fix("cite an activity entry executed at the delivery head_sha")
-	case strings.Contains(msg, "unknown exit code"):
-		return fix("do not use this entry to support satisfied; lower the status or cite an entry with a known zero exit code")
-	case strings.Contains(msg, "failed exit code"):
-		return fix("do not use a failed command as satisfied evidence; lower the status or cite a passing entry")
-	case strings.Contains(msg, "upgrade-only"):
-		return fix("add a diff citation (path) for this implementation criterion")
-	case strings.Contains(msg, "activity log digest mismatch"):
-		return setup("re-run arm review prepare so activity.digest matches the on-disk log")
-	case strings.Contains(msg, "activity log missing or unreadable"):
-		return setup("restore the activity log or re-run arm review prepare")
-	case strings.Contains(msg, "activity log validation"):
-		return setup("re-run arm review prepare so activity.digest matches the on-disk log")
-	case strings.Contains(msg, "gate evidence"):
-		return setup("re-run arm review prepare after restoring original gate evidence logs")
-	case strings.Contains(msg, "build diff index"):
-		return setup("re-run arm review prepare so Delivery.Diff is a well-formed unified diff")
-	case strings.Contains(msg, "acceptance criteria"):
-		return setup("fix the issue acceptance JSON and re-run arm review prepare")
-	case strings.Contains(msg, "not in diff"):
-		return fix("remove the citation or cite a path present in the delivery diff")
-	default:
-		return setup("fix the assessment to satisfy this check, then re-run arm review validate")
+		text := rule.text
+		if rule.schema {
+			text = fmt.Sprintf(text, SchemaVersion)
+		}
+		if rule.quoted {
+			if id := firstQuoted(message); id != "" {
+				text = fmt.Sprintf("add a criterion result with id %q", id)
+			}
+		}
+		return ValidateFix{Suggestion: text, Fixable: rule.fixable}
 	}
+	return ValidateFix{
+		Suggestion: "fix the assessment to satisfy this check, then re-run arm review validate",
+		Fixable:    false,
+	}
+}
+
+const (
+	fixPrepareBundle    = "re-run arm review prepare --output <bundle.json> and pass that file as --bundle"
+	fixCopyDeliveryFP   = "copy fingerprints.delivery from the prepared review bundle"
+	fixCopyContractFP   = "copy fingerprints.contract from the prepared review bundle"
+	fixActivityDigest   = "re-run arm review prepare so activity.digest matches the on-disk log"
+	fixDefaultCriterion = `add a criterion result with id "definition_of_done" or "acceptance[N]"`
+	fixAssessmentJSON   = "emit JSON matching docs/schemas/conformance-assessment.schema.json with schema_version %d"
+	fixDropActivityCite = "re-run arm review prepare so the bundle includes activity, or drop activity_entry_id citations"
+	fixUnknownExit      = "do not use this entry to support satisfied; lower the status or cite an entry with a known zero exit code"
+	fixFailedExit       = "do not use a failed command as satisfied evidence; lower the status or cite a passing entry"
+	fixCitationsReq     = "add at least one citation, or lower the status from satisfied and set missing_evidence"
+	fixInvalidStatus    = `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`
+	fixUnexpectedID     = `rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`
+	fixUnknownField     = "remove the unknown field or rename it to a documented schema property"
+)
+
+type validateFixRule struct {
+	any     []string
+	all     []string
+	fixable bool
+	text    string
+	schema  bool
+	quoted  bool
+}
+
+func (r validateFixRule) match(msg string) bool {
+	for _, n := range r.all {
+		if !strings.Contains(msg, n) {
+			return false
+		}
+	}
+	if len(r.any) == 0 {
+		return true
+	}
+	for _, n := range r.any {
+		if strings.Contains(msg, n) {
+			return true
+		}
+	}
+	return false
+}
+
+var validateFixRules = []validateFixRule{
+	{any: []string{"review bundle:"}, text: fixPrepareBundle},
+	{any: []string{"unsupported schema version"}, fixable: true, text: "set schema_version to %d", schema: true},
+	{any: []string{"unknown field"}, fixable: true, text: fixUnknownField},
+	{any: []string{"column must be"}, fixable: true, text: "omit column or set it to a 1-based column number (>= 1)"},
+	{any: []string{"line must be"}, fixable: true, text: "omit line or set it to an integer; JSON null is not allowed"},
+	{any: []string{"citations must be"}, fixable: true, text: "set citations to an array of evidence, or [] with missing_evidence"},
+	{any: []string{"invalid criterion status"}, fixable: true, text: fixInvalidStatus},
+	{any: []string{"missing required field"}, fixable: true, text: "add the required field on the criterion result"},
+	{
+		any:     []string{"parse assessment json", "decode conformance assessment", "unexpected trailing json"},
+		fixable: true, text: fixAssessmentJSON, schema: true,
+	},
+	{any: []string{"parse bundle json", "decode review bundle"}, text: fixPrepareBundle},
+	{any: []string{"missing bundle id", "bundle id is empty"}, fixable: true, text: "copy bundle_id from the prepared review bundle"},
+	{any: []string{"no results provided"}, fixable: true, text: "add one results[] entry per contract criterion"},
+	{any: []string{"missing contract fingerprint"}, fixable: true, text: fixCopyContractFP},
+	{any: []string{"missing delivery fingerprint"}, fixable: true, text: fixCopyDeliveryFP},
+	{any: []string{"missing id"}, fixable: true, text: `set id to "definition_of_done" or "acceptance[N]"`},
+	{any: []string{"missing rationale"}, fixable: true, text: "add a rationale explaining the criterion status"},
+	{any: []string{"citations required"}, fixable: true, text: fixCitationsReq},
+	{any: []string{"missing evidence", "citations or missing_evidence"}, fixable: true, text: "set missing_evidence to describe what is absent, or add citations"},
+	{any: []string{"mutually exclusive"}, fixable: true, text: "keep either path or activity_entry_id on the citation, not both"},
+	{all: []string{"delivery_fingerprint", "does not match"}, fixable: true, text: fixCopyDeliveryFP},
+	{any: []string{"issue contract fingerprint"}, text: fixPrepareBundle},
+	{all: []string{"contract fingerprint", "does not match"}, fixable: true, text: fixCopyContractFP},
+	{all: []string{"contract_fingerprint", "does not match"}, fixable: true, text: fixCopyContractFP},
+	{any: []string{"bundle integrity"}, text: "re-run arm review prepare --output <bundle.json>; do not edit the bundle file"},
+	{all: []string{"bundle_id", "does not match"}, fixable: true, text: "set bundle_id to the prepared bundle's bundle_id"},
+	{any: []string{"bundle was prepared for issue"}, text: "validate against the bundle's issue or re-run arm review prepare for this issue"},
+	{any: []string{"duplicate id"}, fixable: true, text: "keep a single result for this criterion id"},
+	{any: []string{"unexpected criterion id"}, fixable: true, text: fixUnexpectedID},
+	{any: []string{"missing expected id"}, fixable: true, text: fixDefaultCriterion, quoted: true},
+	{any: []string{"no bundle activity section", "cites activity log entries"}, fixable: true, text: fixDropActivityCite},
+	{any: []string{"invalid activity entry id"}, fixable: true, text: "cite a numeric activity_entry_id from the bundle activity log"},
+	{any: []string{"unknown activity entry"}, fixable: true, text: "cite an activity_entry_id present in the activity log"},
+	{any: []string{"earlier commits"}, fixable: true, text: "cite an activity entry executed at the delivery head_sha"},
+	{any: []string{"unknown exit code"}, fixable: true, text: fixUnknownExit},
+	{any: []string{"failed exit code"}, fixable: true, text: fixFailedExit},
+	{any: []string{"upgrade-only"}, fixable: true, text: "add a diff citation (path) for this implementation criterion"},
+	{any: []string{"activity log digest mismatch"}, text: fixActivityDigest},
+	{any: []string{"activity log missing or unreadable"}, text: "restore the activity log or re-run arm review prepare"},
+	{any: []string{"activity log validation"}, text: fixActivityDigest},
+	{any: []string{"gate evidence"}, text: "re-run arm review prepare after restoring original gate evidence logs"},
+	{any: []string{"build diff index"}, text: "re-run arm review prepare so Delivery.Diff is a well-formed unified diff"},
+	{any: []string{"acceptance criteria"}, text: "fix the issue acceptance JSON and re-run arm review prepare"},
+	{any: []string{"not in diff"}, fixable: true, text: "remove the citation or cite a path present in the delivery diff"},
 }
 
 func firstQuoted(s string) string {

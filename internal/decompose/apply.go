@@ -50,10 +50,7 @@ type ApplyOptions struct {
 	appendOps func(string, []ops.Op) error
 }
 
-// ValidatePlan returns a list of advisory warnings for the plan.
-// It does not report invalid issue types: those are always fatal, see
-// validateTypes. Missing per-issue source is always fatal, see validateSources.
-func ValidatePlan(plan *Plan) []string {
+func validatePlan(plan *Plan) []string {
 	var warnings []string
 	for _, issue := range plan.Issues {
 		if issue.DoD == "" {
@@ -97,7 +94,7 @@ func sourceIDsFromManifest(data []byte) (map[string]struct{}, error) {
 }
 
 // validateTypes rejects a plan containing any issue with an unrecognized
-// Type. Unlike the advisory warnings in ValidatePlan, this is always a hard
+// Type. Unlike the advisory warnings in validatePlan, this is always a hard
 // error: an unrecognized type is never a legitimate, salvageable situation.
 func validateTypes(plan *Plan) error {
 	for _, issue := range plan.Issues {
@@ -177,7 +174,7 @@ func DryRunApplyPlan(plan *Plan, state *materialize.State, opts ApplyOptions) (*
 		return nil, err
 	}
 
-	warnings := ValidatePlan(plan)
+	warnings := validatePlan(plan)
 
 	transformed := preparePlan(plan, opts)
 	proposed, err := planOps(transformed, state, "dry-run", clock.System, opts)

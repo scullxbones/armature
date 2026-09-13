@@ -207,19 +207,19 @@ func TestDynamicBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 	git := adapters.New(tmpDir)
 
 	// No parent-branch config recorded: error.
-	_, err := DynamicBaseCommit(git)
+	_, err := dynamicBaseCommit(git)
 	assert.Error(t, err)
 
 	// Stale literal "HEAD" record: treated as absent.
 	require.NoError(t, git.SetGitConfig(ParentBranchConfigKey("task/issue-1"), "HEAD"))
-	_, err = DynamicBaseCommit(git)
+	_, err = dynamicBaseCommit(git)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "literal value")
 	require.NoError(t, git.UnsetGitConfig(ParentBranchConfigKey("task/issue-1")))
 
 	// Valid parent-branch record: resolves to the merge-base.
 	require.NoError(t, git.SetGitConfig(ParentBranchConfigKey("task/issue-1"), "main-parent"))
-	got, err := DynamicBaseCommit(git)
+	got, err := dynamicBaseCommit(git)
 	require.NoError(t, err)
 	assert.Equal(t, baseSHA, got)
 }

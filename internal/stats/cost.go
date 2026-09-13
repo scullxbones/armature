@@ -72,7 +72,7 @@ type rateFile struct {
 
 // DefaultRates returns built-in USD-per-MTok prices used when no table is configured.
 // Values are list prices for common 2026-era frontier models, not a billing guarantee.
-func DefaultRates() RateTable {
+func defaultRates() RateTable {
 	return RateTable{
 		"claude-sonnet-4-5": {InputUSDPerMTok: 3.00, OutputUSDPerMTok: 15.00},
 		"claude-haiku-4-5":  {InputUSDPerMTok: 1.00, OutputUSDPerMTok: 5.00},
@@ -85,7 +85,7 @@ func DefaultRates() RateTable {
 
 // LoadRateTable reads a JSON object {"models": {name: {input_usd_per_mtok, output_usd_per_mtok}}}.
 // Unknown models still fall back to the "default" entry after merge with DefaultRates.
-func LoadRateTable(path string) (RateTable, error) {
+func loadRateTable(path string) (RateTable, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("read rate table: %w", err)
@@ -94,7 +94,7 @@ func LoadRateTable(path string) (RateTable, error) {
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return nil, fmt.Errorf("parse rate table: %w", err)
 	}
-	rates := DefaultRates()
+	rates := defaultRates()
 	for name, rate := range parsed.Models {
 		rates[name] = rate
 	}
@@ -104,15 +104,15 @@ func LoadRateTable(path string) (RateTable, error) {
 // ResolveRates returns flag path, else IssuesDir/cost-rates.json if present, else defaults.
 func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
 	if ratesPath != "" {
-		return LoadRateTable(ratesPath)
+		return loadRateTable(ratesPath)
 	}
 	if issuesDir != "" {
 		candidate := filepath.Join(issuesDir, DefaultRatesFile)
 		if _, err := os.Stat(candidate); err == nil {
-			return LoadRateTable(candidate)
+			return loadRateTable(candidate)
 		}
 	}
-	return DefaultRates(), nil
+	return defaultRates(), nil
 }
 
 // LoadOps parses every JSONL ops log under opsDir using the same validated
@@ -122,7 +122,7 @@ func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
 //
 // Command handlers that already have a Snapshot must use snap.Ops instead of
 // calling LoadOps, so spend and hierarchy share one captured op set.
-func LoadOps(opsDir string) ([]ops.Op, error) {
+func loadOps(opsDir string) ([]ops.Op, error) {
 	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
 		return nil, fmt.Errorf("load ops logs: %w", err)
@@ -180,16 +180,16 @@ type attestationKey struct {
 }
 
 // USDFromTokens converts token counts to dollars using the model's rate.
-func USDFromTokens(inputTokens, outputTokens int, rate Rate) float64 {
+func usdFromTokens(inputTokens, outputTokens int, rate Rate) float64 {
 	const million = 1_000_000.0
 	return float64(inputTokens)/million*rate.InputUSDPerMTok +
 		float64(outputTokens)/million*rate.OutputUSDPerMTok
 }
 
 // RateFor returns the rate for model, then issue preferred model, then default.
-func RateFor(table RateTable, model, preferred string) Rate {
+func rateFor(table RateTable, model, preferred string) Rate {
 	if table == nil {
-		table = DefaultRates()
+		table = defaultRates()
 	}
 	for _, key := range []string{model, preferred, DefaultModel} {
 		if key == "" {
@@ -205,7 +205,7 @@ func RateFor(table RateTable, model, preferred string) Rate {
 // Estimate aggregates usage into per-issue, per-story, and per-wave dollar totals.
 func Estimate(usages []Usage, issues map[string]IssueInfo, rates RateTable) Report {
 	if rates == nil {
-		rates = DefaultRates()
+		rates = defaultRates()
 	}
 	byIssue := make(map[string]Totals)
 	for _, u := range usages {
@@ -214,18 +214,18 @@ func Estimate(usages []Usage, issues map[string]IssueInfo, rates RateTable) Repo
 		if u.Source != "assessment" {
 			preferred = info.PreferredModel
 		}
-		rate := RateFor(rates, u.Model, preferred)
+		rate := rateFor(rates, u.Model, preferred)
 		cur := byIssue[u.IssueID]
 		cur.ID = u.IssueID
 		cur.InputTokens += u.InputTokens
 		cur.OutputTokens += u.OutputTokens
-		cur.USD += USDFromTokens(u.InputTokens, u.OutputTokens, rate)
+		cur.USD += usdFromTokens(u.InputTokens, u.OutputTokens, rate)
 		byIssue[u.IssueID] = cur
 	}
 
 	storyBuckets := make(map[string]Totals)
 	for issueID, tot := range byIssue {
-		root := StoryRoot(issueID, issues)
+		root := storyRoot(issueID, issues)
 		bucket := storyBuckets[root]
 		bucket.ID = root
 		bucket.InputTokens += tot.InputTokens
@@ -244,7 +244,7 @@ func Estimate(usages []Usage, issues map[string]IssueInfo, rates RateTable) Repo
 }
 
 // StoryRoot walks parents until a story (or the top-most ancestor).
-func StoryRoot(issueID string, issues map[string]IssueInfo) string {
+func storyRoot(issueID string, issues map[string]IssueInfo) string {
 	seen := map[string]bool{}
 	cur := issueID
 	last := issueID

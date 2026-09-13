@@ -133,8 +133,7 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 				lastHeartbeat[op.TargetID] = op.Timestamp
 			}
 		case ops.OpTransition:
-			if op.Payload.To == ops.StatusDone || op.Payload.To == ops.StatusMerged ||
-				op.Payload.To == ops.StatusCancelled {
+			if isTerminalStatus(op.Payload.To) {
 				transitioned[op.TargetID] = true
 			}
 			// Only count a transition as claiming-worker activity when the
@@ -268,7 +267,7 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 				if s := stateByWorker[op.WorkerID]; s != nil && op.Timestamp > s.lastClaimingWorkerActivity {
 					s.lastClaimingWorkerActivity = op.Timestamp
 				}
-				if op.Payload.To == ops.StatusDone || op.Payload.To == ops.StatusMerged || op.Payload.To == ops.StatusCancelled {
+				if isTerminalStatus(op.Payload.To) {
 					if s := stateByWorker[op.WorkerID]; s != nil {
 						s.transitioned = true
 					}

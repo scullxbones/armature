@@ -38,7 +38,7 @@ func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	err = os.WriteFile(issueIDFile, []byte("task-from-path"), 0o644)
 	require.NoError(t, err)
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "task-from-path", binding.IssueID)
@@ -68,7 +68,7 @@ func TestResolveBindingFromFilePath_LinkedWorktree_RootIsWorktreeRoot(t *testing
 	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	require.NoError(t, os.WriteFile(issueIDFile, []byte("linked-worktree-task"), 0o644))
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "linked-worktree-task", binding.IssueID)
@@ -86,7 +86,7 @@ func TestResolveBindingFromFilePath_NoGitDir(t *testing.T) {
 	err := os.MkdirAll(filepath.Dir(filePath), 0o755)
 	require.NoError(t, err)
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "", binding.IssueID)
@@ -106,7 +106,7 @@ func TestResolveBindingFromFilePath_NoIssueIDFile(t *testing.T) {
 	err = os.MkdirAll(fileDir, 0o755)
 	require.NoError(t, err)
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "", binding.IssueID)
@@ -136,7 +136,7 @@ func TestResolveBindingFromFilePath_StopsAtFirstGitDir(t *testing.T) {
 	err = os.WriteFile(issueIDFile, []byte("task-from-child"), 0o644)
 	require.NoError(t, err)
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "task-from-child", binding.IssueID)
@@ -162,7 +162,7 @@ func TestResolveBindingFromFilePath_TrimsWhitespace(t *testing.T) {
 	err = os.WriteFile(issueIDFile, []byte("  task-with-spaces  \n"), 0o644)
 	require.NoError(t, err)
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "task-with-spaces", binding.IssueID)
@@ -660,7 +660,7 @@ func TestResolveBindingFromFilePath_FallsBackToLegacyTaskIDFile(t *testing.T) {
 	err = os.WriteFile(taskIDFile, []byte("legacy-task-id"), 0o644)
 	require.NoError(t, err)
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "legacy-task-id", binding.IssueID)
@@ -691,7 +691,7 @@ func TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID(t *testing.T) {
 	err = os.WriteFile(taskIDFile, []byte("legacy-task-id"), 0o644)
 	require.NoError(t, err)
 
-	binding, err := ResolveBindingFromFilePath(filePath)
+	binding, err := resolveBindingFromFilePath(filePath)
 
 	require.NoError(t, err)
 	assert.Equal(t, "new-issue-id", binding.IssueID, "armature-issue-id should take precedence")
@@ -701,7 +701,7 @@ func TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID(t *testing.T) {
 // TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding verifies that
 // when event Cwd is the worktree root (step 2 of the resolution chain), the binding
 // is found at <cwd>/.git/armature-issue-id. This test catches the bug where
-// ResolveBindingFromFilePath(cwd) would do filepath.Dir(cwd), skipping the root's
+// resolveBindingFromFilePath(cwd) would do filepath.Dir(cwd), skipping the root's
 // own .git directory (finding P2).
 func TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding(t *testing.T) {
 	t.Parallel()

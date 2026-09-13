@@ -178,8 +178,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 				lastHeartbeat[op.TargetID] = op.Timestamp
 			}
 		case ops.OpTransition:
-			if op.Payload.To == ops.StatusDone || op.Payload.To == ops.StatusMerged ||
-				op.Payload.To == ops.StatusCancelled {
+			if isTerminalStatus(op.Payload.To) {
 				transitioned[op.TargetID] = true
 			}
 			// This is a per-worker log: every op here was authored by workerID,
