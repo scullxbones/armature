@@ -89,7 +89,7 @@ func mapAgentFacingError(cmd *cobra.Command, err error) error {
 		return armerrors.Wrap(armerrors.CodeUSAGE, err.Error(), []string{"arm --help"}, exitcodes.ExitUsageError.Int(), err)
 	}
 	code := failureCodeForCommand(cmd)
-	return armerrors.Map(code, err.Error(), nextActionsForPortError(err), 1, err)
+	return armerrors.Wrap(code, err.Error(), nextActionsForPortError(err), 1, err)
 }
 
 func failureCodeForCommand(cmd *cobra.Command) string {

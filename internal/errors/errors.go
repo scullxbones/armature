@@ -69,11 +69,6 @@ func Wrap(code, cause string, nextActions []string, exitCode int, err error) *Co
 	}
 }
 
-// Map is Wrap for a Failure Code chosen at the CLI port (command prefix).
-func Map(code, cause string, nextActions []string, exitCode int, err error) *CommandFailure {
-	return Wrap(code, cause, nextActions, exitCode, err)
-}
-
 func (e *CommandFailure) Error() string {
 	return fmt.Sprintf("[%s] %s", e.Code, e.Cause)
 }
