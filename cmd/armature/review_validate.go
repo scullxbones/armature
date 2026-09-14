@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,15 +57,9 @@ func runReviewValidate(cmd *cobra.Command, assessmentFile, bundleFile string) er
 		return fmt.Errorf("--bundle expects a file path, not JSON content")
 	}
 
-	var assessmentData []byte
-	var err error
-	if assessmentFile == "-" {
-		assessmentData, err = io.ReadAll(os.Stdin)
-	} else {
-		assessmentData, err = os.ReadFile(filepath.Clean(assessmentFile))
-	}
+	assessmentData, err := readAssessmentFile(assessmentFile)
 	if err != nil {
-		return fmt.Errorf("read assessment file: %w", err)
+		return err
 	}
 
 	assessment, err := review.DecodeConformanceAssessment(assessmentData)

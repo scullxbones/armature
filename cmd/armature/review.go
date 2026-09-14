@@ -321,15 +321,9 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	}
 
 	// Decode input: read and parse assessment JSON
-	var assessmentData []byte
-	var err error
-	if assessmentFile == "-" {
-		assessmentData, err = io.ReadAll(os.Stdin)
-	} else {
-		assessmentData, err = os.ReadFile(filepath.Clean(assessmentFile))
-	}
+	assessmentData, err := readAssessmentFile(assessmentFile)
 	if err != nil {
-		return fmt.Errorf("read assessment file: %w", err)
+		return err
 	}
 
 	assessment, err := review.DecodeConformanceAssessment(assessmentData)
@@ -455,6 +449,20 @@ func init() {
 func looksLikeJSONArg(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
+}
+
+func readAssessmentFile(path string) ([]byte, error) {
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(filepath.Clean(path))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read assessment file: %w", err)
+	}
+	return data, nil
 }
 
 func mapReviewError(err error) error {

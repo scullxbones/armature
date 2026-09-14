@@ -56,7 +56,7 @@ func TestListDefaultRowIsFourFields_REQ_AOC_S2_T2(t *testing.T) {
 	var help []string
 	require.NoError(t, json.Unmarshal(decoded["help"], &help))
 	require.NotEmpty(t, help)
-	assert.Equal(t, listShowHelp, help[0])
+	assert.Equal(t, output.ListShowHelp, help[0])
 }
 
 func TestListOmitsOutcome_REQ_AOC_S2_T2(t *testing.T) {
@@ -97,11 +97,11 @@ func TestListGroupHonouredInStructuredOutput_REQ_AOC_S2_T2(t *testing.T) {
 	withGroup := decodeListEnvelope(t, grouped)
 	require.Contains(t, withGroup, "groups")
 
-	var issues []listEntry
+	var issues []output.ListIssue
 	require.NoError(t, json.Unmarshal(withGroup["issues"], &issues))
 	require.NotEmpty(t, issues)
 
-	var groups []listGroup
+	var groups []output.ListGroup
 	require.NoError(t, json.Unmarshal(withGroup["groups"], &groups))
 	require.NotEmpty(t, groups)
 
@@ -138,7 +138,7 @@ func TestListCountIsTrueTotal_REQ_AOC_S2_T2(t *testing.T) {
 	decoded := decodeListEnvelope(t, runListJSON(t, repo))
 	var count int
 	require.NoError(t, json.Unmarshal(decoded["count"], &count))
-	var issues []listEntry
+	var issues []output.ListIssue
 	require.NoError(t, json.Unmarshal(decoded["issues"], &issues))
 	assert.Equal(t, len(issues), count, "count must equal payload length")
 	assert.Equal(t, 3, count, "count is the true unfiltered total, not a cap")
@@ -147,7 +147,7 @@ func TestListCountIsTrueTotal_REQ_AOC_S2_T2(t *testing.T) {
 	empty := decodeListEnvelope(t, emptyOut)
 	require.NoError(t, json.Unmarshal(empty["count"], &count))
 	assert.Equal(t, 0, count)
-	var emptyIssues []listEntry
+	var emptyIssues []output.ListIssue
 	require.NoError(t, json.Unmarshal(empty["issues"], &emptyIssues))
 	assert.Empty(t, emptyIssues)
 	assert.Equal(t, "[]", strings.TrimSpace(string(empty["issues"])))

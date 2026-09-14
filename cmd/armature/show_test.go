@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/stats"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -305,7 +306,7 @@ func TestShowTruncatesOutcomeWithSizeHint_REQ_AOC_S2_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	longOutcome := strings.Repeat("completed with a detailed outcome body. ", 40)
-	require.Greater(t, len(longOutcome), showLargeFieldLimit)
+	require.Greater(t, len(longOutcome), output.ShowLargeFieldLimit)
 
 	_, err = runTrls(t, repo, "transition", "task-01", "--to", "done",
 		"--skip-delivery-gate", "--outcome", longOutcome, "--force")
@@ -321,7 +322,7 @@ func TestShowTruncatesOutcomeWithSizeHint_REQ_AOC_S2_T3(t *testing.T) {
 
 	decoded := decodeShowEnvelope(t, out)
 	require.Contains(t, decoded, "truncated")
-	var hints []showTruncation
+	var hints []output.ShowTruncation
 	require.NoError(t, json.Unmarshal(decoded["truncated"], &hints))
 	require.NotEmpty(t, hints)
 	found := false
@@ -349,7 +350,7 @@ func TestShowFullFlagReturnsCompleteField_REQ_AOC_S2_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	longOutcome := strings.Repeat("completed with a detailed outcome body. ", 40)
-	require.Greater(t, len(longOutcome), showLargeFieldLimit)
+	require.Greater(t, len(longOutcome), output.ShowLargeFieldLimit)
 
 	_, err = runTrls(t, repo, "transition", "task-01", "--to", "done",
 		"--skip-delivery-gate", "--outcome", longOutcome, "--force")
