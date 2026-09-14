@@ -1,6 +1,0 @@
-cmd: git -C /tmp/arm-verify-target.EmQCHp config --unset armature.worker-id
-exit: 0
---- stdout ---
-
---- stderr ---
-

@@ -1,1 +1,0 @@
-git -C /tmp/arm-verify-target.GCF9xD config --get armature.worker-id
