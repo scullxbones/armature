@@ -207,7 +207,14 @@ func collectDraftSubtree(state *materialize.State, rootID string) []*materialize
 	return result
 }
 
-func emitVerifiedDAGSummary(cmd *cobra.Command, execState *executionState, logPath, workerID string, draftIssues []*materialize.Issue, approvedIDs []string, cov traceability.Coverage) {
+func emitVerifiedDAGSummary(
+	cmd *cobra.Command,
+	execState *executionState,
+	logPath, workerID string,
+	draftIssues []*materialize.Issue,
+	approvedIDs []string,
+	cov traceability.Coverage,
+) {
 	for _, id := range approvedIDs {
 		o := ops.Op{
 			Type:      ops.OpDAGTransition,
