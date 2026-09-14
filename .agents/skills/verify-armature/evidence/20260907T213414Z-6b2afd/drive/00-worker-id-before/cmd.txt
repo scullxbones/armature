@@ -1,1 +1,0 @@
-git -C /tmp/arm-verify-target.ghvE84 config --get armature.worker-id

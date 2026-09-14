@@ -1,7 +1,0 @@
-cmd: arm ready
-exit: 0
---- stdout ---
-null
-
---- stderr ---
-
