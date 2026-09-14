@@ -103,24 +103,7 @@ mode (agents) to auto-approve all pending draft items.`,
 					for _, issue := range draftIssues {
 						approvedIDs = append(approvedIDs, issue.ID)
 					}
-					for _, id := range approvedIDs {
-						o := ops.Op{
-							Type:      ops.OpDAGTransition,
-							TargetID:  id,
-							Timestamp: nowEpoch(),
-							WorkerID:  workerID,
-							Payload: ops.Payload{
-								IssueID: id,
-								To:      "verified",
-							},
-						}
-						if err := appendLowStakesOp(execState, logPath, o); err != nil {
-							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
-						}
-					}
-					if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
-					}
+					emitVerifiedDAGSummary(cmd, execState, logPath, workerID, draftIssues, approvedIDs, cov)
 				}
 
 				type pendingItem struct {
@@ -173,25 +156,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			}
 
 			approvedIDs := final.ApprovedIDs()
-			for _, id := range approvedIDs {
-				o := ops.Op{
-					Type:      ops.OpDAGTransition,
-					TargetID:  id,
-					Timestamp: nowEpoch(),
-					WorkerID:  workerID,
-					Payload: ops.Payload{
-						IssueID: id,
-						To:      "verified",
-					},
-				}
-				if err := appendLowStakesOp(execState, logPath, o); err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
-				}
-			}
-
-			if err := writeDAGSummaryArtifact(appCtx.StateDir, draftIssues, approvedIDs, cov); err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
-			}
+			emitVerifiedDAGSummary(cmd, execState, logPath, workerID, draftIssues, approvedIDs, cov)
 
 			return nil
 		},
@@ -240,6 +205,34 @@ func collectDraftSubtree(state *materialize.State, rootID string) []*materialize
 	}
 	walk(root.ID)
 	return result
+}
+
+func emitVerifiedDAGSummary(
+	cmd *cobra.Command,
+	execState *executionState,
+	logPath, workerID string,
+	draftIssues []*materialize.Issue,
+	approvedIDs []string,
+	cov traceability.Coverage,
+) {
+	for _, id := range approvedIDs {
+		o := ops.Op{
+			Type:      ops.OpDAGTransition,
+			TargetID:  id,
+			Timestamp: nowEpoch(),
+			WorkerID:  workerID,
+			Payload: ops.Payload{
+				IssueID: id,
+				To:      "verified",
+			},
+		}
+		if err := appendLowStakesOp(execState, logPath, o); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit dag-transition for %s: %v\n", id, err)
+		}
+	}
+	if err := writeDAGSummaryArtifact(execState.ctx.StateDir, draftIssues, approvedIDs, cov); err != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: write dag-summary.md: %v\n", err)
+	}
 }
 
 func writeDAGSummaryArtifact(stateDir string, reviewed []*materialize.Issue,

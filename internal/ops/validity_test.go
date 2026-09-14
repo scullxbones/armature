@@ -22,9 +22,5 @@ func TestAffectsValidity_KnownTypes(t *testing.T) {
 	assert.False(t, classified)
 	assert.False(t, affects)
 	assert.True(t, AffectsValidity("not-a-real-op"), "unclassified op types must fail-closed as validity-affecting")
-}
-
-func TestClassifiedOpTypes_NonEmpty(t *testing.T) {
-	t.Parallel()
-	require.NotEmpty(t, ClassifiedOpTypes())
+	require.NotEmpty(t, classifiedValidity)
 }

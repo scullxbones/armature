@@ -86,7 +86,7 @@ func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailu
 	if format == "json" || format == "agent" {
 		b, err := json.Marshal(commandFailureEnvelope{Error: cf})
 		if err != nil {
-			fallback := armerrors.Map(armerrors.CodeIO, err.Error(), nil, 1, err)
+			fallback := armerrors.Wrap(armerrors.CodeIO, err.Error(), nil, 1, err)
 			b, _ = json.Marshal(commandFailureEnvelope{Error: fallback}) //nolint:errcheck // fallback fields are always serializable
 		}
 		fmt.Fprintln(w, string(b))

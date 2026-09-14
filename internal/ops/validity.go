@@ -1,7 +1,5 @@
 package ops
 
-import "slices"
-
 // classifiedValidity is the exhaustive AffectsValidity census.
 // Every materialize.RegisteredOpTypes() entry must appear here; an
 // unclassified new type fails CI via TestAffectsValidityCensus.
@@ -41,14 +39,4 @@ func AffectsValidity(opType string) bool {
 func ClassifiedValidity(opType string) (affects bool, classified bool) {
 	affects, classified = classifiedValidity[opType]
 	return affects, classified
-}
-
-// ClassifiedOpTypes returns every op type present in the AffectsValidity census.
-func ClassifiedOpTypes() []string {
-	types := make([]string, 0, len(classifiedValidity))
-	for opType := range classifiedValidity {
-		types = append(types, opType)
-	}
-	slices.Sort(types)
-	return types
 }

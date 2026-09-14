@@ -11,11 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const listShowHelp = output.ListShowHelp
-
-type listEntry = output.ListIssue
-type listGroup = output.ListGroup
-
 func newListCmd() *cobra.Command {
 	var filterParent string
 	var filterType string
@@ -60,7 +55,7 @@ func newListCmd() *cobra.Command {
 			filtered := filterParent != "" || filterType != "" || filterStatus != "" || terminal
 			if structuredFormat(cmd) {
 				rows := output.ListRows(index, ids)
-				var groups []listGroup
+				var groups []output.ListGroup
 				if group {
 					groups = output.ListGroupsByStatus(index, ids)
 				}
@@ -68,29 +63,16 @@ func newListCmd() *cobra.Command {
 			}
 
 			if group {
-				groups := make(map[string][]string)
-				for _, id := range ids {
-					s := index[id].Status
-					groups[s] = append(groups[s], id)
-				}
-				statuses := make([]string, 0, len(groups))
-				for s := range groups {
-					statuses = append(statuses, s)
-				}
-				sort.Slice(statuses, func(i, j int) bool {
-					return output.ListStatusRank(statuses[i]) < output.ListStatusRank(statuses[j])
-				})
-				for _, status := range statuses {
-					label := status
-					if status == ops.StatusDone {
+				for _, g := range output.ListGroupsByStatus(index, ids) {
+					label := g.Status
+					if g.Status == ops.StatusDone {
 						label = "done (awaiting merge)"
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
-					sort.Strings(groups[status])
-					for _, id := range groups[status] {
+					for _, id := range g.IDs {
 						e := index[id]
 						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
-						if status == ops.StatusDone && e.Branch != "" {
+						if g.Status == ops.StatusDone && e.Branch != "" {
 							line += fmt.Sprintf("  [branch: %s", e.Branch)
 							if e.PR != "" {
 								line += fmt.Sprintf(", PR: #%s", e.PR)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/output"
@@ -10,18 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/stats"
 	"github.com/spf13/cobra"
 )
-
-const showLargeFieldLimit = output.ShowLargeFieldLimit
-
-type showTruncation = output.ShowTruncation
-
-func truncateShowIssue(row *output.IssueJSON) []showTruncation {
-	return output.TruncateShowIssue(row)
-}
-
-func writeShowEnvelope(w io.Writer, ids []string, rows []output.IssueJSON, trunc []showTruncation) error {
-	return output.WriteShowEnvelope(w, ids, rows, trunc)
-}
 
 func newShowCmd() *cobra.Command {
 	var issueID string
@@ -77,28 +64,20 @@ func newShowCmd() *cobra.Command {
 
 			if structured {
 				rows := make([]output.IssueJSON, 0, len(ids))
-				var trunc []showTruncation
+				var trunc []output.ShowTruncation
 				for _, id := range ids {
 					row := output.MarshalIssue(snap.Issues[id])
 					if !full {
-						trunc = append(trunc, truncateShowIssue(&row)...)
+						trunc = append(trunc, output.TruncateShowIssue(&row)...)
 					}
 					rows = append(rows, row)
 				}
-				return writeShowEnvelope(cmd.OutOrStdout(), ids, rows, trunc)
+				return output.WriteShowEnvelope(cmd.OutOrStdout(), ids, rows, trunc)
 			}
 
-			needSpend := true
-			var (
-				costReport *stats.Report
-				issueInfo  map[string]stats.IssueInfo
-			)
-			if needSpend {
-				var costErr error
-				costReport, issueInfo, costErr = loadSpendReport(ctx, snap)
-				if costErr != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: spend-to-date unavailable: %s\n", costErr)
-				}
+			costReport, issueInfo, costErr := loadSpendReport(ctx, snap)
+			if costErr != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: spend-to-date unavailable: %s\n", costErr)
 			}
 
 			for i, id := range ids {

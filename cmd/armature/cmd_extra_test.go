@@ -653,10 +653,10 @@ func TestListCmd_Group_JSONIgnoresGroupFlag(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	var env struct {
-		Count  int         `json:"count"`
-		Issues []listEntry `json:"issues"`
-		Groups []listGroup `json:"groups"`
-		Help   []string    `json:"help"`
+		Count  int                `json:"count"`
+		Issues []output.ListIssue `json:"issues"`
+		Groups []output.ListGroup `json:"groups"`
+		Help   []string           `json:"help"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &env),
 		"--group must emit a structured envelope")
@@ -1184,9 +1184,9 @@ func TestListCmd_JSONFormat(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	var env struct {
-		Count  int         `json:"count"`
-		Issues []listEntry `json:"issues"`
-		Help   []string    `json:"help"`
+		Count  int                `json:"count"`
+		Issues []output.ListIssue `json:"issues"`
+		Help   []string           `json:"help"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &env))
 	require.Len(t, env.Issues, 1)
@@ -1244,9 +1244,9 @@ func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	var env struct {
-		Count  int         `json:"count"`
-		Issues []listEntry `json:"issues"`
-		Help   []string    `json:"help"`
+		Count  int                `json:"count"`
+		Issues []output.ListIssue `json:"issues"`
+		Help   []string           `json:"help"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &env),
 		"agent format must emit a valid envelope")
