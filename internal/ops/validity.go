@@ -2,7 +2,7 @@ package ops
 
 // classifiedValidity is the exhaustive AffectsValidity census.
 // Every materialize.RegisteredOpTypes() entry must appear here; an
-// unclassified new type fails CI via TestAffectsValidityCensus_REQ_LNGHZN_S10_T12.
+// unclassified new type fails CI via TestAffectsValidityCensus.
 var classifiedValidity = map[string]bool{
 	OpCreate:             true,
 	OpAmend:              true,
@@ -32,4 +32,11 @@ var classifiedValidity = map[string]bool{
 func AffectsValidity(opType string) bool {
 	affects, classified := classifiedValidity[opType]
 	return affects || !classified
+}
+
+// ClassifiedValidity reports the census entry for opType. classified is
+// false when the type is missing from the map.
+func ClassifiedValidity(opType string) (affects bool, classified bool) {
+	affects, classified = classifiedValidity[opType]
+	return affects, classified
 }

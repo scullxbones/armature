@@ -3,7 +3,6 @@ package ops
 import (
 	"testing"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,17 +18,9 @@ func TestAffectsValidity_KnownTypes(t *testing.T) {
 	assert.False(t, AffectsValidity(OpHeartbeat))
 	assert.False(t, AffectsValidity(OpNote))
 	assert.False(t, AffectsValidity(OpGateEvidence))
-	affects, classified := classifiedValidity["not-a-real-op"]
+	affects, classified := ClassifiedValidity("not-a-real-op")
 	assert.False(t, classified)
 	assert.False(t, affects)
 	assert.True(t, AffectsValidity("not-a-real-op"), "unclassified op types must fail-closed as validity-affecting")
 	require.NotEmpty(t, classifiedValidity)
-}
-
-func TestAffectsValidityCensus_REQ_LNGHZN_S10_T12(t *testing.T) {
-	t.Parallel()
-	for _, typ := range materialize.RegisteredOpTypes() {
-		_, classified := classifiedValidity[typ]
-		assert.True(t, classified, "unclassified op type %q: every RegisteredOpTypes() entry must be classified AffectsValidity", typ)
-	}
 }
