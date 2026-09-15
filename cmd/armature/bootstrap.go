@@ -34,26 +34,13 @@ type BootstrapResult struct {
 	HarnessSetup []bootstrap.HarnessArtifactResult `json:"harness_setup"`
 }
 
-// runRepoSetupWithFormat calls runRepoSetup, silencing human output when format is "json".
-func runRepoSetupWithFormat(cmd *cobra.Command, repoPath string, format string) (RepoSetupResult, error) {
+func cmdOutForFormat(cmd *cobra.Command, format string) *cobra.Command {
 	if format == "json" || format == "agent" {
 		silentCmd := &cobra.Command{}
 		silentCmd.SetOut(io.Discard)
-		return runRepoSetup(silentCmd, repoPath)
+		return silentCmd
 	}
-	return runRepoSetup(cmd, repoPath)
-}
-
-// executeHarnessSetupWithFormat calls executeHarnessSetup, silencing human output when format is "json" or "agent".
-func executeHarnessSetupWithFormat(
-	cmd *cobra.Command, plan bootstrap.Plan, repoPath string, global bool, format string,
-) ([]bootstrap.HarnessArtifactResult, error) {
-	if format == "json" || format == "agent" {
-		silentCmd := &cobra.Command{}
-		silentCmd.SetOut(io.Discard)
-		return executeHarnessSetup(silentCmd, plan, repoPath, global)
-	}
-	return executeHarnessSetup(cmd, plan, repoPath, global)
+	return cmd
 }
 
 func newBootstrapCmd() *cobra.Command {
@@ -136,7 +123,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 			}
 
 			// Run repo setup and collect results (pass format flag for silent mode in JSON)
-			repoSetupResult, err := runRepoSetupWithFormat(cmd, repoPath, format)
+			repoSetupResult, err := runRepoSetup(cmdOutForFormat(cmd, format), repoPath)
 			if err != nil {
 				// Emit error in JSON format before returning (for json/agent format)
 				if format == "json" || format == "agent" {
@@ -155,7 +142,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 			}
 
 			// Execute harness setup and collect results (pass format flag for silent mode in JSON)
-			harnessResults, err := executeHarnessSetupWithFormat(cmd, plan, repoPath, global, format)
+			harnessResults, err := executeHarnessSetup(cmdOutForFormat(cmd, format), plan, repoPath, global)
 			if err != nil {
 				// Emit partial JSON results before returning error (for json/agent format)
 				if (format == "json" || format == "agent") && len(harnessResults) > 0 {

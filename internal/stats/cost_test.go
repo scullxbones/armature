@@ -194,6 +194,14 @@ func TestUSDFromTokensUsesPerMillion(t *testing.T) {
 	assert.InDelta(t, 0.0, usdFromTokens(0, 0, defaultRates()[DefaultModel]), 1e-9)
 }
 
+func loadValidatedOps(opsDir string) ([]ops.Op, error) {
+	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	if err != nil {
+		return nil, err
+	}
+	return ops.ExtractOps(items), nil
+}
+
 func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -214,19 +222,19 @@ func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "w.log"), append(append(owned, '\n'), append(foreign, '\n')...), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "skip.txt"), []byte("not a log"), 0o600))
 
-	loaded, err := loadOps(dir)
+	loaded, err := loadValidatedOps(dir)
 	require.NoError(t, err)
 	require.Len(t, loaded, 1, "ops whose worker_id mismatches the filename must be excluded")
 	assert.Equal(t, "T1", loaded[0].TargetID)
 	assert.Equal(t, 10, loaded[0].Payload.InputTokens)
 
-	missing, err := loadOps(filepath.Join(dir, "no-such-ops"))
+	missing, err := loadValidatedOps(filepath.Join(dir, "no-such-ops"))
 	require.NoError(t, err)
 	assert.Empty(t, missing)
 
 	notADir := filepath.Join(dir, "not-a-dir")
 	require.NoError(t, os.WriteFile(notADir, []byte("x"), 0o600))
-	_, err = loadOps(notADir)
+	_, err = loadValidatedOps(notADir)
 	require.Error(t, err, "unreadable ops dir must not silently understate spend")
 
 	_, err = loadRateTable(filepath.Join(dir, "missing.json"))
@@ -267,7 +275,7 @@ func TestLoadOps_UnreadableLogReturnsError(t *testing.T) {
 	// symlink is listed then fails to open, which must not be swallowed.
 	require.NoError(t, os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "broken.log")))
 
-	_, err := loadOps(dir)
+	_, err := loadValidatedOps(dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "broken.log")
 }

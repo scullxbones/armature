@@ -43,16 +43,6 @@ func hookLogContainsEntry(gitDir, kind string) (bool, error) {
 	return false, nil
 }
 
-// readHookLogForPassThroughs reports whether the hook log contains pass-through entries.
-func readHookLogForPassThroughs(gitDir string) (bool, error) {
-	return hookLogContainsEntry(gitDir, "pass-through:")
-}
-
-// readHookLogForViolations reports whether the hook log contains violation entries.
-func readHookLogForViolations(gitDir string) (bool, error) {
-	return hookLogContainsEntry(gitDir, "violation:")
-}
-
 // resolveBoundWorktree resolves the worktree an issue owns, by binding alone.
 //
 // This is the SELECTION half of the split (see worktree.SelectByIssue): it is
@@ -166,7 +156,7 @@ func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) (bool,
 		// Bound to a different issue; not ours to gate on.
 		return false, nil
 	}
-	return readHookLogForViolations(gitDir)
+	return hookLogContainsEntry(gitDir, "violation:")
 }
 
 // worktreeRemoveOutcome distinguishes an actual worktree removal from a
@@ -291,7 +281,7 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 			selected.Path, binding, issue.ID)
 		return worktreeSkipped, nil
 	}
-	hasPassThroughs, err := readHookLogForPassThroughs(gitDir)
+	hasPassThroughs, err := hookLogContainsEntry(gitDir, "pass-through:")
 	if err != nil {
 		return worktreeSkipped, fmt.Errorf("read hook log for %s: %w", issue.ID, err)
 	}

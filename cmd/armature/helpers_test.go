@@ -630,8 +630,8 @@ func TestParseAcceptanceJSON(t *testing.T) {
 
 func TestGitCommitterNilWhenNoWorktree(t *testing.T) {
 	t.Parallel()
-	assert.Nil(t, gitCommitter(nil))
-	assert.Nil(t, gitCommitter(&config.Context{}))
+	assert.Nil(t, worktreeGit(nil))
+	assert.Nil(t, worktreeGit(&config.Context{}))
 }
 
 func TestIsAbsentArmatureLayout_NonexistentRepo_REQ_AOC_S2_T5(t *testing.T) {

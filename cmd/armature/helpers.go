@@ -322,14 +322,6 @@ func worktreeGit(ctx *config.Context) *adapters.Client {
 	return adapters.New(ctx.WorktreePath)
 }
 
-func gitCommitter(ctx *config.Context) ops.GitCommitter {
-	gc := worktreeGit(ctx)
-	if gc == nil {
-		return nil
-	}
-	return gc
-}
-
 // parseAcceptanceJSON decodes --acceptance flag JSON shared by create and amend.
 func parseAcceptanceJSON(acceptanceJSON string) (json.RawMessage, error) {
 	if acceptanceJSON == "" {
@@ -464,7 +456,7 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
 		return err
 	}
-	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gitCommitter(ctx))
+	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx))
 }
 
 // appendHighStakesOp appends an op, commits it (dual-branch), and attempts to push.

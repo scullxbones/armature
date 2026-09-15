@@ -115,21 +115,6 @@ func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
 	return defaultRates(), nil
 }
 
-// LoadOps parses every JSONL ops log under opsDir using the same validated
-// op stream as snapshot materialization. Ops whose worker_id does not match
-// the filename are excluded. Unreadable logs return an error rather than a
-// silently understated spend total.
-//
-// Command handlers that already have a Snapshot must use snap.Ops instead of
-// calling LoadOps, so spend and hierarchy share one captured op set.
-func loadOps(opsDir string) ([]ops.Op, error) {
-	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
-	if err != nil {
-		return nil, fmt.Errorf("load ops logs: %w", err)
-	}
-	return ops.ExtractOps(items), nil
-}
-
 // CollectUsage extracts token-bearing outcome and assessment records. Zero is unset.
 // Assessment attestations are deduplicated by issue ID + ResultFingerprint, matching
 // materialize.applyAssessmentAttested, so concurrent idempotent appends are billed once.

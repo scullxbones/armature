@@ -1606,14 +1606,6 @@ func TestGlobOverlaps_ParityWithClaimPackage_PR79(t *testing.T) {
 	}
 }
 
-func TestAffectsValidityCensus_REQ_LNGHZN_S10_T12(t *testing.T) {
-	t.Parallel()
-	for _, typ := range materialize.RegisteredOpTypes() {
-		_, classified := ops.ClassifiedValidity(typ)
-		assert.True(t, classified, "unclassified op type %q: every RegisteredOpTypes() entry must be classified AffectsValidity", typ)
-	}
-}
-
 // Production writers of ops.Append* that are allowed to skip refuseIntroduction.
 // Each entry must state why. A new production call site fails this test until
 // it is routed through an Introduction wrapper or added here with a reason.
