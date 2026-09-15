@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func materializeAndReturn(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
+	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true})
+}
+
 func TestToTraceabilityRefs_CarriesConfidence_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
 	issues := map[string]*Issue{
@@ -108,7 +112,7 @@ func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
 
 	stateDir := filepath.Join(readOnlyDir, "state")
 
-	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{}, nil)
+	_, _, err := materializeAndReturn(stateDir, []ops.Op{}, nil)
 	if err == nil {
 		t.Fatal("expected error when MkdirAll fails, got nil")
 	}
@@ -350,7 +354,7 @@ func TestMaterializeAndReturn_UnknownOpTypeErrorSurfaced(t *testing.T) {
 
 	allOps := []ops.Op{validOp, unknownOp}
 
-	_, result, err := MaterializeAndReturn(stateDir, allOps, nil)
+	_, result, err := materializeAndReturn(stateDir, allOps, nil)
 	require.NoError(t, err, "MaterializeAndReturn should not error, but should capture unknown ops")
 
 	// Verify unknown op is captured
@@ -385,7 +389,7 @@ func TestMaterializeAndReturn_HandlerErrorSurfaced(t *testing.T) {
 		Payload:   ops.Payload{TTL: 60},
 	}
 
-	_, _, err := MaterializeAndReturn(stateDir, []ops.Op{validOp, handlerErrOp}, nil)
+	_, _, err := materializeAndReturn(stateDir, []ops.Op{validOp, handlerErrOp}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "claim: issue task-02 not found")
 
@@ -517,7 +521,7 @@ func TestMaterializeAndReturn_UnhandledOpsWarningEmitted(t *testing.T) { //nolin
 	os.Stderr = w
 
 	// Run MaterializeAndReturn
-	_, result, funcErr := MaterializeAndReturn(stateDir, allOps, nil)
+	_, result, funcErr := materializeAndReturn(stateDir, allOps, nil)
 
 	// Restore stderr immediately and close the write end
 	os.Stderr = oldStderr
@@ -632,7 +636,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
 	offsets := map[string]int64{filepath.Base(logPath): info.Size()}
-	baselineState, baselineResult, err := MaterializeAndReturn(stateDir, opsInitial, offsets)
+	baselineState, baselineResult, err := materializeAndReturn(stateDir, opsInitial, offsets)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(baselineState.Issues))
 	assert.Equal(t, 6, baselineResult.OpsProcessed)
@@ -660,7 +664,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	info2, err := os.Stat(logPath)
 	require.NoError(t, err)
 	offsets2 := map[string]int64{filepath.Base(logPath): info2.Size()}
-	incrementalState, incrementalResult, err := MaterializeAndReturn(stateDir, opsAll, offsets2)
+	incrementalState, incrementalResult, err := materializeAndReturn(stateDir, opsAll, offsets2)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(incrementalState.Issues))
 	assert.Equal(t, 8, incrementalResult.OpsProcessed, "should have processed all 8 ops")
@@ -710,7 +714,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	// Run fresh full replay with all ops
 	opsAll2, err := ops.ReadLog(logPath2)
 	require.NoError(t, err)
-	fullReplayState, fullReplayResult, err := MaterializeAndReturn(stateDir2, opsAll2, nil)
+	fullReplayState, fullReplayResult, err := materializeAndReturn(stateDir2, opsAll2, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(fullReplayState.Issues))
 	assert.Equal(t, 8, fullReplayResult.OpsProcessed)
@@ -760,7 +764,7 @@ func TestIncremental_ReplayRepairsStaleIssueState(t *testing.T) {
 		ByteOffsets: map[string]int64{"worker-a.log": 128},
 	}))
 
-	state, result, err := MaterializeAndReturn(stateDir, nil, map[string]int64{"worker-a.log": 128})
+	state, result, err := materializeAndReturn(stateDir, nil, map[string]int64{"worker-a.log": 128})
 	require.NoError(t, err)
 	assert.False(t, result.FullReplay, "checkpointed replay should take the incremental path")
 
@@ -1049,7 +1053,7 @@ func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
 	allOps := []ops.Op{createOp, assessmentOp}
 
 	// Materialize the ops
-	state, result, err := MaterializeAndReturn(stateDir, allOps, nil)
+	state, result, err := materializeAndReturn(stateDir, allOps, nil)
 	require.NoError(t, err)
 
 	// Verify materialization results
@@ -1107,7 +1111,7 @@ func TestIncremental_RetractsCachedPromotionBeforeReplay_REQ_TOPTIER_B1(t *testi
 	require.NoError(t, err)
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
-	seedState, _, err := MaterializeAndReturn(stateDir, seedOps,
+	seedState, _, err := materializeAndReturn(stateDir, seedOps,
 		map[string]int64{filepath.Base(logPath): info.Size()})
 	require.NoError(t, err)
 	require.Equal(t, ops.StatusMerged, seedState.Issues["story-01"].Status,
@@ -1127,12 +1131,12 @@ func TestIncremental_RetractsCachedPromotionBeforeReplay_REQ_TOPTIER_B1(t *testi
 	require.NoError(t, err)
 	info2, err := os.Stat(logPath)
 	require.NoError(t, err)
-	incremental, incResult, err := MaterializeAndReturn(stateDir, allOps,
+	incremental, incResult, err := materializeAndReturn(stateDir, allOps,
 		map[string]int64{filepath.Base(logPath): info2.Size()})
 	require.NoError(t, err)
 	require.False(t, incResult.FullReplay, "precondition: this run must be incremental")
 
-	coldState, _, err := MaterializeAndReturn(filepath.Join(dir, "state2"), allOps, nil)
+	coldState, _, err := materializeAndReturn(filepath.Join(dir, "state2"), allOps, nil)
 	require.NoError(t, err)
 	require.Equal(t, ops.StatusInProgress, coldState.Issues["story-01"].Status,
 		"precondition: a cold replay promotes the story when its child is reclaimed")
@@ -1170,7 +1174,7 @@ func TestMaterialize_PreVersionCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *test
 		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 103, WorkerID: "w1",
 			Payload: ops.Payload{To: ops.StatusOpen}},
 	}
-	state, result, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	state, result, err := materializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
 	require.NoError(t, err)
 
 	assert.True(t, result.FullReplay, "a pre-version checkpoint must force a cold replay")
@@ -1212,7 +1216,7 @@ func TestMaterialize_NewerCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *testing.T
 		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 103, WorkerID: "w1",
 			Payload: ops.Payload{To: ops.StatusOpen}},
 	}
-	state, result, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	state, result, err := materializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
 	require.NoError(t, err)
 
 	assert.True(t, result.FullReplay, "a checkpoint from a newer state version must force a cold replay")
@@ -1245,7 +1249,7 @@ func TestMaterialize_FullReplayPurgesOrphanedSnapshots_REQ_TOPTIER_B1(t *testing
 		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
 			Payload: ops.Payload{Title: "Task A", NodeType: "task"}},
 	}
-	state, result, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	state, result, err := materializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
 	require.NoError(t, err)
 	require.True(t, result.FullReplay, "precondition: the version mismatch forces a cold replay")
 	require.NotContains(t, state.Issues, "task-99", "precondition: the replay does not yield the orphan")
@@ -1254,7 +1258,7 @@ func TestMaterialize_FullReplayPurgesOrphanedSnapshots_REQ_TOPTIER_B1(t *testing
 		"a snapshot the replay did not produce must not survive on disk")
 
 	// The next run is incremental, and must not resurrect the orphan.
-	next, nextResult, err := MaterializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
+	next, nextResult, err := materializeAndReturn(stateDir, allOps, map[string]int64{"w1.log": 256})
 	require.NoError(t, err)
 	require.False(t, nextResult.FullReplay, "precondition: the rewritten checkpoint enables incremental replay")
 	assert.NotContains(t, next.Issues, "task-99",

@@ -23,12 +23,6 @@ type ListEntry struct {
 	AssignedTo string `json:"assigned_to,omitempty"`
 }
 
-// RenderIssue renders a single issue as human-readable text.
-// Structured show output goes through NewEnvelope/WriteEnvelope, not this helper.
-func RenderIssue(w io.Writer, issue *materialize.Issue) error {
-	return renderIssueHuman(w, issue)
-}
-
 // IssueJSON is the canonical JSON representation of an issue.
 // All JSON serialization of issues must go through this struct to ensure schema consistency.
 type IssueJSON struct {
@@ -145,7 +139,9 @@ func formatLatestAttestationLine(attestations []review.AssessmentAttestation) st
 	return fmt.Sprintf("Review:    %s (bundle %s; %s)", ratingStr, bundleID, strings.Join(counts, ", "))
 }
 
-func renderIssueHuman(w io.Writer, issue *materialize.Issue) error {
+// RenderIssue renders a single issue as human-readable text.
+// Structured show output goes through NewEnvelope/WriteEnvelope, not this helper.
+func RenderIssue(w io.Writer, issue *materialize.Issue) error {
 	ew := &errWriter{w: w}
 
 	ew.printf("ID:        %s\n", issue.ID)
@@ -270,12 +266,6 @@ func RenderBoard(w io.Writer, entries []BoardEntry) error {
 	return nil
 }
 
-// RenderReady renders the ready queue as human-readable text.
-// Structured ready output goes through WriteReadyEnvelope, not this helper.
-func RenderReady(w io.Writer, entries []ready.ReadyEntry) error {
-	return renderReadyHuman(w, entries)
-}
-
 // RenderExpiredClaims renders the distinct expired-claims section for `arm ready`
 // as human-readable text, and is a no-op when claims is empty (nothing to surface).
 // Structured expired claims go through WriteReadyEnvelope as an adjunct.
@@ -295,7 +285,9 @@ func RenderExpiredClaims(w io.Writer, claims []ready.ExpiredClaimEntry) error {
 	return nil
 }
 
-func renderReadyHuman(w io.Writer, entries []ready.ReadyEntry) error {
+// RenderReady renders the ready queue as human-readable text.
+// Structured ready output goes through WriteReadyEnvelope, not this helper.
+func RenderReady(w io.Writer, entries []ready.ReadyEntry) error {
 	if len(entries) == 0 {
 		_, err := fmt.Fprintln(w, "No tasks ready.")
 		return err

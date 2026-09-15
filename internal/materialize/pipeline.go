@@ -80,10 +80,6 @@ func isUnknownOpTypeError(err error) bool {
 	return strings.HasPrefix(err.Error(), "unknown op type: ")
 }
 
-func applyOps(state *State, allOps []ops.Op) ([]ops.Op, error) {
-	return applyOpsWithTolerance(state, allOps, nil)
-}
-
 func missingTargetReplayID(err error) (string, bool) {
 	msg := err.Error()
 	switch {
@@ -191,7 +187,7 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 
 	sortOpsByTimestamp(allOps)
 
-	unhandledOps, err := applyOps(state, allOps)
+	unhandledOps, err := applyOpsWithTolerance(state, allOps, nil)
 	if err != nil {
 		return nil, Result{}, err
 	}
@@ -328,13 +324,6 @@ func Materialize(stateDir string, allOps []ops.Op, byteOffsets map[string]int64)
 // because they render returned warnings themselves.
 func MaterializeAndReturnQuiet(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
 	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: false})
-}
-
-// MaterializeAndReturn runs the full materialization pipeline and returns the resulting State.
-// It accepts pre-read ops and writes state and checkpoint files to stateDir.
-// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
-func MaterializeAndReturn(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
-	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true})
 }
 
 // MaterializeExcludeWorker replays ops excluding all ops from the given
