@@ -13,13 +13,10 @@ import (
 // Identity is read from each worktree's binding file; branch and path are
 // observations only. A failed git listing or unreadable binding fails closed.
 func List(repoPath string) ([]Meta, error) {
-	// #nosec G204 - git and its arguments are controlled by Armature.
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	out, err := cmd.Output()
+	blocks, err := listPorcelainBlocks(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
+		return nil, err
 	}
-	blocks := parsePorcelainBlocks(string(out))
 	result := make([]Meta, 0, len(blocks))
 	for _, block := range blocks {
 		if block.prunable || block.path == "" {
@@ -44,15 +41,13 @@ func List(repoPath string) ([]Meta, error) {
 // paths are clone-local evidence: callers must not use replicated issue paths
 // alone to infer ownership in another clone.
 func RegisteredPaths(repoPath string) ([]string, error) {
-	// #nosec G204 - git and its arguments are controlled by Armature.
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	out, err := cmd.Output()
+	blocks, err := listPorcelainBlocks(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
+		return nil, err
 	}
 	main := NormalizePathAllowingMissing(repoPath)
 	paths := make([]string, 0)
-	for _, block := range parsePorcelainBlocks(string(out)) {
+	for _, block := range blocks {
 		if block.path == "" || NormalizePathAllowingMissing(block.path) == main {
 			continue
 		}
@@ -275,14 +270,12 @@ func boundEntries(items []Meta, id string) []Meta {
 // exact-path re-add, never a broad `git worktree prune` that could drop
 // unrelated registrations.
 func HasPrunableRegistration(repoPath, path string) (bool, error) {
-	// #nosec G204 - git and its arguments are controlled by Armature.
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	out, err := cmd.Output()
+	blocks, err := listPorcelainBlocks(repoPath)
 	if err != nil {
-		return false, fmt.Errorf("git worktree list --porcelain: %w", err)
+		return false, err
 	}
 	want := NormalizePathAllowingMissing(path)
-	for _, block := range parsePorcelainBlocks(string(out)) {
+	for _, block := range blocks {
 		if block.prunable && block.path != "" && NormalizePathAllowingMissing(block.path) == want {
 			return true, nil
 		}
@@ -294,6 +287,16 @@ type porcelainBlock struct {
 	path     string
 	branch   string
 	prunable bool
+}
+
+func listPorcelainBlocks(repoPath string) ([]porcelainBlock, error) {
+	// #nosec G204 - git and its arguments are controlled by Armature.
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
+	}
+	return parsePorcelainBlocks(string(out)), nil
 }
 
 func parsePorcelainBlocks(output string) []porcelainBlock {

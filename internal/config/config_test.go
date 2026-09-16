@@ -100,10 +100,10 @@ func TestConfigGatesRoundTrip(t *testing.T) {
 
 	loaded, err := LoadConfig(configPath)
 	require.NoError(t, err)
-	full, ok := loaded.Gate(PublishGateProfile)
+	full, ok := loaded.Gates[PublishGateProfile]
 	require.True(t, ok)
 	assert.Equal(t, []string{"make", "check"}, full.Command)
-	_, ok = loaded.Gate("missing")
+	_, ok = loaded.Gates["missing"]
 	assert.False(t, ok)
 }
 
