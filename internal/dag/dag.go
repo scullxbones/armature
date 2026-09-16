@@ -36,10 +36,6 @@ func (g *Graph) addNode(n *Node) error {
 	return nil
 }
 
-func (g *Graph) node(id string) *Node {
-	return g.nodes[id]
-}
-
 // HasCycle checks for cycles using DFS across both the parent-child hierarchy
 // and the blocking dependency graph simultaneously.
 func (g *Graph) HasCycle() bool {

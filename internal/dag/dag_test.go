@@ -116,7 +116,7 @@ func TestPropertyParentChildConsistency(t *testing.T) {
 				return false
 			}
 
-			parentNode := d.node(parentID)
+			parentNode := d.nodes[parentID]
 			return parentNode != nil && slices.Contains(parentNode.Children, childID)
 		},
 		gen.AlphaString(),
@@ -423,7 +423,7 @@ func TestGraphBlockersEmptyNode(t *testing.T) {
 	assert.Empty(t, blockers)
 }
 
-// TestGraphNode uses the Node method to test node retrieval.
+// TestGraphNode tests node retrieval from the graph map.
 func TestGraphNode(t *testing.T) {
 	t.Parallel()
 	d := newGraph()
@@ -431,11 +431,11 @@ func TestGraphNode(t *testing.T) {
 
 	require.NoError(t, d.addNode(task))
 
-	retrieved := d.node("task-1")
+	retrieved := d.nodes["task-1"]
 	assert.NotNil(t, retrieved)
 	assert.Equal(t, "task-1", retrieved.ID)
 
-	notFound := d.node("nonexistent")
+	notFound := d.nodes["nonexistent"]
 	assert.Nil(t, notFound)
 }
 

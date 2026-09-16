@@ -53,15 +53,6 @@ type GateConfig struct {
 	Command []string `json:"command"`
 }
 
-// Gate returns the configured profile, or false when gates are unset or the name is unknown.
-func (c Config) Gate(name string) (GateConfig, bool) {
-	if len(c.Gates) == 0 {
-		return GateConfig{}, false
-	}
-	gate, ok := c.Gates[name]
-	return gate, ok
-}
-
 // ParseGates decodes a gates.json document (map of profile name → command).
 func ParseGates(data []byte) (map[string]GateConfig, error) {
 	var gates map[string]GateConfig

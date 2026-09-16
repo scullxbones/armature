@@ -1066,24 +1066,13 @@ func (c *Client) IsTracked(path string) bool {
 	return err == nil && len(out) > 0
 }
 
-// CommitPaths creates a commit scoped to the given pathspecs, so it structurally cannot
-// sweep in unrelated staged changes outside those paths. If there is nothing staged for
-// the given paths, this is a no-op (returns nil) rather than an error. Any other commit
-// failure (hook rejection, missing git identity, etc.) is returned as an error.
-func (c *Client) CommitPaths(message string, paths ...string) error {
-	return c.commitPaths(message, false, paths...)
-}
-
-// CommitPathsNoVerify behaves like CommitPaths but skips hooks with --no-verify.
+// CommitPathsNoVerify creates a commit scoped to the given pathspecs with
+// --no-verify, so it cannot sweep in unrelated staged changes outside those
+// paths and cannot be blocked by user hooks. If there is nothing staged for
+// the given paths, this is a no-op (returns nil) rather than an error. Any
+// other commit failure (missing git identity, etc.) is returned as an error.
 func (c *Client) CommitPathsNoVerify(message string, paths ...string) error {
-	return c.commitPaths(message, true, paths...)
-}
-
-func (c *Client) commitPaths(message string, noVerify bool, paths ...string) error {
-	args := append([]string{"commit", "-m", message, "--"}, paths...)
-	if noVerify {
-		args = append([]string{"commit", "--no-verify", "-m", message, "--"}, paths...)
-	}
+	args := append([]string{"commit", "--no-verify", "-m", message, "--"}, paths...)
 	cmd := c.cmd(args...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {

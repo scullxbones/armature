@@ -2878,7 +2878,7 @@ func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
 	require.NoError(t, os.Remove(configPath))
 	worktreeGitClient := adapters.New(worktreePath)
 	require.NoError(t, worktreeGitClient.AddPaths([]string{"."}))
-	require.NoError(t, worktreeGitClient.CommitPaths("chore: simulate remote adoption without config.json", "."))
+	require.NoError(t, worktreeGitClient.CommitPathsNoVerify("chore: simulate remote adoption without config.json", "."))
 
 	opsFile := filepath.Join(issuesDir, "ops", "adopted-issue.json")
 	require.NoError(t, os.WriteFile(opsFile, []byte(`{"id":"adopted"}`), 0o600))
