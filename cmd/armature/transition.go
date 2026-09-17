@@ -260,17 +260,7 @@ outcome) appends as an amendment at exit 0.`,
 			}
 
 			// If --field flag is set, extract and print only the requested field
-			if fieldFlag != "" {
-				// Create a minimal issue object with just the transition result
-				// to extract the field from
-				transitionResult := &materialize.Issue{
-					ID:     issueID,
-					Status: to,
-				}
-				fields := extractFieldsFromIssue(transitionResult, fieldFlag)
-				for _, field := range fields {
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
-				}
+			if writeTransitionFields(cmd, issueID, to, fieldFlag) {
 				return nil
 			}
 
@@ -302,16 +292,22 @@ outcome) appends as an amendment at exit 0.`,
 var testBarrierAfterIdempotencyCheck func()
 
 func writeTransitionNoOp(cmd *cobra.Command, issueID, to, fieldFlag string) {
-	if fieldFlag != "" {
-		transitionResult := &materialize.Issue{ID: issueID, Status: to}
-		fields := extractFieldsFromIssue(transitionResult, fieldFlag)
-		for _, field := range fields {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
-		}
+	if writeTransitionFields(cmd, issueID, to, fieldFlag) {
 		return
 	}
 	writeCommandResult(cmd, map[string]any{"issue": issueID, "status": to, "noop": true},
 		"no-op: identical payload, nothing appended\n")
+}
+
+func writeTransitionFields(cmd *cobra.Command, issueID, to, fieldFlag string) bool {
+	if fieldFlag == "" {
+		return false
+	}
+	fields := extractFieldsFromIssue(&materialize.Issue{ID: issueID, Status: to}, fieldFlag)
+	for _, field := range fields {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), field)
+	}
+	return true
 }
 
 // replayIssueOps reads the append-only source of truth without updating

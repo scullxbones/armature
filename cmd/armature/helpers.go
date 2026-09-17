@@ -662,3 +662,19 @@ func newSnapshotStore(ctx *config.Context) *snapshot.Store {
 	stateDir := ctx.StateDir
 	return snapshot.NewStore(opsDir, stateDir)
 }
+
+// issuesMatchingScope returns issue IDs whose scope has an entry matching pred,
+// sorted for deterministic op order.
+func issuesMatchingScope(index materialize.Index, pred func(string) bool) []string {
+	var affected []string
+	for id, entry := range index {
+		for _, scopeEntry := range entry.Scope {
+			if pred(scopeEntry) {
+				affected = append(affected, id)
+				break
+			}
+		}
+	}
+	sort.Strings(affected)
+	return affected
+}

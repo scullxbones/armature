@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -40,24 +39,14 @@ func newScopeRenameCmd() *cobra.Command {
 				return fmt.Errorf("read index: %w", err)
 			}
 
-			// Find issues with scope entries that contain oldPath as a substring.
-			var affected []string
-			for id, entry := range index {
-				for _, scopeEntry := range entry.Scope {
-					if strings.Contains(scopeEntry, oldPath) {
-						affected = append(affected, id)
-						break
-					}
-				}
-			}
+			affected := issuesMatchingScope(index, func(scopeEntry string) bool {
+				return strings.Contains(scopeEntry, oldPath)
+			})
 
 			if len(affected) == 0 {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: no issues have scope entries matching %q\n", oldPath)
 				return nil
 			}
-
-			// Sort for deterministic output and op order.
-			sort.Strings(affected)
 
 			// Use the same timestamp for all ops.
 			ts := nowEpoch()

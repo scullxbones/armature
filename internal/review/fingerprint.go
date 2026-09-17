@@ -24,46 +24,31 @@ const activityScannerBufferSize = 1 << 20
 // bounding how large a single line is allowed to grow before scanning fails.
 const activityScannerMaxTokenSize = 4 << 20
 
+func fingerprintJSON(v any, what string) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal %s: %v", what, err))
+	}
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
 // FingerprintContract computes a canonical SHA-256 fingerprint of a contract.
 // The fingerprint is deterministic across identical contracts.
 func FingerprintContract(contract Contract) string {
-	// Serialize contract to canonical JSON for deterministic hashing
-	data, err := json.Marshal(contract)
-	if err != nil {
-		// Should never happen for well-formed contracts
-		panic(fmt.Sprintf("failed to marshal contract: %v", err))
-	}
-
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
+	return fingerprintJSON(contract, "contract")
 }
 
 // FingerprintDelivery computes a canonical SHA-256 fingerprint of delivery metadata.
 // The fingerprint is deterministic across identical delivery ranges.
 func FingerprintDelivery(delivery Delivery) string {
-	// Serialize delivery to canonical JSON for deterministic hashing
-	data, err := json.Marshal(delivery)
-	if err != nil {
-		// Should never happen for well-formed deliveries
-		panic(fmt.Sprintf("failed to marshal delivery: %v", err))
-	}
-
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
+	return fingerprintJSON(delivery, "delivery")
 }
 
 // FingerprintResult computes a canonical SHA-256 fingerprint of a conformance assessment result.
 // This fingerprint is used for idempotence detection and result validation.
 func FingerprintResult(assessment ConformanceAssessment) string {
-	// Serialize the entire assessment to canonical JSON
-	data, err := json.Marshal(assessment)
-	if err != nil {
-		// Should never happen for well-formed assessments
-		panic(fmt.Sprintf("failed to marshal assessment: %v", err))
-	}
-
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
+	return fingerprintJSON(assessment, "assessment")
 }
 
 // ComputeBundleID computes a canonical bundle identifier from review data.

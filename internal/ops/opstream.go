@@ -144,13 +144,12 @@ func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64,
 
 	stream := newValidatedOpStream()
 
-	// Register each log file with its expected worker ID from the filename
-	// Note: we use the full filename-derived worker ID (including slot suffix).
-	// extractWorkerIDFromFilename preserves the slot suffix (e.g., "3357fe85~a"),
-	// unlike adapters.WorkerIDFromFilename which strips it (e.g., "3357fe85").
-	// We preserve the slot here because ops include the full worker ID with slot in validation.
+	// Register each log file with its expected worker ID from the filename.
+	// Use the full filename (including slot suffix, e.g. "3357fe85~a"), unlike
+	// adapters.WorkerIDFromFilename which strips the slot. Ops include the
+	// full worker ID with slot in validation.
 	for _, logPath := range logFiles {
-		stream.addFile(logPath, extractWorkerIDFromFilename(logPath))
+		stream.addFile(logPath, strings.TrimSuffix(filepath.Base(logPath), ".log"))
 	}
 
 	return stream.loadAll()
@@ -164,12 +163,4 @@ func ExtractOps(items []OpItem) []Op {
 		ops[i] = item.Op
 	}
 	return ops
-}
-
-// extractWorkerIDFromFilename extracts the full worker ID from a log filename,
-// preserving any slot suffix (the part after ~).
-func extractWorkerIDFromFilename(logPath string) string {
-	base := filepath.Base(logPath)
-	name := strings.TrimSuffix(base, ".log")
-	return name
 }

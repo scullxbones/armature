@@ -157,12 +157,16 @@ func (a *CodexAdapter) Decode(input []byte) (Event, error) {
 
 // Encode serialises the Decision into the JSON payload Codex expects on stdout.
 func (a *CodexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
+	// Codex processes the JSON response on exit 0, so exit code is always 0.
+	return encodeApproveOrBlockJSON(decision)
+}
+
+func encodeApproveOrBlockJSON(decision Decision) ([]byte, int, error) {
 	if decision.Action != DecisionBlock {
 		data, err := json.Marshal(map[string]any{"decision": "approve"})
 		return data, 0, err
 	}
 	data, err := json.Marshal(map[string]any{"decision": "block", "reason": decision.Message})
-	// Codex processes the JSON response on exit 0, so exit code is always 0.
 	return data, 0, err
 }
 

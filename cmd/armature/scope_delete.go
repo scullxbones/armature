@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -45,24 +44,14 @@ func newScopeDeleteCmd() *cobra.Command {
 				return fmt.Errorf("read index: %w", err)
 			}
 
-			// Find issues with an exact scope entry matching deletedPath.
-			var affected []string
-			for id, idxEntry := range index {
-				for _, scopeEntry := range idxEntry.Scope {
-					if scopeEntry == deletedPath {
-						affected = append(affected, id)
-						break
-					}
-				}
-			}
+			affected := issuesMatchingScope(index, func(scopeEntry string) bool {
+				return scopeEntry == deletedPath
+			})
 
 			if len(affected) == 0 {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: no issues have scope entry %q\n", deletedPath)
 				return nil
 			}
-
-			// Sort for deterministic output and op order.
-			sort.Strings(affected)
 
 			// Use the same timestamp for all ops.
 			ts := nowEpoch()
