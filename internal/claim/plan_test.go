@@ -390,7 +390,6 @@ func TestPlanClaim_InputsUnchanged_REQ_ARCHIMP_S20_T1(t *testing.T) {
 func warningIDs(warnings []string) []string {
 	ids := make([]string, 0, len(warnings))
 	for _, w := range warnings {
-		// "scope overlap with {id} (...)"
 		rest := w[len("scope overlap with "):]
 		for i, r := range rest {
 			if r == ' ' {

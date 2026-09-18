@@ -646,9 +646,9 @@ func rollbackClaimWithExclusionLock(
 			WorktreePath:           prior.worktreePath,
 			ClaimToken:             prior.claimToken,
 		},
-		WorkerID:   workerID,
-		Now:        now,
-		ClaimToken: claimToken,
+		WorkerID:     workerID,
+		Now:          now,
+		IfClaimToken: claimToken,
 	})
 	if planErr != nil {
 		return finish(fmt.Errorf("%s: %w; also failed to plan claim compensation: %v (manual cleanup may be needed)", opLabel, cause, planErr))

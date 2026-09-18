@@ -21,15 +21,12 @@ func liveSameWorkerInput() claim.CompensationInput {
 			WorktreePath:           "/repo/.worktrees/TASK-1",
 			ClaimToken:             "prior-token",
 		},
-		WorkerID:   "worker-a",
-		Now:        150,
-		ClaimToken: "won-token",
+		WorkerID:     "worker-a",
+		Now:          150,
+		IfClaimToken: "won-token",
 	}
 }
 
-// TestPlanCompensation_RestoreLiveSameWorker_REQ_ARCHIMP_S20_T3 restores the
-// prior status and every lease field when the prior lease is live and held by
-// the same worker, including a non-empty WorktreePath.
 func TestPlanCompensation_RestoreLiveSameWorker_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 
@@ -47,16 +44,14 @@ func TestPlanCompensation_RestoreLiveSameWorker_REQ_ARCHIMP_S20_T3(t *testing.T)
 	assert.Equal(t, in.Prior.ClaimToken, got.RestoreClaimToken)
 	assert.Equal(t, in.Prior.WorktreePath, got.WorktreePath)
 	assert.False(t, got.ClearWorktreePath)
-	assert.Equal(t, in.ClaimToken, got.IfClaimToken)
+	assert.Equal(t, in.IfClaimToken, got.IfClaimToken)
 }
 
-// TestPlanCompensation_ReleaseStaleSameWorker_REQ_ARCHIMP_S20_T3 releases to
-// open and zeros restore-lease fields when the prior same-worker lease is stale.
 func TestPlanCompensation_ReleaseStaleSameWorker_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 
 	in := liveSameWorkerInput()
-	in.Now = 206 // lastActivity 145 + TTL 60s = 205; now > 205 is stale
+	in.Now = 206
 	got, err := claim.PlanCompensation(in)
 	require.NoError(t, err)
 
@@ -70,11 +65,9 @@ func TestPlanCompensation_ReleaseStaleSameWorker_REQ_ARCHIMP_S20_T3(t *testing.T
 	assert.Empty(t, got.RestoreClaimToken)
 	assert.Equal(t, in.Prior.WorktreePath, got.WorktreePath)
 	assert.False(t, got.ClearWorktreePath)
-	assert.Equal(t, in.ClaimToken, got.IfClaimToken)
+	assert.Equal(t, in.IfClaimToken, got.IfClaimToken)
 }
 
-// TestPlanCompensation_ReleaseForeign_REQ_ARCHIMP_S20_T3 releases to open when
-// Claimed By is a different worker, even if the prior lease is still live.
 func TestPlanCompensation_ReleaseForeign_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 
@@ -91,11 +84,9 @@ func TestPlanCompensation_ReleaseForeign_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	assert.Zero(t, got.RestoreLastHeartbeat)
 	assert.Zero(t, got.RestoreLastClaimingWorkerActivity)
 	assert.Empty(t, got.RestoreClaimToken)
-	assert.Equal(t, in.ClaimToken, got.IfClaimToken)
+	assert.Equal(t, in.IfClaimToken, got.IfClaimToken)
 }
 
-// TestPlanCompensation_ClearsEmptyWorktreePath_REQ_ARCHIMP_S20_T3 sets
-// ClearWorktreePath when the prior path is empty instead of leaving WorktreePath.
 func TestPlanCompensation_ClearsEmptyWorktreePath_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 
@@ -109,14 +100,12 @@ func TestPlanCompensation_ClearsEmptyWorktreePath_REQ_ARCHIMP_S20_T3(t *testing.
 	assert.Equal(t, ops.StatusInProgress, got.To)
 }
 
-// TestPlanCompensation_SetsIfClaimToken_REQ_ARCHIMP_S20_T3 stamps IfClaimToken
-// from the compensating Claim, not the prior lease token.
 func TestPlanCompensation_SetsIfClaimToken_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 
 	in := liveSameWorkerInput()
 	in.Prior.ClaimedBy = "worker-b"
-	in.ClaimToken = "token-of-won-claim"
+	in.IfClaimToken = "token-of-won-claim"
 	got, err := claim.PlanCompensation(in)
 	require.NoError(t, err)
 
@@ -124,8 +113,6 @@ func TestPlanCompensation_SetsIfClaimToken_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	assert.NotEqual(t, in.Prior.ClaimToken, got.IfClaimToken)
 }
 
-// TestPlanCompensation_InvalidInput_REQ_ARCHIMP_S20_T3 returns an input error
-// for empty WorkerID or empty ClaimToken and never panics.
 func TestPlanCompensation_InvalidInput_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 
@@ -133,7 +120,7 @@ func TestPlanCompensation_InvalidInput_REQ_ARCHIMP_S20_T3(t *testing.T) {
 		name string
 		in   claim.CompensationInput
 	}{
-		{name: "empty worker ID", in: claim.CompensationInput{ClaimToken: "tok"}},
+		{name: "empty worker ID", in: claim.CompensationInput{IfClaimToken: "tok"}},
 		{name: "empty claim token", in: claim.CompensationInput{WorkerID: "worker-a"}},
 		{name: "both empty", in: claim.CompensationInput{}},
 	}
@@ -149,8 +136,6 @@ func TestPlanCompensation_InvalidInput_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	}
 }
 
-// TestPlanCompensation_InputsUnchanged_REQ_ARCHIMP_S20_T3 leaves CompensationInput
-// and nested LeaseFacts unchanged after planning.
 func TestPlanCompensation_InputsUnchanged_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 

@@ -20,27 +20,27 @@ type LeaseFacts struct {
 
 // CompensationInput is the borrowed, read-only decision input for PlanCompensation.
 type CompensationInput struct {
-	Prior      LeaseFacts
-	WorkerID   string
-	Now        int64
-	ClaimToken string // IfClaimToken of the Claim this compensates
+	Prior        LeaseFacts
+	WorkerID     string
+	Now          int64
+	IfClaimToken string
 }
 
 // PlanCompensation is a pure restore-vs-release decision. It returns the
 // compensating Transition payload: restore a live same-Worker lease, or
-// release a stale/foreign lease to open. Empty WorkerID or ClaimToken is an
+// release a stale/foreign lease to open. Empty WorkerID or IfClaimToken is an
 // input error. Inputs are never mutated.
 func PlanCompensation(in CompensationInput) (ops.Payload, error) {
 	if in.WorkerID == "" {
 		return ops.Payload{}, fmt.Errorf("worker ID is required")
 	}
-	if in.ClaimToken == "" {
+	if in.IfClaimToken == "" {
 		return ops.Payload{}, fmt.Errorf("claim token is required")
 	}
 
 	payload := ops.Payload{
 		RestoreClaim: true,
-		IfClaimToken: in.ClaimToken,
+		IfClaimToken: in.IfClaimToken,
 	}
 
 	liveSameWorker := in.Prior.ClaimedBy == in.WorkerID &&
