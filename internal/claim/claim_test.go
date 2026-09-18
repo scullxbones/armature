@@ -33,19 +33,28 @@ func TestResolveClaimRace_LexicographicTiebreaker(t *testing.T) {
 	assert.Equal(t, "worker-a", winner.WorkerID)
 }
 
+func TestFoldLastActivity(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, LastActivity(100), FoldLastActivity(100, 0, 0))
+	assert.Equal(t, LastActivity(150), FoldLastActivity(100, 150, 0))
+	assert.Equal(t, LastActivity(150), FoldLastActivity(100, 0, 150))
+	assert.Equal(t, LastActivity(200), FoldLastActivity(100, 150, 200))
+	assert.Equal(t, "unix:150", FoldLastActivity(100, 150, 0).String())
+}
+
 func TestIsClaimStale(t *testing.T) {
 	t.Parallel()
-	assert.True(t, IsClaimStale(100, 0, 0, 1, 161))
-	assert.False(t, IsClaimStale(100, 0, 0, 1, 159))
-	assert.False(t, IsClaimStale(100, 150, 0, 1, 209))
-	assert.True(t, IsClaimStale(100, 150, 0, 1, 211))
-	assert.False(t, IsClaimStale(100, 0, 0, 0, 9999))
+	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 0), 1, 161))
+	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 0), 1, 159))
+	assert.False(t, IsClaimStale(FoldLastActivity(100, 150, 0), 1, 209))
+	assert.True(t, IsClaimStale(FoldLastActivity(100, 150, 0), 1, 211))
+	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 0), 0, 9999))
 }
 
 func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
 	t.Parallel()
-	assert.False(t, IsClaimStale(100, 0, 150, 1, 209))
-	assert.True(t, IsClaimStale(100, 0, 150, 1, 211))
+	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 150), 1, 209))
+	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 150), 1, 211))
 }
 
 func TestScopeOverlap(t *testing.T) {
@@ -169,11 +178,11 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 			if ttlMinutes <= 0 {
 				return true
 			}
-			if !IsClaimStale(claimedAt, lastHeartbeat, 0, int(ttlMinutes), now) {
+			if !IsClaimStale(FoldLastActivity(claimedAt, lastHeartbeat, 0), int(ttlMinutes), now) {
 				return true
 			}
 			laterNow := now + 1
-			return IsClaimStale(claimedAt, lastHeartbeat, 0, int(ttlMinutes), laterNow)
+			return IsClaimStale(FoldLastActivity(claimedAt, lastHeartbeat, 0), int(ttlMinutes), laterNow)
 		},
 		gen.Int64Range(0, 10000),
 		gen.Int64Range(0, 10000),

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/dag"
+	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,10 +36,10 @@ func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *tes
 	scopeParent := []string{"src/**"}
 	scopeChild := []string{"src/auth/**"}
 
-	result := ScopesOverlapEx(scopeChild, scopeParent, graph, "task-01", "story-01")
+	result := ScopesOverlapIgnoringAncestry(scopeChild, scopeParent, graph, "task-01", "story-01")
 	assert.False(t, result, "child task should not conflict with parent story despite scope overlap")
 
-	result = ScopesOverlapEx(scopeParent, scopeChild, graph, "story-01", "task-01")
+	result = ScopesOverlapIgnoringAncestry(scopeParent, scopeChild, graph, "story-01", "task-01")
 	assert.False(t, result, "parent story should not conflict with child task despite scope overlap")
 
 	sibling := &dag.Node{
@@ -53,7 +54,7 @@ func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *tes
 	nodes["task-02"] = sibling
 	graph = dag.FromIndex(nodes)
 
-	result = ScopesOverlapEx(scopeChild, scopeChild, graph, "task-01", "task-02")
+	result = ScopesOverlapIgnoringAncestry(scopeChild, scopeChild, graph, "task-01", "task-02")
 	assert.True(t, result, "sibling tasks with same scope should conflict")
 }
 
@@ -85,7 +86,7 @@ func TestScopesOverlap_StillDetectsNonAncestorOverlaps_REQ_TOPTIER_S17_T1(t *tes
 	scopeA := []string{"src/auth/**"}
 	scopeB := []string{"src/auth/login.go"}
 
-	result := ScopesOverlapEx(scopeA, scopeB, graph, "task-a", "task-b")
+	result := ScopesOverlapIgnoringAncestry(scopeA, scopeB, graph, "task-a", "task-b")
 	assert.True(t, result, "unrelated tasks with overlapping scopes should conflict")
 }
 
@@ -190,27 +191,13 @@ func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6(t *tes
 		"overlap check must be symmetric")
 }
 
-var globOverlapParityCases = []struct {
-	name string
-	a, b string
-	want bool
-}{
-	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
-	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
-	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
-	{"no longer overlaps via directory nesting alone", "internal/claim/sub/*.go", "internal/claim/*.go", false},
-	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
-	{"root-level files, no dir", "a.go", "b.go", false},
-	{"explicit doublestar directory glob still overlaps nested file", "internal/claim/**", "internal/claim/sub/a.go", true},
-}
-
 func TestGlobOverlaps_ParityWithValidatePackage_PR79(t *testing.T) {
 	t.Parallel()
-	for _, c := range globOverlapParityCases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, c := range scopematch.OverlapParityCases {
+		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, c.want, globOverlaps(c.a, c.b), "globOverlaps(%q, %q)", c.a, c.b)
-			assert.Equal(t, c.want, globOverlaps(c.b, c.a), "globOverlaps(%q, %q) (symmetric)", c.b, c.a)
+			assert.Equal(t, c.Want, globOverlaps(c.A, c.B), "globOverlaps(%q, %q)", c.A, c.B)
+			assert.Equal(t, c.Want, globOverlaps(c.B, c.A), "globOverlaps(%q, %q) (symmetric)", c.B, c.A)
 		})
 	}
 }

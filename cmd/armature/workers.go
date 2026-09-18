@@ -157,7 +157,8 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		if ttl <= 0 {
 			ttl = defaultTTLMinutes
 		}
-		if !claim.IsClaimStale(ca, lastHeartbeat[issueID], lastClaimingWorkerActivity[issueID], ttl, now) {
+		last := claim.FoldLastActivity(ca, lastHeartbeat[issueID], lastClaimingWorkerActivity[issueID])
+		if !claim.IsClaimStale(last, ttl, now) {
 			return WorkerStatus{
 				WorkerID:    workerID,
 				Status:      "active",
@@ -243,7 +244,11 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 				if ttl <= 0 {
 					ttl = 60
 				}
-				return claim.IsClaimStale(s.claimedAt, s.lastHeartbeat, s.lastClaimingWorkerActivity, ttl, now)
+				return claim.IsClaimStale(
+					claim.FoldLastActivity(s.claimedAt, s.lastHeartbeat, s.lastClaimingWorkerActivity),
+					ttl,
+					now,
+				)
 			}
 			switch op.Type {
 			case ops.OpClaim:

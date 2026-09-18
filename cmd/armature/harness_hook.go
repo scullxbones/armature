@@ -111,7 +111,8 @@ func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
 		return true
 	}
 	// Check if the claim's TTL has expired
-	return claimPkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, issue.ClaimTTL, now)
+	last := claimPkg.FoldLastActivity(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity)
+	return claimPkg.IsClaimStale(last, issue.ClaimTTL, now)
 }
 
 // isFileWriteEvent checks if an event represents a file write operation.

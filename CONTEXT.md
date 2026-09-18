@@ -162,7 +162,7 @@ The worker currently holding the active claim on an issue. `Claimed By` records 
 _Avoid_: Assigned worker, owner
 
 **Claim Plan**:
-The overlap decision for a proposed Claim, produced before any Op is appended. It names block reasons, warnings, and note intents. Distinct from the Claim Op itself.
+The overlap decision for a proposed Claim, produced before any Op is appended. It names block reasons, warnings, note intents, and foreign-worker overlap Issue IDs. Distinct from the Claim Op itself.
 _Avoid_: Resolver, overlap check, claim result
 
 **Claim Compensation**:

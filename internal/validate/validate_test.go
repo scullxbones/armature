@@ -1564,44 +1564,13 @@ func TestCheckW1ScopeOverlap_MessageReportsMatchedPatternPair_PR79(t *testing.T)
 		"message should report only the matched pattern pair, not the full scope lists: %s", msg)
 }
 
-// globOverlapParityCases is a table of (patternA, patternB, wantOverlap) cases
-// run against both internal/validate's globOverlaps and internal/claim's
-// globOverlaps (see internal/claim/overlap_test.go's identical table). As of
-// LNGHZN-S10-T7 both are thin wrappers around the single canonical
-// scopematch.Overlaps implementation, so this parity is now structural
-// rather than a maintenance hazard — but the duplicated table is kept as
-// belt-and-suspenders regression coverage in both packages.
-var globOverlapParityCases = []struct {
-	name string
-	a, b string
-	want bool
-}{
-	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
-	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
-	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
-	// LNGHZN-S10-T7: previously "true" under the now-removed
-	// containing/ancestor-directory fallback. "internal/claim/*.go" is a
-	// single-segment glob and does not match the deeper literal path
-	// "internal/claim/sub/*.go", so these no longer overlap.
-	{"no longer overlaps via directory nesting alone", "internal/claim/sub/*.go", "internal/claim/*.go", false},
-	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
-	{"root-level files, no dir", "a.go", "b.go", false},
-	{"explicit doublestar directory glob still overlaps nested file", "internal/claim/**", "internal/claim/sub/a.go", true},
-	// PR #102 review finding: glob-vs-glob intersection, not just
-	// glob-vs-literal containment, must be detected (under-blocking is the
-	// dangerous direction) but bounded to patterns that could actually share
-	// a concrete match.
-	{"glob-vs-glob same-segment intersection", "src/auth/*.go", "src/auth/login.*", true},
-	{"glob-vs-glob distinct literal directories cannot intersect", "src/auth/*.go", "src/billing/*.go", false},
-}
-
 func TestGlobOverlaps_ParityWithClaimPackage_PR79(t *testing.T) {
 	t.Parallel()
-	for _, c := range globOverlapParityCases {
-		t.Run(c.name, func(t *testing.T) {
+	for _, c := range scopematch.OverlapParityCases {
+		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, c.want, globOverlaps(c.a, c.b), "globOverlaps(%q, %q)", c.a, c.b)
-			assert.Equal(t, c.want, globOverlaps(c.b, c.a), "globOverlaps(%q, %q) (symmetric)", c.b, c.a)
+			assert.Equal(t, c.Want, globOverlaps(c.A, c.B), "globOverlaps(%q, %q)", c.A, c.B)
+			assert.Equal(t, c.Want, globOverlaps(c.B, c.A), "globOverlaps(%q, %q) (symmetric)", c.B, c.A)
 		})
 	}
 }

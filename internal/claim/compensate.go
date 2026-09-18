@@ -44,7 +44,11 @@ func PlanCompensation(in CompensationInput) (ops.Payload, error) {
 	}
 
 	liveSameWorker := in.Prior.ClaimedBy == in.WorkerID &&
-		!IsClaimStale(in.Prior.ClaimedAt, in.Prior.LastHeartbeat, in.Prior.ClaimingWorkerActivity, in.Prior.ClaimTTL, in.Now)
+		!IsClaimStale(
+			FoldLastActivity(in.Prior.ClaimedAt, in.Prior.LastHeartbeat, in.Prior.ClaimingWorkerActivity),
+			in.Prior.ClaimTTL,
+			in.Now,
+		)
 	if liveSameWorker {
 		payload.To = in.Prior.Status
 		payload.RestoreClaimedBy = in.Prior.ClaimedBy

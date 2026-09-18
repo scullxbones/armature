@@ -23,8 +23,8 @@ rule interface, or hypothetical adapter. Git and filesystem stay in `cmd/`.
 **T1** adds all three glossary terms (T5 no longer edits `CONTEXT.md`):
 
 **Claim Plan**: The overlap decision for a proposed Claim, produced before any
-Op is appended. It names block reasons, warnings, and note intents. Distinct
-from the Claim Op itself.
+Op is appended. It names block reasons, warnings, note intents, and
+foreign-worker overlap Issue IDs. Distinct from the Claim Op itself.
 _Avoid_: Resolver, overlap check, claim result
 
 **Claim Compensation**: The planned Transition that restores or releases a
@@ -79,6 +79,7 @@ type ClaimPlan struct {
     BlockReasons []string
     Warnings     []string
     Notes        []NoteIntent
+    OverlapIDs   []string
 }
 
 func PlanClaim(PlanInput) (ClaimPlan, error)
@@ -96,18 +97,18 @@ Inputs are borrowed and read-only.
    affect diagnostics or note order.
 3. Ignore the target itself.
 4. Only another Task in `claimed` or `in-progress` competes.
-5. Overlap uses `ScopesOverlapEx` so ancestor and descendant pairs remain
+5. Overlap uses `ScopesOverlapIgnoringAncestry` so ancestor and descendant pairs remain
    excluded in both directions.
 6. Diagnostics name the conflicting Issue ID, title, type, status, and Claimed
    By. Empty Claimed By renders as `unknown`.
 7. Exact same-Worker overlap is a dismissal, including when `Force` is set.
 8. Deduplicate dismissal evidence by target Issue, conflicting Issue, and
    current Worker identity.
-9. Without `Force`, return every sorted foreign-Worker block reason. A blocked
-   plan is atomic: empty `Warnings` and `Notes`.
+9. Without `Force`, return every sorted foreign-Worker block reason and those
+   Issue IDs on `OverlapIDs`. A blocked plan is atomic: empty `Warnings` and `Notes`.
 10. With `Force`, return a warning and two reciprocal note intents for every
-    foreign-Worker overlap, in candidate-ID order. Same-Worker overlaps remain
-    dismissals.
+    foreign-Worker overlap, in candidate-ID order, plus the same `OverlapIDs`.
+    Same-Worker overlaps remain dismissals and are omitted from `OverlapIDs`.
 11. Canonical messages, preserved:
     - dismissal: `Serial claim: scope overlap with {id} (same worker, dismissed)`
     - force notes: `Scope overlap with {id} detected at claim time` on each Issue

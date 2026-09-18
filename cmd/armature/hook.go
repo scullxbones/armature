@@ -200,7 +200,8 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		if ttl <= 0 {
 			ttl = defaultTTL
 		}
-		if !claimPkg.IsClaimStale(ca, lastHeartbeat[issueID], lastTransitionAt[issueID], ttl, now) {
+		last := claimPkg.FoldLastActivity(ca, lastHeartbeat[issueID], lastTransitionAt[issueID])
+		if !claimPkg.IsClaimStale(last, ttl, now) {
 			return issueID
 		}
 	}
