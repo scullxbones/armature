@@ -3,12 +3,42 @@ package sources
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+// Test-only single-source wrappers. Production uses SyncAll / VerifyAll.
+func (l *Lifecycle) sync(ctx context.Context, id string) SyncResult {
+	manifest, err := ReadManifest(l.manifestPath)
+	if err != nil {
+		return SyncResult{ID: id, Error: fmt.Errorf("read manifest: %w", err)}
+	}
+	result := l.syncEntry(ctx, &manifest, id)
+	if writeErr := l.writeManifest(manifest); writeErr != nil && result.Error == nil {
+		result.Error = fmt.Errorf("write manifest: %w", writeErr)
+	}
+	return result
+}
+
+func (l *Lifecycle) verify(id string) VerifyResult {
+	manifest, err := ReadManifest(l.manifestPath)
+	if err != nil {
+		return VerifyResult{ID: id, Status: VerifyError, Error: err}
+	}
+	return l.verifyEntry(&manifest, id)
+}
+
+func (l *Lifecycle) isFresh(id string) (bool, error) {
+	result := l.verify(id)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.Status == VerifyOK, nil
+}
 
 // MockProvider implements Provider for testing.
 type MockProvider struct {

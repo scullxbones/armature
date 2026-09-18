@@ -89,26 +89,6 @@ type SyncResult struct {
 	Error        error
 }
 
-// Sync synchronizes a single source by fetching its content, computing a fingerprint,
-// updating the manifest, and caching the content.
-func (l *Lifecycle) sync(ctx context.Context, id string) SyncResult {
-	manifest, err := ReadManifest(l.manifestPath)
-	if err != nil {
-		return SyncResult{
-			ID:    id,
-			Error: fmt.Errorf("read manifest: %w", err),
-		}
-	}
-
-	result := l.syncEntry(ctx, &manifest, id)
-
-	if writeErr := l.writeManifest(manifest); writeErr != nil && result.Error == nil {
-		result.Error = fmt.Errorf("write manifest: %w", writeErr)
-	}
-
-	return result
-}
-
 // syncEntry synchronizes a single source against the given in-memory manifest,
 // mutating the manifest's entry in place but not persisting it. Callers are
 // responsible for writing the manifest to disk.
@@ -229,23 +209,9 @@ const (
 	VerifyError VerifyStatus = "ERROR"
 )
 
-// Verify checks if the cached content for a source matches its stored fingerprint.
-func (l *Lifecycle) verify(id string) VerifyResult {
-	manifest, err := ReadManifest(l.manifestPath)
-	if err != nil {
-		return VerifyResult{
-			ID:     id,
-			Status: VerifyError,
-			Error:  err,
-		}
-	}
-
-	return l.verifyEntry(&manifest, id)
-}
-
 // verifyEntry checks freshness for a single source against an already-loaded
 // manifest, avoiding a redundant re-read. Callers that already hold a manifest
-// (e.g. VerifyAll) should use this instead of Verify.
+// (e.g. VerifyAll) should use this.
 func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 	entry, ok := manifest.Get(id)
 	if !ok {
@@ -325,15 +291,6 @@ func (l *Lifecycle) VerifyAll() ([]VerifyResult, error) {
 	}
 
 	return results, nil
-}
-
-// IsFresh returns true if the source's cached content matches its stored fingerprint.
-func (l *Lifecycle) isFresh(id string) (bool, error) {
-	result := l.verify(id)
-	if result.Error != nil {
-		return false, result.Error
-	}
-	return result.Status == VerifyOK, nil
 }
 
 // ListAll returns all sources in the manifest with their current state.

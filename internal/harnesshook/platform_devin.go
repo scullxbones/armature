@@ -99,11 +99,6 @@ func (a *DevinAdapter) Decode(input []byte) (Event, error) {
 
 // Encode serialises the Decision into the JSON payload Devin expects on stdout.
 func (a *DevinAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
-	if decision.Action != DecisionBlock {
-		data, err := json.Marshal(map[string]any{"decision": "approve"})
-		return data, 0, err
-	}
-	data, err := json.Marshal(map[string]any{"decision": "block", "reason": decision.Message})
 	// Devin processes the JSON response on exit 0, so exit code is always 0.
-	return data, 0, err
+	return encodeApproveOrBlockJSON(decision)
 }
