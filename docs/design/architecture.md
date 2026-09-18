@@ -83,7 +83,7 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
 | Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .armature --force`, then re-run `arm bootstrap` |
-| Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
+| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes attempt `pushOpsBranchBestEffort`; low-stakes writes stay local until `low_stakes_push_threshold` |
 | Worktree corruption | Manually remove the stale worktree (`git worktree remove .armature --force`), then re-run `arm bootstrap` to recreate it from remote |
 
 ### Directory Structure (within `.armature/` worktree)
@@ -327,39 +327,48 @@ In single-repo mode (v1), `repo` is omitted (default: current repo). This is a s
 
 ### Canonical Process Flow
 
-Every CLI command follows one of two process flows. Sync is implicit — workers never need to think about it.
+Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** warns when this clone is behind). `arm sync` is **not** that fetch — see the `arm sync` spec below.
 
-**Read-only commands** (`arm ready`, `arm render-context`, `arm validate`, `arm status`, `arm metrics`, `arm context-history`):
-
-```
-1. cd ops-worktree && git pull          (sync ops)
-2. Incremental materialize              (only new ops since checkpoint)
-3. Execute command                      (read from state/ files)
-```
-
-**Read-write commands** (`arm claim`, `arm transition`, `arm heartbeat`, `arm note`, `arm create`, `arm link`, `arm dag apply`):
+**Read-only commands** (`arm ready`, `arm list`, `arm show`, `arm render-context`, `arm validate`, `arm status`, `arm metrics`, `arm context-history`):
 
 ```
-1. cd ops-worktree && git pull          (sync ops)
-2. Incremental materialize              (only new ops since checkpoint)
-3. Execute command                      (append to own log in ops-worktree)
-4. git add .armature/ops/<worker-id>.log  (in ops-worktree)
-5. git commit                           (in ops-worktree)
-6. git push (retry with pull --rebase)  (to _armature)
+1. Resolve ops worktree path (git config / layout)
+2. Incremental materialize from local ops logs (checkpoint / byte offsets)
+3. Execute command (read from state/ files)
+```
+
+No `git fetch` / `git pull` of `origin/_armature` on this path.
+
+**Read-write commands** (`arm claim`, `arm transition`, `arm heartbeat`, `arm note`, `arm create`, `arm link`, `arm dag apply`, …):
+
+```
+1. Resolve ops worktree path
+2. Incremental materialize from local ops logs
+3. Execute command (append to own log in ops-worktree; commit that log)
+4. Publish policy (see Ops publish below) — not a guaranteed push
 ```
 
 Code commits happen separately in the developer's main worktree, on their feature branch. The CLI never touches the code worktree for ops writes.
 
-### Push Retry Loop
+### Ops publish (`pushOpsBranchBestEffort`)
 
-```bash
-while ! git push; do
-  git pull --rebase
-done
-# Cap at ~5 retries. Failure beyond that is network/auth, not data conflict.
-```
+`cmd/armature/helpers.go` publishes `_armature` with `pushOpsBranchBestEffort`:
 
-Rebase always succeeds because each worker only modifies its own file. The retry targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
+1. `Push("_armature")`
+2. On error: `FetchAndRebase("_armature")` then a second `Push`
+3. `tracker.Reset()` (pending-push counter)
+
+There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap. Git errors on this helper are **best-effort / swallowed** so a successful local append is not rolled back (v1 residue). `arm push-ops` is the explicit Push-only command and **does** fail the CLI (`PUSH-OPS-1`).
+
+**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranchBestEffort` immediately. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
+
+**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call the **same** helper (PR #198). Below threshold they stay local-only.
+
+**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranchBestEffort` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
+
+Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
+
+**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after a best-effort `FetchTrackingRef` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
 
 ### Incremental Materialization Algorithm
 
@@ -477,7 +486,7 @@ Nodes with `confidence: "inferred"` (brownfield imports) include `"requires_conf
 
 Two workers can both claim the same issue between pulls. Both pushes succeed (different files). Resolution is at **read time**: first claim by timestamp wins. Deterministic tiebreaker on worker ID (lexicographic) for identical timestamps.
 
-Losing worker discovers loss on next `pull + materialize` cycle and moves on.
+Losing worker discovers loss on a later materialize that includes the winner's log. That log is local-only until this clone has fetched `origin/_armature` (explicit fetch/rebase, or a `FetchAndRebase` inside a later publish). Reads do not pull first.
 
 ### Claim TTL and Heartbeat Protocol
 
@@ -501,7 +510,7 @@ This gives agents awareness of potential semantic conflicts before investing a f
 
 ### Post-Claim Verification Flow
 
-After claiming and pushing, the worker should pull again and re-materialize to confirm it won the race before investing work. One extra pull — cheap insurance. The `arm claim` command handles this internally: claim, push, pull, re-check.
+After claiming, the CLI attempts a best-effort ops publish (`pushOpsBranchBestEffort`). It does **not** pull and re-materialize to confirm the race. Race resolution stays read-time on whatever logs this clone already has. A worker who needs origin's claims should fetch/rebase the ops worktree (D12 flags lag) and then re-read (`arm show` / `arm ready`), not assume `arm claim` did that.
 
 ---
 
@@ -1298,7 +1307,7 @@ No cross-worktree operations occur within a single phase.
 | `transition` (with verification hooks) | ops worktree + code worktree | ops worktree |
 | `init`, `worker-init` | both | both (setup) |
 | `sources add/sync/verify` | ops worktree + external providers | ops worktree |
-| `sync` | ops worktree | (none, unless `--code`) |
+| `sync` | ops worktree + code repo (merge detection) | ops worktree when it writes `merged` transitions |
 
 ### Key Command Specifications
 
@@ -1308,26 +1317,31 @@ No cross-worktree operations occur within a single phase.
 arm sync [flags]
 
 Behavior:
-  1. Pull ops worktree (_armature branch)
-  2. Incremental materialize (process new ops since checkpoint)
-  3. Report summary of changes
+  1. Load a snapshot from the local ops worktree (no fetch of origin/_armature)
+  2. Detect code-branch merges for done issues (`internal/sync.DetectMerges`)
+  3. Unless --dry-run, append local `merged` transitions for those IDs
+
+This is merge-detection onto `main` (or `--into`), not “pull ops then materialize.”
+It is not implicit in other commands. Catching up `_armature` is an explicit
+git fetch/rebase of the ops worktree; `arm materialize` replays local logs;
+doctor D12 only warns when this clone is behind origin/_armature.
 
 Flags:
-  --quiet          Suppress output (for scripting)
-  --code           Also pull the code branch (convenience wrapper)
-  --check          Report sync status without pulling (is local behind remote?)
+  --into <branch>  Target branch to check merges against (default: current branch)
+  --dry-run        Print which issues would transition without writing ops
 
-Output:
-  synced: 3 new ops from 2 workers
-  materialized: 1 task claimed, 1 task merged, 0 new tasks
+Output (examples):
+  No merged branches detected.
+  Transitioned TASK-001 to merged
+  would transition: TASK-001 -> merged
+  dry-run: 1 issue(s) would be transitioned to merged
 
 Exit codes:
-  0  success (or already current)
-  1  ops branch not found (run arm bootstrap)
-  2  network error (offline — local state is stale)
+  0  success (or nothing to do)
+  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails
 ```
 
-Implicit in all commands. Explicit `arm sync` exists for diagnostics, scripting, and batch operations.
+Not a substitute for fetching `origin/_armature`. Not run at the start of `ready`/`list`/`show`.
 
 #### `arm bootstrap`
 
@@ -1597,7 +1611,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 | Error | Cause | Hint |
 |---|---|---|
 | `ops branch not found` | `_armature` branch missing | `run arm bootstrap` |
-| `ops worktree desync` | Local ops worktree is behind or corrupted | `run arm sync` or `arm bootstrap` |
+| `ops worktree desync` | Local ops worktree is behind or corrupted | fetch/rebase `origin/_armature` in the ops worktree (D12 names this lag); `arm bootstrap` if the worktree is missing |
 | `stale worktree` | Worktree path exists but points to wrong branch | `run arm bootstrap` |
 | `materialization failed` | Corrupt log line or unexpected state | Skip unparseable lines + warn; `--debug` shows details |
 
@@ -1611,7 +1625,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 |---|---|---|
 | Worker crashes after claim, before completion | Issue stuck as claimed | Heartbeat + TTL expiry; other workers reclaim after TTL |
 | Worker crashes after append, before push | Op lost locally; shared state consistent | No mitigation needed — inherently safe, worker re-issues on restart |
-| Push rejected (non-fast-forward) | Temporary delay | Retry loop with `pull --rebase`, cap at ~5 |
+| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranchBestEffort`: one `FetchAndRebase` then a second `Push`; remaining git errors swallowed on the high/low-stakes helper. `arm push-ops` fails the CLI instead |
 | Corrupt log line | Materialization fails on one line | Skip unparseable lines + warn (implemented in parser) |
 | Clock skew between workers | Wrong claim winner | NTP keeps skew <1s; ms timestamps make races negligible |
 | Duplicate worker IDs | Real merge conflicts | UUID generation + uniqueness validation on first push |
