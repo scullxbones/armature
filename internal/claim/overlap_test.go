@@ -7,16 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1 verifies that
-// ScopesOverlapEx excludes ancestor/descendant issue pairs from conflict comparison.
-// A parent story's scope is by design the union of its children's scopes,
-// so comparing a child against its parent should never be a conflict.
 func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *testing.T) {
 	t.Parallel()
 
-	// Build a simple hierarchy:
-	// story-01 (scope: ["src/**"])
-	//   └─ task-01 (scope: ["src/auth/**"])
 	nodes := map[string]*dag.Node{
 		"story-01": {
 			ID:        "story-01",
@@ -39,20 +32,15 @@ func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *tes
 	}
 	graph := dag.FromIndex(nodes)
 
-	// Even though the scopes overlap (task-01's scope is subset of story-01's),
-	// ScopesOverlapEx should return false because they are parent and child
 	scopeParent := []string{"src/**"}
 	scopeChild := []string{"src/auth/**"}
 
-	// Child claiming against parent should not report overlap
 	result := ScopesOverlapEx(scopeChild, scopeParent, graph, "task-01", "story-01")
 	assert.False(t, result, "child task should not conflict with parent story despite scope overlap")
 
-	// Parent claiming against child should not report overlap either
 	result = ScopesOverlapEx(scopeParent, scopeChild, graph, "story-01", "task-01")
 	assert.False(t, result, "parent story should not conflict with child task despite scope overlap")
 
-	// Non-ancestor/descendant pairs with overlapping scopes should still report overlap
 	sibling := &dag.Node{
 		ID:        "task-02",
 		Title:     "Sibling Task",
@@ -69,12 +57,9 @@ func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *tes
 	assert.True(t, result, "sibling tasks with same scope should conflict")
 }
 
-// TestScopesOverlap_StillDetectsNonAncestorOverlaps_REQ_TOPTIER_S17_T1 verifies that
-// non-ancestor/descendant pairs with overlapping scopes are still detected.
 func TestScopesOverlap_StillDetectsNonAncestorOverlaps_REQ_TOPTIER_S17_T1(t *testing.T) {
 	t.Parallel()
 
-	// Build a graph with unrelated tasks
 	nodes := map[string]*dag.Node{
 		"task-a": {
 			ID:        "task-a",
@@ -97,7 +82,6 @@ func TestScopesOverlap_StillDetectsNonAncestorOverlaps_REQ_TOPTIER_S17_T1(t *tes
 	}
 	graph := dag.FromIndex(nodes)
 
-	// Tasks with overlapping scopes should still conflict
 	scopeA := []string{"src/auth/**"}
 	scopeB := []string{"src/auth/login.go"}
 
@@ -107,22 +91,11 @@ func TestScopesOverlap_StillDetectsNonAncestorOverlaps_REQ_TOPTIER_S17_T1(t *tes
 
 func TestGlobOverlaps_RespectsPathSegmentBoundaries_PR79(t *testing.T) {
 	t.Parallel()
-	// internal/claimx has internal/claim as a *string* prefix but is not nested
-	// under it as a path segment. A naive hasPrefix(dirA, dirB) check falsely
-	// treats these as overlapping. Regression coverage for the bug found in
-	// fable's holistic review of PR #79.
 	assert.False(t, globOverlaps("internal/claimx/foo.go", "internal/claim/*.go"),
 		"internal/claimx and internal/claim share a string prefix but are sibling directories, not nested — must not overlap")
 	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claimx/foo.go"),
 		"overlap check must be symmetric")
 
-	// NOTE(LNGHZN-S10-T6): these two cases previously asserted `true` on the
-	// strength of the now-removed containing/ancestor-directory fallback
-	// (dirA == dirB, or one a path-segment prefix of the other). Per
-	// LNGHZN-S10-T6, overlap is now decided by exact path or glob match
-	// only, so two glob patterns or two literal files that merely share a
-	// directory no longer overlap unless one pattern actually matches the
-	// other (e.g. a "**" or trailing-slash directory scope).
 	assert.False(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
 		"single-segment glob 'internal/claim/*.go' does not match the deeper literal directory 'sub/' — no longer treated as overlapping via directory ancestry")
 	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
@@ -132,14 +105,6 @@ func TestGlobOverlaps_RespectsPathSegmentBoundaries_PR79(t *testing.T) {
 		"two distinct literal files that merely share a containing directory must not overlap")
 }
 
-// TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T6 verifies that
-// globOverlaps no longer reports overlap for two distinct files that merely
-// share a containing or ancestor directory. This is the regression coverage
-// for the bug reported in
-// docs/dogfood/findings/raw/2026-08-14T2352Z-5207ee28-tooling-scope-overlap-matches-on-directory-not-file.md,
-// where docs/agents/quality-gates.md (dir "docs/agents") and
-// docs/use-cases.md (dir "docs") were falsely reported as overlapping
-// because "docs/agents" has "docs/" as a string prefix.
 func TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -154,16 +119,6 @@ func TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T6(t *testing
 		"overlap check must be symmetric")
 }
 
-// TestOverlapDetectsGlobToGlobIntersection_REQ_LNGHZN_S10_T6 verifies that
-// two glob patterns in the same directory that could both match a common
-// filename are reported as overlapping, even though neither pattern
-// literally matches the other (filepath.Match(a, b) and
-// filepath.Match(b, a) are both false, and neither pattern's file, treated
-// literally, satisfies the other via scopematch.Allows). This is the
-// dangerous under-blocking direction the directory-fallback removal
-// exposed: "src/auth/*.go" and "src/auth/login.*" both match
-// "src/auth/login.go", so two workers claiming these scopes concurrently
-// could both write that file.
 func TestOverlapDetectsGlobToGlobIntersection_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -173,11 +128,6 @@ func TestOverlapDetectsGlobToGlobIntersection_REQ_LNGHZN_S10_T6(t *testing.T) {
 		"overlap check must be symmetric")
 }
 
-// TestOverlapStripsNewFileAnnotation_REQ_LNGHZN_S10_T6 verifies that a
-// worker-declared " (new)" annotation does not hide a real overlap:
-// "src/foo.go (new)" and "src/*.go" both cover src/foo.go. Matching now
-// lives in scopematch.Overlaps (LNGHZN-S10-T7); this stays as a caller
-// tripwire so a future override in claim cannot silently drop the strip.
 func TestOverlapStripsNewFileAnnotation_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -189,10 +139,6 @@ func TestOverlapStripsNewFileAnnotation_REQ_LNGHZN_S10_T6(t *testing.T) {
 		"annotation stripping must not invent overlap between distinct files")
 }
 
-// TestOverlapIntersectsDoublestarAcrossDirectories_REQ_LNGHZN_S10_T6 verifies
-// that glob-to-glob intersection walks the full path, not just equal
-// directory prefixes. src/**/foo.go and src/auth/*.go both include
-// src/auth/foo.go, even though their literal directory strings differ.
 func TestOverlapIntersectsDoublestarAcrossDirectories_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -204,9 +150,6 @@ func TestOverlapIntersectsDoublestarAcrossDirectories_REQ_LNGHZN_S10_T6(t *testi
 		"foo.go cannot intersect a *.txt glob in the same directory")
 }
 
-// TestOverlapIntersectsCharacterClass_REQ_LNGHZN_S10_T6 verifies that
-// filepath.Match character classes participate in glob intersection:
-// src/file[ab].go and src/filea.* both match src/filea.go.
 func TestOverlapIntersectsCharacterClass_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -216,11 +159,6 @@ func TestOverlapIntersectsCharacterClass_REQ_LNGHZN_S10_T6(t *testing.T) {
 		"overlap check must be symmetric")
 }
 
-// TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6 verifies the
-// glob-to-glob over-approximation is bounded by path-segment intersection,
-// not "any two globs overlap": two globs that cannot match a common path
-// (different literal directories, no "**") are still reported as
-// non-overlapping.
 func TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -230,10 +168,6 @@ func TestOverlapGlobToGlobIntersectionBounded_REQ_LNGHZN_S10_T6(t *testing.T) {
 		"overlap check must be symmetric")
 }
 
-// TestOverlapGlobToGlobIntersectionRegression_REQ_LNGHZN_S10_T6 re-confirms,
-// in both directions, that the glob-to-glob intersection fallback did not
-// resurrect the removed ancestor/containing-directory fallback: entries
-// whose directory portions differ still never overlap merely by proximity.
 func TestOverlapGlobToGlobIntersectionRegression_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -244,11 +178,6 @@ func TestOverlapGlobToGlobIntersectionRegression_REQ_LNGHZN_S10_T6(t *testing.T)
 	assert.False(t, globOverlaps("internal/claim/overlap_test.go", "internal/claim/overlap.go"))
 }
 
-// TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6 verifies
-// that removing the directory fallback did not break genuine overlap
-// detection: identical scope entries still overlap, and an explicit
-// directory glob like "docs/agents/**" still reports overlap against a file
-// beneath it.
 func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6(t *testing.T) {
 	t.Parallel()
 
@@ -261,10 +190,6 @@ func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6(t *tes
 		"overlap check must be symmetric")
 }
 
-// globOverlapParityCases mirrors the identically-named table in
-// internal/validate/validate_test.go. Both packages now delegate to
-// scopematch.Overlaps (LNGHZN-S10-T7); the tables stay as a drift tripwire
-// so a future caller-side override cannot silently diverge.
 var globOverlapParityCases = []struct {
 	name string
 	a, b string
@@ -273,10 +198,6 @@ var globOverlapParityCases = []struct {
 	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
 	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
 	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
-	// LNGHZN-S10-T6: previously "true" under the now-removed
-	// containing/ancestor-directory fallback. "internal/claim/*.go" is a
-	// single-segment glob and does not match the deeper literal path
-	// "internal/claim/sub/*.go", so these no longer overlap.
 	{"no longer overlaps via directory nesting alone", "internal/claim/sub/*.go", "internal/claim/*.go", false},
 	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
 	{"root-level files, no dir", "a.go", "b.go", false},
@@ -294,8 +215,6 @@ func TestGlobOverlaps_ParityWithValidatePackage_PR79(t *testing.T) {
 	}
 }
 
-// TestIsWithinScope_FilesWithinDeclaredScope_REQ_LNGHZN_S4_T1 verifies that IsWithinScope
-// correctly identifies files that are within the declared scope globs.
 func TestIsWithinScope_FilesWithinDeclaredScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -304,7 +223,7 @@ func TestIsWithinScope_FilesWithinDeclaredScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 		files    []string
 		scope    []string
 		wantIsIn bool
-		wantFile string // first file that's out of scope (empty if all in)
+		wantFile string
 	}{
 		{
 			name:     "all files in single glob pattern",
@@ -374,10 +293,6 @@ func TestIsWithinScope_CaseSensitivity_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.False(t, isIn, "case mismatch should not match on Unix")
 }
 
-// TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2 verifies that a
-// scope entry carrying the " (new)" annotation workers commonly append when
-// declaring a file that doesn't exist yet (e.g. "internal/foo/bar.go (new)")
-// still matches the real file path once it's created.
 func TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2(t *testing.T) {
 	t.Parallel()
 
@@ -389,10 +304,6 @@ func TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.Empty(t, outOfScope)
 }
 
-// TestIsWithinScope_PreservesFilenameWithLiteralParens_REQ_LNGHZN_S4_T1 verifies that a
-// scope entry ending in a literal parenthesized filename (no preceding space,
-// so it's not the " (new)" annotation marker) is not mistaken for an
-// annotation and mis-truncated.
 func TestIsWithinScope_PreservesFilenameWithLiteralParens_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -404,11 +315,6 @@ func TestIsWithinScope_PreservesFilenameWithLiteralParens_REQ_LNGHZN_S4_T1(t *te
 	assert.Empty(t, outOfScope)
 }
 
-// TestIsWithinScope_TrailingSlashDirectoryScope_REQ_LNGHZN_S4 verifies that a
-// scope entry ending in "/" (no "/**" suffix), such as "internal/", is
-// treated as a recursive directory scope covering every file underneath it
-// at any depth — consistent with internal/harnesspolicy/scope.go's
-// cleanScope semantics for the same trailing-slash convention.
 func TestIsWithinScope_TrailingSlashDirectoryScope_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -420,9 +326,6 @@ func TestIsWithinScope_TrailingSlashDirectoryScope_REQ_LNGHZN_S4(t *testing.T) {
 	assert.Empty(t, outOfScope)
 }
 
-// TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZN_S4
-// verifies that a trailing-slash directory scope like "internal/" does not
-// overly broaden matching to sibling directories outside its prefix.
 func TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -434,10 +337,6 @@ func TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZ
 	assert.Equal(t, "other/foo.go", outOfScope)
 }
 
-// TestIsWithinScope_RepoRootScopeMatchesAnyFile_REQ_LNGHZN_S4_T1 verifies that the
-// canonical repository-root scope "." matches any file path, consistent
-// with internal/harnesspolicy/scope.go's ScopePolicy.allows, which
-// special-cases scope == "." to mean "everything in the repo is in scope".
 func TestIsWithinScope_RepoRootScopeMatchesAnyFile_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -446,13 +345,6 @@ func TestIsWithinScope_RepoRootScopeMatchesAnyFile_REQ_LNGHZN_S4_T1(t *testing.T
 	assert.Empty(t, outOfScope)
 }
 
-// TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_REQ_LNGHZN_S4_T1 verifies that a
-// "**" segment appearing in the middle of a scope glob (not just as a
-// trailing "/**" suffix) matches zero or more path segments, per standard
-// doublestar semantics. E.g. "internal/**/api.go" should match both
-// "internal/foo/api.go" (one intervening segment) and
-// "internal/foo/bar/api.go" (two intervening segments), and must not match
-// unrelated files in the same directories.
 func TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 

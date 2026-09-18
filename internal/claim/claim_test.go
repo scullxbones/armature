@@ -35,27 +35,16 @@ func TestResolveClaimRace_LexicographicTiebreaker(t *testing.T) {
 
 func TestIsClaimStale(t *testing.T) {
 	t.Parallel()
-	// TTL=1 minute = 60 seconds; claimedAt=100, now=161 => stale (100+60=160 < 161)
 	assert.True(t, IsClaimStale(100, 0, 0, 1, 161))
-	// now=159 => not stale (100+60=160 > 159)
 	assert.False(t, IsClaimStale(100, 0, 0, 1, 159))
-	// heartbeat at 150, now=209 => not stale (150+60=210 > 209)
 	assert.False(t, IsClaimStale(100, 150, 0, 1, 209))
-	// heartbeat at 150, now=211 => stale (150+60=210 < 211)
 	assert.True(t, IsClaimStale(100, 150, 0, 1, 211))
-	// TTL=0 => never stale
 	assert.False(t, IsClaimStale(100, 0, 0, 0, 9999))
 }
 
-// TestIsClaimStale_ClaimingWorkerActivityExtends verifies that a claimant
-// transition just before naive TTL expiry (bumping LastClaimingWorkerActivity
-// without touching LastHeartbeat) prevents the claim from reading as stale.
 func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
 	t.Parallel()
-	// claimedAt=100, lastHeartbeat=0, claimingWorkerActivity=150, TTL=1min.
-	// now=209 => not stale (150+60=210 > 209), driven solely by claimingWorkerActivity.
 	assert.False(t, IsClaimStale(100, 0, 150, 1, 209))
-	// now=211 => stale (150+60=210 < 211)
 	assert.True(t, IsClaimStale(100, 0, 150, 1, 211))
 }
 
@@ -67,7 +56,6 @@ func TestScopeOverlap(t *testing.T) {
 	assert.False(t, ScopesOverlap([]string{}, []string{"src/auth/login.go"}))
 }
 
-// genOp creates an arbitrary ops.Op with a random timestamp and workerID.
 func genOp() gopter.Gen {
 	return gen.Struct(reflect.TypeFor[ops.Op](), map[string]gopter.Gen{
 		"Type":      gen.Const(ops.OpClaim),
@@ -77,7 +65,6 @@ func genOp() gopter.Gen {
 	})
 }
 
-// shuffle returns a copy of the slice with elements in a different order.
 func shuffle(claims []ops.Op, rng *rand.Rand) []ops.Op {
 	cp := make([]ops.Op, len(claims))
 	copy(cp, claims)
@@ -85,8 +72,6 @@ func shuffle(claims []ops.Op, rng *rand.Rand) []ops.Op {
 	return cp
 }
 
-// TestPropertyClaimRaceWinnerDeterminism verifies that ResolveClaim always
-// picks the same winner regardless of the order in which claims are presented.
 func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
 	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
@@ -99,7 +84,6 @@ func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
 				return true
 			}
 			expected := ResolveClaim(claims)
-			// Try a few different shuffles and confirm the winner never changes.
 			rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic seed intentional for test reproducibility
 			for range 5 {
 				shuffled := shuffle(claims, rng)
@@ -116,8 +100,6 @@ func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-// TestPropertyResolveClaimNoPanic verifies that ResolveClaim never panics
-// on arbitrary claim sets including empty slices and single-element slices.
 func TestPropertyResolveClaimNoPanic(t *testing.T) {
 	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
@@ -140,9 +122,6 @@ func TestPropertyResolveClaimNoPanic(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-// TestPropertyClaimWinnerMinimality verifies that the winning claim always has
-// the minimum timestamp (or lexicographically smallest workerID at equal timestamps),
-// which is the key invariant of the race resolution algorithm.
 func TestPropertyClaimWinnerMinimality(t *testing.T) {
 	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
@@ -156,7 +135,6 @@ func TestPropertyClaimWinnerMinimality(t *testing.T) {
 			}
 			winner := ResolveClaim(claims)
 			for _, c := range claims {
-				// No claim should be strictly better than the winner.
 				if c.Timestamp < winner.Timestamp {
 					return false
 				}
@@ -166,9 +144,11 @@ func TestPropertyClaimWinnerMinimality(t *testing.T) {
 			}
 			return true
 		},
-		// Use SliceOfN to guarantee at least 1 element, then append arbitrary extras.
 		gen.SliceOfN(1, genOp()).FlatMap(func(v any) gopter.Gen {
-			base := v.([]ops.Op) //nolint:errcheck // panic on failed type assertion is acceptable in tests
+			base, ok := v.([]ops.Op)
+			if !ok {
+				return gen.Fail(reflect.TypeFor[[]ops.Op]())
+			}
 			return gen.SliceOf(genOp()).Map(func(extra []ops.Op) []ops.Op {
 				return append(base, extra...)
 			})
@@ -178,8 +158,6 @@ func TestPropertyClaimWinnerMinimality(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-// TestPropertyIsClaimStaleMonotone verifies that once a claim is stale at time T,
-// it remains stale at any time T' >= T (monotonicity).
 func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
@@ -189,13 +167,11 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 	properties.Property("staleness is monotone in time", prop.ForAll(
 		func(claimedAt, lastHeartbeat int64, ttlMinutes int32, now int64) bool {
 			if ttlMinutes <= 0 {
-				// TTL=0 is always not-stale; no monotonicity to check.
 				return true
 			}
 			if !IsClaimStale(claimedAt, lastHeartbeat, 0, int(ttlMinutes), now) {
-				return true // not stale yet, nothing to verify
+				return true
 			}
-			// If stale at now, must also be stale at now+delta for any delta >= 0.
 			laterNow := now + 1
 			return IsClaimStale(claimedAt, lastHeartbeat, 0, int(ttlMinutes), laterNow)
 		},
@@ -251,30 +227,23 @@ func TestHasOverlapDismissalNote_NotFoundDifferentTarget(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-a",
 			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-02 (same worker, dismissed)"}},
 	}
-	// Looking for note on task-02 about task-01, but we have note on task-01 about task-02
 	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
 	assert.False(t, found)
 }
 
-// TestShouldHeartbeat_NoHeartbeatYet verifies that a heartbeat is emitted when
-// no prior heartbeat exists (lastHeartbeatTime is zero).
 func TestShouldHeartbeat_NoHeartbeatYet_REQ_LNGHZN_S3_T1(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
 	assert.True(t, ShouldHeartbeat(time.Time{}, now))
 }
 
-// TestShouldHeartbeat_WithinDebounceWindow verifies that a heartbeat is not
-// emitted when the last heartbeat was within the debounce interval.
 func TestShouldHeartbeat_WithinDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	lastHeartbeat := now.Add(-2 * time.Minute) // 2 minutes ago
+	lastHeartbeat := now.Add(-2 * time.Minute)
 	assert.False(t, ShouldHeartbeat(lastHeartbeat, now))
 }
 
-// TestShouldHeartbeat_ExactlyAtDebounceWindow verifies that a heartbeat is
-// emitted when the elapsed time is exactly equal to the debounce interval.
 func TestShouldHeartbeat_ExactlyAtDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -282,17 +251,13 @@ func TestShouldHeartbeat_ExactlyAtDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) 
 	assert.True(t, ShouldHeartbeat(lastHeartbeat, now))
 }
 
-// TestShouldHeartbeat_ExceedsDebounceWindow verifies that a heartbeat is
-// emitted when the elapsed time exceeds the debounce interval.
 func TestShouldHeartbeat_ExceedsDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	lastHeartbeat := now.Add(-6 * time.Minute) // 6 minutes ago
+	lastHeartbeat := now.Add(-6 * time.Minute)
 	assert.True(t, ShouldHeartbeat(lastHeartbeat, now))
 }
 
-// TestShouldHeartbeat_JustBeforeDebounceWindow verifies that a heartbeat is
-// not emitted when the elapsed time is just before the debounce interval.
 func TestShouldHeartbeat_JustBeforeDebounceWindow_REQ_LNGHZN_S3_T1(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
