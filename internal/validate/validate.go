@@ -740,7 +740,7 @@ func isActivelyClaimed(issue *materialize.Issue, now int64) bool {
 
 // isAncestorOrDescendant reports whether a and b are in the same parent/child
 // chain. A parent's scope is the union of its descendants', so that pair is
-// not a W1 collision. Duplicated from claim.ScopesOverlapEx so validate does
+// not a W1 collision. Duplicated from claim.ScopesOverlapIgnoringAncestry so validate does
 // not import internal/claim (depguard: scopematch is the shared leaf).
 func isAncestorOrDescendant(graph *dag.Graph, a, b string) bool {
 	if graph == nil {

@@ -44,13 +44,27 @@ func HasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
 	return false
 }
 
-func IsClaimStale(claimedAt, lastHeartbeat, claimingWorkerActivity int64, ttlMinutes int, now int64) bool {
+// LastActivity is the claim TTL clock in unix seconds. It is the max of
+// claimed-at, last heartbeat, and claiming-worker activity.
+type LastActivity int64
+
+func (a LastActivity) String() string {
+	return fmt.Sprintf("unix:%d", int64(a))
+}
+
+// FoldLastActivity collapses the three claim clocks into one LastActivity.
+func FoldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity int64) LastActivity {
+	return LastActivity(max(claimedAt, lastHeartbeat, claimingWorkerActivity))
+}
+
+// IsClaimStale reports whether last plus TTL is strictly before now.
+// ttlMinutes is converted to seconds. ttlMinutes <= 0 never expires.
+func IsClaimStale(last LastActivity, ttlMinutes int, now int64) bool {
 	if ttlMinutes <= 0 {
 		return false
 	}
-	lastActivity := max(claimedAt, lastHeartbeat, claimingWorkerActivity)
 	ttlSeconds := int64(ttlMinutes) * 60
-	return now > lastActivity+ttlSeconds
+	return now > int64(last)+ttlSeconds
 }
 
 func ShouldHeartbeat(lastHeartbeatTime, now time.Time) bool {

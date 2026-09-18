@@ -18,7 +18,8 @@ import (
 // directly from packages like internal/worktree, whose depguard boundary forbids
 // it) because materialize already owns the claim sub-domain.
 func (i *Issue) ClaimStale(now int64) bool {
-	return claimpkg.IsClaimStale(i.ClaimedAt, i.LastHeartbeat, i.LastClaimingWorkerActivity, i.ClaimTTL, now)
+	last := claimpkg.FoldLastActivity(i.ClaimedAt, i.LastHeartbeat, i.LastClaimingWorkerActivity)
+	return claimpkg.IsClaimStale(last, i.ClaimTTL, now)
 }
 
 // ClaimHeldBy reports whether this issue is, right now, held by exactly the

@@ -117,7 +117,8 @@ func (s *State) applyClaim(op ops.Op) error {
 		if ttl <= 0 {
 			ttl = 60
 		}
-		if !claimpkg.IsClaimStale(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity, ttl, op.Timestamp) {
+		last := claimpkg.FoldLastActivity(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity)
+		if !claimpkg.IsClaimStale(last, ttl, op.Timestamp) {
 			// Keep existing active owner; this claim loses the race.
 			return nil
 		}

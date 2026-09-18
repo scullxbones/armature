@@ -81,6 +81,7 @@ func TestPlanClaim_InvalidInput_REQ_ARCHIMP_S20_T1(t *testing.T) {
 			assert.Empty(t, plan.BlockReasons)
 			assert.Empty(t, plan.Warnings)
 			assert.Empty(t, plan.Notes)
+			assert.Empty(t, plan.OverlapIDs)
 		})
 	}
 }
@@ -101,6 +102,7 @@ func TestPlanClaim_NilCollectionsEmptyPlan_REQ_ARCHIMP_S20_T1(t *testing.T) {
 	assert.Empty(t, plan.BlockReasons)
 	assert.Empty(t, plan.Warnings)
 	assert.Empty(t, plan.Notes)
+	assert.Empty(t, plan.OverlapIDs)
 }
 
 func TestPlanClaim_IgnoresNonCompetitors_REQ_ARCHIMP_S20_T1(t *testing.T) {
@@ -128,6 +130,7 @@ func TestPlanClaim_IgnoresNonCompetitors_REQ_ARCHIMP_S20_T1(t *testing.T) {
 	assert.Empty(t, plan.BlockReasons)
 	assert.Empty(t, plan.Warnings)
 	assert.Empty(t, plan.Notes)
+	assert.Empty(t, plan.OverlapIDs)
 }
 
 func TestPlanClaim_ActiveTasksCompete_REQ_ARCHIMP_S20_T1(t *testing.T) {
@@ -145,6 +148,7 @@ func TestPlanClaim_ActiveTasksCompete_REQ_ARCHIMP_S20_T1(t *testing.T) {
 		"scope overlap with task-claimed (Claimed Work), a task claimed held by worker-b",
 		"scope overlap with task-wip (In Progress Work), a task in-progress held by worker-c",
 	}, plan.BlockReasons)
+	assert.Equal(t, []string{"task-claimed", "task-wip"}, plan.OverlapIDs)
 	assert.Empty(t, plan.Warnings)
 	assert.Empty(t, plan.Notes)
 }
@@ -189,6 +193,7 @@ func TestPlanClaim_ExcludesAncestorDescendant_REQ_ARCHIMP_S20_T1(t *testing.T) {
 	assert.Equal(t, []string{
 		"scope overlap with task-sibling (Sibling), a task claimed held by worker-c",
 	}, plan.BlockReasons)
+	assert.Equal(t, []string{"task-sibling"}, plan.OverlapIDs)
 	assert.Empty(t, plan.Notes)
 }
 
@@ -208,6 +213,7 @@ func TestPlanClaim_SameWorkerDismissalAndDedup_REQ_ARCHIMP_S20_T1(t *testing.T) 
 		IssueID: "task-target",
 		Message: "Serial claim: scope overlap with task-mine (same worker, dismissed)",
 	}}, plan.Notes)
+	assert.Empty(t, plan.OverlapIDs)
 
 	in.PriorOps = []ops.Op{{
 		Type: ops.OpNote, TargetID: "task-target", WorkerID: "worker-a",
@@ -242,6 +248,7 @@ func TestPlanClaim_UnknownClaimedBy_REQ_ARCHIMP_S20_T1(t *testing.T) {
 	assert.Equal(t, []string{
 		"scope overlap with task-orphan (Orphan), a task claimed held by unknown",
 	}, plan.BlockReasons)
+	assert.Equal(t, []string{"task-orphan"}, plan.OverlapIDs)
 }
 
 func TestPlanClaim_CollectsSortedForeignBlocks_REQ_ARCHIMP_S20_T1(t *testing.T) {
@@ -261,6 +268,7 @@ func TestPlanClaim_CollectsSortedForeignBlocks_REQ_ARCHIMP_S20_T1(t *testing.T) 
 		"scope overlap with task-m (Mid), a task in-progress held by worker-m",
 		"scope overlap with task-z (Zed), a task claimed held by worker-z",
 	}, plan.BlockReasons)
+	assert.Equal(t, []string{"task-a", "task-m", "task-z"}, plan.OverlapIDs)
 }
 
 func TestPlanClaim_BlockedMixedProducesNoNotes_REQ_ARCHIMP_S20_T1(t *testing.T) {
@@ -277,6 +285,7 @@ func TestPlanClaim_BlockedMixedProducesNoNotes_REQ_ARCHIMP_S20_T1(t *testing.T) 
 	assert.Equal(t, []string{
 		"scope overlap with task-foreign (Theirs), a task claimed held by worker-b",
 	}, plan.BlockReasons)
+	assert.Equal(t, []string{"task-foreign"}, plan.OverlapIDs)
 	assert.Empty(t, plan.Warnings)
 	assert.Empty(t, plan.Notes)
 }
@@ -304,6 +313,7 @@ func TestPlanClaim_ForceWarningsAndReciprocalNotes_REQ_ARCHIMP_S20_T1(t *testing
 		{IssueID: "task-target", Message: "Scope overlap with task-z detected at claim time"},
 		{IssueID: "task-z", Message: "Scope overlap with task-target detected at claim time"},
 	}, plan.Notes)
+	assert.Equal(t, []string{"task-a", "task-z"}, plan.OverlapIDs)
 }
 
 func TestPlanClaim_SameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T1(t *testing.T) {
@@ -323,6 +333,7 @@ func TestPlanClaim_SameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T1(t *testing.T
 		IssueID: "task-target",
 		Message: "Serial claim: scope overlap with task-mine (same worker, dismissed)",
 	}}, plan.Notes)
+	assert.Empty(t, plan.OverlapIDs)
 }
 
 func TestPlanClaim_MapOrderInvariant_REQ_ARCHIMP_S20_T1(t *testing.T) {
@@ -347,7 +358,7 @@ func TestPlanClaim_MapOrderInvariant_REQ_ARCHIMP_S20_T1(t *testing.T) {
 
 	assert.Equal(t, planA, planB)
 	assert.Equal(t, planA, planC)
-	assert.Equal(t, []string{"task-a", "task-b", "task-c"}, warningIDs(planA.Warnings))
+	assert.Equal(t, []string{"task-a", "task-b", "task-c"}, planA.OverlapIDs)
 }
 
 func TestPlanClaim_InputsUnchanged_REQ_ARCHIMP_S20_T1(t *testing.T) {
@@ -385,18 +396,4 @@ func TestPlanClaim_InputsUnchanged_REQ_ARCHIMP_S20_T1(t *testing.T) {
 	assert.Equal(t, mineScopeBefore, in.Issues["task-mine"].Scope)
 	assert.Equal(t, foreignScopeBefore, in.Issues["task-foreign"].Scope)
 	assert.Equal(t, opsBefore, in.PriorOps)
-}
-
-func warningIDs(warnings []string) []string {
-	ids := make([]string, 0, len(warnings))
-	for _, w := range warnings {
-		rest := w[len("scope overlap with "):]
-		for i, r := range rest {
-			if r == ' ' {
-				ids = append(ids, rest[:i])
-				break
-			}
-		}
-	}
-	return ids
 }

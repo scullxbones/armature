@@ -39,6 +39,7 @@ type ClaimPlan struct {
 	BlockReasons []string
 	Warnings     []string
 	Notes        []NoteIntent
+	OverlapIDs   []string
 }
 
 // PlanClaim decides overlapping-scope Claims as a pure in-process plan.
@@ -60,7 +61,7 @@ func PlanClaim(in PlanInput) (ClaimPlan, error) {
 	}
 	slices.Sort(ids)
 
-	var blocks, warnings []string
+	var blocks, warnings, overlapIDs []string
 	var notes []NoteIntent
 
 	for _, id := range ids {
@@ -71,7 +72,7 @@ func PlanClaim(in PlanInput) (ClaimPlan, error) {
 		if !competes(fact) {
 			continue
 		}
-		if !ScopesOverlapEx(in.TargetScope, fact.Scope, in.Graph, in.TargetID, id) {
+		if !ScopesOverlapIgnoringAncestry(in.TargetScope, fact.Scope, in.Graph, in.TargetID, id) {
 			continue
 		}
 
@@ -92,6 +93,8 @@ func PlanClaim(in PlanInput) (ClaimPlan, error) {
 			continue
 		}
 
+		overlapIDs = append(overlapIDs, id)
+
 		if !in.Force {
 			blocks = append(blocks, reason)
 			continue
@@ -111,9 +114,9 @@ func PlanClaim(in PlanInput) (ClaimPlan, error) {
 	}
 
 	if len(blocks) > 0 {
-		return ClaimPlan{BlockReasons: blocks}, nil
+		return ClaimPlan{BlockReasons: blocks, OverlapIDs: overlapIDs}, nil
 	}
-	return ClaimPlan{Warnings: warnings, Notes: notes}, nil
+	return ClaimPlan{Warnings: warnings, Notes: notes, OverlapIDs: overlapIDs}, nil
 }
 
 func competes(fact IssueFacts) bool {

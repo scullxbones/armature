@@ -25,9 +25,9 @@ func ScopesOverlap(scopeA, scopeB []string) bool {
 	return false
 }
 
-// ScopesOverlapEx checks if two scope glob lists have any overlap,
-// excluding ancestor/descendant issue pairs from overlap detection.
-func ScopesOverlapEx(scopeA, scopeB []string, graph HierarchyGraph, issueA, issueB string) bool {
+// ScopesOverlapIgnoringAncestry reports glob overlap except when issueA and
+// issueB sit on the same parent-child chain (see IsAncestorOrDescendant).
+func ScopesOverlapIgnoringAncestry(scopeA, scopeB []string, graph HierarchyGraph, issueA, issueB string) bool {
 	if IsAncestorOrDescendant(graph, issueA, issueB) {
 		return false
 	}
