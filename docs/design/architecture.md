@@ -360,9 +360,11 @@ Code commits happen separately in the developer's main worktree, on their featur
 
 There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap. Git errors on this helper are **best-effort / swallowed** so a successful local append is not rolled back (v1 residue). `arm push-ops` is the explicit Push-only command and **does** fail the CLI (`PUSH-OPS-1`).
 
-**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranchBestEffort` immediately.
+**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranchBestEffort` immediately. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
 
-**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call the **same** helper (PR #198). Below threshold they stay local-only.
+**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call the **same** helper (PR #198). Below threshold they stay local-only.
+
+**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranchBestEffort` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
 
 Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
 
