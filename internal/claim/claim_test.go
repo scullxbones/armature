@@ -39,7 +39,6 @@ func TestFoldLastActivity(t *testing.T) {
 	assert.Equal(t, LastActivity(150), FoldLastActivity(100, 150, 0))
 	assert.Equal(t, LastActivity(150), FoldLastActivity(100, 0, 150))
 	assert.Equal(t, LastActivity(200), FoldLastActivity(100, 150, 200))
-	assert.Equal(t, "unix:150", FoldLastActivity(100, 150, 0).String())
 }
 
 func TestIsClaimStale(t *testing.T) {

@@ -48,10 +48,6 @@ func HasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
 // claimed-at, last heartbeat, and claiming-worker activity.
 type LastActivity int64
 
-func (a LastActivity) String() string {
-	return fmt.Sprintf("unix:%d", int64(a))
-}
-
 // FoldLastActivity collapses the three claim clocks into one LastActivity.
 func FoldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity int64) LastActivity {
 	return LastActivity(max(claimedAt, lastHeartbeat, claimingWorkerActivity))

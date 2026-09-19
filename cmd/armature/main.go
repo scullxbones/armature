@@ -78,19 +78,7 @@ func newRootCmd() *cobra.Command {
 				))
 			}
 
-			workerID := workerIDBestEffort(repoPath)
-			if workerID == "" {
-				workerID = "default"
-			}
-			workerID = slottedWorkerID(workerID).String()
-			ctx.StateDir = stateDirFor(ctx, workerID)
-
-			state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
-			baseCtx := cmd.Context()
-			if baseCtx == nil {
-				baseCtx = context.Background()
-			}
-			cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
+			attachExecutionState(cmd, ctx)
 			return nil
 		},
 		Args: rejectUnknownRootArgs,

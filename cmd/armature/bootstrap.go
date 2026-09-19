@@ -558,38 +558,29 @@ func isLocalOnlyUntrackPath(path, prefix string) bool {
 	}
 }
 
-func writeGitignoreMonotonic(gitignorePath string, warn io.Writer) error {
-	existing, err := os.ReadFile(gitignorePath) //nolint:gosec // G304: gitignorePath is derived from controlled repo paths
+func writeScaffoldingMonotonic(path, label string, content []byte, warn io.Writer) error {
+	existing, err := os.ReadFile(path) //nolint:gosec // G304: path is derived from controlled repo paths
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read .gitignore: %w", err)
+		return fmt.Errorf("read %s: %w", label, err)
 	}
 	if tracked, ok := ops.ParseScaffoldingVersion(string(existing)); ok && tracked > ops.ScaffoldingVersion {
 		_, _ = fmt.Fprintf(warn,
 			"Warning: %s was written by a newer arm (scaffolding version %d > %d); leaving it alone. Upgrade arm to regenerate it.\n",
-			gitignorePath, tracked, ops.ScaffoldingVersion)
+			path, tracked, ops.ScaffoldingVersion)
 		return nil
 	}
-	if err := os.WriteFile(gitignorePath, []byte(ops.GenerateOpsGitignore()), 0o600); err != nil {
-		return fmt.Errorf("write .gitignore: %w", err)
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", label, err)
 	}
 	return nil
 }
 
+func writeGitignoreMonotonic(gitignorePath string, warn io.Writer) error {
+	return writeScaffoldingMonotonic(gitignorePath, ".gitignore", []byte(ops.GenerateOpsGitignore()), warn)
+}
+
 func writeSchemaMonotonic(schemaPath string, warn io.Writer) error {
-	existing, err := os.ReadFile(schemaPath) //nolint:gosec // G304: schemaPath is derived from controlled repo paths
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read SCHEMA: %w", err)
-	}
-	if tracked, ok := ops.ParseScaffoldingVersion(string(existing)); ok && tracked > ops.ScaffoldingVersion {
-		_, _ = fmt.Fprintf(warn,
-			"Warning: %s was written by a newer arm (scaffolding version %d > %d); leaving it alone. Upgrade arm to regenerate it.\n",
-			schemaPath, tracked, ops.ScaffoldingVersion)
-		return nil
-	}
-	if err := os.WriteFile(schemaPath, []byte(ops.GenerateSchema()), 0o600); err != nil {
-		return fmt.Errorf("write SCHEMA: %w", err)
-	}
-	return nil
+	return writeScaffoldingMonotonic(schemaPath, "SCHEMA", []byte(ops.GenerateSchema()), warn)
 }
 
 func commitObsoleteHookTemplateRemovals(worktreePath string, isCollapsedLayout bool) error {

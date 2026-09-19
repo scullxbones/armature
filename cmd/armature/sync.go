@@ -5,7 +5,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/spf13/cobra"
 )
@@ -82,23 +81,7 @@ preview changes without committing them.`,
 				return err
 			}
 
-			for _, id := range mergedIDs {
-				op := ops.Op{
-					Type:      ops.OpTransition,
-					TargetID:  id,
-					WorkerID:  workerID,
-					Timestamp: nowEpoch(),
-					Payload: ops.Payload{
-						To:      ops.StatusMerged,
-						Outcome: "auto-detected merge into " + targetBranch,
-					},
-				}
-				if err := appendOp(ctx, logPath, op); err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to transition %s: %v\n", id, err)
-					continue
-				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
-			}
+			appendMergedTransitions(ctx, logPath, workerID, targetBranch, mergedIDs, cmd.OutOrStdout(), cmd.ErrOrStderr())
 
 			snap, err = store.Load(cmd.Context())
 			if err != nil {

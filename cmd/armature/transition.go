@@ -322,7 +322,7 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 }
 
 func deliveryGateRequiredByMarkerThenTypeClaimedBy(repoRoot, invokingRepoPath, issueID string, gateIssue *materialize.Issue) (bool, string, error) {
-	if run, path, handled := deliveryGateFromInvokingMarker(invokingRepoPath, issueID); handled {
+	if run, path, handled := deliveryGateFromInvokingMarker(invokingRepoPath); handled {
 		return run, path, nil
 	}
 
@@ -337,18 +337,12 @@ func deliveryGateRequiredByMarkerThenTypeClaimedBy(repoRoot, invokingRepoPath, i
 	return deliveryGateFromTypeOrClaimedByAbsence(invokingRepoPath, issueID, gateIssue)
 }
 
-func deliveryGateFromInvokingMarker(invokingRepoPath, issueID string) (run bool, path string, handled bool) {
+func deliveryGateFromInvokingMarker(invokingRepoPath string) (run bool, path string, handled bool) {
 	invokingBinding, bindingErr := worktreeIssueBinding(invokingRepoPath)
-	if bindingErr != nil {
+	if bindingErr != nil || invokingBinding == "" {
 		return false, "", false
 	}
-	if invokingBinding == issueID {
-		return true, invokingRepoPath, true
-	}
-	if invokingBinding != "" {
-		return true, invokingRepoPath, true
-	}
-	return false, "", false
+	return true, invokingRepoPath, true
 }
 
 func deliveryGateFromTypeOrClaimedByAbsence(invokingRepoPath, issueID string, gateIssue *materialize.Issue) (bool, string, error) {

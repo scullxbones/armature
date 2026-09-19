@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,8 +71,6 @@ func isTerminalStatus(status string) bool {
 }
 
 func swallowErr(err error) { _ = err }
-
-func bestEffortLog(err error) { swallowErr(err) }
 
 func bestEffortClose(c io.Closer) {
 	if c == nil {
@@ -239,6 +238,51 @@ func mustState(cmd *cobra.Command) *executionState {
 		panic(err)
 	}
 	return state
+}
+
+func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
+	workerID := workerIDBestEffort(ctx.RepoPath)
+	if workerID == "" {
+		workerID = "default"
+	}
+	workerID = slottedWorkerID(workerID).String()
+	ctx.StateDir = stateDirFor(ctx, workerID)
+	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
+	baseCtx := cmd.Context()
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
+}
+
+func opsHistoryPrefixes(appCtx *config.Context, opsRepoPath string) (opsPrefix, legacyOpsPrefix string) {
+	issuesRel := "."
+	if appCtx.IssuesDir != "" && opsRepoPath != "" {
+		if rel, relErr := filepath.Rel(opsRepoPath, appCtx.IssuesDir); relErr == nil {
+			issuesRel = rel
+		}
+	}
+	return filepath.Join(issuesRel, "ops"), filepath.Join(".armature", "ops")
+}
+
+func appendMergedTransitions(ctx *config.Context, logPath, workerID, intoBranch string, mergedIDs []string, stdout, stderr io.Writer) {
+	for _, id := range mergedIDs {
+		op := ops.Op{
+			Type:      ops.OpTransition,
+			TargetID:  id,
+			WorkerID:  workerID,
+			Timestamp: nowEpoch(),
+			Payload: ops.Payload{
+				To:      ops.StatusMerged,
+				Outcome: "auto-detected merge into " + intoBranch,
+			},
+		}
+		if err := appendOp(ctx, logPath, op); err != nil {
+			_, _ = fmt.Fprintf(stderr, "Warning: failed to transition %s: %v\n", id, err)
+			continue
+		}
+		_, _ = fmt.Fprintf(stdout, "Transitioned %s to merged\n", id)
+	}
 }
 
 func currentCtx(cmd *cobra.Command) *config.Context {

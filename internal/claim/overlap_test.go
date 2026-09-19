@@ -8,6 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func globOverlaps(a, b string) bool {
+	return scopematch.Overlaps(a, b)
+}
+
 func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *testing.T) {
 	t.Parallel()
 

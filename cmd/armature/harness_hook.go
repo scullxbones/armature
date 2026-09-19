@@ -73,7 +73,7 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 	normalizedPaths := harnesshook.AbsolutizePaths(event.Paths, event.Cwd, resolvedBinding.Root)
 	_, err = harnesshook.LogPassThroughScopeViolation(
 		logGitDir, scopePolicy, normalizedPaths, "stale binding")
-	bestEffortLog(err)
+	swallowErr(err)
 }
 
 func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
@@ -260,21 +260,21 @@ func newHarnessHookCmd() *cobra.Command {
 			inputData, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to read hook input: %v\n", err)
-				bestEffortLog(logPassThrough(gitDir, "stdin read failed"))
+				swallowErr(logPassThrough(gitDir, "stdin read failed"))
 				return nil
 			}
 
 			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to select hook adapter: %v\n", err)
-				bestEffortLog(logPassThrough(gitDir, "adapter selection failed"))
+				swallowErr(logPassThrough(gitDir, "adapter selection failed"))
 				return nil
 			}
 
 			event, err := adapter.Decode(inputData)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to decode hook event: %v\n", err)
-				bestEffortLog(logPassThrough(gitDir, "event decode failed"))
+				swallowErr(logPassThrough(gitDir, "event decode failed"))
 				return nil
 			}
 
@@ -292,7 +292,7 @@ func newHarnessHookCmd() *cobra.Command {
 			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding, gitDir, adapter.Capabilities().SupportedShellTools)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: binding resolution failed: %v\n", err)
-				bestEffortLog(logPassThrough(gitDir, "binding resolution failed"))
+				swallowErr(logPassThrough(gitDir, "binding resolution failed"))
 				return nil
 			}
 
@@ -303,7 +303,7 @@ func newHarnessHookCmd() *cobra.Command {
 			if pathResolved {
 				if !isKnownWorktreeGitDir(rawRepo, logGitDir) {
 					fmt.Fprintf(cmd.ErrOrStderr(), "error: path-resolved git dir %q is not a known worktree of %q; falling back to session binding\n", logGitDir, rawRepo)
-					bestEffortLog(logViolation(gitDir, fmt.Sprintf("path-resolved git dir %q rejected as untrusted", logGitDir)))
+					swallowErr(logViolation(gitDir, fmt.Sprintf("path-resolved git dir %q rejected as untrusted", logGitDir)))
 					resolvedBinding = harnesshook.ResolvedBinding{
 						IssueID:        sessionBinding,
 						GitDir:         gitDir,
@@ -315,9 +315,9 @@ func newHarnessHookCmd() *cobra.Command {
 
 			if resolvedBinding.IssueID == "" {
 				if isFileWriteEvent(event.Kind, filePath) {
-					bestEffortLog(logViolation(logGitDir, "file write with no resolved binding"))
+					swallowErr(logViolation(logGitDir, "file write with no resolved binding"))
 				} else {
-					bestEffortLog(logPassThrough(logGitDir, "no issue binding found"))
+					swallowErr(logPassThrough(logGitDir, "no issue binding found"))
 				}
 				return nil
 			}
@@ -326,7 +326,7 @@ func newHarnessHookCmd() *cobra.Command {
 			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to load snapshot: %v\n", err)
-				bestEffortLog(logPassThrough(logGitDir, "snapshot load failed"))
+				swallowErr(logPassThrough(logGitDir, "snapshot load failed"))
 				return nil
 			}
 			for _, w := range snap.Warnings {
@@ -335,7 +335,7 @@ func newHarnessHookCmd() *cobra.Command {
 
 			if isBindingStale(snap, resolvedBinding.IssueID, time.Now().Unix()) {
 				logStalePassThroughScopeViolation(appCtx, resolvedBinding, event, logGitDir)
-				bestEffortLog(logPassThrough(logGitDir, "stale issue binding"))
+				swallowErr(logPassThrough(logGitDir, "stale issue binding"))
 				return nil
 			}
 
@@ -358,12 +358,12 @@ func newHarnessHookCmd() *cobra.Command {
 				// Evaluation errors (policy resolution, evaluator, encode) are fail-open
 				// with loud stderr warning, per ADR-0007's "fail-open everywhere" (finding 3).
 				fmt.Fprintf(cmd.ErrOrStderr(), "error: hook evaluation failed: %v\n", err)
-				bestEffortLog(logPassThrough(logGitDir, "hook evaluation failed"))
+				swallowErr(logPassThrough(logGitDir, "hook evaluation failed"))
 				return nil
 			}
 
 			blockReason := result.Decision.Message
-			bestEffortLog(logDecision(
+			swallowErr(logDecision(
 				logGitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
 				string(event.Kind), event.Tool, string(result.Decision.Action), blockReason))
 
@@ -374,7 +374,7 @@ func newHarnessHookCmd() *cobra.Command {
 			// PR #71 review — this hardcoding silently discarded Codex/Devin evidence).
 			if event.Kind == harnesshook.EventPostToolUse && resolvedBinding.IssueID != "" &&
 				adapter.Capabilities().PostToolUse && slices.Contains(adapter.Capabilities().SupportedShellTools, event.Tool) {
-				bestEffortLog(harnesshook.AppendActivity(
+				swallowErr(harnesshook.AppendActivity(
 					logGitDir, event.Command, event.ExitCode, event.ExitCodeKnown, event.Output))
 			}
 

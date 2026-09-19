@@ -372,23 +372,7 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		return err
 	}
 
-	for _, id := range mergedIDs {
-		op := ops.Op{
-			Type:      ops.OpTransition,
-			TargetID:  id,
-			WorkerID:  workerID,
-			Timestamp: nowEpoch(),
-			Payload: ops.Payload{
-				To:      ops.StatusMerged,
-				Outcome: "auto-detected merge into " + branch,
-			},
-		}
-		if err := appendOp(appCtx, logPath, op); err != nil {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to transition %s: %v\n", id, err)
-			continue
-		}
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
-	}
+	appendMergedTransitions(appCtx, logPath, workerID, branch, mergedIDs, cmd.OutOrStdout(), cmd.ErrOrStderr())
 
 	if _, err := store.Load(context.Background()); err != nil {
 		return fmt.Errorf("refresh snapshot: %w", err)

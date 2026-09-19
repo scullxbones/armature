@@ -273,7 +273,28 @@ func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
 // checkD3OrphanedOpsFromListWithContext checks for orphaned ops given a flat list of target IDs
 // and optional verbose context (file:line locations).
 func checkD3OrphanedOpsFromListWithContext(index materialize.Index, targetIDs []string, locations map[string][]opLocation) Finding {
-	f := checkD3OrphanedOpsFromList(index, targetIDs)
+	f := Finding{Check: "D3", Severity: SeverityOK, Message: "No orphaned ops"}
+	if targetIDs == nil {
+		return f
+	}
+
+	orphaned := make(map[string]bool)
+	for _, id := range targetIDs {
+		if _, ok := index[id]; !ok {
+			orphaned[id] = true
+		}
+	}
+
+	if len(orphaned) > 0 {
+		var items []string
+		for id := range orphaned {
+			items = append(items, id)
+		}
+		sort.Strings(items)
+		f.Severity = SeverityError
+		f.Message = "Op files reference issue IDs not in the graph"
+		f.Items = items
+	}
 
 	if f.Severity == SeverityError && len(f.Items) > 0 && len(locations) > 0 {
 		orphanedSet := make(map[string]bool, len(f.Items))
@@ -352,33 +373,6 @@ func noteOnlyOrphanTargets(allOps []ops.Op) map[string]bool {
 		}
 	}
 	return result
-}
-
-// checkD3OrphanedOpsFromList checks for orphaned ops given a flat list of target IDs.
-func checkD3OrphanedOpsFromList(index materialize.Index, targetIDs []string) Finding {
-	f := Finding{Check: "D3", Severity: SeverityOK, Message: "No orphaned ops"}
-	if targetIDs == nil {
-		return f
-	}
-
-	orphaned := make(map[string]bool)
-	for _, id := range targetIDs {
-		if _, ok := index[id]; !ok {
-			orphaned[id] = true
-		}
-	}
-
-	if len(orphaned) > 0 {
-		var items []string
-		for id := range orphaned {
-			items = append(items, id)
-		}
-		sort.Strings(items)
-		f.Severity = SeverityError
-		f.Message = "Op files reference issue IDs not in the graph"
-		f.Items = items
-	}
-	return f
 }
 
 // D4: broken parent refs — issues whose parent points to a non-existent ID.
