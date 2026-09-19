@@ -442,16 +442,8 @@ var reservedFailureCodePrefixes = map[string]struct{}{
 	"IO":    {},
 }
 
-// reservedFailureCodes exempts exact live codes from the allowed-prefix set,
-// rather than reserving their whole prefix family. GENERAL-1 is retired and
-// is no longer live, so it is not listed here.
 var reservedFailureCodes = map[string]struct{}{}
 
-// ledgerRowNeedsCurrentPrefixCheck reports whether a ledger row's prefix
-// must be present in the *current* allowed-prefix set. Retired rows are
-// exempt: a top-level command or deep module can be removed or renamed
-// after its code is retired, and the no-reuse rule requires keeping the
-// historical row regardless of whether its module still exists today.
 func ledgerRowNeedsCurrentPrefixCheck(row ledgerRow) bool {
 	return !row.Retired
 }
@@ -547,10 +539,6 @@ func assertAgentFailureEnvelope(t *testing.T, stdout string) *armerrors.CommandF
 	return typed.Error
 }
 
-// assertNextActionsPolicy enforces the docs/error-contract.md Next Actions
-// rule: empty next_actions is allowed only on IO, and "--help" is an allowed
-// next action only on USAGE (ADR 0020: "--help is for USAGE / GENERAL" —
-// GENERAL-1 is retired).
 func assertNextActionsPolicy(t *testing.T, cf *armerrors.CommandFailure) {
 	t.Helper()
 	for _, issue := range nextActionsPolicyViolations(cf.Code, cf.NextActions) {
@@ -558,11 +546,6 @@ func assertNextActionsPolicy(t *testing.T, cf *armerrors.CommandFailure) {
 	}
 }
 
-// nextActionsPolicyViolations is the pure policy check behind
-// assertNextActionsPolicy, reused by
-// TestNextActionsPolicyAppliesToEveryMapperCallSite_REQ_LNGHZN_S6_T3 so the
-// policy is checked at every armerrors.New/Wrap call site in cmd/, not only
-// the handful reached by the runtime "emit an agent envelope" tests.
 func nextActionsPolicyViolations(code string, nextActions []string) []string {
 	var issues []string
 	prefix := failureCodePrefix(code)
@@ -579,13 +562,6 @@ func nextActionsPolicyViolations(code string, nextActions []string) []string {
 	return issues
 }
 
-// TestNextActionsPolicyAppliesToEveryMapperCallSite_REQ_LNGHZN_S6_T3
-// statically scans every non-test cmd/armature/*.go file for
-// armerrors.New/armerrors.Wrap call sites and applies
-// nextActionsPolicyViolations to each one's (code, next_actions) pair. This
-// is the "systematic coverage" remedy: the runtime envelope tests above only
-// exercise five hand-picked commands, so a sixth mapper with a policy
-// violation would otherwise pass make check unnoticed.
 func TestNextActionsPolicyAppliesToEveryMapperCallSite_REQ_LNGHZN_S6_T3(t *testing.T) {
 	t.Parallel()
 	fset := token.NewFileSet()
@@ -655,11 +631,6 @@ func TestNextActionsPolicyAppliesToEveryMapperCallSite_REQ_LNGHZN_S6_T3(t *testi
 	require.Greater(t, checked, 0, "expected at least one armerrors.New/Wrap call site in cmd/armature")
 }
 
-// resolveStringSliceArg resolves a next_actions call argument that is
-// either the bare identifier "nil" or a []string{...} composite literal of
-// string literals. It returns false for anything else (a variable, a
-// function call, append(...), ...) so the caller can flag the call site as
-// unauditable rather than silently skip it.
 func resolveStringSliceArg(expr ast.Expr) ([]string, bool) {
 	switch v := expr.(type) {
 	case *ast.Ident:

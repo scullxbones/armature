@@ -26,7 +26,6 @@ func TestUncitedLookup_IncludesDraftUncited_REQ_CITEGATE_T2(t *testing.T) {
 	assert.NotContains(t, lookup, "DRAFT-2")
 }
 
-// setupRepoWithDraftNode creates a bootstrapped repo with a draft-confidence task.
 func setupRepoWithDraftNode(t *testing.T) string {
 	t.Helper()
 	repo := setupRepoWithTask(t)
@@ -42,7 +41,6 @@ func setupRepoWithDraftNode(t *testing.T) string {
 	return repo
 }
 
-// TestDAGSummaryCmd_WithDraftNodes_EmitsJSON verifies JSON output when draft nodes exist.
 func TestDAGSummaryCmd_WithDraftNodes_EmitsJSON(t *testing.T) {
 	repo := setupRepoWithDraftNode(t)
 
@@ -59,7 +57,6 @@ func TestDAGSummaryCmd_WithDraftNodes_EmitsJSON(t *testing.T) {
 	assert.Equal(t, float64(1), count, "expected one draft node")
 }
 
-// TestDAGSummaryCmd_ApproveAll_WithDraftNodes emits ops and returns JSON.
 func TestDAGSummaryCmd_ApproveAll_WithDraftNodes(t *testing.T) {
 	repo := setupRepoWithDraftNode(t)
 
@@ -75,18 +72,15 @@ func TestDAGSummaryCmd_ApproveAll_WithDraftNodes(t *testing.T) {
 	assert.Equal(t, true, result["approve_all"])
 }
 
-// TestDAGSummaryCmd_IssueFlag_WithDraftSubtree uses --issue to limit to a subtree.
 func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Create an epic that is draft, with a draft child task.
 	_, err := runTrls(t, repo, "create",
 		"--title", "Draft epic",
 		"--type", "epic",
 		"--id", "epic-draft-01",
 	)
 	require.NoError(t, err)
-	// Materialize so issues/epic-draft-01.json exists for ReadIssue in create --parent.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create",
@@ -105,13 +99,11 @@ func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 
 	var result map[string]any
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
-	// Should include at least the draft nodes in the subtree.
 	count, ok := result["count"].(float64)
 	require.True(t, ok)
 	assert.GreaterOrEqual(t, count, float64(1))
 }
 
-// TestDAGSummaryCmd_IssueFlag_UnknownID returns zero draft items when the ID is unknown.
 func TestDAGSummaryCmd_IssueFlag_UnknownID(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

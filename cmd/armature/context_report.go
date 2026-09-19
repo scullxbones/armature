@@ -19,12 +19,6 @@ Tokens are bytes/4 (integer division), matching the token_budget
 convention (character budget = tokens * 4). Fixtures are embedded in the
 binary; --repo is not required.`,
 		Args: cobra.NoArgs,
-		// context-report bypasses the root PersistentPreRunE (it does not
-		// need config.ResolveContext; fixtures are embedded), so it applies
-		// the same --non-interactive/--format auto-detection via the shared
-		// autoDetectTTYPolicy helper in main.go. That keeps direct
-		// terminal-detection calls confined to main.go per the CLI Grammar
-		// Contract (docs/design/cli-grammar-contract.md).
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			autoDetectTTYPolicy(cmd.Root())
 			return nil

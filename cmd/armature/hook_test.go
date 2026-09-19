@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHookRunUnknown verifies that an unknown hook name returns an error.
 func TestHookRunUnknown(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -27,7 +26,6 @@ func TestHookRunUnknown(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown hook")
 }
 
-// TestHookRunMissingArg verifies that hook run with no hook name returns an error.
 func TestHookRunMissingArg(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -35,7 +33,6 @@ func TestHookRunMissingArg(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestHookRunPostMerge verifies that post-merge hook runs sync logic without error.
 func TestHookRunPostMerge(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -44,22 +41,17 @@ func TestHookRunPostMerge(t *testing.T) {
 	assert.Contains(t, out, "No merged branches detected")
 }
 
-// TestHookRunPostCommit_NoActiveClaim verifies post-commit succeeds with no active claim.
 func TestHookRunPostCommit_NoActiveClaim(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// post-commit sends heartbeat if there's an active claim, otherwise no-ops
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
-	// No active claim — should produce no output or a skip message
 	_ = out
 }
 
-// TestHookRunPostCommit_WithActiveClaim verifies post-commit sends a heartbeat when a claim is active.
 func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Claim the task first
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
 
@@ -68,9 +60,6 @@ func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 	assert.Contains(t, out, "task-01")
 }
 
-// TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1 verifies a post-commit
-// invoked from the _armature worktree is skipped even when the parent checkout
-// has a live claim (ResolveContext collapses --repo to the parent RepoPath).
 func TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -113,16 +102,13 @@ func TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1(t *testing.T) {
 	assert.Equal(t, heartbeatsBefore, heartbeatsAfter, "ops-worktree post-commit must not record a heartbeat")
 }
 
-// TestHookRunPreCommit_SingleBranch verifies pre-commit is a no-op in single-branch mode.
 func TestHookRunPreCommit_SingleBranch(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Single-branch mode — pre-commit should always allow ops commits
 	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
 	require.NoError(t, err)
 }
 
-// TestHookSubcommandHelp verifies the hook subcommand help text.
 func TestHookSubcommandHelp(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
@@ -133,36 +119,26 @@ func TestHookSubcommandHelp(t *testing.T) {
 	assert.Contains(t, buf.String(), "hook")
 }
 
-// TestHookPostCommit_InitialCommit verifies that post-commit does not error when HEAD~1 is absent.
 func TestHookPostCommit_InitialCommit(t *testing.T) {
-	// Build a repo with NO parent commit so HEAD~1 is absent.
 	repo := initTempRepo(t)
 
-	// arm init requires at least one commit; make a bare commit then immediately run arm init.
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	// Create a task with scope so detection has something to work with.
 	_, err := runTrls(t, repo, "create", "--title", "Scoped task", "--type", "task", "--id", "task-scope-01", "--scope", "src/foo.go")
 	require.NoError(t, err)
 
-	// Claim it.
 	_, err = runTrls(t, repo, "claim", "task-scope-01", "--worktree")
 	require.NoError(t, err)
 
-	// Now run post-commit on the very first real commit (HEAD~1 absent for the init commit).
-	// hookDetectScopeChanges should skip silently and not error.
 	_, err = runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
 }
 
-// TestHookPostCommit_ScopeRename verifies that post-commit emits scope-rename ops
-// for issues whose scope contains the renamed path.
 func TestHookPostCommit_ScopeRename(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-rename-01", "src/old.go")
 
-	// Perform a rename and commit so HEAD~1 exists.
 	writeFile(t, repo, "src/old.go", "package old")
 	run(t, repo, "git", "add", "src/old.go")
 	run(t, repo, "git", "commit", "-m", "add src/old.go")
@@ -170,7 +146,6 @@ func TestHookPostCommit_ScopeRename(t *testing.T) {
 	run(t, repo, "git", "mv", "src/old.go", "src/new.go")
 	run(t, repo, "git", "commit", "-m", "rename src/old.go -> src/new.go")
 
-	// Claim the task so there's an active claim and a log path.
 	_, err := runTrls(t, repo, "claim", "task-rename-01", "--worktree")
 	require.NoError(t, err)
 
@@ -180,15 +155,11 @@ func TestHookPostCommit_ScopeRename(t *testing.T) {
 	assert.Contains(t, out, "task-rename-01")
 }
 
-// TestHookPostCommit_ScopeDelete verifies that post-commit emits scope-delete ops
-// for issues whose scope exactly matches the deleted path.
 func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-delete-01", "src/gone.go")
-	// Keep a second scope entry so Introduction (E6) still allows the delete op.
 	_, err := runTrls(t, repo, "amend", "task-delete-01", "--scope", "src/gone.go", "--scope", "src/keep.go")
 	require.NoError(t, err)
 
-	// Add a file then delete it.
 	writeFile(t, repo, "src/gone.go", "package gone")
 	run(t, repo, "git", "add", "src/gone.go")
 	run(t, repo, "git", "commit", "-m", "add src/gone.go")
@@ -196,7 +167,6 @@ func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	run(t, repo, "git", "rm", "src/gone.go")
 	run(t, repo, "git", "commit", "-m", "delete src/gone.go")
 
-	// Claim the task so there's an active claim and a log path.
 	_, err = runTrls(t, repo, "claim", "task-delete-01", "--worktree")
 	require.NoError(t, err)
 
@@ -206,8 +176,6 @@ func TestHookPostCommit_ScopeDelete(t *testing.T) {
 	assert.Contains(t, out, "task-delete-01")
 }
 
-// TestHookRunPreCommit_NoStagedFiles verifies that pre-commit succeeds when no
-// files are staged.
 func TestHookRunPreCommit_NoStagedFiles(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -217,7 +185,6 @@ func TestHookRunPreCommit_NoStagedFiles(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestHookRunPreCommit_StagedNonOpsFile verifies that staging a non-ops file is allowed.
 func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -228,11 +195,9 @@ func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestHookRunPreCommit_BlocksStagedOpsFile verifies that a staged .armature/ops/ file on a non-_armature branch is blocked unconditionally.
 func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Stage a file in .armature/ops/
 	writeFile(t, repo, ".armature/ops/test.log", "test ops content")
 	run(t, repo, "git", "add", filepath.Join(".armature", "ops", "test.log"))
 
@@ -241,10 +206,6 @@ func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "refusing to commit .armature/ops/")
 }
 
-// TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG
-// proves pre-commit inspects the claiming worktree's branch and cached diff,
-// not the parent checkout ResolveContext walks up to. Staging .armature/ops/
-// only in .worktrees/<id> must refuse while the parent index stays empty.
 func TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -344,49 +305,21 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 	assert.Empty(t, hookFindActiveClaimID(ctx))
 }
 
-// TestHookDetectScopeChanges_WithExistingCheckpoint verifies that hookDetectScopeChanges
-// correctly uses ReadIndex (not Load) when checkpoint.json already exists.
-//
-// Mechanism: after materializing a real task, inject a fake entry directly into index.json.
-// This entry has no create op — Load() would overwrite index.json and lose it; ReadIndex()
-// reads the existing file and sees it.
-//
-// RED with store.Load() (old code): rematerializes from ops → fake entry lost → no
-//
-//	scope-rename op for "task-index-only" → assertion FAILS.
-//
-// GREEN with store.ReadIndex() (new code): reads existing index.json → sees fake entry
-//
-//	→ scope-rename op for "task-index-only" is emitted → assertion PASSES.
-//
-// This approach is immune to the installed arm binary triggering materialization via
-// git hooks (post-commit sends a heartbeat, which materializes), since we're not
-// relying on checkpoint.json mtime but rather on what entries hookDetectScopeChanges sees.
 func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
 
-	// Claim the task so there's an active claim and a log path for scope-rename ops.
 	_, err := runTrls(t, repo, "claim", "task-checkpoint-scope", "--worktree")
 	require.NoError(t, err)
 
-	// Add the scoped file, commit it, then rename it and commit again so that
-	// hookDetectScopeChanges sees a rename in HEAD~1..HEAD.
-	// All git commits are done BEFORE injecting the fake entry so that an installed
-	// hook that materializes as a side effect cannot overwrite it.
 	writeFile(t, repo, "src/checkpoint.go", "package checkpoint")
 	run(t, repo, "git", "add", "src/checkpoint.go")
 	run(t, repo, "git", "commit", "-m", "add checkpoint.go")
 	run(t, repo, "git", "mv", "src/checkpoint.go", "src/checkpoint-renamed.go")
 	run(t, repo, "git", "commit", "-m", "rename checkpoint.go")
 
-	// Materialize so index.json exists with scope data for ReadIndex to read.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Inject a fake entry directly into index.json AFTER all git commits.
-	// This entry has no create op — store.Load() rematerializes from ops and loses it;
-	// store.ReadIndex() reads the file as-is and sees it.
-	// No further git commits will run, so the installed arm binary cannot overwrite this entry.
 	stateDir := getTestStateDir(t, repo)
 	indexPath := filepath.Join(stateDir, "index.json")
 	indexData, readErr := os.ReadFile(indexPath)
@@ -402,12 +335,6 @@ func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	require.NoError(t, marshalErr)
 	require.NoError(t, os.WriteFile(indexPath, newData, 0o600))
 
-	// Run the post-commit hook. hookDetectScopeChanges will:
-	// - git diff HEAD~1..HEAD → finds rename src/checkpoint.go → src/checkpoint-renamed.go
-	// - store.ReadIndex() (correct) reads existing index.json, sees task-index-only
-	//   → emits scope-rename for both task-checkpoint-scope and task-index-only
-	// - store.Load() (old/wrong) rematerializes from ops, overwrites index.json,
-	//   loses task-index-only → only emits scope-rename for task-checkpoint-scope
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
 	assert.Contains(t, out, "scope-rename")
@@ -439,9 +366,6 @@ func readScopeDriftOps(t *testing.T, repo string) (renames, deletes []ops.Op) {
 	return renames, deletes
 }
 
-// TestScopeDriftDetectionEmitsRenameOp_REQ_HKDLG_T2 verifies a git mv of a scoped
-// file emits a scope-rename op (and not a scope-delete), even when the repo has
-// diff.renames disabled — the hook must pass --find-renames.
 func TestScopeDriftDetectionEmitsRenameOp_REQ_HKDLG_T2(t *testing.T) {
 	const (
 		taskID  = "task-drift-rename-01"
@@ -481,15 +405,12 @@ func TestScopeDriftDetectionEmitsRenameOp_REQ_HKDLG_T2(t *testing.T) {
 	assert.Equal(t, newPath, got.Payload.NewPath)
 }
 
-// TestScopeDriftDetectionEmitsDeleteOp_REQ_HKDLG_T2 verifies a git rm of a scoped
-// file emits a scope-delete op and no scope-rename.
 func TestScopeDriftDetectionEmitsDeleteOp_REQ_HKDLG_T2(t *testing.T) {
 	const (
 		taskID = "task-drift-delete-01"
 		path   = "src/gone.go"
 	)
 	repo := setupRepoWithScopedTask(t, taskID, path)
-	// Introduction refuses a scope-delete that would empty E6-required scope.
 	_, err := runTrls(t, repo, "amend", taskID, "--scope", path, "--scope", "src/keep.go")
 	require.NoError(t, err)
 
@@ -522,8 +443,6 @@ func TestScopeDriftDetectionEmitsDeleteOp_REQ_HKDLG_T2(t *testing.T) {
 	assert.Equal(t, path, got.Payload.DeletedPath)
 }
 
-// TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2 verifies git mv / git rm
-// of paths that are not in any issue scope emit no scope-rename or scope-delete ops.
 func TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2(t *testing.T) {
 	const taskID = "task-drift-unscoped-01"
 	repo := setupRepoWithScopedTask(t, taskID, "src/scoped.go")
@@ -568,7 +487,6 @@ func TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2(t *testing.T) {
 	assert.Len(t, deletesAfter, len(deletesBefore), "unscoped git rm must not emit scope-delete")
 }
 
-// setupRepoWithScopedTask initialises a repo and creates a task with the given scope path.
 func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -581,7 +499,6 @@ func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 	return repo
 }
 
-// writeFile creates (or overwrites) a file in the repo dir.
 func writeFile(t *testing.T, repo, relPath, content string) {
 	t.Helper()
 	full := filepath.Join(repo, relPath)

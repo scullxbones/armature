@@ -59,11 +59,6 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 	})
 }
 
-// TestContextReportNonTTYDefaultsToJSON_REQ_NXTTN_S3_T1 verifies that when
-// stdout is not a terminal and --format is not explicitly set, context-report
-// emits JSON. The command's PersistentPreRunE bypasses root's hook
-// (config.ResolveContext is not needed; fixtures are embedded), so it must
-// call autoDetectTTYPolicy itself — the same pattern as bootstrap.
 func TestContextReportNonTTYDefaultsToJSON_REQ_NXTTN_S3_T1(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 

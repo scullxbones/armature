@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -13,8 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// openControllingTTY opens the process controlling terminal. Tests replace
-// this to simulate a missing TTY.
 var openControllingTTY = func() (*os.File, error) {
 	return os.OpenFile("/dev/tty", os.O_RDWR, 0)
 }
@@ -55,7 +52,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			if err != nil {
 				return fmt.Errorf("release override requires a controlling terminal")
 			}
-			defer tty.Close() //nolint:errcheck
+			defer bestEffortClose(tty)
 
 			if renderErr := output.RenderValidation(tty, result, false); renderErr != nil {
 				return fmt.Errorf("render findings: %w", renderErr)
@@ -91,8 +88,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			}
 
 			out := map[string]string{"issue": issueID, "promoted_to": "verified", "override": "recorded"}
-			data, _ := json.Marshal(out) //nolint:errcheck // result struct contains only serializable values
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(out)))
 			return nil
 		},
 	}

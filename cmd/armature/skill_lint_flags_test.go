@@ -11,21 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMandatoryFlagsMatchMarkFlagRequired is a drift detector: it fails if a
-// cmd/armature/*.go command calls cobra's MarkFlagRequired for a flag that
-// isn't reflected in scripts/skill_lint.py's MANDATORY_FLAGS table. Without
-// this, skill docs can show a command missing a flag the real CLI requires
-// and skill-lint will happily pass it (see PR #73 review thread
-// PRRT_kwDORnVQE86QmOzV).
-//
-// This is intentionally a coarse, file-level check rather than a full model
-// of Cobra's command tree: for each cmd/armature/*.go file, it collects (a)
-// every `Use: "..."` token's first word in that file, and (b) every flag
-// name passed to MarkFlagRequired in that file. It then requires that, for
-// each such flag, at least one MANDATORY_FLAGS key whose own first word
-// appears in that file's Use set lists the flag. That's precise enough to
-// catch a newly added MarkFlagRequired call that skill_lint.py doesn't know
-// about, without needing to parse Cobra's nested command wiring.
 func TestMandatoryFlagsMatchMarkFlagRequired(t *testing.T) {
 	root := projectRootDir(t)
 
@@ -82,9 +67,6 @@ func TestMandatoryFlagsMatchMarkFlagRequired(t *testing.T) {
 	}
 }
 
-// parseMandatoryFlags extracts the MANDATORY_FLAGS dict literal from
-// scripts/skill_lint.py as a map of command name -> flag list, without
-// invoking Python.
 func parseMandatoryFlags(t *testing.T, skillLintPath string) map[string][]string {
 	t.Helper()
 	content, err := os.ReadFile(skillLintPath)
@@ -111,8 +93,6 @@ func parseMandatoryFlags(t *testing.T, skillLintPath string) map[string][]string
 	return result
 }
 
-// projectRootDir locates the repository root by walking up from the current
-// working directory until it finds the Makefile.
 func projectRootDir(t *testing.T) string {
 	t.Helper()
 	root, err := os.Getwd()

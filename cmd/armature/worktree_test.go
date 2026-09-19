@@ -12,36 +12,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGCExitError_AmbiguousExitsNonZero_REQ_LNGHZN_S5 verifies that `arm worktree
-// gc` fails closed for the two classes that must never look like a clean run:
-// removal failures and ambiguous terminal issues reconcile refused to GC. An
-// ambiguous candidate previously exited 0, silently dropping it from gc's output.
 func TestGCExitError_AmbiguousExitsNonZero_REQ_LNGHZN_S5(t *testing.T) {
 	t.Parallel()
 
-	// Nothing failed or ambiguous: clean exit.
 	assert.NoError(t, gcExitError(nil, nil))
 
-	// Ambiguous alone must exit non-zero and name the class.
 	err := gcExitError(nil, []string{"task-13"})
 	require.Error(t, err, "ambiguous GC candidates must not exit clean")
 	assert.Contains(t, err.Error(), "ambiguous")
 
-	// A removal failure alone exits non-zero.
 	assert.Error(t, gcExitError([]string{"task-1"}, nil))
 
-	// A removal failure takes precedence in the message over ambiguity.
 	both := gcExitError([]string{"task-1"}, []string{"task-13"})
 	require.Error(t, both)
 	assert.Contains(t, both.Error(), "failed to remove")
 }
 
-// TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5 verifies that
-// when a managed worktree directory is deleted out from under git (leaving a
-// prunable administrative registration), a subsequent addWorktreeDetached at the
-// same canonical path succeeds by clearing that stale registration with an
-// exact-path --force add, instead of failing with "missing but already
-// registered worktree" and looping every re-claim.
 func TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -51,32 +37,21 @@ func TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5(t *testi
 	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD"))
 	require.DirExists(t, wtPath)
 
-	// Delete the worktree directory out from under git: its registration under
-	// .git/worktrees survives and git marks it prunable.
 	require.NoError(t, os.RemoveAll(wtPath))
 
-	// A plain re-add would fail; addWorktreeDetached must detect the prunable
-	// registration and clear it via an exact-path --force add.
 	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD"))
 	assert.DirExists(t, wtPath)
 }
 
-// worktreeReconcileFixture is a repo wired with real claim/transition ops so the
-// worktree commands exercise the true production read path (snapshot store ->
-// materialize -> Reconcile). Hand-editing state JSON is useless here: the
-// snapshot store re-materializes from the op log on every load, so the classes
-// below are driven entirely by ops.
 type worktreeReconcileFixture struct {
 	repo             string
-	boundPath        string // .worktrees/task-bound   (claimed, live)          -> bound
-	orphanPath       string // .worktrees/task-orphan  (bound, claim released)  -> orphan
-	ghostPath        string // .worktrees/task-ghost   (claimed, removed)       -> ghost
-	gcPath           string // .worktrees/task-gc      (merged, on disk)        -> gc_ready / removed
-	unrecognizedPath string // .worktrees/task-unbound (on disk, NO binding)    -> unrecognized
+	boundPath        string
+	orphanPath       string
+	ghostPath        string
+	gcPath           string
+	unrecognizedPath string
 }
 
-// setupWorktreeReconcileFixture builds a repo with one worktree in each
-// reconcile class using real arm commands.
 func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -87,7 +62,6 @@ func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Distinct scopes so concurrent claims never trip scope-overlap handling.
 	create := func(id, scope string) {
 		_, cerr := runTrls(t, repo, "create", "--id", id, "--title", id, "--type", "task", "--scope", scope)
 		require.NoError(t, cerr)
@@ -97,44 +71,28 @@ func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 	create("task-ghost", "c.go")
 	create("task-gc", "d.go")
 
-	// task-bound: live claim with a managed worktree -> bound.
 	_, err = runTrls(t, repo, "claim", "task-bound", "--worktree")
 	require.NoError(t, err)
 
-	// task-ghost: live claim, then delete the worktree off disk without arm.
-	// The claim op still records its WorktreePath, so reconcile sees a live
-	// claim whose worktree vanished -> ghost.
 	_, err = runTrls(t, repo, "claim", "task-ghost", "--worktree")
 	require.NoError(t, err)
 	ghostPath := filepath.Join(repo, ".worktrees", "task-ghost")
 	run(t, repo, "git", "worktree", "remove", "--force", ghostPath)
 
-	// task-gc: live claim (records WorktreePath), then transition to merged
-	// while the worktree is still on disk -> gc_ready.
 	_, err = runTrls(t, repo, "claim", "task-gc", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-gc", "--to", "merged", "--force")
 	require.NoError(t, err)
 
-	// task-orphan: a BOUND worktree whose claim was released -> orphan. Claim it
-	// so the binding is written, then transition back to open so no live claim
-	// remains. An orphan is a real worktree with a binding and no live owner; a
-	// worktree with no binding at all is a different class entirely (below).
 	_, err = runTrls(t, repo, "claim", "task-orphan", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-orphan", "--to", "open")
 	require.NoError(t, err)
 	orphanPath := filepath.Join(repo, ".worktrees", "task-orphan")
 
-	// task-unbound: a worktree git knows about, at a canonical-looking path, with
-	// NO armature-issue-id binding -> unrecognized. Its basename would name a
-	// plausible issue ID, which is precisely why identity must not be inferred
-	// from it.
 	unrecognizedPath := filepath.Join(repo, ".worktrees", "task-unbound")
 	run(t, repo, "git", "worktree", "add", unrecognizedPath, "-b", "task/task-unbound")
 
-	// Materialize so on-disk state reflects the ops (belt and suspenders; the
-	// snapshot store also materializes on load).
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -148,7 +106,6 @@ func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 	}
 }
 
-// listJSON runs `worktree list --format json` and decodes it into string slices.
 func listJSON(t *testing.T, repo string) map[string][]string {
 	t.Helper()
 	out, err := runTrls(t, repo, "worktree", "list", "--format", "json")
@@ -168,11 +125,6 @@ func listJSON(t *testing.T, repo string) map[string][]string {
 	return res
 }
 
-// TestWorktreeListClassifiesEachClass_REQ_LNGHZN_S5_T2 asserts real reconciliation
-// outcomes: the claimed worktree is bound, the unclaimed one is an orphan, the
-// merged one is gc_ready, and the vanished claim is a ghost. These assertions
-// FAIL against the pre-F1 code, which read from a non-existent issues dir and so
-// classified nothing (every list came back empty).
 func TestWorktreeListClassifiesEachClass_REQ_LNGHZN_S5_T2(t *testing.T) {
 	fx := setupWorktreeReconcileFixture(t)
 
@@ -183,24 +135,17 @@ func TestWorktreeListClassifiesEachClass_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, res["gc_ready"], "task-gc", "merged worktree still on disk must be gc_ready")
 	assert.Contains(t, res["ghosts"], "task-ghost", "claimed-but-removed worktree must be a ghost")
 
-	// A worktree carrying no binding is unrecognized, never classified against
-	// the issue its directory name happens to resemble.
 	assert.Contains(t, res["unrecognized"], fx.unrecognizedPath, "unbound worktree must be unrecognized")
 	assert.NotContains(t, res["bound"], "task-unbound")
 	assert.NotContains(t, res["orphans"], "task-unbound")
 
-	// Cross-class: a bound worktree is never simultaneously an orphan/gc target.
 	assert.NotContains(t, res["orphans"], "task-bound")
 	assert.NotContains(t, res["gc_ready"], "task-bound")
 }
 
-// TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2 asserts gc actually removes
-// the merged worktree from disk and reports it as removed. This FAILS against the
-// pre-F1 code, where gc found zero issues and removed nothing.
 func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	fx := setupWorktreeReconcileFixture(t)
 
-	// Precondition: the merged worktree exists on disk.
 	_, err := os.Stat(fx.gcPath)
 	require.NoError(t, err, "gc worktree must exist before gc")
 
@@ -217,15 +162,10 @@ func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.NotContains(t, res.Skipped, "task-gc")
 	assert.Empty(t, res.Failed)
 
-	// The worktree is actually gone from disk.
 	_, statErr := os.Stat(fx.gcPath)
 	assert.True(t, os.IsNotExist(statErr), "gc must remove the worktree directory from disk")
 }
 
-// TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1
-// verifies that an Armature-claimed worktree outside .worktrees/ remains in
-// lifecycle inventory: it is bound while claimed, GC-ready after cancellation,
-// and removed by worktree gc.
 func TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "child")
@@ -358,9 +298,6 @@ func TestWorktreeListReportsMissingCustomGhostWithCloneLocalEvidence_REQ_LNGHZN_
 	}
 }
 
-// TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5 verifies that gc reports
-// a failed removal instead of silently force-deleting tracked or untracked
-// worker output.
 func TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -440,9 +377,6 @@ func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *te
 	assert.NoError(t, statErr, "GC must not remove a duplicate marker at an external legacy path")
 }
 
-// TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2 verifies
-// that a worktree directory removed outside git is not treated as a live bound
-// worktree while git still reports its stale registration as prunable.
 func TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -463,8 +397,6 @@ func TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2(t *tes
 	assert.NotContains(t, res["bound"], "task-prunable")
 }
 
-// TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2 verifies gc
-// removes a terminal managed worktree even after its branch is detached.
 func TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -498,8 +430,6 @@ func TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2(t *testing.T
 	assert.True(t, os.IsNotExist(statErr), "gc must remove the detached worktree directory")
 }
 
-// TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2 verifies --dry-run reports the
-// merged worktree as a removal candidate but leaves it on disk.
 func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	fx := setupWorktreeReconcileFixture(t)
 
@@ -514,14 +444,10 @@ func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.True(t, res.DryRun)
 	assert.Contains(t, res.WouldRemove, "task-gc")
 
-	// Still on disk after a dry run.
 	_, statErr := os.Stat(fx.gcPath)
 	assert.NoError(t, statErr, "dry-run must not remove the worktree")
 }
 
-// TestWorktreeGCDryRunWithNoCandidatesSucceeds_REQ_LNGHZN_S5_T10 verifies
-// that a clean dry run has a successful exit status. Ambiguity, rather than an
-// empty removal set, is what makes a dry run fail.
 func TestWorktreeGCDryRunWithNoCandidatesSucceeds_REQ_LNGHZN_S5_T10(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -557,8 +483,6 @@ func setupAmbiguousGCRepo(t *testing.T) (string, string) {
 	return repo, "task-ambig"
 }
 
-// TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10 requires dry-run
-// to expose the same unsafe ambiguity and exit status as a real gc run.
 func TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10(t *testing.T) {
 	repo, issueID := setupAmbiguousGCRepo(t)
 
@@ -575,8 +499,6 @@ func TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10(t *testing.T) {
 	assert.Contains(t, stderr, issueID)
 }
 
-// TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2 verifies the human format renders
-// the class headings and the classified issue IDs.
 func TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2(t *testing.T) {
 	fx := setupWorktreeReconcileFixture(t)
 
@@ -589,12 +511,6 @@ func TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, out, "task-gc")
 }
 
-// TestManagedWorktreeRoots_RelativeRepoPath_REQ_LNGHZN_S5_T2 pins the fix for
-// the reconcile no-op that survived F1: in production ctx.RepoPath defaults
-// to "." when --repo is not passed, while `git worktree list` emits absolute
-// paths. Both local-evidence roots must be absolute even for a relative
-// repoPath. `worktree.ListManaged` fail-closed on a git inventory error is
-// covered in internal/worktree.
 func TestManagedWorktreeRoots_RelativeRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
 	roots := managedWorktreeRoots(".")
@@ -603,11 +519,6 @@ func TestManagedWorktreeRoots_RelativeRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.True(t, filepath.IsAbs(roots[1]), "repo root must be absolute, got %q", roots[1])
 }
 
-// TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3 drives `arm claim --worktree`
-// end-to-end and asserts the worktree mitigation ran with the correct effect:
-// with no go.work in the main tree, the mitigation is a no-op — it neither
-// creates a go.work in the main tree nor a bare go.work in the worktree (the
-// latter would break `go build ./...` inside the worktree).
 func TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -630,10 +541,6 @@ func TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "no go.work should be created in the worktree")
 }
 
-// TestWorktreeListHumanFormatReportsAmbiguous_REQ_LNGHZN_S9_T1 verifies that
-// `arm worktree list --format human` surfaces the same ambiguous-terminal-issue
-// class that gc refuses to touch, so a human operator reviewing `list` output
-// is not left unaware of an issue with two candidate worktrees.
 func TestWorktreeListHumanFormatReportsAmbiguous_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo, issueID := setupAmbiguousGCRepo(t)
 
@@ -643,12 +550,6 @@ func TestWorktreeListHumanFormatReportsAmbiguous_REQ_LNGHZN_S9_T1(t *testing.T) 
 	assert.Contains(t, out, issueID, "list must name the ambiguous issue")
 }
 
-// TestWorktreeGCHumanFormatReportsFailure_REQ_LNGHZN_S9_T1 verifies that a
-// real (non-dry-run) `arm worktree gc --format human` invocation prints the
-// "Failed to remove" section and names the issue whose worktree could not be
-// force-removed (a dirty custom claim destination), matching the JSON
-// "failed" list that TestWorktreeGCPreservesDirtyExplicitClaimDestination
-// already asserts for the JSON format.
 func TestWorktreeGCHumanFormatReportsFailure_REQ_LNGHZN_S9_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "custom-dirty-human")

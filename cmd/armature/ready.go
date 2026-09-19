@@ -29,7 +29,6 @@ const (
 
 type readyIssueRow = output.ReadyIssue
 
-// readyExplainRow is the structured --explain row: N4 keys plus the exclusion reason.
 type readyExplainRow struct {
 	ID     string `json:"id"`
 	Type   string `json:"type"`
@@ -153,7 +152,6 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			index := snap.Index
 			issues := snap.Issues
 
-			// --explain: print why each open unclaimed task is not ready, then return.
 			if explain {
 				notReady := ready.ExplainNotReady(index, issues, nowEpoch())
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -174,13 +172,11 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			entries := ready.ComputeReady(index, issues, workerID, nowEpoch())
 			expiredClaims := ready.ExpiredClaims(issues, time.Now())
 
-			// Apply --assigned-to filter: keep only tasks assigned to the given worker.
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
 			if assignedTo != "" {
 				expiredClaims = filterExpiredClaimsByAssignedWorker(expiredClaims, issues, assignedTo)
 			}
 
-			// Apply --parent filter: keep only descendants of the given issue.
 			if filterParent != "" {
 				descendants := ready.CollectDescendants(filterParent, index)
 				filtered := entries[:0]
@@ -241,9 +237,6 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				} else if err := output.RenderReady(cmd.OutOrStdout(), entries); err != nil {
 					return err
 				}
-				// Distinct expired-claims section, always shown (not just when the
-				// ready queue is empty) so expired claims are never silently omitted
-				// nor silently folded into the ready list.
 				if err := output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims); err != nil {
 					return err
 				}
@@ -261,13 +254,6 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	return cmd
 }
 
-// filterExpiredClaimsByAssignedWorker keeps only the expired-claim entries
-// whose issue is assigned to assignedTo, per the issue's AssignedWorker field
-// (the same field ready.FilterByAssignedTo uses for the main ready list).
-// This is deliberately NOT a filter on ClaimedBy (who currently holds the
-// claim) — assignment and claim ownership can diverge (e.g. issue assigned
-// to worker-a but claimed by worker-b), and this view is about what's
-// assigned to assignedTo, not who claimed it.
 func filterExpiredClaimsByAssignedWorker(
 	expiredClaims []ready.ExpiredClaimEntry,
 	issues map[string]*materialize.Issue,

@@ -33,7 +33,6 @@ preview changes without committing them.`,
   $ arm sync --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
-			// Load snapshot to ensure state is up to date
 			store := newSnapshotStore(appCtx)
 			snap, err := store.Load(cmd.Context())
 			if err != nil {
@@ -52,7 +51,6 @@ preview changes without committing them.`,
 				targetBranch = branch
 			}
 
-			// Convert snapshot issues to slice for DetectMerges
 			issues := make([]materialize.Issue, 0, len(snap.Issues))
 			for _, issue := range snap.Issues {
 				issues = append(issues, *issue)
@@ -102,7 +100,6 @@ preview changes without committing them.`,
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
 			}
 
-			// Re-load snapshot so state files reflect the new merged status
 			snap, err = store.Load(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)

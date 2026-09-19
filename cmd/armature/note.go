@@ -27,7 +27,6 @@ func newNoteCmd() *cobra.Command {
 				return runNoteDelete(cmd, issueID, noteID)
 			}
 
-			// Handle positional arguments: args[0] = issue-id, args[1] = message
 			if len(args) >= 2 {
 				issueID = args[0]
 				msg = args[1]

@@ -47,7 +47,6 @@ func TestCommandFailureAgentEnvelope_REQ_LNGHZN_S6_T1(t *testing.T) {
 	require.Len(t, actions, 1)
 	assert.Equal(t, "arm doctor", actions[0])
 
-	// json ≡ agent
 	jsonBuf := new(bytes.Buffer)
 	renderCommandFailure(jsonBuf, "json", cf)
 	assert.JSONEq(t, raw, strings.TrimSpace(jsonBuf.String()))
@@ -184,11 +183,6 @@ func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T)
 	assert.NotContains(t, agentOut.String(), "Error [GENERAL-1]")
 }
 
-// TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1 pins the ADR 0020
-// equivalence of json and agent: a failing `arm validate --format=agent` must
-// put the structured validation report on stdout, not the human renderer.
-// skipCommandFailure means handleRootError supplies no envelope of its own, so
-// a human report here would leave an agent consumer with non-JSON stdout.
 func TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -209,9 +203,6 @@ func TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.False(t, hasError, "graph findings must not be presented as a Command Failure")
 }
 
-// TestDoctorAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1 is the doctor twin of
-// the validate case above: --format=agent must take the structured report
-// branch before skipCommandFailure suppresses the Command Failure.
 func TestDoctorAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	plantVerifiedTaskUnder(t, repo, "task-orphan", "src/orphan.go", "NO-SUCH-PARENT")
@@ -365,10 +356,6 @@ func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T
 	raw := strings.TrimSpace(stdout.String())
 	require.True(t, json.Valid([]byte(raw)), "doctor --fix must emit exactly one JSON value on stdout, got %q", stdout.String())
 
-	// ADR 0020 §7 exempts doctor *checks*, not a failure while mutating state.
-	// The plan is not an apply result, so a failed append must reach stdout as
-	// a Command Failure -- and, because the plan is withheld until the apply
-	// succeeds, it is the only JSON value on the stream.
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal([]byte(raw), &payload))
 	envelope, hasError := payload["error"].(map[string]any)
@@ -377,12 +364,6 @@ func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T
 	assert.NotEmpty(t, envelope["cause"], "Command Failure must carry the apply cause")
 }
 
-// TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1 verifies that a
-// nonzero `arm worktree gc --format=json` run keeps stdout as exactly one
-// structured report. gc writes its result and then returns a nonzero error;
-// appending a Command Failure object to that same stream would make stdout
-// invalid JSON for the agent consumers this contract targets, so the gc exit
-// must be classified as a protocol exit like the doctor/validate reports.
 func TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo, issueID := setupAmbiguousGCRepo(t)
 
@@ -405,10 +386,6 @@ func TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.Contains(t, dryPayload["ambiguous"], issueID)
 }
 
-// TestHookFlagParseErrorStaysOnGitProtocol_REQ_LNGHZN_S6_T1 verifies that a
-// malformed `arm hook` invocation keeps the git-hook protocol. Cobra fails
-// during flag parsing, before either PersistentPreRunE or the Args wrapper can
-// classify the error, so the classification has to happen at the Execute seam.
 func TestHookFlagParseErrorStaysOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -420,11 +397,6 @@ func TestHookFlagParseErrorStaysOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.Contains(t, stderr.String(), "bad-flag", "the git protocol is a non-zero exit plus a stderr reason")
 }
 
-// TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1 verifies
-// that a harness-hook failure raised before RunE can return an adapterExitError
-// leaves stdout alone. stdout is reserved for the harness's platform-native
-// decision (ADR 0020 §6), so an unexpected Command Failure object there can be
-// rejected or misread by the invoking harness.
 func TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -435,7 +407,6 @@ func TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1(t *testin
 	assert.Empty(t, flagOut.String(), "a flag error under harness-hook must not write to the platform's stdout")
 	assert.Contains(t, flagErr.String(), "bad-flag")
 
-	// A context-resolution failure in PersistentPreRunE is the same class.
 	notRepo := t.TempDir()
 	ctxOut := new(bytes.Buffer)
 	ctxErr := new(bytes.Buffer)
@@ -445,11 +416,6 @@ func TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1(t *testin
 	assert.NotEmpty(t, ctxErr.String(), "the reason belongs on stderr")
 }
 
-// TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1 verifies that a
-// non-TTY invocation with no explicit --format still renders its Command
-// Failure as the promised JSON object. Cobra returns before PersistentPreRunE
-// runs autoDetectTTYPolicy, so the implicit-format decision must be applied at
-// the Execute seam too, or agent consumers parsing stdout get a human line.
 func TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -464,14 +430,6 @@ func TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.NotContains(t, stdout.String(), "Error [GENERAL-1]")
 }
 
-// TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1 verifies the
-// platform protocol still holds when the offending flag precedes the subtree
-// token. Cobra's Find strips flags before matching a subcommand and skips the
-// token after one that takes a value (or that it does not recognize), so
-// `arm --bad-flag hook run pre-commit` never enters the hook subtree and
-// ExecuteC hands back the root command — the parent-chain walk alone would
-// classify it as an ordinary Command Failure and put a JSON object on the
-// stdout git owns.
 func TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -492,12 +450,6 @@ func TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1(t *testin
 	}
 }
 
-// TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1 pins the gate
-// wire protocol: runGateProfile streams the child's output and its
-// `gate <profile> exit=<n>` status line to stdout before it returns. Appending
-// a Command Failure object to that same stream would leave an agent consumer
-// with arbitrary text followed by JSON instead of one parseable value, so the
-// nonzero return must be classified as a protocol exit (ADR 0020 §7).
 func TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{"full": {"false"}})
@@ -517,13 +469,6 @@ func TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1(t *testing.
 	assert.NotContains(t, agentOut.String(), "Error [")
 }
 
-// TestPreRenderedReportsAreNotConcatenatedCommandFailures_REQ_LNGHZN_S6_T1 pins
-// the remaining report-then-fail paths. `arm sources verify` prints a line per
-// source before returning an error for any non-OK entry, and a blocked
-// `arm confirm` / `arm dag transition` renders validation findings before
-// refusing the release. Both already completed their wire protocol, so
-// handleRootError must not append a Command Failure object to that stream
-// (ADR 0020 §7) — an agent would otherwise read report text followed by JSON.
 func TestPreRenderedReportsAreNotConcatenatedCommandFailures_REQ_LNGHZN_S6_T1(t *testing.T) {
 	t.Run("sources verify", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
@@ -648,4 +593,25 @@ func TestIsAbsentArmatureLayout_NonexistentRepo_REQ_AOC_S2_T5(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, isAbsentArmatureLayout(outside, err),
 		"a reachable directory with no Armature layout is the empty home")
+}
+
+func asMap(t *testing.T, v any) map[string]any {
+	t.Helper()
+	m, ok := v.(map[string]any)
+	require.True(t, ok, "want map[string]any, got %T", v)
+	return m
+}
+
+func asString(t *testing.T, v any) string {
+	t.Helper()
+	s, ok := v.(string)
+	require.True(t, ok, "want string, got %T", v)
+	return s
+}
+
+func asAnySlice(t *testing.T, v any) []any {
+	t.Helper()
+	s, ok := v.([]any)
+	require.True(t, ok, "want []any, got %T", v)
+	return s
 }

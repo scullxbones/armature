@@ -23,13 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testArmBin is a CLI built once in TestMain and placed on PATH so git hooks
-// that delegate to `arm hook run` can spawn it from package tests.
 var testArmBin string
 
-// TestMain builds arm and prepends it to PATH. Bootstrap installs a pre-commit
-// hook that execs `arm`; ops commits from create/claim share .git/hooks and
-// would otherwise fail with "arm: not found" in sandboxes that have no arm.
 func TestMain(m *testing.M) {
 	code := 1
 	dir, err := os.Getwd()
@@ -71,8 +66,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// TestBootstrapDeploySkillsDeploysFiles verifies that deploySkills (moved to bootstrap_deploy.go)
-// copies every skill entry from the provided FS into the target directory.
 func TestBootstrapDeploySkillsDeploysFiles(t *testing.T) {
 	src := makeBootstrapTestFS(t)
 	dest := t.TempDir()
@@ -85,8 +78,6 @@ func TestBootstrapDeploySkillsDeploysFiles(t *testing.T) {
 	assert.Contains(t, string(content), "demo-skill")
 }
 
-// TestBootstrapDeploySkillsCreatesDestDir verifies that deploySkills creates the
-// destination directory when it does not exist.
 func TestBootstrapDeploySkillsCreatesDestDir(t *testing.T) {
 	src := makeBootstrapTestFS(t)
 	dest := filepath.Join(t.TempDir(), "nonexistent", "skills")
@@ -99,27 +90,20 @@ func TestBootstrapDeploySkillsCreatesDestDir(t *testing.T) {
 	assert.True(t, info.IsDir())
 }
 
-// TestBootstrapDeployFlatSkillsCreatesFlatMDFiles verifies that deployFlatSkills writes a flat
-// <name>.md file (SKILL.md body) alongside each skill directory so the Skill tool can
-// load skills by name.
 func TestBootstrapDeployFlatSkillsCreatesFlatMDFiles(t *testing.T) {
 	src := makeBootstrapTestFS(t)
 	dest := t.TempDir()
 
-	// Deploy the directory structure first (required for flat files to co-exist).
 	require.NoError(t, deploySkills(src, dest))
 
 	err := deployFlatSkills(src, dest)
 	require.NoError(t, err)
 
-	// Verify the flat .md file exists alongside the directory.
 	content, readErr := os.ReadFile(filepath.Join(dest, "demo-skill.md"))
 	require.NoError(t, readErr)
 	assert.Contains(t, string(content), "demo-skill", "flat md should contain SKILL.md body")
 }
 
-// TestBootstrapDeployFlatSkillsRewritesReferencePaths verifies that deployFlatSkills rewrites
-// relative reference paths in skill files so they resolve correctly from the flat file location.
 func TestBootstrapDeployFlatSkillsRewritesReferencePaths(t *testing.T) {
 	src := fstest.MapFS{
 		"skills/demo-skill/SKILL.md": {
@@ -128,21 +112,17 @@ func TestBootstrapDeployFlatSkillsRewritesReferencePaths(t *testing.T) {
 	}
 	dest := t.TempDir()
 
-	// Deploy the directory structure first (required for flat files to co-exist).
 	require.NoError(t, deploySkills(src, dest))
 
 	err := deployFlatSkills(src, dest)
 	require.NoError(t, err)
 
-	// Verify the flat .md file has rewritten reference paths.
 	content, readErr := os.ReadFile(filepath.Join(dest, "demo-skill.md"))
 	require.NoError(t, readErr)
 	assert.Contains(t, string(content), "demo-skill/references/guide.md", "flat md should have rewritten reference path")
 	assert.NotContains(t, string(content), "`references/guide.md`", "flat md should not contain unrewritten reference path")
 }
 
-// TestBootstrapDeployPluginCreatesPluginJSON verifies that deployPlugin creates the
-// plugin directory and copies plugin.json.
 func TestBootstrapDeployPluginCreatesPluginJSON(t *testing.T) {
 	src := makeBootstrapTestFSWithPlugin(t)
 	dest := t.TempDir()
@@ -155,7 +135,6 @@ func TestBootstrapDeployPluginCreatesPluginJSON(t *testing.T) {
 	assert.Contains(t, string(content), "armature")
 }
 
-// TestBootstrapCopyFileWorks verifies that copyFile copies a file from src FS to dest path.
 func TestBootstrapCopyFileWorks(t *testing.T) {
 	src := fstest.MapFS{
 		"test.txt": {
@@ -173,8 +152,6 @@ func TestBootstrapCopyFileWorks(t *testing.T) {
 	assert.Equal(t, "test content", string(content))
 }
 
-// TestBootstrapCopySkillWithRewrittenRefsWorks verifies that copySkillWithRewrittenRefs
-// reads a skill file, rewrites references/ paths, and writes it to dest.
 func TestBootstrapCopySkillWithRewrittenRefsWorks(t *testing.T) {
 	src := fstest.MapFS{
 		"skills/demo-skill/SKILL.md": {
@@ -193,7 +170,6 @@ func TestBootstrapCopySkillWithRewrittenRefsWorks(t *testing.T) {
 	assert.NotContains(t, string(content), "references/guide.md\" (shouldn't have unrewritten path)")
 }
 
-// makeBootstrapTestFS builds a minimal in-memory FS for bootstrap tests
 func makeBootstrapTestFS(t *testing.T) fs.FS {
 	t.Helper()
 	return fstest.MapFS{
@@ -203,7 +179,6 @@ func makeBootstrapTestFS(t *testing.T) fs.FS {
 	}
 }
 
-// makeBootstrapTestFSWithPlugin builds an in-memory FS that includes plugin.json
 func makeBootstrapTestFSWithPlugin(t *testing.T) fs.FS {
 	t.Helper()
 	return fstest.MapFS{
@@ -213,10 +188,8 @@ func makeBootstrapTestFSWithPlugin(t *testing.T) fs.FS {
 	}
 }
 
-// TestBootstrapCommandRegistered verifies that `arm bootstrap --help` exits 0.
 func TestBootstrapCommandRegistered(t *testing.T) {
 	repo := initTempRepo(t)
-	// Create an initial commit so git is fully initialized
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
@@ -229,31 +202,23 @@ func TestBootstrapCommandRegistered(t *testing.T) {
 	assert.Contains(t, buf.String(), "bootstrap")
 }
 
-// TestBootstrapCommandDefaultsToLocal verifies that the bootstrap command initializes the repository.
 func TestBootstrapCommandDefaultsToLocal(t *testing.T) {
 	repo := initTempRepo(t)
-	// Create an initial commit so git is fully initialized
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	// Note: --repo is a flag on the bootstrap command itself
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
 
-	// Verify dual-branch layout was initialized (always uses dual-branch mode now)
 	assert.DirExists(t, filepath.Join(repo, ".armature"))
 }
 
-// TestRunRepoSetupCreatesStructure verifies that runRepoSetup creates the directory
-// structure (.armature/ops, .armature/state, etc.) needed for Armature.
-// In dual-branch mode, this structure is in the .arm worktree.
 func TestRunRepoSetupCreatesStructure(t *testing.T) {
 	repo := initTempRepo(t)
-	// Create an initial commit so git is fully initialized
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
@@ -263,7 +228,6 @@ func TestRunRepoSetupCreatesStructure(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify directory structure in the dual-branch worktree
 	armatureBase := filepath.Join(repo, ".armature")
 	assert.DirExists(t, armatureBase)
 	assert.DirExists(t, filepath.Join(armatureBase, "ops"))
@@ -274,8 +238,6 @@ func TestRunRepoSetupCreatesStructure(t *testing.T) {
 	assert.DirExists(t, filepath.Join(armatureBase, "review"))
 }
 
-// TestRunRepoSetupWritesGitignore verifies that runRepoSetup writes .armature/.gitignore
-// to prevent state/ from being committed. In dual-branch mode, .armature is in the worktree.
 func TestRunRepoSetupWritesGitignore(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -296,9 +258,6 @@ func TestRunRepoSetupWritesGitignore(t *testing.T) {
 	assert.Contains(t, string(content), fmt.Sprintf("# scaffolding-version: %d\n", ops.ScaffoldingVersion))
 }
 
-// TestBootstrapIgnoresGateAndReviewSidecars verifies that gate logs and
-// review-assessment JSON under the ops worktree stay untracked. They are
-// local sidecars (hash-checked at record time; recording inputs), not ops.
 func TestBootstrapIgnoresGateAndReviewSidecars(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -317,9 +276,6 @@ func TestBootstrapIgnoresGateAndReviewSidecars(t *testing.T) {
 	assert.NotContains(t, status, "review/")
 }
 
-// TestBootstrapCommitsOpsScaffoldingAndLeavesWorktreeClean verifies that
-// regenerated SCHEMA/.gitignore/hook templates are committed on _armature so
-// a later FetchAndRebase is not blocked by dirty tracked scaffolding.
 func TestBootstrapCommitsOpsScaffoldingAndLeavesWorktreeClean(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -347,12 +303,6 @@ func TestBootstrapCommitsOpsScaffoldingAndLeavesWorktreeClean(t *testing.T) {
 	assert.Contains(t, runOutput(t, repo, "log", "_armature", "--oneline"), "refresh ops scaffolding")
 }
 
-// TestBootstrapUntracksAlreadyCommittedSidecars verifies that bootstrap removes
-// gate/review sidecars from the index when a repo already committed them (an
-// upgrade from a build that predates the ignore rules, or a legacy migration
-// whose setup path staged review/). .gitignore does not affect tracked paths,
-// so without this the sidecars keep leaving the ops worktree dirty and blocking
-// FetchAndRebase. Local copies must survive; only the tracking goes away.
 func TestBootstrapUntracksAlreadyCommittedSidecars(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -370,7 +320,6 @@ func TestBootstrapUntracksAlreadyCommittedSidecars(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(assessment), 0o750))
 	require.NoError(t, os.WriteFile(assessment, []byte("{}\n"), 0o600))
 
-	// Simulate the pre-ignore-rules state: the sidecars are already tracked.
 	run(t, opsWT, "git", "add", "--force", "gates", "review")
 	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: legacy committed sidecars")
 	require.Contains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), "gates/full-1.log")
@@ -386,11 +335,6 @@ func TestBootstrapUntracksAlreadyCommittedSidecars(t *testing.T) {
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
-// TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork verifies that
-// bootstrap refuses to untrack sidecars when the ops worktree's index carries
-// anything else. The untracking commit is unscoped (a path-scoped commit cannot
-// record an index-only removal), so it would otherwise sweep a worker's staged
-// log into a cleanup commit.
 func TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -419,11 +363,6 @@ func TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork(t *testing.T) 
 	assert.Contains(t, lsTree, "gates/full-1.log", "the sidecar stays tracked until the index is clear")
 }
 
-// TestBootstrapKeepsHookTemplatesLocal verifies that hook templates are never
-// committed to the shared _armature branch. Nothing reads them across clones —
-// each bootstrap rewrites them from this binary's own constants before
-// installing — so tracking them only invites competing writes between clones on
-// different versions.
 func TestBootstrapKeepsHookTemplatesLocal(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -439,9 +378,6 @@ func TestBootstrapKeepsHookTemplatesLocal(t *testing.T) {
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
-// TestBootstrapUntracksPreviouslyCommittedHookTemplates verifies that a repo
-// upgrading from a build that committed hook templates gets them dropped from
-// the index, keeping the local copies.
 func TestBootstrapUntracksPreviouslyCommittedHookTemplates(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -465,10 +401,6 @@ func TestBootstrapUntracksPreviouslyCommittedHookTemplates(t *testing.T) {
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
-// TestBootstrapDoesNotDowngradeSchema verifies that an older binary run against
-// a repo whose SCHEMA was written by a newer one leaves the tracked file alone.
-// SCHEMA is generated from the running binary, so without this an older clone
-// silently commits a downgrade and the two versions fight over _armature.
 func TestBootstrapDoesNotDowngradeSchema(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -481,7 +413,6 @@ func TestBootstrapDoesNotDowngradeSchema(t *testing.T) {
 	opsWT := filepath.Join(repo, ".armature")
 	schemaPath := filepath.Join(opsWT, "ops", "SCHEMA")
 
-	// Stand in for a newer generator having written this repo's SCHEMA.
 	fromNewer := fmt.Sprintf("# Trellis Op Log Schema v1\n# scaffolding-version: %d\n# written by a newer arm\n", ops.ScaffoldingVersion+1)
 	require.NoError(t, os.WriteFile(schemaPath, []byte(fromNewer), 0o600))
 	run(t, opsWT, "git", "add", "ops/SCHEMA")
@@ -496,11 +427,6 @@ func TestBootstrapDoesNotDowngradeSchema(t *testing.T) {
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
-// TestBootstrapDoesNotDowngradeGitignore verifies that an older binary run
-// against a repo whose ops .gitignore was written by a newer one leaves the
-// tracked file alone. Ignore rules are generated from the running binary, so
-// without this an older clone silently commits a downgrade and the two versions
-// fight over _armature.
 func TestBootstrapDoesNotDowngradeGitignore_REQ_OPSCLEAN_1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -527,10 +453,6 @@ func TestBootstrapDoesNotDowngradeGitignore_REQ_OPSCLEAN_1(t *testing.T) {
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
-// interceptGitCommit prepends a git wrapper that fails any `commit` invocation.
-// Used to inject cleanup/migration commit failures without chmod (no-op as root)
-// or commit.gpgsign (this environment's git commits successfully when gpg.program
-// is missing).
 func interceptGitCommit(t *testing.T) func() {
 	t.Helper()
 	origPath := os.Getenv("PATH")
@@ -555,11 +477,6 @@ exec %q "$@"
 	return restore
 }
 
-// TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN_1
-// verifies that a failed unscoped cleanup commit does not leave dangling staged
-// deletions. The failure is injected via a PATH git wrapper (not directory
-// permissions, which are a no-op as root in CI). After restore, a retry can
-// still see the sidecar as tracked and finish the untrack.
 func TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN_1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -597,9 +514,6 @@ func TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN
 	assert.NotContains(t, runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature"), "gates/full-1.log")
 }
 
-// TestUntrackLocalOnlyPathsFinishesStagedDeletionsOnRetry_REQ_OPSCLEAN_1
-// verifies that leftover staged deletions (IsTracked false, index still dirty)
-// are recognized and committed rather than skipped.
 func TestUntrackLocalOnlyPathsFinishesStagedDeletionsOnRetry_REQ_OPSCLEAN_1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -630,8 +544,6 @@ func TestUntrackLocalOnlyPathsFinishesStagedDeletionsOnRetry_REQ_OPSCLEAN_1(t *t
 	assertOpsWorktreeHasNoTrackedDirt(t, opsWT)
 }
 
-// TestRunRepoSetupWritesSchemaFile verifies that runRepoSetup writes the SCHEMA file.
-// In dual-branch mode, the SCHEMA file is in the worktree's ops directory.
 func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -648,7 +560,6 @@ func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
 	require.NoError(t, statErr)
 }
 
-// TestRunRepoSetupInstallsHooks verifies that runRepoSetup installs hooks to .git/hooks/.
 func TestRunRepoSetupInstallsHooks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -660,13 +571,11 @@ func TestRunRepoSetupInstallsHooks(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify hooks are installed
 	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
 	_, statErr := os.Stat(hookPath)
 	require.NoError(t, statErr, "pre-commit hook should be installed")
 }
 
-// TestRunRepoSetupIdempotent verifies that running runRepoSetup twice is safe.
 func TestRunRepoSetupIdempotent(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -682,8 +591,6 @@ func TestRunRepoSetupIdempotent(t *testing.T) {
 	require.NoError(t, err2, "second run should not fail")
 }
 
-// TestRunRepoSetupWritesConfig verifies that runRepoSetup writes config.json.
-// In dual-branch mode, config.json is in the worktree's .armature directory.
 func TestRunRepoSetupWritesConfig(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -700,10 +607,6 @@ func TestRunRepoSetupWritesConfig(t *testing.T) {
 	require.NoError(t, statErr, "config.json should be created in worktree")
 }
 
-// TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1 guards the HOOKMSG-1 fix.
-// The hook prefixed the subject with the claim ID, which docs/conventions.md already requires
-// inside the commit scope; the prefix broke commitref's ^-anchored pattern and so the delivery
-// gate. Dropping the template alone would leave every existing clone running the old copy.
 func TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -721,10 +624,6 @@ func TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T
 		"the obsolete template must not be written back")
 }
 
-// TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1 guards the upgrade path
-// where _armature already tracks the retired template. os.Remove alone leaves an unstaged
-// deletion; later CommitWorktreeOp stages only the worker log, so FetchAndRebase's rebase
-// refuses the dirty ops worktree. The deletion must land on _armature.
 func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -738,8 +637,6 @@ func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T
 	require.NoError(t, os.MkdirAll(filepath.Dir(templatePath), 0o750))
 	require.NoError(t, os.WriteFile(templatePath, []byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o600))
 	opsGit := adapters.New(opsWT)
-	// --force: hook templates are gitignored now, and this fixture is deliberately
-	// reproducing a repo from a build that tracked them.
 	run(t, opsWT, "git", "add", "--force", templateRel)
 	require.NoError(t, opsGit.CommitPathsNoVerify("chore: plant legacy prepare-commit-msg template", templateRel))
 
@@ -765,8 +662,6 @@ func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T
 	assert.Contains(t, runOutput(t, repo, "log", "_armature", "--oneline"), "remove obsolete hook templates")
 }
 
-// TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1 verifies the removal is
-// scoped to hooks Armature wrote. A hook the user owns is theirs, not ours to delete.
 func TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -784,7 +679,6 @@ func TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1(t *testin
 	assert.Equal(t, userHook, string(content), "a user-owned hook must be left untouched")
 }
 
-// TestInstallHooksExecutable verifies that installHooks makes hook files executable.
 func TestInstallHooksExecutable(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -796,16 +690,12 @@ func TestInstallHooksExecutable(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify at least one hook is executable
 	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
 	stat, statErr := os.Stat(hookPath)
 	require.NoError(t, statErr)
 	assert.NotZero(t, stat.Mode()&0o111, "hook should be executable")
 }
 
-// TestRunRepoSetupAlwaysCreatesCollapsedWorktree_REQ_SB_T9 verifies that runRepoSetup
-// on a fresh repo creates the collapsed .armature/ worktree directly (LNGHZN-S1-T2),
-// not the legacy dual-branch .arm/.armature/ layout.
 func TestRunRepoSetupAlwaysCreatesDualBranchWorktree_REQ_SB_T9(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -817,21 +707,15 @@ func TestRunRepoSetupAlwaysCreatesDualBranchWorktree_REQ_SB_T9(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// A fresh init goes straight to the collapsed layout; no .arm/ worktree.
 	assert.False(t, pathExists(filepath.Join(repo, ".arm")), "no .arm worktree should be created for a fresh init")
 
-	// Verify the collapsed .armature/ worktree exists.
 	assert.DirExists(t, filepath.Join(repo, ".armature"))
 
-	// Verify config is created in the worktree
 	configPath := filepath.Join(repo, ".armature", "config.json")
 	_, statErr := os.Stat(configPath)
 	require.NoError(t, statErr, "config.json should exist in worktree")
 }
 
-// TestBootstrapDeployPluginUsesPluginName verifies that deployPlugin uses the plugin's
-// name from plugin.json (e.g., "armature") for the directory path, not the platform name.
-// This ensures that metadata is installed at .claude/plugins/armature/ not .claude/plugins/claude/.
 func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
 	src := makeBootstrapTestFSWithPlugin(t)
 
@@ -840,8 +724,6 @@ func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
 	assert.Equal(t, "armature", pluginName, "plugin name should be extracted from plugin.json")
 }
 
-// TestBootstrapInvalidPlatformFailsBeforeRepoSetup verifies that arm bootstrap
-// rejects an unknown platform name before mutating the repository.
 func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -854,20 +736,15 @@ func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err, "bootstrap with unknown platform should fail")
 
-	// The repository must NOT have been mutated before validation failure
 	armatureDir := filepath.Join(repo, ".armature")
 	_, statErr := os.Stat(armatureDir)
 	assert.True(t, os.IsNotExist(statErr), ".armature must not be created when platform validation fails")
 }
 
-// TestInstallHooksPreservesExistingUnmanagedHook verifies that installHooks does not overwrite
-// existing user-managed git hooks. It should only overwrite hooks that are Armature-owned
-// (marked with "# Armature" near the top).
 func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Create a user-managed hook before bootstrap
 	gitHooksDir := filepath.Join(repo, ".git", "hooks")
 	require.NoError(t, os.MkdirAll(gitHooksDir, 0o750))
 
@@ -875,29 +752,18 @@ func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 	userHookPath := filepath.Join(gitHooksDir, "pre-commit")
 	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o755))
 
-	// Run bootstrap (which calls installHooks)
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify the user hook is still there unchanged
 	hookData, readErr := os.ReadFile(userHookPath)
 	require.NoError(t, readErr)
 	assert.Equal(t, userHookContent, string(hookData), "user-managed hook should not be overwritten")
 }
 
-// TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9 verifies that when bootstrap is run twice,
-// the first run creates dual-branch mode and the second run converges it to the collapsed
-// layout (LNGHZN-S1-T2), without corrupting ops data in the process. A third run must then be
-// a true no-op idempotent pass over the now-collapsed layout.
 func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
-	// A fresh repo now goes straight to the collapsed layout (LNGHZN-S1-T2), so
-	// exercising dual-branch convergence requires simulating a repo inherited
-	// from before that migration: manually construct the .arm/.armature layout
-	// the way a pre-existing clone would have it, then verify bootstrap
-	// converges it to collapsed and stays idempotent afterward.
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "config", "commit.gpgsign", "false")
@@ -919,7 +785,6 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
-	// First run: bootstrap detects the dual-branch layout and converges it to collapsed.
 	cmd := newRootCmd()
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
@@ -929,10 +794,6 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repo, ".armature"), "collapsed .armature worktree should exist")
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "ops directory should exist in the collapsed worktree")
 
-	// The migration must commit the copied files and remove the stale nested .armature/
-	// subtree from the branch, not just leave them on disk (review finding BLOCKING #1).
-	// Scaffolding (.gitignore, hooks/*.template, ops/SCHEMA) is also committed so
-	// FetchAndRebase is not blocked by dirty tracked files.
 	collapsedWorktreePath := filepath.Join(repo, ".armature")
 	assertOpsWorktreeHasNoTrackedDirt(t, collapsedWorktreePath)
 
@@ -943,17 +804,12 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	}
 	assert.Contains(t, lsTreeOut, "ops/existing-issue.json", "the pre-migration ops data must be present at the root-level path")
 
-	// Simulate a fresh clone: `git clone` the repo (a genuinely separate .git, unlike
-	// another worktree of the same repo) and check out _armature there. This proves the
-	// migration commit actually preserved history for other collaborators, not just the
-	// machine that ran the migration in place.
 	cloneDir := filepath.Join(t.TempDir(), "fresh-clone")
 	runOutput(t, filepath.Dir(cloneDir), "clone", "--quiet", "--no-local", repo, cloneDir)
 	runOutput(t, cloneDir, "checkout", "--quiet", "_armature")
 	assert.FileExists(t, filepath.Join(cloneDir, "ops", "existing-issue.json"),
 		"a fresh clone checked out to _armature must show ops data at the root-level path, not nested under .armature/")
 
-	// Second run: the collapsed layout is now the steady state; must be a true no-op.
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(strings.Builder))
 	result2, err := runRepoSetup(cmd2, repo)
@@ -962,13 +818,6 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "ops directory should still exist after idempotent run")
 }
 
-// TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration verifies that a
-// successful dual-branch->collapsed migration prints a user-facing explanation of the
-// .arm.collapsed-<timestamp> backup directory left behind: its path, that it is a safety
-// snapshot of the pre-migration ops worktree, that its contents are committed on the
-// _armature branch, and that it is safe to delete once the collapsed layout is verified.
-// Without this, users are left with an unexplained multi-megabyte directory and no way to
-// know whether it's needed (see the dogfood finding this fixes).
 func TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1014,9 +863,6 @@ func TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration(t *testi
 	assert.Contains(t, output, "safe to delete", "output should say the backup is safe to delete once verified")
 }
 
-// TestRunRepoSetupFreshInitDoesNotPrintBackupSafetyGuidance verifies that an ordinary
-// bootstrap of a fresh repo (no migration performed) never prints the backup safety
-// message; it must appear only when migrateDualBranchToCollapsed actually ran.
 func TestRunRepoSetupFreshInitDoesNotPrintBackupSafetyGuidance(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1045,11 +891,6 @@ func TestMigrateDualBranchToCollapsedRestoresUsableWorktreeAfterAddFailure_REQ_L
 	require.NoError(t, armGitClient.CommitWorktreeOp(".armature", "chore: create legacy layout"))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
-	// Fail the commit step that runs inside the newly-relocated .armature/ worktree
-	// (git -C <newWorktreePath> ... commit ...), after the worktree has already been
-	// moved from .arm to .armature via `git worktree move` and its stale nested
-	// .armature/ subtree flattened. This exercises the rollback path: MoveWorktree
-	// moving .armature back to .arm.
 	newWorktreePath := filepath.Join(repo, ".armature")
 	wrapperDir := t.TempDir()
 	realGit, err := exec.LookPath("git")
@@ -1074,12 +915,6 @@ exec "$real_git" "$@"
 	_, _, err = migrateDualBranchToCollapsed(repo)
 	require.Error(t, err)
 
-	// The restored .arm checkout must be a registered, usable Git worktree, not
-	// merely a directory containing a stale pointer to a removed worktree entry.
-	// A stale/broken .git pointer file still lets `git status` exit 0 by silently
-	// falling through to the enclosing outer repo, so assert on the resolved
-	// git-dir path instead: it must resolve to something under .git/worktrees/,
-	// proving .arm is genuinely its own registered worktree, not a fallthrough.
 	gitDir := strings.TrimSpace(runOutput(t, armWorktreePath, "rev-parse", "--git-dir"))
 	assert.Contains(t, gitDir, filepath.Join(".git", "worktrees"),
 		"resolved git-dir must be .arm's own worktree entry, not a fallthrough to the outer repo: %s", gitDir)
@@ -1087,12 +922,6 @@ exec "$real_git" "$@"
 	assert.Empty(t, status, "rollback must restore a clean legacy worktree")
 }
 
-// TestMigrateDualBranchToCollapsedPreservesCommitOnPostCommitConfigFailure verifies
-// that a failure occurring after the collapse commit (the SetGitConfig step) does
-// NOT reset --hard the _armature branch back to its pre-migration SHA: doing so
-// would rewind already-committed history, violating the append-only invariant
-// (AGENTS.md I2/T2). Instead the migration is left committed at its new worktree
-// path and the error instructs a manual config fix.
 func TestMigrateDualBranchToCollapsedPreservesCommitOnPostCommitConfigFailure(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1102,8 +931,6 @@ func TestMigrateDualBranchToCollapsedPreservesCommitOnPostCommitConfigFailure(t 
 	armWorktreePath := filepath.Join(repo, ".arm")
 	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
 
-	// These root-level artifacts are legitimate pre-collapse state. The nested
-	// equivalents are the legacy layout inputs which migration will flatten.
 	preexisting := map[string]string{
 		"ops/root-op.json":             `{"id":"root"}`,
 		"templates/root-template.md":   "root template\n",
@@ -1123,8 +950,6 @@ func TestMigrateDualBranchToCollapsedPreservesCommitOnPostCommitConfigFailure(t 
 	preCollapseSHA, err := armGitClient.HeadSHA()
 	require.NoError(t, err)
 
-	// Fail only the final config update. This occurs after the flattening commit,
-	// exercising the post-commit failure path that must not rewind _armature.
 	wrapperDir := t.TempDir()
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
@@ -1155,19 +980,12 @@ exec "$real_git" "$@"
 	require.NoError(t, err)
 	assert.NotEqual(t, preCollapseSHA, postCommitSHA, "collapse commit must remain on _armature, not be reset away")
 
-	// The collapsed layout landed at the new worktree path; the flattened root-level
-	// content (not the stale nested copy) is what's present there now.
 	for _, path := range []string{"ops/root-op.json", "templates/root-template.md", "config.json"} {
 		_, statErr := os.Stat(filepath.Join(newWorktreePath, path))
 		assert.NoError(t, statErr, "expected %s to remain in collapsed worktree", path)
 	}
 }
 
-// TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo verifies that a real
-// nested Git checkout at .arm/ (e.g. a submodule or accidental nested clone)
-// is not mistaken for the legacy linked-worktree layout: its .git is a
-// directory, not the pointer file a linked worktree has, so migration must
-// leave it untouched (review finding #2).
 func TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1188,13 +1006,11 @@ func TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo(t *testing.T) {
 	assert.DirExists(t, filepath.Join(armPath, ".git"), ".arm/.git must remain a real repo directory")
 }
 
-// pathExists is a helper to check if a path exists without error
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
 
-// runOutput runs a command in dir and returns its combined stdout+stderr, failing the test on error.
 func runOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), "git", args...)
@@ -1215,12 +1031,6 @@ func assertOpsWorktreeHasNoTrackedDirt(t *testing.T, opsWT string) {
 	}
 }
 
-// TestRunRepoSetupDualBranchMigrationPreservesSources_REQ_LNGHZN_S1 verifies that a
-// dual-branch repo with .arm/.armature/sources/manifest.json ends up with
-// .armature/sources/manifest.json (committed to _armature) after migration to the
-// collapsed layout. Review finding BLOCKING #2: sources/ was missing from the list of
-// legacy directories copyLegacyOpsToNewWorktree preserves, silently orphaning any
-// permanent citations (manifest UUIDs) referenced by ops payloads.
 func TestRunRepoSetupDualBranchMigrationPreservesSources_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1257,19 +1067,10 @@ func TestRunRepoSetupDualBranchMigrationPreservesSources_REQ_LNGHZN_S1(t *testin
 	require.NoError(t, err, "sources/manifest.json should be preserved at the collapsed worktree root")
 	assert.Contains(t, string(content), "deadbeef")
 
-	// Must also be committed to _armature, not just left on disk (BLOCKING #1's fix).
 	lsTreeOut := runOutput(t, repo, "ls-tree", "-r", "--name-only", "_armature")
 	assert.Contains(t, lsTreeOut, "sources/manifest.json", "migrated sources/ data must be committed to _armature")
 }
 
-// TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1 verifies that a
-// pre-existing .arm/ worktree with no inner .armature/ subdirectory (e.g. a partially
-// completed earlier bootstrap, or a genuinely stray/empty worktree) converges to the
-// collapsed layout in a single bootstrap call, per the design doc's "bootstrap always
-// converges to the collapsed layout in one pass." Review finding MODERATE #3: this
-// previously required two separate bootstrap invocations because the chained
-// migrateDualBranchToCollapsed call was gated on `migrated` (legacy single-branch
-// migration also having happened), which is false in this scenario.
 func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1278,7 +1079,6 @@ func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing
 	gitClient := adapters.New(repo)
 	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
 
-	// Pre-existing .arm/ worktree with no inner .armature/ subdirectory at all.
 	armWorktreePath := filepath.Join(repo, ".arm")
 	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
@@ -1288,7 +1088,6 @@ func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// A single bootstrap call must converge all the way to the collapsed layout.
 	assert.False(t, pathExists(filepath.Join(repo, ".arm")), "a single bootstrap pass must migrate away the empty .arm worktree")
 	assert.DirExists(t, filepath.Join(repo, ".armature"), "collapsed .armature worktree should exist after one pass")
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "ops directory should exist in the collapsed worktree")
@@ -1296,13 +1095,10 @@ func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing
 		"chained migration must (re-)write .gitignore into the final collapsed worktree so state/ stays ignored")
 }
 
-// TestInstallHooksReturnsSkippedHooks verifies that installHooks returns the list of skipped hook names
-// when existing hooks are not Armature-managed.
 func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Create user-managed hooks before calling installHooks
 	gitHooksDir := filepath.Join(repo, ".git", "hooks")
 	require.NoError(t, os.MkdirAll(gitHooksDir, 0o750))
 
@@ -1320,7 +1116,6 @@ func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
 		0o755,
 	))
 
-	// Set up .armature/hooks/ with templates
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
@@ -1328,26 +1123,20 @@ func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// In dual-branch mode, issuesDir is in the worktree
 	issuesDir := filepath.Join(repo, ".armature")
 
-	// Now test that installHooks returns the skipped hooks
 	skipped, err := installHooks(repo, issuesDir)
 	require.NoError(t, err)
 
-	// Should have skipped at least the pre-commit and post-commit hooks
 	assert.NotEmpty(t, skipped, "skipped hooks list should not be empty")
 	assert.Contains(t, skipped, "pre-commit", "should report pre-commit as skipped")
 	assert.Contains(t, skipped, "post-commit", "should report post-commit as skipped")
 }
 
-// TestRunRepoSetupWarnsAboutSkippedHooks verifies that when installHooks reports skipped hooks,
-// runRepoSetup prints warnings to stderr for each skipped hook.
 func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Create a user-managed hook before bootstrap
 	gitHooksDir := filepath.Join(repo, ".git", "hooks")
 	require.NoError(t, os.MkdirAll(gitHooksDir, 0o750))
 
@@ -1355,7 +1144,6 @@ func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 	userHookPath := filepath.Join(gitHooksDir, "pre-commit")
 	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o755))
 
-	// Run runRepoSetup with stderr capture
 	outBuf := new(strings.Builder)
 	errBuf := new(strings.Builder)
 	cmd := newRootCmd()
@@ -1366,17 +1154,11 @@ func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 	require.NoError(t, err)
 
 	errOutput := errBuf.String()
-	// Should have a warning about skipping the pre-commit hook
 	assert.Contains(t, errOutput, "Warning:", "stderr should contain warning prefix")
 	assert.Contains(t, errOutput, "pre-commit", "stderr should mention the skipped hook name")
 	assert.Contains(t, errOutput, "not Armature-managed", "stderr should explain why it was skipped")
 }
 
-// TestBootstrapRespectsPersistentRepoFlag verifies that when the root persistent --repo flag is set
-// (without passing --repo directly to bootstrap), the bootstrap command uses the persistent flag value.
-// This tests the fix for the flag shadowing bug where the local --repo flag would shadow the root's.
-// Before the fix, the local repoPath variable would default to "." instead of reading from the
-// persistent flag, causing bootstrap to operate on the wrong directory.
 func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 	repoPath := initTempRepo(t)
 	run(t, repoPath, "git", "commit", "--allow-empty", "-m", "init")
@@ -1385,38 +1167,30 @@ func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 	cmd := newRootCmd()
 	cmd.SetOut(outBuf)
 
-	// Set args with persistent --repo flag BEFORE subcommand name, without passing --repo to bootstrap itself.
-	// This simulates: arm --repo /path bootstrap (not arm bootstrap --repo /path)
 	cmd.SetArgs([]string{"--repo", repoPath, "bootstrap"})
 
 	err := cmd.Execute()
 	require.NoError(t, err, "bootstrap with persistent --repo flag should succeed")
 
-	// Verify dual-branch .armature was initialized at the correct path specified by the persistent flag
 	assert.DirExists(t, filepath.Join(repoPath, ".armature"), ".armature should be initialized in the .arm worktree")
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "ops"), ".armature/ops should exist in worktree")
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "state"), ".armature/state should exist in worktree")
 	assert.DirExists(t, filepath.Join(repoPath, ".armature", "hooks"), ".armature/hooks should exist in worktree")
 }
 
-// TestBootstrapJSONSkippedHooksReported verifies that skipped_hooks appears in JSON output
-// when a pre-existing unmanaged hook prevents installation.
 func TestBootstrapJSONSkippedHooksReported(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// First bootstrap to create the .armature/ structure.
 	buf1 := new(strings.Builder)
 	cmd1 := newRootCmd()
 	cmd1.SetOut(buf1)
 	cmd1.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 	require.NoError(t, cmd1.Execute())
 
-	// Replace post-commit with a user-managed hook (no armature marker).
 	hookPath := filepath.Join(repo, ".git", "hooks", "post-commit")
 	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\necho mine\n"), 0o755))
 
-	// Second bootstrap: post-commit should be skipped and reported.
 	buf2 := new(strings.Builder)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf2)
@@ -1434,8 +1208,6 @@ func TestBootstrapJSONSkippedHooksReported(t *testing.T) {
 	assert.Equal(t, "post-commit", skipped[0])
 }
 
-// TestBootstrapJSONOutput verifies that arm bootstrap --format json emits valid JSON
-// with the expected schema: repo_setup and harness_setup fields.
 func TestBootstrapJSONOutput(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1450,33 +1222,26 @@ func TestBootstrapJSONOutput(t *testing.T) {
 
 	output := buf.String()
 
-	// Verify output is valid JSON
 	var result map[string]interface{}
 	err = json.Unmarshal([]byte(output), &result)
 	require.NoError(t, err, "bootstrap output should be valid JSON")
 
-	// Verify expected top-level schema
 	assert.Contains(t, result, "repo_setup", "result should have repo_setup field")
 	assert.Contains(t, result, "harness_setup", "result should have harness_setup field")
 
-	// Verify repo_setup has the expected structure
 	repoSetup, ok := result["repo_setup"].(map[string]interface{})
 	require.True(t, ok, "repo_setup should be an object")
 	assert.Contains(t, repoSetup, "status", "repo_setup should have status field")
 
-	// Verify harness_setup is an array
 	harnessSetup, ok := result["harness_setup"].([]interface{})
 	require.True(t, ok, "harness_setup should be an array")
-	_ = harnessSetup // Use it to avoid linter complaints
+	_ = harnessSetup
 }
 
-// TestBootstrapJSONRepoSetupStatus verifies that repo_setup.status is set correctly
-// on fresh bootstrap and on idempotent re-run.
 func TestBootstrapJSONRepoSetupStatus(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// First bootstrap (fresh init)
 	buf1 := new(strings.Builder)
 	cmd1 := newRootCmd()
 	cmd1.SetOut(buf1)
@@ -1495,7 +1260,6 @@ func TestBootstrapJSONRepoSetupStatus(t *testing.T) {
 	require.True(t, ok, "status should be a string")
 	assert.Equal(t, "initialized", status1, "first bootstrap should report 'initialized'")
 
-	// Second bootstrap (idempotent)
 	buf2 := new(strings.Builder)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf2)
@@ -1515,27 +1279,21 @@ func TestBootstrapJSONRepoSetupStatus(t *testing.T) {
 	assert.Equal(t, "already_initialized", status2, "second bootstrap should report 'already_initialized'")
 }
 
-// TestExecuteHarnessSetupSkipsUnownedConfig verifies that executeHarnessSetup checks OwnsConfig
-// and skips WriteConfig if the config is not owned by armature, recording a skipped status.
 func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Initialize the repo structure
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Create a .codex/config.toml file WITHOUT the armature:managed marker to simulate
-	// a config not owned by armature (the Codex adapter checks for this marker)
 	codexDir := filepath.Join(repo, ".codex")
 	require.NoError(t, os.MkdirAll(codexDir, 0o755))
 	codexPath := filepath.Join(codexDir, "config.toml")
 	require.NoError(t, os.WriteFile(codexPath, []byte("# Some other config\nkey = \"value\"\n"), 0o600))
 
-	// Build a plan that includes harness hook config for Codex
 	req := bootstrap.PlanRequest{
 		Platforms: []bootstrap.Platform{bootstrap.PlatformCodex},
 		Target:    "local",
@@ -1544,11 +1302,9 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 	plan, err := bootstrap.BuildPlan(req)
 	require.NoError(t, err)
 
-	// Execute harness setup
 	results, err := executeHarnessSetup(cmd, plan, repo, false)
 	require.NoError(t, err)
 
-	// Verify that a result with Status=skipped was recorded
 	var foundSkipped bool
 	for _, result := range results {
 		if result.Artifact == "harness_hook_config" && result.Status == "skipped" {
@@ -1561,20 +1317,16 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 	assert.True(t, foundSkipped, "expected to find a skipped harness_hook_config result")
 }
 
-// TestInstallHooksSkipsUnmanagedHook verifies that installHooks does not overwrite
-// an existing hook file that does not contain the # armature:managed marker.
 func TestInstallHooksSkipsUnmanagedHook(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up the repo structure
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Create an existing hook without the armature:managed marker
 	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
 	existingContent := `#!/bin/sh
 # Some other pre-commit hook that's not managed by armature
@@ -1582,33 +1334,27 @@ echo "Running external pre-commit hook"
 `
 	require.NoError(t, os.WriteFile(hookPath, []byte(existingContent), 0o755))
 
-	// Call installHooks again
 	issuesDir := filepath.Join(repo, ".armature")
 	var skipped []string
 	skipped, err = installHooks(repo, issuesDir)
 	_ = skipped
 	require.NoError(t, err)
 
-	// Verify that the hook was NOT overwritten (still has the old content)
 	content, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	assert.Equal(t, existingContent, string(content), "hook should not have been overwritten")
 }
 
-// TestInstallHooksOverwritesManagedHook verifies that installHooks DOES overwrite
-// an existing hook file that contains the # armature:managed marker.
 func TestInstallHooksOverwritesManagedHook(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up the repo structure
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Create an existing hook WITH the armature:managed marker
 	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
 	oldContent := `#!/bin/sh
 # armature:managed
@@ -1617,25 +1363,18 @@ echo "old"
 `
 	require.NoError(t, os.WriteFile(hookPath, []byte(oldContent), 0o755))
 
-	// Call installHooks again
-	// In dual-branch mode, issuesDir is in the worktree
 	issuesDir := filepath.Join(repo, ".armature")
 	var skipped2 []string
 	skipped2, err = installHooks(repo, issuesDir)
 	_ = skipped2
 	require.NoError(t, err)
 
-	// Verify that the hook WAS overwritten (contains the new content)
 	content, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "# armature:managed", "hook should have been overwritten")
 	assert.NotContains(t, string(content), "echo \"old\"", "old content should be gone")
 }
 
-// TestBootstrapRejectsUnsupportedPlatformWithoutHooks verifies that arm bootstrap --platform codex
-// (without --with-hooks) returns an error when both skills and plugin_metadata are unsupported
-// for that platform. The check should not count HarnessHookConfig=ActionSkip as "supported" when
-// hooks weren't requested.
 func TestBootstrapRejectsUnsupportedPlatformWithoutHooks(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1643,36 +1382,25 @@ func TestBootstrapRejectsUnsupportedPlatformWithoutHooks(t *testing.T) {
 	cmd := newRootCmd()
 	buf := &bytes.Buffer{}
 	cmd.SetOut(buf)
-	// Try to bootstrap with --platform codex but WITHOUT --with-hooks.
-	// Codex has no verified skills or plugin_metadata, so it should fail.
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codex"})
 
 	err := cmd.Execute()
 	require.Error(t, err, "bootstrap --platform codex without --with-hooks should fail")
 	assert.Contains(t, err.Error(), "no supported requested artifacts", "error should mention unsupported artifacts")
 
-	// The repository must NOT have been mutated before validation failure
 	armatureDir := filepath.Join(repo, ".armature")
 	_, statErr := os.Stat(armatureDir)
 	assert.True(t, os.IsNotExist(statErr), ".armature must not be created when platform validation fails")
 }
 
-// TestBootstrapNonTTYDefaultsToJSON verifies that when stdout is not a terminal
-// and --format is not explicitly set, bootstrap outputs JSON instead of "Bootstrap complete.".
-// This tests the fix for the PersistentPreRunE replacement bug where the bootstrap command's
-// no-op PersistentPreRunE prevented the root's TTY-detection hook from running.
 func TestBootstrapNonTTYDefaultsToJSON(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Create a root command and bootstrap subcommand
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 
-	// Simulate non-TTY by NOT setting --format explicitly.
-	// In tests, tui.IsTerminal() returns false, so the detection logic should kick in
-	// and set format to "json" (not "agent" because this is bootstrap, not the agent context).
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 
 	err := cmd.Execute()
@@ -1680,30 +1408,22 @@ func TestBootstrapNonTTYDefaultsToJSON(t *testing.T) {
 
 	output := buf.String()
 
-	// Verify output is valid JSON (not "Bootstrap complete.")
 	var result map[string]interface{}
 	err = json.Unmarshal([]byte(output), &result)
 	require.NoError(t, err, "bootstrap output should be valid JSON when stdout is not a terminal")
 
-	// Verify the JSON structure
 	assert.Contains(t, result, "repo_setup", "result should have repo_setup field")
 	assert.Contains(t, result, "harness_setup", "result should have harness_setup field")
 
-	// Verify we do NOT get the human text
 	assert.NotContains(t, output, "Bootstrap complete.", "should not emit human text in non-TTY")
 }
 
-// TestBootstrapEmitsJSONOnRepoSetupError verifies that when runRepoSetup fails and --format json
-// is set, the command emits JSON with repo_setup.status="error" and repo_setup.error set before
-// returning the error. This allows callers to see the failure reason in JSON format.
 func TestBootstrapEmitsJSONOnRepoSetupError(t *testing.T) {
-	// Create a path that doesn't exist (will fail when trying to initialize)
 	nonexistentPath := filepath.Join(t.TempDir(), "no-git-here", ".armature")
 
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
-	// Try to bootstrap a path that has no git repo (will fail in runRepoSetup)
 	cmd.SetArgs([]string{"bootstrap", "--repo", filepath.Dir(filepath.Dir(nonexistentPath)), "--format", "json"})
 
 	err := cmd.Execute()
@@ -1711,12 +1431,10 @@ func TestBootstrapEmitsJSONOnRepoSetupError(t *testing.T) {
 
 	output := buf.String()
 
-	// Verify that JSON was emitted before the error
 	var result map[string]interface{}
 	err = json.Unmarshal([]byte(output), &result)
 	require.NoError(t, err, "output should be valid JSON even on repo setup failure")
 
-	// Verify repo_setup contains error status
 	repoSetup, ok := result["repo_setup"].(map[string]interface{})
 	require.True(t, ok, "repo_setup should be an object")
 
@@ -1728,37 +1446,28 @@ func TestBootstrapEmitsJSONOnRepoSetupError(t *testing.T) {
 	require.True(t, ok, "repo_setup.error should be a string")
 	assert.NotEmpty(t, errMsg, "repo_setup.error should contain the error message")
 
-	// Verify harness_setup is an empty array
 	harnessSetup, ok := result["harness_setup"].([]interface{})
 	require.True(t, ok, "harness_setup should be an array")
 	assert.Empty(t, harnessSetup, "harness_setup should be empty when repo setup fails")
 }
 
-// TestBootstrapEmitsPartialJSONOnHarnessSetupError verifies that when executeHarnessSetup
-// returns an error along with partial results, the command emits the partial results as JSON
-// before returning the error. This allows callers to see which artifacts succeeded before
-// the failure occurred.
 func TestBootstrapEmitsPartialJSONOnHarnessSetupError(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// First bootstrap to initialize repo
 	buf1 := new(strings.Builder)
 	cmd1 := newRootCmd()
 	cmd1.SetOut(buf1)
 	cmd1.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 	require.NoError(t, cmd1.Execute(), "initial bootstrap should succeed")
 
-	// Simulate a harness setup failure by creating a file where the .claude directory should be,
-	// which will cause os.MkdirAll to fail when trying to write plugin metadata
 	claudePath := filepath.Join(repo, ".claude")
 	require.NoError(t, os.RemoveAll(claudePath), "remove .claude dir")
 	require.NoError(t, os.WriteFile(claudePath, []byte("blocking file"), 0o600), "create file at .claude path")
 	t.Cleanup(func() {
-		_ = os.RemoveAll(claudePath) //nolint:errcheck // cleanup is best-effort
+		swallowErr(os.RemoveAll(claudePath))
 	})
 
-	// Now the second bootstrap should fail when trying to create .claude/plugins/
 	buf2 := new(strings.Builder)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf2)
@@ -1769,30 +1478,21 @@ func TestBootstrapEmitsPartialJSONOnHarnessSetupError(t *testing.T) {
 
 	output := buf2.String()
 
-	// Verify that partial JSON was emitted before the error
-	// Even though the command failed, the JSON output should contain results collected so far
 	var result map[string]interface{}
 	err = json.Unmarshal([]byte(output), &result)
 	require.NoError(t, err, "output should be valid JSON even on partial failure")
 
-	// Verify the partial structure contains harness_setup results
 	assert.Contains(t, result, "repo_setup", "partial JSON should have repo_setup field")
 	harnessSetup, ok := result["harness_setup"].([]interface{})
 	require.True(t, ok, "harness_setup should be an array")
 
-	// Verify at least one result was collected before the failure (even if empty, the key should exist)
 	_ = harnessSetup
 }
 
-// TestBootstrapReportsUnsupportedArtifactsInHumanFormat verifies that when using
-// human format and a platform has unsupported/skipped artifacts, the command reports them
-// before printing "Bootstrap complete."
 func TestBootstrapReportsUnsupportedArtifactsInHumanFormat(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Bootstrap with Codex which has unsupported skills and plugin_metadata but supports harness hooks
-	// This should report "unsupported" for skills and plugin_metadata
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
@@ -1803,28 +1503,20 @@ func TestBootstrapReportsUnsupportedArtifactsInHumanFormat(t *testing.T) {
 
 	output := buf.String()
 
-	// Verify that unsupported artifacts are reported in human output
-	// Codex has no verified skills or plugin_metadata, so they should be reported as unsupported
 	assert.Contains(t, output, "unsupported", "output should mention unsupported artifacts")
 	assert.Contains(t, output, "Bootstrap complete.", "output should end with completion message")
 }
 
-// TestBootstrapPersistentFormatFlagSetOnNonTTY verifies that when auto-detecting format
-// to JSON in non-TTY mode, the persistent flag is also updated so early error paths
-// get the correct format.
 func TestBootstrapPersistentFormatFlagSetOnNonTTY(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Create a scenario that causes an early error (e.g., unsupported platform when explicitly requested)
 	buf := new(strings.Builder)
 	errBuf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
 
-	// Simulate non-TTY: don't set format, let it auto-detect to json
-	// Then request an unsupported platform to trigger an early error
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "antigravity"})
 
 	err := cmd.Execute()
@@ -1836,42 +1528,30 @@ func TestBootstrapPersistentFormatFlagSetOnNonTTY(t *testing.T) {
 	assert.NotEmpty(t, err.Error())
 }
 
-// TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9 verifies that runRepoSetup detects
-// a pre-existing single-branch .armature/ops layout and migrates it, preserving the original data
-// by renaming .armature to .armature.migrated-<timestamp>.
 func TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create a test ops file to verify data is preserved
 	testOpsFile := filepath.Join(legacyOpsPath, "test.json")
 	testContent := []byte(`{"test": "data"}`)
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
-	// Run bootstrap, which should detect and migrate the legacy layout
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify the migration happened
 	output := buf.String()
 	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
 
-	// Bootstrap chains the legacy single-branch migration straight through to
-	// the collapsed layout in the same run (LNGHZN-S1-T3): no .arm/ worktree,
-	// just the collapsed .armature/ worktree at the repo root.
 	assert.False(t, pathExists(filepath.Join(repo, ".arm")), "no .arm worktree should remain; chains straight to collapsed")
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "new ops should be in the collapsed worktree")
 
-	// Verify old .armature directory was moved to timestamped backup
-	// Find the backup directory (it should be .armature.migrated-*)
 	entries, err := os.ReadDir(repo)
 	require.NoError(t, err)
 
@@ -1879,7 +1559,6 @@ func TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9(t *testing.T) {
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), ".armature.migrated-") {
 			foundBackup = true
-			// Verify the backup contains the original test file
 			backupOpsFile := filepath.Join(repo, entry.Name(), "ops", "test.json")
 			content, readErr := os.ReadFile(backupOpsFile)
 			require.NoError(t, readErr, "original ops file should be in backup")
@@ -1889,40 +1568,31 @@ func TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9(t *testing.T) {
 	}
 	assert.True(t, foundBackup, "should have .armature.migrated-<timestamp> backup directory")
 
-	// .armature/ at the repo root is now the collapsed ops worktree itself (a git
-	// worktree, not legacy flat data): verify it, not that the path is absent.
 	gitMarker, statErr := os.Stat(filepath.Join(legacyArmaturePath, ".git"))
 	require.NoError(t, statErr, ".armature should now be the collapsed ops worktree")
 	assert.False(t, gitMarker.IsDir(), ".armature/.git should be a worktree-pointer file")
 }
 
-// TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9 verifies that running bootstrap twice
-// (with migration on the first run) does not corrupt data or attempt to double-migrate.
 func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create a test ops file
 	testOpsFile := filepath.Join(legacyOpsPath, "test.json")
 	testContent := []byte(`{"test": "data"}`)
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
-	// First bootstrap run: migrate the legacy layout
 	buf1 := new(strings.Builder)
 	cmd1 := newRootCmd()
 	cmd1.SetOut(buf1)
 	_, err := runRepoSetup(cmd1, repo)
 	require.NoError(t, err)
 
-	// Verify migration happened
 	assert.Contains(t, buf1.String(), "Migrated legacy single-branch")
 
-	// Get the backup directory name from the first run
 	entries1, err := os.ReadDir(repo)
 	require.NoError(t, err)
 	var backupDir string
@@ -1934,56 +1604,42 @@ func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
 	}
 	require.NotEmpty(t, backupDir, "backup directory should exist after first run")
 
-	// Second bootstrap run: should be idempotent (no legacy layout to migrate)
 	buf2 := new(strings.Builder)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf2)
 	_, err = runRepoSetup(cmd2, repo)
 	require.NoError(t, err)
 
-	// Second run should NOT report migration (no legacy layout exists)
 	assert.NotContains(t, buf2.String(), "Migrated legacy single-branch", "second run should not attempt migration")
 
-	// Bootstrap chains the legacy single-branch migration straight through to the
-	// collapsed layout within the same first run (LNGHZN-S1-T2/T3), so the
-	// structure to verify here is the collapsed .armature/ops, not .arm/.armature/ops.
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "ops should still be in the collapsed worktree")
 
-	// Verify backup directory from first run is still there and unchanged
 	entries2, err := os.ReadDir(repo)
 	require.NoError(t, err)
 	var foundBackup bool
 	for _, entry := range entries2 {
 		if strings.HasPrefix(entry.Name(), ".armature.migrated-") {
 			foundBackup = true
-			// Should be the same backup from the first run (no new backups created)
-			// If there were multiple migrated dirs, this test would fail, which is correct
 			assert.Equal(t, backupDir, entry.Name(), "should not create a new backup on second run")
 			break
 		}
 	}
 	assert.True(t, foundBackup, "backup directory should still exist after second run")
 
-	// Verify backup data is preserved
 	backupOpsFile := filepath.Join(repo, backupDir, "ops", "test.json")
 	content, err := os.ReadFile(backupOpsFile)
 	require.NoError(t, err, "backup data should be preserved")
 	assert.Equal(t, testContent, content, "backup should still contain original data")
 }
 
-// TestRunRepoSetupMigrationCopiesLegacyOpsData_P1 verifies that when migrating a legacy single-branch layout,
-// the ops data from the legacy .armature/ops is COPIED to the new worktree's .armature/ops,
-// not just backed up. This ensures existing issues remain accessible after migration.
 func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout with multiple files
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create test ops files to verify data is preserved and copied
 	testFile1 := filepath.Join(legacyOpsPath, "issue001.json")
 	testContent1 := []byte(`{"id": "001", "title": "Legacy issue 1"}`)
 	require.NoError(t, os.WriteFile(testFile1, testContent1, 0o600))
@@ -1992,52 +1648,43 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 	testContent2 := []byte(`{"id": "002", "title": "Legacy issue 2"}`)
 	require.NoError(t, os.WriteFile(testFile2, testContent2, 0o600))
 
-	// Also create a subdirectory with content to test recursive copy
 	legacyLogsDir := filepath.Join(legacyOpsPath, "logs")
 	require.NoError(t, os.MkdirAll(legacyLogsDir, 0o750))
 	testLog := filepath.Join(legacyLogsDir, "claim.log")
 	logContent := []byte("claim: worker1")
 	require.NoError(t, os.WriteFile(testLog, logContent, 0o600))
 
-	// Run bootstrap, which should detect and migrate the legacy layout
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify the migration happened
 	output := buf.String()
 	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
 
-	// Verify the legacy layout chained through to collapsed layout in one bootstrap call (LNGHZN-S1-T3)
 	assert.False(t, pathExists(filepath.Join(repo, ".arm")), ".arm worktree should not exist after chaining to collapsed")
 	assert.DirExists(t, filepath.Join(repo, ".armature"), ".armature collapsed worktree should exist")
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "new ops should be in collapsed worktree")
 
-	// CRITICAL: Verify that legacy ops files are COPIED to the new collapsed worktree ops, not just in backup
 	newWorktreeOpsPath := filepath.Join(repo, ".armature", "ops")
 
-	// Check that the first issue file was copied to the new worktree
 	newFile1 := filepath.Join(newWorktreeOpsPath, "issue001.json")
 	content1, err := os.ReadFile(newFile1)
 	require.NoError(t, err, "legacy ops file issue001.json should be copied to new worktree")
 	assert.Equal(t, testContent1, content1, "copied file should have same content as original")
 
-	// Check that the second issue file was copied to the new worktree
 	newFile2 := filepath.Join(newWorktreeOpsPath, "issue002.json")
 	content2, err := os.ReadFile(newFile2)
 	require.NoError(t, err, "legacy ops file issue002.json should be copied to new worktree")
 	assert.Equal(t, testContent2, content2, "copied file should have same content as original")
 
-	// Check that subdirectories were copied (recursive copy)
 	newLogsDir := filepath.Join(newWorktreeOpsPath, "logs")
 	newLogFile := filepath.Join(newLogsDir, "claim.log")
 	newLogContent, err := os.ReadFile(newLogFile)
 	require.NoError(t, err, "legacy ops subdirectory should be copied to new worktree")
 	assert.Equal(t, logContent, newLogContent, "copied subdirectory content should match original")
 
-	// Also verify old .armature directory was moved to timestamped backup
 	entries, err := os.ReadDir(repo)
 	require.NoError(t, err)
 
@@ -2045,7 +1692,6 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), ".armature.migrated-") {
 			foundBackup = true
-			// Verify the backup contains the original test files
 			backupOpsFile1 := filepath.Join(repo, entry.Name(), "ops", "issue001.json")
 			backupContent1, readErr := os.ReadFile(backupOpsFile1)
 			require.NoError(t, readErr, "original ops file should be in backup")
@@ -2056,19 +1702,14 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 	assert.True(t, foundBackup, "should have .armature.migrated-<timestamp> backup directory")
 }
 
-// TestRunRepoSetupMigrationCommitsLegacyOpsData_P1 verifies that when migrating a legacy single-branch layout,
-// the copied ops files are COMMITTED to the _armature branch, not just present as untracked files.
-// This ensures that the migrated history is preserved for other clones and collaborators.
 func TestRunRepoSetupMigrationCommitsLegacyOpsData_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout with multiple files
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create test ops files to verify data is preserved and committed
 	testFile1 := filepath.Join(legacyOpsPath, "issue001.json")
 	testContent1 := []byte(`{"id": "001", "title": "Legacy issue 1"}`)
 	require.NoError(t, os.WriteFile(testFile1, testContent1, 0o600))
@@ -2077,55 +1718,42 @@ func TestRunRepoSetupMigrationCommitsLegacyOpsData_P1(t *testing.T) {
 	testContent2 := []byte(`{"id": "002", "title": "Legacy issue 2"}`)
 	require.NoError(t, os.WriteFile(testFile2, testContent2, 0o600))
 
-	// Also create a subdirectory with content to test recursive copy and commit
 	legacyLogsDir := filepath.Join(legacyOpsPath, "logs")
 	require.NoError(t, os.MkdirAll(legacyLogsDir, 0o750))
 	testLog := filepath.Join(legacyLogsDir, "claim.log")
 	logContent := []byte("claim: worker1")
 	require.NoError(t, os.WriteFile(testLog, logContent, 0o600))
 
-	// Run bootstrap, which should detect and migrate the legacy layout
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify the migration happened
 	output := buf.String()
 	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
 
-	// Bootstrap chains straight through to the collapsed layout (LNGHZN-S1-T3).
 	assert.False(t, pathExists(filepath.Join(repo, ".arm")), "no .arm worktree should remain; chains straight to collapsed")
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "new ops should be in the collapsed worktree")
 
-	// CRITICAL: Verify that the migrated ops files are actually COMMITTED to the _armature branch,
-	// not just present as untracked files in the worktree
-
-	// Check git log in the _armature branch (should have a commit for the migrated ops)
 	gitLogCmd := exec.CommandContext(context.Background(), "git", "log", "--oneline", "_armature")
 	gitLogCmd.Dir = repo
 	gitLogOut, err := gitLogCmd.Output()
 	require.NoError(t, err, "should be able to read git log from _armature branch")
 
 	logOutput := string(gitLogOut)
-	// There should be at least a commit message mentioning the migration or ops
-	// We expect to see something about the ops files being committed
 	assert.NotEmpty(t, logOutput, "_armature branch should have commits, not be empty")
 
-	// List files in the _armature branch to verify the migrated ops files are committed
 	gitShowCmd := exec.CommandContext(context.Background(), "git", "ls-tree", "-r", "_armature")
 	gitShowCmd.Dir = repo
 	gitShowOut, err := gitShowCmd.Output()
 	require.NoError(t, err, "should be able to list files in _armature branch")
 
 	showOutput := string(gitShowOut)
-	// Check that the committed files include the ops data
 	assert.Contains(t, showOutput, "ops/issue001.json", "migrated ops file should be committed to _armature branch")
 	assert.Contains(t, showOutput, "ops/issue002.json", "migrated ops file should be committed to _armature branch")
 	assert.Contains(t, showOutput, "ops/logs/claim.log", "migrated ops subdirectory should be committed to _armature branch")
 
-	// Verify the committed content is correct by showing the file from the _armature branch
 	gitShowFileCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:ops/issue001.json")
 	gitShowFileCmd.Dir = repo
 	gitShowFileOut, err := gitShowFileCmd.Output()
@@ -2133,9 +1761,6 @@ func TestRunRepoSetupMigrationCommitsLegacyOpsData_P1(t *testing.T) {
 	assert.Equal(t, testContent1, gitShowFileOut, "committed ops file should have the correct content")
 }
 
-// TestRunRepoSetupMigrationIsIdempotent_P1 verifies that running bootstrap a second
-// time over an already-migrated repo does not error and does not disturb the
-// previously-migrated, committed ops data on the _armature branch.
 func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2158,8 +1783,6 @@ func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
 	firstLogOut, err := gitLogCmd.Output()
 	require.NoError(t, err)
 
-	// Second run over the already-migrated repo should be a no-op: no error,
-	// no duplicate migration, and the _armature branch history is unchanged.
 	buf2 := new(strings.Builder)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf2)
@@ -2175,7 +1798,6 @@ func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
 	assert.Equal(t, string(firstLogOut), string(secondLogOut),
 		"_armature branch history should be unchanged by a repeated bootstrap run")
 
-	// Migrated content should still be intact.
 	gitShowFileCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:ops/issue001.json")
 	gitShowFileCmd.Dir = repo
 	gitShowFileOut, err := gitShowFileCmd.Output()
@@ -2183,53 +1805,42 @@ func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
 	assert.Equal(t, testContent, gitShowFileOut)
 }
 
-// TestRunRepoSetupMigratesLegacyConfig_P2 verifies that when migrating a legacy single-branch layout,
-// the legacy config.json (if present) is loaded from the backup and written to the new location,
-// preserving user settings like custom TTL, token budget, and push threshold.
 func TestRunRepoSetupMigratesLegacyConfig_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout with a custom config
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create a legacy config with non-default values
 	legacyConfigPath := filepath.Join(legacyArmaturePath, "config.json")
 	legacyConfig := config.Config{
 		ProjectType:            "go",
-		DefaultTTL:             120,  // non-default
-		TokenBudget:            3200, // non-default
-		LowStakesPushThreshold: 10,   // non-default
+		DefaultTTL:             120,
+		TokenBudget:            3200,
+		LowStakesPushThreshold: 10,
 		Hooks:                  []config.HookConfig{},
 	}
 	require.NoError(t, config.WriteConfig(legacyConfigPath, legacyConfig))
 
-	// Create a test ops file to simulate legacy repo state
 	testOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
 	require.NoError(t, os.WriteFile(testOpsFile, []byte(`{"id":"001"}`), 0o600))
 
-	// Commit the legacy state (in a real migration, this would have been committed in the past)
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy armature setup")
 
-	// Run bootstrap, which should migrate the legacy layout including config
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify the migration happened
 	output := buf.String()
 	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
 
-	// Bootstrap chains straight through to the collapsed layout (LNGHZN-S1-T3).
 	assert.False(t, pathExists(filepath.Join(repo, ".arm")), "no .arm worktree should remain; chains straight to collapsed")
 	assert.DirExists(t, filepath.Join(repo, ".armature"), ".armature worktree should exist")
 
-	// CRITICAL: Verify that the legacy config was migrated (not reset to defaults)
 	newConfigPath := filepath.Join(repo, ".armature", "config.json")
 	migratedConfig, err := config.LoadConfig(newConfigPath)
 	require.NoError(t, err, "config should be loadable from new location")
@@ -2239,23 +1850,16 @@ func TestRunRepoSetupMigratesLegacyConfig_P2(t *testing.T) {
 	assert.Equal(t, 3200, migratedConfig.TokenBudget, "custom TokenBudget should be preserved from legacy config (not reset to 1600)")
 	assert.Equal(t, 10, migratedConfig.LowStakesPushThreshold, "custom LowStakesPushThreshold should be preserved from legacy config (not reset to 5)")
 
-	// The whole point of untracking + committing the legacy .armature removal is to leave
-	// the working tree clean after migration. Verify that explicitly.
 	gitClient := adapters.New(repo)
 	dirty, err := gitClient.IsWorkingTreeDirty()
 	require.NoError(t, err)
 	assert.False(t, dirty, "working tree should be clean after a successful legacy migration")
 }
 
-// TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges verifies that unrelated
-// staged changes present when a legacy repo is migrated are NOT folded into the
-// migration's "chore: migrate..." commit. Previously the migration commit was ungated
-// and un-scoped, so any staged content at the time of migration got swept in.
 func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout, committed (as a real legacy repo would be).
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
@@ -2264,13 +1868,10 @@ func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) 
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy armature setup")
 
-	// Stage an unrelated file change right before running bootstrap.
 	unrelatedFile := filepath.Join(repo, "unrelated.txt")
 	require.NoError(t, os.WriteFile(unrelatedFile, []byte("unrelated work in progress"), 0o600))
 	run(t, repo, "git", "add", "unrelated.txt")
 
-	// With the pre-flight dirty check in place, bootstrap must refuse to run at all,
-	// since the working tree (index) is dirty due to the staged unrelated file.
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
@@ -2278,8 +1879,6 @@ func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) 
 	require.Error(t, err, "bootstrap should refuse to run when the working tree has unrelated staged changes")
 	assert.Contains(t, err.Error(), "dirty", "error should mention the dirty working tree")
 
-	// Nothing should have been touched: no migration backup dir, no committing of the
-	// unrelated staged file, and the unrelated change should still be staged/uncommitted.
 	entries, err := os.ReadDir(repo)
 	require.NoError(t, err)
 	for _, entry := range entries {
@@ -2299,33 +1898,23 @@ func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) 
 	assert.Contains(t, string(statusOut), "unrelated.txt", "unrelated staged file should still be present in git status")
 }
 
-// TestDoctorCommandRunsOnLegacyRepo_P2 verifies that `arm doctor` can run on a legacy repo
-// (one with .armature/ops but no armature.ops-worktree-path git config) without failing
-// with "armature.ops-worktree-path must be set". The doctor command should either succeed
-// or provide a clear diagnostic about the legacy layout, not crash in PersistentPreRunE.
 func TestDoctorCommandRunsOnLegacyRepo_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout WITHOUT running bootstrap
-	// (i.e., no git config set, no worktree created)
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create a test ops file to simulate legacy repo state
 	testOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
 	testContent := []byte(`{"id": "issue-001", "title": "Legacy issue"}`)
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
-	// Verify that git config is NOT set (legacy state)
 	gitCmd := exec.CommandContext(context.Background(), "git", "config", "armature.ops-worktree-path")
 	gitCmd.Dir = repo
 	err := gitCmd.Run()
 	assert.Error(t, err, "legacy repo should NOT have armature.ops-worktree-path git config")
 
-	// Now try to run `arm doctor` on the legacy repo
-	// This should NOT fail with "armature.ops-worktree-path must be set" in PersistentPreRunE
 	buf := new(strings.Builder)
 	errBuf := new(strings.Builder)
 	cmd := newRootCmd()
@@ -2335,25 +1924,17 @@ func TestDoctorCommandRunsOnLegacyRepo_P2(t *testing.T) {
 
 	err = cmd.Execute()
 
-	// The doctor command should either:
-	// 1. Succeed without error, OR
-	// 2. Fail with a clear diagnostic about the legacy layout,
-	// But NOT fail with "armature.ops-worktree-path must be set"
-
 	errOutput := errBuf.String()
 	assert.NotContains(t, errOutput, "armature.ops-worktree-path must be set",
 		"doctor should not fail with missing git config error on legacy repo")
 
 	if err != nil {
-		// If it fails, the error message should not be the git config error
 		errMsg := err.Error()
 		assert.NotContains(t, errMsg, "armature.ops-worktree-path must be set",
 			"doctor error should not be about missing git config")
 	}
 }
 
-// TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1 verifies that after creating the .arm worktree,
-// .arm/ is added to .git/info/exclude so it won't show up as untracked in `git status` or be staged by `git add .`.
 func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2365,8 +1946,6 @@ func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// A fresh init goes straight to the collapsed layout (LNGHZN-S1-T2), so
-	// .git/info/exclude should contain .armature/, not .arm/.
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 	content, readErr := os.ReadFile(excludePath)
 	require.NoError(t, readErr, ".git/info/exclude should exist and be readable")
@@ -2377,13 +1956,9 @@ func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 	firstCount := strings.Count(excludeContent, ".armature/")
 	assert.Equal(t, 1, firstCount, "should have exactly one .armature/ entry")
 
-	// .worktrees/ (where `arm claim` provisions linked worktrees) must also be
-	// excluded so `git add .` never stages them as gitlinks (finding #4).
 	assert.Contains(t, excludeContent, ".worktrees/", ".git/info/exclude should contain .worktrees/")
 	assert.Equal(t, 1, strings.Count(excludeContent, ".worktrees/"), "should have exactly one .worktrees/ entry")
 
-	// Run bootstrap again: the collapsed layout is already the steady state,
-	// so this must be a true idempotent no-op.
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(strings.Builder))
 	_, err = runRepoSetup(cmd2, repo)
@@ -2396,42 +1971,27 @@ func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(excludeContent2, ".worktrees/"), "should still have exactly one .worktrees/ entry after second run (idempotent)")
 }
 
-// TestCopyRecursiveDoesNotOverwriteExistingFiles_P2 verifies that copyRecursive does not overwrite
-// files that already exist at the destination, instead skipping them.
 func TestCopyRecursiveDoesNotOverwriteExistingFiles_P2(t *testing.T) {
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
 
-	// Create a source file with content
 	srcFile := filepath.Join(srcDir, "test.txt")
 	srcContent := []byte("source content")
 	require.NoError(t, os.WriteFile(srcFile, srcContent, 0o600))
 
-	// Create a destination file with different content
 	dstFile := filepath.Join(dstDir, "test.txt")
 	dstContent := []byte("destination content (should not be overwritten)")
 	require.NoError(t, os.WriteFile(dstFile, dstContent, 0o600))
 
-	// Copy the source to destination
 	skipped, err := copyRecursive(srcFile, dstFile)
 	require.NoError(t, err)
 	assert.Equal(t, 1, skipped, "copyRecursive should report 1 skipped file")
 
-	// Verify the destination file was NOT overwritten (still has original content)
 	result, readErr := os.ReadFile(dstFile)
 	require.NoError(t, readErr)
 	assert.Equal(t, dstContent, result, "destination file should not be overwritten by copyRecursive")
 }
 
-// TestPushOpsRunEEmitsNoStderrOnFailure_P2 verifies that push-ops's own RunE writes NOTHING
-// to stderr on failure. main.go's single top-level error handler owns rendering the error
-// (in whatever format was requested), so push_ops must not also emit its own error output —
-// otherwise --format json would produce two JSON objects on stderr instead of one.
-//
-// This test drives push-ops directly via runTrlsWithStderr, which calls root.Execute() and
-// does NOT go through main()'s top-level handler. That means it cannot observe main()'s
-// output at all — it can only observe what push_ops's RunE itself writes. This is exactly
-// the right lens for asserting push_ops emits no error output of its own.
 func TestPushOpsRunEEmitsNoStderrOnFailure_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2439,19 +1999,14 @@ func TestPushOpsRunEEmitsNoStderrOnFailure_P2(t *testing.T) {
 	_, err := runRepoSetup(&cobra.Command{}, repo)
 	require.NoError(t, err)
 
-	// Run push-ops with no remote configured (will fail)
 	out, errOutput, pushErr := runTrlsWithStderr(t, repo, "push-ops", "--format", "json")
 
-	// Expect an error since there's no remote
 	require.Error(t, pushErr, "push-ops should fail when no remote is configured")
 
 	assert.Equal(t, "", errOutput, "push-ops RunE should write nothing to stderr; only main()'s top-level handler should render the error")
 	assert.Equal(t, "", out, "stdout should be empty when push-ops fails")
 }
 
-// TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2 verifies that when writing
-// .git/info/exclude fails (a cosmetic nicety, not essential functionality), bootstrap
-// still succeeds overall and prints a warning instead of aborting.
 func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("running as root: permission bits are not enforced, cannot simulate write failure")
@@ -2460,15 +2015,8 @@ func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// `git init` already creates .git/info/exclude, so making the containing directory
-	// read-only wouldn't block a write to the existing file (only creation/deletion
-	// requires directory write permission). Instead, make the exclude file itself
-	// read-only so os.WriteFile's in-place rewrite fails.
 	infoDir := filepath.Join(repo, ".git", "info")
 	require.NoError(t, os.MkdirAll(infoDir, 0o750))
-	// `git init` already created this file (likely 0644), and os.WriteFile's mode
-	// argument is only applied when creating a new file, so an explicit os.Chmod is
-	// required to actually make the existing file read-only.
 	excludePath := filepath.Join(infoDir, "exclude")
 	require.NoError(t, os.WriteFile(excludePath, []byte("# existing\n"), 0o400))
 	require.NoError(t, os.Chmod(excludePath, 0o400))
@@ -2489,8 +2037,6 @@ func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
 	assert.Contains(t, buf.String(), "Warning", "bootstrap should print a warning when the exclude write fails")
 }
 
-// TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3 verifies that existing .log
-// files are merged line-by-line while non-log files still use skip-on-exists semantics.
 func TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3(t *testing.T) {
 	backupDir := t.TempDir()
 	newIssuesDir := t.TempDir()
@@ -2510,12 +2056,10 @@ func TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, skippedCount, "one non-log collision plus two appended log lines should be counted")
 
-	// The colliding JSON file should not have been overwritten.
 	content, readErr := os.ReadFile(filepath.Join(newOpsDir, "existing.json"))
 	require.NoError(t, readErr)
 	assert.Equal(t, "already here", string(content))
 
-	// The non-colliding file should have been copied.
 	content, readErr = os.ReadFile(filepath.Join(newOpsDir, "new.json"))
 	require.NoError(t, readErr)
 	assert.Equal(t, "legacy", string(content))
@@ -2536,11 +2080,6 @@ func TestListMigrationBackupsSortsAndIgnoresUnreadableRepo_P3(t *testing.T) {
 	require.Nil(t, listMigrationBackups(filepath.Join(repo, "missing")))
 }
 
-// TestListMigrationBackupsIncludesCollapsedBackups_REQ_LNGHZN_S1 verifies that
-// listMigrationBackups also surfaces .arm.collapsed-* backups created by
-// migrateDualBranchToCollapsed, not just the legacy .armature.migrated-* ones,
-// so a stranded dual-branch-to-collapsed backup isn't silently omitted from the
-// "stranded migration backups" note.
 func TestListMigrationBackupsIncludesCollapsedBackups_REQ_LNGHZN_S1(t *testing.T) {
 	repo := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".arm.collapsed-20260703010101"), 0o750))
@@ -2570,10 +2109,6 @@ func TestRunRepoSetupNotesStrandedMigrationBackups_P3(t *testing.T) {
 	assert.Contains(t, buf.String(), "Note: stranded migration backups remain: .armature.migrated-20260703000101, .armature.migrated-20260703010101")
 }
 
-// TestExcludeArmWorktreeFromGitExactLineMatch_P3 verifies that the idempotency check for
-// .arm/ in .git/info/exclude uses exact line matching, not substring containment. A
-// pre-existing similar-but-different line (e.g. "vendor.arm/") must not suppress the
-// real ".arm/" entry from being appended.
 func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
 	repo := t.TempDir()
 	infoDir := filepath.Join(repo, ".git", "info")
@@ -2590,7 +2125,6 @@ func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
 	assert.Contains(t, lines, "vendor.arm/", "pre-existing unrelated line should be preserved")
 	assert.Contains(t, lines, ".arm/", "the real .arm/ exclude entry should be appended despite the similar existing line")
 
-	// Running again should not duplicate the exact ".arm/" line.
 	require.NoError(t, excludeArmWorktreeFromGit(repo))
 	content2, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
@@ -2603,57 +2137,40 @@ func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
 	assert.Equal(t, 1, count, ".arm/ should not be duplicated on repeated calls")
 }
 
-// TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX verifies that when migrating a legacy
-// single-branch layout with a custom config.json, the config is committed to the _armature branch
-// along with the migrated ops data. This ensures custom settings (TTL, token budget, hooks, etc.)
-// are preserved and pushed to other clones. Previously, the config was loaded and written but
-// never committed to _armature, staying untracked in the .arm worktree.
 func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature layout with custom config and ops files
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create a custom legacy config (with non-default values)
 	legacyConfigPath := filepath.Join(legacyArmaturePath, "config.json")
 	legacyConfig := config.Config{
 		ProjectType:            "go",
-		DefaultTTL:             120,  // non-default
-		TokenBudget:            3200, // non-default
-		LowStakesPushThreshold: 10,   // non-default
+		DefaultTTL:             120,
+		TokenBudget:            3200,
+		LowStakesPushThreshold: 10,
 		Hooks:                  []config.HookConfig{},
 	}
 	require.NoError(t, config.WriteConfig(legacyConfigPath, legacyConfig))
 
-	// Create legacy ops files
 	testOpsFile := filepath.Join(legacyOpsPath, "issue001.json")
 	testOpsContent := []byte(`{"id": "001", "title": "Legacy issue"}`)
 	require.NoError(t, os.WriteFile(testOpsFile, testOpsContent, 0o600))
 
-	// Commit the legacy state (as would exist in a real legacy repo)
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy armature setup")
 
-	// Run bootstrap, which should migrate and commit both ops and config
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify migration happened
 	output := buf.String()
 	assert.Contains(t, output, "Migrated legacy single-branch", "output should mention migration")
 
-	// CRITICAL: Verify that the custom config was COMMITTED to the _armature branch,
-	// not just present as an untracked file on disk.
-	// This is the bug fix: config must be in the git history on _armature so it's pushed
-	// to other clones when they pull/clone.
-
-	// List files in the _armature branch to verify config is committed
 	gitShowCmd := exec.CommandContext(context.Background(), "git", "ls-tree", "-r", "_armature")
 	gitShowCmd.Dir = repo
 	gitShowOut, err := gitShowCmd.Output()
@@ -2661,21 +2178,17 @@ func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
 
 	showOutput := string(gitShowOut)
 
-	// The config.json MUST be committed to _armature, not just present on disk
 	assert.Contains(t, showOutput, "config.json",
 		"custom config.json MUST be committed to _armature branch so it's preserved for other clones")
 
-	// Also verify that ops files are committed
 	assert.Contains(t, showOutput, "ops/issue001.json",
 		"migrated ops files should also be committed to _armature branch")
 
-	// Verify the committed config content is correct
 	gitShowConfigCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:config.json")
 	gitShowConfigCmd.Dir = repo
 	gitShowConfigOut, err := gitShowConfigCmd.Output()
 	require.NoError(t, err, "should be able to show committed config from _armature branch")
 
-	// Parse the committed config and verify custom values are preserved
 	var committedConfig config.Config
 	err = json.Unmarshal(gitShowConfigOut, &committedConfig)
 	require.NoError(t, err, "committed config should be valid JSON")
@@ -2686,10 +2199,6 @@ func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
 	assert.Equal(t, 10, committedConfig.LowStakesPushThreshold, "custom LowStakesPushThreshold should be committed (not default 5)")
 }
 
-// TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch verifies that when runRepoSetup
-// performs a fresh bootstrap (no legacy migration), the generated config.json is COMMITTED to
-// the _armature branch, not just written to disk. This ensures config is preserved when the
-// _armature branch is pushed to other clones.
 func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2701,17 +2210,10 @@ func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) 
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
 
-	// Verify config.json exists in the worktree
 	configPath := filepath.Join(repo, ".armature", "config.json")
 	_, err = os.Stat(configPath)
 	require.NoError(t, err, "config.json should exist in worktree")
 
-	// CRITICAL: Verify that config.json is COMMITTED to the _armature branch,
-	// not just written to disk untracked.
-	// This is the fix for Finding 2: fresh bootstrap must also commit the default config
-	// so it's preserved in git history and pushed to other clones.
-
-	// List files committed to the _armature branch
 	gitLsCmd := exec.CommandContext(context.Background(), "git", "ls-tree", "-r", "_armature")
 	gitLsCmd.Dir = repo
 	gitLsOut, err := gitLsCmd.Output()
@@ -2719,49 +2221,36 @@ func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) 
 
 	lsOutput := string(gitLsOut)
 
-	// The config.json MUST be committed to _armature
 	assert.Contains(t, lsOutput, "config.json",
 		"config.json MUST be committed to _armature branch on fresh bootstrap")
 
-	// Verify we can read the committed config from the branch
 	gitShowCmd := exec.CommandContext(context.Background(), "git", "show", "_armature:config.json")
 	gitShowCmd.Dir = repo
 	gitShowOut, err := gitShowCmd.Output()
 	require.NoError(t, err, "should be able to show committed config from _armature branch")
 
-	// Verify the committed config is valid JSON
 	var committedConfig config.Config
 	err = json.Unmarshal(gitShowOut, &committedConfig)
 	require.NoError(t, err, "committed config should be valid JSON")
 
-	// Verify it contains expected default values
 	assert.NotEmpty(t, committedConfig.ProjectType, "ProjectType should be set in default config")
 }
 
-// TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1 verifies that when migrateLegacySingleBranchOps
-// encounters a commit failure, it rolls back completely: the backup
-// directory is removed, the original .armature directory is restored, and the index is restored to its
-// original state with .armature re-added. This ensures the migration is atomic: either it fully succeeds
-// or the repo is left exactly as before, not in a half-migrated state.
 func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a legacy single-branch .armature/ops layout, committed to git (as a real legacy repo would have)
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create a test ops file to verify data is preserved
 	testOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
 	testContent := []byte(`{"id": "001", "title": "Test issue"}`)
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
-	// Commit the legacy .armature to git
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy setup")
 
-	// Fail the migration commit without chmod or gpgsign (see interceptGitCommit).
 	gitClient := adapters.New(repo)
 	wasTrackedBefore := gitClient.IsTracked(".armature")
 	require.True(t, wasTrackedBefore, ".armature should be tracked before migration")
@@ -2770,23 +2259,18 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	migratedFlag, backupDir, preMigrationSHA, _, err := migrateLegacySingleBranchOps(repo)
 	restoreGit()
 
-	// The migration should fail
 	require.Error(t, err, "migration should fail because git commit was intercepted")
 	assert.False(t, migratedFlag, "migrated flag should be false when migration fails")
 	assert.Empty(t, backupDir, "backupDir should be empty when migration fails")
 	assert.NotEmpty(t, preMigrationSHA, "preMigrationSHA should be recorded before rollback")
 
-	// CRITICAL: Verify complete rollback
-	// 1. The original .armature directory should be restored
 	assert.DirExists(t, legacyArmaturePath, ".armature directory should be restored after failed migration")
 
-	// Verify the original file is still there
 	restoredOpsFile := filepath.Join(legacyOpsPath, "test-issue.json")
 	restoredContent, err := os.ReadFile(restoredOpsFile)
 	require.NoError(t, err, "original ops file should still exist after rollback")
 	assert.Equal(t, testContent, restoredContent, "original ops file content should be unchanged")
 
-	// 2. No backup directory should be left behind
 	entries, err := os.ReadDir(repo)
 	require.NoError(t, err)
 	for _, entry := range entries {
@@ -2794,16 +2278,13 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 			"backup directory should not exist after rollback (cleanup on error)")
 	}
 
-	// 3. The index should be clean and .armature should still be tracked
 	isTrackedAfter := gitClient.IsTracked(".armature")
 	assert.True(t, isTrackedAfter, ".armature should still be tracked after rollback (re-added to index on error)")
 
-	// 4. Working tree should be clean (no dangling staged removals)
 	dirty, err := gitClient.IsWorkingTreeDirty()
 	require.NoError(t, err)
 	assert.False(t, dirty, "working tree should be clean after rollback (no dangling staged removals)")
 
-	// 5. Verify that a retry of the migration can still detect the legacy layout.
 	migratedRetry, backupDirRetry, preMigrationSHARetry, _, errRetry := migrateLegacySingleBranchOps(repo)
 	require.NoError(t, errRetry, "retry migration (without signing failure) should succeed")
 	assert.True(t, migratedRetry, "retry migration should report success")
@@ -2812,9 +2293,6 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	assert.DirExists(t, backupDirRetry, "retry backup directory should exist")
 }
 
-// TestRunRepoSetupMigratesTemplatesHooksReview_P2 verifies that legacy templates/, hooks/,
-// and review/ content (not just ops/ and config.json) is copied into the new worktree during
-// migration, rather than being left stranded only in the timestamped backup.
 func TestRunRepoSetupMigratesTemplatesHooksReview_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2853,11 +2331,6 @@ func TestRunRepoSetupMigratesTemplatesHooksReview_P2(t *testing.T) {
 	assert.Equal(t, "review notes", string(reviewContent))
 }
 
-// TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2 verifies that a newly written
-// config.json is committed to the _armature branch even when the worktree is not a
-// fresh init (e.g. _armature was adopted from a remote that had ops/ but no
-// config.json). Previously the commit was gated on freshInit, so the generated
-// config.json could be written to disk but never preserved in git history.
 func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2872,9 +2345,6 @@ func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
 	issuesDir := worktreePath
 	configPath := filepath.Join(issuesDir, "config.json")
 
-	// Simulate "adopted from remote with ops but no config.json": remove config.json
-	// and delete its commit history by resetting the _armature branch, then add an ops
-	// file so the directory is non-empty (not a fresh init on the next run).
 	require.NoError(t, os.Remove(configPath))
 	worktreeGitClient := adapters.New(worktreePath)
 	require.NoError(t, worktreeGitClient.AddPaths([]string{"."}))
@@ -2890,15 +2360,11 @@ func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "already_initialized", result2.Status, "ops/ is non-empty, so this run should not be a fresh init")
 
-	// The dual-branch layout converges to the collapsed layout on this second
-	// bootstrap call (LNGHZN-S1-T2), so config.json now lives directly under
-	// the collapsed .armature/ worktree, not the old .arm/.armature nesting.
 	collapsedWorktreePath := filepath.Join(repo, ".armature")
 	collapsedConfigPath := filepath.Join(collapsedWorktreePath, "config.json")
 
 	assert.FileExists(t, collapsedConfigPath, "config.json should be regenerated in the collapsed worktree")
 
-	// Verify the regenerated config.json was committed to _armature (not just written to disk).
 	statusOut, err := exec.CommandContext(context.Background(), "git", "-C", collapsedWorktreePath, "status", "--porcelain", "config.json").Output()
 	require.NoError(t, err)
 	assert.Empty(t, strings.TrimSpace(string(statusOut)), "regenerated config.json should be committed, not left as an uncommitted/untracked change")
@@ -2908,15 +2374,10 @@ func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
 	assert.Contains(t, string(logOut), "init armature config", "config.json should have a commit preserving it in _armature history")
 }
 
-// TestRunRepoSetupRollsBackMigrationWhenWorktreeAddFails_P1 verifies that if the legacy
-// migration succeeds (backup created, .armature removed and committed) but a later setup
-// step (AddWorktree) fails, the migration is rolled back rather than leaving the repo with
-// .armature gone from tracking while the new dual-branch layout was never created.
 func TestRunRepoSetupRollsBackMigrationWhenWorktreeAddFails_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up and commit a legacy single-branch .armature/ops layout.
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
@@ -2925,10 +2386,6 @@ func TestRunRepoSetupRollsBackMigrationWhenWorktreeAddFails_P1(t *testing.T) {
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy setup")
 
-	// Wrap `git` to fail the `worktree add .armature` call deterministically:
-	// bootstrap now chains a legacy migration straight to the collapsed
-	// .armature/ worktree (LNGHZN-S1-T2/T3), so that's the AddWorktree call to
-	// intercept rather than a pre-collision file at .arm (no longer touched).
 	wrapperDir := t.TempDir()
 	wrapperPath := filepath.Join(wrapperDir, "git")
 	realGit, err := exec.LookPath("git")
@@ -2956,7 +2413,6 @@ exec "$real_git" "$@"
 	require.Error(t, err, "runRepoSetup should fail because worktree add was intercepted")
 	assert.Contains(t, err.Error(), "add .armature worktree")
 
-	// The legacy migration should have been rolled back: .armature restored and tracked again.
 	gitClient := adapters.New(repo)
 	assert.DirExists(t, legacyArmaturePath, ".armature should be restored after rollback")
 	restoredContent, readErr := os.ReadFile(filepath.Join(legacyOpsPath, "test-issue.json"))
@@ -2969,36 +2425,26 @@ exec "$real_git" "$@"
 	assert.False(t, dirty, "working tree should be clean after rollback")
 }
 
-// TestRunRepoSetupRefusesOpsWorktree_P1 verifies that pointing bootstrap at the ops
-// worktree itself (.arm, checked out on _armature) is refused instead of being
-// mistaken for a legacy single-branch layout and "migrated" — which would rename
-// the real dual-branch ops data away and commit its removal on _armature.
 func TestRunRepoSetupRefusesOpsWorktree_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Normal bootstrap to create the dual-branch layout.
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
 	_, err := runRepoSetup(cmd1, repo)
 	require.NoError(t, err)
 
-	// Put a real ops log in the worktree so the "legacy detection" precondition
-	// (non-empty ops dir) holds. Fresh bootstrap now produces the collapsed
-	// .armature/ worktree directly (LNGHZN-S1-T2), not .arm/.armature.
 	armPath := filepath.Join(repo, ".armature")
 	opsFile := filepath.Join(armPath, "ops", "worker-test.jsonl")
 	opsContent := []byte(`{"op":"create"}`)
 	require.NoError(t, os.WriteFile(opsFile, opsContent, 0o600))
 
-	// Bootstrap pointed at the ops worktree must refuse.
 	cmd2 := newRootCmd()
 	cmd2.SetOut(new(bytes.Buffer))
 	_, err = runRepoSetup(cmd2, armPath)
 	require.Error(t, err, "bootstrap targeting the ops worktree should be refused")
 	assert.Contains(t, err.Error(), "_armature")
 
-	// The real ops data must be untouched: no rename, no migrated backup.
 	content, readErr := os.ReadFile(opsFile)
 	require.NoError(t, readErr, "ops data must not be renamed away")
 	assert.Equal(t, opsContent, content)
@@ -3010,11 +2456,6 @@ func TestRunRepoSetupRefusesOpsWorktree_P1(t *testing.T) {
 	}
 }
 
-// TestRunRepoSetupMigrationFailureNamesBackupDir_P1 verifies that when a failure
-// happens AFTER the legacy .armature has been renamed to its backup (e.g. while
-// copying legacy data into the new worktree), the returned error names the backup
-// directory. Without that, a re-run sees no legacy layout, fresh-inits with
-// defaults, and the legacy ops are stranded in the backup with no pointer to them.
 func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3023,14 +2464,11 @@ func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "log.jsonl"), []byte(`{"op":"x"}`), 0o600))
 
-	// An unreadable legacy templates dir makes copyLegacyOpsToNewWorktree fail
-	// after the rename to the backup has already happened.
 	legacyTemplates := filepath.Join(repo, ".armature", "templates")
 	require.NoError(t, os.MkdirAll(legacyTemplates, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyTemplates, "t.md"), []byte("tmpl"), 0o600))
 	require.NoError(t, os.Chmod(legacyTemplates, 0o000))
 	t.Cleanup(func() {
-		// Restore perms wherever the dir ended up so TempDir cleanup works.
 		entries, readErr := os.ReadDir(repo)
 		if readErr != nil {
 			return
@@ -3052,9 +2490,6 @@ func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
 		"error after a post-rename failure must name the backup dir so data isn't silently stranded")
 }
 
-// TestRunRepoSetupMigrationCommitFailureNamesBackupDir_P1 verifies that when the
-// commit of migrated data to the _armature branch fails, the error names the
-// timestamped backup directory so the legacy data can be recovered manually.
 func TestRunRepoSetupMigrationCommitFailureNamesBackupDir_P1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3108,9 +2543,6 @@ exec "$real_git" "$@"
 		"commit failure after migration must name the backup dir so data isn't silently stranded")
 }
 
-// TestRunRepoSetupMigrationBackupNameCollision_P2 verifies migration still succeeds
-// when a backup directory with the current-second timestamp already exists (e.g. a
-// retry right after a rolled-back migration, which leaves its backup behind).
 func TestRunRepoSetupMigrationBackupNameCollision_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3120,8 +2552,6 @@ func TestRunRepoSetupMigrationBackupNameCollision_P2(t *testing.T) {
 	opsContent := []byte(`{"op":"x"}`)
 	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "log.jsonl"), opsContent, 0o600))
 
-	// Pre-create non-empty backup dirs for this second and the next few, simulating
-	// leftovers from prior attempts, so a plain rename would fail with ENOTEMPTY.
 	staleContent := []byte("stale")
 	now := time.Now()
 	var staleDirs []string
@@ -3137,23 +2567,17 @@ func TestRunRepoSetupMigrationBackupNameCollision_P2(t *testing.T) {
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err, "migration should succeed despite pre-existing backup dirs")
 
-	// Prior backups untouched.
 	for _, d := range staleDirs {
 		content, readErr := os.ReadFile(filepath.Join(d, "old.txt"))
 		require.NoError(t, readErr)
 		assert.Equal(t, staleContent, content, "pre-existing backup must not be clobbered")
 	}
 
-	// Legacy ops preserved in some (new) backup and copied into the worktree.
 	migrated, readErr := os.ReadFile(filepath.Join(repo, ".armature", "ops", "log.jsonl"))
 	require.NoError(t, readErr)
 	assert.Equal(t, opsContent, migrated)
 }
 
-// TestRunRepoSetupCommittedRollbackNamesLeftoverBackup_P2 verifies that when a
-// committed migration is rolled back (hard reset restores tracked files), the error
-// still names the leftover backup dir — it's the only copy of any legacy files that
-// were untracked at migration time (the clean-tree pre-flight ignores untracked).
 func TestRunRepoSetupCommittedRollbackNamesLeftoverBackup_P2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3164,12 +2588,9 @@ func TestRunRepoSetupCommittedRollbackNamesLeftoverBackup_P2(t *testing.T) {
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy setup")
 
-	// An untracked ops file: passes the clean-tree check, survives only in the backup.
 	untracked := []byte(`{"op":"untracked"}`)
 	require.NoError(t, os.WriteFile(filepath.Join(legacyOpsPath, "untracked.jsonl"), untracked, 0o600))
 
-	// Wrap `git` to fail the `worktree add .armature` call after the migration
-	// commit has already happened, forcing the rollback path.
 	wrapperDir := t.TempDir()
 	wrapperPath := filepath.Join(wrapperDir, "git")
 	realGit, err := exec.LookPath("git")
@@ -3197,7 +2618,6 @@ exec "$real_git" "$@"
 	assert.Contains(t, err.Error(), ".armature.migrated-",
 		"rollback error must name the leftover backup holding untracked legacy files")
 
-	// The backup really is still on disk with the untracked file.
 	entries, readErr := os.ReadDir(repo)
 	require.NoError(t, readErr)
 	found := false
@@ -3212,9 +2632,6 @@ exec "$real_git" "$@"
 	assert.True(t, found, "backup dir should remain after committed rollback")
 }
 
-// TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3 verifies that when the legacy
-// config.json exists but cannot be loaded, migration proceeds with defaults but
-// warns the user instead of silently discarding their configuration.
 func TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3237,67 +2654,45 @@ func TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3(t *testing.T) {
 	assert.Contains(t, combined, "default", "warning should say defaults are used instead")
 }
 
-// TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3 verifies that a repo with the original
-// single-branch .armature/ layout converges to the collapsed layout in one arm bootstrap invocation.
-// The chaining behavior (legacy -> dual-branch -> collapsed) happens automatically in a single
-// runRepoSetup() call, so a legacy repo does not require two separate bootstrap invocations.
 func TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Set up a repo with ONLY the original single-branch .armature/ops layout
-	// (matching how other legacy-migration tests set up their fixtures)
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
 
-	// Create a test ops file to verify data survives the migration
 	testOpsFile := filepath.Join(legacyOpsPath, "test.json")
 	testContent := []byte(`{"test": "data"}`)
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
-	// Call runRepoSetup() ONCE
 	buf := new(strings.Builder)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
 	result, err := runRepoSetup(cmd, repo)
 
-	// Verify: (a) no error
 	require.NoError(t, err, "bootstrap should complete without error")
 
-	// Verify: (b) repo ends up with collapsed layout
-	// After chaining through both migrations in one pass, .armature/ should be a git worktree.
-	// Check that .armature/.git exists and is NOT a directory (it's the worktree pointer file).
 	gitMarkerPath := filepath.Join(repo, ".armature", ".git")
 	gitMarkerInfo, statErr := os.Stat(gitMarkerPath)
 	require.NoError(t, statErr, ".armature/.git should exist after collapsed migration")
 	assert.False(t, gitMarkerInfo.IsDir(), ".armature/.git should be a worktree pointer file, not a directory")
 
-	// Verify the collapsed layout has the expected directory structure
 	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"), "collapsed layout should have .armature/ops/")
 	assert.DirExists(t, filepath.Join(repo, ".armature", "state"), "collapsed layout should have .armature/state/")
 
-	// Verify: (c) original test file's content survived
 	newOpsFile := filepath.Join(repo, ".armature", "ops", "test.json")
 	newContent, readErr := os.ReadFile(newOpsFile)
 	require.NoError(t, readErr, "original ops file should be preserved in collapsed layout")
 	assert.Equal(t, testContent, newContent, "original ops file content should be unchanged")
 
-	// Verify: (d) there is NO .arm/ directory left behind
 	armWorktreePath := filepath.Join(repo, ".arm")
 	_, armStatErr := os.Stat(armWorktreePath)
 	assert.True(t, os.IsNotExist(armStatErr), ".arm/ worktree should not exist after chaining to collapsed layout")
 
-	// Verify the result reports "initialized" (fresh init status)
 	assert.Equal(t, "initialized", result.Status, "result should report fresh initialization")
 }
 
-// TestBootstrapHonorsConfiguredCustomCollapsedWorktree verifies that a repo which
-// already has a valid collapsed layout at a custom armature.ops-worktree-path
-// (e.g. .ops, not .arm or .armature) is left alone by a second bootstrap run
-// instead of being treated as unmigrated and having a second worktree added at
-// the default .armature/ path, which git would reject since the branch is
-// already checked out elsewhere.
 func TestBootstrapHonorsConfiguredCustomCollapsedWorktree(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3325,23 +2720,13 @@ func TestBootstrapHonorsConfiguredCustomCollapsedWorktree(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(repo, ".armature"), "bootstrap must not create a default .armature/ worktree alongside a valid custom one")
 }
 
-// TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1 verifies
-// that rollbackLegacyMigration refuses to `reset --hard` when HEAD is parked on the
-// _armature branch. CreateOrphanBranch can fail after `git checkout --orphan
-// _armature` if its own restore-checkout also fails, leaving HEAD on the unborn
-// _armature branch; resetting --hard in that state would point _armature at the
-// code branch's pre-migration SHA, corrupting the ops branch and violating the
-// append-only invariant (AGENTS.md I2/T2).
 func TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	preSHA := strings.TrimSpace(runOutput(t, repo, "rev-parse", "HEAD"))
 
-	// Simulate the migration commit that renamed/committed .armature away.
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "chore: migrate legacy .armature to dual-branch layout")
 
-	// Simulate CreateOrphanBranch failing mid-way: its own restore-checkout also
-	// failed, leaving HEAD parked on the unborn _armature branch.
 	run(t, repo, "git", "checkout", "--orphan", "_armature")
 	run(t, repo, "git", "commit", "--no-verify", "--allow-empty", "-m", "chore: init armature issues branch")
 	armatureSHABefore := strings.TrimSpace(runOutput(t, repo, "rev-parse", "_armature"))
@@ -3356,19 +2741,10 @@ func TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1(t *
 	assert.Equal(t, armatureSHABefore, armatureSHAAfter, "_armature ref must be untouched by the refused reset")
 }
 
-// TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGHZN_S1
-// verifies the chain from a successful legacy single-branch migration straight into
-// a failing dual-branch-to-collapsed migration is rolled back, not left stranded.
-// Without this, a successful migrateLegacySingleBranchOps followed by a failing
-// migrateDualBranchToCollapsed would leave the legacy ops history sitting in a
-// backup dir forever: a retry sees migrated == false and never attempts the merge
-// again.
 func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	// Legacy single-branch layout at the root: migrateLegacySingleBranchOps will
-	// succeed and commit its removal.
 	legacyArmaturePath := filepath.Join(repo, ".armature")
 	legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 	require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
@@ -3377,10 +2753,6 @@ func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGH
 	run(t, repo, "git", "add", ".armature")
 	run(t, repo, "git", "commit", "-m", "legacy setup")
 
-	// A separate, pre-existing dual-branch .arm worktree with a dirty working tree:
-	// migrateDualBranchToCollapsed detects the dual-branch layout and refuses
-	// because of the uncommitted changes, failing right after the legacy migration
-	// committed successfully.
 	gitClient := adapters.New(repo)
 	require.NoError(t, gitClient.CreateOrphanBranch("_armature"))
 	armWorktreePath := filepath.Join(repo, ".arm")
@@ -3390,8 +2762,6 @@ func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGH
 	armGitClient := adapters.New(armWorktreePath)
 	require.NoError(t, armGitClient.AddPaths([]string{".armature"}))
 	require.NoError(t, armGitClient.CommitWorktreeOp(".armature", "chore: create legacy dual-branch layout"))
-	// Modify a tracked file without committing so migrateDualBranchToCollapsed's
-	// dirty check fails (untracked-only changes don't count as dirty there).
 	require.NoError(t, os.WriteFile(filepath.Join(armWorktreePath, ".armature", "ops", "issue.json"), []byte(`{"id":"1","modified":true}`), 0o600))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
@@ -3401,7 +2771,6 @@ func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGH
 	require.Error(t, err, "runRepoSetup should fail because the dual-branch worktree is dirty")
 	assert.Contains(t, err.Error(), "migrate dual-branch layout to collapsed")
 
-	// The legacy migration must have been rolled back: .armature restored and tracked.
 	assert.DirExists(t, legacyArmaturePath, ".armature should be restored after rollback")
 	restoredContent, readErr := os.ReadFile(filepath.Join(legacyOpsPath, "test-issue.json"))
 	require.NoError(t, readErr, "legacy ops file should still exist after rollback")
@@ -3413,11 +2782,6 @@ func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGH
 	assert.False(t, dirty, "working tree at repo root should be clean after rollback")
 }
 
-// TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1 verifies
-// that bootstrapping against a custom collapsed ops worktree (e.g. .ops, not the
-// default .armature/) adds an exclude entry for the worktree's own basename, not
-// the hardcoded .armature/ constant. Without this, a repo using a custom worktree
-// path shows the worktree directory as untracked instead of excluded.
 func TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3445,10 +2809,6 @@ func TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1(t *
 	assert.NotContains(t, string(excludeContent), ".armature/", ".git/info/exclude should not exclude the unused default .armature/ path")
 }
 
-// TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1 verifies that
-// a custom ops worktree (e.g. .ops) containing a nested, unmigrated .armature/
-// subtree (dual-branch-style, pre-collapse) is refused rather than silently
-// producing a new collapsed worktree that leaves the nested ops history behind.
 func TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3458,8 +2818,6 @@ func TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1(t *test
 	customWorktreePath := filepath.Join(repo, ".ops")
 	require.NoError(t, gitClient.AddWorktree("_armature", customWorktreePath))
 
-	// Nested, unmigrated .armature/ subtree under the custom worktree: dual-branch
-	// style, pre-collapse layout.
 	opsGitClient := adapters.New(customWorktreePath)
 	nestedArmaturePath := filepath.Join(customWorktreePath, ".armature")
 	require.NoError(t, os.MkdirAll(filepath.Join(nestedArmaturePath, "ops"), 0o750))
@@ -3477,12 +2835,6 @@ func TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1(t *test
 	assert.Contains(t, err.Error(), "supports only .arm")
 }
 
-// TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ_LNGHZN_S1
-// verifies that a custom collapsed worktree whose config.json is missing/corrupt
-// (so config.ResolveContext fails) does not corrupt repo state: bootstrap either
-// falls through to its normal fresh/legacy handling or fails clearly, but must not
-// leave the repo in a state where the existing worktree's git registration is
-// damaged.
 func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ_LNGHZN_S1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3494,7 +2846,6 @@ func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ
 
 	opsGitClient := adapters.New(customWorktreePath)
 	require.NoError(t, os.MkdirAll(filepath.Join(customWorktreePath, "ops"), 0o750))
-	// Corrupt config.json so config.ResolveContext fails to parse it.
 	require.NoError(t, os.WriteFile(filepath.Join(customWorktreePath, "config.json"), []byte(`{not valid json`), 0o600))
 	require.NoError(t, opsGitClient.AddPaths([]string{"ops", "config.json"}))
 	require.NoError(t, opsGitClient.CommitWorktreeOp(".", "chore: collapsed custom worktree with bad config"))
@@ -3504,10 +2855,9 @@ func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ
 
 	cmd := newRootCmd()
 	cmd.SetOut(new(strings.Builder))
-	_, _ = runRepoSetup(cmd, repo) //nolint:errcheck // outcome (success or clear failure) is asserted via git state below, not the return value
+	_, err := runRepoSetup(cmd, repo)
+	swallowErr(err)
 
-	// Whether it succeeded or failed, the existing worktree's git registration must
-	// remain valid and its history must not have been rewound (append-only, I2/T2).
 	gitDir := strings.TrimSpace(runOutput(t, customWorktreePath, "rev-parse", "--git-dir"))
 	assert.Contains(t, gitDir, filepath.Join(".git", "worktrees"),
 		"custom worktree must remain a genuinely registered worktree")
@@ -3515,9 +2865,6 @@ func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ
 	assert.Equal(t, preSHA, postSHA, "custom worktree history must not be rewound")
 }
 
-// TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1 verifies the post-commit
-// template is a one-line delegation to arm hook run, with the managed marker kept
-// and the bare arm heartbeat / arm push-ops / _armature skip removed.
 func TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1(t *testing.T) {
 	require.Contains(t, postCommitHookTemplate, "# armature:managed")
 
@@ -3537,9 +2884,6 @@ func TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1(t *testing.T) {
 	assert.NotContains(t, postCommitHookTemplate, "arm push-ops")
 }
 
-// TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1 commits in a claimed
-// worktree and asserts the installed post-commit hook records a heartbeat op
-// without printing a GENERAL-1 envelope on stdout.
 func TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3554,9 +2898,6 @@ func TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1(t *testing.T) {
 	wt := filepath.Join(repo, ".worktrees", "task-01")
 	require.DirExists(t, wt)
 
-	// Production template unsets Git hook env and skips _armature by
-	// invoking-worktree branch. Do not disable ops-worktree hooks or wrap
-	// env isolation — those hid the production recursion / dirty-index bugs.
 	armBin := buildWorktreeArm(t)
 	wrapperDir := t.TempDir()
 	script := fmt.Sprintf(`#!/bin/sh
@@ -3592,9 +2933,6 @@ exec %q "$@"
 		logPath, stdout.String(), stderr.String())
 }
 
-// TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3 verifies the pre-commit
-// template is a one-line delegation to arm hook run, with the managed marker
-// kept and the in-shell branch skip / grep refusal removed.
 func TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3(t *testing.T) {
 	require.Contains(t, preCommitHookTemplate, "# armature:managed")
 
@@ -3619,9 +2957,6 @@ func TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3(t *testing.T) {
 	assert.NotContains(t, preCommitHookTemplate, "grep -q")
 }
 
-// TestPreCommitRefusalReachesStderrWithRemediation_REQ_HKDLG_T3 commits a
-// staged .armature/ops/ path through the installed pre-commit hook and asserts
-// the Go refusal (including arm bootstrap --dual-branch) reaches stderr.
 func TestPreCommitRefusalReachesStderrWithRemediation_REQ_HKDLG_T3(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -3637,8 +2972,6 @@ exec %q "$@"
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	// Parent gitignore and the ops worktree both try to keep ops/ unstaged;
-	// --force plants a path the Go hook's strings.Contains check still sees.
 	probeRel := filepath.Join("leaked", ".armature", "ops", "probe.log")
 	writeFile(t, repo, probeRel, "ops must not land on a code branch\n")
 	run(t, repo, "git", "add", "--force", probeRel)

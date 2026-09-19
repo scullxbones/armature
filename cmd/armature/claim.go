@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -32,8 +31,6 @@ func init() {
 	armerrors.Register(codeClaim1)
 }
 
-// mapClaimError presents claim RunE errors as a Command Failure at the CLI
-// port. Core helpers still return ordinary errors.
 func mapClaimError(err error) error {
 	if err == nil {
 		return nil
@@ -67,26 +64,20 @@ func mapClaimError(err error) error {
 	}
 }
 
-// defaultWorktreeFlagValue preserves the established value-less --worktree
-// form while allowing --worktree <path> for a caller-selected new worktree.
 const defaultWorktreeFlagValue = ".armature-default-worktree"
 
-// worktreePathExists checks if a worktree exists at the given path.
 func worktreePathExists(path string) (bool, error) {
 	gitFile := filepath.Join(path, ".git")
 	_, err := os.Stat(gitFile)
 	if err == nil {
-		return true, nil // .git exists, this is a worktree
+		return true, nil
 	}
 	if os.IsNotExist(err) {
-		return false, nil // path doesn't exist or no .git file
+		return false, nil
 	}
-	return false, err // other error
+	return false, err
 }
 
-// isWorktreeOf checks if a worktree at worktreePath is registered to the git
-// repository at repoPath. It uses the shared binding-aware inventory so claim's
-// foreign-repository guard cannot drift from list, GC, merged, or Doctor.
 func isWorktreeOf(repoPath, worktreePath string) bool {
 	worktrees, err := worktree.List(repoPath)
 	if err != nil {
@@ -101,21 +92,12 @@ func isWorktreeOf(repoPath, worktreePath string) bool {
 	return false
 }
 
-// checkExistingWorktreeBinding verifies that an existing worktree at path is bound
-// to the expected issue and is on the expected branch. Returns an error if the
-// worktree is bound to a different issue or is on a mismatched branch, preventing
-// silent overwrite of the binding (fix for worktree mismatch governance gap).
 func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) error {
 	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
-		return nil // can't resolve git dir; let later steps surface the error
+		return nil
 	}
 
-	// Use the legacy-aware binding reader that falls back from armature-issue-id to armature-task-id.
-	// This handles worktrees claimed before the rename to armature-issue-id. Unlike
-	// ReadIssueBindingFile, the Err variant surfaces non-ENOENT read errors (e.g.
-	// permission denied) so a binding file we can't read is not silently treated
-	// as unbound, restoring the old fail-closed behavior.
 	existingIssueID, err := harnesshook.ReadIssueBindingFileErr(actualGitDir)
 	if err != nil {
 		return fmt.Errorf("read existing binding: %w", err)
@@ -125,17 +107,15 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 			worktreePath, existingIssueID)
 	}
 
-	// Also verify the worktree's current branch matches the expected branch.
 	headFile := filepath.Join(actualGitDir, "HEAD")
 	headBytes, err := os.ReadFile(headFile) //nolint:gosec // internal path
 	if err != nil {
-		return nil // no HEAD yet (fresh or detached); allow claim to proceed
+		return nil
 	}
 	headStr := strings.TrimSpace(string(headBytes))
-	// Skip branch check for detached HEAD only when already bound to this issue
 	if !strings.HasPrefix(headStr, "ref: refs/heads/") {
 		if existingIssueID == issueID {
-			return nil // already bound to this issue, detached HEAD is acceptable (mid-rebase, etc.)
+			return nil
 		}
 		return fmt.Errorf("worktree at %s has a detached HEAD with no existing binding for %s: checkout the expected branch %q or use a different --worktree path",
 			worktreePath, issueID, expectedBranch)
@@ -150,11 +130,6 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 	return nil
 }
 
-// canonicalWorktreePath validates the issue ID before it is used in any
-// filesystem or git operation. Slash-bearing IDs are rejected to ensure
-// prefix-free worktree paths — one managed worktree can never contain another.
-// Absolute, traversal, and separator-bearing IDs are rejected before the claim
-// op is appended.
 func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 	if err := issueid.Validate(issueID); err != nil {
 		return "", err
@@ -168,8 +143,6 @@ func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 	return path, nil
 }
 
-// destLocationFacts reports whether destination sits inside the coordinator
-// repository and, if so, whether it is under the canonical .worktrees root.
 func destLocationFacts(repoPath, destination string) (inRepo, underCanonical bool) {
 	repoRoot := worktree.NormalizePath(repoPath)
 	normalizedDestination := worktree.NormalizePathAllowingMissing(destination)
@@ -178,11 +151,6 @@ func destLocationFacts(repoPath, destination string) (inRepo, underCanonical boo
 	return inRepo, underCanonical
 }
 
-// nestedRegisteredWorktree returns the registered worktree path that contains
-// destination, or empty when the dest is not nested. The main coordinator
-// worktree is absent from RegisteredPaths. Equal dest/registration is treated
-// as nested unless the registration is prunable (git's leftover after a
-// deleted directory), matching the pre-PlanProvision refuse.
 func nestedRegisteredWorktree(repoPath, destination string) (string, error) {
 	registeredPaths, err := worktree.RegisteredPaths(repoPath)
 	if err != nil {
@@ -207,10 +175,6 @@ func nestedRegisteredWorktree(repoPath, destination string) (string, error) {
 	return "", nil
 }
 
-// refuseCustomWorktreeDestination gathers dest facts and asks PlanProvision
-// whether an explicit destination is legal. Inventory is empty so this call
-// only covers nested/in-repo dest refuses (before the Claim Op). Binding
-// cardinality uses evaluateProvisionPlan with worktree.List inventory.
 func refuseCustomWorktreeDestination(repoPath, destination, issueID, expectedBranch string) error {
 	nestedUnder, err := nestedRegisteredWorktree(repoPath, destination)
 	if err != nil {
@@ -234,9 +198,6 @@ func refuseCustomWorktreeDestination(repoPath, destination, issueID, expectedBra
 	return nil
 }
 
-// evaluateProvisionPlan lists clone inventory and asks PlanProvision. Used
-// before the Claim Op so dest-present re-claim cannot skip Ambiguous Binding
-// (or other inventory-backed refuses) that the create path already consults.
 func evaluateProvisionPlan(repoPath, dest, issueID, expectedBranch string) (worktree.ProvisionPlan, error) {
 	inventory, err := worktree.List(repoPath)
 	if err != nil {
@@ -312,22 +273,8 @@ func sourceAdvancedOnlyByArmature(repoPath, sourcePath, oldTip, newTip string) (
 	return true, nil
 }
 
-// addWorktreeDetached provisions a linked worktree at worktreePath checked out
-// detached at baseRef (a SHA or ref). Using a detached checkout means no branch
-// is held by the new worktree yet, so a subsequent branch checkout inside it
-// cannot trip git's "branch already checked out" guard. Uses raw git rather than
-// the adapter so this reordering stays within cmd/armature (the adapter's
-// AddWorktree only supports the branch-first form).
 func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
 	addArgs := []string{"worktree", "add", "--detach", worktreePath, baseRef}
-	// If the managed worktree directory was deleted out from under git, git keeps
-	// the administrative registration and marks it prunable. worktree.List skips
-	// prunable blocks, so the adoption loop never sees the path and a plain
-	// `git worktree add <path>` fails with "missing but already registered
-	// worktree", leaving every re-claim to loop. Clear that stale registration
-	// with an exact-path `add --force` (git's documented fix for this exact
-	// error) rather than a broad `git worktree prune`, which could drop unrelated
-	// registrations.
 	prunable, err := worktree.HasPrunableRegistration(repoPath, worktreePath)
 	if err != nil {
 		return fmt.Errorf("check prunable worktree registration: %w", err)
@@ -343,10 +290,6 @@ func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
 	return nil
 }
 
-// checkoutBranchInWorktree creates or checks out branchName inside the worktree
-// at worktreePath. If the branch already exists it is checked out as-is; if not,
-// it is created at the worktree's current (detached) HEAD. Idempotent: a no-op
-// when the worktree is already on branchName.
 func checkoutBranchInWorktree(worktreePath, branchName string) error {
 	// Fast-path idempotency and existing-branch handling: if the branch already
 	// exists, check it out; otherwise create it from the current detached HEAD.
@@ -368,8 +311,6 @@ func checkoutBranchInWorktree(worktreePath, branchName string) error {
 	return nil
 }
 
-// branchTipIfExists returns the tip of branchName when it exists locally. An
-// absent branch is a normal result; other git failures are surfaced to callers.
 func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
 	// #nosec G204 - git binary and arguments are controlled by us, not user input
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branchName)
@@ -383,8 +324,6 @@ func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
 	return "", false, fmt.Errorf("resolve branch %s: %w", branchName, err)
 }
 
-// branchConfigIfExists returns a branch-scoped config value when present. An
-// unset key is a normal result; failures to query git config are surfaced.
 func branchConfigIfExists(repoPath, key string) (string, bool, error) {
 	// #nosec G204 - git binary and arguments are controlled by us, not user input
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "config", "--local", "--get", key)
@@ -398,9 +337,6 @@ func branchConfigIfExists(repoPath, key string) (string, bool, error) {
 	return "", false, fmt.Errorf("read config %s: %w", key, err)
 }
 
-// priorClaimState captures the issue's claim-related fields as they were before
-// this claim's op was appended, so a failed post-claim worktree setup step can
-// decide whether to keep the prior status or release the claim.
 type priorClaimState struct {
 	status                 string
 	claimedBy              string
@@ -408,22 +344,10 @@ type priorClaimState struct {
 	lastHeartbeat          int64
 	claimTTL               int
 	claimingWorkerActivity int64
-	// worktreePath is the issue's WorktreePath BEFORE this claim's op overwrote
-	// it with the canonical .worktrees/<issue-id> path. On a same-worker active
-	// retry over a legacy differently-pathed worktree, a provisioning failure
-	// must restore this so the still-active claim doesn't point at a path that
-	// was just removed, orphaning the legacy worktree.
-	worktreePath string
-	// claimToken is the issue's ClaimToken BEFORE this claim's op overwrote it.
-	// Carried in the compensating rollback op's RestoreClaimToken alongside the
-	// other lease fields when the prior claim was active, so a restored claim
-	// keeps its own original token rather than picking up the just-superseded one.
-	claimToken string
+	worktreePath           string
+	claimToken             string
 }
 
-// claimExclusion records a safety pattern this claim added. Rollback can
-// remove it only when the corresponding path has no remaining Git worktree;
-// pre-existing or concurrently-created exclusions are never removed.
 type claimExclusion struct {
 	pattern     string
 	destination string
@@ -432,9 +356,6 @@ type claimExclusion struct {
 
 const claimExclusionMarkerName = "armature-claim-exclusion"
 
-// writeClaimExclusionMarker records that this claim added pattern. The marker
-// lives in the worktree's private Git directory and therefore follows a
-// registered worktree through moves until successful teardown removes it.
 func writeClaimExclusionMarker(worktreePath, pattern string) error {
 	if pattern == "" {
 		return nil
@@ -522,13 +443,6 @@ func cleanupClaimExclusionsLocked(repoPath string, exclusions []claimExclusion) 
 	return nil
 }
 
-// newClaimToken generates a unique per-claim nonce (16 random bytes, hex
-// encoded) to stamp on a claim op's Payload.ClaimToken. ClaimedAt alone has
-// only 1-second resolution, so two claims by the same worker on the same
-// issue in the same second are otherwise indistinguishable — which matters
-// because rollbackClaim's compensating op must name the EXACT claim it is
-// compensating for (see ops.Payload.IfClaimToken), not just "a claim by this
-// worker at roughly this time".
 func newClaimToken() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -537,42 +451,6 @@ func newClaimToken() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// claimStillOwnedBy reports whether issueID is, right now, claimed by
-// workerID with exactly claimToken as its ClaimToken (the unique nonce of
-// the specific claim op this process appended, not just "some claim by this
-// worker"). It re-loads store from the op log to see the latest materialized
-// state, including any claim op a second worker may have appended after this
-// worker's claim went stale mid-provisioning, AND any transition (e.g. to
-// in-progress or blocked) a different command may have applied to this issue
-// in the meantime — transition commands do not take the per-issue claim lock
-// (acquireClaimLock has exactly one caller, in this file), so that race is
-// real, not theoretical.
-//
-// The actual ownership test is delegated entirely to materialize.Issue's
-// ClaimHeldBy — the single canonical predicate, shared with
-// materialize.applyTransition's IfClaimToken guard, for "is this still
-// exactly this claim". Do not reintroduce an ad-hoc field comparison here;
-// that duplication is exactly what let this predicate drift out of sync with
-// its sibling copy across several review rounds before ClaimHeldBy existed.
-//
-// This is the fast-path ownership check consulted by rollbackClaim (before
-// appending a compensating op) and createWorktreeAndBranch's
-// cleanupPartialWorktree (before a destructive filesystem action) so they can
-// produce a clear "superseded" error without appending a doomed op or
-// attempting a doomed cleanup. It is UX only, NOT the correctness boundary:
-// correctness now rests on materialize.applyTransition's replay-time
-// IfClaimToken validation (see ops.Payload.IfClaimToken), which re-checks the
-// exact same ClaimHeldBy condition when the compensating op is actually
-// applied, wherever in the append-only log it lands. A worker that skips
-// this precheck (or races between it and the destructive action) is still
-// safe; this function exists purely to fail fast with a good message before
-// that.
-//
-// If the reload itself fails, ownership is reported as false (fail safe):
-// an unreadable store is not evidence this worker still owns the claim, so
-// the caller must skip the destructive/compensating action just as it would
-// for a confirmed takeover. The reload error is returned so callers can
-// mention it in their own warning or error.
 func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken string) (bool, error) {
 	if _, err := store.Load(context.Background()); err != nil {
 		return false, err
@@ -581,26 +459,6 @@ func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken stri
 	return issue.ClaimHeldBy(workerID, claimToken), nil
 }
 
-// rollbackClaimWithExclusionLock releases (or restores) the claim after a
-// post-claim worktree setup step fails, then returns the error to surface.
-// After ownership reload confirms this Claim still holds, PlanCompensation
-// builds the compensating Transition (live same-Worker restore vs stale/foreign
-// release to open). opLabel names the failed step in the returned error.
-// Shared by the create-worktree and update-issue-ID failure paths.
-//
-// It consults claimStillOwnedBy as a fast-path check (using claimToken, the
-// unique nonce of the claim op this process just appended) so a superseded
-// claim can be reported clearly without appending a doomed op. But the real
-// correctness guarantee is downstream: PlanCompensation stamps
-// Payload.IfClaimToken = claimToken, so even if a second worker's legitimate
-// takeover (a new claim op with a different token) lands — or a different
-// command's transition of this issue to in-progress or blocked lands —
-// between this check and the append below, or anywhere else in the
-// append-only, last-write-wins op log relative to this op, replay itself
-// (materialize.applyTransition, via Issue.ClaimHeldBy — the single canonical
-// ownership predicate this function's own check also delegates to) refuses
-// to apply the compensating op once the claim it targets no longer holds.
-// Log ordering no longer matters.
 func rollbackClaimWithExclusionLock(
 	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
 	cause error, prior priorClaimState, claimToken string, exclusionLockHeld bool, exclusionSets ...[]claimExclusion,
@@ -632,9 +490,6 @@ func rollbackClaimWithExclusionLock(
 	}
 
 	now := nowEpoch()
-	// PlanCompensation is the restore-vs-release kernel. Ownership reload
-	// stays here; the compensating Transition is appended below with
-	// IfClaimToken = claimToken (the Claim this rollback compensates).
 	payload, planErr := claimPkg.PlanCompensation(claimPkg.CompensationInput{
 		Prior: claimPkg.LeaseFacts{
 			Status:                 prior.status,
@@ -666,21 +521,6 @@ func rollbackClaimWithExclusionLock(
 	return finish(fmt.Errorf("%s: %w (claim released; retry arm claim)", opLabel, cause))
 }
 
-// createWorktreeAndBranchWithExclusion creates a new worktree and branches
-// for a task/bug. It uses a git client to create a worktree at the given path
-// with a derived branch name. If the branch is already checked out in another
-// worktree or if worktree creation fails, it returns an error (the user should
-// reuse the existing worktree or unassign/reassign the task).
-//
-// stillOwns is consulted by cleanupPartialWorktree before any destructive
-// action on failure (see that closure below for why: the same claim-took-
-// longer-than-TTL race that motivates rollbackClaimWithExclusionLock's
-// ownership recheck applies here too, and --force discards uncommitted work).
-// Callers build stillOwns from claimStillOwnedBy, which itself delegates to
-// materialize.Issue's ClaimHeldBy — the single canonical ownership
-// predicate — so this contract is exactly "is the issue, right now, in
-// StatusClaimed with this exact workerID/claimToken pair", never a looser
-// or differently-scoped check assembled ad hoc at this call site.
 func createWorktreeAndBranchWithExclusion(
 	repoPath, worktreePath, issueID string,
 	issue materialize.Issue,
@@ -688,10 +528,8 @@ func createWorktreeAndBranchWithExclusion(
 	exclusionPattern string,
 	sourceArgs ...string,
 ) error {
-	// Determine branch name based on issue type
 	branchName := materialize.DeriveBranchName(issue.Type, issueID)
 
-	// Safety guard: empty branch name indicates an issue type that should not have a worktree
 	if branchName == "" {
 		return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
 	}
@@ -730,32 +568,17 @@ func createWorktreeAndBranchWithExclusion(
 		}
 	}
 
-	// Create git client for main repo
 	gitClient := adapters.New(repoPath)
 	var headSHA, parentBranch string
 	var headErr, parentErr error
 	if sourcePath != "" {
-		// Use the immutable values captured by newClaimCmd after the source
-		// revalidation above. Never re-resolve a mutable source and fall back to
-		// the coordinator HEAD after --from validation has succeeded.
 		headSHA, parentBranch = sourceTip, sourceBranch
 	} else {
-		// Resolve HEAD before branching: this is the actual point the task branch
-		// diverges from the coordinator's checkout, which may already be a story
-		// branch containing completed sibling-task commits (not necessarily main).
-		// Persisted below so the delivery gate can scope-check against the real
-		// branch-point instead of guessing via merge-base against a default branch.
 		headSHA, headErr = gitClient.ResolveRevision("HEAD")
 
-		// Capture the name of the branch this task branch is being cut from.
 		parentBranch, parentErr = gitClient.CurrentBranch()
 	}
 
-	// Provision the worktree detached at the base commit FIRST, then create or
-	// check out the issue branch inside the worktree. The old order
-	// (create-branch-then-add-worktree) could hit git's "branch already checked
-	// out" failure when the branch pre-existed; provisioning detached and then
-	// checking the branch out inside the worktree avoids that entirely.
 	detachRef := "HEAD"
 	if headErr == nil && headSHA != "" {
 		detachRef = headSHA
@@ -763,11 +586,6 @@ func createWorktreeAndBranchWithExclusion(
 	adopted := false
 	adoptedFrom := ""
 	alreadyAtDest := false
-	// PlanProvision is the dest/binding decision. Git I/O below executes that
-	// plan: refuse returns the reason; adopt moves; already-at-dest rebinds;
-	// fresh detaches then checks out. Selection is by BINDING, never by branch
-	// (see PlanProvision). An unbound worktree holding the issue branch is cmd
-	// I/O, not the plan.
 	inventory, inventoryErr := worktree.List(repoPath)
 	if inventoryErr != nil {
 		return fmt.Errorf("inspect existing worktrees: %w", inventoryErr)
@@ -792,8 +610,6 @@ func createWorktreeAndBranchWithExclusion(
 		_, statErr := os.Stat(worktreePath)
 		switch {
 		case statErr == nil:
-			// Dest occupied; leave the bound worktree alone and fall through to
-			// a fresh add, which fails closed rather than clobbering.
 		case !os.IsNotExist(statErr):
 			return fmt.Errorf("check canonical worktree path: %w", statErr)
 		default:
@@ -813,22 +629,7 @@ func createWorktreeAndBranchWithExclusion(
 		}
 	}
 
-	// From here on the worktree exists on disk but is not yet fully provisioned
-	// (unbound and/or detached). Any subsequent failure must remove it before
-	// returning: a leftover unbound+detached worktree at .worktrees/<issue-id>
-	// blocks a later re-claim (the path already exists but isn't bound to the
-	// issue). Cleanup is best-effort and logged if it itself fails.
 	cleanupPartialWorktree := func(cause error, label string) error {
-		// Re-check ownership immediately before doing anything destructive: by
-		// the time a post-provisioning step fails, this worker's claim may have
-		// gone stale and a second worker may have legitimately claimed the
-		// issue and be actively using a worktree bound at this same canonical
-		// path. Ops are append-only and replay last-write-wins, so that second
-		// worker's claim is now the truth regardless of what this process still
-		// believes; moving the path back over their worktree (adopted case) or
-		// `git worktree remove --force` (fresh case) would silently discard
-		// whatever work they had already started. Leaving the path alone is the
-		// only safe move once ownership cannot be confirmed.
 		if !stillOwns() {
 			fmt.Fprintf(os.Stderr, "worktree at %s superseded by a newer claim; leaving in place\n", worktreePath)
 			return fmt.Errorf("%s: %w", label, cause)
@@ -838,42 +639,27 @@ func createWorktreeAndBranchWithExclusion(
 				fmt.Fprintf(os.Stderr, "warning: failed to restore adopted worktree at %s: %v\n", adoptedFrom, moveErr)
 			}
 		} else if alreadyAtDest {
-			// Destination predates this claim attempt. A later metadata write
-			// failure must not git-worktree-remove --force a checkout that may
-			// hold dirty worker changes.
 		} else if rmErr := gitClient.RemovePartiallyProvisionedWorktree(worktreePath); rmErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to clean up partial worktree at %s: %v\n", worktreePath, rmErr)
 		}
 		return fmt.Errorf("%s: %w", label, cause)
 	}
 
-	// Create-or-checkout the issue branch inside the worktree. Because the
-	// worktree is detached, no other worktree holds the branch, so this never
-	// trips git's "branch already checked out" guard.
 	if !adopted && !alreadyAtDest {
 		if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
 			return cleanupPartialWorktree(err, "checkout branch in worktree")
 		}
 	}
 
-	// Best-effort project-isolation mitigation: if the MAIN tree uses a go.work
-	// file, drop this worktree from its `use` directives so the main tree's
-	// gopls does not walk the worktree. A no-op when there is no main-tree
-	// go.work (the common case). Non-fatal: a failure only degrades IDE
-	// ergonomics, so it must never fail the claim.
 	if err := worktree.ApplyMitigations(repoPath, worktreePath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: apply worktree mitigations: %v\n", err)
 	}
 
-	// Create the issue ID file in the worktree's .git directory
 	if err := updateIssueIDFile(worktreePath, issueID); err != nil {
 		return cleanupPartialWorktree(err, "write issue ID file")
 	}
 
 	if adopted {
-		// Provenance was required by PlanProvision before the move. Keep any
-		// existing base/parent metadata untouched. The only new claim-time
-		// record that is safe to add is the immutable branch binding.
 		if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
 			return cleanupPartialWorktree(err, "persist claimed branch metadata")
 		}
@@ -893,10 +679,6 @@ func createWorktreeAndBranchWithExclusion(
 	return nil
 }
 
-// hasTrustedBranchPointMetadata reports whether a pre-existing worktree carries
-// claim-time provenance that the delivery gate can use. Default-branch
-// merge-bases are intentionally not considered: the current repository shape
-// cannot prove where an adopted branch was originally cut.
 func hasTrustedBranchPointMetadata(gitClient *adapters.Client, worktreePath, branchName string) bool {
 	if _, err := deliverygate.RecordedBaseCommit(worktreePath); err == nil {
 		return true
@@ -905,57 +687,24 @@ func hasTrustedBranchPointMetadata(gitClient *adapters.Client, worktreePath, bra
 	return err == nil && parentBranch != "" && parentBranch != "HEAD"
 }
 
-// persistBranchPointMetadata records the branch-point metadata (parent branch
-// git config, base-commit file) the delivery gate later reads via
-// dynamicBaseCommit/recordedBaseCommit in transition.go. Both idempotent:
-// safe to call whether or not either record already exists. It is used only
-// for newly provisioned worktrees, where HEAD and the current parent branch
-// are observed at the moment Armature creates the worktree. Pre-existing and
-// adopted worktrees must preserve their original records or fail closed; the
-// current repository's default refs are not provenance.
 func persistBranchPointMetadata(
 	gitClient *adapters.Client,
 	worktreePath, branchName string,
 	headSHA string, headErr error,
 	parentBranch string, parentErr error,
 ) error {
-	// Persist the parent branch name, but only if not already recorded: claim
-	// is idempotent and may re-run after the worktree (but not the branch) was
-	// removed, in which case gitClient.CurrentBranch() here would return
-	// whatever the coordinator happens to be on *now* — not the original
-	// parent — so an existing record must never be overwritten.
-	// "HEAD" is the literal string CurrentBranch() returns when the
-	// coordinator repo is in a detached-HEAD state (git rev-parse
-	// --abbrev-ref HEAD prints "HEAD" itself, not a branch name). Persisting
-	// that as the parent branch would later make the delivery gate resolve
-	// the ref "HEAD" in the task worktree — the task's own current commit —
-	// collapsing the merge-base to the task's HEAD and making every commit
-	// range for CommitReferenceCheck empty. Treat it as no usable parent
-	// branch so nothing is persisted, falling back to the existing
-	// no-parent-branch-config behavior.
 	if parentErr == nil && parentBranch != "" && parentBranch != "HEAD" {
 		if err := writeParentBranchConfigIfAbsent(gitClient, branchName, parentBranch); err != nil {
 			return fmt.Errorf("write parent branch config: %w", err)
 		}
 	}
 
-	// Persist the branch-point SHA if it was already claimed (idempotent claim
-	// re-runs against an existing branch skip this: HEAD may have moved since
-	// the branch was first created, and re-persisting would overwrite the true
-	// original branch-point with a later, incorrect value).
 	if headErr == nil {
 		if err := writeBaseCommitFileIfAbsent(worktreePath, headSHA); err != nil {
 			return fmt.Errorf("write base commit file: %w", err)
 		}
 	}
 
-	// Persist the branch the issue was actually claimed under, immutably, so
-	// the delivery gate can later verify branch binding against what was
-	// claimed rather than re-deriving it from the CURRENT (possibly
-	// since-amended) issue type. branchName is already the branch derived
-	// from the issue's type at claim time (DeriveBranchName), so it's the
-	// correct value to record here for both the fresh-worktree and
-	// existing-worktree claim paths.
 	if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
 		return fmt.Errorf("write claimed branch file: %w", err)
 	}
@@ -963,11 +712,6 @@ func persistBranchPointMetadata(
 	return nil
 }
 
-// writeParentBranchConfigIfAbsent records parentBranch as the branch
-// branchName diverged from, but only if no such record exists yet — the
-// same idempotency guard as writeGitDirFileIfAbsent, and for the same
-// reason: an existing record reflects the true original parent and must
-// never be overwritten by a later, possibly different, "current branch".
 func writeParentBranchConfigIfAbsent(gitClient *adapters.Client, branchName, parentBranch string) error {
 	key := deliverygate.ParentBranchConfigKey(branchName)
 	if existing, err := gitClient.ReadGitConfig(key); err == nil && existing != "" {
@@ -976,10 +720,6 @@ func writeParentBranchConfigIfAbsent(gitClient *adapters.Client, branchName, par
 	return gitClient.SetGitConfig(key, parentBranch)
 }
 
-// writeGitDirFileIfAbsent writes content to <git-dir>/filename unless that
-// file already exists. Claim is idempotent and may re-run against an
-// already-created branch; without the absence-check, a later value would
-// silently overwrite the true origin record.
 func writeGitDirFileIfAbsent(worktreePath, filename, content string) error {
 	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
@@ -999,10 +739,6 @@ func writeBaseCommitFileIfAbsent(worktreePath, headSHA string) error {
 	return writeGitDirFileIfAbsent(worktreePath, deliverygate.BaseCommitFileName, headSHA)
 }
 
-// writeClaimedBranchFileIfAbsent records branchName as the branch the issue
-// was claimed under. Skips writing when branchName is "" — a legitimately
-// branchless issue type has nothing to record, and writing an empty record
-// would be indistinguishable from "not yet recorded" on the read side.
 func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {
 	if branchName == "" {
 		return nil
@@ -1010,21 +746,16 @@ func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {
 	return writeGitDirFileIfAbsent(worktreePath, deliverygate.ClaimedBranchFileName, branchName)
 }
 
-// clearParentBranchMetadata unsets shared parent-branch configuration after a
-// successful removal. Per-worktree base and claimed-branch files disappear
-// with their worktree and must stay intact if removal fails.
 func clearParentBranchMetadata(gitClient *adapters.Client, branchName string) {
-	_ = gitClient.UnsetGitConfig(deliverygate.ParentBranchConfigKey(branchName)) //nolint:errcheck // best-effort cleanup
+	swallowErr(gitClient.UnsetGitConfig(deliverygate.ParentBranchConfigKey(branchName)))
 }
 
-// updateIssueIDFile writes the issue ID to the armature-issue-id file in the worktree's .git directory.
 func updateIssueIDFile(worktreePath, issueID string) error {
 	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
 
-	// Write the issue ID file to the actual git directory
 	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	if err := os.WriteFile(issueIDFile, []byte(issueID), 0o600); err != nil {
 		return fmt.Errorf("write issue ID file: %w", err)
@@ -1117,10 +848,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer func() { err = mapClaimError(err) }()
 			ctx := currentCtx(cmd)
-			// default_ttl in config.json is the single source of --ttl's default;
-			// an explicit --ttl always overrides it. It already governs staleness
-			// detection elsewhere (hook.go, workers.go) — this makes claim's
-			// default consistent with that same config value.
 			if !cmd.Flags().Changed("ttl") && ctx.Config.DefaultTTL > 0 {
 				ttl = ctx.Config.DefaultTTL
 			}
@@ -1139,9 +866,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					args = nil
 				}
 			}
-			// A value provided with --worktree=PATH has already been consumed by
-			// pflag, so any remaining positional token is surplus when --issue is
-			// also set. Do not silently ignore it after extracting the issue ID.
 			if worktreePath != defaultWorktreeFlagValue && issueID != "" && len(args) > 0 {
 				return fmt.Errorf("accepts at most 1 arg(s), received %d", len(args)+1)
 			}
@@ -1163,9 +887,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					return fmt.Errorf("resolve worktree path: %w", err)
 				}
 			} else {
-				// Validate and resolve the canonical path before any claim append or
-				// filesystem/git mutation. Separator-bearing, absolute, and traversal
-				// IDs are rejected rather than becoming filesystem paths.
 				worktreePath, err = canonicalWorktreePath(ctx.RepoPath, issueID)
 				if err != nil {
 					return err
@@ -1173,25 +894,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 			issuesDir := ctx.IssuesDir
 
-			// Serialize same-clone claims for this issue with an OS-level advisory
-			// lock, acquired here — before the FIRST read of issue or worktree
-			// state — and held through the end of this command (claim-op append,
-			// worktree provisioning, and any rollback). The lock must precede every
-			// read whose value later informs a filesystem mutation or the rollback
-			// snapshot (allOps, the store load/Issue lookup that seeds `prior`,
-			// worktreePathExists, isWorktreeOf, checkExistingWorktreeBinding, and
-			// store.Index() for the scope-overlap scan): acquiring it only around
-			// the claim-op append left a window where two same-clone invocations
-			// could both observe stale pre-claim state, both proceed, and the
-			// second one's rollback would restore the FIRST one's stale `prior`
-			// snapshot over an active claim it does not own. Acquiring earlier is
-			// the fix, not sprinkling re-reads after a later lock. See
-			// acquireClaimLock's doc comment for the full substrate model.
-			//
-			// One accepted side effect: a claim for a nonexistent issue now still
-			// creates the lock file (it is created before the issue lookup below
-			// can fail). That is harmless — 0600, confined to the git common dir,
-			// intentionally never deleted, and transparently reused on retry.
 			releaseClaimLock, err := acquireClaimLock(ctx.RepoPath, issueID)
 			if err != nil {
 				return err
@@ -1203,16 +905,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 			defer releaseGitExcludeLock()
 
-			// The exclusion lock is acquired before any explicit-destination
-			// inspection and held through claim append and provisioning. This
-			// serializes the check/remove performed by merged and GC with the
-			// claim's check-through-provisioning handoff, so a teardown cannot
-			// remove an exclusion after a new claim has reused the destination.
-			// Destination legality uses PlanProvision with empty inventory so
-			// nested/in-repo refuses happen before the Claim Op and before
-			// --from revalidation (git worktree list ordering). ExpectedBranch
-			// is empty here: inventory is empty, so PlanProvision does not
-			// need a branch name.
 			if customWorktreePath {
 				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, ""); err != nil {
 					return err
@@ -1239,14 +931,11 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 			}
 
-			// allOps is PriorOps for PlanClaim (dismissal dedup). The store Load below
-			// independently materializes state; this read is not redundant.
 			allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
 			}
 
-			// Create store and load before first issue read
 			store := newSnapshotStore(ctx)
 			snapshot, err := store.Load(context.Background())
 			if err != nil {
@@ -1262,8 +951,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return fmt.Errorf("cannot claim %s: node has confidence=inferred — wait for a human to confirm it", issueID)
 			}
 
-			// Determine the expected branch for this issue type.
-			// Issues with no branch mapping (epic, unknown) cannot use --worktree.
 			expectedBranch := materialize.DeriveBranchName(issue.Type, issueID)
 			if expectedBranch == "" {
 				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
@@ -1289,9 +976,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 			}
 
-			// Check whether the worktree path already exists. Capture the state here
-			// (no side effects yet) so worktree creation can be deferred until after
-			// all claim validations pass.
 			if customWorktreePath {
 				if _, statErr := os.Lstat(worktreePath); statErr == nil {
 					return fmt.Errorf("new worktree path %s must not exist", worktreePath)
@@ -1304,29 +988,18 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return fmt.Errorf("check worktree path: %w", err)
 			}
 
-			// Verify the existing worktree is registered to this repo (not a foreign repo).
-			// This prevents writing armature-issue-id into a foreign repo's git dir,
-			// which would cause later merged operations (which search only this repo's worktree list)
-			// to permanently fail to find and clean up the worktree.
 			if worktreeExists {
 				if !isWorktreeOf(ctx.RepoPath, worktreePath) {
 					return fmt.Errorf("worktree at %s is not registered to this repository; it may belong to a different clone", worktreePath)
 				}
 			}
 
-			// If the worktree already exists, verify it is bound to the correct issue
-			// and is on the correct branch. Reject silently overwriting a binding that
-			// belongs to a different issue.
 			if worktreeExists {
 				if err := checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch); err != nil {
 					return err
 				}
 			}
 
-			// Inventory-backed PlanProvision runs before the Claim Op so
-			// Ambiguous Binding cannot be skipped when dest already exists.
-			// Dest-only nested/in-repo refuses already ran above for custom
-			// dest; this call supplies real worktree.List inventory.
 			provisionPlan, err := evaluateProvisionPlan(ctx.RepoPath, worktreePath, issueID, expectedBranch)
 			if err != nil {
 				return err
@@ -1340,11 +1013,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return err
 			}
 
-			// Capture the prior status and claimed-by before writing the claim op.
-			// If worktree setup fails, we'll use this to determine rollback behavior:
-			// - Same-worker active claim (priorClaimedBy == workerID && !stale): keep prior status
-			// - Stale same-worker claim (priorClaimedBy == workerID && stale): rollback to StatusOpen
-			// - Different-worker takeover (priorClaimedBy != workerID): rollback to StatusOpen
 			prior := priorClaimState{
 				status:                 issue.Status,
 				claimedBy:              issue.ClaimedBy,
@@ -1374,14 +1042,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return fmt.Errorf("persist claim overlap notes: %w", err)
 			}
 
-			// The canonical managed-worktree root must be excluded before the claim
-			// is recorded. Older installations may not have received bootstrap's
-			// exclusion; leaving the claim in place when this safety precondition
-			// fails would make a later broad `git add .` stage a linked worktree as
-			// a gitlink. This intentionally applies to both new and existing
-			// canonical worktrees. The repository exclusion lock is already held
-			// from destination validation through provisioning, so use the locked
-			// helper rather than attempting to acquire it again.
 			var claimExclusions []claimExclusion
 			canonicalAdded, err := updateGitExcludeTrackedLocked(ctx.RepoPath, ".worktrees/", "")
 			if err != nil {
@@ -1393,14 +1053,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				})
 			}
 
-			// claimToken is this process's own claim op's unique nonce, generated
-			// once here so it can be compared (not just ClaimedBy) against the
-			// materialized state later. A worker can re-claim the same issue
-			// serially, possibly within the same wall-clock second (ClaimedAt has
-			// only 1-second resolution); comparing only ClaimedBy — or ClaimedAt —
-			// would treat a later re-claim by the same worker as "still my claim"
-			// when it is really a different one, so both rollbackClaim and
-			// stillOwnsClaim below key off this exact token.
 			claimToken, err := newClaimToken()
 			if err != nil {
 				if cleanupErr := cleanupClaimExclusionsLocked(ctx.RepoPath, claimExclusions); cleanupErr != nil {
@@ -1420,12 +1072,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return err
 			}
 
-			// stillOwnsClaim re-loads the store to confirm this worker's claim
-			// (identified by claimToken) has not been superseded, before either
-			// rollbackClaim appends a compensating op or createWorktreeAndBranch's
-			// cleanup does anything destructive. See claimStillOwnedBy's doc
-			// comment for the canonical ownership predicate this delegates to
-			// (materialize.Issue.ClaimHeldBy).
 			stillOwnsClaim := func() bool {
 				owns, err := claimStillOwnedBy(store, issueID, workerID, claimToken)
 				if err != nil {
@@ -1435,7 +1081,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return owns
 			}
 
-			// Refresh store after appending claim Op
 			if _, err := store.Load(context.Background()); err != nil {
 				return fmt.Errorf("refresh store after claim: %w", err)
 			}
@@ -1444,35 +1089,8 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			if issueAfter == nil {
 				return fmt.Errorf("issue %s not found after claim", issueID)
 			}
-			// won asks "did THIS claim op win?", not the looser "is *a* claim by
-			// this worker current?" that a bare issueAfter.ClaimedBy == workerID
-			// comparison would ask. The two questions coincide on every legitimate
-			// path -- materialize.applyClaim sets Status/ClaimedBy/ClaimToken
-			// unconditionally and atomically on a won claim, so immediately after
-			// the append-and-reload above, this op's own claimToken is current
-			// whenever we genuinely won -- but they diverge exactly in the case
-			// this predicate exists to catch: the same workerID claiming the same
-			// issue concurrently from two different clones (acquireClaimLock's
-			// flock is per-clone; nothing enforces a worker ID's global
-			// uniqueness across clones). Both reload and both see
-			// ClaimedBy == workerID; only ClaimHeldBy's claimToken comparison
-			// tells the loser it lost. This is the third call site delegating to
-			// materialize.Issue.ClaimHeldBy -- alongside claimStillOwnedBy in this
-			// file and applyTransition's IfClaimToken guard in
-			// internal/materialize/engine.go -- and, per ClaimHeldBy's own doc
-			// comment, no ad-hoc ClaimedBy == comparison belongs anywhere on the
-			// claim path; delegate to it instead of writing a fourth copy.
 			won := issueAfter.ClaimHeldBy(workerID, claimToken)
 			if !won {
-				// supersededBySameWorker distinguishes losing to a genuinely
-				// different claimant from being superseded by a different claim
-				// that happens to carry this same workerID (the two-clones race
-				// above). Without this, "claimed_by" reporting our own workerID
-				// back to us reads as nonsense ("lost the race to yourself").
-				// claimed_by/reason/claimed/issue keep their exact prior meaning
-				// and values for the ordinary different-worker case so existing
-				// agent consumers and TestClaimCommand_LostRaceReportsClearResult
-				// (main_test.go) keep working unchanged; this only adds a field.
 				supersededBySameWorker := issueAfter.ClaimedBy == workerID
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
 				switch {
@@ -1484,8 +1102,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 						"reason":                    "lost_claim_race",
 						"superseded_by_same_worker": supersededBySameWorker,
 					}
-					data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(result)))
 				case supersededBySameWorker:
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 						"Claim lost for %s (superseded by a different claim from this same worker ID, %s)\n",
@@ -1499,12 +1116,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return nil
 			}
 
-			// Worktree setup is deferred to here so it only happens after all claim
-			// validations pass and this worker has won the claim race.
-			// Skip create only when dest already exists and PlanProvision says
-			// already_at_dest or fresh (unbound dest, no other binding). Adopt
-			// with dest present still runs createWorktree, which fails closed
-			// rather than writing a second binding.
 			rebindExistingDest := worktreeExists &&
 				(provisionPlan.Action == worktree.ProvisionAlreadyAtDest ||
 					provisionPlan.Action == worktree.ProvisionFresh)
@@ -1523,8 +1134,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					)
 				}
 			} else {
-				// Worktree exists and binding was already validated above; update the
-				// task ID file to ensure the binding is current (idempotent).
 				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
 					return rollbackClaimWithExclusionLock(
 						cmd, store, logPath, issueID, workerID, "update task ID file",
@@ -1532,13 +1141,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					)
 				}
 
-				// A pre-existing canonical worktree may already carry trusted
-				// claim-time provenance. Preserve it; never synthesize a base from
-				// origin/main, main, or another current default ref. If it lacks
-				// provenance, the claim remains replay-compatible but the delivery
-				// gate will fail closed with an explicit re-claim/override action.
-				// This keeps legacy worktrees usable for inspection without turning
-				// the current repository shape into false evidence.
 				worktreeGitClient := adapters.New(worktreePath)
 				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
 					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
@@ -1549,7 +1151,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					}
 				}
 			}
-			// Auto-advance any open ancestor story/epic to in-progress.
 			if parentID := issue.Parent; parentID != "" {
 				if parentEntry, ok := index[parentID]; ok && parentEntry.Status == ops.StatusOpen {
 					advanceOp := ops.Op{
@@ -1559,7 +1160,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 						WorkerID:  workerID,
 						Payload:   ops.Payload{To: ops.StatusInProgress},
 					}
-					appendOp(ctx, logPath, advanceOp) //nolint:errcheck,gosec
+					swallowErr(appendOp(ctx, logPath, advanceOp))
 				}
 			}
 

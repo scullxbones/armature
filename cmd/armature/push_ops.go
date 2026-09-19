@@ -7,9 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newPushOpsCmd creates the push-ops command.
-// This command pushes the _armature branch to the remote, making ops logs available to other clones.
-// It's called by the post-commit hook after every commit to keep ops data in sync across collaborators.
 func newPushOpsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "push-ops",
@@ -51,7 +48,6 @@ Called by the post-commit hook after each commit.`,
 			}
 
 			if format == "json" || format == "agent" {
-				// Just output the status, don't fail
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), `{"status":"pushed","branch":"_armature"}`+"\n")
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Pushed _armature branch to remote\n")

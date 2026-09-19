@@ -19,8 +19,6 @@ func sourcesDir(ctx *config.Context) string {
 	return filepath.Join(ctx.IssuesDir, "sources")
 }
 
-// sourcesLifecycle constructs a Lifecycle for the given sources directory,
-// wiring in an auto-commit committer when a worktree path is available.
 func sourcesLifecycle(appCtx *config.Context, dir string) *sources.Lifecycle {
 	if appCtx.WorktreePath != "" {
 		gc := adapters.New(appCtx.WorktreePath)
@@ -55,7 +53,6 @@ func newSourcesAddCmd() *cobra.Command {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
 
-			// Create lifecycle with auto-commit support
 			lc := sourcesLifecycle(appCtx, dir)
 
 			entry := sources.SourceEntry{
@@ -65,7 +62,6 @@ func newSourcesAddCmd() *cobra.Command {
 				ProviderType: providerType,
 			}
 
-			// Warn if filesystem path is relative.
 			if providerType == "filesystem" && !filepath.IsAbs(url) {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 					"warning: relative filesystem path %q will be resolved from working directory at sync time; "+
@@ -99,7 +95,6 @@ func newSourcesSyncCmd() *cobra.Command {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
 
-			// Create lifecycle with auto-commit support
 			lc := sourcesLifecycle(appCtx, dir)
 
 			entries, err := lc.ListAll()
@@ -140,7 +135,6 @@ func newSourcesSyncCmd() *cobra.Command {
 				}
 			}
 
-			// Return error only when all sources failed.
 			if err != nil {
 				return err
 			}
@@ -158,7 +152,6 @@ func newSourcesVerifyCmd() *cobra.Command {
 			appCtx := currentCtx(cmd)
 			dir := sourcesDir(appCtx)
 
-			// verify never writes, so no committer is needed.
 			lc := sources.NewLifecycle(dir)
 
 			entries, err := lc.ListAll()

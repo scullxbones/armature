@@ -15,7 +15,6 @@ func newConfirmCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			nodeID := args[0]
-			// Read the issue directly from disk; no full rematerialization needed.
 			store := newSnapshotStore(appCtx)
 			if _, err := store.ReadIssue(nodeID); err != nil {
 				return fmt.Errorf("node %q not found", nodeID)

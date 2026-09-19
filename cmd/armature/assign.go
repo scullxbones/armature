@@ -71,11 +71,9 @@ This allows the issue to be claimed again by another worker.`,
 				return err
 			}
 
-			// Check current status before unassigning so we can release claimed → open.
-			// Use ReadIndex to avoid premature rematerialization; gracefully degrade to
-			// an empty index if the index file is missing.
 			store := newSnapshotStore(ctx)
-			index, _ := store.ReadIndex() //nolint:errcheck // missing index treated as empty; access uses ok-check
+			index, err := store.ReadIndex()
+			swallowErr(err)
 			if index == nil {
 				index = make(materialize.Index)
 			}
@@ -95,7 +93,6 @@ This allows the issue to be claimed again by another worker.`,
 				return err
 			}
 
-			// If the issue was claimed, release it back to open.
 			if currentStatus == ops.StatusClaimed {
 				transitionOp := ops.Op{
 					Type:      ops.OpTransition,
@@ -104,7 +101,7 @@ This allows the issue to be claimed again by another worker.`,
 					WorkerID:  workerID,
 					Payload:   ops.Payload{To: ops.StatusOpen},
 				}
-				appendOp(ctx, logPath, transitionOp) //nolint:errcheck,gosec
+				swallowErr(appendOp(ctx, logPath, transitionOp))
 			}
 
 			writeCommandResult(cmd, map[string]string{"issue": issueID, "assigned_to": ""},

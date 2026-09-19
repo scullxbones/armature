@@ -46,7 +46,6 @@ func newLogCmd() *cobra.Command {
 			if sinceStr != "" {
 				t, err := time.Parse(time.RFC3339, sinceStr)
 				if err != nil {
-					// Try date-only format
 					t, err = time.Parse("2006-01-02", sinceStr)
 					if err != nil {
 						return fmt.Errorf("invalid --since format (use RFC3339 or YYYY-MM-DD): %w", err)
@@ -117,7 +116,6 @@ func printLogJSON(cmd *cobra.Command, entries []audit.Entry) error {
 	return nil
 }
 
-// logPayloadSummary returns a short human-readable summary of an op's payload.
 func logPayloadSummary(op ops.Op) string {
 	switch op.Type {
 	case ops.OpCreate:

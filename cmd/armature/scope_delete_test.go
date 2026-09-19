@@ -14,10 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupRepoWithScopedTasksForDelete creates a temp repo with tasks for scope-delete tests.
-// task-01: scope = ["src/old/foo.go", "src/old/bar.go"]
-// task-02: scope = ["src/old/foo.go", "src/old/keep.go"]
-// task-03: scope = ["src/other/qux.go"]        (no match)
 func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -54,14 +50,12 @@ func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 		Payload: wellFormed("Task 3", []string{"src/other/qux.go"}),
 	}))
 
-	// Materialize so index.json exists with scope data before scope-delete reads it via ReadIndex.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	return repo
 }
 
-// TestScopeDeleteCmd_RejectsEmptyPath verifies that an empty path argument returns an error.
 func TestScopeDeleteCmd_RejectsEmptyPath(t *testing.T) {
 	repo := setupRepoWithScopedTasksForDelete(t)
 	_, err := runTrls(t, repo, "scope-delete", "")
@@ -69,7 +63,6 @@ func TestScopeDeleteCmd_RejectsEmptyPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "empty")
 }
 
-// TestScopeDeleteCmd_NoMatchWarnsAndExitsZero verifies no-match emits a warning but returns no error.
 func TestScopeDeleteCmd_NoMatchWarnsAndExitsZero(t *testing.T) {
 	repo := setupRepoWithScopedTasksForDelete(t)
 
@@ -85,22 +78,17 @@ func TestScopeDeleteCmd_NoMatchWarnsAndExitsZero(t *testing.T) {
 	assert.Contains(t, errBuf.String(), "no issues")
 }
 
-// TestScopeDeleteCmd_ExactMatchOnlyAffectsMatchingIssues verifies only issues with an exact
-// scope entry are affected, and substring matches are not removed.
 func TestScopeDeleteCmd_ExactMatchOnlyAffectsMatchingIssues(t *testing.T) {
 	repo := setupRepoWithScopedTasksForDelete(t)
 
 	out, err := runTrls(t, repo, "scope-delete", "src/old/foo.go")
 	require.NoError(t, err)
 
-	// task-01 and task-02 have an exact "src/old/foo.go" entry
 	assert.Contains(t, out, "task-01")
 	assert.Contains(t, out, "task-02")
-	// task-03 only has "src/other/qux.go" — not affected
 	assert.NotContains(t, out, "task-03")
 }
 
-// TestScopeDeleteCmd_RematerializesState verifies that the materialized issue files are updated.
 func TestScopeDeleteCmd_RematerializesState(t *testing.T) {
 	repo := setupRepoWithScopedTasksForDelete(t)
 
@@ -109,25 +97,21 @@ func TestScopeDeleteCmd_RematerializesState(t *testing.T) {
 
 	workerDir := getTestStateDir(t, repo)
 
-	// task-01 should still have "src/old/bar.go" but not "src/old/foo.go"
 	issue01, err := materialize.LoadIssue(filepath.Join(workerDir, "issues", "task-01.json"))
 	require.NoError(t, err)
 	assert.NotContains(t, issue01.Scope, "src/old/foo.go", "deleted entry should be removed from task-01")
 	assert.Contains(t, issue01.Scope, "src/old/bar.go", "non-deleted entry should remain in task-01")
 
-	// task-02 keeps its other entry so the delete does not introduce E6
 	issue02, err := materialize.LoadIssue(filepath.Join(workerDir, "issues", "task-02.json"))
 	require.NoError(t, err)
 	assert.NotContains(t, issue02.Scope, "src/old/foo.go")
 	assert.Contains(t, issue02.Scope, "src/old/keep.go")
 
-	// task-03 scope should be unchanged
 	issue03, err := materialize.LoadIssue(filepath.Join(workerDir, "issues", "task-03.json"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"src/other/qux.go"}, issue03.Scope)
 }
 
-// TestScopeDeleteCmd_SameTimestampForAllOps verifies all ops share the same timestamp.
 func TestScopeDeleteCmd_SameTimestampForAllOps(t *testing.T) {
 	repo := setupRepoWithScopedTasksForDelete(t)
 
@@ -174,7 +158,6 @@ func TestScopeDeleteCmd_EmptyingLastTaskScopeIsRefused(t *testing.T) {
 	assert.Contains(t, err.Error(), "task-last")
 }
 
-// TestScopeDeleteCmd_HumanOutput verifies human-readable output format.
 func TestScopeDeleteCmd_HumanOutput(t *testing.T) {
 	repo := setupRepoWithScopedTasksForDelete(t)
 
@@ -184,7 +167,6 @@ func TestScopeDeleteCmd_HumanOutput(t *testing.T) {
 	assert.NotContains(t, out, `"deleted_path"`, "human format should not be JSON")
 }
 
-// TestScopeDeleteCmd_JSONOutput verifies JSON output format.
 func TestScopeDeleteCmd_JSONOutput(t *testing.T) {
 	repo := setupRepoWithScopedTasksForDelete(t)
 
@@ -197,20 +179,6 @@ func TestScopeDeleteCmd_JSONOutput(t *testing.T) {
 	assert.EqualValues(t, 2, result["affected_count"])
 }
 
-// TestScopeDeleteCmd_UsesIndexForScan proves that scope-delete reads from index.json via
-// store.ReadIndex() rather than rematerializing from ops via store.Load().
-//
-// Mechanism: after materializing a real task, inject a fake entry directly into index.json.
-// This entry has no create op — Load() would overwrite index.json and lose it; ReadIndex()
-// reads the existing file and sees it.
-//
-// RED with store.Load(): rematerializes from ops → fake entry lost → output lacks
-//
-//	"task-index-only" → assertion FAILS.
-//
-// GREEN with store.ReadIndex(): reads existing index.json → sees fake entry → output
-//
-//	contains "task-index-only" → assertion PASSES.
 func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -220,18 +188,13 @@ func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create a real task with the scope path we'll delete.
 	_, err = runTrls(t, repo, "create", "--id", "task-real", "--title", "Real task", "--type", "task",
 		"--scope", "src/old/foo.go", "--scope", "src/keep/bar.go")
 	require.NoError(t, err)
 
-	// Materialize to write index.json containing task-real.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Inject a fake entry directly into index.json.
-	// This entry has no create op — store.Load() rematerializes and loses it;
-	// store.ReadIndex() reads the file as-is and sees it.
 	stateDir := getTestStateDir(t, repo)
 	indexPath := filepath.Join(stateDir, "index.json")
 
@@ -250,11 +213,6 @@ func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
 	require.NoError(t, marshalErr)
 	require.NoError(t, os.WriteFile(indexPath, newData, 0o644))
 
-	// Run scope-delete.
-	// With store.Load() (old code): rematerializes from ops, overwrites index.json,
-	//   loses task-index-only → output lacks it → assertion below FAILS (RED).
-	// With store.ReadIndex() (new code): reads existing index.json, sees task-index-only
-	//   → output includes it → assertion PASSES (GREEN).
 	out, err := runTrls(t, repo, "scope-delete", "src/old/foo.go")
 	require.NoError(t, err)
 

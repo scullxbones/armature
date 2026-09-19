@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExitJSON_Format verifies the Command Failure agent envelope on stdout.
 func TestExitJSON_Format(t *testing.T) {
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "json", armerrors.New("IO", "something went wrong", nil, 1))
@@ -29,7 +28,6 @@ func TestExitJSON_Format(t *testing.T) {
 	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
-// TestExitJSON_UsageError verifies a mapped USAGE Command Failure keeps exit_code 2.
 func TestExitJSON_UsageError(t *testing.T) {
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "json", armerrors.New("USAGE", "bad flag", []string{"arm --help"}, 2))
@@ -43,7 +41,6 @@ func TestExitJSON_UsageError(t *testing.T) {
 	assert.Equal(t, float64(2), errObj["exit_code"])
 }
 
-// TestExitJSON_NotFound verifies a port error without a command maps to IO, not GENERAL-1.
 func TestExitJSON_NotFound(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	code := handleRootError(stdout, new(bytes.Buffer), "json", false, fmt.Errorf("issue not found"))
@@ -58,8 +55,6 @@ func TestExitJSON_NotFound(t *testing.T) {
 	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
-// TestPortErrorsDoNotWrapAsGeneral1 verifies substring classification is gone
-// and the GENERAL-1 wrap is not used.
 func TestPortErrorsDoNotWrapAsGeneral1(t *testing.T) {
 	cases := []string{
 		"some unexpected problem",
@@ -83,7 +78,6 @@ func TestPortErrorsDoNotWrapAsGeneral1(t *testing.T) {
 	}
 }
 
-// TestMain_JSONFormatError verifies Execute errors map to the stdout envelope.
 func TestMain_JSONFormatError(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -108,7 +102,6 @@ func TestMain_JSONFormatError(t *testing.T) {
 	assert.Equal(t, float64(1), errObj["exit_code"])
 }
 
-// TestMain_AgentFormatError verifies --format=agent writes the same stdout envelope.
 func TestMain_AgentFormatError(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -131,7 +124,6 @@ func TestMain_AgentFormatError(t *testing.T) {
 	assert.Equal(t, "SHOW-1", errObj["code"])
 }
 
-// TestHandleRootError_Nil verifies nil maps to exit 0 and writes nothing.
 func TestHandleRootError_Nil(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	code := handleRootError(stdout, new(bytes.Buffer), "json", false, nil)
@@ -139,8 +131,6 @@ func TestHandleRootError_Nil(t *testing.T) {
 	assert.Empty(t, stdout.String())
 }
 
-// TestHandleRootError_AdapterExitError verifies harness-hook platform integers
-// are not rendered as Command Failures.
 func TestHandleRootError_AdapterExitError(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	code := handleRootError(stdout, new(bytes.Buffer), "json", false, adapterExitError{code: 42})
@@ -148,8 +138,6 @@ func TestHandleRootError_AdapterExitError(t *testing.T) {
 	assert.Empty(t, stdout.String())
 }
 
-// TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1 verifies reports and
-// git-hook errors that already wrote their payload skip the Command Failure.
 func TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -161,13 +149,11 @@ func TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1(t *testing.T) {
 	assert.Contains(t, stderr.String(), "DEBUG:")
 }
 
-// TestRenderStringSlice_NonEmpty verifies non-empty slices produce JSON arrays.
 func TestRenderStringSlice_NonEmpty(t *testing.T) {
 	result := renderStringSlice([]string{"a", "b", "c"})
 	assert.Equal(t, `["a","b","c"]`, result)
 }
 
-// TestRenderStringSlice_Empty verifies empty slices return "[]".
 func TestRenderStringSlice_Empty(t *testing.T) {
 	result := renderStringSlice([]string{})
 	assert.Equal(t, "[]", result)

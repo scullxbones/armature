@@ -15,8 +15,8 @@ import (
 // WorkerStatus describes the current activity state of a worker.
 type WorkerStatus struct {
 	WorkerID    string `json:"worker_id"`
-	Status      string `json:"status"`       // "active", "stale", or "idle"
-	LastOpTime  int64  `json:"last_op_time"` // Unix epoch of most recent op
+	Status      string `json:"status"`
+	LastOpTime  int64  `json:"last_op_time"`
 	ActiveIssue string `json:"active_issue,omitempty"`
 }
 
@@ -47,7 +47,6 @@ func newWorkersCmd() *cobra.Command {
 				statuses = append(statuses, s)
 			}
 
-			// Sort by worker ID for stable output
 			sort.Slice(statuses, func(i, j int) bool {
 				return statuses[i].WorkerID < statuses[j].WorkerID
 			})
@@ -85,8 +84,6 @@ func newWorkersCmd() *cobra.Command {
 	return cmd
 }
 
-// enumerateWorkers reads all *.log files from opsDir and returns a map of
-// workerID -> their ops.
 func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 	logFiles, err := filepath.Glob(filepath.Join(opsDir, "*.log"))
 	if err != nil {
@@ -105,15 +102,9 @@ func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 	return result, nil
 }
 
-// buildWorkerStatus determines the status of a worker based on their ops:
-//   - active: has a live (non-stale) claim
-//   - stale: had claims but all are stale
-//   - idle: last op was within 2*defaultTTL minutes window (no active claim)
 func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64, winners map[string]string) WorkerStatus {
 	lastOp := lastOpTimestampFromLog(allOps)
 
-	// Find active claims: look for claims not yet overtaken by a transition to done/merged
-	// Track claimed issues and their last state
 	claimedAt := make(map[string]int64)
 	lastHeartbeat := make(map[string]int64)
 	claimTTL := make(map[string]int)
@@ -136,16 +127,12 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 			if isTerminalStatus(op.Payload.To) {
 				transitioned[op.TargetID] = true
 			}
-			// Only count a transition as claiming-worker activity when the
-			// transition's author is the current claim owner for this issue —
-			// one worker's transition must not extend another worker's claim.
 			if op.WorkerID == claimedBy[op.TargetID] && op.Timestamp > lastClaimingWorkerActivity[op.TargetID] {
 				lastClaimingWorkerActivity[op.TargetID] = op.Timestamp
 			}
 		}
 	}
 
-	// Check each claimed issue
 	for issueID, ca := range claimedAt {
 		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
 			continue
@@ -168,8 +155,6 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		}
 	}
 
-	// Check if any winner claim was made by this worker (all stale).
-	// Losing race claims should not classify a worker as stale.
 	hasWinnerClaim := false
 	for issueID := range claimedAt {
 		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
@@ -186,7 +171,6 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 		}
 	}
 
-	// Idle: no claims, but had recent ops within 2*TTL window
 	idleWindowSeconds := int64(2 * defaultTTLMinutes * 60)
 	if lastOp > 0 && now-lastOp <= idleWindowSeconds {
 		return WorkerStatus{
@@ -266,9 +250,6 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 					s.lastHeartbeat = op.Timestamp
 				}
 			case ops.OpTransition:
-				// stateByWorker is keyed by workerID, so a transition op only ever
-				// touches its own author's state here — by construction this is
-				// claiming-worker activity and cannot extend a different worker's claim.
 				if s := stateByWorker[op.WorkerID]; s != nil && op.Timestamp > s.lastClaimingWorkerActivity {
 					s.lastClaimingWorkerActivity = op.Timestamp
 				}
@@ -296,7 +277,6 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 	return winners
 }
 
-// lastOpTimestampFromLog returns the timestamp of the most recent op in the list.
 func lastOpTimestampFromLog(allOps []ops.Op) int64 {
 	var last int64
 	for _, op := range allOps {

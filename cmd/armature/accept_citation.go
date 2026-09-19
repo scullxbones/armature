@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -73,8 +72,7 @@ func newAcceptCitationCmd() *cobra.Command {
 					"rationale":                  rationale,
 					"confirmed_noninteractively": skipPrompt,
 				}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(result)))
 			}
 			return nil
 		},

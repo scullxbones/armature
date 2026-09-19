@@ -13,13 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDoctorFixPushesToOriginInDualBranchMode verifies that `arm doctor --fix`
-// pushes its repair ops to origin after committing them, the same way the
-// high-stakes op path (claim/transition/assign, via appendHighStakesOp) does.
-// Before the fix, doctor --fix only appended and committed the repair ops
-// locally and never called Push, so a coordinator could report stale-claim
-// repairs as applied while every other clone kept replaying the old
-// _armature branch until someone manually ran `arm push-ops`.
 func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	bareDir := t.TempDir()
 	run(t, bareDir, "git", "init", "--bare")
@@ -33,16 +26,11 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Push the initial bootstrap state so the bare origin has a starting
-	// _armature branch to compare against below.
 	_, err = runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
 
 	refBefore := showArmatureRef(t, bareDir)
 
-	// Directly append a create + claim op with a claim far enough in the past
-	// to be stale, bypassing `arm claim` so the test doesn't depend on TTL
-	// timing or worktree creation.
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0o755))
 	logPath := filepath.Join(opsDir, "worker-01.log")
@@ -61,10 +49,6 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	require.NotEqual(t, refBefore, refAfter,
 		"doctor --fix must push its repair ops to origin's _armature branch, not just commit them locally")
 
-	// It's not enough for the ref to have moved — the pushed commit must
-	// actually contain the doctor repair op for fixpush-01, not some
-	// unrelated change. Walk the ops files tracked on origin's _armature
-	// branch and confirm at least one contains the repair note.
 	treeOut := runOutput(t, bareDir, "ls-tree", "-r", "--name-only", "refs/heads/_armature")
 	var found bool
 	for _, path := range strings.Fields(treeOut) {

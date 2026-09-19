@@ -37,9 +37,6 @@ var platformProtocolRoots = map[string]bool{
 	"harness-hook": true,
 }
 
-// staysOnPlatformProtocol reports whether cmd, or any ancestor of it, is one of
-// those subtrees. It walks the parent chain so a failure raised on a subcommand
-// (`arm hook run pre-commit`) is classified the same as one on its parent.
 func staysOnPlatformProtocol(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
 		if platformProtocolRoots[c.Name()] {
@@ -132,7 +129,6 @@ Examples:
 	}
 }
 
-// hookCurrentBranch returns the current git branch name, or empty string on error.
 func hookCurrentBranch(repoPath string) string {
 	gc := adapters.New(repoPath)
 	branch, err := gc.CurrentBranch()
@@ -142,7 +138,6 @@ func hookCurrentBranch(repoPath string) string {
 	return branch
 }
 
-// hookFindActiveClaimID returns the active claim ID for the current worker, or empty string if none.
 func hookFindActiveClaimID(ctx *config.Context) string {
 	workerID, err := worker.GetWorkerID(ctx.RepoPath)
 	if err != nil {
@@ -181,11 +176,6 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 			if isTerminalStatus(op.Payload.To) {
 				transitioned[op.TargetID] = true
 			}
-			// This is a per-worker log: every op here was authored by workerID,
-			// so any transition seen for this issue is by construction claimant
-			// activity — record it even for non-terminal transitions (e.g.
-			// claimed -> in-progress) so it can extend claim liveness like a
-			// heartbeat does.
 			if op.Timestamp > lastTransitionAt[op.TargetID] {
 				lastTransitionAt[op.TargetID] = op.Timestamp
 			}
@@ -208,24 +198,16 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 	return ""
 }
 
-// runPreCommitHook implements the pre-commit hook logic natively.
-// Unconditionally blocks additions/modifications to .armature/ops/ on non-_armature branches.
 func runPreCommitHook(cmd *cobra.Command) error {
-	// Use the invoking worktree. ResolveContext walks a linked worktree up to
-	// the parent, so appCtx.RepoPath is the code checkout even when git invoked
-	// this hook from .worktrees/<id>; a staged .armature/ops/ path in the
-	// claiming worktree would otherwise be checked against the parent index.
 	checkout := invocationRepoPath(cmd)
 	branch := hookCurrentBranch(checkout)
 	if branch == "_armature" {
 		return nil
 	}
 
-	// Check for staged .armature/ops/ additions/modifications
 	gitCmd := adapters.NonInteractiveGitCommand(checkout, "diff", "--cached", "--name-only", "--diff-filter=AM")
 	out, err := gitCmd.Output()
 	if err != nil {
-		// If git fails (e.g., no commits yet), allow the commit
 		return nil
 	}
 
@@ -240,14 +222,8 @@ func runPreCommitHook(cmd *cobra.Command) error {
 	return nil
 }
 
-// runPostCommitHook implements the post-commit hook logic natively.
-// Sends a heartbeat for any active claim and, in dual-branch mode, pushes ops.
 func runPostCommitHook(cmd *cobra.Command) {
 	appCtx := currentCtx(cmd)
-	// Skip on _armature using the invoking worktree. ResolveContext walks a
-	// linked worktree up to the parent, so appCtx.RepoPath is the code checkout
-	// even when git invoked this hook from .armature; a heartbeat commit would
-	// otherwise re-enter this hook forever.
 	branch := hookCurrentBranch(invocationRepoPath(cmd))
 	if branch == "_armature" {
 		return
@@ -260,7 +236,6 @@ func runPostCommitHook(cmd *cobra.Command) {
 
 	workerID, logPath, err := resolveWorkerAndLog(appCtx)
 	if err != nil {
-		// Best-effort — don't block the commit
 		return
 	}
 
@@ -271,7 +246,6 @@ func runPostCommitHook(cmd *cobra.Command) {
 		WorkerID:  workerID,
 	}
 	if err := appendLowStakesOp(mustState(cmd), logPath, op); err != nil {
-		// Best-effort — don't block the commit
 		return
 	}
 
@@ -280,25 +254,14 @@ func runPostCommitHook(cmd *cobra.Command) {
 	hookDetectScopeChanges(cmd, workerID, logPath)
 }
 
-// hookDetectScopeChanges parses HEAD~1..HEAD for file renames and deletions,
-// then emits scope-rename / scope-delete ops for any issue whose scope is affected.
-// It skips silently when HEAD~1 is absent (initial commit) and swallows all errors.
 func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 	appCtx := currentCtx(cmd)
-	// --name-status with --find-renames and diff-filter covers renames (R*) and
-	// deletions (D). Use the invoking worktree so a claimed-worktree commit diffs
-	// that HEAD, not the parent checkout's.
-	// --find-renames overrides diff.renames=false so a git mv is reported as R*,
-	// not as a deletion plus an untracked add (which --diff-filter=RD would treat
-	// as a scope-delete).
 	gitCmd := adapters.NonInteractiveGitCommand(invocationRepoPath(cmd), "diff", "--name-status", "--find-renames", "--diff-filter=RD", "HEAD~1", "HEAD")
 	out, err := gitCmd.Output()
 	if err != nil {
-		// HEAD~1 absent on initial commit, or any other git error — skip silently.
 		return
 	}
 
-	// Load current materialized index to discover which issues are affected.
 	store := newSnapshotStore(appCtx)
 	index, err := store.ReadIndex()
 	if err != nil {
@@ -321,7 +284,6 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 		status := fields[0]
 
 		if strings.HasPrefix(status, "R") && len(fields) >= 3 {
-			// Rename: fields = [RXXX, old_path, new_path]
 			oldPath := fields[1]
 			newPath := fields[2]
 			for issueID, entry := range index {
@@ -347,7 +309,6 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 				}
 			}
 		} else if status == "D" {
-			// Deletion: fields = [D, deleted_path]
 			deletedPath := fields[1]
 			for issueID, entry := range index {
 				if slices.Contains(entry.Scope, deletedPath) {
@@ -371,24 +332,19 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 	}
 }
 
-// runPostMergeHook implements the post-merge hook logic natively.
-// Runs the sync command to auto-transition done issues to merged.
 func runPostMergeHook(cmd *cobra.Command) error {
 	appCtx := currentCtx(cmd)
-	// Skip on _armature branch
 	branch := hookCurrentBranch(appCtx.RepoPath)
 	if branch == "_armature" {
 		return nil
 	}
 
-	// Load snapshot to get materialized state
 	store := newSnapshotStore(appCtx)
 	snap, err := store.Load(context.Background())
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}
 
-	// Extract issues map from snapshot and convert to slice for DetectMerges
 	issuesMap := snap.State.Issues
 	if issuesMap == nil {
 		issuesMap = make(map[string]*materialize.Issue)
@@ -434,13 +390,9 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Transitioned %s to merged\n", id)
 	}
 
-	// Refresh snapshot after writing ops
 	if _, err := store.Load(context.Background()); err != nil {
 		return fmt.Errorf("refresh snapshot: %w", err)
 	}
 
 	return nil
 }
-
-// runPrepareCommitMsgHook implements the prepare-commit-msg hook logic natively.
-// If there is an active claim, prepends its ID to the commit message file.

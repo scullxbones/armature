@@ -36,9 +36,6 @@ func TestConfirmCommand_Success(t *testing.T) {
 	assert.Contains(t, buf.String(), "confirmed draft-task-01")
 }
 
-// TestConfirmCmd_DoesNotMaterialize is historical: Plan Release on confirm
-// must Load the graph. The command still uses ReadIssue to resolve the node
-// before the gate; the gate's Load is required and is not a write-path leak.
 func TestConfirmCmd_DoesNotMaterialize(t *testing.T) {
 	repo := setupRepoWithValidDraftNode(t)
 	_, err := runTrls(t, repo, "materialize")
@@ -103,7 +100,6 @@ func TestSourcesVerifyCommand_EmptyManifest(t *testing.T) {
 func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Create a draft task so dag-summary has items to report.
 	cmd0 := newRootCmd()
 	cmd0.SetOut(new(bytes.Buffer))
 	cmd0.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo,
@@ -117,7 +113,6 @@ func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 
 	err := cmd.Execute()
 	require.NoError(t, err)
-	// Non-interactive mode with draft items outputs JSON
 	assert.Contains(t, buf.String(), "pending_dag_confirmation")
 }
 
@@ -146,20 +141,15 @@ func TestReadyCommand_JSONFormat(t *testing.T) {
 	assert.True(t, found, "ready-json-01 must appear in the issues payload")
 }
 
-// TestReadyExpiredClaims_REQ_TOPTIER_S4_T3 verifies `arm ready` surfaces an
-// expired claim distinctly in both text and JSON output, per TOPTIER-S4-T3's
-// acceptance criterion, rather than silently omitting it (ComputeReady only
-// ever returns status=open issues).
 func TestReadyExpiredClaims_REQ_TOPTIER_S4_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Materialize first to establish baseline state before injecting the stale claim op.
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	logPath := filepath.Join(opsDir, "expired-worker.log")
-	staleClaimTime := time.Now().Unix() - 7200 // 2 hours ago, TTL 1 minute — stale
+	staleClaimTime := time.Now().Unix() - 7200
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpClaim, TargetID: "task-01", Timestamp: staleClaimTime,
 		WorkerID: "expired-worker", Payload: ops.Payload{TTL: 1},
@@ -183,17 +173,9 @@ func TestReadyExpiredClaims_REQ_TOPTIER_S4_T3(t *testing.T) {
 	assert.False(t, strings.HasPrefix(strings.TrimSpace(jsonErrOut), "["), "expired claims must not be a stderr JSON array")
 }
 
-// TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
-// verifies `arm ready --parent X` does not leak an expired claim on an issue
-// outside that parent's subtree. Before the fix, expiredClaims was computed
-// once from all issues and never filtered by --parent (unlike the main ready
-// entries), so a scoped `arm ready` call would surface unrelated expired
-// claims regardless of --parent.
 func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Parent story with a child task-01 is scope; a sibling task outside
-	// that parent must not leak into a --parent-scoped ready call.
 	cmd := newRootCmd()
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Parent story", "--type", "story", "--id", "E7"}))
@@ -212,7 +194,7 @@ func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	logPath := filepath.Join(opsDir, "expired-worker.log")
-	staleClaimTime := time.Now().Unix() - 7200 // 2 hours ago, TTL 1 minute — stale
+	staleClaimTime := time.Now().Unix() - 7200
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpClaim, TargetID: "task-outside", Timestamp: staleClaimTime,
 		WorkerID: "expired-worker", Payload: ops.Payload{TTL: 1},
@@ -220,8 +202,6 @@ func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// task-outside is not a descendant of E7: --parent E7 must not surface
-	// its expired claim. expired_claims lives on the stdout envelope.
 	out, errOut := runReadyJSON(t, repo, "--parent", "E7")
 	decoded := decodeReadyEnvelope(t, out)
 	var expiredClaims []map[string]any
@@ -255,7 +235,7 @@ func TestWorkersCommand_WithInitializedWorker(t *testing.T) {
 
 	out, err := runTrls(t, repo, "workers", "--repo", repo)
 	require.NoError(t, err)
-	_ = out // worker list rendered
+	_ = out
 }
 
 func TestImportCommand_ActualImport(t *testing.T) {
@@ -272,7 +252,6 @@ func TestImportCommand_ActualImport(t *testing.T) {
 	assert.Contains(t, out, "imported 1 items")
 }
 
-// TestImportCommand_WithSource verifies that --source links each imported item to a source.
 func TestImportCommand_WithSource(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
@@ -286,10 +265,6 @@ func TestImportCommand_WithSource(t *testing.T) {
 	assert.Contains(t, out, "imported 1 items")
 }
 
-// TestImportCommand_InvalidType verifies that an import batch containing an
-// invalid issue type anywhere in the file is rejected atomically, before any
-// op from the batch is written — otherwise import would be a second ingress
-// (besides amend) for writing unvalidated types straight into the op log.
 func TestImportCommand_InvalidType(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
@@ -311,10 +286,6 @@ func TestImportCommand_InvalidType(t *testing.T) {
 	assert.NotContains(t, out, "imp-bad-1")
 }
 
-// TestIssueIDIngressRejectsPathSeparators_REQ_LNGHZN_S5 verifies every
-// user-facing creation boundary rejects a path-shaped ID before appending any
-// create op. This keeps IDs from becoming filesystem paths later in lifecycle
-// commands or materialization.
 func TestIssueIDIngressRejectsPathSeparators_REQ_LNGHZN_S5(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
@@ -384,9 +355,6 @@ func TestDecomposeRevertCommand(t *testing.T) {
 	assert.Contains(t, out, "Reverted")
 }
 
-// TestDecomposeApply_DraftConfidence verifies that nodes created by decompose-apply
-// have confidence=draft, are hidden from trls ready, and become visible after
-// dag-transition promotes them to verified.
 func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -406,7 +374,6 @@ func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
-	// Apply the plan — all nodes should be created as draft
 	out, err := runTrls(t, repo, "dag", "apply", "--plan", planFile)
 	require.NoError(t, err)
 	applied := decodeContractEnvelope(t, out, "issues")
@@ -414,14 +381,12 @@ func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
 	require.NoError(t, json.Unmarshal(applied["count"], &count))
 	assert.Equal(t, 3, count)
 
-	// trls ready should NOT list draft nodes
 	readyOut, err := runTrls(t, repo, "ready", "--format", "json")
 	require.NoError(t, err)
 	assert.NotContains(t, readyOut, "DRF-001")
 	assert.NotContains(t, readyOut, "DRF-002")
 	assert.NotContains(t, readyOut, "DRF-003")
 
-	// Promote via dag-transition on each root node (they have no parent so promote each)
 	_, err = runTrls(t, repo, "dag", "transition", "--issue", "DRF-001")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "dag", "transition", "--issue", "DRF-002")
@@ -429,7 +394,6 @@ func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
 	_, err = runTrls(t, repo, "dag", "transition", "--issue", "DRF-003")
 	require.NoError(t, err)
 
-	// After promotion trls ready should show the tasks
 	readyOut2, err := runTrls(t, repo, "ready", "--format", "json")
 	require.NoError(t, err)
 	assert.Contains(t, readyOut2, "DRF-001")
@@ -440,24 +404,20 @@ func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
 func TestSourcesSyncCommand_WithFilesystemSource(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Init worker so sync can emit ops
 	cmd0 := newRootCmd()
 	cmd0.SetOut(new(bytes.Buffer))
 	cmd0.SetArgs([]string{"worker-init", "--repo", repo})
 	require.NoError(t, cmd0.Execute())
 
-	// Create a file to sync
 	docFile := filepath.Join(repo, "spec.md")
 	require.NoError(t, os.WriteFile(docFile, []byte("# Spec"), 0644))
 
-	// Add filesystem source
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"sources", "add", "--repo", repo,
 		"--url", docFile, "--type", "filesystem", "--title", "Spec"})
 	require.NoError(t, cmd1.Execute())
 
-	// Sync through the lifecycle provider registry.
 	buf := new(bytes.Buffer)
 	cmd2 := newRootCmd()
 	cmd2.SetOut(buf)
@@ -484,7 +444,6 @@ func TestSourcesVerifyCommand_AfterSync_OK(t *testing.T) {
 	_, err = runTrls(t, repo, "sources", "sync")
 	require.NoError(t, err)
 
-	// After sync, verify should pass
 	out, err := runTrls(t, repo, "sources", "verify")
 	require.NoError(t, err)
 	assert.Contains(t, out, "OK")
@@ -503,7 +462,6 @@ func TestValidateCommand_JSON(t *testing.T) {
 	assert.Contains(t, out, "{")
 }
 
-// Test extractFieldsFromIssue helper function
 func TestExtractFieldsFromIssue_SingleField(t *testing.T) {
 	issue := &materialize.Issue{
 		ID:     "task-01",
@@ -562,7 +520,6 @@ func TestExtractFieldsFromIssue_BlockedByAbsent(t *testing.T) {
 	assert.Equal(t, []string{"[]"}, fields)
 }
 
-// Test trls show --field flag
 func TestShowCommand_WithFieldFlag_SingleField(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -590,7 +547,6 @@ func TestShowCommand_WithFieldFlag_BlockedByAbsent(t *testing.T) {
 	assert.Equal(t, "[]\n", out)
 }
 
-// Test trls status --status filter
 func TestListCmd_Group_ShowsStatusHeaders(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
@@ -628,7 +584,6 @@ func TestListCmd_Group_WithParentFilter(t *testing.T) {
 	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"}))
 	require.NoError(t, cmd.Execute())
 
-	// Materialize so issues/E6.json exists for ReadIssue in create --parent.
 	_, materializeErr := runTrls(t, repo, "materialize")
 	require.NoError(t, materializeErr)
 
@@ -668,7 +623,6 @@ func TestListCmd_Group_JSONIgnoresGroupFlag(t *testing.T) {
 func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Amend task-01 to have scope pointing to a non-existent file
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
 		"--scope", "nonexistent/file.go",
 		"--acceptance", testAcceptance,
@@ -698,7 +652,6 @@ func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
 func TestValidateQuiet(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Provide all required task fields so validate reports OK (no errors)
 	acceptance := `[{"type":"test_passes","cmd":"make check"}]`
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
 		"--scope", "nonexistent/file.go",
@@ -731,7 +684,6 @@ func TestAmendCmd_PatchesType(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "amended")
 
-	// Materialize and check the type changed
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	index, err := materialize.LoadIndex(filepath.Join(getTestStateDir(t, repo), "index.json"))
@@ -748,11 +700,10 @@ func TestAmendCmd_PatchesAcceptance(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "amended")
 
-	// Re-materialize and check validate no longer reports missing acceptance
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	validateOut, _ := runTrls(t, repo, "validate") //nolint:errcheck // test helper; errors checked via output assertions
-	// After amendment the task should not report missing acceptance
+	validateOut, err := runTrls(t, repo, "validate")
+	swallowErr(err)
 	assert.NotContains(t, validateOut, "missing required field: acceptance on task task-01")
 }
 
@@ -763,7 +714,6 @@ func TestAmendCmd_NoFieldsProvided_ReturnsError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// Fix W3: passing both --clear-context-files and --context-file must be a hard error.
 func TestAmendCmd_ClearContextFilesAndContextFileConflict_ReturnsError(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -774,8 +724,6 @@ func TestAmendCmd_ClearContextFilesAndContextFileConflict_ReturnsError(t *testin
 	assert.Contains(t, err.Error(), "--clear-context-files")
 }
 
-// setupRepoWithSource creates a repo with a task and a source entry in the manifest,
-// returning the repo path and the source UUID.
 func setupRepoWithSource(t *testing.T) (string, string) {
 	t.Helper()
 	repo := setupRepoWithTask(t)
@@ -790,7 +738,6 @@ func setupRepoWithSource(t *testing.T) (string, string) {
 		"--url", docFile, "--type", "filesystem", "--title", "Doc")
 	require.NoError(t, err)
 
-	// Extract UUID from "added source <uuid> (...)" output
 	parts := strings.Fields(out)
 	require.GreaterOrEqual(t, len(parts), 3, "expected 'added source <uuid> ...' output")
 	sourceID := parts[2]
@@ -842,8 +789,6 @@ func TestSourceLinkCmd_MakesNodeCited(t *testing.T) {
 	require.NotEmpty(t, issue.SourceLinks, "expected SourceLinks to be non-empty after source-link op")
 	assert.Equal(t, sourceID, issue.SourceLinks[0].SourceEntryID)
 }
-
-// accept-citation tests
 
 func TestAcceptCitationCmd_CI_HappyPath(t *testing.T) {
 	repo := setupRepoWithTask(t)
@@ -1107,16 +1052,13 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 	require.NoError(t, err)
 
 	output := buf.String()
-	// Output must be valid JSON
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(output)), &parsed), "output must be valid JSON")
 
-	// Must contain top-level plan fields
 	assert.Contains(t, parsed, "version")
 	assert.Contains(t, parsed, "title")
 	assert.Contains(t, parsed, "issues")
 
-	// Issues must be a non-empty array
 	issues, ok := parsed["issues"].([]any)
 	require.True(t, ok, "issues must be an array")
 	assert.NotEmpty(t, issues)
@@ -1142,7 +1084,6 @@ func TestDecomposeApplyDryRun_REQ_AOC_S2_T4(t *testing.T) {
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
-	// Capture ops dir state before dry-run
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	entriesBefore, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
@@ -1168,7 +1109,6 @@ func TestDecomposeApplyDryRun_REQ_AOC_S2_T4(t *testing.T) {
 	require.NotEmpty(t, help)
 	assert.Contains(t, help[0], "dry-run")
 
-	// No new ops files should be written
 	entriesAfter, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
 	assert.Equal(t, len(entriesBefore), len(entriesAfter), "dry-run must not write any ops files")
@@ -1197,7 +1137,6 @@ func TestListCmd_JSONFormat(t *testing.T) {
 func TestListCmd_StatusFilter(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
-	// Transition task-01 to done so we have two distinct statuses
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "claim", "task-01", "--worktree")
@@ -1207,18 +1146,14 @@ func TestListCmd_StatusFilter(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Promotion to merged now requires an explicit `arm merged` call (no more
-	// automatic done->merged promotion via git-history merge detection).
 	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
 	require.NoError(t, err)
 
-	// --status merged should include task-01 but not task-02 (still open)
 	out, err := runTrls(t, repo, "list", "--status", "merged")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.NotContains(t, out, "task-02")
 
-	// --status open should include task-02 but not task-01
 	out, err = runTrls(t, repo, "list", "--status", "open")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-02")
@@ -1230,7 +1165,6 @@ func TestListCmd_HumanShowsStatus(t *testing.T) {
 
 	out, err := runTrls(t, repo, "list")
 	require.NoError(t, err)
-	// Human output should include a status value alongside each issue
 	assert.Contains(t, out, "open")
 }
 
@@ -1255,8 +1189,6 @@ func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
 	assert.NotEmpty(t, env.Help)
 }
 
-// TestDecomposeApplyUncitedPlan verifies apply --strict is gone and an
-// uncited plan is refused (source-atomic).
 func TestDecomposeApplyUncitedPlan(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1310,8 +1242,6 @@ func TestDecomposeApplyRefusesUnknownSource(t *testing.T) {
 	require.Error(t, showErr, "a refused apply must not create the issue")
 }
 
-// TestDecomposeApplyGenerateIds verifies that --generate-ids replaces the
-// plan-specified IDs with system-generated UUIDs in the created issues.
 func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1337,7 +1267,6 @@ func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
 	require.NoError(t, json.Unmarshal(applied["count"], &count))
 	assert.Equal(t, 2, count)
 
-	// The plan IDs must NOT appear in the state after materialization.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -1349,12 +1278,9 @@ func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
 	assert.False(t, hasGEN001, "GEN-001 should not exist when --generate-ids is used")
 	assert.False(t, hasGEN002, "GEN-002 should not exist when --generate-ids is used")
 
-	// There should be exactly 2 new issues with UUID-like IDs.
 	assert.Len(t, index, 2, "should have exactly 2 issues with generated IDs")
 }
 
-// TestDecomposeApplyRoot verifies that --root overrides the inferred root and
-// attaches top-level plan issues as children of the given root issue.
 func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1364,11 +1290,9 @@ func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create an existing story to use as root.
 	_, err = runTrls(t, repo, "create", "--title", "Existing Story", "--type", "story", "--id", "root-story-01")
 	require.NoError(t, err)
 
-	// Plan with no parent set — top-level issues should become children of root-story-01.
 	planData := `{"version":1,"title":"Root Test","issues":[` +
 		`{"id":"ROOT-001","title":"Task under root","type":"task","source":"src-test",` +
 		`"scope":"internal/ROOT-001.go","dod":"Task under root is complete and tested",` +
@@ -1384,7 +1308,6 @@ func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
 	require.NoError(t, json.Unmarshal(applied["count"], &count))
 	assert.Equal(t, 1, count)
 
-	// After materialization, ROOT-001 should have parent = root-story-01.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -1396,21 +1319,17 @@ func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
 	assert.Equal(t, "root-story-01", entry.Parent, "ROOT-001 should have parent=root-story-01 when --root is set")
 }
 
-// TestShowCmd verifies that trls show --issue prints human-readable summary
-// and that --format json produces structured data.
 func TestShowCmd(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
-	// Human-readable output
 	out, err := runTrls(t, repo, "show", "--format", "human", "--issue", "task-01")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-01")
 	assert.Contains(t, out, "My Task")
-	assert.Contains(t, out, "task")     // type
-	assert.Contains(t, out, "open")     // status
-	assert.Contains(t, out, "story-01") // parent
+	assert.Contains(t, out, "task")
+	assert.Contains(t, out, "open")
+	assert.Contains(t, out, "story-01")
 
-	// JSON output
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
@@ -1434,13 +1353,11 @@ func TestShowCmd_DisplaysAcceptance(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Human-readable output includes acceptance
 	out, err := runTrls(t, repo, "show", "--format", "human", "--issue", "task-01")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Acceptance:", "human output should show Acceptance field")
 	assert.Contains(t, out, "test_passes", "human output should include acceptance criteria content")
 
-	// JSON output includes acceptance field
 	jsonOut, err := runTrls(t, repo, "show", "--issue", "task-01", "--format", "json")
 	require.NoError(t, err)
 	assert.Contains(t, jsonOut, `"acceptance"`, "JSON output should include acceptance field")
@@ -1460,7 +1377,6 @@ func TestShowCmd_MissingFlag(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestDoctorCmd_CleanRepo verifies that trls doctor succeeds on a healthy repo.
 func TestDoctorCmd_CleanRepo(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -1473,7 +1389,6 @@ func TestDoctorCmd_CleanRepo(t *testing.T) {
 	assert.Contains(t, out, "D6")
 }
 
-// TestDoctorCmd_JSONFormat verifies --format json outputs structured data.
 func TestDoctorCmd_JSONFormat(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -1488,9 +1403,6 @@ func TestDoctorCmd_JSONFormat(t *testing.T) {
 	assert.Contains(t, result, "checks")
 }
 
-// TestDoctorCmd_BrokenParentRef verifies D4 detects broken parent references.
-// Since arm create now validates parent existence, we inject the broken op directly
-// into the ops log to simulate a task with a non-existent parent.
 func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1500,8 +1412,6 @@ func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Directly inject a create op with a non-existent parent into the ops log,
-	// bypassing the arm create validation layer.
 	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
 	logPath := filepath.Join(repo, ".armature", "ops", workerID+".log")
 	brokenOp := ops.Op{
@@ -1522,22 +1432,16 @@ func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 	assert.Contains(t, out+err.Error(), "D4")
 }
 
-// TestDoctorCmd_Strict verifies --strict promotes D6 warnings to errors.
 func TestDoctorCmd_Strict(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Without --strict: uncited issues are warnings, should succeed.
 	_, err := runTrls(t, repo, "doctor")
 	require.NoError(t, err, "doctor without --strict should succeed on a repo with uncited issues")
 
-	// With --strict: warnings become errors, should fail.
 	_, err = runTrls(t, repo, "doctor", "--strict")
 	assert.Error(t, err, "doctor --strict should fail when uncited issues exist")
 }
 
-// TestDoctorStrictFlagsUnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8 verifies
-// the CLI reports a managed checkout with no binding and promotes that warning
-// to a non-zero exit under --strict.
 func TestDoctorStrictFlagsUnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	stray := filepath.Join(repo, ".worktrees", "stray")
@@ -1549,9 +1453,6 @@ func TestDoctorStrictFlagsUnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testin
 	assert.Contains(t, out, "stray")
 }
 
-// TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5 verifies that a
-// moved but still bound live worktree is an advisory path-drift finding, not a
-// missing-worktree repair that releases the claimant's reservation.
 func TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
@@ -1571,8 +1472,6 @@ func TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5(t *testing.T) {
 	assert.DirExists(t, movedPath)
 }
 
-// TestDecomposeApplySchemaFlag verifies that --schema prints a valid JSON Schema
-// document that correctly documents field names, types, and constraints.
 func TestDecomposeApplySchemaFlag(t *testing.T) {
 	repo := initTempRepo(t)
 
@@ -1586,26 +1485,19 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 
 	output := strings.TrimSpace(buf.String())
 
-	// Output must be valid JSON
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal([]byte(output), &parsed), "output must be valid JSON")
 
-	// Must contain $schema key (JSON Schema indicator)
 	assert.Contains(t, parsed, "$schema", "output must contain $schema key")
 
-	// Must document the version field as integer type (not string)
 	schemaStr := output
 	assert.Contains(t, schemaStr, `"version"`, "schema must document version field")
 	assert.Contains(t, schemaStr, `"integer"`, "version must be documented as integer type")
 
-	// Must document dod field (not definition_of_done)
 	assert.Contains(t, schemaStr, `"dod"`, "schema must document dod field (not definition_of_done)")
 	assert.NotContains(t, schemaStr, `"definition_of_done"`, "schema must not use definition_of_done as field name")
 
-	// Must document scope as string type (not array)
 	assert.Contains(t, schemaStr, `"scope"`, "schema must document scope field")
-	// scope property should use "string" type, not "array"
-	// We verify by checking the properties section contains scope with string type
 	properties, ok := parsed["properties"].(map[string]any)
 	require.True(t, ok, "schema must have a properties object")
 	assert.Contains(t, properties, "version", "properties must include version")
@@ -1642,32 +1534,25 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 	}
 }
 
-// TestReadyParentFilter verifies that trls ready --parent ISSUE-ID returns only
-// descendants of the given issue.
 func TestReadyParentFilter(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
-	// Without filter: all ready tasks visible (task-01, task-02; story-01 is a story type which may appear).
 	outAll, err := runTrls(t, repo, "ready")
 	require.NoError(t, err)
 	assert.Contains(t, outAll, "task-01")
 	assert.Contains(t, outAll, "task-02")
 
-	// With --parent story-01: only task-01 (child of story-01) should appear.
 	outFiltered, err := runTrls(t, repo, "ready", "--parent", "story-01")
 	require.NoError(t, err)
 	assert.Contains(t, outFiltered, "task-01")
 	assert.NotContains(t, outFiltered, "task-02")
 
-	// With --parent for a non-existent ID: no tasks.
 	outNone, err := runTrls(t, repo, "ready", "--parent", "nonexistent-parent")
 	require.NoError(t, err)
 	assert.NotContains(t, outNone, "task-01")
 	assert.NotContains(t, outNone, "task-02")
 }
 
-// TestMaterializeCommand_ExcludeWorker verifies that --exclude-worker skips all
-// ops from that worker's log, yielding zero issues in diagnostic mode.
 func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -1681,7 +1566,6 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--title", "Exclude Worker Issue", "--type", "task", "--id", "TST-EX")
 	require.NoError(t, err)
 
-	// Find the worker ID from the ops log filename.
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	entries, readErr := os.ReadDir(opsDir)
 	require.NoError(t, readErr)
@@ -1694,68 +1578,54 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 	}
 	require.NotEmpty(t, workerID, "expected at least one .log file in ops dir")
 
-	// Normal materialize should produce 1 issue.
 	outNormal, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	assert.Contains(t, outNormal, "1 issues")
 
-	// With --exclude-worker, all ops from that worker are skipped.
 	outExclude, err := runTrls(t, repo, "materialize", "--exclude-worker", workerID)
 	require.NoError(t, err)
 	assert.Contains(t, outExclude, "excluding worker")
 	assert.Contains(t, outExclude, "0 issues")
 }
 
-// TestListTerminal verifies that --terminal returns all issues with terminal
-// statuses (done, merged, cancelled) and excludes open/in-progress issues.
 func TestListTerminal(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
-	// Initialize worker so we can do transitions.
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create additional issues: one to cancel, one to leave open, one to merge.
 	_, err = runTrls(t, repo, "create", "--title", "Task to cancel", "--type", "task", "--id", "task-cancel")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--title", "Task to done", "--type", "task", "--id", "task-done")
 	require.NoError(t, err)
 
-	// Transition task-cancel to cancelled.
 	_, err = runTrls(t, repo, "claim", "task-cancel", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-cancel", "--to", "cancelled", "--outcome", "not needed", "--force")
 	require.NoError(t, err)
 
-	// Transition task-done to done; on a repo with git history this becomes merged.
 	_, err = runTrls(t, repo, "claim", "task-done", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "task-done", "--to", "done", "--skip-delivery-gate", "--outcome", "completed", "--force")
 	require.NoError(t, err)
 
-	// --terminal must include cancelled and done/merged issues.
 	out, err := runTrls(t, repo, "list", "--terminal")
 	require.NoError(t, err)
 	assert.Contains(t, out, "task-cancel", "--terminal should include cancelled issues")
 	assert.Contains(t, out, "task-done", "--terminal should include done/merged issues")
 
-	// --terminal must exclude open issues.
 	assert.NotContains(t, out, "task-01", "--terminal should exclude open issues")
 	assert.NotContains(t, out, "task-02", "--terminal should exclude open issues")
 	assert.NotContains(t, out, "story-01", "--terminal should exclude open story")
 }
 
-// TestReadyExplain verifies that arm ready --explain prints ID: reason pairs for
-// open tasks that are blocked or have an inactive parent, in deterministic order.
 func TestReadyExplain(t *testing.T) {
 	repo := plantBlockedReadyExplainFixture(t)
 
 	out, err := runTrls(t, repo, "ready", "--explain")
 	require.NoError(t, err)
-	// task-blocked should appear with a reason mentioning its unmerged blocker
 	assert.Contains(t, out, "task-blocked", "--explain should list task-blocked")
 	assert.Contains(t, out, "task-blocker", "--explain reason should mention the unmerged blocker")
-	// task-01 and task-02 are ready (not blocked), so they must NOT appear in explain output
 	assert.NotContains(t, out, "task-01", "--explain must not include ready tasks")
 	assert.NotContains(t, out, "task-02", "--explain must not include ready tasks")
 }
@@ -1805,8 +1675,6 @@ func TestDagApplyResultModesEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
 	assert.True(t, ids["ENV-002"])
 }
 
-// TestDagApplyEnvelopeIgnoresForeignCreates_REQ_AOC_S2_T4: a sibling worker's
-// issue in global state must not appear as this apply's created rows.
 func TestDagApplyEnvelopeIgnoresForeignCreates_REQ_AOC_S2_T4(t *testing.T) {
 	repo, planFile := plantDagApplyEnvelopeFixture(t)
 	_, err := runTrls(t, repo, "create",
@@ -1908,8 +1776,6 @@ func plantDagApplyEnvelopeFixture(t *testing.T) (string, string) {
 	return repo, planFile
 }
 
-// TestCommandLongAndExampleFields verifies that high-priority commands have
-// non-empty Long and Example fields for comprehensive help documentation.
 func TestCommandLongAndExampleFields(t *testing.T) {
 	type commandTest struct {
 		name string
@@ -1938,7 +1804,6 @@ func TestCommandLongAndExampleFields(t *testing.T) {
 	}
 }
 
-// Fix 1: TestCreateCommand_FeatureType verifies that arm create --type feature succeeds.
 func TestCreateCommand_FeatureType(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
@@ -1947,10 +1812,7 @@ func TestCreateCommand_FeatureType(t *testing.T) {
 	assert.Contains(t, out, "feature-01", "output should include the created ID")
 }
 
-// Fix 1: TestCreateCommand_FeatureTypeInvalidMsg verifies that invalid type error includes "feature".
 func TestCreateCommand_FeatureTypeInErrMsg(t *testing.T) {
-	// Verify that the valid types list includes "feature" in the error message
-	// by attempting to create with a totally invalid type.
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "my widget", "--type", "invalid-type", "--id", "widget-01")
@@ -1958,54 +1820,43 @@ func TestCreateCommand_FeatureTypeInErrMsg(t *testing.T) {
 	assert.Contains(t, err.Error(), "feature", "error message should list 'feature' as a valid type")
 }
 
-// Fix 1: TestValidParentChildTypes_EpicCanContainFeature verifies hierarchy rules for feature type.
 func TestValidParentChildTypes_EpicCanContainFeature(t *testing.T) {
 	assert.True(t, issuetype.IsLegalHierarchy("epic", "feature"),
 		"epic should be able to contain feature")
 }
 
-// Fix 1: TestValidParentChildTypes_FeatureCanContainTask verifies feature can contain task.
 func TestValidParentChildTypes_FeatureCanContainTask(t *testing.T) {
 	assert.True(t, issuetype.IsLegalHierarchy("feature", "task"),
 		"feature should be able to contain task")
 }
 
-// Fix 1: TestValidParentChildTypes_FeatureCanContainBug verifies feature can contain bug.
 func TestValidParentChildTypes_FeatureCanContainBug(t *testing.T) {
 	assert.True(t, issuetype.IsLegalHierarchy("feature", "bug"),
 		"feature should be able to contain bug")
 }
 
-// Fix 1: TestCreateCommand_FeatureUnderEpic verifies feature can be created under an epic.
 func TestCreateCommand_FeatureUnderEpic(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Create an epic first
 	_, err := runTrls(t, repo, "create", "--title", "My Epic", "--type", "epic", "--id", "epic-01")
 	require.NoError(t, err)
 
-	// Materialize so issues/epic-01.json exists for ReadIssue in create --parent.
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	// Create a feature under the epic
 	out, err := runTrls(t, repo, "create", "--title", "My Feature", "--type", "feature", "--id", "feature-02", "--parent", "epic-01")
 	require.NoError(t, err, "arm create --type feature --parent epic-01 should succeed")
 	assert.Contains(t, out, "feature-02")
 }
 
-// Fix 3: TestReparentCommand_EmptyParentMakesTopLevel verifies that --parent ""
-// makes an issue top-level (removes its parent).
 func TestReparentCommand_EmptyParentMakesTopLevel(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 
-	// task-01 has parent story-01; reparent with --parent "" should make it top-level.
 	out, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "")
 	require.NoError(t, err, "arm reparent --parent '' should succeed")
 	assert.Contains(t, out, "task-01", "output should include issue ID")
 }
 
-// TestAcceptCitationCmd_Interactive_Confirm sends "y" to stdin and verifies success.
 func TestAcceptCitationCmd_Interactive_Confirm(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
@@ -2024,7 +1875,6 @@ func TestAcceptCitationCmd_Interactive_Confirm(t *testing.T) {
 	assert.Contains(t, outBuf.String(), "task-01")
 }
 
-// TestAcceptCitationCmd_PositionalIssueID verifies that the positional argument is accepted.
 func TestAcceptCitationCmd_PositionalIssueID(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
@@ -2039,14 +1889,12 @@ func TestAcceptCitationCmd_PositionalIssueID(t *testing.T) {
 	assert.Contains(t, out, "task-01")
 }
 
-// TestWorkersCommand_WithCancelledTransition verifies workers handles cancelled status ops.
 func TestWorkersCommand_WithCancelledTransition(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Claim the task, then cancel it so an OpTransition with StatusCancelled is recorded.
 	_, err = runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "cancelled")
@@ -2057,11 +1905,9 @@ func TestWorkersCommand_WithCancelledTransition(t *testing.T) {
 	_ = out
 }
 
-// TestListCmd_Group_MultipleStatusGroups verifies the sort comparator runs with 2+ status groups.
 func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	// Create a second task and claim it so we get two status groups: open and claimed.
 	_, err := runTrls(t, repo, "create",
 		"--title", "Task two",
 		"--type", "task",
@@ -2080,19 +1926,15 @@ func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
 	require.NoError(t, root.Execute())
 
 	out := buf.String()
-	// Both status groups should appear.
 	assert.Contains(t, out, "task-01")
 	assert.Contains(t, out, "task-02")
 }
 
-// TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus verifies the parent story
-// status check is called when transitioning a task with a parent to done.
 func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
 	repo := setupRepoWithStoryAndTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Claim task-01 (child of story-01) then transition it to done.
 	_, err = runTrls(t, repo, "claim", "task-01",
 		"--worktree",
 	)
@@ -2103,18 +1945,15 @@ func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
 	assert.Contains(t, out, "task-01")
 }
 
-// TestDecomposeContextCmd_BasicOutput verifies that decompose-context outputs a template.
 func TestDecomposeContextCmd_BasicOutput(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "context"})
 	require.NoError(t, root.Execute())
-	// Should output the default prompt template (non-empty).
 	assert.NotEmpty(t, buf.String())
 }
 
-// TestDecomposeContextCmd_JSONFormat verifies --format json output.
 func TestDecomposeContextCmd_JSONFormat(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
@@ -2126,12 +1965,10 @@ func TestDecomposeContextCmd_JSONFormat(t *testing.T) {
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
 }
 
-// TestDecomposeContextCmd_WithSources verifies --sources flag parses and filters empty segments.
 func TestDecomposeContextCmd_WithSources(t *testing.T) {
 	buf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(buf)
-	// Pass comma-separated sources with an empty segment to exercise the `if s != "" {` guard.
 	root.SetArgs([]string{"dag", "context", "--format", "json", "--sources", "src-01,,src-02"})
 	require.NoError(t, root.Execute())
 
@@ -2139,12 +1976,9 @@ func TestDecomposeContextCmd_WithSources(t *testing.T) {
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &result))
 }
 
-// TestNewSnapshotStore_UsesContextPaths verifies that newSnapshotStore wires
-// opsDir from IssuesDir/ops and stateDir from StateDir.
 func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
 	t.Parallel()
 
-	// Dual-branch mode (the only supported mode)
 	ctx := &config.Context{
 		IssuesDir: "/repo/.arm/.armature",
 		StateDir:  "/repo/.arm/state/worker-1",
@@ -2152,11 +1986,9 @@ func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
 	store := newSnapshotStore(ctx)
 	require.NotNil(t, store)
 
-	// Verify stateDir is wired correctly by checking IndexPath
 	expectedIndexPath := filepath.Join(ctx.StateDir, "index.json")
 	assert.Equal(t, expectedIndexPath, store.IndexPath())
 
-	// Verify IssuePath also uses StateDir
 	expectedIssuePath := filepath.Join(ctx.StateDir, "issues", "test-id.json")
 	assert.Equal(t, expectedIssuePath, store.IssuePath("test-id"))
 }

@@ -7,9 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1 verifies that
-// `arm ready --waves --format json` groups ready issues into scope-disjoint
-// waves as a waves adjunct on the Agent Output Contract envelope.
 func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	t.Parallel()
 
@@ -18,9 +15,6 @@ func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	armatureDir := setupArmatureLayout(t, repo)
 	t.Logf("armature dir: %s", armatureDir)
 
-	// Create three ready tasks with disjoint scopes so they can all land in
-	// one wave, plus a fourth task sharing scope with the first so it must
-	// be placed in a different wave.
 	tasks := []struct {
 		id    string
 		title string
@@ -57,7 +51,6 @@ func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	require.GreaterOrEqual(t, totalIssues, 1, "expected at least one issue across all waves")
 	require.Equal(t, len(issues), totalIssues)
 
-	// task-01 and task-04 share scope, so they must not land in the same wave.
 	for _, wave := range waveIDs {
 		hasTask01 := false
 		hasTask04 := false

@@ -18,6 +18,5 @@ func TestTUICommand_NonInteractive(t *testing.T) {
 
 	err := cmd.Execute()
 	require.NoError(t, err)
-	// In non-interactive mode (tests run without a TTY), print summary
 	assert.Contains(t, buf.String(), "board:")
 }
