@@ -118,7 +118,7 @@ func getTestStateDir(t *testing.T, repo string) string {
 	if workerID == "" {
 		workerID = "default"
 	}
-	workerID = workerIdentityWithSlot(workerID)
+	workerID = slottedWorkerID(workerID).String()
 	if _, err := os.Stat(filepath.Join(repo, ".arm", ".git")); err == nil {
 		return filepath.Join(repo, ".armature", "state", workerID)
 	}
@@ -826,7 +826,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	issuesDir := filepath.Join(repo, ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	workerID = workerIdentityWithSlot(workerID)
+	workerID = slottedWorkerID(workerID).String()
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
 	statBefore, err := os.Stat(logPath)
 	require.NoError(t, err)
@@ -1157,7 +1157,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	defaultID := "default"
-	defaultID = workerIdentityWithSlot(defaultID)
+	defaultID = slottedWorkerID(defaultID).String()
 	expectedDefault := filepath.Join(repo, ".armature", "state", defaultID)
 	_, err = os.Stat(expectedDefault)
 	assert.NoError(t, err, "StateDir should exist at %s when no worker ID is set", expectedDefault)
@@ -1169,7 +1169,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
-	workerID = workerIdentityWithSlot(workerID)
+	workerID = slottedWorkerID(workerID).String()
 	expectedWorker := filepath.Join(repo, ".armature", "state", workerID)
 	_, err = os.Stat(expectedWorker)
 	assert.NoError(t, err, "StateDir should exist at %s for configured worker ID", expectedWorker)
@@ -1195,7 +1195,7 @@ func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 10}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "active", status.Status)
 	assert.Equal(t, "T-001", status.ActiveIssue)
 	assert.Equal(t, "worker-a", status.WorkerID)
@@ -1207,7 +1207,7 @@ func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 1}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.Equal(t, "stale", status.Status)
 	assert.Empty(t, status.ActiveIssue)
 }
@@ -1217,7 +1217,7 @@ func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
 	allOps := []ops.Op{
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a"},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 1, now, map[string]string{})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 1, now, map[string]string{})
 	assert.Equal(t, "idle", status.Status)
 	assert.Equal(t, int64(900), status.LastOpTime)
 }
@@ -1230,7 +1230,7 @@ func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
 		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a",
 			Payload: ops.Payload{To: "done"}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.NotEqual(t, "active", status.Status)
 }
 
@@ -1242,7 +1242,7 @@ func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
 		{Type: ops.OpHeartbeat, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a"},
 		{Type: ops.OpHeartbeat, TargetID: "T-001", Timestamp: 9500, WorkerID: "worker-a"},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a"})
 	assert.NotEqual(t, "active", status.Status)
 }
 
@@ -1264,7 +1264,7 @@ func TestBuildWorkerStatus_SlottedWinnerMatchesBaseWorker(t *testing.T) {
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 900, WorkerID: "worker-a~slot-1", Payload: ops.Payload{TTL: 60}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a~slot-1"})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-a~slot-1"})
 	assert.Equal(t, "active", status.Status)
 	assert.Equal(t, "task-1", status.ActiveIssue)
 }
@@ -1274,7 +1274,7 @@ func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 980, WorkerID: "worker-a", Payload: ops.Payload{TTL: 60}},
 	}
-	status := buildWorkerStatus("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-b"})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"task-1": "worker-b"})
 	assert.Equal(t, "idle", status.Status)
 }
 
@@ -2161,32 +2161,32 @@ func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
 
 func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
 	t.Setenv("ARM_LOG_SLOT", "lane-a")
-	workerID := workerIdentityWithSlot("worker-123")
+	workerID := slottedWorkerID("worker-123").String()
 	assert.Equal(t, "worker-123~lane-a", workerID)
 
 	ctx := &config.Context{IssuesDir: "/repo/.armature"}
 	assert.Equal(t, "/repo/.armature/state/worker-123~lane-a", stateDirFor(ctx, workerID))
 }
 
-func TestWorkerIdentityWithSlot_REQ_LNGHZN_S3_T1(t *testing.T) {
+func TestSlottedWorkerID_REQ_LNGHZN_S3_T1(t *testing.T) {
 	t.Run("valid slot is appended as before", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "lane-a_2")
-		assert.Equal(t, "worker-123~lane-a_2", workerIdentityWithSlot("worker-123"))
+		assert.Equal(t, SlottedWorkerID("worker-123~lane-a_2"), slottedWorkerID("worker-123"))
 	})
 
 	t.Run("slot containing a path separator falls back to unslotted identity", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "../../etc")
-		assert.Equal(t, "worker-123", workerIdentityWithSlot("worker-123"))
+		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
 	})
 
 	t.Run("slot containing a slash falls back to unslotted identity", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "a/b")
-		assert.Equal(t, "worker-123", workerIdentityWithSlot("worker-123"))
+		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
 	})
 
 	t.Run("empty slot is unslotted identity", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "")
-		assert.Equal(t, "worker-123", workerIdentityWithSlot("worker-123"))
+		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
 	})
 }
 

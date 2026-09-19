@@ -31,7 +31,7 @@ func rollbackClaim(
 	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
 	cause error, prior priorClaimState, claimToken string, exclusionSets ...[]claimExclusion,
 ) error {
-	return rollbackClaimWithExclusionLock(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, false, exclusionSets...)
+	return compensateClaimIfHeldByToken(cmd, store, logPath, issueID, workerID, opLabel, cause, prior, claimToken, false, exclusionSets...)
 }
 
 func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, sourceArgs ...string) error {
@@ -898,9 +898,9 @@ func TestClaimStillOwnedByReportsFalseAfterTransitionToInProgress_REQ_LNGHZN_S5_
 		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusInProgress},
 	}))
 
-	owns, err := claimStillOwnedBy(store, "task-01", "worker-a", claimToken)
+	owns, err := reloadStoreClaimHeldBy(store, "task-01", "worker-a", claimToken)
 	require.NoError(t, err)
-	assert.False(t, owns, "claimStillOwnedBy must report not-owned once the issue has left StatusClaimed, even with matching ClaimedBy/ClaimToken")
+	assert.False(t, owns, "reloadStoreClaimHeldBy must report not-owned once the issue has left StatusClaimed, even with matching ClaimedBy/ClaimToken")
 }
 
 func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededByTransition_REQ_LNGHZN_S5_T9(t *testing.T) {
@@ -919,7 +919,7 @@ func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededB
 	}))
 
 	stillOwns := func() bool {
-		owns, err := claimStillOwnedBy(store, "task-01", "worker-a", claimToken)
+		owns, err := reloadStoreClaimHeldBy(store, "task-01", "worker-a", claimToken)
 		require.NoError(t, err)
 		return owns
 	}
@@ -1035,9 +1035,9 @@ func TestClaimLockPrecedesStoreAndWorktreeReads_REQ_LNGHZN_S5_T9(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	release, lockErr := acquireClaimLock(repo, "does-not-exist")
+	flock, lockErr := tryAcquirePessimisticCloneClaimFlock(repo, "does-not-exist")
 	require.NoError(t, lockErr)
-	t.Cleanup(release)
+	t.Cleanup(flock.Release)
 
 	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "does-not-exist", "--worktree")
 	require.Error(t, claimErr, "claim must fail while the lock is held. stderr: %s", stderr)
@@ -2433,7 +2433,7 @@ func TestRollbackClaimReportsExclusionCleanupFailure_REQ_LNGHZN_S9_T1(t *testing
 	cause := fmt.Errorf("boom")
 	exclusions := []claimExclusion{{pattern: "/custom/", destination: filepath.Join(t.TempDir(), "custom")}}
 
-	err := rollbackClaimWithExclusionLock(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimToken, false, exclusions)
+	err := compensateClaimIfHeldByToken(cmd, store, logPathA, "task-01", "worker-a", "create worktree", cause, prior, claimToken, false, exclusions)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "boom")
 	assert.Contains(t, err.Error(), "exclusion rollback failed")

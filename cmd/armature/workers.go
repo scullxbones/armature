@@ -43,7 +43,7 @@ func newWorkersCmd() *cobra.Command {
 			statuses := make([]WorkerStatus, 0, len(workers))
 			winners := claimWinnersByIssue(workers)
 			for workerID, allOps := range workers {
-				s := buildWorkerStatus(workerID, allOps, defaultTTL, now, winners)
+				s := foldWorkerStatusFromClaimOwnerActivity(workerID, allOps, defaultTTL, now, winners)
 				statuses = append(statuses, s)
 			}
 
@@ -102,50 +102,91 @@ func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 	return result, nil
 }
 
-func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64, winners map[string]string) WorkerStatus {
+func claimingWorkerActivityIfAuthorOwnsLease(author, claimOwner string, ts, last int64) int64 {
+	if author != claimOwner {
+		return last
+	}
+	if ts > last {
+		return ts
+	}
+	return last
+}
+
+type claimOwnerClocks struct {
+	owner                      string
+	claimedAt                  int64
+	lastHeartbeat              int64
+	ttl                        int
+	lastClaimingWorkerActivity int64
+	transitioned               bool
+}
+
+func (c *claimOwnerClocks) recordHeartbeat(ts int64) {
+	if ts > c.lastHeartbeat {
+		c.lastHeartbeat = ts
+	}
+}
+
+func (c *claimOwnerClocks) recordTransitionByAuthor(author string, ts int64, to string) {
+	c.lastClaimingWorkerActivity = claimingWorkerActivityIfAuthorOwnsLease(author, c.owner, ts, c.lastClaimingWorkerActivity)
+	if isTerminalStatus(to) {
+		c.transitioned = true
+	}
+}
+
+func (c claimOwnerClocks) lastActivity() claim.LastActivity {
+	return claim.FoldLastActivity(c.claimedAt, c.lastHeartbeat, c.lastClaimingWorkerActivity)
+}
+
+func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64, winners map[string]string) WorkerStatus {
 	lastOp := lastOpTimestampFromLog(allOps)
 
-	claimedAt := make(map[string]int64)
-	lastHeartbeat := make(map[string]int64)
-	claimTTL := make(map[string]int)
-	transitioned := make(map[string]bool)
-	claimedBy := make(map[string]string)
-	lastClaimingWorkerActivity := make(map[string]int64)
+	clocksByIssue := make(map[string]*claimOwnerClocks)
 
 	for _, op := range allOps {
 		switch op.Type {
 		case ops.OpClaim:
-			claimedAt[op.TargetID] = op.Timestamp
-			claimTTL[op.TargetID] = op.Payload.TTL
-			claimedBy[op.TargetID] = op.WorkerID
-			lastClaimingWorkerActivity[op.TargetID] = op.Timestamp
+			c := clocksByIssue[op.TargetID]
+			if c == nil {
+				c = &claimOwnerClocks{}
+				clocksByIssue[op.TargetID] = c
+			}
+			c.owner = op.WorkerID
+			c.claimedAt = op.Timestamp
+			c.ttl = op.Payload.TTL
+			c.lastClaimingWorkerActivity = op.Timestamp
 		case ops.OpHeartbeat:
-			if op.Timestamp > lastHeartbeat[op.TargetID] {
-				lastHeartbeat[op.TargetID] = op.Timestamp
+			c := clocksByIssue[op.TargetID]
+			if c == nil {
+				c = &claimOwnerClocks{}
+				clocksByIssue[op.TargetID] = c
 			}
+			c.recordHeartbeat(op.Timestamp)
 		case ops.OpTransition:
-			if isTerminalStatus(op.Payload.To) {
-				transitioned[op.TargetID] = true
+			c := clocksByIssue[op.TargetID]
+			if c == nil {
+				c = &claimOwnerClocks{}
+				clocksByIssue[op.TargetID] = c
 			}
-			if op.WorkerID == claimedBy[op.TargetID] && op.Timestamp > lastClaimingWorkerActivity[op.TargetID] {
-				lastClaimingWorkerActivity[op.TargetID] = op.Timestamp
-			}
+			c.recordTransitionByAuthor(op.WorkerID, op.Timestamp, op.Payload.To)
 		}
 	}
 
-	for issueID, ca := range claimedAt {
+	for issueID, c := range clocksByIssue {
+		if c.claimedAt == 0 {
+			continue
+		}
 		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
 			continue
 		}
-		if transitioned[issueID] {
+		if c.transitioned {
 			continue
 		}
-		ttl := claimTTL[issueID]
+		ttl := c.ttl
 		if ttl <= 0 {
 			ttl = defaultTTLMinutes
 		}
-		last := claim.FoldLastActivity(ca, lastHeartbeat[issueID], lastClaimingWorkerActivity[issueID])
-		if !claim.IsClaimStale(last, ttl, now) {
+		if !claim.IsClaimStale(c.lastActivity(), ttl, now) {
 			return WorkerStatus{
 				WorkerID:    workerID,
 				Status:      "active",
@@ -156,7 +197,10 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 	}
 
 	hasWinnerClaim := false
-	for issueID := range claimedAt {
+	for issueID, c := range clocksByIssue {
+		if c.claimedAt == 0 {
+			continue
+		}
 		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
 			continue
 		}
@@ -188,13 +232,6 @@ func buildWorkerStatus(workerID string, allOps []ops.Op, defaultTTLMinutes int, 
 }
 
 func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
-	type issueState struct {
-		claimedAt                  int64
-		lastHeartbeat              int64
-		ttl                        int
-		transitioned               bool
-		lastClaimingWorkerActivity int64
-	}
 	claimsByIssue := make(map[string][]ops.Op)
 	opsByIssue := make(map[string][]ops.Op)
 	for _, allOps := range workers {
@@ -216,7 +253,7 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 			}
 			return issueOps[i].Type < issueOps[j].Type
 		})
-		stateByWorker := make(map[string]*issueState)
+		stateByWorker := make(map[string]*claimOwnerClocks)
 		var activeWorker string
 		for _, op := range issueOps {
 			staleAt := func(workerID string, now int64) bool {
@@ -228,17 +265,14 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 				if ttl <= 0 {
 					ttl = 60
 				}
-				return claim.IsClaimStale(
-					claim.FoldLastActivity(s.claimedAt, s.lastHeartbeat, s.lastClaimingWorkerActivity),
-					ttl,
-					now,
-				)
+				return claim.IsClaimStale(s.lastActivity(), ttl, now)
 			}
 			switch op.Type {
 			case ops.OpClaim:
 				if staleAt(activeWorker, op.Timestamp) {
 					activeWorker = op.WorkerID
-					stateByWorker[op.WorkerID] = &issueState{
+					stateByWorker[op.WorkerID] = &claimOwnerClocks{
+						owner:                      op.WorkerID,
 						claimedAt:                  op.Timestamp,
 						lastHeartbeat:              op.Timestamp,
 						ttl:                        op.Payload.TTL,
@@ -246,17 +280,14 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 					}
 				}
 			case ops.OpHeartbeat:
-				if s := stateByWorker[op.WorkerID]; s != nil && op.Timestamp > s.lastHeartbeat {
-					s.lastHeartbeat = op.Timestamp
+				if s := stateByWorker[op.WorkerID]; s != nil {
+					s.recordHeartbeat(op.Timestamp)
 				}
 			case ops.OpTransition:
-				if s := stateByWorker[op.WorkerID]; s != nil && op.Timestamp > s.lastClaimingWorkerActivity {
-					s.lastClaimingWorkerActivity = op.Timestamp
+				if s := stateByWorker[op.WorkerID]; s != nil {
+					s.recordTransitionByAuthor(op.WorkerID, op.Timestamp, op.Payload.To)
 				}
 				if isTerminalStatus(op.Payload.To) {
-					if s := stateByWorker[op.WorkerID]; s != nil {
-						s.transitioned = true
-					}
 					activeWorker = ""
 				}
 			}

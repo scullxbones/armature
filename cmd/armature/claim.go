@@ -451,7 +451,7 @@ func newClaimToken() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken string) (bool, error) {
+func reloadStoreClaimHeldBy(store *snapshot.Store, issueID, workerID, claimToken string) (bool, error) {
 	if _, err := store.Load(context.Background()); err != nil {
 		return false, err
 	}
@@ -459,9 +459,22 @@ func claimStillOwnedBy(store *snapshot.Store, issueID, workerID, claimToken stri
 	return issue.ClaimHeldBy(workerID, claimToken), nil
 }
 
-func rollbackClaimWithExclusionLock(
+func priorLeaseFacts(prior priorClaimState) claimPkg.LeaseFacts {
+	return claimPkg.LeaseFacts{
+		Status:                 prior.status,
+		ClaimedBy:              prior.claimedBy,
+		ClaimedAt:              prior.claimedAt,
+		LastHeartbeat:          prior.lastHeartbeat,
+		ClaimTTL:               prior.claimTTL,
+		ClaimingWorkerActivity: prior.claimingWorkerActivity,
+		WorktreePath:           prior.worktreePath,
+		ClaimToken:             prior.claimToken,
+	}
+}
+
+func compensateClaimIfHeldByToken(
 	cmd *cobra.Command, store *snapshot.Store, logPath, issueID, workerID, opLabel string,
-	cause error, prior priorClaimState, claimToken string, exclusionLockHeld bool, exclusionSets ...[]claimExclusion,
+	cause error, prior priorClaimState, ifClaimToken string, exclusionLockHeld bool, exclusionSets ...[]claimExclusion,
 ) error {
 	var exclusions []claimExclusion
 	if len(exclusionSets) > 0 {
@@ -481,7 +494,7 @@ func rollbackClaimWithExclusionLock(
 		return base
 	}
 
-	owns, err := claimStillOwnedBy(store, issueID, workerID, claimToken)
+	owns, err := reloadStoreClaimHeldBy(store, issueID, workerID, ifClaimToken)
 	if err != nil {
 		return finish(fmt.Errorf("%s: %w (claim superseded; no rollback appended: reload store failed: %v)", opLabel, cause, err))
 	}
@@ -491,19 +504,10 @@ func rollbackClaimWithExclusionLock(
 
 	now := nowEpoch()
 	payload, planErr := claimPkg.PlanCompensation(claimPkg.CompensationInput{
-		Prior: claimPkg.LeaseFacts{
-			Status:                 prior.status,
-			ClaimedBy:              prior.claimedBy,
-			ClaimedAt:              prior.claimedAt,
-			LastHeartbeat:          prior.lastHeartbeat,
-			ClaimTTL:               prior.claimTTL,
-			ClaimingWorkerActivity: prior.claimingWorkerActivity,
-			WorktreePath:           prior.worktreePath,
-			ClaimToken:             prior.claimToken,
-		},
+		Prior:        priorLeaseFacts(prior),
 		WorkerID:     workerID,
 		Now:          now,
-		IfClaimToken: claimToken,
+		IfClaimToken: ifClaimToken,
 	})
 	if planErr != nil {
 		return finish(fmt.Errorf("%s: %w; also failed to plan claim compensation: %v (manual cleanup may be needed)", opLabel, cause, planErr))
@@ -894,11 +898,11 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 			issuesDir := ctx.IssuesDir
 
-			releaseClaimLock, err := acquireClaimLock(ctx.RepoPath, issueID)
+			cloneFlock, err := tryAcquirePessimisticCloneClaimFlock(ctx.RepoPath, issueID)
 			if err != nil {
 				return err
 			}
-			defer releaseClaimLock()
+			defer cloneFlock.Release()
 			releaseGitExcludeLock, err := acquireGitExcludeLock(ctx.RepoPath)
 			if err != nil {
 				return err
@@ -1073,7 +1077,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 
 			stillOwnsClaim := func() bool {
-				owns, err := claimStillOwnedBy(store, issueID, workerID, claimToken)
+				owns, err := reloadStoreClaimHeldBy(store, issueID, workerID, claimToken)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "warning: reload store to verify claim ownership failed: %v\n", err)
 					return false
@@ -1128,14 +1132,14 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					ctx.RepoPath, worktreePath, issueID, *issue,
 					stillOwnsClaim, "", sourceArgs...,
 				); err != nil {
-					return rollbackClaimWithExclusionLock(
+					return compensateClaimIfHeldByToken(
 						cmd, store, logPath, issueID, workerID, "create worktree",
 						err, prior, claimToken, true, claimExclusions,
 					)
 				}
 			} else {
 				if err := updateIssueIDFile(worktreePath, issueID); err != nil {
-					return rollbackClaimWithExclusionLock(
+					return compensateClaimIfHeldByToken(
 						cmd, store, logPath, issueID, workerID, "update task ID file",
 						err, prior, claimToken, true, claimExclusions,
 					)
@@ -1144,7 +1148,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				worktreeGitClient := adapters.New(worktreePath)
 				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
 					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
-						return rollbackClaimWithExclusionLock(
+						return compensateClaimIfHeldByToken(
 							cmd, store, logPath, issueID, workerID, "persist claimed branch metadata",
 							err, prior, claimToken, true, claimExclusions,
 						)

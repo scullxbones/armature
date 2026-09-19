@@ -272,7 +272,7 @@ func attachDoctorExecutionState(cmd *cobra.Command, ctx *config.Context) {
 	if workerID == "" {
 		workerID = "default"
 	}
-	workerID = workerIdentityWithSlot(workerID)
+	workerID = slottedWorkerID(workerID).String()
 	ctx.StateDir = stateDirFor(ctx, workerID)
 	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
 	baseCtx := cmd.Context()

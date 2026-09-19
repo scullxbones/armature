@@ -174,7 +174,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
 			if assignedTo != "" {
-				expiredClaims = filterExpiredClaimsByAssignedWorker(expiredClaims, issues, assignedTo)
+				expiredClaims = filterExpiredClaimsByIssueAssignedWorker(expiredClaims, issues, assignedTo)
 			}
 
 			if filterParent != "" {
@@ -254,15 +254,15 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	return cmd
 }
 
-func filterExpiredClaimsByAssignedWorker(
+func filterExpiredClaimsByIssueAssignedWorker(
 	expiredClaims []ready.ExpiredClaimEntry,
 	issues map[string]*materialize.Issue,
-	assignedTo string,
+	assignedWorker string,
 ) []ready.ExpiredClaimEntry {
 	filtered := expiredClaims[:0]
 	for _, e := range expiredClaims {
 		issue := issues[e.Issue]
-		if issue != nil && issue.AssignedWorker == assignedTo {
+		if issue != nil && issue.AssignedWorker == assignedWorker {
 			filtered = append(filtered, e)
 		}
 	}

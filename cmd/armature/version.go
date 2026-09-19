@@ -44,7 +44,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print arm version",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			format, nonInteractive := autoDetectTTYPolicy(cmd)
+			format, nonInteractive := applyTTYDetectionPolicy(cmd)
 			tui.SetFormat(format)
 			tui.SetNonInteractive(nonInteractive)
 			return nil
