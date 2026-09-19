@@ -38,11 +38,6 @@ func decodeReadyEnvelope(t *testing.T, stdout string) map[string]json.RawMessage
 	return decoded
 }
 
-// TestFilterExpiredClaimsByAssignedWorker_UsesAssignedWorkerNotClaimedBy proves
-// that an expired claim on an issue assigned to worker-a but claimed by
-// worker-b shows up under --assigned-to worker-a (not worker-b), matching the
-// AssignedWorker-based filtering ready.FilterByAssignedTo uses for the main
-// ready list.
 func TestFilterExpiredClaimsByAssignedWorker_UsesAssignedWorkerNotClaimedBy(t *testing.T) {
 	t.Parallel()
 

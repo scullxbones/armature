@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -64,8 +63,7 @@ planner cannot release a dirty plan. Demotion to draft is not gated.`,
 			}
 
 			result := map[string]string{"issue": issueID, "promoted_to": targetConfidence}
-			data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(result)))
 			return nil
 		},
 	}

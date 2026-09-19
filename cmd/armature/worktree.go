@@ -32,10 +32,6 @@ func newWorktreeListCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 
-			// Read all managed worktrees from git worktree list. Propagate a git
-			// failure instead of proceeding on an empty inventory: an empty list
-			// from a transient git error would mislabel every live claim a ghost
-			// and make gc silently remove nothing.
 			worktrees, err := worktree.ListManaged(ctx.RepoPath)
 			if err != nil {
 				return worktreeLifecycleError(
@@ -49,12 +45,6 @@ func newWorktreeListCmd() *cobra.Command {
 					"run `git worktree list --porcelain` and retry `arm worktree list`", err)
 			}
 
-			// Load current-truth issues via the snapshot store, exactly as
-			// `arm list` does: it materializes from the op log against the
-			// clone-local state dir (stateDirFor(ctx, workerID)), so we read the
-			// same issues production read paths see. Reading raw JSON from
-			// ctx.IssuesDir/issues pointed at a directory that never exists
-			// (.armature/issues), yielding zero issues and a silent no-op.
 			issues, err := loadIssuesForReconcile(ctx)
 			if err != nil {
 				return worktreeLifecycleError(
@@ -62,9 +52,6 @@ func newWorktreeListCmd() *cobra.Command {
 					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree list`", err)
 			}
 
-			// Reconcile, scoping ghost detection to worktrees this clone owns so a
-			// live claim held by a remote clone (whose absolute WorktreePath can
-			// never match this clone's git worktree list) is not a false ghost.
 			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, time.Now(), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -74,7 +61,6 @@ func newWorktreeListCmd() *cobra.Command {
 					return err
 				}
 			} else {
-				// Human format
 				if len(result.BoundWorktrees) > 0 {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "BOUND WORKTREES:")
 					for _, id := range result.BoundWorktrees {
@@ -139,8 +125,6 @@ func newWorktreeGCCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 
-			// Read all managed worktrees; abort on a git failure rather than
-			// proceeding on an empty inventory (see list command).
 			worktrees, err := worktree.ListManaged(ctx.RepoPath)
 			if err != nil {
 				return worktreeLifecycleError(
@@ -154,7 +138,6 @@ func newWorktreeGCCmd() *cobra.Command {
 					"run `git worktree list --porcelain` and retry `arm worktree gc`", err)
 			}
 
-			// Load current-truth issues via the snapshot store (see list command).
 			issues, err := loadIssuesForReconcile(ctx)
 			if err != nil {
 				return worktreeLifecycleError(
@@ -162,15 +145,11 @@ func newWorktreeGCCmd() *cobra.Command {
 					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree gc`", err)
 			}
 
-			// Reconcile to find what should be removed, scoping ghost detection to
-			// worktrees this clone owns (see list command for rationale).
 			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, time.Now(), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if dryRun {
-				// Dry-run must report the same anomalous ambiguity that a real run
-				// would refuse, so automation never treats this preview as all-clear.
 				if format == "json" || format == "agent" {
 					if err := writeWorktreeGCEnvelope(cmd, result.GCRemovalSet, nil, nil, result.GCAmbiguous, true); err != nil {
 						return err
@@ -198,14 +177,6 @@ func newWorktreeGCCmd() *cobra.Command {
 				return skipCommandFailure(gcExitError(nil, result.GCAmbiguous))
 			}
 
-			// Actually remove worktrees. Route each removal through the
-			// binding-verified teardown path shared with `arm merged`
-			// (removeWorktreeForIssue): it locates the worktree by branch in THIS
-			// clone, verifies the clone-local armature-issue-id binding before
-			// removing, and cleans up branch-point metadata. This replaces a naive
-			// force-remove of issue.WorktreePath — a git-replicated absolute path
-			// that may point at a reused or foreign worktree — collapsing the two
-			// divergent teardown paths into one.
 			removed := []string{}
 			failed := []string{}
 			skipped := []string{}
@@ -223,22 +194,15 @@ func newWorktreeGCCmd() *cobra.Command {
 				case outcome == worktreeRemoved:
 					removed = append(removed, selected.Binding)
 				default:
-					// worktreeSkipped: not found by branch, or binding mismatch.
-					// Nothing was removed, so it must not be reported as removed.
 					skipped = append(skipped, selected.Binding)
 				}
 			}
 
-			// Report results
 			if format == "json" || format == "agent" {
 				if err := writeWorktreeGCEnvelope(cmd, removed, skipped, failed, result.GCAmbiguous, false); err != nil {
 					return err
 				}
-				// Consistency with the human branch below: a removal failure or an
-				// ambiguous terminal issue is a non-zero exit regardless of output
-				// format, so gc never reports a misleading clean run.
 				if exitErr := gcExitError(failed, result.GCAmbiguous); exitErr != nil {
-					// Report already on the wire; see the dry-run branch above.
 					return skipCommandFailure(exitErr)
 				}
 			} else {
@@ -260,9 +224,6 @@ func newWorktreeGCCmd() *cobra.Command {
 						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "  %s\n", id)
 					}
 				}
-				// Surface ambiguous terminal issues that reconcile refused to GC.
-				// list already renders these; gc must too, and must exit non-zero,
-				// or an ambiguous candidate is silently dropped from a "clean" run.
 				if len(result.GCAmbiguous) > 0 {
 					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "AMBIGUOUS GC CANDIDATES (nothing removed):")
 					for _, id := range result.GCAmbiguous {
@@ -270,7 +231,6 @@ func newWorktreeGCCmd() *cobra.Command {
 					}
 				}
 				if exitErr := gcExitError(failed, result.GCAmbiguous); exitErr != nil {
-					// Report already on the wire; see the dry-run branch above.
 					return skipCommandFailure(exitErr)
 				}
 			}
@@ -292,12 +252,6 @@ func managedWorktreeRoots(repoPath string) []string {
 	return []string{worktree.CanonicalRoot(repoPath), worktree.NormalizePath(abs)}
 }
 
-// loadIssuesForReconcile loads current-truth issues the same way production read
-// paths do: via the snapshot store, which materializes the op log against the
-// clone-local state directory (stateDirFor(ctx, workerID), exposed as
-// ctx.StateDir). This is the fix for the reconcile no-op — the previous code
-// read raw JSON from ctx.IssuesDir/issues (<repo>/.armature/issues), a directory
-// that never exists, so Reconcile always received zero issues.
 func loadIssuesForReconcile(ctx *config.Context) (map[string]*materialize.Issue, error) {
 	store := newSnapshotStore(ctx)
 	snap, err := store.Load(context.Background())
@@ -310,10 +264,6 @@ func loadIssuesForReconcile(ctx *config.Context) (map[string]*materialize.Issue,
 	return snap.Issues, nil
 }
 
-// gcExitError builds the non-zero exit for `arm worktree gc` from the two
-// classes that must not be reported as a clean run: removal failures and
-// ambiguous terminal issues reconcile refused to GC. Returns nil when both are
-// empty. A removal failure takes precedence in the message.
 func gcExitError(failed, ambiguous []string) error {
 	if len(failed) > 0 {
 		return fmt.Errorf("failed to remove %d worktree(s)", len(failed))

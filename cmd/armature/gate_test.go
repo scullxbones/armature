@@ -114,9 +114,6 @@ func TestGateRunFailedCommandRecordsEvidence(t *testing.T) {
 	assert.Equal(t, "full", ev.Profile)
 }
 
-// TestGateRunUsesInvokingWorktree_REQ_LNGHZN_S10_T3 is the P1 seam: when
-// invoked from a linked task worktree, HEAD, cleanliness, and the configured
-// command must use that checkout — not the parent repo ResolveContext walks to.
 func TestGateRunUsesInvokingWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
@@ -142,9 +139,6 @@ func TestGateRunUsesInvokingWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.False(t, ev.Uncommitted)
 }
 
-// TestGateRunDirtiedTreeUncitable_REQ_LNGHZN_S10_T3 covers a clean checkout
-// whose configured command leaves a non-ignored file: the run must still be
-// recorded uncommitted so evidence cannot cite a tree that no longer matches HEAD.
 func TestGateRunDirtiedTreeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
@@ -160,9 +154,6 @@ func TestGateRunDirtiedTreeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.FileExists(t, filepath.Join(repo, "generated-by-gate.txt"))
 }
 
-// TestGateRunUncommittedGatesJSON_REQ_LNGHZN_S10_T3 is the I5 seam: a
-// gates.json edit that is not in HEAD must dirty the tree so the run cannot
-// be cited as evidence for the committed definition.
 func TestGateRunUncommittedGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
@@ -180,9 +171,6 @@ func TestGateRunUncommittedGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, []string{"true"}, ev.Command, "must execute the HEAD command, not the worktree edit")
 }
 
-// TestGateRunSkipWorktreeGatesJSONUsesHEADCommand_REQ_LNGHZN_S10_T3 is the
-// I5 seam: skip-worktree hides a mutated gates.json from porcelain. The
-// wrapper must still execute the HEAD blob command, not the worktree file.
 func TestGateRunSkipWorktreeGatesJSONUsesHEADCommand_REQ_LNGHZN_S10_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
@@ -240,8 +228,6 @@ func TestGateRunAssumeUnchangedSourceUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, 0, ev.Exit)
 }
 
-// TestGateRunUntrackedGatesJSONIsUnconfigured_REQ_LNGHZN_S10_T3: a
-// worktree-only gates.json is not in HEAD, so the repo is unconfigured.
 func TestGateRunUntrackedGatesJSONIsUnconfigured_REQ_LNGHZN_S10_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesFile(t, repo, map[string][]string{
@@ -253,9 +239,6 @@ func TestGateRunUntrackedGatesJSONIsUnconfigured_REQ_LNGHZN_S10_T3(t *testing.T)
 	assert.Contains(t, err.Error(), "no gates configured")
 }
 
-// TestGateRunReadsInvokingWorktreeGatesJSON_REQ_LNGHZN_S10_T3 is the I5
-// seam: arm gate run must load the tracked gates.json in the invoking
-// checkout, not the parent's .armature/config.json Gates map.
 func TestGateRunReadsInvokingWorktreeGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
@@ -279,9 +262,6 @@ func TestGateRunReadsInvokingWorktreeGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, 0, ev.Exit)
 }
 
-// TestGateRunHEADMoveRecordsUncommitted_REQ_LNGHZN_S10_T3 covers a command
-// that advances HEAD (empty commit). HeadSHA stays the pre-command revision
-// so attach cannot match a different delivery head; Uncommitted is set.
 func TestGateRunHEADMoveRecordsUncommitted_REQ_LNGHZN_S10_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
@@ -586,8 +566,6 @@ func TestGateOutputExcerptSplitsLongASCII(t *testing.T) {
 }
 
 func TestGateOutputExcerptWalksUTF8Boundaries(t *testing.T) {
-	// 世 is 3 bytes. Place one so the 1024-byte head cut is mid-rune and
-	// one so the tail cut is mid-rune; excerpts must stay valid UTF-8.
 	prefix := append(bytes.Repeat([]byte("a"), gateOutputChunkSize-1), []byte("世")...)
 	suffix := append([]byte("世"), bytes.Repeat([]byte("c"), gateOutputChunkSize-1)...)
 	in := append(append(prefix, bytes.Repeat([]byte("b"), 8)...), suffix...)

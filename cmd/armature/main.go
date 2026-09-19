@@ -11,20 +11,12 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/scullxbones/armature/internal/tui"
-	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
-// autoDetectTTYPolicy is the single TTY-detection mechanism for the CLI (per the
-// CLI Grammar Contract, docs/design/cli-grammar-contract.md § TTY detection). It reads
-// the --format and --non-interactive flags off cmd's flag set (root persistent flags,
-// or the flag set of a command whose PersistentPreRunE bypasses root's, such as
-// bootstrap.go) and auto-upgrades them to agent/non-interactive when running non-TTY.
-// No other file in cmd/armature may call tui.IsTerminal() directly; callers that need
-// TTY-aware behavior go through this function instead.
 func autoDetectTTYPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
 	flags := cmd.Flags()
 
@@ -80,16 +72,13 @@ func newRootCmd() *cobra.Command {
 				return platformProtocolError(cmd, err)
 			}
 
-			// Detect old unmigrated dual-branch layout (.arm/.armature/) and refuse
-			// with clear guidance to run bootstrap. This check applies to all non-bootstrap
-			// commands; bootstrap has its own PersistentPreRunE override that bypasses this.
 			if config.DetectUnmigratedLayout(ctx.WorktreePath, ctx.IssuesDir) {
 				return platformProtocolError(cmd, fmt.Errorf(
 					"repo uses the pre-collapse .arm/.armature/ worktree layout; run `arm bootstrap` to migrate to the current layout",
 				))
 			}
 
-			workerID, _ := worker.GetWorkerID(repoPath) //nolint:errcheck // best-effort; missing worker ID falls back to empty
+			workerID := workerIDBestEffort(repoPath)
 			if workerID == "" {
 				workerID = "default"
 			}
@@ -125,13 +114,11 @@ func newRootCmd() *cobra.Command {
 	root.Flags().BoolP("Version", "V", false, "print version and exit")
 	root.SetFlagErrorFunc(failLoudFlagError)
 
-	// Add command groups
 	root.AddGroup(&cobra.Group{ID: "workflow", Title: "Workflow Commands:"})
 	root.AddGroup(&cobra.Group{ID: "dag", Title: "DAG Commands:"})
 	root.AddGroup(&cobra.Group{ID: "sync", Title: "Sync Commands:"})
 	root.AddGroup(&cobra.Group{ID: "admin", Title: "Admin Commands:"})
 
-	// Workflow commands
 	versionCmd := newVersionCmd()
 	versionCmd.GroupID = "admin"
 	root.AddCommand(versionCmd)
@@ -188,7 +175,6 @@ func newRootCmd() *cobra.Command {
 	assignCmd.GroupID = "workflow"
 	root.AddCommand(assignCmd)
 
-	// DAG commands (group with subcommands)
 	dagCmd := newDAGCmd()
 	dagCmd.GroupID = "dag"
 	root.AddCommand(dagCmd)
@@ -201,7 +187,6 @@ func newRootCmd() *cobra.Command {
 	unlinkCmd.GroupID = "dag"
 	root.AddCommand(unlinkCmd)
 
-	// Sync commands
 	syncCmd := newSyncCmd()
 	syncCmd.GroupID = "sync"
 	root.AddCommand(syncCmd)
@@ -222,7 +207,6 @@ func newRootCmd() *cobra.Command {
 	importCmd.GroupID = "sync"
 	root.AddCommand(importCmd)
 
-	// Admin commands
 	createCmd := newCreateCmd()
 	createCmd.GroupID = "admin"
 	root.AddCommand(createCmd)
@@ -311,8 +295,6 @@ func newRootCmd() *cobra.Command {
 	worktreeCmd.GroupID = "admin"
 	root.AddCommand(worktreeCmd)
 
-	// Cobra lazily adds `help` in ExecuteC. Install it first so the paved-road
-	// walk classifies every registered command, including help.
 	root.SetHelpCommandGroupID("admin")
 	root.InitDefaultHelpCmd()
 	applyPavedRoadMetadata(root)
@@ -345,9 +327,6 @@ func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) i
 		target = root
 	}
 	err = platformProtocolError(target, err)
-	// When cobra could not resolve a subcommand it hands back the root command,
-	// so the parent-chain walk above sees nothing to classify. Fall back to argv
-	// in exactly that case; see argvNamesPlatformProtocol for why it is blunt.
 	if target == root && argvNamesPlatformProtocol(argv) {
 		err = skipCommandFailure(err)
 	}
@@ -360,10 +339,6 @@ func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) i
 func main() {
 	os.Exit(executeRoot(newRootCmd(), os.Args[1:], os.Stdout, os.Stderr))
 }
-
-// Paved-road classification (NXTTN-S4-T1). Every cobra command is paved or
-// escape-hatch. Metadata on the tree is the source of truth for --help
-// markers and docs/paved-road.md.
 
 const (
 	pavedRoadAnnotationKey = "armature.paved-road"
@@ -390,10 +365,6 @@ type pavedRoadDefault struct {
 	Reason   string
 }
 
-// pavedRoadCommands classifies every registered command path (space-separated
-// names, no "arm" prefix). Root is "". Cobra's generated help command is
-// installed in newRootCmd before applyPavedRoadMetadata so it is classified
-// here like every other registered command.
 var pavedRoadCommands = map[string]pavedRoadClass{
 	"":     {Kind: pavedRoadKindPaved},
 	"help": {Kind: pavedRoadKindPaved},
@@ -469,7 +440,6 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"worktree gc":             {Kind: pavedRoadKindEscape, Note: "Remove worktrees after merged/cancelled. Sync/merged teardown is the road."},
 }
 
-// pavedRoadPipeline maps Next-Ten pipeline steps onto concrete commands.
 var pavedRoadPipeline = []pavedRoadStep{
 	{
 		ID:          "bootstrap",
@@ -509,8 +479,6 @@ var pavedRoadPipeline = []pavedRoadStep{
 	},
 }
 
-// pavedRoadDefaultsAudit lists flags that exist to leave the paved road.
-// Skip and force flags stay labeled here until they are removed.
 var pavedRoadDefaultsAudit = []pavedRoadDefault{
 	{
 		Flag:     "--skip-delivery-gate",

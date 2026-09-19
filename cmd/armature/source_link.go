@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -18,7 +17,6 @@ func newSourceLinkCmd() *cobra.Command {
 		Short: "Link one or more issues to a source entry in the manifest",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Positional arg is a backward-compat single-issue path.
 			if len(issueIDs) == 0 && len(args) > 0 {
 				issueIDs = []string{args[0]}
 			}
@@ -57,8 +55,7 @@ func newSourceLinkCmd() *cobra.Command {
 				}
 
 				result := map[string]string{"issue": issueID, "source_id": sourceID, "source_url": entry.URL}
-				data, _ := json.Marshal(result) //nolint:errcheck // result struct contains only serializable values
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(result)))
 			}
 			return nil
 		},

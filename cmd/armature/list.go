@@ -89,7 +89,6 @@ func newListCmd() *cobra.Command {
 				if len(ids) == 0 {
 					return nil
 				}
-				// Story Board view: migrate to output.RenderBoard for a single table renderer
 				boardEntries := make([]output.BoardEntry, 0, len(ids))
 				for _, id := range ids {
 					e := index[id]
@@ -109,7 +108,6 @@ func newListCmd() *cobra.Command {
 				return output.RenderBoard(cmd.OutOrStdout(), boardEntries)
 			}
 
-			// Use output.RenderList for simple list view
 			entries := make([]output.ListEntry, 0, len(ids))
 			for _, id := range ids {
 				e := index[id]

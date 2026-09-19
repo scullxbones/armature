@@ -10,9 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// usageBoundaryError marks a failure that originated in Cobra Args or flag
-// parsing, not in command RunE. Callers wrap at that boundary so filenames
-// and other user-controlled text cannot be mistaken for usage phrasing.
 type usageBoundaryError struct {
 	err error
 }
@@ -65,9 +62,6 @@ var (
 	cobraFlagNeedsArgErr  = regexp.MustCompile(`(?i)^flag needs an argument:`)
 )
 
-// mapAgentFacingError presents a port error as a non-GENERAL Command Failure.
-// Protocol Output, harness-hook adapter exits, and already-mapped Command
-// Failures are returned unchanged. Panics are not recovered.
 func mapAgentFacingError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil

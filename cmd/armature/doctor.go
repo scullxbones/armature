@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
-	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -27,15 +25,11 @@ func newDoctorCmd() *cobra.Command {
 		Use:   "doctor",
 		Short: "Run repo health checks (D1-D10, D12); --fix reconciles expired claims",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Fall through to root PersistentPreRunE for normal config loading.
-			// This correctly sets the execution state in the command context.
 			rootErr := cmd.Root().PersistentPreRunE(cmd, args)
 			if rootErr == nil {
 				return nil
 			}
 
-			// Root context resolution failed; check if this is a legacy
-			// single-branch layout by looking for .armature/ops in the repo root.
 			repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
 			if repoPath == "" {
 				repoPath = "."
@@ -56,15 +50,12 @@ func newDoctorCmd() *cobra.Command {
 			legacyArmaturePath := filepath.Join(absRepoPath, ".armature")
 			legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 
-			// Check if legacy layout exists
 			info, statErr := os.Stat(legacyOpsPath)
 			if statErr == nil && info.IsDir() {
-				// Legacy layout detected: set up minimal execution state in the command context
 				legacyCtx := &config.Context{
 					RepoPath:  absRepoPath,
 					IssuesDir: legacyArmaturePath,
 					StateDir:  filepath.Join(legacyArmaturePath, "state"),
-					// Note: WorktreePath is empty for legacy repos, which is expected
 				}
 				state := &executionState{ctx: legacyCtx, tracker: initPushDeps(legacyCtx)}
 				baseCtx := cmd.Context()
@@ -76,7 +67,6 @@ func newDoctorCmd() *cobra.Command {
 				return nil
 			}
 
-			// Neither modern nor legacy layout found; return the original context error
 			return rootErr
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -226,8 +216,6 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 	}
 }
 
-// runDoctorFix plans and (unless dryRun) applies the deterministic claim-liveness
-// remediations described in docs/design/recovery-state-machine.md.
 func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error {
 	if err := doctorFixConfigHealth(appCtx); err != nil {
 		return err
@@ -252,13 +240,6 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 		return nil
 	}
 
-	// Append via the same high-stakes path claim/transition/assign use: commit
-	// (dual-branch) and push (best-effort) each op immediately.
-	//
-	// The plan is withheld until every op lands. ADR 0020 §7 exempts doctor
-	// checks, not a failure while mutating state: an apply error is a real
-	// Command Failure, and printing the plan first would both concatenate a
-	// second value onto stdout and describe ops that were never attempted.
 	state := mustState(cmd)
 	for _, a := range actions {
 		for _, op := range a.Ops {
@@ -272,12 +253,9 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 	return nil
 }
 
-// renderDoctorFixPlan writes the fix plan to stdout in the caller's format.
-// Callers invoke it for a dry run or after every op has been applied, so the
-// plan on stdout always describes work that was planned only or done in full.
 func renderDoctorFixPlan(cmd *cobra.Command, format string, actions []doctor.FixAction) {
 	if format == "json" || format == "agent" {
-		data, _ := json.MarshalIndent(actions, "", "  ") //nolint:errcheck // actions struct contains only serializable values
+		data := mustMarshalIndent(actions)
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 		return
 	}
@@ -290,7 +268,7 @@ func renderDoctorFixPlan(cmd *cobra.Command, format string, actions []doctor.Fix
 }
 
 func attachDoctorExecutionState(cmd *cobra.Command, ctx *config.Context) {
-	workerID, _ := worker.GetWorkerID(ctx.RepoPath) //nolint:errcheck // best-effort; missing worker ID falls back to empty
+	workerID := workerIDBestEffort(ctx.RepoPath)
 	if workerID == "" {
 		workerID = "default"
 	}

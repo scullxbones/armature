@@ -32,7 +32,6 @@ func newScopeRenameCmd() *cobra.Command {
 				return err
 			}
 
-			// Read index directly from disk to scan scope entries; no rematerialization needed.
 			store := newSnapshotStore(appCtx)
 			index, err := store.ReadIndex()
 			if err != nil {
@@ -48,7 +47,6 @@ func newScopeRenameCmd() *cobra.Command {
 				return nil
 			}
 
-			// Use the same timestamp for all ops.
 			ts := nowEpoch()
 
 			proposed := make([]ops.Op, 0, len(affected))
@@ -68,7 +66,6 @@ func newScopeRenameCmd() *cobra.Command {
 				return err
 			}
 
-			// Refresh snapshot to apply the ops to state.
 			if _, err := store.Load(context.Background()); err != nil {
 				return fmt.Errorf("refresh snapshot: %w", err)
 			}

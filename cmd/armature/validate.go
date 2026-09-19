@@ -85,14 +85,11 @@ Use --quiet to suppress INFO lines on a failing run.`,
 	cmd.Flags().BoolVar(&strict, "strict", true, "Treat warnings as errors (default true)")
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "Suppress INFO lines on a failing run")
 
-	// Add doc-examples as a subcommand
 	cmd.AddCommand(newValidateDocExamplesCmd())
 
 	return cmd
 }
 
-// runGraphValidation materializes state and runs validate.Validate with
-// citations, coverage, and expanded scopes filled in. Callers set Options.Strict.
 func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Result, error) {
 	appCtx := currentCtx(cmd)
 	store := newSnapshotStore(appCtx)

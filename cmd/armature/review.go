@@ -95,7 +95,6 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 
 	ctx := currentCtx(cmd)
 
-	// Load snapshot to get issue metadata
 	store := newSnapshotStore(ctx)
 	snap, err := store.Load(cmd.Context())
 	if err != nil {
@@ -108,55 +107,30 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	}
 	issue := *issuePtr
 
-	// Extract title and scope
 	title := issue.Title
 	scope := issue.Scope
 
-	// Parse acceptance criteria from JSON
 	criteria, err := review.ParseAcceptanceCriteria(issue.Acceptance)
 	if err != nil {
 		return fmt.Errorf("failed to parse acceptance criteria: %w", err)
 	}
 
-	// Create git adapter
 	git := adapters.New(ctx.RepoPath)
 
-	// Construct the activity log path from the delivery worktree's *actual* git
-	// dir, not ctx.RepoPath — ctx.RepoPath is resolved to the parent repo root
-	// when this command runs inside a linked worktree (the standard armature
-	// delivery flow), while the harness hook writes each worktree's activity log
-	// to that worktree's private git dir (<repo>/.git/worktrees/<name>/). Using
-	// ctx.RepoPath here would either miss the log entirely or attach an unrelated
-	// session's activity as evidence for this delivery. Resolve from the same
-	// path the command was invoked against (the --repo flag, defaulting to the
-	// current directory, exactly as main.go resolves ctx before the parent-repo
-	// walk) so the resolution finds the invoking worktree's own git dir rather
-	// than the already-resolved parent repo root.
 	invocationPath := invocationRepoPath(cmd)
 	binding, err := harnesshook.ResolveBindingFromDir(invocationPath)
 	if err != nil {
 		return fmt.Errorf("resolve git dir for activity log: %w", err)
 	}
-	// The file-based binding alone is not the full picture: capture (see
-	// resolveIssueBinding below) also falls back to the ARMATURE_ISSUE_ID env var when
-	// no armature-issue-id file is present, so an env-bound session's legitimately
-	// captured activity would otherwise be silently dropped here (binding.IssueID would
-	// come back empty from the file-only resolver even though capture attached activity
-	// to this issue). Reuse the same resolution helper capture uses so the prepare-time
-	// gate compares against the same binding source that capture used.
 	resolvedIssueID := binding.IssueID
 	if resolvedIssueID == "" && binding.GitDir != "" {
 		resolvedIssueID = resolveIssueBinding(binding.GitDir)
 	}
 	activityLogPath := ""
-	// Only attach the activity log if the binding's issue ID matches the issue being prepared.
-	// This prevents a bundle for issue A from carrying issue B's activity log, which would
-	// cause downstream record validation to check citations against the wrong issue's evidence.
 	if binding.GitDir != "" && resolvedIssueID == issueID {
 		activityLogPath = filepath.Join(binding.GitDir, "armature-activity.log")
 	}
 
-	// Call prepare — pass real issue metadata (type, outcome, definition of done)
 	bundle, err := review.Prepare(git, issueID, title, issue.DefinitionOfDone, issue.Type, issue.Outcome, scope, criteria, base, head, activityLogPath)
 	if err != nil {
 		return fmt.Errorf("prepare review bundle: %w", err)
@@ -165,13 +139,11 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 		return fmt.Errorf("attach gate evidence: %w", err)
 	}
 
-	// Marshal bundle to JSON
 	bundleJSON, err := json.MarshalIndent(bundle, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal bundle to JSON: %w", err)
 	}
 
-	// Output to file or stdout
 	if outputFile != "" {
 		if err := os.WriteFile(outputFile, bundleJSON, 0o600); err != nil {
 			return fmt.Errorf("write output file: %w", err)
@@ -262,17 +234,6 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 	ctx := currentCtx(cmd)
 	git := adapters.New(ctx.RepoPath)
 
-	// When --branch is left at its default ("HEAD"), resolve HEAD against
-	// the invocation directory, not ctx.RepoPath — ctx.RepoPath is resolved
-	// to the parent repo root when this command runs inside a linked git
-	// worktree (the standard `arm claim --worktree` delivery flow), so a
-	// bare "HEAD" passed straight through to git.LogBranch would report the
-	// *parent* repo's checked-out branch instead of the worktree's own,
-	// silently returning wrong (or empty) results with exit 0. Mirrors the
-	// same invocation-path resolution runReviewPrepare already applies to
-	// the activity log path, for the same underlying reason. Only applies
-	// when the flag wasn't explicitly passed — an explicit --branch always
-	// means exactly what it says.
 	if !cmd.Flags().Changed("branch") {
 		if resolved, err := adapters.New(invocationRepoPath(cmd)).CurrentBranch(); err == nil && resolved != "" {
 			branch = resolved
@@ -284,7 +245,6 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 		return fmt.Errorf("failed to list commits for issue %s: %w", issueID, err)
 	}
 
-	// Output in JSON format when in agent context, otherwise human-readable
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {
 		help := []string{"arm review prepare --issue " + issueID + " --base <sha> --head <sha> builds a review bundle"}
@@ -320,7 +280,6 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		}
 	}
 
-	// Decode input: read and parse assessment JSON
 	assessmentData, err := readAssessmentFile(assessmentFile)
 	if err != nil {
 		return err
@@ -331,7 +290,6 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		return fmt.Errorf("parse assessment JSON: %w", err)
 	}
 
-	// Optionally load the review bundle for fingerprint verification and diff-index validation.
 	var bundlePtr *review.ReviewBundle
 	if bundleFile != "" {
 		bundleData, err := os.ReadFile(filepath.Clean(bundleFile))
@@ -345,7 +303,6 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		bundlePtr = &bundle
 	}
 
-	// Load snapshot to fetch issue data for contract validation and duplicate checking
 	ctx := currentCtx(cmd)
 
 	store := newSnapshotStore(ctx)
@@ -360,14 +317,12 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	}
 	issue := *issuePtr
 
-	// Build issue data for the review module
 	issueData := &review.IssueData{
 		DefinitionOfDone: issue.DefinitionOfDone,
 		Scope:            issue.Scope,
 		Acceptance:       string(issue.Acceptance),
 	}
 
-	// Call the review module to perform all validation and attestation creation
 	recordInput := review.RecordInput{
 		Assessment: &assessment,
 		Bundle:     bundlePtr,
@@ -380,7 +335,6 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		return err
 	}
 
-	// Handle idempotent duplicate case
 	if recordResult.IsDuplicate {
 		format, _ := cmd.Root().PersistentFlags().GetString("format")
 		if format == "json" || format == "agent" {
@@ -394,7 +348,6 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		return nil
 	}
 
-	// Render output: create and append the Op
 	attJSON, err := json.Marshal(recordResult.Attestation)
 	if err != nil {
 		return fmt.Errorf("marshal attestation: %w", err)
@@ -420,7 +373,6 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		return err
 	}
 
-	// Output result
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {
 		return writeReviewAssessmentEnvelope(cmd, reviewAssessmentRow{
@@ -436,10 +388,6 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	return nil
 }
 
-// codeReview1 uses the traceability deep module prefix (not "review"):
-// `arm review` is backed by the traceability deep module (see
-// docs/design/cli-command-audit.md), so under the error-contract prefix
-// rule it is not an orphan Use eligible for its own top-level prefix.
 const codeReview1 = "TRACEABILITY-1"
 
 func init() {

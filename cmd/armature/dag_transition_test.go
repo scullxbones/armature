@@ -8,10 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDAGTransitionCmd_RejectsInvalidToValue verifies that --to on dag-transition
-// is validated as a confidence value (draft, verified), not silently accepted as
-// an arbitrary string (which would otherwise stamp a nonsensical value like
-// "done" into Provenance.Confidence — see surface-census.md dag-transition --to row).
 func TestDAGTransitionCmd_RejectsInvalidToValue(t *testing.T) {
 	repo := setupRepoWithDraftNode(t)
 
@@ -25,8 +21,6 @@ func TestDAGTransitionCmd_RejectsInvalidToValue(t *testing.T) {
 	assert.Contains(t, err.Error(), "confidence")
 }
 
-// TestDAGTransitionCmd_AcceptsValidToValue verifies the legitimate confidence values
-// still work on a validate-green graph.
 func TestDAGTransitionCmd_AcceptsValidToValue(t *testing.T) {
 	repo := setupRepoWithValidDraftNode(t)
 
@@ -57,8 +51,6 @@ func setupRepoWithValidDraftNode(t *testing.T) string {
 	return repo
 }
 
-// TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4: promoting a
-// subtree to verified is refused while the graph has validate findings.
 func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -90,7 +82,6 @@ func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.Contains(t, out, "draft-a")
 }
 
-// TestDagTransitionValidateFailureDistinguishesWarnings_REQ_LNGHZN_S10_T4
 func TestDagTransitionValidateFailureDistinguishesWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

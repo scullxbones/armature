@@ -8,7 +8,6 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/tui"
-	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -21,15 +20,12 @@ func newTUICmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			stateDir := filepath.Join(appCtx.IssuesDir, "state", ".tui")
 
-			workerID, _ := worker.GetWorkerID(appCtx.RepoPath) //nolint:errcheck // best-effort; missing worker ID falls back to empty
+			workerID := workerIDBestEffort(appCtx.RepoPath)
 			if workerID == "" {
 				workerID = "default"
 			}
 
 			if !tui.IsInteractive() {
-				// Non-interactive path uses a scratch dir to avoid writing checkpoint/issues/index
-				// into the canonical StateDir. The interactive path (runBoardTUI) uses stateDir
-				// which already points to the .tui isolation dir.
 				tuiOpsDir := filepath.Join(appCtx.IssuesDir, "ops")
 				store := snapshot.NewStore(tuiOpsDir, stateDir)
 				snap, err := store.Load(context.Background())

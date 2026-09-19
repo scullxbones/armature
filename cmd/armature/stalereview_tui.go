@@ -7,9 +7,6 @@ import (
 	"github.com/scullxbones/armature/internal/tui/stalereview"
 )
 
-// runStaleReviewTUI is the interactive boundary for `arm stale-review`:
-// construct the review model, run it, and return the finished model so
-// stalereview.go can emit notes from the decisions.
 func runStaleReviewTUI(items []stalereview.ReviewItem, workerID string) (stalereview.Model, error) {
 	m := stalereview.New(items, workerID)
 	p := tea.NewProgram(m)

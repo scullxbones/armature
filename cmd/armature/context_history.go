@@ -45,22 +45,15 @@ func newContextHistoryCmd() *cobra.Command {
 				return fmt.Errorf("log branch: %w", err)
 			}
 
-			// In the collapsed layout, IssuesDir == WorktreePath, so the ops
-			// prefix relative to the worktree root is just "ops"; in the
-			// legacy dual-branch layout, IssuesDir is nested a level down.
 			issuesRel := "."
 			if appCtx.IssuesDir != "" && opsRepoPath != "" {
 				if rel, relErr := filepath.Rel(opsRepoPath, appCtx.IssuesDir); relErr == nil {
 					issuesRel = rel
 				}
 			}
-			// Include the legacy nested prefix alongside the current one so
-			// history spanning a dual-branch-to-collapsed migration replays
-			// ops committed under either layout.
 			opsPrefix := filepath.Join(issuesRel, "ops")
 			legacyOpsPrefix := filepath.Join(".armature", "ops")
 
-			// Reverse entries to walk oldest-first
 			for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
 				entries[i], entries[j] = entries[j], entries[i]
 			}
@@ -71,16 +64,13 @@ func newContextHistoryCmd() *cobra.Command {
 			for _, entry := range entries {
 				state, err := materialize.MaterializeAtSHA(gc, entry.SHA, opsPrefix, legacyOpsPrefix)
 				if err != nil {
-					// Skip commits where materialization fails (e.g. before .armature existed)
 					continue
 				}
 
-				// Create an OSFileReader for file access
 				reader := &context.OSFileReader{Root: appCtx.RepoPath}
 
 				ctx, err := context.Assemble(chIssue, state, reader)
 				if err != nil {
-					// Issue doesn't exist at this commit — skip
 					continue
 				}
 
@@ -99,7 +89,6 @@ func newContextHistoryCmd() *cobra.Command {
 				return fmt.Errorf("issue %q not found in any commit history", chIssue)
 			}
 
-			// Newest-first for both human and structured output.
 			rows := make([]contextHistoryRow, 0, len(changes))
 			for i := len(changes) - 1; i >= 0; i-- {
 				rows = append(rows, changes[i])

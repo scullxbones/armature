@@ -46,9 +46,6 @@ func transitionOpsForIssue(t *testing.T, repo, issueID string) []ops.Op {
 	return out
 }
 
-// TestIdenticalPayloadIsNoOpExitZero_REQ_AOC_S4_T1 verifies that repeating a
-// transition whose payload matches the issue's current recorded state exits 0
-// and says it is a no-op rather than an error.
 func TestIdenticalPayloadIsNoOpExitZero_REQ_AOC_S4_T1(t *testing.T) {
 	repo := setupTransitionIdempotencyRepo(t, idempotentIssueID)
 
@@ -66,8 +63,6 @@ func TestIdenticalPayloadIsNoOpExitZero_REQ_AOC_S4_T1(t *testing.T) {
 	assert.Contains(t, human, "no-op")
 }
 
-// TestChangedPayloadAppendsAmendment_REQ_AOC_S4_T1 verifies that a same-status
-// transition with a changed payload appends as an amendment at exit 0.
 func TestChangedPayloadAppendsAmendment_REQ_AOC_S4_T1(t *testing.T) {
 	repo := setupTransitionIdempotencyRepo(t, idempotentAmendmentIssueID)
 
@@ -85,8 +80,6 @@ func TestChangedPayloadAppendsAmendment_REQ_AOC_S4_T1(t *testing.T) {
 	assert.Equal(t, idempotentOutcomeRicher, got[1].Payload.Outcome)
 }
 
-// TestNoOpAppendsNothingToOpsLog_REQ_AOC_S4_T1 verifies that an identical-payload
-// retry does not append another op.
 func TestNoOpAppendsNothingToOpsLog_REQ_AOC_S4_T1(t *testing.T) {
 	repo := setupTransitionIdempotencyRepo(t, idempotentIssueID)
 
@@ -115,8 +108,6 @@ func runTransitionUnlocked(t *testing.T, repo string, args ...string) (string, e
 	return buf.String(), err
 }
 
-// TestIdenticalDoneRetryOnMainIsNoOp_REQ_AOC_S4_T1 verifies that an identical
-// done retry exits 0 even when the checkout is on main/master, without --force.
 func TestIdenticalDoneRetryOnMainIsNoOp_REQ_AOC_S4_T1(t *testing.T) {
 	issueID := "aoc-s4-t1-done-main"
 	repo := setupTransitionIdempotencyRepo(t, issueID)
@@ -140,9 +131,6 @@ func TestIdenticalDoneRetryOnMainIsNoOp_REQ_AOC_S4_T1(t *testing.T) {
 	assert.Len(t, transitionOpsForIssue(t, repo, issueID), 1)
 }
 
-// TestOverlappingIdenticalTransitionsAppendOnce_REQ_AOC_S4_T1 verifies that two
-// in-flight identical transitions serialize the idempotency check with the
-// append so only one op is written.
 func TestOverlappingIdenticalTransitionsAppendOnce_REQ_AOC_S4_T1(t *testing.T) {
 	issueID := "aoc-s4-t1-race"
 	repo := setupTransitionIdempotencyRepo(t, issueID)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,7 +41,6 @@ mode (agents) to auto-approve all pending draft items.`,
 			execState := mustState(cmd)
 			appCtx := execState.ctx
 
-			// Read the --non-interactive flag (auto-set by main.go based on TTY/format detection)
 			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
 			format, _ := cmd.Flags().GetString("format")
 
@@ -51,7 +49,6 @@ mode (agents) to auto-approve all pending draft items.`,
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			// Load snapshot to get materialized state
 			store := newSnapshotStore(appCtx)
 			snap, err := store.Load(context.Background())
 			if err != nil {
@@ -63,11 +60,11 @@ mode (agents) to auto-approve all pending draft items.`,
 			}
 
 			tracePath := store.StatePath("traceability.json")
-			cov, _ := traceability.Read(tracePath) //nolint:errcheck // best-effort read of derived traceability state
+			cov, err := traceability.Read(tracePath)
+			swallowErr(err)
 
 			uncitedSet := uncitedLookup(cov)
 
-			// Collect draft nodes from the subtree (or globally if no --issue given).
 			var draftIssues []*materialize.Issue
 			if issueID != "" {
 				draftIssues = collectDraftSubtree(state, issueID)
@@ -84,11 +81,11 @@ mode (agents) to auto-approve all pending draft items.`,
 
 			if len(draftIssues) == 0 {
 				if format == "json" || format == "agent" || nonInteractive {
-					data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
+					data := mustMarshalIndent(map[string]interface{}{
 						"pending_dag_confirmation": []interface{}{},
 						"count":                    0,
 						"approve_all":              approveAll,
-					}, "", "  ")
+					})
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				} else {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.")
@@ -97,7 +94,6 @@ mode (agents) to auto-approve all pending draft items.`,
 			}
 
 			if format == "json" || format == "agent" || nonInteractive {
-				// In non-interactive mode, --approve-all emits ops for all draft items.
 				if approveAll && len(draftIssues) > 0 {
 					approvedIDs := make([]string, 0, len(draftIssues))
 					for _, issue := range draftIssues {
@@ -119,11 +115,11 @@ mode (agents) to auto-approve all pending draft items.`,
 						Status:  issue.Status,
 					})
 				}
-				data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map with known serializable values
+				data := mustMarshalIndent(map[string]interface{}{
 					"pending_dag_confirmation": pending,
 					"count":                    len(pending),
 					"approve_all":              approveAll,
-				}, "", "  ")
+				})
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
@@ -133,7 +129,6 @@ mode (agents) to auto-approve all pending draft items.`,
 				"Traceability: %.1f%% (%d/%d nodes cited)\n\n",
 				cov.CoveragePct, cov.CitedNodes, cov.TotalNodes)
 
-			// Build dagsummary items with IsCited populated.
 			items := make([]dagsummary.Item, len(draftIssues))
 			for i, issue := range draftIssues {
 				_, isUncited := uncitedSet[issue.ID]
@@ -150,7 +145,6 @@ mode (agents) to auto-approve all pending draft items.`,
 				return err
 			}
 
-			// Only emit ops if sign-off was confirmed.
 			if !final.Done() {
 				return nil
 			}
@@ -167,12 +161,6 @@ mode (agents) to auto-approve all pending draft items.`,
 	return cmd
 }
 
-// collectDraftSubtree walks the issue subtree rooted at rootID and returns
-// all issues with confidence == "draft".
-// uncitedLookup builds a set of uncited IDs for fast lookup. Draft nodes are
-// deliberately absent from Coverage.Uncited (they are legally ungrounded, not a
-// Finding), so their own uncited list is folded in here: sign-off still requires
-// explicit per-node acknowledgment for an unlinked draft.
 func uncitedLookup(cov traceability.Coverage) map[string]struct{} {
 	set := make(map[string]struct{}, len(cov.Uncited)+len(cov.DraftUncited))
 	for _, id := range cov.Uncited {

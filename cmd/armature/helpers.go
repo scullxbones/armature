@@ -26,9 +26,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// adapterExitError represents a hook exit code from the platform adapter.
-// Exit-status-based blocking platforms return non-zero codes to signal blocking
-// to the platform's process exit mechanism.
 type adapterExitError struct {
 	code int
 }
@@ -72,13 +69,39 @@ func isTerminalStatus(status string) bool {
 	}
 }
 
+func swallowErr(err error) { _ = err }
+
+func bestEffortLog(err error) { swallowErr(err) }
+
+func bestEffortClose(c io.Closer) {
+	if c == nil {
+		return
+	}
+	swallowErr(c.Close())
+}
+
+func mustMarshal(v any) []byte {
+	b, err := json.Marshal(v)
+	swallowErr(err)
+	return b
+}
+
+func mustMarshalIndent(v any) []byte {
+	b, err := json.MarshalIndent(v, "", "  ")
+	swallowErr(err)
+	return b
+}
+
+func workerIDBestEffort(repoPath string) string {
+	id, err := worker.GetWorkerID(repoPath)
+	swallowErr(err)
+	return id
+}
+
 type commandFailureEnvelope struct {
 	Error *armerrors.CommandFailure `json:"error"`
 }
 
-// renderCommandFailure writes a Command Failure to w. json/agent emit
-// {error:{code,cause,next_actions,exit_code}} on the writer (stdout at the
-// port). Human is Error [CODE]: cause plus Try: lines. Not nested in AOC.
 func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailure) {
 	if cf == nil {
 		return
@@ -87,7 +110,7 @@ func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailu
 		b, err := json.Marshal(commandFailureEnvelope{Error: cf})
 		if err != nil {
 			fallback := armerrors.Wrap(armerrors.CodeIO, err.Error(), nil, 1, err)
-			b, _ = json.Marshal(commandFailureEnvelope{Error: fallback}) //nolint:errcheck // fallback fields are always serializable
+			b = mustMarshal(commandFailureEnvelope{Error: fallback})
 		}
 		fmt.Fprintln(w, string(b))
 		return
@@ -98,11 +121,6 @@ func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailu
 	}
 }
 
-// handleRootError maps a root Execute error to a Command Failure, writes it
-// to stdout, optionally dumps --debug on stderr, and returns the process exit
-// code. adapterExitError is the harness-hook platform integer and is not a
-// Command Failure on the wire. protocolExitError is the same for reports and
-// git hooks that already wrote their payload.
 func handleRootError(stdout, stderr io.Writer, format string, debug bool, err error) int {
 	if err == nil {
 		return exitcodes.ExitSuccess.Int()
@@ -150,16 +168,10 @@ func homeEmptyReason(cmd *cobra.Command) string {
 	return reason
 }
 
-// shouldPrintRootHelp is the bare-root TTY help fast-path. Explicit json/agent
-// (or --non-interactive) must still resolve the repo and emit the ready envelope.
 func shouldPrintRootHelp(format string, nonInteractive, isTTY bool) bool {
 	return isTTY && !nonInteractive && format == "human"
 }
 
-// isAbsentArmatureLayout is true only when the repo path is reachable and has
-// no Armature ops worktree configured. Nonexistent or inaccessible --repo
-// paths, config load failures, and other ResolveContext errors stay errors —
-// including GitConfig failures that happen to mention ops-worktree-path.
 func isAbsentArmatureLayout(repoPath string, resolveErr error) bool {
 	if resolveErr == nil {
 		return false
@@ -187,8 +199,6 @@ func missingOpsWorktreePath(err error) bool {
 	if !strings.Contains(msg, "armature.ops-worktree-path must be set") {
 		return false
 	}
-	// Wrapped GitConfig failures for missing/inaccessible paths mention the
-	// key even when git never read config. Those are not a missing layout.
 	lower := strings.ToLower(msg)
 	if strings.Contains(lower, "no such file") ||
 		strings.Contains(lower, "cannot change to") ||
@@ -216,8 +226,8 @@ func stateFromCmd(cmd *cobra.Command) (*executionState, error) {
 	if raw == nil {
 		return nil, fmt.Errorf("command context unavailable")
 	}
-	state, _ := raw.Value(executionStateKey{}).(*executionState) //nolint:errcheck // comma-ok form; nil check follows immediately
-	if state == nil || state.ctx == nil {
+	state, ok := raw.Value(executionStateKey{}).(*executionState)
+	if !ok || state == nil || state.ctx == nil {
 		return nil, fmt.Errorf("command execution state unavailable")
 	}
 	return state, nil
@@ -235,10 +245,6 @@ func currentCtx(cmd *cobra.Command) *config.Context {
 	return mustState(cmd).ctx
 }
 
-// invocationRepoPath is the checkout the command was invoked against: --repo,
-// or "." when the flag is unset. ResolveContext walks a linked worktree up to
-// the parent repo, so callers that need HEAD, dirtiness, or a process cwd for
-// *this* checkout must use this path rather than Context.RepoPath.
 func invocationRepoPath(cmd *cobra.Command) string {
 	if cmd == nil || cmd.Root() == nil {
 		return "."
@@ -250,8 +256,6 @@ func invocationRepoPath(cmd *cobra.Command) string {
 	return path
 }
 
-// stateDirFor returns the worker-specific state directory.
-// In dual-branch mode, state lives at the worktree root (not inside .armature/).
 func stateDirFor(ctx *config.Context, workerID string) string {
 	if ctx.WorktreePath != "" {
 		return filepath.Join(ctx.WorktreePath, "state", workerID)
@@ -271,24 +275,12 @@ func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
 	return ownerID, opsLogPath(ctx.IssuesDir, ownerID), nil
 }
 
-// opsLogPath returns the path to ownerID's ops log file under issuesDir. This is
-// the single source of truth for where an owner's ops log lives; every writer
-// and reader of that log (manual commands via resolveWorkerAndLog, the harness
-// hook's heartbeat emission, etc.) must derive the path through here so they
-// can never diverge onto a directory materialize/snapshot doesn't read.
 func opsLogPath(issuesDir, ownerID string) string {
 	return filepath.Join(issuesDir, "ops", ownerID+".log")
 }
 
 var validSlotPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
-// workerIdentityWithSlot appends the ARM_LOG_SLOT value (parallel dispatch mode)
-// to workerID to form a slotted identity used in filesystem paths. Since
-// ARM_LOG_SLOT is an environment variable and not fully within our control, it
-// is validated against a safe charset here; an invalid value is treated as if
-// ARM_LOG_SLOT were unset (fail-open, matching this codebase's heartbeat-adjacent
-// pattern of never blocking the harness) rather than propagated into path
-// construction.
 func workerIdentityWithSlot(workerID string) string {
 	slot := os.Getenv("ARM_LOG_SLOT")
 	if slot == "" {
@@ -313,8 +305,6 @@ func nowEpoch() int64 {
 	return time.Now().Unix()
 }
 
-// worktreeGit returns a git client for the ops worktree, or nil when the
-// command is not running in dual-branch mode.
 func worktreeGit(ctx *config.Context) *adapters.Client {
 	if ctx == nil || ctx.WorktreePath == "" {
 		return nil
@@ -322,7 +312,6 @@ func worktreeGit(ctx *config.Context) *adapters.Client {
 	return adapters.New(ctx.WorktreePath)
 }
 
-// parseAcceptanceJSON decodes --acceptance flag JSON shared by create and amend.
 func parseAcceptanceJSON(acceptanceJSON string) (json.RawMessage, error) {
 	if acceptanceJSON == "" {
 		return nil, nil
@@ -334,8 +323,6 @@ func parseAcceptanceJSON(acceptanceJSON string) (json.RawMessage, error) {
 	return raw, nil
 }
 
-// resolveIssueID returns the --issue flag value, or args[0] when the flag is
-// unset. The error text is shared by every command that accepts either form.
 func resolveIssueID(flag string, args []string) (string, error) {
 	if flag == "" && len(args) > 0 {
 		flag = args[0]
@@ -346,13 +333,10 @@ func resolveIssueID(flag string, args []string) (string, error) {
 	return flag, nil
 }
 
-// writeCommandResult emits json/agent as a single JSON object, otherwise the
-// human line. Callers must include a trailing newline in humanFormat.
 func writeCommandResult(cmd *cobra.Command, jsonValue any, humanFormat string, humanArgs ...any) {
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {
-		data, _ := json.Marshal(jsonValue) //nolint:errcheck // result values are maps/structs of serializable fields
-		fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(jsonValue)))
 		return
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), humanFormat, humanArgs...)
@@ -430,8 +414,6 @@ func validFlagNames(cmd *cobra.Command) []string {
 	return names
 }
 
-// short truncates a fingerprint string to 8 characters for display, returning
-// the string unchanged if it is already shorter than that to avoid a panic.
 func short(fp string) string {
 	if len(fp) < 8 {
 		return fp
@@ -439,8 +421,6 @@ func short(fp string) string {
 	return fp[:8]
 }
 
-// initPushDeps returns the pending-push tracker for the current context.
-// Dual-branch mode uses a file-backed counter; otherwise the tracker is a no-op.
 func initPushDeps(ctx *config.Context) ops.PendingPushTracker {
 	if ctx != nil && ctx.WorktreePath != "" {
 		return ops.NewFilePushTracker(ctx.StateDir)
@@ -448,7 +428,6 @@ func initPushDeps(ctx *config.Context) ops.PendingPushTracker {
 	return ops.NoTracker{}
 }
 
-// appendOp appends an op to the log and, in dual-branch mode, commits it to the worktree branch.
 func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	if ctx == nil {
 		return fmt.Errorf("appendOp: command context unavailable")
@@ -459,17 +438,11 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx))
 }
 
-// appendHighStakesOp appends an op, commits it (dual-branch), and attempts to push.
-// Push errors are best-effort — the op is still committed locally.
-// Used for claim, transition, assign, unassign — ops that must not be delayed.
 func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
 	_, err := appendHighStakesOpIf(state, logPath, op, nil)
 	return err
 }
 
-// appendHighStakesOpIf is appendHighStakesOp with an optional proceed callback
-// that runs under the per-log append lock. wrote is false when proceed skipped
-// the append; push is then skipped as well.
 func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proceed func() (bool, error)) (bool, error) {
 	if state == nil || state.ctx == nil {
 		return false, fmt.Errorf("appendHighStakesOp: command context unavailable")
@@ -488,30 +461,23 @@ func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proc
 	return true, nil
 }
 
-// pushOpsBranchBestEffort publishes _armature the same way high-stakes does:
-// Push, and on error FetchAndRebase then a second Push, then tracker.Reset.
-// Git errors are swallowed so a local commit is never rolled back.
 func pushOpsBranchBestEffort(gc *adapters.Client, tracker ops.PendingPushTracker) {
 	if gc != nil {
 		if err := gc.Push("_armature"); err != nil {
 			if rbErr := gc.FetchAndRebase("_armature"); rbErr == nil {
-				gc.Push("_armature") //nolint:errcheck,gosec
+				swallowErr(gc.Push("_armature"))
 			}
 		}
 	}
 	if tracker != nil {
-		tracker.Reset() //nolint:errcheck,gosec
+		swallowErr(tracker.Reset())
 	}
 }
 
-// appendLowStakesOp appends an op, increments the pending counter, and only
-// pushes when the threshold is reached.
 func appendLowStakesOp(state *executionState, logPath string, op ops.Op) error {
 	return appendLowStakesOps(state, logPath, []ops.Op{op})
 }
 
-// appendLowStakesOps Introduction-checks the whole group before appending any
-// of it, so a fan-out verb cannot land a prefix and then refuse the rest.
 func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendLowStakesOp: command context unavailable")
@@ -557,9 +523,6 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	if len(check) == 0 {
 		return nil
 	}
-	// Replay in memory (no checkpoint rewrite) with the same timestamp sort
-	// (creates before same-timestamp links) and rollup validate uses. File-concat
-	// ApplyOp can drop a later-file create's inbound link under I3 interleaving.
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
 	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
 	if err != nil {
@@ -581,9 +544,6 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	})
 }
 
-// extractFieldsFromIssue extracts specified fields from an Issue and returns their values
-// as a slice of strings in the order requested. For unknown fields, returns empty string.
-// Fields are comma-separated (e.g., "status,title,outcome").
 func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string {
 	if issue == nil {
 		return []string{}
@@ -640,10 +600,6 @@ func renderStringSlice(values []string) string {
 	return string(rendered)
 }
 
-// readAllOpsFromDirWithOffsets reads all ops and returns offsets for checkpoint tracking.
-// Returns ops slice and a map of log filename -> byte offset (end position).
-// Validates that each op's worker ID matches its filename's worker ID.
-// Logs warnings for any validation failures.
 func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
 	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
 	if err != nil {
@@ -655,16 +611,12 @@ func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, er
 	return ops.ExtractOps(items), offsets, nil
 }
 
-// newSnapshotStore creates a snapshot.Store from the given config context.
-// It wires opsDir from IssuesDir/ops and stateDir from StateDir.
 func newSnapshotStore(ctx *config.Context) *snapshot.Store {
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
 	stateDir := ctx.StateDir
 	return snapshot.NewStore(opsDir, stateDir)
 }
 
-// issuesMatchingScope returns issue IDs whose scope has an entry matching pred,
-// sorted for deterministic op order.
 func issuesMatchingScope(index materialize.Index, pred func(string) bool) []string {
 	var affected []string
 	for id, entry := range index {

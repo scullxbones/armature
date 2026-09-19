@@ -9,9 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/tui/workers"
 )
 
-// runBoardTUI is the interactive boundary for `arm tui`: wire the kanban
-// app and screens, then run the alt-screen program. The non-interactive
-// board summary stays in tui.go.
 func runBoardTUI(issuesDir, stateDir, workerID string) error {
 	m := app.New(issuesDir, stateDir, workerID).WithScreens(
 		dagtree.New(),

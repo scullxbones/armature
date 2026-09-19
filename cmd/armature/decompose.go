@@ -52,7 +52,6 @@ plan, or --schema to view the JSON schema.`,
 			if exampleFlag || schemaFlag {
 				return nil
 			}
-			// Fall through to root PersistentPreRunE for normal config loading.
 			return cmd.Root().PersistentPreRunE(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -205,7 +204,6 @@ plan, or --schema to view the JSON schema.`,
 				return err
 			}
 
-			// Load snapshot to get materialized state
 			store := newSnapshotStore(appCtx)
 			snap, err := store.Load(context.Background())
 			if err != nil {
@@ -333,7 +331,6 @@ It validates that no new children exist under the planned issues before removal.
 				return err
 			}
 
-			// Load snapshot to get materialized state
 			store := newSnapshotStore(appCtx)
 			snap, err := store.Load(context.Background())
 			if err != nil {

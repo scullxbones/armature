@@ -22,13 +22,11 @@ func newCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new work item",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Validate node type before doing anything else.
 			if !issuetype.IsValid(nodeType) {
 				return fmt.Errorf("invalid type %q: valid types are %s",
 					nodeType, strings.Join(issuetype.All(), ", "))
 			}
 
-			// Validate parent/type combination when a parent is specified.
 			if parent != "" {
 				ctx := currentCtx(cmd)
 				store := newSnapshotStore(ctx)
@@ -83,8 +81,6 @@ func newCreateCmd() *cobra.Command {
 				Payload:   payload,
 			}
 
-			// Resolve --source before any write so a missing source cannot
-			// leave a durable uncited create (create is source-atomic).
 			if sourceRef != "" {
 				entry, resolvedID, resolveErr := resolveCreateSource(ctx, sourceRef)
 				if resolveErr != nil {

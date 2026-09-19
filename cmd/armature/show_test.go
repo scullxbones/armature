@@ -66,7 +66,7 @@ func TestShowOmitsTombstonedNotes(t *testing.T) {
 	require.NoError(t, err)
 	var noteResult map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out2)), &noteResult))
-	deletedID, _ := noteResult["note_id"].(string) //nolint:errcheck // panic on failed type assertion is acceptable in tests
+	deletedID := asString(t, noteResult["note_id"])
 	require.NotEmpty(t, deletedID)
 
 	_, err = runTrls(t, repo, "note", "delete", "--issue", "note-task", "--note-id", deletedID)
@@ -75,15 +75,13 @@ func TestShowOmitsTombstonedNotes(t *testing.T) {
 	out, err := runTrls(t, repo, "show", "--format", "json", "note-task")
 	require.NoError(t, err)
 	showResult := decodeShowIssue(t, out)
-	notes, _ := showResult["notes"].([]any) //nolint:errcheck // panic on failed type assertion is acceptable in tests
+	notes := asAnySlice(t, showResult["notes"])
 	assert.Len(t, notes, 1, "deleted note should be hidden from show output")
 	if len(notes) > 0 {
 		assert.Equal(t, "visible note", notes[0])
 	}
 }
 
-// TestShow_BlockedBy verifies that arm show displays blocked_by and blocks lists
-// when they are non-empty, in both human-readable and JSON formats.
 func TestShow_BlockedBy(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -92,14 +90,11 @@ func TestShow_BlockedBy(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create three tasks: t1 blocks t2, t2 is blocked_by t1, t3 is independent
 	_, err = runTrls(t, repo, "create", "--id", "blk-1", "--title", "Blocker task", "--type", "task")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--id", "blk-2", "--title", "Blocked task", "--type", "task")
 	require.NoError(t, err)
 
-	// Link: blk-2 is blocked_by blk-1 (engine processes "blocked_by" rel on source,
-	// and also sets blk-1.Blocks = [blk-2] as the symmetric side).
 	_, err = runTrls(t, repo, "link", "--source", "blk-2", "--dep", "blk-1", "--rel", "blocked_by")
 	require.NoError(t, err)
 
@@ -142,22 +137,18 @@ func TestShow_BlockedBy(t *testing.T) {
 	})
 
 	t.Run("omits BlockedBy when empty", func(t *testing.T) {
-		// blk-1 is not blocked by anything
 		out, err := runTrls(t, repo, "show", "--format", "human", "blk-1")
 		require.NoError(t, err)
 		assert.NotContains(t, out, "BlockedBy:", "blk-1 has no blockers and should not show BlockedBy")
 	})
 
 	t.Run("omits Blocks when empty", func(t *testing.T) {
-		// blk-2 does not block anything
 		out, err := runTrls(t, repo, "show", "--format", "human", "blk-2")
 		require.NoError(t, err)
 		assert.NotContains(t, out, "Blocks:", "blk-2 blocks nothing and should not show Blocks")
 	})
 }
 
-// TestShow_BlockedBy_MultiJSON verifies that the multi-issue JSON array path
-// also includes blocked_by and blocks fields.
 func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -170,7 +161,6 @@ func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--id", "mblk-2", "--title", "Multi Blocked", "--type", "task")
 	require.NoError(t, err)
-	// Link: mblk-2 is blocked_by mblk-1 — engine sets symmetric Blocks on mblk-1.
 	_, err = runTrls(t, repo, "link", "--source", "mblk-2", "--dep", "mblk-1", "--rel", "blocked_by")
 	require.NoError(t, err)
 
@@ -180,7 +170,6 @@ func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 	results := decodeShowIssues(t, out)
 	require.Len(t, results, 2)
 
-	// Find mblk-1 and mblk-2 entries
 	var entry1, entry2 map[string]any
 	for _, r := range results {
 		switch r["id"] {
@@ -202,9 +191,6 @@ func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 	assert.Equal(t, []any{"mblk-1"}, blockedByList)
 }
 
-// TestShow_JSON_IncludesPriorityField verifies that the priority field is present in
-// JSON output when set. This is a non-regression test: the move from the old inline
-// showJSON struct to output.IssueJSON added the priority field to the JSON schema.
 func TestShow_JSON_IncludesPriorityField(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -213,7 +199,6 @@ func TestShow_JSON_IncludesPriorityField(t *testing.T) {
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Create a task with an explicit priority
 	_, err = runTrls(t, repo, "create", "--id", "pri-task", "--title", "Priority task", "--type", "task", "--priority", "high")
 	require.NoError(t, err)
 
@@ -234,7 +219,6 @@ func TestShowDisplaysRunningSpend_REQ_TOPTIER_S11_T2(t *testing.T) {
 	assert.Contains(t, out, "Spend-to-date:")
 	assert.Contains(t, out, "$")
 	assert.Regexp(t, `Spend-to-date: \$[0-9]+\.[0-9]+ \([0-9]+ in / [0-9]+ out\)`, out)
-	// Story rollup includes descendant TASK-COST-A (1M in @ $3) and TASK-COST-B (haiku).
 	assert.NotContains(t, out, "$0.000000", "story spend-to-date must include recorded descendant tokens")
 
 	fieldOut, err := runTrls(t, repo, "show", "--field", "status", "STORY-COST")

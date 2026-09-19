@@ -16,9 +16,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// seamHosts are the command files that previously mixed interactive TUI
-// construction with non-interactive logic. After LNGHZN-S6-T4, tea.NewProgram
-// and model wiring live only in the matching *_tui.go sibling.
 var seamHosts = []string{
 	"ready.go",
 	"stalereview.go",
@@ -26,8 +23,6 @@ var seamHosts = []string{
 	"tui.go",
 }
 
-// requiredSeamWiring is the model-wiring + program-construction each seam
-// file must contain. Kinds match classifyTUISeamCall.
 var requiredSeamWiring = map[string][]string{
 	"ready_tui.go":       {"readytui.New", "tea.NewProgram"},
 	"stalereview_tui.go": {"stalereview.New", "tea.NewProgram"},
@@ -67,10 +62,6 @@ func cmdArmatureProductionGoFiles(t *testing.T) []string {
 	return names
 }
 
-// TestInteractiveTUIConstructionLivesInTuiFiles_REQ_LNGHZN_S6_T4 is the
-// architecture guard for the TUI seam: interactive program construction and
-// model wiring live only in cmd/armature/*_tui.go, so coverage and mutation
-// gates can exclude that boundary without dropping non-interactive logic.
 func TestInteractiveTUIConstructionLivesInTuiFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
 	t.Parallel()
 
@@ -106,31 +97,18 @@ func TestInteractiveTUIConstructionLivesInTuiFiles_REQ_LNGHZN_S6_T4(t *testing.T
 	}
 }
 
-// tuiSeamExcludePattern is the regexp Gremlins must compile from
-// .gremlins.yaml unleash.exclude-files to keep the TUI seam out of the
-// mutation gate. This is the decoded value, not the file's raw bytes: the
-// YAML scalar `"_tui\\.go$"` unmarshals to `_tui\.go$`.
 const tuiSeamExcludePattern = `_tui\.go$`
 
-// yamlQuoted renders a regexp as the double-quoted YAML scalar that encodes
-// it, e.g. `_tui\.go$` -> `"_tui\\.go$"`. Go and YAML agree on double-quoted
-// backslash escaping, so strconv.Quote is the right encoder.
 func yamlQuoted(pattern string) string {
 	return strconv.Quote(pattern)
 }
 
-// gremlinsConfig is the slice of .gremlins.yaml this guard reads: the
-// exclusion list Gremlins itself consults before mutating a file.
 type gremlinsConfig struct {
 	Unleash struct {
 		ExcludeFiles []string `yaml:"exclude-files"`
 	} `yaml:"unleash"`
 }
 
-// gremlinsExcludesPattern reports whether the Gremlins config at path excludes
-// pattern from mutation. It answers for the configuration Gremlins would act
-// on -- the parsed unleash.exclude-files list -- not for the file's raw text,
-// so a commented-out or misplaced entry reads as absent.
 func gremlinsExcludesPattern(t *testing.T, path, pattern string) bool {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -142,9 +120,6 @@ func gremlinsExcludesPattern(t *testing.T, path, pattern string) bool {
 	return slices.Contains(cfg.Unleash.ExcludeFiles, pattern)
 }
 
-// TestGremlinsExcludesTUISeamFiles_REQ_LNGHZN_S6_T4 locks the mutation-gate
-// exclusion: .gremlins.yaml exclude-files must list the *_tui.go pattern,
-// same precedent as _windows.go.
 func TestGremlinsExcludesTUISeamFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
 	t.Parallel()
 
@@ -153,11 +128,6 @@ func TestGremlinsExcludesTUISeamFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
 		".gremlins.yaml unleash.exclude-files must include the *_tui.go pattern")
 }
 
-// TestGremlinsExclusionCheckReadsActiveConfig_REQ_LNGHZN_S6_T4 guards the
-// guard: the exclusion check must go red when the pattern is present in the
-// file but inert -- commented out, or parked under a key Gremlins does not
-// read. A check that only greps raw text stays green in both cases while
-// Gremlins silently resumes mutating the seam files.
 func TestGremlinsExclusionCheckReadsActiveConfig_REQ_LNGHZN_S6_T4(t *testing.T) {
 	t.Parallel()
 

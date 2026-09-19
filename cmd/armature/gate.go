@@ -73,19 +73,12 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		return fmt.Errorf("invalid gate profile %q: must match %s", profile, validGateProfile.String())
 	}
 	appCtx := currentCtx(cmd)
-	// Context.RepoPath is the parent repo when this command runs inside a
-	// linked task worktree. Context.WorktreePath is the ops worktree. Neither
-	// is the checkout under test — use the invocation path for HEAD, dirtiness,
-	// and the tracked gates.json so evidence matches the task head.
 	checkout := invocationRepoPath(cmd)
 	git := adapters.NewIsolated(checkout)
 	headSHA, err := git.ResolveRevision("HEAD")
 	if err != nil {
 		return fmt.Errorf("resolve HEAD: %w", err)
 	}
-	// Execute the command recorded at HEAD:gates.json, not the worktree
-	// file. skip-worktree / assume-unchanged can hide a mutated worktree
-	// copy from porcelain; Delivery.Diff would also be silent.
 	blob, err := git.ShowFileAtCommit(headSHA, config.GatesFileName)
 	if err != nil {
 		if isAbsentAtCommit(err) {
@@ -149,10 +142,6 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		return fmt.Errorf("recheck working tree: %w", dirtyErr)
 	}
 	uncommitted = uncommitted || afterDirty
-	// Re-read HEAD after the command. Keep HeadSHA as the pre-command
-	// revision (the tree the reviewer thinks was tested) so attach cannot
-	// silently accept a moved HEAD as a match for a different delivery
-	// commit. A SHA change still marks the run uncommitted (I5).
 	afterHEAD, headErr := git.ResolveRevision("HEAD")
 	if headErr != nil {
 		return fmt.Errorf("recheck HEAD: %w", headErr)

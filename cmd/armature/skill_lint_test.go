@@ -11,12 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSkillLint_REQ_TOPTIER-S1-T1 verifies that skill-lint validates arm commands in fenced code blocks.
 func TestSkillLint_REQ_TOPTIER_S1_T1(t *testing.T) {
-	// Get the project root by looking for the scripts directory
 	projectRoot, err := os.Getwd()
 	require.NoError(t, err)
-	// If we're in cmd/armature, go up two levels to get to the project root
 	for !fileExists(filepath.Join(projectRoot, "scripts", "skill_lint.py")) {
 		parent := filepath.Dir(projectRoot)
 		if parent == projectRoot {
@@ -26,10 +23,6 @@ func TestSkillLint_REQ_TOPTIER_S1_T1(t *testing.T) {
 	}
 	scriptPath := filepath.Join(projectRoot, "scripts", "skill_lint.py")
 
-	// Point skill_lint.py at a real, freshly-built arm binary instead of
-	// relying on PATH: CI doesn't build/install arm before running go test,
-	// so `arm` may not exist on PATH there even though it does on a dev
-	// machine with `make install` run previously.
 	armBin := os.Getenv("ARM_BIN")
 	if armBin == "" {
 		armBin = filepath.Join(projectRoot, "bin", "arm")
@@ -41,9 +34,6 @@ func TestSkillLint_REQ_TOPTIER_S1_T1(t *testing.T) {
 		pythonBin = "python3"
 	}
 
-	// Command examples in the quick-reference skill are meant to be copied
-	// into a shell. Optional-argument brackets are Cobra synopsis notation,
-	// not shell syntax, and would be passed as literal positional arguments.
 	t.Run("ArmatureQuickReferenceUsesCopyableCommands", func(t *testing.T) {
 		skillPath := filepath.Join(projectRoot, "internal", "skillsembed", "skills", "armature", "SKILL.md")
 		content, err := os.ReadFile(skillPath)
@@ -52,13 +42,11 @@ func TestSkillLint_REQ_TOPTIER_S1_T1(t *testing.T) {
 		require.NotContains(t, string(content), "arm render-context ID [--budget 4000]")
 	})
 
-	// Test 1: Verify that valid arm commands pass
 	t.Run("ValidCommandsPasses", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
 
-		// Write a valid skill file with correct arm commands
 		skillMD := `---
 name: test-skill
 description: Test skill
@@ -83,7 +71,6 @@ More info.
 `
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
-		// Run skill-lint
 		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
@@ -99,13 +86,11 @@ More info.
 		require.NoError(t, err, "skill-lint should pass for valid commands")
 	})
 
-	// Test 2: Verify that missing mandatory flags fail
 	t.Run("MissingMandatoryFlagFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
 
-		// Write a skill file with invalid arm commands (missing --worktree on claim)
 		skillMD := `---
 name: test-skill
 description: Test skill
@@ -123,7 +108,6 @@ More info.
 `
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
-		// Run skill-lint
 		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
@@ -133,13 +117,11 @@ More info.
 		cmd.Stderr = errOutput
 		err := cmd.Run()
 
-		// Should fail, and fail for the right reason
 		require.Error(t, err, "skill-lint should fail when mandatory --worktree flag is missing from claim command")
 		require.Contains(t, errOutput.String(), "missing mandatory flags: --worktree",
 			"failure should be attributed to the missing --worktree flag")
 	})
 
-	// References are shipped with their parent skill and must be linted too.
 	t.Run("ReferenceMarkdownIsLinted", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		referenceDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill", "references")
@@ -155,9 +137,6 @@ More info.
 		require.Contains(t, output.String(), "invalid-reference-command")
 	})
 
-	// Canonical public workflow documentation is copyable guidance, so an
-	// obsolete command there must fail lint. Archive material is deliberately
-	// excluded because it may document a historic surface.
 	t.Run("CanonicalDocumentationRejectsObsoleteCommandButArchiveIsExcluded", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "docs", "archive"), 0755))
@@ -177,9 +156,6 @@ More info.
 		require.NotContains(t, output.String(), "historic-command")
 	})
 
-	// `--worktree` accepts an optional value: bare for the canonical
-	// `.worktrees/<issue-id>` path, or an explicit path for a caller-selected
-	// worktree. Lint must accept both spellings.
 	t.Run("ValueTakingWorktreePasses", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -209,14 +185,6 @@ More info.
 		require.Contains(t, output.String(), "bracketed synopsis syntax")
 	})
 
-	// A continued command is one shell command, so a mandatory flag supplied
-	// only on the continuation line must satisfy the mandatory-flag check.
-	// This discriminates joined-vs-unjoined continuations: `arm claim
-	// TASK-01` alone would already be missing --worktree, so a test that
-	// only checks for that failure can't prove the join happened. Here the
-	// continuation line supplies the mandatory flag, so the command must
-	// PASS lint -- which only happens if the physical lines were actually
-	// joined before validation.
 	t.Run("ContinuedCommandSuppliesMandatoryFlagOnContinuationLine", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -231,9 +199,6 @@ More info.
 		require.NoError(t, err, "stderr: %s", output.String())
 	})
 
-	// The continuation line's flags must actually be parsed and validated,
-	// not just the first physical line -- an invalid flag on the
-	// continuation line must be caught.
 	t.Run("ContinuedCommandValidatesFlagsOnContinuationLine", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -251,9 +216,6 @@ More info.
 		require.Contains(t, output.String(), "--not-a-real-flag")
 	})
 
-	// `arm` as a mere prefix of another command name inside a command
-	// substitution (e.g. `armature-cli`, not the `arm` CLI) must not be
-	// mistaken for an arm invocation.
 	t.Run("CommandSubstitutionArmPrefixIsNotFlagged", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -268,9 +230,6 @@ More info.
 		require.NoError(t, err, "stderr: %s", output.String())
 	})
 
-	// A `;`-separated compound line must have each segment parsed as its
-	// own arm command, and trailing shell redirections must be stripped
-	// before parsing so they don't leak into the subcommand chain.
 	t.Run("SemicolonSeparatedAndRedirectedCommandsAreLinted", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -285,9 +244,6 @@ More info.
 		require.NoError(t, err, "stderr: %s", output.String())
 	})
 
-	// The tokenizer must treat single quotes the same as double quotes so a
-	// quoted argument value containing a space and a dash-like sequence
-	// isn't mistaken for separate flag tokens.
 	t.Run("SingleQuotedArgumentIsNotMistakenForFlags", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -303,7 +259,6 @@ More info.
 		require.NoError(t, err, "stderr: %s", output.String())
 	})
 
-	// `arm` commands in command substitutions are real invocations, not prose.
 	t.Run("CommandSubstitutionIsLinted", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -319,13 +274,11 @@ More info.
 		require.Contains(t, output.String(), "--not-a-real-flag")
 	})
 
-	// Test 3: Verify that invalid subcommands fail
 	t.Run("InvalidSubcommandFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
 
-		// Write a skill file with invalid subcommand
 		skillMD := `---
 name: test-skill
 description: Test skill
@@ -343,7 +296,6 @@ More info.
 `
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
-		// Run skill-lint
 		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
@@ -353,15 +305,11 @@ More info.
 		cmd.Stderr = errOutput
 		err := cmd.Run()
 
-		// Should fail, and fail for the right reason
 		require.Error(t, err, "skill-lint should fail for invalid subcommands")
 		require.Contains(t, errOutput.String(), "Unknown subcommand 'invalid-subcommand'",
 			"failure should be attributed to the unknown subcommand")
 	})
 
-	// Test for the extract_code_blocks fence-pairing bug: a non-bash fenced
-	// block (e.g. ```json) appearing before a ```bash block must not cause
-	// the bash block's commands to be silently skipped.
 	t.Run("BashBlockAfterNonBashBlockIsExtracted", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -397,18 +345,11 @@ arm invalid-subcommand-after-json --some-flag value
 		cmd.Stderr = errOutput
 		err := cmd.Run()
 
-		// If the bash block after the json block were silently skipped (the
-		// bug), skill-lint would report no errors here. It must be caught.
 		require.Error(t, err, "the bash block after a non-bash fenced block must still be extracted and linted")
 		require.Contains(t, errOutput.String(), "Unknown subcommand 'invalid-subcommand-after-json'",
 			"the invalid command inside the bash block after the json block should have been found")
 	})
 
-	// Regression check for the concrete case the reviewer flagged: before the
-	// fence-parser fix, armature-reviewer/SKILL.md's `arm review ...`
-	// commands (which follow ```json blocks in the same file) were silently
-	// never extracted, so skill-lint validated nothing in that file's bash
-	// blocks.
 	t.Run("ArmatureReviewerSkillCommandsAreExtracted", func(t *testing.T) {
 		skillPath := filepath.Join(projectRoot, "internal", "skillsembed", "skills", "armature-reviewer", "SKILL.md")
 		require.FileExists(t, skillPath)
@@ -439,16 +380,6 @@ assert any("arm review commits" in c for c in commands), commands
 		require.NoError(t, err, "arm review show/record commands should be extracted from armature-reviewer/SKILL.md")
 	})
 
-	// Regression test for the reviewer-flagged bug: a placeholder positional
-	// arg that doesn't start with "-" gets appended to `subcommands` by
-	// parse_command_line, so the full chain becomes "sources add
-	// SOME-PLACEHOLDER" -- which isn't a key in MANDATORY_FLAGS, so
-	// validate_command fell back to the top-level "sources" key (which has
-	// no mandatory-flags entry) and silently skipped checking for the
-	// mandatory --url/--type flags on "sources add". Uses a bare-word
-	// placeholder (not angle-bracket syntax) so this test exercises the
-	// mandatory-flags-fallback bug specifically, distinct from the
-	// angle-bracket copyability check covered below.
 	t.Run("SourcesAddWithPlaceholderArgMissingMandatoryFlagsFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -467,10 +398,6 @@ assert any("arm review commits" in c for c in commands), commands
 		require.Contains(t, output.String(), "--type")
 	})
 
-	// Angle-bracket synopsis placeholders (e.g. "<old-path>") are not
-	// copyable shell syntax either: unquoted, they tokenize as the literal
-	// `<` / `>` redirection operators. Lint must reject them the same way it
-	// rejects square-bracket optional-flag syntax.
 	t.Run("AngleBracketPlaceholderSyntaxFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -487,9 +414,6 @@ assert any("arm review commits" in c for c in commands), commands
 		require.Contains(t, output.String(), "angle-bracket synopsis syntax")
 	})
 
-	// The bracket check must not require a leading whitespace before "[" so
-	// a flag fused directly to its optional-value bracket (e.g. "--ttl[=N]")
-	// is also caught, not just a space-separated "[--ttl 120]".
 	t.Run("FusedBracketedFlagSyntaxFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -506,11 +430,6 @@ assert any("arm review commits" in c for c in commands), commands
 		require.Contains(t, output.String(), "bracketed synopsis syntax")
 	})
 
-	// Regression test for the reviewer-flagged bug: FENCE_RE only matched
-	// fences at column 1, so fenced code blocks indented under a numbered or
-	// bulleted list item (as in the shipped armature-coordinator/SKILL.md)
-	// were never entered by extract_code_blocks, silently skipping their
-	// content from linting entirely.
 	t.Run("IndentedFencedBlockUnderListItemIsLinted", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
@@ -542,13 +461,11 @@ assert any("arm review commits" in c for c in commands), commands
 		require.Contains(t, output.String(), "missing mandatory flags: --worktree")
 	})
 
-	// Test 4: Verify that invalid flags fail
 	t.Run("InvalidFlagFails", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "internal", "skillsembed", "skills", "test-skill")
 		require.NoError(t, os.MkdirAll(skillDir, 0755))
 
-		// Write a skill file with invalid flag
 		skillMD := `---
 name: test-skill
 description: Test skill
@@ -566,7 +483,6 @@ More info.
 `
 		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
 
-		// Run skill-lint
 		ctx := t.Context()
 		cmd := exec.CommandContext(ctx, pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled, not attacker input
 		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
@@ -576,7 +492,6 @@ More info.
 		cmd.Stderr = errOutput
 		err := cmd.Run()
 
-		// Should fail, and fail for the right reason
 		require.Error(t, err, "skill-lint should fail for invalid flags")
 		require.Contains(t, errOutput.String(), "invalid flags: --invalid-flag", "failure should be attributed to the invalid flag, not some other cause")
 	})
@@ -613,7 +528,6 @@ More info.
 	})
 }
 
-// fileExists checks if a file exists at the given path.
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

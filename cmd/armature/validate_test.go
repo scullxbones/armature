@@ -16,8 +16,6 @@ const testAcceptance = `[{"type":"test_passes","cmd":"go test"}]`
 
 func createOverlappingTask(t *testing.T, repo, id, dod string) {
 	t.Helper()
-	// Plant via raw ops so fixtures can represent a dirty graph without
-	// being refused by the write-time Introduction check.
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
@@ -25,8 +23,6 @@ func createOverlappingTask(t *testing.T, repo, id, dod string) {
 	require.NoError(t, err)
 }
 
-// TestValidateStrictDefault_REQ_LNGHZN_S10_T4: arm validate is strict by
-// default — warnings are errors and a green run prints only a summary line.
 func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -58,8 +54,6 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.NotContains(t, out, "ERROR:")
 }
 
-// TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4: D7 rejects partial
-// validation. --scope and --parent must not be registered on arm validate.
 func TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -77,8 +71,6 @@ func TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown flag: --parent")
 }
 
-// TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4: --strict=false
-// keeps warnings as warnings (exit 0) but human output still lists them.
 func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -96,8 +88,6 @@ func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.NotContains(t, out, "ERROR: scope overlap")
 }
 
-// TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4: default-strict JSON
-// keeps W-codes under "warnings" so agents can triage severity.
 func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -117,8 +107,6 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
     "scope overlap`)
 }
 
-// TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4: rejected ops must
-// appear in the structured envelope so agents cannot treat count:0 as clean.
 func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -162,9 +150,6 @@ func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
 	assert.Greater(t, count, 0)
 }
 
-// TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4: structured
-// validate already puts snapshot warnings in the envelope; stderr must not
-// duplicate them.
 func TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -188,8 +173,6 @@ func TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4(t *testing.T) {
 	assert.Contains(t, humanErr, "warning:", "human validate still reports snapshot warnings on stderr")
 }
 
-// TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4: silent green is
-// strict-only; --strict=false must still print INFO lines.
 func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
@@ -203,8 +186,6 @@ func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.Contains(t, out, "INFO: phantom scope", "--strict=false human output must list INFO findings")
 }
 
-// TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4: --strict=false
-// keeps warnings as warnings but still exits non-zero on hard errors (E-codes).
 func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -226,8 +207,6 @@ func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.Contains(t, out, "definition_of_done exceeds")
 }
 
-// TestValidateCiRejectsStrictFalse_REQ_LNGHZN_S10_T4: --ci --strict=false is
-// a contradiction, not a silent override.
 func TestValidateCiRejectsStrictFalse_REQ_LNGHZN_S10_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "validate", "--ci", "--strict=false")
@@ -246,11 +225,6 @@ func nonEmptyLines(s string) []string {
 	return lines
 }
 
-// TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12 plants an I3 two-log
-// interleave where worker B's file (name-sorts first) holds a same-timestamp
-// create+link whose source is created in worker A's later file. File-concat
-// replay drops that link; sort (creates before same-timestamp links) keeps it.
-// Closing the cycle must then be refused, matching whole-graph validate.
 func TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -281,7 +255,6 @@ func TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12(t *testing.T) {
 		}))
 	}
 
-	// aaa-worker.log concatenates before zzz-worker.log (os.ReadDir name order).
 	bLog := filepath.Join(opsDir, "aaa-worker.log")
 	plantSortedReplayCreate(bLog, "aaa-worker", "cycle-b", "cmd/armature/cycle_b.go")
 	require.NoError(t, ops.AppendOp(bLog, ops.Op{

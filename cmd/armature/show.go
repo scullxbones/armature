@@ -20,7 +20,6 @@ func newShowCmd() *cobra.Command {
 		Short: "Show a human-readable summary of one or more issues",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Collect all IDs: --issue flag plus all positional args
 			var ids []string
 			if issueID != "" {
 				ids = append(ids, issueID)

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,7 +60,7 @@ func newImportCmd() *cobra.Command {
 					for i, item := range items {
 						ids[i] = item.ID
 					}
-					out, _ := json.Marshal(map[string]any{ //nolint:errcheck // map contains only serializable values
+					out := mustMarshal(map[string]any{
 						"created":   len(items),
 						"issue_ids": ids,
 						"dry_run":   true,
@@ -117,7 +116,7 @@ func newImportCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if format == "json" {
-				out, _ := json.Marshal(map[string]any{ //nolint:errcheck // map contains only serializable values
+				out := mustMarshal(map[string]any{
 					"created":   len(createdIDs),
 					"issue_ids": createdIDs,
 				})

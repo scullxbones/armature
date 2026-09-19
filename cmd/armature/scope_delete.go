@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// nonTerminalStatuses is the set of statuses for which an empty scope after
-// deletion is noteworthy (i.e. the issue is still active in some sense).
 var nonTerminalStatuses = map[string]bool{
 	ops.StatusOpen:       true,
 	ops.StatusClaimed:    true,
@@ -37,7 +35,6 @@ func newScopeDeleteCmd() *cobra.Command {
 				return err
 			}
 
-			// Read index directly from disk to scan scope entries; no rematerialization needed.
 			store := newSnapshotStore(appCtx)
 			index, err := store.ReadIndex()
 			if err != nil {
@@ -53,7 +50,6 @@ func newScopeDeleteCmd() *cobra.Command {
 				return nil
 			}
 
-			// Use the same timestamp for all ops.
 			ts := nowEpoch()
 
 			proposed := make([]ops.Op, 0, len(affected))
@@ -72,14 +68,11 @@ func newScopeDeleteCmd() *cobra.Command {
 				return err
 			}
 
-			// Refresh snapshot to apply the ops to state.
 			snap, err := store.Load(context.Background())
 			if err != nil {
 				return fmt.Errorf("refresh snapshot: %w", err)
 			}
 
-			// Warn about issues that now have an empty scope and are non-terminal.
-			// snap.State.Issues is always initialized after Refresh(); nil check is unnecessary.
 			updatedIssues := snap.State.Issues
 			for _, id := range affected {
 				issue, ok := updatedIssues[id]

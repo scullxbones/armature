@@ -37,31 +37,22 @@ func newRenderContextCmd() *cobra.Command {
 			}
 
 			appCtx := currentCtx(cmd)
-			// token_budget in config.json is the single source of --budget's
-			// default; an explicit --budget always overrides it.
 			if !cmd.Flags().Changed("budget") && appCtx.Config.TokenBudget > 0 {
 				rcBudget = appCtx.Config.TokenBudget
 			}
 			var state *materialize.State
 			if rcAt != "" {
-				// Time-travel: replay ops as they existed at the given commit SHA.
 				opsRepoPath := appCtx.RepoPath
 				if appCtx.WorktreePath != "" {
 					opsRepoPath = appCtx.WorktreePath
 				}
 				gc := adapters.New(opsRepoPath)
-				// In the collapsed layout, IssuesDir == WorktreePath, so the ops
-				// prefix relative to the worktree root is just "ops"; in the
-				// legacy dual-branch layout, IssuesDir is nested a level down.
 				issuesRel := "."
 				if appCtx.IssuesDir != "" && opsRepoPath != "" {
 					if rel, relErr := filepath.Rel(opsRepoPath, appCtx.IssuesDir); relErr == nil {
 						issuesRel = rel
 					}
 				}
-				// Include the legacy nested prefix alongside the current one so
-				// a commit predating a dual-branch-to-collapsed migration
-				// still replays its ops.
 				opsPrefix := filepath.Join(issuesRel, "ops")
 				legacyOpsPrefix := filepath.Join(".armature", "ops")
 				var err error
@@ -80,7 +71,6 @@ func newRenderContextCmd() *cobra.Command {
 				state = snap.State
 			}
 
-			// Create an OSFileReader for file access
 			repoRoot := ctxpkg.InferRepoRoot(appCtx.StateDir)
 			reader := &ctxpkg.OSFileReader{Root: repoRoot}
 

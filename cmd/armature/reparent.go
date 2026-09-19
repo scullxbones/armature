@@ -39,14 +39,12 @@ with an explicit error message.`,
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
-			// Look up the issue being reparented.
 			issue, ok := snap.Issues[issueID]
 			if !ok {
 				return fmt.Errorf("issue %s not found", issueID)
 			}
 
 			if newParent != "" {
-				// Look up the new parent and validate the hierarchy.
 				parentIssue, ok := snap.Issues[newParent]
 				if !ok {
 					return fmt.Errorf("parent %s not found", newParent)

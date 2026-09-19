@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -21,7 +20,6 @@ func newStaleReviewCmd() *cobra.Command {
 			execState := mustState(cmd)
 			appCtx := execState.ctx
 
-			// Read the --non-interactive flag (auto-set by main.go based on TTY/format detection)
 			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
 			format, _ := cmd.Flags().GetString("format")
 
@@ -32,7 +30,6 @@ func newStaleReviewCmd() *cobra.Command {
 
 			lc := sources.NewLifecycle(sourcesDir(appCtx))
 
-			// Load snapshot to get materialized state
 			store := newSnapshotStore(appCtx)
 			snap, err := store.Load(context.Background())
 			if err != nil {
@@ -43,18 +40,13 @@ func newStaleReviewCmd() *cobra.Command {
 				state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 			}
 
-			// Detect stale entries.
 			verifyResults, err := lc.VerifyAll()
 			if err != nil && verifyResults == nil {
 				return fmt.Errorf("verify sources: %w", err)
 			}
-			// Note: When VerifyAll() returns results, the combined error is redundant with per-result status,
-			// but when results are nil (manifest unreadable), the error must be propagated.
 
 			var reviewItems []stalereview.ReviewItem
 			for _, result := range verifyResults {
-				// Only include sources that have changed or are missing from cache;
-				// surface read errors instead of silently discarding them.
 				if result.Status == sources.VerifyError {
 					return fmt.Errorf("read cache for %s: %w", result.ID, result.Error)
 				}
@@ -62,7 +54,6 @@ func newStaleReviewCmd() *cobra.Command {
 					continue
 				}
 
-				// Find cited issues.
 				var cited []*materialize.Issue
 				for _, issue := range state.Issues {
 					if len(issue.SourceLinks) == 0 {
@@ -124,10 +115,10 @@ func newStaleReviewCmd() *cobra.Command {
 						CitedIssues:   ids,
 					})
 				}
-				data, _ := json.MarshalIndent(map[string]interface{}{ //nolint:errcheck // map of serializable values
+				data := mustMarshalIndent(map[string]interface{}{
 					"stale_sources": staleSources,
 					"count":         len(staleSources),
-				}, "", "  ")
+				})
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}
@@ -142,9 +133,9 @@ func newStaleReviewCmd() *cobra.Command {
 			for i, item := range items {
 				var decision string
 				switch decisions[i] {
-				case 1: // decisionConfirmed
+				case 1:
 					decision = "confirmed"
-				case 2: // decisionFlagged
+				case 2:
 					decision = "flagged"
 				default:
 					continue
