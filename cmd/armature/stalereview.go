@@ -118,7 +118,7 @@ func newStaleReviewCmd() *cobra.Command {
 				data := mustMarshalIndent(map[string]interface{}{
 					"stale_sources": staleSources,
 					"count":         len(staleSources),
-				}, "", "  ")
+				}, "  ")
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}

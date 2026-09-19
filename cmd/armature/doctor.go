@@ -255,7 +255,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 
 func renderDoctorFixPlan(cmd *cobra.Command, format string, actions []doctor.FixAction) {
 	if format == "json" || format == "agent" {
-		data := mustMarshalIndent(actions, "", "  ")
+		data := mustMarshalIndent(actions, "  ")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 		return
 	}
