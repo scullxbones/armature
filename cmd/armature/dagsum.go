@@ -85,7 +85,7 @@ mode (agents) to auto-approve all pending draft items.`,
 						"pending_dag_confirmation": []interface{}{},
 						"count":                    0,
 						"approve_all":              approveAll,
-					}, "  ")
+					})
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				} else {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No draft nodes found.")
@@ -119,7 +119,7 @@ mode (agents) to auto-approve all pending draft items.`,
 					"pending_dag_confirmation": pending,
 					"count":                    len(pending),
 					"approve_all":              approveAll,
-				}, "  ")
+				})
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 				return nil
 			}

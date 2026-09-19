@@ -86,8 +86,8 @@ func mustMarshal(v any) []byte {
 	return b
 }
 
-func mustMarshalIndent(v any, indent string) []byte {
-	b, err := json.MarshalIndent(v, "", indent)
+func mustMarshalIndent(v any) []byte {
+	b, err := json.MarshalIndent(v, "", "  ")
 	swallowErr(err)
 	return b
 }
