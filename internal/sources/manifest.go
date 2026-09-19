@@ -59,18 +59,7 @@ func WriteManifestAndCommit(manifestPath, worktreePath string, m Manifest, fc Fi
 	if err := WriteManifest(manifestPath, m); err != nil {
 		return err
 	}
-	if worktreePath == "" {
-		return nil // single-branch: no git commit needed
-	}
-
-	// Compute the relative path from worktreePath to manifest.json
-	manifestFile := filepath.Join(manifestPath, "manifest.json")
-	relPath, err := filepath.Rel(worktreePath, manifestFile)
-	if err != nil {
-		return fmt.Errorf("resolve relative manifest path: %w", err)
-	}
-
-	return fc.CommitWorktreeOp(relPath, "sources: update manifest.json")
+	return commitWorktreeFile(worktreePath, filepath.Join(manifestPath, "manifest.json"), "sources: update manifest.json", fc)
 }
 
 // WriteCacheAndCommit writes cache data to a cache file and commits it
@@ -80,17 +69,16 @@ func WriteCacheAndCommit(manifestPath, worktreePath, id string, data []byte, fc 
 	if err := WriteCache(manifestPath, id, data); err != nil {
 		return err
 	}
+	return commitWorktreeFile(worktreePath, filepath.Join(manifestPath, id+".cache"), fmt.Sprintf("sources: update cache for %s", id), fc)
+}
+
+func commitWorktreeFile(worktreePath, absPath, message string, fc FileCommitter) error {
 	if worktreePath == "" {
-		return nil // single-branch: no git commit needed
+		return nil
 	}
-
-	// Compute the relative path from worktreePath to the cache file
-	cacheFile := filepath.Join(manifestPath, id+".cache")
-	relPath, err := filepath.Rel(worktreePath, cacheFile)
+	relPath, err := filepath.Rel(worktreePath, absPath)
 	if err != nil {
-		return fmt.Errorf("resolve relative cache path: %w", err)
+		return fmt.Errorf("resolve relative path: %w", err)
 	}
-
-	message := fmt.Sprintf("sources: update cache for %s", id)
 	return fc.CommitWorktreeOp(relPath, message)
 }

@@ -17,7 +17,7 @@ type HierarchyGraph interface {
 func ScopesOverlap(scopeA, scopeB []string) bool {
 	for _, a := range scopeA {
 		for _, b := range scopeB {
-			if globOverlaps(a, b) {
+			if scopematch.Overlaps(a, b) {
 				return true
 			}
 		}
@@ -42,10 +42,6 @@ func IsAncestorOrDescendant(graph HierarchyGraph, issueA, issueB string) bool {
 	}
 	return slices.Contains(graph.Descendants(issueA), issueB) ||
 		slices.Contains(graph.Descendants(issueB), issueA)
-}
-
-func globOverlaps(a, b string) bool {
-	return scopematch.Overlaps(a, b)
 }
 
 // IsWithinScope checks if all files in the provided list are within the

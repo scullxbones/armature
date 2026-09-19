@@ -43,7 +43,7 @@ func newDoctorCmd() *cobra.Command {
 			if layout, layoutErr := config.ResolveLayout(absRepoPath); layoutErr == nil &&
 				layout.WorktreePath != "" &&
 				!config.DetectUnmigratedLayout(layout.WorktreePath, layout.IssuesDir) {
-				attachDoctorExecutionState(cmd, layout)
+				attachExecutionState(cmd, layout)
 				return nil
 			}
 
@@ -265,21 +265,6 @@ func renderDoctorFixPlan(cmd *cobra.Command, format string, actions []doctor.Fix
 	for _, a := range actions {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", a.IssueID, a.Reason)
 	}
-}
-
-func attachDoctorExecutionState(cmd *cobra.Command, ctx *config.Context) {
-	workerID := workerIDBestEffort(ctx.RepoPath)
-	if workerID == "" {
-		workerID = "default"
-	}
-	workerID = slottedWorkerID(workerID).String()
-	ctx.StateDir = stateDirFor(ctx, workerID)
-	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
-	baseCtx := cmd.Context()
-	if baseCtx == nil {
-		baseCtx = context.Background()
-	}
-	cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
 }
 
 func doctorFixConfigHealth(appCtx *config.Context) error {

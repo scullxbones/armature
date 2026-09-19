@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -47,14 +46,7 @@ func newRenderContextCmd() *cobra.Command {
 					opsRepoPath = appCtx.WorktreePath
 				}
 				gc := adapters.New(opsRepoPath)
-				issuesRel := "."
-				if appCtx.IssuesDir != "" && opsRepoPath != "" {
-					if rel, relErr := filepath.Rel(opsRepoPath, appCtx.IssuesDir); relErr == nil {
-						issuesRel = rel
-					}
-				}
-				opsPrefix := filepath.Join(issuesRel, "ops")
-				legacyOpsPrefix := filepath.Join(".armature", "ops")
+				opsPrefix, legacyOpsPrefix := opsHistoryPrefixes(appCtx, opsRepoPath)
 				var err error
 				state, err = materialize.MaterializeAtSHA(gc, rcAt, opsPrefix, legacyOpsPrefix)
 				if err != nil {

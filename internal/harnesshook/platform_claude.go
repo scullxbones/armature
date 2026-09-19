@@ -148,11 +148,7 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 
 	cfg["hooks"] = hooks
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(settingsPath, data, 0o600)
+	return writeJSONFile(settingsPath, cfg)
 }
 
 // Decode parses a Claude Code hook payload into a normalised Event.

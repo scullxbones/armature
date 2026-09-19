@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/context"
@@ -45,14 +44,7 @@ func newContextHistoryCmd() *cobra.Command {
 				return fmt.Errorf("log branch: %w", err)
 			}
 
-			issuesRel := "."
-			if appCtx.IssuesDir != "" && opsRepoPath != "" {
-				if rel, relErr := filepath.Rel(opsRepoPath, appCtx.IssuesDir); relErr == nil {
-					issuesRel = rel
-				}
-			}
-			opsPrefix := filepath.Join(issuesRel, "ops")
-			legacyOpsPrefix := filepath.Join(".armature", "ops")
+			opsPrefix, legacyOpsPrefix := opsHistoryPrefixes(appCtx, opsRepoPath)
 
 			for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
 				entries[i], entries[j] = entries[j], entries[i]

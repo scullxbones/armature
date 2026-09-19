@@ -85,11 +85,7 @@ func (a *DevinAdapter) WriteConfig(workdir string) error {
 			}},
 		},
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, "hooks.json"), data, 0o600)
+	return writeJSONFile(filepath.Join(dir, "hooks.json"), cfg)
 }
 
 // Decode parses a Devin hook payload into a normalised Event.
@@ -101,4 +97,12 @@ func (a *DevinAdapter) Decode(input []byte) (Event, error) {
 func (a *DevinAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	// Devin processes the JSON response on exit 0, so exit code is always 0.
 	return encodeApproveOrBlockJSON(decision)
+}
+
+func writeJSONFile(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }
