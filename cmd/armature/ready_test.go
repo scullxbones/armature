@@ -38,7 +38,7 @@ func decodeReadyEnvelope(t *testing.T, stdout string) map[string]json.RawMessage
 	return decoded
 }
 
-func TestFilterExpiredClaimsByAssignedWorker_UsesAssignedWorkerNotClaimedBy(t *testing.T) {
+func TestFilterExpiredClaimsByIssueAssignedWorker_UsesAssignedWorkerNotClaimedBy(t *testing.T) {
 	t.Parallel()
 
 	expiredClaims := []ready.ExpiredClaimEntry{
@@ -50,14 +50,14 @@ func TestFilterExpiredClaimsByAssignedWorker_UsesAssignedWorkerNotClaimedBy(t *t
 		"task-02": {AssignedWorker: "worker-c", ClaimedBy: "worker-a"},
 	}
 
-	got := filterExpiredClaimsByAssignedWorker(expiredClaims, issues, "worker-a")
+	got := filterExpiredClaimsByIssueAssignedWorker(expiredClaims, issues, "worker-a")
 
 	if len(got) != 1 || got[0].Issue != "task-01" {
 		t.Fatalf("expected only task-01 (assigned to worker-a, regardless of claimant), got %+v", got)
 	}
 }
 
-func TestFilterExpiredClaimsByAssignedWorker_MissingIssueExcluded(t *testing.T) {
+func TestFilterExpiredClaimsByIssueAssignedWorker_MissingIssueExcluded(t *testing.T) {
 	t.Parallel()
 
 	expiredClaims := []ready.ExpiredClaimEntry{
@@ -65,7 +65,7 @@ func TestFilterExpiredClaimsByAssignedWorker_MissingIssueExcluded(t *testing.T) 
 	}
 	issues := map[string]*materialize.Issue{}
 
-	got := filterExpiredClaimsByAssignedWorker(expiredClaims, issues, "worker-a")
+	got := filterExpiredClaimsByIssueAssignedWorker(expiredClaims, issues, "worker-a")
 
 	if len(got) != 0 {
 		t.Fatalf("expected no entries for an issue with no materialized state, got %+v", got)

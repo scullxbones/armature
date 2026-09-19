@@ -158,7 +158,7 @@ outcome) appends as an amendment at exit 0.`,
 					gateRepoPath = resolved
 				}
 
-				runGate, resolvedGateRepoPath, gateErr := deliverygateRequired(appCtx.RepoPath, gateRepoPath, issueID, gateIssue)
+				runGate, resolvedGateRepoPath, gateErr := deliveryGateRequiredByMarkerThenTypeClaimedBy(appCtx.RepoPath, gateRepoPath, issueID, gateIssue)
 				if gateErr != nil {
 					return gateErr
 				}
@@ -321,19 +321,12 @@ func checkAndWarnParentStoryStatus(index materialize.Index, currentIssueID strin
 	return nil
 }
 
-func deliverygateRequired(repoRoot, invokingRepoPath, issueID string, gateIssue *materialize.Issue) (bool, string, error) {
-
-	invokingBinding, bindingErr := worktreeIssueBinding(invokingRepoPath)
-	if bindingErr == nil {
-		if invokingBinding == issueID {
-			return true, invokingRepoPath, nil
-		}
-		if invokingBinding != "" {
-			return true, invokingRepoPath, nil
-		}
+func deliveryGateRequiredByMarkerThenTypeClaimedBy(repoRoot, invokingRepoPath, issueID string, gateIssue *materialize.Issue) (bool, string, error) {
+	if run, path, handled := deliveryGateFromInvokingMarker(invokingRepoPath, issueID); handled {
+		return run, path, nil
 	}
 
-	claimedPath, found, err := resolveClaimedStoryWorktree(repoRoot, issueID)
+	claimedPath, found, err := discoverIssueBoundWorktreeIndependentOfCheckout(repoRoot, issueID)
 	if err != nil {
 		return false, invokingRepoPath, fmt.Errorf("could not determine claimed worktree for %s: %w. Use --skip-delivery-gate to bypass", issueID, err)
 	}
@@ -341,12 +334,29 @@ func deliverygateRequired(repoRoot, invokingRepoPath, issueID string, gateIssue 
 		return true, claimedPath, nil
 	}
 
+	return deliveryGateFromTypeOrClaimedByAbsence(invokingRepoPath, issueID, gateIssue)
+}
+
+func deliveryGateFromInvokingMarker(invokingRepoPath, issueID string) (run bool, path string, handled bool) {
+	invokingBinding, bindingErr := worktreeIssueBinding(invokingRepoPath)
+	if bindingErr != nil {
+		return false, "", false
+	}
+	if invokingBinding == issueID {
+		return true, invokingRepoPath, true
+	}
+	if invokingBinding != "" {
+		return true, invokingRepoPath, true
+	}
+	return false, "", false
+}
+
+func deliveryGateFromTypeOrClaimedByAbsence(invokingRepoPath, issueID string, gateIssue *materialize.Issue) (bool, string, error) {
 	if gateIssue.ClaimedBy != "" || gateIssue.Type == "task" || gateIssue.Type == "bug" || gateIssue.Type == "feature" {
 		return false, invokingRepoPath, fmt.Errorf(
 			"claimed issue %s has no discoverable claimed worktree; restore or re-claim it, or use --skip-delivery-gate to bypass",
 			issueID)
 	}
-
 	return false, invokingRepoPath, nil
 }
 
@@ -358,7 +368,7 @@ func worktreeIssueBinding(worktreePath string) (string, error) {
 	return harnesshook.ReadIssueBindingFileErr(gitDir)
 }
 
-func resolveClaimedStoryWorktree(repoPath, issueID string) (string, bool, error) {
+func discoverIssueBoundWorktreeIndependentOfCheckout(repoPath, issueID string) (string, bool, error) {
 	items, err := worktree.List(repoPath)
 	if err != nil {
 		return "", false, fmt.Errorf("list worktrees: %w", err)

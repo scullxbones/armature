@@ -20,7 +20,7 @@ convention (character budget = tokens * 4). Fixtures are embedded in the
 binary; --repo is not required.`,
 		Args: cobra.NoArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			autoDetectTTYPolicy(cmd.Root())
+			applyTTYDetectionPolicy(cmd.Root())
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

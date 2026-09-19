@@ -271,8 +271,8 @@ func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
-	ownerID := workerIdentityWithSlot(workerID)
-	return ownerID, opsLogPath(ctx.IssuesDir, ownerID), nil
+	ownerID := slottedWorkerID(workerID)
+	return ownerID.String(), opsLogPath(ctx.IssuesDir, ownerID.String()), nil
 }
 
 func opsLogPath(issuesDir, ownerID string) string {
@@ -281,16 +281,20 @@ func opsLogPath(issuesDir, ownerID string) string {
 
 var validSlotPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
-func workerIdentityWithSlot(workerID string) string {
+type SlottedWorkerID string
+
+func (id SlottedWorkerID) String() string { return string(id) }
+
+func slottedWorkerID(workerID string) SlottedWorkerID {
 	slot := os.Getenv("ARM_LOG_SLOT")
 	if slot == "" {
-		return workerID
+		return SlottedWorkerID(workerID)
 	}
 	if !validSlotPattern.MatchString(slot) {
 		fmt.Fprintf(os.Stderr, "warning: ARM_LOG_SLOT %q contains invalid characters, ignoring\n", slot)
-		return workerID
+		return SlottedWorkerID(workerID)
 	}
-	return workerID + "~" + slot
+	return SlottedWorkerID(workerID + "~" + slot)
 }
 
 func baseWorkerIdentity(workerID string) string {

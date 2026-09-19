@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,4 +32,25 @@ func TestWorkersEmitsEnvelopeNotJSONL_REQ_AOC_S2_T4(t *testing.T) {
 		assert.NotEmpty(t, workers[0].WorkerID)
 		assert.NotEmpty(t, workers[0].Status)
 	}
+}
+
+func TestClaimingWorkerActivityIfAuthorOwnsLease(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, int64(100), claimingWorkerActivityIfAuthorOwnsLease("worker-b", "worker-a", 500, 100))
+	assert.Equal(t, int64(500), claimingWorkerActivityIfAuthorOwnsLease("worker-a", "worker-a", 500, 100))
+	assert.Equal(t, int64(100), claimingWorkerActivityIfAuthorOwnsLease("worker-a", "worker-a", 50, 100))
+}
+
+func TestFoldWorkerStatusFromClaimOwnerActivity_ForeignTransitionDoesNotExtendLease(t *testing.T) {
+	t.Parallel()
+	now := int64(10000)
+	allOps := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
+			Payload: ops.Payload{TTL: 10}},
+		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 9800, WorkerID: "worker-b",
+			Payload: ops.Payload{To: "in-progress"}},
+	}
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"T-001": "worker-a"})
+	assert.Equal(t, "stale", status.Status)
+	assert.Empty(t, status.ActiveIssue)
 }

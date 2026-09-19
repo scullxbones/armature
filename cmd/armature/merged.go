@@ -43,46 +43,55 @@ func resolveBoundWorktree(worktrees []worktree.Meta, issue materialize.Issue) (w
 	return item, res, nil
 }
 
-func findGateTarget(repoPath string, issue materialize.Issue) (gitDir, binding string, found bool, err error) {
+type mergedViolationGateRead struct {
+	GitDir  string
+	Binding string
+}
+
+type gateReadWideningPath struct {
+	Path string
+}
+
+func locateMergedViolationGateRead(repoPath string, issue materialize.Issue) (mergedViolationGateRead, bool, error) {
 	worktrees, err := worktree.List(repoPath)
 	if err != nil {
-		return "", "", false, fmt.Errorf("read worktree inventory: %w", err)
+		return mergedViolationGateRead{}, false, fmt.Errorf("read worktree inventory: %w", err)
 	}
 	item, res, err := resolveBoundWorktree(worktrees, issue)
 	if err != nil {
-		return "", "", false, err
+		return mergedViolationGateRead{}, false, err
 	}
 	worktreePath := item.Path
 	if res == worktree.NotFound {
-		worktreePath = unboundWorktreeOnBranch(worktrees, issue)
+		worktreePath = unboundWorktreeForGateReadWidening(worktrees, issue).Path
 	}
 	if worktreePath == "" {
-		return "", "", false, nil
+		return mergedViolationGateRead{}, false, nil
 	}
 
-	gitDir, err = worktree.ResolveGitDir(worktreePath)
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
-		return "", "", false, fmt.Errorf("resolve worktree git dir for %s: %w", worktreePath, err)
+		return mergedViolationGateRead{}, false, fmt.Errorf("resolve worktree git dir for %s: %w", worktreePath, err)
 	}
-	return gitDir, harnesshook.ReadIssueBindingFile(gitDir), true, nil
+	return mergedViolationGateRead{GitDir: gitDir, Binding: harnesshook.ReadIssueBindingFile(gitDir)}, true, nil
 }
 
-func unboundWorktreeOnBranch(worktrees []worktree.Meta, issue materialize.Issue) string {
+func unboundWorktreeForGateReadWidening(worktrees []worktree.Meta, issue materialize.Issue) gateReadWideningPath {
 	branchName := materialize.DeriveBranchName(issue.Type, issue.ID)
 	if branchName == "" {
-		return ""
+		return gateReadWideningPath{}
 	}
 	wantRef := "refs/heads/" + branchName
 	for _, candidate := range worktrees {
 		if candidate.Binding == "" && candidate.Branch == wantRef {
-			return candidate.Path
+			return gateReadWideningPath{Path: candidate.Path}
 		}
 	}
-	return ""
+	return gateReadWideningPath{}
 }
 
 func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) (bool, error) {
-	gitDir, binding, ok, err := findGateTarget(repoPath, issue)
+	target, ok, err := locateMergedViolationGateRead(repoPath, issue)
 	if err != nil {
 		return false, err
 	}
@@ -92,10 +101,10 @@ func issueWorktreeHasViolations(repoPath string, issue materialize.Issue) (bool,
 		}
 		return false, nil
 	}
-	if binding != "" && binding != issue.ID {
+	if target.Binding != "" && target.Binding != issue.ID {
 		return false, nil
 	}
-	return hookLogContainsEntry(gitDir, "violation:")
+	return hookLogContainsEntry(target.GitDir, "violation:")
 }
 
 type worktreeRemoveOutcome int
@@ -140,10 +149,10 @@ func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, err
 		return worktreeSkipped, err
 	}
 	if res != worktree.Bound {
-		if path := unboundWorktreeOnBranch(worktrees, issue); path != "" {
+		if widening := unboundWorktreeForGateReadWidening(worktrees, issue); widening.Path != "" {
 			_, _ = fmt.Fprintf(errWriter,
 				"Warning: worktree at %s is on branch %s but not bound to %s; skipping removal\n",
-				path, materialize.DeriveBranchName(issue.Type, issue.ID), issue.ID)
+				widening.Path, materialize.DeriveBranchName(issue.Type, issue.ID), issue.ID)
 		}
 		return worktreeSkipped, nil
 	}

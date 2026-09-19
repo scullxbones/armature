@@ -17,7 +17,7 @@ import (
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
-func autoDetectTTYPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
+func applyTTYDetectionPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
 	flags := cmd.Flags()
 
 	format, _ = flags.GetString("format")
@@ -43,7 +43,7 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			format, nonInteractive := autoDetectTTYPolicy(cmd)
+			format, nonInteractive := applyTTYDetectionPolicy(cmd)
 			tui.SetFormat(format)
 			tui.SetNonInteractive(nonInteractive)
 
@@ -82,7 +82,7 @@ func newRootCmd() *cobra.Command {
 			if workerID == "" {
 				workerID = "default"
 			}
-			workerID = workerIdentityWithSlot(workerID)
+			workerID = slottedWorkerID(workerID).String()
 			ctx.StateDir = stateDirFor(ctx, workerID)
 
 			state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
@@ -331,7 +331,7 @@ func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) i
 		err = skipCommandFailure(err)
 	}
 	err = mapAgentFacingError(target, err)
-	format, _ := autoDetectTTYPolicy(root)
+	format, _ := applyTTYDetectionPolicy(root)
 	debug, _ := root.PersistentFlags().GetBool("debug")
 	return handleRootError(stdout, stderr, format, debug, err)
 }

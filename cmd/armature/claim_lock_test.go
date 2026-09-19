@@ -7,59 +7,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAcquireClaimLockSecondAcquisitionFailsWhileHeld_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestPessimisticCloneClaimFlockSecondAcquisitionFailsWhileHeld_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 	repo := initTempRepo(t)
 
-	release, err := acquireClaimLock(repo, "task-01")
+	flock, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.NoError(t, err)
-	t.Cleanup(release)
+	t.Cleanup(flock.Release)
 
-	_, err = acquireClaimLock(repo, "task-01")
+	_, err = tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "task-01")
 	assert.Contains(t, err.Error(), "in progress")
 }
 
-func TestAcquireClaimLockSucceedsAfterRelease_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestPessimisticCloneClaimFlockSucceedsAfterRelease_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 	repo := initTempRepo(t)
 
-	release, err := acquireClaimLock(repo, "task-01")
+	flock, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.NoError(t, err)
-	release()
+	flock.Release()
 
-	release2, err := acquireClaimLock(repo, "task-01")
+	flock2, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.NoError(t, err)
-	release2()
+	flock2.Release()
 }
 
-func TestAcquireClaimLockIsPerIssue_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestPessimisticCloneClaimFlockIsPerIssue_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 	repo := initTempRepo(t)
 
-	releaseA, err := acquireClaimLock(repo, "task-01")
+	flockA, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.NoError(t, err)
-	t.Cleanup(releaseA)
+	t.Cleanup(flockA.Release)
 
-	releaseB, err := acquireClaimLock(repo, "task-02")
+	flockB, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-02")
 	require.NoError(t, err)
-	releaseB()
+	flockB.Release()
 }
 
-func TestAcquireClaimLockContractHoldsOnBuildPlatform_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestPessimisticCloneClaimFlockContractHoldsOnBuildPlatform_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 	repo := initTempRepo(t)
 
-	release1, err := acquireClaimLock(repo, "contract-task")
+	flock1, err := tryAcquirePessimisticCloneClaimFlock(repo, "contract-task")
 	require.NoError(t, err, "first acquisition on this build platform must succeed")
 
-	_, err = acquireClaimLock(repo, "contract-task")
+	_, err = tryAcquirePessimisticCloneClaimFlock(repo, "contract-task")
 	require.Error(t, err, "a concurrent acquisition must be refused, never silently granted")
 
-	release1()
+	flock1.Release()
 
-	release2, err := acquireClaimLock(repo, "contract-task")
+	flock2, err := tryAcquirePessimisticCloneClaimFlock(repo, "contract-task")
 	require.NoError(t, err, "acquisition must succeed again after a genuine release")
-	release2()
+	flock2.Release()
 }

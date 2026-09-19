@@ -11,32 +11,44 @@ import (
 	"github.com/scullxbones/armature/internal/filelock"
 )
 
-func acquireClaimLock(repoPath, issueID string) (release func(), err error) {
+// pessimisticCloneClaimFlock is the same-clone flock (TryLock). Op-log claim
+// ownership is optimistic (Issue.ClaimHeldBy / Payload.IfClaimToken).
+type pessimisticCloneClaimFlock struct {
+	release func()
+}
+
+func (f pessimisticCloneClaimFlock) Release() {
+	if f.release != nil {
+		f.release()
+	}
+}
+
+func tryAcquirePessimisticCloneClaimFlock(repoPath, issueID string) (pessimisticCloneClaimFlock, error) {
 	gitDir, err := resolveCommonGitDir(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("resolve git dir for claim lock: %w", err)
+		return pessimisticCloneClaimFlock{}, fmt.Errorf("resolve git dir for claim lock: %w", err)
 	}
 	lockPath := filepath.Join(gitDir, fmt.Sprintf("armature-claim-%s.lock", issueID))
 
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // path is built from a validated issue ID, not user-controlled
 	if err != nil {
-		return nil, fmt.Errorf("open claim lock file: %w", err)
+		return pessimisticCloneClaimFlock{}, fmt.Errorf("open claim lock file: %w", err)
 	}
 
 	locked, lockErr := filelock.TryLock(f)
 	if lockErr != nil {
 		bestEffortClose(f)
-		return nil, fmt.Errorf("acquire claim lock: %w", lockErr)
+		return pessimisticCloneClaimFlock{}, fmt.Errorf("acquire claim lock: %w", lockErr)
 	}
 	if !locked {
 		bestEffortClose(f)
-		return nil, fmt.Errorf("another claim for %s is in progress in this clone", issueID)
+		return pessimisticCloneClaimFlock{}, fmt.Errorf("another claim for %s is in progress in this clone", issueID)
 	}
 
-	return func() {
+	return pessimisticCloneClaimFlock{release: func() {
 		swallowErr(filelock.Unlock(f))
 		bestEffortClose(f)
-	}, nil
+	}}, nil
 }
 
 func acquireGitExcludeLock(repoPath string) (release func(), err error) {
