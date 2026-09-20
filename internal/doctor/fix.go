@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -24,27 +23,11 @@ type FixAction struct {
 // state, for callers (such as `arm doctor --fix`) that need the same view Run uses
 // internally but also want to compute fixes against it.
 func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*materialize.Issue, error) {
-	opsDir := filepath.Join(issuesDir, "ops")
-	opItems, _, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	loaded, err := loadMaterializedState(issuesDir, stateDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read ops: %w", err)
+		return nil, nil, err
 	}
-	allOps := ops.ExtractOps(opItems)
-
-	if _, err := materialize.Materialize(stateDir, allOps, nil); err != nil {
-		return nil, nil, fmt.Errorf("materialize: %w", err)
-	}
-
-	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))
-	if err != nil {
-		return nil, nil, fmt.Errorf("load index: %w", err)
-	}
-
-	allIssues, err := loadAllIssues(stateDir, index)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load issues: %w", err)
-	}
-	return index, allIssues, nil
+	return loaded.index, loaded.issues, nil
 }
 
 // PlanFixes computes the deterministic set of remediation ops for issues whose

@@ -62,12 +62,7 @@ func skipCommandFailure(err error) error {
 }
 
 func isTerminalStatus(status string) bool {
-	switch status {
-	case ops.StatusDone, ops.StatusMerged, ops.StatusCancelled:
-		return true
-	default:
-		return false
-	}
+	return ops.IsTerminalStatus(status)
 }
 
 func swallowErr(err error) { _ = err }

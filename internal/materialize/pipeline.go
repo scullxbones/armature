@@ -82,18 +82,18 @@ func isUnknownOpTypeError(err error) bool {
 
 func missingTargetReplayID(err error) (string, bool) {
 	msg := err.Error()
-	switch {
-	case strings.HasPrefix(msg, "claim: issue ") && strings.HasSuffix(msg, " not found"):
-		return strings.TrimSuffix(strings.TrimPrefix(msg, "claim: issue "), " not found"), true
-	case strings.HasPrefix(msg, "transition: issue ") && strings.HasSuffix(msg, " not found"):
-		return strings.TrimSuffix(strings.TrimPrefix(msg, "transition: issue "), " not found"), true
-	case strings.HasPrefix(msg, "link: source issue ") && strings.HasSuffix(msg, " not found"):
-		return strings.TrimSuffix(strings.TrimPrefix(msg, "link: source issue "), " not found"), true
-	case strings.HasPrefix(msg, "unlink: source issue ") && strings.HasSuffix(msg, " not found"):
-		return strings.TrimSuffix(strings.TrimPrefix(msg, "unlink: source issue "), " not found"), true
-	default:
-		return "", false
+	const suffix = " not found"
+	for _, prefix := range []string{
+		"claim: issue ",
+		"transition: issue ",
+		"link: source issue ",
+		"unlink: source issue ",
+	} {
+		if strings.HasPrefix(msg, prefix) && strings.HasSuffix(msg, suffix) {
+			return strings.TrimSuffix(strings.TrimPrefix(msg, prefix), suffix), true
+		}
 	}
+	return "", false
 }
 
 func applyOpsWithTolerance(state *State, allOps []ops.Op, toleratedMissingTargetIDs map[string]bool) ([]ops.Op, error) {

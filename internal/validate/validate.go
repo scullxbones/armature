@@ -1027,7 +1027,7 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []Finding
 }
 
 func isTerminalStatus(status string) bool {
-	return status == ops.StatusMerged || status == ops.StatusDone || status == ops.StatusCancelled
+	return ops.IsTerminalStatus(status)
 }
 
 func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string, allIssues map[string]*materialize.Issue) []Finding {

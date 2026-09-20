@@ -172,6 +172,7 @@ func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, de
 		}
 	}
 
+	hasWinnerClaim := false
 	for issueID, c := range clocksByIssue {
 		if c.claimedAt == 0 {
 			continue
@@ -179,6 +180,7 @@ func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, de
 		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
 			continue
 		}
+		hasWinnerClaim = true
 		if c.transitioned {
 			continue
 		}
@@ -194,18 +196,6 @@ func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, de
 				ActiveIssue: issueID,
 			}
 		}
-	}
-
-	hasWinnerClaim := false
-	for issueID, c := range clocksByIssue {
-		if c.claimedAt == 0 {
-			continue
-		}
-		if winner, ok := winners[issueID]; ok && baseWorkerIdentity(winner) != workerID {
-			continue
-		}
-		hasWinnerClaim = true
-		break
 	}
 	if hasWinnerClaim {
 		return WorkerStatus{

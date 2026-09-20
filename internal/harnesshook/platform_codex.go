@@ -69,39 +69,19 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 				return false, legacyErr
 			}
 
-			// Check if the legacy file is the old format owned by armature.
-			// Two cases: pre-marker exact body, or marker-bearing file (earlier
-			// commits wrote "# armature:managed" to root codex.toml directly).
-			legacyContentStr := string(legacyContent)
-			if strings.TrimSpace(legacyContentStr) == strings.TrimSpace(legacyCodexConfig) {
-				return true, nil
-			}
-			firstLine, _, _ := strings.Cut(legacyContentStr, "\n")
-			if strings.TrimSpace(firstLine) == "# armature:managed" {
-				return true, nil
-			}
-
-			// Legacy file exists but is user-managed
-			return false, nil
+			return codexConfigOwned(string(legacyContent)), nil
 		}
 		return false, err
 	}
+	return codexConfigOwned(string(content)), nil
+}
 
-	contentStr := string(content)
-
-	// Check for the marker at the beginning of the file
-	firstLine, _, _ := strings.Cut(contentStr, "\n")
-	if strings.TrimSpace(firstLine) == "# armature:managed" {
-		return true, nil
+func codexConfigOwned(content string) bool {
+	if strings.TrimSpace(content) == strings.TrimSpace(legacyCodexConfig) {
+		return true
 	}
-
-	// Check for legacy configs written by the previous version that exactly
-	// match the known legacy body but lack the marker.
-	if strings.TrimSpace(contentStr) == strings.TrimSpace(legacyCodexConfig) {
-		return true, nil
-	}
-
-	return false, nil
+	firstLine, _, _ := strings.Cut(content, "\n")
+	return strings.TrimSpace(firstLine) == "# armature:managed"
 }
 
 // WriteConfig writes the Codex hook configuration into workdir/.codex/config.toml.
@@ -137,14 +117,8 @@ command = "arm harness-hook"
 	// file whose first line is "# armature:managed".
 	legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
 	legacyBytes, err := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
-	if err == nil {
-		legacyStr := string(legacyBytes)
-		firstLine, _, _ := strings.Cut(legacyStr, "\n")
-		owned := strings.TrimSpace(legacyStr) == strings.TrimSpace(legacyCodexConfig) ||
-			strings.TrimSpace(firstLine) == "# armature:managed"
-		if owned {
-			os.Remove(legacyPath) //nolint:errcheck,gosec // G104: best-effort cleanup; failure leaves a stale but harmless file
-		}
+	if err == nil && codexConfigOwned(string(legacyBytes)) {
+		os.Remove(legacyPath) //nolint:errcheck,gosec // G104: best-effort cleanup; failure leaves a stale but harmless file
 	}
 
 	return nil

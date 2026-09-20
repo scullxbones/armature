@@ -750,10 +750,6 @@ func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {
 	return writeGitDirFileIfAbsent(worktreePath, deliverygate.ClaimedBranchFileName, branchName)
 }
 
-func clearParentBranchMetadata(gitClient *adapters.Client, branchName string) {
-	swallowErr(gitClient.UnsetGitConfig(deliverygate.ParentBranchConfigKey(branchName)))
-}
-
 func updateIssueIDFile(worktreePath, issueID string) error {
 	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {

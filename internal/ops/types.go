@@ -45,6 +45,18 @@ func IsAuditOnly(opType string) bool {
 	}
 }
 
+// IsTerminalStatus reports issue statuses that are finished in the DAG
+// (done, merged, cancelled). Worktree GC uses a stricter merged|cancelled
+// check and must not call this helper.
+func IsTerminalStatus(status string) bool {
+	switch status {
+	case StatusDone, StatusMerged, StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Issue statuses.
 // Note: the op type handler registry (mapping op type string to handler function)
 // lives in materialize.RegisteredOpTypes() — see internal/materialize/engine.go.

@@ -39,6 +39,17 @@ func TestIsAuditOnly_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.False(t, IsAuditOnly(OpCreate))
 }
 
+func TestIsTerminalStatus(t *testing.T) {
+	t.Parallel()
+	assert.True(t, IsTerminalStatus(StatusDone))
+	assert.True(t, IsTerminalStatus(StatusMerged))
+	assert.True(t, IsTerminalStatus(StatusCancelled))
+	assert.False(t, IsTerminalStatus(StatusOpen))
+	assert.False(t, IsTerminalStatus(StatusClaimed))
+	assert.False(t, IsTerminalStatus(StatusInProgress))
+	assert.False(t, IsTerminalStatus(StatusBlocked))
+}
+
 func TestGateEvidenceDirtyNotCitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
 	ev := GateEvidence{Profile: "full", Exit: 0, Uncommitted: true}
