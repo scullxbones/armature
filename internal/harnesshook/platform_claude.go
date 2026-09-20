@@ -56,6 +56,14 @@ func removeArmatureHooks(hooksArray []any) []any {
 	return filtered
 }
 
+func mergeArmatureHookEvent(hooks map[string]any, key string, entry map[string]any) {
+	merged := []any{}
+	if existing, ok := hooks[key].([]any); ok {
+		merged = removeArmatureHooks(existing)
+	}
+	hooks[key] = append(merged, entry)
+}
+
 // Name returns the platform identifier.
 func (a *ClaudeAdapter) Name() string { return "claude" }
 
@@ -122,29 +130,9 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 		}},
 	}
 
-	// Merge PreToolUse hooks: remove any existing Armature-managed entries, then add the current version
-	preToolUseHooks := []any{}
-	if existing, ok := hooks["PreToolUse"].([]any); ok {
-		preToolUseHooks = removeArmatureHooks(existing)
-	}
-	preToolUseHooks = append(preToolUseHooks, armaturePreToolUse)
-	hooks["PreToolUse"] = preToolUseHooks
-
-	// Merge PostToolUse hooks: remove any existing Armature-managed entries, then add the current version
-	postToolUseHooks := []any{}
-	if existing, ok := hooks["PostToolUse"].([]any); ok {
-		postToolUseHooks = removeArmatureHooks(existing)
-	}
-	postToolUseHooks = append(postToolUseHooks, armaturePostToolUse)
-	hooks["PostToolUse"] = postToolUseHooks
-
-	// Merge Stop hooks: remove any existing Armature-managed entries, then add the current version
-	stopHooks := []any{}
-	if existing, ok := hooks["Stop"].([]any); ok {
-		stopHooks = removeArmatureHooks(existing)
-	}
-	stopHooks = append(stopHooks, armatureStop)
-	hooks["Stop"] = stopHooks
+	mergeArmatureHookEvent(hooks, "PreToolUse", armaturePreToolUse)
+	mergeArmatureHookEvent(hooks, "PostToolUse", armaturePostToolUse)
+	mergeArmatureHookEvent(hooks, "Stop", armatureStop)
 
 	cfg["hooks"] = hooks
 

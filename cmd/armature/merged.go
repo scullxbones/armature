@@ -134,11 +134,6 @@ func removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, destination, patte
 	return nil
 }
 
-func removeWorktreeForIssue(repoPath string, issue materialize.Issue, errWriter io.Writer) error {
-	_, err := removeWorktreeForIssueTracked(repoPath, issue, errWriter)
-	return err
-}
-
 func removeWorktreeForIssueTracked(repoPath string, issue materialize.Issue, errWriter io.Writer) (worktreeRemoveOutcome, error) {
 	worktrees, err := worktree.List(repoPath)
 	if err != nil {
@@ -228,7 +223,7 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 		releaseClaimExclusionLock()
 		return worktreeSkipped, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
 	}
-	clearParentBranchMetadata(gitClient, branchName)
+	swallowErr(gitClient.UnsetGitConfig(deliverygate.ParentBranchConfigKey(branchName)))
 	if hasClaimExclusion {
 		if err := removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, selected.Path, claimExclusionPattern); err != nil {
 			releaseClaimExclusionLock()
@@ -304,7 +299,7 @@ func newMergedCmd() *cobra.Command {
 				}
 			}
 
-			if err := removeWorktreeForIssue(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
+			if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
 

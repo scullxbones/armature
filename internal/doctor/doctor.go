@@ -113,30 +113,15 @@ func LiveCheckIDs() []string {
 // worktreePath is the ops worktree (`_armature` checkout); D12 probes lag
 // against origin/_armature there. Empty or missing paths skip D12.
 func Run(issuesDir string, stateDir string, repoPath string, worktreePath string, verbose bool, now time.Time) (Report, error) {
-	// Read ops from the ops directory using validated stream (excludes worker-ID mismatches)
-	opsDir := filepath.Join(issuesDir, "ops")
-	opItems, _, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	loaded, err := loadMaterializedState(issuesDir, stateDir)
 	if err != nil {
-		return Report{}, fmt.Errorf("read ops: %w", err)
+		return Report{}, err
 	}
-
-	// Extract ops from OpItems
-	allOps := ops.ExtractOps(opItems)
-
-	if _, err := materialize.Materialize(stateDir, allOps, nil); err != nil {
-		return Report{}, fmt.Errorf("materialize: %w", err)
-	}
-
-	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))
-	if err != nil {
-		return Report{}, fmt.Errorf("load index: %w", err)
-	}
-
-	// Load all issues for detailed checks.
-	allIssues, err := loadAllIssues(stateDir, index)
-	if err != nil {
-		return Report{}, fmt.Errorf("load issues: %w", err)
-	}
+	index := loaded.index
+	allIssues := loaded.issues
+	allOps := loaded.allOps
+	opItems := loaded.opItems
+	warnings := loaded.warnings
 
 	// Extract target IDs from ops for D3 check
 	noteOnlyOrphans := noteOnlyOrphanTargets(allOps)
@@ -170,6 +155,41 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
 
 	return Report{Checks: checks}, nil
+}
+
+type materializedState struct {
+	index    materialize.Index
+	issues   map[string]*materialize.Issue
+	opItems  []ops.OpItem
+	warnings []string
+	allOps   []ops.Op
+}
+
+func loadMaterializedState(issuesDir, stateDir string) (materializedState, error) {
+	opsDir := filepath.Join(issuesDir, "ops")
+	opItems, _, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	if err != nil {
+		return materializedState{}, fmt.Errorf("read ops: %w", err)
+	}
+	allOps := ops.ExtractOps(opItems)
+	if _, err := materialize.Materialize(stateDir, allOps, nil); err != nil {
+		return materializedState{}, fmt.Errorf("materialize: %w", err)
+	}
+	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))
+	if err != nil {
+		return materializedState{}, fmt.Errorf("load index: %w", err)
+	}
+	allIssues, err := loadAllIssues(stateDir, index)
+	if err != nil {
+		return materializedState{}, fmt.Errorf("load issues: %w", err)
+	}
+	return materializedState{
+		index:    index,
+		issues:   allIssues,
+		opItems:  opItems,
+		warnings: warnings,
+		allOps:   allOps,
+	}, nil
 }
 
 func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materialize.Issue, error) {
