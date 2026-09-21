@@ -110,17 +110,15 @@ func (s *State) applyClaim(op ops.Op) error {
 	if !ok {
 		return fmt.Errorf("claim: issue %s not found", op.TargetID)
 	}
-	if (issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress) &&
-		issue.ClaimedBy != "" && issue.ClaimedBy != op.WorkerID {
-		ttl := issue.ClaimTTL
-		if ttl <= 0 {
-			ttl = 60
-		}
-		last := claimpkg.FoldLastActivity(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity)
-		if !claimpkg.IsClaimStale(last, ttl, op.Timestamp) {
-			// Keep existing active owner; this claim loses the race.
-			return nil
-		}
+	if claimpkg.ClaimLostRace(claimpkg.HeldClaim{
+		Status:                     issue.Status,
+		ClaimedBy:                  issue.ClaimedBy,
+		ClaimedAt:                  issue.ClaimedAt,
+		LastHeartbeat:              issue.LastHeartbeat,
+		LastClaimingWorkerActivity: issue.LastClaimingWorkerActivity,
+		TTLMinutes:                 issue.ClaimTTL,
+	}, op.WorkerID, op.Timestamp) {
+		return nil
 	}
 	issue.Status = ops.StatusClaimed
 	issue.ClaimedBy = op.WorkerID
@@ -141,10 +139,7 @@ func (s *State) applyHeartbeat(op ops.Op) error {
 		return nil
 	}
 	issue.Updated = op.Timestamp
-	// LastHeartbeat feeds directly into claim.IsClaimStale, so only the
-	// claiming worker's heartbeat may extend it — a non-claimant's heartbeat
-	// must not be able to mask a genuinely stale claim.
-	if op.WorkerID == issue.ClaimedBy {
+	if claimpkg.ClaimantHeartbeatClocks(issue.ClaimedBy, op.WorkerID) {
 		issue.LastHeartbeat = op.Timestamp
 		issue.LastClaimingWorkerActivity = op.Timestamp
 	}
