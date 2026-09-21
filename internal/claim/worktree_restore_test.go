@@ -36,7 +36,7 @@ func TestWorktreeRestore_REQ_MATENC_S1_T3(t *testing.T) {
 
 	t.Run("leave encodes neither flag", func(t *testing.T) {
 		t.Parallel()
-		w := claim.WorktreeLeave()
+		w := ops.WorktreeRestore{Action: ops.WorktreeUnchanged}
 		assert.Equal(t, ops.WorktreeUnchanged, w.Action)
 		assert.Empty(t, w.Path)
 		p := ops.Compensation{Worktree: w}.Encode()

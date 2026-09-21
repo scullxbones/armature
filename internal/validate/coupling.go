@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
@@ -27,7 +28,7 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 
 	byStory := make(map[string][]*materialize.Issue)
 	for _, issue := range issues {
-		if issue.Type != "task" || issue.Parent == "" || isTerminalStatus(issue.Status) {
+		if issue.Type != "task" || issue.Parent == "" || ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
 		byStory[issue.Parent] = append(byStory[issue.Parent], issue)

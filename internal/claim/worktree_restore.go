@@ -11,8 +11,3 @@ func WorktreeRestore(priorPath string) ops.WorktreeRestore {
 	}
 	return ops.WorktreeRestore{Action: ops.WorktreeSet, Path: priorPath}
 }
-
-// WorktreeLeave is the third tri-state: neither wire flag (normal transitions).
-func WorktreeLeave() ops.WorktreeRestore {
-	return ops.WorktreeRestore{Action: ops.WorktreeUnchanged}
-}

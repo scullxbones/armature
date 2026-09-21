@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -30,7 +31,7 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 	}
 
 	for _, f := range files {
-		if !hasAnyPrefix(f, prefixes) {
+		if !slices.ContainsFunc(prefixes, func(p string) bool { return strings.HasPrefix(f, p) }) {
 			continue
 		}
 		if !strings.HasSuffix(f, ".log") {
@@ -79,13 +80,4 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 	}
 
 	return state, nil
-}
-
-func hasAnyPrefix(f string, prefixes []string) bool {
-	for _, p := range prefixes {
-		if strings.HasPrefix(f, p) {
-			return true
-		}
-	}
-	return false
 }

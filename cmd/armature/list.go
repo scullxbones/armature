@@ -45,7 +45,7 @@ func newListCmd() *cobra.Command {
 				if filterStatus != "" && entry.Status != filterStatus {
 					continue
 				}
-				if terminal && !isTerminalStatus(entry.Status) {
+				if terminal && !ops.IsTerminalStatus(entry.Status) {
 					continue
 				}
 				ids = append(ids, id)

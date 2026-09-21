@@ -140,10 +140,10 @@ func findingsAfterReopeningTerminalIssues(current *materialize.State, proposed [
 			continue
 		}
 		issue, ok := current.Issues[op.TargetID]
-		if !ok || !isTerminalStatus(issue.Status) {
+		if !ok || !ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
-		if isTerminalStatus(op.Payload.To) {
+		if ops.IsTerminalStatus(op.Payload.To) {
 			continue
 		}
 		unsuppressing = append(unsuppressing, op)
@@ -356,7 +356,7 @@ func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []Fin
 func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if isTerminalStatus(issue.Status) {
+		if ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, childID := range issue.Children {
@@ -364,7 +364,7 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 			if !ok {
 				continue
 			}
-			if isTerminalStatus(child.Status) {
+			if ops.IsTerminalStatus(child.Status) {
 				continue
 			}
 			if !issuetype.IsLegalHierarchy(issue.Type, child.Type) {
@@ -392,7 +392,7 @@ func e6Missing(id, typ, field string) Finding {
 func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if isTerminalStatus(issue.Status) {
+		if ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, field := range issuetype.RequiredFields(issue.Type) {
@@ -583,7 +583,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 
 	var tasks []*materialize.Issue
 	for _, issue := range issues {
-		if !issuetype.IsReadyEligible(issue.Type) || isTerminalStatus(issue.Status) {
+		if !issuetype.IsReadyEligible(issue.Type) || ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
 		if unclaimedStoryOrFeatureWithDescendants(issue, graph, now) {
@@ -774,7 +774,7 @@ func checkW3BudgetExceeded(issues map[string]*materialize.Issue) []Finding {
 func checkW4BroadScope(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if isTerminalStatus(issue.Status) {
+		if ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, glob := range issue.Scope {
@@ -797,7 +797,7 @@ func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []Finding 
 		if isW5ContainerType(issue.Type) {
 			continue
 		}
-		if isTerminalStatus(issue.Status) {
+		if ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
 		if len(issue.ContextFiles) > 0 {
@@ -908,14 +908,10 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []Finding
 	return findings
 }
 
-func isTerminalStatus(status string) bool {
-	return ops.IsTerminalStatus(status)
-}
-
 func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string, allIssues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if isTerminalStatus(issue.Status) {
+		if ops.IsTerminalStatus(issue.Status) {
 			continue
 		}
 		expandedFiles, ok := preExpandedScopes[id]

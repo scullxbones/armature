@@ -61,10 +61,6 @@ func skipCommandFailure(err error) error {
 	return protocolExitError{err: err, code: 1}
 }
 
-func isTerminalStatus(status string) bool {
-	return ops.IsTerminalStatus(status)
-}
-
 func swallowErr(err error) { _ = err }
 
 func bestEffortClose(c io.Closer) {
