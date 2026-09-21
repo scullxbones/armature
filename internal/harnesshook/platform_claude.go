@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 )
 
-// ClaudeAdapter implements PlatformAdapter for the Claude Code harness.
 type ClaudeAdapter struct{}
 
 func NewClaudeAdapter() *ClaudeAdapter { return &ClaudeAdapter{} }

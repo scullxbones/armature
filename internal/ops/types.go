@@ -25,10 +25,7 @@ const (
 	OpScopeRename       = "scope-rename"
 	OpScopeDelete       = "scope-delete"
 
-	// OpReparent moves an issue to a new parent.
-	OpReparent = "reparent"
-
-	// OpAssessmentAttested records a conformance assessment attestation.
+	OpReparent           = "reparent"
 	OpAssessmentAttested = "assessment-attested"
 )
 
@@ -44,9 +41,6 @@ func IsAuditOnly(opType string) bool {
 	}
 }
 
-// IsTerminalStatus reports issue statuses that are finished in the DAG
-// (done, merged, cancelled). Worktree GC uses a stricter merged|cancelled
-// check and must not call this helper.
 func IsTerminalStatus(status string) bool {
 	switch status {
 	case StatusDone, StatusMerged, StatusCancelled:
@@ -66,7 +60,6 @@ const (
 	StatusCancelled  = "cancelled"
 )
 
-// ValidTransitionTargets is the set of statuses accepted by the transition command.
 var ValidTransitionTargets = map[string]bool{
 	StatusOpen:       true,
 	StatusInProgress: true,
@@ -76,7 +69,6 @@ var ValidTransitionTargets = map[string]bool{
 	StatusCancelled:  true,
 }
 
-// Op represents a single parsed operation from the log.
 type Op struct {
 	Type      string
 	TargetID  string
@@ -85,8 +77,6 @@ type Op struct {
 	Payload   Payload
 }
 
-// Payload holds all possible payload fields across op types.
-// Only relevant fields are populated for each op type.
 type Payload struct {
 	Title                             string          `json:"title,omitempty"`
 	Parent                            string          `json:"parent,omitempty"`
@@ -167,8 +157,6 @@ func PayloadsEqual(a, b Payload) bool {
 	return bytes.Equal(left, right)
 }
 
-// LastTransitionPayload returns the payload of the last transition op for
-// issueID, if any. Scan is in log order; last write wins.
 func LastTransitionPayload(all []Op, issueID string) (Payload, bool) {
 	var last Payload
 	found := false
@@ -181,13 +169,6 @@ func LastTransitionPayload(all []Op, issueID string) (Payload, bool) {
 	return last, found
 }
 
-// RecordedTransitionPayload is the payload that currently represents the
-// issue's recorded transition state. When the last transition still names
-// this status, that op's payload is used in full, so optional fields such as
-// input_tokens/output_tokens participate in equality only if they were
-// already recorded. Otherwise the payload is synthesized from materialized
-// status fields without inventing token counts or other transition-only
-// flags.
 func RecordedTransitionPayload(status, outcome, branch, pr string, last Payload, hasLast bool) Payload {
 	if hasLast && last.To == status {
 		return last
@@ -195,8 +176,6 @@ func RecordedTransitionPayload(status, outcome, branch, pr string, last Payload,
 	return Payload{To: status, Outcome: outcome, Branch: branch, PR: pr}
 }
 
-// IdenticalTransition reports whether proposed is a no-op against issueID's
-// current status and recorded transition payload.
 func IdenticalTransition(all []Op, issueID, status, outcome, branch, pr string, proposed Payload) bool {
 	if status != proposed.To {
 		return false

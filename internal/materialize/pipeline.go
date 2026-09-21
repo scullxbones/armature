@@ -17,9 +17,6 @@ import (
 func swallowErr(err error) { _ = err }
 
 type Options struct {
-	// WriteStateFiles controls whether state files and checkpoints are written to disk.
-	// When false, checkpoint reads are also skipped, forcing a full in-memory replay
-	// (no incremental mode). Use false for read-only/diagnostic calls.
 	WriteStateFiles bool
 	ExcludeWorkerID string
 	EmitWarnings    bool

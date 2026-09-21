@@ -24,12 +24,7 @@ type Options struct {
 	ManifestData      []byte
 	Coverage          *traceability.Coverage
 	PreExpandedScopes map[string][]string
-	// Now is the evaluation time in Unix seconds, used to age claims out for
-	// W1's claimed-aggregate-parent exception. This package sits behind a
-	// depguard boundary that forbids a clock dependency, so callers inject the
-	// timestamp. Zero means "freshness unknown", which keeps a claimed parent in
-	// W1 rather than silently dropping a live conflict from a warning-only rule.
-	Now int64
+	Now               int64
 }
 
 type Result struct {
@@ -41,23 +36,12 @@ type Result struct {
 	Coverage *traceability.Coverage
 }
 
-// Finding is a Graph Finding: a rule violation arm validate reports,
-// identified by a rule and the issue IDs it cites.
 type Finding struct {
 	Severity string
 	Rule     string
 	Message  string
 	CitedIDs []string
-	// Key is a rule-specific, stable discriminator used (alongside Rule and
-	// CitedIDs) to identify a Finding across writes. It exists so a rule that
-	// can emit more than one Finding per (Rule, CitedIDs) pair — currently
-	// checkE6RequiredFields, checkE10ScopeGlobs, checkE14TaskContract, and checkW8ConflictingDecisions
-	// — doesn't alias its distinct findings together. Key must never be
-	// derived from mutable detail (counts, overlap file lists, char lengths):
-	// Message is intentionally excluded from identity so a write that
-	// strictly narrows an existing finding's residual detail isn't treated
-	// as introducing a new one.
-	Key string
+	Key      string
 }
 
 func (f Finding) identity() string {
@@ -201,7 +185,6 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 		if f.Severity == "info" {
 			continue
 		}
-		// Cite-after remains legal on create (Plan Release / Integration).
 		switch f.Rule {
 		case "E7", "E8":
 			continue
@@ -569,9 +552,6 @@ func unitOnlyAcceptance(raw json.RawMessage) bool {
 	if len(raw) == 0 || string(raw) == "null" {
 		return false
 	}
-	// Object form (plan schema): unit-only iff every entry is type test_passes.
-	// review.ParseAcceptanceCriteria is off-limits here (validate-boundary
-	// depguard), so decode both supported array shapes locally.
 	var criteria []struct {
 		Type string `json:"type"`
 	}
@@ -660,8 +640,6 @@ func isActivelyClaimed(issue *materialize.Issue, now int64) bool {
 	return now == 0 || !issue.ClaimStale(now)
 }
 
-// Duplicated from claim.ScopesOverlapIgnoringAncestry so validate does
-// not import internal/claim (depguard: scopematch is the shared leaf).
 func isAncestorOrDescendant(graph *dag.Graph, a, b string) bool {
 	if graph == nil {
 		return false
@@ -709,11 +687,6 @@ func blocksReachable(start, target string, blocks map[string][]string) bool {
 	return false
 }
 
-// Overlap matching is delegated to internal/scopematch — the single canonical
-// implementation shared with internal/claim — rather than duplicated locally,
-// so the two layers cannot diverge again as they once did. internal/scopematch
-// is a leaf package with no dependency on the orchestration-layer
-// internal/claim package, so it is safe under the validate-boundary depguard rule.
 func firstGlobOverlapPair(a, b []string) (patternA, patternB string, overlaps bool) {
 	for _, x := range a {
 		for _, y := range b {
