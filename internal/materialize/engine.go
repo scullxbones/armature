@@ -76,8 +76,8 @@ func (s *State) applyCreate(op ops.Op) error {
 		Status:           ops.StatusOpen,
 		Title:            op.Payload.Title,
 		Parent:           op.Payload.Parent,
-		Scope:            normalizeScopeEntries(op.Payload.Scope),
-		ContextFiles:     normalizeScopeEntries(op.Payload.ContextFiles),
+		Scope:            ops.DecodeScope(op.Payload.Scope),
+		ContextFiles:     ops.DecodeScope(op.Payload.ContextFiles),
 		Priority:         op.Payload.Priority,
 		EstComplexity:    op.Payload.EstComplexity,
 		DefinitionOfDone: op.Payload.DefinitionOfDone,
@@ -393,13 +393,13 @@ func (s *State) applyAmend(op ops.Op) error {
 		issue.Type = op.Payload.NodeType
 	}
 	if len(op.Payload.Scope) > 0 {
-		issue.Scope = normalizeScopeEntries(op.Payload.Scope)
+		issue.Scope = ops.DecodeScope(op.Payload.Scope)
 	}
 	if op.Payload.ClearContextFiles {
 		issue.ContextFiles = []string{}
 	}
 	if op.Payload.ContextFiles != nil {
-		issue.ContextFiles = normalizeScopeEntries(op.Payload.ContextFiles)
+		issue.ContextFiles = ops.DecodeScope(op.Payload.ContextFiles)
 	}
 	if len(op.Payload.Acceptance) > 0 && string(op.Payload.Acceptance) != "null" {
 		issue.Acceptance = op.Payload.Acceptance
@@ -725,29 +725,6 @@ func appendUnique(slice []string, item string) []string {
 		return slice
 	}
 	return append(slice, item)
-}
-
-// normalizeScopeEntries splits any comma-separated scope entries into individual paths.
-// Legacy ops stored scope as a single joined string (e.g. "a.go, b.go"); this ensures
-// the materialized state always holds one path per element.
-func normalizeScopeEntries(scope []string) []string {
-	result := make([]string, 0, len(scope))
-	for _, entry := range scope {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		if strings.Contains(entry, ", ") {
-			for part := range strings.SplitSeq(entry, ", ") {
-				if part = strings.TrimSpace(part); part != "" {
-					result = append(result, part)
-				}
-			}
-		} else if entry = strings.TrimSpace(entry); entry != "" {
-			result = append(result, entry)
-		}
-	}
-	return result
 }
 
 func removeString(slice []string, item string) []string {
