@@ -151,32 +151,10 @@ func (s *State) applyTransition(op ops.Op) error {
 	if !ok {
 		return fmt.Errorf("transition: issue %s not found", op.TargetID)
 	}
-	// A non-empty IfClaimToken marks this op as a conditional compensating
-	// rollback (see ops.Payload.IfClaimToken). Validate it BEFORE any mutation:
-	// replay order is not under this op's control (append-only log, last-write-
-	// wins), so the only way to make a stale rollback harmless regardless of
-	// where it lands is to have replay itself refuse to apply it once the claim
-	// it targets no longer holds. Delegate the "is this still the exact claim
-	// being compensated for" question to Issue.ClaimHeldBy -- the single
-	// canonical predicate shared with cmd/armature's claimStillOwnedBy -- rather
-	// than re-deriving field comparisons here. ClaimHeldBy requires
-	// Status == StatusClaimed, which subsumes the old terminal-only check
-	// (done/merged/cancelled are all simply not "claimed") and additionally
-	// covers a live, non-terminal transition (in-progress, blocked) made by a
-	// different command in the meantime, since claim-owning commands do not hold
-	// the per-issue claim lock against transition commands (acquireClaimLock has
-	// exactly one caller). Any mismatch makes this a deterministic no-op: return
-	// nil without touching the issue at all.
-	if op.Payload.IfClaimToken != "" {
-		if !issue.ClaimHeldBy(op.WorkerID, op.Payload.IfClaimToken) {
-			return nil
-		}
+	if !compensationApplies(issue, op) {
+		return nil
 	}
 	newStatus := op.Payload.To
-	// Capture claimant-ness before any field clearing below: a transition to
-	// `open` zeroes ClaimedBy as part of this same op, but the claimant's own
-	// release of their claim is still claimant activity and must still bump
-	// LastClaimingWorkerActivity.
 	wasClaimant := op.WorkerID == issue.ClaimedBy
 	if newStatus == ops.StatusOpen {
 		issue.ClaimedBy = ""
@@ -190,36 +168,9 @@ func (s *State) applyTransition(op ops.Op) error {
 	if wasClaimant {
 		issue.LastClaimingWorkerActivity = op.Timestamp
 	}
-	issue.Status = newStatus
-	// An op-asserted status supersedes any derived rollup promotion this issue
-	// was carrying, so the next RunRollup must not restore what the promotion
-	// replaced. Clearing here is what makes op assertion win over retraction.
-	issue.RollupStatusBefore = ""
-	issue.Updated = op.Timestamp
-	// A transition op may carry a WorktreePath ONLY when it is a claim rollback
-	// restoring the path that was overwritten by the (now-failed) claim attempt.
-	// Normal transitions never set Payload.WorktreePath, so this never clobbers a
-	// live path; restoring it keeps an active same-worker retry's claim pointing
-	// at its real (possibly legacy) worktree instead of a just-removed canonical one.
-	//
-	// ClearWorktreePath is the explicit clear-signal a rollback uses when the
-	// path to restore is empty: an empty Payload.WorktreePath is indistinguishable
-	// from "no change" (an omitted field), so a rollback that must put back an
-	// EMPTY pre-claim path sets ClearWorktreePath instead, and it takes precedence.
-	switch {
-	case op.Payload.ClearWorktreePath:
-		issue.WorktreePath = ""
-	case op.Payload.WorktreePath != "":
-		issue.WorktreePath = op.Payload.WorktreePath
-	}
-	if op.Payload.RestoreClaim {
-		issue.ClaimedBy = op.Payload.RestoreClaimedBy
-		issue.ClaimedAt = op.Payload.RestoreClaimedAt
-		issue.ClaimTTL = op.Payload.RestoreClaimTTL
-		issue.LastHeartbeat = op.Payload.RestoreLastHeartbeat
-		issue.LastClaimingWorkerActivity = op.Payload.RestoreLastClaimingWorkerActivity
-		issue.ClaimToken = op.Payload.RestoreClaimToken
-	}
+	applyStatusAssert(issue, newStatus, op.Timestamp)
+	issue.WorktreePath = ops.DecodeWorktreeRestore(op.Payload).Apply(issue.WorktreePath)
+	restoreLeaseIfMarked(issue, op.Payload)
 	if op.Payload.Outcome != "" {
 		issue.Outcome = op.Payload.Outcome
 	}
@@ -230,6 +181,31 @@ func (s *State) applyTransition(op ops.Op) error {
 		issue.PR = op.Payload.PR
 	}
 	return nil
+}
+
+func compensationApplies(issue *Issue, op ops.Op) bool {
+	if op.Payload.IfClaimToken == "" {
+		return true
+	}
+	return issue.ClaimHeldBy(op.WorkerID, op.Payload.IfClaimToken)
+}
+
+func applyStatusAssert(issue *Issue, status string, timestamp int64) {
+	issue.Status = status
+	issue.RollupStatusBefore = ""
+	issue.Updated = timestamp
+}
+
+func restoreLeaseIfMarked(issue *Issue, p ops.Payload) {
+	if !p.RestoreClaim {
+		return
+	}
+	issue.ClaimedBy = p.RestoreClaimedBy
+	issue.ClaimedAt = p.RestoreClaimedAt
+	issue.ClaimTTL = p.RestoreClaimTTL
+	issue.LastHeartbeat = p.RestoreLastHeartbeat
+	issue.LastClaimingWorkerActivity = p.RestoreLastClaimingWorkerActivity
+	issue.ClaimToken = p.RestoreClaimToken
 }
 
 func (s *State) applyNote(op ops.Op) error {
