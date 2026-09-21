@@ -36,15 +36,17 @@ func AppendAndCommitIf(logPath, worktreePath string, op Op, gc GitCommitter, pro
 		return false, fmt.Errorf("resolve relative log path: %w", err)
 	}
 
-	// Safely truncate WorkerID to at most 8 chars for the commit message
-	workerPrefix := op.WorkerID
-	if len(workerPrefix) > 8 {
-		workerPrefix = workerPrefix[:8]
-	}
-
-	message := fmt.Sprintf("ops: %s %s by %s", strings.ToLower(op.Type), op.TargetID, workerPrefix)
+	message := fmt.Sprintf("ops: %s %s by %s", strings.ToLower(op.Type), op.TargetID, TruncateWorkerID(op.WorkerID, 8))
 	if err := gc.CommitWorktreeOp(relPath, message); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// TruncateWorkerID returns the leading n bytes of id, or id if it is shorter.
+func TruncateWorkerID(id string, n int) string {
+	if len(id) > n {
+		return id[:n]
+	}
+	return id
 }

@@ -23,7 +23,8 @@ func TestValidatedOpStream_LoadSingleFile(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	entry := stream.addFile(logPath, "worker-a1")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, warnings, 0)
@@ -51,7 +52,8 @@ func TestValidatedOpStream_MultipleFiles(t *testing.T) {
 	stream := newValidatedOpStream()
 	entry1 := stream.addFile(logPath1, "worker-a1")
 	entry2 := stream.addFile(logPath2, "worker-b2")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, warnings, 0)
@@ -75,7 +77,8 @@ func TestValidatedOpStream_RejectsWorkerIDMismatch(t *testing.T) {
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "worker-a1")
 
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, items, 0)
@@ -98,7 +101,8 @@ func TestValidatedOpStream_ReturnsOffsets(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "worker-a1")
-	items, _, _, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items := loaded.Items
 
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
@@ -108,6 +112,7 @@ func TestValidatedOpStream_ReturnsOffsets(t *testing.T) {
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
 	assert.Equal(t, info.Size(), items[1].Offset)
+	assert.Equal(t, info.Size(), loaded.PhysicalEOF[filepath.Base(logPath)])
 }
 
 func TestValidatedOpStream_PreservesLogFilename(t *testing.T) {
@@ -122,7 +127,8 @@ func TestValidatedOpStream_PreservesLogFilename(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "custom-worker-id~slot")
-	items, _, _, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items := loaded.Items
 
 	require.NoError(t, err)
 	assert.Len(t, items, 1)
@@ -150,7 +156,8 @@ func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "worker-a1")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
@@ -162,7 +169,8 @@ func TestValidatedOpStream_FileNotFound(t *testing.T) {
 	t.Parallel()
 	stream := newValidatedOpStream()
 	stream.addFile("/nonexistent/path/worker.log", "worker-a1")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	assert.Error(t, err)
 	assert.Len(t, items, 0)
@@ -172,7 +180,8 @@ func TestValidatedOpStream_FileNotFound(t *testing.T) {
 func TestValidatedOpStream_Empty(t *testing.T) {
 	t.Parallel()
 	stream := newValidatedOpStream()
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, items, 0)
@@ -197,7 +206,8 @@ func TestValidatedOpStream_MultipleFiles_MixedValidity(t *testing.T) {
 	stream.addFile(logPath1, "worker-a1")
 	stream.addFile(logPath2, "worker-b2")
 
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, items, 1)
@@ -217,7 +227,8 @@ func TestValidatedOpStream_SlottedLogFilename(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "3357fe85~a")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, items, 1)
@@ -237,7 +248,8 @@ func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "worker-alpha~slot-a")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, items, 1, "should accept legacy base worker ID in slotted log")
@@ -265,7 +277,8 @@ func TestLoadFile_LineNumberPopulated(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "worker-w1")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
 	assert.Len(t, items, 2, "should accept 2 ops (line 1 and 3) and reject 1 (line 2)")
@@ -340,16 +353,16 @@ func TestLoadFromDirWithOffsetsValidated_KeysMapByBasename(t *testing.T) {
 	require.NoError(t, AppendOp(logPath1, op1))
 	require.NoError(t, AppendOp(logPath2, op2))
 
-	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+	got, err := LoadFromDirValidated(dir)
 
 	require.NoError(t, err)
-	assert.Len(t, warnings, 0)
-	assert.Len(t, items, 2)
+	assert.Len(t, got.Warnings, 0)
+	assert.Len(t, got.Items, 2)
 
-	assert.Contains(t, offsets, "worker-a1.log")
-	assert.Contains(t, offsets, "worker-b2.log")
-	assert.Greater(t, offsets["worker-a1.log"], int64(0))
-	assert.Greater(t, offsets["worker-b2.log"], int64(0))
+	assert.Contains(t, got.PhysicalEOF, "worker-a1.log")
+	assert.Contains(t, got.PhysicalEOF, "worker-b2.log")
+	assert.Greater(t, got.PhysicalEOF["worker-a1.log"], int64(0))
+	assert.Greater(t, got.PhysicalEOF["worker-b2.log"], int64(0))
 }
 
 func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
@@ -365,21 +378,19 @@ func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
 	require.NoError(t, AppendOp(logPath, op1))
 	require.NoError(t, AppendOp(logPath, op2))
 
-	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+	got, err := LoadFromDirValidated(dir)
 
 	require.NoError(t, err)
-	assert.Len(t, items, 0)
-	assert.Len(t, warnings, 2)
+	assert.Len(t, got.Items, 0)
+	assert.Len(t, got.Warnings, 2)
 
-	// CRITICAL: Even though all ops are mismatched, the offset should still be recorded
-	// so we don't re-read the same lines forever
 	logName := "worker-a1.log"
-	assert.Contains(t, offsets, logName, "offset should be recorded even for all-mismatched files")
-	assert.Greater(t, offsets[logName], int64(0), "offset should point past all lines")
+	assert.Contains(t, got.PhysicalEOF, logName)
+	assert.Greater(t, got.PhysicalEOF[logName], int64(0))
 
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
-	assert.Equal(t, info.Size(), offsets[logName], "offset should match file size")
+	assert.Equal(t, info.Size(), got.PhysicalEOF[logName])
 }
 
 func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t *testing.T) {
@@ -395,27 +406,21 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t
 		Payload: Payload{Msg: "This op should be rejected"}}
 	require.NoError(t, AppendOp(logPath, rejectedOp))
 
-	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+	got, err := LoadFromDirValidated(dir)
 
 	require.NoError(t, err)
-	assert.Len(t, items, 1)
-	assert.Len(t, warnings, 1)
+	assert.Len(t, got.Items, 1)
+	assert.Len(t, got.Warnings, 1)
 
 	logName := "worker-a1.log"
-	assert.Contains(t, offsets, logName)
+	assert.Contains(t, got.PhysicalEOF, logName)
 
-	// CRITICAL: The offset must point to the END of the file (past the trailing rejected line),
-	// not just to the end of the last accepted op.
-	// This ensures incremental readers resuming from this checkpoint won't re-read the rejected tail forever.
 	fileInfo, err := os.Stat(logPath)
 	require.NoError(t, err)
 	fileSize := fileInfo.Size()
 
-	assert.Equal(t, fileSize, offsets[logName],
-		"offset must equal file size to avoid re-reading trailing rejected lines")
-
-	assert.Greater(t, offsets[logName], items[0].Offset,
-		"offset must be past the accepted op, not just at its end")
+	assert.Equal(t, fileSize, got.PhysicalEOF[logName])
+	assert.Greater(t, got.PhysicalEOF[logName], got.Items[0].Offset)
 }
 
 func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t *testing.T) {
@@ -433,22 +438,20 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t 
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+	got, err := LoadFromDirValidated(dir)
 
 	require.NoError(t, err)
-	assert.Len(t, items, 1)
-	assert.Len(t, warnings, 1)
+	assert.Len(t, got.Items, 1)
+	assert.Len(t, got.Warnings, 1)
 
 	logName := "worker-a1.log"
-	assert.Contains(t, offsets, logName)
+	assert.Contains(t, got.PhysicalEOF, logName)
 
-	// CRITICAL: Even with a corrupt trailing line, the offset must point to the physical EOF
 	fileInfo, err := os.Stat(logPath)
 	require.NoError(t, err)
 	fileSize := fileInfo.Size()
 
-	assert.Equal(t, fileSize, offsets[logName],
-		"offset must equal file size even when trailing line is corrupt")
+	assert.Equal(t, fileSize, got.PhysicalEOF[logName])
 }
 
 func TestExtractOps_ReturnsOpsFromItems(t *testing.T) {

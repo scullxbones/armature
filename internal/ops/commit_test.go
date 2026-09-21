@@ -127,6 +127,7 @@ func TestAppendAndCommit_DualBranch_Commits(t *testing.T) {
 	require.Len(t, fc.Calls, 1)
 	assert.Contains(t, fc.Calls[0].Message, "claim")
 	assert.Contains(t, fc.Calls[0].Message, "T1")
+	assert.Contains(t, fc.Calls[0].Message, ops.TruncateWorkerID("abc-def-ghi-jkl", 8))
 }
 
 func TestAppendAndCommit_ShortWorkerID(t *testing.T) {
@@ -145,4 +146,15 @@ func TestAppendAndCommit_ShortWorkerID(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestTruncateWorkerID(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "abc", ops.TruncateWorkerID("abc", 8))
+	assert.Equal(t, "abcdefgh", ops.TruncateWorkerID("abcdefgh", 8))
+	assert.Equal(t, "abcdefgh", ops.TruncateWorkerID("abcdefghij", 8))
+	assert.Equal(t, "", ops.TruncateWorkerID("", 8))
+	wide := "αβγδε"
+	assert.Equal(t, wide[:8], ops.TruncateWorkerID(wide, 8))
+	assert.Equal(t, 8, len(ops.TruncateWorkerID(wide, 8)))
 }
