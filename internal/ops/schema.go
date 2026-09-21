@@ -66,7 +66,6 @@ func SchemaDocumentedOpTypes() []string {
 // (AGENTS.md I3).
 const ScaffoldingVersion = 3
 
-// scaffoldingVersionPrefix marks the SCHEMA line carrying ScaffoldingVersion.
 const scaffoldingVersionPrefix = "# scaffolding-version: "
 
 // ParseScaffoldingVersion reads the scaffolding version recorded in SCHEMA or

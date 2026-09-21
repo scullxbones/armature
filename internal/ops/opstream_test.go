@@ -14,7 +14,6 @@ func TestValidatedOpStream_LoadSingleFile(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
-	// Create test ops
 	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
 		Payload: Payload{Title: "Test", NodeType: "task"}}
 	op2 := Op{Type: OpClaim, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-a1",
@@ -22,7 +21,6 @@ func TestValidatedOpStream_LoadSingleFile(t *testing.T) {
 
 	require.NoError(t, AppendOps(logPath, []Op{op1, op2}))
 
-	// Load via ValidatedOpStream
 	stream := newValidatedOpStream()
 	entry := stream.addFile(logPath, "worker-a1")
 	items, _, warnings, err := stream.loadAll()
@@ -69,20 +67,19 @@ func TestValidatedOpStream_RejectsWorkerIDMismatch(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
-	// Op with mismatched worker ID
 	op := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-b2",
 		Payload: Payload{Title: "Bad", NodeType: "task"}}
 
 	require.NoError(t, AppendOp(logPath, op))
 
 	stream := newValidatedOpStream()
-	stream.addFile(logPath, "worker-a1") // expect worker-a1, not worker-b2
+	stream.addFile(logPath, "worker-a1")
 
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
-	assert.Len(t, items, 0)    // Op rejected
-	assert.Len(t, warnings, 1) // One warning about mismatch
+	assert.Len(t, items, 0)
+	assert.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "worker ID mismatch")
 }
 
@@ -108,7 +105,6 @@ func TestValidatedOpStream_ReturnsOffsets(t *testing.T) {
 	assert.Greater(t, items[0].Offset, int64(0))
 	assert.Greater(t, items[1].Offset, items[0].Offset)
 
-	// Get final file size
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
 	assert.Equal(t, info.Size(), items[1].Offset)
@@ -138,19 +134,16 @@ func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
-	// Write a valid op
 	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
 		Payload: Payload{Title: "Valid", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, op1))
 
-	// Append corrupt line manually
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
 	require.NoError(t, err)
 	_, err = f.WriteString("not valid json\n")
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	// Write another valid op
 	op2 := Op{Type: OpNote, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-a1",
 		Payload: Payload{Msg: "Also valid"}}
 	require.NoError(t, AppendOp(logPath, op2))
@@ -160,8 +153,8 @@ func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
-	assert.Len(t, items, 2)    // Only valid ops loaded
-	assert.Len(t, warnings, 1) // Warning about corrupt line
+	assert.Len(t, items, 2)
+	assert.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "corrupt")
 }
 
@@ -171,7 +164,6 @@ func TestValidatedOpStream_FileNotFound(t *testing.T) {
 	stream.addFile("/nonexistent/path/worker.log", "worker-a1")
 	items, _, warnings, err := stream.loadAll()
 
-	// Should fail gracefully
 	assert.Error(t, err)
 	assert.Len(t, items, 0)
 	assert.Len(t, warnings, 0)
@@ -193,25 +185,23 @@ func TestValidatedOpStream_MultipleFiles_MixedValidity(t *testing.T) {
 	logPath1 := filepath.Join(dir, "worker-a1.log")
 	logPath2 := filepath.Join(dir, "worker-b2.log")
 
-	// Valid op in first file
 	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
 		Payload: Payload{Title: "Good", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath1, op1))
 
-	// Mismatched op in second file
 	op2 := Op{Type: OpCreate, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-wrong",
 		Payload: Payload{Title: "Bad", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath2, op2))
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath1, "worker-a1")
-	stream.addFile(logPath2, "worker-b2") // expect b2, not worker-wrong
+	stream.addFile(logPath2, "worker-b2")
 
 	items, _, warnings, err := stream.loadAll()
 
 	require.NoError(t, err)
-	assert.Len(t, items, 1)    // Only first op accepted
-	assert.Len(t, warnings, 1) // One warning about mismatch
+	assert.Len(t, items, 1)
+	assert.Len(t, warnings, 1)
 	assert.Equal(t, "task-01", items[0].Op.TargetID)
 }
 
@@ -240,7 +230,6 @@ func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-alpha~slot-a.log")
 
-	// Legacy op with base worker ID (no slot suffix), stored in slotted log file
 	op := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-alpha",
 		Payload: Payload{Title: "Legacy Op", NodeType: "task"}}
 
@@ -262,17 +251,14 @@ func TestLoadFile_LineNumberPopulated(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-w1.log")
 
-	// Line 1: valid op
 	op1 := Op{Type: OpCreate, TargetID: "issue-1", Timestamp: 100, WorkerID: "worker-w1",
 		Payload: Payload{Title: "First", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, op1))
 
-	// Line 2: mismatch op (will be rejected)
 	mismatchOp := Op{Type: OpNote, TargetID: "issue-2", Timestamp: 101, WorkerID: "worker-wrong",
 		Payload: Payload{Msg: "Mismatch"}}
 	require.NoError(t, AppendOp(logPath, mismatchOp))
 
-	// Line 3: valid op
 	op3 := Op{Type: OpNote, TargetID: "issue-3", Timestamp: 102, WorkerID: "worker-w1",
 		Payload: Payload{Msg: "Third"}}
 	require.NoError(t, AppendOp(logPath, op3))
@@ -285,12 +271,9 @@ func TestLoadFile_LineNumberPopulated(t *testing.T) {
 	assert.Len(t, items, 2, "should accept 2 ops (line 1 and 3) and reject 1 (line 2)")
 	assert.Len(t, warnings, 1, "should have 1 warning for the mismatch")
 
-	// Verify physical line numbers are set correctly
 	assert.Equal(t, 1, items[0].LineNumber, "first accepted op should be from physical line 1")
 	assert.Equal(t, 3, items[1].LineNumber, "second accepted op should be from physical line 3")
 }
-
-// ===== Tests for package-level LoadFromDirWithOffsetsValidated =====
 
 func TestLoadFromDirWithOffsetsValidated_DirDoesNotExist(t *testing.T) {
 	t.Parallel()
@@ -321,7 +304,6 @@ func TestLoadFromDirWithOffsetsValidated_DirWithValidLogs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, warnings, 0)
 	assert.Len(t, items, 2)
-	// Verify worker IDs match filenames
 	assert.Equal(t, "worker-a1", items[0].Op.WorkerID)
 	assert.Equal(t, "worker-b2", items[1].Op.WorkerID)
 }
@@ -364,7 +346,6 @@ func TestLoadFromDirWithOffsetsValidated_KeysMapByBasename(t *testing.T) {
 	assert.Len(t, warnings, 0)
 	assert.Len(t, items, 2)
 
-	// Verify offsets map uses basenames, not full paths
 	assert.Contains(t, offsets, "worker-a1.log")
 	assert.Contains(t, offsets, "worker-b2.log")
 	assert.Greater(t, offsets["worker-a1.log"], int64(0))
@@ -376,7 +357,6 @@ func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
-	// Write ops with mismatched worker IDs
 	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-wrong",
 		Payload: Payload{Title: "Wrong1", NodeType: "task"}}
 	op2 := Op{Type: OpCreate, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-wrong",
@@ -388,7 +368,6 @@ func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
 	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
 
 	require.NoError(t, err)
-	// All ops are rejected due to mismatch
 	assert.Len(t, items, 0)
 	assert.Len(t, warnings, 2)
 
@@ -398,7 +377,6 @@ func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
 	assert.Contains(t, offsets, logName, "offset should be recorded even for all-mismatched files")
 	assert.Greater(t, offsets[logName], int64(0), "offset should point past all lines")
 
-	// Get file size to verify offset
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
 	assert.Equal(t, info.Size(), offsets[logName], "offset should match file size")
@@ -409,12 +387,10 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
-	// Write one accepted op (matching worker ID)
 	acceptedOp := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
 		Payload: Payload{Title: "Accepted", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, acceptedOp))
 
-	// Append trailing rejected line (mismatched worker ID)
 	rejectedOp := Op{Type: OpNote, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-wrong",
 		Payload: Payload{Msg: "This op should be rejected"}}
 	require.NoError(t, AppendOp(logPath, rejectedOp))
@@ -422,7 +398,6 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t
 	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
 
 	require.NoError(t, err)
-	// One accepted op, one rejected
 	assert.Len(t, items, 1)
 	assert.Len(t, warnings, 1)
 
@@ -439,7 +414,6 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t
 	assert.Equal(t, fileSize, offsets[logName],
 		"offset must equal file size to avoid re-reading trailing rejected lines")
 
-	// Verify offset is past the accepted op itself
 	assert.Greater(t, offsets[logName], items[0].Offset,
 		"offset must be past the accepted op, not just at its end")
 }
@@ -449,12 +423,10 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
-	// Write one accepted op (matching worker ID)
 	acceptedOp := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
 		Payload: Payload{Title: "Accepted", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, acceptedOp))
 
-	// Append corrupt line directly
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
 	require.NoError(t, err)
 	_, err = f.WriteString("not valid json\n")
@@ -464,9 +436,8 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t 
 	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated(dir)
 
 	require.NoError(t, err)
-	// One accepted op, one corrupt line (skipped)
 	assert.Len(t, items, 1)
-	assert.Len(t, warnings, 1) // Warning about corrupt line
+	assert.Len(t, warnings, 1)
 
 	logName := "worker-a1.log"
 	assert.Contains(t, offsets, logName)

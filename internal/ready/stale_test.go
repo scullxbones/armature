@@ -22,7 +22,6 @@ func TestStaleClaims_EmptyWhenNoClaims(t *testing.T) {
 
 func TestStaleClaims_ReturnsStaleClaimed(t *testing.T) {
 	t.Parallel()
-	// claimed at t=0, TTL=1min (60s), now=t+200 → stale
 	issues := map[string]*materialize.Issue{
 		"task-01": {
 			ID:        "task-01",
@@ -39,7 +38,6 @@ func TestStaleClaims_ReturnsStaleClaimed(t *testing.T) {
 
 func TestStaleClaims_DoesNotReturnFreshClaim(t *testing.T) {
 	t.Parallel()
-	// claimed at t=0, TTL=5min (300s), now=t+100 → fresh
 	issues := map[string]*materialize.Issue{
 		"task-01": {
 			ID:        "task-01",
@@ -72,9 +70,6 @@ func TestStaleClaims_DoesNotReturnNonClaimedStatus(t *testing.T) {
 
 func TestStaleClaims_HeartbeatExtendsTTL(t *testing.T) {
 	t.Parallel()
-	// claimed at 0, heartbeat at 500, TTL=1min (60s)
-	// without heartbeat: stale at now>60
-	// with heartbeat: not stale until now>560
 	issues := map[string]*materialize.Issue{
 		"task-01": {
 			ID:            "task-01",
@@ -85,9 +80,7 @@ func TestStaleClaims_HeartbeatExtendsTTL(t *testing.T) {
 			LastHeartbeat: 500,
 		},
 	}
-	// now=530 → not yet stale (500+60=560)
 	assert.Empty(t, StaleClaims(issues, time.Unix(530, 0)))
-	// now=561 → stale
 	assert.Equal(t, []string{"task-01"}, StaleClaims(issues, time.Unix(561, 0)))
 }
 

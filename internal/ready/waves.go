@@ -21,7 +21,6 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index) [][]ReadyEntr
 	}
 	graph := materialize.GraphFromIndex(index)
 
-	// Group entries by priority tier
 	tierMap := make(map[string][]ReadyEntry)
 	priorityOrder := []string{"critical", "high", "medium", "low", ""}
 
@@ -32,8 +31,6 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index) [][]ReadyEntr
 
 	var allWaves [][]ReadyEntry
 
-	// Process known priority tiers first, then all custom tiers in lexical order.
-	// This preserves hard boundaries while ensuring every input entry is emitted.
 	orderedTiers := append([]string(nil), priorityOrder...)
 	knownTiers := make(map[string]bool, len(priorityOrder))
 	for _, tier := range priorityOrder {
@@ -48,25 +45,19 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index) [][]ReadyEntr
 	sort.Strings(customTiers)
 	orderedTiers = append(orderedTiers, customTiers...)
 
-	// Process each priority tier in order, ensuring hard boundaries between tiers.
 	for _, tier := range orderedTiers {
 		tierEntries, ok := tierMap[tier]
 		if !ok || len(tierEntries) == 0 {
 			continue
 		}
 
-		// Sort entries in this tier by scope-conflict degree (descending)
-		// Items with higher conflict degree are considered first for placement
 		sortByConflictDegree(tierEntries)
 
-		// Greedy first-fit: for each candidate, try to place it into the first existing
-		// wave where it has no scope overlap and no ancestor/descendant relationship
 		var tierWaves [][]ReadyEntry
 
 		for _, candidate := range tierEntries {
 			placed := false
 
-			// Try to place the candidate into an existing wave
 			for waveIdx := range tierWaves {
 				if canAddToWave(candidate, tierWaves[waveIdx], graph) {
 					tierWaves[waveIdx] = append(tierWaves[waveIdx], candidate)
@@ -75,23 +66,18 @@ func PartitionWaves(entries []ReadyEntry, index materialize.Index) [][]ReadyEntr
 				}
 			}
 
-			// If not placed in any existing wave, start a new wave
 			if !placed {
 				tierWaves = append(tierWaves, []ReadyEntry{candidate})
 			}
 		}
 
-		// Add all waves from this tier to the overall waves
 		allWaves = append(allWaves, tierWaves...)
 	}
 
 	return allWaves
 }
 
-// sortByConflictDegree sorts entries by their scope-conflict degree in descending order.
-// Items with more conflicts (shared scopes with other ready items) are sorted first.
 func sortByConflictDegree(entries []ReadyEntry) {
-	// Compute conflict degree for each entry
 	conflictDegrees := make(map[string]int)
 	for _, entry := range entries {
 		degree := 0
@@ -105,17 +91,15 @@ func sortByConflictDegree(entries []ReadyEntry) {
 		conflictDegrees[entry.Issue] = degree
 	}
 
-	// Sort by conflict degree (descending), then by ID for determinism
 	orderByConflictDegree := func(i, j int) bool {
 		di := conflictDegrees[entries[i].Issue]
 		dj := conflictDegrees[entries[j].Issue]
 		if di != dj {
-			return di > dj // higher degree first (descending)
+			return di > dj
 		}
-		return entries[i].Issue < entries[j].Issue // tie-break by ID
+		return entries[i].Issue < entries[j].Issue
 	}
 
-	// Use insertion sort to maintain relative order for deterministic results
 	for i := 1; i < len(entries); i++ {
 		key := entries[i]
 		j := i - 1
@@ -127,17 +111,12 @@ func sortByConflictDegree(entries []ReadyEntry) {
 	}
 }
 
-// canAddToWave checks if a candidate entry can be added to a wave without:
-// 1. Scope overlap with any existing member of the wave
-// 2. Ancestor/descendant relationship with any existing member of the wave
 func canAddToWave(candidate ReadyEntry, wave []ReadyEntry, graph *dag.Graph) bool {
 	for _, existing := range wave {
-		// Check scope overlap
 		if claim.ScopesOverlap(candidate.Scope, existing.Scope) {
 			return false
 		}
 
-		// Also check if they are direct ancestors/descendants (even if scopes don't overlap)
 		if claim.IsAncestorOrDescendant(graph, candidate.Issue, existing.Issue) {
 			return false
 		}

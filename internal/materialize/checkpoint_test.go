@@ -29,7 +29,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 func TestLoadCheckpoint_Missing(t *testing.T) {
 	t.Parallel()
 	cp, err := LoadCheckpoint("/nonexistent/checkpoint.json")
-	require.NoError(t, err) // missing checkpoint = fresh start
+	require.NoError(t, err)
 	assert.Equal(t, "", cp.LastCommitSHA)
 	assert.NotNil(t, cp.ByteOffsets)
 }

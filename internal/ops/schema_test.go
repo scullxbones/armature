@@ -10,9 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGenerateSchemaCarriesScaffoldingVersion verifies that SCHEMA records the
-// generator's scaffolding version, so bootstrap can tell a newer generator from
-// an older one and refuse to downgrade shared scaffolding.
 func TestGenerateSchemaCarriesScaffoldingVersion(t *testing.T) {
 	t.Parallel()
 	schema := GenerateSchema()
@@ -23,9 +20,6 @@ func TestGenerateSchemaCarriesScaffoldingVersion(t *testing.T) {
 	assert.Equal(t, ScaffoldingVersion, got)
 }
 
-// TestGenerateOpsGitignoreCarriesScaffoldingVersion verifies that the committed
-// ops .gitignore records the same generator version SCHEMA does, so bootstrap
-// can refuse to downgrade ignore rules from an older binary.
 func TestGenerateOpsGitignoreCarriesScaffoldingVersion(t *testing.T) {
 	t.Parallel()
 	gitignore := GenerateOpsGitignore()
@@ -37,10 +31,6 @@ func TestGenerateOpsGitignoreCarriesScaffoldingVersion(t *testing.T) {
 	assert.Equal(t, ScaffoldingVersion, got)
 }
 
-// TestGenerateSchema_DocumentsTransitionTokenFields_REQ_TOPTIER_S11_T1
-// verifies that ops/SCHEMA lists optional input_tokens and output_tokens on
-// transition, and that ScaffoldingVersion is new enough for bootstrap to
-// republish that SCHEMA into existing repos.
 func TestGenerateSchema_DocumentsTransitionTokenFields_REQ_TOPTIER_S11_T1(t *testing.T) {
 	t.Parallel()
 	schema := GenerateSchema()
@@ -66,9 +56,6 @@ func TestGenerateSchema_DocumentsTransitionTokenFields_REQ_TOPTIER_S11_T1(t *tes
 	assert.Greater(t, ScaffoldingVersion, 2, "bump ScaffoldingVersion so bootstrap republishes ops/SCHEMA")
 }
 
-// TestParseScaffoldingVersion covers the readings bootstrap depends on: a
-// pre-version SCHEMA (no header) reports absent, so it is treated as older and
-// upgraded rather than parsed as version zero.
 func TestParseScaffoldingVersion(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -2,10 +2,6 @@ package materialize
 
 import "testing"
 
-// TestDeriveBranchName covers each issue-type -> branch-prefix mapping,
-// including the empty-string fallback for types without a worktree. This
-// closes a mutation-coverage gap: the function previously had no dedicated
-// test, leaving its string-concatenation mutants unexercised.
 func TestDeriveBranchName(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

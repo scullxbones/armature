@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// initAtSHATestRepo creates a temp dir with a git repo configured for testing.
 func initAtSHATestRepo(t *testing.T) (string, *adapters.Client) {
 	t.Helper()
 	dir := t.TempDir()
@@ -33,7 +32,6 @@ func initAtSHATestRepo(t *testing.T) (string, *adapters.Client) {
 	return dir, adapters.New(dir)
 }
 
-// captureHEAD returns the current HEAD SHA of the repo at dir.
 func captureHEAD(t *testing.T, dir string) string {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "HEAD")
@@ -42,7 +40,6 @@ func captureHEAD(t *testing.T, dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// writeAndCommitOp writes a JSONL op file to opsPrefix/<workerID>.log and commits it.
 func writeAndCommitOp(t *testing.T, dir, opsPrefix string, op ops.Op) string {
 	t.Helper()
 	opsDir := filepath.Join(dir, opsPrefix)
@@ -67,7 +64,6 @@ func writeAndCommitOp(t *testing.T, dir, opsPrefix string, op ops.Op) string {
 	return captureHEAD(t, dir)
 }
 
-// TestMaterializeAtSHA_CreateOp verifies that a single create op is materialized correctly.
 func TestMaterializeAtSHA_CreateOp(t *testing.T) {
 	t.Parallel()
 	dir, gc := initAtSHATestRepo(t)
@@ -94,15 +90,11 @@ func TestMaterializeAtSHA_CreateOp(t *testing.T) {
 	assert.Equal(t, "task", issue.Type)
 }
 
-// TestMaterializeAtSHA_BeforeOpsAdded verifies that materializing at the init commit
-// (before any ops) returns an empty state.
 func TestMaterializeAtSHA_BeforeOpsAdded(t *testing.T) {
 	t.Parallel()
 	dir, gc := initAtSHATestRepo(t)
-	// Capture the init SHA before adding any ops.
 	initSHA := captureHEAD(t, dir)
 
-	// Now add an op in a subsequent commit.
 	op := ops.Op{
 		Type:      ops.OpCreate,
 		TargetID:  "E1-T1",
@@ -115,14 +107,12 @@ func TestMaterializeAtSHA_BeforeOpsAdded(t *testing.T) {
 	}
 	writeAndCommitOp(t, dir, "ops", op)
 
-	// Materializing at initSHA (before op was committed) should give empty state.
 	state, err := MaterializeAtSHA(gc, initSHA, "ops")
 	require.NoError(t, err)
 	require.NotNil(t, state)
 	assert.Empty(t, state.Issues)
 }
 
-// TestMaterializeAtSHA_InvalidSHA verifies that an invalid SHA returns an error.
 func TestMaterializeAtSHA_InvalidSHA(t *testing.T) {
 	t.Parallel()
 	_, gc := initAtSHATestRepo(t)
@@ -131,8 +121,6 @@ func TestMaterializeAtSHA_InvalidSHA(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestMaterializeAtSHA_MultipleWorkers verifies that log files from multiple workers
-// are all merged correctly into the final state.
 func TestMaterializeAtSHA_MultipleWorkers(t *testing.T) {
 	t.Parallel()
 	dir, gc := initAtSHATestRepo(t)
@@ -213,11 +201,6 @@ func TestMaterializeAtSHA_SlottedWorkerLogPreserved(t *testing.T) {
 	assert.Contains(t, state.Issues, "E1-SLOT")
 }
 
-// TestMaterializeAtSHA_MultiplePrefixes_PreAndPostCollapse verifies that
-// passing both the legacy nested prefix and the collapsed root prefix lets a
-// single replay see ops committed under either layout, since a repo migrated
-// by migrateDualBranchToCollapsed has pre-collapse commits storing logs under
-// ".armature/ops" and post-collapse commits storing them under "ops".
 func TestMaterializeAtSHA_MultiplePrefixes_PreAndPostCollapse(t *testing.T) {
 	t.Parallel()
 	dir, gc := initAtSHATestRepo(t)
@@ -231,8 +214,6 @@ func TestMaterializeAtSHA_MultiplePrefixes_PreAndPostCollapse(t *testing.T) {
 	}
 	preSHA := writeAndCommitOp(t, dir, ".armature/ops", preOp)
 
-	// A commit at preSHA only has the legacy nested prefix; the collapsed
-	// prefix alone must not see it, but passing both must.
 	state, err := MaterializeAtSHA(gc, preSHA, "ops")
 	require.NoError(t, err)
 	assert.NotContains(t, state.Issues, "E1-PRE", "collapsed-only prefix should not see pre-collapse ops")

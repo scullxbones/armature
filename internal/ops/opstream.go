@@ -76,13 +76,11 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 	var warnings []string
 	var physicalEOF int64
 
-	// Derive legacy worker ID by stripping slot suffix if present
 	legacyWorkerID := entry.ExpectedWorkerID
 	if i := strings.Index(entry.ExpectedWorkerID, "~"); i >= 0 {
 		legacyWorkerID = entry.ExpectedWorkerID[:i]
 	}
 
-	// Read raw lines from the log file and track their byte offsets
 	linesWithOffsets, err := adapters.ReadLogLinesWithOffsets(entry.LogPath, 0)
 	if err != nil {
 		return nil, 0, nil, err
@@ -92,10 +90,8 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 		// Track physical EOF on every line (accepted or rejected)
 		physicalEOF = lineInfo.EndOffset
 
-		// Parse the op
 		op, parseErr := ParseLine(lineInfo.Line)
 		if parseErr != nil {
-			// Skip corrupt lines, but record warning
 			warnings = append(warnings, fmt.Sprintf(
 				"corrupt line in %s: %v",
 				filepath.Base(entry.LogPath), parseErr,
@@ -103,7 +99,6 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 			continue
 		}
 
-		// Check worker ID match (accept both expected and legacy base ID)
 		if op.WorkerID != entry.ExpectedWorkerID && op.WorkerID != legacyWorkerID {
 			warnings = append(warnings, fmt.Sprintf(
 				"worker ID mismatch in %s: expected %s, got %s (target: %s)",
@@ -115,7 +110,6 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 			continue
 		}
 
-		// Add to items
 		items = append(items, OpItem{
 			Op:          op,
 			LogFilename: entry.LogPath,
@@ -133,7 +127,6 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 // Returns items, a map of log filename -> byte offset (end position), warnings, and error.
 // Checkpoint offset for every file must equal its physical EOF after each load.
 func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64, []string, error) {
-	// List all log files in the directory
 	logFiles, err := adapters.ListLogFiles(opsDir)
 	if err != nil {
 		return nil, nil, nil, err

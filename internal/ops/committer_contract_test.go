@@ -7,9 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// RunGitCommitterContract validates that an implementation of GitCommitter
-// correctly handles committing worktree operations.
-// Call this from any test that provides a real or test GitCommitter implementation.
 func RunGitCommitterContract(t *testing.T, committer ops.GitCommitter) {
 	t.Run("CommitWorktreeOp_ReturnsNoErrorOnSuccess", func(t *testing.T) {
 		t.Parallel()
@@ -39,8 +36,6 @@ func RunGitCommitterContract(t *testing.T, committer ops.GitCommitter) {
 	})
 }
 
-// FakeCommitter is a test fake that implements GitCommitter.
-// It records all calls for inspection in tests.
 type FakeCommitter struct {
 	Calls []struct {
 		RelPath string
@@ -57,8 +52,6 @@ func (f *FakeCommitter) CommitWorktreeOp(relPath, message string) error {
 	return f.Err
 }
 
-// TestFakeCommitter_SatisfiesContract ensures that FakeCommitter
-// correctly implements the GitCommitter interface and satisfies its contract.
 func TestFakeCommitter_SatisfiesContract(t *testing.T) {
 	t.Parallel()
 	fc := &FakeCommitter{}

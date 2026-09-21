@@ -24,7 +24,6 @@ func NewState() *State {
 	}
 }
 
-// opHandlers maps op type strings to their handler functions.
 var opHandlers = map[string]func(*State, ops.Op) error{
 	ops.OpCreate:             (*State).applyCreate,
 	ops.OpClaim:              (*State).applyClaim,
@@ -504,8 +503,6 @@ func (s *State) applyScopeDelete(op ops.Op) error {
 	return nil
 }
 
-// applyReparent moves an issue to a new parent, updating the children lists
-// of both the old parent (removing the issue) and the new parent (adding it).
 func (s *State) applyReparent(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
@@ -514,7 +511,6 @@ func (s *State) applyReparent(op ops.Op) error {
 	oldParentID := issue.Parent
 	newParentID := op.Payload.Parent
 
-	// Remove from old parent's children list.
 	if oldParentID != "" {
 		if oldParent, ok := s.Issues[oldParentID]; ok {
 			oldParent.Children = removeString(oldParent.Children, op.TargetID)
@@ -522,7 +518,6 @@ func (s *State) applyReparent(op ops.Op) error {
 		}
 	}
 
-	// Add to new parent's children list.
 	if newParentID != "" {
 		if newParent, ok := s.Issues[newParentID]; ok {
 			newParent.Children = appendUnique(newParent.Children, op.TargetID)
@@ -535,36 +530,28 @@ func (s *State) applyReparent(op ops.Op) error {
 	return nil
 }
 
-// applyAssessmentAttested replays an assessment attestation op by unmarshaling
-// the assessment, deduplicating by ResultFingerprint, and appending to the issue's
-// assessment attestations list.
 func (s *State) applyAssessmentAttested(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
 		return fmt.Errorf("assessment-attested: issue %s not found", op.TargetID)
 	}
 
-	// Unmarshal the assessment attestation from op.Payload.Assessment
 	var att review.AssessmentAttestation
 	if err := json.Unmarshal(op.Payload.Assessment, &att); err != nil {
 		return fmt.Errorf("unmarshal assessment attestation: %w", err)
 	}
 
-	// Deduplicate by ResultFingerprint
 	for _, existing := range issue.AssessmentAttestations {
 		if existing.ResultFingerprint == att.ResultFingerprint {
-			return nil // duplicate, skip
+			return nil
 		}
 	}
 
-	// Append the attestation
 	issue.AssessmentAttestations = append(issue.AssessmentAttestations, att)
 	issue.Updated = op.Timestamp
 	return nil
 }
 
-// promoteSubtreeConfidence walks the subtree rooted at rootID and sets
-// Provenance.Confidence to targetConfidence on every node in the subtree.
 func (s *State) promoteSubtreeConfidence(rootID, targetConfidence string, timestamp int64) {
 	root, ok := s.Issues[rootID]
 	if !ok {
@@ -590,9 +577,6 @@ func (s *State) promoteParentToInProgress(parentID string) {
 	}
 }
 
-// rollupSatisfied reports whether a child's status no longer blocks its parent
-// from rolling up. Both merged and cancelled are terminal; treating cancelled as
-// outstanding would leave the parent unresolvable for the life of the repo.
 func rollupSatisfied(status string) bool {
 	return status == ops.StatusMerged || status == ops.StatusCancelled
 }
@@ -643,11 +627,9 @@ func (s *State) RunRollup() {
 	// already run over this state.
 	s.RetractDerivedPromotions()
 
-	// Compute initial in-degree (unmerged children count) for each parent
 	inDegree := make(map[string]int)
 	queue := make([]string, 0)
 
-	// First pass: count unmerged children for all non-task parents
 	for _, issue := range s.Issues {
 		if issue.Type == "task" || issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled || len(issue.Children) == 0 {
 			continue
@@ -667,14 +649,11 @@ func (s *State) RunRollup() {
 		}
 		inDegree[issue.ID] = unresolvedCount
 
-		// Every child is terminal and something shipped: ready to promote.
 		if unresolvedCount == 0 && hasMerged {
 			queue = append(queue, issue.ID)
 		}
 	}
 
-	// Second pass: process queue (topological sort, bottom-up)
-	// Each issue in the queue has all children merged
 	for len(queue) > 0 {
 		issueID := queue[0]
 		queue = queue[1:]
@@ -684,29 +663,23 @@ func (s *State) RunRollup() {
 			continue
 		}
 
-		// Promote this issue to merged, remembering what the promotion replaced
-		// so a later run can retract it if the children stop justifying it.
 		if issue.Status != ops.StatusMerged {
 			issue.RollupStatusBefore = issue.Status
 			issue.Status = ops.StatusMerged
 
-			// Check parent: decrement its in-degree
 			if issue.Parent != "" {
 				parent, ok := s.Issues[issue.Parent]
 				if !ok {
 					continue
 				}
 
-				// Skip if parent is a task or already terminal
 				if parent.Type == "task" || parent.Status == ops.StatusMerged || parent.Status == ops.StatusCancelled || len(parent.Children) == 0 {
 					continue
 				}
 
-				// Decrement parent's in-degree
 				if count, ok := inDegree[parent.ID]; ok {
 					inDegree[parent.ID] = count - 1
 
-					// If parent now has all children merged, add to queue
 					if inDegree[parent.ID] == 0 {
 						queue = append(queue, parent.ID)
 					}
@@ -740,8 +713,6 @@ func (s *State) BuildIndex() Index {
 	return index
 }
 
-// confidenceOrDefault returns the confidence value from an op payload,
-// defaulting to "verified" when the field is absent or empty.
 func confidenceOrDefault(confidence string) string {
 	if confidence == "" {
 		return "verified"
