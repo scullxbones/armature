@@ -345,3 +345,6 @@
 ["dag-transition","MATENC-S1",1790009289,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"verified","issue_id":"MATENC-S1"}]
 ["amend","MATENC-S1-T7",1790009331,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"scope":["internal/materialize/pipeline.go","internal/materialize/api.go (new)","internal/materialize/api_test.go (new)"]}]
 ["claim","MATENC-S1-T1",1790009494,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/MATENC-S1-T1","claim_token":"c222b5a3818bbe0559c11e664ac58f21"}]
+["transition","MATENC-S1-T1",1790010428,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Landed via PR #217 squash 18e11163; ops.DecodeScope on main; make check green","branch":"task/MATENC-S1-T1","pr":"217","skipped_delivery_gate":true}]
+["claim","MATENC-S1-T2",1790010438,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/MATENC-S1-T2","claim_token":"9f6497e5bccb94a67e4bbda00312fdfd"}]
+["claim","MATENC-S1-T3",1790010440,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/MATENC-S1-T3","claim_token":"58acd1db361b4d98167f59f745a0183b"}]
