@@ -356,3 +356,7 @@
 ["transition","MATENC-S1-T5",1790013514,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Landed via PR #221 squash f0cd96bb; MissingTarget handler meta","branch":"task/MATENC-S1-T5","pr":"221","skipped_delivery_gate":true}]
 ["claim","MATENC-S1-T6",1790013516,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/MATENC-S1-T6","claim_token":"0355e8b1381e5b5871050c1db83831e3"}]
 ["claim","MATENC-S1-T7",1790013518,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/MATENC-S1-T7","claim_token":"e2dfc5e429eae7f9ea3ec9cfbc94a8a1"}]
+["transition","MATENC-S1-T6",1790016156,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Landed via PR #222 squash 15466f10; DAGEra at ops decode","branch":"task/MATENC-S1-T6","pr":"222","skipped_delivery_gate":true}]
+["transition","MATENC-S1-T7",1790016158,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Landed via PR #223 squash a17dcd67; MaterializeCold/Incremental mandatory retract","branch":"task/MATENC-S1-T7","pr":"223","skipped_delivery_gate":true}]
+["transition","MATENC-S1",1790016189,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"A-primary+B grafts encode complete: PRs #217–#223 (DecodeScope, claimLostRace, WorktreeRestore, applyTransition shrink, MissingTarget, DAGEra, MaterializeCold/Incremental). Asserted/Derived held.","skipped_delivery_gate":true}]
+["transition","MATENC-S1",1790016191,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"merged","pr":"217-223"}]
