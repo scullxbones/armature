@@ -168,7 +168,8 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "worker-a1")
-	items, _, warnings, err := stream.loadAll()
+	loaded, err := stream.loadAll()
+	items, warnings := loaded.Items, loaded.Warnings
 	require.NoError(t, err)
 	assert.Len(t, items, 0)
 	assert.NotEmpty(t, warnings)

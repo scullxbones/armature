@@ -1,8 +1,5 @@
 package ops
 
-// classifiedValidity is the exhaustive AffectsValidity census.
-// Every materialize.RegisteredOpTypes() entry must appear here; an
-// unclassified new type fails CI via TestAffectsValidityCensus.
 var classifiedValidity = map[string]bool{
 	OpCreate:             true,
 	OpAmend:              true,

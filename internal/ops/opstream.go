@@ -30,6 +30,15 @@ type ValidatedOpStream struct {
 	files []*FileEntry
 }
 
+// LoadResult is one validated load of worker log files.
+type LoadResult struct {
+	Items []OpItem
+	// PhysicalEOF maps each log basename to the byte offset of the last line
+	// observed (accepted, rejected, or corrupt), or 0 if the file is empty.
+	PhysicalEOF map[string]int64
+	Warnings    []string
+}
+
 func newValidatedOpStream() *ValidatedOpStream {
 	return &ValidatedOpStream{
 		files: make([]*FileEntry, 0),
@@ -45,32 +54,24 @@ func (s *ValidatedOpStream) addFile(logPath, expectedWorkerID string) *FileEntry
 	return entry
 }
 
-// loadAll loads every registered file once, returning items, per-file physical
-// EOF offsets, and warnings. Checkpoint offsets are physical EOF; accepted-op
-// offsets cannot exceed that, so they are not max'd separately.
-func (s *ValidatedOpStream) loadAll() ([]OpItem, map[string]int64, []string, error) {
-	var items []OpItem
-	var warnings []string
-	offsets := make(map[string]int64)
+func (s *ValidatedOpStream) loadAll() (LoadResult, error) {
+	result := LoadResult{
+		PhysicalEOF: make(map[string]int64),
+	}
 
 	for _, entry := range s.files {
 		fileItems, physicalEOF, fileWarnings, err := s.loadFile(entry)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("load file %s: %w", entry.LogPath, err)
+			return LoadResult{}, fmt.Errorf("load file %s: %w", entry.LogPath, err)
 		}
-		items = append(items, fileItems...)
-		warnings = append(warnings, fileWarnings...)
-		offsets[filepath.Base(entry.LogPath)] = physicalEOF
+		result.Items = append(result.Items, fileItems...)
+		result.Warnings = append(result.Warnings, fileWarnings...)
+		result.PhysicalEOF[filepath.Base(entry.LogPath)] = physicalEOF
 	}
 
-	return items, offsets, warnings, nil
+	return result, nil
 }
 
-// loadFile loads ops from a single file, returning items, physical EOF offset, warnings, and error.
-// It validates that each op's WorkerID matches the expected worker ID.
-// For slotted filenames (with ~ suffix), it also accepts the legacy base worker ID (part before ~).
-// The physical EOF offset is the byte offset of the last line in the file (or 0 if empty),
-// and is computed by tracking the EndOffset of every line (both accepted and rejected).
 func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []string, error) {
 	var items []OpItem
 	var warnings []string
@@ -87,7 +88,6 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 	}
 
 	for i, lineInfo := range linesWithOffsets {
-		// Track physical EOF on every line (accepted or rejected)
 		physicalEOF = lineInfo.EndOffset
 
 		op, parseErr := ParseLine(lineInfo.Line)
@@ -122,30 +122,38 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 	return items, physicalEOF, warnings, nil
 }
 
+// LoadFromDirValidated loads every .log file under opsDir with worker-ID checks.
+func LoadFromDirValidated(opsDir string) (LoadResult, error) {
+	empty := LoadResult{
+		Items:       []OpItem{},
+		PhysicalEOF: map[string]int64{},
+		Warnings:    []string{},
+	}
+	logFiles, err := adapters.ListLogFiles(opsDir)
+	if err != nil {
+		return LoadResult{}, err
+	}
+	if logFiles == nil {
+		return empty, nil
+	}
+
+	stream := newValidatedOpStream()
+	for _, logPath := range logFiles {
+		stream.addFile(logPath, strings.TrimSuffix(filepath.Base(logPath), ".log"))
+	}
+	return stream.loadAll()
+}
+
 // LoadFromDirWithOffsetsValidated loads all ops from a directory of .log files,
 // validating worker IDs and returning byte offsets for checkpoint tracking.
 // Returns items, a map of log filename -> byte offset (end position), warnings, and error.
 // Checkpoint offset for every file must equal its physical EOF after each load.
 func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64, []string, error) {
-	logFiles, err := adapters.ListLogFiles(opsDir)
+	result, err := LoadFromDirValidated(opsDir)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if logFiles == nil {
-		return []OpItem{}, make(map[string]int64), []string{}, nil
-	}
-
-	stream := newValidatedOpStream()
-
-	// Register each log file with its expected worker ID from the filename.
-	// Use the full filename (including slot suffix, e.g. "3357fe85~a"), unlike
-	// adapters.WorkerIDFromFilename which strips the slot. Ops include the
-	// full worker ID with slot in validation.
-	for _, logPath := range logFiles {
-		stream.addFile(logPath, strings.TrimSuffix(filepath.Base(logPath), ".log"))
-	}
-
-	return stream.loadAll()
+	return result.Items, result.PhysicalEOF, result.Warnings, nil
 }
 
 // ExtractOps converts a slice of OpItems to a slice of Ops for compatibility
