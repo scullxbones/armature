@@ -20,19 +20,17 @@ rule interface, or hypothetical adapter. Git and filesystem stay in `cmd/`.
 
 ## Glossary (workers add to `CONTEXT.md`)
 
-**T1** adds:
+**T1** adds all three glossary terms (T5 no longer edits `CONTEXT.md`):
 
 **Claim Plan**: The overlap decision for a proposed Claim, produced before any
-Op is appended. It names block reasons, warnings, and note intents. Distinct
-from the Claim Op itself.
+Op is appended. It names block reasons, warnings, note intents, and
+foreign-worker overlap Issue IDs. Distinct from the Claim Op itself.
 _Avoid_: Resolver, overlap check, claim result
 
 **Claim Compensation**: The planned Transition that restores or releases a
 Claim after a failed post-Claim step, produced before any compensating Op is
 appended. Distinct from the Claim Op and from git rollback.
 _Avoid_: Rollback, resolver, claim result
-
-**T5** adds:
 
 **Worktree Provision Plan**: The decision for a proposed Managed Worktree
 destination, produced before any git or filesystem mutation. Outcomes are
@@ -81,6 +79,7 @@ type ClaimPlan struct {
     BlockReasons []string
     Warnings     []string
     Notes        []NoteIntent
+    OverlapIDs   []string
 }
 
 func PlanClaim(PlanInput) (ClaimPlan, error)
@@ -98,18 +97,18 @@ Inputs are borrowed and read-only.
    affect diagnostics or note order.
 3. Ignore the target itself.
 4. Only another Task in `claimed` or `in-progress` competes.
-5. Overlap uses `ScopesOverlapEx` so ancestor and descendant pairs remain
+5. Overlap uses `ScopesOverlapIgnoringAncestry` so ancestor and descendant pairs remain
    excluded in both directions.
 6. Diagnostics name the conflicting Issue ID, title, type, status, and Claimed
    By. Empty Claimed By renders as `unknown`.
 7. Exact same-Worker overlap is a dismissal, including when `Force` is set.
 8. Deduplicate dismissal evidence by target Issue, conflicting Issue, and
    current Worker identity.
-9. Without `Force`, return every sorted foreign-Worker block reason. A blocked
-   plan is atomic: empty `Warnings` and `Notes`.
+9. Without `Force`, return every sorted foreign-Worker block reason and those
+   Issue IDs on `OverlapIDs`. A blocked plan is atomic: empty `Warnings` and `Notes`.
 10. With `Force`, return a warning and two reciprocal note intents for every
-    foreign-Worker overlap, in candidate-ID order. Same-Worker overlaps remain
-    dismissals.
+    foreign-Worker overlap, in candidate-ID order, plus the same `OverlapIDs`.
+    Same-Worker overlaps remain dismissals and are omitted from `OverlapIDs`.
 11. Canonical messages, preserved:
     - dismissal: `Serial claim: scope overlap with {id} (same worker, dismissed)`
     - force notes: `Scope overlap with {id} detected at claim time` on each Issue
@@ -248,8 +247,10 @@ type ProvisionPlan struct {
 func PlanProvision(ProvisionInput) (ProvisionPlan, error)
 ```
 
-Inputs borrowed and read-only. Empty `IssueID`, `Dest`, or `ExpectedBranch` is
-an input error. Never panic. No git. `internal/worktree` does not import
+Inputs borrowed and read-only. Empty `IssueID` or `Dest` is an input error.
+Empty `ExpectedBranch` is an input error when `Inventory` is non-empty.
+Dest-only nested/in-repo refuses (empty inventory, before `--from`) may omit
+`ExpectedBranch` rather than inventing a placeholder. Never panic. No git. `internal/worktree` does not import
 `issueid`, `adapters`, `deliverygate`, or `cmd`. Issue-ID validation stays in
 `cmd/` before this is called.
 
@@ -267,10 +268,15 @@ paths when naming them.
    `issue %s is bound to %d worktrees (%s); remove the armature-issue-id binding from the ones you do not want before claiming`
    with bound paths sorted.
 5. If exactly one bound row:
-   - If its path is the dest: `already_at_dest`.
-   - If its `Branch` is not `refs/heads/`+`ExpectedBranch` (empty branch means
-     detached): refuse. Preserve phrasing:
-     `worktree at %s is bound to %s but is on %s, not %s; finish or abandon the in-progress git operation there and check out %s before claiming`.
+   - If its path is the dest: `already_at_dest` **before** branch or
+     provenance checks. A path-equal bound row is already at dest even if
+     HEAD is detached or on another branch; dest-local branch/HEAD checks
+     stay in `cmd/` (`checkExistingWorktreeBinding`). Do not reorder this.
+   - If its `Branch` is not `refs/heads/`+`ExpectedBranch` (empty branch or
+     the porcelain token `detached` means detached HEAD): refuse. Preserve
+     phrasing:
+     `worktree at %s is bound to %s but is on %s, not %s; finish or abandon the in-progress git operation there and check out %s before claiming`
+     (render empty/`detached` as `detached HEAD`).
    - If `!ProvenanceOK`: refuse. Preserve phrasing:
      `adopted worktree has no recorded branch-point provenance; re-claim it from a managed worktree or use --skip-delivery-gate only with an explicit override`.
    - Otherwise: `adopt` with `AdoptFrom` set to that path.
@@ -283,10 +289,26 @@ them.
 
 ### Command adapter (T6)
 
-Gather inventory and dest facts, call `PlanProvision`, then existing git:
-refuse returns the reason; adopt moves; already-at-dest rebinds; fresh
-detaches and checks out. Do not change Claim Op ordering relative to
-provision (still Claim first, then provision, then rollback on failure).
+`PlanProvision` is called from two command sites:
+
+1. **Early dest-only refuse** (`refuseCustomWorktreeDestination`) — empty
+   inventory, empty `ExpectedBranch`, before the Claim Op and before `--from`
+   revalidation (git worktree list ordering). Nested dest and
+   in-repo-outside-canonical refuses only. Binding cardinality is not
+   decided here.
+2. **Full inventory** — `evaluateProvisionPlan` (via `worktree.List` /
+   `provisionInputFromInventory`) before the Claim Op, and again inside
+   `createWorktreeAndBranch` after the Claim Op when create still runs.
+
+Existing-dest re-claim (`worktreeExists`) must consult the inventory-backed
+plan for Ambiguous Binding before appending the Claim Op or treating the
+claim as provisioned. Skip `createWorktreeAndBranch` only when dest exists
+and the plan is `already_at_dest` or `fresh` (unbound dest, no other
+binding). Adopt with dest present still runs create and fails closed.
+
+When dest is missing, refuse still returns the reason; adopt moves;
+already-at-dest rebinds; fresh detaches and checks out. Create-path
+failures after a won Claim Op still roll back.
 
 ### Tests
 
@@ -303,11 +325,11 @@ user-visible errors. Do not duplicate T5 tables in Cobra.
 
 | Task | What | Blocked by |
 |---|---|---|
-| T1 | `PlanClaim` + tests; `CONTEXT.md` Claim Plan and Claim Compensation | — |
-| T2 | Overlap command adapter | T1, `LNGHZN-S6-T2` |
+| T1 | `PlanClaim` + tests; `CONTEXT.md` Claim Plan, Claim Compensation, and Worktree Provision Plan; Split table sync | — |
+| T2 | Overlap command adapter | T1, `LNGHZN-S7` until merged |
 | T3 | `PlanCompensation` + tests (parallel with T1) | — |
 | T4 | `rollbackClaim` calls `PlanCompensation` | T2, T3 |
-| T5 | `PlanProvision` + tests; `CONTEXT.md` Worktree Provision Plan | T1 |
+| T5 | `PlanProvision` + tests (no `CONTEXT.md`) | — |
 | T6 | Command calls `PlanProvision`, then existing git | T2, T4, T5 |
 
 T2 does not wire compensation or provision. T4 does not extract provision.
