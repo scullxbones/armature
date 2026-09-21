@@ -14,13 +14,12 @@ import (
 	"github.com/scullxbones/armature/internal/traceability"
 )
 
+func swallowErr(err error) { _ = err }
+
 type Options struct {
-	// WriteStateFiles controls whether state files and checkpoints are written to disk.
-	// When false, checkpoint reads are also skipped, forcing a full in-memory replay
-	// (no incremental mode). Use false for read-only/diagnostic calls.
 	WriteStateFiles bool
-	ExcludeWorkerID string // If set, filters out ops from this worker (diagnostic mode only)
-	EmitWarnings    bool   // Controls whether warnings are emitted to stderr
+	ExcludeWorkerID string
+	EmitWarnings    bool
 }
 
 type Result struct {
@@ -31,8 +30,6 @@ type Result struct {
 	Warnings     []string
 }
 
-// toTraceabilityRefs converts the issues map into a slice of traceability.IssueRef
-// without importing materialize from the traceability package (avoiding a cycle).
 func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 	refs := make([]traceability.IssueRef, 0, len(issues))
 	for id, issue := range issues {
@@ -46,8 +43,6 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 	return refs
 }
 
-// emitUnhandledOpsWarning emits a warning to stderr listing the unknown op types
-// that were skipped during materialization.
 func emitUnhandledOpsWarning(unhandledOps []ops.Op) {
 	for _, warning := range formatUnhandledOpsWarnings(unhandledOps) {
 		fmt.Fprint(os.Stderr, warning+"\n")
@@ -59,7 +54,6 @@ func formatUnhandledOpsWarnings(unhandledOps []ops.Op) []string {
 		return nil
 	}
 
-	// Collect unique op types
 	typeSet := make(map[string]bool)
 	for _, op := range unhandledOps {
 		typeSet[op.Type] = true
@@ -115,9 +109,6 @@ func applyOpsWithTolerance(state *State, allOps []ops.Op, toleratedMissingTarget
 	return unhandledOps, nil
 }
 
-// purgeOrphanedIssues deletes every issue snapshot in issuesDir that is not in
-// keep. Callers pass the issues a completed replay produced, so what remains is
-// exactly the set no longer backed by the op log.
 func purgeOrphanedIssues(issuesDir string, keep map[string]*Issue) error {
 	issueIDs, err := adapters.ReadIssuesDir(issuesDir)
 	if err != nil {
@@ -134,9 +125,6 @@ func purgeOrphanedIssues(issuesDir string, keep map[string]*Issue) error {
 	return nil
 }
 
-// runFullPipeline runs the full materialization pipeline.
-// If emitWarnings is true, unknown-op warnings are printed to stderr.
-// If writeStateFiles is false, disk-write operations are skipped.
 func runFullPipeline(stateDir string, allOps []ops.Op,
 	byteOffsets map[string]int64, emitWarnings bool, writeStateFiles bool) (*State, Result, error) {
 	issuesStateDir := filepath.Join(stateDir, "issues")
@@ -157,19 +145,9 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 	}
 
-	// Detect incremental vs full replay based on checkpoint. Any StateVersion
-	// mismatch — in either direction — accompanies snapshots this build cannot
-	// interpret (see checkpoint.go), so it is treated exactly like no checkpoint
-	// at all: discard the cached issues and replay the log cold. A newer version
-	// matters as much as an older one, because checking out an older release
-	// leaves this decoder silently dropping fields the newer snapshot's
-	// semantics depend on. allOps is always the complete log — callers read
-	// every op regardless of the checkpoint, which only gates whether prior
-	// state is preloaded — so a forced cold replay loses nothing but the preload.
 	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion != CurrentStateVersion
 	var state *State
 
-	// For incremental replay, load prior state from issuesStateDir
 	if !fullReplay {
 		loadedIssues, err := LoadAllIssues(issuesStateDir)
 		if err != nil {
@@ -177,9 +155,6 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 		state = NewState()
 		state.Issues = loadedIssues
-		// Undo cached rollup promotions before any handler runs: they are
-		// derived, and handlers that branch on parent status would otherwise
-		// see state a cold replay never produces. See TOPTIER-B1.
 		state.RetractDerivedPromotions()
 	} else {
 		state = NewState()
@@ -209,12 +184,6 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 			}
 		}
 
-		// The write loop above only overwrites what this replay produced, so a
-		// snapshot the log no longer yields would survive on disk and be loaded
-		// back by the next incremental run — state no replay of this log can
-		// produce. Only a cold replay can strand one (an incremental run's state
-		// came from these same files), and the checkpoint is stamped current
-		// immediately below, so the purge has to happen here.
 		if fullReplay {
 			if err := purgeOrphanedIssues(issuesStateDir, state.Issues); err != nil {
 				return nil, Result{}, err
@@ -222,17 +191,14 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 
 		readyPath := filepath.Join(stateDir, "ready.json")
-		_ = adapters.WriteFile(readyPath, []byte("[]"), 0644) //nolint:errcheck // best-effort derived state; critical writes are checked
+		swallowErr(adapters.WriteFile(readyPath, []byte("[]"), 0644))
 	}
 
-	// Emit warning if any ops were unhandled
 	if emitWarnings {
 		emitUnhandledOpsWarning(unhandledOps)
 	}
 
 	if writeStateFiles {
-		// Write checkpoint with byte offsets for next incremental replay.
-		// If byteOffsets not provided, use empty map.
 		offsets := byteOffsets
 		if offsets == nil {
 			offsets = make(map[string]int64)
@@ -243,7 +209,7 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 
 		cov := traceability.Compute(toTraceabilityRefs(state.Issues))
-		_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov) //nolint:errcheck // best-effort derived state; critical writes are checked
+		swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
 	}
 
 	warnings := formatUnhandledOpsWarnings(unhandledOps)
@@ -256,11 +222,7 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 	}, nil
 }
 
-// runExcludeWorker replays ops excluding all ops from the given workerID.
-// This is a diagnostic-only mode: state files and checkpoint are NOT updated.
-// Returns the resulting State and Result.
 func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, emitWarnings bool) (*State, Result, error) {
-	// Filter out ops from the excluded worker
 	var filteredOps []ops.Op
 	toleratedMissingTargetIDs := make(map[string]bool)
 	for _, op := range allOps {
@@ -282,7 +244,6 @@ func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, emitWarnings bool
 
 	state.RunRollup()
 
-	// Emit warning if any ops were unhandled
 	if emitWarnings {
 		emitUnhandledOpsWarning(unhandledOps)
 	}
@@ -297,12 +258,6 @@ func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, emitWarnings bool
 	}, nil
 }
 
-// Run is the unified entry point for materialization.
-// It accepts pre-read ops and processes them according to the Options.
-// If Options.ExcludeWorkerID is set, it runs in diagnostic-only mode (no disk writes).
-// If Options.WriteStateFiles is false, no state files or checkpoints are written.
-// If Options.EmitWarnings is false, warnings are suppressed from stderr.
-// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
 func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Options) (*State, Result, error) {
 	if opts.ExcludeWorkerID != "" {
 		return runExcludeWorker(allOps, opts.ExcludeWorkerID, opts.EmitWarnings)
@@ -310,33 +265,19 @@ func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Op
 	return runFullPipeline(stateDir, allOps, byteOffsets, opts.EmitWarnings, opts.WriteStateFiles)
 }
 
-// Materialize runs the full materialization pipeline.
-// It accepts pre-read ops and writes state and checkpoint files to stateDir.
-// issuesDir is used to resolve stateDir paths; allOps should be pre-read from the log files.
-// byteOffsets maps log filename -> byte offset (end position). Can be nil for no checkpoint tracking.
 func Materialize(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (Result, error) {
 	_, result, err := Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true})
 	return result, err
 }
 
-// MaterializeAndReturnQuiet runs the full materialization pipeline without emitting
-// warnings to stderr. Snapshot-backed commands use this to avoid duplicate warnings
-// because they render returned warnings themselves.
 func MaterializeAndReturnQuiet(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
 	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: false})
 }
 
-// MaterializeExcludeWorker replays ops excluding all ops from the given
-// workerID. This is a diagnostic-only mode: state files and checkpoint are NOT
-// updated. Returns the resulting State and Result.
-// allOps should be pre-read from log files.
 func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string) (*State, Result, error) {
 	return Run("", allOps, nil, Options{ExcludeWorkerID: excludeWorkerID, EmitWarnings: true})
 }
 
-// opSortKey returns a secondary sort key so that at equal timestamps: creates
-// sort first, note-deletes sort after note-adds (so tombstones survive
-// same-second concurrent adds), and everything else sits in between.
 func opSortKey(op ops.Op) int {
 	switch op.Type {
 	case ops.OpCreate:
@@ -357,10 +298,6 @@ func sortOpsByTimestamp(allOps []ops.Op) {
 	})
 }
 
-// ApplyOpsSorted applies proposed ops in materializer replay order, then
-// RunRollup. Callers that project a write (Introduction) and the full
-// materializer share this path so they cannot disagree on parent/link
-// back-edges or rollup-derived status.
 func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	if state == nil {
 		return fmt.Errorf("ApplyOpsSorted: state is nil")
@@ -376,9 +313,6 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	return nil
 }
 
-// ReplayOpsTolerant replays historical ops in the same timestamp order as ApplyOpsSorted,
-// skipping ApplyOp failures (backdated claim/link) and then running rollup.
-// skipped is the number of apply failures; firstErr is the first of them.
 func ReplayOpsTolerant(allOps []ops.Op) (state *State, skipped int, firstErr error) {
 	ordered := append([]ops.Op(nil), allOps...)
 	sortOpsByTimestamp(ordered)

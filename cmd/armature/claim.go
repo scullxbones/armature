@@ -254,10 +254,6 @@ func sourceAdvancedOnlyByArmature(repoPath, sourcePath, oldTip, newTip string) (
 	if worktree.NormalizePath(repoPath) != worktree.NormalizePath(sourcePath) {
 		return false, nil
 	}
-	// A high-stakes claim op may commit its own .armature bookkeeping in the
-	// coordinator checkout after --from validation and before provisioning.
-	// That internal advance does not change the validated source content; any
-	// other changed path remains a source mutation and fails closed.
 	// #nosec G204 - git binary is fixed; sourcePath and revisions were validated
 	// from the repository's own worktree inventory and immutable claim inputs.
 	cmd := exec.CommandContext(context.Background(), "git", "-C", sourcePath, "diff", "--name-only", oldTip, newTip)
@@ -291,8 +287,6 @@ func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
 }
 
 func checkoutBranchInWorktree(worktreePath, branchName string) error {
-	// Fast-path idempotency and existing-branch handling: if the branch already
-	// exists, check it out; otherwise create it from the current detached HEAD.
 	// #nosec G204 - git binary and arguments are controlled by us, not user input
 	verify := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "rev-parse", "--verify", "refs/heads/"+branchName)
 	branchExists := verify.Run() == nil

@@ -20,18 +20,11 @@ import (
 )
 
 type Options struct {
-	Strict       bool
-	ManifestData []byte                 // Pre-read manifest bytes (may be nil/empty if citations not available)
-	Coverage     *traceability.Coverage // Pre-loaded traceability coverage
-	// PreExpandedScopes maps issue ID to pre-expanded file paths (for W10 phantom scope check)
-	// If nil, W10 phantom scope checks are skipped
+	Strict            bool
+	ManifestData      []byte
+	Coverage          *traceability.Coverage
 	PreExpandedScopes map[string][]string
-	// Now is the evaluation time in Unix seconds, used to age claims out for
-	// W1's claimed-aggregate-parent exception. This package sits behind a
-	// depguard boundary that forbids a clock dependency, so callers inject the
-	// timestamp. Zero means "freshness unknown", which keeps a claimed parent in
-	// W1 rather than silently dropping a live conflict from a warning-only rule.
-	Now int64
+	Now               int64
 }
 
 type Result struct {
@@ -43,23 +36,12 @@ type Result struct {
 	Coverage *traceability.Coverage
 }
 
-// Finding is a Graph Finding: a rule violation arm validate reports,
-// identified by a rule and the issue IDs it cites.
 type Finding struct {
 	Severity string
 	Rule     string
 	Message  string
 	CitedIDs []string
-	// Key is a rule-specific, stable discriminator used (alongside Rule and
-	// CitedIDs) to identify a Finding across writes. It exists so a rule that
-	// can emit more than one Finding per (Rule, CitedIDs) pair — currently
-	// checkE6RequiredFields, checkE10ScopeGlobs, checkE14TaskContract, and checkW8ConflictingDecisions
-	// — doesn't alias its distinct findings together. Key must never be
-	// derived from mutable detail (counts, overlap file lists, char lengths):
-	// Message is intentionally excluded from identity so a write that
-	// strictly narrows an existing finding's residual detail isn't treated
-	// as introducing a new one.
-	Key string
+	Key      string
 }
 
 func (f Finding) identity() string {
@@ -79,7 +61,6 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	findings = append(findings, checkE6RequiredFields(targets)...)
 	findings = append(findings, checkE9DoDLength(targets)...)
 	findings = append(findings, checkE10ScopeGlobs(targets)...)
-	// TODO(E4-S3): E11 check not yet implemented — spec definition pending.
 	findings = append(findings, checkE13VerticalSliceCoupling(targets)...)
 	findings = append(findings, checkE14TaskContract(targets)...)
 
@@ -95,8 +76,6 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	findings = append(findings, checkW6ComplexityMismatch(targets)...)
 	findings = append(findings, checkW7VagueDoD(targets)...)
 	findings = append(findings, checkW8ConflictingDecisions(targets)...)
-	// TODO(E4-S3): W9 stale-heartbeat check not yet implemented —
-	// should warn when a claimed issue's last heartbeat exceeds its ClaimTTL.
 	findings = append(findings, checkW11VagueOutcomes(targets)...)
 
 	if opts.PreExpandedScopes != nil {
@@ -126,13 +105,6 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 // CheckIntroduction refuses a proposed write that introduces a Graph Finding
 // on an issue the write created or targeted. Pre-existing findings on
 // foreign IDs do not block.
-//
-// The baseline used to decide what counts as "pre-existing" is widened by an
-// un-suppression projection: several rules (E5, E6, E13, W1, W4, W10) deliberately
-// suppress themselves once an issue reaches a terminal status, so a write
-// that only reverses that terminal status (e.g. arm reopen) is not itself an
-// introduction of whatever those rules find once un-suppressed. See
-// unsuppressionBaseline.
 func CheckIntroduction(current *materialize.State, proposed []ops.Op, opts Options) error {
 	if current == nil {
 		current = materialize.NewState()
@@ -161,13 +133,6 @@ func CheckIntroduction(current *materialize.State, proposed []ops.Op, opts Optio
 	return formatIntroductionError(introduced)
 }
 
-// unsuppressionBaseline returns the findings that would appear on a
-// projection of current where ONLY the proposed write's terminal-to-open (or
-// otherwise non-terminal) status transitions are applied — i.e. current with
-// suppression lifted but nothing else changed. Those findings are folded
-// into the baseline so a status transition alone never reads as "introducing"
-// them: they existed in latent form the moment the issue went terminal, the
-// write just made the suppressing rules look at them again.
 func unsuppressionBaseline(current *materialize.State, proposed []ops.Op, opts Options) ([]Finding, error) {
 	var unsuppressing []ops.Op
 	for _, op := range proposed {
@@ -204,11 +169,6 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 			targetSet[id] = struct{}{}
 		}
 	}
-	// E4 cites the entire cyclic node set, so breaking one node out of a
-	// pre-existing cycle changes CitedIDs and would otherwise still read as
-	// new. Treat an after-E4 finding as pre-existing when its CitedIDs are a
-	// subset of some before-E4 finding's CitedIDs: a cycle that shrinks was
-	// not introduced; a cycle that grows or is disjoint still blocks.
 	var beforeE4Sets []map[string]struct{}
 	for _, f := range before.Findings {
 		if f.Rule != "E4" {
@@ -225,17 +185,9 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 		if f.Severity == "info" {
 			continue
 		}
-		// Cite-after remains legal on create (Plan Release / Integration).
 		switch f.Rule {
 		case "E7", "E8":
 			continue
-		// E13 is a story-shape rule evaluated at plan release, not at write
-		// time. Decomposition adds tasks one at a time and the graph is
-		// transiently ill-shaped between writes, so refusing the create would
-		// forbid ever reaching the intermediate state a planner must pass
-		// through. E13 still fails every Validate call -- arm validate and
-		// arm dag transition --to verified -- it just does not refuse the
-		// write that produces the shape.
 		case "E13":
 			continue
 		}
@@ -252,8 +204,6 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 	return out
 }
 
-// citedIDsSubsetOfAny reports whether ids is a subset of at least one of the
-// given sets.
 func citedIDsSubsetOfAny(ids []string, sets []map[string]struct{}) bool {
 	for _, set := range sets {
 		subset := true
@@ -378,8 +328,6 @@ func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []Fin
 		scope[id] = true
 	}
 
-	// Cite every node that participates in a scoped cycle so a new edge that
-	// closes a loop naming an old node still counts as introduced.
 	var cyclic []string
 	for id := range issues {
 		if graph.ScopedHasCycle(id, scope) {
@@ -400,7 +348,6 @@ func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []Fin
 func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		// Terminal issues have already been delivered; skip hierarchy checks for them.
 		if isTerminalStatus(issue.Status) {
 			continue
 		}
@@ -425,7 +372,6 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 	return findings
 }
 
-// checkE6RequiredFields checks that each issue has the required fields for its type.
 func e6Missing(id, typ, field string) Finding {
 	return Finding{
 		Severity: "error", Rule: "E6",
@@ -555,9 +501,6 @@ func taskFromIssue(issue *materialize.Issue) taskcontract.Task {
 	}
 }
 
-// checkE14TaskContract maps taskcontract.CheckTaskContract onto Graph Finding
-// E14 (doctor.run_wiring → E14) and the same-surface sibling: unit-only
-// Acceptance cannot stand alone beside a CLI DoD.
 func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
 	ids := make([]string, 0, len(issues))
 	for id := range issues {
@@ -597,28 +540,18 @@ func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-// claimsDoctorRunWiringDoD reports whether the DoD is a doctor-run product claim
-// (not helper-only / ritual). Probe with a scope that cannot cover
-// DoctorRunWiringPath so CheckTaskContract's skip-if-wired path does not hide
-// the claim when the real scope already includes doctor.go.
 func claimsDoctorRunWiringDoD(task taskcontract.Task) bool {
 	probe := task
 	probe.Scope = []string{"internal/unrelated.go"}
 	return len(taskcontract.CheckTaskContract(probe)) > 0
 }
 
-// reArmDoctorSurface detects Acceptance that names the arm doctor CLI as the
-// tested surface. Broader than taskcontract's implement-claim matcher:
-// `arm doctor --format json` is same-surface proof, not a gains-check claim.
 var reArmDoctorSurface = regexp.MustCompile(`(?i)\barm\s+doctor\b`)
 
 func unitOnlyAcceptance(raw json.RawMessage) bool {
 	if len(raw) == 0 || string(raw) == "null" {
 		return false
 	}
-	// Object form (plan schema): unit-only iff every entry is type test_passes.
-	// review.ParseAcceptanceCriteria is off-limits here (validate-boundary
-	// depguard), so decode both supported array shapes locally.
 	var criteria []struct {
 		Type string `json:"type"`
 	}
@@ -630,8 +563,6 @@ func unitOnlyAcceptance(raw json.RawMessage) bool {
 		}
 		return !reArmDoctorSurface.Match(raw)
 	}
-	// Plain-string form: ["go test ./internal/doctor", "make check"] — same
-	// unit-only contract as test_passes unless a string names arm doctor.
 	var plain []string
 	if err := json.Unmarshal(raw, &plain); err != nil || len(plain) == 0 {
 		return false
@@ -642,11 +573,6 @@ func unitOnlyAcceptance(raw json.RawMessage) bool {
 func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State, graph *dag.Graph, now int64) []Finding {
 	var findings []Finding
 
-	// Collect every non-terminal ready-eligible issue (task, bug, feature, story).
-	// Story/feature parents with descendants are skipped: their stored scope is a
-	// rollup (often still including terminal children's files). Live work is
-	// represented by the descendants themselves. Leaf stories/features with no
-	// descendants still compete on their declared scope.
 	var tasks []*materialize.Issue
 	for _, issue := range issues {
 		if !issuetype.IsReadyEligible(issue.Type) || isTerminalStatus(issue.Status) {
@@ -658,14 +584,8 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		tasks = append(tasks, issue)
 	}
 
-	// Index direct ordering edges from the full issue set (not the possibly
-	// scope-narrowed `issues` subset). Reachability is then traversed only for
-	// overlapping task pairs, so chains through an out-of-scope issue still
-	// suppress a warning without materializing an all-pairs transitive closure.
 	blocks := directBlocks(state.Issues)
 
-	// Compare all pairs (including cross-story pairs).
-	// Use i < j to avoid duplicate reporting of the same pair.
 	for i, task1 := range tasks {
 		for j := i + 1; j < len(tasks); j++ {
 			task2 := tasks[j]
@@ -697,17 +617,6 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	return findings
 }
 
-// isPassiveAggregateParent reports whether issue is a story/feature whose
-// competing scope would be a descendant rollup. Those parents stay out of W1;
-// active children (and leaf stories/features with no descendants) compete.
-//
-// An explicitly claimed parent is not passive: claiming a story or feature
-// directly is supported, and its holder is editing the declared files right
-// now. The claim-time overlap scan filters out non-task holders, so W1 is the
-// only remaining safeguard for that case. ClaimedBy is the discriminator
-// rather than status alone, because applyClaim promotes a parent to
-// in-progress on a child's claim without ever setting a claimant on it, and
-// the claim must still be within its TTL -- an expired lease has no holder.
 func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph, now int64) bool {
 	if issue.Type != "story" && issue.Type != "feature" {
 		return false
@@ -721,13 +630,6 @@ func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph, now in
 	return len(graph.Descendants(issue.ID)) > 0
 }
 
-// isActivelyClaimed reports whether issue currently has a worker holding it,
-// mirroring the claimed/in-progress holder states cmd/armature's claim-time
-// scan treats as competing. A claim past its TTL is not a holder: materialization
-// leaves Status and ClaimedBy populated on an expired lease, so freshness comes
-// from materialize.Issue.ClaimStale -- the same predicate the ready and recovery
-// paths use -- rather than from those fields alone. A zero now means the caller
-// supplied no clock, so freshness is simply not evaluated.
 func isActivelyClaimed(issue *materialize.Issue, now int64) bool {
 	if issue.ClaimedBy == "" {
 		return false
@@ -738,10 +640,6 @@ func isActivelyClaimed(issue *materialize.Issue, now int64) bool {
 	return now == 0 || !issue.ClaimStale(now)
 }
 
-// isAncestorOrDescendant reports whether a and b are in the same parent/child
-// chain. A parent's scope is the union of its descendants', so that pair is
-// not a W1 collision. Duplicated from claim.ScopesOverlapIgnoringAncestry so validate does
-// not import internal/claim (depguard: scopematch is the shared leaf).
 func isAncestorOrDescendant(graph *dag.Graph, a, b string) bool {
 	if graph == nil {
 		return false
@@ -749,9 +647,6 @@ func isAncestorOrDescendant(graph *dag.Graph, a, b string) bool {
 	return slices.Contains(graph.Descendants(a), b) || slices.Contains(graph.Descendants(b), a)
 }
 
-// directBlocks indexes the direct blocks relationship. It accepts both Blocks
-// and BlockedBy because legacy materialized state can contain only one side of
-// an otherwise equivalent ordering edge.
 func directBlocks(issues map[string]*materialize.Issue) map[string][]string {
 	blocks := make(map[string][]string)
 	for id, issue := range issues {
@@ -769,8 +664,6 @@ func directBlocks(issues map[string]*materialize.Issue) map[string][]string {
 	return blocks
 }
 
-// hasSerialDependency returns true if a blocks b or b blocks a, directly or
-// transitively. It traverses only the candidate pair's reachable subgraph.
 func hasSerialDependency(a, b *materialize.Issue, blocks map[string][]string) bool {
 	return blocksReachable(a.ID, b.ID, blocks) || blocksReachable(b.ID, a.ID, blocks)
 }
@@ -794,23 +687,6 @@ func blocksReachable(start, target string, blocks map[string][]string) bool {
 	return false
 }
 
-// firstGlobOverlapPair returns the first pair of patterns (one from a, one from
-// b) found to overlap via scopematch.Overlaps, matching claim-time semantics
-// (claim.ScopesOverlap) rather than exact string equality: a glob like
-// "cmd/armature/*.go" and a literal "cmd/armature/claim.go" must be recognized
-// as overlapping so validate can't pass a claim that would later be rejected
-// by claim.ScopesOverlap. Overlap matching is delegated to
-// internal/scopematch — the single canonical implementation shared with
-// internal/claim — rather than duplicated locally, so the two layers cannot
-// diverge again as they once did. internal/scopematch is a leaf package with
-// no dependency on the orchestration-layer internal/claim package, so it is
-// safe under the validate-boundary depguard rule.
-//
-// firstGlobOverlapPair also reports whether any overlap was found at all.
-// Used so warning messages can report the specific pattern pair that
-// matched, rather than dumping both full scope lists when the overlap was
-// only detected via glob matching (scopeIntersection's exact-string
-// comparison found nothing).
 func firstGlobOverlapPair(a, b []string) (patternA, patternB string, overlaps bool) {
 	for _, x := range a {
 		for _, y := range b {
@@ -910,8 +786,6 @@ func checkW4BroadScope(issues map[string]*materialize.Issue) []Finding {
 func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		// Container types span many directories by design. Allowlist so a
-		// future or typo'd type still gets the check.
 		if isW5ContainerType(issue.Type) {
 			continue
 		}
@@ -1063,11 +937,8 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 	return findings
 }
 
-// collectBlockerNewFiles gathers all "(new)"-annotated files declared by an issue's blocking tasks.
-// It returns a map where the key is the filename (without " (new)") and the value indicates it was found.
 func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materialize.Issue) map[string]bool {
 	result := make(map[string]bool)
-	// Use a simple queue-based approach to handle transitive blockers
 	toVisit := make([]string, len(issue.BlockedBy))
 	copy(toVisit, issue.BlockedBy)
 	visited := make(map[string]bool)
@@ -1076,7 +947,6 @@ func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materia
 		blockerID := toVisit[0]
 		toVisit = toVisit[1:]
 
-		// Skip if already visited (avoid cycles)
 		if visited[blockerID] {
 			continue
 		}
@@ -1084,11 +954,9 @@ func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materia
 
 		blocker, ok := issues[blockerID]
 		if !ok {
-			// Blocker not in scope; skip
 			continue
 		}
 
-		// Collect all "(new)"-suffixed files from this blocker's scope
 		for _, entry := range blocker.Scope {
 			for _, path := range strings.Split(entry, ", ") {
 				path = strings.TrimSpace(path)
@@ -1098,14 +966,12 @@ func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materia
 			}
 		}
 
-		// Transitively visit this blocker's blockers
 		toVisit = append(toVisit, blocker.BlockedBy...)
 	}
 
 	return result
 }
 
-// isGlobPattern checks if a string contains glob characters
 func isGlobPattern(s string) bool {
 	return strings.ContainsAny(s, "*?[]")
 }

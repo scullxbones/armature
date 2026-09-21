@@ -8,58 +8,33 @@ import (
 	"strings"
 )
 
-// legacyCodexConfig is the exact pre-marker body written by WriteConfig at the root
-// codex.toml before the new .codex/config.toml location was introduced. OwnsConfig
-// matches against this string (after trimming whitespace) so that only the known
-// legacy config is silently migrated, and user-authored files that merely mention
-// "arm harness-hook" are left untouched. Root codex.toml files that carry the
-// "# armature:managed" first-line marker are handled separately via the first-line
-// check in OwnsConfig, not by this constant.
 const legacyCodexConfig = "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 
-// legacyCodexConfigPath is the old location where codex.toml was written at the root
 const legacyCodexConfigPath = "codex.toml"
 
-// CodexAdapter implements PlatformAdapter for the OpenAI Codex harness.
 type CodexAdapter struct{}
 
-// NewCodexAdapter constructs a CodexAdapter.
 func NewCodexAdapter() *CodexAdapter { return &CodexAdapter{} }
 
-// Name returns the platform identifier.
 func (a *CodexAdapter) Name() string { return "codex" }
 
-// Capabilities returns the hook event support matrix for Codex.
 func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
-		PreToolUse:         true,
-		Stop:               true,
-		PostToolUse:        true,
-		BlockingStop:       true,
-		ShellInterception:  "best-effort",
-		SupportedEditTools: []string{"apply_patch", "Edit", "Write"},
-		// Codex's native shell tool is named "shell" (also seen as "local_shell" in
-		// some harness versions); "Bash" is kept for compatibility with configurations
-		// that alias it. extractCommand already handles the "cmd"/"input" keys these
-		// tools use.
+		PreToolUse:          true,
+		Stop:                true,
+		PostToolUse:         true,
+		BlockingStop:        true,
+		ShellInterception:   "best-effort",
+		SupportedEditTools:  []string{"apply_patch", "Edit", "Write"},
 		SupportedShellTools: []string{"shell", "local_shell", "Bash"},
 	}
 }
 
-// OwnsConfig reports whether Armature may write .codex/config.toml in workdir.
-// Returns true when the file is absent (safe to create), when the first line
-// is the "# armature:managed" marker written by WriteConfig, or when the file
-// is exactly the legacy config body (an exact match against legacyCodexConfig,
-// trimming surrounding whitespace) written before the marker was introduced.
-// An exact match is used instead of substring search so that user-authored
-// files that merely mention "arm harness-hook" are never silently overwritten.
-// Also recognizes the old legacy config at the root codex.toml for migration.
 func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, ".codex", "config.toml")
 	content, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Check for old legacy config at root codex.toml for migration support
 			legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
 			legacyContent, legacyErr := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
 			if legacyErr != nil {
@@ -84,7 +59,6 @@ func codexConfigOwned(content string) bool {
 	return strings.TrimSpace(firstLine) == "# armature:managed"
 }
 
-// WriteConfig writes the Codex hook configuration into workdir/.codex/config.toml.
 func (a *CodexAdapter) WriteConfig(workdir string) error {
 	codexDir := filepath.Join(workdir, ".codex")
 	if err := os.MkdirAll(codexDir, 0o750); err != nil {
@@ -111,27 +85,20 @@ command = "arm harness-hook"
 		return err
 	}
 
-	// Remove any stale root codex.toml that was written by an earlier version of
-	// WriteConfig (before the .codex/ subdirectory location was adopted). We only
-	// remove it when it is armature-owned: either the pre-marker exact body or a
-	// file whose first line is "# armature:managed".
 	legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
 	legacyBytes, err := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
 	if err == nil && codexConfigOwned(string(legacyBytes)) {
-		os.Remove(legacyPath) //nolint:errcheck,gosec // G104: best-effort cleanup; failure leaves a stale but harmless file
+		swallowErr(os.Remove(legacyPath))
 	}
 
 	return nil
 }
 
-// Decode parses a Codex hook payload into a normalised Event.
 func (a *CodexAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-// Encode serialises the Decision into the JSON payload Codex expects on stdout.
 func (a *CodexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
-	// Codex processes the JSON response on exit 0, so exit code is always 0.
 	return encodeApproveOrBlockJSON(decision)
 }
 
@@ -169,14 +136,6 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 		return Event{}, err
 	}
 
-	// PostToolUse execution evidence (ADR-0008) lives in tool_response for the
-	// harnesses that emit it (e.g. Claude Code's Bash tool_response carries
-	// stdout/stderr). tool_input is model-authored (it's the arguments the model
-	// requested, not what the harness observed happening), so it must never be
-	// used as a source of exit_code/output: doing so would let a model fabricate
-	// its own "evidence" of a successful/failed execution, defeating the entire
-	// point of ADR-0008 (evidence must come from the harness). Both are no-ops
-	// (return zero value) for PreToolUse events, where tool_response doesn't exist yet.
 	exitCode, exitCodeKnown := ExtractExitCode(raw.ToolResponse)
 	output := ExtractOutput(raw.ToolResponse)
 
