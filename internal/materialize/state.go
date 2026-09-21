@@ -203,8 +203,8 @@ func LoadIssue(path string) (Issue, error) {
 	if err != nil {
 		return Issue{}, err
 	}
-	issue.Scope = normalizeScopeEntries(issue.Scope)
-	issue.ContextFiles = normalizeScopeEntries(issue.ContextFiles)
+	issue.Scope = ops.DecodeScope(issue.Scope)
+	issue.ContextFiles = ops.DecodeScope(issue.ContextFiles)
 	return issue, nil
 }
 
