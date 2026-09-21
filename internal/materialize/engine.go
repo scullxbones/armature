@@ -24,27 +24,56 @@ func NewState() *State {
 	}
 }
 
-var opHandlers = map[string]func(*State, ops.Op) error{
-	ops.OpCreate:             (*State).applyCreate,
-	ops.OpClaim:              (*State).applyClaim,
-	ops.OpHeartbeat:          (*State).applyHeartbeat,
-	ops.OpTransition:         (*State).applyTransition,
-	ops.OpNote:               (*State).applyNote,
-	ops.OpNoteDelete:         (*State).applyNoteDelete,
-	ops.OpLink:               (*State).applyLink,
-	ops.OpUnlink:             (*State).applyUnlink,
-	ops.OpDecision:           (*State).applyDecision,
-	ops.OpAssign:             (*State).applyAssign,
-	ops.OpAmend:              (*State).applyAmend,
-	ops.OpSourceLink:         (*State).applySourceLink,
-	ops.OpSourceFingerprint:  func(_ *State, _ ops.Op) error { return nil },
-	ops.OpGateEvidence:       func(_ *State, _ ops.Op) error { return nil },
-	ops.OpCitationAccepted:   (*State).applyCitationAccepted,
-	ops.OpDAGTransition:      (*State).applyDAGTransition,
-	ops.OpScopeRename:        (*State).applyScopeRename,
-	ops.OpScopeDelete:        (*State).applyScopeDelete,
-	ops.OpReparent:           (*State).applyReparent,
-	ops.OpAssessmentAttested: (*State).applyAssessmentAttested,
+// MissingTarget is handler-table metadata for a missing op.TargetID.
+// Error fails replay; Ignore is success (no-op). Empty means the handler
+// does not look up the target as an existing issue (create / no-ops).
+type MissingTarget string
+
+const (
+	MissingTargetError  MissingTarget = "Error"
+	MissingTargetIgnore MissingTarget = "Ignore"
+)
+
+type opHandler struct {
+	apply         func(*State, ops.Op) error
+	missingTarget MissingTarget
+}
+
+type missingTargetError struct {
+	OpType   string
+	TargetID string
+}
+
+func (e missingTargetError) Error() string {
+	switch e.OpType {
+	case ops.OpLink, ops.OpUnlink:
+		return fmt.Sprintf("%s: source issue %s not found", e.OpType, e.TargetID)
+	default:
+		return fmt.Sprintf("%s: issue %s not found", e.OpType, e.TargetID)
+	}
+}
+
+var opHandlers = map[string]opHandler{
+	ops.OpCreate:             {apply: (*State).applyCreate},
+	ops.OpClaim:              {apply: (*State).applyClaim, missingTarget: MissingTargetError},
+	ops.OpHeartbeat:          {apply: (*State).applyHeartbeat, missingTarget: MissingTargetIgnore},
+	ops.OpTransition:         {apply: (*State).applyTransition, missingTarget: MissingTargetError},
+	ops.OpNote:               {apply: (*State).applyNote, missingTarget: MissingTargetIgnore},
+	ops.OpNoteDelete:         {apply: (*State).applyNoteDelete, missingTarget: MissingTargetIgnore},
+	ops.OpLink:               {apply: (*State).applyLink, missingTarget: MissingTargetError},
+	ops.OpUnlink:             {apply: (*State).applyUnlink, missingTarget: MissingTargetError},
+	ops.OpDecision:           {apply: (*State).applyDecision, missingTarget: MissingTargetIgnore},
+	ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: MissingTargetIgnore},
+	ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: MissingTargetIgnore},
+	ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
+	ops.OpSourceFingerprint:  {apply: func(_ *State, _ ops.Op) error { return nil }},
+	ops.OpGateEvidence:       {apply: func(_ *State, _ ops.Op) error { return nil }},
+	ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: MissingTargetIgnore},
+	ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: MissingTargetIgnore},
+	ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: MissingTargetIgnore},
+	ops.OpScopeDelete:        {apply: (*State).applyScopeDelete, missingTarget: MissingTargetIgnore},
+	ops.OpReparent:           {apply: (*State).applyReparent, missingTarget: MissingTargetIgnore},
+	ops.OpAssessmentAttested: {apply: (*State).applyAssessmentAttested, missingTarget: MissingTargetError},
 }
 
 // RegisteredOpTypes returns the set of supported op type strings.
@@ -63,7 +92,15 @@ func (s *State) ApplyOp(op ops.Op) error {
 	if !exists {
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
-	return handler(s, op)
+	if handler.missingTarget == MissingTargetError || handler.missingTarget == MissingTargetIgnore {
+		if _, ok := s.Issues[op.TargetID]; !ok {
+			if handler.missingTarget == MissingTargetIgnore {
+				return nil
+			}
+			return missingTargetError{OpType: op.Type, TargetID: op.TargetID}
+		}
+	}
+	return handler.apply(s, op)
 }
 
 func (s *State) applyCreate(op ops.Op) error {
@@ -108,7 +145,7 @@ func (s *State) applyCreate(op ops.Op) error {
 func (s *State) applyClaim(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
-		return fmt.Errorf("claim: issue %s not found", op.TargetID)
+		return missingTargetError{OpType: ops.OpClaim, TargetID: op.TargetID}
 	}
 	if claimpkg.ClaimLostRace(claimpkg.HeldClaim{
 		Status:                     issue.Status,
@@ -149,7 +186,7 @@ func (s *State) applyHeartbeat(op ops.Op) error {
 func (s *State) applyTransition(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
-		return fmt.Errorf("transition: issue %s not found", op.TargetID)
+		return missingTargetError{OpType: ops.OpTransition, TargetID: op.TargetID}
 	}
 	if !compensationApplies(issue, op) {
 		return nil
@@ -280,7 +317,7 @@ func noteIDExists(notes []Note, id string) bool {
 func (s *State) applyLink(op ops.Op) error {
 	source, ok := s.Issues[op.TargetID]
 	if !ok {
-		return fmt.Errorf("link: source issue %s not found", op.TargetID)
+		return missingTargetError{OpType: ops.OpLink, TargetID: op.TargetID}
 	}
 	if op.Payload.Rel == "blocked_by" {
 		source.BlockedBy = appendUnique(source.BlockedBy, op.Payload.Dep)
@@ -295,7 +332,7 @@ func (s *State) applyLink(op ops.Op) error {
 func (s *State) applyUnlink(op ops.Op) error {
 	source, ok := s.Issues[op.TargetID]
 	if !ok {
-		return fmt.Errorf("unlink: source issue %s not found", op.TargetID)
+		return missingTargetError{OpType: ops.OpUnlink, TargetID: op.TargetID}
 	}
 	if op.Payload.Rel == "blocked_by" {
 		source.BlockedBy = removeString(source.BlockedBy, op.Payload.Dep)
@@ -310,7 +347,6 @@ func (s *State) applyUnlink(op ops.Op) error {
 func (s *State) applyAssign(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
-		// Tolerate unknown issues (e.g. assign op before create op in log)
 		return nil
 	}
 	issue.AssignedWorker = op.Payload.AssignedTo
@@ -504,7 +540,7 @@ func (s *State) applyReparent(op ops.Op) error {
 func (s *State) applyAssessmentAttested(op ops.Op) error {
 	issue, ok := s.Issues[op.TargetID]
 	if !ok {
-		return fmt.Errorf("assessment-attested: issue %s not found", op.TargetID)
+		return missingTargetError{OpType: ops.OpAssessmentAttested, TargetID: op.TargetID}
 	}
 
 	var att review.AssessmentAttestation

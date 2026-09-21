@@ -2,6 +2,7 @@ package materialize
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -75,17 +76,9 @@ func isUnknownOpTypeError(err error) bool {
 }
 
 func missingTargetReplayID(err error) (string, bool) {
-	msg := err.Error()
-	const suffix = " not found"
-	for _, prefix := range []string{
-		"claim: issue ",
-		"transition: issue ",
-		"link: source issue ",
-		"unlink: source issue ",
-	} {
-		if strings.HasPrefix(msg, prefix) && strings.HasSuffix(msg, suffix) {
-			return strings.TrimSuffix(strings.TrimPrefix(msg, prefix), suffix), true
-		}
+	var miss missingTargetError
+	if errors.As(err, &miss) {
+		return miss.TargetID, true
 	}
 	return "", false
 }

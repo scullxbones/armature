@@ -2,6 +2,7 @@ package materialize
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -404,6 +405,91 @@ func TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered(t *testing.T) {
 	for _, opType := range standardOps {
 		assert.True(t, registeredSet[opType], "standard op type %q must be in RegisteredOpTypes", opType)
 	}
+}
+
+func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
+	t.Parallel()
+
+	t.Run("handler table encodes Error or Ignore", func(t *testing.T) {
+		t.Parallel()
+		wantError := map[string]struct{}{
+			ops.OpClaim: {}, ops.OpTransition: {}, ops.OpLink: {}, ops.OpUnlink: {},
+			ops.OpAssessmentAttested: {},
+		}
+		wantIgnore := map[string]struct{}{
+			ops.OpHeartbeat: {}, ops.OpNote: {}, ops.OpNoteDelete: {}, ops.OpDecision: {},
+			ops.OpAssign: {}, ops.OpAmend: {}, ops.OpSourceLink: {}, ops.OpCitationAccepted: {},
+			ops.OpDAGTransition: {}, ops.OpScopeRename: {}, ops.OpScopeDelete: {}, ops.OpReparent: {},
+		}
+		wantUnspecified := map[string]struct{}{
+			ops.OpCreate: {}, ops.OpSourceFingerprint: {}, ops.OpGateEvidence: {},
+		}
+		require.Equal(t, len(opHandlers), len(wantError)+len(wantIgnore)+len(wantUnspecified))
+		for opType, handler := range opHandlers {
+			switch {
+			case mapHas(wantError, opType):
+				assert.Equal(t, MissingTargetError, handler.missingTarget, opType)
+			case mapHas(wantIgnore, opType):
+				assert.Equal(t, MissingTargetIgnore, handler.missingTarget, opType)
+			case mapHas(wantUnspecified, opType):
+				assert.Empty(t, handler.missingTarget, opType)
+			default:
+				t.Errorf("unclassified op type %q in handler table", opType)
+			}
+		}
+	})
+
+	t.Run("assign missing-target stays success", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, MissingTargetIgnore, opHandlers[ops.OpAssign].missingTarget)
+		err := NewState().ApplyOp(ops.Op{
+			Type: ops.OpAssign, TargetID: "unknown-01", Timestamp: 200, WorkerID: "w1",
+			Payload: ops.Payload{AssignedTo: "worker-x"},
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("pipeline does not parse claim-not-found strings", func(t *testing.T) {
+		t.Parallel()
+		id, ok := missingTargetReplayID(fmt.Errorf("claim: issue task-01 not found"))
+		assert.False(t, ok, "exclude-worker must not classify claim-not-found by string prefix")
+		assert.Empty(t, id)
+
+		typed := NewState().ApplyOp(ops.Op{
+			Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "w1",
+			Payload: ops.Payload{TTL: 60},
+		})
+		require.Error(t, typed)
+		gotID, gotOK := missingTargetReplayID(typed)
+		assert.True(t, gotOK)
+		assert.Equal(t, "task-01", gotID)
+		assert.Contains(t, typed.Error(), "claim: issue task-01 not found")
+	})
+
+	t.Run("exclude-worker swallows typed missing-target for excluded creates", func(t *testing.T) {
+		t.Parallel()
+		allOps := []ops.Op{
+			{Type: ops.OpCreate, TargetID: "task-02", Timestamp: 100, WorkerID: "worker-b",
+				Payload: ops.Payload{Title: "Task two", NodeType: "task"}},
+			{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-b",
+				Payload: ops.Payload{TTL: 60}},
+			{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 300, WorkerID: "worker-a",
+				Payload: ops.Payload{Title: "Task one", NodeType: "task"}},
+		}
+		state, result, err := MaterializeExcludeWorker(allOps, "worker-a")
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.IssueCount)
+		assert.Equal(t, 2, result.OpsProcessed)
+		_, hasTaskTwo := state.Issues["task-02"]
+		assert.True(t, hasTaskTwo)
+		_, hasTaskOne := state.Issues["task-01"]
+		assert.False(t, hasTaskOne)
+	})
+}
+
+func mapHas(m map[string]struct{}, key string) bool {
+	_, ok := m[key]
+	return ok
 }
 
 func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
