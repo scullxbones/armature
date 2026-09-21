@@ -456,22 +456,18 @@ func (s *State) applyCitationAccepted(op ops.Op) error {
 }
 
 func (s *State) applyDAGTransition(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
-	// New behavior: when IssueID is set, walk the subtree and promote confidence.
-	if op.Payload.IssueID != "" {
-		targetConfidence := op.Payload.To
-		if targetConfidence == "" {
-			targetConfidence = "verified"
+	mode := ops.DecodeDAGMode(op)
+	switch mode.Era {
+	case ops.DAGEraCanonical:
+		s.promoteSubtreeConfidence(mode.RootID, mode.Confidence, op.Timestamp)
+	default:
+		issue, ok := s.Issues[mode.RootID]
+		if !ok {
+			return nil
 		}
-		s.promoteSubtreeConfidence(op.Payload.IssueID, targetConfidence, op.Timestamp)
-		return nil
+		issue.Provenance.DAGConfirmed = mode.Confirmed
+		issue.Updated = op.Timestamp
 	}
-	// Legacy behavior: set DAGConfirmed flag on the single target issue.
-	issue.Provenance.DAGConfirmed = op.Payload.Confirmed
-	issue.Updated = op.Timestamp
 	return nil
 }
 
