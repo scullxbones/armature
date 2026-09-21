@@ -129,7 +129,7 @@ func (c *claimOwnerClocks) recordHeartbeat(ts int64) {
 
 func (c *claimOwnerClocks) recordTransitionByAuthor(author string, ts int64, to string) {
 	c.lastClaimingWorkerActivity = claimingWorkerActivityIfAuthorOwnsLease(author, c.owner, ts, c.lastClaimingWorkerActivity)
-	if isTerminalStatus(to) {
+	if ops.IsTerminalStatus(to) {
 		c.transitioned = true
 	}
 }
@@ -277,7 +277,7 @@ func claimWinnersByIssue(workers map[string][]ops.Op) map[string]string {
 				if s := stateByWorker[op.WorkerID]; s != nil {
 					s.recordTransitionByAuthor(op.WorkerID, op.Timestamp, op.Payload.To)
 				}
-				if isTerminalStatus(op.Payload.To) {
+				if ops.IsTerminalStatus(op.Payload.To) {
 					activeWorker = ""
 				}
 			}

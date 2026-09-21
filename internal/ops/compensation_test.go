@@ -71,7 +71,17 @@ func TestCompensationEncode_REQ_MATENC_S1_T3(t *testing.T) {
 			IfClaimToken:                      "won",
 			Worktree:                          WorktreeRestore{Action: WorktreeSet, Path: "/p"},
 		}
-		assert.Equal(t, c, DecodeCompensation(c.Encode()))
+		p := c.Encode()
+		assert.Equal(t, c.To, p.To)
+		assert.Equal(t, c.RestoreClaim, p.RestoreClaim)
+		assert.Equal(t, c.RestoreClaimedBy, p.RestoreClaimedBy)
+		assert.Equal(t, c.RestoreClaimedAt, p.RestoreClaimedAt)
+		assert.Equal(t, c.RestoreClaimTTL, p.RestoreClaimTTL)
+		assert.Equal(t, c.RestoreLastHeartbeat, p.RestoreLastHeartbeat)
+		assert.Equal(t, c.RestoreLastClaimingWorkerActivity, p.RestoreLastClaimingWorkerActivity)
+		assert.Equal(t, c.RestoreClaimToken, p.RestoreClaimToken)
+		assert.Equal(t, c.IfClaimToken, p.IfClaimToken)
+		assert.Equal(t, c.Worktree, DecodeWorktreeRestore(p))
 	})
 }
 

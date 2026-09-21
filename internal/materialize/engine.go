@@ -92,7 +92,7 @@ func (s *State) ApplyOp(op ops.Op) error {
 	if !exists {
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
-	if handler.missingTarget == MissingTargetError || handler.missingTarget == MissingTargetIgnore {
+	if handler.missingTarget != "" {
 		if _, ok := s.Issues[op.TargetID]; !ok {
 			if handler.missingTarget == MissingTargetIgnore {
 				return nil
@@ -143,10 +143,7 @@ func (s *State) applyCreate(op ops.Op) error {
 }
 
 func (s *State) applyClaim(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return missingTargetError{OpType: ops.OpClaim, TargetID: op.TargetID}
-	}
+	issue := s.Issues[op.TargetID]
 	if claimpkg.ClaimLostRace(claimpkg.HeldClaim{
 		Status:                     issue.Status,
 		ClaimedBy:                  issue.ClaimedBy,
@@ -171,10 +168,7 @@ func (s *State) applyClaim(op ops.Op) error {
 }
 
 func (s *State) applyHeartbeat(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	issue.Updated = op.Timestamp
 	if claimpkg.ClaimantHeartbeatClocks(issue.ClaimedBy, op.WorkerID) {
 		issue.LastHeartbeat = op.Timestamp
@@ -184,10 +178,7 @@ func (s *State) applyHeartbeat(op ops.Op) error {
 }
 
 func (s *State) applyTransition(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return missingTargetError{OpType: ops.OpTransition, TargetID: op.TargetID}
-	}
+	issue := s.Issues[op.TargetID]
 	if !compensationApplies(issue, op) {
 		return nil
 	}
@@ -246,10 +237,7 @@ func restoreLeaseIfMarked(issue *Issue, p ops.Payload) {
 }
 
 func (s *State) applyNote(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	if hasAppliedNote(issue.Notes, op) {
 		return nil
 	}
@@ -276,10 +264,7 @@ func hasAppliedNote(notes []Note, op ops.Op) bool {
 }
 
 func (s *State) applyNoteDelete(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	for i := range issue.Notes {
 		if issue.Notes[i].ID == op.Payload.NoteID {
 			issue.Notes[i].Deleted = true
@@ -315,29 +300,23 @@ func noteIDExists(notes []Note, id string) bool {
 }
 
 func (s *State) applyLink(op ops.Op) error {
-	source, ok := s.Issues[op.TargetID]
-	if !ok {
-		return missingTargetError{OpType: ops.OpLink, TargetID: op.TargetID}
-	}
-	if op.Payload.Rel == "blocked_by" {
-		source.BlockedBy = appendUnique(source.BlockedBy, op.Payload.Dep)
-		if dep, ok := s.Issues[op.Payload.Dep]; ok {
-			dep.Blocks = appendUnique(dep.Blocks, op.TargetID)
-		}
-	}
-	source.Updated = op.Timestamp
-	return nil
+	return s.applyBlockedByRel(op, true)
 }
 
 func (s *State) applyUnlink(op ops.Op) error {
-	source, ok := s.Issues[op.TargetID]
-	if !ok {
-		return missingTargetError{OpType: ops.OpUnlink, TargetID: op.TargetID}
-	}
+	return s.applyBlockedByRel(op, false)
+}
+
+func (s *State) applyBlockedByRel(op ops.Op, add bool) error {
+	source := s.Issues[op.TargetID]
 	if op.Payload.Rel == "blocked_by" {
-		source.BlockedBy = removeString(source.BlockedBy, op.Payload.Dep)
+		edge := removeString
+		if add {
+			edge = appendUnique
+		}
+		source.BlockedBy = edge(source.BlockedBy, op.Payload.Dep)
 		if dep, ok := s.Issues[op.Payload.Dep]; ok {
-			dep.Blocks = removeString(dep.Blocks, op.TargetID)
+			dep.Blocks = edge(dep.Blocks, op.TargetID)
 		}
 	}
 	source.Updated = op.Timestamp
@@ -345,20 +324,14 @@ func (s *State) applyUnlink(op ops.Op) error {
 }
 
 func (s *State) applyAssign(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	issue.AssignedWorker = op.Payload.AssignedTo
 	issue.Updated = op.Timestamp
 	return nil
 }
 
 func (s *State) applyDecision(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	decision := Decision{
 		Topic:     op.Payload.Topic,
 		Choice:    op.Payload.Choice,
@@ -392,10 +365,7 @@ func hasDecision(decisions []Decision, want Decision) bool {
 }
 
 func (s *State) applyAmend(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	if op.Payload.NodeType != "" {
 		issue.Type = op.Payload.NodeType
 	}
@@ -419,10 +389,7 @@ func (s *State) applyAmend(op ops.Op) error {
 }
 
 func (s *State) applySourceLink(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	link := SourceLink{
 		SourceEntryID: op.Payload.SourceID,
 		SourceURL:     op.Payload.SourceURL,
@@ -437,10 +404,7 @@ func (s *State) applySourceLink(op ops.Op) error {
 }
 
 func (s *State) applyCitationAccepted(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	acceptance := CitationAcceptance{
 		WorkerID:                  op.WorkerID,
 		Timestamp:                 op.Timestamp,
@@ -472,10 +436,7 @@ func (s *State) applyDAGTransition(op ops.Op) error {
 }
 
 func (s *State) applyScopeRename(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	updated := make([]string, len(issue.Scope))
 	for i, entry := range issue.Scope {
 		updated[i] = strings.ReplaceAll(entry, op.Payload.OldPath, op.Payload.NewPath)
@@ -486,10 +447,7 @@ func (s *State) applyScopeRename(op ops.Op) error {
 }
 
 func (s *State) applyScopeDelete(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	result := make([]string, 0, len(issue.Scope))
 	matched := false
 	for _, entry := range issue.Scope {
@@ -507,10 +465,7 @@ func (s *State) applyScopeDelete(op ops.Op) error {
 }
 
 func (s *State) applyReparent(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return nil
-	}
+	issue := s.Issues[op.TargetID]
 	oldParentID := issue.Parent
 	newParentID := op.Payload.Parent
 
@@ -534,10 +489,7 @@ func (s *State) applyReparent(op ops.Op) error {
 }
 
 func (s *State) applyAssessmentAttested(op ops.Op) error {
-	issue, ok := s.Issues[op.TargetID]
-	if !ok {
-		return missingTargetError{OpType: ops.OpAssessmentAttested, TargetID: op.TargetID}
-	}
+	issue := s.Issues[op.TargetID]
 
 	var att review.AssessmentAttestation
 	if err := json.Unmarshal(op.Payload.Assessment, &att); err != nil {

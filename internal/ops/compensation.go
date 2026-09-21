@@ -91,19 +91,3 @@ func (c Compensation) Encode() Payload {
 		ClearWorktreePath:                 clear,
 	}
 }
-
-// DecodeCompensation reconstructs typed Compensation from a payload.
-func DecodeCompensation(p Payload) Compensation {
-	return Compensation{
-		To:                                p.To,
-		RestoreClaim:                      p.RestoreClaim,
-		RestoreClaimedBy:                  p.RestoreClaimedBy,
-		RestoreClaimedAt:                  p.RestoreClaimedAt,
-		RestoreClaimTTL:                   p.RestoreClaimTTL,
-		RestoreLastHeartbeat:              p.RestoreLastHeartbeat,
-		RestoreLastClaimingWorkerActivity: p.RestoreLastClaimingWorkerActivity,
-		RestoreClaimToken:                 p.RestoreClaimToken,
-		IfClaimToken:                      p.IfClaimToken,
-		Worktree:                          DecodeWorktreeRestore(p),
-	}
-}

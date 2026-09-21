@@ -173,7 +173,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 				lastHeartbeat[op.TargetID] = op.Timestamp
 			}
 		case ops.OpTransition:
-			if isTerminalStatus(op.Payload.To) {
+			if ops.IsTerminalStatus(op.Payload.To) {
 				transitioned[op.TargetID] = true
 			}
 			if op.Timestamp > lastTransitionAt[op.TargetID] {

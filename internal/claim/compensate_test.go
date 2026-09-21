@@ -163,7 +163,7 @@ func TestPlanCompensation_EncodesViaCompensation_REQ_MATENC_S1_T3(t *testing.T) 
 	want.WorktreePath = ""
 	want.ClearWorktreePath = true
 	assert.Equal(t, want, got)
-	assert.Equal(t, ops.WorktreeClear, ops.DecodeCompensation(got).Worktree.Action)
+	assert.Equal(t, ops.WorktreeClear, ops.DecodeWorktreeRestore(got).Action)
 }
 
 func TestPlanCompensation_InputsUnchanged_REQ_ARCHIMP_S20_T3(t *testing.T) {
