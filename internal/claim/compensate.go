@@ -27,9 +27,10 @@ type CompensationInput struct {
 }
 
 // PlanCompensation is a pure restore-vs-release decision. It returns the
-// compensating Transition payload: restore a live same-Worker lease, or
-// release a stale/foreign lease to open. Empty WorkerID or IfClaimToken is an
-// input error. Inputs are never mutated.
+// compensating Transition payload encoded from ops.Compensation: restore a
+// live same-Worker lease, or release a stale/foreign lease to open. Empty
+// WorkerID or IfClaimToken is an input error. Inputs are never mutated.
+// Worktree flags are written only via EncodeWorktree.
 func PlanCompensation(in CompensationInput) (ops.Payload, error) {
 	if in.WorkerID == "" {
 		return ops.Payload{}, fmt.Errorf("worker ID is required")
@@ -38,9 +39,10 @@ func PlanCompensation(in CompensationInput) (ops.Payload, error) {
 		return ops.Payload{}, fmt.Errorf("claim token is required")
 	}
 
-	payload := ops.Payload{
+	comp := ops.Compensation{
 		RestoreClaim: true,
 		IfClaimToken: in.IfClaimToken,
+		Worktree:     WorktreeRestore(in.Prior.WorktreePath),
 	}
 
 	liveSameWorker := in.Prior.ClaimedBy == in.WorkerID &&
@@ -50,22 +52,16 @@ func PlanCompensation(in CompensationInput) (ops.Payload, error) {
 			in.Now,
 		)
 	if liveSameWorker {
-		payload.To = in.Prior.Status
-		payload.RestoreClaimedBy = in.Prior.ClaimedBy
-		payload.RestoreClaimedAt = in.Prior.ClaimedAt
-		payload.RestoreClaimTTL = in.Prior.ClaimTTL
-		payload.RestoreLastHeartbeat = in.Prior.LastHeartbeat
-		payload.RestoreLastClaimingWorkerActivity = in.Prior.ClaimingWorkerActivity
-		payload.RestoreClaimToken = in.Prior.ClaimToken
+		comp.To = in.Prior.Status
+		comp.RestoreClaimedBy = in.Prior.ClaimedBy
+		comp.RestoreClaimedAt = in.Prior.ClaimedAt
+		comp.RestoreClaimTTL = in.Prior.ClaimTTL
+		comp.RestoreLastHeartbeat = in.Prior.LastHeartbeat
+		comp.RestoreLastClaimingWorkerActivity = in.Prior.ClaimingWorkerActivity
+		comp.RestoreClaimToken = in.Prior.ClaimToken
 	} else {
-		payload.To = ops.StatusOpen
+		comp.To = ops.StatusOpen
 	}
 
-	if in.Prior.WorktreePath != "" {
-		payload.WorktreePath = in.Prior.WorktreePath
-	} else {
-		payload.ClearWorktreePath = true
-	}
-
-	return payload, nil
+	return comp.Encode(), nil
 }
