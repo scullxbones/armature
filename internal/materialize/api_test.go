@@ -131,6 +131,30 @@ func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 		assert.NotContains(t, asMap, "derived")
 	})
 
+	t.Run("second incremental of same log does not duplicate PriorOutcomes", func(t *testing.T) {
+		t.Parallel()
+		allOps := []ops.Op{
+			{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",
+				Payload: ops.Payload{Title: "Task", NodeType: "task"}},
+			{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 101, WorkerID: "w1",
+				Payload: ops.Payload{To: ops.StatusDone, Outcome: "first"}},
+			{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 102, WorkerID: "w1",
+				Payload: ops.Payload{To: ops.StatusOpen}},
+		}
+
+		cold, err := MaterializeCold(allOps)
+		require.NoError(t, err)
+		require.Equal(t, []string{"first"}, cold.Issues["task-01"].PriorOutcomes)
+
+		cached := cloneMaterializeState(t, cold)
+		require.NoError(t, MaterializeIncremental(cached, allOps))
+		require.NoError(t, MaterializeIncremental(cached, allOps))
+		assert.Equal(t, []string{"first"}, cached.Issues["task-01"].PriorOutcomes)
+		assert.Equal(t, cold.Issues["task-01"].PriorOutcomes, cached.Issues["task-01"].PriorOutcomes)
+		assert.Equal(t, ops.StatusOpen, cached.Issues["task-01"].Status)
+		assert.Empty(t, cached.Issues["task-01"].Outcome)
+	})
+
 	t.Run("nil state is an error", func(t *testing.T) {
 		t.Parallel()
 		err := MaterializeIncremental(nil, nil)
