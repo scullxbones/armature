@@ -57,7 +57,6 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 			}
 			op, err := ops.ParseLine(line)
 			if err != nil {
-				// Skip corrupt lines
 				continue
 			}
 			if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
@@ -82,7 +81,6 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 	return state, nil
 }
 
-// hasAnyPrefix reports whether f starts with any of prefixes.
 func hasAnyPrefix(f string, prefixes []string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(f, p) {

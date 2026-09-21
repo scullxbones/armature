@@ -24,12 +24,10 @@ func TestAppendAndCommit_SingleBranch_NoCommit(t *testing.T) {
 	err := ops.AppendAndCommit(logPath, "", op, fc)
 	require.NoError(t, err)
 
-	// File should contain the op
 	data, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "note")
 
-	// No commit was called (worktreePath is "")
 	assert.Len(t, fc.Calls, 0)
 }
 
@@ -126,7 +124,6 @@ func TestAppendAndCommit_DualBranch_Commits(t *testing.T) {
 	err := ops.AppendAndCommit(logPath, worktreePath, op, fc)
 	require.NoError(t, err)
 
-	// Commit was called once
 	require.Len(t, fc.Calls, 1)
 	assert.Contains(t, fc.Calls[0].Message, "claim")
 	assert.Contains(t, fc.Calls[0].Message, "T1")
@@ -140,7 +137,6 @@ func TestAppendAndCommit_ShortWorkerID(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
 
 	fc := &FakeCommitter{}
-	// WorkerID shorter than 8 chars must not panic
 	op := ops.Op{Type: ops.OpNote, TargetID: "T2", Timestamp: 1000, WorkerID: "abc",
 		Payload: ops.Payload{Msg: "hi"}}
 

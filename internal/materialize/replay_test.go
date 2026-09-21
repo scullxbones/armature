@@ -12,11 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2 proves
-// that every possible torn-write point in an op append is delimited by the
-// production append path. Once the writer retries the complete op, replay
-// converges to the same state as an uninterrupted append without truncating the
-// append-only log tail.
 func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *testing.T) {
 	t.Parallel()
 
@@ -36,23 +31,15 @@ func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *tes
 		t.Run("write-point-"+strconv.Itoa(interruptedAt), func(t *testing.T) {
 			t.Parallel()
 
-			// Write the exact bytes a killed append can leave behind: there is no
-			// synthetic newline. AppendOp must delimit that tail before retrying.
 			torn := append([]byte{}, encodedCreate[:interruptedAt]...)
 			actual, logBytes, opCount := replayState(t, torn, nil, 0, create, transition)
 			assertAppendOnlyTail(t, torn, logBytes)
-			// A complete JSON value without its delimiter is already durable. Its
-			// retry must be recognized so non-idempotent ops cannot be duplicated.
 			require.Equal(t, 2, opCount)
 			require.Equal(t, baseline, actual)
 		})
 	}
 }
 
-// TestMaterializationConvergesAfterDelimiterCrash_REQ_TOPTIER_S3_T2 proves
-// that retrying after recovery has written a delimiter does not append a second
-// copy of the operation. Scope rename is deliberately non-idempotent for this
-// input: replaying it twice would turn "src" into "src22".
 func TestMaterializationConvergesAfterDelimiterCrash_REQ_TOPTIER_S3_T2(t *testing.T) {
 	t.Parallel()
 
@@ -78,13 +65,6 @@ func TestMaterializationConvergesAfterDelimiterCrash_REQ_TOPTIER_S3_T2(t *testin
 	encodedRename, err := ops.MarshalOp(rename)
 	require.NoError(t, err)
 
-	// This is the durable state if the first recovery delimits the complete
-	// rename tail and then crashes before it can return. The pending marker
-	// AppendLog.Append writes before a record becomes durable is still present
-	// in that scenario (it is only removed after the append fully succeeds),
-	// so the next retry can recognize that newline-terminated final record as
-	// an exact retry rather than confusing it with an unrelated legitimate
-	// append of identical bytes.
 	delimiterCrashPrefix := append(append(append([]byte{}, encodedCreate...), '\n'), encodedRename...)
 	delimiterCrashPrefix = append(delimiterCrashPrefix, '\n')
 	pendingRename := append(append([]byte{}, encodedRename...), '\n')

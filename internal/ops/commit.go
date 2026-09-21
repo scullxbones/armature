@@ -28,7 +28,7 @@ func AppendAndCommitIf(logPath, worktreePath string, op Op, gc GitCommitter, pro
 		return wrote, err
 	}
 	if worktreePath == "" {
-		return true, nil // single-branch: no git commit needed
+		return true, nil
 	}
 
 	relPath, err := filepath.Rel(worktreePath, logPath)

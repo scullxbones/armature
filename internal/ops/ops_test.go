@@ -55,7 +55,6 @@ func TestMarshalOp(t *testing.T) {
 	line, err := MarshalOp(op)
 	require.NoError(t, err)
 
-	// Round-trip
 	parsed, err := ParseLine(line)
 	require.NoError(t, err)
 	assert.Equal(t, op.Type, parsed.Type)
@@ -68,7 +67,6 @@ func TestParseInvalidLine(t *testing.T) {
 	_, err := ParseLine([]byte(`not json`))
 	assert.Error(t, err)
 
-	// Unknown op types are now allowed at parse time; the engine validates them.
 	_, err = ParseLine([]byte(`["unknown","x",0,"w",{}]`))
 	assert.NoError(t, err)
 }
@@ -86,7 +84,7 @@ func TestPropOpRoundTrip(t *testing.T) {
 	properties.Property("marshal then parse preserves type, target, timestamp, worker", prop.ForAll(
 		func(opType string, targetID string, ts int64, workerID string) bool {
 			if targetID == "" || workerID == "" {
-				return true // skip empty — not valid ops
+				return true
 			}
 			op := Op{
 				Type:      opType,
@@ -145,7 +143,6 @@ func TestReadLogFromOffset(t *testing.T) {
 		Payload: Payload{Title: "First", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, op1))
 
-	// Get current offset
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
 	offset := info.Size()
@@ -165,7 +162,6 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
 
-	// Op with wrong worker ID
 	op := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-b2",
 		Payload: Payload{Title: "Bad", NodeType: "task"}}
 	require.NoError(t, AppendOp(logPath, op))
@@ -174,7 +170,7 @@ func TestValidateWorkerIDInLog(t *testing.T) {
 	stream.addFile(logPath, "worker-a1")
 	items, _, warnings, err := stream.loadAll()
 	require.NoError(t, err)
-	assert.Len(t, items, 0) // rejected — worker ID mismatch
+	assert.Len(t, items, 0)
 	assert.NotEmpty(t, warnings)
 }
 
@@ -193,13 +189,11 @@ func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
 	schema := GenerateSchema()
 	documentedTypes := SchemaDocumentedOpTypes()
 
-	// Convert to a set for fast lookup
 	documentedSet := make(map[string]bool, len(documentedTypes))
 	for _, opType := range documentedTypes {
 		documentedSet[opType] = true
 	}
 
-	// All registered op types must be documented in the schema
 	requiredOpTypes := []string{
 		OpCreate,
 		OpClaim,
@@ -248,7 +242,6 @@ func TestGenerateSchema_DocumentsClaimFields_REQ_LNGHZN_S5_T9(t *testing.T) {
 		case strings.HasPrefix(line, transitionHeaderPrefix):
 			inTransitionBlock = true
 		case strings.HasPrefix(line, "#   ") && strings.Contains(line, ":"):
-			// A different op's header line ends the transition block.
 			inTransitionBlock = false
 		}
 		if inTransitionBlock && strings.Contains(line, "if_claim_token") {
@@ -260,8 +253,6 @@ func TestGenerateSchema_DocumentsClaimFields_REQ_LNGHZN_S5_T9(t *testing.T) {
 	assert.True(t, transitionHasIfClaimToken, "transition op must document the if_claim_token field")
 }
 
-// TestReadLogFromOffset_ManyOps verifies that ReadLogFromOffset correctly reads
-// a log containing many ops. This also exercises the pre-allocated slice path.
 func TestReadLogFromOffset_ManyOps(t *testing.T) {
 	t.Parallel()
 	const count = 200

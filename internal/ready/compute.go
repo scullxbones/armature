@@ -104,17 +104,13 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 			continue
 		}
 		issue := issues[id]
-		// Skip draft issues (they have their own gate but are not "not ready" — they
-		// require confirmation first and are intentionally excluded).
 		if issue != nil && issue.Provenance.Confidence == "draft" {
 			continue
 		}
-		// Skip issues that are actively claimed (not stale).
 		if issue != nil && issue.ClaimedBy != "" && !issue.ClaimStale(currentTime) {
 			continue
 		}
 
-		// Check each gate in order and record the first failing one.
 		if !allBlockersMerged(entry.BlockedBy, index) {
 			var unmerged []string
 			for _, bid := range entry.BlockedBy {
@@ -142,7 +138,6 @@ func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Iss
 				continue
 			}
 		}
-		// Issue passed all gates — it IS ready, do not include it.
 	}
 	return result
 }
@@ -180,11 +175,9 @@ var priorityOrder = map[string]int{
 	"":         4,
 }
 
-// assignmentTier returns a sort tier for assignment-aware ordering:
-// 0 = assigned to me, 1 = unassigned, 2 = assigned to someone else.
 func assignmentTier(issueID, workerID string, index materialize.Index) int {
 	if workerID == "" {
-		return 1 // no worker context — treat all as unassigned tier
+		return 1
 	}
 	entry := index[issueID]
 	if entry.AssignedWorker == "" {
@@ -198,7 +191,6 @@ func assignmentTier(issueID, workerID string, index materialize.Index) int {
 
 func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, workerID string) {
 	sort.SliceStable(entries, func(i, j int) bool {
-		// Assignment tier first
 		ai := assignmentTier(entries[i].Issue, workerID, index)
 		aj := assignmentTier(entries[j].Issue, workerID, index)
 		if ai != aj {
@@ -209,7 +201,6 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 		if pi != pj {
 			return pi < pj
 		}
-		// Use graph projection for depth calculation
 		di := graph.Depth(entries[i].Issue)
 		dj := graph.Depth(entries[j].Issue)
 		if di != dj {

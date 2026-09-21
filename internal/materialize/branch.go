@@ -16,7 +16,6 @@ func DeriveBranchName(issueType, issueID string) string {
 	case "task":
 		return "task/" + issueID
 	default:
-		// epic and unknown types do not have worktrees.
 		return ""
 	}
 }

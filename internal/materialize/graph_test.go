@@ -53,7 +53,6 @@ func TestGraphFromState_DefensiveCopy(t *testing.T) {
 	graph := materialize.GraphFromState(state)
 	require.NotNil(t, graph)
 
-	// Mutate the original state's slices; graph must not be affected.
 	state.Issues["T1"].Children[0] = "MUTATED"
 	state.Issues["T1"].BlockedBy[0] = "MUTATED"
 	state.Issues["T1"].Blocks[0] = "MUTATED"

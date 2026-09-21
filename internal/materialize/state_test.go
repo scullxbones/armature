@@ -95,13 +95,6 @@ func TestLoadIssueNormalization(t *testing.T) {
 	assert.Equal(t, []string{"docs/plan.md"}, loaded.ContextFiles)
 }
 
-// TestIssueClaimHeldBy_REQ_LNGHZN_S5_T9 is direct unit coverage of the single
-// canonical "do I still own this claim?" predicate, ClaimHeldBy. It must be
-// true only for an exact workerID+claimToken match while Status is exactly
-// ops.StatusClaimed, and false for every other status (including every
-// terminal one, which the predicate deliberately folds into "not claimed"
-// rather than checking separately — see the method's doc comment), a wrong
-// worker, a wrong token, an empty token, and a nil receiver.
 func TestIssueClaimHeldBy_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 
@@ -140,10 +133,6 @@ func TestIssueClaimHeldBy_REQ_LNGHZN_S5_T9(t *testing.T) {
 	} {
 		t.Run("not held in status "+status, func(t *testing.T) {
 			t.Parallel()
-			// ClaimedBy/ClaimToken deliberately still match: only a transition to
-			// `open` clears them, so an in-progress or blocked issue can carry a
-			// matching worker/token while no longer being "claimed". The predicate
-			// must reject on status alone in every one of these cases.
 			issue := &Issue{Status: status, ClaimedBy: "worker-a", ClaimToken: "token-a"}
 			assert.False(t, issue.ClaimHeldBy("worker-a", "token-a"))
 		})

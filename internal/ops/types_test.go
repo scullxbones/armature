@@ -27,7 +27,6 @@ func TestPayload_ScopeDeleteField(t *testing.T) {
 
 func TestPayload_PreferredModel_RoundTripsJSON(t *testing.T) {
 	t.Parallel()
-	// Payload.PreferredModel must survive JSONL encode/decode.
 	p := Payload{PreferredModel: "claude-opus-4"}
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -44,7 +43,6 @@ func TestPayload_PreferredModel_RoundTripsJSON(t *testing.T) {
 
 func TestPayload_PreferredModel_OmittedWhenEmpty(t *testing.T) {
 	t.Parallel()
-	// When PreferredModel is empty, it must not appear in JSON (omitempty).
 	p := Payload{Title: "some task"}
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -57,7 +55,6 @@ func TestPayload_PreferredModel_OmittedWhenEmpty(t *testing.T) {
 
 func TestPayload_SourceEntryID_RoundTripsJSON(t *testing.T) {
 	t.Parallel()
-	// Payload.SourceEntryID must survive JSONL encode/decode.
 	p := Payload{SourceEntryID: "entry-abc123"}
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -74,7 +71,6 @@ func TestPayload_SourceEntryID_RoundTripsJSON(t *testing.T) {
 
 func TestPayload_SourceEntryID_OmittedWhenEmpty(t *testing.T) {
 	t.Parallel()
-	// When SourceEntryID is empty, it must not appear in JSON (omitempty).
 	p := Payload{Title: "some task"}
 	data, err := json.Marshal(p)
 	if err != nil {

@@ -49,7 +49,7 @@ func (f *FilePushTracker) Count() (int, error) {
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		return 0, nil // treat corrupt file as 0
+		return 0, nil
 	}
 	return n, nil
 }

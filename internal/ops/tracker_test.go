@@ -28,12 +28,10 @@ func TestFilePushTracker_IncrementAndReset(t *testing.T) {
 	dir := t.TempDir()
 	tr := ops.NewFilePushTracker(dir)
 
-	// Initial count is 0
 	n, err := tr.Count()
 	require.NoError(t, err)
 	assert.Equal(t, 0, n)
 
-	// Increment 3 times
 	n, err = tr.Increment()
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
@@ -46,12 +44,10 @@ func TestFilePushTracker_IncrementAndReset(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, n)
 
-	// Count confirms
 	n, err = tr.Count()
 	require.NoError(t, err)
 	assert.Equal(t, 3, n)
 
-	// Reset
 	require.NoError(t, tr.Reset())
 	n, err = tr.Count()
 	require.NoError(t, err)
@@ -62,11 +58,13 @@ func TestFilePushTracker_PersistenceAcrossInstances(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	tr1 := ops.NewFilePushTracker(dir)
-	tr1.Increment() //nolint:errcheck
-	tr1.Increment() //nolint:errcheck
-	tr1.Increment() //nolint:errcheck
+	_, err := tr1.Increment()
+	require.NoError(t, err)
+	_, err = tr1.Increment()
+	require.NoError(t, err)
+	_, err = tr1.Increment()
+	require.NoError(t, err)
 
-	// New instance reads the same file
 	tr2 := ops.NewFilePushTracker(dir)
 	n, err := tr2.Count()
 	require.NoError(t, err)
@@ -75,7 +73,6 @@ func TestFilePushTracker_PersistenceAcrossInstances(t *testing.T) {
 
 func TestFilePushTracker_DefaultThreshold(t *testing.T) {
 	t.Parallel()
-	// DefaultConfig has LowStakesPushThreshold=5; verify FilePushTracker hits at 5
 	dir := t.TempDir()
 	tr := ops.NewFilePushTracker(dir)
 
@@ -85,7 +82,6 @@ func TestFilePushTracker_DefaultThreshold(t *testing.T) {
 		require.NoError(t, err)
 		assert.Less(t, n, threshold)
 	}
-	// 5th increment reaches threshold
 	n, err := tr.Increment()
 	require.NoError(t, err)
 	assert.Equal(t, threshold, n)
