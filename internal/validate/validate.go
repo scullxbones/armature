@@ -119,7 +119,7 @@ func CheckIntroduction(current *materialize.State, proposed []ops.Op, opts Optio
 	for _, f := range before.Findings {
 		priorIdentities[f.identity()] = struct{}{}
 	}
-	widened, werr := unsuppressionBaseline(current, proposed, opts)
+	widened, werr := findingsAfterReopeningTerminalIssues(current, proposed, opts)
 	if werr != nil {
 		return werr
 	}
@@ -133,7 +133,7 @@ func CheckIntroduction(current *materialize.State, proposed []ops.Op, opts Optio
 	return formatIntroductionError(introduced)
 }
 
-func unsuppressionBaseline(current *materialize.State, proposed []ops.Op, opts Options) ([]Finding, error) {
+func findingsAfterReopeningTerminalIssues(current *materialize.State, proposed []ops.Op, opts Options) ([]Finding, error) {
 	var unsuppressing []ops.Op
 	for _, op := range proposed {
 		if op.Type != ops.OpTransition {
@@ -185,10 +185,7 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 		if f.Severity == "info" {
 			continue
 		}
-		switch f.Rule {
-		case "E7", "E8":
-			continue
-		case "E13":
+		if writeDoesNotIntroduceRule(f.Rule) {
 			continue
 		}
 		if _, ok := prior[f.identity()]; ok {
@@ -202,6 +199,17 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 		}
 	}
 	return out
+}
+
+func writeDoesNotIntroduceRule(rule string) bool {
+	switch rule {
+	case "E7", "E8":
+		return true
+	case "E13":
+		return true
+	default:
+		return false
+	}
 }
 
 func citedIDsSubsetOfAny(ids []string, sets []map[string]struct{}) bool {
@@ -524,7 +532,7 @@ func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
 				Key:      taskcontract.RuleDoctorRunWiring,
 			})
 		}
-		if claimsDoctorRunWiringDoD(task) && unitOnlyAcceptance(issue.Acceptance) {
+		if doctorRunWiringClaimProbedOffDoctorPath(task) && unitOnlyAcceptance(issue.Acceptance) {
 			findings = append(findings, Finding{
 				Severity: "error",
 				Rule:     ruleE14,
@@ -540,7 +548,7 @@ func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func claimsDoctorRunWiringDoD(task taskcontract.Task) bool {
+func doctorRunWiringClaimProbedOffDoctorPath(task taskcontract.Task) bool {
 	probe := task
 	probe.Scope = []string{"internal/unrelated.go"}
 	return len(taskcontract.CheckTaskContract(probe)) > 0
@@ -578,7 +586,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		if !issuetype.IsReadyEligible(issue.Type) || isTerminalStatus(issue.Status) {
 			continue
 		}
-		if isPassiveAggregateParent(issue, graph, now) {
+		if unclaimedStoryOrFeatureWithDescendants(issue, graph, now) {
 			continue
 		}
 		tasks = append(tasks, issue)
@@ -617,20 +625,20 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	return findings
 }
 
-func isPassiveAggregateParent(issue *materialize.Issue, graph *dag.Graph, now int64) bool {
+func unclaimedStoryOrFeatureWithDescendants(issue *materialize.Issue, graph *dag.Graph, now int64) bool {
 	if issue.Type != "story" && issue.Type != "feature" {
 		return false
 	}
 	if graph == nil {
 		return false
 	}
-	if isActivelyClaimed(issue, now) {
+	if holderPresentAndLeaseFresh(issue, now) {
 		return false
 	}
 	return len(graph.Descendants(issue.ID)) > 0
 }
 
-func isActivelyClaimed(issue *materialize.Issue, now int64) bool {
+func holderPresentAndLeaseFresh(issue *materialize.Issue, now int64) bool {
 	if issue.ClaimedBy == "" {
 		return false
 	}
