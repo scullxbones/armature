@@ -136,6 +136,36 @@ func TestPlanCompensation_InvalidInput_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	}
 }
 
+func TestPlanCompensation_EncodesViaCompensation_REQ_MATENC_S1_T3(t *testing.T) {
+	t.Parallel()
+
+	in := liveSameWorkerInput()
+	got, err := claim.PlanCompensation(in)
+	require.NoError(t, err)
+
+	want := ops.Compensation{
+		To:                                in.Prior.Status,
+		RestoreClaim:                      true,
+		RestoreClaimedBy:                  in.Prior.ClaimedBy,
+		RestoreClaimedAt:                  in.Prior.ClaimedAt,
+		RestoreClaimTTL:                   in.Prior.ClaimTTL,
+		RestoreLastHeartbeat:              in.Prior.LastHeartbeat,
+		RestoreLastClaimingWorkerActivity: in.Prior.ClaimingWorkerActivity,
+		RestoreClaimToken:                 in.Prior.ClaimToken,
+		IfClaimToken:                      in.IfClaimToken,
+		Worktree:                          claim.WorktreeRestore(in.Prior.WorktreePath),
+	}.Encode()
+	assert.Equal(t, want, got)
+
+	in.Prior.WorktreePath = ""
+	got, err = claim.PlanCompensation(in)
+	require.NoError(t, err)
+	want.WorktreePath = ""
+	want.ClearWorktreePath = true
+	assert.Equal(t, want, got)
+	assert.Equal(t, ops.WorktreeClear, ops.DecodeCompensation(got).Worktree.Action)
+}
+
 func TestPlanCompensation_InputsUnchanged_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 
