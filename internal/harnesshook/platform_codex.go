@@ -17,19 +17,15 @@ import (
 // check in OwnsConfig, not by this constant.
 const legacyCodexConfig = "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 
-// legacyCodexConfigPath is the old location where codex.toml was written at the root
 const legacyCodexConfigPath = "codex.toml"
 
 // CodexAdapter implements PlatformAdapter for the OpenAI Codex harness.
 type CodexAdapter struct{}
 
-// NewCodexAdapter constructs a CodexAdapter.
 func NewCodexAdapter() *CodexAdapter { return &CodexAdapter{} }
 
-// Name returns the platform identifier.
 func (a *CodexAdapter) Name() string { return "codex" }
 
-// Capabilities returns the hook event support matrix for Codex.
 func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:         true,
@@ -59,7 +55,6 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	content, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Check for old legacy config at root codex.toml for migration support
 			legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
 			legacyContent, legacyErr := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
 			if legacyErr != nil {
@@ -84,7 +79,6 @@ func codexConfigOwned(content string) bool {
 	return strings.TrimSpace(firstLine) == "# armature:managed"
 }
 
-// WriteConfig writes the Codex hook configuration into workdir/.codex/config.toml.
 func (a *CodexAdapter) WriteConfig(workdir string) error {
 	codexDir := filepath.Join(workdir, ".codex")
 	if err := os.MkdirAll(codexDir, 0o750); err != nil {
@@ -111,25 +105,19 @@ command = "arm harness-hook"
 		return err
 	}
 
-	// Remove any stale root codex.toml that was written by an earlier version of
-	// WriteConfig (before the .codex/ subdirectory location was adopted). We only
-	// remove it when it is armature-owned: either the pre-marker exact body or a
-	// file whose first line is "# armature:managed".
 	legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
 	legacyBytes, err := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
 	if err == nil && codexConfigOwned(string(legacyBytes)) {
-		os.Remove(legacyPath) //nolint:errcheck,gosec // G104: best-effort cleanup; failure leaves a stale but harmless file
+		swallowErr(os.Remove(legacyPath))
 	}
 
 	return nil
 }
 
-// Decode parses a Codex hook payload into a normalised Event.
 func (a *CodexAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-// Encode serialises the Decision into the JSON payload Codex expects on stdout.
 func (a *CodexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	// Codex processes the JSON response on exit 0, so exit code is always 0.
 	return encodeApproveOrBlockJSON(decision)

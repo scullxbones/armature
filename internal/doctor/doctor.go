@@ -20,7 +20,6 @@ import (
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
-// Severity of a check finding.
 type Severity string
 
 const (
@@ -29,7 +28,6 @@ const (
 	SeverityOK      Severity = "ok"
 )
 
-// Finding is a single finding from a health check.
 type Finding struct {
 	Check        string   `json:"check"`
 	Severity     Severity `json:"severity"`
@@ -38,12 +36,12 @@ type Finding struct {
 	VerboseItems []string `json:"verbose_items,omitempty"`
 }
 
-// Report is the result of running all doctor checks.
 type Report struct {
 	Checks []Finding `json:"checks"`
 }
 
-// HasErrors returns true if any finding has error severity.
+func swallowErr(err error) { _ = err }
+
 func (r Report) HasErrors() bool {
 	for _, f := range r.Checks {
 		if f.Severity == SeverityError {
@@ -53,7 +51,6 @@ func (r Report) HasErrors() bool {
 	return false
 }
 
-// HasWarnings returns true if any finding has warning severity.
 func (r Report) HasWarnings() bool {
 	for _, f := range r.Checks {
 		if f.Severity == SeverityWarning {
@@ -63,15 +60,8 @@ func (r Report) HasWarnings() bool {
 	return false
 }
 
-// issueIDPattern matches issue-ID-like tokens in git commit messages.
-// Matches uppercase/lowercase letters and digits separated by hyphens, e.g. E5-S1-T9, task-01.
 var issueIDPattern = regexp.MustCompile(`\b([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+)\b`)
 
-// RunChecks executes the subset of checks that don't require filesystem ops (D3)
-// or git (D1). It accepts pre-loaded data, making it testable without I/O.
-// Pass nil for allIssues and opsLog to skip those checks.
-// repoPath is used for D1; pass "" to skip D1.
-// now is used for D2 stale claim detection.
 func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string, now time.Time) Report {
 	var checks []Finding
 
@@ -92,26 +82,14 @@ func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	return Report{Checks: checks}
 }
 
-// liveCheckIDs is the check-ID sequence Run appends. LiveCheckIDs is the
-// exported registry TOPTIER-S18-T3 will document; keep it in lockstep with
-// the append order below (proven by TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0).
 var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}
 
-// LiveCheckIDs returns the doctor check IDs the live Run path emits, in Run
-// order (D1–D10, D12). RunChecks omits D7 (worker-ID mismatches need the
-// validated ops stream) and D12 (ops-worktree lag needs the ops worktree).
-// D11 remains reserved for TOPTIER-S12-T2. The returned slice is a copy.
 func LiveCheckIDs() []string {
 	out := make([]string, len(liveCheckIDs))
 	copy(out, liveCheckIDs)
 	return out
 }
 
-// Run executes all health checks and returns a Report.
-// verbose=true adds file path and line context to D3 violations via VerboseItems.
-// now is used for D2 stale claim detection.
-// worktreePath is the ops worktree (`_armature` checkout); D12 probes lag
-// against origin/_armature there. Empty or missing paths skip D12.
 func Run(issuesDir string, stateDir string, repoPath string, worktreePath string, verbose bool, now time.Time) (Report, error) {
 	loaded, err := loadMaterializedState(issuesDir, stateDir)
 	if err != nil {
@@ -123,7 +101,6 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 	opItems := loaded.opItems
 	warnings := loaded.warnings
 
-	// Extract target IDs from ops for D3 check
 	noteOnlyOrphans := noteOnlyOrphanTargets(allOps)
 	opsTargetIDs := make([]string, 0, len(allOps))
 	for _, op := range allOps {
@@ -132,7 +109,6 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 		}
 	}
 
-	// Build verbose context from OpItems metadata
 	var verboseD3Context map[string][]opLocation
 	if verbose {
 		verboseD3Context = buildLocationMapFromOpItems(opItems)
@@ -209,8 +185,6 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 	return result, nil
 }
 
-// D1: git/armature divergence — scan git log for issue IDs referenced in commits
-// that are not in done/merged state.
 func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
 	out, err := adapters.GitLog(repoPath, "--oneline", "--no-merges", "--pretty=%s")
 	if err != nil {
@@ -256,7 +230,6 @@ func evaluateD1GitDivergence(commitSubjects []string, statuses map[string]string
 	return f
 }
 
-// D2: stale claims — issues in claimed state with expired TTL.
 func checkD2StaleClaims(allIssues map[string]*materialize.Issue, now time.Time) Finding {
 	f := Finding{Check: "D2", Severity: SeverityOK, Message: "No stale claims"}
 
@@ -269,15 +242,11 @@ func checkD2StaleClaims(allIssues map[string]*materialize.Issue, now time.Time) 
 	return f
 }
 
-// opLocation records where in an op log a target ID was found.
 type opLocation struct {
 	file string
 	line int
 }
 
-// buildLocationMapFromOpItems builds a location map from OpItem metadata.
-// Each OpItem contains the physical line number in its source log file.
-// We use this directly for D3 verbose output.
 func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
 	result := make(map[string][]opLocation)
 	for _, item := range items {
@@ -290,8 +259,6 @@ func buildLocationMapFromOpItems(items []ops.OpItem) map[string][]opLocation {
 	return result
 }
 
-// checkD3OrphanedOpsFromListWithContext checks for orphaned ops given a flat list of target IDs
-// and optional verbose context (file:line locations).
 func checkD3OrphanedOpsFromListWithContext(index materialize.Index, targetIDs []string, locations map[string][]opLocation) Finding {
 	f := Finding{Check: "D3", Severity: SeverityOK, Message: "No orphaned ops"}
 	if targetIDs == nil {
@@ -340,11 +307,6 @@ func checkD3OrphanedOpsFromListWithContext(index materialize.Index, targetIDs []
 	return f
 }
 
-// noteOnlyOrphanTargets returns target IDs whose only references in allOps are
-// note ops that have since been fully deleted via a matching note-delete op
-// (paired by Payload.NoteID). Such targets are stray retracted notes — e.g. a
-// mistyped `arm note list ...` invocation parsed "list" as an issue ID — not
-// genuine orphaned issue references, and must be excluded from the D3 target list.
 func noteOnlyOrphanTargets(allOps []ops.Op) map[string]bool {
 	type noteState struct{ created, deleted bool }
 	notes := make(map[string]map[string]*noteState)
@@ -370,7 +332,6 @@ func noteOnlyOrphanTargets(allOps []ops.Op) map[string]bool {
 				ns.deleted = true
 			}
 		case ops.OpSourceFingerprint, ops.OpGateEvidence:
-			// already excluded from D3 entirely (audit-only; target is not an issue)
 		default:
 			otherRefs[op.TargetID] = true
 		}
@@ -395,7 +356,6 @@ func noteOnlyOrphanTargets(allOps []ops.Op) map[string]bool {
 	return result
 }
 
-// D4: broken parent refs — issues whose parent points to a non-existent ID.
 func checkD4BrokenParentRefs(index materialize.Index) Finding {
 	f := Finding{Check: "D4", Severity: SeverityOK, Message: "No broken parent refs"}
 
@@ -418,13 +378,9 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 	return f
 }
 
-// indexToDagNodes converts a materialize.Index to a map of dag.Node pointers.
-// Only blocked_by edges are converted; parent-child hierarchy is preserved.
-// Children is set to nil to ensure HasCycle() only traverses blocked_by edges.
 func indexToDagNodes(index materialize.Index) map[string]*dag.Node {
 	nodes := make(map[string]*dag.Node)
 	for id, entry := range index {
-		// Defensive copy of BlockedBy slice
 		blockedBy := make([]string, len(entry.BlockedBy))
 		copy(blockedBy, entry.BlockedBy)
 		nodes[id] = &dag.Node{
@@ -440,18 +396,15 @@ func indexToDagNodes(index materialize.Index) map[string]*dag.Node {
 	return nodes
 }
 
-// D5: dependency cycles — blocked_by chains that form a cycle.
 func checkD5DependencyCycles(index materialize.Index) Finding {
 	f := Finding{Check: "D5", Severity: SeverityOK, Message: "No dependency cycles"}
 
-	// Use dag.Graph.HasCycle() for fast cycle detection.
 	dagNodes := indexToDagNodes(index)
 	graphIndex := dag.FromIndex(dagNodes)
 	if !graphIndex.HasCycle() {
 		return f
 	}
 
-	// Cycle detected. Collect cycle edges using simplified blocked_by-only DFS.
 	adj := make(map[string][]string)
 	for id, entry := range index {
 		adj[id] = entry.BlockedBy
@@ -498,7 +451,6 @@ func checkD5DependencyCycles(index materialize.Index) Finding {
 	return f
 }
 
-// D6: uncited issues — issues without source-link or accept-citation.
 func checkD6UncitedIssues(allIssues map[string]*materialize.Issue) Finding {
 	f := Finding{Check: "D6", Severity: SeverityOK, Message: "All issues cited"}
 
@@ -531,7 +483,6 @@ func filterMismatchWarnings(warnings []string) []string {
 	return out
 }
 
-// D7: worker-ID mismatches — ops that were excluded from the validated stream due to worker-ID mismatches.
 func checkD7WorkerIDMismatches(warnings []string) Finding {
 	f := Finding{Check: "D7", Severity: SeverityOK, Message: "No worker-ID mismatches detected"}
 
@@ -544,13 +495,6 @@ func checkD7WorkerIDMismatches(warnings []string) Finding {
 	return f
 }
 
-// checkD9UnrecognizedWorktrees reports managed worktrees carrying no issue
-// binding. It reads this clone's managed inventory and reuses the worktree
-// reconciliation classification (the Unrecognized class) rather than
-// reinventing detection. A git/inventory failure fails open to OK, matching D1.
-// A nil allIssues means the caller omitted issue details (per RunChecks'
-// contract); without the issue map no binding can be recognized, so the check
-// is skipped rather than misreporting every bound worktree as unrecognized.
 func checkD9UnrecognizedWorktrees(repoPath string, allIssues map[string]*materialize.Issue, now time.Time) Finding {
 	if repoPath == "" || allIssues == nil {
 		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
@@ -563,12 +507,6 @@ func checkD9UnrecognizedWorktrees(repoPath string, allIssues map[string]*materia
 	return EvaluateD9UnrecognizedWorktrees(result.Unrecognized)
 }
 
-// EvaluateD9UnrecognizedWorktrees turns the reconciler's Unrecognized class into
-// a doctor finding. A worktree at a managed path with no issue binding is an
-// enforced health problem: reported here and, being a warning, promoted to an
-// error by `arm doctor --strict` so an agent cannot proceed past it. Note that
-// `arm worktree list` intentionally keeps exit code 0 on the same anomaly — it
-// is the inventory command that exists to report it.
 func EvaluateD9UnrecognizedWorktrees(unrecognized []string) Finding {
 	f := Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
 	if len(unrecognized) > 0 {
@@ -581,10 +519,6 @@ func EvaluateD9UnrecognizedWorktrees(unrecognized []string) Finding {
 	return f
 }
 
-// checkD12OpsWorktreeLag warns when the ops worktree HEAD is N>0 commits
-// behind origin/_armature. It best-effort fetches the tracking ref in the
-// ops worktree. Missing worktree or missing origin/_armature skips OK.
-// Not remediable by doctor --fix.
 func checkD12OpsWorktreeLag(worktreePath string) Finding {
 	skip := Finding{Check: "D12", Severity: SeverityOK, Message: "Ops worktree lag not checked"}
 	if strings.TrimSpace(worktreePath) == "" {
@@ -595,7 +529,7 @@ func checkD12OpsWorktreeLag(worktreePath string) Finding {
 		return skip
 	}
 	gc := adapters.New(worktreePath)
-	_ = gc.FetchTrackingRef("_armature") //nolint:errcheck // best-effort refresh of origin/_armature
+	swallowErr(gc.FetchTrackingRef("_armature"))
 	behind, err := gc.RevListCount("HEAD..origin/_armature")
 	if err != nil {
 		return skip
@@ -603,7 +537,6 @@ func checkD12OpsWorktreeLag(worktreePath string) Finding {
 	return EvaluateD12OpsWorktreeLag(behind)
 }
 
-// EvaluateD12OpsWorktreeLag turns a behind-count into a D12 finding.
 func EvaluateD12OpsWorktreeLag(behind int) Finding {
 	f := Finding{Check: "D12", Severity: SeverityOK, Message: "Ops worktree is not behind origin/_armature"}
 	if behind > 0 {

@@ -19,9 +19,6 @@ type FixAction struct {
 	Ops     []ops.Op `json:"ops"`
 }
 
-// LoadState materializes the ops log and returns the resulting index and per-issue
-// state, for callers (such as `arm doctor --fix`) that need the same view Run uses
-// internally but also want to compute fixes against it.
 func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*materialize.Issue, error) {
 	loaded, err := loadMaterializedState(issuesDir, stateDir)
 	if err != nil {
@@ -30,50 +27,6 @@ func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*mater
 	return loaded.index, loaded.issues, nil
 }
 
-// PlanFixes computes the deterministic set of remediation ops for issues whose
-// claim or worktree binding is broken, per the recovery state machine
-// (docs/design/recovery-state-machine.md):
-//
-//   - claimed + claim-expired (D2 — Orphaned Claim): the claiming worker went silent
-//     before starting; release the claim by transitioning back to open.
-//   - in-progress + claim-expired (D2 — Orphaned Claim + Starvation): the claiming
-//     worker went silent mid-work; transition to blocked pending manual investigation
-//     rather than silently discarding in-flight work.
-//   - claimed/in-progress + missing worktree: `arm claim --worktree` records the
-//     task's worktree path (the canonical `.worktrees/<issue-id>` path for new
-//     claims), so a claimed or in-progress issue whose recorded path has no live
-//     binding-bound worktree registered against repoPath indicates the worktree was
-//     torn down (or its git metadata corrupted) out from under an active claim —
-//     the same class of failure this fix pass exists to recover from, independent
-//     of whether the TTL has expired yet. This check is skipped entirely — for
-//     every issue, not just the ones it would otherwise flag — whenever the
-//     binding-aware inventory cannot positively confirm which worktrees are live
-//     (repoPath empty, not a git repo, or any other git failure). Treating
-//     "couldn't determine" the same as "confirmed missing" would misfire on every
-//     currently claimed/in-progress issue in the graph from a single transient git
-//     error — exactly the mass-false-positive risk this fix pass exists to avoid,
-//     not reintroduce. This check is further scoped to claims owned by workerID
-//     (the worker running doctor --fix): `git worktree list` only reports worktrees
-//     registered in the local repository doctor is running against, not worktrees
-//     on other machines/clones. In a coordinator clone, or any clone that has
-//     merely pulled another worker's claim ops, every other worker's claim would
-//     look like it has no live worktree here — only the current worker's own local
-//     git state can be trusted to say "the worktree is really gone" rather than
-//     "I just don't have visibility into another machine's worktree".
-//
-// Each action is expressed purely as ops to append; PlanFixes never mutates or
-// removes existing op log lines. Calling PlanFixes again after those ops have
-// been appended is idempotent: the affected issues are no longer
-// claimed/in-progress with a broken claim, so no further action is planned for them.
-//
-// Deliberately out of scope: reopening `done` issues that lack a corroborating git
-// commit ("half-recorded transitions" in the fully general sense). Unlike the cases
-// above, that check has no way to bound itself to a small, currently-active set of
-// issues — it would have to scan every done/merged issue in the whole graph, and a
-// deleted-after-merge task branch is a normal, expected state for old work, not a
-// sign of corruption. Auto-reopening on that signal risks mass false positives
-// across the graph's history. Left as a manual `arm doctor` diagnostic follow-up
-// rather than an automated fix.
 func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now time.Time, repoPath string) []FixAction {
 	nowUnix := now.Unix()
 	var actions []FixAction
@@ -96,14 +49,8 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 	}
 
 	if repoPath != "" {
-		// List the complete local inventory here rather than only the canonical
-		// .worktrees root. Claims made before managed auto-provisioning can carry
-		// an explicit legacy WorktreePath outside that root; if that path is still
-		// binding-bound and registered in this clone, it is live and must not be
-		// repaired as a missing worktree.
 		inventory, err := worktree.List(repoPath)
 		if err != nil {
-			// A failed inventory cannot prove a missing recorded worktree.
 			return actions
 		}
 		for id, issue := range allIssues {
@@ -121,9 +68,6 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 			case worktree.BindingAtRecordedPath:
 				continue
 			case worktree.BindingElsewhere:
-				// A moved worktree remains live by its binding. Surface the drift
-				// without emitting any op: releasing it would discard a claimant's
-				// reservation based solely on stale path metadata.
 				actions = append(actions, reportWorktreePathDrift(id, issue.WorktreePath, livePath))
 				continue
 			case worktree.BindingAmbiguous:
@@ -140,8 +84,6 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 	return actions
 }
 
-// reportWorktreePathDrift creates an output-only doctor advisory. An empty Ops
-// slice is intentional: applying the plan must leave durable state untouched.
 func reportWorktreePathDrift(id, recordedPath, livePath string) FixAction {
 	return FixAction{
 		IssueID: id,
