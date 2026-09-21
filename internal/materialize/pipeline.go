@@ -148,11 +148,13 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		}
 		state = NewState()
 		state.Issues = loadedIssues
-		state.RetractDerivedPromotions()
 	} else {
 		state = NewState()
 	}
 
+	// Cold and incremental share this apply path: retract (no-op on a fresh
+	// State) then full-replay allOps. Incremental is not a delta of new ops.
+	state.RetractDerivedPromotions()
 	sortOpsByTimestamp(allOps)
 
 	unhandledOps, err := applyOpsWithTolerance(state, allOps, nil)
@@ -295,6 +297,7 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	if state == nil {
 		return fmt.Errorf("ApplyOpsSorted: state is nil")
 	}
+	state.RetractDerivedPromotions()
 	ordered := append([]ops.Op(nil), proposed...)
 	sortOpsByTimestamp(ordered)
 	for _, op := range ordered {
