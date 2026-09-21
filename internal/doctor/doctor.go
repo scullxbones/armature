@@ -101,7 +101,7 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 	opItems := loaded.opItems
 	warnings := loaded.warnings
 
-	noteOnlyOrphans := noteOnlyOrphanTargets(allOps)
+	noteOnlyOrphans := targetsWithOnlyFullyDeletedNotes(allOps)
 	opsTargetIDs := make([]string, 0, len(allOps))
 	for _, op := range allOps {
 		if !ops.IsAuditOnly(op.Type) && op.TargetID != "" && !noteOnlyOrphans[op.TargetID] {
@@ -307,7 +307,7 @@ func checkD3OrphanedOpsFromListWithContext(index materialize.Index, targetIDs []
 	return f
 }
 
-func noteOnlyOrphanTargets(allOps []ops.Op) map[string]bool {
+func targetsWithOnlyFullyDeletedNotes(allOps []ops.Op) map[string]bool {
 	type noteState struct{ created, deleted bool }
 	notes := make(map[string]map[string]*noteState)
 	otherRefs := make(map[string]bool)
@@ -378,7 +378,7 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 	return f
 }
 
-func indexToDagNodes(index materialize.Index) map[string]*dag.Node {
+func blockedByOnlyDAGNodes(index materialize.Index) map[string]*dag.Node {
 	nodes := make(map[string]*dag.Node)
 	for id, entry := range index {
 		blockedBy := make([]string, len(entry.BlockedBy))
@@ -399,7 +399,7 @@ func indexToDagNodes(index materialize.Index) map[string]*dag.Node {
 func checkD5DependencyCycles(index materialize.Index) Finding {
 	f := Finding{Check: "D5", Severity: SeverityOK, Message: "No dependency cycles"}
 
-	dagNodes := indexToDagNodes(index)
+	dagNodes := blockedByOnlyDAGNodes(index)
 	graphIndex := dag.FromIndex(dagNodes)
 	if !graphIndex.HasCycle() {
 		return f
