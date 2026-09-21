@@ -351,3 +351,5 @@
 ["transition","MATENC-S1-T2",1790011379,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Landed via PR #218 squash c3c49a32; ClaimLostRace + claimant heartbeat clocks","branch":"task/MATENC-S1-T2","pr":"218","skipped_delivery_gate":true}]
 ["transition","MATENC-S1-T3",1790011543,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Landed via PR #219 squash 1da5cb61; WorktreeRestore/Compensation encode","branch":"task/MATENC-S1-T3","pr":"219","skipped_delivery_gate":true}]
 ["claim","MATENC-S1-T4",1790011554,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/MATENC-S1-T4","claim_token":"477e37ab200b7dfaed4bf510eed87fb0"}]
+["transition","MATENC-S1-T4",1790012302,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"to":"done","outcome":"Landed via PR #220 squash e857904f; shrink applyTransition helpers","branch":"task/MATENC-S1-T4","pr":"220","skipped_delivery_gate":true}]
+["claim","MATENC-S1-T5",1790012305,"bfc7fab2-5292-4d3d-9773-9f49b203f5c6",{"ttl":240,"worktree_path":"/workspace/armature/.worktrees/MATENC-S1-T5","claim_token":"2b3c677f8bba18c64c79397cdd894c39"}]
