@@ -111,7 +111,16 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 	return Report{Checks: checks}, nil
 }
 
-func indexedChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string, now time.Time, d3ctx map[string][]opLocation, afterD6 []Finding, configPath string) []Finding {
+func indexedChecks(
+	index materialize.Index,
+	allIssues map[string]*materialize.Issue,
+	opsTargetIDs []string,
+	repoPath string,
+	now time.Time,
+	d3ctx map[string][]opLocation,
+	afterD6 []Finding,
+	configPath string,
+) []Finding {
 	checks := []Finding{
 		checkD1GitDivergence(repoPath, index),
 		checkD2StaleClaims(allIssues, now),
