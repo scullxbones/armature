@@ -156,8 +156,7 @@ func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64,
 	return result.Items, result.PhysicalEOF, result.Warnings, nil
 }
 
-// ExtractOps converts a slice of OpItems to a slice of Ops for compatibility
-// with existing code that expects just ops.
+// ExtractOps converts a slice of OpItems to a slice of Ops.
 func ExtractOps(items []OpItem) []Op {
 	ops := make([]Op, len(items))
 	for i, item := range items {

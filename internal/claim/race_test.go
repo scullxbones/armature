@@ -90,9 +90,6 @@ func TestClaimLostRace_REQ_MATENC_S1_T2(t *testing.T) {
 
 	t.Run("does not unify with ResolveClaim earliest-timestamp winner", func(t *testing.T) {
 		t.Parallel()
-		// Held lease applied at t=200; challenger op is timestamped earlier.
-		// ResolveClaim would pick the earlier op; sequential replay keeps the
-		// live holder.
 		held := liveHeld("worker-a", 200, 60)
 		assert.True(t, ClaimLostRace(held, "worker-b", 100))
 		winner := ResolveClaim([]ops.Op{

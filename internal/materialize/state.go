@@ -11,12 +11,7 @@ import (
 	"github.com/scullxbones/armature/internal/review"
 )
 
-// ClaimStale reports whether this issue's claim has expired as of now (Unix
-// seconds), delegating to the shared claim.IsClaimStale expiry formula so every
-// caller — worktree reconciliation, doctor, claim races — agrees on staleness
-// from a single source of truth. Exposed here (rather than importing claim
-// directly from packages like internal/worktree, whose depguard boundary forbids
-// it) because materialize already owns the claim sub-domain.
+// ClaimStale reports whether this issue's claim has expired as of now (Unix seconds).
 func (i *Issue) ClaimStale(now int64) bool {
 	last := claimpkg.FoldLastActivity(i.ClaimedAt, i.LastHeartbeat, i.LastClaimingWorkerActivity)
 	return claimpkg.IsClaimStale(last, i.ClaimTTL, now)
@@ -24,44 +19,6 @@ func (i *Issue) ClaimStale(now int64) bool {
 
 // ClaimHeldBy reports whether this issue is, right now, held by exactly the
 // claim identified by workerID and claimToken.
-//
-// This is the SINGLE canonical "do I still own this claim?" predicate for
-// the whole codebase. Before this method existed, the same check was
-// written out by hand in two places -- cmd/armature's claimStillOwnedBy and
-// this package's applyTransition IfClaimToken guard -- and the two copies
-// had already drifted (only one of them checked for a terminal status).
-// Every review round before this one patched whichever copy the round's
-// finding happened to land in, and the next round found the next field the
-// OTHER copy was still missing. Delegating both call sites to this one
-// method is the fix for the class of bug, not just the latest instance:
-// there is now exactly one place this logic can be written, so it cannot
-// disagree with itself again. Do not reintroduce a second, ad-hoc field
-// comparison anywhere else -- call this method instead.
-//
-// Requiring Status == ops.StatusClaimed is what makes this safe, and it
-// deliberately SUBSUMES the old "not terminal" check: done, merged, and
-// cancelled are all simply not ops.StatusClaimed, so a separate terminal
-// check is redundant and must not be "restored" alongside this method.
-// It also closes the gap the old terminal-only check missed: an issue that
-// has moved on to in-progress or blocked -- a live, non-terminal transition
-// made by a DIFFERENT command after this claim was won -- is just as much
-// "no longer this claim" as a terminal one, because claim-owning commands
-// (arm transition et al.) do not take the per-issue claim lock
-// (acquireClaimLock has exactly one caller, in cmd/armature/claim.go) and so
-// can race a claim's own post-claim provisioning/rollback path.
-//
-// This is safe on the legitimate path because applyClaim sets
-// Status = ops.StatusClaimed unconditionally on a WON claim, and a claim
-// that LOSES the race returns early -- the command exits before any
-// provisioning or rollback runs, so a rollback for a losing claim is never
-// even attempted.
-//
-// A nil receiver or an empty claimToken always reports false (fail safe):
-// an empty token can never legitimately match (ClaimToken is always
-// non-empty once a claim is won), so treating it as "no claim" here rather
-// than matching a zero-valued/legacy ClaimToken field closes that edge case
-// at the one place it can ever matter, instead of relying on every caller to
-// avoid passing an empty token.
 func (i *Issue) ClaimHeldBy(workerID, claimToken string) bool {
 	if i == nil || claimToken == "" {
 		return false

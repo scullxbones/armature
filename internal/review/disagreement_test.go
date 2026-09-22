@@ -7,9 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test-only aggregator for stored disagreement facts (G3.3). Production writes
-// IsDisagreement on attestations; nothing on the CLI path queries this view.
-
 type disagreementEvent struct {
 	BundleID              string
 	DeliveryFingerprint   string
@@ -52,10 +49,6 @@ func cloneRating(r *Rating) *Rating {
 	return &cp
 }
 
-// TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2 proves G3.3:
-// RecordWithDuplicateCheck writes IsDisagreement / ConflictsWith* on the new
-// Assessment Attestation, and collectDisagreementStats treats those stored
-// fields as the queryable disagreement facts.
 func TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2(t *testing.T) {
 	t.Parallel()
 
@@ -92,9 +85,6 @@ func TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2(t *testing.T) 
 		"the unre-written prior is not a disagreement fact")
 }
 
-// TestDisagreementStats_IgnoresNonDisagreementRows_REQ_TOPTIER_S13_T2 asserts
-// the aggregator keys off stored IsDisagreement and does not re-derive events
-// from raw Conformance Rating pairs or leftover ConflictsWith* fields.
 func TestDisagreementStats_IgnoresNonDisagreementRows_REQ_TOPTIER_S13_T2(t *testing.T) {
 	t.Parallel()
 

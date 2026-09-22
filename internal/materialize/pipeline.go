@@ -152,8 +152,6 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		state = NewState()
 	}
 
-	// Cold and incremental share this apply path: retract (no-op on a fresh
-	// State) then full-replay allOps. Incremental is not a delta of new ops.
 	state.RetractDerivedPromotions()
 	sortOpsByTimestamp(allOps)
 
@@ -284,10 +282,6 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	if state == nil {
 		return fmt.Errorf("ApplyOpsSorted: state is nil")
 	}
-	// Retract derived promotions, then apply proposed in timestamp order.
-	// Callers that pass a complete log onto cached state must reinitialize
-	// asserted issues first (MaterializeIncremental); this function stays
-	// a delta projector for validate's proposed-op overlay.
 	state.RetractDerivedPromotions()
 	ordered := append([]ops.Op(nil), proposed...)
 	sortOpsByTimestamp(ordered)

@@ -18,11 +18,6 @@ var censusedSurfaces = map[string][]string{
 	"cmd/**": {"docs/commands.md", "docs/design/surface-census.md"},
 }
 
-// checkE13VerticalSliceCoupling asks a per-task question: does this task touch a
-// censused surface without owning any of the doc lines that surface's drift check
-// reads, while a sibling in the same story owns them? A task that carries both its
-// code and its own census/doc lines is a vertical slice and is exempt by
-// construction. One finding per offending task, citing every implicated sibling.
 func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 
@@ -67,7 +62,6 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 				if !scopeTouchesSurface(t.Scope, surfaceGlob) {
 					continue
 				}
-				// Same-task ownership is co-location, not coupling.
 				if len(ownedDocFiles(t.Scope, docFiles)) > 0 {
 					continue
 				}
@@ -101,11 +95,6 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 	return findings
 }
 
-// scopeTouchesSurface reports whether a scope entry definitely lands inside the
-// censused surface. This is Allows-shaped (does the surface glob cover this
-// entry), deliberately not Overlaps-shaped: Overlaps documents itself as an
-// over-approximation calibrated for a warning with a --force escape, and would
-// read a repo-wide scope such as "." or "**" as a phantom cmd/** code task.
 func scopeTouchesSurface(scope []string, surfaceGlob string) bool {
 	for _, entry := range scope {
 		cleaned, _ := scopematch.CleanScope(entry)
@@ -116,15 +105,6 @@ func scopeTouchesSurface(scope []string, surfaceGlob string) bool {
 	return false
 }
 
-// ownedDocFiles reports which of docFiles this scope owns the lines of. Repo-wide
-// entries are dropped first: Allows short-circuits to true for any entry whose
-// canonical form is "**" (i.e. "." , "./" and "**"), so a lint sweep or dependency
-// bump would otherwise read as owning every census/doc file by construction. That
-// is the ownership-side twin of the phantom-code-task hole scopeTouchesSurface
-// closes -- and a phantom owner is worse, because it makes every genuinely
-// well-formed sibling in the story an E13 offender with no coherent remedy. A
-// scope that actually names a directory containing the doc files (docs/**) is a
-// real owner and stays one: that is the horizontal split E13 exists to catch.
 func ownedDocFiles(scope []string, docFiles []string) []string {
 	named := make([]string, 0, len(scope))
 	for _, entry := range scope {
