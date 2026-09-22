@@ -13,22 +13,14 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 )
 
-// CheckD8ScopeViolations checks for out-of-scope artifacts on disk that correlate with
-// active or recently-completed tasks. It uses ScopePolicy.CheckPaths to detect any untracked
-// or modified paths outside a task's declared scope glob.
-//
-// The check is designed to catch stray binaries and other artifacts that escaped scope
-// enforcement at commit time. It does NOT flag general main-worktree hygiene unrelated
-// to a task's scope.
-//
-// Scope:
-//   - Only checks against active (claimed/in-progress) or recently-completed (done/merged)
-//     tasks, within a grace period (e.g., 30 minutes after completion).
-//   - For each such task, walks the filesystem and identifies paths that would violate
-//     the task's scope globs.
-//   - Does NOT check the entire filesystem against all tasks (that would be O(n*m) and
-//     flag unrelated hygiene issues); instead checks only paths that match the task's
-//     scope pattern, looking for both in-scope and out-of-scope variants.
+// CheckD8ScopeViolations reports out-of-scope artifacts among git-dirty paths
+// for active or recently completed tasks. Candidates come from
+// findOutOfScopeArtifacts, which reads `git status --porcelain` (untracked or
+// uncommitted-modified paths). It does not walk the filesystem. Committed files
+// outside a task's scope are not flagged. Root-level config files and non-code
+// directories are treated as general hygiene. A dirty path covered by another
+// active or recently completed task's scope is not reported as a violation of a
+// different task.
 func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*materialize.Issue, repoPath string, now time.Time) Finding {
 	f := Finding{
 		Check:    "D8",

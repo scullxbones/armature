@@ -57,10 +57,7 @@ func CheckTaskContract(task Task) []Violation {
 	if task.Type != "task" || isTerminal(task.Status) {
 		return nil
 	}
-	if !claimsDoctorRunWiring(task.DefinitionOfDone) {
-		return nil
-	}
-	if reHelperOnly.MatchString(task.DefinitionOfDone) {
+	if !ClaimsDoctorRunWiring(task.DefinitionOfDone) {
 		return nil
 	}
 	if scopematch.Allows(task.Scope, DoctorRunWiringPath) {
@@ -76,8 +73,14 @@ func CheckTaskContract(task Task) []Violation {
 	}}
 }
 
-func claimsDoctorRunWiring(dod string) bool {
+// ClaimsDoctorRunWiring reports whether dod is an implement-claim for arm doctor
+// Run wiring. Helper-only and not-wired DoDs are not claims. Completion-ritual
+// mentions of arm doctor are not claims.
+func ClaimsDoctorRunWiring(dod string) bool {
 	if strings.TrimSpace(dod) == "" {
+		return false
+	}
+	if reHelperOnly.MatchString(dod) {
 		return false
 	}
 	if reGainsCheck.MatchString(dod) || reAddWireDn.MatchString(dod) {
