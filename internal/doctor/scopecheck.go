@@ -161,6 +161,7 @@ func topLevelDir(rel string) string {
 }
 
 func gitDirtyPaths(repoPath string) []string {
+	// #nosec G204 - repoPath is a caller-supplied trusted repo/worktree path
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "--porcelain", "--untracked-files=all")
 	out, err := cmd.Output()
 	if err != nil {
