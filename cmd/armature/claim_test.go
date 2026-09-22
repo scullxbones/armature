@@ -900,7 +900,8 @@ func TestClaimStillOwnedByReportsFalseAfterTransitionToInProgress_REQ_LNGHZN_S5_
 
 	owns, err := reloadStoreHeldByExactWorkerAndClaimToken(store, "task-01", "worker-a", claimToken)
 	require.NoError(t, err)
-	assert.False(t, owns, "reloadStoreHeldByExactWorkerAndClaimToken must report not-owned once the issue has left StatusClaimed, even with matching ClaimedBy/ClaimToken")
+	assert.False(t, owns,
+		"reloadStoreHeldByExactWorkerAndClaimToken must report not-owned once the issue has left StatusClaimed, even with matching ClaimedBy/ClaimToken")
 }
 
 func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededByTransition_REQ_LNGHZN_S5_T9(t *testing.T) {
