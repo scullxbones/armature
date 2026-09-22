@@ -143,9 +143,6 @@ func TestPlanCouplingSkipsTerminalStatusTasks_REQ_LNGHZN_S10_T5(t *testing.T) {
 	assert.False(t, containsError(result, "E13"), "merged sibling tasks should not trigger coupling error, got: %v", result.Errors)
 }
 
-// TestPlanCouplingExemptsSelfCoLocatedSiblings asserts the shape E13 exists to
-// reward: two siblings that each carry their own code AND their own census/doc
-// lines are vertical slices, not a horizontal split, and must not be flagged.
 func TestPlanCouplingExemptsSelfCoLocatedSiblings_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -169,10 +166,6 @@ func TestPlanCouplingExemptsSelfCoLocatedSiblings_REQ_LNGHZN_S10_T5(t *testing.T
 		"self-co-located siblings are vertical slices, not coupling, got: %v", result.Errors)
 }
 
-// TestPlanCouplingIgnoresRepoWideScope asserts a repo-wide task (a lint sweep, a
-// dependency bump) is not read as a phantom cmd/** code task. scopeTouchesSurface
-// asks whether the entry definitely lands inside the surface, not whether the two
-// globs could conceivably intersect.
 func TestPlanCouplingIgnoresRepoWideScope_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	for _, scope := range []string{".", "**", "internal/**"} {
@@ -196,10 +189,6 @@ func TestPlanCouplingIgnoresRepoWideScope_REQ_LNGHZN_S10_T5(t *testing.T) {
 	}
 }
 
-// TestPlanCouplingReportsOncePerCodeTask asserts findings scale with the number of
-// offending tasks, not with the code x doc cross product. Per I4 the agent reading
-// this output is the primary user: one finding per offending task, citing every
-// implicated sibling, says the same thing once.
 func TestPlanCouplingReportsOncePerCodeTask_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -224,10 +213,6 @@ func TestPlanCouplingReportsOncePerCodeTask_REQ_LNGHZN_S10_T5(t *testing.T) {
 	}
 }
 
-// TestCensusedSurfacesMatchesCensusDoc is the drift gate for E13's own census
-// copy. docs/design/surface-census.md is authoritative; censusedSurfaces restates
-// it. Without this test, adding a surface to the census silently stops E13 from
-// covering it -- a false negative, the failure mode a gate never announces.
 func TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "design", "surface-census.md"))
@@ -239,8 +224,6 @@ func TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5(t *testing.T) {
 		"censusedSurfaces has drifted from the Censused Surfaces table in docs/design/surface-census.md")
 }
 
-// parseCensusedSurfaceTable reads the "## Censused Surfaces" markdown table,
-// whose rows are | `<surface glob>` | `<doc file>`, `<doc file>` | <notes> |.
 func parseCensusedSurfaceTable(t *testing.T, doc string) map[string][]string {
 	t.Helper()
 	out := make(map[string][]string)
@@ -273,11 +256,6 @@ func parseCensusedSurfaceTable(t *testing.T, doc string) map[string][]string {
 	return out
 }
 
-// TestCheckIntroductionDoesNotBlockOnE13 asserts E13 is a plan-release gate, not a
-// write-time refusal. A planner decomposes a story one task at a time and the graph
-// is transiently ill-shaped between writes; refusing the create forbids ever
-// reaching the intermediate state. E13 still fails Validate for arm validate and
-// arm dag transition --to verified.
 func TestCheckIntroductionDoesNotBlockOnE13_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	current := makeState(
@@ -311,12 +289,6 @@ func TestCheckIntroductionDoesNotBlockOnE13_REQ_LNGHZN_S10_T5(t *testing.T) {
 	assert.NoError(t, err, "E13 is a plan-release gate, not a write-time refusal")
 }
 
-// TestPlanCouplingRepoWideScopeIsNotADocOwner asserts the same rule that keeps a
-// repo-wide task from being read as a phantom cmd/** code task also keeps it from
-// being read as a phantom doc *owner*. A lint sweep scoped "." covers the census
-// docs by construction; it does not own their lines, and treating it as an owner
-// makes every well-formed sibling in the story an E13 offender. A directory scope
-// that actually names the docs tree (docs/**) is a real owner and stays one.
 func TestPlanCouplingRepoWideScopeIsNotADocOwner_REQ_LNGHZN_S10_T5(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

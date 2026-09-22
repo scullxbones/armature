@@ -10,10 +10,6 @@ import (
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
-// censusedSurfaces restates the Censused Surfaces table in
-// docs/design/surface-census.md, which is authoritative. The two are held
-// together by TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5 -- without
-// that gate, adding a surface to the census would silently stop E13 covering it.
 var censusedSurfaces = map[string][]string{
 	"cmd/**": {"docs/commands.md", "docs/design/surface-census.md"},
 }

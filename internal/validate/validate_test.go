@@ -19,9 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// globOverlaps is a test-only alias for scopematch.Overlaps — the single
-// canonical overlap implementation validate.go now delegates to — kept so
-// the table-driven tests below don't need per-call-site churn.
 func globOverlaps(a, b string) bool {
 	return scopematch.Overlaps(a, b)
 }
@@ -79,7 +76,7 @@ func TestValidate_CircularDep(t *testing.T) {
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
 	assert.False(t, result.OK)
-	// At least one circular dependency error should be present
+
 	found := false
 	for _, e := range result.Errors {
 		if strings.Contains(e, "cycle detected") {
@@ -229,9 +226,7 @@ func TestW1IgnoresTerminalAndEpicIssues_REQ_W1TYPE_1(t *testing.T) {
 
 func TestW1ExcludesPassiveAggregateParents_REQ_W1TYPE_1(t *testing.T) {
 	t.Parallel()
-	// In-progress story whose only child is done still carries rolled-up scope.
-	// W1 must not treat that parent as a competitor against unrelated live work;
-	// the terminal child is already ignored.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:       "STORY-ROLLUP",
@@ -258,17 +253,11 @@ func TestW1ExcludesPassiveAggregateParents_REQ_W1TYPE_1(t *testing.T) {
 		"passive aggregate story must not W1 against an unrelated live task on rolled-up files")
 }
 
-// w1ClaimNow pins the evaluation clock for the claim-freshness W1 tests so
-// claim expiry is deterministic rather than wall-clock dependent.
 const w1ClaimNow int64 = 1_700_000_000
 
 func TestW1KeepsExplicitlyClaimedAggregateParent_REQ_W1TYPE_1(t *testing.T) {
 	t.Parallel()
-	// A story can be claimed directly (see cmd/armature/claim_test.go's direct
-	// story claim coverage). A worker holding that claim is editing the story's
-	// files right now, so it is active work rather than a passive rollup and must
-	// still compete in W1 -- the claim-time scan filters out non-task holders, so
-	// validate is the only remaining safeguard for this case.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:            "STORY-CLAIMED",
@@ -308,10 +297,6 @@ func TestW1KeepsExplicitlyClaimedAggregateParent_REQ_W1TYPE_1(t *testing.T) {
 	assert.Contains(t, cited, "TSK-NEW")
 }
 
-// TestW1InProgressRollupParentWithoutClaimantStaysPassive_REQ_W1TYPE_1 guards
-// the other side of the claim check: applyClaim promotes a parent to
-// in-progress without setting ClaimedBy, so an in-progress status alone is not
-// evidence of a direct claim and must not drag the rollup back into W1.
 func TestW1InProgressRollupParentWithoutClaimantStaysPassive_REQ_W1TYPE_1(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -340,13 +325,6 @@ func TestW1InProgressRollupParentWithoutClaimantStaysPassive_REQ_W1TYPE_1(t *tes
 		"a rollup parent promoted to in-progress without a claimant must stay out of W1")
 }
 
-// TestW1ExcludesExpiredAggregateClaim_REQ_W1TYPE_1 covers the third state a
-// claimed aggregate parent can be in: materialization leaves Status and
-// ClaimedBy populated after a lease outlives its TTL, so those fields alone
-// would keep an abandoned parent "active" in W1 forever -- and under
-// CheckIntroduction(..., Strict: true) that stale rollup could reject later
-// creates and amendments with no worker actually holding it. Claim freshness
-// decides, matching what the ready and recovery paths already do.
 func TestW1ExcludesExpiredAggregateClaim_REQ_W1TYPE_1(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -508,7 +486,7 @@ func TestE5TypeHierarchy(t *testing.T) {
 func TestE6RequiredFields(t *testing.T) {
 	t.Parallel()
 	state := makeState(
-		&materialize.Issue{ID: "TSK-1", Type: "task"}, // missing scope, acceptance, dod
+		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
@@ -519,7 +497,7 @@ func TestE6RequiredFields(t *testing.T) {
 func TestE6RequiredFields_SkipsMergedTask(t *testing.T) {
 	t.Parallel()
 	state := makeState(
-		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "merged"}, // merged — required fields not enforced
+		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "merged"},
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
@@ -530,7 +508,7 @@ func TestE6RequiredFields_SkipsMergedTask(t *testing.T) {
 func TestE6RequiredFields_SkipsDoneTask(t *testing.T) {
 	t.Parallel()
 	state := makeState(
-		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done"}, // done — required fields not enforced
+		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done"},
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
@@ -541,7 +519,7 @@ func TestE6RequiredFields_SkipsDoneTask(t *testing.T) {
 func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
 	t.Parallel()
 	state := makeState(
-		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "cancelled"}, // cancelled — required fields not enforced
+		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "cancelled"},
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
@@ -562,7 +540,7 @@ func TestE5TypeHierarchy_EpicWithTaskIsValid(t *testing.T) {
 
 func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
 	t.Parallel()
-	// B.Blocks contains A (B was created first and blocks A) — should suppress overlap warning
+
 	state := makeState(
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-B"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-A"}},
@@ -574,9 +552,7 @@ func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
 
 func TestCheckW1ScopeOverlap_SuppressesTransitivelyOrderedPairs_REQ_TOPTIER_S17_T2(t *testing.T) {
 	t.Parallel()
-	// Test transitive closure: A blocks B blocks C
-	// Therefore A and C are transitively ordered (A ultimately blocks C)
-	// and should NOT produce a scope-overlap warning.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:     "TSK-A",
@@ -597,22 +573,21 @@ func TestCheckW1ScopeOverlap_SuppressesTransitivelyOrderedPairs_REQ_TOPTIER_S17_
 			ID:        "TSK-C",
 			Type:      "task",
 			Parent:    "STORY-1",
-			Scope:     []string{"internal/ops/*.go"}, // overlaps with TSK-A
+			Scope:     []string{"internal/ops/*.go"},
 			BlockedBy: []string{"TSK-B"},
 		},
 	)
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{})
-	// TSK-A and TSK-C should NOT trigger scope-overlap warning
-	// because TSK-A transitively blocks TSK-C through TSK-B
+
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"scope overlap should be suppressed when tasks are transitively ordered via blocked_by chain")
 }
 
 func TestW3BudgetExceeded_WithLargeContext(t *testing.T) {
 	t.Parallel()
-	// Context field pushes estimated token count over the 4000-token budget
-	largeContext := make([]byte, 20000) // 20k bytes / 4 = 5000 est tokens
+
+	largeContext := make([]byte, 20000)
 	for i := range largeContext {
 		largeContext[i] = 'x'
 	}
@@ -655,7 +630,7 @@ func TestW6ComplexityMismatch_LargeWith1File(t *testing.T) {
 
 func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
 	t.Parallel()
-	// Outcome is exactly one of the vague words (exact match check at validate.go:491)
+
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
@@ -666,8 +641,7 @@ func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
 
 func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
 	t.Parallel()
-	// Merged/done/cancelled issues should not trigger the missing context_files warning —
-	// the work is complete and the guidance is no longer actionable.
+
 	for _, status := range []string{"merged", "done", "cancelled"} {
 		t.Run(status, func(t *testing.T) {
 			t.Parallel()
@@ -680,7 +654,6 @@ func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
 					"pkg/b/bar.go",
 					"pkg/c/baz.go",
 				},
-				// no ContextFiles — spans 3 dirs, would trigger W5 for active issues
 			})
 			graph := graphFromState(state)
 			result := Validate(state, graph, Options{})
@@ -702,7 +675,7 @@ func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
 	result := Validate(state, graph, Options{})
 	assert.True(t, containsWarning(result, "missing context_files"),
 		"active issues spanning 3+ dirs without context_files should still warn")
-	// The warning must not reference the non-existent --context-files flag.
+
 	for _, w := range result.Warnings {
 		if strings.Contains(w, "missing context_files") {
 			assert.NotContains(t, w, "--context-files",
@@ -754,8 +727,7 @@ func TestW5MissingContextFiles_NonContainerTypesStillWarn_REQ_LNGHZN_S10_T4(t *t
 
 func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 	t.Parallel()
-	// Issues with merged, done, or cancelled status should not trigger phantom scope warnings
-	// even if their scope globs match no files.
+
 	for _, status := range []string{"merged", "done", "cancelled"} {
 		state := makeState(
 			&materialize.Issue{
@@ -765,7 +737,7 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 				Scope:  []string{"nonexistent/path/*.go"},
 			},
 		)
-		// For terminal statuses, W10 check is skipped anyway
+
 		graph := graphFromState(state)
 		result := Validate(state, graph, Options{PreExpandedScopes: nil})
 		assert.False(t, containsPhantomScopeInfo(result),
@@ -775,7 +747,7 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 
 func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 	t.Parallel()
-	// Blocked issues are not terminal — their scope should still be validated.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:     "TSK-1",
@@ -784,9 +756,9 @@ func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 			Scope:  []string{"nonexistent/path/*.go"},
 		},
 	)
-	// Provide pre-expanded scopes showing no files match
+
 	preExpandedScopes := map[string][]string{
-		"TSK-1": {}, // empty list means globs matched no files
+		"TSK-1": {},
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
@@ -796,7 +768,7 @@ func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 
 func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) {
 	t.Parallel()
-	// Terminal status applies across all issue types, not just tasks.
+
 	for _, issueType := range []string{"epic", "story"} {
 		state := makeState(
 			&materialize.Issue{
@@ -806,7 +778,7 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 				Scope:  []string{"nonexistent/path/*.go"},
 			},
 		)
-		// Terminal status skips W10 check anyway
+
 		graph := graphFromState(state)
 		result := Validate(state, graph, Options{PreExpandedScopes: nil})
 		assert.False(t, containsPhantomScopeInfo(result),
@@ -816,8 +788,7 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 
 func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 	t.Parallel()
-	// Scope entries ending with " (new)" mark files not yet created; they should not
-	// trigger phantom scope warnings because the file is intentionally planned, not missing.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:     "ISSUE-1",
@@ -826,9 +797,9 @@ func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 			Scope:  []string{"internal/adapters/files.go (new)", "internal/adapters/git.go (new)"},
 		},
 	)
-	// "(new)" entries don't trigger phantom scope checks
+
 	preExpandedScopes := map[string][]string{
-		"ISSUE-1": {}, // empty list means no files matched
+		"ISSUE-1": {},
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
@@ -838,9 +809,9 @@ func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 
 func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 	t.Parallel()
-	// When a scope has both (new) and regular entries, only the regular nonexistent one triggers.
+
 	dir := t.TempDir()
-	// Create one real file
+
 	realFile := filepath.Join(dir, "real.go")
 	require.NoError(t, os.WriteFile(realFile, []byte("package x\n"), 0644))
 
@@ -852,16 +823,16 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 			Scope:  []string{"real.go", "planned.go (new)", "ghost.go"},
 		},
 	)
-	// Provide pre-expanded scopes showing real.go exists but ghost.go doesn't
+
 	preExpandedScopes := map[string][]string{
-		"ISSUE-1": {"real.go"}, // ghost.go and planned.go (new) don't appear
+		"ISSUE-1": {"real.go"},
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
-	// ghost.go is phantom (no (new) suffix, doesn't exist)
+
 	assert.True(t, containsPhantomScopeInfo(result),
 		"nonexistent file without (new) suffix should still trigger phantom scope warning")
-	// Confirm only ghost.go is mentioned, not planned.go (new)
+
 	var phantomInfos []string
 	for _, info := range result.Infos {
 		if strings.Contains(info, "phantom scope") {
@@ -875,8 +846,7 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 
 func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 	t.Parallel()
-	// Legacy ops store scope as a single comma-joined string. The W10 check must split
-	// and evaluate each path individually, skipping "(new)" entries within the list.
+
 	dir := t.TempDir()
 	realFile := filepath.Join(dir, "real.go")
 	require.NoError(t, os.WriteFile(realFile, []byte("package x\n"), 0644))
@@ -886,12 +856,12 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 			ID:     "ISSUE-1",
 			Type:   "task",
 			Status: "open",
-			// Legacy single-string entry with mixed (new), existing, and phantom paths.
+
 			Scope: []string{"planned.go (new), real.go, ghost.go"},
 		},
 	)
 	preExpandedScopes := map[string][]string{
-		"ISSUE-1": {"real.go"}, // only real.go exists; planned.go (new) and ghost.go don't
+		"ISSUE-1": {"real.go"},
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
@@ -901,7 +871,7 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 			phantomInfos = append(phantomInfos, info)
 		}
 	}
-	// Only ghost.go should be phantom; planned.go (new) is skipped, real.go exists.
+
 	assert.Len(t, phantomInfos, 1)
 	assert.Contains(t, phantomInfos[0], "ghost.go")
 	assert.NotContains(t, phantomInfos[0], "planned.go")
@@ -910,7 +880,7 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 
 func TestValidateUsesCoverage(t *testing.T) {
 	t.Parallel()
-	// Pass coverage data directly
+
 	coverage := &traceability.Coverage{
 		CitedNodes:  1,
 		TotalNodes:  1,
@@ -924,14 +894,12 @@ func TestValidateUsesCoverage(t *testing.T) {
 	assert.Equal(t, 1, result.Coverage.CitedNodes)
 }
 
-// TestE5TypeHierarchy_SkipsTerminalStatus verifies that cancelled, done, and merged
-// issues are not flagged for hierarchy violations — they have already been delivered.
 func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
 	t.Parallel()
 	for _, status := range []string{"cancelled", "done", "merged"} {
 		t.Run("status="+status, func(t *testing.T) {
 			t.Parallel()
-			// task parenting another task is normally invalid, but terminal tasks are exempt
+
 			state := makeState(
 				&materialize.Issue{ID: "TASK-1", Type: "task", Status: status, Children: []string{"TASK-2"}},
 				&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
@@ -944,15 +912,12 @@ func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
 	}
 }
 
-// TestE5TypeHierarchy_SkipsTerminalChildren verifies that cancelled, done, and merged
-// children are not flagged for hierarchy violations even if the parent/child combo would
-// otherwise be invalid (e.g. bug under task).
 func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
 	t.Parallel()
 	for _, status := range []string{"cancelled", "done", "merged"} {
 		t.Run("status="+status, func(t *testing.T) {
 			t.Parallel()
-			// bug under task is normally invalid, but terminal children are exempt
+
 			state := makeState(
 				&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
 				&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1", Status: status},
@@ -965,7 +930,6 @@ func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
 	}
 }
 
-// TestE5TypeHierarchy_BugUnderStoryIsValid verifies that bug is a valid child of story.
 func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -977,7 +941,6 @@ func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
 	assert.False(t, containsError(result, "invalid hierarchy"), "bug under story should be valid")
 }
 
-// TestE5TypeHierarchy_BugUnderEpicIsValid verifies that bug is a valid child of epic.
 func TestE5TypeHierarchy_BugUnderEpicIsValid(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -989,7 +952,6 @@ func TestE5TypeHierarchy_BugUnderEpicIsValid(t *testing.T) {
 	assert.False(t, containsError(result, "invalid hierarchy"), "bug under epic should be valid")
 }
 
-// TestE5TypeHierarchy_BugUnderTaskIsInvalid verifies that bug cannot be parented under a task.
 func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -1001,48 +963,35 @@ func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
 	assert.True(t, containsError(result, "invalid hierarchy"), "bug under task should be invalid")
 }
 
-// TestCheckE4Cycles_CrossScopeBlockerCycle verifies that graph.ScopedHasCycle detects
-// a cycle where the blocker is outside the scope but creates a cycle with a scoped issue.
-// Example: Task A (in scope) is blocked by Task B (out of scope). Task B is blocked by Task A.
-// This is a real cycle that prevents A from ever becoming ready, and should be detected.
 func TestCheckE4Cycles_CrossScopeBlockerCycle(t *testing.T) {
 	t.Parallel()
-	// Create a state with two issues: A and B, where A blocks B and B blocks A.
-	// When validating scope={A}, graph.ScopedHasCycle("A", ...) should detect the cycle.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:        "A",
 			Type:      "task",
 			Status:    "open",
-			BlockedBy: []string{"B"}, // A is blocked by B
+			BlockedBy: []string{"B"},
 		},
 		&materialize.Issue{
 			ID:        "B",
 			Type:      "task",
 			Status:    "open",
-			BlockedBy: []string{"A"}, // B is blocked by A — cycle!
+			BlockedBy: []string{"A"},
 		},
 	)
 
-	// Build the graph
 	graph := graphFromState(state)
 
-	// Define scope containing only A (B is out of scope)
 	scope := map[string]bool{
 		"A": true,
 	}
 
-	// Call ScopedHasCycle with A in scope, B out of scope
 	result := graph.ScopedHasCycle("A", scope)
 
-	// Should detect the cycle even though B is out of scope
 	assert.True(t, result, "expected ScopedHasCycle to detect cross-scope blocker cycle")
 }
 
-// TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive verifies that graph.ScopedHasCycle does NOT
-// report a cycle when the cycle exists entirely outside the scope.
-// Example: A (in scope) is blocked by B (out of scope). B and C form a cycle B→C→B.
-// A is not part of any cycle, so graph.ScopedHasCycle("A") must return false.
 func TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive(t *testing.T) {
 	t.Parallel()
 	state := makeState(
@@ -1056,7 +1005,7 @@ func TestCheckE4Cycles_OutOfScopeCycleIsNotFalsePositive(t *testing.T) {
 			ID:        "B",
 			Type:      "task",
 			Status:    "open",
-			BlockedBy: []string{"C"}, // B→C→B cycle, entirely out of scope
+			BlockedBy: []string{"C"},
 		},
 		&materialize.Issue{
 			ID:        "C",
@@ -1202,9 +1151,7 @@ func TestW4BroadScope_SkipsTerminalStatus(t *testing.T) {
 
 func TestCheckW1ScopeOverlap_FlagsCrossStoryOverlap_REQ_TOPTIER_S17_T3(t *testing.T) {
 	t.Parallel()
-	// Two tasks in DIFFERENT stories (different parents) with overlapping scope
-	// and no ordering edge should produce a scope-overlap warning.
-	// This is the "most dangerous, currently silent" case being fixed by TOPTIER-S17-T3.
+
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story"},
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
@@ -1219,8 +1166,7 @@ func TestCheckW1ScopeOverlap_FlagsCrossStoryOverlap_REQ_TOPTIER_S17_T3(t *testin
 
 func TestCheckW1ScopeOverlap_SuppressesCrossStoryWhenOrdered_REQ_TOPTIER_S17_T3(t *testing.T) {
 	t.Parallel()
-	// Two tasks in different stories with overlapping scope but with an ordering edge
-	// should NOT produce a scope-overlap warning, as they execute serially.
+
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story"},
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-B"}},
@@ -1235,13 +1181,9 @@ func TestCheckW1ScopeOverlap_SuppressesCrossStoryWhenOrdered_REQ_TOPTIER_S17_T3(
 
 func TestCheckW10PhantomScope_SuppressesForBlockerCreatedFiles_REQ_TOPTIER_S17_T4(t *testing.T) {
 	t.Parallel()
-	// A downstream task references a file that doesn't yet exist (phantom scope),
-	// but an upstream blocking task has declared in its scope that it will create
-	// that file (marked with "(new)" suffix). The phantom scope info should be
-	// suppressed for this file/task pair, since the file is legitimately expected
-	// to not exist yet pending upstream creation.
+
 	state := makeState(
-		// Upstream blocking task declares it will create internal/new_file.go
+
 		&materialize.Issue{
 			ID:     "TSK-BLOCKER",
 			Type:   "task",
@@ -1249,7 +1191,7 @@ func TestCheckW10PhantomScope_SuppressesForBlockerCreatedFiles_REQ_TOPTIER_S17_T
 			Scope:  []string{"internal/new_file.go (new)"},
 			Blocks: []string{"TSK-DOWNSTREAM"},
 		},
-		// Downstream task references internal/new_file.go but it doesn't exist yet
+
 		&materialize.Issue{
 			ID:        "TSK-DOWNSTREAM",
 			Type:      "task",
@@ -1258,28 +1200,21 @@ func TestCheckW10PhantomScope_SuppressesForBlockerCreatedFiles_REQ_TOPTIER_S17_T
 			BlockedBy: []string{"TSK-BLOCKER"},
 		},
 	)
-	// Pre-expanded scopes show no files exist yet
+
 	preExpandedScopes := map[string][]string{
 		"TSK-BLOCKER":    {},
 		"TSK-DOWNSTREAM": {},
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
-	// Should NOT report phantom scope for TSK-DOWNSTREAM since TSK-BLOCKER
-	// declares it will create the file
+
 	assert.False(t, containsPhantomScopeInfo(result),
 		"phantom scope should be suppressed when a blocking task declares the file with (new) suffix")
 }
 
 func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfScopeIssue(t *testing.T) {
 	t.Parallel()
-	// Models `arm validate --scope STORY-AC`: the scoped subset passed to
-	// checkW1ScopeOverlap contains only TSK-A and TSK-C (via STORY-AC's
-	// descendants); TSK-B — the middle link in the A->B->C blocked_by chain —
-	// lives under a sibling story and falls outside the subset. Even though
-	// the subset itself doesn't contain B, the transitive closure must still
-	// be computed from the full state so that A and C are recognized as
-	// serially ordered and the overlap warning is suppressed.
+
 	state := makeState(
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"STORY-AC", "STORY-B"}},
 		&materialize.Issue{ID: "STORY-AC", Type: "story", Parent: "EPIC-1", Children: []string{"TSK-A", "TSK-C"}},
@@ -1303,12 +1238,11 @@ func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfSc
 			ID:        "TSK-C",
 			Type:      "task",
 			Parent:    "STORY-AC",
-			Scope:     []string{"internal/ops/*.go"}, // overlaps with TSK-A
+			Scope:     []string{"internal/ops/*.go"},
 			BlockedBy: []string{"TSK-B"},
 		},
 	)
 
-	// Narrowed target set: STORY-AC plus its descendants (TSK-A, TSK-C). TSK-B is excluded.
 	scoped := map[string]*materialize.Issue{
 		"STORY-AC": state.Issues["STORY-AC"],
 		"TSK-A":    state.Issues["TSK-A"],
@@ -1326,7 +1260,7 @@ func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfSc
 func TestDirectBlocks_DoesNotMaterializeTransitiveClosure(t *testing.T) {
 	t.Parallel()
 	state := makeState(
-		// The only A -> B edge is the legacy/asymmetric BlockedBy form.
+
 		&materialize.Issue{ID: "TSK-A"},
 		&materialize.Issue{ID: "TSK-B", BlockedBy: []string{"TSK-A"}, Blocks: []string{"TSK-C"}},
 		&materialize.Issue{ID: "TSK-C"},
@@ -1346,9 +1280,7 @@ func TestDirectBlocks_DoesNotMaterializeTransitiveClosure(t *testing.T) {
 
 func TestCheckW10PhantomScope_SuppressesForTwoHopBlockerCreatedFiles(t *testing.T) {
 	t.Parallel()
-	// Same as the 1-hop suppression case, but the file-creating task is two
-	// blocked_by hops upstream (TSK-DOWNSTREAM <- TSK-MID <- TSK-BLOCKER),
-	// exercising collectBlockerNewFiles' transitive traversal.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:     "TSK-BLOCKER",
@@ -1388,11 +1320,7 @@ func TestCheckW10PhantomScope_SuppressesForTwoHopBlockerCreatedFiles(t *testing.
 
 func TestCheckW1ScopeOverlap_FlagsGlobAwareCrossStoryOverlap_PR79(t *testing.T) {
 	t.Parallel()
-	// Two tasks in different stories scope the same file through different
-	// valid glob patterns (a directory wildcard vs. a literal file inside that
-	// directory). scopeIntersection's exact-string comparison misses this, but
-	// claim.ScopesOverlap (used at claim time) recognizes it. Validate must use
-	// the same glob-aware primitive so it can't pass a claim that will later fail.
+
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story"},
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/armature/*.go"}},
@@ -1407,12 +1335,7 @@ func TestCheckW1ScopeOverlap_FlagsGlobAwareCrossStoryOverlap_PR79(t *testing.T) 
 
 func TestCheckW10PhantomScope_ConsultsFullStateForCrossSubtreeBlocker_PR79(t *testing.T) {
 	t.Parallel()
-	// Mirrors `arm validate --scope`/`--parent`: the downstream task is inside
-	// the selected subtree, but its blocker lives in a sibling story outside
-	// the scoped `targets` map passed to checkW10PhantomScope. The blocker
-	// legitimately declares the file as "(new)", so the phantom-scope INFO
-	// must still be suppressed by consulting the full issue map for blocker
-	// traversal, not just the scope-narrowed subset.
+
 	state := makeState(
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"STORY-BLOCKER", "STORY-DOWNSTREAM"}},
 		&materialize.Issue{ID: "STORY-BLOCKER", Type: "story", Parent: "EPIC-1", Children: []string{"TSK-BLOCKER"}},
@@ -1434,7 +1357,7 @@ func TestCheckW10PhantomScope_ConsultsFullStateForCrossSubtreeBlocker_PR79(t *te
 			BlockedBy: []string{"TSK-BLOCKER"},
 		},
 	)
-	// Narrowed target set: STORY-DOWNSTREAM plus its descendants. TSK-BLOCKER is excluded.
+
 	targets := map[string]*materialize.Issue{
 		"STORY-DOWNSTREAM": state.Issues["STORY-DOWNSTREAM"],
 		"TSK-DOWNSTREAM":   state.Issues["TSK-DOWNSTREAM"],
@@ -1453,42 +1376,21 @@ func TestCheckW10PhantomScope_ConsultsFullStateForCrossSubtreeBlocker_PR79(t *te
 
 func TestGlobOverlaps_RespectsPathSegmentBoundaries_PR79(t *testing.T) {
 	t.Parallel()
-	// internal/claimx has internal/claim as a *string* prefix but is not nested
-	// under it as a path segment. A naive strings.HasPrefix(dirA, dirB) check
-	// falsely treats these as overlapping. Regression coverage for the bug
-	// found in fable's holistic review of PR #79.
+
 	assert.False(t, globOverlaps("internal/claimx/foo.go", "internal/claim/*.go"),
 		"internal/claimx and internal/claim share a string prefix but are sibling directories, not nested — must not overlap")
 	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claimx/foo.go"),
 		"overlap check must be symmetric")
 
-	// NOTE(LNGHZN-S10-T7): these two cases previously asserted `true` on the
-	// strength of the now-removed containing/ancestor-directory fallback
-	// (dirA == dirB, or one a path-segment prefix of the other). Per
-	// LNGHZN-S10-T7, overlap is now decided by exact path or glob match
-	// only, so two glob patterns or two literal files that merely share a
-	// directory no longer overlap unless one pattern actually matches the
-	// other (e.g. a "**" or trailing-slash directory scope).
 	assert.False(t, globOverlaps("internal/claim/sub/*.go", "internal/claim/*.go"),
 		"single-segment glob 'internal/claim/*.go' does not match the deeper literal directory 'sub/' — no longer treated as overlapping via directory ancestry")
 	assert.False(t, globOverlaps("internal/claim/*.go", "internal/claim/sub/*.go"),
 		"overlap check must be symmetric")
 
-	// Two distinct literal files that merely share a containing directory
-	// must not overlap (this used to be `true` under the removed fallback).
 	assert.False(t, globOverlaps("internal/claim/a.go", "internal/claim/b.go"),
 		"two distinct literal files that merely share a containing directory must not overlap")
 }
 
-// TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7 verifies that
-// globOverlaps (delegated to scopematch.Overlaps) no longer reports overlap for
-// two distinct files that merely share a containing or ancestor directory. This
-// is the regression coverage, within internal/validate, for the second copy of
-// the bug fixed in claim by LNGHZN-S10-T6: internal/validate carried its own
-// duplicate globOverlaps/globOverlapDir pair with the same directory-ancestry
-// fallback, so arm claim was fixed but arm validate kept emitting false-positive
-// scope-overlap warnings between distinct files that merely lived under the
-// same directory (e.g. docs/agents/quality-gates.md and docs/use-cases.md).
 func TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
 
@@ -1503,10 +1405,6 @@ func TestGlobOverlapsIgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7(t *testing
 		"overlap check must be symmetric")
 }
 
-// TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T7 verifies
-// that delegating to scopematch.Overlaps did not weaken genuine overlap
-// detection: identical scope entries still overlap, and an explicit directory
-// glob like "docs/agents/**" still reports overlap against a file beneath it.
 func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
 
@@ -1535,10 +1433,7 @@ func TestFirstGlobOverlapPair_ReportsMatchedPatterns_PR79(t *testing.T) {
 
 func TestCheckW1ScopeOverlap_MessageReportsMatchedPatternPair_PR79(t *testing.T) {
 	t.Parallel()
-	// When the only overlap is via glob matching (scopeIntersection's
-	// exact-string comparison finds nothing), the warning message must name
-	// the specific pattern pair that matched, not dump both full scope lists —
-	// otherwise the message isn't actionable for tasks with many scope entries.
+
 	state := makeState(
 		&materialize.Issue{ID: "STORY-1", Type: "story"},
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/other/*.go", "cmd/armature/*.go"}},
@@ -1583,9 +1478,6 @@ func TestAffectsValidityCensus_REQ_LNGHZN_S10_T12(t *testing.T) {
 	}
 }
 
-// Production writers of ops.Append* that are allowed to skip refuseIntroduction.
-// Each entry must state why. A new production call site fails this test until
-// it is routed through an Introduction wrapper or added here with a reason.
 var introductionWriterAllowlist = map[string]string{
 	"cmd/armature/helpers.go":      "Introduction wrappers: refuseIntroduction then AppendAndCommit",
 	"cmd/armature/harness_hook.go": "heartbeat only; OpHeartbeat is classified AffectsValidity=false",
@@ -1914,8 +1806,6 @@ func TestValidate_CircularDepNamesParticipants(t *testing.T) {
 	assert.Contains(t, result.Errors[0], "B")
 }
 
-// --- Fix 1: Finding.identity() must use a structured Key, not Message ---
-
 func TestIntroductionAllowsW1NarrowingResidualOverlap_REQ_LNGHZN_S10_T12(t *testing.T) {
 	t.Parallel()
 	x := wellFormedTask("X", "a.go")
@@ -1924,7 +1814,6 @@ func TestIntroductionAllowsW1NarrowingResidualOverlap_REQ_LNGHZN_S10_T12(t *test
 	y.Scope = []string{"a.go", "b.go"}
 	state := makeState(x, y)
 
-	// Sanity: before the narrowing write, W1 fires citing both files.
 	before := Validate(state, graphFromState(state), Options{})
 	require.True(t, containsWarning(before, "scope overlap"))
 
@@ -1941,10 +1830,7 @@ func TestIntroductionAllowsW1NarrowingResidualOverlap_REQ_LNGHZN_S10_T12(t *test
 
 func TestIntroductionAllowsCountOnlyMessageChange_REQ_LNGHZN_S10_T12(t *testing.T) {
 	t.Parallel()
-	// W11's message embeds the outcome's char count ("vague outcome: %s
-	// outcome is %d chars"). Two W11 findings on the same issue with
-	// different counts must still be the same identity (Key empty, Message
-	// excluded), so a residual count change is not a re-introduction.
+
 	before := Result{Findings: []Finding{
 		{Severity: "warning", Rule: "W11", CitedIDs: []string{"SHIP"}, Message: "vague outcome: SHIP outcome is 5 chars"},
 	}}
@@ -1957,7 +1843,7 @@ func TestIntroductionAllowsCountOnlyMessageChange_REQ_LNGHZN_S10_T12(t *testing.
 
 func TestIntroductionE4PartialCycleBreakNotIntroduced_REQ_LNGHZN_S10_T12(t *testing.T) {
 	t.Parallel()
-	// Two overlapping 2-cycles sharing node B: A<->B and B<->C.
+
 	a := &materialize.Issue{ID: "A", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"B"}}
 	b := &materialize.Issue{ID: "B", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"A", "C"}}
 	c := &materialize.Issue{ID: "C", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"B"}}
@@ -1966,7 +1852,6 @@ func TestIntroductionE4PartialCycleBreakNotIntroduced_REQ_LNGHZN_S10_T12(t *test
 	before := Validate(state, graphFromState(state), Options{})
 	require.True(t, containsError(before, "cycle detected"))
 
-	// Break C out of the cycle: remove C's blocked_by edge to B.
 	proposed := []ops.Op{{
 		Type:     ops.OpUnlink,
 		TargetID: "C",
@@ -1989,7 +1874,6 @@ func TestIntroductionE4GrowingCycleStillIntroduced_REQ_LNGHZN_S10_T12(t *testing
 	before := Validate(state, graphFromState(state), Options{})
 	require.True(t, containsError(before, "cycle detected"))
 
-	// Pull C into the cycle: B<->C, overlapping the existing A<->B cycle.
 	proposed := []ops.Op{
 		{
 			Type:     ops.OpLink,
@@ -2009,9 +1893,7 @@ func TestIntroductionE4GrowingCycleStillIntroduced_REQ_LNGHZN_S10_T12(t *testing
 
 func TestIntroductionRefusesSecondE6OnDifferentField_REQ_LNGHZN_S10_T12(t *testing.T) {
 	t.Parallel()
-	// E6 always cites just [id], so this exercises identity aliasing directly:
-	// a scope-missing finding before, a definition_of_done-missing finding
-	// after — same (Rule, CitedIDs), different Key — must not alias.
+
 	before := Result{Findings: []Finding{
 		{Severity: "error", Rule: "E6", CitedIDs: []string{"BARE2"}, Key: "scope", Message: "missing required field: scope on task BARE2"},
 	}}
@@ -2073,8 +1955,6 @@ func TestIntroductionRefusesSecondW8OnDifferentTopic_REQ_LNGHZN_S10_T12(t *testi
 	assert.Contains(t, err.Error(), "cache")
 }
 
-// --- Fix 2: un-suppression by reversing terminal status is not an introduction ---
-
 func TestIntroductionAllowsReopenOfLegacyDoneIssueMissingRequiredFields_REQ_LNGHZN_S10_T12(t *testing.T) {
 	t.Parallel()
 	legacy := &materialize.Issue{
@@ -2084,7 +1964,6 @@ func TestIntroductionAllowsReopenOfLegacyDoneIssueMissingRequiredFields_REQ_LNGH
 		Title:      "LEGACY",
 		Outcome:    "Delivered with tests and a full review of the change",
 		Provenance: materialize.Provenance{Confidence: "draft"},
-		// No Scope, no Acceptance, no DefinitionOfDone — pre-dates E6.
 	}
 	state := makeState(legacy)
 
@@ -2098,7 +1977,6 @@ func TestIntroductionAllowsReopenOfLegacyDoneIssueMissingRequiredFields_REQ_LNGH
 	err := CheckIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "reopening a legacy issue must not be blocked by E6 findings that only exist because terminal suppression was lifted")
 
-	// The door lets it land; it does not silence the rule afterward.
 	afterState, perr := projectState(state, proposed)
 	require.NoError(t, perr)
 	after := Validate(afterState, materialize.GraphFromState(afterState), Options{})
@@ -2131,8 +2009,6 @@ func TestIntroductionTransitionIntoTerminalDoesNotWidenBaseline_REQ_LNGHZN_S10_T
 		Status:     ops.StatusOpen,
 		Title:      "INCOMPLETE",
 		Provenance: materialize.Provenance{Confidence: "draft"},
-		// Missing scope/acceptance/definition_of_done — E6 fires while open,
-		// but is suppressed once terminal.
 	}
 	state := makeState(incomplete)
 
@@ -2144,9 +2020,7 @@ func TestIntroductionTransitionIntoTerminalDoesNotWidenBaseline_REQ_LNGHZN_S10_T
 			Outcome: "Delivered with tests and a full review of the change",
 		},
 	}}
-	// Transitioning INTO terminal doesn't need the widened baseline: E6 fires
-	// on the before-state too (issue was open), so this isn't newly introduced
-	// either way, but the widening projection must only trigger on unsuppression.
+
 	err := CheckIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err)
 }
@@ -2174,10 +2048,6 @@ func TestIntroductionRefusesReopenBatchWithGenuinelyNewFinding_REQ_LNGHZN_S10_T1
 	assert.Contains(t, err.Error(), "invalid glob")
 }
 
-// s7T2Fixture is the LNGHZN-S7-T2 create-time contract from the dogfood
-// finding: DoD claims arm doctor / gains check D9, scope is four new helper
-// files (no internal/doctor/doctor.go), acceptance is named unit tests + make
-// check — not "arm doctor emits the new check."
 func s7T2Fixture() *materialize.Issue {
 	return &materialize.Issue{
 		ID:               "LNGHZN-S7-T2",
