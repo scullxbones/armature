@@ -21,7 +21,7 @@ func CheckD10ConfigHealth(configPath string) Finding {
 		return f
 	}
 
-	data, err := os.ReadFile(configPath) //nolint:gosec // path is the repo's config.json
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return f

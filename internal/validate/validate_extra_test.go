@@ -27,10 +27,10 @@ func TestValidate_WithIssuesDir_SkipsCitationsWhenNoManifest(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
-	// When ManifestData is nil/empty, citations are skipped
+
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{ManifestData: nil})
-	// No citation errors should appear
+
 	for _, e := range result.Errors {
 		if strings.Contains(e, "citation check skipped") {
 			t.Errorf("unexpected citation error: %s", e)
@@ -51,10 +51,10 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
-	// Pass manifest data directly
+
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{ManifestData: manifestData})
-	// TSK-1 has no source links — should be an uncited node error
+
 	found := false
 	for _, e := range result.Errors {
 		if containsError(Result{Errors: []string{e}}, "uncited node") {
@@ -69,9 +69,9 @@ func TestValidate_WithRepoPath_PhantomScope_AppearsInInfos(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"nonexistent/**/*.go"}},
 	)
-	// Provide pre-expanded scopes showing no files match the glob
+
 	preExpandedScopes := map[string][]string{
-		"TSK-1": {}, // empty list means globs matched no files
+		"TSK-1": {},
 	}
 	graph := graphFromState(state)
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
@@ -105,7 +105,7 @@ func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
 
 func TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped(t *testing.T) {
 	t.Parallel()
-	// No manifest data — citation check should be skipped entirely.
+
 	state := makeState(
 		&materialize.Issue{
 			ID:   "TSK-1",
@@ -147,11 +147,11 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 
 func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
 	t.Parallel()
-	// When PreExpandedScopes is provided with matches, no phantom scope errors
+
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"*.go"}},
 	)
-	// Provide pre-expanded scopes showing that files exist
+
 	preExpandedScopes := map[string][]string{
 		"TSK-1": {"foo.go"},
 	}
