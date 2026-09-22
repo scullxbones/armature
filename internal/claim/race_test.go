@@ -18,60 +18,60 @@ func liveHeld(worker string, claimedAt int64, ttl int) HeldClaim {
 	}
 }
 
-func TestClaimLostRace_REQ_MATENC_S1_T2(t *testing.T) {
+func TestForeignLiveLeaseBlocksChallenger_REQ_MATENC_S1_T2(t *testing.T) {
 	t.Parallel()
 
 	t.Run("different worker loses against live claimed lease", func(t *testing.T) {
 		t.Parallel()
-		assert.True(t, ClaimLostRace(liveHeld("worker-a", 200, 60), "worker-b", 210))
+		assert.True(t, ForeignLiveLeaseBlocksChallenger(liveHeld("worker-a", 200, 60), "worker-b", 210))
 	})
 
 	t.Run("in-progress live lease also blocks a different worker", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("worker-a", 200, 60)
 		held.Status = ops.StatusInProgress
-		assert.True(t, ClaimLostRace(held, "worker-b", 210))
+		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 210))
 	})
 
 	t.Run("stale lease is not a lost race", func(t *testing.T) {
 		t.Parallel()
-		assert.False(t, ClaimLostRace(liveHeld("worker-a", 200, 60), "worker-b", 200+60*60+1))
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(liveHeld("worker-a", 200, 60), "worker-b", 200+60*60+1))
 	})
 
 	t.Run("same worker is never a lost race", func(t *testing.T) {
 		t.Parallel()
-		assert.False(t, ClaimLostRace(liveHeld("worker-a", 200, 60), "worker-a", 210))
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(liveHeld("worker-a", 200, 60), "worker-a", 210))
 	})
 
 	t.Run("empty holder is not a lost race", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("", 200, 60)
-		assert.False(t, ClaimLostRace(held, "worker-b", 210))
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 210))
 	})
 
 	t.Run("open status is not a lost race", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("worker-a", 200, 60)
 		held.Status = ops.StatusOpen
-		assert.False(t, ClaimLostRace(held, "worker-b", 210))
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 210))
 	})
 
 	t.Run("blocked status is not a lost race", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("worker-a", 200, 60)
 		held.Status = ops.StatusBlocked
-		assert.False(t, ClaimLostRace(held, "worker-b", 210))
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 210))
 	})
 
 	t.Run("zero TTL uses replay default 60 minutes not never-expire", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("worker-a", 100, 0)
-		assert.True(t, ClaimLostRace(held, "worker-b", 100+60*60),
+		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100+60*60),
 			"exact default-TTL boundary is still live (IsClaimStale is strict-after)")
-		assert.False(t, ClaimLostRace(held, "worker-b", 100+60*60+1),
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100+60*60+1),
 			"TTL<=0 on a held lease defaults to 60 minutes at replay, unlike IsClaimStale")
 		assert.False(t, IsClaimStale(FoldLastActivity(100, 100, 100), 0, 100+60*60+1),
-			"sanity: IsClaimStale TTL<=0 never expires — ClaimLostRace must not copy that")
+			"sanity: IsClaimStale TTL<=0 never expires — ForeignLiveLeaseBlocksChallenger must not copy that")
 	})
 
 	t.Run("heartbeat and activity clocks fold into staleness", func(t *testing.T) {
@@ -84,14 +84,14 @@ func TestClaimLostRace_REQ_MATENC_S1_T2(t *testing.T) {
 			LastClaimingWorkerActivity: 0,
 			TTLMinutes:                 1,
 		}
-		assert.True(t, ClaimLostRace(held, "worker-b", 209))
-		assert.False(t, ClaimLostRace(held, "worker-b", 211))
+		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 209))
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 211))
 	})
 
 	t.Run("does not unify with ResolveClaim earliest-timestamp winner", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("worker-a", 200, 60)
-		assert.True(t, ClaimLostRace(held, "worker-b", 100))
+		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100))
 		winner := ResolveClaim([]ops.Op{
 			{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-a"},
 			{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-b"},

@@ -42,7 +42,7 @@ func PlanCompensation(in CompensationInput) (ops.Payload, error) {
 	comp := ops.Compensation{
 		RestoreClaim: true,
 		IfClaimToken: in.IfClaimToken,
-		Worktree:     WorktreeRestore(in.Prior.WorktreePath),
+		Worktree:     WorktreeRestoreClearingEmptyPrior(in.Prior.WorktreePath),
 	}
 
 	liveSameWorker := in.Prior.ClaimedBy == in.WorkerID &&

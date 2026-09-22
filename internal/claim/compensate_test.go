@@ -153,7 +153,7 @@ func TestPlanCompensation_EncodesViaCompensation_REQ_MATENC_S1_T3(t *testing.T) 
 		RestoreLastClaimingWorkerActivity: in.Prior.ClaimingWorkerActivity,
 		RestoreClaimToken:                 in.Prior.ClaimToken,
 		IfClaimToken:                      in.IfClaimToken,
-		Worktree:                          claim.WorktreeRestore(in.Prior.WorktreePath),
+		Worktree:                          claim.WorktreeRestoreClearingEmptyPrior(in.Prior.WorktreePath),
 	}.Encode()
 	assert.Equal(t, want, got)
 

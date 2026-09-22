@@ -144,7 +144,7 @@ func (s *State) applyCreate(op ops.Op) error {
 
 func (s *State) applyClaim(op ops.Op) error {
 	issue := s.Issues[op.TargetID]
-	if claimpkg.ClaimLostRace(claimpkg.HeldClaim{
+	if claimpkg.ForeignLiveLeaseBlocksChallenger(claimpkg.HeldClaim{
 		Status:                     issue.Status,
 		ClaimedBy:                  issue.ClaimedBy,
 		ClaimedAt:                  issue.ClaimedAt,
