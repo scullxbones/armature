@@ -898,9 +898,10 @@ func TestClaimStillOwnedByReportsFalseAfterTransitionToInProgress_REQ_LNGHZN_S5_
 		WorkerID: "worker-a", Payload: ops.Payload{To: ops.StatusInProgress},
 	}))
 
-	owns, err := reloadStoreClaimHeldBy(store, "task-01", "worker-a", claimToken)
+	owns, err := reloadStoreHeldByExactWorkerAndClaimToken(store, "task-01", "worker-a", claimToken)
 	require.NoError(t, err)
-	assert.False(t, owns, "reloadStoreClaimHeldBy must report not-owned once the issue has left StatusClaimed, even with matching ClaimedBy/ClaimToken")
+	assert.False(t, owns,
+		"reloadStoreHeldByExactWorkerAndClaimToken must report not-owned once the issue has left StatusClaimed, even with matching ClaimedBy/ClaimToken")
 }
 
 func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededByTransition_REQ_LNGHZN_S5_T9(t *testing.T) {
@@ -919,7 +920,7 @@ func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededB
 	}))
 
 	stillOwns := func() bool {
-		owns, err := reloadStoreClaimHeldBy(store, "task-01", "worker-a", claimToken)
+		owns, err := reloadStoreHeldByExactWorkerAndClaimToken(store, "task-01", "worker-a", claimToken)
 		require.NoError(t, err)
 		return owns
 	}

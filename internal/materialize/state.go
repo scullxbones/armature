@@ -17,9 +17,9 @@ func (i *Issue) ClaimStale(now int64) bool {
 	return claimpkg.IsClaimStale(last, i.ClaimTTL, now)
 }
 
-// ClaimHeldBy reports whether this issue is, right now, held by exactly the
+// HeldByExactWorkerAndClaimToken reports whether this issue is, right now, held by exactly the
 // claim identified by workerID and claimToken.
-func (i *Issue) ClaimHeldBy(workerID, claimToken string) bool {
+func (i *Issue) HeldByExactWorkerAndClaimToken(workerID, claimToken string) bool {
 	if i == nil || claimToken == "" {
 		return false
 	}
