@@ -2,10 +2,8 @@ package claim
 
 import "github.com/scullxbones/armature/internal/ops"
 
-// WorktreeRestore maps a prior claim worktree path to the compensation
-// tri-state. Empty prior is Clear, not Unchanged: omitting both wire flags
-// would leave the failed claim's path in place.
-func WorktreeRestore(priorPath string) ops.WorktreeRestore {
+// WorktreeRestoreClearingEmptyPrior maps a prior claim worktree path onto ops.WorktreeRestore.
+func WorktreeRestoreClearingEmptyPrior(priorPath string) ops.WorktreeRestore {
 	if priorPath == "" {
 		return ops.WorktreeRestore{Action: ops.WorktreeClear}
 	}

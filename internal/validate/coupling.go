@@ -50,7 +50,7 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 
 			var docOwners []*materialize.Issue
 			for _, t := range tasks {
-				if len(ownedDocFiles(t.Scope, docFiles)) > 0 {
+				if len(docFilesOwnedExcludingRepoWide(t.Scope, docFiles)) > 0 {
 					docOwners = append(docOwners, t)
 				}
 			}
@@ -59,10 +59,10 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 			}
 
 			for _, t := range tasks {
-				if !scopeTouchesSurface(t.Scope, surfaceGlob) {
+				if !surfaceGlobAllowsScopeEntry(t.Scope, surfaceGlob) {
 					continue
 				}
-				if len(ownedDocFiles(t.Scope, docFiles)) > 0 {
+				if len(docFilesOwnedExcludingRepoWide(t.Scope, docFiles)) > 0 {
 					continue
 				}
 
@@ -70,7 +70,7 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 				var owned []string
 				for _, owner := range docOwners {
 					ownerIDs = append(ownerIDs, owner.ID)
-					owned = append(owned, ownedDocFiles(owner.Scope, docFiles)...)
+					owned = append(owned, docFilesOwnedExcludingRepoWide(owner.Scope, docFiles)...)
 				}
 				if len(ownerIDs) == 0 {
 					continue
@@ -95,7 +95,7 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 	return findings
 }
 
-func scopeTouchesSurface(scope []string, surfaceGlob string) bool {
+func surfaceGlobAllowsScopeEntry(scope []string, surfaceGlob string) bool {
 	for _, entry := range scope {
 		cleaned, _ := scopematch.CleanScope(entry)
 		if scopematch.Allows([]string{surfaceGlob}, cleaned) {
@@ -105,7 +105,7 @@ func scopeTouchesSurface(scope []string, surfaceGlob string) bool {
 	return false
 }
 
-func ownedDocFiles(scope []string, docFiles []string) []string {
+func dropRepoWideScopeEntries(scope []string) []string {
 	named := make([]string, 0, len(scope))
 	for _, entry := range scope {
 		if cleaned, _ := scopematch.CleanScope(entry); cleaned == "." || cleaned == "**" {
@@ -113,7 +113,11 @@ func ownedDocFiles(scope []string, docFiles []string) []string {
 		}
 		named = append(named, entry)
 	}
+	return named
+}
 
+func docFilesOwnedExcludingRepoWide(scope []string, docFiles []string) []string {
+	named := dropRepoWideScopeEntries(scope)
 	var owned []string
 	for _, docFile := range docFiles {
 		if scopematch.Allows(named, docFile) {

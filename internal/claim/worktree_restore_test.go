@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestWorktreeRestore_REQ_MATENC_S1_T3(t *testing.T) {
+func TestWorktreeRestoreClearingEmptyPrior_REQ_MATENC_S1_T3(t *testing.T) {
 	t.Parallel()
 
 	t.Run("clear empty prior", func(t *testing.T) {
 		t.Parallel()
-		w := claim.WorktreeRestore("")
+		w := claim.WorktreeRestoreClearingEmptyPrior("")
 		assert.Equal(t, ops.WorktreeClear, w.Action)
 		assert.Empty(t, w.Path)
 		p := ops.Compensation{Worktree: w}.Encode()
@@ -25,7 +25,7 @@ func TestWorktreeRestore_REQ_MATENC_S1_T3(t *testing.T) {
 	t.Run("set nonempty prior", func(t *testing.T) {
 		t.Parallel()
 		prior := "/repo/.worktrees/TASK-1"
-		w := claim.WorktreeRestore(prior)
+		w := claim.WorktreeRestoreClearingEmptyPrior(prior)
 		assert.Equal(t, ops.WorktreeSet, w.Action)
 		assert.Equal(t, prior, w.Path)
 		p := ops.Compensation{Worktree: w}.Encode()
