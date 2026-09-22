@@ -18,8 +18,7 @@ import (
 
 func TestRun_CleanRepo(t *testing.T) {
 	t.Parallel()
-	// Run creates a temp issues dir so we need a helper.
-	// We test the internal checks directly.
+
 	t.Run("D4_NoBrokenParents", func(t *testing.T) {
 		t.Parallel()
 		index := materialize.Index{
@@ -119,10 +118,9 @@ func TestReport_HasWarnings(t *testing.T) {
 
 func TestRunChecks_D2_StaleClaims_InjectedTime(t *testing.T) {
 	t.Parallel()
-	// Test that injected time is used for stale claim detection
-	// Create an issue with a claim that would be fresh at time.Now() but stale at far-future time
+
 	claimedAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
-	ttl := 3600 // 1 hour in seconds
+	ttl := 3600
 
 	index := materialize.Index{
 		"claimed-task": {Status: "open", Type: "task"},
@@ -137,7 +135,6 @@ func TestRunChecks_D2_StaleClaims_InjectedTime(t *testing.T) {
 		},
 	}
 
-	// At far-future time, claim should be stale
 	farFuture := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
 	report := doctor.RunChecks(index, allIssues, nil, "", farFuture)
 	d2 := findCheck(t, report, "D2")
@@ -161,7 +158,7 @@ func TestEvaluateD9UnrecognizedWorktrees_REQ_LNGHZN_S5_T8(t *testing.T) {
 		f := doctor.EvaluateD9UnrecognizedWorktrees([]string{"/repo/.worktrees/b", "/repo/.worktrees/a"})
 		assert.Equal(t, "D9", f.Check)
 		assert.Equal(t, doctor.SeverityWarning, f.Severity)
-		// Deterministic, sorted output.
+
 		assert.Equal(t, []string{"/repo/.worktrees/a", "/repo/.worktrees/b"}, f.Items)
 	})
 }
@@ -169,9 +166,6 @@ func TestEvaluateD9UnrecognizedWorktrees_REQ_LNGHZN_S5_T8(t *testing.T) {
 func TestRunChecks_D9_SkippedWhenIssueDetailsOmitted_REQ_LNGHZN_S5_T8(t *testing.T) {
 	t.Parallel()
 
-	// RunChecks documents allIssues == nil as "skip checks requiring issue
-	// details". A bound managed worktree must not surface as a D9 anomaly in
-	// that mode: with no issue map there is no way to recognize the binding.
 	repoDir := t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
@@ -188,7 +182,6 @@ func TestRunChecks_D9_SkippedWhenIssueDetailsOmitted_REQ_LNGHZN_S5_T8(t *testing
 	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "chore: initial commit")
 
-	// A managed worktree bound to a real issue via the binding marker.
 	boundPath := filepath.Join(repoDir, ".worktrees", "T-001")
 	run("git", "worktree", "add", "-b", "bound-branch", boundPath)
 	bindingPath := filepath.Join(repoDir, ".git", "worktrees", "T-001", "armature-issue-id")
@@ -223,11 +216,9 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "chore: initial commit")
 
-	// A managed worktree under .worktrees/ carrying no issue binding marker.
 	strayPath := filepath.Join(repoDir, ".worktrees", "stray")
 	run("git", "worktree", "add", "-b", "stray-branch", strayPath)
 
-	// Minimal .armature state so doctor.Run can materialize.
 	issuesDir := filepath.Join(repoDir, ".armature")
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "ops"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "state", "issues"), 0o755))
@@ -242,7 +233,6 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 	require.NotEmpty(t, d9.Items)
 	assert.Contains(t, strings.Join(d9.Items, "\n"), "stray")
 
-	// The anomaly must be a warning (fails --strict) not an error (fails plain doctor).
 	assert.True(t, report.HasWarnings(), "--strict must fail on the unrecognized worktree")
 	assert.False(t, report.HasErrors(), "plain doctor must not error on the unrecognized worktree")
 }
@@ -295,14 +285,13 @@ func findCheck(t *testing.T, report doctor.Report, checkID string) doctor.Findin
 	return doctor.Finding{}
 }
 
-// initIssuesDir sets up a minimal .armature directory for integration tests.
 func initIssuesDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	issuesDir := filepath.Join(dir, ".armature")
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "ops"), 0755))
 	require.NoError(t, os.MkdirAll(filepath.Join(issuesDir, "state", "issues"), 0755))
-	// Write a minimal config.json
+
 	require.NoError(t, os.WriteFile(
 		filepath.Join(issuesDir, "config.json"),
 		[]byte(`{}`),
@@ -315,13 +304,12 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// Write an empty ops log so materialize can run
 	workerLog := filepath.Join(issuesDir, "ops", "test-worker.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
 	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
-	// All checks should be OK on an empty repo.
+
 	for _, f := range report.Checks {
 		assert.NotEqual(t, doctor.SeverityError, f.Severity, "check %s should not error on empty repo", f.Check)
 	}
@@ -347,8 +335,6 @@ func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testi
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// gate-evidence targets the profile name ("full"), which is not an issue ID.
-	// Doctor must treat it as audit-only, the same way it treats source-fingerprint.
 	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
 	require.NoError(t, ops.AppendGateEvidence(logPath, "worker-01", ops.GateEvidence{
 		Profile: "full",
@@ -372,8 +358,6 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// Write a note op that references an issue that was never created (no create op).
-	// This simulates a corrupt op log referencing a deleted/nonexistent issue.
 	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
 	op := ops.Op{
 		Type:      ops.OpNote,
@@ -387,7 +371,6 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
-	// D3 should be an error since ghost-issue-01 is not in the graph.
 	d3 := findCheck(t, report, "D3")
 	assert.Equal(t, doctor.SeverityError, d3.Severity)
 	assert.Contains(t, d3.Items, "ghost-issue-01")
@@ -397,9 +380,6 @@ func TestRun_Integration_D3_SkipsDeletedNoteOnlyIssues(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// Simulate a stray `arm note list ...` typo: a note was created against a
-	// bogus target ID ("list") and then deleted, with no other op ever
-	// referencing that target. This must not be flagged as an orphaned op.
 	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
 	noteOp := ops.Op{
 		Type:      ops.OpNote,
@@ -430,8 +410,6 @@ func TestRun_Integration_D3_UndeletedNoteStillOrphans(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// A note created against a bogus target but never deleted must still
-	// flag as an orphaned op — only fully-deleted note-only targets are skipped.
 	logPath := filepath.Join(issuesDir, "ops", "worker-01.log")
 	noteOp := ops.Op{
 		Type:      ops.OpNote,
@@ -454,7 +432,6 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// Create a valid issue first (no mismatch)
 	validWorkerLog := filepath.Join(issuesDir, "ops", "worker-valid.log")
 	createOp := ops.Op{
 		Type:      ops.OpCreate,
@@ -465,37 +442,27 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(validWorkerLog, createOp))
 
-	// Create a log file with a mismatched worker ID op (GHOST-99).
-	// The op claims to be from "worker-other" but the filename says "worker-mismatched".
 	mismatchWorkerLog := filepath.Join(issuesDir, "ops", "worker-mismatched.log")
 	mismatchOp := ops.Op{
 		Type:      ops.OpNote,
 		TargetID:  "mismatched-issue-01",
 		Timestamp: time.Now().Unix(),
-		WorkerID:  "worker-other", // Mismatch! Filename says worker-mismatched
+		WorkerID:  "worker-other",
 		Payload:   ops.Payload{Msg: "This op has a worker ID mismatch"},
 	}
 	require.NoError(t, ops.AppendOp(mismatchWorkerLog, mismatchOp))
 
-	// Run doctor
 	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
-	// D3 should report mismatched-issue-01 as orphaned (it has no create op)
-	// BUT the key point is that mismatched-issue-01 should appear in D3
-	// because the mismatch should cause it to be excluded from the ops list.
-	// However, let's verify the logic more carefully: if the op is excluded due to
-	// mismatch, it won't be in the opsTargetIDs, so the D3 check should pass.
-	// Therefore, D3 should be OK (no orphaned ops).
 	d3 := findCheck(t, report, "D3")
 	assert.Equal(t, doctor.SeverityOK, d3.Severity,
 		"D3 should be OK because mismatched ops are excluded from D3 check")
 	assert.NotContains(t, d3.Items, "mismatched-issue-01",
 		"Worker-ID mismatched ops should not appear in D3 orphaned list")
-	// valid-issue-01 should have a create op, so it's not orphaned
+
 	assert.NotContains(t, d3.Items, "valid-issue-01")
 
-	// D7 should report the worker-ID mismatch warning
 	d7 := findCheck(t, report, "D7")
 	assert.Equal(t, doctor.SeverityWarning, d7.Severity, "D7 should warn about worker-ID mismatches")
 	assert.Len(t, d7.Items, 1, "should report one mismatch warning")
@@ -505,7 +472,6 @@ func TestRun_CorruptLineDoesNotTriggerD7(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// Write a log file with a corrupt (non-JSON) line — no worker-ID mismatch.
 	logPath := filepath.Join(issuesDir, "ops", "worker-clean.log")
 	require.NoError(t, os.WriteFile(logPath, []byte("this is not valid json\n"), 0o644))
 
@@ -521,7 +487,6 @@ func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
 
-	// Create an issue and claim it with TTL=1 (already expired)
 	logPath := filepath.Join(issuesDir, "ops", "worker-02.log")
 	createOp := ops.Op{
 		Type: ops.OpCreate, TargetID: "stale-01",
@@ -562,9 +527,9 @@ func TestRun_Integration_D3_Verbose_ShowsFileAndLine(t *testing.T) {
 
 	d3 := findCheck(t, report, "D3")
 	assert.Equal(t, doctor.SeverityError, d3.Severity)
-	// Regular items unchanged — just the orphaned ID
+
 	assert.Contains(t, d3.Items, "ghost-verbose-01")
-	// VerboseItems should include file name and line number
+
 	require.NotEmpty(t, d3.VerboseItems)
 	assert.Contains(t, d3.VerboseItems[0], "worker-verbose.log")
 	assert.Contains(t, d3.VerboseItems[0], "ghost-verbose-01")
@@ -591,31 +556,25 @@ func TestDoctorRunUsesStateDir(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), "specific-state")
 	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
 
-	// Write an empty ops log so materialize can run
 	workerLog := filepath.Join(issuesDir, "ops", "test-worker.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
-	// Write a mock index.json to the specific stateDir
 	index := materialize.Index{
 		"T-001": {Status: "open", Type: "task"},
 	}
 	indexPath := filepath.Join(stateDir, "index.json")
 	require.NoError(t, materialize.WriteIndex(indexPath, index))
 
-	// doctor.Run should load the index from stateDir.
-	// We pass an empty repoPath to skip D1 git divergence.
 	report, err := doctor.Run(issuesDir, stateDir, "", "", false, time.Now())
 	require.NoError(t, err)
 
-	// D4 checks broken parent refs. If it saw T-001, it means it loaded the index.
-	// Since T-001 has no parent, D4 should be OK.
 	d4 := findCheck(t, report, "D4")
 	assert.Equal(t, doctor.SeverityOK, d4.Severity)
 }
 
 func TestRunChecks_D1_GitDivergence(t *testing.T) {
 	t.Parallel()
-	// Create a temp git repo with a commit referencing an issue not in done/merged state (doctor.go:159)
+
 	repoDir := t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
@@ -643,7 +602,7 @@ func TestRunChecks_D1_GitDivergence(t *testing.T) {
 
 func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
 	t.Parallel()
-	// Done issues referenced in commits should not trigger D1 warning (covers 159:46 — "merged" branch)
+
 	repoDir := t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
@@ -674,8 +633,6 @@ func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
 
 	logPath := filepath.Join(issuesDir, "ops", "worker-physical.log")
 
-	// Write three lines:
-	// Line 1: accepted op (orphaned - note op without create)
 	acceptedOp1 := ops.Op{
 		Type:      ops.OpNote,
 		TargetID:  "orphan-1",
@@ -685,7 +642,6 @@ func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, acceptedOp1))
 
-	// Line 2: mismatched op (rejected, not in items)
 	mismatchOp := ops.Op{
 		Type:      ops.OpNote,
 		TargetID:  "orphan-2",
@@ -695,7 +651,6 @@ func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, mismatchOp))
 
-	// Line 3: accepted op (orphaned, needs D3 verbose output)
 	acceptedOp3 := ops.Op{
 		Type:      ops.OpNote,
 		TargetID:  "orphan-3",
@@ -713,21 +668,19 @@ func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
 	assert.Contains(t, d3.Items, "orphan-1", "orphan-1 should be in items")
 	assert.Contains(t, d3.Items, "orphan-3", "orphan-3 should be in items")
 
-	// Check verbose items use physical line numbers, not ordinal position
 	require.NotEmpty(t, d3.VerboseItems, "verbose items should be present")
 
-	// Find the verbose items for orphan-1 and orphan-3
 	verbose1Found := false
 	verbose3Found := false
 	for _, vi := range d3.VerboseItems {
 		if strings.Contains(vi, "orphan-1") {
 			verbose1Found = true
-			// orphan-1 should be at physical line 1
+
 			assert.Contains(t, vi, "worker-physical.log:1", "orphan-1 should be reported at physical line 1")
 		}
 		if strings.Contains(vi, "orphan-3") {
 			verbose3Found = true
-			// orphan-3 should be at physical line 3 (not line 2, which was the mismatch)
+
 			assert.Contains(t, vi, "worker-physical.log:3", "orphan-3 should be reported at physical line 3")
 		}
 	}

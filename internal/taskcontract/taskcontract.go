@@ -35,20 +35,11 @@ type Violation struct {
 }
 
 var (
-	// Implement-claim only: an allocated or next-free check id, not the
-	// schematic placeholder "Dn" used when describing the E14 rule itself.
-	reGainsCheck = regexp.MustCompile(`(?i)gains(?:\s+a)?\s+check(?:\s*\(?D\d+\)?|\s+\(next\s+free)`)
-	reAddWireDn  = regexp.MustCompile(`(?i)(?:adds?|wires?)\s+(?:a\s+)?(?:check\s+)?D\d+(?:\s+into\s+Run)?`)
-	// Product-behavior claim: arm doctor + implement verb. A pointer, flag, or
-	// "DoD claims arm doctor" mention is not an implement claim.
+	reGainsCheck    = regexp.MustCompile(`(?i)gains(?:\s+a)?\s+check(?:\s*\(?D\d+\)?|\s+\(next\s+free)`)
+	reAddWireDn     = regexp.MustCompile(`(?i)(?:adds?|wires?)\s+(?:a\s+)?(?:check\s+)?D\d+(?:\s+into\s+Run)?`)
 	reArmDoctorVerb = regexp.MustCompile(`(?i)\barm\s+doctor\s+(?:gains|reports|emits|enforces|adds|wires)`)
-	// Explicit wiring opt-out only. A bare "exported helper" mention is not an opt-out.
-	reHelperOnly = regexp.MustCompile(`(?i)(?:helper[-\s]only|not[-\s]wired)`)
-	// Completion-ritual mentions of `arm doctor`: the CLI as a pre-done quality
-	// gate, not a product-behavior claim. Ritual requires an explicit marker:
-	// "and arm validate" (optional --ci / before done|merge) or "before done|merge".
-	// "make check ...;" may precede those spans; it is not itself a ritual marker.
-	reDoctorRitual = regexp.MustCompile(`(?i)` +
+	reHelperOnly    = regexp.MustCompile(`(?i)(?:helper[-\s]only|not[-\s]wired)`)
+	reDoctorRitual  = regexp.MustCompile(`(?i)` +
 		`(?:run\s+)?arm\s+doctor\s+and\s+arm\s+validate(?:\s+--ci)?(?:\s+before\s+(?:done|merging|merge))?` +
 		`|` +
 		`(?:run\s+)?arm\s+doctor\s+before\s+(?:done|merging|merge)`)

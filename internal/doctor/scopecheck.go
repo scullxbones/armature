@@ -37,33 +37,27 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 	}
 
 	if _, err := os.Stat(repoPath); err != nil {
-		// If the repo path doesn't exist, can't check filesystem; pass through
 		return f
 	}
 
-	// Collect active and recently-completed tasks
 	var tasksToCheck []*materialize.Issue
-	gracePeriod := 30 * time.Minute // Recently-completed tasks within 30 minutes
+	gracePeriod := 30 * time.Minute
 
 	for id, issue := range allIssues {
 		if issue == nil {
 			continue
 		}
 
-		// Check if it's in the index (to avoid stale issues)
 		if _, inIndex := index[id]; !inIndex {
 			continue
 		}
 
-		// Include active tasks (claimed/in-progress)
 		if issue.Status == "claimed" || issue.Status == "in-progress" {
 			tasksToCheck = append(tasksToCheck, issue)
 			continue
 		}
 
-		// Include recently-completed tasks (done/merged within grace period)
 		if issue.Status == "done" || issue.Status == "merged" {
-			// Use Updated timestamp as proxy for completion time
 			if issue.Updated > 0 {
 				completedTime := time.Unix(issue.Updated, 0)
 				if now.Sub(completedTime) <= gracePeriod {
@@ -74,20 +68,11 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 		}
 	}
 
-	// If no tasks to check, return OK
 	if len(tasksToCheck) == 0 {
 		return f
 	}
 
-	// Collect all violations across all tasks. A single shared dirty-path set
-	// (from repoPath's git status) is checked against every active/recent
-	// task's scope independently, since there is no per-worktree correlation
-	// between a candidate path and the specific task it belongs to. Without
-	// the cross-task filter below, a path legitimately explained by one
-	// task's scope (in-scope for it) but outside a *different* task's
-	// unrelated scope would be misreported as a violation of that other
-	// task, purely because both tasks happen to be active/recent at once.
-	rawViolations := make(map[string][]string) // maps task ID to list of candidate violations
+	rawViolations := make(map[string][]string)
 	for _, issue := range tasksToCheck {
 		if len(issue.Scope) == 0 {
 			continue
@@ -99,11 +84,7 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 		}
 	}
 
-	// A candidate is only a genuine out-of-scope artifact if no other active
-	// or recently-completed task's declared scope explains it; otherwise it's
-	// legitimately in-scope work for that other task, not a violation of the
-	// task it was checked against.
-	explainedBy := make(map[string][]*materialize.Issue) // maps candidate path -> tasks that cover it
+	explainedBy := make(map[string][]*materialize.Issue)
 	for _, issue := range tasksToCheck {
 		if len(issue.Scope) == 0 {
 			continue
@@ -118,19 +99,16 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 		}
 	}
 
-	allViolations := make(map[string][]string) // maps task ID to list of confirmed violations
+	allViolations := make(map[string][]string)
 	for taskID, violations := range rawViolations {
 		for _, path := range violations {
 			if len(explainedBy[path]) > 0 {
-				// Some other active/recent task's scope covers this path; it's
-				// that task's legitimate work, not a violation of taskID.
 				continue
 			}
 			allViolations[taskID] = append(allViolations[taskID], path)
 		}
 	}
 
-	// If there are any violations, report them
 	if len(allViolations) > 0 {
 		f.Severity = SeverityError
 		f.Message = "Out-of-scope artifacts detected for active or recently-completed tasks"
@@ -146,20 +124,6 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 	return f
 }
 
-// findOutOfScopeArtifacts identifies untracked or uncommitted-modified paths in
-// repoPath's git worktree that fall outside the given scope globs.
-//
-// It gates candidates on `git status --porcelain`, restricting the check to
-// paths git considers untracked or modified (i.e. stray artifacts and dirty
-// worktree state that escaped scope enforcement at commit time), rather than
-// walking the whole filesystem. Legitimately committed files outside a task's
-// scope glob (e.g. files in an unrelated package) are never flagged, since
-// they are neither untracked nor modified. Root-level config/doc files are
-// additionally exempted via isConfigFile/isNonCodeDir as general hygiene.
-//
-// If repoPath is not a git worktree (or `git status` otherwise fails), no
-// candidates can be safely identified and the function returns nil rather
-// than falling back to a full filesystem walk.
 func findOutOfScopeArtifacts(repoPath string, scope []string) []string {
 	if len(scope) == 0 {
 		return nil
@@ -170,19 +134,16 @@ func findOutOfScopeArtifacts(repoPath string, scope []string) []string {
 		return nil
 	}
 
-	// Create a ScopePolicy to check paths against
 	policy := harnesspolicy.NewScopePolicyWithRoot(scope, repoPath)
 
 	var outOfScope []string
 	for _, rel := range candidates {
 		rel = filepath.ToSlash(rel)
 
-		// Skip files in non-code directories (docs, CI config, etc).
 		if isNonCodeDir(topLevelDir(rel)) {
 			continue
 		}
 
-		// Skip root-level configuration files.
 		if !strings.Contains(rel, "/") && isConfigFile(filepath.Base(rel)) {
 			continue
 		}
@@ -200,8 +161,6 @@ func findOutOfScopeArtifacts(repoPath string, scope []string) []string {
 	return outOfScope
 }
 
-// topLevelDir returns the first path segment of a forward-slash-normalized
-// relative path, or "" if rel has no directory component.
 func topLevelDir(rel string) string {
 	if idx := strings.Index(rel, "/"); idx >= 0 {
 		return rel[:idx]
@@ -209,13 +168,7 @@ func topLevelDir(rel string) string {
 	return ""
 }
 
-// gitDirtyPaths runs `git status --porcelain` against repoPath and returns the
-// repo-relative paths of untracked or modified (uncommitted) files. Returns
-// nil if repoPath is not a git worktree or the command fails, so callers treat
-// an unresolvable status the same as "no candidates" rather than falling back
-// to flagging every committed file.
 func gitDirtyPaths(repoPath string) []string {
-	// #nosec G204 - repoPath is a caller-supplied trusted repo/worktree path
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "--porcelain", "--untracked-files=all")
 	out, err := cmd.Output()
 	if err != nil {
@@ -240,8 +193,6 @@ func gitDirtyPaths(repoPath string) []string {
 	return paths
 }
 
-// isNonCodeDir returns true if the directory is known to contain non-code files
-// (like documentation, CI configuration, etc) and should be skipped.
 func isNonCodeDir(name string) bool {
 	nonCodeDirs := map[string]bool{
 		"docs":          true,
@@ -266,8 +217,6 @@ func isNonCodeDir(name string) bool {
 	return nonCodeDirs[name]
 }
 
-// isConfigFile returns true if the filename is a root-level configuration file
-// that should not be checked for scope violations.
 func isConfigFile(name string) bool {
 	configFiles := map[string]bool{
 		"README.md":          true,

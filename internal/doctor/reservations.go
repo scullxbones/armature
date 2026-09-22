@@ -16,8 +16,6 @@ type CheckReservation struct {
 	Planned string
 }
 
-// openReservations is the source of truth for open-task check-ID claims.
-// TOPTIER-S18-T3 documents this alongside LiveCheckIDs; do not implement S12-T2.
 var openReservations = []CheckReservation{
 	{
 		ID:      "D11",

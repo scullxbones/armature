@@ -1,4 +1,4 @@
-// Package doctor implements repo health checks for the trls doctor command.
+// Package doctor implements repo health checks for the arm doctor command.
 package doctor
 
 import (
@@ -39,8 +39,6 @@ type Finding struct {
 type Report struct {
 	Checks []Finding `json:"checks"`
 }
-
-func swallowErr(err error) { _ = err }
 
 func (r Report) HasErrors() bool {
 	for _, f := range r.Checks {
@@ -533,7 +531,7 @@ func checkD12OpsWorktreeLag(worktreePath string) Finding {
 		return skip
 	}
 	gc := adapters.New(worktreePath)
-	swallowErr(gc.FetchTrackingRef("_armature"))
+	_ = gc.FetchTrackingRef("_armature")
 	behind, err := gc.RevListCount("HEAD..origin/_armature")
 	if err != nil {
 		return skip
