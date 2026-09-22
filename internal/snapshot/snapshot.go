@@ -36,7 +36,7 @@ func Load(opsDir, stateDir string) (*Snapshot, error) {
 		allOps = []ops.Op{}
 	}
 
-	state, result, err := materialize.MaterializeAndReturnQuiet(stateDir, allOps, offsets)
+	state, result, err := materialize.Run(stateDir, allOps, offsets, materialize.Options{WriteStateFiles: true})
 	if err != nil {
 		return nil, fmt.Errorf("materialize: %w", err)
 	}

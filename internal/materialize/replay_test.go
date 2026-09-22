@@ -123,7 +123,7 @@ func replayState(t *testing.T, crash appendCrash, recovered ...ops.Op) (*Issue, 
 	}
 	allOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	state, _, err := MaterializeAndReturnQuiet(filepath.Join(root, "state"), allOps, map[string]int64{"worker-a.log": 1})
+	state, _, err := materializeQuiet(filepath.Join(root, "state"), allOps, map[string]int64{"worker-a.log": 1})
 	require.NoError(t, err)
 	issue := state.Issues["REPLAY-001"]
 	require.NotNil(t, issue)

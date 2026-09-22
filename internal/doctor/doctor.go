@@ -63,23 +63,11 @@ func (r Report) HasWarnings() bool {
 var issueIDPattern = regexp.MustCompile(`\b([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+)\b`)
 
 func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string, now time.Time) Report {
-	var checks []Finding
-
-	checks = append(checks, checkD1GitDivergence(repoPath, index))
-	checks = append(checks, checkD2StaleClaims(allIssues, now))
-	checks = append(checks, checkD3OrphanedOpsFromListWithContext(index, opsTargetIDs, nil))
-	checks = append(checks, checkD4BrokenParentRefs(index))
-	checks = append(checks, checkD5DependencyCycles(index))
-	checks = append(checks, checkD6UncitedIssues(allIssues))
-	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
-	checks = append(checks, checkD9UnrecognizedWorktrees(repoPath, allIssues, now))
 	configPath := ""
 	if repoPath != "" {
 		configPath = filepath.Join(repoPath, ".armature", "config.json")
 	}
-	checks = append(checks, CheckD10ConfigHealth(configPath))
-
-	return Report{Checks: checks}
+	return Report{Checks: indexedChecks(index, allIssues, opsTargetIDs, repoPath, now, nil, nil, configPath)}
 }
 
 var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}
@@ -116,21 +104,37 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 		verboseD3Context = make(map[string][]opLocation)
 	}
 
-	var checks []Finding
-
-	checks = append(checks, checkD1GitDivergence(repoPath, index))
-	checks = append(checks, checkD2StaleClaims(allIssues, now))
-	checks = append(checks, checkD3OrphanedOpsFromListWithContext(index, opsTargetIDs, verboseD3Context))
-	checks = append(checks, checkD4BrokenParentRefs(index))
-	checks = append(checks, checkD5DependencyCycles(index))
-	checks = append(checks, checkD6UncitedIssues(allIssues))
-	checks = append(checks, checkD7WorkerIDMismatches(filterMismatchWarnings(warnings)))
-	checks = append(checks, CheckD8ScopeViolations(index, allIssues, repoPath, now))
-	checks = append(checks, checkD9UnrecognizedWorktrees(repoPath, allIssues, now))
-	checks = append(checks, CheckD10ConfigHealth(filepath.Join(issuesDir, "config.json")))
+	checks := indexedChecks(index, allIssues, opsTargetIDs, repoPath, now, verboseD3Context,
+		[]Finding{checkD7WorkerIDMismatches(filterMismatchWarnings(warnings))},
+		filepath.Join(issuesDir, "config.json"))
 	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
-
 	return Report{Checks: checks}, nil
+}
+
+func indexedChecks(
+	index materialize.Index,
+	allIssues map[string]*materialize.Issue,
+	opsTargetIDs []string,
+	repoPath string,
+	now time.Time,
+	d3ctx map[string][]opLocation,
+	afterD6 []Finding,
+	configPath string,
+) []Finding {
+	checks := []Finding{
+		checkD1GitDivergence(repoPath, index),
+		checkD2StaleClaims(allIssues, now),
+		checkD3OrphanedOpsFromListWithContext(index, opsTargetIDs, d3ctx),
+		checkD4BrokenParentRefs(index),
+		checkD5DependencyCycles(index),
+		checkD6UncitedIssues(allIssues),
+	}
+	checks = append(checks, afterD6...)
+	return append(checks,
+		CheckD8ScopeViolations(index, allIssues, repoPath, now),
+		checkD9UnrecognizedWorktrees(repoPath, allIssues, now),
+		CheckD10ConfigHealth(configPath),
+	)
 }
 
 type materializedState struct {
@@ -148,7 +152,7 @@ func loadMaterializedState(issuesDir, stateDir string) (materializedState, error
 		return materializedState{}, fmt.Errorf("read ops: %w", err)
 	}
 	allOps := ops.ExtractOps(opItems)
-	if _, err := materialize.Materialize(stateDir, allOps, nil); err != nil {
+	if _, _, err := materialize.Run(stateDir, allOps, nil, materialize.Options{WriteStateFiles: true, EmitWarnings: true}); err != nil {
 		return materializedState{}, fmt.Errorf("materialize: %w", err)
 	}
 	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))

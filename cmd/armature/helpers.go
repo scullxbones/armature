@@ -333,11 +333,8 @@ func slottedWorkerID(workerID string) SlottedWorkerID {
 }
 
 func baseWorkerIdentity(workerID string) string {
-	before, _, found := strings.Cut(workerID, "~")
-	if found {
-		return before
-	}
-	return workerID
+	before, _, _ := strings.Cut(workerID, "~")
+	return before
 }
 
 func nowEpoch() int64 {

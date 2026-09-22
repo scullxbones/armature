@@ -18,6 +18,14 @@ func materializeAndReturn(stateDir string, allOps []ops.Op, byteOffsets map[stri
 	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true})
 }
 
+func materializeQuiet(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
+	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true})
+}
+
+func materializeExcludeWorker(allOps []ops.Op, excludeWorkerID string) (*State, Result, error) {
+	return Run("", allOps, nil, Options{ExcludeWorkerID: excludeWorkerID, EmitWarnings: true})
+}
+
 func TestToTraceabilityRefs_CarriesConfidence_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
 	issues := map[string]*Issue{
@@ -54,7 +62,7 @@ func TestMaterialize_IncrementalReplayNormalizesLoadedIssues(t *testing.T) {
 		ByteOffsets: map[string]int64{"worker-1.log": 123},
 	}))
 
-	_, err := Materialize(stateDir, nil, nil)
+	_, _, err := materializeAndReturn(stateDir, nil, nil)
 	require.NoError(t, err)
 
 	loaded, err := LoadIssue(filepath.Join(issuesDir, "task-01.json"))
@@ -82,7 +90,7 @@ func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
 
 	stateDir := filepath.Join(readOnlyDir, "state")
 
-	_, err := Materialize(stateDir, []ops.Op{}, nil)
+	_, _, err := materializeAndReturn(stateDir, []ops.Op{}, nil)
 	if err == nil {
 		t.Fatal("expected error when MkdirAll fails, got nil")
 	}
@@ -144,7 +152,7 @@ func TestMaterialize_SlottedLogsIncluded(t *testing.T) {
 	require.NoError(t, err)
 	allOps = append(allOps, slottedOps...)
 
-	result, err := Materialize(filepath.Join(dir, "state"), allOps, nil)
+	_, result, err := materializeAndReturn(filepath.Join(dir, "state"), allOps, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount)
 	assert.Equal(t, 3, result.OpsProcessed)
@@ -184,7 +192,7 @@ func TestMaterializeExcludeWorker_AlsoExcludesSlottedLogs(t *testing.T) {
 	require.NoError(t, err)
 	allOps := append(append(opsA, opsASlot...), opsB...)
 
-	state, result, err := MaterializeExcludeWorker(allOps, workerA)
+	state, result, err := materializeExcludeWorker(allOps, workerA)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.IssueCount, "only worker-b's issue should be present")
 	_, hasTaskOne := state.Issues["task-01"]
@@ -221,7 +229,7 @@ func TestMaterializeExcludeWorker_ToleratesMissingTargetsFromExcludedCreates(t *
 
 	allOps := []ops.Op{validCreate, missingTargetClaim, excludedCreate}
 
-	state, result, err := MaterializeExcludeWorker(allOps, workerA)
+	state, result, err := materializeExcludeWorker(allOps, workerA)
 	require.NoError(t, err, "exclude-worker replay should tolerate missing targets from filtered creates")
 	assert.Equal(t, 1, result.IssueCount)
 	assert.Equal(t, 2, result.OpsProcessed)
@@ -259,7 +267,7 @@ func TestMaterializeExcludeWorker_DoesNotSuppressUnrelatedMissingTargets(t *test
 		Payload:   ops.Payload{Title: "Task ninety-nine", NodeType: "task"},
 	}
 
-	_, _, err := MaterializeExcludeWorker([]ops.Op{validCreate, missingTargetClaim, unrelatedExcludedCreate}, workerA)
+	_, _, err := materializeExcludeWorker([]ops.Op{validCreate, missingTargetClaim, unrelatedExcludedCreate}, workerA)
 	require.Error(t, err, "unrelated missing-target replay errors should still surface")
 	assert.Contains(t, err.Error(), "task-01")
 }
@@ -290,7 +298,7 @@ func TestMaterialize_UnknownOpTypeErrorSurfaced(t *testing.T) {
 
 	allOps := []ops.Op{validOp, unknownOp}
 
-	result, err := Materialize(stateDir, allOps, nil)
+	_, result, err := materializeAndReturn(stateDir, allOps, nil)
 	require.NoError(t, err, "Materialize should not error, but should capture unknown ops")
 
 	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type should be captured in UnhandledOps")
@@ -386,7 +394,7 @@ func TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced(t *testing.T) {
 
 	allOps := []ops.Op{validOp, unknownOp}
 
-	_, result, err := MaterializeExcludeWorker(allOps, "worker-c")
+	_, result, err := materializeExcludeWorker(allOps, "worker-c")
 	require.NoError(t, err, "MaterializeExcludeWorker should not error, but should capture unknown ops")
 
 	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
@@ -428,7 +436,7 @@ func TestMaterialize_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralle
 	require.NoError(t, err)
 	os.Stderr = w
 
-	result, materializeErr := Materialize(stateDir, allOps, nil)
+	_, result, materializeErr := materializeAndReturn(stateDir, allOps, nil)
 
 	require.NoError(t, w.Close())
 	os.Stderr = oldStderr
@@ -515,7 +523,7 @@ func TestMaterializeExcludeWorker_UnhandledOpsWarningEmitted(t *testing.T) { //n
 	require.NoError(t, err)
 	os.Stderr = w
 
-	_, result, funcErr := MaterializeExcludeWorker(allOps, "worker-c")
+	_, result, funcErr := materializeExcludeWorker(allOps, "worker-c")
 
 	os.Stderr = oldStderr
 	require.NoError(t, w.Close())
@@ -718,7 +726,7 @@ func TestMaterializeAndReturnQuiet_BasicRoundTrip(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
 
-	state, result, err := MaterializeAndReturnQuiet(stateDir, []ops.Op{}, nil)
+	state, result, err := materializeQuiet(stateDir, []ops.Op{}, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, state)
 	assert.Equal(t, 0, result.OpsProcessed)

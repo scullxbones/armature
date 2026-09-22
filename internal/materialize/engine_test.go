@@ -476,7 +476,7 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 			{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 300, WorkerID: "worker-a",
 				Payload: ops.Payload{Title: "Task one", NodeType: "task"}},
 		}
-		state, result, err := MaterializeExcludeWorker(allOps, "worker-a")
+		state, result, err := materializeExcludeWorker(allOps, "worker-a")
 		require.NoError(t, err)
 		assert.Equal(t, 1, result.IssueCount)
 		assert.Equal(t, 2, result.OpsProcessed)
@@ -683,7 +683,7 @@ func TestMaterializePipeline(t *testing.T) {
 
 	allOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
-	result, err := Materialize(filepath.Join(dir, "state"), allOps, nil)
+	_, result, err := materializeAndReturn(filepath.Join(dir, "state"), allOps, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.IssueCount)
 
