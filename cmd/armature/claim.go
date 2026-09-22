@@ -445,12 +445,12 @@ func newClaimToken() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func reloadStoreClaimHeldBy(store *snapshot.Store, issueID, workerID, claimToken string) (bool, error) {
+func reloadStoreHeldByExactWorkerAndClaimToken(store *snapshot.Store, issueID, workerID, claimToken string) (bool, error) {
 	if _, err := store.Load(context.Background()); err != nil {
 		return false, err
 	}
 	issue := store.Issue(issueID)
-	return issue.ClaimHeldBy(workerID, claimToken), nil
+	return issue.HeldByExactWorkerAndClaimToken(workerID, claimToken), nil
 }
 
 func priorLeaseFacts(prior priorClaimState) claimPkg.LeaseFacts {
@@ -488,7 +488,7 @@ func compensateClaimIfHeldByToken(
 		return base
 	}
 
-	owns, err := reloadStoreClaimHeldBy(store, issueID, workerID, ifClaimToken)
+	owns, err := reloadStoreHeldByExactWorkerAndClaimToken(store, issueID, workerID, ifClaimToken)
 	if err != nil {
 		return finish(fmt.Errorf("%s: %w (claim superseded; no rollback appended: reload store failed: %v)", opLabel, cause, err))
 	}
@@ -1067,7 +1067,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 
 			stillOwnsClaim := func() bool {
-				owns, err := reloadStoreClaimHeldBy(store, issueID, workerID, claimToken)
+				owns, err := reloadStoreHeldByExactWorkerAndClaimToken(store, issueID, workerID, claimToken)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "warning: reload store to verify claim ownership failed: %v\n", err)
 					return false
@@ -1083,7 +1083,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			if issueAfter == nil {
 				return fmt.Errorf("issue %s not found after claim", issueID)
 			}
-			won := issueAfter.ClaimHeldBy(workerID, claimToken)
+			won := issueAfter.HeldByExactWorkerAndClaimToken(workerID, claimToken)
 			if !won {
 				supersededBySameWorker := issueAfter.ClaimedBy == workerID
 				format, _ := cmd.Root().PersistentFlags().GetString("format")

@@ -12,7 +12,7 @@ import (
 )
 
 // pessimisticCloneClaimFlock is the same-clone flock (TryLock). Op-log claim
-// ownership is optimistic (Issue.ClaimHeldBy / Payload.IfClaimToken).
+// ownership is optimistic (Issue.HeldByExactWorkerAndClaimToken / Payload.IfClaimToken).
 type pessimisticCloneClaimFlock struct {
 	release func()
 }

@@ -217,7 +217,7 @@ Rollback's compensating `transition` op stamps `if_claim_token` with the exact
 token of the claim it is compensating for
 (`ops.Payload.IfClaimToken`). `materialize.applyTransition` treats a non-empty
 `if_claim_token` as a condition, not an instruction: it applies the op only if
-`Issue.ClaimHeldBy(WorkerID, IfClaimToken)` reports true, which requires the
+`Issue.HeldByExactWorkerAndClaimToken(WorkerID, IfClaimToken)` reports true, which requires the
 issue's status to be *exactly* `claimed` and its `claimed_by`/`claim_token` to
 match the op's `WorkerID`/`IfClaimToken` — otherwise it is a deterministic
 no-op. The exact-`claimed` requirement subsumes the old terminal-status check

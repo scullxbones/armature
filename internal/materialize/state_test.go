@@ -95,37 +95,37 @@ func TestLoadIssueNormalization(t *testing.T) {
 	assert.Equal(t, []string{"docs/plan.md"}, loaded.ContextFiles)
 }
 
-func TestIssueClaimHeldBy_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestIssueHeldByExactWorkerAndClaimToken_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nil receiver is never held", func(t *testing.T) {
 		t.Parallel()
 		var issue *Issue
-		assert.False(t, issue.ClaimHeldBy("worker-a", "token-a"))
+		assert.False(t, issue.HeldByExactWorkerAndClaimToken("worker-a", "token-a"))
 	})
 
 	t.Run("empty claim token is never held, even if fields happen to match", func(t *testing.T) {
 		t.Parallel()
 		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: ""}
-		assert.False(t, issue.ClaimHeldBy("worker-a", ""))
+		assert.False(t, issue.HeldByExactWorkerAndClaimToken("worker-a", ""))
 	})
 
 	t.Run("wrong worker is not held", func(t *testing.T) {
 		t.Parallel()
 		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: "token-a"}
-		assert.False(t, issue.ClaimHeldBy("worker-b", "token-a"))
+		assert.False(t, issue.HeldByExactWorkerAndClaimToken("worker-b", "token-a"))
 	})
 
 	t.Run("wrong token is not held", func(t *testing.T) {
 		t.Parallel()
 		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: "token-a"}
-		assert.False(t, issue.ClaimHeldBy("worker-a", "token-b"))
+		assert.False(t, issue.HeldByExactWorkerAndClaimToken("worker-a", "token-b"))
 	})
 
 	t.Run("exact worker and token in claimed status is held", func(t *testing.T) {
 		t.Parallel()
 		issue := &Issue{Status: ops.StatusClaimed, ClaimedBy: "worker-a", ClaimToken: "token-a"}
-		assert.True(t, issue.ClaimHeldBy("worker-a", "token-a"))
+		assert.True(t, issue.HeldByExactWorkerAndClaimToken("worker-a", "token-a"))
 	})
 
 	for _, status := range []string{
@@ -134,7 +134,7 @@ func TestIssueClaimHeldBy_REQ_LNGHZN_S5_T9(t *testing.T) {
 		t.Run("not held in status "+status, func(t *testing.T) {
 			t.Parallel()
 			issue := &Issue{Status: status, ClaimedBy: "worker-a", ClaimToken: "token-a"}
-			assert.False(t, issue.ClaimHeldBy("worker-a", "token-a"))
+			assert.False(t, issue.HeldByExactWorkerAndClaimToken("worker-a", "token-a"))
 		})
 	}
 }

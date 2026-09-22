@@ -215,7 +215,7 @@ func compensationApplies(issue *Issue, op ops.Op) bool {
 	if op.Payload.IfClaimToken == "" {
 		return true
 	}
-	return issue.ClaimHeldBy(op.WorkerID, op.Payload.IfClaimToken)
+	return issue.HeldByExactWorkerAndClaimToken(op.WorkerID, op.Payload.IfClaimToken)
 }
 
 func applyStatusAssert(issue *Issue, status string, timestamp int64) {
