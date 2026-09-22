@@ -260,19 +260,6 @@ func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Op
 	return runFullPipeline(stateDir, allOps, byteOffsets, opts.EmitWarnings, opts.WriteStateFiles)
 }
 
-func Materialize(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (Result, error) {
-	_, result, err := Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true})
-	return result, err
-}
-
-func MaterializeAndReturnQuiet(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
-	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: false})
-}
-
-func MaterializeExcludeWorker(allOps []ops.Op, excludeWorkerID string) (*State, Result, error) {
-	return Run("", allOps, nil, Options{ExcludeWorkerID: excludeWorkerID, EmitWarnings: true})
-}
-
 func opSortKey(op ops.Op) int {
 	switch op.Type {
 	case ops.OpCreate:

@@ -7,9 +7,54 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test-only aggregator for stored disagreement facts (G3.3). Production writes
+// IsDisagreement on attestations; nothing on the CLI path queries this view.
+
+type disagreementEvent struct {
+	BundleID              string
+	DeliveryFingerprint   string
+	Rating                Rating
+	EffectiveRating       Rating
+	ConflictsWithBundleID string
+	ConflictsWithRating   *Rating
+}
+
+type disagreementStats struct {
+	Count  int
+	Events []disagreementEvent
+}
+
+func collectDisagreementStats(atts []AssessmentAttestation) disagreementStats {
+	var stats disagreementStats
+	for i := range atts {
+		att := atts[i]
+		if !att.IsDisagreement {
+			continue
+		}
+		stats.Events = append(stats.Events, disagreementEvent{
+			BundleID:              att.BundleID,
+			DeliveryFingerprint:   att.DeliveryFingerprint,
+			Rating:                att.Rating,
+			EffectiveRating:       att.EffectiveRating,
+			ConflictsWithBundleID: att.ConflictsWithBundleID,
+			ConflictsWithRating:   cloneRating(att.ConflictsWithRating),
+		})
+	}
+	stats.Count = len(stats.Events)
+	return stats
+}
+
+func cloneRating(r *Rating) *Rating {
+	if r == nil {
+		return nil
+	}
+	cp := *r
+	return &cp
+}
+
 // TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2 proves G3.3:
 // RecordWithDuplicateCheck writes IsDisagreement / ConflictsWith* on the new
-// Assessment Attestation, and CollectDisagreementStats treats those stored
+// Assessment Attestation, and collectDisagreementStats treats those stored
 // fields as the queryable disagreement facts.
 func TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2(t *testing.T) {
 	t.Parallel()
@@ -30,7 +75,7 @@ func TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2(t *testing.T) 
 	assert.False(t, prior.IsDisagreement, "T1 writes disagreement only on the new record")
 
 	history := []AssessmentAttestation{prior, *result.Attestation}
-	stats := CollectDisagreementStats(history)
+	stats := collectDisagreementStats(history)
 	assert.Equal(t, 1, stats.Count)
 	require.Len(t, stats.Events, 1)
 	assert.Equal(t, stats.Count, len(stats.Events))
@@ -43,7 +88,7 @@ func TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2(t *testing.T) 
 	require.NotNil(t, event.ConflictsWithRating)
 	assert.Equal(t, Green, *event.ConflictsWithRating)
 
-	assert.Equal(t, 0, CollectDisagreementStats([]AssessmentAttestation{prior}).Count,
+	assert.Equal(t, 0, collectDisagreementStats([]AssessmentAttestation{prior}).Count,
 		"the unre-written prior is not a disagreement fact")
 }
 
@@ -93,7 +138,7 @@ func TestDisagreementStats_IgnoresNonDisagreementRows_REQ_TOPTIER_S13_T2(t *test
 		},
 	}
 
-	stats := CollectDisagreementStats(rows)
+	stats := collectDisagreementStats(rows)
 	assert.Equal(t, 2, stats.Count)
 	require.Len(t, stats.Events, 2)
 	assert.Equal(t, "stored-disagreement", stats.Events[0].BundleID)
@@ -105,7 +150,7 @@ func TestDisagreementStats_IgnoresNonDisagreementRows_REQ_TOPTIER_S13_T2(t *test
 	require.NotNil(t, stats.Events[1].ConflictsWithRating)
 	assert.Equal(t, Green, *stats.Events[1].ConflictsWithRating)
 
-	empty := CollectDisagreementStats(nil)
+	empty := collectDisagreementStats(nil)
 	assert.Equal(t, 0, empty.Count)
 	assert.Empty(t, empty.Events)
 

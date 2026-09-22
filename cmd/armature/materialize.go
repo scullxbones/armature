@@ -22,7 +22,10 @@ func newMaterializeCmd() *cobra.Command {
 			}
 
 			if excludeWorker != "" {
-				_, result, err := materialize.MaterializeExcludeWorker(allOps, excludeWorker)
+				_, result, err := materialize.Run("", allOps, nil, materialize.Options{
+					ExcludeWorkerID: excludeWorker,
+					EmitWarnings:    true,
+				})
 				if err != nil {
 					return err
 				}
@@ -35,7 +38,10 @@ func newMaterializeCmd() *cobra.Command {
 				return nil
 			}
 
-			result, err := materialize.Materialize(appCtx.StateDir, allOps, offsets)
+			_, result, err := materialize.Run(appCtx.StateDir, allOps, offsets, materialize.Options{
+				WriteStateFiles: true,
+				EmitWarnings:    true,
+			})
 			if err != nil {
 				return err
 			}

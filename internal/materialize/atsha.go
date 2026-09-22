@@ -39,10 +39,7 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 		}
 
 		expectedWorkerID := strings.TrimSuffix(filepath.Base(f), ".log")
-		legacyWorkerID := expectedWorkerID
-		if i := strings.Index(expectedWorkerID, "~"); i >= 0 {
-			legacyWorkerID = expectedWorkerID[:i]
-		}
+		legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
 
 		content, err := history.ShowFileAtCommit(sha, f)
 		if err != nil {
