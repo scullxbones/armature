@@ -80,9 +80,6 @@ func NewStore(opsDir, stateDir string) *Store {
 // Load loads the snapshot from disk and caches it, replacing any previously
 // cached snapshot. Call it both for the initial load and to refresh the
 // cache after the underlying ops/state have changed.
-//
-// ctx is accepted for API consistency with other Store methods; the
-// underlying disk reads do not yet honor cancellation.
 func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 	snap, err := Load(s.opsDir, s.stateDir)
 	if err != nil {

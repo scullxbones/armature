@@ -2,12 +2,9 @@ package claim
 
 import "github.com/scullxbones/armature/internal/ops"
 
-// replayDefaultTTLMinutes is applyClaim's fallback when a held lease recorded
-// TTL <= 0. Distinct from IsClaimStale, which treats TTL <= 0 as never-expire.
 const replayDefaultTTLMinutes = 60
 
-// HeldClaim is the replay-visible lease ClaimLostRace inspects. It is not a
-// materialize.Issue: this package must not import materialize.
+// HeldClaim is the replay-visible lease ClaimLostRace inspects.
 type HeldClaim struct {
 	Status                     string
 	ClaimedBy                  string
@@ -19,9 +16,6 @@ type HeldClaim struct {
 
 // ClaimLostRace reports whether a challenger's claim op is a no-op because
 // another worker still holds a live claimed or in-progress lease.
-//
-// Sequential replay, not ResolveClaim: an earlier-timestamp challenger still
-// loses if the currently held lease is not stale at the challenger's timestamp.
 func ClaimLostRace(held HeldClaim, challengerID string, now int64) bool {
 	if held.Status != ops.StatusClaimed && held.Status != ops.StatusInProgress {
 		return false
