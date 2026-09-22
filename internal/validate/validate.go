@@ -532,7 +532,10 @@ func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
 				Key:      taskcontract.RuleDoctorRunWiring,
 			})
 		}
-		if doctorRunWiringClaimProbedOffDoctorPath(task) && unitOnlyAcceptance(issue.Acceptance) {
+		if issue.Type == "task" &&
+			!ops.IsTerminalStatus(issue.Status) &&
+			taskcontract.ClaimsDoctorRunWiring(issue.DefinitionOfDone) &&
+			unitOnlyAcceptance(issue.Acceptance) {
 			findings = append(findings, Finding{
 				Severity: "error",
 				Rule:     ruleE14,
@@ -546,12 +549,6 @@ func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
 		}
 	}
 	return findings
-}
-
-func doctorRunWiringClaimProbedOffDoctorPath(task taskcontract.Task) bool {
-	probe := task
-	probe.Scope = []string{"internal/unrelated.go"}
-	return len(taskcontract.CheckTaskContract(probe)) > 0
 }
 
 var reArmDoctorSurface = regexp.MustCompile(`(?i)\barm\s+doctor\b`)

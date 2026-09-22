@@ -207,3 +207,15 @@ func TestCheckTaskContract_DoctorRunWiring_REQ_TOPTIER_S18_T0(t *testing.T) {
 		assert.Empty(t, got)
 	})
 }
+
+func TestClaimsDoctorRunWiring_REQ_TOPTIER_S18_T0(t *testing.T) {
+	t.Parallel()
+	assert.True(t, taskcontract.ClaimsDoctorRunWiring("arm doctor gains check D9 so the config file can never silently lie again"))
+	assert.True(t, taskcontract.ClaimsDoctorRunWiring("wire D10 into Run"))
+	assert.True(t, taskcontract.ClaimsDoctorRunWiring("arm doctor reports malformed config as an error"))
+	assert.False(t, taskcontract.ClaimsDoctorRunWiring(""))
+	assert.False(t, taskcontract.ClaimsDoctorRunWiring("make check green; arm doctor and arm validate --ci before done"))
+	assert.False(t, taskcontract.ClaimsDoctorRunWiring("run arm doctor before done"))
+	assert.False(t, taskcontract.ClaimsDoctorRunWiring("arm doctor gains check D9 as an exported helper, not wired into Run"))
+	assert.False(t, taskcontract.ClaimsDoctorRunWiring("arm doctor gains check D11 helper-only"))
+}
