@@ -58,11 +58,9 @@ func cleanTreeCheck(worktreePath string) CheckResult {
 		}
 	}
 
-	const armatureStateDir = ".armature/"
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Path, armatureStateDir) &&
-			(entry.OldPath == "" || strings.HasPrefix(entry.OldPath, armatureStateDir)) {
+		if armatureStateNoise(entry) {
 			continue
 		}
 		paths = append(paths, entry.Path)
@@ -79,6 +77,12 @@ func cleanTreeCheck(worktreePath string) CheckResult {
 	}
 
 	return CheckResult{Pass: true, Remediation: ""}
+}
+
+func armatureStateNoise(entry adapters.DirtyEntry) bool {
+	const armatureStateDir = ".armature/"
+	return strings.HasPrefix(entry.Path, armatureStateDir) &&
+		(entry.OldPath == "" || strings.HasPrefix(entry.OldPath, armatureStateDir))
 }
 
 // ScopeContainmentCheck verifies that all files changed since baseCommit
@@ -178,6 +182,10 @@ func hasMatchingReference(git *adapters.Client, baseCommit, head, issueID string
 	if err != nil {
 		return false
 	}
+	return logContainsMatchingReference(entries, issueID)
+}
+
+func logContainsMatchingReference(entries []adapters.LogEntry, issueID string) bool {
 	for _, entry := range entries {
 		if commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
 			return true
@@ -254,15 +262,7 @@ func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID stri
 		}
 	}
 
-	foundMatchingCommit := false
-	for _, entry := range entries {
-		if commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
-			foundMatchingCommit = true
-			break
-		}
-	}
-
-	if !foundMatchingCommit {
+	if !logContainsMatchingReference(entries, issueID) {
 		return CheckResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
@@ -272,14 +272,14 @@ func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID stri
 		}
 	}
 
-	diffEntries, err := git.DiffNameStatusRange(baseCommit, head)
+	empty, err := netDeliveryEmpty(git, baseCommit, head)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
 			Remediation: fmt.Sprintf("Failed to get diff: %v", err),
 		}
 	}
-	if len(diffEntries) == 0 {
+	if empty {
 		return CheckResult{
 			Pass: false,
 			Remediation: fmt.Sprintf(
@@ -291,4 +291,12 @@ func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID stri
 	}
 
 	return CheckResult{Pass: true, Remediation: ""}
+}
+
+func netDeliveryEmpty(git *adapters.Client, baseCommit, head string) (bool, error) {
+	diffEntries, err := git.DiffNameStatusRange(baseCommit, head)
+	if err != nil {
+		return false, err
+	}
+	return len(diffEntries) == 0, nil
 }
