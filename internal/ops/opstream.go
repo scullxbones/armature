@@ -10,11 +10,11 @@ import (
 
 // OpItem represents a single op loaded from a log file, with metadata about its source.
 type OpItem struct {
-	Op          Op         // The parsed operation
-	LogFilename string     // Full path to the log file
-	Source      *FileEntry // Reference to the FileEntry that produced this op
-	Offset      int64      // Byte offset where this op ends in the log file
-	LineNumber  int        // Physical line number in the source log file (1-indexed)
+	Op          Op
+	LogFilename string
+	Source      *FileEntry
+	Offset      int64
+	LineNumber  int
 }
 
 // FileEntry represents a log file to be loaded with expected worker ID validation.

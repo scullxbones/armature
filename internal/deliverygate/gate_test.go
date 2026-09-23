@@ -11,40 +11,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCleanTreeCheck_REQ_LNGHZN_S4_T1 verifies that the clean tree check
-// correctly detects when a worktree has no uncommitted changes.
 func TestCleanTreeCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	// Create a temporary git repository
 	tmpDir := t.TempDir()
 	initGitRepo(t, tmpDir)
 
-	// Create and commit a file
 	cleanFile := filepath.Join(tmpDir, "clean.txt")
 	require.NoError(t, os.WriteFile(cleanFile, []byte("clean content"), 0644))
 	runGit(t, tmpDir, "add", "clean.txt")
 	runGit(t, tmpDir, "commit", "-m", "initial commit")
 
-	// Test with a clean tree
 	result := cleanTreeCheck(tmpDir)
 	assert.True(t, result.Pass, "clean tree should pass")
 	assert.Empty(t, result.Remediation, "clean tree should have no remediation")
 
-	// Add an uncommitted change
 	require.NoError(t, os.WriteFile(cleanFile, []byte("modified content"), 0644))
 
-	// Test with dirty tree
 	result = cleanTreeCheck(tmpDir)
 	assert.False(t, result.Pass, "dirty tree should fail")
 	assert.NotEmpty(t, result.Remediation, "dirty tree should have remediation message")
 }
 
-// TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1 verifies that a
-// staged rename moving a tracked file from outside .armature/ into
-// .armature/ is NOT filtered out by the .armature/ noise exclusion: the
-// source path being outside .armature/ means a real tracked file was
-// effectively deleted, so the tree must be reported as dirty.
 func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -64,9 +52,6 @@ func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1(t *testi
 	assert.Contains(t, result.Remediation, "outside.go")
 }
 
-// TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LNGHZN_S4_T1
-// verifies that ignored generated artifacts still make a delivery tree dirty,
-// while Armature's derived coordination state remains safe local noise.
 func TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -89,15 +74,12 @@ func TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LN
 	assert.NotContains(t, result.Remediation, ".armature/")
 }
 
-// TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1 verifies that
-// the scope containment check passes when all changed files are within scope.
 func TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	initGitRepo(t, tmpDir)
 
-	// Create a base commit
 	file1 := filepath.Join(tmpDir, "pkg", "file1.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(file1), 0755))
 	require.NoError(t, os.WriteFile(file1, []byte("package pkg\nvar X = 1"), 0644))
@@ -106,26 +88,21 @@ func TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1(t *testing.T
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Add a change within scope
 	require.NoError(t, os.WriteFile(file1, []byte("package pkg\nvar X = 2"), 0644))
 	runGit(t, tmpDir, "add", "pkg/file1.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST): modify file1")
 
-	// Test scope containment
 	result := scopeContainmentCheck(tmpDir, baseCommit, "HEAD", []string{"pkg/**"})
 	assert.True(t, result.Pass, "all files within scope should pass")
 	assert.Empty(t, result.Remediation)
 }
 
-// TestScopeContainmentCheck_FileOutsideScope_REQ_LNGHZN_S4_T1 verifies that
-// the scope containment check fails when a changed file is outside the declared scope.
 func TestScopeContainmentCheck_FileOutsideScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	initGitRepo(t, tmpDir)
 
-	// Create base commit
 	file1 := filepath.Join(tmpDir, "pkg", "file1.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(file1), 0755))
 	require.NoError(t, os.WriteFile(file1, []byte("package pkg"), 0644))
@@ -134,25 +111,18 @@ func TestScopeContainmentCheck_FileOutsideScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Add a change outside declared scope
 	file2 := filepath.Join(tmpDir, "cmd", "main.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(file2), 0755))
 	require.NoError(t, os.WriteFile(file2, []byte("package main"), 0644))
 	runGit(t, tmpDir, "add", "cmd/main.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST): add main")
 
-	// Test with scope that excludes the new file
 	result := scopeContainmentCheck(tmpDir, baseCommit, "HEAD", []string{"pkg/**"})
 	assert.False(t, result.Pass, "file outside scope should fail")
 	assert.NotEmpty(t, result.Remediation)
 	assert.Contains(t, result.Remediation, "cmd/main.go")
 }
 
-// TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4 verifies
-// that a rename whose original path was outside the declared scope fails
-// scope containment, even though the destination path is in scope. Plain
-// `git diff --name-only` collapses a rename to only its destination path,
-// which would otherwise mask an out-of-scope deletion via rename.
 func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -162,7 +132,6 @@ func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *te
 	outsideFile := filepath.Join(tmpDir, "outside", "a.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(outsideFile), 0755))
 	// Content needs enough bulk for git's rename heuristic to recognize the
-	// move rather than reporting a plain delete+add.
 	content := ""
 	for range 20 {
 		content += "line of content\n"
@@ -183,8 +152,6 @@ func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *te
 	assert.Contains(t, result.Remediation, "outside/a.go")
 }
 
-// TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4 verifies that
-// a rename whose source and destination are both within scope passes.
 func TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -211,16 +178,12 @@ func TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4(t *testing.T
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1 verifies that
-// the commit reference check passes when at least one commit has the proper
-// conventional-commit format with the issue ID in the scope.
 func TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	initGitRepo(t, tmpDir)
 
-	// Create a base commit
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
@@ -228,21 +191,15 @@ func TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1(t *testin
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Add a commit with proper conventional format
 	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): add feature")
 
-	// Test commit reference
 	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "valid conventional commit should pass")
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription verifies that
-// a commit subject matching "fix(ISSUE-ID):" with no description after the
-// colon does not satisfy the check: the regex must require a non-empty
-// description, not just the type/issue-ID/colon prefix.
 func TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription(t *testing.T) {
 	t.Parallel()
 
@@ -265,15 +222,12 @@ func TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription(t *testing.T) 
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1 verifies that
-// the commit reference check fails when no commits match the conventional format.
 func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	initGitRepo(t, tmpDir)
 
-	// Create a base commit
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
@@ -281,22 +235,15 @@ func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Add a commit WITHOUT proper conventional format (no issue ID in scope)
 	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "feat: generic feature")
 
-	// Test commit reference - should fail
 	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "commits without issue ID should fail")
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC
-// covers the CA+PJ squash-land path: the claim worktree stays on the old
-// task-branch tip (no matching conventional commit), while main has
-// `feat(ISSUE): … (#PR)`. CommitReference must accept the primary-branch
-// evidence without requiring the worktree to be reset.
 func TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
@@ -327,9 +274,6 @@ func TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC(t
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_MATENC
-// keeps the fail-closed path: a stale task branch plus a primary branch
-// that also lacks a matching commit must not pass.
 func TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
@@ -353,11 +297,6 @@ func TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC
-// covers the P1 hole: empty/stale worktree HEAD has no delivery diff (vacuously
-// in scope), while main's squash commit changes an out-of-scope file. Scope
-// and CommitReference must share that primary-branch delivery ref so the
-// gate fails instead of accepting the empty worktree range.
 func TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
@@ -390,12 +329,6 @@ func TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC(t 
 	assert.Contains(t, gate.ScopeContainment.Remediation, "cmd/out.go")
 }
 
-// TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC
-// covers the follow-up P1: after an in-scope squash lands on main, an
-// unrelated later commit that touches an out-of-scope path must not fail
-// ScopeContainment for this issue. Primary fallback isolates the complete
-// landing (enclosing merge, or first-parent..SHA for a squash) rather than
-// scoping claimBase..primaryTip.
 func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
@@ -436,12 +369,6 @@ func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquas
 	assert.Empty(t, gate.ScopeContainment.Remediation)
 }
 
-// TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC
-// covers a follow-up P1: a stale worktree plus a non-squash --no-ff merge
-// whose merge subject is not a valid issue reference. The landing includes
-// an older out-of-scope matching commit and a newer in-scope matching
-// commit. Primary fallback must scope the complete merge (first-parent..M),
-// not only the newest matching commit, so ScopeContainment fails.
 func TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
@@ -485,9 +412,6 @@ func TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC(t *test
 	assert.Contains(t, gate.ScopeContainment.Remediation, "cmd/out.go")
 }
 
-// TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC
-// covers the P2 hole: a resolvable but empty local main must not block
-// examining master, which holds the only matching conventional commit.
 func TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
@@ -516,17 +440,12 @@ func TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC(t 
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1 verifies that
-// a commit type outside the repo's documented convention (feat, fix, refactor,
-// test, docs, style, polish — see docs/conventions.md) does not satisfy the
-// check, even though it matches "some lowercase word" followed by (ISSUE-ID):.
 func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	initGitRepo(t, tmpDir)
 
-	// Create a base commit
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
@@ -534,7 +453,6 @@ func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Add a commit using a bogus, non-conventional type.
 	require.NoError(t, os.WriteFile(file, []byte("modified"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "oops(TEST-123): bypass convention")
@@ -544,11 +462,6 @@ func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4 verifies
-// that the documented merge-commit format ("merge: <ISSUE-ID> <description>",
-// per docs/conventions.md) satisfies the commit-reference check when it is
-// the subject of a GENUINE merge commit (2+ parents) — the shape the
-// documented format is meant for.
 func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -562,8 +475,6 @@ func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Build a genuine two-parent merge commit whose subject is the
-	// documented merge form.
 	runGit(t, tmpDir, "checkout", "-b", "feature-branch")
 	featureFile := filepath.Join(tmpDir, "feature.txt")
 	require.NoError(t, os.WriteFile(featureFile, []byte("feature content"), 0644))
@@ -581,12 +492,6 @@ func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4
-// fixes the open PR review comment on gate.go:194: the merge: ID description
-// subject form must only be accepted on a genuine merge commit (2+
-// parents). An ordinary single-parent commit whose author merely wrote a
-// subject that LOOKS like the merge form must not satisfy the check via
-// regex alone.
 func TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -609,9 +514,6 @@ func TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2 verifies
-// that a conventional-commit reference committed BEFORE baseCommit does not
-// satisfy the check — only commits strictly after base count.
 func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
 	t.Parallel()
 
@@ -621,8 +523,6 @@ func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("v0"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
-	// A matching reference lands BEFORE the base commit — e.g. an older,
-	// already-merged commit for the same issue ID.
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): earlier work")
 
 	baseCommit := getHeadSHA(t, tmpDir)
@@ -636,12 +536,6 @@ func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1 verifies the P3 fix: a
-// commit that matches the conventional-commit format but has no actual diff
-// (e.g. `git commit --allow-empty -m "fix(ISSUE-ID): busywork"`) must not
-// satisfy the check. Before the fix, CommitReferenceCheck only inspected
-// commit subject lines, so an empty commit with the right message shape would
-// wrongly pass the gate with no real content delivered.
 func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -655,7 +549,6 @@ func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) 
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// A conventional-commit-shaped but content-free commit.
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "fix(TEST-123): busywork")
 
 	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
@@ -663,11 +556,6 @@ func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) 
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_T1 verifies
-// that the empty-commit tightening doesn't reject an issue whose FIRST
-// matching commit happens to be empty but a LATER matching commit has real
-// content — the check should keep looking rather than stop at the first
-// subject-line match.
 func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -692,11 +580,6 @@ func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1 verifies that a
-// matching conventional commit whose change is fully reverted by a later
-// commit in the range, with nothing else delivered, does not satisfy the
-// check: the net base..HEAD diff is empty, so there is no evidence anything
-// was actually delivered.
 func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
@@ -710,13 +593,10 @@ func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *te
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Commit A: matching format, changes a real file.
 	require.NoError(t, os.WriteFile(file, []byte("changed content"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): make a change")
 
-	// Commit B: reverts A's change back to the base content, so the net
-	// base-to-HEAD diff is empty.
 	require.NoError(t, os.WriteFile(file, []byte("base content"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "revert the change")
@@ -726,18 +606,6 @@ func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *te
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4 documents
-// an intentional design trade-off: a matching conventional commit whose own
-// change is fully reverted, but the range also contains an unrelated later
-// commit that delivers something else, now PASSES. The new two-part check
-// (conventional-commit reference exists AND net base..HEAD diff is
-// non-empty) deliberately does not attribute the surviving net diff back to
-// the specific matching commit — that per-commit content-survival
-// reconstruction is what caused repeated edge-case bugs (deletions, binary
-// files, renames, mixed add/delete, merges) across prior implementations.
-// The abuse case this check exists to prevent (a `type(ID): busywork`
-// commit reverted with NOTHING else delivered) is still caught, because in
-// that case the net diff is empty.
 func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -753,18 +621,14 @@ func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t 
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// C1: matching format, changes widget.txt.
 	require.NoError(t, os.WriteFile(widget, []byte("changed widget"), 0644))
 	runGit(t, tmpDir, "add", "widget.txt")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement widget")
 
-	// C2: reverts C1's change back to base content.
 	require.NoError(t, os.WriteFile(widget, []byte("base widget"), 0644))
 	runGit(t, tmpDir, "add", "widget.txt")
 	runGit(t, tmpDir, "commit", "-m", "revert the widget change")
 
-	// C3: an unrelated edit to another in-scope file — net delivery from
-	// somewhere in the range, even though C1's own substance was reverted.
 	require.NoError(t, os.WriteFile(other, []byte("base other\n// trivial comment"), 0644))
 	runGit(t, tmpDir, "add", "other.txt")
 	runGit(t, tmpDir, "commit", "-m", "add trivial comment")
@@ -774,12 +638,6 @@ func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t 
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4 verifies
-// that a matching conventional commit whose only change is removing lines
-// (no lines added) is treated as delivered when that deletion is never
-// undone. Before this fix, the survival check was based entirely on
-// addedLinesByFile, which a pure deletion never populates, so a legitimate
-// deletion-only delivery was wrongly rejected as "not surviving".
 func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -793,7 +651,6 @@ func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testin
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Matching commit removes the distinctive line and adds nothing.
 	require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale line")
@@ -803,9 +660,6 @@ func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testin
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4
-// verifies that a matching deletion-only commit does NOT satisfy the check
-// when a later commit re-adds the removed content, undoing the deletion.
 func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -819,12 +673,10 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Matching commit removes the distinctive line and adds nothing.
 	require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale line")
 
-	// Later commit re-adds the removed content, undoing the deletion.
 	require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "restore the line")
@@ -834,13 +686,6 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 	assert.NotEmpty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_REQ_LNGHZN_S4
-// verifies that a later commit which only cosmetically reformats a
-// previously delivered line (e.g. a gofmt-style indentation rewrap) does not
-// break the check: the net base..HEAD diff is still non-empty relative to
-// base, and a matching conventional-commit reference exists somewhere in the
-// range, so the two-part check passes without needing to attribute the
-// reformatted content back to the original matching commit specifically.
 func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -854,17 +699,12 @@ func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_RE
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Matching commit adds a distinctive delivered line, indented with
-	// spaces.
 	require.NoError(t, os.WriteFile(file, []byte(
 		"package p\n\nfunc New() {\n    return doDistinctiveDeliveredWork()\n}\n",
 	), 0644))
 	runGit(t, tmpDir, "add", "file.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): implement New")
 
-	// Later commit only cosmetically reformats the delivered line's
-	// indentation (spaces -> tab, gofmt-style), without changing its actual
-	// tokens/content or the file's line structure.
 	require.NoError(t, os.WriteFile(file, []byte(
 		"package p\n\nfunc New() {\n\treturn doDistinctiveDeliveredWork()\n}\n",
 	), 0644))
@@ -877,14 +717,6 @@ func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_RE
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4 verifies
-// the fix for a review finding against the prior diff-text-based survival
-// check: a matching commit that adds content to a file with a non-ASCII
-// name (which git quotes and octal-escapes in default diff/log text output,
-// e.g. "caf\303\251.go" for "café.go") must still be recognized as
-// surviving. Blob-OID comparison sidesteps this entirely: paths come from
-// CommitDiffTreeStatus's -z (NUL-delimited, unquoted) output and are passed
-// as literal arguments to git plumbing, with no diff-header text to decode.
 func TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -908,15 +740,6 @@ func TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4(t *testing.
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4
-// verifies the fix for a review finding against the prior diff-text-based
-// survival check: a matching commit that is a pure (100%-similarity) rename
-// with no textual hunk (git represents it as a rename with zero added/
-// removed lines) must still be recognized as delivering a real change.
-// Blob-OID comparison handles this automatically: the commit's post-image
-// blob OID at the destination path is unchanged from the pre-rename blob,
-// so comparing it against HEAD's blob OID at the destination path correctly
-// recognizes the rename as surviving with no hunk-parsing involved.
 func TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -942,20 +765,6 @@ func TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4(t *t
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4 is a table-driven
-// suite enumerating outcomes of CommitReferenceCheck's two-part design
-// (conventional-commit reference exists AND the net base..HEAD diff is
-// non-empty) across add/delete/modify/rename shapes, with and without a
-// later commit undoing the change. Earlier designs tried to prove the
-// matching commit's OWN content specifically survives to HEAD and were
-// redefined multiple times across review rounds (filename-overlap-only ->
-// same-file added-line-multiset intersection -> blob-OID comparison), each
-// round's fix closing one counterexample while reopening another for a
-// different diff shape (deletions, binary files, renames, merges). The
-// two-part check sidesteps that entirely: it doesn't attribute the diff to
-// any specific commit, only requires that a matching reference exists AND
-// something was net-delivered. This suite pins down that every case below
-// still lands on the intuitively-correct verdict under the simpler design.
 func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -1109,16 +918,10 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 				runGit(t, dir, "commit", "-m", "base")
 				base := getHeadSHA(t, dir)
 
-				// Matching commit both removes the stale line and adds new
-				// content to the same file (a refactor-shaped change).
 				require.NoError(t, os.WriteFile(file, []byte("keep this line\nADDED REPLACEMENT DELIVERY LINE HERE\n"), 0644))
 				runGit(t, dir, "add", "file.txt")
 				runGit(t, dir, "commit", "-m", "fix(TEST-123): replace stale line")
 
-				// Later commit edits away the added content (so
-				// addedContentSurvives will return false for this file),
-				// but does not restore the originally deleted line — the
-				// matching commit's deletion still holds at HEAD.
 				require.NoError(t, os.WriteFile(file, []byte("keep this line\nSOME OTHER UNRELATED LINE ENTIRELY\n"), 0644))
 				runGit(t, dir, "add", "file.txt")
 				runGit(t, dir, "commit", "-m", "edit away the added line")
@@ -1126,12 +929,6 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 			},
 		},
 		{
-			// Regression for PR #88 review finding: a commit whose every
-			// added line is shorter than survivalMinLineLength (15 chars)
-			// used to blanket-skip ALL of its lines whenever it added more
-			// than one, leaving no evidence to check and permanently
-			// rejecting a commit that legitimately delivers only short
-			// lines.
 			name:         "commit whose every added line is short still finds survival evidence",
 			expectedPass: true,
 			setup: func(t *testing.T, dir string) string {
@@ -1142,7 +939,6 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 				runGit(t, dir, "commit", "-m", "base")
 				base := getHeadSHA(t, dir)
 
-				// Both added lines are short (< 15 chars).
 				require.NoError(t, os.WriteFile(file, []byte("package p\nvar X = 1\n"), 0644))
 				runGit(t, dir, "add", "file.go")
 				runGit(t, dir, "commit", "-m", "feat(TEST-123): add short var")
@@ -1150,13 +946,6 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 			},
 		},
 		{
-			// Regression for PR #88 review finding: deletionSurvives used to
-			// require ALL removed lines to remain absent from HEAD, so a
-			// commit that removed several lines but had just one of them
-			// coincidentally restored elsewhere (e.g. re-added by an
-			// unrelated later commit for an unrelated reason) was rejected
-			// wholesale, even though most of its removed content is
-			// genuinely gone and the deletion substantively still holds.
 			name:         "deletion with multiple removed lines survives if at least one remains absent",
 			expectedPass: true,
 			setup: func(t *testing.T, dir string) string {
@@ -1168,14 +957,10 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 				runGit(t, dir, "commit", "-m", "base")
 				base := getHeadSHA(t, dir)
 
-				// Matching commit removes both distinctive lines and adds nothing.
 				require.NoError(t, os.WriteFile(file, []byte("keep this line\n"), 0644))
 				runGit(t, dir, "add", "file.txt")
 				runGit(t, dir, "commit", "-m", "fix(TEST-123): remove stale lines")
 
-				// A later, unrelated commit coincidentally reintroduces only
-				// ONE of the two removed lines (e.g. an unrelated doc note
-				// with the same text), not both.
 				require.NoError(t, os.WriteFile(file, []byte(
 					"keep this line\nDELETE THIS FIRST DISTINCTIVE LINE\n"), 0644))
 				runGit(t, dir, "add", "file.txt")
@@ -1219,15 +1004,12 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 	}
 }
 
-// TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1 verifies that the
-// DeliveryGate function returns correct combined results for all three checks.
 func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	initGitRepo(t, tmpDir)
 
-	// Set up initial commit with scoped file
 	scopedFile := filepath.Join(tmpDir, "pkg", "file.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(scopedFile), 0755))
 	require.NoError(t, os.WriteFile(scopedFile, []byte("package pkg\nvar X = 1"), 0644))
@@ -1236,12 +1018,10 @@ func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Add a valid change with proper commit message
 	require.NoError(t, os.WriteFile(scopedFile, []byte("package pkg\nvar X = 2"), 0644))
 	runGit(t, tmpDir, "add", "pkg/file.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(ISSUE-001): valid change")
 
-	// Test with valid gate parameters
 	gate := DeliveryGate(tmpDir, "ISSUE-001", baseCommit, []string{"pkg/**"})
 
 	assert.True(t, gate.CleanTree.Pass, "tree is clean after commit")
@@ -1249,10 +1029,6 @@ func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.True(t, gate.CommitReference.Pass, "commit has proper format")
 }
 
-// TestCommitReferenceCheck_WholeFileDeletionSurvives verifies end to end that
-// a matching commit which deletes an entire file (rather than removing some
-// lines from a surviving file) is correctly recognized as delivering
-// non-trivial, undone content when the deletion is never reverted.
 func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 	t.Parallel()
 
@@ -1266,7 +1042,6 @@ func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Matching commit deletes the entire file.
 	runGit(t, tmpDir, "rm", "gone.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale file")
 
@@ -1275,15 +1050,6 @@ func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4
-// exercises a copy-with-edits followed by unrelated further edits and an
-// unrelated deletion of the copy's source path. Under the two-part check,
-// this passes: a matching conventional-commit reference exists, and the net
-// base..HEAD diff is non-empty (dest.txt's final content differs from base,
-// and source.txt was removed). The check does not attempt to prove that the
-// matching commit's OWN destination-path content specifically survived —
-// that per-commit attribution is exactly the class of logic (with its own
-// copy-vs-rename OldPath edge cases) this design intentionally avoids.
 func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -1297,23 +1063,16 @@ func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_R
 	runGit(t, tmpDir, "commit", "-m", "base")
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Matching commit copies source.txt to dest.txt, with edits (so git
-	// reports it as a copy "C..." with OldPath=source.txt, Path=dest.txt,
-	// rather than a 100%-similarity copy).
 	destPath := filepath.Join(tmpDir, "dest.txt")
 	require.NoError(t, os.WriteFile(destPath, []byte(
 		"line one\nline two replaced\nline three\n"), 0644))
 	runGit(t, tmpDir, "add", "-A")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): copy and adapt")
 
-	// Unrelated later commit overwrites dest.txt entirely, so the matching
-	// commit's own post-image blob at dest.txt no longer matches HEAD (the
-	// exact blob-OID check must fail, forcing the fallback path).
 	require.NoError(t, os.WriteFile(destPath, []byte("totally different content now\n"), 0644))
 	runGit(t, tmpDir, "add", "dest.txt")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: further edit dest")
 
-	// Unrelated later commit deletes the copy's untouched source path.
 	runGit(t, tmpDir, "rm", "source.txt")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: remove source file")
 
@@ -1323,15 +1082,6 @@ func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_R
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_S4
-// verifies a merge commit whose subject matches the conventional-commit
-// format still satisfies the check when it legitimately merges in real
-// content. LogRange (which feeds the commit-subject scan) uses plain
-// `base..head` log semantics, which is NOT first-parent-only, so a merge
-// commit can appear in the scanned range; under the two-part design this is
-// unproblematic regardless of the merge commit's own diff-tree output, since
-// the second half of the check reads the net base..HEAD diff directly
-// rather than any specific commit's per-commit diff.
 func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -1350,8 +1100,6 @@ func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_
 	runGit(t, tmpDir, "add", "feature.txt")
 	runGit(t, tmpDir, "commit", "-m", "add feature file")
 
-	// Back to the branch containing baseCommit, then merge with a commit
-	// subject matching the conventional-commit format.
 	runGit(t, tmpDir, "checkout", "-")
 	runGit(t, tmpDir, "merge", "--no-ff", "-m", "fix(TEST-123): merge feature", "feature-branch")
 
@@ -1361,14 +1109,6 @@ func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4
-// exercises a binary file modified by the matching commit and then further
-// modified by an unrelated later commit. Under the two-part check this
-// passes: a matching conventional-commit reference exists, and the net
-// base..HEAD diff is non-empty (the binary asset's final content differs
-// from base). No per-file-shape content-survival heuristic (which for prior
-// implementations meant splitting binary blob bytes on '\n' — meaningless
-// for binary content) is needed to reach that verdict.
 func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -1381,13 +1121,10 @@ func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffChec
 	runGit(t, tmpDir, "commit", "-m", "base")
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Matching commit modifies the binary asset.
 	require.NoError(t, os.WriteFile(binFile, []byte("\x00BBBB_DIFFERENT_LINE\ntrailing\n"), 0644))
 	runGit(t, tmpDir, "add", "asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): update binary asset")
 
-	// Unrelated later commit replaces the binary asset with entirely
-	// different content.
 	require.NoError(t, os.WriteFile(binFile, []byte("\x00CCCC_FINAL_LINE\ntrailing\n"), 0644))
 	runGit(t, tmpDir, "add", "asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: replace binary asset")
@@ -1398,17 +1135,6 @@ func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffChec
 	assert.Empty(t, result.Remediation)
 }
 
-// TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4 is a
-// regression test for review comment 3695646511 (gate.go, prior blob-OID
-// implementation): a matching commit that deletes a binary file was NOT
-// recognized as delivering content, because the deletion-survival fallback
-// (removedLinesBetweenBlobs) refused to compute "removed lines" for a binary
-// pre-image, and a deletion's Status ("D...") skips the exact blob-OID
-// comparison entirely — so a binary-file deletion had NO surviving-evidence
-// path at all and always caused the gate to reject a legitimate,
-// never-undone deletion. The two-part check has no such gap: the binary
-// file's absence from the tree is just another entry in the base..HEAD diff,
-// so no per-file-shape (text vs. binary) special-casing is needed.
 func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -1421,8 +1147,6 @@ func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testin
 	runGit(t, tmpDir, "commit", "-m", "base")
 	baseCommit := getHeadSHA(t, tmpDir)
 
-	// Matching commit deletes the binary file outright, and the deletion is
-	// never reverted.
 	runGit(t, tmpDir, "rm", "stale-asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale binary asset")
 
@@ -1431,8 +1155,6 @@ func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testin
 		"a matching commit that deletes a binary file, with the deletion never undone, must satisfy the check")
 	assert.Empty(t, result.Remediation)
 }
-
-// Helper functions
 
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
@@ -1457,5 +1179,5 @@ func getHeadSHA(t *testing.T, dir string) string {
 	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	require.NoError(t, err, "git rev-parse HEAD failed")
-	return string(output[:len(output)-1]) // trim newline
+	return strings.TrimSpace(string(output))
 }
