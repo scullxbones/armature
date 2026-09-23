@@ -235,12 +235,19 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 
-	if dryRun || len(actions) == 0 {
+	if dryRun {
 		renderDoctorFixPlan(cmd, format, actions)
 		return nil
 	}
 
 	state := mustState(cmd)
+	if len(actions) == 0 {
+		if err := publishHighStakesOps(state); err != nil {
+			return err
+		}
+		renderDoctorFixPlan(cmd, format, actions)
+		return nil
+	}
 	for _, a := range actions {
 		for _, op := range a.Ops {
 			if err := appendHighStakesOp(state, logPath, op); err != nil {

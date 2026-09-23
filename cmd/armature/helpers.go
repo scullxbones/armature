@@ -492,10 +492,21 @@ func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proc
 	}
 	gc := worktreeGit(ctx)
 	wrote, err := ops.AppendAndCommitIf(logPath, ctx.WorktreePath, op, gc, proceed)
-	if err != nil || !wrote {
+	if err != nil {
 		return wrote, err
 	}
-	return true, pushOpsBranch(opsPublishGit(ctx, gc), tracker)
+	return wrote, pushOpsBranch(opsPublishGit(ctx, gc), tracker)
+}
+
+// publishHighStakesOps publishes the local _armature tip (Push / FetchAndRebase /
+// Push). High-stakes no-op retries use this so an earlier unpublished commit
+// cannot silent-succeed while origin still lacks the op.
+func publishHighStakesOps(state *executionState) error {
+	if state == nil || state.ctx == nil {
+		return fmt.Errorf("appendHighStakesOp: command context unavailable")
+	}
+	ctx := state.ctx
+	return pushOpsBranch(opsPublishGit(ctx, worktreeGit(ctx)), state.tracker)
 }
 
 // opsPublishError is a git failure after a successful local _armature append.
@@ -541,16 +552,25 @@ func opsPublishGit(ctx *config.Context, gc *adapters.Client) *adapters.Client {
 	return gc
 }
 
+type opsBranchPublisher interface {
+	Push(branch string) error
+	FetchAndRebase(branch string) error
+}
+
 func publishArmatureBranch(gc *adapters.Client) error {
 	if gc == nil {
 		return nil
 	}
+	return publishArmatureSequence(gc)
+}
+
+func publishArmatureSequence(gc opsBranchPublisher) error {
 	err := gc.Push("_armature")
 	if err == nil {
 		return nil
 	}
 	if rbErr := gc.FetchAndRebase("_armature"); rbErr != nil {
-		return err
+		return rbErr
 	}
 	return gc.Push("_armature")
 }
