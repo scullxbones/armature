@@ -19,9 +19,6 @@ func swallowErr(err error) { _ = err }
 type Options struct {
 	WriteStateFiles bool
 	ExcludeWorkerID string
-	// EmitWarnings is retained for call-site compatibility. Unhandled-op
-	// messages live on Result.Warnings; this package never writes stderr.
-	EmitWarnings bool
 }
 
 type Result struct {

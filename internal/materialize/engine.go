@@ -66,8 +66,8 @@ var opHandlers = map[string]opHandler{
 	ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: MissingTargetIgnore},
 	ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: MissingTargetIgnore},
 	ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
-	ops.OpSourceFingerprint:  {apply: func(_ *State, _ ops.Op) error { return nil }},
-	ops.OpGateEvidence:       {apply: func(_ *State, _ ops.Op) error { return nil }},
+	ops.OpSourceFingerprint:  {apply: applyNoop},
+	ops.OpGateEvidence:       {apply: applyNoop},
 	ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: MissingTargetIgnore},
 	ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: MissingTargetIgnore},
 	ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: MissingTargetIgnore},
@@ -75,6 +75,8 @@ var opHandlers = map[string]opHandler{
 	ops.OpReparent:           {apply: (*State).applyReparent, missingTarget: MissingTargetIgnore},
 	ops.OpAssessmentAttested: {apply: (*State).applyAssessmentAttested, missingTarget: MissingTargetError},
 }
+
+func applyNoop(_ *State, _ ops.Op) error { return nil }
 
 // RegisteredOpTypes returns the set of supported op type strings.
 func RegisteredOpTypes() []string {

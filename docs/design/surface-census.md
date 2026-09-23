@@ -167,6 +167,8 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `workers` | main.go, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |
 | `sources` | main.go, sources.go | Manage source manifest | **kept-evidence** | Citation infrastructure. CRUD for source entries. Subcommands: accept-citation, add, link, stale-review, sync, verify. |
 | `sources add` | sources.go | Add a source entry to the manifest | **kept-evidence** | Subcommand of `sources`. |
+| `sources accept-citation` | sources.go, accept_citation.go | Accept a citation with a recorded rationale | **kept-evidence** | Subcommand of `sources`. |
+| `sources link` | sources.go | Link issues to a source entry in the manifest | **kept-evidence** | Subcommand of `sources`. |
 | `sources stale-review` | sources.go, stalereview.go | Review stale sources | **kept-evidence** | Subcommand of `sources`. |
 | `sources sync` | sources.go | Sync source manifest state | **kept-evidence** | Subcommand of `sources`. |
 | `sources verify` | sources.go | Verify source manifest entries | **kept-evidence** | Subcommand of `sources`. |
@@ -239,7 +241,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--ttl` | claim | int | Claim TTL in minutes (default 60) | **kept-evidence** |
 | `--worktree` | claim | string | Required worktree destination; a value-less form remains compatible and provisions .worktrees/<issue-id>, while an explicit value selects a new destination | **kept-evidence** |
 | `--from` | claim | string | Parent worktree whose current branch and tip seed an explicit new --worktree destination | **kept-evidence** |
-| `--force` | claim, merged, transition | bool | Override warnings or require confirmation | **kept-evidence** |
+| `--force` | claim, merged, sources accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
 | `--msg` | note | string | Note message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
@@ -252,7 +254,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
 | `--topic` | decision | string | Decision topic | **kept-evidence** |
 | `--choice` | decision | string | Chosen option | **kept-evidence** |
-| `--rationale` | decision | string | Why this choice | **kept-evidence** |
+| `--rationale` | decision, sources accept-citation | string | Why this choice (decision) or why the citation is accepted | **kept-evidence** |
 | `--affects` | decision | string[] | Affected scope globs | **kept-evidence** |
 
 ### Synchronization/Sync Flags
@@ -286,9 +288,11 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--ci` | validate | bool | Fail-closed alias used by CI / make validate-graph, not by make check. Implied by default --strict; still accepted so CI scripts keep working. Contradicts an explicit `--strict=false`. | **kept-evidence** |
+| `--ci` | validate, sources accept-citation | bool | Fail-closed alias used by CI / make validate-graph, not by make check (validate). On `sources accept-citation`, skips the confirmation prompt. | **kept-evidence** |
+| `--non-interactive` | sources accept-citation | bool | Command-local alias that skips the confirmation prompt (same as `--ci`/`--force`). Distinct from the inherited root persistent `--non-interactive`. | **kept-evidence** |
 | `--url` | sources add | string | URL or path of source | **kept-evidence** |
 | `--type` | sources add | string | Provider type (filesystem, confluence, sharepoint) | **kept-evidence** |
+| `--source-id` | sources link | string | UUID of the source entry in the manifest | **kept-evidence** |
 
 ### Query/Filter Flags
 
@@ -472,7 +476,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - **Confidence States**: 3 (all kept-evidence)
 - **Issue Fields**: 37 (33 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 19 (all kept-evidence)
-- **CLI Commands**: 50 (all kept-evidence, 4 groups)
+- **CLI Commands**: 52 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
 - **Command output modes**: 63 (58 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)

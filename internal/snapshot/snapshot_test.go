@@ -11,6 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func loadSnap(opsDir, stateDir string) (*Snapshot, error) {
+	return NewStore(opsDir, stateDir).Load(context.Background())
+}
+
 // Test 1: empty dir → returns zero-value Snapshot (no error)
 func TestLoad_EmptyDir(t *testing.T) {
 	t.Parallel()
@@ -21,7 +25,7 @@ func TestLoad_EmptyDir(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap)
@@ -51,7 +55,7 @@ func TestLoad_SingleIssue(t *testing.T) {
 	opLine := `["create","issue-1",1000,"test-worker",{"title":"Test Issue","type":"task","scope":[],"context_files":[]}]`
 	require.NoError(t, adapters.WriteFile(logPath, []byte(opLine+"\n"), 0644))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap)
@@ -78,7 +82,7 @@ func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
 	opLine := `["create","issue-1",1000,"bob",{"title":"Test Issue","type":"task","scope":[],"context_files":[]}]`
 	require.NoError(t, adapters.WriteFile(logPath, []byte(opLine+"\n"), 0644))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	// The op should be rejected due to worker ID mismatch, resulting in a warning
@@ -111,7 +115,7 @@ func TestLoad_UnknownOpWarningIncluded(t *testing.T) {
 		`["unknown_future_type","issue-1",1001,"worker-x",{}]` + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap)
@@ -145,7 +149,7 @@ func TestLoad_StateAndIssuesAgreement(t *testing.T) {
 	content := op1 + "\n" + op2 + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, len(snap.Issues))
@@ -184,7 +188,7 @@ func TestLoad_IndexPopulated(t *testing.T) {
 	content := op1 + "\n" + op2 + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(content), 0644))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap.Index)
@@ -211,7 +215,7 @@ func TestLoad_StateIndexConsistency(t *testing.T) {
 	op := `["create","issue-1",1000,"worker1",{"title":"Test Issue","type":"task","scope":["file1.txt"],"context_files":["file2.txt"]}]`
 	require.NoError(t, adapters.WriteFile(logPath, []byte(op+"\n"), 0644))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	stateIssue := snap.State.Issues["issue-1"]
@@ -235,7 +239,7 @@ func TestLoad_AllFieldsPopulated(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 
 	assert.NotNil(t, snap, "Snapshot should not be nil")
@@ -258,7 +262,7 @@ func TestLoad_CapturedOpsDoNotIncludeLaterAppends(t *testing.T) {
 	first := `["create","issue-1",1000,"test-worker",{"title":"First","type":"task","scope":[],"context_files":[]}]` + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(first), 0644))
 
-	snap, err := Load(opsDir, stateDir)
+	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 	require.Len(t, snap.Ops, 1)
 	require.Contains(t, snap.Issues, "issue-1")
@@ -269,7 +273,7 @@ func TestLoad_CapturedOpsDoNotIncludeLaterAppends(t *testing.T) {
 	assert.Len(t, snap.Ops, 1, "captured op set must stay frozen after later appends")
 	assert.NotContains(t, snap.Issues, "issue-2", "snapshot hierarchy must match the captured ops, not a later log read")
 
-	snap2, err := Load(opsDir, stateDir)
+	snap2, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
 	require.Len(t, snap2.Ops, 2)
 	assert.Contains(t, snap2.Issues, "issue-2")

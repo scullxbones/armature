@@ -37,8 +37,8 @@ func newSourcesCmd() *cobra.Command {
 	cmd.AddCommand(newSourcesSyncCmd())
 	cmd.AddCommand(newSourcesVerifyCmd())
 	cmd.AddCommand(newSourcesLinkCmd())
-	cmd.AddCommand(newSourcesAcceptCitationCmd())
-	cmd.AddCommand(newSourcesStaleReviewCmd())
+	cmd.AddCommand(newAcceptCitationCmd())
+	cmd.AddCommand(newStaleReviewCmd())
 
 	return cmd
 }
@@ -196,19 +196,60 @@ func newSourcesVerifyCmd() *cobra.Command {
 }
 
 func newSourcesLinkCmd() *cobra.Command {
-	cmd := newSourceLinkCmd()
-	cmd.Use = "link [issue-id]"
-	return cmd
-}
+	var issueIDs []string
+	var sourceID string
 
-func newSourcesAcceptCitationCmd() *cobra.Command {
-	cmd := newAcceptCitationCmd()
-	cmd.Use = "accept-citation [issue-id]"
-	return cmd
-}
+	cmd := &cobra.Command{
+		Use:   "link [issue-id]",
+		Short: "Link one or more issues to a source entry in the manifest",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(issueIDs) == 0 && len(args) > 0 {
+				issueIDs = []string{args[0]}
+			}
+			if len(issueIDs) == 0 {
+				return fmt.Errorf("issue ID is required (via --issue flag or positional argument)")
+			}
 
-func newSourcesStaleReviewCmd() *cobra.Command {
-	cmd := newStaleReviewCmd()
-	cmd.Use = "stale-review"
+			state := mustState(cmd)
+			ctx := state.ctx
+
+			dir := sourcesDir(ctx)
+			lc := sources.NewLifecycle(dir)
+
+			entry, err := lc.Get(sourceID)
+			if err != nil {
+				return fmt.Errorf("source-id %q not found in manifest: %w", sourceID, err)
+			}
+			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			if err != nil {
+				return err
+			}
+
+			for _, issueID := range issueIDs {
+				op := ops.Op{
+					Type:      ops.OpSourceLink,
+					TargetID:  issueID,
+					Timestamp: nowEpoch(),
+					WorkerID:  workerID,
+					Payload: ops.Payload{
+						SourceID:  sourceID,
+						SourceURL: entry.URL,
+					},
+				}
+				if err := appendLowStakesOp(state, logPath, op); err != nil {
+					return err
+				}
+
+				result := map[string]string{"issue": issueID, "source_id": sourceID, "source_url": entry.URL}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(result)))
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringArrayVar(&issueIDs, "issue", nil, "issue ID to link (repeatable)")
+	cmd.Flags().StringVar(&sourceID, "source-id", "", "UUID of the source entry in the manifest")
+	_ = cmd.MarkFlagRequired("source-id")
 	return cmd
 }
