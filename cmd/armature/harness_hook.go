@@ -278,7 +278,7 @@ func newHarnessHookCmd() *cobra.Command {
 				return nil
 			}
 
-			filePath := harnesshook.FilePathFromToolInput(event.ToolInput)
+			filePath := harnesshook.FirstPathFromToolInput(event.ToolInput)
 			eventInfo := &harnesshook.DecodedEventInfo{
 				Kind:     event.Kind,
 				FilePath: filePath,

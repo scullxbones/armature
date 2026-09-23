@@ -27,9 +27,9 @@ type ResolvedBinding struct {
 	Root           string // Worktree root directory (only set for path-resolved bindings: file_path, event_cwd)
 }
 
-// FilePathFromToolInput extracts a single file path from the raw tool_input map.
+// FirstPathFromToolInput extracts a single file path from the raw tool_input map.
 // Lookup order: file_path, path, then the first changes[] entry's path.
-func FilePathFromToolInput(toolInput map[string]any) string {
+func FirstPathFromToolInput(toolInput map[string]any) string {
 	if toolInput == nil {
 		return ""
 	}
