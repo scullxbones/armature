@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,7 +19,9 @@ func swallowErr(err error) { _ = err }
 type Options struct {
 	WriteStateFiles bool
 	ExcludeWorkerID string
-	EmitWarnings    bool
+	// EmitWarnings is retained for call-site compatibility. Unhandled-op
+	// messages live on Result.Warnings; this package never writes stderr.
+	EmitWarnings bool
 }
 
 type Result struct {
@@ -42,12 +43,6 @@ func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
 		})
 	}
 	return refs
-}
-
-func emitUnhandledOpsWarning(unhandledOps []ops.Op) {
-	for _, warning := range formatUnhandledOpsWarnings(unhandledOps) {
-		fmt.Fprint(os.Stderr, warning+"\n")
-	}
 }
 
 func formatUnhandledOpsWarnings(unhandledOps []ops.Op) []string {
@@ -119,7 +114,7 @@ func purgeOrphanedIssues(issuesDir string, keep map[string]*Issue) error {
 }
 
 func runFullPipeline(stateDir string, allOps []ops.Op,
-	byteOffsets map[string]int64, emitWarnings bool, writeStateFiles bool) (*State, Result, error) {
+	byteOffsets map[string]int64, writeStateFiles bool) (*State, Result, error) {
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
@@ -187,10 +182,6 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 		swallowErr(adapters.WriteFile(readyPath, []byte("[]"), 0644))
 	}
 
-	if emitWarnings {
-		emitUnhandledOpsWarning(unhandledOps)
-	}
-
 	if writeStateFiles {
 		offsets := byteOffsets
 		if offsets == nil {
@@ -215,7 +206,7 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 	}, nil
 }
 
-func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, emitWarnings bool) (*State, Result, error) {
+func runExcludeWorker(allOps []ops.Op, excludeWorkerID string) (*State, Result, error) {
 	var filteredOps []ops.Op
 	toleratedMissingTargetIDs := make(map[string]bool)
 	for _, op := range allOps {
@@ -237,9 +228,6 @@ func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, emitWarnings bool
 
 	state.RunRollup()
 
-	if emitWarnings {
-		emitUnhandledOpsWarning(unhandledOps)
-	}
 	warnings := formatUnhandledOpsWarnings(unhandledOps)
 
 	return state, Result{
@@ -253,9 +241,9 @@ func runExcludeWorker(allOps []ops.Op, excludeWorkerID string, emitWarnings bool
 
 func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Options) (*State, Result, error) {
 	if opts.ExcludeWorkerID != "" {
-		return runExcludeWorker(allOps, opts.ExcludeWorkerID, opts.EmitWarnings)
+		return runExcludeWorker(allOps, opts.ExcludeWorkerID)
 	}
-	return runFullPipeline(stateDir, allOps, byteOffsets, opts.EmitWarnings, opts.WriteStateFiles)
+	return runFullPipeline(stateDir, allOps, byteOffsets, opts.WriteStateFiles)
 }
 
 func opSortKey(op ops.Op) int {
@@ -282,6 +270,10 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	if state == nil {
 		return fmt.Errorf("ApplyOpsSorted: state is nil")
 	}
+	return retractSortApplyRollup(state, proposed)
+}
+
+func retractSortApplyRollup(state *State, proposed []ops.Op) error {
 	state.RetractDerivedPromotions()
 	ordered := append([]ops.Op(nil), proposed...)
 	sortOpsByTimestamp(ordered)
