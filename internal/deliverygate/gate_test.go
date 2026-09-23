@@ -393,8 +393,9 @@ func TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC(t 
 // TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC
 // covers the follow-up P1: after an in-scope squash lands on main, an
 // unrelated later commit that touches an out-of-scope path must not fail
-// ScopeContainment for this issue. Primary fallback isolates the matching
-// landing (first-parent..SHA) rather than scoping claimBase..primaryTip.
+// ScopeContainment for this issue. Primary fallback isolates the complete
+// landing (enclosing merge, or first-parent..SHA for a squash) rather than
+// scoping claimBase..primaryTip.
 func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
@@ -433,6 +434,55 @@ func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquas
 	assert.True(t, gate.CommitReference.Pass, "in-scope squash on main must satisfy CommitReference")
 	assert.True(t, gate.ScopeContainment.Pass, "later unrelated out-of-scope commit on main must not fail this task's scope")
 	assert.Empty(t, gate.ScopeContainment.Remediation)
+}
+
+// TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC
+// covers a follow-up P1: a stale worktree plus a non-squash --no-ff merge
+// whose merge subject is not a valid issue reference. The landing includes
+// an older out-of-scope matching commit and a newer in-scope matching
+// commit. Primary fallback must scope the complete merge (first-parent..M),
+// not only the newest matching commit, so ScopeContainment fails.
+func TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	inFile := filepath.Join(tmpDir, "pkg", "in.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	stale := filepath.Join(tmpDir, "pkg", "stale.go")
+	require.NoError(t, os.WriteFile(stale, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/stale.go")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	runGit(t, tmpDir, "checkout", "main")
+	runGit(t, tmpDir, "checkout", "-b", "feat/TEST-123")
+	outFile := filepath.Join(tmpDir, "cmd", "out.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(outFile), 0755))
+	require.NoError(t, os.WriteFile(outFile, []byte("package main\n"), 0644))
+	runGit(t, tmpDir, "add", "cmd/out.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): out of scope change")
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n\nfunc In() {}\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): in scope change")
+
+	runGit(t, tmpDir, "checkout", "main")
+	runGit(t, tmpDir, "merge", "--no-ff", "feat/TEST-123", "-m", "Merge branch 'feat/TEST-123'")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	gate := DeliveryGate(tmpDir, "TEST-123", baseCommit, []string{"pkg/**"})
+	assert.True(t, gate.CleanTree.Pass, "claim worktree is clean")
+	assert.True(t, gate.CommitReference.Pass, "matching commits in the merge landing must satisfy CommitReference")
+	assert.False(t, gate.ScopeContainment.Pass, "complete merge landing must include the older out-of-scope path")
+	assert.Contains(t, gate.ScopeContainment.Remediation, "cmd/out.go")
 }
 
 // TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC

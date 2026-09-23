@@ -32,8 +32,11 @@ type GateResult struct {
 //
 // CommitReference and ScopeContainment share one (rangeBase, rangeHead)
 // pair. Worktree-first that is claimBase..HEAD; primary-branch fallback
-// isolates the matching landing to first-parent..SHA so later unrelated
-// commits on main/master are not attributed to this issue.
+// isolates the complete landing that delivered the issue — an enclosing
+// merge's first-parent..M when a matching commit arrived via a 2+-parent
+// merge, otherwise first-parent..matching-SHA for a squash / single-parent
+// landing — so later unrelated commits on main/master are not attributed
+// to this issue.
 //
 // Returns a structured GateResult with per-check results and remediations.
 // Performs no state mutation — only reads and reports.
@@ -105,8 +108,9 @@ func cleanTreeCheck(worktreePath string) CheckResult {
 // includes commits reachable from baseCommit but not from head if baseCommit
 // is a raw branch tip rather than a merge-base. (baseCommit, head) is the
 // same pair CommitReference used: claimBase..HEAD on the worktree-first
-// path, or first-parent..matching-SHA when primary-branch fallback
-// isolated a landing.
+// path, or the complete isolated landing (enclosing merge first-parent..M,
+// or first-parent..matching-SHA) when primary-branch fallback selected
+// evidence.
 func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string) CheckResult {
 	git := adapters.New(worktreePath)
 
@@ -191,12 +195,12 @@ type deliveryRange struct {
 }
 
 // deliveryRef picks one delivery range for the gate pass: claimBase..HEAD
-// when the worktree has CommitReference evidence, otherwise the isolated
-// matching landing (first-parent..SHA) on the first primary-branch ref that
-// supplies passing evidence. ScopeContainmentCheck must use this same pair
-// so an empty stale worktree cannot pass while an out-of-scope squash on
-// the primary branch is ignored, and so later unrelated primary-branch
-// commits are not attributed to this issue.
+// when the worktree has CommitReference evidence, otherwise the complete
+// isolated landing on the first primary-branch ref that supplies passing
+// evidence. ScopeContainmentCheck must use this same pair so an empty stale
+// worktree cannot pass while an out-of-scope landing on the primary branch
+// is ignored, and so later unrelated primary-branch commits are not
+// attributed to this issue.
 func deliveryRef(git *adapters.Client, baseCommit, issueID string) (deliveryRange, CheckResult) {
 	worktreeRange := deliveryRange{base: baseCommit, head: "HEAD"}
 	worktreeResult := commitReferenceAgainst(git, worktreeRange.base, worktreeRange.head, issueID)
@@ -210,10 +214,11 @@ func deliveryRef(git *adapters.Client, baseCommit, issueID string) (deliveryRang
 	if hasMatchingReference(git, worktreeRange.base, worktreeRange.head, issueID) {
 		return worktreeRange, worktreeResult
 	}
-	// After a remote squash-land, matching conventional commits live on
+	// After a remote land, matching conventional commits live on
 	// main/master while the claim worktree is still on the stale task
-	// branch. Search every resolvable primary candidate until an isolated
-	// landing passes so a stale local main cannot hide a valid master squash.
+	// branch. Search every resolvable primary candidate until a complete
+	// isolated landing passes so a stale local main cannot hide a valid
+	// master landing.
 	for _, primary := range primaryBranchRefs(git) {
 		if rng, primaryResult, ok := isolatedPrimaryEvidence(git, baseCommit, primary, issueID); ok {
 			return rng, primaryResult
@@ -235,11 +240,14 @@ func hasMatchingReference(git *adapters.Client, baseCommit, head, issueID string
 	return false
 }
 
-// isolatedPrimaryEvidence finds the most recent matching conventional
-// commit on primary (LogRange is newest-first) and evaluates
-// CommitReference against first-parent..SHA. Commits with no parent are
-// skipped (fail closed). Isolation is range selection only: no byte-level
-// attribution of whether that commit's content survived to the primary tip.
+// isolatedPrimaryEvidence finds matching conventional commits on primary
+// (LogRange is newest-first) and evaluates CommitReference against the
+// complete landing that delivered the newest usable match: the nearest
+// enclosing merge (first-parent..M) when that match was introduced by a
+// 2+-parent merge, otherwise first-parent..matching-SHA. Commits with no
+// parent are skipped (fail closed). Isolation is range selection only: no
+// byte-level attribution of whether that commit's content survived to the
+// primary tip.
 func isolatedPrimaryEvidence(git *adapters.Client, baseCommit, primary, issueID string) (deliveryRange, CheckResult, bool) {
 	entries, err := git.LogRange(baseCommit, primary)
 	if err != nil {
@@ -252,13 +260,47 @@ func isolatedPrimaryEvidence(git *adapters.Client, baseCommit, primary, issueID 
 		if len(entry.Parents) == 0 {
 			continue
 		}
-		rng := deliveryRange{base: entry.Parents[0], head: entry.SHA}
+		rng := completePrimaryLanding(git, entries, entry)
 		result := commitReferenceAgainst(git, rng.base, rng.head, issueID)
 		if result.Pass {
 			return rng, result, true
 		}
 	}
 	return deliveryRange{}, CheckResult{}, false
+}
+
+// completePrimaryLanding selects the delivery range for one matching
+// commit: prefer the newest enclosing merge landing, else isolate that
+// commit to first-parent..SHA (squash / single-parent).
+func completePrimaryLanding(git *adapters.Client, rangeEntries []adapters.LogEntry, matching adapters.LogEntry) deliveryRange {
+	if rng, ok := enclosingMergeLanding(git, rangeEntries, matching); ok {
+		return rng
+	}
+	return deliveryRange{base: matching.Parents[0], head: matching.SHA}
+}
+
+// enclosingMergeLanding returns first-parent..M for the newest genuine
+// merge M in rangeEntries such that matching is reachable from M but not
+// from M.Parents[0] (the commits that merge brought onto the primary line).
+func enclosingMergeLanding(git *adapters.Client, rangeEntries []adapters.LogEntry, matching adapters.LogEntry) (deliveryRange, bool) {
+	for _, merge := range rangeEntries {
+		if len(merge.Parents) < 2 {
+			continue
+		}
+		if merge.SHA == matching.SHA {
+			return deliveryRange{base: merge.Parents[0], head: merge.SHA}, true
+		}
+		introduced, err := git.LogRange(merge.Parents[0], merge.SHA)
+		if err != nil {
+			continue
+		}
+		for _, entry := range introduced {
+			if entry.SHA == matching.SHA {
+				return deliveryRange{base: merge.Parents[0], head: merge.SHA}, true
+			}
+		}
+	}
+	return deliveryRange{}, false
 }
 
 func primaryBranchRefs(git *adapters.Client) []string {
