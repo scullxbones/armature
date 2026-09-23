@@ -88,7 +88,9 @@ command = "arm harness-hook"
 	legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
 	legacyBytes, err := os.ReadFile(legacyPath) //nolint:gosec // G304: internal config path
 	if err == nil && codexConfigOwned(string(legacyBytes)) {
-		_ = os.Remove(legacyPath)
+		if rmErr := os.Remove(legacyPath); rmErr != nil {
+			return nil
+		}
 	}
 
 	return nil

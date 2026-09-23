@@ -81,8 +81,10 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	settingsPath := filepath.Join(dir, "settings.json")
 	cfg := map[string]any{}
 	if existing, err := os.ReadFile(settingsPath); err == nil { //nolint:gosec // G304: internal settings path
-		cfg = map[string]any{}
-		_ = json.Unmarshal(existing, &cfg)
+		parsed := map[string]any{}
+		if err := json.Unmarshal(existing, &parsed); err == nil {
+			cfg = parsed
+		}
 	}
 
 	hooks := map[string]any{}
