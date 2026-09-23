@@ -33,10 +33,12 @@ type GateResult struct {
 // Returns a structured GateResult with per-check results and remediations.
 // Performs no state mutation — only reads and reports.
 func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *GateResult {
+	git := adapters.New(worktreePath)
+	head, commitRef := deliveryRef(git, baseCommit, issueID)
 	return &GateResult{
 		CleanTree:        cleanTreeCheck(worktreePath),
-		ScopeContainment: scopeContainmentCheck(worktreePath, baseCommit, scope),
-		CommitReference:  commitReferenceCheck(worktreePath, baseCommit, issueID),
+		ScopeContainment: scopeContainmentCheck(worktreePath, baseCommit, head, scope),
+		CommitReference:  commitRef,
 	}
 }
 
@@ -94,11 +96,13 @@ func cleanTreeCheck(worktreePath string) CheckResult {
 // or (Pass: false, Remediation: "...message...") if any file is outside scope.
 //
 // Precondition: baseCommit must already be an actual merge-base of the
-// current branch (as produced by GatedBaseCommit), not an arbitrary ref —
-// the diff below uses two-dot (baseCommit..HEAD) semantics, which silently
-// includes commits reachable from baseCommit but not from HEAD if baseCommit
-// is a raw branch tip rather than a merge-base.
-func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) CheckResult {
+// delivery head (as produced by GatedBaseCommit), not an arbitrary ref —
+// the diff below uses two-dot (baseCommit..head) semantics, which silently
+// includes commits reachable from baseCommit but not from head if baseCommit
+// is a raw branch tip rather than a merge-base. head is the single delivery
+// ref chosen for this gate pass (worktree HEAD or the primary-branch ref
+// that supplied CommitReference evidence).
+func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string) CheckResult {
 	git := adapters.New(worktreePath)
 
 	// Get the list of file changes since base commit, with rename detection
@@ -107,7 +111,7 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 	// the destination path of a rename, masking an out-of-scope original
 	// location (e.g. a rename that moves a file from outside scope into
 	// scope, silently deleting the out-of-scope original).
-	entries, err := git.DiffNameStatus(baseCommit)
+	entries, err := git.DiffNameStatusRange(baseCommit, head)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
@@ -144,10 +148,12 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 //     matches <type>(<ISSUE-ID>): ... or <type>(<ISSUE-ID>)!: ..., where
 //     type is one of feat, fix, refactor, test, docs, style, polish (see
 //     docs/conventions.md). The worktree HEAD is searched first; if it has
-//     no matching evidence, refs/heads/main (then refs/heads/master) is
-//     searched so a squash-land on the primary branch still counts.
+//     no matching evidence, each resolvable of refs/heads/main then
+//     refs/heads/master is searched until evidence passes, so a squash-land
+//     on the primary branch still counts even when a stale local main exists.
 //  2. Net delivery is non-empty: the tree diff baseCommit..head is
 //     non-empty (reusing the same diff primitive as ScopeContainmentCheck).
+//     DeliveryGate uses this same head for ScopeContainmentCheck.
 //
 // This intentionally does NOT attempt to prove that the specific matching
 // commit's own diff content survives byte-for-byte to HEAD. Earlier
@@ -168,29 +174,40 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 // which is only correct when baseCommit is the real divergence point.
 func commitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
 	git := adapters.New(worktreePath)
+	_, result := deliveryRef(git, baseCommit, issueID)
+	return result
+}
+
+// deliveryRef picks one delivery head for the gate pass: worktree HEAD when
+// that range has CommitReference evidence, otherwise the first primary-branch
+// ref whose range has evidence. ScopeContainmentCheck must use this same
+// head so an empty stale worktree cannot pass while an out-of-scope squash
+// on the primary branch is ignored.
+func deliveryRef(git *adapters.Client, baseCommit, issueID string) (string, CheckResult) {
 	worktreeResult := commitReferenceAgainst(git, baseCommit, "HEAD", issueID)
 	if worktreeResult.Pass {
-		return worktreeResult
+		return "HEAD", worktreeResult
 	}
 	// After a remote squash-land, matching conventional commits live on
 	// main/master while the claim worktree is still on the stale task
-	// branch. Search that primary branch as a fallback so coordinators
-	// do not need --skip-delivery-gate or a worktree reset.
-	if primary, ok := primaryBranchRef(git); ok {
+	// branch. Search every resolvable primary candidate until evidence
+	// passes so a stale local main cannot hide a valid master squash.
+	for _, primary := range primaryBranchRefs(git) {
 		if primaryResult := commitReferenceAgainst(git, baseCommit, primary, issueID); primaryResult.Pass {
-			return primaryResult
+			return primary, primaryResult
 		}
 	}
-	return worktreeResult
+	return "HEAD", worktreeResult
 }
 
-func primaryBranchRef(git *adapters.Client) (string, bool) {
+func primaryBranchRefs(git *adapters.Client) []string {
+	var refs []string
 	for _, ref := range []string{"refs/heads/main", "refs/heads/master"} {
 		if _, err := git.ResolveRevision(ref); err == nil {
-			return ref, true
+			refs = append(refs, ref)
 		}
 	}
-	return "", false
+	return refs
 }
 
 func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID string) CheckResult {
