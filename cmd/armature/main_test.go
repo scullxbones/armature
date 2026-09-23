@@ -1222,6 +1222,22 @@ func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
 	assert.Equal(t, int64(900), status.LastOpTime)
 }
 
+func TestBuildWorkerStatus_InactiveBeyondIdleWindow_REQ_NOCOMMENTS(t *testing.T) {
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a"},
+	}
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 1, now, map[string]string{})
+	assert.Equal(t, "inactive", status.Status)
+	assert.Equal(t, int64(100), status.LastOpTime)
+}
+
+func TestBuildWorkerStatus_InactiveNoLastOp_REQ_NOCOMMENTS(t *testing.T) {
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", nil, 60, 1000, map[string]string{})
+	assert.Equal(t, "inactive", status.Status)
+	assert.Equal(t, int64(0), status.LastOpTime)
+}
+
 func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
 	now := int64(10000)
 	allOps := []ops.Op{
