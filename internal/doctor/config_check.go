@@ -3,9 +3,14 @@ package doctor
 import (
 	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/config"
 )
+
+const repoConfigFileName = "config.json"
+
+var errNotRepoConfigJSON = errors.New("path is not the repo's config.json")
 
 // CheckD10ConfigHealth validates that config.json decodes strictly (unknown
 // fields rejected by key) and that every present field is within its valid
@@ -21,7 +26,7 @@ func CheckD10ConfigHealth(configPath string) Finding {
 		return f
 	}
 
-	data, err := os.ReadFile(configPath) //nolint:gosec // path is the repo's config.json
+	data, err := readRepoConfigFile(configPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return f
@@ -39,4 +44,12 @@ func CheckD10ConfigHealth(configPath string) Finding {
 		f.Items = problems
 	}
 	return f
+}
+
+func readRepoConfigFile(configPath string) ([]byte, error) {
+	cleaned := filepath.Clean(configPath)
+	if filepath.Base(cleaned) != repoConfigFileName {
+		return nil, errNotRepoConfigJSON
+	}
+	return os.ReadFile(cleaned)
 }

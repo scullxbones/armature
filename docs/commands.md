@@ -1199,6 +1199,10 @@ Show worker activity status.
 Structured output (`--format json`, `--format agent`, or `--json`) is one Agent
 Output Contract envelope `{count, workers, help}`. It is never JSONL.
 
+Statuses: `active` (live claim), `stale` (expired claim), `idle` (no live claim,
+last op within `2 × default_ttl`), `inactive` (no last op, or last op beyond
+that window).
+
 **Flags:**
 - `--json`: Output as JSON envelope (legacy alias of `--format json`).
 

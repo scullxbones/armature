@@ -183,9 +183,9 @@ than one per (code task, doc task) pair.
 
 The censused surfaces and the doc files each one reads are authoritative in the
 Censused Surfaces table in `docs/design/surface-census.md`;
-`internal/validate`'s `censusedSurfaces` map restates it and
-`TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5` fails if the two drift
-apart. E13 is catalogued in `docs/validation-codes.md`.
+`go generate ./internal/validate` writes `censusedSurfaces` from that table and
+`TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5` fails if they drift.
+E13 is catalogued in `docs/validation-codes.md`.
 
 ## Story shape
 

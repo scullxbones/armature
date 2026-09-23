@@ -35,11 +35,11 @@ type Violation struct {
 }
 
 var (
-	reGainsCheck    = regexp.MustCompile(`(?i)gains(?:\s+a)?\s+check(?:\s*\(?D\d+\)?|\s+\(next\s+free)`)
-	reAddWireDn     = regexp.MustCompile(`(?i)(?:adds?|wires?)\s+(?:a\s+)?(?:check\s+)?D\d+(?:\s+into\s+Run)?`)
-	reArmDoctorVerb = regexp.MustCompile(`(?i)\barm\s+doctor\s+(?:gains|reports|emits|enforces|adds|wires)`)
-	reHelperOnly    = regexp.MustCompile(`(?i)(?:helper[-\s]only|not[-\s]wired)`)
-	reDoctorRitual  = regexp.MustCompile(`(?i)` +
+	gainsCheckMatcher    = regexp.MustCompile(`(?i)gains(?:\s+a)?\s+check(?:\s*\(?D\d+\)?|\s+\(next\s+free)`)
+	addWireDnMatcher     = regexp.MustCompile(`(?i)(?:adds?|wires?)\s+(?:a\s+)?(?:check\s+)?D\d+(?:\s+into\s+Run)?`)
+	armDoctorVerbMatcher = regexp.MustCompile(`(?i)\barm\s+doctor\s+(?:gains|reports|emits|enforces|adds|wires)`)
+	helperOnlyMatcher    = regexp.MustCompile(`(?i)(?:helper[-\s]only|not[-\s]wired)`)
+	doctorRitualMatcher  = regexp.MustCompile(`(?i)` +
 		`(?:run\s+)?arm\s+doctor\s+and\s+arm\s+validate(?:\s+--ci)?(?:\s+before\s+(?:done|merging|merge))?` +
 		`|` +
 		`(?:run\s+)?arm\s+doctor\s+before\s+(?:done|merging|merge)`)
@@ -80,14 +80,14 @@ func ClaimsDoctorRunWiring(dod string) bool {
 	if strings.TrimSpace(dod) == "" {
 		return false
 	}
-	if reHelperOnly.MatchString(dod) {
+	if helperOnlyMatcher.MatchString(dod) {
 		return false
 	}
-	if reGainsCheck.MatchString(dod) || reAddWireDn.MatchString(dod) {
+	if gainsCheckMatcher.MatchString(dod) || addWireDnMatcher.MatchString(dod) {
 		return true
 	}
-	stripped := reDoctorRitual.ReplaceAllString(dod, " ")
-	return reArmDoctorVerb.MatchString(stripped)
+	stripped := doctorRitualMatcher.ReplaceAllString(dod, " ")
+	return armDoctorVerbMatcher.MatchString(stripped)
 }
 
 func isTerminal(status string) bool {

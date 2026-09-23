@@ -559,10 +559,10 @@ To reproduce this census in the future:
 ## Censused Surfaces
 
 This table is the authoritative list of surfaces this census covers, and the
-documentation files each surface's drift check reads. `internal/validate`'s E13
-vertical-slice check restates it in `censusedSurfaces` (internal/validate/coupling.go);
-`TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5` fails if the two drift
-apart, so adding a row here without updating the map is caught at `make check`.
+documentation files each surface's drift check reads. `go generate ./internal/validate`
+writes `censusedSurfaces` from this table into `censused_surfaces_gen.go`.
+`TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5` fails if the generated map
+drifts from this table, so adding a row here without regenerating is caught at `make check`.
 
 | Surface | Doc Files | Notes |
 |---------|-----------|-------|

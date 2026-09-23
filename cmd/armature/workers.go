@@ -216,7 +216,7 @@ func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, de
 
 	return WorkerStatus{
 		WorkerID:   workerID,
-		Status:     "idle",
+		Status:     "inactive",
 		LastOpTime: lastOp,
 	}
 }

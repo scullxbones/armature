@@ -2242,3 +2242,17 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		}
 	})
 }
+
+func TestWritePathDoesNotIntroduceFindings(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, writePathDoesNotIntroduceFinding("E7"), writePathDoesNotIntroduceE7)
+	assert.Equal(t, writePathDoesNotIntroduceFinding("E8"), writePathDoesNotIntroduceE8)
+	assert.Equal(t, writePathDoesNotIntroduceFinding("E13"), writePathDoesNotIntroduceE13)
+	assert.True(t, writeDoesNotIntroduceRule("E7"))
+	assert.True(t, writeDoesNotIntroduceRule("E8"))
+	assert.True(t, writeDoesNotIntroduceRule("E13"))
+	assert.False(t, writeDoesNotIntroduceRule("E4"))
+	assert.False(t, writeDoesNotIntroduceRule("E14"))
+	assert.False(t, writeDoesNotIntroduceRule("W1"))
+	assert.False(t, writeDoesNotIntroduceRule(""))
+}

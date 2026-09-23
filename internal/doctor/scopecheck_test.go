@@ -378,3 +378,50 @@ func TestCheckD8ScopeViolations_RecentlyCompleted_OutsideGracePeriod_REQ_TOPTIER
 	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
 	assert.Equal(t, doctor.SeverityOK, finding.Severity, "out-of-grace-period task should not be checked")
 }
+
+func TestCheckD8ScopeViolations_GitDirtyProbeFailure(t *testing.T) {
+	t.Parallel()
+	notGit := t.TempDir()
+	now := time.Now()
+	index := materialize.Index{
+		"TASK-001": {Status: "claimed", Type: "task"},
+	}
+	allIssues := map[string]*materialize.Issue{
+		"TASK-001": {
+			ID:      "TASK-001",
+			Status:  "claimed",
+			Type:    "task",
+			Scope:   []string{"internal/auth/"},
+			Updated: now.Unix(),
+		},
+	}
+
+	finding := doctor.CheckD8ScopeViolations(index, allIssues, notGit, now)
+	assert.Equal(t, "D8", finding.Check)
+	assert.Equal(t, doctor.SeverityError, finding.Severity)
+	assert.Equal(t, "Could not list git-dirty paths", finding.Message)
+	require.NotEmpty(t, finding.Items)
+	assert.Contains(t, finding.Items[0], "git status --porcelain")
+}
+
+func TestCheckD8ScopeViolations_EmptyDirtySetIsOK(t *testing.T) {
+	t.Parallel()
+	tmpDir := initGitRepo(t)
+	now := time.Now()
+	index := materialize.Index{
+		"TASK-001": {Status: "claimed", Type: "task"},
+	}
+	allIssues := map[string]*materialize.Issue{
+		"TASK-001": {
+			ID:      "TASK-001",
+			Status:  "claimed",
+			Type:    "task",
+			Scope:   []string{"internal/auth/"},
+			Updated: now.Unix(),
+		},
+	}
+
+	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, doctor.SeverityOK, finding.Severity, "empty dirty set must not be treated as a probe failure: %v", finding.Items)
+	assert.Empty(t, finding.Items)
+}
