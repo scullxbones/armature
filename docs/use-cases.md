@@ -353,7 +353,7 @@ The working tree must be clean: the gate runs `git status --porcelain --ignored`
 
 **2. Scope Containment**
 
-The diff between your base commit and `HEAD` must be a subset of the issue's declared scope. The base commit is resolved with a three-tier fallback, most-precise first:
+The delivery diff must be a subset of the issue's declared scope. The worktree-first path diffs `claimBase..HEAD`. When that range has no Commit Reference evidence, the gate falls back to `main` then `master`, isolates the matching landing to `first-parent..SHA`, and scopes that same isolated range so a later unrelated commit on the primary branch is not attributed to this issue. The claim base is resolved with a three-tier fallback, most-precise first:
 
 1. **Dynamic parent-branch merge-base** — recomputed fresh on every gate check as `git merge-base` between the task branch and the parent branch it was cut from (recorded as git config at claim time). This is the branch the coordinator's checkout was actually on when the task branch was created — often a story branch containing completed sibling-task commits, not `main`. Recomputing on demand (rather than trusting a value cached once) means it self-corrects if the task branch is later rebased onto an updated parent tip.
 2. **Claim-time recorded SHA** — if no parent-branch record exists (e.g. a worktree claimed before this mechanism existed), fall back to the branch-point SHA persisted once at claim time.
@@ -368,7 +368,7 @@ This prevents scope creep: you cannot deliver changes that fall outside the issu
 
 **3. Commit Reference**
 
-At least one commit since the base commit must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. This ensures your work is traceable and tied to the issue ID.
+At least one commit in the selected delivery range must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. Search order is worktree `HEAD`, then `refs/heads/main`, then `refs/heads/master`, until evidence passes. Primary-branch fallback evaluates the isolated matching landing (`first-parent..SHA`), not every commit since claim on the primary tip. This ensures your work is traceable and tied to the issue ID.
 
 *Remedy:* Add at least one properly-formatted commit. For example: `feat(LNGHZN-S4-T3): document the delivery gate in worker skill`.
 

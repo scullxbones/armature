@@ -390,6 +390,51 @@ func TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC(t 
 	assert.Contains(t, gate.ScopeContainment.Remediation, "cmd/out.go")
 }
 
+// TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC
+// covers the follow-up P1: after an in-scope squash lands on main, an
+// unrelated later commit that touches an out-of-scope path must not fail
+// ScopeContainment for this issue. Primary fallback isolates the matching
+// landing (first-parent..SHA) rather than scoping claimBase..primaryTip.
+func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	inFile := filepath.Join(tmpDir, "pkg", "in.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	stale := filepath.Join(tmpDir, "pkg", "stale.go")
+	require.NoError(t, os.WriteFile(stale, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/stale.go")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	runGit(t, tmpDir, "checkout", "main")
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n\nfunc In() {}\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): land squash")
+
+	outFile := filepath.Join(tmpDir, "cmd", "unrelated.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(outFile), 0755))
+	require.NoError(t, os.WriteFile(outFile, []byte("package main\n"), 0644))
+	runGit(t, tmpDir, "add", "cmd/unrelated.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(OTHER-1): unrelated landing")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	gate := DeliveryGate(tmpDir, "TEST-123", baseCommit, []string{"pkg/**"})
+	assert.True(t, gate.CleanTree.Pass, "claim worktree is clean")
+	assert.True(t, gate.CommitReference.Pass, "in-scope squash on main must satisfy CommitReference")
+	assert.True(t, gate.ScopeContainment.Pass, "later unrelated out-of-scope commit on main must not fail this task's scope")
+	assert.Empty(t, gate.ScopeContainment.Remediation)
+}
+
 // TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC
 // covers the P2 hole: a resolvable but empty local main must not block
 // examining master, which holds the only matching conventional commit.

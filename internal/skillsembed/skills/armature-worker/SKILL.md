@@ -207,8 +207,8 @@ Before you transition to `done`, stage and commit your work (conventional commit
 **The Three Checks:**
 
 1. **Clean Tree:** `git status --porcelain` must be empty. All work must be staged and committed; the worktree must be clean. (`.armature/` state is automatically excluded from this check — it is not considered outstanding work.)
-2. **Scope Containment:** The diff between `HEAD` and a base commit must be a subset of the issue's declared scope (verified via `internal/claim.IsWithinScope`). The base is selected in order: a fresh `git merge-base` against the recorded parent branch, the claim-time recorded SHA, then a merge-base against the first available `origin/main`, `origin/master`, `main`, or `master`. This prevents scope creep: you cannot deliver changes outside the issue's boundaries.
-3. **Commit Reference:** At least one commit since the base commit must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. This ensures your work is traceable and tied to the issue ID.
+2. **Scope Containment:** The selected delivery range must be a subset of the issue's declared scope (verified via `internal/claim.IsWithinScope`). Worktree-first is `claimBase..HEAD`. If that range has no matching conventional commit, the gate searches `main` then `master`, isolates the matching landing to `first-parent..SHA`, and scopes that same range. The claim base is selected in order: a fresh `git merge-base` against the recorded parent branch, the claim-time recorded SHA, then a merge-base against the first available `origin/main`, `origin/master`, `main`, or `master`. This prevents scope creep: you cannot deliver changes outside the issue's boundaries, and later unrelated primary-branch landings are not attributed to this issue.
+3. **Commit Reference:** At least one commit in that same selected range must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. Search order is worktree `HEAD`, then `refs/heads/main`, then `refs/heads/master`.
 
 **On Failure:**
 

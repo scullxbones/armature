@@ -932,8 +932,9 @@ func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
 }
 
 // DiffNameStatusRange is DiffNameStatus against an arbitrary head ref
-// (two-dot `base head` semantics), used when CommitReference evidence lives
-// on the primary branch rather than the worktree HEAD.
+// (two-dot `base head` semantics), used for the selected delivery range:
+// claimBase..HEAD on the worktree-first path, or first-parent..matching-SHA
+// when CommitReference evidence is an isolated primary-branch landing.
 func (c *Client) DiffNameStatusRange(baseSHA, head string) ([]DiffStatusEntry, error) {
 	// -z switches git to NUL-delimited, unquoted output: without it, git
 	// quotes and octal-escapes any path containing non-ASCII or special
