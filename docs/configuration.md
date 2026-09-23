@@ -109,7 +109,7 @@ else:
     is_stale = now > last_activity + claim_ttl * 60 seconds
 ```
 
-An explicit `--ttl` on `arm claim` overrides config for that claim only. `--ttl 0` is accepted and never expires (`IsClaimStale` is false for TTL ≤ 0). That is distinct from omitting `default_ttl` in config, which falls back to 60, and from writing `"default_ttl": 0`, which is D10-invalid. Worker idle/stale classification also uses `default_ttl` when a claim recorded no TTL. See `arm list` for staleness indicators.
+An explicit `--ttl` on `arm claim` overrides config for that claim only. `--ttl 0` is accepted and never expires (`IsClaimStale` is false for TTL ≤ 0). That is distinct from omitting `default_ttl` in config, which falls back to 60, and from writing `"default_ttl": 0`, which is D10-invalid. Worker idle/inactive/stale classification also uses `default_ttl` when a claim recorded no TTL. See `arm list` for staleness indicators. `idle` is last op within `2 × default_ttl`; `inactive` is beyond that window or no last op.
 
 ## See Also
 
