@@ -14,15 +14,11 @@ import (
 )
 
 func materializeAndReturn(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
-	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true, EmitWarnings: true})
-}
-
-func materializeQuiet(stateDir string, allOps []ops.Op, byteOffsets map[string]int64) (*State, Result, error) {
 	return Run(stateDir, allOps, byteOffsets, Options{WriteStateFiles: true})
 }
 
 func materializeExcludeWorker(allOps []ops.Op, excludeWorkerID string) (*State, Result, error) {
-	return Run("", allOps, nil, Options{ExcludeWorkerID: excludeWorkerID, EmitWarnings: true})
+	return Run("", allOps, nil, Options{ExcludeWorkerID: excludeWorkerID})
 }
 
 func TestToTraceabilityRefs_CarriesConfidence_REQ_CITEGATE_T2(t *testing.T) {
@@ -694,7 +690,7 @@ func TestMaterializeAndReturnQuiet_BasicRoundTrip(t *testing.T) {
 	t.Parallel()
 	stateDir := t.TempDir()
 
-	state, result, err := materializeQuiet(stateDir, []ops.Op{}, nil)
+	state, result, err := materializeAndReturn(stateDir, []ops.Op{}, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, state)
 	assert.Equal(t, 0, result.OpsProcessed)
@@ -864,7 +860,7 @@ func TestRun_UnhandledOpsPopulateResultWarnings_REQ_NOCOMMENTS(t *testing.T) {
 
 	allOps := []ops.Op{createOp, unknownOp}
 
-	_, result, runErr := Run(stateDir, allOps, nil, Options{WriteStateFiles: true, EmitWarnings: false})
+	_, result, runErr := Run(stateDir, allOps, nil, Options{WriteStateFiles: true})
 	require.NoError(t, runErr, "Run should not error")
 	assert.Equal(t, 1, len(result.UnhandledOps), "unhandled op should be captured in Result")
 	assert.Equal(t, "unknown_emit_test_type", result.UnhandledOps[0].Type)

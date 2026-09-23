@@ -36,9 +36,9 @@ func newSourcesCmd() *cobra.Command {
 	cmd.AddCommand(newSourcesAddCmd())
 	cmd.AddCommand(newSourcesSyncCmd())
 	cmd.AddCommand(newSourcesVerifyCmd())
-	cmd.AddCommand(newSourcesLinkCmd())
-	cmd.AddCommand(newSourcesAcceptCitationCmd())
-	cmd.AddCommand(newSourcesStaleReviewCmd())
+	cmd.AddCommand(newSourceLinkCmd())
+	cmd.AddCommand(newAcceptCitationCmd())
+	cmd.AddCommand(newStaleReviewCmd())
 
 	return cmd
 }
@@ -193,22 +193,4 @@ func newSourcesVerifyCmd() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-func newSourcesLinkCmd() *cobra.Command {
-	cmd := newSourceLinkCmd()
-	cmd.Use = "link [issue-id]"
-	return cmd
-}
-
-func newSourcesAcceptCitationCmd() *cobra.Command {
-	cmd := newAcceptCitationCmd()
-	cmd.Use = "accept-citation [issue-id]"
-	return cmd
-}
-
-func newSourcesStaleReviewCmd() *cobra.Command {
-	cmd := newStaleReviewCmd()
-	cmd.Use = "stale-review"
-	return cmd
 }

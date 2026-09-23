@@ -150,7 +150,7 @@ func loadMaterializedState(issuesDir, stateDir string) (materializedState, error
 		return materializedState{}, fmt.Errorf("read ops: %w", err)
 	}
 	allOps := ops.ExtractOps(opItems)
-	if _, _, err := materialize.Run(stateDir, allOps, nil, materialize.Options{WriteStateFiles: true, EmitWarnings: true}); err != nil {
+	if _, _, err := materialize.Run(stateDir, allOps, nil, materialize.Options{WriteStateFiles: true}); err != nil {
 		return materializedState{}, fmt.Errorf("materialize: %w", err)
 	}
 	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))

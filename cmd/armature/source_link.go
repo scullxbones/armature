@@ -13,7 +13,7 @@ func newSourceLinkCmd() *cobra.Command {
 	var sourceID string
 
 	cmd := &cobra.Command{
-		Use:   "source-link [issue-id]",
+		Use:   "link [issue-id]",
 		Short: "Link one or more issues to a source entry in the manifest",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

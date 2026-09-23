@@ -23,43 +23,6 @@ type Snapshot struct {
 	Ops []ops.Op
 }
 
-// Load materializes state from opsDir and stateDir, returning a populated Snapshot.
-// Returns a non-nil Snapshot with empty collections when opsDir is empty.
-func Load(opsDir, stateDir string) (*Snapshot, error) {
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
-	if err != nil {
-		return nil, fmt.Errorf("load ops: %w", err)
-	}
-
-	allOps := ops.ExtractOps(items)
-	if allOps == nil {
-		allOps = []ops.Op{}
-	}
-
-	state, result, err := materialize.Run(stateDir, allOps, offsets, materialize.Options{WriteStateFiles: true})
-	if err != nil {
-		return nil, fmt.Errorf("materialize: %w", err)
-	}
-
-	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))
-	if err != nil {
-		return nil, fmt.Errorf("load index: %w", err)
-	}
-
-	issues := state.Issues
-	if issues == nil {
-		issues = make(map[string]*materialize.Issue)
-	}
-
-	return &Snapshot{
-		State:    state,
-		Index:    index,
-		Issues:   issues,
-		Warnings: append(warnings, result.Warnings...),
-		Ops:      allOps,
-	}, nil
-}
-
 // Store owns ops-read→materialize→snapshot operations for a configured directory pair.
 // Store is not safe for concurrent use. It is designed for sequential, per-command usage
 // where Load/Issue/Index are called from a single goroutine.
@@ -77,13 +40,42 @@ func NewStore(opsDir, stateDir string) *Store {
 	}
 }
 
-// Load loads the snapshot from disk and caches it, replacing any previously
+// Load materializes state from disk and caches it, replacing any previously
 // cached snapshot. Call it both for the initial load and to refresh the
-// cache after the underlying ops/state have changed.
+// cache after the underlying ops/state have changed. Returns a non-nil
+// Snapshot with empty collections when opsDir is empty.
 func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
-	snap, err := Load(s.opsDir, s.stateDir)
+	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(s.opsDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load ops: %w", err)
+	}
+
+	allOps := ops.ExtractOps(items)
+	if allOps == nil {
+		allOps = []ops.Op{}
+	}
+
+	state, result, err := materialize.Run(s.stateDir, allOps, offsets, materialize.Options{WriteStateFiles: true})
+	if err != nil {
+		return nil, fmt.Errorf("materialize: %w", err)
+	}
+
+	index, err := materialize.LoadIndex(filepath.Join(s.stateDir, "index.json"))
+	if err != nil {
+		return nil, fmt.Errorf("load index: %w", err)
+	}
+
+	issues := state.Issues
+	if issues == nil {
+		issues = make(map[string]*materialize.Issue)
+	}
+
+	snap := &Snapshot{
+		State:    state,
+		Index:    index,
+		Issues:   issues,
+		Warnings: append(warnings, result.Warnings...),
+		Ops:      allOps,
 	}
 	s.current = snap
 	return snap, nil
