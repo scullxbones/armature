@@ -284,7 +284,7 @@ func newHarnessHookCmd() *cobra.Command {
 				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("failed to decode hook event: %v", err), "event decode failed")
 			}
 
-			filePath := harnesshook.ExtractFilePathFromToolInput(event.ToolInput)
+			filePath := harnesshook.FirstPathFromToolInput(event.ToolInput)
 			eventInfo := &harnesshook.DecodedEventInfo{
 				Kind:     event.Kind,
 				FilePath: filePath,
