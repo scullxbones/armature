@@ -107,6 +107,9 @@ outcome) appends as an amendment at exit 0.`,
 			if replayErr == nil && liveIssue != nil {
 				currentStatus = liveIssue.Status
 				if ops.IdenticalTransition(allOps, issueID, liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, payload) {
+					if err := publishHighStakesOps(state); err != nil {
+						return err
+					}
 					writeTransitionNoOp(cmd, issueID, to, fieldFlag)
 					return nil
 				}
@@ -463,6 +466,8 @@ func mapTransitionError(err error) error {
 		}, 1, err)
 	case strings.Contains(msg, "delivery gate"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
+	case isOpsPublishError(err):
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm push-ops", "arm doctor"}, 1, err)
 	default:
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	}

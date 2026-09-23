@@ -34,6 +34,11 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	runCmd(tmpDir, "config", "user.name", "Test User")
 	runCmd(tmpDir, "config", "commit.gpgsign", "false")
 
+	originParent := t.TempDir()
+	origin := filepath.Join(originParent, "origin.git")
+	runCmd(originParent, "init", "--bare", origin)
+	runCmd(tmpDir, "remote", "add", "origin", origin)
+
 	// Initialize worker
 	armBin := getArmBinary(t)
 	// Try worker-init --check first; if it fails, run full init
