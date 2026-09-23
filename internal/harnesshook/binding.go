@@ -27,8 +27,8 @@ type ResolvedBinding struct {
 	Root           string // Worktree root directory (only set for path-resolved bindings: file_path, event_cwd)
 }
 
-// ExtractFilePathFromToolInput extracts the file path from the raw tool_input map.
-// It checks for common file path keys in the order they're likely to be used.
+// ExtractFilePathFromToolInput extracts a single file path from the raw tool_input map.
+// Lookup order: file_path, path, then the first changes[] entry's path.
 func ExtractFilePathFromToolInput(toolInput map[string]any) string {
 	if toolInput == nil {
 		return ""
@@ -40,15 +40,23 @@ func ExtractFilePathFromToolInput(toolInput map[string]any) string {
 		}
 	}
 
-	if changes, ok := toolInput["changes"].([]any); ok && len(changes) > 0 {
-		if change, ok := changes[0].(map[string]any); ok {
-			if path, ok := change["path"].(string); ok && path != "" {
-				return path
-			}
-		}
-	}
+	return firstPathFromChanges(toolInput["changes"])
+}
 
-	return ""
+func firstPathFromChanges(raw any) string {
+	changes, ok := raw.([]any)
+	if !ok || len(changes) == 0 {
+		return ""
+	}
+	change, ok := changes[0].(map[string]any)
+	if !ok {
+		return ""
+	}
+	path, ok := change["path"].(string)
+	if !ok || path == "" {
+		return ""
+	}
+	return path
 }
 
 // ReadIssueBindingFile reads the issue ID bound to gitDir, preferring the
@@ -99,7 +107,7 @@ func ResolveBindingFromDir(dir string) (ResolvedBinding, error) {
 			} else {
 				data, err := os.ReadFile(gitDir) //nolint:gosec // G304: derived from repo structure
 				if err != nil {
-					return ResolvedBinding{GitDir: gitDir, Root: currentDir}, nil
+					return unreadableGitFileBinding(gitDir, currentDir), nil
 				}
 				gitdirLine := strings.TrimSpace(string(data))
 				gitdirLine = strings.TrimPrefix(gitdirLine, "gitdir: ")
@@ -127,6 +135,10 @@ func ResolveBindingFromDir(dir string) (ResolvedBinding, error) {
 		}
 		currentDir = parent
 	}
+}
+
+func unreadableGitFileBinding(gitFilePath, worktreeRoot string) ResolvedBinding {
+	return ResolvedBinding{GitDir: gitFilePath, Root: worktreeRoot}
 }
 
 func resolveBindingFromFilePath(filePath string) (ResolvedBinding, error) {
