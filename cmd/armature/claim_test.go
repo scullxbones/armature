@@ -1721,9 +1721,9 @@ func TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1(t *t
 	excludeAfter, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
 	assert.Equal(t, string(excludeBefore), string(excludeAfter), "nested destination rejection must not mutate Git exclusions")
-	release, lockErr := acquireGitExcludeLock(repo)
+	flock, lockErr := acquireBlockingGitExcludeFlock(repo)
 	require.NoError(t, lockErr, "nested destination rejection must release the exclusion lock")
-	release()
+	flock.Release()
 }
 
 func TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5(t *testing.T) {

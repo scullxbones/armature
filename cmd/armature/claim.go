@@ -396,11 +396,11 @@ func cleanupClaimExclusions(repoPath string, exclusions []claimExclusion) error 
 	if len(exclusions) == 0 {
 		return nil
 	}
-	release, err := acquireGitExcludeLock(repoPath)
+	flock, err := acquireBlockingGitExcludeFlock(repoPath)
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer flock.Release()
 	return cleanupClaimExclusionsLocked(repoPath, exclusions)
 }
 
@@ -517,6 +517,20 @@ func compensateClaimIfHeldByToken(
 		return finish(fmt.Errorf("%s: %w; also failed to push claim release: %v (manual cleanup may be needed)", opLabel, cause, rbErr))
 	}
 	return finish(fmt.Errorf("%s: %w (claim released; retry arm claim)", opLabel, cause))
+}
+
+func recoverSpacedOptionalWorktreeArg(worktreePath, issueID string, args []string) (string, string, []string) {
+	if worktreePath != defaultWorktreeFlagValue {
+		return worktreePath, issueID, args
+	}
+	switch {
+	case issueID != "" && len(args) == 1:
+		return args[0], issueID, nil
+	case issueID == "" && len(args) == 2:
+		return args[1], args[0], nil
+	default:
+		return worktreePath, issueID, args
+	}
 }
 
 func createWorktreeAndBranchWithExclusion(
@@ -846,20 +860,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				ttl = ctx.Config.DefaultTTL
 			}
 			var fromBranch, fromTip string
-			// pflag's optional-value support sets NoOptDefVal without consuming a
-			// following token. Recover the documented spaced form here while
-			// retaining the established value-less form for existing agents.
-			if worktreePath == defaultWorktreeFlagValue {
-				switch {
-				case issueID != "" && len(args) == 1:
-					worktreePath = args[0]
-					args = nil
-				case issueID == "" && len(args) == 2:
-					issueID = args[0]
-					worktreePath = args[1]
-					args = nil
-				}
-			}
+			worktreePath, issueID, args = recoverSpacedOptionalWorktreeArg(worktreePath, issueID, args)
 			if worktreePath != defaultWorktreeFlagValue && issueID != "" && len(args) > 0 {
 				return fmt.Errorf("accepts at most 1 arg(s), received %d", len(args)+1)
 			}
@@ -893,11 +894,11 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return err
 			}
 			defer cloneFlock.Release()
-			releaseGitExcludeLock, err := acquireGitExcludeLock(ctx.RepoPath)
+			excludeFlock, err := acquireBlockingGitExcludeFlock(ctx.RepoPath)
 			if err != nil {
 				return err
 			}
-			defer releaseGitExcludeLock()
+			defer excludeFlock.Release()
 
 			if customWorktreePath {
 				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, ""); err != nil {

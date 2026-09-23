@@ -209,28 +209,28 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	if err != nil {
 		return worktreeSkipped, fmt.Errorf("read claim exclusion for %s: %w", issue.ID, err)
 	}
-	releaseClaimExclusionLock := func() {}
+	excludeFlock := blockingGitExcludeFlock{}
 	if hasClaimExclusion {
-		release, lockErr := acquireGitExcludeLock(repoPath)
+		var lockErr error
+		excludeFlock, lockErr = acquireBlockingGitExcludeFlock(repoPath)
 		if lockErr != nil {
 			return worktreeSkipped, fmt.Errorf("acquire claim exclusion lock for %s: %w", issue.ID, lockErr)
 		}
-		releaseClaimExclusionLock = release
 	}
 	gitClient := adapters.New(repoPath)
 
 	if err := gitClient.RemoveWorktree(selected.Path); err != nil {
-		releaseClaimExclusionLock()
+		excludeFlock.Release()
 		return worktreeSkipped, fmt.Errorf("remove worktree for %s: %w", issue.ID, err)
 	}
 	swallowErr(gitClient.UnsetGitConfig(deliverygate.ParentBranchConfigKey(branchName)))
 	if hasClaimExclusion {
 		if err := removeClaimExclusionAfterWorktreeRemovalLocked(repoPath, selected.Path, claimExclusionPattern); err != nil {
-			releaseClaimExclusionLock()
+			excludeFlock.Release()
 			return worktreeRemoved, err
 		}
 	}
-	releaseClaimExclusionLock()
+	excludeFlock.Release()
 
 	return worktreeRemoved, nil
 }
