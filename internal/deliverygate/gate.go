@@ -46,7 +46,6 @@ func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *Gat
 	}
 }
 
-// CleanTreeCheck verifies that git status --porcelain is empty.
 func cleanTreeCheck(worktreePath string) CheckResult {
 	git := adapters.New(worktreePath)
 
@@ -85,18 +84,6 @@ func armatureStateNoise(entry adapters.DirtyEntry) bool {
 		(entry.OldPath == "" || strings.HasPrefix(entry.OldPath, armatureStateDir))
 }
 
-// ScopeContainmentCheck verifies that all files changed since baseCommit
-// are within the declared scope globs.
-//
-// Precondition: baseCommit must already be an actual merge-base of the
-// delivery head (as produced by GatedBaseCommit), not an arbitrary ref —
-// the diff below uses two-dot (baseCommit..head) semantics, which silently
-// includes commits reachable from baseCommit but not from head if baseCommit
-// is a raw branch tip rather than a merge-base. (baseCommit, head) is the
-// same pair CommitReference used: claimBase..HEAD on the worktree-first
-// path, or the complete isolated landing (enclosing merge first-parent..M,
-// or first-parent..matching-SHA) when primary-branch fallback selected
-// evidence.
 func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string) CheckResult {
 	git := adapters.New(worktreePath)
 
@@ -132,24 +119,6 @@ func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string
 	return CheckResult{Pass: true, Remediation: ""}
 }
 
-// CommitReferenceCheck verifies two independent things since baseCommit:
-//
-//  1. Conventional-commit reference exists: at least one commit's subject
-//     matches <type>(<ISSUE-ID>): ... or <type>(<ISSUE-ID>)!: ..., where
-//     type is one of feat, fix, refactor, test, docs, style, polish (see
-//     docs/conventions.md). The worktree HEAD is searched first; if it has
-//     no matching evidence, each resolvable of refs/heads/main then
-//     refs/heads/master is searched until a matching landing isolates and
-//     passes, so a squash-land on the primary branch still counts even when
-//     a stale local main exists.
-//  2. Net delivery is non-empty: the tree diff of the selected range is
-//     non-empty (reusing the same diff primitive as ScopeContainmentCheck).
-//     DeliveryGate feeds ScopeContainment that same (rangeBase, rangeHead).
-//
-// Precondition: baseCommit must already be an actual merge-base of the
-// current branch (as produced by GatedBaseCommit), not an arbitrary ref —
-// LogRange and the net diff below use two-dot (baseCommit..HEAD) semantics,
-// which is only correct when baseCommit is the real divergence point.
 func commitReferenceCheck(worktreePath, baseCommit, issueID string) (deliveryRange, CheckResult) {
 	git := adapters.New(worktreePath)
 	return deliveryRef(git, baseCommit, issueID)

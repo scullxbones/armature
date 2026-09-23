@@ -133,6 +133,7 @@ func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *te
 	outsideFile := filepath.Join(tmpDir, "outside", "a.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(outsideFile), 0755))
 	// Content needs enough bulk for git's rename heuristic to recognize the
+	// copy as a rename rather than delete+add.
 	content := ""
 	for range 20 {
 		content += "line of content\n"

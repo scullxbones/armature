@@ -26,7 +26,10 @@ type ScopeViolation struct {
 }
 
 func NewScopePolicy(scope []string) ScopePolicy {
-	root, _ := os.Getwd() //nolint:errcheck // Getwd failure falls back to empty prefix for path normalization
+	root, err := os.Getwd()
+	if err != nil {
+		return NewScopePolicyWithRoot(scope, "")
+	}
 	return NewScopePolicyWithRoot(scope, root)
 }
 

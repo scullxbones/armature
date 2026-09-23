@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockPolicyResolver returns a fixed IssuePolicy for any issue ID.
 type mockPolicyResolver struct {
 	policy harnesspolicy.IssuePolicy
 }
@@ -21,7 +20,6 @@ func (m *mockPolicyResolver) Resolve(taskID string) (harnesspolicy.IssuePolicy, 
 	return m.policy, nil
 }
 
-// makeHookPayload creates a properly formatted PreToolUse hook event payload for testing.
 func makeHookPayload(t *testing.T, toolName string, toolInput map[string]any) []byte {
 	t.Helper()
 	payload := map[string]any{
@@ -34,10 +32,6 @@ func makeHookPayload(t *testing.T, toolName string, toolInput map[string]any) []
 	return data
 }
 
-// TestHookConformance_REQ_TOPTIER_S5_T1 is the canonical single entry point
-// required by the TOPTIER-S5-T1 contract: it exercises the full binding-state x
-// tool-class x path-type matrix by running each of the conformance sub-tests
-// below as a subtest, reusing their table data rather than duplicating it.
 func TestHookConformance_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	t.Run("BindingStates", TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1)
@@ -49,15 +43,6 @@ func TestHookConformance_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Run("NoPathPolicy", TestConformanceMatrix_NoPathPolicy_REQ_TOPTIER_S5_T1)
 }
 
-// TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1 verifies binding resolution
-// for the two binding states this package's Hook.Evaluate can itself observe:
-// bound active and unbound. The third state, "bound inactive" (a stale
-// claim), is not modeled at this layer at all — staleness is resolved one
-// layer up in cmd/armature (see isBindingStale and
-// logStalePassThroughScopeViolation in cmd/armature/harness_hook.go). That
-// stale-binding pass-through-with-violation path is exercised end-to-end by
-// cmd/armature/harness_hook_test.go's
-// TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2.
 func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -155,8 +140,6 @@ func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
 	}
 }
 
-// TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1 verifies that different tool
-// classes (Edit vs Bash) follow correct binding and evaluation paths.
 func TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -245,8 +228,6 @@ func TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1(t *testing.T) {
 	}
 }
 
-// TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1 verifies path resolution for
-// in-scope, out-of-scope, and outside-worktree paths.
 func TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -326,11 +307,6 @@ func TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1(t *testing.T) {
 	}
 }
 
-// TestConformanceMatrix_DogfoodBypassCases_REQ_TOPTIER_S5_T1 verifies the three
-// specific dogfood bypass cases documented in the task:
-// 1. Out-of-scope Makefile edit (deny)
-// 2. Stray binary left outside declared scope (deny)
-// 3. Worktree changes leaking into the main worktree (deny)
 func TestConformanceMatrix_DogfoodBypassCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -405,8 +381,6 @@ func TestConformanceMatrix_DogfoodBypassCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 	}
 }
 
-// TestConformanceMatrix_EmptyScope_REQ_TOPTIER_S5_T1 verifies that tasks with empty
-// scope definitions are properly blocked to prevent unscoped edits.
 func TestConformanceMatrix_EmptyScope_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -438,8 +412,6 @@ func TestConformanceMatrix_EmptyScope_REQ_TOPTIER_S5_T1(t *testing.T) {
 	assert.Contains(t, result.Decision.Message, "task has no declared scope")
 }
 
-// TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1 verifies that absolute paths
-// are correctly normalized and checked against scope.
 func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -455,7 +427,6 @@ func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 	hook := NewHook(resolver)
 
-	// Test with absolute path that should normalize to in-scope
 	absInScopePath := filepath.Join(tmpDir, "internal", "foo.go")
 	input := makeHookPayload(t, "Edit", map[string]any{
 		"file_path": absInScopePath,
@@ -472,7 +443,6 @@ func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 	assert.Equal(t, DecisionAllow, result.Decision.Action,
 		"absolute path within scope should be allowed")
 
-	// Test with absolute path that should be out-of-scope
 	absOutOfScopePath := filepath.Join(tmpDir, "cmd", "main.go")
 	input = makeHookPayload(t, "Edit", map[string]any{
 		"file_path": absOutOfScopePath,
@@ -490,8 +460,6 @@ func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 		"absolute path outside scope should be blocked")
 }
 
-// TestConformanceMatrix_NoPathPolicy_REQ_TOPTIER_S5_T1 verifies that events with
-// no paths are allowed (pass-through).
 func TestConformanceMatrix_NoPathPolicy_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

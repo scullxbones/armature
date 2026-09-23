@@ -72,14 +72,6 @@ func (a *ClaudeAdapter) OwnsConfig(workdir string) (bool, error) {
 	return true, nil
 }
 
-func swallowErr(err error) { _ = err }
-
-func overlayJSONObject(data []byte) map[string]any {
-	cfg := map[string]any{}
-	swallowErr(json.Unmarshal(data, &cfg))
-	return cfg
-}
-
 func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	dir := filepath.Join(workdir, ".claude")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -89,7 +81,8 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	settingsPath := filepath.Join(dir, "settings.json")
 	cfg := map[string]any{}
 	if existing, err := os.ReadFile(settingsPath); err == nil { //nolint:gosec // G304: internal settings path
-		cfg = overlayJSONObject(existing)
+		cfg = map[string]any{}
+		_ = json.Unmarshal(existing, &cfg)
 	}
 
 	hooks := map[string]any{}

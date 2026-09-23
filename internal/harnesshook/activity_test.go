@@ -30,7 +30,6 @@ func TestActivityTruncateOutputShort_REQ_EXECEV_T1(t *testing.T) {
 
 func TestActivityTruncateOutputExactBoundary_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
-	// Create output exactly 2*maxOutputChunkSize bytes
 	output := make([]byte, maxOutputChunkSize*2)
 	for i := range output {
 		output[i] = 'a'
@@ -38,39 +37,33 @@ func TestActivityTruncateOutputExactBoundary_REQ_EXECEV_T1(t *testing.T) {
 
 	result := truncateOutput(output)
 
-	// At exactly 2*maxOutputChunkSize, it should not be truncated
 	assert.Equal(t, string(output), result.Head)
 	assert.Equal(t, "", result.Tail)
 }
 
 func TestActivityTruncateOutputLong_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
-	// Create output larger than 2*maxOutputChunkSize
 	totalSize := maxOutputChunkSize * 3
 	output := make([]byte, totalSize)
 
-	// Fill with different patterns to distinguish head and tail
 	for i := range maxOutputChunkSize {
-		output[i] = 'H' // HEAD
+		output[i] = 'H'
 	}
 	for i := maxOutputChunkSize; i < totalSize-maxOutputChunkSize; i++ {
-		output[i] = 'M' // MIDDLE
+		output[i] = 'M'
 	}
 	for i := totalSize - maxOutputChunkSize; i < totalSize; i++ {
-		output[i] = 'T' // TAIL
+		output[i] = 'T'
 	}
 
 	result := truncateOutput(output)
 
-	// Check head
 	assert.Len(t, result.Head, maxOutputChunkSize)
 	assert.True(t, strings.Contains(result.Head, "H"))
 
-	// Check tail
 	assert.Len(t, result.Tail, maxOutputChunkSize)
 	assert.True(t, strings.Contains(result.Tail, "T"))
 
-	// Check hash is correct for full output
 	expectedHash := fmt.Sprintf("%x", sha256.Sum256(output))
 	assert.Equal(t, expectedHash, result.Hash)
 }
@@ -79,12 +72,10 @@ func TestActivityGetWorktreeHEAD_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	// Create a HEAD file pointing to a branch
 	headContent := "ref: refs/heads/main\n"
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(headContent), 0o600))
 
-	// Create the branch ref file
 	branchDir := filepath.Join(gitDir, "refs", "heads")
 	require.NoError(t, os.MkdirAll(branchDir, 0o750))
 	shaValue := "1234567890abcdef1234567890abcdef12345678"
@@ -101,7 +92,6 @@ func TestActivityGetWorktreeHEADDetached_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	// Create a HEAD file in detached state (direct SHA)
 	shaValue := "abcdef1234567890abcdef1234567890abcdef12"
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
@@ -116,12 +106,10 @@ func TestActivityAppendActivityCreatesLog_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	// Create HEAD file
 	shaValue := "1234567890abcdef1234567890abcdef12345678"
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	// Append an activity
 	command := "echo hello"
 	exitCode := 0
 	output := []byte("hello\n")
@@ -130,7 +118,6 @@ func TestActivityAppendActivityCreatesLog_REQ_EXECEV_T1(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Verify log file was created and contains the entry
 	logPath := filepath.Join(gitDir, "armature-activity.log")
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
@@ -148,12 +135,10 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	// Create HEAD file
 	shaValue := "1234567890abcdef1234567890abcdef12345678"
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	// Append multiple activities
 	for i := range 3 {
 		command := fmt.Sprintf("command %d", i)
 		exitCode := i
@@ -163,13 +148,11 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Verify log file contains all entries
 	logPath := filepath.Join(gitDir, "armature-activity.log")
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 
 	lines := strings.Split(string(content), "\n")
-	// Filter out empty lines
 	var nonEmptyLines []string
 	for _, line := range lines {
 		if strings.TrimSpace(line) != "" {
@@ -184,37 +167,23 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 	}
 }
 
-// TestActivityEnvVarKillSwitchHasNoEffect_REQ_EXECEV_T1 verifies that the
-// legacy ARMATURE_DISABLE_ACTIVITY_LOGGING environment variable no longer
-// disables capture (M8): an env var kill-switch would be settable by the
-// worker process mid-session, letting it curate failure-then-success
-// sequences out of the log. The only supported kill-switch is the repo-level
-// git config key (see TestActivityRepoConfigKillSwitchDisablesLogging).
 func TestActivityEnvVarKillSwitchHasNoEffect_REQ_EXECEV_T1(t *testing.T) {
 	gitDir := t.TempDir()
 
-	// Create HEAD file
 	shaValue := "1234567890abcdef1234567890abcdef12345678"
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	// This env var must have no effect on activity capture.
 	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "true")
 
 	err := AppendActivity(gitDir, "echo hello", 0, true, []byte("hello\n"))
 	require.NoError(t, err)
 
-	// Verify log file WAS created despite the env var being set.
 	logPath := filepath.Join(gitDir, "armature-activity.log")
 	_, err = os.ReadFile(logPath)
 	assert.NoError(t, err, "activity log should be created; ARMATURE_DISABLE_ACTIVITY_LOGGING must not disable capture")
 }
 
-// initTestGitRepo creates a real git repository at dir with one commit, so that
-// gitDir has both a resolvable HEAD (via getWorktreeHEAD) and a writable --local
-// git config store (via `git --git-dir=... config --local`). Returns the .git
-// directory path. Used to test the repo-level activity-logging kill-switch,
-// which is read via `git --git-dir=<gitDir> config`.
 func initTestGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -252,8 +221,6 @@ func TestActivityRepoConfigKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T)
 	assert.True(t, os.IsNotExist(err), "activity log should not exist when repo-level kill-switch is set")
 }
 
-// setGitConfigBool sets the armature.disable-activity-logging local git config
-// key in the repo backed by gitDir.
 func setGitConfigBool(t *testing.T, gitDir, value string) {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir,
@@ -298,8 +265,6 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
 	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
 	gitDir := t.TempDir()
 
-	// Don't create HEAD file, so getWorktreeHEAD fails
-	// Capture stderr to verify warning is printed
 	oldStderr := os.Stderr
 	defer func() { os.Stderr = oldStderr }()
 
@@ -313,14 +278,12 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
 
 	err = AppendActivity(gitDir, command, exitCode, true, output)
 
-	// Fail-open: should not return an error
 	assert.NoError(t, err)
 
 	_ = w.Close() //nolint:errcheck // test code
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r) //nolint:errcheck // test code
 
-	// Should have printed a warning to stderr
 	stderrOutput := buf.String()
 	assert.Contains(t, stderrOutput, "warning")
 }
@@ -331,18 +294,15 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
 	gitDir := t.TempDir()
 
-	// Create HEAD file
 	shaValue := "1234567890abcdef1234567890abcdef12345678"
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	// Make the git dir read-only so we can't write to it
 	require.NoError(t, os.Chmod(gitDir, 0o500))
 	t.Cleanup(func() {
 		_ = os.Chmod(gitDir, 0o755) //nolint:errcheck // cleanup code
 	})
 
-	// Capture stderr to verify warning is printed
 	oldStderr := os.Stderr
 	defer func() { os.Stderr = oldStderr }()
 
@@ -356,14 +316,12 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 
 	err = AppendActivity(gitDir, command, exitCode, true, output)
 
-	// Fail-open: should not return an error
 	assert.NoError(t, err)
 
 	_ = w.Close() //nolint:errcheck // test code
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r) //nolint:errcheck // test code
 
-	// Should have printed a warning to stderr
 	stderrOutput := buf.String()
 	assert.Contains(t, stderrOutput, "warning")
 }
@@ -383,7 +341,6 @@ func TestActivityFormatLogEntry_REQ_EXECEV_T1(t *testing.T) {
 
 	logLine := formatActivityLogEntry(entry)
 
-	// The line must be valid JSON (JSONL format).
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal([]byte(logLine), &decoded))
 
@@ -395,9 +352,6 @@ func TestActivityFormatLogEntry_REQ_EXECEV_T1(t *testing.T) {
 	assert.Contains(t, logLine, `"output_hash":"abc123"`)
 }
 
-// TestActivityFormatLogEntryUnknownExitCode_REQ_EXECEV_T1 verifies that an
-// entry with no reported exit code is recorded as exit_code_known=false, not
-// silently coerced to a successful exit_code=0 (M2).
 func TestActivityFormatLogEntryUnknownExitCode_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	entry := ActivityEntry{
@@ -414,13 +368,8 @@ func TestActivityFormatLogEntryUnknownExitCode_REQ_EXECEV_T1(t *testing.T) {
 	assert.Contains(t, logLine, `"exit_code_known":false`)
 }
 
-// TestActivityTruncateOutputRuneBoundary_REQ_EXECEV_T1 verifies that
-// truncation never splits a multi-byte UTF-8 rune across the head/tail
-// boundary (m8).
 func TestActivityTruncateOutputRuneBoundary_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
-	// Build output where a multi-byte rune (é, 2 bytes in UTF-8) straddles
-	// the maxOutputChunkSize head boundary and the tail start boundary.
 	filler := strings.Repeat("a", maxOutputChunkSize-1)
 	middle := strings.Repeat("b", maxOutputChunkSize)
 	tailFiller := strings.Repeat("c", maxOutputChunkSize-1)
@@ -436,12 +385,10 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	// Create HEAD file
 	shaValue := "1234567890abcdef1234567890abcdef12345678"
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	// Append an activity
 	beforeTime := time.Now().UTC()
 	command := "test"
 	exitCode := 0
@@ -452,7 +399,6 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 
 	afterTime := time.Now().UTC()
 
-	// Verify log file contains timestamp
 	logPath := filepath.Join(gitDir, "armature-activity.log")
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
@@ -462,11 +408,9 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(bytes.TrimSpace(content), &decoded))
 
-	// Try to parse the timestamp
 	logTime, err := time.Parse(time.RFC3339, decoded.Timestamp)
 	require.NoError(t, err)
 
-	// Verify it's within the expected range
 	assert.True(t, logTime.After(beforeTime.Add(-time.Second)))
 	assert.True(t, logTime.Before(afterTime.Add(time.Second)))
 }
@@ -477,32 +421,21 @@ func TestActivityHashConsistency_REQ_EXECEV_T1(t *testing.T) {
 	result1 := truncateOutput(output)
 	result2 := truncateOutput(output)
 
-	// Hash should be consistent
 	assert.Equal(t, result1.Hash, result2.Hash)
 
-	// Hash should be the correct SHA256
 	expectedHash := fmt.Sprintf("%x", sha256.Sum256(output))
 	assert.Equal(t, expectedHash, result1.Hash)
 }
 
-// TestActivityFallbackGetHEAD_UsesGitDirDirectly_REQ_EXECEV_M7 verifies that
-// fallbackGetHEAD resolves HEAD via `git --git-dir=<gitDir> rev-parse HEAD`
-// directly against the given git dir, without needing to derive or guess a
-// separate working-tree path (M7). This exercises the case where the loose ref
-// file is absent (e.g. after git packs refs) so getWorktreeHEAD must fall
-// through to fallbackGetHEAD.
 func TestActivityFallbackGetHEAD_UsesGitDirDirectly_REQ_EXECEV_M7(t *testing.T) {
 	t.Parallel()
 	gitDir := initTestGitRepo(t)
 
-	// Confirm the expected HEAD sha via git itself.
 	revParseCmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
 	expectedOut, err := revParseCmd.Output()
 	require.NoError(t, err)
 	expected := strings.TrimSpace(string(expectedOut))
 
-	// Pack refs so the loose ref file (refs/heads/main) is removed, forcing
-	// getWorktreeHEAD to fall back to fallbackGetHEAD.
 	packCmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "pack-refs", "--all")
 	require.NoError(t, packCmd.Run())
 	_, statErr := os.Stat(filepath.Join(gitDir, "refs", "heads", "main"))
@@ -513,19 +446,12 @@ func TestActivityFallbackGetHEAD_UsesGitDirDirectly_REQ_EXECEV_M7(t *testing.T) 
 	assert.Equal(t, expected, sha)
 }
 
-// TestActivityFallbackGetHEAD_InvalidGitDir_REQ_EXECEV_M7 verifies that
-// fallbackGetHEAD surfaces an error when the git dir is not a valid git
-// directory (e.g. git rev-parse fails), rather than silently succeeding.
 func TestActivityFallbackGetHEAD_InvalidGitDir_REQ_EXECEV_M7(t *testing.T) {
 	t.Parallel()
 	_, err := fallbackGetHEAD(t.TempDir())
 	assert.Error(t, err)
 }
 
-// TestActivityAppendActivityCapsOversizedCommand_REQ_EXECEV_M5 verifies that an
-// oversized command is capped at write time (m5), so a single O_APPEND write
-// stays small enough to remain within typical kernel atomic-write guarantees
-// even when multiple worktree hook processes append concurrently.
 func TestActivityAppendActivityCapsOversizedCommand_REQ_EXECEV_M5(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()

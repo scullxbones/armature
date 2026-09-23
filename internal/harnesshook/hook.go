@@ -34,7 +34,6 @@ func AbsolutizePaths(paths []string, cwd, root string) []string {
 		} else if root != "" && !filepath.IsAbs(path) {
 			absolutized = append(absolutized, filepath.Join(root, path))
 		} else {
-			// If absolutization fails, use the original path
 			absolutized = append(absolutized, path)
 		}
 	}
@@ -89,34 +88,23 @@ func NewHook(resolver PolicyResolver) *Hook {
 // 5. Evaluates event against policy (with absolutized paths for scope checking)
 // 6. Encodes result to output
 func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, error) {
-	// Select adapter for platform
 	adapter, err := NewAdapterForPlatform(input.Platform)
 	if err != nil {
 		return RunResult{}, err
 	}
 
-	// Decode hook input to Event
 	event, err := adapter.Decode(input.Input)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("decode hook input: %w", err)
 	}
 
-	// For scope checking, we need absolute paths. If the event has relative paths and a cwd,
-	// absolutize them against the cwd (as was done during binding resolution).
-	// This ensures that when cwd=/repo/docs and file_path=internal/x.go, the scope check
-	// evaluates the absolute path /repo/docs/internal/x.go against the root /repo,
-	// not the relative path against the cwd.
 	event.Paths = AbsolutizePaths(event.Paths, event.Cwd, input.Root)
 
-	// Resolve policy for task using the already-resolved binding (ADR-0007: single resolution)
 	policy, err := h.resolver.Resolve(input.Binding)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("resolve policy: %w", err)
 	}
 
-	// Build evaluator from resolved policy, using the provided root (if any) for path normalization.
-	// For path-resolved bindings, the root should be the worktree directory where the binding was found.
-	// When root is empty, falls back to os.Getwd().
 	service := harnesspolicy.NewVerificationService()
 	var scopePolicy harnesspolicy.ScopePolicy
 	if input.Root != "" {
@@ -133,13 +121,11 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 		},
 	})
 
-	// Evaluate the event against the policy
 	decision, err := evaluator.Evaluate(ctx, event)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("evaluate hook: %w", err)
 	}
 
-	// Encode the result
 	output, exitCode, err := adapter.Encode(event, decision)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("encode hook output: %w", err)

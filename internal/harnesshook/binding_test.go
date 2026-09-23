@@ -9,31 +9,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2 verifies that ResolveBindingFromFilePath
-// walks up from a file path to find the containing worktree's git dir and reads
-// the armature-issue-id file, and returns both the issue ID and the git dir.
 func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	t.Parallel()
-	// Create a temporary directory structure simulating a worktree
 	tmpDir := t.TempDir()
 	worktreeDir := filepath.Join(tmpDir, "worktree")
 	actualGitDir := filepath.Join(tmpDir, "actual-git-dir")
 	fileDir := filepath.Join(worktreeDir, "some", "deep", "path")
 	filePath := filepath.Join(fileDir, "myfile.go")
 
-	// Create the directories
 	err := os.MkdirAll(actualGitDir, 0o755)
 	require.NoError(t, err)
 	err = os.MkdirAll(fileDir, 0o755)
 	require.NoError(t, err)
 
-	// Write a .git file that points to the actual git dir (like in a worktree)
 	gitFileContent := "gitdir: " + actualGitDir + "\n"
 	gitFile := filepath.Join(worktreeDir, ".git")
 	err = os.WriteFile(gitFile, []byte(gitFileContent), 0o644)
 	require.NoError(t, err)
 
-	// Write armature-issue-id in the actual git dir
 	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	err = os.WriteFile(issueIDFile, []byte("task-from-path"), 0o644)
 	require.NoError(t, err)
@@ -46,10 +39,6 @@ func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	assert.Equal(t, worktreeDir, binding.Root, "Root should be the worktree root, not the gitdir parent (finding P3)")
 }
 
-// TestResolveBindingFromFilePath_LinkedWorktree_RootIsWorktreeRoot verifies that
-// for a linked-worktree layout (.git is a file pointing elsewhere, e.g.
-// <parent>/.git/worktrees/<name>), ResolvedBinding.Root is the worktree root
-// directory itself, not the parent of the actual git dir the .git file points to.
 func TestResolveBindingFromFilePath_LinkedWorktree_RootIsWorktreeRoot(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -76,11 +65,8 @@ func TestResolveBindingFromFilePath_LinkedWorktree_RootIsWorktreeRoot(t *testing
 	assert.Equal(t, worktreeDir, binding.Root, "Root must be the worktree root (where .git lives), not actualGitDir's parent")
 }
 
-// TestResolveBindingFromFilePath_NoGitDir verifies that ResolveBindingFromFilePath
-// returns a ResolvedBinding with empty IssueID when no .git directory is found.
 func TestResolveBindingFromFilePath_NoGitDir(t *testing.T) {
 	t.Parallel()
-	// Create a temporary directory without any git structure
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "some", "file.go")
 	err := os.MkdirAll(filepath.Dir(filePath), 0o755)
@@ -92,8 +78,6 @@ func TestResolveBindingFromFilePath_NoGitDir(t *testing.T) {
 	assert.Equal(t, "", binding.IssueID)
 }
 
-// TestResolveBindingFromFilePath_NoIssueIDFile verifies that ResolveBindingFromFilePath
-// returns a ResolvedBinding with empty IssueID when the git dir exists but armature-issue-id file doesn't.
 func TestResolveBindingFromFilePath_NoIssueIDFile(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -112,8 +96,6 @@ func TestResolveBindingFromFilePath_NoIssueIDFile(t *testing.T) {
 	assert.Equal(t, "", binding.IssueID)
 }
 
-// TestResolveBindingFromFilePath_StopsAtFirstGitDir verifies that ResolveBindingFromFilePath
-// stops at the first .git directory it finds when walking up the directory tree.
 func TestResolveBindingFromFilePath_StopsAtFirstGitDir(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -123,7 +105,6 @@ func TestResolveBindingFromFilePath_StopsAtFirstGitDir(t *testing.T) {
 	fileDir := filepath.Join(childDir, "subdir")
 	filePath := filepath.Join(fileDir, "file.go")
 
-	// Create both .git directories
 	err := os.MkdirAll(parentGitDir, 0o755)
 	require.NoError(t, err)
 	err = os.MkdirAll(childGitDir, 0o755)
@@ -131,7 +112,6 @@ func TestResolveBindingFromFilePath_StopsAtFirstGitDir(t *testing.T) {
 	err = os.MkdirAll(fileDir, 0o755)
 	require.NoError(t, err)
 
-	// Write issue ID in child git dir only
 	issueIDFile := filepath.Join(childGitDir, "armature-issue-id")
 	err = os.WriteFile(issueIDFile, []byte("task-from-child"), 0o644)
 	require.NoError(t, err)
@@ -143,8 +123,6 @@ func TestResolveBindingFromFilePath_StopsAtFirstGitDir(t *testing.T) {
 	assert.Equal(t, childGitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromFilePath_TrimsWhitespace verifies that ResolveBindingFromFilePath
-// trims whitespace from the armature-issue-id file content.
 func TestResolveBindingFromFilePath_TrimsWhitespace(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -157,7 +135,6 @@ func TestResolveBindingFromFilePath_TrimsWhitespace(t *testing.T) {
 	err = os.MkdirAll(fileDir, 0o755)
 	require.NoError(t, err)
 
-	// Write issue ID with whitespace
 	issueIDFile := filepath.Join(gitDir, "armature-issue-id")
 	err = os.WriteFile(issueIDFile, []byte("  task-with-spaces  \n"), 0o644)
 	require.NoError(t, err)
@@ -168,9 +145,6 @@ func TestResolveBindingFromFilePath_TrimsWhitespace(t *testing.T) {
 	assert.Equal(t, "task-with-spaces", binding.IssueID)
 }
 
-// TestResolveBindingFromEvent_PreToolUse_WithFilePath verifies that
-// ResolveBindingFromEvent resolves binding from tool_input.file_path
-// for PreToolUse events.
 func TestResolveBindingFromEvent_PreToolUse_WithFilePath(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -187,7 +161,6 @@ func TestResolveBindingFromEvent_PreToolUse_WithFilePath(t *testing.T) {
 	err = os.WriteFile(issueIDFile, []byte("task-from-path"), 0o644)
 	require.NoError(t, err)
 
-	// Create a DecodedEventInfo with a file path
 	eventInfo := &DecodedEventInfo{
 		Kind:     EventPreToolUse,
 		FilePath: filePath,
@@ -200,9 +173,6 @@ func TestResolveBindingFromEvent_PreToolUse_WithFilePath(t *testing.T) {
 	assert.Equal(t, gitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromEvent_PreToolUse_NoFilePath_FallsBackToSession verifies that
-// ResolveBindingFromEvent falls back to session binding when no file path is available
-// for PreToolUse events.
 func TestResolveBindingFromEvent_PreToolUse_NoFilePath_FallsBackToSession(t *testing.T) {
 	t.Parallel()
 	eventInfo := &DecodedEventInfo{
@@ -218,9 +188,6 @@ func TestResolveBindingFromEvent_PreToolUse_NoFilePath_FallsBackToSession(t *tes
 	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
-// TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2 verifies that
-// ResolveBindingFromEvent uses session binding for Stop events, ignoring any
-// file paths.
 func TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -237,7 +204,6 @@ func TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	err = os.WriteFile(issueIDFile, []byte("task-from-path"), 0o644)
 	require.NoError(t, err)
 
-	// Even though there's a file path, Stop events should use session binding
 	eventInfo := &DecodedEventInfo{
 		Kind:     EventStop,
 		FilePath: filePath,
@@ -251,12 +217,10 @@ func TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromEvent_Bash_UsesSessionBinding verifies that
-// ResolveBindingFromEvent uses session binding for Bash events.
 func TestResolveBindingFromEvent_Bash_UsesSessionBinding(t *testing.T) {
 	t.Parallel()
 	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse, // Bash arrives as PreToolUse with Tool=="Bash"
+		Kind:     EventPreToolUse,
 		Tool:     "Bash",
 		FilePath: "/some/path/file.go",
 	}
@@ -269,14 +233,9 @@ func TestResolveBindingFromEvent_Bash_UsesSessionBinding(t *testing.T) {
 	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromEvent_DevinExec_UsesSessionBinding verifies that
-// ResolveBindingFromEvent uses session binding for Devin exec events, bypassing
-// path-based resolution per ADR-0007. This tests the fix for the shell-tool
-// recognition issue where Devin's "exec" tool was not recognized as a shell tool.
 func TestResolveBindingFromEvent_DevinExec_UsesSessionBinding(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
-	// Create a worktree with its own binding
 	worktreeDir := filepath.Join(tmpDir, "worktree")
 	worktreeGitDir := filepath.Join(tmpDir, "worktree-git-dir")
 	fileDir := filepath.Join(worktreeDir, "some", "path")
@@ -285,41 +244,29 @@ func TestResolveBindingFromEvent_DevinExec_UsesSessionBinding(t *testing.T) {
 	require.NoError(t, os.MkdirAll(worktreeGitDir, 0o755))
 	require.NoError(t, os.MkdirAll(fileDir, 0o755))
 
-	// Write a .git file pointing to the separate git dir (worktree layout)
 	gitFile := filepath.Join(worktreeDir, ".git")
 	require.NoError(t, os.WriteFile(gitFile, []byte("gitdir: "+worktreeGitDir+"\n"), 0o644))
 
-	// Write a binding in the worktree's git dir
 	issueIDFile := filepath.Join(worktreeGitDir, "armature-issue-id")
 	require.NoError(t, os.WriteFile(issueIDFile, []byte("worktree-binding"), 0o644))
 
-	// Create an event with Devin's exec tool and a file path in the worktree
 	eventInfo := &DecodedEventInfo{
 		Kind:     EventPreToolUse,
-		Tool:     "exec", // Devin's shell tool
+		Tool:     "exec",
 		FilePath: filePath,
 	}
 	sessionGitDir := "/session/git/dir"
 
-	// Get Devin's supported shell tools which includes "exec"
 	devinAdapter := NewDevinAdapter()
 	devinShellTools := devinAdapter.Capabilities().SupportedShellTools
 
 	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, devinShellTools)
 
 	require.NoError(t, err)
-	// Since "exec" should be recognized as a shell tool (per ADR-0007),
-	// binding should resolve to session level, not the worktree's path-based binding
 	assert.Equal(t, "session-binding", binding.IssueID, "exec tool should skip path-based resolution and use session binding")
 	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromEvent_CodexShell_UsesSessionBinding verifies that
-// ResolveBindingFromEvent recognizes Codex's native "shell" tool name (and the
-// "local_shell" alias seen in some harness versions) as a shell tool, bypassing
-// path-based resolution per ADR-0007. Codex's SupportedShellTools previously
-// only listed "Bash", which does not match the tool name Codex actually sends,
-// silently defeating the shell bypass for Codex sessions.
 func TestResolveBindingFromEvent_CodexShell_UsesSessionBinding(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -359,8 +306,6 @@ func TestResolveBindingFromEvent_CodexShell_UsesSessionBinding(t *testing.T) {
 	}
 }
 
-// TestResolveBindingFromEvent_EmptySessionBinding verifies that ResolveBindingFromEvent
-// handles empty session bindings gracefully.
 func TestResolveBindingFromEvent_EmptySessionBinding(t *testing.T) {
 	t.Parallel()
 	eventInfo := &DecodedEventInfo{
@@ -375,10 +320,6 @@ func TestResolveBindingFromEvent_EmptySessionBinding(t *testing.T) {
 	assert.Equal(t, "", binding.IssueID)
 }
 
-// TestBindingResolutionChain_REQ_HOOKBIND_T2 verifies the complete 4-step binding resolution
-// chain per ADR-0007: (1) file_path walk-up, (2) event-payload cwd, (3) session binding, (4) env.
-// This test exercises the most-specific-first priority and ensures event-payload cwd is consulted
-// between file_path and session binding for PreToolUse/PostToolUse events.
 func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 	t.Parallel()
 
@@ -398,7 +339,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-file-path"), 0o644)
 		require.NoError(t, err)
 
-		// Step 1 should resolve from file path, ignoring session binding
 		eventInfo := &DecodedEventInfo{
 			Kind:     EventPreToolUse,
 			FilePath: filePath,
@@ -427,7 +367,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-event-cwd"), 0o644)
 		require.NoError(t, err)
 
-		// Step 2: event-payload cwd should resolve when file_path is empty
 		eventInfo := &DecodedEventInfo{
 			Kind:     EventPreToolUse,
 			FilePath: "",
@@ -459,7 +398,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.MkdirAll(cwdDir, 0o755)
 		require.NoError(t, err)
 
-		// Write different issue IDs to both git dirs
 		fileIssueIDFile := filepath.Join(filePathGitDir, "armature-issue-id")
 		err = os.WriteFile(fileIssueIDFile, []byte("from-file-path"), 0o644)
 		require.NoError(t, err)
@@ -468,7 +406,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(cwdIssueIDFile, []byte("from-event-cwd"), 0o644)
 		require.NoError(t, err)
 
-		// Step 1 (file_path) should take precedence over step 2 (event cwd)
 		eventInfo := &DecodedEventInfo{
 			Kind:     EventPreToolUse,
 			FilePath: filePath,
@@ -484,7 +421,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 
 	t.Run("Step3_SessionBindingFallback", func(t *testing.T) {
 		t.Parallel()
-		// No file path, no event cwd -> should use session binding
 		eventInfo := &DecodedEventInfo{
 			Kind:     EventPreToolUse,
 			FilePath: "",
@@ -518,7 +454,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-path"), 0o644)
 		require.NoError(t, err)
 
-		// Bash events should ignore both file_path and event cwd
 		eventInfo := &DecodedEventInfo{
 			Kind:     EventPreToolUse,
 			Tool:     "Bash",
@@ -553,7 +488,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-path"), 0o644)
 		require.NoError(t, err)
 
-		// Stop events should ignore both file_path and event cwd
 		eventInfo := &DecodedEventInfo{
 			Kind:     EventStop,
 			FilePath: filePath,
@@ -569,9 +503,6 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 	})
 }
 
-// TestResolveBindingFromEvent_RelativeFilePath_JoinsWithEventCwd verifies that a
-// relative tool_input.file_path is resolved against the event-payload cwd rather
-// than the hook process's own (untrusted) working directory (finding 5).
 func TestResolveBindingFromEvent_RelativeFilePath_JoinsWithEventCwd(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -584,7 +515,7 @@ func TestResolveBindingFromEvent_RelativeFilePath_JoinsWithEventCwd(t *testing.T
 
 	eventInfo := &DecodedEventInfo{
 		Kind:     EventPreToolUse,
-		FilePath: filepath.Join("some", "path", "file.go"), // relative
+		FilePath: filepath.Join("some", "path", "file.go"),
 		Cwd:      worktreeDir,
 	}
 
@@ -595,9 +526,6 @@ func TestResolveBindingFromEvent_RelativeFilePath_JoinsWithEventCwd(t *testing.T
 	assert.Equal(t, gitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromEvent_RelativeFilePath_NoCwdFallsBackToSession verifies that
-// a relative file_path with no event cwd available does not get resolved against the
-// hook process cwd; it falls through to session binding instead.
 func TestResolveBindingFromEvent_RelativeFilePath_NoCwdFallsBackToSession(t *testing.T) {
 	t.Parallel()
 	eventInfo := &DecodedEventInfo{
@@ -613,10 +541,6 @@ func TestResolveBindingFromEvent_RelativeFilePath_NoCwdFallsBackToSession(t *tes
 	assert.Equal(t, sessionGitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromEvent_UnboundWorktree_ReturnsWorktreeGitDir verifies that
-// when the file path's worktree is found but has no armature-issue-id binding, the
-// worktree's own git dir is returned (not the session git dir), so violations get
-// logged where `arm merged` actually looks (finding 1).
 func TestResolveBindingFromEvent_UnboundWorktree_ReturnsWorktreeGitDir(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -625,7 +549,6 @@ func TestResolveBindingFromEvent_UnboundWorktree_ReturnsWorktreeGitDir(t *testin
 	filePath := filepath.Join(fileDir, "file.go")
 	require.NoError(t, os.MkdirAll(gitDir, 0o755))
 	require.NoError(t, os.MkdirAll(fileDir, 0o755))
-	// No armature-issue-id file written: worktree exists but is unbound.
 
 	eventInfo := &DecodedEventInfo{
 		Kind:     EventPreToolUse,
@@ -639,10 +562,6 @@ func TestResolveBindingFromEvent_UnboundWorktree_ReturnsWorktreeGitDir(t *testin
 	assert.Equal(t, gitDir, binding.GitDir, "should return the unbound worktree's git dir, not the session git dir")
 }
 
-// TestResolveBindingFromFilePath_FallsBackToLegacyTaskIDFile verifies that
-// ResolveBindingFromFilePath falls back to reading armature-task-id when
-// armature-issue-id doesn't exist, for compatibility with worktrees claimed
-// before the binding file was renamed (commit d52d78be).
 func TestResolveBindingFromFilePath_FallsBackToLegacyTaskIDFile(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -655,7 +574,6 @@ func TestResolveBindingFromFilePath_FallsBackToLegacyTaskIDFile(t *testing.T) {
 	err = os.MkdirAll(fileDir, 0o755)
 	require.NoError(t, err)
 
-	// Write legacy armature-task-id file only (no armature-issue-id)
 	taskIDFile := filepath.Join(gitDir, "armature-task-id")
 	err = os.WriteFile(taskIDFile, []byte("legacy-task-id"), 0o644)
 	require.NoError(t, err)
@@ -667,9 +585,6 @@ func TestResolveBindingFromFilePath_FallsBackToLegacyTaskIDFile(t *testing.T) {
 	assert.Equal(t, gitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID verifies that
-// when both armature-issue-id and armature-task-id exist, armature-issue-id
-// takes precedence.
 func TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -682,7 +597,6 @@ func TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID(t *testing.T) {
 	err = os.MkdirAll(fileDir, 0o755)
 	require.NoError(t, err)
 
-	// Write both files
 	issueIDFile := filepath.Join(gitDir, "armature-issue-id")
 	err = os.WriteFile(issueIDFile, []byte("new-issue-id"), 0o644)
 	require.NoError(t, err)
@@ -698,18 +612,12 @@ func TestResolveBindingFromFilePath_PrefersIssueIDOverTaskID(t *testing.T) {
 	assert.Equal(t, gitDir, binding.GitDir)
 }
 
-// TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding verifies that
-// when event Cwd is the worktree root (step 2 of the resolution chain), the binding
-// is found at <cwd>/.git/armature-issue-id. This test catches the bug where
-// resolveBindingFromFilePath(cwd) would do filepath.Dir(cwd), skipping the root's
-// own .git directory (finding P2).
 func TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
-	worktreeRoot := tmpDir // cwd is the worktree root itself
+	worktreeRoot := tmpDir
 	gitDir := filepath.Join(worktreeRoot, ".git")
 
-	// Create .git directory and armature-issue-id file at the worktree root
 	err := os.MkdirAll(gitDir, 0o755)
 	require.NoError(t, err)
 
@@ -717,12 +625,11 @@ func TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding(t *testi
 	err = os.WriteFile(issueIDFile, []byte("issue-at-root"), 0o644)
 	require.NoError(t, err)
 
-	// Create event with Cwd = worktree root, no FilePath (step 2 resolution)
 	eventInfo := &DecodedEventInfo{
 		Kind:     EventPreToolUse,
 		FilePath: "",
 		Cwd:      worktreeRoot,
-		Tool:     "Edit", // non-shell tool
+		Tool:     "Edit",
 	}
 
 	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
@@ -733,11 +640,6 @@ func TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding(t *testi
 	assert.Equal(t, "event_cwd", binding.ResolutionStep, "should resolve via event_cwd step")
 }
 
-// TestResolveBindingFromDir_UnreadableGitFile_ReportsBestEffortLocation verifies
-// that when the .git file in a worktree exists but can't be read (e.g. permission
-// denied), ResolveBindingFromDir still reports the discovered worktree location
-// (GitDir/Root) instead of dropping it, so callers can log violations against the
-// right worktree (finding P3).
 func TestResolveBindingFromDir_UnreadableGitFile_ReportsBestEffortLocation(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("running as root: chmod 000 does not prevent root from reading files")
@@ -759,21 +661,15 @@ func TestResolveBindingFromDir_UnreadableGitFile_ReportsBestEffortLocation(t *te
 	assert.Equal(t, tmpDir, binding.Root)
 }
 
-// TestResolveBindingFromEvent_UnboundWorktreeViaCwdOnly_ReturnsWorktreeGitDir
-// verifies that step 2 (event-payload cwd) alone can populate the unbound git
-// dir when step 1 (file_path) finds nothing at all (no FilePath present),
-// exercising the `unboundGitDir == "" && cwdBinding.GitDir != ""` branch.
 func TestResolveBindingFromEvent_UnboundWorktreeViaCwdOnly_ReturnsWorktreeGitDir(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	gitDir := filepath.Join(tmpDir, ".git")
 	require.NoError(t, os.MkdirAll(gitDir, 0o755))
-	// No armature-issue-id file written: worktree exists but is unbound.
 
 	eventInfo := &DecodedEventInfo{
 		Kind: EventPreToolUse,
-		// No FilePath: step 1 is skipped entirely, leaving unboundGitDir == "".
-		Cwd: tmpDir,
+		Cwd:  tmpDir,
 	}
 
 	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
@@ -783,8 +679,6 @@ func TestResolveBindingFromEvent_UnboundWorktreeViaCwdOnly_ReturnsWorktreeGitDir
 	assert.Equal(t, gitDir, binding.GitDir, "should return the unbound worktree's git dir found via cwd, not the session git dir")
 }
 
-// TestExtractFilePathFromToolInput covers ExtractFilePathFromToolInput's key
-// lookup order and the "changes" array fallback.
 func TestExtractFilePathFromToolInput(t *testing.T) {
 	t.Parallel()
 

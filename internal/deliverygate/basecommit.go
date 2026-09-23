@@ -115,32 +115,14 @@ func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 // independently after claim. It is used only for the no-record fallback
 // path below.
 func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy string) error {
-	// Prefer the branch recorded immutably at claim time over re-deriving it
-	// from the CURRENT issue type: the issue's type can be amended after
-	// claim (e.g. task -> epic, which has no branch mapping), and re-deriving
-	// from that amended type would make this check silently no-op, letting
-	// commits on an arbitrary scratch branch through. If a claimed-branch
-	// record exists, it wins even when DeriveBranchName(current type) would
-	// return "" — that mismatch is exactly the bypass this guards against, so
-	// it fails closed rather than skipping.
 	expectedBranch, recorded, err := RecordedClaimedBranch(worktreePath)
 	if err != nil {
 		return fmt.Errorf("read recorded claimed branch for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
 	}
 	if !recorded {
-		// No claimed-branch record (pre-migration worktree, claimed before this
-		// record existed): fall back to re-deriving from the current issue type.
 		expectedBranch = materialize.DeriveBranchName(issueType, issueID)
 		if expectedBranch == "" {
 			if claimedBy != "" {
-				// A pre-migration worktree (no armature-claimed-branch marker)
-				// for an issue that is STILL claimed must never be read as
-				// "nothing to check" just because the current type has no
-				// branch mapping — the issue may have been retyped (e.g.
-				// task -> epic) after claim specifically to route around this
-				// check while the claim, and whatever worktree/branch it's
-				// bound to, is still live. Absence of a record is not
-				// evidence of absence of a binding to verify: fail closed.
 				return fmt.Errorf(
 					"issue %s is claimed by %s but has no recorded claimed-branch marker and its "+
 						"current type %q has no branch mapping: cannot verify branch binding for a "+
@@ -215,17 +197,6 @@ func RecordedClaimedBranch(worktreePath string) (string, bool, error) {
 	return branch, true, nil
 }
 
-// DynamicBaseCommit recomputes the task branch's divergence point on demand
-// by merge-basing the current branch against its recorded parent branch
-// (see ParentBranchConfigKey / writeParentBranchConfigIfAbsent in
-// cmd/armature/claim.go). Unlike a SHA recorded once at claim time, this is
-// recomputed fresh on every gate check, so it stays correct even if the task
-// branch was rebased onto an updated parent tip after claim — a stale
-// recorded SHA would otherwise misattribute new sibling commits pulled in by
-// the rebase as in-scope diff, reintroducing the sibling-attribution bug this
-// mechanism exists to prevent. Returns an error if the current branch can't
-// be determined, no parent is recorded (worktrees claimed before this
-// existed), or the parent ref no longer resolves.
 func dynamicBaseCommit(git *adapters.Client) (string, error) {
 	currentBranch, err := git.CurrentBranch()
 	if err != nil || currentBranch == "" {
@@ -235,13 +206,6 @@ func dynamicBaseCommit(git *adapters.Client) (string, error) {
 	if err != nil || parentBranch == "" {
 		return "", fmt.Errorf("no recorded parent branch for %s: %w", currentBranch, err)
 	}
-	// A persisted literal "HEAD" is a stale record from before the
-	// detached-HEAD guard existed in claim.go (see writeParentBranchConfigIfAbsent):
-	// resolving the ref "HEAD" here would just mean the task branch's own tip,
-	// collapsing the merge-base to the task's HEAD and making every commit
-	// range for CommitReferenceCheck empty. Treat it the same as an
-	// absent/empty value so old bad records self-heal by falling back to
-	// RecordedBaseCommit instead of silently producing a wrong (empty) range.
 	if parentBranch == "HEAD" {
 		return "", fmt.Errorf("recorded parent branch for %s is the literal value \"HEAD\"\n"+
 			"(stale pre-fix record): treating as no usable parent branch", currentBranch)
