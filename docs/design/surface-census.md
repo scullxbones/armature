@@ -241,7 +241,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--ttl` | claim | int | Claim TTL in minutes (default 60) | **kept-evidence** |
 | `--worktree` | claim | string | Required worktree destination; a value-less form remains compatible and provisions .worktrees/<issue-id>, while an explicit value selects a new destination | **kept-evidence** |
 | `--from` | claim | string | Parent worktree whose current branch and tip seed an explicit new --worktree destination | **kept-evidence** |
-| `--force` | claim, merged, transition, sources accept-citation | bool | Override warnings or require confirmation | **kept-evidence** |
+| `--force` | claim, merged, sources accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |
 | `--msg` | note | string | Note message | **kept-evidence** |
 | `--note-id` | note | string | Note ID for deletion | **kept-evidence** |
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
