@@ -234,7 +234,7 @@ func TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1(t *testin
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): add feature")
 
 	// Test commit reference
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "valid conventional commit should pass")
 	assert.Empty(t, result.Remediation)
 }
@@ -260,7 +260,7 @@ func TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription(t *testing.T) 
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123):")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "bare subject with no description should fail")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -287,7 +287,7 @@ func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	runGit(t, tmpDir, "commit", "-m", "feat: generic feature")
 
 	// Test commit reference - should fail
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "commits without issue ID should fail")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -322,7 +322,7 @@ func TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC(t
 
 	runGit(t, tmpDir, "checkout", "task/TEST-123")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "matching conventional commit on main must satisfy CommitReference when the worktree is still on the stale task branch")
 	assert.Empty(t, result.Remediation)
 }
@@ -348,7 +348,7 @@ func TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "stale worktree with no matching commit on main must still fail")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -416,7 +416,7 @@ func TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC(t 
 
 	runGit(t, tmpDir, "checkout", "task/TEST-123")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "matching conventional commit on master must satisfy CommitReference when local main is stale and empty")
 	assert.Empty(t, result.Remediation)
 }
@@ -444,7 +444,7 @@ func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "oops(TEST-123): bypass convention")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "commit with disallowed type should fail")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -481,7 +481,7 @@ func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.
 	runGit(t, tmpDir, "commit", "-m", "unrelated integration commit")
 	runGit(t, tmpDir, "merge", "--no-ff", "feature-branch", "-m", "merge: TEST-123 integrate feature work")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "documented merge: ID description format should be accepted on a genuine merge commit")
 	assert.Empty(t, result.Remediation)
 }
@@ -509,7 +509,7 @@ func TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "merge: TEST-123 integrate feature work")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "merge: ID subject on a single-parent (non-merge) commit must be rejected")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -536,7 +536,7 @@ func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "no reference in this one")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "a match before base must not satisfy the check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -563,7 +563,7 @@ func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) 
 	// A conventional-commit-shaped but content-free commit.
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "fix(TEST-123): busywork")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "an empty commit must not satisfy the commit reference check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -592,7 +592,7 @@ func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): real fix")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a later real-content matching commit should still pass")
 	assert.Empty(t, result.Remediation)
 }
@@ -626,7 +626,7 @@ func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *te
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "revert the change")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "a matching commit whose change is fully reverted must not satisfy the check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -674,7 +674,7 @@ func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t 
 	runGit(t, tmpDir, "add", "other.txt")
 	runGit(t, tmpDir, "commit", "-m", "add trivial comment")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a matching commit reference plus a non-empty net diff from elsewhere in the range satisfies the check")
 	assert.Empty(t, result.Remediation)
 }
@@ -703,7 +703,7 @@ func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testin
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale line")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a deletion-only commit whose deletion is never undone must satisfy the check")
 	assert.Empty(t, result.Remediation)
 }
@@ -734,7 +734,7 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "restore the line")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "a deletion-only commit whose deletion is later undone must not satisfy the check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -776,7 +776,7 @@ func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_RE
 	runGit(t, tmpDir, "add", "file.go")
 	runGit(t, tmpDir, "commit", "-m", "gofmt cleanup")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit reference plus a non-empty net diff satisfies the check even after a cosmetic reformat")
 	assert.Empty(t, result.Remediation)
@@ -808,7 +808,7 @@ func TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4(t *testing.
 	runGit(t, tmpDir, "add", "café.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): add café helper")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a matching commit adding a non-ASCII-named file must be recognized as surviving")
 	assert.Empty(t, result.Remediation)
 }
@@ -842,7 +842,7 @@ func TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4(t *t
 	runGit(t, tmpDir, "mv", "oldname.txt", "newname.txt")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): rename to newname")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a content-preserving (pure) rename must be recognized as a surviving delivered change")
 	assert.Empty(t, result.Remediation)
 }
@@ -1113,7 +1113,7 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 			initGitRepo(t, tmpDir)
 			baseCommit := tc.setup(t, tmpDir)
 
-			result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+			_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 			assert.Equal(t, tc.expectedPass, result.Pass, "case %q", tc.name)
 			if tc.expectedPass {
 				assert.Empty(t, result.Remediation)
@@ -1175,7 +1175,7 @@ func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 	runGit(t, tmpDir, "rm", "gone.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale file")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a whole-file deletion whose deletion is never undone must satisfy the check")
 	assert.Empty(t, result.Remediation)
 }
@@ -1222,7 +1222,7 @@ func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_R
 	runGit(t, tmpDir, "rm", "source.txt")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: remove source file")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit reference plus a non-empty net diff satisfies the check regardless of copy/rename source-path bookkeeping")
 	assert.Empty(t, result.Remediation)
@@ -1260,7 +1260,7 @@ func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_
 	runGit(t, tmpDir, "checkout", "-")
 	runGit(t, tmpDir, "merge", "--no-ff", "-m", "fix(TEST-123): merge feature", "feature-branch")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a merge commit whose subject matches and whose first-parent diff carries real content must be recognized as delivering")
 	assert.Empty(t, result.Remediation)
@@ -1297,7 +1297,7 @@ func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffChec
 	runGit(t, tmpDir, "add", "asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: replace binary asset")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit reference plus a non-empty net diff satisfies the check for binary content too")
 	assert.Empty(t, result.Remediation)
@@ -1331,7 +1331,7 @@ func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testin
 	runGit(t, tmpDir, "rm", "stale-asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale binary asset")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit that deletes a binary file, with the deletion never undone, must satisfy the check")
 	assert.Empty(t, result.Remediation)

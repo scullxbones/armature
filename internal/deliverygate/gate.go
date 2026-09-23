@@ -33,8 +33,7 @@ type GateResult struct {
 // Returns a structured GateResult with per-check results and remediations.
 // Performs no state mutation — only reads and reports.
 func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *GateResult {
-	git := adapters.New(worktreePath)
-	head, commitRef := deliveryRef(git, baseCommit, issueID)
+	head, commitRef := commitReferenceCheck(worktreePath, baseCommit, issueID)
 	return &GateResult{
 		CleanTree:        cleanTreeCheck(worktreePath),
 		ScopeContainment: scopeContainmentCheck(worktreePath, baseCommit, head, scope),
@@ -172,10 +171,9 @@ func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string
 // current branch (as produced by GatedBaseCommit), not an arbitrary ref —
 // LogRange and the net diff below use two-dot (baseCommit..HEAD) semantics,
 // which is only correct when baseCommit is the real divergence point.
-func commitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
+func commitReferenceCheck(worktreePath, baseCommit, issueID string) (string, CheckResult) {
 	git := adapters.New(worktreePath)
-	_, result := deliveryRef(git, baseCommit, issueID)
-	return result
+	return deliveryRef(git, baseCommit, issueID)
 }
 
 // deliveryRef picks one delivery head for the gate pass: worktree HEAD when
