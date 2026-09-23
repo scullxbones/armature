@@ -79,15 +79,7 @@ func resolveCitationChecks(issue materialize.Issue, knownSources map[string]sour
 		return nil
 	}
 
-	globallyAccepted := false
-	accepted := make(map[string]bool, len(issue.CitationAcceptances))
-	for _, acceptance := range issue.CitationAcceptances {
-		if acceptance.SourceEntryID == "" {
-			globallyAccepted = true
-		} else {
-			accepted[acceptance.SourceEntryID] = true
-		}
-	}
+	emptySourceEntryIDAcceptsAll, accepted := citationAcceptanceIndex(issue.CitationAcceptances)
 
 	checks := make([]CitationCheck, 0, len(issue.SourceLinks))
 	for _, link := range issue.SourceLinks {
@@ -97,14 +89,26 @@ func resolveCitationChecks(issue materialize.Issue, knownSources map[string]sour
 		if _, ok := knownSources[link.SourceEntryID]; !ok {
 			checks = append(checks, CitationCheck{
 				SourceEntryID: link.SourceEntryID,
-				Accepted:      globallyAccepted,
+				Accepted:      emptySourceEntryIDAcceptsAll,
 			})
 			continue
 		}
 		checks = append(checks, CitationCheck{
 			SourceEntryID: link.SourceEntryID,
-			Accepted:      globallyAccepted || accepted[link.SourceEntryID],
+			Accepted:      emptySourceEntryIDAcceptsAll || accepted[link.SourceEntryID],
 		})
 	}
 	return checks
+}
+
+func citationAcceptanceIndex(acceptances []materialize.CitationAcceptance) (emptySourceEntryIDAcceptsAll bool, byID map[string]bool) {
+	byID = make(map[string]bool, len(acceptances))
+	for _, acceptance := range acceptances {
+		if acceptance.SourceEntryID == "" {
+			emptySourceEntryIDAcceptsAll = true
+			continue
+		}
+		byID[acceptance.SourceEntryID] = true
+	}
+	return emptySourceEntryIDAcceptsAll, byID
 }

@@ -99,7 +99,7 @@ func getWorktreeHEAD(gitDir string) (string, error) {
 
 	headRef := strings.TrimSpace(string(content))
 
-	if len(headRef) == 40 || len(headRef) == 64 {
+	if headRefLooksLikeSHA(headRef) {
 		return headRef, nil
 	}
 
@@ -115,6 +115,11 @@ func getWorktreeHEAD(gitDir string) (string, error) {
 	}
 
 	return headRef, nil
+}
+
+func headRefLooksLikeSHA(headRef string) bool {
+	n := len(headRef)
+	return n == 40 || n == 64
 }
 
 func fallbackGetHEAD(gitDir string) (string, error) {
@@ -223,8 +228,12 @@ func formatActivityLogEntry(entry ActivityEntry) string {
 
 	data, err := json.Marshal(line)
 	if err != nil {
-		return fmt.Sprintf(`{"timestamp":%q,"command":"","exit_code":0,"exit_code_known":false,"head_sha":%q,"output_hash":""}`,
-			entry.Timestamp, entry.WorktreeHead)
+		return fallbackActivityJSONL(entry)
 	}
 	return string(data)
+}
+
+func fallbackActivityJSONL(entry ActivityEntry) string {
+	return fmt.Sprintf(`{"timestamp":%q,"command":"","exit_code":0,"exit_code_known":false,"head_sha":%q,"output_hash":""}`,
+		entry.Timestamp, entry.WorktreeHead)
 }
