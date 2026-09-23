@@ -95,6 +95,27 @@ func TestLoadIssueNormalization(t *testing.T) {
 	assert.Equal(t, []string{"docs/plan.md"}, loaded.ContextFiles)
 }
 
+func TestLoadIssue_PreservesCommaInContextFilePath_REQ_MATENC_S1_T1(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	issuePath := filepath.Join(dir, "task-01.json")
+
+	raw := []byte(`{
+		"id": "task-01",
+		"type": "task",
+		"status": "open",
+		"title": "Fix auth",
+		"scope": ["a.go,b.go"],
+		"context_files": ["docs/design,v2.md"]
+	}`)
+	require.NoError(t, os.WriteFile(issuePath, raw, 0644))
+
+	loaded, err := LoadIssue(issuePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.go", "b.go"}, loaded.Scope)
+	assert.Equal(t, []string{"docs/design,v2.md"}, loaded.ContextFiles)
+}
+
 func TestIssueHeldByExactWorkerAndClaimToken_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
 
