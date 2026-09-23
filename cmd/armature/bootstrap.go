@@ -34,7 +34,7 @@ type BootstrapResult struct {
 	HarnessSetup []bootstrap.HarnessArtifactResult `json:"harness_setup"`
 }
 
-func cmdOutForFormat(cmd *cobra.Command, format string) *cobra.Command {
+func silenceHumanStdoutWhenStructured(cmd *cobra.Command, format string) *cobra.Command {
 	if format == "json" || format == "agent" {
 		silentCmd := &cobra.Command{}
 		silentCmd.SetOut(io.Discard)
@@ -112,7 +112,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 				}
 			}
 
-			repoSetupResult, err := runRepoSetup(cmdOutForFormat(cmd, format), repoPath)
+			repoSetupResult, err := runRepoSetup(silenceHumanStdoutWhenStructured(cmd, format), repoPath)
 			if err != nil {
 				if format == "json" || format == "agent" {
 					repoSetupResult.Status = "error"
@@ -129,7 +129,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 				return fmt.Errorf("repo setup failed: %w", err)
 			}
 
-			harnessResults, err := executeHarnessSetup(cmdOutForFormat(cmd, format), plan, repoPath, global)
+			harnessResults, err := executeHarnessSetup(silenceHumanStdoutWhenStructured(cmd, format), plan, repoPath, global)
 			if err != nil {
 				if (format == "json" || format == "agent") && len(harnessResults) > 0 {
 					result := BootstrapResult{
@@ -252,7 +252,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		}
 
 		if row.PluginMetadata == bootstrap.ActionInstall {
-			pluginName, err := getPluginNameFromFS(skillsembed.SkillsFS)
+			pluginName, err := pluginNameFromSkillsFS(skillsembed.SkillsFS)
 			if err != nil {
 				return results, fmt.Errorf("extract plugin name: %w", err)
 			}
@@ -1068,11 +1068,11 @@ func updateGitExclude(repoPath string, addPattern, removePattern string) error {
 }
 
 func updateGitExcludeTracked(repoPath string, addPattern, removePattern string) (bool, error) {
-	release, err := acquireGitExcludeLock(repoPath)
+	flock, err := acquireBlockingGitExcludeFlock(repoPath)
 	if err != nil {
 		return false, err
 	}
-	defer release()
+	defer flock.Release()
 	return updateGitExcludeTrackedLocked(repoPath, addPattern, removePattern)
 }
 

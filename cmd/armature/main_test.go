@@ -114,11 +114,10 @@ func getTestContext(t *testing.T, repo string) *config.Context {
 
 func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
-	workerID := workerIDBestEffort(repo)
+	workerID := slottedWorkerIDBestEffort(repo)
 	if workerID == "" {
-		workerID = "default"
+		workerID = slottedWorkerID("default").String()
 	}
-	workerID = slottedWorkerID(workerID).String()
 	if _, err := os.Stat(filepath.Join(repo, ".arm", ".git")); err == nil {
 		return filepath.Join(repo, ".armature", "state", workerID)
 	}

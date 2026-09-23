@@ -257,7 +257,7 @@ in the same clone fails fast with a clear error instead of racing. See
 moved, at the canonical path, in this clone. The complete set of commands
 that mutate git worktrees is: `arm bootstrap` (the `_armature` worktree, a
 different path), `arm merged` (removes a worktree for an already-`done`
-issue), and `arm claim` (serialized in-clone by `acquireClaimLock`). `arm
+issue), and `arm claim` (serialized in-clone by `tryAcquirePessimisticCloneClaimFlock`). `arm
 transition` never creates, moves, or opens a worktree — it appends an op and
 may run a read-only delivery gate. Therefore a transition landing inside the
 window between the `stillOwns()` recheck and the destructive call cannot
@@ -266,7 +266,8 @@ serial schedule in which cleanup completes and the transition lands
 immediately after. That ordering is always reachable and no lock can prevent
 it. Consequently, serializing `arm transition` through the per-issue claim
 lock is explicitly rejected: it removes no reachable bad state, and because
-`acquireClaimLock` is non-blocking and fails fast, it would make an unrelated
+`tryAcquirePessimisticCloneClaimFlock` (`pessimisticCloneClaimFlock`,
+non-blocking TryLock) fails fast, it would make an unrelated
 concurrent `arm claim` turn ordinary transitions into hard errors.
 
 ---

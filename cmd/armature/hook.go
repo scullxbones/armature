@@ -144,7 +144,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 
-	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, slottedWorkerID(workerID).String())
+	logPath := opsLogPath(ctx.IssuesDir, slottedWorkerID(workerID).String())
 
 	allOps, err := ops.ReadLog(logPath)
 	if err != nil {
@@ -157,41 +157,34 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 	}
 	now := time.Now().Unix()
 
-	claimedAt := make(map[string]int64)
-	lastHeartbeat := make(map[string]int64)
-	claimTTL := make(map[string]int)
-	transitioned := make(map[string]bool)
-	lastTransitionAt := make(map[string]int64)
+	clocksByIssue := make(map[string]*claimOwnerClocks)
 
 	for _, op := range allOps {
+		c := clocksByIssue[op.TargetID]
+		if c == nil {
+			c = &claimOwnerClocks{}
+			clocksByIssue[op.TargetID] = c
+		}
 		switch op.Type {
 		case ops.OpClaim:
-			claimedAt[op.TargetID] = op.Timestamp
-			claimTTL[op.TargetID] = op.Payload.TTL
+			c.claimedAt = op.Timestamp
+			c.ttl = op.Payload.TTL
 		case ops.OpHeartbeat:
-			if op.Timestamp > lastHeartbeat[op.TargetID] {
-				lastHeartbeat[op.TargetID] = op.Timestamp
-			}
+			c.recordHeartbeat(op.Timestamp)
 		case ops.OpTransition:
-			if ops.IsTerminalStatus(op.Payload.To) {
-				transitioned[op.TargetID] = true
-			}
-			if op.Timestamp > lastTransitionAt[op.TargetID] {
-				lastTransitionAt[op.TargetID] = op.Timestamp
-			}
+			c.recordTransitionAt(op.Timestamp, op.Payload.To)
 		}
 	}
 
-	for issueID, ca := range claimedAt {
-		if transitioned[issueID] {
+	for issueID, c := range clocksByIssue {
+		if c.claimedAt == 0 || c.transitioned {
 			continue
 		}
-		ttl := claimTTL[issueID]
+		ttl := c.ttl
 		if ttl <= 0 {
 			ttl = defaultTTL
 		}
-		last := claimPkg.FoldLastActivity(ca, lastHeartbeat[issueID], lastTransitionAt[issueID])
-		if !claimPkg.IsClaimStale(last, ttl, now) {
+		if !claimPkg.IsClaimStale(c.lastActivity(), ttl, now) {
 			return issueID
 		}
 	}

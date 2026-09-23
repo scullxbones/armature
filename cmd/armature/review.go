@@ -124,7 +124,7 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	}
 	resolvedIssueID := binding.IssueID
 	if resolvedIssueID == "" && binding.GitDir != "" {
-		resolvedIssueID = resolveIssueBinding(binding.GitDir)
+		resolvedIssueID = issueBindingFromGitDirOrEnv(binding.GitDir)
 	}
 	activityLogPath := ""
 	if binding.GitDir != "" && resolvedIssueID == issueID {

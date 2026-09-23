@@ -51,25 +51,37 @@ func tryAcquirePessimisticCloneClaimFlock(repoPath, issueID string) (pessimistic
 	}}, nil
 }
 
-func acquireGitExcludeLock(repoPath string) (release func(), err error) {
+// blockingGitExcludeFlock is the clone-wide git exclude lock (blocking Lock).
+// Distinct from pessimisticCloneClaimFlock, which is per-issue TryLock.
+type blockingGitExcludeFlock struct {
+	release func()
+}
+
+func (f blockingGitExcludeFlock) Release() {
+	if f.release != nil {
+		f.release()
+	}
+}
+
+func acquireBlockingGitExcludeFlock(repoPath string) (blockingGitExcludeFlock, error) {
 	gitDir, err := resolveCommonGitDir(repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("resolve git dir for exclude lock: %w", err)
+		return blockingGitExcludeFlock{}, fmt.Errorf("resolve git dir for exclude lock: %w", err)
 	}
 	lockPath := filepath.Join(gitDir, "armature-git-exclude.lock")
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // fixed lock name in this clone's git dir
 	if err != nil {
-		return nil, fmt.Errorf("open git exclude lock file: %w", err)
+		return blockingGitExcludeFlock{}, fmt.Errorf("open git exclude lock file: %w", err)
 	}
 	if err := filelock.Lock(f); err != nil {
 		bestEffortClose(f)
-		return nil, fmt.Errorf("acquire git exclude lock: %w", err)
+		return blockingGitExcludeFlock{}, fmt.Errorf("acquire git exclude lock: %w", err)
 	}
 
-	return func() {
+	return blockingGitExcludeFlock{release: func() {
 		swallowErr(filelock.Unlock(f))
 		bestEffortClose(f)
-	}, nil
+	}}, nil
 }
 
 func resolveCommonGitDir(repoPath string) (string, error) {
