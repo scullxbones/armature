@@ -128,7 +128,6 @@ func TestResolverTreatsGlobalAcceptanceAsCitingAllSources(t *testing.T) {
 	})
 	require.NoError(t, sources.WriteManifest(sourcesDir, manifest))
 
-	// arm accept-citation writes CitationAcceptance with empty SourceEntryID
 	require.NoError(t, materialize.WriteIssue(issuesDir, materialize.Issue{
 		ID:    "TASK-3",
 		Title: "Linked source task",

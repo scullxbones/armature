@@ -1,18 +1,5 @@
 package harnesspolicy_test
 
-// This file exists specifically to catch drift between the two independent
-// scope-matching call sites: internal/claim.IsWithinScope (used by the
-// delivery gate's scope-containment check) and
-// internal/harnesspolicy.ScopePolicy.CheckPaths (used by the worker-facing
-// scope gate). Both packages route through the shared internal/scopematch
-// leaf package, but nothing previously asserted they actually agree on the
-// same input -- four separate PR review rounds (trailing slash, "**"
-// doublestar, "." root, "./" prefix) each caught a one-off divergence
-// between hand-ported copies of this logic before internal/scopematch was
-// extracted. This table-driven test exists so any future reintroduction of
-// bespoke matching logic in either caller is caught immediately instead of
-// via another review round.
-
 import (
 	"testing"
 

@@ -79,8 +79,6 @@ func resolveCitationChecks(issue materialize.Issue, knownSources map[string]sour
 		return nil
 	}
 
-	// An accept-citation op with no SourceEntryID is a global acceptance that
-	// covers all linked sources (matching the CLI behaviour of arm accept-citation).
 	globallyAccepted := false
 	accepted := make(map[string]bool, len(issue.CitationAcceptances))
 	for _, acceptance := range issue.CitationAcceptances {

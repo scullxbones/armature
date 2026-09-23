@@ -135,8 +135,6 @@ func TestScopePolicyDoubleStarDoesNotMatchSiblingPrefixCollision(t *testing.T) {
 	t.Parallel()
 	policy := NewScopePolicy([]string{"internal/**"})
 
-	// "internal-x" shares the literal prefix "internal" with the scope "internal/**"
-	// but is not a path under "internal/"; it must not be allowed.
 	blocked := policy.CheckPaths([]string{"internal-x/foo.go"})
 	require.False(t, blocked.Allowed, "internal/** must not match sibling paths that merely share a string prefix")
 

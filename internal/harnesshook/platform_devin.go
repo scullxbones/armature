@@ -53,8 +53,6 @@ func (a *DevinAdapter) OwnsConfig(workdir string) (bool, error) {
 		return true, nil
 	}
 
-	// Check for legacy configs written by the previous version that contain
-	// "arm harness-hook" in the command but lack the managed marker.
 	if strings.Contains(string(data), "arm harness-hook") {
 		return true, nil
 	}

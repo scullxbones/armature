@@ -7,22 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1 is a comprehensive
-// conformance matrix that verifies every combination of:
-//   - Tool class (Edit, Bash, etc.)
-//   - Path type (in scope, out of scope, outside worktree)
-//
-// ScopePolicy itself has no notion of binding state (bound active, bound
-// inactive/stale, unbound) — that's resolved one layer up, in
-// internal/harnesshook (see conformance_test.go's BindingStates subtest for
-// bound active/unbound) and, for the stale ("bound inactive") pass-through
-// case specifically, in cmd/armature/harness_hook_test.go's
-// TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2, which is
-// the layer that actually models claim staleness and drives it through the
-// pass-through decision path.
-//
-// The matrix drives policy decisions: allow or block for a given path set.
-// This is the data-centric test suite for scope policy validation.
 func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -33,9 +17,7 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 		expectMsg   string
 	}
 
-	// Test cases covering the binding state x tool x path matrix
 	tests := []testCase{
-		// ========== In-Scope Paths (Tool: Edit, Binding: Bound Active) ==========
 		{
 			name:        "matrix_bound_edit_in_scope_single_file_allow",
 			scope:       []string{"internal/"},
@@ -58,7 +40,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "within task scope",
 		},
 
-		// ========== Out-of-Scope Paths (Tool: Edit, Binding: Bound Active) ==========
 		{
 			name:        "matrix_bound_edit_out_of_scope_single_file_block",
 			scope:       []string{"internal/"},
@@ -81,7 +62,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "outside task scope",
 		},
 
-		// ========== Outside Worktree Paths (Tool: Edit, Binding: Bound Active) ==========
 		{
 			name:        "matrix_bound_edit_outside_worktree_traversal_block",
 			scope:       []string{"internal/"},
@@ -97,7 +77,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "outside task scope",
 		},
 
-		// ========== Root Scope (.) - Universal Allow ==========
 		{
 			name:        "matrix_bound_edit_root_scope_any_file_allow",
 			scope:       []string{"."},
@@ -113,7 +92,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "within task scope",
 		},
 
-		// ========== Glob Patterns ==========
 		{
 			name:        "matrix_bound_edit_glob_single_star_allow",
 			scope:       []string{"internal/*.go"},
@@ -143,7 +121,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "within task scope",
 		},
 
-		// ========== Empty Scope (Unbound) ==========
 		{
 			name:        "matrix_unbound_empty_scope_any_path_block",
 			scope:       []string{},
@@ -159,7 +136,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "task has no declared scope",
 		},
 
-		// ========== Multiple Scope Entries (OR logic) ==========
 		{
 			name:        "matrix_multiple_scopes_path_matches_first_allow",
 			scope:       []string{"internal/", "cmd/"},
@@ -182,7 +158,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "outside task scope",
 		},
 
-		// ========== Multiple Paths: All Must Match (AND logic per path) ==========
 		{
 			name:        "matrix_multiple_paths_all_in_scope_allow",
 			scope:       []string{"internal/"},
@@ -205,7 +180,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "outside task scope",
 		},
 
-		// ========== Absolute Paths (normalized by root) ==========
 		{
 			name:        "matrix_absolute_path_in_scope_allow",
 			scope:       []string{"internal/"},
@@ -221,7 +195,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "outside task scope",
 		},
 
-		// ========== Path Cleaning (. and .. normalization) ==========
 		{
 			name:        "matrix_path_with_dot_segments_cleaned_allow",
 			scope:       []string{"internal/"},
@@ -244,7 +217,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "outside task scope",
 		},
 
-		// ========== Dogfood Bypass Cases ==========
 		{
 			name:        "dogfood_case_1_makefile_out_of_scope_block",
 			scope:       []string{"internal/harnesshook/"},
@@ -267,13 +239,12 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 			expectMsg:   "outside task scope",
 		},
 
-		// ========== Edge Cases ==========
 		{
 			name:        "matrix_empty_path_in_scope_allow",
 			scope:       []string{"internal/"},
 			paths:       []string{},
 			expectAllow: true,
-			expectMsg:   "", // No paths means no violations
+			expectMsg:   "",
 		},
 		{
 			name:        "matrix_dot_slash_prefix_normalized_allow",
@@ -314,8 +285,6 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 	}
 }
 
-// TestScopeMatrix_DoubleStarEdgeCases_REQ_TOPTIER_S5_T1 verifies edge cases
-// for ** (doublestar) glob patterns.
 func TestScopeMatrix_DoubleStarEdgeCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -386,8 +355,6 @@ func TestScopeMatrix_DoubleStarEdgeCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 	}
 }
 
-// TestScopeMatrix_ScopeViolationMessages_REQ_TOPTIER_S5_T1 verifies that
-// violation messages are clear and include all necessary information.
 func TestScopeMatrix_ScopeViolationMessages_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
@@ -449,8 +416,6 @@ func TestScopeMatrix_ScopeViolationMessages_REQ_TOPTIER_S5_T1(t *testing.T) {
 	}
 }
 
-// TestScopeMatrix_AbsoluteVsRelativePaths_REQ_TOPTIER_S5_T1 verifies that
-// absolute and relative paths are normalized correctly with a provided root.
 func TestScopeMatrix_AbsoluteVsRelativePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 	t.Parallel()
 	const (
