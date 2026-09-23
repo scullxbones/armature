@@ -65,6 +65,38 @@ func TestDeliveryGateBlocksMissingCommitReference_REQ_LNGHZN_S4_T2(t *testing.T)
 	assert.Contains(t, err.Error(), "delivery gate")
 }
 
+// TestTransitionDoneAcceptsSquashOnMainWhenClaimWorktreeStale_REQ_MATENC
+// simulates the dogfood failure: evidence lives only on main after a
+// squash-land, the claim worktree is still on the stale task branch, and
+// `arm transition --to done` must succeed without --skip-delivery-gate.
+func TestTransitionDoneAcceptsSquashOnMainWhenClaimWorktreeStale_REQ_MATENC(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	run(t, repo, "git", "branch", "-M", "main")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--id", "gate-squash-01", "--title", "Gate squash", "--type", "task", "--scope", "foo.go")
+	require.NoError(t, err)
+
+	wt := filepath.Join(repo, ".worktrees", "gate-squash-01")
+	_, err = runTrls(t, repo, "claim", "gate-squash-01", "--worktree")
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "foo.go"), []byte("package foo\n"), 0o644))
+	run(t, repo, "git", "add", "foo.go")
+	run(t, repo, "git", "commit", "-m", "feat(gate-squash-01): land squash (#217)")
+
+	head, err := adapters.New(wt).CurrentBranch()
+	require.NoError(t, err)
+	require.Equal(t, "task/gate-squash-01", head, "claim worktree must remain on the stale task branch")
+
+	_, err = runTrls(t, wt, "transition", "--issue", "gate-squash-01", "--to", "done", "--outcome", "test", "--force")
+	require.NoError(t, err, "main-only squash evidence must pass the delivery gate without --skip-delivery-gate")
+}
+
 func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

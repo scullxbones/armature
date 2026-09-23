@@ -112,7 +112,7 @@ func TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1(t *testing.T
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST): modify file1")
 
 	// Test scope containment
-	result := scopeContainmentCheck(tmpDir, baseCommit, []string{"pkg/**"})
+	result := scopeContainmentCheck(tmpDir, baseCommit, "HEAD", []string{"pkg/**"})
 	assert.True(t, result.Pass, "all files within scope should pass")
 	assert.Empty(t, result.Remediation)
 }
@@ -142,7 +142,7 @@ func TestScopeContainmentCheck_FileOutsideScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST): add main")
 
 	// Test with scope that excludes the new file
-	result := scopeContainmentCheck(tmpDir, baseCommit, []string{"pkg/**"})
+	result := scopeContainmentCheck(tmpDir, baseCommit, "HEAD", []string{"pkg/**"})
 	assert.False(t, result.Pass, "file outside scope should fail")
 	assert.NotEmpty(t, result.Remediation)
 	assert.Contains(t, result.Remediation, "cmd/main.go")
@@ -178,7 +178,7 @@ func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *te
 	runGit(t, tmpDir, "mv", "outside/a.go", "inside/a.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST): rename outside to inside")
 
-	result := scopeContainmentCheck(tmpDir, baseCommit, []string{"inside/**"})
+	result := scopeContainmentCheck(tmpDir, baseCommit, "HEAD", []string{"inside/**"})
 	assert.False(t, result.Pass, "rename from out-of-scope path should fail scope containment")
 	assert.Contains(t, result.Remediation, "outside/a.go")
 }
@@ -206,7 +206,7 @@ func TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4(t *testing.T
 	runGit(t, tmpDir, "mv", "pkg/old.go", "pkg/new.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST): rename within scope")
 
-	result := scopeContainmentCheck(tmpDir, baseCommit, []string{"pkg/**"})
+	result := scopeContainmentCheck(tmpDir, baseCommit, "HEAD", []string{"pkg/**"})
 	assert.True(t, result.Pass, "rename fully within scope should pass")
 	assert.Empty(t, result.Remediation)
 }
@@ -234,7 +234,7 @@ func TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1(t *testin
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): add feature")
 
 	// Test commit reference
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "valid conventional commit should pass")
 	assert.Empty(t, result.Remediation)
 }
@@ -260,7 +260,7 @@ func TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription(t *testing.T) 
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123):")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "bare subject with no description should fail")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -287,9 +287,233 @@ func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	runGit(t, tmpDir, "commit", "-m", "feat: generic feature")
 
 	// Test commit reference - should fail
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "commits without issue ID should fail")
 	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC
+// covers the CA+PJ squash-land path: the claim worktree stays on the old
+// task-branch tip (no matching conventional commit), while main has
+// `feat(ISSUE): … (#PR)`. CommitReference must accept the primary-branch
+// evidence without requiring the worktree to be reset.
+func TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	require.NoError(t, os.WriteFile(file, []byte("stale task tip"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	runGit(t, tmpDir, "checkout", "main")
+	require.NoError(t, os.WriteFile(file, []byte("squash landed"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): land squash (#217)")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "matching conventional commit on main must satisfy CommitReference when the worktree is still on the stale task branch")
+	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_MATENC
+// keeps the fail-closed path: a stale task branch plus a primary branch
+// that also lacks a matching commit must not pass.
+func TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	require.NoError(t, os.WriteFile(file, []byte("stale task tip"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "stale worktree with no matching commit on main must still fail")
+	assert.NotEmpty(t, result.Remediation)
+}
+
+// TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC
+// covers the P1 hole: empty/stale worktree HEAD has no delivery diff (vacuously
+// in scope), while main's squash commit changes an out-of-scope file. Scope
+// and CommitReference must share that primary-branch delivery ref so the
+// gate fails instead of accepting the empty worktree range.
+func TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	inFile := filepath.Join(tmpDir, "pkg", "in.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+
+	runGit(t, tmpDir, "checkout", "main")
+	outFile := filepath.Join(tmpDir, "cmd", "out.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(outFile), 0755))
+	require.NoError(t, os.WriteFile(outFile, []byte("package main\n"), 0644))
+	runGit(t, tmpDir, "add", "cmd/out.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): land squash (#217)")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	gate := DeliveryGate(tmpDir, "TEST-123", baseCommit, []string{"pkg/**"})
+	assert.True(t, gate.CleanTree.Pass, "claim worktree is clean")
+	assert.True(t, gate.CommitReference.Pass, "matching squash on main must still satisfy CommitReference")
+	assert.False(t, gate.ScopeContainment.Pass, "out-of-scope squash on main must fail scope even when worktree HEAD is empty")
+	assert.Contains(t, gate.ScopeContainment.Remediation, "cmd/out.go")
+}
+
+// TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC
+// covers the follow-up P1: after an in-scope squash lands on main, an
+// unrelated later commit that touches an out-of-scope path must not fail
+// ScopeContainment for this issue. Primary fallback isolates the complete
+// landing (enclosing merge, or first-parent..SHA for a squash) rather than
+// scoping claimBase..primaryTip.
+func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	inFile := filepath.Join(tmpDir, "pkg", "in.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	stale := filepath.Join(tmpDir, "pkg", "stale.go")
+	require.NoError(t, os.WriteFile(stale, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/stale.go")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	runGit(t, tmpDir, "checkout", "main")
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n\nfunc In() {}\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): land squash")
+
+	outFile := filepath.Join(tmpDir, "cmd", "unrelated.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(outFile), 0755))
+	require.NoError(t, os.WriteFile(outFile, []byte("package main\n"), 0644))
+	runGit(t, tmpDir, "add", "cmd/unrelated.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(OTHER-1): unrelated landing")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	gate := DeliveryGate(tmpDir, "TEST-123", baseCommit, []string{"pkg/**"})
+	assert.True(t, gate.CleanTree.Pass, "claim worktree is clean")
+	assert.True(t, gate.CommitReference.Pass, "in-scope squash on main must satisfy CommitReference")
+	assert.True(t, gate.ScopeContainment.Pass, "later unrelated out-of-scope commit on main must not fail this task's scope")
+	assert.Empty(t, gate.ScopeContainment.Remediation)
+}
+
+// TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC
+// covers a follow-up P1: a stale worktree plus a non-squash --no-ff merge
+// whose merge subject is not a valid issue reference. The landing includes
+// an older out-of-scope matching commit and a newer in-scope matching
+// commit. Primary fallback must scope the complete merge (first-parent..M),
+// not only the newest matching commit, so ScopeContainment fails.
+func TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	inFile := filepath.Join(tmpDir, "pkg", "in.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	stale := filepath.Join(tmpDir, "pkg", "stale.go")
+	require.NoError(t, os.WriteFile(stale, []byte("package pkg\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/stale.go")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	runGit(t, tmpDir, "checkout", "main")
+	runGit(t, tmpDir, "checkout", "-b", "feat/TEST-123")
+	outFile := filepath.Join(tmpDir, "cmd", "out.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(outFile), 0755))
+	require.NoError(t, os.WriteFile(outFile, []byte("package main\n"), 0644))
+	runGit(t, tmpDir, "add", "cmd/out.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): out of scope change")
+	require.NoError(t, os.WriteFile(inFile, []byte("package pkg\n\nfunc In() {}\n"), 0644))
+	runGit(t, tmpDir, "add", "pkg/in.go")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): in scope change")
+
+	runGit(t, tmpDir, "checkout", "main")
+	runGit(t, tmpDir, "merge", "--no-ff", "feat/TEST-123", "-m", "Merge branch 'feat/TEST-123'")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	gate := DeliveryGate(tmpDir, "TEST-123", baseCommit, []string{"pkg/**"})
+	assert.True(t, gate.CleanTree.Pass, "claim worktree is clean")
+	assert.True(t, gate.CommitReference.Pass, "matching commits in the merge landing must satisfy CommitReference")
+	assert.False(t, gate.ScopeContainment.Pass, "complete merge landing must include the older out-of-scope path")
+	assert.Contains(t, gate.ScopeContainment.Remediation, "cmd/out.go")
+}
+
+// TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC
+// covers the P2 hole: a resolvable but empty local main must not block
+// examining master, which holds the only matching conventional commit.
+func TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "master")
+	baseCommit := getHeadSHA(t, tmpDir)
+	runGit(t, tmpDir, "branch", "main")
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+
+	runGit(t, tmpDir, "checkout", "master")
+	require.NoError(t, os.WriteFile(file, []byte("squash landed"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): land squash on master")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "matching conventional commit on master must satisfy CommitReference when local main is stale and empty")
+	assert.Empty(t, result.Remediation)
 }
 
 // TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1 verifies that
@@ -315,7 +539,7 @@ func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "oops(TEST-123): bypass convention")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "commit with disallowed type should fail")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -352,7 +576,7 @@ func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.
 	runGit(t, tmpDir, "commit", "-m", "unrelated integration commit")
 	runGit(t, tmpDir, "merge", "--no-ff", "feature-branch", "-m", "merge: TEST-123 integrate feature work")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "documented merge: ID description format should be accepted on a genuine merge commit")
 	assert.Empty(t, result.Remediation)
 }
@@ -380,7 +604,7 @@ func TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "merge: TEST-123 integrate feature work")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "merge: ID subject on a single-parent (non-merge) commit must be rejected")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -407,7 +631,7 @@ func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "no reference in this one")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "a match before base must not satisfy the check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -434,7 +658,7 @@ func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) 
 	// A conventional-commit-shaped but content-free commit.
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "fix(TEST-123): busywork")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "an empty commit must not satisfy the commit reference check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -463,7 +687,7 @@ func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): real fix")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a later real-content matching commit should still pass")
 	assert.Empty(t, result.Remediation)
 }
@@ -497,7 +721,7 @@ func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *te
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "revert the change")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "a matching commit whose change is fully reverted must not satisfy the check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -545,7 +769,7 @@ func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t 
 	runGit(t, tmpDir, "add", "other.txt")
 	runGit(t, tmpDir, "commit", "-m", "add trivial comment")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a matching commit reference plus a non-empty net diff from elsewhere in the range satisfies the check")
 	assert.Empty(t, result.Remediation)
 }
@@ -574,7 +798,7 @@ func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testin
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale line")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a deletion-only commit whose deletion is never undone must satisfy the check")
 	assert.Empty(t, result.Remediation)
 }
@@ -605,7 +829,7 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 	runGit(t, tmpDir, "add", "file.txt")
 	runGit(t, tmpDir, "commit", "-m", "restore the line")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.False(t, result.Pass, "a deletion-only commit whose deletion is later undone must not satisfy the check")
 	assert.NotEmpty(t, result.Remediation)
 }
@@ -647,7 +871,7 @@ func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_RE
 	runGit(t, tmpDir, "add", "file.go")
 	runGit(t, tmpDir, "commit", "-m", "gofmt cleanup")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit reference plus a non-empty net diff satisfies the check even after a cosmetic reformat")
 	assert.Empty(t, result.Remediation)
@@ -679,7 +903,7 @@ func TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4(t *testing.
 	runGit(t, tmpDir, "add", "café.go")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): add café helper")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a matching commit adding a non-ASCII-named file must be recognized as surviving")
 	assert.Empty(t, result.Remediation)
 }
@@ -713,7 +937,7 @@ func TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4(t *t
 	runGit(t, tmpDir, "mv", "oldname.txt", "newname.txt")
 	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): rename to newname")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a content-preserving (pure) rename must be recognized as a surviving delivered change")
 	assert.Empty(t, result.Remediation)
 }
@@ -984,7 +1208,7 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 			initGitRepo(t, tmpDir)
 			baseCommit := tc.setup(t, tmpDir)
 
-			result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+			_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 			assert.Equal(t, tc.expectedPass, result.Pass, "case %q", tc.name)
 			if tc.expectedPass {
 				assert.Empty(t, result.Remediation)
@@ -1046,7 +1270,7 @@ func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 	runGit(t, tmpDir, "rm", "gone.txt")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale file")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass, "a whole-file deletion whose deletion is never undone must satisfy the check")
 	assert.Empty(t, result.Remediation)
 }
@@ -1093,7 +1317,7 @@ func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_R
 	runGit(t, tmpDir, "rm", "source.txt")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: remove source file")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit reference plus a non-empty net diff satisfies the check regardless of copy/rename source-path bookkeeping")
 	assert.Empty(t, result.Remediation)
@@ -1131,7 +1355,7 @@ func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_
 	runGit(t, tmpDir, "checkout", "-")
 	runGit(t, tmpDir, "merge", "--no-ff", "-m", "fix(TEST-123): merge feature", "feature-branch")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a merge commit whose subject matches and whose first-parent diff carries real content must be recognized as delivering")
 	assert.Empty(t, result.Remediation)
@@ -1168,7 +1392,7 @@ func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffChec
 	runGit(t, tmpDir, "add", "asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "unrelated: replace binary asset")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit reference plus a non-empty net diff satisfies the check for binary content too")
 	assert.Empty(t, result.Remediation)
@@ -1202,7 +1426,7 @@ func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testin
 	runGit(t, tmpDir, "rm", "stale-asset.bin")
 	runGit(t, tmpDir, "commit", "-m", "fix(TEST-123): remove stale binary asset")
 
-	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
 	assert.True(t, result.Pass,
 		"a matching commit that deletes a binary file, with the deletion never undone, must satisfy the check")
 	assert.Empty(t, result.Remediation)

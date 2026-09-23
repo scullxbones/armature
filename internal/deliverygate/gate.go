@@ -27,16 +27,25 @@ type GateResult struct {
 
 // DeliveryGate evaluates a worktree against an issue via three checks:
 // 1. Clean tree: git status --porcelain is empty
-// 2. Scope containment: delivery diff vs base is subset of declared scope
+// 2. Scope containment: selected delivery range is subset of declared scope
 // 3. Commit reference: at least one commit matches conventional-commit format
+//
+// CommitReference and ScopeContainment share one (rangeBase, rangeHead)
+// pair. Worktree-first that is claimBase..HEAD; primary-branch fallback
+// isolates the complete landing that delivered the issue — an enclosing
+// merge's first-parent..M when a matching commit arrived via a 2+-parent
+// merge, otherwise first-parent..matching-SHA for a squash / single-parent
+// landing — so later unrelated commits on main/master are not attributed
+// to this issue.
 //
 // Returns a structured GateResult with per-check results and remediations.
 // Performs no state mutation — only reads and reports.
 func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *GateResult {
+	rng, commitRef := commitReferenceCheck(worktreePath, baseCommit, issueID)
 	return &GateResult{
 		CleanTree:        cleanTreeCheck(worktreePath),
-		ScopeContainment: scopeContainmentCheck(worktreePath, baseCommit, scope),
-		CommitReference:  commitReferenceCheck(worktreePath, baseCommit, issueID),
+		ScopeContainment: scopeContainmentCheck(worktreePath, rng.base, rng.head, scope),
+		CommitReference:  commitRef,
 	}
 }
 
@@ -94,11 +103,15 @@ func cleanTreeCheck(worktreePath string) CheckResult {
 // or (Pass: false, Remediation: "...message...") if any file is outside scope.
 //
 // Precondition: baseCommit must already be an actual merge-base of the
-// current branch (as produced by GatedBaseCommit), not an arbitrary ref —
-// the diff below uses two-dot (baseCommit..HEAD) semantics, which silently
-// includes commits reachable from baseCommit but not from HEAD if baseCommit
-// is a raw branch tip rather than a merge-base.
-func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) CheckResult {
+// delivery head (as produced by GatedBaseCommit), not an arbitrary ref —
+// the diff below uses two-dot (baseCommit..head) semantics, which silently
+// includes commits reachable from baseCommit but not from head if baseCommit
+// is a raw branch tip rather than a merge-base. (baseCommit, head) is the
+// same pair CommitReference used: claimBase..HEAD on the worktree-first
+// path, or the complete isolated landing (enclosing merge first-parent..M,
+// or first-parent..matching-SHA) when primary-branch fallback selected
+// evidence.
+func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string) CheckResult {
 	git := adapters.New(worktreePath)
 
 	// Get the list of file changes since base commit, with rename detection
@@ -107,7 +120,7 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 	// the destination path of a rename, masking an out-of-scope original
 	// location (e.g. a rename that moves a file from outside scope into
 	// scope, silently deleting the out-of-scope original).
-	entries, err := git.DiffNameStatus(baseCommit)
+	entries, err := git.DiffNameStatusRange(baseCommit, head)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
@@ -143,9 +156,14 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 //  1. Conventional-commit reference exists: at least one commit's subject
 //     matches <type>(<ISSUE-ID>): ... or <type>(<ISSUE-ID>)!: ..., where
 //     type is one of feat, fix, refactor, test, docs, style, polish (see
-//     docs/conventions.md).
-//  2. Net delivery is non-empty: the tree diff baseCommit..HEAD is
+//     docs/conventions.md). The worktree HEAD is searched first; if it has
+//     no matching evidence, each resolvable of refs/heads/main then
+//     refs/heads/master is searched until a matching landing isolates and
+//     passes, so a squash-land on the primary branch still counts even when
+//     a stale local main exists.
+//  2. Net delivery is non-empty: the tree diff of the selected range is
 //     non-empty (reusing the same diff primitive as ScopeContainmentCheck).
+//     DeliveryGate feeds ScopeContainment that same (rangeBase, rangeHead).
 //
 // This intentionally does NOT attempt to prove that the specific matching
 // commit's own diff content survives byte-for-byte to HEAD. Earlier
@@ -164,11 +182,140 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 // current branch (as produced by GatedBaseCommit), not an arbitrary ref —
 // LogRange and the net diff below use two-dot (baseCommit..HEAD) semantics,
 // which is only correct when baseCommit is the real divergence point.
-func commitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
+func commitReferenceCheck(worktreePath, baseCommit, issueID string) (deliveryRange, CheckResult) {
 	git := adapters.New(worktreePath)
+	return deliveryRef(git, baseCommit, issueID)
+}
 
-	// Get only commits strictly after baseCommit (exclusive) up to HEAD.
-	entries, err := git.LogRange(baseCommit, "HEAD")
+// deliveryRange is the exclusive-base, inclusive-head pair both
+// CommitReference and ScopeContainment evaluate for one gate pass.
+type deliveryRange struct {
+	base string
+	head string
+}
+
+// deliveryRef picks one delivery range for the gate pass: claimBase..HEAD
+// when the worktree has CommitReference evidence, otherwise the complete
+// isolated landing on the first primary-branch ref that supplies passing
+// evidence. ScopeContainmentCheck must use this same pair so an empty stale
+// worktree cannot pass while an out-of-scope landing on the primary branch
+// is ignored, and so later unrelated primary-branch commits are not
+// attributed to this issue.
+func deliveryRef(git *adapters.Client, baseCommit, issueID string) (deliveryRange, CheckResult) {
+	worktreeRange := deliveryRange{base: baseCommit, head: "HEAD"}
+	worktreeResult := commitReferenceAgainst(git, worktreeRange.base, worktreeRange.head, issueID)
+	if worktreeResult.Pass {
+		return worktreeRange, worktreeResult
+	}
+	// Worktree-first stays claimBase..HEAD whenever a matching conventional
+	// commit exists there — including empty-net reverts, which must fail
+	// closed on that range. Primary isolation only runs when the claim
+	// worktree has no matching subject (stale task branch after squash-land).
+	if hasMatchingReference(git, worktreeRange.base, worktreeRange.head, issueID) {
+		return worktreeRange, worktreeResult
+	}
+	// After a remote land, matching conventional commits live on
+	// main/master while the claim worktree is still on the stale task
+	// branch. Search every resolvable primary candidate until a complete
+	// isolated landing passes so a stale local main cannot hide a valid
+	// master landing.
+	for _, primary := range primaryBranchRefs(git) {
+		if rng, primaryResult, ok := isolatedPrimaryEvidence(git, baseCommit, primary, issueID); ok {
+			return rng, primaryResult
+		}
+	}
+	return worktreeRange, worktreeResult
+}
+
+func hasMatchingReference(git *adapters.Client, baseCommit, head, issueID string) bool {
+	entries, err := git.LogRange(baseCommit, head)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
+			return true
+		}
+	}
+	return false
+}
+
+// isolatedPrimaryEvidence finds matching conventional commits on primary
+// (LogRange is newest-first) and evaluates CommitReference against the
+// complete landing that delivered the newest usable match: the nearest
+// enclosing merge (first-parent..M) when that match was introduced by a
+// 2+-parent merge, otherwise first-parent..matching-SHA. Commits with no
+// parent are skipped (fail closed). Isolation is range selection only: no
+// byte-level attribution of whether that commit's content survived to the
+// primary tip.
+func isolatedPrimaryEvidence(git *adapters.Client, baseCommit, primary, issueID string) (deliveryRange, CheckResult, bool) {
+	entries, err := git.LogRange(baseCommit, primary)
+	if err != nil {
+		return deliveryRange{}, CheckResult{}, false
+	}
+	for _, entry := range entries {
+		if !commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
+			continue
+		}
+		if len(entry.Parents) == 0 {
+			continue
+		}
+		rng := completePrimaryLanding(git, entries, entry)
+		result := commitReferenceAgainst(git, rng.base, rng.head, issueID)
+		if result.Pass {
+			return rng, result, true
+		}
+	}
+	return deliveryRange{}, CheckResult{}, false
+}
+
+// completePrimaryLanding selects the delivery range for one matching
+// commit: prefer the newest enclosing merge landing, else isolate that
+// commit to first-parent..SHA (squash / single-parent).
+func completePrimaryLanding(git *adapters.Client, rangeEntries []adapters.LogEntry, matching adapters.LogEntry) deliveryRange {
+	if rng, ok := enclosingMergeLanding(git, rangeEntries, matching); ok {
+		return rng
+	}
+	return deliveryRange{base: matching.Parents[0], head: matching.SHA}
+}
+
+// enclosingMergeLanding returns first-parent..M for the newest genuine
+// merge M in rangeEntries such that matching is reachable from M but not
+// from M.Parents[0] (the commits that merge brought onto the primary line).
+func enclosingMergeLanding(git *adapters.Client, rangeEntries []adapters.LogEntry, matching adapters.LogEntry) (deliveryRange, bool) {
+	for _, merge := range rangeEntries {
+		if len(merge.Parents) < 2 {
+			continue
+		}
+		if merge.SHA == matching.SHA {
+			return deliveryRange{base: merge.Parents[0], head: merge.SHA}, true
+		}
+		introduced, err := git.LogRange(merge.Parents[0], merge.SHA)
+		if err != nil {
+			continue
+		}
+		for _, entry := range introduced {
+			if entry.SHA == matching.SHA {
+				return deliveryRange{base: merge.Parents[0], head: merge.SHA}, true
+			}
+		}
+	}
+	return deliveryRange{}, false
+}
+
+func primaryBranchRefs(git *adapters.Client) []string {
+	var refs []string
+	for _, ref := range []string{"refs/heads/main", "refs/heads/master"} {
+		if _, err := git.ResolveRevision(ref); err == nil {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
+}
+
+func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID string) CheckResult {
+	// Get only commits strictly after baseCommit (exclusive) up to head.
+	entries, err := git.LogRange(baseCommit, head)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
@@ -207,9 +354,9 @@ func commitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// range (e.g. a revert) can cancel out exactly the change the matching
 	// commit made, leaving nothing actually delivered even though the
 	// matching commit "touched files" at the time it was made. Require the
-	// net base..HEAD diff to be non-empty as independent evidence that
+	// net base..head diff to be non-empty as independent evidence that
 	// something was actually delivered.
-	diffEntries, err := git.DiffNameStatus(baseCommit)
+	diffEntries, err := git.DiffNameStatusRange(baseCommit, head)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
