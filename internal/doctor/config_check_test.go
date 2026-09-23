@@ -178,6 +178,18 @@ func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
 		assert.Contains(t, strings.Join(f.Items, "\n"), "hooks[0].command[0]")
 	})
 
+	t.Run("untrusted_basename_is_not_read", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		path := filepath.Join(dir, "not-config.json")
+		require.NoError(t, os.WriteFile(path, []byte(`{"mystery_knob":true}`), 0o600))
+		f := doctor.CheckD10ConfigHealth(path)
+		assert.Equal(t, "D10", f.Check)
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		require.NotEmpty(t, f.Items)
+		assert.Contains(t, f.Items[0], "config.json")
+	})
+
 	t.Run("overflow_token_budget_is_out_of_range", func(t *testing.T) {
 		t.Parallel()
 		path := writeConfig(t, `{"token_budget":`+strconv.Itoa(math.MaxInt)+`}`)

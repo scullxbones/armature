@@ -2,6 +2,8 @@ package doctor
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +18,8 @@ import (
 // CheckD8ScopeViolations reports out-of-scope artifacts among git-dirty paths
 // for active or recently completed tasks. Candidates come from
 // findOutOfScopeArtifacts, which reads `git status --porcelain` (untracked or
-// uncommitted-modified paths). It does not walk the filesystem. Committed files
+// uncommitted-modified paths). A porcelain probe error is a D8 error, not a
+// clean tree. It does not walk the filesystem. Committed files
 // outside a task's scope are not flagged. Root-level config files and non-code
 // directories are treated as general hygiene. A dirty path covered by another
 // active or recently completed task's scope is not reported as a violation of a
@@ -64,13 +67,32 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 		return f
 	}
 
+	needsDirtyProbe := false
+	for _, issue := range tasksToCheck {
+		if len(issue.Scope) > 0 {
+			needsDirtyProbe = true
+			break
+		}
+	}
+	var dirtyPaths []string
+	if needsDirtyProbe {
+		var err error
+		dirtyPaths, err = gitDirtyPaths(repoPath)
+		if err != nil {
+			f.Severity = SeverityError
+			f.Message = "Could not list git-dirty paths"
+			f.Items = []string{err.Error()}
+			return f
+		}
+	}
+
 	rawViolations := make(map[string][]string)
 	for _, issue := range tasksToCheck {
 		if len(issue.Scope) == 0 {
 			continue
 		}
 
-		violations := findOutOfScopeArtifacts(repoPath, issue.Scope)
+		violations := findOutOfScopeArtifacts(repoPath, issue.Scope, dirtyPaths)
 		if len(violations) > 0 {
 			rawViolations[issue.ID] = violations
 		}
@@ -116,12 +138,11 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 	return f
 }
 
-func findOutOfScopeArtifacts(repoPath string, scope []string) []string {
+func findOutOfScopeArtifacts(repoPath string, scope []string, candidates []string) []string {
 	if len(scope) == 0 {
 		return nil
 	}
 
-	candidates := gitDirtyPaths(repoPath)
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -160,20 +181,26 @@ func topLevelDir(rel string) string {
 	return ""
 }
 
-func gitDirtyPaths(repoPath string) []string {
+func gitDirtyPaths(repoPath string) ([]string, error) {
 	// #nosec G204 - repoPath is a caller-supplied trusted repo/worktree path
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "--porcelain", "--untracked-files=all")
 	out, err := cmd.Output()
 	if err != nil {
-		return nil
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+			return nil, fmt.Errorf("git status --porcelain: %w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+		}
+		return nil, fmt.Errorf("git status --porcelain: %w", err)
 	}
+	return parseGitStatusPorcelain(out), nil
+}
 
+func parseGitStatusPorcelain(out []byte) []string {
 	var paths []string
 	for _, line := range strings.Split(string(out), "\n") {
 		if len(line) < 4 {
 			continue
 		}
-		// Porcelain format: "XY <path>" or "XY <path> -> <newpath>" for renames.
 		entry := line[3:]
 		if idx := strings.Index(entry, " -> "); idx >= 0 {
 			entry = entry[idx+4:]
