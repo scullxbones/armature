@@ -3,7 +3,6 @@ package materialize
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -400,7 +399,8 @@ func TestMaterializeExcludeWorker_UnknownOpTypeErrorSurfaced(t *testing.T) {
 	assert.Greater(t, len(result.UnhandledOps), 0, "unknown op type error should be captured in UnhandledOps")
 }
 
-func TestMaterialize_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralleltest
+func TestMaterialize_UnhandledOpsWarningEmitted(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "state")
 	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
@@ -431,28 +431,18 @@ func TestMaterialize_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralle
 
 	allOps := []ops.Op{validOp, unknownOp1, unknownOp2}
 
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
 	_, result, materializeErr := materializeAndReturn(stateDir, allOps, nil)
-
-	require.NoError(t, w.Close())
-	os.Stderr = oldStderr
-	stderrOutput, err := io.ReadAll(r)
-	require.NoError(t, err)
 
 	require.NoError(t, materializeErr, "Materialize should not error")
 	assert.Equal(t, 2, len(result.UnhandledOps), "should have two unhandled ops")
-
-	stderrStr := string(stderrOutput)
-	assert.Contains(t, stderrStr, "warning:", "stderr should contain warning prefix")
-	assert.Contains(t, stderrStr, "2", "stderr should mention count of unhandled ops")
-	assert.Contains(t, stderrStr, "op(s) with unknown types skipped", "stderr should describe the issue")
+	require.Len(t, result.Warnings, 1)
+	assert.Contains(t, result.Warnings[0], "warning:")
+	assert.Contains(t, result.Warnings[0], "2")
+	assert.Contains(t, result.Warnings[0], "op(s) with unknown types skipped")
 }
 
-func TestMaterializeAndReturn_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralleltest
+func TestMaterializeAndReturn_UnhandledOpsWarningEmitted(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "state")
 	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0755))
@@ -476,28 +466,17 @@ func TestMaterializeAndReturn_UnhandledOpsWarningEmitted(t *testing.T) { //nolin
 
 	allOps := []ops.Op{validOp, unknownOp}
 
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
 	_, result, funcErr := materializeAndReturn(stateDir, allOps, nil)
-
-	os.Stderr = oldStderr
-	require.NoError(t, w.Close())
-
-	stderrOutput, readErr := io.ReadAll(r)
-	require.NoError(t, readErr)
 
 	require.NoError(t, funcErr, "MaterializeAndReturn should not error")
 	assert.Equal(t, 1, len(result.UnhandledOps), "should have one unhandled op")
-
-	stderrStr := string(stderrOutput)
-	assert.Contains(t, stderrStr, "warning:", "stderr should contain warning prefix")
-	assert.Contains(t, stderrStr, "op(s) with unknown types skipped", "stderr should describe the issue")
+	require.Len(t, result.Warnings, 1)
+	assert.Contains(t, result.Warnings[0], "warning:")
+	assert.Contains(t, result.Warnings[0], "op(s) with unknown types skipped")
 }
 
-func TestMaterializeExcludeWorker_UnhandledOpsWarningEmitted(t *testing.T) { //nolint:paralleltest
+func TestMaterializeExcludeWorker_UnhandledOpsWarningEmitted(t *testing.T) {
+	t.Parallel()
 	workerA := "worker-a"
 	workerB := "worker-b"
 
@@ -518,24 +497,13 @@ func TestMaterializeExcludeWorker_UnhandledOpsWarningEmitted(t *testing.T) { //n
 
 	allOps := []ops.Op{validOp, unknownOp}
 
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
 	_, result, funcErr := materializeExcludeWorker(allOps, "worker-c")
-
-	os.Stderr = oldStderr
-	require.NoError(t, w.Close())
-	stderrOutput, readErr := io.ReadAll(r)
-	require.NoError(t, readErr)
 
 	require.NoError(t, funcErr, "MaterializeExcludeWorker should not error")
 	assert.Greater(t, len(result.UnhandledOps), 0, "should have at least one unhandled op")
-
-	stderrStr := string(stderrOutput)
-	assert.Contains(t, stderrStr, "warning:", "stderr should contain warning prefix")
-	assert.Contains(t, stderrStr, "op(s) with unknown types skipped", "stderr should describe the issue")
+	require.NotEmpty(t, result.Warnings)
+	assert.Contains(t, result.Warnings[0], "warning:")
+	assert.Contains(t, result.Warnings[0], "op(s) with unknown types skipped")
 }
 
 func TestIncremental_MatchesFullReplay(t *testing.T) {
@@ -872,7 +840,8 @@ func TestRun_ExcludeWorkerFiltersOpsAndSkipsWrites_REQ_ARCHIMP_S13(t *testing.T)
 	assert.True(t, hasTaskTwo2, "task-02 should exist in normal mode")
 }
 
-func TestRun_EmitWarningsFalse_SuppressesStderr_REQ_ARCHIMP_S13(t *testing.T) { //nolint:paralleltest
+func TestRun_UnhandledOpsPopulateResultWarnings_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	stateDir := filepath.Join(dir, "state")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
@@ -895,23 +864,11 @@ func TestRun_EmitWarningsFalse_SuppressesStderr_REQ_ARCHIMP_S13(t *testing.T) { 
 
 	allOps := []ops.Op{createOp, unknownOp}
 
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
 	_, result, runErr := Run(stateDir, allOps, nil, Options{WriteStateFiles: true, EmitWarnings: false})
-
-	os.Stderr = oldStderr
-	require.NoError(t, w.Close())
-	stderrOutput, readErr := io.ReadAll(r)
-	require.NoError(t, readErr)
-
 	require.NoError(t, runErr, "Run should not error")
 	assert.Equal(t, 1, len(result.UnhandledOps), "unhandled op should be captured in Result")
 	assert.Equal(t, "unknown_emit_test_type", result.UnhandledOps[0].Type)
-
-	assert.Empty(t, string(stderrOutput), "stderr should be empty when EmitWarnings=false")
+	require.Equal(t, formatUnhandledOpsWarnings(result.UnhandledOps), result.Warnings)
 }
 
 func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
