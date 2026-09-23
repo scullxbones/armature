@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,14 +82,19 @@ func TestDoctorFixPublishFailureKeepsLocalRepair_REQ_OPS_PUBLISH(t *testing.T) {
 			Payload: ops.Payload{TTL: 5}},
 	}))
 
+	worktree := filepath.Join(repo, ".armature")
+	headBefore := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
 	breakOrigin(t, repo)
-	_, err = runTrls(t, repo, "doctor", "--fix")
-	require.Error(t, err)
+	out, err := runTrls(t, repo, "doctor", "--fix")
+	require.Error(t, err, "doctor --fix output: %s", out)
 	assert.True(t, isOpsPublishError(err) || strings.Contains(err.Error(), "publish _armature"), "got %v", err)
 
-	content, readErr := os.ReadFile(logPath)
-	require.NoError(t, readErr)
-	assert.Contains(t, string(content), "doctor --fix:", "local repair op must remain after publish failure")
+	headAfter := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
+	assert.NotEqual(t, headBefore, headAfter, "local doctor --fix commit must remain after publish failure")
+	show := runOutput(t, worktree, "show", "HEAD")
+	assert.True(t,
+		strings.Contains(show, "doctor --fix:") || strings.Contains(show, "fixpush-fail"),
+		"HEAD commit must contain the repair; show=%s", show)
 }
 
 func showArmatureRef(t *testing.T, dir string) string {

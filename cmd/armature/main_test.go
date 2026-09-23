@@ -251,8 +251,9 @@ func initTempRepo(t *testing.T) string {
 	run(t, dir, "git", "config", "commit.gpgsign", "false")
 	run(t, dir, "git", "config", "gc.auto", "0")
 	run(t, dir, "git", "config", "maintenance.auto", "false")
-	origin := filepath.Join(t.TempDir(), "origin.git")
-	run(t, origin, "git", "init", "--bare")
+	originParent := t.TempDir()
+	origin := filepath.Join(originParent, "origin.git")
+	run(t, originParent, "git", "init", "--bare", origin)
 	run(t, dir, "git", "remote", "add", "origin", origin)
 	return dir
 }
