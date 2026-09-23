@@ -161,7 +161,7 @@ func LoadIssue(path string) (Issue, error) {
 		return Issue{}, err
 	}
 	issue.Scope = ops.DecodeScope(issue.Scope)
-	issue.ContextFiles = ops.DecodeScope(issue.ContextFiles)
+	issue.ContextFiles = ops.DecodeContextFiles(issue.ContextFiles)
 	return issue, nil
 }
 

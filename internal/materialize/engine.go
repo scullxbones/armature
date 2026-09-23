@@ -114,7 +114,7 @@ func (s *State) applyCreate(op ops.Op) error {
 		Title:            op.Payload.Title,
 		Parent:           op.Payload.Parent,
 		Scope:            ops.DecodeScope(op.Payload.Scope),
-		ContextFiles:     ops.DecodeScope(op.Payload.ContextFiles),
+		ContextFiles:     ops.DecodeContextFiles(op.Payload.ContextFiles),
 		Priority:         op.Payload.Priority,
 		EstComplexity:    op.Payload.EstComplexity,
 		DefinitionOfDone: op.Payload.DefinitionOfDone,
@@ -376,7 +376,7 @@ func (s *State) applyAmend(op ops.Op) error {
 		issue.ContextFiles = []string{}
 	}
 	if op.Payload.ContextFiles != nil {
-		issue.ContextFiles = ops.DecodeScope(op.Payload.ContextFiles)
+		issue.ContextFiles = ops.DecodeContextFiles(op.Payload.ContextFiles)
 	}
 	if len(op.Payload.Acceptance) > 0 && string(op.Payload.Acceptance) != "null" {
 		issue.Acceptance = op.Payload.Acceptance

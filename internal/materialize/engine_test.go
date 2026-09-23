@@ -1378,6 +1378,22 @@ func TestApplyCreateOp_SetsContextFiles(t *testing.T) {
 	assert.Equal(t, []string{"docs/adr.md", "docs/plan.md"}, state.Issues["T1"].ContextFiles)
 }
 
+func TestApplyCreateOp_PreservesCommaInContextFilePath_REQ_MATENC_S1_T1(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{
+		Type: ops.OpCreate, TargetID: "T1", Timestamp: 100, WorkerID: "w1",
+		Payload: ops.Payload{
+			Title:        "Task",
+			NodeType:     "task",
+			Scope:        []string{"a.go,b.go"},
+			ContextFiles: []string{"docs/design,v2.md"},
+		},
+	}))
+	assert.Equal(t, []string{"a.go", "b.go"}, state.Issues["T1"].Scope)
+	assert.Equal(t, []string{"docs/design,v2.md"}, state.Issues["T1"].ContextFiles)
+}
+
 func TestApplyAmendOp_ReplacesAndClearsContextFiles(t *testing.T) {
 	t.Parallel()
 	state := NewState()
@@ -1430,7 +1446,7 @@ func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
 	assert.Equal(t, []string{"cmd/x.go", "cmd/y.go"}, state.Issues["T1"].Scope)
 }
 
-func TestApplyAmendOp_NormalizesCommaSeparatedContextFiles(t *testing.T) {
+func TestApplyAmendOp_PreservesCommaInContextFilePath_REQ_MATENC_S1_T1(t *testing.T) {
 	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
@@ -1439,9 +1455,9 @@ func TestApplyAmendOp_NormalizesCommaSeparatedContextFiles(t *testing.T) {
 	}))
 	require.NoError(t, state.ApplyOp(ops.Op{
 		Type: ops.OpAmend, TargetID: "T1", Timestamp: 200, WorkerID: "w1",
-		Payload: ops.Payload{ContextFiles: []string{"docs/a.md, docs/b.md"}},
+		Payload: ops.Payload{ContextFiles: []string{"docs/design,v2.md"}},
 	}))
-	assert.Equal(t, []string{"docs/a.md", "docs/b.md"}, state.Issues["T1"].ContextFiles)
+	assert.Equal(t, []string{"docs/design,v2.md"}, state.Issues["T1"].ContextFiles)
 }
 
 func TestMaterializedStateCollapsesHistoricalClaims(t *testing.T) {
