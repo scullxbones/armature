@@ -42,9 +42,6 @@ func (c *Client) cmd(args ...string) *exec.Cmd {
 	return c.cmdContext(context.Background(), args...)
 }
 
-// cmdContext is like cmd but binds the command to the given context, so
-// callers can bound long-running or network-touching commands (e.g. fetch)
-// with a timeout.
 func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	// maintenance.auto=false (and gc.auto=0 for older git) prevent git from
 	// forking "git maintenance run --auto --detach" on commit-like commands.
@@ -201,7 +198,6 @@ func (c *Client) MergeBase(rev1, rev2 string) (string, error) {
 // Returns true if there are modified tracked files or staged changes, false if clean.
 // Untracked files are ignored (only tracked file changes count as "dirty").
 func (c *Client) IsWorkingTreeDirty() (bool, error) {
-	// Check for modified/staged tracked files using git status.
 	// The --porcelain output includes lines starting with the status codes:
 	// - First char: index status (M, D, A, etc. or space if no staged change)
 	// - Second char: working tree status (M, D, etc. or space if no modification)
@@ -217,11 +213,9 @@ func (c *Client) IsWorkingTreeDirty() (bool, error) {
 		if line == "" {
 			continue
 		}
-		// Skip untracked files (start with ??)
 		if strings.HasPrefix(line, "??") {
 			continue
 		}
-		// Any other output means tracked files have changes
 		return true, nil
 	}
 	return false, nil
@@ -241,16 +235,10 @@ type DirtyEntry struct {
 
 // DirtyEntries returns every working-tree change, tracked or untracked
 // (unlike IsWorkingTreeDirty, which treats untracked files as never dirty).
-// Callers that need to classify dirty paths against an allow-list — e.g.
-// reconciling known-safe debris before refusing a dirty worktree outright —
-// need the Untracked flag too, since tolerating incidental untracked
-// scaffolding while still refusing on tracked changes is exactly
-// IsWorkingTreeDirty's existing contract; this exposes the same information
-// per-path instead of collapsing it to a single bool. Renamed paths report
-// the destination path in Path and the source path in OldPath, so a caller
-// checking a rename against a boundary (e.g. a scope or state directory)
-// can inspect both sides rather than only seeing the destination. Returns an
-// empty (nil) slice for a clean working tree.
+// Renamed paths report the destination path in Path and the source path in
+// OldPath, so a caller checking a rename against a boundary (e.g. a scope or
+// state directory) can inspect both sides rather than only seeing the
+// destination. Returns an empty (nil) slice for a clean working tree.
 func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
 	return c.dirtyEntries("status", "--porcelain", "--ignored")
 }
@@ -478,35 +466,30 @@ func isBenignEmptyRepoRmError(output []byte) bool {
 	return strings.Contains(string(output), "did not match any files")
 }
 
+func ignoreBestEffortRemoteFetch(err error) { _ = err }
+
 // CreateOrphanBranch creates an orphan branch (no parent commits) with a single empty commit.
 // If the branch already exists locally, this is a no-op.
 // If the branch exists on origin but not locally, creates a local tracking branch from origin.
 // Otherwise, creates a new orphan branch with an empty commit.
 // Always returns to the original branch. Fails with an error if the working tree is dirty.
 func (c *Client) CreateOrphanBranch(branch string) error {
-	// Check if branch already exists locally — idempotent fast-path
 	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err == nil {
 		return nil
 	}
 
-	// Attempt to fetch the branch from origin in case it exists on the remote
-	// but not in the local remote-tracking refs (e.g., after git clone --single-branch).
-	// Fetch with refspec to create/update the remote-tracking ref.
-	// This is best-effort; ignore failures when the remote is absent, offline, or the branch doesn't exist.
-	// "origin" is hardcoded here, matching the existing pattern elsewhere in this
-	// client (Push/FetchAndRebase); this assumes a single remote named "origin".
-	// Bounded with a short timeout so a black-holed network can't hang bootstrap.
+	// Fetch after git clone --single-branch so origin/<branch> exists locally.
+	// Best-effort: ignore failures when the remote is absent, offline, or the
+	// branch doesn't exist. Bounded so a black-holed network can't hang bootstrap.
 	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	fetchCmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
-	_ = fetchCmd.Run() //nolint:errcheck // Ignore fetch errors; best-effort fetch for remote branch
+	ignoreBestEffortRemoteFetch(fetchCmd.Run())
 
-	// Check if the branch exists on origin and create a local tracking branch if so
 	remoteBranch := "origin/" + branch
 	remoteCheck := c.cmd("rev-parse", "--verify", remoteBranch)
 	if err := remoteCheck.Run(); err == nil {
-		// Remote branch exists; create a local tracking branch from it
 		createCmd := c.cmd("branch", branch, remoteBranch)
 		if out, err := createCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git branch %s from %s: %w\n%s", branch, remoteBranch, err, out)
@@ -514,7 +497,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 		return nil
 	}
 
-	// Check if working tree is dirty before doing anything destructive
 	dirty, err := c.IsWorkingTreeDirty()
 	if err != nil {
 		return fmt.Errorf("check working tree: %w", err)
@@ -533,7 +515,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	}
 	priorBranch := strings.TrimSpace(string(headOut))
 
-	// If in detached HEAD, capture the SHA to restore to, not the "HEAD" literal
 	if priorBranch == "HEAD" {
 		shaCmd := c.cmd("rev-parse", "HEAD")
 		shaOut, err := shaCmd.Output()
@@ -543,7 +524,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 		priorBranch = strings.TrimSpace(string(shaOut))
 	}
 
-	// Create orphan branch and make an empty initial commit
 	orphanCmd := c.cmd("checkout", "--orphan", branch)
 	if out, err := orphanCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout --orphan %s: %w\n%s", branch, err, out)
@@ -564,11 +544,9 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	}
 	commitCmd := c.cmd("commit", "--no-verify", "--allow-empty", "-m", "chore: init armature issues branch")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
-		// Commit failed; attempt to restore to the prior branch before returning error
 		restore := c.cmd("checkout", priorBranch)
 		restoreErr := restore.Run()
 		if restoreErr != nil {
-			// Restore failed; include both errors in the message
 			return fmt.Errorf("git commit on orphan branch failed: %w; then failed to restore to %s: %w\n%s", err, priorBranch, restoreErr, out)
 		}
 		return fmt.Errorf("git commit on orphan branch: %w\n%s", err, out)
@@ -590,7 +568,7 @@ func (c *Client) AddWorktree(branch, path string) error {
 	if _, err := os.Stat(gitFile); err == nil {
 		check := c.cmd("-C", path, "rev-parse", "--is-inside-work-tree")
 		if err := check.Run(); err == nil {
-			return nil // already a usable worktree
+			return nil
 		}
 		if err := os.Remove(gitFile); err != nil {
 			return fmt.Errorf("remove stale worktree pointer %s: %w", gitFile, err)
@@ -641,7 +619,6 @@ func (c *Client) UnsetGitConfig(key string) error {
 // The receiver's repoPath must be the worktree root (not the main repo root).
 // relPath is relative to the worktree root. If there is nothing to commit, this is a no-op.
 func (c *Client) CommitWorktreeOp(relPath, message string) error {
-	// Stage the specific file
 	if out, err := c.runMutatingWithRetry("git add "+relPath, "add", relPath); err != nil {
 		return fmt.Errorf("%s", enhanceGitLockfileError(
 			fmt.Sprintf("git add %s: %v\n%s", relPath, err, out),
@@ -649,13 +626,11 @@ func (c *Client) CommitWorktreeOp(relPath, message string) error {
 		))
 	}
 
-	// Check if there is actually something staged
 	diff := c.cmd("diff", "--cached", "--quiet")
 	if err := diff.Run(); err == nil {
-		return nil // nothing staged, no-op
+		return nil
 	}
 
-	// Commit
 	if out, err := c.runMutatingWithRetry("git commit", "commit", "-m", message); err != nil {
 		return fmt.Errorf("git commit: %w\n%s", err, out)
 	}
@@ -822,11 +797,8 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	if n > 0 {
 		args = append(args, fmt.Sprintf("-n%d", n))
 	}
-	// TEST_EXCEPTION: disambiguates branch from a path when a branch name
-	// collides with a file/directory path in the repo (git would otherwise
-	// error "ambiguous argument"). Not covered by a dedicated test: exercising
-	// it requires contriving a directory that shadows a branch name, which
-	// isn't a proportionate amount of test scaffolding for a one-line fix.
+	// git log BRANCH -- disambiguates a branch name that collides with a path
+	// ("ambiguous argument").
 	args = append(args, "--")
 	cmd := c.cmd(args...)
 	out, err := cmd.Output()
@@ -1100,7 +1072,6 @@ func (c *Client) CommitPathsNoVerify(message string, paths ...string) error {
 // CommitWithMessage creates a commit with the given message. Returns an error
 // if there is nothing staged to commit.
 func (c *Client) CommitWithMessage(message string) error {
-	// Fail fast if nothing is staged
 	diff := c.cmd("diff", "--cached", "--quiet")
 	if err := diff.Run(); err == nil {
 		return fmt.Errorf("nothing to commit: index is clean")
@@ -1131,13 +1102,11 @@ func (c *Client) CommitIndexNoVerify(message string) error {
 // BranchMergedInto checks if branch has been fully merged into target.
 // Returns (false, nil) if the branch does not exist, rather than an error.
 func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
-	// Check that branch exists
 	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err != nil {
-		return false, nil // branch doesn't exist
+		return false, nil
 	}
 
-	// Get the tip commit of branch
 	tip := c.cmd("rev-parse", branch)
 	tipOut, err := tip.Output()
 	if err != nil {

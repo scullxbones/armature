@@ -132,7 +132,6 @@ func (s *Store) IndexPath() string {
 }
 
 // StatePath returns the filesystem path for a named file within the state directory.
-// Use this instead of filepath.Join(ctx.StateDir, name) in handler code.
 func (s *Store) StatePath(name string) string {
 	return filepath.Join(s.stateDir, name)
 }

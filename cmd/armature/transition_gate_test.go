@@ -65,10 +65,6 @@ func TestDeliveryGateBlocksMissingCommitReference_REQ_LNGHZN_S4_T2(t *testing.T)
 	assert.Contains(t, err.Error(), "delivery gate")
 }
 
-// TestTransitionDoneAcceptsSquashOnMainWhenClaimWorktreeStale_REQ_MATENC
-// simulates the dogfood failure: evidence lives only on main after a
-// squash-land, the claim worktree is still on the stale task branch, and
-// `arm transition --to done` must succeed without --skip-delivery-gate.
 func TestTransitionDoneAcceptsSquashOnMainWhenClaimWorktreeStale_REQ_MATENC(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
