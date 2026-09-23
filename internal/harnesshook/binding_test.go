@@ -679,43 +679,43 @@ func TestResolveBindingFromEvent_UnboundWorktreeViaCwdOnly_ReturnsWorktreeGitDir
 	assert.Equal(t, gitDir, binding.GitDir, "should return the unbound worktree's git dir found via cwd, not the session git dir")
 }
 
-func TestExtractFilePathFromToolInput(t *testing.T) {
+func TestFilePathFromToolInput(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "", ExtractFilePathFromToolInput(nil), "nil input must return empty string")
+	assert.Equal(t, "", FilePathFromToolInput(nil), "nil input must return empty string")
 
-	assert.Equal(t, "", ExtractFilePathFromToolInput(map[string]any{}), "no matching key must return empty string")
+	assert.Equal(t, "", FilePathFromToolInput(map[string]any{}), "no matching key must return empty string")
 
 	assert.Equal(t, "/a/file_path.go",
-		ExtractFilePathFromToolInput(map[string]any{"file_path": "/a/file_path.go"}))
+		FilePathFromToolInput(map[string]any{"file_path": "/a/file_path.go"}))
 
 	assert.Equal(t, "/a/path.go",
-		ExtractFilePathFromToolInput(map[string]any{"path": "/a/path.go"}))
+		FilePathFromToolInput(map[string]any{"path": "/a/path.go"}))
 
 	assert.Equal(t, "/a/file_path.go",
-		ExtractFilePathFromToolInput(map[string]any{"file_path": "/a/file_path.go", "path": "/a/path.go"}),
+		FilePathFromToolInput(map[string]any{"file_path": "/a/file_path.go", "path": "/a/path.go"}),
 		"file_path must take precedence over path")
 
 	assert.Equal(t, "",
-		ExtractFilePathFromToolInput(map[string]any{"file_path": ""}),
+		FilePathFromToolInput(map[string]any{"file_path": ""}),
 		"empty string value must not be treated as present")
 
 	assert.Equal(t, "/a/changed.go",
-		ExtractFilePathFromToolInput(map[string]any{
+		FilePathFromToolInput(map[string]any{
 			"changes": []any{map[string]any{"path": "/a/changed.go"}},
 		}), "must fall back to the first changes[] entry's path")
 
 	assert.Equal(t, "",
-		ExtractFilePathFromToolInput(map[string]any{"changes": []any{}}),
+		FilePathFromToolInput(map[string]any{"changes": []any{}}),
 		"empty changes array must return empty string")
 
 	assert.Equal(t, "",
-		ExtractFilePathFromToolInput(map[string]any{
+		FilePathFromToolInput(map[string]any{
 			"changes": []any{map[string]any{"path": ""}},
 		}), "empty path within a changes entry must return empty string")
 
 	assert.Equal(t, "",
-		ExtractFilePathFromToolInput(map[string]any{
+		FilePathFromToolInput(map[string]any{
 			"changes": []any{"not-a-map"},
 		}), "a non-map changes entry must return empty string, not panic")
 }
