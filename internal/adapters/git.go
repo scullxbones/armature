@@ -198,22 +198,12 @@ func (c *Client) MergeBase(rev1, rev2 string) (string, error) {
 // Returns true if there are modified tracked files or staged changes, false if clean.
 // Untracked files are ignored (only tracked file changes count as "dirty").
 func (c *Client) IsWorkingTreeDirty() (bool, error) {
-	// The --porcelain output includes lines starting with the status codes:
-	// - First char: index status (M, D, A, etc. or space if no staged change)
-	// - Second char: working tree status (M, D, etc. or space if no modification)
-	// - Lines starting with ??: untracked (ignored, not dirty)
-	// Any line NOT starting with ?? means a tracked file change
-	cmd := c.cmd("status", "--porcelain")
-	out, err := cmd.Output()
+	entries, err := c.DirtyEntries()
 	if err != nil {
-		return false, fmt.Errorf("git status: %w", err)
+		return false, err
 	}
-
-	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "??") {
+	for _, entry := range entries {
+		if entry.Untracked || entry.Ignored {
 			continue
 		}
 		return true, nil
