@@ -52,7 +52,7 @@ func bootstrappedRepoWithFileOrigin(t *testing.T) (bareDir, repo, worktree strin
 	run(t, bareDir, "git", "init", "--bare")
 
 	repo = initTempRepo(t)
-	run(t, repo, "git", "remote", "add", "origin", "file://"+bareDir)
+	run(t, repo, "git", "remote", "set-url", "origin", "file://"+bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

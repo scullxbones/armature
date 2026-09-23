@@ -18,7 +18,7 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	run(t, bareDir, "git", "init", "--bare")
 
 	repo := initTempRepo(t)
-	run(t, repo, "git", "remote", "add", "origin", bareDir)
+	run(t, repo, "git", "remote", "set-url", "origin", bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -63,6 +63,32 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 	}
 	require.True(t, found,
 		"origin's _armature branch must contain the doctor repair op for fixpush-01, not just an unrelated commit")
+}
+
+func TestDoctorFixPublishFailureKeepsLocalRepair_REQ_OPS_PUBLISH(t *testing.T) {
+	_, repo, _ := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o755))
+	logPath := filepath.Join(opsDir, "worker-01.log")
+	staleClaim := time.Now().Add(-2 * time.Hour).Unix()
+	require.NoError(t, ops.AppendOps(logPath, []ops.Op{
+		{Type: ops.OpCreate, TargetID: "fixpush-fail", Timestamp: staleClaim, WorkerID: "worker-01",
+			Payload: ops.Payload{Title: "Doctor fix publish fail", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "fixpush-fail", Timestamp: staleClaim, WorkerID: "worker-01",
+			Payload: ops.Payload{TTL: 5}},
+	}))
+
+	breakOrigin(t, repo)
+	_, err = runTrls(t, repo, "doctor", "--fix")
+	require.Error(t, err)
+	assert.True(t, isOpsPublishError(err) || strings.Contains(err.Error(), "publish _armature"), "got %v", err)
+
+	content, readErr := os.ReadFile(logPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "doctor --fix:", "local repair op must remain after publish failure")
 }
 
 func showArmatureRef(t *testing.T, dir string) string {

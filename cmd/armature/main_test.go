@@ -251,7 +251,15 @@ func initTempRepo(t *testing.T) string {
 	run(t, dir, "git", "config", "commit.gpgsign", "false")
 	run(t, dir, "git", "config", "gc.auto", "0")
 	run(t, dir, "git", "config", "maintenance.auto", "false")
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	run(t, origin, "git", "init", "--bare")
+	run(t, dir, "git", "remote", "add", "origin", origin)
 	return dir
+}
+
+func dropOrigin(t *testing.T, repo string) {
+	t.Helper()
+	run(t, repo, "git", "remote", "remove", "origin")
 }
 
 func run(t *testing.T, dir string, name string, args ...string) { //nolint:unparam // name is "git" in all current callers but helper is intentionally general
@@ -1978,7 +1986,7 @@ func TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin(t *testing.T) {
 	run(t, bareDir, "git", "init", "--bare")
 
 	repo := initTempRepo(t)
-	run(t, repo, "git", "remote", "add", "origin", bareDir)
+	run(t, repo, "git", "remote", "set-url", "origin", bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1999,6 +2007,7 @@ func TestPushOpsCommand_PushFailureReturnsErrorAndJSON(t *testing.T) {
 
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
+	dropOrigin(t, repo)
 
 	out, errBuf, err := runTrlsWithStderr(t, repo, "push-ops", "--format", "json")
 	require.Error(t, err, "push-ops should return a real error when the push fails")

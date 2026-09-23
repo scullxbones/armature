@@ -118,6 +118,8 @@ func topLevelCommandUse(cmd *cobra.Command) string {
 func nextActionsForPortError(err error) []string {
 	msg := err.Error()
 	switch {
+	case isOpsPublishError(err):
+		return opsPublishNextActions()
 	case strings.Contains(msg, "ops-worktree-path"),
 		strings.Contains(msg, "unmigrated"),
 		strings.Contains(msg, "worker not initialized"):

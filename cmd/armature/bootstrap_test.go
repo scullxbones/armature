@@ -1999,6 +1999,8 @@ func TestPushOpsRunEEmitsNoStderrOnFailure_P2(t *testing.T) {
 	_, err := runRepoSetup(&cobra.Command{}, repo)
 	require.NoError(t, err)
 
+	dropOrigin(t, repo)
+
 	out, errOutput, pushErr := runTrlsWithStderr(t, repo, "push-ops", "--format", "json")
 
 	require.Error(t, pushErr, "push-ops should fail when no remote is configured")

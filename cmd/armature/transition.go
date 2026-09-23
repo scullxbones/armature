@@ -463,6 +463,8 @@ func mapTransitionError(err error) error {
 		}, 1, err)
 	case strings.Contains(msg, "delivery gate"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
+	case isOpsPublishError(err):
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm push-ops", "arm doctor"}, 1, err)
 	default:
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
 	}

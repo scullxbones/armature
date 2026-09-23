@@ -176,6 +176,25 @@ func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.NotContains(t, inferredActions, "arm show")
 }
 
+func TestClaimPublishFailureMapsToClaim1_REQ_OPS_PUBLISH(t *testing.T) {
+	_, repo, _ := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "create", "--type", "task", "--title", "publish fail", "--id", "task-pub")
+	require.NoError(t, err)
+	breakOrigin(t, repo)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-pub", "--worktree", "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "CLAIM-1", cf.Code)
+	assert.Contains(t, cf.Cause, "publish _armature")
+	joined := strings.Join(cf.NextActions, "\n")
+	assert.Contains(t, joined, "arm push-ops")
+	assert.Contains(t, joined, "arm doctor")
+	assertNoHelpCopOut(t, cf)
+}
+
 func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

@@ -83,7 +83,7 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
 | Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .armature --force`, then re-run `arm bootstrap` |
-| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes attempt `pushOpsBranchBestEffort`; low-stakes writes stay local until `low_stakes_push_threshold` |
+| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes call `pushOpsBranch` immediately after the local commit (publish failure is returned to the CLI; the local commit is not rolled back). Low-stakes writes stay local until `low_stakes_push_threshold`, then `pushOpsBranchBestEffort` |
 | Worktree corruption | Manually remove the stale worktree (`git worktree remove .armature --force`), then re-run `arm bootstrap` to recreate it from remote |
 
 ### Directory Structure (within `.armature/` worktree)
@@ -345,26 +345,28 @@ No `git fetch` / `git pull` of `origin/_armature` on this path.
 1. Resolve ops worktree path
 2. Incremental materialize from local ops logs
 3. Execute command (append to own log in ops-worktree; commit that log)
-4. Publish policy (see Ops publish below) — not a guaranteed push
+4. Publish policy (see Ops publish below) — high-stakes push is attempted immediately and fails the command if git still errors; the local commit is kept
 ```
 
 Code commits happen separately in the developer's main worktree, on their feature branch. The CLI never touches the code worktree for ops writes.
 
-### Ops publish (`pushOpsBranchBestEffort`)
+### Ops publish (`pushOpsBranch` / `pushOpsBranchBestEffort`)
 
-`cmd/armature/helpers.go` publishes `_armature` with `pushOpsBranchBestEffort`:
+`cmd/armature/helpers.go` publishes `_armature` with a single git sequence:
 
 1. `Push("_armature")`
 2. On error: `FetchAndRebase("_armature")` then a second `Push`
-3. `tracker.Reset()` (pending-push counter)
+3. On success: `tracker.Reset()` (pending-push counter)
 
-There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap. Git errors on this helper are **best-effort / swallowed** so a successful local append is not rolled back (v1 residue). `arm push-ops` is the explicit Push-only command and **does** fail the CLI (`PUSH-OPS-1`).
+There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap.
 
-**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranchBestEffort` immediately. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
+**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranch`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, …) with Next Actions `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
 
-**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call the **same** helper (PR #198). Below threshold they stay local-only.
+**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call `pushOpsBranchBestEffort` — the **same git sequence**, but git errors are swallowed so a heartbeat cannot eject a worker. `tracker.Reset()` still runs after the attempt. Below threshold they stay local-only.
 
-**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranchBestEffort` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
+**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranch` / `pushOpsBranchBestEffort` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
+
+`arm push-ops` is the explicit Push-only command (no FetchAndRebase retry) and **does** fail the CLI (`PUSH-OPS-1`). It is also the recovery command after a loud high-stakes publish failure.
 
 Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
 
@@ -510,7 +512,7 @@ This gives agents awareness of potential semantic conflicts before investing a f
 
 ### Post-Claim Verification Flow
 
-After claiming, the CLI attempts a best-effort ops publish (`pushOpsBranchBestEffort`). It does **not** pull and re-materialize to confirm the race. Race resolution stays read-time on whatever logs this clone already has. A worker who needs origin's claims should fetch/rebase the ops worktree (D12 flags lag) and then re-read (`arm show` / `arm ready`), not assume `arm claim` did that.
+After claiming, the CLI publishes `_armature` with `pushOpsBranch`. A git failure after the local claim commit is returned to the caller (`CLAIM-1`, Next Actions include `arm push-ops`); the claim op is **not** rolled back. The CLI does **not** pull and re-materialize to confirm the race. Race resolution stays read-time on whatever logs this clone already has. A worker who needs origin's claims should fetch/rebase the ops worktree (D12 flags lag) and then re-read (`arm show` / `arm ready`), not assume `arm claim` did that.
 
 ---
 
@@ -1625,7 +1627,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 |---|---|---|
 | Worker crashes after claim, before completion | Issue stuck as claimed | Heartbeat + TTL expiry; other workers reclaim after TTL |
 | Worker crashes after append, before push | Op lost locally; shared state consistent | No mitigation needed — inherently safe, worker re-issues on restart |
-| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranchBestEffort`: one `FetchAndRebase` then a second `Push`; remaining git errors swallowed on the high/low-stakes helper. `arm push-ops` fails the CLI instead |
+| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranch`: one `FetchAndRebase` then a second `Push`. High-stakes remaining git errors fail the CLI (`opsPublishError` → command Failure Code, Next Actions `arm push-ops` / `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchBestEffort`. `arm push-ops` is Push-only and fails as `PUSH-OPS-1` |
 | Corrupt log line | Materialization fails on one line | Skip unparseable lines + warn (implemented in parser) |
 | Clock skew between workers | Wrong claim winner | NTP keeps skew <1s; ms timestamps make races negligible |
 | Duplicate worker IDs | Real merge conflicts | UUID generation + uniqueness validation on first push |
