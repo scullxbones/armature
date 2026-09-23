@@ -78,3 +78,41 @@ func TestDecodeScope_REQ_MATENC_S1_T1(t *testing.T) {
 		assert.Equal(t, []string{"a.go,b.go"}, op.Payload.Scope, "DecodeScope must not mutate the payload")
 	})
 }
+
+func TestDecodeContextFiles_REQ_MATENC_S1_T1(t *testing.T) {
+	t.Parallel()
+
+	t.Run("comma in a path is preserved", func(t *testing.T) {
+		t.Parallel()
+		got := DecodeContextFiles([]string{"docs/design,v2.md"})
+		assert.Equal(t, []string{"docs/design,v2.md"}, got)
+	})
+
+	t.Run("array entries stay separate without splitting paths", func(t *testing.T) {
+		t.Parallel()
+		got := DecodeContextFiles([]string{"docs/design,v2.md", "docs/adr.md"})
+		assert.Equal(t, []string{"docs/design,v2.md", "docs/adr.md"}, got)
+	})
+
+	t.Run("empty and whitespace entries are dropped", func(t *testing.T) {
+		t.Parallel()
+		got := DecodeContextFiles([]string{" ", "docs/plan.md", "", "docs/design,v2.md"})
+		assert.Equal(t, []string{"docs/plan.md", "docs/design,v2.md"}, got)
+	})
+
+	t.Run("nil and empty inputs yield an empty slice", func(t *testing.T) {
+		t.Parallel()
+		assert.Empty(t, DecodeContextFiles(nil))
+		assert.Empty(t, DecodeContextFiles([]string{}))
+	})
+
+	t.Run("ParseLine does not mutate payload context_files", func(t *testing.T) {
+		t.Parallel()
+		line := []byte(`["create","T1",1,"w1",{"title":"t","type":"task","context_files":["docs/design,v2.md"]}]`)
+		op, err := ParseLine(line)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"docs/design,v2.md"}, op.Payload.ContextFiles)
+		assert.Equal(t, []string{"docs/design,v2.md"}, DecodeContextFiles(op.Payload.ContextFiles))
+		assert.Equal(t, []string{"docs/design,v2.md"}, op.Payload.ContextFiles, "DecodeContextFiles must not mutate the payload")
+	})
+}
