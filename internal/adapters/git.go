@@ -928,15 +928,22 @@ type DiffStatusEntry struct {
 // checks: `git diff --name-only` collapses a rename to only its destination
 // path, which can hide that the file's original location was out of scope.
 func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
+	return c.DiffNameStatusRange(baseSHA, "HEAD")
+}
+
+// DiffNameStatusRange is DiffNameStatus against an arbitrary head ref
+// (two-dot `base head` semantics), used when CommitReference evidence lives
+// on the primary branch rather than the worktree HEAD.
+func (c *Client) DiffNameStatusRange(baseSHA, head string) ([]DiffStatusEntry, error) {
 	// -z switches git to NUL-delimited, unquoted output: without it, git
 	// quotes and octal-escapes any path containing non-ASCII or special
 	// characters (e.g. "caf\303\251.go" instead of the literal "café.go"),
 	// which breaks scope-containment comparisons against the literal path.
 	// Mirrors DiffNameOnlyRange, which already handles this correctly.
-	cmd := c.cmd("diff", "--name-status", "-M", "-z", baseSHA, "HEAD")
+	cmd := c.cmd("diff", "--name-status", "-M", "-z", baseSHA, head)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("git diff --name-status -M %s HEAD: %w", baseSHA, err)
+		return nil, fmt.Errorf("git diff --name-status -M %s %s: %w", baseSHA, head, err)
 	}
 	return parseNameStatusZ(out), nil
 }

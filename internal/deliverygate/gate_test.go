@@ -292,6 +292,67 @@ func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	assert.NotEmpty(t, result.Remediation)
 }
 
+// TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC
+// covers the CA+PJ squash-land path: the claim worktree stays on the old
+// task-branch tip (no matching conventional commit), while main has
+// `feat(ISSUE): … (#PR)`. CommitReference must accept the primary-branch
+// evidence without requiring the worktree to be reset.
+func TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	require.NoError(t, os.WriteFile(file, []byte("stale task tip"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	runGit(t, tmpDir, "checkout", "main")
+	require.NoError(t, os.WriteFile(file, []byte("squash landed"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "feat(TEST-123): land squash (#217)")
+
+	runGit(t, tmpDir, "checkout", "task/TEST-123")
+
+	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.True(t, result.Pass, "matching conventional commit on main must satisfy CommitReference when the worktree is still on the stale task branch")
+	assert.Empty(t, result.Remediation)
+}
+
+// TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_MATENC
+// keeps the fail-closed path: a stale task branch plus a primary branch
+// that also lacks a matching commit must not pass.
+func TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_MATENC(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	file := filepath.Join(tmpDir, "file.txt")
+	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "base")
+	runGit(t, tmpDir, "branch", "-M", "main")
+	baseCommit := getHeadSHA(t, tmpDir)
+
+	runGit(t, tmpDir, "checkout", "-b", "task/TEST-123")
+	require.NoError(t, os.WriteFile(file, []byte("stale task tip"), 0644))
+	runGit(t, tmpDir, "add", "file.txt")
+	runGit(t, tmpDir, "commit", "-m", "wip: not a conventional reference")
+
+	result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
+	assert.False(t, result.Pass, "stale worktree with no matching commit on main must still fail")
+	assert.NotEmpty(t, result.Remediation)
+}
+
 // TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1 verifies that
 // a commit type outside the repo's documented convention (feat, fix, refactor,
 // test, docs, style, polish — see docs/conventions.md) does not satisfy the

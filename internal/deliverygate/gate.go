@@ -143,8 +143,10 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 //  1. Conventional-commit reference exists: at least one commit's subject
 //     matches <type>(<ISSUE-ID>): ... or <type>(<ISSUE-ID>)!: ..., where
 //     type is one of feat, fix, refactor, test, docs, style, polish (see
-//     docs/conventions.md).
-//  2. Net delivery is non-empty: the tree diff baseCommit..HEAD is
+//     docs/conventions.md). The worktree HEAD is searched first; if it has
+//     no matching evidence, refs/heads/main (then refs/heads/master) is
+//     searched so a squash-land on the primary branch still counts.
+//  2. Net delivery is non-empty: the tree diff baseCommit..head is
 //     non-empty (reusing the same diff primitive as ScopeContainmentCheck).
 //
 // This intentionally does NOT attempt to prove that the specific matching
@@ -166,9 +168,34 @@ func scopeContainmentCheck(worktreePath, baseCommit string, scope []string) Chec
 // which is only correct when baseCommit is the real divergence point.
 func commitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult {
 	git := adapters.New(worktreePath)
+	worktreeResult := commitReferenceAgainst(git, baseCommit, "HEAD", issueID)
+	if worktreeResult.Pass {
+		return worktreeResult
+	}
+	// After a remote squash-land, matching conventional commits live on
+	// main/master while the claim worktree is still on the stale task
+	// branch. Search that primary branch as a fallback so coordinators
+	// do not need --skip-delivery-gate or a worktree reset.
+	if primary, ok := primaryBranchRef(git); ok {
+		if primaryResult := commitReferenceAgainst(git, baseCommit, primary, issueID); primaryResult.Pass {
+			return primaryResult
+		}
+	}
+	return worktreeResult
+}
 
-	// Get only commits strictly after baseCommit (exclusive) up to HEAD.
-	entries, err := git.LogRange(baseCommit, "HEAD")
+func primaryBranchRef(git *adapters.Client) (string, bool) {
+	for _, ref := range []string{"refs/heads/main", "refs/heads/master"} {
+		if _, err := git.ResolveRevision(ref); err == nil {
+			return ref, true
+		}
+	}
+	return "", false
+}
+
+func commitReferenceAgainst(git *adapters.Client, baseCommit, head, issueID string) CheckResult {
+	// Get only commits strictly after baseCommit (exclusive) up to head.
+	entries, err := git.LogRange(baseCommit, head)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
@@ -207,9 +234,9 @@ func commitReferenceCheck(worktreePath, baseCommit, issueID string) CheckResult 
 	// range (e.g. a revert) can cancel out exactly the change the matching
 	// commit made, leaving nothing actually delivered even though the
 	// matching commit "touched files" at the time it was made. Require the
-	// net base..HEAD diff to be non-empty as independent evidence that
+	// net base..head diff to be non-empty as independent evidence that
 	// something was actually delivered.
-	diffEntries, err := git.DiffNameStatus(baseCommit)
+	diffEntries, err := git.DiffNameStatusRange(baseCommit, head)
 	if err != nil {
 		return CheckResult{
 			Pass:        false,
