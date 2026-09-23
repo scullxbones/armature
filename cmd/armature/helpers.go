@@ -450,7 +450,7 @@ func validFlagNames(cmd *cobra.Command) []string {
 	return names
 }
 
-func short(fp string) string {
+func fingerprintPrefix8(fp string) string {
 	if len(fp) < 8 {
 		return fp
 	}

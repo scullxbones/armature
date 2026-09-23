@@ -74,7 +74,7 @@ func newStaleReviewCmd() *cobra.Command {
 				switch result.Status {
 				case sources.VerifyChanged:
 					summary = fmt.Sprintf("fingerprint changed (stored: %s, current: %s)",
-						short(result.Stored), short(result.Current))
+						fingerprintPrefix8(result.Stored), fingerprintPrefix8(result.Current))
 				case sources.VerifyMissing:
 					summary = "no cache found"
 				case sources.VerifyStale:

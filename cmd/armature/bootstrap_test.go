@@ -719,7 +719,7 @@ func TestRunRepoSetupAlwaysCreatesDualBranchWorktree_REQ_SB_T9(t *testing.T) {
 func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
 	src := makeBootstrapTestFSWithPlugin(t)
 
-	pluginName, err := getPluginNameFromFS(src)
+	pluginName, err := pluginNameFromFS(src)
 	require.NoError(t, err)
 	assert.Equal(t, "armature", pluginName, "plugin name should be extracted from plugin.json")
 }

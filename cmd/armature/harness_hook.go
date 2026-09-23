@@ -76,6 +76,8 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 	swallowErr(err)
 }
 
+// isBindingStale reports that a resolved issue id has no live claim: missing
+// issue, status outside claimed/in-progress, or TTL expiry. All three fail open.
 func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	issue, ok := snap.Issues[taskID]
 	if !ok {
@@ -137,6 +139,19 @@ func resolvePathForComparison(path string) string {
 		return abs
 	}
 	return ""
+}
+
+func failOpenPassThrough(w io.Writer, gitDir, userMsg, logReason string) error {
+	fmt.Fprintf(w, "error: %s\n", userMsg)
+	swallowErr(logPassThrough(gitDir, logReason))
+	return nil
+}
+
+func shouldCaptureShellPostToolUseEvidence(event harnesshook.Event, caps harnesshook.PlatformCapabilities, issueID string) bool {
+	return event.Kind == harnesshook.EventPostToolUse &&
+		issueID != "" &&
+		caps.PostToolUse &&
+		slices.Contains(caps.SupportedShellTools, event.Tool)
 }
 
 func applyRunResult(out io.Writer, result harnesshook.RunResult) error {
@@ -254,28 +269,19 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 			sessionBinding := resolveIssueBinding(gitDir)
 
-			// Read hook input from stdin (before binding resolution per ADR-0007).
-			// A read failure fails open: warn loudly and pass through rather than
-			// blocking the platform on a nonzero exit (finding 3).
 			inputData, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to read hook input: %v\n", err)
-				swallowErr(logPassThrough(gitDir, "stdin read failed"))
-				return nil
+				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("failed to read hook input: %v", err), "stdin read failed")
 			}
 
 			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to select hook adapter: %v\n", err)
-				swallowErr(logPassThrough(gitDir, "adapter selection failed"))
-				return nil
+				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("failed to select hook adapter: %v", err), "adapter selection failed")
 			}
 
 			event, err := adapter.Decode(inputData)
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to decode hook event: %v\n", err)
-				swallowErr(logPassThrough(gitDir, "event decode failed"))
-				return nil
+				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("failed to decode hook event: %v", err), "event decode failed")
 			}
 
 			filePath := harnesshook.ExtractFilePathFromToolInput(event.ToolInput)
@@ -286,14 +292,9 @@ func newHarnessHookCmd() *cobra.Command {
 				Tool:     event.Tool,
 			}
 
-			// Resolve binding from event and session binding (single resolution per ADR-0007);
-			// also get the git dir where it was resolved.
-			// Pass the platform's supported shell tools so shell tool events skip path-based resolution.
 			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding, gitDir, adapter.Capabilities().SupportedShellTools)
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "error: binding resolution failed: %v\n", err)
-				swallowErr(logPassThrough(gitDir, "binding resolution failed"))
-				return nil
+				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("binding resolution failed: %v", err), "binding resolution failed")
 			}
 
 			logGitDir := resolvedBinding.GitDir
@@ -325,9 +326,7 @@ func newHarnessHookCmd() *cobra.Command {
 			store := snapshot.NewStore(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir)
 			snap, err := store.Load(cmd.Context())
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "error: failed to load snapshot: %v\n", err)
-				swallowErr(logPassThrough(logGitDir, "snapshot load failed"))
-				return nil
+				return failOpenPassThrough(cmd.ErrOrStderr(), logGitDir, fmt.Sprintf("failed to load snapshot: %v", err), "snapshot load failed")
 			}
 			for _, w := range snap.Warnings {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
@@ -355,11 +354,7 @@ func newHarnessHookCmd() *cobra.Command {
 				Root:     resolvedBinding.Root,
 			})
 			if err != nil {
-				// Evaluation errors (policy resolution, evaluator, encode) are fail-open
-				// with loud stderr warning, per ADR-0007's "fail-open everywhere" (finding 3).
-				fmt.Fprintf(cmd.ErrOrStderr(), "error: hook evaluation failed: %v\n", err)
-				swallowErr(logPassThrough(logGitDir, "hook evaluation failed"))
-				return nil
+				return failOpenPassThrough(cmd.ErrOrStderr(), logGitDir, fmt.Sprintf("hook evaluation failed: %v", err), "hook evaluation failed")
 			}
 
 			blockReason := result.Decision.Message
@@ -367,13 +362,7 @@ func newHarnessHookCmd() *cobra.Command {
 				logGitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
 				string(event.Kind), event.Tool, string(result.Decision.Action), blockReason))
 
-			// Capture execution evidence for shell PostToolUse events (ADR-0008).
-			// Each platform names its shell tool differently (Claude: "Bash", Codex:
-			// "shell"/"local_shell", Devin: "exec"), so match against the resolved
-			// adapter's capability matrix rather than hardcoding "Bash" (finding: P1,
-			// PR #71 review — this hardcoding silently discarded Codex/Devin evidence).
-			if event.Kind == harnesshook.EventPostToolUse && resolvedBinding.IssueID != "" &&
-				adapter.Capabilities().PostToolUse && slices.Contains(adapter.Capabilities().SupportedShellTools, event.Tool) {
+			if shouldCaptureShellPostToolUseEvidence(event, adapter.Capabilities(), resolvedBinding.IssueID) {
 				swallowErr(harnesshook.AppendActivity(
 					logGitDir, event.Command, event.ExitCode, event.ExitCodeKnown, event.Output))
 			}

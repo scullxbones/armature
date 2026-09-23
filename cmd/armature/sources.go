@@ -131,7 +131,7 @@ func newSourcesSyncCmd() *cobra.Command {
 					if syncErr := appendLowStakesOp(mustState(cmd), logPath, o); syncErr != nil {
 						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: emit source-fingerprint for %s: %v\n", result.ID, syncErr)
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", result.ID, short(result.Fingerprint))
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "synced %s  fp=%s\n", result.ID, fingerprintPrefix8(result.Fingerprint))
 				}
 			}
 
@@ -179,7 +179,7 @@ func newSourcesVerifyCmd() *cobra.Command {
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  MISSING\n", result.ID)
 					case sources.VerifyChanged:
 						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-40s  CHANGED  (stored=%s actual=%s)\n",
-							result.ID, short(result.Stored), short(result.Current))
+							result.ID, fingerprintPrefix8(result.Stored), fingerprintPrefix8(result.Current))
 					}
 				}
 			}

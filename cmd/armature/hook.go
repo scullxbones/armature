@@ -144,7 +144,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 
-	logPath := fmt.Sprintf("%s/ops/%s.log", ctx.IssuesDir, slottedWorkerID(workerID).String())
+	logPath := opsLogPath(ctx.IssuesDir, slottedWorkerID(workerID).String())
 
 	allOps, err := ops.ReadLog(logPath)
 	if err != nil {
