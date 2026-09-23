@@ -201,15 +201,23 @@ func introducedOnTargets(before, after Result, prior map[string]struct{}, target
 	return out
 }
 
+type writePathDoesNotIntroduceFinding string
+
+const (
+	writePathDoesNotIntroduceE7  writePathDoesNotIntroduceFinding = "E7"
+	writePathDoesNotIntroduceE8  writePathDoesNotIntroduceFinding = "E8"
+	writePathDoesNotIntroduceE13 writePathDoesNotIntroduceFinding = "E13"
+)
+
+var writePathDoesNotIntroduce = map[writePathDoesNotIntroduceFinding]struct{}{
+	writePathDoesNotIntroduceE7:  {},
+	writePathDoesNotIntroduceE8:  {},
+	writePathDoesNotIntroduceE13: {},
+}
+
 func writeDoesNotIntroduceRule(rule string) bool {
-	switch rule {
-	case "E7", "E8":
-		return true
-	case "E13":
-		return true
-	default:
-		return false
-	}
+	_, ok := writePathDoesNotIntroduce[writePathDoesNotIntroduceFinding(rule)]
+	return ok
 }
 
 func citedIDsSubsetOfAny(ids []string, sets []map[string]struct{}) bool {
