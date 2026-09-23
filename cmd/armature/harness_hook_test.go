@@ -177,7 +177,7 @@ func TestApplyRunResult_PropagatesExitCode(t *testing.T) {
 		ExitCode: 2,
 	}
 	var buf bytes.Buffer
-	err := applyRunResult(&buf, result)
+	err := writeHarnessHookRunResult(&buf, result)
 	require.Error(t, err)
 	var ace adapterExitError
 	require.True(t, errors.As(err, &ace), "error must be adapterExitError")
@@ -191,7 +191,7 @@ func TestApplyRunResult_ZeroExitCode(t *testing.T) {
 		ExitCode: 0,
 	}
 	var buf bytes.Buffer
-	err := applyRunResult(&buf, result)
+	err := writeHarnessHookRunResult(&buf, result)
 	require.NoError(t, err)
 	assert.Equal(t, `{"decision":"approve"}`, buf.String())
 }
@@ -202,7 +202,7 @@ func TestResolveIssueBinding_FromFile(t *testing.T) {
 	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
 	require.NoError(t, err)
 
-	taskID := resolveIssueBinding(gitDir)
+	taskID := issueBindingFromGitDirOrEnv(gitDir)
 
 	assert.Equal(t, "task-from-file", taskID)
 }
@@ -211,7 +211,7 @@ func TestResolveIssueBinding_FromEnv(t *testing.T) {
 	gitDir := t.TempDir()
 	t.Setenv("ARMATURE_ISSUE_ID", "task-from-env")
 
-	taskID := resolveIssueBinding(gitDir)
+	taskID := issueBindingFromGitDirOrEnv(gitDir)
 
 	assert.Equal(t, "task-from-env", taskID)
 }
@@ -220,7 +220,7 @@ func TestResolveIssueBinding_Empty(t *testing.T) {
 	gitDir := t.TempDir()
 	t.Setenv("ARMATURE_ISSUE_ID", "")
 
-	taskID := resolveIssueBinding(gitDir)
+	taskID := issueBindingFromGitDirOrEnv(gitDir)
 
 	assert.Equal(t, "", taskID)
 }
@@ -232,7 +232,7 @@ func TestResolveIssueBinding_FilePreferredOverEnv(t *testing.T) {
 	require.NoError(t, err)
 	t.Setenv("ARMATURE_ISSUE_ID", "task-from-env")
 
-	taskID := resolveIssueBinding(gitDir)
+	taskID := issueBindingFromGitDirOrEnv(gitDir)
 
 	assert.Equal(t, "task-from-file", taskID)
 }
@@ -243,7 +243,7 @@ func TestResolveIssueBinding_FallsBackToLegacyTaskIDFile(t *testing.T) {
 	err := os.WriteFile(taskIDPath, []byte("legacy-task-id"), 0o644)
 	require.NoError(t, err)
 
-	taskID := resolveIssueBinding(gitDir)
+	taskID := issueBindingFromGitDirOrEnv(gitDir)
 
 	assert.Equal(t, "legacy-task-id", taskID)
 }

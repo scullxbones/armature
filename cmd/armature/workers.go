@@ -134,6 +134,15 @@ func (c *claimOwnerClocks) recordTransitionByAuthor(author string, ts int64, to 
 	}
 }
 
+func (c *claimOwnerClocks) recordTransitionAt(ts int64, to string) {
+	if ts > c.lastClaimingWorkerActivity {
+		c.lastClaimingWorkerActivity = ts
+	}
+	if ops.IsTerminalStatus(to) {
+		c.transitioned = true
+	}
+}
+
 func (c claimOwnerClocks) lastActivity() claim.LastActivity {
 	return claim.FoldLastActivity(c.claimedAt, c.lastHeartbeat, c.lastClaimingWorkerActivity)
 }

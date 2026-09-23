@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func resolveIssueBinding(gitDir string) string {
+func issueBindingFromGitDirOrEnv(gitDir string) string {
 	if issueID := harnesshook.ReadIssueBindingFile(gitDir); issueID != "" {
 		return issueID
 	}
@@ -154,7 +154,7 @@ func shouldCaptureShellPostToolUseEvidence(event harnesshook.Event, caps harness
 		slices.Contains(caps.SupportedShellTools, event.Tool)
 }
 
-func applyRunResult(out io.Writer, result harnesshook.RunResult) error {
+func writeHarnessHookRunResult(out io.Writer, result harnesshook.RunResult) error {
 	_, err := out.Write(result.Output)
 	swallowErr(err)
 	if result.ExitCode != 0 {
@@ -267,7 +267,7 @@ func newHarnessHookCmd() *cobra.Command {
 			if err != nil {
 				gitDir = filepath.Join(appCtx.RepoPath, ".git")
 			}
-			sessionBinding := resolveIssueBinding(gitDir)
+			sessionBinding := issueBindingFromGitDirOrEnv(gitDir)
 
 			inputData, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
@@ -367,7 +367,7 @@ func newHarnessHookCmd() *cobra.Command {
 					logGitDir, event.Command, event.ExitCode, event.ExitCodeKnown, event.Output))
 			}
 
-			return applyRunResult(cmd.OutOrStdout(), result)
+			return writeHarnessHookRunResult(cmd.OutOrStdout(), result)
 		},
 	}
 }

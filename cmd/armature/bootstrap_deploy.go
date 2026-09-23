@@ -101,7 +101,7 @@ func copyFile(src fs.FS, srcPath, destPath string) error {
 	return nil
 }
 
-func pluginNameFromFS(src fs.FS) (string, error) {
+func pluginNameFromSkillsFS(src fs.FS) (string, error) {
 	pluginBytes, err := fs.ReadFile(src, "plugin.json")
 	if err != nil {
 		return "", fmt.Errorf("read plugin.json: %w", err)

@@ -396,11 +396,11 @@ func cleanupClaimExclusions(repoPath string, exclusions []claimExclusion) error 
 	if len(exclusions) == 0 {
 		return nil
 	}
-	release, err := acquireGitExcludeLock(repoPath)
+	flock, err := acquireBlockingGitExcludeFlock(repoPath)
 	if err != nil {
 		return err
 	}
-	defer release()
+	defer flock.Release()
 	return cleanupClaimExclusionsLocked(repoPath, exclusions)
 }
 
@@ -894,11 +894,11 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return err
 			}
 			defer cloneFlock.Release()
-			releaseGitExcludeLock, err := acquireGitExcludeLock(ctx.RepoPath)
+			excludeFlock, err := acquireBlockingGitExcludeFlock(ctx.RepoPath)
 			if err != nil {
 				return err
 			}
-			defer releaseGitExcludeLock()
+			defer excludeFlock.Release()
 
 			if customWorktreePath {
 				if err := refuseCustomWorktreeDestination(ctx.RepoPath, worktreePath, issueID, ""); err != nil {

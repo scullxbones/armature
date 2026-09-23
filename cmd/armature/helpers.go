@@ -82,10 +82,13 @@ func mustMarshalIndent(v any) []byte {
 	return b
 }
 
-func workerIDBestEffort(repoPath string) string {
+func slottedWorkerIDBestEffort(repoPath string) string {
 	id, err := worker.GetWorkerID(repoPath)
 	swallowErr(err)
-	return id
+	if id == "" {
+		return ""
+	}
+	return slottedWorkerID(id).String()
 }
 
 type commandFailureEnvelope struct {
@@ -232,11 +235,10 @@ func mustState(cmd *cobra.Command) *executionState {
 }
 
 func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
-	workerID := workerIDBestEffort(ctx.RepoPath)
+	workerID := slottedWorkerIDBestEffort(ctx.RepoPath)
 	if workerID == "" {
-		workerID = "default"
+		workerID = slottedWorkerID("default").String()
 	}
-	workerID = slottedWorkerID(workerID).String()
 	ctx.StateDir = stateDirFor(ctx, workerID)
 	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
 	baseCtx := cmd.Context()

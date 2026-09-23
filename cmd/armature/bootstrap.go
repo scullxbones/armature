@@ -252,7 +252,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		}
 
 		if row.PluginMetadata == bootstrap.ActionInstall {
-			pluginName, err := pluginNameFromFS(skillsembed.SkillsFS)
+			pluginName, err := pluginNameFromSkillsFS(skillsembed.SkillsFS)
 			if err != nil {
 				return results, fmt.Errorf("extract plugin name: %w", err)
 			}
@@ -1068,11 +1068,11 @@ func updateGitExclude(repoPath string, addPattern, removePattern string) error {
 }
 
 func updateGitExcludeTracked(repoPath string, addPattern, removePattern string) (bool, error) {
-	release, err := acquireGitExcludeLock(repoPath)
+	flock, err := acquireBlockingGitExcludeFlock(repoPath)
 	if err != nil {
 		return false, err
 	}
-	defer release()
+	defer flock.Release()
 	return updateGitExcludeTrackedLocked(repoPath, addPattern, removePattern)
 }
 

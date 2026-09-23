@@ -15,7 +15,7 @@ import (
 // unsupported, and per I5 ("deterministic gates fail closed"), an
 // unsupported platform must refuse to lock rather than silently reporting a
 // lock as acquired: a no-op here would let callers race with no mutual
-// exclusion at all — including, for acquireClaimLock's caller, the
+// exclusion at all — including, for tryAcquirePessimisticCloneClaimFlock's caller, the
 // destructive `git worktree remove --force` / MoveWorktree path a claim lock
 // exists to make impossible, and, for lockLog's caller, concurrent op-log
 // appends racing each other. This file exists purely so a build targeting an

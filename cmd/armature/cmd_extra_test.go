@@ -1748,7 +1748,7 @@ func TestHarnessHookOutputUnchanged_REQ_AOC_S2_T4(t *testing.T) {
 		ExitCode: 0,
 	}
 	var buf bytes.Buffer
-	require.NoError(t, applyRunResult(&buf, result))
+	require.NoError(t, writeHarnessHookRunResult(&buf, result))
 	assert.Equal(t, `{"decision":"approve"}`, buf.String())
 	assert.NotContains(t, buf.String(), `"count"`)
 	assert.NotContains(t, buf.String(), `"help"`)
