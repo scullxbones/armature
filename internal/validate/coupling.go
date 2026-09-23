@@ -10,10 +10,6 @@ import (
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
-var censusedSurfaces = map[string][]string{
-	"cmd/**": {"docs/commands.md", "docs/design/surface-census.md"},
-}
-
 func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Finding {
 	var findings []Finding
 
@@ -101,7 +97,7 @@ func surfaceGlobAllowsScopeEntry(scope []string, surfaceGlob string) bool {
 	return false
 }
 
-func dropRepoWideScopeEntries(scope []string) []string {
+func dropRepoWideScopeEntriesBeforeCouplingCheck(scope []string) []string {
 	named := make([]string, 0, len(scope))
 	for _, entry := range scope {
 		if cleaned, _ := scopematch.CleanScope(entry); cleaned == "." || cleaned == "**" {
@@ -113,7 +109,7 @@ func dropRepoWideScopeEntries(scope []string) []string {
 }
 
 func docFilesOwnedExcludingRepoWide(scope []string, docFiles []string) []string {
-	named := dropRepoWideScopeEntries(scope)
+	named := dropRepoWideScopeEntriesBeforeCouplingCheck(scope)
 	var owned []string
 	for _, docFile := range docFiles {
 		if scopematch.Allows(named, docFile) {

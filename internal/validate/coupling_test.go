@@ -218,42 +218,30 @@ func TestCensusedSurfacesMatchesCensusDoc_REQ_LNGHZN_S10_T5(t *testing.T) {
 	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "design", "surface-census.md"))
 	require.NoError(t, err)
 
-	fromDoc := parseCensusedSurfaceTable(t, string(doc))
+	fromDoc := parseCensusedSurfaceTable(string(doc))
 	require.NotEmpty(t, fromDoc, "no Censused Surfaces table found in docs/design/surface-census.md")
 	assert.Equal(t, fromDoc, censusedSurfaces,
 		"censusedSurfaces has drifted from the Censused Surfaces table in docs/design/surface-census.md")
+
+	wantSrc, err := RenderCensusedSurfacesGo(string(doc))
+	require.NoError(t, err)
+	gotSrc, err := os.ReadFile("censused_surfaces_gen.go")
+	require.NoError(t, err, "run go generate ./internal/validate")
+	assert.Equal(t, wantSrc, string(gotSrc),
+		"censused_surfaces_gen.go drifted; regenerate with go generate ./internal/validate")
 }
 
-func parseCensusedSurfaceTable(t *testing.T, doc string) map[string][]string {
-	t.Helper()
-	out := make(map[string][]string)
-	inSection := false
-	for _, line := range strings.Split(doc, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "## ") {
-			inSection = trimmed == "## Censused Surfaces"
-			continue
-		}
-		if !inSection || !strings.HasPrefix(trimmed, "|") {
-			continue
-		}
-		cells := strings.Split(strings.Trim(trimmed, "|"), "|")
-		if len(cells) < 2 {
-			continue
-		}
-		surface := strings.Trim(strings.TrimSpace(cells[0]), "`")
-		if surface == "" || surface == "Surface" || strings.HasPrefix(surface, "---") {
-			continue
-		}
-		var docFiles []string
-		for _, f := range strings.Split(cells[1], ",") {
-			if cleaned := strings.Trim(strings.TrimSpace(f), "`"); cleaned != "" {
-				docFiles = append(docFiles, cleaned)
-			}
-		}
-		out[surface] = docFiles
-	}
-	return out
+func TestCensusedSurfacesGoGenerateDirective(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("censused_surfaces.go")
+	require.NoError(t, err)
+	assert.Contains(t, string(src), "//go:generate go run generate_censused_surfaces.go")
+}
+
+func TestRenderCensusedSurfacesGoRequiresTable(t *testing.T) {
+	t.Parallel()
+	_, err := RenderCensusedSurfacesGo("# no table\n")
+	require.Error(t, err)
 }
 
 func TestCheckIntroductionDoesNotBlockOnE13_REQ_LNGHZN_S10_T5(t *testing.T) {
