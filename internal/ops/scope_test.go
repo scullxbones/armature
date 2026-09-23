@@ -22,10 +22,16 @@ func TestDecodeScope_REQ_MATENC_S1_T1(t *testing.T) {
 		assert.Equal(t, []string{"src/auth/**", "src/session/**"}, got)
 	})
 
-	t.Run("comma without space is not a split", func(t *testing.T) {
+	t.Run("bare comma joined entry splits", func(t *testing.T) {
 		t.Parallel()
-		joined := []string{"a.go,b.go"}
-		assert.Equal(t, []string{"a.go,b.go"}, DecodeScope(joined))
+		got := DecodeScope([]string{"a.go,b.go"})
+		assert.Equal(t, []string{"a.go", "b.go"}, got)
+	})
+
+	t.Run("mixed comma and comma-space splits", func(t *testing.T) {
+		t.Parallel()
+		got := DecodeScope([]string{"a.go, b.go,c.go"})
+		assert.Equal(t, []string{"a.go", "b.go", "c.go"}, got)
 	})
 
 	t.Run("empty and whitespace entries are dropped", func(t *testing.T) {
@@ -37,6 +43,12 @@ func TestDecodeScope_REQ_MATENC_S1_T1(t *testing.T) {
 	t.Run("empty parts after split are dropped", func(t *testing.T) {
 		t.Parallel()
 		got := DecodeScope([]string{"a.go, , b.go"})
+		assert.Equal(t, []string{"a.go", "b.go"}, got)
+	})
+
+	t.Run("empty segments after bare commas are dropped", func(t *testing.T) {
+		t.Parallel()
+		got := DecodeScope([]string{"a.go,,b.go"})
 		assert.Equal(t, []string{"a.go", "b.go"}, got)
 	})
 
@@ -54,5 +66,15 @@ func TestDecodeScope_REQ_MATENC_S1_T1(t *testing.T) {
 		assert.Equal(t, []string{"a.go, b.go"}, op.Payload.Scope)
 		assert.Equal(t, []string{"a.go", "b.go"}, DecodeScope(op.Payload.Scope))
 		assert.Equal(t, []string{"a.go, b.go"}, op.Payload.Scope, "DecodeScope must not mutate the payload")
+	})
+
+	t.Run("ParseLine does not mutate bare-comma payload scope", func(t *testing.T) {
+		t.Parallel()
+		line := []byte(`["create","T1",1,"w1",{"title":"t","type":"task","scope":["a.go,b.go"]}]`)
+		op, err := ParseLine(line)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"a.go,b.go"}, op.Payload.Scope)
+		assert.Equal(t, []string{"a.go", "b.go"}, DecodeScope(op.Payload.Scope))
+		assert.Equal(t, []string{"a.go,b.go"}, op.Payload.Scope, "DecodeScope must not mutate the payload")
 	})
 }
