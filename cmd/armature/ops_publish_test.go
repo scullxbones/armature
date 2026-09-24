@@ -28,7 +28,7 @@ func TestAppendHighStakesOp_PublishFailureKeepsLocalCommit_REQ_OPS_PUBLISH(t *te
 	op := ops.Op{Type: ops.OpNote, TargetID: "T-HS-1", Timestamp: 100, WorkerID: "w1", Payload: ops.Payload{Msg: "loud publish"}}
 	err = appendHighStakesOp(state, logPath, op)
 	require.Error(t, err)
-	assert.True(t, isOpsPublishError(err), "got %v", err)
+	assert.True(t, isLocalArmatureTipPublishError(err), "got %v", err)
 	assert.Contains(t, err.Error(), "publish _armature")
 
 	logged, readErr := ops.ReadLog(logPath)
@@ -103,7 +103,7 @@ func TestTransitionIdenticalRetryPublishesUnpublishedLocalOp_REQ_OPS_PUBLISH(t *
 
 	_, err = runTrls(t, repo, "transition", "--issue", issueID, "--to", "blocked", "--outcome", idempotentOutcomeWaiting)
 	require.Error(t, err)
-	assert.True(t, isOpsPublishError(err), "first transition must fail loud on publish, got %v", err)
+	assert.True(t, isLocalArmatureTipPublishError(err), "first transition must fail loud on publish, got %v", err)
 	require.Len(t, transitionOpsForIssue(t, repo, issueID), 1)
 	assert.False(t, originArmatureContains(t, bareDir, issueID), "origin must still lack the unpublished transition")
 

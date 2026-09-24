@@ -586,7 +586,7 @@ func TestFetchAndRebase_ReportsRebaseError(t *testing.T) {
 	assert.Contains(t, err.Error(), "git rebase origin/feature/missing")
 }
 
-func TestFetchTrackingRef_UpdatesOriginRef(t *testing.T) {
+func TestFetchTrackingRefWithoutMovingHEAD_UpdatesOriginRef(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 	origin := filepath.Join(t.TempDir(), "origin.git")
@@ -606,18 +606,18 @@ func TestFetchTrackingRef_UpdatesOriginRef(t *testing.T) {
 
 	before := runGitOutput(t, repo, "rev-parse", "origin/_armature")
 	c := adapters.New(repo)
-	require.NoError(t, c.FetchTrackingRef("_armature"))
+	require.NoError(t, c.FetchTrackingRefWithoutMovingHEAD("_armature"))
 	after := runGitOutput(t, repo, "rev-parse", "origin/_armature")
 	assert.NotEqual(t, before, after)
 	remoteTip := runGitOutput(t, origin, "rev-parse", "refs/heads/_armature")
 	assert.Equal(t, remoteTip, after)
 }
 
-func TestFetchTrackingRef_ReportsErrorWithoutOrigin(t *testing.T) {
+func TestFetchTrackingRefWithoutMovingHEAD_ReportsErrorWithoutOrigin(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
-	err := c.FetchTrackingRef("_armature")
+	err := c.FetchTrackingRefWithoutMovingHEAD("_armature")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "git fetch origin _armature")
 }

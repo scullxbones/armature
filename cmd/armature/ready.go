@@ -283,7 +283,7 @@ func mapReadyError(err error) error {
 	if errors.As(err, &cf) {
 		return cf
 	}
-	if isOpsPublishError(err) {
+	if isLocalArmatureTipPublishError(err) {
 		return armerrors.Wrap(codeReady1, err.Error(), []string{"arm push-ops", "arm doctor"}, 1, err)
 	}
 	return armerrors.Wrap(codeReady1, err.Error(), []string{"arm doctor"}, 1, err)
