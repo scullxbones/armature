@@ -557,13 +557,6 @@ type opsBranchPublisher interface {
 	FetchAndRebase(branch string) error
 }
 
-func publishArmatureBranch(gc *adapters.Client) error {
-	if gc == nil {
-		return nil
-	}
-	return publishArmatureSequence(gc)
-}
-
 func publishArmatureSequence(gc opsBranchPublisher) error {
 	err := gc.Push("_armature")
 	if err == nil {
@@ -579,8 +572,10 @@ func publishArmatureSequence(gc opsBranchPublisher) error {
 // Success resets the pending-push tracker. Failure returns opsPublishError and
 // does not roll back the local commit and does not Reset the tracker.
 func pushOpsBranch(gc *adapters.Client, tracker ops.PendingPushTracker) error {
-	if err := publishArmatureBranch(gc); err != nil {
-		return &opsPublishError{err: err}
+	if gc != nil {
+		if err := publishArmatureSequence(gc); err != nil {
+			return &opsPublishError{err: err}
+		}
 	}
 	if tracker != nil {
 		swallowErr(tracker.Reset())

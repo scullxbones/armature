@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
@@ -54,7 +55,7 @@ var (
 // implement claims. Completion-ritual mentions of arm doctor are not claims.
 // Non-tasks and terminal issues are skipped.
 func CheckTaskContract(task Task) []Violation {
-	if task.Type != "task" || isTerminal(task.Status) {
+	if task.Type != "task" || ops.IsTerminalStatus(task.Status) {
 		return nil
 	}
 	if !ClaimsDoctorRunWiring(task.DefinitionOfDone) {
@@ -88,13 +89,4 @@ func ClaimsDoctorRunWiring(dod string) bool {
 	}
 	stripped := doctorRitualMatcher.ReplaceAllString(dod, " ")
 	return armDoctorVerbMatcher.MatchString(stripped)
-}
-
-func isTerminal(status string) bool {
-	switch status {
-	case "done", "merged", "cancelled":
-		return true
-	default:
-		return false
-	}
 }

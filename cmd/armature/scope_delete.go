@@ -9,13 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var nonTerminalStatuses = map[string]bool{
-	ops.StatusOpen:       true,
-	ops.StatusClaimed:    true,
-	ops.StatusInProgress: true,
-	ops.StatusBlocked:    true,
-}
-
 func newScopeDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scope-delete <path>",
@@ -79,7 +72,7 @@ func newScopeDeleteCmd() *cobra.Command {
 				if !ok {
 					continue
 				}
-				if nonTerminalStatuses[issue.Status] && len(issue.Scope) == 0 {
+				if !ops.IsTerminalStatus(issue.Status) && len(issue.Scope) == 0 {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 						"warning: issue %s now has an empty scope (status: %s)\n", id, issue.Status)
 				}
