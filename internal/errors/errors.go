@@ -5,6 +5,8 @@ package errors
 import (
 	"fmt"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/exitcodes"
 )
 
 // Failure Code constants reserved by ADR 0020. GENERAL-1 was the expand-step
@@ -48,15 +50,27 @@ type CommandFailure struct {
 	wrapped     error
 }
 
+// ExitFor returns the process exit number for a Failure Code. USAGE is
+// ExitUsageError (2) per docs/error-contract.md; every other live code,
+// including reserved IO, is ExitGeneralError (1). ExitIOError (5) is a
+// reserved grammar-contract slot (docs/design/cli-grammar-contract.md),
+// not the IO Command Failure mapping.
+func ExitFor(code string) int {
+	if code == CodeUSAGE {
+		return exitcodes.ExitUsageError.Int()
+	}
+	return exitcodes.ExitGeneralError.Int()
+}
+
 // New constructs a CommandFailure. A nil nextActions slice is stored as empty
 // so JSON encoding emits [] rather than null. Empty next_actions is allowed
-// on IO (ADR 0020).
-func New(code, cause string, nextActions []string, exitCode int) *CommandFailure {
-	return Wrap(code, cause, nextActions, exitCode, nil)
+// on IO (ADR 0020). The exit number is ExitFor(code).
+func New(code, cause string, nextActions []string) *CommandFailure {
+	return Wrap(code, cause, nextActions, nil)
 }
 
 // Wrap is New plus an unwrap target for errors.Is / errors.As.
-func Wrap(code, cause string, nextActions []string, exitCode int, err error) *CommandFailure {
+func Wrap(code, cause string, nextActions []string, err error) *CommandFailure {
 	if nextActions == nil {
 		nextActions = []string{}
 	}
@@ -64,7 +78,7 @@ func Wrap(code, cause string, nextActions []string, exitCode int, err error) *Co
 		Code:        code,
 		Cause:       cause,
 		NextActions: nextActions,
-		ExitCode:    exitCode,
+		ExitCode:    ExitFor(code),
 		wrapped:     err,
 	}
 }
@@ -72,8 +86,8 @@ func Wrap(code, cause string, nextActions []string, exitCode int, err error) *Co
 // Map is Wrap for a Failure Code chosen at the CLI port (command prefix).
 // Call sites with a computed code must use Map so the next-actions census
 // (which inspects New/Wrap) does not require a string constant.
-func Map(code, cause string, nextActions []string, exitCode int, err error) *CommandFailure {
-	return Wrap(code, cause, nextActions, exitCode, err)
+func Map(code, cause string, nextActions []string, err error) *CommandFailure {
+	return Wrap(code, cause, nextActions, err)
 }
 
 func (e *CommandFailure) Error() string {

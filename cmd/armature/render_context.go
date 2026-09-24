@@ -113,16 +113,16 @@ func mapRenderContextError(err error) error {
 	}
 	msg := err.Error()
 	if strings.Contains(msg, "issue ID is required") || strings.Contains(msg, "accepts at most") {
-		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, 2, err)
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, err)
 	}
 	if strings.Contains(msg, "materialize at ") {
 		return armerrors.Wrap(codeRenderContext1, msg, []string{
 			"arm render-context --issue <issue-id> --at <reachable-sha>",
 			"arm render-context --issue <issue-id>",
-		}, 1, err)
+		}, err)
 	}
 	if strings.Contains(msg, "load snapshot") {
-		return armerrors.Wrap(codeRenderContext1, msg, []string{"arm doctor"}, 1, err)
+		return armerrors.Wrap(codeRenderContext1, msg, []string{"arm doctor"}, err)
 	}
-	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, 1, err)
+	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, err)
 }

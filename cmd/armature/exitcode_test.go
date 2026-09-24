@@ -14,7 +14,7 @@ import (
 
 func TestExitJSON_Format(t *testing.T) {
 	buf := new(bytes.Buffer)
-	renderCommandFailure(buf, "json", armerrors.New("IO", "something went wrong", nil, 1))
+	renderCommandFailure(buf, "json", armerrors.New("IO", "something went wrong", nil))
 
 	out := strings.TrimSpace(buf.String())
 	require.True(t, json.Valid([]byte(out)), "must be valid JSON: %q", out)
@@ -30,7 +30,7 @@ func TestExitJSON_Format(t *testing.T) {
 
 func TestExitJSON_UsageError(t *testing.T) {
 	buf := new(bytes.Buffer)
-	renderCommandFailure(buf, "json", armerrors.New("USAGE", "bad flag", []string{"arm --help"}, 2))
+	renderCommandFailure(buf, "json", armerrors.New("USAGE", "bad flag", []string{"arm --help"}))
 
 	var m map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &m))

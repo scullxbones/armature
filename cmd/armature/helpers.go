@@ -102,7 +102,7 @@ func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailu
 	if format == "json" || format == "agent" {
 		b, err := json.Marshal(commandFailureEnvelope{Error: cf})
 		if err != nil {
-			fallback := armerrors.Wrap(armerrors.CodeIO, err.Error(), nil, 1, err)
+			fallback := armerrors.Wrap(armerrors.CodeIO, err.Error(), nil, err)
 			b = mustMarshal(commandFailureEnvelope{Error: fallback})
 		}
 		fmt.Fprintln(w, string(b))
@@ -129,7 +129,7 @@ func handleRootError(stdout, stderr io.Writer, format string, debug bool, err er
 			fmt.Fprintf(stderr, "DEBUG: %+v\n", err)
 		}
 		if pe.code == 0 {
-			return 1
+			return exitcodes.ExitGeneralError.Int()
 		}
 		return pe.code
 	}
@@ -386,9 +386,18 @@ func structuredFormat(cmd *cobra.Command) bool {
 }
 
 func writeNamedEnvelope(w io.Writer, key string, items any, help []string) error {
+	return writeCommandEnvelope(w, key, items, help, nil)
+}
+
+func writeCommandEnvelope(w io.Writer, key string, items any, help []string, decorate func(*output.Envelope) error) error {
 	env, err := output.NewEnvelope(key, items, help)
 	if err != nil {
 		return err
+	}
+	if decorate != nil {
+		if err := decorate(env); err != nil {
+			return err
+		}
 	}
 	return output.WriteEnvelope(w, env)
 }
@@ -411,7 +420,7 @@ func failLoudFlagError(cmd *cobra.Command, err error) error {
 	if len(valid) > 0 {
 		cause = cause + "; valid flags: " + strings.Join(valid, ", ")
 	}
-	return armerrors.Wrap(armerrors.CodeUSAGE, cause, []string{"arm --help"}, exitcodes.ExitUsageError.Int(), err)
+	return armerrors.Wrap(armerrors.CodeUSAGE, cause, []string{"arm --help"}, err)
 }
 
 func flagNameFromParseError(err error) string {

@@ -19,24 +19,44 @@ type Envelope struct {
 	help       []string
 }
 
-// NewEnvelope constructs an envelope for a named payload array.
-// items must be a slice or array. help is copied; a nil help becomes an empty array.
-func NewEnvelope(payloadKey string, items any, help []string) (*Envelope, error) {
-	if payloadKey == "" || payloadKey == "count" || payloadKey == "help" || payloadKey == "payload" {
-		return nil, fmt.Errorf("envelope payload key %q is not a command-declared name", payloadKey)
+func reservedEnvelopeMember(key string) bool {
+	switch key {
+	case "", "count", "help", "payload":
+		return true
+	default:
+		return false
 	}
+}
+
+func payloadValue(items any) (reflect.Value, error) {
 	if items == nil {
-		return nil, fmt.Errorf("envelope payload must be an array")
+		return reflect.Value{}, fmt.Errorf("envelope payload must be an array")
 	}
 	rv := reflect.ValueOf(items)
 	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
-		return nil, fmt.Errorf("envelope payload must be an array")
+		return reflect.Value{}, fmt.Errorf("envelope payload must be an array")
 	}
 	// encoding/json marshals []byte, [N]byte, and aliases such as json.RawMessage
 	// as a base64 string (or raw JSON), not a JSON array. Reject those so count
 	// equals payload length and the payload key is always an array (N2).
 	if rv.Type().Elem().Kind() == reflect.Uint8 {
-		return nil, fmt.Errorf("envelope payload must be an array")
+		return reflect.Value{}, fmt.Errorf("envelope payload must be an array")
+	}
+	if rv.Kind() == reflect.Slice && rv.IsNil() {
+		rv = reflect.MakeSlice(rv.Type(), 0, 0)
+	}
+	return rv, nil
+}
+
+// NewEnvelope constructs an envelope for a named payload array.
+// items must be a slice or array. help is copied; a nil help becomes an empty array.
+func NewEnvelope(payloadKey string, items any, help []string) (*Envelope, error) {
+	if reservedEnvelopeMember(payloadKey) {
+		return nil, fmt.Errorf("envelope payload key %q is not a command-declared name", payloadKey)
+	}
+	rv, err := payloadValue(items)
+	if err != nil {
+		return nil, err
 	}
 	for i, h := range help {
 		if h == "" {
@@ -51,11 +71,11 @@ func NewEnvelope(payloadKey string, items any, help []string) (*Envelope, error)
 	}
 	helpCopy := make([]string, len(help))
 	copy(helpCopy, help)
-	return &Envelope{payloadKey: payloadKey, items: items, help: helpCopy}, nil
+	return &Envelope{payloadKey: payloadKey, items: rv.Interface(), help: helpCopy}, nil
 }
 
 func (e *Envelope) AddAdjunct(key string, value any) error {
-	if key == "" || key == "count" || key == e.payloadKey || key == "help" || key == "payload" {
+	if reservedEnvelopeMember(key) || key == e.payloadKey {
 		return fmt.Errorf("envelope adjunct key %q conflicts with a reserved member", key)
 	}
 	if _, exists := e.adjuncts[key]; exists {
@@ -84,16 +104,13 @@ func (e *Envelope) MarshalJSON() ([]byte, error) {
 	if e == nil {
 		return nil, fmt.Errorf("nil envelope")
 	}
-	if e.items == nil {
-		return nil, fmt.Errorf("envelope payload must be an array")
+	rv, err := payloadValue(e.items)
+	if err != nil {
+		return nil, err
 	}
-	n := reflect.ValueOf(e.items).Len()
-	payload, err := marshalVerbatim(e.items)
+	payload, err := marshalVerbatim(rv.Interface())
 	if err != nil {
 		return nil, fmt.Errorf("marshal envelope payload: %w", err)
-	}
-	if string(payload) == "null" {
-		payload = []byte("[]")
 	}
 	key, err := marshalVerbatim(e.payloadKey)
 	if err != nil {
@@ -109,7 +126,7 @@ func (e *Envelope) MarshalJSON() ([]byte, error) {
 
 	var buf bytes.Buffer
 	buf.WriteString(`{"count":`)
-	buf.WriteString(strconv.Itoa(n))
+	buf.WriteString(strconv.Itoa(rv.Len()))
 	buf.WriteByte(',')
 	buf.Write(key)
 	buf.WriteByte(':')
@@ -158,6 +175,9 @@ func WriteEnvelope(w io.Writer, env *Envelope) error {
 	if err != nil {
 		return fmt.Errorf("marshal envelope: %w", err)
 	}
-	_, err = fmt.Fprintln(w, string(data))
+	if _, err := w.Write(data); err != nil {
+		return err
+	}
+	_, err = w.Write([]byte{'\n'})
 	return err
 }

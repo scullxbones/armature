@@ -455,20 +455,20 @@ func mapTransitionError(err error) error {
 		strings.Contains(msg, "required flag"),
 		strings.Contains(msg, "accepts at most"),
 		strings.Contains(msg, "skip-delivery-gate is only valid"):
-		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, 2, err)
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, err)
 	case strings.Contains(msg, "invalid status"):
-		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to <valid-status>", "arm show"}, 1, err)
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to <valid-status>", "arm show"}, err)
 	case strings.Contains(msg, "cannot transition to done"),
 		strings.Contains(msg, "Use --force"):
 		return armerrors.Wrap(codeTransition1, msg, []string{
 			"git switch task/<issue-id>",
 			"arm transition --to done --force",
-		}, 1, err)
+		}, err)
 	case strings.Contains(msg, "delivery gate"):
-		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, err)
 	case isLocalArmatureTipPublishError(err):
-		return armerrors.Wrap(codeTransition1, msg, []string{"arm push-ops", "arm doctor"}, 1, err)
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm push-ops", "arm doctor"}, err)
 	default:
-		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, 1, err)
+		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, err)
 	}
 }

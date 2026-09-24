@@ -95,16 +95,12 @@ func newContextHistoryCmd() *cobra.Command {
 						help[0],
 					}
 				}
-				env, err := output.NewEnvelope("commits", rows, help)
-				if err != nil {
-					return err
-				}
-				if bounded {
-					if err := env.AddAdjunct("limit", chLimit); err != nil {
-						return err
+				return writeCommandEnvelope(cmd.OutOrStdout(), "commits", rows, help, func(env *output.Envelope) error {
+					if !bounded {
+						return nil
 					}
-				}
-				return output.WriteEnvelope(cmd.OutOrStdout(), env)
+					return env.AddAdjunct("limit", chLimit)
+				})
 			}
 
 			for _, c := range rows {

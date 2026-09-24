@@ -11,16 +11,60 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 var failureCodeNumber = regexp.MustCompile(`^[0-9]+$`)
+
+func TestFailureCodeToExitMapping_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
+	registry := uniqueRegisteredCodes(t)
+	require.Contains(t, registry, armerrors.CodeUSAGE)
+	require.Contains(t, registry, armerrors.CodeIO)
+
+	codes := make([]string, 0, len(registry))
+	for code := range registry {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+
+	for _, code := range codes {
+		want := exitcodes.ExitGeneralError.Int()
+		if code == armerrors.CodeUSAGE {
+			want = exitcodes.ExitUsageError.Int()
+		}
+		assert.Equal(t, want, armerrors.ExitFor(code), "Failure Code %q exit mapping", code)
+
+		actions := []string{"arm doctor"}
+		switch code {
+		case armerrors.CodeUSAGE:
+			actions = []string{"arm --help"}
+		case armerrors.CodeIO:
+			actions = nil
+		}
+		cf := armerrors.New(code, "pin", actions)
+		assert.Equal(t, code, cf.Code)
+		assert.Equal(t, want, cf.ExitCode, "New(%q) must use ExitFor, not a call-site integer", code)
+	}
+
+	assert.Equal(t, 0, exitcodes.ExitSuccess.Int())
+	assert.Equal(t, 1, exitcodes.ExitGeneralError.Int())
+	assert.Equal(t, 2, exitcodes.ExitUsageError.Int())
+	assert.Equal(t, 3, exitcodes.ExitNotFound.Int())
+	assert.Equal(t, 4, exitcodes.ExitConflict.Int())
+	assert.Equal(t, 5, exitcodes.ExitIOError.Int())
+	assert.Equal(t, 6, exitcodes.ExitInvalidState.Int())
+	assert.NotEqual(t, armerrors.ExitFor(armerrors.CodeIO), exitcodes.ExitIOError.Int(),
+		"reserved IO failure code maps to general exit 1, not ExitIOError 5")
+}
 
 func TestErrorCodeRegistryUnique_REQ_LNGHZN_S6_T3(t *testing.T) {
 	t.Parallel()
@@ -181,7 +225,7 @@ func TestErrorObjectRejectsExtraKeys_REQ_LNGHZN_S6_T3(t *testing.T) {
 
 func TestErrorObjectNotNestedInAOCEnvelope_REQ_LNGHZN_S6_T3(t *testing.T) {
 	t.Parallel()
-	cf := armerrors.New("CLAIM-1", "issue missing", []string{"arm ready", "arm list"}, 1)
+	cf := armerrors.New("CLAIM-1", "issue missing", []string{"arm ready", "arm list"})
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "agent", cf)
 

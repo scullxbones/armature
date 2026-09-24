@@ -46,23 +46,23 @@ func mapClaimError(err error) error {
 		strings.Contains(msg, "--worktree is required"),
 		strings.Contains(msg, "--from requires an explicit --worktree"),
 		strings.Contains(msg, "accepts at most"):
-		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm claim --help"}, 2, err)
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm claim --help"}, err)
 	case strings.Contains(msg, "issue") && strings.Contains(msg, "not found") &&
 		!strings.Contains(msg, "after claim"):
-		return armerrors.Wrap(codeClaim1, msg, []string{"arm ready", "arm list"}, 1, err)
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm ready", "arm list"}, err)
 	case strings.Contains(msg, "use --force"):
-		return armerrors.Wrap(codeClaim1, msg, []string{"arm claim --force --worktree"}, 1, err)
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm claim --force --worktree"}, err)
 	case strings.Contains(msg, "is not an existing worktree of this repository"),
 		strings.Contains(msg, "--from worktree") && strings.Contains(msg, "must be on a branch"):
 		return armerrors.Wrap(codeClaim1, msg, []string{
 			"arm claim --worktree <new-path> --from <existing-branch-attached-worktree>",
-		}, 1, err)
+		}, err)
 	case strings.Contains(msg, "confidence=inferred"):
-		return armerrors.Wrap(codeClaim1, msg, []string{"arm confirm <node-id>"}, 1, err)
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm confirm <node-id>"}, err)
 	case isLocalArmatureTipPublishError(err):
-		return armerrors.Wrap(codeClaim1, msg, []string{"arm push-ops", "arm doctor"}, 1, err)
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm push-ops", "arm doctor"}, err)
 	default:
-		return armerrors.Wrap(codeClaim1, msg, []string{"arm doctor", "arm show"}, 1, err)
+		return armerrors.Wrap(codeClaim1, msg, []string{"arm doctor", "arm show"}, err)
 	}
 }
 
