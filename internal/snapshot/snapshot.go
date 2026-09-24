@@ -12,11 +12,11 @@ import (
 
 // Snapshot is the result of loading and materializing the full repo state.
 type Snapshot struct {
-	State    *materialize.State
-	Index    materialize.Index
-	Issues   map[string]*materialize.Issue
-	Warnings []string
-	Ops      []ops.Op
+	State           *materialize.State
+	Index           materialize.Index
+	Issues          map[string]*materialize.Issue
+	Warnings        []string
+	MaterializedOps []ops.Op
 }
 
 // Store owns ops-read→materialize→snapshot operations for a configured directory pair.
@@ -66,11 +66,11 @@ func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 	}
 
 	snap := &Snapshot{
-		State:    state,
-		Index:    index,
-		Issues:   issues,
-		Warnings: append(warnings, result.Warnings...),
-		Ops:      allOps,
+		State:           state,
+		Index:           index,
+		Issues:          issues,
+		Warnings:        append(warnings, result.Warnings...),
+		MaterializedOps: allOps,
 	}
 	s.current = snap
 	return snap, nil

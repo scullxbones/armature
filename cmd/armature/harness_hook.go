@@ -76,7 +76,7 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 	swallowErr(err)
 }
 
-func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
+func hasNoLiveClaim(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	issue, ok := snap.Issues[taskID]
 	if !ok {
 		return true
@@ -330,7 +330,7 @@ func newHarnessHookCmd() *cobra.Command {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
 			}
 
-			if isBindingStale(snap, resolvedBinding.IssueID, time.Now().Unix()) {
+			if hasNoLiveClaim(snap, resolvedBinding.IssueID, time.Now().Unix()) {
 				logStalePassThroughScopeViolation(appCtx, resolvedBinding, event, logGitDir)
 				swallowErr(logPassThrough(logGitDir, "stale issue binding"))
 				return nil
