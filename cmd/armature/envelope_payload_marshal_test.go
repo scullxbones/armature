@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -12,24 +13,35 @@ func TestNewEnvelopeCmdPayloadTypesHaveNoMarshalJSON_REQ_NOCOMMENTS(t *testing.T
 	t.Parallel()
 
 	samples := []any{
-		[]worktreeRow{},
-		[]validateFindingRow{},
-		[]contextHistoryRow{},
-		[]readyExplainRow{},
-		[]readyIssueRow{},
-		[]reviewAssessmentRow{},
-		[]reviewBundleWriteRow{},
-		[]versionRow{},
-		[]WorkerStatus{},
-		[]applyIssueRow{},
-		[]doctorCheckRow{},
+		worktreeRow{},
+		validateFindingRow{},
+		contextHistoryRow{},
+		readyExplainRow{},
+		readyIssueRow{},
+		reviewAssessmentRow{},
+		reviewBundleWriteRow{},
+		versionRow{},
+		WorkerStatus{},
+		applyIssueRow{},
+		doctorCheckRow{},
+		output.IssueJSON{},
 	}
 	for _, sample := range samples {
-		elem := reflect.TypeOf(sample).Elem()
-		_, ok := reflect.PtrTo(elem).MethodByName("MarshalJSON")
-		require.False(t, ok, "%s must not define MarshalJSON; nil/empty encoding stays Envelope's [] + help", elem)
+		require.False(t, implementsJSONMarshaler(sample),
+			"%T must not define MarshalJSON; nil/empty encoding stays Envelope's [] plus help", sample)
 	}
+}
 
-	_, ok := reflect.PtrTo(reflect.TypeOf(output.IssueJSON{})).MethodByName("MarshalJSON")
-	require.False(t, ok)
+func implementsJSONMarshaler(sample any) bool {
+	if _, ok := sample.(json.Marshaler); ok {
+		return true
+	}
+	rv := reflect.ValueOf(sample)
+	if rv.Kind() == reflect.Ptr {
+		return false
+	}
+	p := reflect.New(rv.Type())
+	p.Elem().Set(rv)
+	_, ok := p.Interface().(json.Marshaler)
+	return ok
 }

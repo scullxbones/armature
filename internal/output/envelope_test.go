@@ -297,14 +297,27 @@ func TestNewEnvelopePayloadElemTypesHaveNoMarshalJSON_REQ_NOCOMMENTS(t *testing.
 	t.Parallel()
 
 	samples := []any{
-		[]IssueJSON{},
-		[]ListIssue{},
-		[]ReadyIssue{},
-		[]contractListRow{},
+		IssueJSON{},
+		ListIssue{},
+		ReadyIssue{},
+		contractListRow{},
 	}
 	for _, sample := range samples {
-		elem := reflect.TypeOf(sample).Elem()
-		_, ok := reflect.PtrTo(elem).MethodByName("MarshalJSON")
-		require.False(t, ok, "%s must not define MarshalJSON; Envelope already maps nil payload to []", elem)
+		require.False(t, implementsJSONMarshaler(sample),
+			"%T must not define MarshalJSON; Envelope already maps nil payload to []", sample)
 	}
+}
+
+func implementsJSONMarshaler(sample any) bool {
+	if _, ok := sample.(json.Marshaler); ok {
+		return true
+	}
+	rv := reflect.ValueOf(sample)
+	if rv.Kind() == reflect.Ptr {
+		return false
+	}
+	p := reflect.New(rv.Type())
+	p.Elem().Set(rv)
+	_, ok := p.Interface().(json.Marshaler)
+	return ok
 }
