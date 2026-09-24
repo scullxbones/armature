@@ -27,7 +27,7 @@ const (
 
 type Layer struct {
 	Name     string `json:"name"`
-	Priority int    `json:"priority"`
+	DropRank int    `json:"priority"`
 	Content  string `json:"content"`
 }
 
@@ -56,7 +56,7 @@ func Assemble(issueID string, state *materialize.State, reader FileReader) (*Con
 	layers = append(layers, buildSiblingOutcomes(issue, graph, state))
 
 	sort.Slice(layers, func(i, j int) bool {
-		return layers[i].Priority < layers[j].Priority
+		return layers[i].DropRank < layers[j].DropRank
 	})
 
 	return &Context{
@@ -110,7 +110,7 @@ func inferRepoRootByGit(stateDir string) string {
 
 func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
 	if len(issue.ContextFiles) == 0 {
-		return Layer{Name: "context_files", Priority: 2, Content: ""}
+		return Layer{Name: "context_files", DropRank: 2, Content: ""}
 	}
 	var sections []string
 	for _, relPath := range issue.ContextFiles {
@@ -125,7 +125,7 @@ func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
 	}
 	return Layer{
 		Name:     "context_files",
-		Priority: 2,
+		DropRank: 2,
 		Content:  "## Context Files\n" + strings.Join(sections, "\n\n"),
 	}
 }
@@ -169,31 +169,31 @@ func buildCoreSpec(issue *materialize.Issue) Layer {
 	}
 	content := fmt.Sprintf("# Issue: %s\nType: %s | Scope: %s | Priority: %s\n\n## Definition of Done\n%s",
 		issue.Title, issue.Type, scope, priority, dod)
-	return Layer{Name: "core_spec", Priority: 1, Content: content}
+	return Layer{Name: "core_spec", DropRank: 1, Content: content}
 }
 
 func buildSnippets(issue *materialize.Issue) Layer {
 	if issue.Context == nil {
-		return Layer{Name: "snippets", Priority: 3, Content: ""}
+		return Layer{Name: "snippets", DropRank: 3, Content: ""}
 	}
 	var ctxMap map[string]any
 	if err := json.Unmarshal(issue.Context, &ctxMap); err != nil {
-		return Layer{Name: "snippets", Priority: 3, Content: ""}
+		return Layer{Name: "snippets", DropRank: 3, Content: ""}
 	}
 	if len(ctxMap) == 0 {
-		return Layer{Name: "snippets", Priority: 3, Content: ""}
+		return Layer{Name: "snippets", DropRank: 3, Content: ""}
 	}
 	var lines []string
 	for k, v := range ctxMap {
 		lines = append(lines, fmt.Sprintf("%s: %v", k, v))
 	}
 	sort.Strings(lines)
-	return Layer{Name: "snippets", Priority: 3, Content: strings.Join(lines, "\n")}
+	return Layer{Name: "snippets", DropRank: 3, Content: strings.Join(lines, "\n")}
 }
 
 func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) Layer {
 	if len(issue.BlockedBy) == 0 {
-		return Layer{Name: "blocker_outcomes", Priority: 3, Content: ""}
+		return Layer{Name: "blocker_outcomes", DropRank: 3, Content: ""}
 	}
 	var lines []string
 	for _, blockerID := range issue.BlockedBy {
@@ -205,13 +205,11 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 				outcome = blocker.Outcome
 			}
 		}
-		if outcome == "outcome unknown" && status != "" {
-			outcome = fmt.Sprintf("%s (outcome unknown)", status)
-		}
+		outcome = blockerDisplay(outcome, status)
 		lines = append(lines, fmt.Sprintf("- %s: %s", blockerID, outcome))
 	}
 	content := "## Blocking Issue Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "blocker_outcomes", Priority: 4, Content: content}
+	return Layer{Name: "blocker_outcomes", DropRank: 4, Content: content}
 }
 
 func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
@@ -230,27 +228,27 @@ func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materia
 	}
 
 	if len(lines) == 0 {
-		return Layer{Name: "parent_chain", Priority: 5, Content: ""}
+		return Layer{Name: "parent_chain", DropRank: 5, Content: ""}
 	}
 	content := "## Parent Chain\n" + strings.Join(lines, "\n")
-	return Layer{Name: "parent_chain", Priority: 5, Content: content}
+	return Layer{Name: "parent_chain", DropRank: 5, Content: content}
 }
 
 func buildDecisions(issue *materialize.Issue) Layer {
 	if len(issue.Decisions) == 0 {
-		return Layer{Name: "decisions", Priority: 6, Content: ""}
+		return Layer{Name: "decisions", DropRank: 6, Content: ""}
 	}
 	var lines []string
 	for _, d := range issue.Decisions {
 		lines = append(lines, fmt.Sprintf("- %s: %s — %s", d.Topic, d.Choice, d.Rationale))
 	}
 	content := "## Decisions\n" + strings.Join(lines, "\n")
-	return Layer{Name: "decisions", Priority: 6, Content: content}
+	return Layer{Name: "decisions", DropRank: 6, Content: content}
 }
 
 func buildNotes(issue *materialize.Issue) Layer {
 	if len(issue.Notes) == 0 {
-		return Layer{Name: "notes", Priority: 7, Content: ""}
+		return Layer{Name: "notes", DropRank: 7, Content: ""}
 	}
 	notes := make([]materialize.Note, 0, len(issue.Notes))
 	for _, note := range issue.Notes {
@@ -260,7 +258,7 @@ func buildNotes(issue *materialize.Issue) Layer {
 		notes = append(notes, note)
 	}
 	if len(notes) == 0 {
-		return Layer{Name: "notes", Priority: 7, Content: ""}
+		return Layer{Name: "notes", DropRank: 7, Content: ""}
 	}
 	if len(notes) > recentNotesDisplayCap {
 		notes = notes[len(notes)-recentNotesDisplayCap:]
@@ -271,12 +269,12 @@ func buildNotes(issue *materialize.Issue) Layer {
 		lines = append(lines, fmt.Sprintf("- [%s] %s", ts, n.Msg))
 	}
 	content := "## Notes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "notes", Priority: 7, Content: content}
+	return Layer{Name: "notes", DropRank: 7, Content: content}
 }
 
 func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
 	if issue.Parent == "" {
-		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
+		return Layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
 	}
 
 	_, children := graph.Hierarchy(issue.Parent)
@@ -299,8 +297,15 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 		}
 	}
 	if len(lines) == 0 {
-		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
+		return Layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "sibling_outcomes", Priority: 8, Content: content}
+	return Layer{Name: "sibling_outcomes", DropRank: 8, Content: content}
+}
+
+func blockerDisplay(outcome, status string) string {
+	if outcome == "outcome unknown" && status != "" {
+		return fmt.Sprintf("%s (outcome unknown)", status)
+	}
+	return outcome
 }

@@ -52,7 +52,7 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 
 	layer := ctx.Layers[0]
 	assert.Equal(t, "core_spec", layer.Name)
-	assert.Equal(t, 1, layer.Priority)
+	assert.Equal(t, 1, layer.DropRank)
 	assert.Contains(t, layer.Content, "Fix the thing")
 	assert.Contains(t, layer.Content, "task")
 	assert.Contains(t, layer.Content, "backend")
@@ -224,9 +224,9 @@ func TestAssembleContext_Truncation(t *testing.T) {
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
-			{Name: "core_spec", Priority: 1, Content: strings.Repeat("a", 100)},
-			{Name: "decisions", Priority: 5, Content: strings.Repeat("b", 100)},
-			{Name: "notes", Priority: 6, Content: strings.Repeat("c", 100)},
+			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 100)},
+			{Name: "decisions", DropRank: 5, Content: strings.Repeat("b", 100)},
+			{Name: "notes", DropRank: 6, Content: strings.Repeat("c", 100)},
 		},
 	}
 
@@ -854,7 +854,7 @@ func TestRenderAgent(t *testing.T) {
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
-			{Name: "core_spec", Priority: 1, Content: "Issue: Fix bug"},
+			{Name: "core_spec", DropRank: 1, Content: "Issue: Fix bug"},
 		},
 	}
 
@@ -871,8 +871,8 @@ func TestRenderHuman(t *testing.T) {
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
-			{Name: "core_spec", Priority: 1, Content: "Issue: Fix bug"},
-			{Name: "notes", Priority: 6, Content: "Some note"},
+			{Name: "core_spec", DropRank: 1, Content: "Issue: Fix bug"},
+			{Name: "notes", DropRank: 6, Content: "Some note"},
 		},
 	}
 
@@ -888,8 +888,8 @@ func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
-			{Name: "core_spec", Priority: 1, Content: strings.Repeat("a", 60)},
-			{Name: "notes", Priority: 6, Content: strings.Repeat("b", 40)},
+			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 60)},
+			{Name: "notes", DropRank: 6, Content: strings.Repeat("b", 40)},
 		},
 	}
 
@@ -902,8 +902,8 @@ func TestTruncate_OneBelowBudget_NoTruncation(t *testing.T) {
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
-			{Name: "core_spec", Priority: 1, Content: strings.Repeat("a", 59)},
-			{Name: "notes", Priority: 6, Content: strings.Repeat("b", 40)},
+			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 59)},
+			{Name: "notes", DropRank: 6, Content: strings.Repeat("b", 40)},
 		},
 	}
 
@@ -916,7 +916,7 @@ func TestTruncate_SingleLayer_NeverRemoved(t *testing.T) {
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
-			{Name: "core_spec", Priority: 1, Content: strings.Repeat("a", 1000)},
+			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 1000)},
 		},
 	}
 
@@ -930,9 +930,9 @@ func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
 	ctx := &Context{
 		IssueID: "TST-001",
 		Layers: []Layer{
-			{Name: "core_spec", Priority: 1, Content: strings.Repeat("a", 60)},
-			{Name: "decisions", Priority: 5, Content: strings.Repeat("b", 60)},
-			{Name: "notes", Priority: 5, Content: strings.Repeat("c", 60)},
+			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 60)},
+			{Name: "decisions", DropRank: 5, Content: strings.Repeat("b", 60)},
+			{Name: "notes", DropRank: 5, Content: strings.Repeat("c", 60)},
 		},
 	}
 
