@@ -30,12 +30,19 @@ func errsContain(errs []string, substr string) bool {
 	return false
 }
 
+func mustUnmarshalCitation(t *testing.T, raw string) Citation {
+	t.Helper()
+	var c Citation
+	require.NoError(t, json.Unmarshal([]byte(raw), &c))
+	return c
+}
+
 func citedSatisfied(id, rationale string) CriterionResult {
 	return CriterionResult{
 		ID:        id,
 		Status:    Satisfied,
 		Rationale: rationale,
-		Citations: []Citation{{Path: "impl.go", Line: 1}},
+		Citations: []Citation{FileCitation("impl.go", 1, 0)},
 	}
 }
 
@@ -494,7 +501,7 @@ func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "Done",
 				Citations: []Citation{
-					{Path: "impl.go", Line: 3},
+					FileCitation("impl.go", 3, 0),
 				},
 			},
 		},
@@ -544,7 +551,7 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "Done",
 				Citations: []Citation{
-					{Path: "impl.go", Line: 9999},
+					FileCitation("impl.go", 9999, 0),
 				},
 			},
 		},
@@ -666,8 +673,8 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 		ContractFingerprint: bundle.Fingerprints.Contract,
 		DeliveryFingerprint: bundle.Fingerprints.Delivery,
 		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
-			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ran", Citations: []Citation{{ActivityEntryID: "0"}}},
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{FileCitation("f.go", 1, 0)}},
+			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ran", Citations: []Citation{ActivityCitation("0")}},
 		},
 	}
 
@@ -685,7 +692,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{ActivityEntryID: "0"}}},
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{ActivityCitation("0")}},
 		},
 	}
 
@@ -726,7 +733,11 @@ func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T)
 		Results: []CriterionResult{
 			{
 				ID: "acceptance[0]", Status: Satisfied, Rationale: "ok",
-				Citations: []Citation{{Path: "f.go", Line: 1, ActivityEntryDetails: "fabricated: exit_code=0 all tests passed"}},
+				Citations: []Citation{func() Citation {
+					c := FileCitation("f.go", 1, 0)
+					c.SetActivityEntryDetails("fabricated: exit_code=0 all tests passed")
+					return c
+				}()},
 			},
 		},
 	}
@@ -734,7 +745,7 @@ func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T)
 	result, err := Record(RecordInput{Assessment: assessment, IssueID: "task-01"})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Empty(t, assessment.Results[0].Citations[0].ActivityEntryDetails,
+	assert.Empty(t, assessment.Results[0].Citations[0].ActivityEntryDetails(),
 		"inbound ActivityEntryDetails must be reset, not passed through")
 }
 
@@ -744,7 +755,7 @@ func TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV(t *testing.T) {
 		ID:        "acceptance[0]",
 		Status:    Satisfied,
 		Rationale: "ok",
-		Citations: []Citation{{Path: "f.go", Line: 1, ActivityEntryID: "0"}},
+		Citations: []Citation{mustUnmarshalCitation(t, `{"path":"f.go","line":1,"activity_entry_id":"0"}`)},
 	}
 	err := result.Valid()
 	require.Error(t, err)
@@ -850,13 +861,13 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 				ID:        "definition_of_done",
 				Status:    Satisfied,
 				Rationale: "Implementation ready",
-				Citations: []Citation{{Path: "t.go", Line: 1}},
+				Citations: []Citation{FileCitation("t.go", 1, 0)},
 			},
 			{
 				ID:        "acceptance[0]",
 				Status:    Satisfied,
 				Rationale: "Tests pass",
-				Citations: []Citation{{ActivityEntryID: "0"}},
+				Citations: []Citation{ActivityCitation("0")},
 			},
 		},
 	}
@@ -870,10 +881,10 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	assert.False(t, result.IsDuplicate)
 
 	activityCitation := &assessment.Results[1].Citations[0]
-	assert.NotEmpty(t, activityCitation.ActivityEntryDetails, "activity entry details must be populated from the log")
-	assert.Contains(t, activityCitation.ActivityEntryDetails, "entry 0")
-	assert.Contains(t, activityCitation.ActivityEntryDetails, "make test")
-	assert.Contains(t, activityCitation.ActivityEntryDetails, "exit_code=0")
+	assert.NotEmpty(t, activityCitation.ActivityEntryDetails(), "activity entry details must be populated from the log")
+	assert.Contains(t, activityCitation.ActivityEntryDetails(), "entry 0")
+	assert.Contains(t, activityCitation.ActivityEntryDetails(), "make test")
+	assert.Contains(t, activityCitation.ActivityEntryDetails(), "exit_code=0")
 }
 
 func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
@@ -963,14 +974,14 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 				ID:        "definition_of_done",
 				Status:    Satisfied,
 				Rationale: "Implementation ready",
-				Citations: []Citation{{Path: "t.go", Line: 1}},
+				Citations: []Citation{FileCitation("t.go", 1, 0)},
 			},
 			{
 				ID:        "acceptance[0]",
 				Status:    Satisfied,
 				Rationale: "Tests pass",
 
-				Citations: []Citation{{Path: "t.go", Line: 1}},
+				Citations: []Citation{FileCitation("t.go", 1, 0)},
 			},
 		},
 	}
@@ -1014,8 +1025,8 @@ func gateEvidenceRecordFixture(t *testing.T, ev ops.GateEvidence) (*ReviewBundle
 		ContractFingerprint: bundle.Fingerprints.Contract,
 		DeliveryFingerprint: bundle.Fingerprints.Delivery,
 		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
-			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{FileCitation("f.go", 1, 0)}},
+			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ok", Citations: []Citation{FileCitation("f.go", 1, 0)}},
 		},
 	}
 	return bundle, assessment
@@ -1114,7 +1125,7 @@ func disagreementAssessment(bundleID, rationale string, status CriterionStatus) 
 		Rationale: rationale,
 	}
 	if status == Satisfied {
-		result.Citations = []Citation{{Path: "impl.go", Line: 1}}
+		result.Citations = []Citation{FileCitation("impl.go", 1, 0)}
 	} else {
 		result.MissingEvidence = "not demonstrated"
 	}

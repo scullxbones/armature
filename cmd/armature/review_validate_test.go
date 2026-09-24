@@ -77,7 +77,7 @@ func prepareReviewValidateFixture(t *testing.T) (repo, bundleFile, validAssessme
 				Status:    review.Satisfied,
 				Rationale: "Implementation is complete and tested.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -94,7 +94,7 @@ func prepareReviewValidateFixture(t *testing.T) (repo, bundleFile, validAssessme
 			Status:    review.Satisfied,
 			Rationale: "Implementation verified.",
 			Citations: []review.Citation{
-				{Path: "impl.go", Line: 9999},
+				review.FileCitation("impl.go", 9999, 0),
 			},
 		},
 	}

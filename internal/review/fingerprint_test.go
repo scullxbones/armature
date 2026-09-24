@@ -129,7 +129,7 @@ func TestFingerprintResult_Deterministic(t *testing.T) {
 				Status:    review.PartiallySatisfied,
 				Rationale: "Partial",
 				Citations: []review.Citation{
-					{Path: "main.go", Line: 42},
+					review.FileCitation("main.go", 42, 0),
 				},
 			},
 		},

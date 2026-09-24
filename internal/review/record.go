@@ -38,7 +38,7 @@ func Record(input RecordInput) (*RecordResult, error) {
 
 	for i := range input.Assessment.Results {
 		for j := range input.Assessment.Results[i].Citations {
-			input.Assessment.Results[i].Citations[j].ActivityEntryDetails = ""
+			input.Assessment.Results[i].Citations[j].ClearActivityEntryDetails()
 		}
 	}
 
@@ -136,11 +136,11 @@ func Record(input RecordInput) (*RecordResult, error) {
 		for i := range input.Assessment.Results {
 			for j := range input.Assessment.Results[i].Citations {
 				citation := &input.Assessment.Results[i].Citations[j]
-				if citation.ActivityEntryID != "" {
-					entryID, err := strconv.Atoi(citation.ActivityEntryID)
+				if citation.ActivityEntryID() != "" {
+					entryID, err := strconv.Atoi(citation.ActivityEntryID())
 					if err == nil {
 						if details, ok := activityEntryMap[entryID]; ok {
-							citation.ActivityEntryDetails = FormatActivityEntryDetails(details)
+							citation.SetActivityEntryDetails(FormatActivityEntryDetails(details))
 						}
 					}
 				}

@@ -23,7 +23,7 @@ func TestValidateResult_Valid(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "all requirements met",
 				Citations: []review.Citation{
-					{Path: "file1.go", Line: 10},
+					review.FileCitation("file1.go", 10, 0),
 				},
 			},
 		},
@@ -84,7 +84,7 @@ func TestValidateResult_InvalidCitation(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "all requirements met",
 				Citations: []review.Citation{
-					{Path: "file1.go", Line: 999},
+					review.FileCitation("file1.go", 999, 0),
 				},
 			},
 		},
@@ -120,7 +120,7 @@ func TestValidateResult_SuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T)
 				Status:    review.Satisfied,
 				Rationale: "all requirements met",
 				Citations: []review.Citation{
-					{Path: "file1.go", Line: 104},
+					review.FileCitation("file1.go", 104, 0),
 				},
 			},
 		},
@@ -179,8 +179,8 @@ func TestValidateResult_MultipleCitations(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "evidence from multiple files",
 				Citations: []review.Citation{
-					{Path: "file1.go", Line: 1},
-					{Path: "file2.go", Line: 5},
+					review.FileCitation("file1.go", 1, 0),
+					review.FileCitation("file2.go", 5, 0),
 				},
 			},
 		},
@@ -348,7 +348,7 @@ func TestValidateResultNoDiff_Valid(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "implementation complete",
 				Citations: []review.Citation{
-					{Path: "internal/review/types.go", Line: 42},
+					review.FileCitation("internal/review/types.go", 42, 0),
 				},
 			},
 		},
@@ -400,7 +400,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 				Results: []review.CriterionResult{
-					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{review.FileCitation("impl.go", 1, 0)}},
 				},
 			},
 		})
@@ -432,7 +432,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: bundle.Fingerprints.Contract,
 				DeliveryFingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 				Results: []review.CriterionResult{
-					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{review.FileCitation("impl.go", 1, 0)}},
 				},
 			},
 		})
@@ -459,7 +459,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: review.FingerprintContract(contract),
 				DeliveryFingerprint: "sha256:bbbb",
 				Results: []review.CriterionResult{
-					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "Done", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "Done", Citations: []review.Citation{review.FileCitation("impl.go", 1, 0)}},
 				},
 			},
 		})
@@ -478,7 +478,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 				Results: []review.CriterionResult{
-					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{ActivityEntryID: "0"}}},
+					{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{review.ActivityCitation("0")}},
 				},
 			},
 		})
@@ -543,7 +543,7 @@ func validValidateInputWithActivity(t *testing.T, activity *review.Activity) rev
 			ContractFingerprint: bundle.Fingerprints.Contract,
 			DeliveryFingerprint: bundle.Fingerprints.Delivery,
 			Results: []review.CriterionResult{
-				{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{{Path: "impl.go", Line: 1}}},
+				{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok", Citations: []review.Citation{review.FileCitation("impl.go", 1, 0)}},
 			},
 		},
 	}
@@ -748,7 +748,7 @@ func TestValidateResult_PathOnlyCitation_FileInDiff(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "file was modified",
 				Citations: []review.Citation{
-					{Path: "internal/review/test.go", Line: 0},
+					review.FileCitation("internal/review/test.go", 0, 0),
 				},
 			},
 		},
@@ -787,7 +787,7 @@ func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "file was modified",
 				Citations: []review.Citation{
-					{Path: "nonexistent.go", Line: 0},
+					review.FileCitation("nonexistent.go", 0, 0),
 				},
 			},
 		},
@@ -831,7 +831,7 @@ func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -865,7 +865,7 @@ func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "10"},
+					review.ActivityCitation("10"),
 				},
 			},
 		},
@@ -900,7 +900,7 @@ func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T)
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "not-a-number"},
+					review.ActivityCitation("not-a-number"),
 				},
 			},
 		},
@@ -935,7 +935,7 @@ func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECE
 				Status:    review.Satisfied,
 				Rationale: "implementation complete",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -970,7 +970,7 @@ func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECE
 				Status:    review.PartiallySatisfied,
 				Rationale: "partially implemented",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -1005,7 +1005,7 @@ func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testi
 				Status:    review.Satisfied,
 				Rationale: "test executed successfully",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -1039,8 +1039,8 @@ func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "implementation complete",
 				Citations: []review.Citation{
-					{Path: "main.go", Line: 10},
-					{ActivityEntryID: "0"},
+					review.FileCitation("main.go", 10, 0),
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -1074,7 +1074,7 @@ func TestValidateActivityCitations_NilActivity_REQ_EXECEV_T3(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{Path: "main.go", Line: 10},
+					review.FileCitation("main.go", 10, 0),
 				},
 			},
 		},
@@ -1098,7 +1098,7 @@ func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -1139,7 +1139,7 @@ func TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "1"},
+					review.ActivityCitation("1"),
 				},
 			},
 		},
@@ -1177,7 +1177,7 @@ func TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV(t *tes
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -1207,7 +1207,7 @@ func TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXEC
 				Status:    review.NotSatisfied,
 				Rationale: "test still fails",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -1235,7 +1235,7 @@ func TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXE
 				Status:    review.NotSatisfied,
 				Rationale: "was already broken before this commit too",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"},
+					review.ActivityCitation("0"),
 				},
 			},
 		},
@@ -1270,7 +1270,7 @@ func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
 					Status:    review.Satisfied,
 					Rationale: "test passed",
 					Citations: []review.Citation{
-						{ActivityEntryID: "index:0"},
+						review.ActivityCitation("index:0"),
 					},
 				},
 			},
@@ -1398,8 +1398,8 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 					Rationale: "Some evidence of completion.",
 					Citations: []review.Citation{
 
-						{Path: "impl.go", Line: 1},
-						{ActivityEntryID: "0"},
+						review.FileCitation("impl.go", 1, 0),
+						review.ActivityCitation("0"),
 					},
 				},
 				{
@@ -1407,7 +1407,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 					Status:    review.Satisfied,
 					Rationale: "Feature works as designed.",
 					Citations: []review.Citation{
-						{ActivityEntryID: "0"},
+						review.ActivityCitation("0"),
 					},
 				},
 			},
