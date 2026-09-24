@@ -1306,7 +1306,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 	t.Run("digest still matches when log is unmodified", func(t *testing.T) {
 		t.Parallel()
 		logPath := filepath.Join(t.TempDir(), "armature-activity.log")
-		content := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123` + "\n")
+		content := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make build","exit_code":0,"exit_code_known":true,"head_sha":"abc123","output_hash":"h"}` + "\n")
 		require.NoError(t, os.WriteFile(logPath, content, 0o600))
 
 		activity := &review.Activity{

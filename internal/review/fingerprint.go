@@ -142,6 +142,28 @@ type activityLogLine struct {
 	OutputTail    string `json:"output_tail"`
 }
 
+func (l *activityLogLine) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	type alias activityLogLine
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	if strings.TrimSpace(a.Command) == "" {
+		return fmt.Errorf("missing command")
+	}
+	if a.ExitCodeKnown {
+		if _, ok := raw["exit_code"]; !ok {
+			return fmt.Errorf("exit_code_known is true but exit_code is omitted")
+		}
+	}
+	*l = activityLogLine(a)
+	return nil
+}
+
 func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, error) {
 	content, err := os.ReadFile(logPath) //nolint:gosec // G304: logPath is provided by Prepare
 	if err != nil {
@@ -161,6 +183,7 @@ func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	scanner.Buffer(make([]byte, 0, activityScannerBufferSize), activityScannerMaxTokenSize)
 
+	var errs []string
 	lineNum := 0
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -173,6 +196,7 @@ func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 
 		var raw activityLogLine
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+			errs = append(errs, fmt.Sprintf("activity log line %d: %v", id, err))
 			continue
 		}
 
@@ -181,6 +205,9 @@ func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan activity log: %w", err)
+	}
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("%s", strings.Join(errs, "\n"))
 	}
 
 	return entries, nil

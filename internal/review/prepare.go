@@ -85,14 +85,14 @@ func filterExcludedPaths(files []string, excludePrefixes []string) []string {
 	return filtered
 }
 
-func attachActivitySection(activityLogPath, headSHA string) *Activity {
+func attachActivitySection(activityLogPath, headSHA string) (*Activity, error) {
 	if _, err := os.Stat(activityLogPath); err != nil {
-		return nil
+		return nil, nil
 	}
 
 	entries, logContent, err := parseActivityLogFile(activityLogPath)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	deliveryHeadCount := 0
@@ -118,7 +118,7 @@ func attachActivitySection(activityLogPath, headSHA string) *Activity {
 		DeliveryHeadCount: deliveryHeadCount,
 		EarlierCount:      earlierCount,
 		LogPath:           logAbsPath,
-	}
+	}, nil
 }
 
 func Prepare(
@@ -189,7 +189,10 @@ func Prepare(
 	}
 
 	if activityLogPath != "" {
-		activity := attachActivitySection(activityLogPath, headSHA)
+		activity, err := attachActivitySection(activityLogPath, headSHA)
+		if err != nil {
+			return nil, fmt.Errorf("parse activity log: %w", err)
+		}
 		if activity != nil {
 			bundle.Activity = activity
 		}

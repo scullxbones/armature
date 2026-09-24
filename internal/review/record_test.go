@@ -757,21 +757,21 @@ func TestParseActivityLogFile_IDsAreLinePositionNotSequentialCount_REQ_EXECEV(t 
 	dir := t.TempDir()
 	logPath := dir + "/armature-activity.log"
 	content := `{"timestamp":"t0","command":"first","exit_code":0,"exit_code_known":true,"head_sha":"h","output_hash":"o"}
-this line is not valid JSON at all
+
 {"timestamp":"t2","command":"third","exit_code":0,"exit_code_known":true,"head_sha":"h","output_hash":"o"}
 `
 	require.NoError(t, os.WriteFile(logPath, []byte(content), 0o600))
 
 	entries, _, err := parseActivityLogFile(logPath)
 	require.NoError(t, err)
-	require.Len(t, entries, 2, "the malformed line should be skipped, leaving 2 valid entries")
+	require.Len(t, entries, 2, "blank lines consume physical IDs but are not entries")
 
 	first, ok := entries[0]
 	require.True(t, ok, "the first entry must keep ID 0 (physical line 0)")
 	assert.Equal(t, "first", first.Command)
 
-	_, malformedPresent := entries[1]
-	assert.False(t, malformedPresent, "the malformed physical line 1 must not produce an entry")
+	_, blankPresent := entries[1]
+	assert.False(t, blankPresent, "the blank physical line 1 must not produce an entry")
 
 	third, ok := entries[2]
 	require.True(t, ok, "the third entry must be at ID 2 (physical line 2), not shifted to ID 1")
