@@ -94,7 +94,7 @@ Prefer the in-tree Go harness when you need the **full lifecycle** (bootstrap â†
 make test-e2eharness
 ```
 
-That target builds `./bin/arm` and runs `ARM_BIN=$(pwd)/bin/arm go test -v -count=1 ./internal/e2e/harness/...`. It already creates bare origins + clones. Do not invent a browser harness. Do not treat e2eharness as a way to drive the source working tree.
+That target builds `./bin/arm` and runs `ARM_BIN=$(pwd)/bin/arm go test -v -count=1 ./internal/e2e/harness/...`. It already creates bare origins + clones. Do not invent a browser harness. Do not treat `make test-e2eharness` as a way to drive the source working tree.
 
 For a **single user path** mid-task, use the isolated repo + CLI. Global flags on every command:
 
