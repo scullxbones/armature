@@ -87,7 +87,7 @@ func TestDoctorFixPublishFailureKeepsLocalRepair_REQ_OPS_PUBLISH(t *testing.T) {
 	breakOrigin(t, repo)
 	out, err := runTrls(t, repo, "doctor", "--fix")
 	require.Error(t, err, "doctor --fix output: %s", out)
-	assert.True(t, isOpsPublishError(err) || strings.Contains(err.Error(), "publish _armature"), "got %v", err)
+	assert.True(t, isLocalArmatureTipPublishError(err) || strings.Contains(err.Error(), "publish _armature"), "got %v", err)
 
 	headAfter := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
 	assert.NotEqual(t, headBefore, headAfter, "local doctor --fix commit must remain after publish failure")

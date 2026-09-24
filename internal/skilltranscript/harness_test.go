@@ -89,7 +89,7 @@ func (tr *TestRepo) CreateStory(t *testing.T, title string) string {
 	return issueID
 }
 
-func (tr *TestRepo) CreateTask(t *testing.T, parent, title string, scope []string) string {
+func (tr *TestRepo) HarnessCreateVerifiedTask(t *testing.T, parent, title string, scope []string) string {
 	t.Helper()
 
 	args := []string{
@@ -168,7 +168,7 @@ func (tr *TestRepo) RenderContext(t *testing.T, issueID string) map[string]inter
 	return result
 }
 
-func (tr *TestRepo) Transition(t *testing.T, issueID, status, outcome string) {
+func (tr *TestRepo) HarnessDriveTransition(t *testing.T, issueID, status, outcome string) {
 	t.Helper()
 
 	args := []string{"transition", issueID, "--to", status, "--outcome", outcome}

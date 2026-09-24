@@ -686,9 +686,9 @@ func (c *Client) FetchAndRebase(branch string) error {
 	return nil
 }
 
-// FetchTrackingRef updates refs/remotes/origin/<branch> from origin without
+// FetchTrackingRefWithoutMovingHEAD updates refs/remotes/origin/<branch> from origin without
 // moving the local branch.
-func (c *Client) FetchTrackingRef(branch string) error {
+func (c *Client) FetchTrackingRefWithoutMovingHEAD(branch string) error {
 	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	cmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
