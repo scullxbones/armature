@@ -34,7 +34,7 @@ type ListGroup struct {
 	IDs    []string `json:"ids"`
 }
 
-func ListStatusRank(status string) int {
+func listStatusRank(status string) int {
 	if n, ok := listStatusRankEarlierFirst[status]; ok {
 		return n
 	}
@@ -67,7 +67,7 @@ func ListGroupsByStatus(index materialize.Index, ids []string) []ListGroup {
 		statuses = append(statuses, s)
 	}
 	sort.Slice(statuses, func(i, j int) bool {
-		return ListStatusRank(statuses[i]) < ListStatusRank(statuses[j])
+		return listStatusRank(statuses[i]) < listStatusRank(statuses[j])
 	})
 	groups := make([]ListGroup, 0, len(statuses))
 	for _, status := range statuses {
