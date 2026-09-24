@@ -9,8 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
-// DecodedEventInfo carries the minimal information extracted from a decoded
-// hook event needed for binding resolution.
 type DecodedEventInfo struct {
 	Kind     EventKind
 	FilePath string

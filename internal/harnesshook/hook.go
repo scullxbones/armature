@@ -40,7 +40,6 @@ func AbsolutizePaths(paths []string, cwd, root string) []string {
 	return absolutized
 }
 
-// PolicyResolver is the interface for resolving issue policies.
 type PolicyResolver interface {
 	Resolve(taskID string) (harnesspolicy.IssuePolicy, error)
 }
@@ -69,24 +68,14 @@ type EvaluateInput struct {
 	Root     string // worktree root for path normalization (optional; defaults to os.Getwd())
 }
 
-// Hook orchestrates hook evaluation: adapter selection, policy resolution,
-// evaluator construction, event decoding/evaluation/encoding.
 type Hook struct {
 	resolver PolicyResolver
 }
 
-// NewHook creates a new Hook with the given policy resolver.
 func NewHook(resolver PolicyResolver) *Hook {
 	return &Hook{resolver: resolver}
 }
 
-// Evaluate executes the full hook evaluation pipeline:
-// 1. Selects adapter for the platform
-// 2. Decodes input to Event
-// 3. Resolves task policy using the caller-resolved binding
-// 4. Builds evaluator from policy
-// 5. Evaluates event against policy (with absolutized paths for scope checking)
-// 6. Encodes result to output
 func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, error) {
 	adapter, err := NewAdapterForPlatform(input.Platform)
 	if err != nil {

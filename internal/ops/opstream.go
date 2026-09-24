@@ -30,7 +30,6 @@ type ValidatedOpStream struct {
 	files []*FileEntry
 }
 
-// LoadResult is one validated load of worker log files.
 type LoadResult struct {
 	Items []OpItem
 	// PhysicalEOF maps each log basename to the byte offset of the last line
@@ -122,7 +121,6 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 	return items, physicalEOF, warnings, nil
 }
 
-// LoadFromDirValidated loads every .log file under opsDir with worker-ID checks.
 func LoadFromDirValidated(opsDir string) (LoadResult, error) {
 	empty := LoadResult{
 		Items:       []OpItem{},
@@ -156,7 +154,6 @@ func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64,
 	return result.Items, result.PhysicalEOF, result.Warnings, nil
 }
 
-// ExtractOps converts a slice of OpItems to a slice of Ops.
 func ExtractOps(items []OpItem) []Op {
 	ops := make([]Op, len(items))
 	for i, item := range items {

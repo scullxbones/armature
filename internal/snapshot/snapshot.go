@@ -16,11 +16,7 @@ type Snapshot struct {
 	Index    materialize.Index
 	Issues   map[string]*materialize.Issue
 	Warnings []string
-	// Ops is the validated op set used to materialize this snapshot. Callers that
-	// derive costs or other log-backed views must use this slice rather than
-	// re-reading logs, so concurrent appends cannot mix newer usage with older
-	// hierarchy/scope data.
-	Ops []ops.Op
+	Ops      []ops.Op
 }
 
 // Store owns ops-read→materialize→snapshot operations for a configured directory pair.
@@ -32,7 +28,6 @@ type Store struct {
 	current  *Snapshot
 }
 
-// NewStore creates a new Store for loading snapshots from the given directories.
 func NewStore(opsDir, stateDir string) *Store {
 	return &Store{
 		opsDir:   opsDir,
@@ -89,7 +84,6 @@ func (s *Store) Issue(id string) *materialize.Issue {
 	return s.current.Issues[id]
 }
 
-// Index returns the current snapshot's index.
 func (s *Store) Index() materialize.Index {
 	if s.current == nil {
 		return make(materialize.Index)
@@ -120,18 +114,15 @@ func (s *Store) ReadIssue(id string) (*materialize.Issue, error) {
 	return &issue, nil
 }
 
-// IssuePath returns the filesystem path where an issue with the given ID is stored.
 func (s *Store) IssuePath(id string) string {
 	issuesDir := filepath.Join(s.stateDir, "issues")
 	return filepath.Join(issuesDir, id+".json")
 }
 
-// IndexPath returns the filesystem path to the index file.
 func (s *Store) IndexPath() string {
 	return filepath.Join(s.stateDir, "index.json")
 }
 
-// StatePath returns the filesystem path for a named file within the state directory.
 func (s *Store) StatePath(name string) string {
 	return filepath.Join(s.stateDir, name)
 }

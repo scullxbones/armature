@@ -25,7 +25,6 @@ type ActivityEntry struct {
 	Timestamp     string // RFC3339 UTC timestamp
 }
 
-// TruncatedOutput represents the truncated output.
 type TruncatedOutput struct {
 	Head string // First 1KB
 	Tail string // Last 1KB (empty if output was not truncated)
