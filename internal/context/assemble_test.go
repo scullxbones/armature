@@ -29,7 +29,6 @@ func TestOSFileReader_JoinsRoot_REQ_ARCHIMP_S16_T1(t *testing.T) {
 	require.Equal(t, testContent, content)
 }
 
-// fakeReader is an in-memory FileReader implementation for testing.
 type fakeReader struct {
 	files map[string][]byte
 }

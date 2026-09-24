@@ -81,14 +81,12 @@ func ClassifyFlags(annotations map[string]string, setFlags map[string]bool) Chan
 	return ChannelAgentFacing
 }
 
-// MarkProtocolOutput returns a copy of annotations with an explicit Protocol Output classification.
 func MarkProtocolOutput(annotations map[string]string) map[string]string {
 	out := cloneAnnotations(annotations, 1)
 	out[ChannelAnnotationKey] = string(ChannelProtocolOutput)
 	return out
 }
 
-// MarkArtifactOutput returns a copy of annotations with an explicit, cited Artifact Output classification.
 func MarkArtifactOutput(annotations map[string]string, mode ArtifactMode) map[string]string {
 	out := cloneAnnotations(annotations, 4)
 	out[ChannelAnnotationKey] = string(ChannelArtifactOutput)

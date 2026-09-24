@@ -11,8 +11,6 @@ import (
 // gitSHAPattern is the published review-bundle schema pattern for delivery SHAs.
 var gitSHAPattern = regexp.MustCompile(`^[a-f0-9]{40}$`)
 
-// DecodeReviewBundle decodes one complete ReviewBundle artifact using the
-// repository-wide strict JSON policy.
 func DecodeReviewBundle(data []byte) (ReviewBundle, error) {
 	var bundle ReviewBundle
 	if err := strictjson.Decode(data, &bundle); err != nil {
@@ -24,10 +22,6 @@ func DecodeReviewBundle(data []byte) (ReviewBundle, error) {
 	return bundle, nil
 }
 
-// validateDecodedBundleContract enforces published bundle-schema constraints that
-// ReviewBundle.Valid and encoding/json zero values do not: issue.type enum,
-// nonempty issue.title, 40-hex delivery SHAs, and a present
-// delivery.changed_files array (omitted or JSON null both decode as a nil slice).
 func validateDecodedBundleContract(rb ReviewBundle) error {
 	if rb.Issue.Title == "" {
 		return fmt.Errorf("review bundle: missing issue title")
@@ -47,8 +41,6 @@ func validateDecodedBundleContract(rb ReviewBundle) error {
 	return nil
 }
 
-// DecodeConformanceAssessment decodes one complete reviewer assessment using
-// the repository-wide strict JSON policy.
 func DecodeConformanceAssessment(data []byte) (ConformanceAssessment, error) {
 	var assessment ConformanceAssessment
 	if err := strictjson.Decode(data, &assessment); err != nil {

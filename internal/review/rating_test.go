@@ -93,7 +93,7 @@ func TestDeriveRating_NotSatisfied_Red(t *testing.T) {
 
 func TestDeriveRating_Mixed_YellowAndRed_Red(t *testing.T) {
 	t.Parallel()
-	// Red takes precedence: any not_satisfied → red
+
 	results := []review.CriterionResult{
 		{
 			ID:              "acceptance[0]",
@@ -115,7 +115,7 @@ func TestDeriveRating_Mixed_YellowAndRed_Red(t *testing.T) {
 
 func TestDeriveRating_Empty_Green(t *testing.T) {
 	t.Parallel()
-	// Empty result set is treated as green (no violations)
+
 	results := []review.CriterionResult{}
 
 	rating := review.DeriveRating(results)

@@ -19,53 +19,40 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 )
 
-// Layer represents a single named, prioritized context layer.
+const (
+	minMarkdownFence      = 3
+	parentChainDisplayCap = 3
+	recentNotesDisplayCap = 5
+)
+
 type Layer struct {
 	Name     string `json:"name"`
-	Priority int    `json:"priority"` // lower = higher priority (1 = highest)
+	Priority int    `json:"priority"`
 	Content  string `json:"content"`
 }
 
-// Context holds all assembled layers for an issue.
 type Context struct {
 	IssueID string  `json:"issue_id"`
-	Layers  []Layer `json:"layers"` // ordered by priority ascending
+	Layers  []Layer `json:"layers"`
 }
 
-// Assemble builds a layered context for the given issue from state.
 func Assemble(issueID string, state *materialize.State, reader FileReader) (*Context, error) {
 	issue, ok := state.Issues[issueID]
 	if !ok {
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
 	}
 
-	// Derive graph internally from state
 	graph := materialize.GraphFromState(state)
 
 	var layers []Layer
 
-	// Layer 1: core_spec
 	layers = append(layers, buildCoreSpec(issue))
-
-	// Layer 2: context_files
 	layers = append(layers, buildContextFiles(issue, reader))
-
-	// Layer 3: snippets
 	layers = append(layers, buildSnippets(issue))
-
-	// Layer 4: blocker_outcomes
 	layers = append(layers, buildBlockerOutcomes(issue, state))
-
-	// Layer 5: parent_chain
 	layers = append(layers, buildParentChain(issue, graph, state))
-
-	// Layer 6: decisions
 	layers = append(layers, buildDecisions(issue))
-
-	// Layer 7: notes
 	layers = append(layers, buildNotes(issue))
-
-	// Layer 8: sibling_outcomes
 	layers = append(layers, buildSiblingOutcomes(issue, graph, state))
 
 	sort.Slice(layers, func(i, j int) bool {
@@ -79,7 +66,6 @@ func Assemble(issueID string, state *materialize.State, reader FileReader) (*Con
 }
 
 func InferRepoRoot(stateDir string) string {
-	// Fast path: walk up looking for .arm/.armature directory name (no subprocess).
 	if root := inferRepoRootByPath(stateDir); root != "" {
 		return root
 	}
@@ -90,8 +76,6 @@ func InferRepoRoot(stateDir string) string {
 	return filepath.Clean(stateDir)
 }
 
-// inferRepoRootByPath walks up from stateDir looking for a directory component
-// named ".arm" or ".armature" and returns its parent (the project root).
 func inferRepoRootByPath(stateDir string) string {
 	clean := filepath.Clean(stateDir)
 	for dir := clean; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
@@ -103,10 +87,7 @@ func inferRepoRootByPath(stateDir string) string {
 	return ""
 }
 
-// inferRepoRootByGit runs "git rev-parse --show-toplevel" from stateDir (or
-// the nearest existing ancestor) to locate the repo root in worktree layouts.
 func inferRepoRootByGit(stateDir string) string {
-	// Walk up to find an existing directory to run git from.
 	dir := filepath.Clean(stateDir)
 	for dir != "." && dir != string(filepath.Separator) {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
@@ -167,8 +148,8 @@ func codeBlockFence(content string) string {
 		}
 	}
 	fenceLen := maxRun + 1
-	if fenceLen < 3 { //nolint:mnd // 3 is the minimum valid Markdown code-fence length
-		fenceLen = 3
+	if fenceLen < minMarkdownFence {
+		fenceLen = minMarkdownFence
 	}
 	return strings.Repeat("`", fenceLen)
 }
@@ -224,7 +205,6 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 				outcome = blocker.Outcome
 			}
 		}
-		// Include status alongside outcome for unambiguous signal
 		if outcome == "outcome unknown" && status != "" {
 			outcome = fmt.Sprintf("%s (outcome unknown)", status)
 		}
@@ -237,17 +217,13 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
 	var lines []string
 
-	// Get all ancestors up the hierarchy
 	ancestors := graph.Ancestry(issue.ID)
 	for _, parentID := range ancestors {
-		// Ancestors come from graph.Ancestry, which only includes parents
-		// We need to cap at 3 levels for display
-		if len(lines) >= 3 {
+		if len(lines) >= parentChainDisplayCap {
 			break
 		}
 		parentIssue, ok := state.Issues[parentID]
 		if !ok {
-			// Parent not in state; this shouldn't happen with a valid graph
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", parentID, parentIssue.Title, parentIssue.Status))
@@ -286,9 +262,8 @@ func buildNotes(issue *materialize.Issue) Layer {
 	if len(notes) == 0 {
 		return Layer{Name: "notes", Priority: 7, Content: ""}
 	}
-	// Take most recent 5
-	if len(notes) > 5 {
-		notes = notes[len(notes)-5:]
+	if len(notes) > recentNotesDisplayCap {
+		notes = notes[len(notes)-recentNotesDisplayCap:]
 	}
 	var lines []string
 	for _, n := range notes {
@@ -300,12 +275,10 @@ func buildNotes(issue *materialize.Issue) Layer {
 }
 
 func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
-	// Get the parent ID from the current issue
 	if issue.Parent == "" {
 		return Layer{Name: "sibling_outcomes", Priority: 8, Content: ""}
 	}
 
-	// Use graph.Hierarchy to get the parent's children
 	_, children := graph.Hierarchy(issue.Parent)
 
 	var lines []string
@@ -315,7 +288,6 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 		}
 		sib, ok := state.Issues[sibID]
 		if !ok {
-			// Sibling not in state; this shouldn't happen with a valid graph
 			continue
 		}
 		if sib.Status == "done" || sib.Status == "merged" {

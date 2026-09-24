@@ -13,10 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// loadActivityEntries reads the activity log at logPath, computes its digest, and
-// calls ValidateActivityDigestAndLoadEntries with a matching Activity so tests can
-// exercise the parser without duplicating digest bookkeeping. Fails the test if
-// validation reports any error (it must not, since the digest is self-computed).
 func loadActivityEntries(t *testing.T, logPath string) map[int]review.ActivityEntryDetails {
 	t.Helper()
 	content, err := os.ReadFile(logPath)
@@ -31,14 +27,6 @@ func loadActivityEntries(t *testing.T, logPath string) map[int]review.ActivityEn
 	return entries
 }
 
-// TestActivityWriterParserRoundTrip_REQ_EXECEV verifies the full write→read pipeline
-// between internal/harnesshook.AppendActivity (the writer) and
-// internal/review.ValidateActivityDigestAndLoadEntries (the parser). C2/C3/M1 stemmed from these two
-// components (plus the skill docs) being authored against different imagined log
-// formats with no cross-component test catching the mismatch; this test is that
-// missing guardrail. It exercises: quoted content, embedded newlines, unicode,
-// and >2KB output that must be truncated to head+tail while still round-tripping
-// exactly for the parts that are kept.
 func TestActivityWriterParserRoundTrip_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
@@ -48,8 +36,6 @@ func TestActivityWriterParserRoundTrip_REQ_EXECEV(t *testing.T) {
 
 	command := `grep "foo" main.go` + "\nsecond line with a \"quote\" and unicode: héllo wörld 日本語"
 
-	// Build output larger than 2KB (2*maxOutputChunkSize) so the writer truncates
-	// it to head+tail form, and make head/tail distinguishable.
 	head := strings.Repeat("H", 1200)
 	middle := strings.Repeat("M", 4000)
 	tail := strings.Repeat("T", 1200)
@@ -68,16 +54,11 @@ func TestActivityWriterParserRoundTrip_REQ_EXECEV(t *testing.T) {
 	assert.Equal(t, 7, details.ExitCode)
 	assert.True(t, details.ExitCodeKnown)
 
-	// FormatActivityEntryDetails must reflect the recovered command/exit status
-	// (rendered via %q, so compare against the quoted form).
 	formatted := review.FormatActivityEntryDetails(details)
 	assert.Contains(t, formatted, fmt.Sprintf("%q", command))
 	assert.Contains(t, formatted, "exit_code=7")
 }
 
-// TestActivityWriterParserRoundTrip_UnknownExitCode_REQ_EXECEV verifies that an
-// entry written with an unknown exit code round-trips as unknown, not as a
-// silently-coerced exit_code=0 (M2).
 func TestActivityWriterParserRoundTrip_UnknownExitCode_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
@@ -96,9 +77,6 @@ func TestActivityWriterParserRoundTrip_UnknownExitCode_REQ_EXECEV(t *testing.T) 
 	assert.Contains(t, review.FormatActivityEntryDetails(details), "exit_code=unknown")
 }
 
-// TestActivityWriterParserRoundTrip_MultipleEntriesHeadSHA_REQ_EXECEV verifies that
-// head_sha round-trips correctly across multiple appended entries, matching the
-// worktree HEAD at each append.
 func TestActivityWriterParserRoundTrip_MultipleEntriesHeadSHA_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 

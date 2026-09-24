@@ -12,14 +12,10 @@ import (
 	"github.com/scullxbones/armature/internal/ready"
 )
 
-// DynamicInvocationPaths are the main-path commands whose json/agent stdout
-// is priced from the embedded fixture graph. list, ready, and show are AOC
-// envelopes from the shared writers. render-context is the live RenderAgent
-// JSON; wrapping it would change the CLI contract.
+// DynamicInvocationPaths includes render-context as live RenderAgent JSON;
+// wrapping it would change the CLI contract.
 var DynamicInvocationPaths = []string{"list", "ready", "show", "render-context"}
 
-// AOCEnvelopePaths are the dynamic rows that must be compact
-// {count,<payload>,help} objects from Write*Envelope.
 var AOCEnvelopePaths = []string{"list", "ready", "show"}
 
 func priceDynamicInvocations(state *materialize.State, index materialize.Index, reader ctxpkg.FileReader) ([]Artifact, []byte, error) {
@@ -81,8 +77,6 @@ func measureShow(state *materialize.State) ([]byte, error) {
 	row := output.MarshalIssue(issue)
 	trunc := output.TruncateShowIssue(&row)
 	var buf bytes.Buffer
-	// json/agent show is writeShowEnvelope. FormatSpend is human-only
-	// (AOC-S2-T3) and must not be priced on this row.
 	if err := output.WriteShowEnvelope(&buf, []string{issue.ID}, []output.IssueJSON{row}, trunc); err != nil {
 		return nil, fmt.Errorf("render show envelope: %w", err)
 	}

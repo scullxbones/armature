@@ -37,7 +37,6 @@ func truncateShowText(s string, limit int) (shown string, total int, truncated b
 	return shown, total, true
 }
 
-// TruncateShowIssue mutates row in place, capping outcome and definition_of_done.
 func TruncateShowIssue(row *IssueJSON) []ShowTruncation {
 	var hints []ShowTruncation
 	if shown, total, truncated := truncateShowText(row.Outcome, ShowLargeFieldLimit); truncated {
@@ -70,7 +69,7 @@ func showHelp(ids []string, trunc []ShowTruncation) []string {
 }
 
 // WriteShowEnvelope emits the compact agent show object {count,issues,help}
-// and optional truncated adjunct. This is the live arm show json/agent path.
+// and optional truncated adjunct.
 func WriteShowEnvelope(w io.Writer, ids []string, rows []IssueJSON, trunc []ShowTruncation) error {
 	env, err := NewEnvelope("issues", rows, showHelp(ids, trunc))
 	if err != nil {
