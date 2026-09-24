@@ -3,7 +3,7 @@ package adapters
 import "path/filepath"
 
 // This file exports narrow crash-simulation hooks used by tests (in this
-// package and others, e.g. internal/materialize and internal/e2eharness)
+// package and others, e.g. internal/materialize and internal/e2e/harness)
 // to exercise AppendLog's .pending marker recovery paths without reaching
 // into unexported internals directly. It is not a _test.go file so it can
 // be imported from test code in other packages.

@@ -1,11 +1,11 @@
-package e2eharness_test
+package harness_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/e2eharness"
+	"github.com/scullxbones/armature/internal/e2e/harness"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ func TestHarnessNew_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Parallel()
 
 	armBin := "arm"
-	h := e2eharness.New(t, armBin)
+	h := harness.New(t, armBin)
 
 	// Verify origin repo exists and is bare
 	assert.DirExists(t, h.OriginDir)
@@ -38,7 +38,7 @@ func TestHarnessNew_REQ_TOPTIER_S3_T1(t *testing.T) {
 func TestHarnessClone_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	h := e2eharness.New(t, "arm")
+	h := harness.New(t, "arm")
 	workerPath := filepath.Join(h.TempDir, "worker-1")
 
 	err := h.Clone("worker-1", workerPath)
@@ -58,7 +58,7 @@ func TestHarnessClone_REQ_TOPTIER_S3_T1(t *testing.T) {
 func TestHarnessGetWorkerDir_ReturnsEmpty_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	h := e2eharness.New(t, "arm")
+	h := harness.New(t, "arm")
 
 	result := h.GetWorkerDir("nonexistent-worker")
 	assert.Equal(t, "", result)
@@ -69,7 +69,7 @@ func TestHarnessGetWorkerDir_ReturnsEmpty_REQ_TOPTIER_S3_T1(t *testing.T) {
 func TestHarnessMultipleClones_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	h := e2eharness.New(t, "arm")
+	h := harness.New(t, "arm")
 
 	// Create multiple clones
 	worker1Path := filepath.Join(h.TempDir, "worker-1")
@@ -93,7 +93,7 @@ func TestHarnessArmBinPathSet_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Parallel()
 
 	armBin := "/path/to/arm"
-	h := e2eharness.New(t, armBin)
+	h := harness.New(t, armBin)
 
 	assert.Equal(t, armBin, h.ArmBinPath)
 }
@@ -103,7 +103,7 @@ func TestHarnessArmBinPathSet_REQ_TOPTIER_S3_T1(t *testing.T) {
 func TestHarnessOriginIsAccessible_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	h := e2eharness.New(t, "arm")
+	h := harness.New(t, "arm")
 
 	// Verify the work directory has origin as a remote
 	remoteFile := filepath.Join(h.WorkDir, ".git", "config")

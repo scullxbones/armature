@@ -202,23 +202,23 @@ before tooling lands.
 
 ## TUI seam extraction (LNGHZN-S6-T4)
 
-Interactive terminal-entry code in `cmd/armature` lives in `*_tui.go` files
-(`ready_tui.go`, `stalereview_tui.go`, `dagsum_tui.go`, `tui_tui.go`): program
-construction, model wiring, `tea.NewProgram`. Non-interactive logic and
-post-TUI side effects (claim/note/dag-transition ops) stay in the host files
-and remain covered. `.gremlins.yaml` excludes `_tui\\.go$` on the same
-precedent as `_windows.go`, so mutation no longer treats unreachable
-interactive sites as test-quality misses.
+Interactive terminal-entry code (`tea.NewProgram`, model `New`, `WithScreens`)
+lives in the command files that own the entrypoints: `ready.go`,
+`stalereview.go`, `dagsum.go`, and `tui.go`. `cmd/armature/tui_seam_test.go`
+asserts those call sites exist in those files and that no standalone
+`*_tui.go` companions remain.
 
-`make coverage-check` still counts `*_tui.go` statements (that script is
-outside this task's scope). Extracting 0%-covered seam files therefore
-slightly lowers the cmd aggregate even as the host files rise.
+The extract below (LNGHZN-S6-T4) originally split construction into
+`ready_tui.go`, `stalereview_tui.go`, `dagsum_tui.go`, and `tui_tui.go` so
+`.gremlins.yaml` could exclude `_tui\\.go$`. That filename split was later
+folded back; gremlins no longer special-cases TUI companions. Mutation of
+those interactive sites is expected to land as not-covered (tests do not
+drive a real terminal). `make coverage-check` still counts the statements.
 
-Statement coverage was measured on `task/LNGHZN-S6-T4` immediately before
-and after the extract (same worktree; `make coverage` /
-`scripts/coverage-check.sh`). Cmd mutant-coverage was re-run as
-`gremlins unleash ./cmd` on this extract's parent and extract commits
-(not a prior-HEAD proxy):
+Historical measurement of the extract on `task/LNGHZN-S6-T4` (same worktree;
+`make coverage` / `scripts/coverage-check.sh`). Cmd mutant-coverage was
+re-run as `gremlins unleash ./cmd` on this extract's parent and extract
+commits (not a prior-HEAD proxy):
 
 - before: `cb0e4fb2` (pre-extract tree; `.gremlins.yaml` has no `_tui.go` exclude)
 - after: `350f3017` (extract + `_tui.go` exclude)
