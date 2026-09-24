@@ -37,7 +37,7 @@ func implementsJSONMarshaler(sample any) bool {
 		return true
 	}
 	rv := reflect.ValueOf(sample)
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		return false
 	}
 	p := reflect.New(rv.Type())
