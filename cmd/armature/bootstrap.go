@@ -575,7 +575,6 @@ func writeScaffoldingMonotonic(path, label string, content []byte, warn io.Write
 	return nil
 }
 
-
 func commitObsoleteHookTemplateRemovals(worktreePath string, isCollapsedLayout bool) error {
 	client := adapters.New(worktreePath)
 	prefix := "hooks/"
@@ -1480,7 +1479,8 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			if err := os.MkdirAll(filepath.Join(stateDir, "issues"), 0o750); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to recreate state directories after migration: %v\n", err)
 			}
-			if err := writeScaffoldingMonotonic(filepath.Join(issuesDir, ".gitignore"), ".gitignore", []byte(ops.GenerateOpsGitignore()), cmd.ErrOrStderr()); err != nil {
+			gitignorePath := filepath.Join(issuesDir, ".gitignore")
+			if err := writeScaffoldingMonotonic(gitignorePath, ".gitignore", []byte(ops.GenerateOpsGitignore()), cmd.ErrOrStderr()); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to write .gitignore after migration: %v\n", err)
 			}
 		}

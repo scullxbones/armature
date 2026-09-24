@@ -90,4 +90,3 @@ func ClaimsDoctorRunWiring(dod string) bool {
 	stripped := doctorRitualMatcher.ReplaceAllString(dod, " ")
 	return armDoctorVerbMatcher.MatchString(stripped)
 }
-
