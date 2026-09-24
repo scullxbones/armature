@@ -1,4 +1,4 @@
-package e2eharness_test
+package harness_test
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	armBinPath := buildArmBinary(t)
 
 	// Create harness with bare origin and work directory
-	h := e2eharness.New(t, armBinPath)
+	h := harness.New(t, armBinPath)
 	// Capture the integration branch before any feature/worktree checkout. The
 	// merge below must be into main, never a feature branch merged into itself.
 	mainBranch := gitGetCurrentBranch(t, h.WorkDir)
@@ -177,13 +177,13 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Logf("Happy-path lifecycle test completed successfully")
 }
 
-func assertMaterializedField(t *testing.T, h *e2eharness.Harness, field, want string) {
+func assertMaterializedField(t *testing.T, h *harness.Harness, field, want string) {
 	t.Helper()
 	got := materializedField(t, h, "TEST-001", field)
 	assert.Equal(t, want, got, "materialized %s", field)
 }
 
-func materializedField(t *testing.T, h *e2eharness.Harness, issueID, field string) string {
+func materializedField(t *testing.T, h *harness.Harness, issueID, field string) string {
 	t.Helper()
 	out, err := h.RunArm("materialize", "--repo", h.WorkDir)
 	require.NoError(t, err, "materialize failed: %s", out)

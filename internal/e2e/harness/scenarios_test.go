@@ -1,4 +1,4 @@
-package e2eharness_test
+package harness_test
 
 import (
 	"encoding/json"
@@ -112,7 +112,7 @@ func TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2(t *testing.T) {
 	assertScenarioStatus(t, h, recoveryDir, "WAVE-001", "claimed")
 }
 
-func assertScenarioStatus(t *testing.T, h *e2eharness.Harness, repo, issueID, want string) {
+func assertScenarioStatus(t *testing.T, h *harness.Harness, repo, issueID, want string) {
 	t.Helper()
 	out, err := h.RunArmIn(repo, "materialize", "--repo", repo)
 	require.NoError(t, err, "materialize %s failed: %s", issueID, out)
@@ -121,9 +121,9 @@ func assertScenarioStatus(t *testing.T, h *e2eharness.Harness, repo, issueID, wa
 	assert.Equal(t, want, strings.TrimSpace(out), "materialized status for %s", issueID)
 }
 
-func scenarioHarness(t *testing.T, issueIDs ...string) *e2eharness.Harness {
+func scenarioHarness(t *testing.T, issueIDs ...string) *harness.Harness {
 	t.Helper()
-	h := e2eharness.New(t, buildArmBinary(t))
+	h := harness.New(t, buildArmBinary(t))
 	out, err := h.RunArm("bootstrap", "--repo", h.WorkDir)
 	require.NoError(t, err, "bootstrap failed: %s", out)
 
@@ -154,7 +154,7 @@ func scenarioHarness(t *testing.T, issueIDs ...string) *e2eharness.Harness {
 	return h
 }
 
-func scenarioWorkers(t *testing.T, h *e2eharness.Harness) (string, string) {
+func scenarioWorkers(t *testing.T, h *harness.Harness) (string, string) {
 	t.Helper()
 	workerA := filepath.Join(h.TempDir, "worker-a")
 	workerB := filepath.Join(h.TempDir, "worker-b")
@@ -169,7 +169,7 @@ func scenarioWorkers(t *testing.T, h *e2eharness.Harness) (string, string) {
 	return workerA, workerB
 }
 
-func seedExpiredClaim(t *testing.T, h *e2eharness.Harness, issueID string) {
+func seedExpiredClaim(t *testing.T, h *harness.Harness, issueID string) {
 	t.Helper()
 	opsWorktree := filepath.Join(h.WorkDir, ".armature")
 	logPath := filepath.Join(opsWorktree, "ops", "abandoned-worker.log")

@@ -1,4 +1,4 @@
-package e2eharness_test
+package harness_test
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 func TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	h := e2eharness.New(t, buildArmBinary(t))
+	h := harness.New(t, buildArmBinary(t))
 	out, err := h.RunArm("bootstrap", "--repo", h.WorkDir)
 	require.NoError(t, err, "bootstrap failed: %s", out)
 	out, err = h.RunArm("worker-init", "--repo", h.WorkDir)
