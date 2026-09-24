@@ -224,7 +224,9 @@ func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentA
 		if prior.ResultFingerprint == att.ResultFingerprint {
 			continue
 		}
-		att.EffectiveRating = MaxRating(att.EffectiveRating, prior.Rating)
+		if max, ok := MaxRating(att.EffectiveRating, prior.Rating); ok {
+			att.EffectiveRating = max
+		}
 		if prior.Rating == att.Rating {
 			continue
 		}

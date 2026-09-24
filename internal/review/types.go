@@ -75,6 +75,9 @@ func ParseCriterionStatus(s string) (CriterionStatus, error) {
 
 type Rating int
 
+// Unspecified is not a Conformance Rating. MaxRating returns it when given no ratings.
+const Unspecified Rating = -1
+
 const (
 	Green Rating = iota
 	Yellow
@@ -83,6 +86,8 @@ const (
 
 func (r Rating) String() string {
 	switch r {
+	case Unspecified:
+		return "unknown"
 	case Green:
 		return "green"
 	case Yellow:
