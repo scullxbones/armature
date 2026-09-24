@@ -36,7 +36,7 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 
 		// Step 1: Create a story and task
 		storyID := repo.CreateStory(t, "Golden Transcript Story")
-		taskID := repo.CreateTask(t,
+		taskID := repo.HarnessCreateVerifiedTask(t,
 			storyID,
 			"Implement golden transcript test",
 			[]string{"internal/skilltranscript/golden_test.go"})
@@ -136,7 +136,7 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 		// Step 5: Transition the task to done
 		t.Run("arm transition marks task done", func(t *testing.T) {
 			outcome := "Implemented golden transcript test for coordinator skill verification"
-			repo.Transition(t, taskID, "done", outcome)
+			repo.HarnessDriveTransition(t, taskID, "done", outcome)
 
 			t.Logf("Successfully transitioned task %s to done", taskID)
 		})
@@ -282,7 +282,7 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 
 	// Create minimal fixture
 	storyID := repo.CreateStory(t, "Command Surface Test Story")
-	taskID := repo.CreateTask(t, storyID, "Test Task", []string{"test.go"})
+	taskID := repo.HarnessCreateVerifiedTask(t, storyID, "Test Task", []string{"test.go"})
 
 	t.Run("arm ready returns JSON array", func(t *testing.T) {
 		readyTasks := repo.Ready(t)
@@ -344,7 +344,7 @@ func TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5(t *testing.T) {
 
 	repo := NewTestRepo(t)
 	storyID := repo.CreateStory(t, "Worktree Auto-Provisioning Test Story")
-	taskID := repo.CreateTask(t, storyID, "Test auto-provisioning", []string{"test.go"})
+	taskID := repo.HarnessCreateVerifiedTask(t, storyID, "Test auto-provisioning", []string{"test.go"})
 
 	// Claim with boolean --worktree flag
 	worktreePath := repo.Claim(t, taskID, 120)

@@ -360,7 +360,7 @@ Code commits happen separately in the developer's main worktree, on their featur
 
 There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap.
 
-**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranch`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, …) with Next Actions `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIf` `!wrote`, `doctor --fix` with no remaining actions) still publishes the local `_armature` tip: success may report no-op, but origin must contain the op; remaining git errors stay `opsPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
+**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranch`. Remaining git errors are **returned to the CLI caller** as `localArmatureTipPublishError` (`publish _armature: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, …) with Next Actions `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIf` `!wrote`, `doctor --fix` with no remaining actions) still publishes the local `_armature` tip: success may report no-op, but origin must contain the op; remaining git errors stay `localArmatureTipPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
 
 **Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call `pushOpsBranchAlwaysResetTracker` — the **same git sequence**, but git errors are swallowed so a heartbeat cannot eject a worker. `tracker.Reset()` still runs after the attempt. Below threshold they stay local-only.
 
@@ -370,7 +370,7 @@ There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry 
 
 Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
 
-**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after a best-effort `FetchTrackingRef` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
+**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after a best-effort `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
 
 ### Incremental Materialization Algorithm
 
@@ -1627,7 +1627,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 |---|---|---|
 | Worker crashes after claim, before completion | Issue stuck as claimed | Heartbeat + TTL expiry; other workers reclaim after TTL |
 | Worker crashes after append, before push | Op lost locally; shared state consistent | No mitigation needed — inherently safe, worker re-issues on restart |
-| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranch`: one `FetchAndRebase` then a second `Push`. High-stakes remaining git errors fail the CLI (`opsPublishError` → command Failure Code, Next Actions `arm push-ops` / `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchAlwaysResetTracker`. `arm push-ops` is Push-only and fails as `PUSH-OPS-1` |
+| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranch`: one `FetchAndRebase` then a second `Push`. High-stakes remaining git errors fail the CLI (`localArmatureTipPublishError` → command Failure Code, Next Actions `arm push-ops` / `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchAlwaysResetTracker`. `arm push-ops` is Push-only and fails as `PUSH-OPS-1` |
 | Corrupt log line | Materialization fails on one line | Skip unparseable lines + warn (implemented in parser) |
 | Clock skew between workers | Wrong claim winner | NTP keeps skew <1s; ms timestamps make races negligible |
 | Duplicate worker IDs | Real merge conflicts | UUID generation + uniqueness validation on first push |
