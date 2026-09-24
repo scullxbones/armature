@@ -50,10 +50,18 @@ func Assemble(issueID string, state *materialize.State, reader FileReader) (*Con
 	layers = append(layers, buildContextFiles(issue, reader))
 	layers = append(layers, buildSnippets(issue))
 	layers = append(layers, buildBlockerOutcomes(issue, state))
-	layers = append(layers, buildParentChain(issue, graph, state))
+	parentLayer, err := buildParentChain(issue, graph, state)
+	if err != nil {
+		return nil, err
+	}
+	layers = append(layers, parentLayer)
 	layers = append(layers, buildDecisions(issue))
 	layers = append(layers, buildNotes(issue))
-	layers = append(layers, buildSiblingOutcomes(issue, graph, state))
+	siblingLayer, err := buildSiblingOutcomes(issue, graph, state)
+	if err != nil {
+		return nil, err
+	}
+	layers = append(layers, siblingLayer)
 
 	sort.Slice(layers, func(i, j int) bool {
 		return layers[i].DropRank < layers[j].DropRank
@@ -212,7 +220,11 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 	return Layer{Name: "blocker_outcomes", DropRank: 4, Content: content}
 }
 
-func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
+func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) (Layer, error) {
+	empty := Layer{Name: "parent_chain", DropRank: 5, Content: ""}
+	if graph == nil {
+		return empty, fmt.Errorf("parent chain: issue graph is missing")
+	}
 	var lines []string
 
 	ancestors := graph.Ancestry(issue.ID)
@@ -222,16 +234,16 @@ func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materia
 		}
 		parentIssue, ok := state.Issues[parentID]
 		if !ok {
-			continue
+			return empty, fmt.Errorf("parent chain: graph node %s is missing from state", parentID)
 		}
 		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", parentID, parentIssue.Title, parentIssue.Status))
 	}
 
 	if len(lines) == 0 {
-		return Layer{Name: "parent_chain", DropRank: 5, Content: ""}
+		return empty, nil
 	}
 	content := "## Parent Chain\n" + strings.Join(lines, "\n")
-	return Layer{Name: "parent_chain", DropRank: 5, Content: content}
+	return Layer{Name: "parent_chain", DropRank: 5, Content: content}, nil
 }
 
 func buildDecisions(issue *materialize.Issue) Layer {
@@ -272,9 +284,13 @@ func buildNotes(issue *materialize.Issue) Layer {
 	return Layer{Name: "notes", DropRank: 7, Content: content}
 }
 
-func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) Layer {
+func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) (Layer, error) {
+	empty := Layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
 	if issue.Parent == "" {
-		return Layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
+		return empty, nil
+	}
+	if graph == nil {
+		return empty, fmt.Errorf("sibling outcomes: issue graph is missing")
 	}
 
 	_, children := graph.Hierarchy(issue.Parent)
@@ -286,7 +302,7 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 		}
 		sib, ok := state.Issues[sibID]
 		if !ok {
-			continue
+			return empty, fmt.Errorf("sibling outcomes: graph node %s is missing from state", sibID)
 		}
 		if sib.Status == "done" || sib.Status == "merged" {
 			outcome := sib.Outcome
@@ -297,10 +313,10 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 		}
 	}
 	if len(lines) == 0 {
-		return Layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
+		return empty, nil
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "sibling_outcomes", DropRank: 8, Content: content}
+	return Layer{Name: "sibling_outcomes", DropRank: 8, Content: content}, nil
 }
 
 func blockerDisplay(outcome, status string) string {
