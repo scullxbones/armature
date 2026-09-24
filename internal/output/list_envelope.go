@@ -9,7 +9,7 @@ import (
 
 const ListShowHelp = "arm show <id> for outcome, scope, and acceptance"
 
-var listStatusOrder = map[string]int{
+var listStatusRankEarlierFirst = map[string]int{
 	"in-progress": 0,
 	"claimed":     1,
 	"done":        2,
@@ -35,7 +35,7 @@ type ListGroup struct {
 }
 
 func ListStatusRank(status string) int {
-	if n, ok := listStatusOrder[status]; ok {
+	if n, ok := listStatusRankEarlierFirst[status]; ok {
 		return n
 	}
 	return 99
