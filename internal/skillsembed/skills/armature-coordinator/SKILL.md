@@ -337,7 +337,7 @@ open-ended back-and-forth. Per task:
    → fix chain, and never one shared assessment file.
 3. **One consolidated remediation request** covering every finding from step 1/2.
    The first review runs after the worker has already transitioned to `done`.
-   **Do not remediate on a `done` (or `merged`) task.** `isBindingStale` treats
+   **Do not remediate on a `done` (or `merged`) task.** `hasNoLiveClaim` treats
    any status other than `claimed` or `in-progress` as stale, so the harness
    hook passes through: no scope enforcement, no hook heartbeats, and no
    second `done` delivery gate on the remediating HEAD. Before dispatching
