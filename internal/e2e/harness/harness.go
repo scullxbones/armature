@@ -1,4 +1,7 @@
-// Package e2eharness provides infrastructure for end-to-end lifecycle tests of the arm CLI.
+// Package e2eharness is the test-only lifecycle harness for arm CLI end-to-end
+// tests (make test-e2eharness). It is not a production package: it imports
+// testing, is excluded from UNIT_PACKAGES / coverage, and must not be imported
+// from cmd/ or other production code.
 //
 // It creates a bare origin repository, clones, and orchestrates the complete workflow:
 // bootstrap → worker-init → create → claim → in-progress → done → merge detection.

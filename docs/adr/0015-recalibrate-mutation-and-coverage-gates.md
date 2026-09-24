@@ -11,7 +11,7 @@ I4, I5, I7
 ## Context
 
 The repo runs three quality gates: `make coverage-check` (statement coverage,
-one aggregate number over all of `./...` minus `internal/e2eharness`,
+one aggregate number over all of `./...` minus `internal/e2e/harness`,
 threshold 85%), gremlins `threshold.mutant-coverage` in `.gremlins.yaml`
 (threshold 95), and gremlins `threshold.efficacy` (threshold 99). Measurement
 on this branch (`chore/gate-threshold-recalibration`, based on

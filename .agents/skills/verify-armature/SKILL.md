@@ -53,7 +53,7 @@ git -C "$TARGET" branch -M main
 ARM="$SOURCE/bin/arm"
 ```
 
-Leave `ARM_LOG_SLOT` **unset** unless you are explicitly testing parallel writers on one clone. The in-tree e2e harness strips that env var because `arm dag apply` writes `$workerID.log` and ignores the slot (see `internal/e2eharness/harness.go`). Two verification instances = two temp repos, not two processes on this checkout.
+Leave `ARM_LOG_SLOT` **unset** unless you are explicitly testing parallel writers on one clone. The in-tree e2e harness strips that env var because `arm dag apply` writes `$workerID.log` and ignores the slot (see `internal/e2e/harness/harness.go`). Two verification instances = two temp repos, not two processes on this checkout.
 
 Do **not** pass `--global` to bootstrap (it writes `~/.claude/`). Do **not** run `arm tui` / `arm dag summary` as the default drive â€” they are interactive TUIs. `arm ready` also opens a TUI on a TTY; always pass `--format agent --non-interactive`.
 
@@ -94,7 +94,7 @@ Prefer the in-tree Go harness when you need the **full lifecycle** (bootstrap â†
 make test-e2eharness
 ```
 
-That target builds `./bin/arm` and runs `ARM_BIN=$(pwd)/bin/arm go test -v -count=1 ./internal/e2eharness/...`. It already creates bare origins + clones. Do not invent a browser harness. Do not treat e2eharness as a way to drive the source working tree.
+That target builds `./bin/arm` and runs `ARM_BIN=$(pwd)/bin/arm go test -v -count=1 ./internal/e2e/harness/...`. It already creates bare origins + clones. Do not invent a browser harness. Do not treat e2eharness as a way to drive the source working tree.
 
 For a **single user path** mid-task, use the isolated repo + CLI. Global flags on every command:
 

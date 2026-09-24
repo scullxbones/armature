@@ -7,27 +7,20 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
-var seamHosts = []string{
-	"ready.go",
-	"stalereview.go",
-	"dagsum.go",
-	"tui.go",
-}
-
+// Host command files that own an interactive TUI entrypoint. Construction
+// (tea.NewProgram / model New / WithScreens) lives in these files, not in
+// standalone *_tui.go companions.
 var requiredSeamWiring = map[string][]string{
-	"ready_tui.go":       {"readytui.New", "tea.NewProgram"},
-	"stalereview_tui.go": {"stalereview.New", "tea.NewProgram"},
-	"dagsum_tui.go":      {"dagsummary.New", "tea.NewProgram"},
-	"tui_tui.go":         {"app.New", "WithScreens", "tea.NewProgram"},
+	"ready.go":       {"readytui.New", "tea.NewProgram"},
+	"stalereview.go": {"stalereview.New", "tea.NewProgram"},
+	"dagsum.go":      {"dagsummary.New", "tea.NewProgram"},
+	"tui.go":         {"app.New", "WithScreens", "tea.NewProgram"},
 }
 
 func cmdArmatureDir(t *testing.T) string {
@@ -35,15 +28,6 @@ func cmdArmatureDir(t *testing.T) string {
 	_, thisTestFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	return filepath.Dir(thisTestFile)
-}
-
-func repoRootFromCmd(t *testing.T) string {
-	t.Helper()
-	return filepath.Dir(filepath.Dir(cmdArmatureDir(t)))
-}
-
-func tuiSeamFile(host string) string {
-	return strings.TrimSuffix(host, ".go") + "_tui.go"
 }
 
 func cmdArmatureProductionGoFiles(t *testing.T) []string {
@@ -62,110 +46,35 @@ func cmdArmatureProductionGoFiles(t *testing.T) []string {
 	return names
 }
 
-func TestInteractiveTUIConstructionLivesInTuiFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
+func TestNoStandaloneTUICompanionFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range cmdArmatureProductionGoFiles(t) {
+		require.False(t, strings.HasSuffix(name, "_tui.go"),
+			"TUI construction belongs in the command file; remove standalone %s", name)
+	}
+}
+
+func TestInteractiveTUIConstructionLivesInCommandFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
 	t.Parallel()
 
 	dir := cmdArmatureDir(t)
 	fset := token.NewFileSet()
+	names := cmdArmatureProductionGoFiles(t)
 
-	for _, name := range cmdArmatureProductionGoFiles(t) {
-		file := parseGoFile(t, fset, filepath.Join(dir, name))
-		hits := tuiSeamCalls(fset, file)
-		if strings.HasSuffix(name, "_tui.go") {
-			continue
-		}
-		require.Empty(t, hits, "%s must not construct a bubbletea program or wire TUI models; move to *_tui.go: %v", name, hits)
+	for _, host := range []string{"ready.go", "stalereview.go", "dagsum.go", "tui.go"} {
+		require.Contains(t, names, host, "expected command file %s", host)
 	}
 
-	for _, host := range seamHosts {
-		seam := tuiSeamFile(host)
-		seamPath := filepath.Join(dir, seam)
-		_, err := os.Stat(seamPath)
-		require.NoError(t, err, "expected TUI seam file %s next to %s", seam, host)
-
-		required, ok := requiredSeamWiring[seam]
-		require.True(t, ok, "requiredSeamWiring must list %s", seam)
-
-		hits := tuiSeamCalls(fset, parseGoFile(t, fset, seamPath))
+	for host, required := range requiredSeamWiring {
+		hits := tuiSeamCalls(fset, parseGoFile(t, fset, filepath.Join(dir, host)))
 		got := make(map[string]bool, len(hits))
 		for _, hit := range hits {
 			got[hit.kind] = true
 		}
 		for _, kind := range required {
-			require.True(t, got[kind], "%s must contain %s (TUI construction / model wiring)", seam, kind)
+			require.True(t, got[kind], "%s must contain %s (TUI construction / model wiring)", host, kind)
 		}
-	}
-}
-
-const tuiSeamExcludePattern = `_tui\.go$`
-
-func yamlQuoted(pattern string) string {
-	return strconv.Quote(pattern)
-}
-
-type gremlinsConfig struct {
-	Unleash struct {
-		ExcludeFiles []string `yaml:"exclude-files"`
-	} `yaml:"unleash"`
-}
-
-func gremlinsExcludesPattern(t *testing.T, path, pattern string) bool {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err)
-
-	var cfg gremlinsConfig
-	require.NoError(t, yaml.Unmarshal(raw, &cfg), "%s must be valid YAML", path)
-
-	return slices.Contains(cfg.Unleash.ExcludeFiles, pattern)
-}
-
-func TestGremlinsExcludesTUISeamFiles_REQ_LNGHZN_S6_T4(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join(repoRootFromCmd(t), ".gremlins.yaml")
-	require.True(t, gremlinsExcludesPattern(t, path, tuiSeamExcludePattern),
-		".gremlins.yaml unleash.exclude-files must include the *_tui.go pattern")
-}
-
-func TestGremlinsExclusionCheckReadsActiveConfig_REQ_LNGHZN_S6_T4(t *testing.T) {
-	t.Parallel()
-
-	quoted := yamlQuoted(tuiSeamExcludePattern)
-	windows := yamlQuoted(`_windows\.go$`)
-
-	for _, tc := range []struct {
-		name string
-		yaml string
-		want bool
-	}{
-		{
-			name: "active entry",
-			yaml: "unleash:\n  exclude-files:\n    - " + windows + "\n    - " + quoted + "\n",
-			want: true,
-		},
-		{
-			name: "commented out",
-			yaml: "unleash:\n  exclude-files:\n    - " + windows + "\n    # - " + quoted + "\n",
-			want: false,
-		},
-		{
-			name: "parked under an unread key",
-			yaml: "unleash:\n  exclude-files:\n    - " + windows + "\nignored:\n  exclude-files:\n    - " + quoted + "\n",
-			want: false,
-		},
-		{
-			name: "exclude-files absent entirely",
-			yaml: "unleash:\n  workers: 4\n",
-			want: false,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			path := filepath.Join(t.TempDir(), ".gremlins.yaml")
-			require.NoError(t, os.WriteFile(path, []byte(tc.yaml), 0o600))
-			require.Equal(t, tc.want, gremlinsExcludesPattern(t, path, tuiSeamExcludePattern))
-		})
 	}
 }
 

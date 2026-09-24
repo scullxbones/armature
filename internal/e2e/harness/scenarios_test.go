@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/e2eharness"
+	"github.com/scullxbones/armature/internal/e2e/harness"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

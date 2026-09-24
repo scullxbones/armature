@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -159,6 +160,20 @@ mode (agents) to auto-approve all pending draft items.`,
 	cmd.Flags().StringVar(&issueID, "issue", "", "root issue ID of the subtree to review (default: all draft nodes)")
 	cmd.Flags().BoolVar(&approveAll, "approve-all", false, "approve all pending draft items (non-interactive only)")
 	return cmd
+}
+
+func runDAGSummaryTUI(items []dagsummary.Item, rootID string) (dagsummary.Model, error) {
+	m := dagsummary.New(items, rootID)
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+	if err != nil {
+		return dagsummary.Model{}, fmt.Errorf("dag-summary TUI: %w", err)
+	}
+	final, ok := finalModel.(dagsummary.Model)
+	if !ok {
+		return dagsummary.Model{}, fmt.Errorf("unexpected model type from TUI")
+	}
+	return final, nil
 }
 
 func uncitedLookup(cov traceability.Coverage) map[string]struct{} {

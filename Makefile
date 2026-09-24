@@ -6,7 +6,7 @@ PYTHON ?= python3
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS ?= -X main.Version=$(VERSION)
 INSTALL_DIR ?= $(HOME)/.local/bin
-UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2eharness$$')
+UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$')
 
 # Default target
 .DEFAULT_GOAL := help
@@ -61,7 +61,7 @@ test-skill-transcript: build
 	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/skilltranscript/...
 
 test-e2eharness: build
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/e2eharness/...
+	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/e2e/harness/...
 
 coverage: build
 	@tmp=$$(mktemp); \
