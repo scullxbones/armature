@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -290,4 +291,20 @@ func assertJSONEqual(t *testing.T, want, got []byte) {
 	require.NoError(t, json.Unmarshal(want, &wantV))
 	require.NoError(t, json.Unmarshal(got, &gotV))
 	require.Equal(t, wantV, gotV)
+}
+
+func TestNewEnvelopePayloadElemTypesHaveNoMarshalJSON_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+
+	samples := []any{
+		[]IssueJSON{},
+		[]ListIssue{},
+		[]ReadyIssue{},
+		[]contractListRow{},
+	}
+	for _, sample := range samples {
+		elem := reflect.TypeOf(sample).Elem()
+		_, ok := reflect.PtrTo(elem).MethodByName("MarshalJSON")
+		require.False(t, ok, "%s must not define MarshalJSON; Envelope already maps nil payload to []", elem)
+	}
 }
