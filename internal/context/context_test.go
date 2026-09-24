@@ -14,14 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// emptyFileReader is a test FileReader that returns an error for all files.
 type emptyFileReader struct{}
 
 func (f *emptyFileReader) ReadFile(relPath string) ([]byte, error) {
 	return nil, fmt.Errorf("file not found: %s", relPath)
 }
 
-// realFileReader reads files from the filesystem.
 type realFileReader struct {
 	root string
 }
@@ -137,7 +135,6 @@ func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *test
 		}
 	}
 	require.NotNil(t, blockerLayer)
-	// For an in-progress blocker with no outcome, should show the status
 	assert.Contains(t, blockerLayer.Content, "TST-B")
 	assert.Contains(t, blockerLayer.Content, "in-progress")
 }
@@ -178,10 +175,8 @@ func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
 		}
 	}
 	require.NotNil(t, blockerLayer)
-	// When outcome is available, should show outcome (not status)
 	assert.Contains(t, blockerLayer.Content, "TST-B")
 	assert.Contains(t, blockerLayer.Content, "fixed with edge-case handling")
-	// Outcome should be present, status should not interfere
 	assert.NotContains(t, blockerLayer.Content, "outcome unknown")
 }
 
@@ -235,10 +230,6 @@ func TestAssembleContext_Truncation(t *testing.T) {
 		},
 	}
 
-	// total chars = 300; budget chars = tokenBudget * 4
-	// Set budget so that 300 > budget*4 but 200 <= budget*4
-	// budget = 60 => charBudget = 240 => 300 > 240, remove priority 6
-	// After removal: 200 <= 240, done
 	truncated := Truncate(ctx, 60)
 
 	assert.Len(t, truncated.Layers, 2)
@@ -246,8 +237,6 @@ func TestAssembleContext_Truncation(t *testing.T) {
 		assert.NotEqual(t, "notes", l.Name, "notes layer (priority 6) should have been removed")
 	}
 }
-
-// TC-003: Tests for buildSnippets, buildDecisions, buildNotes, buildSiblingOutcomes
 
 func TestAssembleContext_UnknownIssue(t *testing.T) {
 	t.Parallel()
@@ -625,7 +614,6 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 
 func TestBuildBlockerOutcomes_FromState(t *testing.T) {
 	t.Parallel()
-	// Blocker must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-BLK"] = &materialize.Issue{
 		ID:           "TST-BLK",
@@ -666,7 +654,6 @@ func TestBuildBlockerOutcomes_FromState(t *testing.T) {
 
 func TestBuildParentChain_FromState(t *testing.T) {
 	t.Parallel()
-	// Parent must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-PAR"] = &materialize.Issue{
 		ID:           "TST-PAR",
@@ -707,8 +694,6 @@ func TestBuildParentChain_FromState(t *testing.T) {
 
 func TestBuildParentChain_WithGrandparent(t *testing.T) {
 	t.Parallel()
-	// Parent and grandparent are both in state
-	// This tests the fix for the bug where grandparents were silently dropped
 	state := materialize.NewState()
 	state.Issues["TST-GRP"] = &materialize.Issue{
 		ID:           "TST-GRP",
@@ -754,7 +739,6 @@ func TestBuildParentChain_WithGrandparent(t *testing.T) {
 		}
 	}
 	require.NotNil(t, parentLayer)
-	// Both parent and grandparent should be present
 	assert.Contains(t, parentLayer.Content, "TST-PAR")
 	assert.Contains(t, parentLayer.Content, "Parent Story")
 	assert.Contains(t, parentLayer.Content, "TST-GRP")
@@ -763,7 +747,6 @@ func TestBuildParentChain_WithGrandparent(t *testing.T) {
 
 func TestBuildSiblingOutcomes_FromState(t *testing.T) {
 	t.Parallel()
-	// Sibling must be in state (no more disk fallback)
 	state := materialize.NewState()
 	state.Issues["TST-PAR"] = &materialize.Issue{
 		ID:           "TST-PAR",
@@ -816,7 +799,6 @@ func TestBuildSiblingOutcomes_FromState(t *testing.T) {
 
 func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 	t.Parallel()
-	// Parent and siblings are all in state
 	state := materialize.NewState()
 	state.Issues["TST-PAR2"] = &materialize.Issue{
 		ID:           "TST-PAR2",
@@ -867,8 +849,6 @@ func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 	assert.Contains(t, sibLayer.Content, "state sibling outcome")
 }
 
-// TC-004: Tests for RenderAgent and RenderHuman
-
 func TestRenderAgent(t *testing.T) {
 	t.Parallel()
 	ctx := &Context{
@@ -903,8 +883,6 @@ func TestRenderHuman(t *testing.T) {
 	assert.Contains(t, out, "Some note")
 }
 
-// TC-005: Truncate boundary condition tests
-
 func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
 	t.Parallel()
 	ctx := &Context{
@@ -915,7 +893,7 @@ func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
 		},
 	}
 
-	result := Truncate(ctx, 25) // charBudget = 100, total = 100
+	result := Truncate(ctx, 25)
 	assert.Len(t, result.Layers, 2, "should not truncate when total == charBudget")
 }
 
@@ -929,7 +907,7 @@ func TestTruncate_OneBelowBudget_NoTruncation(t *testing.T) {
 		},
 	}
 
-	result := Truncate(ctx, 25) // charBudget = 100, total = 99
+	result := Truncate(ctx, 25)
 	assert.Len(t, result.Layers, 2)
 }
 
@@ -942,7 +920,7 @@ func TestTruncate_SingleLayer_NeverRemoved(t *testing.T) {
 		},
 	}
 
-	result := Truncate(ctx, 1) // charBudget = 4, total = 1000
+	result := Truncate(ctx, 1)
 	assert.Len(t, result.Layers, 1, "single layer must never be removed")
 	assert.Equal(t, "core_spec", result.Layers[0].Name)
 }
@@ -958,7 +936,7 @@ func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
 		},
 	}
 
-	result := Truncate(ctx, 30) // charBudget = 120, total = 180
+	result := Truncate(ctx, 30)
 	assert.Len(t, result.Layers, 2)
 	found := false
 	for _, l := range result.Layers {
@@ -969,16 +947,13 @@ func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
 	assert.True(t, found, "core_spec (priority 1) must survive truncation")
 }
 
-// Fix B1: inferRepoRoot must fall back to git in worktree mode.
 func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
 	t.Parallel()
-	// Create a git repo without .arm/.armature directory; simulates a worktree layout.
 	repoDir := t.TempDir()
 	initCmd := exec.CommandContext(context.Background(), "git", "init")
 	initCmd.Dir = repoDir
 	require.NoError(t, initCmd.Run(), "git init must succeed")
 
-	// stateDir is a subdirectory with no .arm/.armature in the path hierarchy.
 	stateDir := filepath.Join(repoDir, "state", "worker-abc")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
@@ -986,7 +961,6 @@ func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
 	assert.Equal(t, repoDir, root, "inferRepoRoot must return git repo root when no .arm/.armature directory exists in path")
 }
 
-// Fix B1: inferRepoRoot still uses the fast path when .armature is in the hierarchy.
 func TestInferRepoRoot_UsesArmatureDirectoryWhenPresent(t *testing.T) {
 	t.Parallel()
 	repoDir := t.TempDir()
@@ -998,11 +972,9 @@ func TestInferRepoRoot_UsesArmatureDirectoryWhenPresent(t *testing.T) {
 	assert.Equal(t, repoDir, root, "inferRepoRoot must find repo root from .armature directory in path")
 }
 
-// Fix W1: buildContextFiles must use a longer fence when file content contains triple backticks.
 func TestBuildContextFiles_EscapesBacktickFence(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	// Content containing a triple-backtick code fence.
 	mdContent := "# Guide\n```go\nfmt.Println(\"hello\")\n```\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide.md"), []byte(mdContent), 0644))
 
@@ -1029,8 +1001,6 @@ func TestBuildContextFiles_EscapesBacktickFence(t *testing.T) {
 		}
 	}
 	require.NotNil(t, cfLayer)
-	// The wrapper fence must be at least 4 backticks (longer than the content's 3).
 	assert.Contains(t, cfLayer.Content, "````", "wrapper fence must be longer than content's triple-backtick fence")
-	// The content itself must still be present.
 	assert.Contains(t, cfLayer.Content, "fmt.Println")
 }

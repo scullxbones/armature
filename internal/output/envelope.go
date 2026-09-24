@@ -54,7 +54,6 @@ func NewEnvelope(payloadKey string, items any, help []string) (*Envelope, error)
 	return &Envelope{payloadKey: payloadKey, items: items, help: helpCopy}, nil
 }
 
-// AddAdjunct adds a named result field between the payload and trailing help.
 func (e *Envelope) AddAdjunct(key string, value any) error {
 	if key == "" || key == "count" || key == e.payloadKey || key == "help" || key == "payload" {
 		return fmt.Errorf("envelope adjunct key %q conflicts with a reserved member", key)

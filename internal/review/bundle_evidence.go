@@ -35,8 +35,6 @@ func AttachGateEvidence(bundle *ReviewBundle, issuesDir string) error {
 		return nil
 	}
 	bundle.GateEvidence = kept
-	// Finalize identity after attachment so record-time ComputeBundleID
-	// matches the ID the reviewer attested. Evidence is part of that identity.
 	bundle.BundleID = ComputeBundleID(*bundle)
 	return nil
 }

@@ -36,7 +36,6 @@ type Mode struct {
 	Bind     func(m Mode, golden []byte, stdout, stderr io.Writer) error
 }
 
-// ID is the stable fixture stem for a mode (spaces become dots).
 func (m Mode) ID() string {
 	path := m.Path
 	if path == "" {
@@ -67,7 +66,6 @@ func (m Mode) label() string {
 	return label
 }
 
-// DefaultGoldenDir is internal/output/testdata/golden next to this package.
 func DefaultGoldenDir() string {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -141,9 +139,6 @@ func lintModes(modes []Mode, goldenDir string) error {
 	return fmt.Errorf("envelope shape lint failed:\n  %s", strings.Join(errs, "\n  "))
 }
 
-// BindWriter returns a Bind that writes golden through stdout, the writer the
-// handler is certified against. Tests and the cobra adapter use this so a
-// fixture cannot skip the writer being linted.
 func BindWriter() func(Mode, []byte, io.Writer, io.Writer) error {
 	return func(_ Mode, golden []byte, stdout, stderr io.Writer) error {
 		_, err := stdout.Write(golden)
@@ -199,7 +194,6 @@ func enumerableCommand(cmd *Command, isRoot bool) bool {
 	if isRoot {
 		return true
 	}
-	// Visible subcommands mean this run function is group help, not a result mode.
 	return !cmd.HasAvailableSubs
 }
 

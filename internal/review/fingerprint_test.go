@@ -20,11 +20,10 @@ func TestFingerprintContract_Deterministic(t *testing.T) {
 	fp1 := review.FingerprintContract(contract)
 	fp2 := review.FingerprintContract(contract)
 
-	// Same input produces same fingerprint
 	assert.Equal(t, fp1, fp2)
-	// Fingerprint is not empty
+
 	assert.NotEmpty(t, fp1)
-	// Fingerprint has correct format
+
 	assert.True(t, len(fp1) > 0)
 }
 
@@ -43,7 +42,6 @@ func TestFingerprintContract_Different(t *testing.T) {
 	fp1 := review.FingerprintContract(contract1)
 	fp2 := review.FingerprintContract(contract2)
 
-	// Different contracts produce different fingerprints
 	assert.NotEqual(t, fp1, fp2)
 }
 
@@ -68,7 +66,6 @@ func TestFingerprintContract_OrderMatters(t *testing.T) {
 	fp1 := review.FingerprintContract(contract1)
 	fp2 := review.FingerprintContract(contract2)
 
-	// Different order produces different fingerprints
 	assert.NotEqual(t, fp1, fp2)
 }
 
@@ -83,9 +80,8 @@ func TestFingerprintDelivery_Deterministic(t *testing.T) {
 	fp1 := review.FingerprintDelivery(delivery)
 	fp2 := review.FingerprintDelivery(delivery)
 
-	// Same input produces same fingerprint
 	assert.Equal(t, fp1, fp2)
-	// Fingerprint is not empty
+
 	assert.NotEmpty(t, fp1)
 }
 
@@ -99,14 +95,13 @@ func TestFingerprintDelivery_Different(t *testing.T) {
 
 	delivery2 := review.Delivery{
 		BaseSHA:      "abc123",
-		HeadSHA:      "def457", // different head
+		HeadSHA:      "def457",
 		ChangedFiles: []string{"file.go"},
 	}
 
 	fp1 := review.FingerprintDelivery(delivery1)
 	fp2 := review.FingerprintDelivery(delivery2)
 
-	// Different deliveries produce different fingerprints
 	assert.NotEqual(t, fp1, fp2)
 }
 
@@ -204,7 +199,7 @@ func TestBundleID_Deterministic(t *testing.T) {
 
 	assert.Equal(t, bundleID1, bundleID2)
 	assert.NotEmpty(t, bundleID1)
-	// BundleID should have sha256: prefix
+
 	assert.True(t, len(bundleID1) > 7)
 }
 
@@ -258,10 +253,8 @@ func TestFingerprintFormat(t *testing.T) {
 
 	fp := review.FingerprintContract(contract)
 
-	// Fingerprints should be hex-encoded SHA-256 hashes
-	// SHA-256 produces 32 bytes = 64 hex characters
 	assert.Len(t, fp, 64)
-	// All characters should be valid hex
+
 	for _, c := range fp {
 		assert.True(t, (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'),
 			"Fingerprint contains non-hex character: %c", c)
@@ -287,7 +280,6 @@ func TestBundleIDFormat(t *testing.T) {
 
 	bundleID := review.ComputeBundleID(bundle)
 
-	// Should have sha256: prefix followed by 64 hex characters
 	assert.True(t, len(bundleID) > 7)
 	assert.Contains(t, bundleID, ":")
 	parts := len(bundleID) - len("sha256:")
@@ -303,11 +295,10 @@ func TestFingerprintActivity_Deterministic_REQ_EXECEV_T2(t *testing.T) {
 	fp1 := review.FingerprintActivity(logContent)
 	fp2 := review.FingerprintActivity(logContent)
 
-	// Same content produces same digest
 	assert.Equal(t, fp1, fp2)
-	// Digest is not empty
+
 	assert.NotEmpty(t, fp1)
-	// Should be 64 hex characters (SHA-256)
+
 	assert.Len(t, fp1, 64)
 }
 
@@ -320,7 +311,6 @@ func TestFingerprintActivity_Different_REQ_EXECEV_T2(t *testing.T) {
 	fp1 := review.FingerprintActivity(logContent1)
 	fp2 := review.FingerprintActivity(logContent2)
 
-	// Different content produces different digests
 	assert.NotEqual(t, fp1, fp2)
 }
 
@@ -331,17 +321,13 @@ func TestFingerprintActivity_Empty_REQ_EXECEV_T2(t *testing.T) {
 
 	fp := review.FingerprintActivity(logContent)
 
-	// Empty content still produces a valid hash
 	assert.NotEmpty(t, fp)
 	assert.Len(t, fp, 64)
 }
 
-// TestBundleID_LogPath_Excluded verifies that ComputeBundleID excludes LogPath from the hash.
-// Two Activity values that differ only in LogPath should produce the same bundle ID.
-// This is necessary because LogPath is worktree-local and differs across clones.
 func TestBundleID_LogPath_Excluded(t *testing.T) {
 	t.Parallel()
-	// Create two bundles identical except for Activity.LogPath
+
 	bundle1 := review.ReviewBundle{
 		SchemaVersion: 1,
 		Issue: review.IssueInfo{
@@ -390,22 +376,19 @@ func TestBundleID_LogPath_Excluded(t *testing.T) {
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
 			EarlierCount:      2,
-			LogPath:           "/home/user/clone2/.armature/armature-activity.log", // Different path
+			LogPath:           "/home/user/clone2/.armature/armature-activity.log",
 		},
 	}
 
 	bundleID1 := review.ComputeBundleID(bundle1)
 	bundleID2 := review.ComputeBundleID(bundle2)
 
-	// Same bundle ID despite different LogPath
 	assert.Equal(t, bundleID1, bundleID2, "ComputeBundleID should exclude LogPath from hash")
 }
 
-// TestBundleID_Activity_Digest_Included verifies that ComputeBundleID includes Activity.Digest in the hash.
-// Two Activity values that differ in Digest should produce different bundle IDs.
 func TestBundleID_Activity_Digest_Included(t *testing.T) {
 	t.Parallel()
-	// Create two bundles with different Activity.Digest
+
 	bundle1 := review.ReviewBundle{
 		SchemaVersion: 1,
 		Issue: review.IssueInfo{
@@ -450,7 +433,7 @@ func TestBundleID_Activity_Digest_Included(t *testing.T) {
 			ChangedFiles: []string{"main.go"},
 		},
 		Activity: &review.Activity{
-			Digest:            "sha256:activity2", // Different digest
+			Digest:            "sha256:activity2",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
 			EarlierCount:      2,
@@ -461,6 +444,5 @@ func TestBundleID_Activity_Digest_Included(t *testing.T) {
 	bundleID1 := review.ComputeBundleID(bundle1)
 	bundleID2 := review.ComputeBundleID(bundle2)
 
-	// Different bundle IDs when Digest differs
 	assert.NotEqual(t, bundleID1, bundleID2, "ComputeBundleID should include Activity.Digest in hash")
 }

@@ -1,10 +1,9 @@
 package context
 
-// Truncate removes lowest-priority layers until total chars <= tokenBudget*4.
-// Layers are removed from highest Priority number downward.
-// Always keeps at least 1 layer.
+const bytesPerToken = 4
+
 func Truncate(ctx *Context, tokenBudget int) *Context {
-	charBudget := tokenBudget * 4
+	charBudget := tokenBudget * bytesPerToken
 
 	layers := make([]Layer, len(ctx.Layers))
 	copy(layers, ctx.Layers)
@@ -18,7 +17,6 @@ func Truncate(ctx *Context, tokenBudget int) *Context {
 	}
 
 	for totalChars() > charBudget && len(layers) > 1 {
-		// Find index of layer with highest Priority number (lowest importance)
 		maxIdx := 0
 		for i, layer := range layers[1:] {
 			if layer.Priority > layers[maxIdx].Priority {

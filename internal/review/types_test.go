@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCriterionStatus_JSONRoundTrip verifies that CriterionStatus marshals as a string
-// and can be decoded from the string values that the armature-reviewer skill emits.
 func TestCriterionStatus_JSONRoundTrip(t *testing.T) {
 	t.Parallel()
 	statuses := []review.CriterionStatus{
@@ -24,7 +22,7 @@ func TestCriterionStatus_JSONRoundTrip(t *testing.T) {
 			t.Parallel()
 			data, err := json.Marshal(status)
 			require.NoError(t, err)
-			// Must encode as a quoted string, not an integer.
+
 			assert.Equal(t, `"`+status.String()+`"`, string(data))
 			var decoded review.CriterionStatus
 			require.NoError(t, json.Unmarshal(data, &decoded))
@@ -33,8 +31,6 @@ func TestCriterionStatus_JSONRoundTrip(t *testing.T) {
 	}
 }
 
-// TestCriterionStatus_UnmarshalJSON_SkillOutput verifies that skill output strings
-// like {"status":"satisfied"} can be decoded.
 func TestCriterionStatus_UnmarshalJSON_SkillOutput(t *testing.T) {
 	t.Parallel()
 	input := `{"status":"satisfied"}`
@@ -46,8 +42,6 @@ func TestCriterionStatus_UnmarshalJSON_SkillOutput(t *testing.T) {
 	assert.Equal(t, review.Satisfied, result.Status)
 }
 
-// TestRating_JSONRoundTrip verifies that Rating marshals as a string and can be
-// decoded from the string values that the armature-reviewer skill emits.
 func TestRating_JSONRoundTrip(t *testing.T) {
 	t.Parallel()
 	ratings := []review.Rating{review.Green, review.Yellow, review.Red}
@@ -56,7 +50,7 @@ func TestRating_JSONRoundTrip(t *testing.T) {
 			t.Parallel()
 			data, err := json.Marshal(rating)
 			require.NoError(t, err)
-			// Must encode as a quoted string, not an integer.
+
 			assert.Equal(t, `"`+rating.String()+`"`, string(data))
 			var decoded review.Rating
 			require.NoError(t, json.Unmarshal(data, &decoded))
@@ -65,8 +59,6 @@ func TestRating_JSONRoundTrip(t *testing.T) {
 	}
 }
 
-// TestRating_UnmarshalJSON_SkillOutput verifies that skill output like {"rating":"green"}
-// can be decoded.
 func TestRating_UnmarshalJSON_SkillOutput(t *testing.T) {
 	t.Parallel()
 	input := `{"rating":"green"}`
@@ -372,7 +364,7 @@ func TestReviewBundle_Valid(t *testing.T) {
 
 func TestCriterionResult_MissingStatus(t *testing.T) {
 	t.Parallel()
-	// Test that JSON with missing "status" key is rejected.
+
 	input := `{"id":"definition_of_done","rationale":"test"}`
 	var result review.CriterionResult
 	err := json.Unmarshal([]byte(input), &result)
@@ -657,15 +649,12 @@ func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 		LogPath:           ".git/armature-activity.log",
 	}
 
-	// Marshal to JSON
 	data, err := json.Marshal(activity)
 	require.NoError(t, err)
 
-	// Unmarshal back
 	var decoded review.Activity
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
-	// Verify all fields are preserved
 	assert.Equal(t, activity.Digest, decoded.Digest)
 	assert.Equal(t, activity.EntryCount, decoded.EntryCount)
 	assert.Equal(t, activity.DeliveryHeadCount, decoded.DeliveryHeadCount)
@@ -707,19 +696,15 @@ func TestReviewBundle_WithActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 		},
 	}
 
-	// Marshal to JSON
 	data, err := json.Marshal(bundle)
 	require.NoError(t, err)
 
-	// Unmarshal back
 	var decoded review.ReviewBundle
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
-	// Verify bundle
 	assert.Equal(t, bundle.SchemaVersion, decoded.SchemaVersion)
 	assert.Equal(t, bundle.BundleID, decoded.BundleID)
 
-	// Verify Activity is preserved
 	require.NotNil(t, decoded.Activity)
 	assert.Equal(t, bundle.Activity.Digest, decoded.Activity.Digest)
 	assert.Equal(t, bundle.Activity.EntryCount, decoded.Activity.EntryCount)
@@ -751,22 +736,18 @@ func TestReviewBundle_WithoutActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) 
 			Contract: "fp_contract",
 			Delivery: "fp_delivery",
 		},
-		// Activity is nil
+
 		Activity: nil,
 	}
 
-	// Marshal to JSON
 	data, err := json.Marshal(bundle)
 	require.NoError(t, err)
 
-	// Verify Activity field is omitted from JSON (due to omitempty)
 	assert.NotContains(t, string(data), "activity")
 
-	// Unmarshal back
 	var decoded review.ReviewBundle
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
-	// Verify Activity is still nil
 	assert.Nil(t, decoded.Activity)
 }
 
@@ -789,15 +770,12 @@ func TestAssessmentAttestation_WithActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 		IndeterminateCount:      0,
 	}
 
-	// Marshal to JSON
 	data, err := json.Marshal(attestation)
 	require.NoError(t, err)
 
-	// Unmarshal back
 	var decoded review.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
-	// Verify ActivityDigest is preserved
 	assert.Equal(t, attestation.ActivityDigest, decoded.ActivityDigest)
 }
 
@@ -968,7 +946,7 @@ func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T)
 		BundleID:                "sha256:bundle123",
 		ContractFingerprint:     "fp_contract",
 		DeliveryFingerprint:     "fp_delivery",
-		ActivityDigest:          "", // empty
+		ActivityDigest:          "",
 		BaseSHA:                 "abc123",
 		HeadSHA:                 "def456",
 		Rating:                  review.Green,
@@ -979,17 +957,13 @@ func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T)
 		IndeterminateCount:      0,
 	}
 
-	// Marshal to JSON
 	data, err := json.Marshal(attestation)
 	require.NoError(t, err)
 
-	// Verify ActivityDigest field is omitted from JSON (due to omitempty)
 	assert.NotContains(t, string(data), "activity_digest")
 
-	// Unmarshal back
 	var decoded review.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
-	// Verify ActivityDigest is empty
 	assert.Empty(t, decoded.ActivityDigest)
 }

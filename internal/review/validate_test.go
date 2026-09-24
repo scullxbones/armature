@@ -53,7 +53,7 @@ func TestValidateResult_InvalidBundleID(t *testing.T) {
 	t.Parallel()
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
-		BundleID:      "", // Empty bundle ID
+		BundleID:      "",
 		Results: []review.CriterionResult{
 			{
 				ID:        "definition_of_done",
@@ -84,7 +84,7 @@ func TestValidateResult_InvalidCitation(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "all requirements met",
 				Citations: []review.Citation{
-					{Path: "file1.go", Line: 999}, // This line doesn't exist in the diff
+					{Path: "file1.go", Line: 999},
 				},
 			},
 		},
@@ -155,7 +155,6 @@ func TestValidateResult_InvalidCriterionResult(t *testing.T) {
 			{
 				ID:     "definition_of_done",
 				Status: review.NotSatisfied,
-				// Missing both rationale and missing evidence
 			},
 		},
 		ContractFingerprint: "sha256:contract123",
@@ -236,9 +235,7 @@ func TestNewAttestation(t *testing.T) {
 	assert.Equal(t, "sha256:test123", att.BundleID)
 	assert.Equal(t, "sha256:contract123", att.ContractFingerprint)
 	assert.Equal(t, "sha256:delivery123", att.DeliveryFingerprint)
-	// 1 satisfied, 1 partial, 1 not satisfied, 1 indeterminate
-	// DeriveRating prioritizes: Red > Yellow > Green
-	// Has NotSatisfied -> Red
+
 	assert.Equal(t, review.Red, att.Rating)
 	assert.Equal(t, 1, att.SatisfiedCount)
 	assert.Equal(t, 1, att.PartiallySatisfiedCount)
@@ -294,7 +291,7 @@ func TestNewAttestation_PopulatesSHAs(t *testing.T) {
 
 func TestIsDuplicate_SameResultFingerprint(t *testing.T) {
 	t.Parallel()
-	// Same ResultFingerprint → identical content → duplicate regardless of BundleID.
+
 	att1 := &review.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		ResultFingerprint: "sha256:fingerprint123",
@@ -309,7 +306,7 @@ func TestIsDuplicate_SameResultFingerprint(t *testing.T) {
 
 func TestIsDuplicate_DifferentResultFingerprint(t *testing.T) {
 	t.Parallel()
-	// Same bundle but different ResultFingerprint → corrected assessment → not a duplicate.
+
 	att1 := &review.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		ResultFingerprint: "sha256:fingerprint123",
@@ -324,7 +321,7 @@ func TestIsDuplicate_DifferentResultFingerprint(t *testing.T) {
 
 func TestIsDuplicate_SameFingerprintDifferentSkillVersion(t *testing.T) {
 	t.Parallel()
-	// Same ResultFingerprint with different SkillVersion → still identical content → duplicate.
+
 	att1 := &review.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		SkillVersion:      "v1.0.0",
@@ -341,7 +338,7 @@ func TestIsDuplicate_SameFingerprintDifferentSkillVersion(t *testing.T) {
 
 func TestValidateResultNoDiff_Valid(t *testing.T) {
 	t.Parallel()
-	// An assessment with a file:line citation must succeed at record time (no diff available).
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -567,7 +564,6 @@ func TestValidateResultNoDiff_InvalidCriterionIDFormat_REQ_LNGHZN_S8_T1(t *testi
 	assert.True(t, containsError(errs, "acceptance[0]"), "expected suggestion of the canonical criterion-ID format")
 }
 
-// Helper function to check if an error message contains a substring
 func containsError(errs []string, substr string) bool {
 	for _, err := range errs {
 		if strings.Contains(err, substr) {
@@ -579,7 +575,7 @@ func containsError(errs []string, substr string) bool {
 
 func TestValidateResult_NoCitations_NotSatisfied(t *testing.T) {
 	t.Parallel()
-	// A NotSatisfied criterion with no citations but with MissingEvidence text should be valid
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -707,7 +703,7 @@ func TestValidateResultCoverage_UnexpectedCriterionID(t *testing.T) {
 		Results: []review.CriterionResult{
 			{ID: "definition_of_done", Status: review.Satisfied, Rationale: "ok"},
 			{ID: "acceptance[0]", Status: review.Satisfied, Rationale: "ok"},
-			{ID: "acceptance[99]", Status: review.Satisfied, Rationale: "extra"}, // not in contract
+			{ID: "acceptance[99]", Status: review.Satisfied, Rationale: "extra"},
 		},
 		ContractFingerprint: "sha256:contract123",
 		DeliveryFingerprint: "sha256:delivery123",
@@ -742,8 +738,7 @@ func TestValidateResultCoverage_EmptyDefinitionOfDone(t *testing.T) {
 
 func TestValidateResult_PathOnlyCitation_FileInDiff(t *testing.T) {
 	t.Parallel()
-	// A citation with only a Path (Line==0, omitted from JSON) should validate successfully
-	// if the file is in the diff
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -753,7 +748,7 @@ func TestValidateResult_PathOnlyCitation_FileInDiff(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "file was modified",
 				Citations: []review.Citation{
-					{Path: "internal/review/test.go", Line: 0}, // Path-only citation
+					{Path: "internal/review/test.go", Line: 0},
 				},
 			},
 		},
@@ -782,8 +777,7 @@ func TestValidateResult_PathOnlyCitation_FileInDiff(t *testing.T) {
 
 func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
 	t.Parallel()
-	// A citation with only a Path (Line==0) should fail validation
-	// if the file is not in the diff
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -793,7 +787,7 @@ func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "file was modified",
 				Citations: []review.Citation{
-					{Path: "nonexistent.go", Line: 0}, // Path-only citation for file not in diff
+					{Path: "nonexistent.go", Line: 0},
 				},
 			},
 		},
@@ -817,8 +811,6 @@ func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
 	assert.True(t, containsError(errs, "nonexistent.go"), "Expected file reference in error message")
 }
 
-// knownExitEntries builds an entries map (as LoadActivityEntries would return)
-// with the given IDs, all recording a known, successful exit code.
 func knownExitEntries(ids ...int) map[int]review.ActivityEntryDetails {
 	entries := make(map[int]review.ActivityEntryDetails)
 	for _, id := range ids {
@@ -829,7 +821,7 @@ func knownExitEntries(ids ...int) map[int]review.ActivityEntryDetails {
 
 func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Valid activity citation by raw entry ID (numeric string)
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -863,7 +855,7 @@ func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 
 func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Citation referencing an unknown entry ID (out of range)
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -873,7 +865,7 @@ func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "10"}, // Only 5 entries (0-4), so 10 is invalid
+					{ActivityEntryID: "10"},
 				},
 			},
 		},
@@ -898,7 +890,7 @@ func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 
 func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Citation with non-numeric entry ID (malformed)
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -933,7 +925,7 @@ func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T)
 
 func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Activity-citations-only cannot support satisfied on implementation criterion (definition_of_done)
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -943,7 +935,7 @@ func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECE
 				Status:    review.Satisfied,
 				Rationale: "implementation complete",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"}, // Activity-only citation
+					{ActivityEntryID: "0"},
 				},
 			},
 		},
@@ -968,8 +960,7 @@ func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECE
 
 func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Activity-citations-only cannot support partially_satisfied on implementation criterion
-	// either (M6 extends the upgrade-only rule beyond just Satisfied).
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -979,7 +970,7 @@ func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECE
 				Status:    review.PartiallySatisfied,
 				Rationale: "partially implemented",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"}, // Activity-only citation
+					{ActivityEntryID: "0"},
 				},
 			},
 		},
@@ -1004,7 +995,7 @@ func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECE
 
 func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Activity-citations-only can support satisfied on acceptance (behavioral) criterion
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -1014,7 +1005,7 @@ func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testi
 				Status:    review.Satisfied,
 				Rationale: "test executed successfully",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"}, // Activity-only citation on acceptance criterion
+					{ActivityEntryID: "0"},
 				},
 			},
 		},
@@ -1038,7 +1029,7 @@ func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testi
 
 func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// Mixed activity and diff citations should not trigger upgrade-only rule
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -1073,7 +1064,7 @@ func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
 
 func TestValidateActivityCitations_NilActivity_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-	// When activity is nil, validation should succeed (no activity to validate against)
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -1095,13 +1086,9 @@ func TestValidateActivityCitations_NilActivity_REQ_EXECEV_T3(t *testing.T) {
 	assert.Empty(t, errs, "Validation against nil activity should succeed")
 }
 
-// TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2 verifies that activity entries
-// whose HeadSHA does not match the delivery's HeadSHA are rejected, even if the entry exists.
-// This prevents citing earlier successful test runs as evidence for the current delivery.
 func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
 	t.Parallel()
-	// An acceptance criterion cites an activity entry, but that entry was executed at
-	// an earlier commit (earlier_sha) while the delivery is at delivery_sha.
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -1111,7 +1098,7 @@ func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "0"}, // Entry 0 was executed at earlier_sha, not delivery_sha
+					{ActivityEntryID: "0"},
 				},
 			},
 		},
@@ -1127,7 +1114,6 @@ func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
 		LogPath:           "armature-activity.log",
 	}
 
-	// Entry 0 was at an earlier commit (earlier_sha), Entry 1 is at delivery_sha
 	entries := map[int]review.ActivityEntryDetails{
 		0: {EntryID: 0, Command: "make build", ExitCode: 0, ExitCodeKnown: true, HeadSHA: "earlier_sha"},
 		1: {EntryID: 1, Command: "make test", ExitCode: 0, ExitCodeKnown: true, HeadSHA: "delivery_sha"},
@@ -1135,18 +1121,15 @@ func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
 
 	deliveryHeadSHA := "delivery_sha"
 
-	// Entry 0 should be rejected because its HeadSHA (earlier_sha) doesn't match delivery_sha
 	errs := review.ValidateActivityCitations(assessment, activity, entries, deliveryHeadSHA)
 	assert.NotEmpty(t, errs, "Activity entry with mismatched HeadSHA should be rejected")
 	assert.True(t, containsError(errs, "head_sha") || containsError(errs, "HeadSHA") || containsError(errs, "earlier commit"),
 		"Error should mention the HeadSHA mismatch")
 }
 
-// TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2 verifies that activity entries
-// whose HeadSHA matches the delivery's HeadSHA are accepted.
 func TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2(t *testing.T) {
 	t.Parallel()
-	// An acceptance criterion cites an activity entry with matching HeadSHA
+
 	assessment := &review.ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:test123",
@@ -1156,7 +1139,7 @@ func TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "test passed",
 				Citations: []review.Citation{
-					{ActivityEntryID: "1"}, // Entry 1 is at delivery_sha
+					{ActivityEntryID: "1"},
 				},
 			},
 		},
@@ -1179,16 +1162,10 @@ func TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2(t *testing.T) {
 
 	deliveryHeadSHA := "delivery_sha"
 
-	// Entry 1 should be accepted because its HeadSHA matches delivery_sha
 	errs := review.ValidateActivityCitations(assessment, activity, entries, deliveryHeadSHA)
 	assert.Empty(t, errs, "Activity entry with matching HeadSHA should be accepted")
 }
 
-// TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV verifies that a
-// citation referencing an activity entry with a known but nonzero exit code cannot support
-// a Satisfied criterion status: a failed command execution is not evidence that something
-// passed. Only !ExitCodeKnown was previously rejected; a known failing exit code slipped
-// through.
 func TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 	assessment := &review.ConformanceAssessment{
@@ -1219,9 +1196,6 @@ func TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV(t *tes
 		"error should mention the failed exit code")
 }
 
-// TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXECEV verifies
-// that a failed-exit-code entry can still be cited as evidence for a NotSatisfied status
-// (e.g. "this failed, confirming the bug") -- the rejection is specific to claiming success.
 func TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 	assessment := &review.ConformanceAssessment{
@@ -1250,11 +1224,6 @@ func TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXEC
 	assert.Empty(t, errs, "a failed exit code citing NotSatisfied should be accepted")
 }
 
-// TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXECEV verifies
-// that the HeadSHA-mismatch gate only blocks citations supporting a Satisfied (or
-// PartiallySatisfied) status. Citing an earlier-commit run as evidence that something was
-// "already broken before this commit too" (NotSatisfied) is legitimate and must not be
-// blocked by the gate meant to stop stale evidence from propping up a passing claim.
 func TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 	assessment := &review.ConformanceAssessment{
@@ -1283,11 +1252,6 @@ func TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXE
 	assert.Empty(t, errs, "an earlier-commit citation supporting NotSatisfied must not be blocked by the HeadSHA gate")
 }
 
-// TestActivityCitationValidation_REQ_EXECEV_T3 is the contract-named acceptance test for
-// EXECEV-T3's activity citation validation. It delegates to the equivalent focused tests above
-// for the raw-entry-ID-accepted, unknown-entry-ID-rejected, and upgrade-only cases, and adds a
-// dedicated assertion for rejecting citations that use "index" terminology instead of a raw
-// entry ID.
 func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
 
@@ -1306,7 +1270,7 @@ func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
 					Status:    review.Satisfied,
 					Rationale: "test passed",
 					Citations: []review.Citation{
-						{ActivityEntryID: "index:0"}, // "index" terminology, not a raw entry ID
+						{ActivityEntryID: "index:0"},
 					},
 				},
 			},
@@ -1336,10 +1300,6 @@ func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
 	})
 }
 
-// TestActivityDigestMismatchRejected_REQ_EXECEV_T3 verifies that when the on-disk activity log
-// no longer matches the digest recorded in the bundle (tampered with or rotated after prepare),
-// the mismatch is rejected at record time -- both via the standalone digest validator and
-// end-to-end through Record.
 func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
 
@@ -1366,8 +1326,6 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 		require.NoError(t, os.WriteFile(logPath, originalContent, 0o600))
 		recordedDigest := review.FingerprintActivity(originalContent)
 
-		// Simulate tampering/rotation: overwrite the log with different content after prepare,
-		// while the bundle still records the digest of the original content.
 		require.NoError(t, os.WriteFile(logPath, []byte(`2026-01-15T10:30:45Z activity: command="rm -rf /" exit_code=0 head_sha=abc123`+"\n"), 0o600))
 
 		activity := &review.Activity{
@@ -1439,9 +1397,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 					Status:    review.PartiallySatisfied,
 					Rationale: "Some evidence of completion.",
 					Citations: []review.Citation{
-						// Mixed diff + activity citation: the diff citation keeps this
-						// off the activity-only upgrade-only rule (M6), which now also
-						// rejects PartiallySatisfied when backed by activity evidence alone.
+
 						{Path: "impl.go", Line: 1},
 						{ActivityEntryID: "0"},
 					},
@@ -1457,7 +1413,6 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 			},
 		}
 
-		// Baseline: recording succeeds while the log matches the recorded digest.
 		_, err := review.Record(review.RecordInput{
 			Assessment: assessment,
 			Bundle:     bundle,
@@ -1465,7 +1420,6 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 		})
 		require.NoError(t, err, "record should succeed when the activity log matches the bundle digest")
 
-		// Tamper with the log after prepare: content changes but the bundle's recorded digest doesn't.
 		tamperedContent := []byte(activityLogLineJSON(t, map[string]any{"command": "curl evil.example", "head_sha": "head456"}) + "\n")
 		require.NoError(t, os.WriteFile(e2eLogPath, tamperedContent, 0o600))
 

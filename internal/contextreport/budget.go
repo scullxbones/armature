@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// BudgetsRelPath is the repo-relative location of the checked-in per-artifact budgets.
 const BudgetsRelPath = "internal/contextreport/budgets.json"
 
 var runtimeClassOrder = []string{ClassInvocation, ClassBundle}
@@ -23,12 +22,10 @@ type Budget struct {
 	TargetBytes int    `json:"target_bytes"`
 }
 
-// BudgetFile is the checked-in budget list. Budgets are per runtime artifact.
 type BudgetFile struct {
 	Artifacts []Budget `json:"artifacts"`
 }
 
-// Violation is one artifact whose measured bytes exceed its enforceable cap.
 type Violation struct {
 	Path     string
 	Class    string
@@ -69,7 +66,6 @@ func (e *GateError) Error() string {
 	return b.String()
 }
 
-// OverBudgetClasses returns distinct classes of over-budget artifacts.
 func (e *GateError) OverBudgetClasses() []string {
 	if e == nil {
 		return nil
@@ -120,7 +116,6 @@ func (e *GateError) failed() bool {
 		len(e.ClassMismatch) > 0)
 }
 
-// LoadBudgets reads a budget file from disk.
 func LoadBudgets(path string) (BudgetFile, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // path is the checked-in budgets file or a test fixture
 	if err != nil {
@@ -129,7 +124,6 @@ func LoadBudgets(path string) (BudgetFile, error) {
 	return ParseBudgets(data)
 }
 
-// ParseBudgets decodes and validates a budget file.
 func ParseBudgets(data []byte) (BudgetFile, error) {
 	var file BudgetFile
 	if err := json.Unmarshal(data, &file); err != nil {

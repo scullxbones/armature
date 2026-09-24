@@ -21,9 +21,9 @@ const (
 	fixtureOpsName      = "testdata/graph/ops.jsonl"
 	fixtureDiffName     = "testdata/graph/delivery.diff"
 	fixtureWorkspaceDir = "testdata/graph/workspace"
-	// fixtureReadyNow is after every fixture claim TTL (claimed_at 1700000004, ttl 60)
-	// so expired_claims matches live arm ready against this graph.
-	fixtureReadyNow = int64(1_800_000_000)
+	fixtureClaimedAt    = 1700000004
+	fixtureClaimTTL     = 60
+	fixtureReadyNow     = fixtureClaimedAt + int64(fixtureClaimTTL)*60 + 2
 )
 
 type fixtureGit struct {
@@ -50,7 +50,6 @@ func (g fixtureGit) DiffNameOnlyRange(_, _ string) ([]string, error) {
 	return []string{g.changedFile}, nil
 }
 
-// embedFileReader reads workspace files from the embedded fixture graph.
 type embedFileReader struct{}
 
 func (embedFileReader) ReadFile(relPath string) ([]byte, error) {
@@ -61,9 +60,6 @@ func (embedFileReader) ReadFile(relPath string) ([]byte, error) {
 	return fixtureGraph.ReadFile(path.Join(fixtureWorkspaceDir, rel))
 }
 
-// Collect inventories fixture-measured structured stdout for main-path CLI
-// commands plus the fixture render-context bundle. Fixtures are embedded in
-// the binary so the command does not depend on the --repo tree.
 func Collect() (Report, error) {
 	state, index, err := replayFixtureState()
 	if err != nil {
