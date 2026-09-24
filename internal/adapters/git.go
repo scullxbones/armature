@@ -23,7 +23,6 @@ const (
 	gitContentionBackoff     = 100 * time.Millisecond
 )
 
-// New creates a git client for a repository path.
 func New(repoPath string) *Client {
 	return &Client{repoPath: repoPath}
 }
@@ -174,7 +173,6 @@ func (c *Client) Toplevel() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// CurrentBranch returns the current git branch name.
 func (c *Client) CurrentBranch() (string, error) {
 	cmd := c.cmd("rev-parse", "--abbrev-ref", "HEAD")
 	output, err := cmd.Output()
@@ -184,7 +182,6 @@ func (c *Client) CurrentBranch() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// MergeBase returns the SHA of the merge-base between two revisions.
 func (c *Client) MergeBase(rev1, rev2 string) (string, error) {
 	cmd := c.cmd("merge-base", rev1, rev2)
 	output, err := cmd.Output()
@@ -571,7 +568,6 @@ func (c *Client) AddWorktree(branch, path string) error {
 	return nil
 }
 
-// SetGitConfig sets a local git config key to value.
 func (c *Client) SetGitConfig(key, value string) error {
 	cmd := c.cmd("config", "--local", key, value)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -667,8 +663,6 @@ func enhanceGitLockfileError(base, out string) string {
 	return base
 }
 
-// Push pushes the current branch to origin. Returns an error if the push is
-// rejected (e.g. non-fast-forward).
 func (c *Client) Push(branch string) error {
 	cmd := c.cmd("push", "origin", branch)
 	out, err := cmd.CombinedOutput()
@@ -679,7 +673,7 @@ func (c *Client) Push(branch string) error {
 }
 
 // FetchAndRebase fetches from origin and rebases the local branch onto the
-// remote tracking branch. This is used to resolve push rejections.
+// remote tracking branch.
 func (c *Client) FetchAndRebase(branch string) error {
 	fetch := c.cmd("fetch", "origin")
 	if out, err := fetch.CombinedOutput(); err != nil {
@@ -693,7 +687,7 @@ func (c *Client) FetchAndRebase(branch string) error {
 }
 
 // FetchTrackingRef updates refs/remotes/origin/<branch> from origin without
-// moving the local branch. Used by doctor D12's best-effort lag probe.
+// moving the local branch.
 func (c *Client) FetchTrackingRef(branch string) error {
 	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -704,8 +698,6 @@ func (c *Client) FetchTrackingRef(branch string) error {
 	return nil
 }
 
-// RevListCount returns git rev-list --count for rangeSpec (for example
-// "HEAD..origin/_armature").
 func (c *Client) RevListCount(rangeSpec string) (int, error) {
 	cmd := c.cmd("rev-list", "--count", rangeSpec)
 	out, err := cmd.Output()
@@ -719,7 +711,6 @@ func (c *Client) RevListCount(rangeSpec string) (int, error) {
 	return n, nil
 }
 
-// LogEntry represents a single git log entry.
 type LogEntry struct {
 	SHA     string
 	Subject string
@@ -752,7 +743,6 @@ func (c *Client) LogRange(base, head string) ([]LogEntry, error) {
 	return parseLogOutput(out), nil
 }
 
-// ListFilesAtCommit returns the list of file paths tracked at the given commit SHA.
 func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
 	cmd := c.cmd("ls-tree", "-r", "--name-only", sha)
 	out, err := cmd.Output()
@@ -766,7 +756,6 @@ func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
-// ShowFileAtCommit returns the contents of the file at path as it existed at the given commit SHA.
 func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
 	cmd := c.cmd("show", sha+":"+path)
 	out, err := cmd.Output()
@@ -828,7 +817,6 @@ func parseLogOutput(out []byte) []LogEntry {
 	return entries
 }
 
-// HeadSHA returns the full SHA of the current HEAD commit.
 func (c *Client) HeadSHA() (string, error) {
 	cmd := c.cmd("rev-parse", "HEAD")
 	out, err := cmd.Output()
@@ -838,9 +826,6 @@ func (c *Client) HeadSHA() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// RemoveWorktree removes a linked worktree at the given path without forcing
-// deletion. Git therefore rejects dirty tracked or untracked content, which
-// preserves work until an operator deliberately resolves it.
 // MoveWorktree relocates a linked worktree's directory and updates git's worktree
 // registration atomically via `git worktree move`. Unlike a manual rename paired
 // with RemoveWorktree/AddWorktree, this cannot leave a partially-registered
@@ -854,6 +839,9 @@ func (c *Client) MoveWorktree(oldPath, newPath string) error {
 	return nil
 }
 
+// RemoveWorktree removes a linked worktree at the given path without forcing
+// deletion. Git therefore rejects dirty tracked or untracked content, which
+// preserves work until an operator deliberately resolves it.
 func (c *Client) RemoveWorktree(path string) error {
 	cmd := c.cmd("worktree", "remove", path)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -943,8 +931,6 @@ func parseNameStatusZ(out []byte) []DiffStatusEntry {
 	return entries
 }
 
-// ResetHard resets the working tree and index to the given ref (e.g. a SHA or
-// branch name).
 func (c *Client) ResetHard(ref string) error {
 	cmd := c.cmd("reset", "--hard", ref)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -1014,7 +1000,6 @@ func (c *Client) RestoreIndexFromHEAD(paths []string) error {
 	return nil
 }
 
-// StagedPaths returns the repository-relative paths with staged changes.
 func (c *Client) StagedPaths() ([]string, error) {
 	out, err := c.cmd("diff", "--cached", "--name-only", "-z").Output()
 	if err != nil {
@@ -1029,8 +1014,6 @@ func (c *Client) StagedPaths() ([]string, error) {
 	return paths, nil
 }
 
-// IsTracked checks if a path is tracked by git (exists in the index).
-// Returns true if the path is tracked, false otherwise.
 func (c *Client) IsTracked(path string) bool {
 	cmd := c.cmd("ls-files", path)
 	out, err := cmd.Output()
@@ -1114,7 +1097,6 @@ func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 	return false, fmt.Errorf("failed to check if %s is on %s: %w", sha, target, err)
 }
 
-// ResolveRevision resolves a git revision (ref, SHA, tag, etc.) to its full commit SHA.
 func (c *Client) ResolveRevision(rev string) (string, error) {
 	cmd := c.cmd("rev-parse", "--verify", rev)
 	output, err := cmd.Output()

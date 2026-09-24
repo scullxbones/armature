@@ -12,7 +12,6 @@ import (
 	"github.com/scullxbones/armature/internal/commitref"
 )
 
-// CheckResult represents the outcome of a single gate check.
 type CheckResult struct {
 	Pass        bool
 	Remediation string
@@ -87,8 +86,6 @@ func armatureStateNoise(entry adapters.DirtyEntry) bool {
 func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string) CheckResult {
 	git := adapters.New(worktreePath)
 
-	// `git diff --name-only` alone would report only the destination path of
-	// a rename, masking an out-of-scope original location.
 	entries, err := git.DiffNameStatusRange(baseCommit, head)
 	if err != nil {
 		return CheckResult{

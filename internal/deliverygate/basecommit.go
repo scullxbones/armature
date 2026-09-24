@@ -37,13 +37,6 @@ const ClaimedBranchFileName = "armature-claimed-branch"
 // .git/config (armature does not enable the worktreeConfig extension), so
 // the record survives `arm merged` removing the worktree, and stays
 // addressable by branch name if the worktree is later recreated.
-//
-// Known limitation: the key is derived solely from the branch name, with no
-// staleness check beyond the literal-"HEAD" guard in DynamicBaseCommit. If a
-// branch name is recycled for a new, unrelated task after the old task
-// merged and its marker was never cleaned up, DynamicBaseCommit would
-// merge-base against the stale recorded parent. Branch-name recycling
-// immediately after merge is out of scope for this fix.
 func ParentBranchConfigKey(branchName string) string {
 	return "branch." + branchName + ".armature-parent"
 }

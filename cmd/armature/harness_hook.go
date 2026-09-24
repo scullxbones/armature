@@ -76,8 +76,6 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 	swallowErr(err)
 }
 
-// isBindingStale reports that a resolved issue id has no live claim: missing
-// issue, status outside claimed/in-progress, or TTL expiry. All three fail open.
 func isBindingStale(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	issue, ok := snap.Issues[taskID]
 	if !ok {

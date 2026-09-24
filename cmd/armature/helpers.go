@@ -498,9 +498,6 @@ func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proc
 	return wrote, pushOpsBranch(opsPublishGit(ctx, gc), tracker)
 }
 
-// publishHighStakesOps publishes the local _armature tip (Push / FetchAndRebase /
-// Push). High-stakes no-op retries use this so an earlier unpublished commit
-// cannot silent-succeed while origin still lacks the op.
 func publishHighStakesOps(state *executionState) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
@@ -509,9 +506,6 @@ func publishHighStakesOps(state *executionState) error {
 	return pushOpsBranch(opsPublishGit(ctx, worktreeGit(ctx)), state.tracker)
 }
 
-// opsPublishError is a git failure after a successful local _armature append.
-// The op stays committed (I2); callers map this onto the command's Failure Code
-// with Next Actions that include `arm push-ops`.
 type opsPublishError struct {
 	err error
 }
@@ -539,9 +533,6 @@ func opsPublishNextActions() []string {
 	return []string{"arm push-ops", "arm doctor"}
 }
 
-// opsPublishGit returns the git client used to publish _armature. Layout-only
-// test fixtures set WorktreePath to a directory without .git; those skip
-// publish rather than treating parent-repo `git push` as dual-branch publish.
 func opsPublishGit(ctx *config.Context, gc *adapters.Client) *adapters.Client {
 	if gc == nil || ctx == nil || ctx.WorktreePath == "" {
 		return nil
@@ -568,9 +559,6 @@ func publishArmatureSequence(gc opsBranchPublisher) error {
 	return gc.Push("_armature")
 }
 
-// pushOpsBranch publishes _armature (Push, on error FetchAndRebase then Push).
-// Success resets the pending-push tracker. Failure returns opsPublishError and
-// does not roll back the local commit and does not Reset the tracker.
 func pushOpsBranch(gc *adapters.Client, tracker ops.PendingPushTracker) error {
 	if gc != nil {
 		if err := publishArmatureSequence(gc); err != nil {
@@ -583,9 +571,6 @@ func pushOpsBranch(gc *adapters.Client, tracker ops.PendingPushTracker) error {
 	return nil
 }
 
-// pushOpsBranchBestEffort is the low-stakes publish path: same git sequence as
-// pushOpsBranch, but git errors are swallowed so notes/heartbeats do not fail
-// the CLI. Tracker.Reset still runs after the attempt (including on failure).
 func pushOpsBranchBestEffort(gc *adapters.Client, tracker ops.PendingPushTracker) {
 	if err := pushOpsBranch(gc, tracker); err != nil && tracker != nil {
 		swallowErr(tracker.Reset())

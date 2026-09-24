@@ -11,22 +11,16 @@ import (
 	"testing"
 )
 
-// TestRepo represents a temporary git repository for testing armature commands.
 type TestRepo struct {
 	path   string
 	armBin string
 }
 
-// NewTestRepo creates a new temporary git repository initialized for armature.
-// It returns a TestRepo with the path to the repository and the path to the arm binary.
-// The caller must call Close() to clean up resources.
 func NewTestRepo(t *testing.T) *TestRepo {
 	t.Helper()
 
-	// Create temporary directory
 	tmpDir := t.TempDir()
 
-	// Initialize as git repo
 	runCmd(tmpDir, "init")
 
 	// Configure git user and disable GPG signing
@@ -39,11 +33,8 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	runCmd(originParent, "init", "--bare", origin)
 	runCmd(tmpDir, "remote", "add", "origin", origin)
 
-	// Initialize worker
 	armBin := getArmBinary(t)
-	// Try worker-init --check first; if it fails, run full init
 	if err := runCmdSafely(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "worker-init", "--check"); err != nil {
-		// Check failed, run full init
 		runCmdWithEnv(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "worker-init")
 	}
 
@@ -59,10 +50,8 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	// worktree-based transcript tests are independent of the runner's config.
 	runCmd(tmpDir, "branch", "-M", "main")
 
-	// Bootstrap armature
 	runCmdWithEnv(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "bootstrap")
 
-	// Commit bootstrap files
 	runCmd(tmpDir, "add", "-A")
 	runCmd(tmpDir, "commit", "-m", "initial: bootstrap armature")
 
@@ -72,12 +61,10 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	}
 }
 
-// Path returns the root path of the test repository.
 func (tr *TestRepo) Path() string {
 	return tr.path
 }
 
-// CreateStory creates a new story issue and returns its ID.
 func (tr *TestRepo) CreateStory(t *testing.T, title string) string {
 	t.Helper()
 
@@ -87,25 +74,21 @@ func (tr *TestRepo) CreateStory(t *testing.T, title string) string {
 		"--dod", "All tasks done and reviewed",
 		"--format", "json")
 
-	// Parse JSON output
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("failed to parse create story output as JSON: %v\nOutput: %q", err, output)
 	}
 
-	// Extract issue ID
 	issueID, ok := result["id"].(string)
 	if !ok {
 		t.Fatalf("failed to extract story ID from JSON: %v", result)
 	}
 
-	// Materialize state so the issue can be found by subsequent commands
 	tr.runArm(t, "materialize")
 
 	return issueID
 }
 
-// CreateTask creates a new task issue under a parent story and returns its ID.
 func (tr *TestRepo) CreateTask(t *testing.T, parent, title string, scope []string) string {
 	t.Helper()
 
@@ -125,27 +108,22 @@ func (tr *TestRepo) CreateTask(t *testing.T, parent, title string, scope []strin
 
 	output := tr.runArm(t, args...)
 
-	// Parse JSON output
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
 		t.Fatalf("failed to parse create task output as JSON: %v\nOutput: %q", err, output)
 	}
 
-	// Extract issue ID
 	issueID, ok := result["id"].(string)
 	if !ok {
 		t.Fatalf("failed to extract task ID from JSON: %v", result)
 	}
 
-	// Materialize state so the issue can be found by subsequent commands
 	tr.runArm(t, "materialize")
-	// Birth is always draft; promote so the task can appear in ready.
 	tr.runArm(t, "dag", "transition", "--issue", issueID, "--to", "verified")
 
 	return issueID
 }
 
-// Ready returns the issues payload from structured arm ready output.
 func (tr *TestRepo) Ready(t *testing.T) []interface{} {
 	t.Helper()
 
@@ -164,7 +142,6 @@ func (tr *TestRepo) Ready(t *testing.T) []interface{} {
 	return envelope.Issues
 }
 
-// Claim claims an issue with a worktree and returns the worktree path.
 func (tr *TestRepo) Claim(t *testing.T, issueID string, ttlMinutes int) string {
 	t.Helper()
 
@@ -178,7 +155,6 @@ func (tr *TestRepo) Claim(t *testing.T, issueID string, ttlMinutes int) string {
 	return worktreePath
 }
 
-// RenderContext renders the context for an issue in agent format and returns the parsed JSON.
 func (tr *TestRepo) RenderContext(t *testing.T, issueID string) map[string]interface{} {
 	t.Helper()
 
@@ -192,16 +168,11 @@ func (tr *TestRepo) RenderContext(t *testing.T, issueID string) map[string]inter
 	return result
 }
 
-// Transition transitions an issue to a new status.
 func (tr *TestRepo) Transition(t *testing.T, issueID, status, outcome string) {
 	t.Helper()
 
 	args := []string{"transition", issueID, "--to", status, "--outcome", outcome}
 	if status == "done" {
-		// This golden transcript demonstrates the coordinator command sequence
-		// in isolation; it doesn't perform real delivery work in the claimed
-		// worktree, so it can't satisfy the delivery gate's clean-tree/
-		// commit-reference checks.
 		args = append(args, "--skip-delivery-gate")
 	}
 	tr.runArm(t, args...)
@@ -224,7 +195,6 @@ func (tr *TestRepo) ReviewPrepare(t *testing.T, issueID, baseSha, headSha, outpu
 		"--head", headSha,
 		"--output", bundleFile)
 
-	// Verify the file exists and contains valid JSON
 	// #nosec G304 -- test reads a file path it just wrote under t.TempDir()
 	content, err := os.ReadFile(bundleFile)
 	if err != nil {
@@ -239,7 +209,6 @@ func (tr *TestRepo) ReviewPrepare(t *testing.T, issueID, baseSha, headSha, outpu
 	return bundleFile
 }
 
-// ReviewRecord records a conformance assessment for an issue.
 func (tr *TestRepo) ReviewRecord(t *testing.T, issueID, assessmentFile, bundleFile string) {
 	t.Helper()
 
@@ -250,17 +219,12 @@ func (tr *TestRepo) ReviewRecord(t *testing.T, issueID, assessmentFile, bundleFi
 		"--bundle", bundleFile)
 }
 
-// runArm runs an arm command in the test repository and returns its output.
-// It fails the test if the command exits with a non-zero status.
 func (tr *TestRepo) runArm(t *testing.T, args ...string) string {
 	t.Helper()
 
 	return runCmdWithEnv(tr.path, map[string]string{"ARM_LOG_SLOT": "1"}, tr.armBin, args...)
 }
 
-// getArmBinary returns the path to the arm binary for testing.
-// It first checks the ARM_BIN environment variable (set by the Makefile during tests).
-// If not set, it attempts to find 'arm' in PATH or build it from source.
 func getArmBinary(t *testing.T) string {
 	t.Helper()
 
@@ -268,13 +232,11 @@ func getArmBinary(t *testing.T) string {
 		return armBin
 	}
 
-	// Try to find 'arm' in PATH
 	armBin, err := exec.LookPath("arm")
 	if err == nil {
 		return armBin
 	}
 
-	// Try to build it from source (assumes we're in the repo root)
 	repoRoot, err := findRepoRoot()
 	if err != nil {
 		t.Fatalf("failed to find repo root: %v", err)
@@ -292,7 +254,6 @@ func getArmBinary(t *testing.T) string {
 	return binPath
 }
 
-// findRepoRoot finds the root of the armature repository by looking for .git directory.
 func findRepoRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -313,20 +274,15 @@ func findRepoRoot() (string, error) {
 	}
 }
 
-// runCmd runs a git command in the given directory and returns its combined output.
-// It panics if the command exits with a non-zero status.
 func runCmd(dir string, args ...string) string {
 	return runCmdWithEnv(dir, nil, "git", args...)
 }
 
-// runCmdWithEnv runs a command in the given directory with environment variables
-// and returns its combined output. It panics if the command exits with a non-zero status.
 func runCmdWithEnv(dir string, env map[string]string, name string, args ...string) string {
 	// #nosec G204 -- test helper invokes git/arm with test-controlled args
 	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 
-	// Inherit existing environment and add/override with test env vars
 	cmd.Env = os.Environ()
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
@@ -340,13 +296,11 @@ func runCmdWithEnv(dir string, env map[string]string, name string, args ...strin
 	return strings.TrimSpace(string(output))
 }
 
-// runCmdSafely runs a command and returns an error if it fails (does not panic).
 func runCmdSafely(dir string, env map[string]string, name string, args ...string) error {
 	// #nosec G204 -- test helper invokes git/arm with test-controlled args
 	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 
-	// Inherit existing environment and add/override with test env vars
 	cmd.Env = os.Environ()
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))

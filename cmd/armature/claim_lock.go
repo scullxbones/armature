@@ -11,8 +11,6 @@ import (
 	"github.com/scullxbones/armature/internal/filelock"
 )
 
-// pessimisticCloneClaimFlock is the same-clone flock (TryLock). Op-log claim
-// ownership is optimistic (Issue.HeldByExactWorkerAndClaimToken / Payload.IfClaimToken).
 type pessimisticCloneClaimFlock struct {
 	release func()
 }
@@ -51,8 +49,6 @@ func tryAcquirePessimisticCloneClaimFlock(repoPath, issueID string) (pessimistic
 	}}, nil
 }
 
-// blockingGitExcludeFlock is the clone-wide git exclude lock (blocking Lock).
-// Distinct from pessimisticCloneClaimFlock, which is per-issue TryLock.
 type blockingGitExcludeFlock struct {
 	release func()
 }
