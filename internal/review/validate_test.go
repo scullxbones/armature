@@ -1294,7 +1294,8 @@ func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
 		TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t)
 	})
 
-	t.Run("activity-only cannot satisfy implementation criteria (upgrade-only)", func(t *testing.T) { //nolint:paralleltest // delegated test below already calls t.Parallel()
+	//nolint:paralleltest // delegated test below already calls t.Parallel()
+	t.Run("activity-only cannot satisfy implementation criteria (upgrade-only)", func(t *testing.T) {
 		TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECEV_T3(t)
 	})
 }
