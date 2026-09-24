@@ -33,8 +33,6 @@ func DeriveRating(results []CriterionResult) Rating {
 	return Green
 }
 
-// CountCriteria counts criterion results by their status.
-// Returns: satisfied, partially_satisfied, not_satisfied, indeterminate counts.
 func CountCriteria(results []CriterionResult) (int, int, int, int) {
 	var satisfied, partiallySatisfied, notSatisfied, indeterminate int
 
@@ -54,8 +52,6 @@ func CountCriteria(results []CriterionResult) (int, int, int, int) {
 	return satisfied, partiallySatisfied, notSatisfied, indeterminate
 }
 
-// ratingSeverity ranks Conformance Ratings for disagreement enrichment.
-// Order: Green < Yellow < Red. Unknown values sort below Green.
 func ratingSeverity(r Rating) int {
 	switch r {
 	case Green:
@@ -70,8 +66,8 @@ func ratingSeverity(r Rating) int {
 }
 
 // MaxRating returns the highest-severity Conformance Rating (Green < Yellow < Red).
-// With no arguments it returns Green. EffectiveRating built from this helper is
-// advisory only and does not confer merge authority (Constitution I5/N4).
+// EffectiveRating built from this helper is advisory only and does not confer
+// merge authority (Constitution I5/N4).
 func MaxRating(ratings ...Rating) Rating {
 	if len(ratings) == 0 {
 		return Green

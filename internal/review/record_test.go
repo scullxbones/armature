@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// errsContain reports whether any error string in errs contains substr.
 func errsContain(errs []string, substr string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, substr) {
@@ -35,7 +34,7 @@ func citedSatisfied(id, rationale string) CriterionResult {
 
 func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
-	// Create a minimal valid assessment
+
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
 		BundleID:            "bundle-123",
@@ -46,7 +45,6 @@ func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		},
 	}
 
-	// Record without issue data (minimal path)
 	input := RecordInput{
 		Assessment: assessment,
 		IssueID:    "task-01",
@@ -63,7 +61,7 @@ func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 
 func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
-	// Create a complete bundle and matching assessment
+
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
 		Issue: IssueInfo{
@@ -116,12 +114,6 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	assert.Equal(t, 2, result.Attestation.SatisfiedCount)
 }
 
-// TestRecord_BundleIntegrityTampered_REQ_EXECEV verifies that Record recomputes
-// ComputeBundleID from the loaded bundle's actual contents and rejects the
-// bundle if it no longer matches the bundle's recorded BundleID. This guards
-// against a hand-edited bundle file (e.g. Delivery.HeadSHA blanked out to skip
-// the HeadSHA-citation gate) that would otherwise pass every check that only
-// compares fields *within* the same untrusted bundle file.
 func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
@@ -141,8 +133,6 @@ func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
 	}
 	bundle.BundleID = ComputeBundleID(*bundle)
 
-	// Tamper with the bundle after its BundleID was computed (e.g. blank out
-	// HeadSHA to try to dodge the HeadSHA-citation gate) without recomputing the ID.
 	bundle.Delivery.HeadSHA = ""
 
 	assessment := &ConformanceAssessment{
@@ -169,7 +159,7 @@ func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
 
 func TestRecord_WithIssueData_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
-	// Create acceptance criteria
+
 	acceptanceCriteria := []string{"Feature works correctly"}
 	acceptanceJSON, err := json.Marshal(acceptanceCriteria)
 	require.NoError(t, err)
@@ -249,7 +239,7 @@ func TestRecord_IssueIDEmpty_REQ_ARCHIMP_S18_T1(t *testing.T) {
 
 func TestRecord_AssessmentInvalid_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
-	// Missing required fields
+
 	assessment := &ConformanceAssessment{
 		SchemaVersion: SchemaVersion,
 		BundleID:      "",
@@ -294,7 +284,7 @@ func TestRecord_BundleIssueMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	input := RecordInput{
 		Assessment: assessment,
 		Bundle:     bundle,
-		IssueID:    "task-01", // Mismatch with bundle.Issue.ID
+		IssueID:    "task-01",
 	}
 
 	result, err := Record(input)
@@ -320,7 +310,7 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
-		BundleID:            "bundle-999", // Mismatch
+		BundleID:            "bundle-999",
 		ContractFingerprint: "sha256:aaaa",
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
@@ -394,7 +384,6 @@ func TestRecord_CoverageMissingCriterion_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
 			citedSatisfied("definition_of_done", "Done"),
-			// Missing acceptance[0]
 		},
 	}
 
@@ -461,7 +450,7 @@ func TestRecord_ValidCoverage_REQ_ARCHIMP_S18_T1(t *testing.T) {
 
 func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	t.Parallel()
-	// Create a bundle with a diff
+
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
 		Issue: IssueInfo{
@@ -548,7 +537,7 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "Done",
 				Citations: []Citation{
-					{Path: "impl.go", Line: 9999}, // Does not exist in diff
+					{Path: "impl.go", Line: 9999},
 				},
 			},
 		},
@@ -583,14 +572,11 @@ func TestRecordWithDuplicateCheck_Duplicate_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	// Record once
 	result1, err := Record(input)
 	require.NoError(t, err)
 
-	// Create an existing attestation with same result fingerprint
 	existingAtts := []AssessmentAttestation{*result1.Attestation}
 
-	// Try to record the same assessment again
 	result2, err := RecordWithDuplicateCheck(input, existingAtts)
 	require.NoError(t, err)
 	assert.True(t, result2.IsDuplicate)
@@ -617,12 +603,10 @@ func TestRecordWithDuplicateCheck_NotDuplicate_REQ_ARCHIMP_S18_T1(t *testing.T) 
 	result1, err := Record(input)
 	require.NoError(t, err)
 
-	// Create a different existing attestation
 	differentAtt := *result1.Attestation
 	differentAtt.ResultFingerprint = "sha256:different"
 	existingAtts := []AssessmentAttestation{differentAtt}
 
-	// Try to record the assessment
 	result2, err := RecordWithDuplicateCheck(input, existingAtts)
 	require.NoError(t, err)
 	assert.False(t, result2.IsDuplicate)
@@ -646,9 +630,6 @@ func TestRecordWithDuplicateCheck_Error_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-// TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV verifies that
-// AssessmentAttestation.ActivityDigest is populated from the bundle's Activity
-// section (M3 / ADR-0008: "the digest enters the attestation").
 func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
@@ -688,10 +669,6 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 	assert.Equal(t, digest, result.Attestation.ActivityDigest, "attestation must carry the bundle's activity digest")
 }
 
-// TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV verifies that
-// an assessment citing activity log entries is rejected outright when no bundle
-// Activity section is available to validate against (M4) -- both when the bundle
-// itself is nil and when the bundle has no Activity section.
 func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
@@ -731,11 +708,6 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 	})
 }
 
-// TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV verifies that a
-// reviewer-supplied ActivityEntryDetails value is always discarded at record time,
-// even when there is no bundle activity section to populate it from -- it must
-// never survive into the recorded/published citation as model-authored prose
-// dressed as harness-verified fact (M10).
 func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
@@ -759,11 +731,6 @@ func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T)
 		"inbound ActivityEntryDetails must be reset, not passed through")
 }
 
-// TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV verifies that a citation
-// with both Path and ActivityEntryID set is rejected (M5): such a citation would
-// otherwise be skipped by diff-index validation (since activity citations are
-// validated separately) while still counting as a diff citation for
-// upgrade-only-rule purposes, letting a fabricated Path escape verification.
 func TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 	result := CriterionResult{
@@ -777,11 +744,6 @@ func TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV(t *testing.T) {
 	assert.Contains(t, err.Error(), "mutually exclusive")
 }
 
-// TestParseActivityLogFile_IDsAreLinePositionNotSequentialCount_REQ_EXECEV verifies
-// that entry IDs are assigned by physical line number, so a malformed or blank
-// line does not shift the IDs of entries that come after it (m1). Without this,
-// a citation naming entry "2" (meant for the third physical line) could resolve
-// to the wrong parsed entry once an earlier line failed to parse.
 func TestParseActivityLogFile_IDsAreLinePositionNotSequentialCount_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
@@ -809,17 +771,12 @@ this line is not valid JSON at all
 	assert.Equal(t, "third", third.Command)
 }
 
-// TestParseActivityLogFile_HandlesOversizedLine_REQ_EXECEV verifies that a single
-// large activity log line (larger than bufio.Scanner's default 64KB token limit)
-// does not fail the entire scan and silently drop the whole activity section (M9).
 func TestParseActivityLogFile_HandlesOversizedLine_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	logPath := dir + "/armature-activity.log"
 
-	// Build a line whose JSON-encoded size exceeds bufio.Scanner's default 64KB
-	// token limit but stays within the raised buffer.
 	bigOutput := make([]byte, 100*1024)
 	for i := range bigOutput {
 		bigOutput[i] = 'x'
@@ -844,24 +801,6 @@ func TestParseActivityLogFile_HandlesOversizedLine_REQ_EXECEV(t *testing.T) {
 	assert.Equal(t, "make build", entries[0].Command)
 }
 
-// TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix is a regression test
-// that exercises Record's activity citation path with digest validation (PR #71 TOCTOU fix).
-// When an assessment uses activity citations, Record must:
-// 1. Validate the activity log's digest matches what was recorded in the bundle
-// 2. Load activity entries and validate citations
-// 3. Populate ActivityEntryDetails in citations
-//
-// The TOCTOU bug was that ValidateActivityDigest and LoadActivityEntries each did
-// independent os.ReadFile calls on the same path. Between those reads, the file could
-// change, causing the digest check to pass against one version while citations were
-// validated against a different version.
-//
-// After the fix, the file is read exactly once and the same bytes are used for both
-// digest validation and entry parsing.
-//
-// This test verifies end-to-end that the activity path works correctly. A literal
-// TOCTOU race test is impractical without injection points, so this regression test
-// confirms no breakage in the common case (code inspection verifies single read).
 func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	t.Parallel()
 
@@ -915,9 +854,6 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 		},
 	}
 
-	// With the TOCTOU bug, if the log file were to change between ValidateActivityDigest
-	// and LoadActivityEntries, this would either fail or use inconsistent content.
-	// After the fix, the file is read once and reused for both operations.
 	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-02"})
 	require.NoError(t, err, "Record should succeed with valid activity citations")
 	require.NotNil(t, result)
@@ -926,8 +862,6 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	assert.Equal(t, Green, result.Attestation.Rating, "activity citation should contribute to passing rating")
 	assert.False(t, result.IsDuplicate)
 
-	// Verify that the activity entry details were populated in the assessment's citations
-	// (Record modifies the input assessment in place)
 	activityCitation := &assessment.Results[1].Citations[0]
 	assert.NotEmpty(t, activityCitation.ActivityEntryDetails, "activity entry details must be populated from the log")
 	assert.Contains(t, activityCitation.ActivityEntryDetails, "entry 0")
@@ -935,9 +869,6 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	assert.Contains(t, activityCitation.ActivityEntryDetails, "exit_code=0")
 }
 
-// TestValidateActivityDigestAndLoadEntries_FailurePaths directly exercises
-// ValidateActivityDigestAndLoadEntries's failure paths (PR #71 review finding #3),
-// which were previously only covered indirectly through Record's happy path.
 func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 	t.Parallel()
 
@@ -950,7 +881,6 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 		require.NoError(t, os.WriteFile(logPath, original, 0o600))
 		recordedDigest := FingerprintActivity(original)
 
-		// Tamper with the log after the digest was recorded.
 		tampered := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"rm -rf /","exit_code":0,` +
 			`"exit_code_known":true,"head_sha":"head"}` + "\n")
 		require.NoError(t, os.WriteFile(logPath, tampered, 0o600))
@@ -959,8 +889,7 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 		entries, errs := ValidateActivityDigestAndLoadEntries(activity)
 		require.NotEmpty(t, errs, "digest mismatch must be reported regardless of whether citations exist")
 		assert.True(t, errsContain(errs, "digest mismatch"))
-		// Entries are still parsed from the (mismatched) on-disk bytes; callers that
-		// gate on citations decide separately whether to use them.
+
 		assert.Len(t, entries, 1)
 	})
 
@@ -985,12 +914,6 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 	})
 }
 
-// TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations verifies the fix for
-// PR #71 review finding #4: Record must reject a digest mismatch even when the
-// assessment cites no activity entries, because NewAttestation unconditionally
-// stamps the bundle's recorded activity.Digest into the durable attestation. Before
-// the fix, a mismatch with zero activity citations was silently discarded, letting
-// the attestation claim a digest that was never actually re-verified against disk.
 func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) {
 	t.Parallel()
 
@@ -1039,21 +962,17 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 				ID:        "acceptance[0]",
 				Status:    Satisfied,
 				Rationale: "Tests pass",
-				// No activity citations here at all -- only a diff citation.
+
 				Citations: []Citation{{Path: "t.go", Line: 1}},
 			},
 		},
 	}
 
-	// Baseline: matches on disk, so Record succeeds even though citations never
-	// reference activity.
 	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-03"})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, recordedDigest, result.Attestation.ActivityDigest)
 
-	// Tamper with the log after the digest was recorded, without adding any activity
-	// citations to the assessment.
 	tampered := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"rm -rf /","exit_code":0,` +
 		`"exit_code_known":true,"head_sha":"head"}` + "\n")
 	require.NoError(t, os.WriteFile(logPath, tampered, 0o600))
@@ -1212,8 +1131,6 @@ func recordDisagreementAttestation(t *testing.T, bundleID, rationale string, sta
 	return *result.Attestation
 }
 
-// TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13 covers G3.1/G3.3
-// disagreement enrichment on a newly accepted Assessment Attestation.
 func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 	t.Parallel()
 
@@ -1362,9 +1279,6 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 	})
 }
 
-// TestReviewRecord_ConformanceRatingNeverOverwritten_REQ_TOPTIER_S13_T1 asserts
-// the Assessment Attestation Conformance Rating stays DeriveRating of this
-// attestation's Criterion Results when EffectiveRating is stricter.
 func TestReviewRecord_ConformanceRatingNeverOverwritten_REQ_TOPTIER_S13_T1(t *testing.T) {
 	t.Parallel()
 	prior := recordDisagreementAttestation(t, "bundle-red", "prior red", NotSatisfied)

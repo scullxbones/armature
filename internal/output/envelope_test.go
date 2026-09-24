@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Documented list-row and envelope from docs/design/agent-output-contract.md
-// (Normative spec N2/N4 and the successful-list worked example).
 type contractListRow struct {
 	ID     string `json:"id"`
 	Type   string `json:"type"`
@@ -165,9 +163,6 @@ func TestEnvelopeWritesToStdout_REQ_AOC_S1_T2(t *testing.T) {
 func TestEnvelopeMemberOrder_REQ_AOC_S1_T2(t *testing.T) {
 	t.Parallel()
 
-	// Payload keys chosen to straddle "count" and "help" lexicographically:
-	// map-backed marshaling sorts "artifacts" ahead of "count" and "help"
-	// ahead of "issues", so only ordered marshaling passes for all three.
 	for _, payloadKey := range []string{"issues", "workers", "artifacts"} {
 		t.Run(payloadKey, func(t *testing.T) {
 			t.Parallel()
@@ -234,8 +229,6 @@ func TestEnvelopeDoesNotEscapeContractText_REQ_AOC_S1_T2(t *testing.T) {
 	require.Contains(t, raw, "arm show <id> for outcome, scope, and acceptance")
 	require.Contains(t, raw, "<hold> & wait")
 
-	// Escaping is a serialization detail, never a semantic one: the bytes
-	// must still decode back to exactly the strings that went in.
 	var decoded struct {
 		Issues []contractListRow `json:"issues"`
 		Help   []string          `json:"help"`
@@ -269,8 +262,6 @@ func TestEnvelopeEmptyStateRequiresHelp_REQ_AOC_S1_T2(t *testing.T) {
 	require.NoError(t, err, "help is mandatory only on the empty state")
 }
 
-// topLevelKeyOrder returns the envelope's member names in serialized order.
-// Unmarshaling into a map would discard exactly the property under test.
 func topLevelKeyOrder(t *testing.T, raw []byte) []string {
 	t.Helper()
 

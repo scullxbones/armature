@@ -9,7 +9,7 @@
     {
       "name": "context_files",
       "priority": 2,
-      "content": "## Context Files\n### hello.go\n```text\npackage hello\n\n// Hello is the fixture delivery file priced by context-report.\nfunc Hello() string {\n\treturn \"fixture-measured\"\n}\n```"
+      "content": "## Context Files\n### hello.go\n```text\npackage hello\n\nfunc Hello() string {\n\treturn \"fixture-measured\"\n}\n```"
     },
     {
       "name": "snippets",

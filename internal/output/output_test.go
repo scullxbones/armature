@@ -200,8 +200,6 @@ func TestRenderValidation_QuietSuppressesInfo(t *testing.T) {
 
 func TestListEntry_struct(t *testing.T) {
 	t.Parallel()
-	// Verify that ListEntry struct can be created with expected fields.
-	// ListEntry only contains fields that are both populated by callers and rendered in output.
 	entry := ListEntry{
 		Issue:      "TASK-01",
 		Title:      "Test",
@@ -340,7 +338,6 @@ func TestRenderIssue_MinimalIssue(t *testing.T) {
 	assert.Contains(t, output, "Major Initiative")
 	assert.Contains(t, output, "epic")
 	assert.Contains(t, output, "open")
-	// Should not contain empty optional fields
 	assert.NotContains(t, output, "Parent:")
 	assert.NotContains(t, output, "Priority:")
 }
@@ -428,12 +425,9 @@ func TestRenderList_ColumnAlignment(t *testing.T) {
 	require.NoError(t, err)
 	lines := buf.String()
 
-	// Each line must use aligned columns: %-12s for ID, %-14s for status.
-	// Use TrimSpace-based checks to avoid brittle trailing-space assertions.
 	for _, line := range strings.Split(strings.TrimRight(lines, "\n"), "\n") {
 		if strings.Contains(line, "SHORT") {
 			assert.True(t, strings.HasPrefix(strings.TrimLeft(line, " "), "SHORT"), "ID column must start with SHORT")
-			// Verify the status column appears after sufficient padding
 			assert.Contains(t, line, "open", "status column must contain open")
 		}
 		if strings.Contains(line, "LONGER-ID") {
@@ -453,19 +447,16 @@ func TestRenderBoard_Basic(t *testing.T) {
 	require.NoError(t, err)
 	out := buf.String()
 
-	// Header must be present
 	assert.Contains(t, out, "ID")
 	assert.Contains(t, out, "STATUS")
 	assert.Contains(t, out, "CLAIMED")
 	assert.Contains(t, out, "OUTCOME")
 	assert.Contains(t, out, "TITLE")
 
-	// Data rows
 	assert.Contains(t, out, "TASK-01")
 	assert.Contains(t, out, "worker-a")
 	assert.Contains(t, out, "Short outcome")
 
-	// Long outcome must be truncated to 30 chars (27 + "...")
 	assert.Contains(t, out, "...", "outcome longer than 30 chars must be truncated")
 	assert.NotContains(t, out, strings.Repeat("x", 35), "full 35-char outcome must not appear verbatim")
 }
@@ -505,12 +496,9 @@ func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 
-	// Should contain the issue basics
 	assert.Contains(t, output, "TASK-01")
 	assert.Contains(t, output, "Task with Review")
 
-	// Should contain Review line with latest attestation (the second one)
-	// Format: Review:    yellow (bundle sha256:fedcb...; 1 satisfied, 1 indeterminate)
 	assert.Contains(t, output, "Review:")
 	assert.Contains(t, output, "yellow")
 	assert.Contains(t, output, "fedcb")
@@ -555,7 +543,6 @@ func TestRenderIssue_NoAssessmentAttestations_Human(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 
-	// Should not contain Review line when no attestations
 	assert.NotContains(t, output, "Review:")
 }
 
@@ -585,22 +572,12 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 
-	// Should only show the latest (second) attestation
 	assert.Contains(t, output, "Review:")
 	assert.Contains(t, output, "green")
-	// The bundle ID should display the first 12 hex chars (sha256: prefix stripped).
-	// "sha256:eeeeeeffffffffgggggghhhhh" → strip prefix → "eeeeeeffffffffgggggghhhhh" → first 12 → "eeeeeeffffff"
 	assert.Contains(t, output, "eeeeeeffffff")
-	// Should not show the first attestation's hash digits
 	assert.NotContains(t, output, "aaaaaabb")
 }
 
-// TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1 fails if pre-contract structured
-// writers or the jsonErrorPayload path reappear. Named retired decls are
-// scanned in tracked production Go files only, so linked worktrees such as
-// .worktrees/<issue> cannot poison the result. asJSON is only a dual-path
-// parameter on functions in internal/output, not a reserved identifier
-// elsewhere. This test's own identifiers are not scanned.
 func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {
 	t.Parallel()
 

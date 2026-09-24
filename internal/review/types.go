@@ -11,24 +11,17 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// SchemaVersion is the current semantic review protocol version.
 const SchemaVersion = 1
 
-// CriterionStatus represents the reviewer's assessment of a single criterion.
 type CriterionStatus int
 
 const (
-	// Satisfied indicates complete criterion fulfillment.
 	Satisfied CriterionStatus = iota
-	// PartiallySatisfied indicates partial criterion fulfillment.
 	PartiallySatisfied
-	// NotSatisfied indicates criterion not met.
 	NotSatisfied
-	// Indeterminate indicates insufficient evidence or ambiguity.
 	Indeterminate
 )
 
-// String returns the canonical string representation of the status.
 func (cs CriterionStatus) String() string {
 	switch cs {
 	case Satisfied:
@@ -65,7 +58,6 @@ func (cs *CriterionStatus) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ParseCriterionStatus parses a string into a CriterionStatus.
 func ParseCriterionStatus(s string) (CriterionStatus, error) {
 	switch strings.ToLower(s) {
 	case "satisfied":
@@ -81,19 +73,14 @@ func ParseCriterionStatus(s string) (CriterionStatus, error) {
 	}
 }
 
-// Rating represents the summary conformance rating derived from criterion results.
 type Rating int
 
 const (
-	// Green indicates all criteria are satisfied.
 	Green Rating = iota
-	// Yellow indicates some criteria are partially satisfied or indeterminate, none not satisfied.
 	Yellow
-	// Red indicates at least one criterion is not satisfied.
 	Red
 )
 
-// String returns the canonical string representation of the rating.
 func (r Rating) String() string {
 	switch r {
 	case Green:
@@ -128,7 +115,6 @@ func (r *Rating) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ParseRating parses a string into a Rating.
 func ParseRating(s string) (Rating, error) {
 	switch strings.ToLower(s) {
 	case "green":
@@ -142,21 +128,11 @@ func ParseRating(s string) (Rating, error) {
 	}
 }
 
-// Citation provides evidence for a criterion result by referencing a specific location in the delivery.
-// It can cite either a diff location (Path/Line/Column) or an activity log entry (ActivityEntryID).
-// These two forms are mutually exclusive.
 type Citation struct {
-	// Path is the file path within the delivery range (for diff citations).
-	Path string `json:"path,omitempty"`
-	// Line is the line number (optional, for precision, for diff citations).
-	Line int `json:"line,omitempty"`
-	// Column is the column number (optional, for precision, for diff citations).
-	Column int `json:"column,omitempty"`
-	// ActivityEntryID references a raw entry ID from the activity log (for activity citations).
-	// This is mutually exclusive with Path/Line/Column.
-	ActivityEntryID string `json:"activity_entry_id,omitempty"`
-	// ActivityEntryDetails contains pre-rendered activity entry information (entry ID, command, exit status).
-	// This is populated during record time for activity citations.
+	Path                 string `json:"path,omitempty"`
+	Line                 int    `json:"line,omitempty"`
+	Column               int    `json:"column,omitempty"`
+	ActivityEntryID      string `json:"activity_entry_id,omitempty"`
 	ActivityEntryDetails string `json:"activity_entry_details,omitempty"`
 }
 
@@ -203,18 +179,12 @@ func decodeCitationCoordinate(field string, raw json.RawMessage, min int) error 
 	return nil
 }
 
-// CriterionResult records the reviewer's assessment for a single criterion.
 type CriterionResult struct {
-	// ID uniquely identifies the criterion (e.g., "definition_of_done", "acceptance[0]").
-	ID string `json:"id"`
-	// Status is the reviewer's assessment.
-	Status CriterionStatus `json:"status"`
-	// Citations provide structured evidence from the delivery.
-	Citations []Citation `json:"citations,omitempty"`
-	// Rationale explains the assessment concisely.
-	Rationale string `json:"rationale"`
-	// MissingEvidence explicitly states missing evidence when citations are absent.
-	MissingEvidence string `json:"missing_evidence,omitempty"`
+	ID              string          `json:"id"`
+	Status          CriterionStatus `json:"status"`
+	Citations       []Citation      `json:"citations,omitempty"`
+	Rationale       string          `json:"rationale"`
+	MissingEvidence string          `json:"missing_evidence,omitempty"`
 }
 
 // UnmarshalJSON detects a missing "status" key. Unknown fields are
@@ -226,7 +196,6 @@ type CriterionResult struct {
 // package-wide — rejecting unknown fields here would fail artifacts the
 // published contract accepts.
 func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
-	// detect absent key via raw map
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -240,7 +209,6 @@ func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
 		}
 	}
 
-	// use type alias to avoid infinite recursion
 	type Alias CriterionResult
 	var alias Alias
 	if err := json.Unmarshal(data, &alias); err != nil {
@@ -250,7 +218,6 @@ func (cr *CriterionResult) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Valid validates that the CriterionResult is well-formed.
 func (cr CriterionResult) Valid() error {
 	if cr.ID == "" {
 		return fmt.Errorf("criterion result: missing ID")
@@ -267,11 +234,6 @@ func (cr CriterionResult) Valid() error {
 	if len(cr.Citations) == 0 && cr.MissingEvidence == "" {
 		return fmt.Errorf("criterion result %s: citations or missing_evidence required for status %s", cr.ID, cr.Status)
 	}
-	// Path and ActivityEntryID are mutually exclusive citation forms; a citation
-	// with both set would silently skip diff-index validation (since activity
-	// citations are validated separately) while still counting as a diff
-	// citation for upgrade-only-rule purposes, letting a fabricated Path escape
-	// verification against the diff.
 	for i, citation := range cr.Citations {
 		if citation.ActivityEntryID != "" && citation.Path != "" {
 			return fmt.Errorf("criterion result %s: citation %d has both path %q and activity_entry_id %q; these are mutually exclusive",
@@ -281,85 +243,50 @@ func (cr CriterionResult) Valid() error {
 	return nil
 }
 
-// IssueInfo captures the issue being reviewed.
 type IssueInfo struct {
-	// ID is the issue identifier.
-	ID string `json:"id"`
-	// Type is the issue type (e.g., "task", "story").
-	Type string `json:"type"`
-	// Title is the issue title.
-	Title string `json:"title"`
-	// Outcome is the recorded delivery outcome.
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Title   string `json:"title"`
 	Outcome string `json:"outcome"`
 }
 
-// Contract captures the contractual requirements for the delivery.
 type Contract struct {
-	// DefinitionOfDone is the primary criterion.
-	DefinitionOfDone string `json:"definition_of_done"`
-	// Scope is the list of files or areas in scope for the delivery.
-	Scope []string `json:"scope,omitempty"`
-	// Acceptance is an ordered list of acceptance criteria.
-	Acceptance []string `json:"acceptance"`
+	DefinitionOfDone string   `json:"definition_of_done"`
+	Scope            []string `json:"scope,omitempty"`
+	Acceptance       []string `json:"acceptance"`
 }
 
-// Delivery captures metadata about the completed delivery.
 type Delivery struct {
-	// BaseSHA is the parent commit SHA.
-	BaseSHA string `json:"base_sha"`
-	// HeadSHA is the delivery commit SHA.
-	HeadSHA string `json:"head_sha"`
-	// ChangedFiles lists the files modified in the delivery range.
+	BaseSHA      string   `json:"base_sha"`
+	HeadSHA      string   `json:"head_sha"`
 	ChangedFiles []string `json:"changed_files"`
-	// Diff is the unified diff for the delivery range.
-	Diff string `json:"diff,omitempty"`
+	Diff         string   `json:"diff,omitempty"`
 }
 
-// Fingerprints captures canonical fingerprints for reproducibility.
 type Fingerprints struct {
-	// Contract is the SHA-256 fingerprint of the contract.
 	Contract string `json:"contract"`
-	// Delivery is the SHA-256 fingerprint of the delivery metadata.
 	Delivery string `json:"delivery"`
 }
 
-// Activity captures execution evidence for a worktree.
 type Activity struct {
-	// Digest is the SHA-256 fingerprint of the activity log file content.
-	Digest string `json:"digest"`
-	// EntryCount is the total number of entries in the activity log.
-	EntryCount int `json:"entry_count"`
-	// DeliveryHeadCount is the number of entries at the delivery HEAD commit.
-	DeliveryHeadCount int `json:"delivery_head_count"`
-	// EarlierCount is the number of entries at commits before the delivery HEAD.
-	EarlierCount int `json:"earlier_count"`
-	// LogPath is the absolute path to the activity log file (see prepare.go's
-	// attachActivitySection, which deliberately resolves it to absolute so record
-	// time re-reads the same file regardless of working directory).
-	LogPath string `json:"log_path"`
+	Digest            string `json:"digest"`
+	EntryCount        int    `json:"entry_count"`
+	DeliveryHeadCount int    `json:"delivery_head_count"`
+	EarlierCount      int    `json:"earlier_count"`
+	LogPath           string `json:"log_path"`
 }
 
-// ReviewBundle is the canonical input package for a reviewer.
 type ReviewBundle struct {
-	// SchemaVersion is the protocol version.
-	SchemaVersion int `json:"schema_version"`
-	// BundleID is a canonical identifier for this bundle.
-	BundleID string `json:"bundle_id"`
-	// Issue captures the reviewed issue.
-	Issue IssueInfo `json:"issue"`
-	// Contract captures the contractual requirements.
-	Contract Contract `json:"contract"`
-	// Delivery captures the delivery metadata.
-	Delivery Delivery `json:"delivery"`
-	// Fingerprints captures canonical fingerprints.
-	Fingerprints Fingerprints `json:"fingerprints"`
-	// Activity optionally captures execution evidence when a worktree activity log exists.
-	Activity *Activity `json:"activity,omitempty"`
-	// GateEvidence is wrapper-recorded gate runs from worker logs so reviewers can cite them.
-	GateEvidence []ops.GateEvidence `json:"gate_evidence,omitempty"`
+	SchemaVersion int                `json:"schema_version"`
+	BundleID      string             `json:"bundle_id"`
+	Issue         IssueInfo          `json:"issue"`
+	Contract      Contract           `json:"contract"`
+	Delivery      Delivery           `json:"delivery"`
+	Fingerprints  Fingerprints       `json:"fingerprints"`
+	Activity      *Activity          `json:"activity,omitempty"`
+	GateEvidence  []ops.GateEvidence `json:"gate_evidence,omitempty"`
 }
 
-// Valid validates that the ReviewBundle is well-formed.
 func (rb ReviewBundle) Valid() error {
 	if rb.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("review bundle: unsupported schema version %d", rb.SchemaVersion)
@@ -385,21 +312,14 @@ func (rb ReviewBundle) Valid() error {
 	return nil
 }
 
-// ConformanceAssessment is the structured result returned by a reviewer.
 type ConformanceAssessment struct {
-	// SchemaVersion is the protocol version.
-	SchemaVersion int `json:"schema_version"`
-	// BundleID must match the prepared bundle.
-	BundleID string `json:"bundle_id"`
-	// Results contains one result per criterion.
-	Results []CriterionResult `json:"results"`
-	// ContractFingerprint must match the prepared contract fingerprint.
-	ContractFingerprint string `json:"contract_fingerprint"`
-	// DeliveryFingerprint must match the prepared delivery fingerprint.
-	DeliveryFingerprint string `json:"delivery_fingerprint"`
+	SchemaVersion       int               `json:"schema_version"`
+	BundleID            string            `json:"bundle_id"`
+	Results             []CriterionResult `json:"results"`
+	ContractFingerprint string            `json:"contract_fingerprint"`
+	DeliveryFingerprint string            `json:"delivery_fingerprint"`
 }
 
-// Valid validates that the ConformanceAssessment is well-formed.
 func (ca ConformanceAssessment) Valid() error {
 	if ca.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("conformance assessment: unsupported schema version %d", ca.SchemaVersion)
@@ -416,7 +336,6 @@ func (ca ConformanceAssessment) Valid() error {
 	if ca.DeliveryFingerprint == "" {
 		return fmt.Errorf("conformance assessment: missing delivery fingerprint")
 	}
-	// Validate each result.
 	for _, result := range ca.Results {
 		if err := result.Valid(); err != nil {
 			return err
@@ -425,58 +344,34 @@ func (ca ConformanceAssessment) Valid() error {
 	return nil
 }
 
-// AssessmentAttestation is the compact durable record of a review.
 type AssessmentAttestation struct {
-	// SchemaVersion is the protocol version.
-	SchemaVersion int `json:"schema_version"`
-	// BundleID from the prepared bundle.
-	BundleID string `json:"bundle_id"`
-	// ContractFingerprint from the bundle.
+	SchemaVersion       int    `json:"schema_version"`
+	BundleID            string `json:"bundle_id"`
 	ContractFingerprint string `json:"contract_fingerprint"`
-	// DeliveryFingerprint from the bundle.
 	DeliveryFingerprint string `json:"delivery_fingerprint"`
-	// ActivityDigest from the bundle (optional, present if activity log exists).
-	ActivityDigest string `json:"activity_digest,omitempty"`
-	// BaseSHA from the delivery range.
-	BaseSHA string `json:"base_sha"`
-	// HeadSHA from the delivery range.
-	HeadSHA string `json:"head_sha"`
-	// SkillVersion identifies the reviewer skill that produced this assessment.
-	SkillVersion string `json:"skill_version,omitempty"`
-	// ModelIdentity identifies the model/provider when exposed by the harness.
-	ModelIdentity string `json:"model_identity,omitempty"`
+	ActivityDigest      string `json:"activity_digest,omitempty"`
+	BaseSHA             string `json:"base_sha"`
+	HeadSHA             string `json:"head_sha"`
+	SkillVersion        string `json:"skill_version,omitempty"`
+	ModelIdentity       string `json:"model_identity,omitempty"`
 	// InputTokens and OutputTokens record reviewer LLM usage on the same
 	// assessment-attested op (G1.1). They are optional: omitempty keeps every
 	// legacy attestation valid. Absent fields decode as 0. No new op type.
-	InputTokens  int `json:"input_tokens,omitempty"`
-	OutputTokens int `json:"output_tokens,omitempty"`
-	// Rating is the derived conformance rating.
-	Rating Rating `json:"rating"`
+	InputTokens  int    `json:"input_tokens,omitempty"`
+	OutputTokens int    `json:"output_tokens,omitempty"`
+	Rating       Rating `json:"rating"`
 	// EffectiveRating is the severity-max of this Conformance Rating and
 	// qualifying same-DeliveryFingerprint priors (Green < Yellow < Red).
 	// It is advisory only: it does not overwrite Rating and confers no merge
 	// authority (Constitution I5/N4). Populated at RecordWithDuplicateCheck
 	// for newly accepted (non-duplicate) attestations.
-	EffectiveRating Rating `json:"effective_rating,omitempty"`
-	// IsDisagreement is true iff any qualifying prior has a different overall
-	// Conformance Rating than this attestation's own. Omitempty keeps legacy
-	// attestations and agreeing records compact.
-	IsDisagreement bool `json:"is_disagreement,omitempty"`
-	// ConflictsWithBundleID and ConflictsWithRating cite the highest-severity
-	// qualifying prior whose Rating differs from this attestation when
-	// IsDisagreement is true (equal severity → most recently appended).
-	// Unset when there is no disagreement. Pointer + omitempty so Green
-	// (Rating zero value) still serializes as "green" when a conflict is set.
-	ConflictsWithBundleID string  `json:"conflicts_with_bundle_id,omitempty"`
-	ConflictsWithRating   *Rating `json:"conflicts_with_rating,omitempty"`
-	// ResultFingerprint is the SHA-256 of the detailed result for idempotence detection.
-	ResultFingerprint string `json:"result_fingerprint"`
-	// SatisfiedCount is the number of satisfied criteria.
-	SatisfiedCount int `json:"satisfied_count"`
-	// PartiallySatisfiedCount is the number of partially satisfied criteria.
-	PartiallySatisfiedCount int `json:"partially_satisfied_count"`
-	// NotSatisfiedCount is the number of not satisfied criteria.
-	NotSatisfiedCount int `json:"not_satisfied_count"`
-	// IndeterminateCount is the number of indeterminate criteria.
-	IndeterminateCount int `json:"indeterminate_count"`
+	EffectiveRating         Rating  `json:"effective_rating,omitempty"`
+	IsDisagreement          bool    `json:"is_disagreement,omitempty"`
+	ConflictsWithBundleID   string  `json:"conflicts_with_bundle_id,omitempty"`
+	ConflictsWithRating     *Rating `json:"conflicts_with_rating,omitempty"`
+	ResultFingerprint       string  `json:"result_fingerprint"`
+	SatisfiedCount          int     `json:"satisfied_count"`
+	PartiallySatisfiedCount int     `json:"partially_satisfied_count"`
+	NotSatisfiedCount       int     `json:"not_satisfied_count"`
+	IndeterminateCount      int     `json:"indeterminate_count"`
 }

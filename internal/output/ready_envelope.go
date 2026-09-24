@@ -42,7 +42,6 @@ type ExpiredClaim struct {
 	LastClaimingWorkerActivity int64  `json:"last_claiming_worker_activity,omitempty"`
 }
 
-// readyIssueRows maps compute-ready entries to envelope rows.
 func readyIssueRows(entries []ready.ReadyEntry) []ReadyIssue {
 	rows := make([]ReadyIssue, 0, len(entries))
 	for _, e := range entries {
@@ -74,7 +73,6 @@ func readyWaveIDs(waves [][]ready.ReadyEntry) [][]string {
 	return groups
 }
 
-// expiredClaimRows maps expired-claim entries to the expired_claims adjunct.
 func expiredClaimRows(claims []ready.ExpiredClaimEntry) []ExpiredClaim {
 	rows := make([]ExpiredClaim, 0, len(claims))
 	for _, c := range claims {
@@ -92,7 +90,6 @@ func expiredClaimRows(claims []ready.ExpiredClaimEntry) []ExpiredClaim {
 	return rows
 }
 
-// readyEmptyReason names why a zero-length ready payload is empty.
 func readyEmptyReason(parent, assignedTo string, expiredN int) string {
 	switch {
 	case parent != "" && assignedTo != "":
@@ -108,7 +105,6 @@ func readyEmptyReason(parent, assignedTo string, expiredN int) string {
 	}
 }
 
-// ReadyHelp is the trailing help for a ready envelope.
 func ReadyHelp(n int, waves bool, expiredN int, parent, assignedTo string) []string {
 	help := make([]string, 0, 4)
 	switch {
@@ -128,7 +124,6 @@ func ReadyHelp(n int, waves bool, expiredN int, parent, assignedTo string) []str
 
 // WriteReadyEnvelope emits the compact agent ready object
 // {count,issues,expired_claims,help} and optional waves adjunct.
-// This is the live arm ready json/agent path.
 func WriteReadyEnvelope(
 	w io.Writer,
 	entries []ready.ReadyEntry,

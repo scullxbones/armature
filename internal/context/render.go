@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/glamour"
 )
 
-// RenderAgent returns a JSON encoding of the context layers.
 func RenderAgent(ctx *Context) (string, error) {
 	data, err := json.MarshalIndent(ctx, "", "  ")
 	if err != nil {

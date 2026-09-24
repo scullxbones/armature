@@ -14,7 +14,6 @@ const BytesPerToken = 4
 // DefaultTokenBudget matches render-context's built-in --budget default.
 const DefaultTokenBudget = 4000
 
-// FixtureShowIssue is the in-progress task priced for show, render-context, and review.
 const FixtureShowIssue = "FX-WORK"
 
 // EstimationMethod is documented in both human and JSON output so a reader
@@ -35,7 +34,6 @@ const (
 	ClassBundle     = "bundle"
 )
 
-// Artifact is one priced runtime payload.
 type Artifact struct {
 	Path            string `json:"path"`
 	Class           string `json:"class"`
@@ -43,7 +41,6 @@ type Artifact struct {
 	EstimatedTokens int    `json:"estimated_tokens"`
 }
 
-// Report is the runtime context-weight inventory.
 type Report struct {
 	EstimationMethod     string     `json:"estimation_method"`
 	Artifacts            []Artifact `json:"artifacts"`
@@ -51,7 +48,6 @@ type Report struct {
 	TotalEstimatedTokens int        `json:"total_estimated_tokens"`
 }
 
-// EstimateTokens applies the token_budget bytes/4 heuristic.
 func EstimateTokens(byteCount int) int {
 	return byteCount / BytesPerToken
 }
@@ -78,7 +74,6 @@ func finalize(artifacts []Artifact) Report {
 	return report
 }
 
-// RenderHuman prints a table plus the estimation method.
 func RenderHuman(report Report) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Context report (fixture-measured main-path CLI)\n")
@@ -91,7 +86,6 @@ func RenderHuman(report Report) string {
 	return b.String()
 }
 
-// RenderJSON encodes the report, including estimation_method.
 func RenderJSON(report Report) ([]byte, error) {
 	return json.MarshalIndent(report, "", "  ")
 }

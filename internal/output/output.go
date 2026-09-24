@@ -13,9 +13,6 @@ import (
 	"github.com/scullxbones/armature/internal/validate"
 )
 
-// ListEntry represents a row in a list view of issues.
-// Only fields rendered by RenderList are included; add fields here only when they
-// are both populated by callers and rendered in output.
 type ListEntry struct {
 	Issue      string `json:"issue"`
 	Title      string `json:"title"`
@@ -23,8 +20,6 @@ type ListEntry struct {
 	AssignedTo string `json:"assigned_to,omitempty"`
 }
 
-// IssueJSON is the canonical JSON representation of an issue.
-// All JSON serialization of issues must go through this struct to ensure schema consistency.
 type IssueJSON struct {
 	ID                     string          `json:"id"`
 	Title                  string          `json:"title"`
@@ -44,7 +39,6 @@ type IssueJSON struct {
 	AssessmentAttestations json.RawMessage `json:"assessment_attestations,omitempty"`
 }
 
-// MarshalIssue converts a materialize.Issue to the canonical IssueJSON representation.
 func MarshalIssue(issue *materialize.Issue) IssueJSON {
 	noteTexts := make([]string, 0, len(issue.Notes))
 	for _, n := range issue.Notes {
@@ -81,33 +75,28 @@ func MarshalIssue(issue *materialize.Issue) IssueJSON {
 	}
 }
 
-// errWriter is a small helper that accumulates the first write error and
-// suppresses subsequent writes. This eliminates repetitive if-err-return blocks
-// in functions that write many fields sequentially.
-type errWriter struct {
+type firstErrorWriter struct {
 	w   io.Writer
 	err error
 }
 
-func (ew *errWriter) printf(format string, args ...interface{}) {
+func (ew *firstErrorWriter) printf(format string, args ...interface{}) {
 	if ew.err != nil {
 		return
 	}
 	_, ew.err = fmt.Fprintf(ew.w, format, args...)
 }
 
-// truncateBundleID returns the first 12 hex characters of the BundleID hash,
-// stripping the "sha256:" prefix so only meaningful hash digits are shown.
+const bundleIDDisplayHexLen = 12
+
 func truncateBundleID(bundleID string) string {
 	id := strings.TrimPrefix(bundleID, "sha256:")
-	if len(id) <= 12 {
+	if len(id) <= bundleIDDisplayHexLen {
 		return id
 	}
-	return id[:12]
+	return id[:bundleIDDisplayHexLen]
 }
 
-// formatLatestAttestationLine formats the latest assessment attestation as a human-readable line.
-// Returns an empty string when there are no attestations.
 func formatLatestAttestationLine(attestations []review.AssessmentAttestation) string {
 	if len(attestations) == 0 {
 		return ""
@@ -117,7 +106,6 @@ func formatLatestAttestationLine(attestations []review.AssessmentAttestation) st
 	bundleID := truncateBundleID(att.BundleID)
 	ratingStr := att.Rating.String()
 
-	// Build counts string: only include counts that are > 0
 	var counts []string
 	if att.SatisfiedCount > 0 {
 		counts = append(counts, fmt.Sprintf("%d satisfied", att.SatisfiedCount))
@@ -139,17 +127,14 @@ func formatLatestAttestationLine(attestations []review.AssessmentAttestation) st
 	return fmt.Sprintf("Review:    %s (bundle %s; %s)", ratingStr, bundleID, strings.Join(counts, ", "))
 }
 
-// RenderIssue renders a single issue as human-readable text.
-// Structured show output goes through NewEnvelope/WriteEnvelope, not this helper.
 func RenderIssue(w io.Writer, issue *materialize.Issue) error {
-	ew := &errWriter{w: w}
+	ew := &firstErrorWriter{w: w}
 
 	ew.printf("ID:        %s\n", issue.ID)
 	ew.printf("Title:     %s\n", issue.Title)
 	ew.printf("Type:      %s\n", issue.Type)
 	ew.printf("Status:    %s\n", issue.Status)
 
-	// Render latest assessment attestation if present
 	if line := formatLatestAttestationLine(issue.AssessmentAttestations); line != "" {
 		ew.printf("%s\n", line)
 	}
@@ -211,8 +196,6 @@ func RenderIssue(w io.Writer, issue *materialize.Issue) error {
 	return ew.err
 }
 
-// RenderList renders a list of issues to the given writer.
-// Each entry is rendered as a single line in human-readable format.
 func RenderList(w io.Writer, entries []ListEntry) error {
 	if len(entries) == 0 {
 		return nil
@@ -231,8 +214,6 @@ func RenderList(w io.Writer, entries []ListEntry) error {
 	return nil
 }
 
-// BoardEntry represents a row in the story-board (parent-filtered) view, which includes
-// claim and outcome columns in addition to the standard ID/status/title columns.
 type BoardEntry struct {
 	Issue   string
 	Status  string
@@ -241,9 +222,6 @@ type BoardEntry struct {
 	Title   string
 }
 
-// RenderBoard renders a story-board table to the given writer.
-// The board view shows ID, STATUS, CLAIMED, OUTCOME, and TITLE columns,
-// and is used when listing issues filtered by a parent (arm list --parent).
 func RenderBoard(w io.Writer, entries []BoardEntry) error {
 	if len(entries) == 0 {
 		return nil
@@ -266,9 +244,6 @@ func RenderBoard(w io.Writer, entries []BoardEntry) error {
 	return nil
 }
 
-// RenderExpiredClaims renders the distinct expired-claims section for `arm ready`
-// as human-readable text, and is a no-op when claims is empty (nothing to surface).
-// Structured expired claims go through WriteReadyEnvelope as an adjunct.
 func RenderExpiredClaims(w io.Writer, claims []ready.ExpiredClaimEntry) error {
 	if len(claims) == 0 {
 		return nil
@@ -285,8 +260,6 @@ func RenderExpiredClaims(w io.Writer, claims []ready.ExpiredClaimEntry) error {
 	return nil
 }
 
-// RenderReady renders the ready queue as human-readable text.
-// Structured ready output goes through WriteReadyEnvelope, not this helper.
 func RenderReady(w io.Writer, entries []ready.ReadyEntry) error {
 	if len(entries) == 0 {
 		_, err := fmt.Fprintln(w, "No tasks ready.")
@@ -306,9 +279,6 @@ func RenderReady(w io.Writer, entries []ready.ReadyEntry) error {
 	return nil
 }
 
-// RenderValidation renders validation results to the given writer.
-// Displays errors, warnings, infos, coverage, and OK status using prefixed lines.
-// When quiet is true, INFO lines are suppressed; COVERAGE and OK lines are always shown.
 func RenderValidation(w io.Writer, result validate.Result, quiet bool) error {
 	for _, e := range result.Errors {
 		if _, err := fmt.Fprintf(w, "ERROR: %s\n", e); err != nil {
@@ -340,7 +310,6 @@ func RenderValidation(w io.Writer, result validate.Result, quiet bool) error {
 	return nil
 }
 
-// CoverageLine formats the COVERAGE clause for a validate result, or "" if coverage is nil.
 func CoverageLine(result validate.Result) string {
 	if result.Coverage == nil {
 		return ""

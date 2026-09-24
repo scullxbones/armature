@@ -10,25 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Package strictdecode_test verifies the JSON decoding strictness of artifact
-// types in internal/review. ReviewBundle and ConformanceAssessment are decoded
-// with DisallowUnknownFields (by callers using json.Decoder) to catch type
-// mismatches and unknown fields that unit tests previously hid. CriterionResult
-// is the exception: its custom UnmarshalJSON allows unknown/extension fields on
-// results[] entries and citations (since the published schema does not set
-// additionalProperties: false there), but it still strictly enforces the
-// required "status" field.
-//
-// Audit of JSON decoders in internal/review:
-//   - acceptance.go (lines 28, 34): uses map[string]interface{} for flexible format;
-//     intentionally non-strict to support extensible acceptance criterion schemas.
-//   - fingerprint.go (line 203): reads activity log; intentionally lenient to skip
-//     malformed lines in append-only logs that may gain new fields in future versions.
-//
-// See docs/design/top-tier-gap-analysis.md (T2.3) for background on this test suite.
-
-// TestReviewBundleRoundTrip_REQ_TOPTIER_S3_T3 verifies that a ReviewBundle
-// marshals to JSON and unmarshals back identically with DisallowUnknownFields enabled.
 func TestReviewBundleRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -57,18 +38,15 @@ func TestReviewBundleRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 		},
 	}
 
-	// Marshal to JSON
 	jsonData, err := json.MarshalIndent(originalBundle, "", "  ")
 	require.NoError(t, err, "failed to marshal ReviewBundle")
 
-	// Unmarshal with DisallowUnknownFields
 	var roundTrippedBundle review.ReviewBundle
 	decoder := json.NewDecoder(strings.NewReader(string(jsonData)))
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&roundTrippedBundle)
 	require.NoError(t, err, "failed to unmarshal ReviewBundle with DisallowUnknownFields")
 
-	// Verify round-trip
 	assert.Equal(t, originalBundle.SchemaVersion, roundTrippedBundle.SchemaVersion)
 	assert.Equal(t, originalBundle.BundleID, roundTrippedBundle.BundleID)
 	assert.Equal(t, originalBundle.Issue.ID, roundTrippedBundle.Issue.ID)
@@ -76,8 +54,6 @@ func TestReviewBundleRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Equal(t, originalBundle.Delivery.BaseSHA, roundTrippedBundle.Delivery.BaseSHA)
 }
 
-// TestConformanceAssessmentRoundTrip_REQ_TOPTIER_S3_T3 verifies that a ConformanceAssessment
-// marshals to JSON and unmarshals back with DisallowUnknownFields enabled.
 func TestConformanceAssessmentRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -108,18 +84,15 @@ func TestConformanceAssessmentRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 		},
 	}
 
-	// Marshal to JSON
 	jsonData, err := json.MarshalIndent(originalAssessment, "", "  ")
 	require.NoError(t, err, "failed to marshal ConformanceAssessment")
 
-	// Unmarshal with DisallowUnknownFields
 	var roundTrippedAssessment review.ConformanceAssessment
 	decoder := json.NewDecoder(strings.NewReader(string(jsonData)))
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&roundTrippedAssessment)
 	require.NoError(t, err, "failed to unmarshal ConformanceAssessment with DisallowUnknownFields")
 
-	// Verify round-trip
 	assert.Equal(t, originalAssessment.SchemaVersion, roundTrippedAssessment.SchemaVersion)
 	assert.Equal(t, originalAssessment.BundleID, roundTrippedAssessment.BundleID)
 	assert.Len(t, roundTrippedAssessment.Results, 2)
@@ -127,9 +100,6 @@ func TestConformanceAssessmentRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Equal(t, review.Satisfied, roundTrippedAssessment.Results[1].Status)
 }
 
-// TestCriterionStatusStringRoundTrip_REQ_TOPTIER_S3_T3 verifies that CriterionStatus
-// marshals as a string (not integer) and unmarshals from that string form.
-// This catches the bug where internal representation uses int but JSON documents strings.
 func TestCriterionStatusStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -144,16 +114,13 @@ func TestCriterionStatusStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 		t.Run(status.String(), func(t *testing.T) {
 			t.Parallel()
 
-			// Marshal status to JSON
 			data, err := json.Marshal(status)
 			require.NoError(t, err)
 
-			// Verify it's a quoted string, not an integer
 			dataStr := string(data)
 			assert.True(t, strings.HasPrefix(dataStr, "\"") && strings.HasSuffix(dataStr, "\""),
 				"CriterionStatus %q marshaled as %s, expected quoted string", status.String(), dataStr)
 
-			// Unmarshal back from the string form
 			var decoded review.CriterionStatus
 			err = json.Unmarshal(data, &decoded)
 			require.NoError(t, err)
@@ -163,8 +130,6 @@ func TestCriterionStatusStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	}
 }
 
-// TestRatingStringRoundTrip_REQ_TOPTIER_S3_T3 verifies that Rating
-// marshals as a string (not integer) and unmarshals from that string form.
 func TestRatingStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -174,16 +139,13 @@ func TestRatingStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 		t.Run(rating.String(), func(t *testing.T) {
 			t.Parallel()
 
-			// Marshal rating to JSON
 			data, err := json.Marshal(rating)
 			require.NoError(t, err)
 
-			// Verify it's a quoted string, not an integer
 			dataStr := string(data)
 			assert.True(t, strings.HasPrefix(dataStr, "\"") && strings.HasSuffix(dataStr, "\""),
 				"Rating %q marshaled as %s, expected quoted string", rating.String(), dataStr)
 
-			// Unmarshal back from the string form
 			var decoded review.Rating
 			err = json.Unmarshal(data, &decoded)
 			require.NoError(t, err)
@@ -193,18 +155,9 @@ func TestRatingStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	}
 }
 
-// TestCriterionResultAllowsSchemaValidExtensionFields_REQ_TOPTIER_S3_T3 verifies
-// that CriterionResult does NOT reject unknown fields during unmarshaling.
-// docs/schemas/conformance-assessment.schema.json does not set
-// additionalProperties: false on results[] entries, so a schema-valid reviewer
-// payload may legitimately carry extension/metadata fields; CriterionResult's
-// decoder must not be stricter than the published schema (see PR #82 review
-// comment https://github.com/scullxbones/armature/pull/82#discussion_r3611714461).
 func TestCriterionResultAllowsSchemaValidExtensionFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	// JSON with an extension field not declared by CriterionResult's Go
-	// struct but permitted by the published schema.
 	jsonStr := `{
 		"id": "test_criterion",
 		"status": "satisfied",
@@ -219,17 +172,9 @@ func TestCriterionResultAllowsSchemaValidExtensionFields_REQ_TOPTIER_S3_T3(t *te
 	assert.Equal(t, review.Satisfied, result.Status)
 }
 
-// TestCriterionResultAllowsSchemaValidExtensionFieldsOnCitation_REQ_TOPTIER_S3_T3
-// verifies that a schema-valid extension field on a nested citations[] entry is
-// also accepted (not rejected) by CriterionResult's decoder, mirroring the
-// results[] entry case above. The original review comment covered both forms:
-// "results[] entry or nested citation" (see PR #82 review comment
-// https://github.com/scullxbones/armature/pull/82#discussion_r3611714461).
 func TestCriterionResultAllowsSchemaValidExtensionFieldsOnCitation_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	// JSON with an extension field on a citations[] entry not declared by
-	// Citation's Go struct but permitted by the published schema.
 	jsonStr := `{
 		"id": "test_criterion",
 		"status": "satisfied",
@@ -251,9 +196,6 @@ func TestCriterionResultAllowsSchemaValidExtensionFieldsOnCitation_REQ_TOPTIER_S
 	assert.Equal(t, 42, result.Citations[0].Line)
 }
 
-// TestCriterionResultMissingStatusRejected_REQ_TOPTIER_S3_T3 verifies that
-// CriterionResult still rejects a missing required "status" field, even
-// though unknown/extension fields are now allowed.
 func TestCriterionResultMissingStatusRejected_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -268,8 +210,6 @@ func TestCriterionResultMissingStatusRejected_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Contains(t, err.Error(), "status")
 }
 
-// TestReviewBundleUnknownFields_REQ_TOPTIER_S3_T3 verifies that
-// ReviewBundle rejects unknown fields during unmarshaling.
 func TestReviewBundleUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -292,8 +232,6 @@ func TestReviewBundleUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 		"expected error to mention unknown field, got: %s", err.Error())
 }
 
-// TestConformanceAssessmentUnknownFields_REQ_TOPTIER_S3_T3 verifies that
-// ConformanceAssessment rejects unknown fields during unmarshaling.
 func TestConformanceAssessmentUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -315,9 +253,6 @@ func TestConformanceAssessmentUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 		"expected error to mention unknown field, got: %s", err.Error())
 }
 
-// TestBundleStrictDecode_REQ_TOPTIER_S3_T3 verifies that ReviewBundle
-// rejects JSON with type mismatches (e.g., string where int is expected).
-// This comprehensive test covers the full pipeline intent: plan -> decompose -> review.
 func TestBundleStrictDecode_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 

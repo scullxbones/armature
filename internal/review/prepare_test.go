@@ -11,10 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// activityLogLineJSON builds a single JSONL activity log line (the format
-// written by internal/harnesshook.AppendActivity / read by
-// review.parseActivityLogFile) for use in tests. Fields omitted from opts
-// default to their zero value.
 func activityLogLineJSON(t *testing.T, opts map[string]any) string {
 	t.Helper()
 	line := map[string]any{
@@ -33,7 +29,6 @@ func activityLogLineJSON(t *testing.T, opts map[string]any) string {
 	return string(data)
 }
 
-// mockGitAdapter is a mock implementation of GitAdapter for testing.
 type mockGitAdapter struct {
 	resolveRevisionFn   func(rev string) (string, error)
 	diffRangeFn         func(base, head string) (string, error)
@@ -84,7 +79,6 @@ func TestPrepare_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
 
-	// Verify bundle properties
 	assert.Equal(t, review.SchemaVersion, bundle.SchemaVersion)
 	assert.NotEmpty(t, bundle.BundleID)
 	assert.Equal(t, "SMTC-S1-T2", bundle.Issue.ID)
@@ -172,14 +166,12 @@ func TestPrepare_BundleIDDeterministic(t *testing.T) {
 		},
 	}
 
-	// Call prepare twice with the same inputs
 	bundle1, err1 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 	require.NoError(t, err1)
 
 	bundle2, err2 := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 	require.NoError(t, err2)
 
-	// The bundle IDs should be identical
 	assert.Equal(t, bundle1.BundleID, bundle2.BundleID)
 }
 
@@ -215,7 +207,6 @@ func TestPrepare_WithCriteria(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
 
-	// Verify criteria are stored in the contract
 	assert.Equal(t, criteria, bundle.Contract.Acceptance)
 }
 
@@ -299,7 +290,7 @@ func TestPrepare_BundleValidation(t *testing.T) {
 	bundle, err := review.Prepare(git, "SMTC-S1-T2", "Test", "", "task", "", []string{}, []string{}, "main", "HEAD", "")
 
 	require.NoError(t, err)
-	// Verify the bundle is valid
+
 	assert.NoError(t, bundle.Valid())
 }
 
@@ -332,7 +323,7 @@ func TestPrepare_ExcludesArmatureArtifacts(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
-	// Only internal/foo.go should be in changed files, not .armature paths
+
 	assert.Equal(t, []string{"internal/foo.go"}, bundle.Delivery.ChangedFiles)
 }
 
@@ -381,7 +372,7 @@ func TestPrepare_ErrorWhenDeliveryEmpty(t *testing.T) {
 			return "", nil
 		},
 		diffNameOnlyRangeFn: func(base, head string) ([]string, error) {
-			// Only armature coordination paths
+
 			return []string{".armature/ops/worker.log", ".arm/state.json"}, nil
 		},
 	}
@@ -536,11 +527,9 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
 	headSHA := "def456def456def456def456def456def456def4"
 
-	// Create a temporary activity log file
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/armature-activity.log"
 
-	// Write a sample activity log with multiple entries
 	logContent := activityLogLineJSON(t, map[string]any{
 		"command": "make build", "head_sha": "def456def456def456def456def456def456def4",
 		"output_hash": "abc123", "output_head": "Build succeeded",
@@ -576,7 +565,6 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	require.NotNil(t, bundle)
 	require.NotNil(t, bundle.Activity, "Activity section should be present")
 
-	// Verify activity properties
 	assert.NotEmpty(t, bundle.Activity.Digest, "Activity digest should be set")
 	assert.Equal(t, 3, bundle.Activity.EntryCount, "Should have 3 activity entries")
 	assert.Equal(t, 2, bundle.Activity.DeliveryHeadCount, "Should have 2 entries at delivery HEAD")
@@ -584,12 +572,6 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	assert.NotEmpty(t, bundle.Activity.LogPath, "LogPath should be set")
 }
 
-// TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV verifies that Activity.LogPath is
-// stored as an absolute path even when Prepare is given a relative path (m3):
-// ValidateActivityDigestAndLoadEntries re-reads LogPath at record time, potentially from a
-// different working directory than prepare ran in, so a relative path would
-// silently point at the wrong file (or nothing) and break digest validation.
-//
 //nolint:paralleltest // mutates process-wide cwd via os.Chdir; must not run concurrently with other tests
 func TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV(t *testing.T) {
 	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
@@ -614,8 +596,6 @@ func TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV(t *testing.T) {
 		},
 	}
 
-	// Change into tmpDir so a relative activity log path resolves there, then
-	// pass a relative path to Prepare.
 	origWD, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(tmpDir))
@@ -651,13 +631,12 @@ func TestPrepare_WithoutActivityLog_REQ_EXECEV_T2(t *testing.T) {
 		},
 	}
 
-	// Pass non-existent activity log path
 	bundle, err := review.Prepare(git, "EXECEV-T2", "No activity", "dod", "task", "done",
 		[]string{}, []string{}, "main", "HEAD", "/nonexistent/path.log")
 
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
-	// Activity section should be omitted when log doesn't exist
+
 	assert.Nil(t, bundle.Activity, "Activity section should be nil when log does not exist")
 }
 
@@ -670,7 +649,6 @@ func TestPrepare_EmptyActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/armature-activity.log"
 
-	// Create an empty activity log
 	err := os.WriteFile(logPath, []byte(""), 0o644)
 	require.NoError(t, err)
 
@@ -709,7 +687,6 @@ func TestPrepare_MalformedActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/armature-activity.log"
 
-	// Write a malformed activity log (a non-JSON line interleaved with valid JSONL entries)
 	logContent := activityLogLineJSON(t, map[string]any{
 		"command": "make build", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "abc123",
 	}) + "\n" +
@@ -741,7 +718,7 @@ func TestPrepare_MalformedActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, bundle)
 	require.NotNil(t, bundle.Activity, "Activity section should be present")
-	// Malformed lines are skipped, so we should have 2 valid entries
+
 	assert.Equal(t, 2, bundle.Activity.EntryCount, "Should skip malformed lines and parse valid ones")
 }
 
@@ -755,7 +732,6 @@ func TestActivityDigestDeterministic_REQ_EXECEV_T2(t *testing.T) {
 		"command": "make build", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "abc123",
 	})
 
-	// Create two identical activity logs and verify they produce the same digest
 	tmpDir := t.TempDir()
 	logPath1 := tmpDir + "/log1.log"
 	logPath2 := tmpDir + "/log2.log"
@@ -788,7 +764,6 @@ func TestActivityDigestDeterministic_REQ_EXECEV_T2(t *testing.T) {
 		[]string{}, []string{}, "main", "HEAD", logPath2)
 	require.NoError(t, err2)
 
-	// Activity digests should be identical for identical log content
 	require.NotNil(t, bundle1.Activity)
 	require.NotNil(t, bundle2.Activity)
 	assert.Equal(t, bundle1.Activity.Digest, bundle2.Activity.Digest, "Activity digests should be deterministic")

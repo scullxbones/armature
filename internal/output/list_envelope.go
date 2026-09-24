@@ -9,7 +9,6 @@ import (
 
 const ListShowHelp = "arm show <id> for outcome, scope, and acceptance"
 
-// listStatusOrder is display priority for --group output — lower number appears first.
 var listStatusOrder = map[string]int{
 	"in-progress": 0,
 	"claimed":     1,
@@ -35,7 +34,6 @@ type ListGroup struct {
 	IDs    []string `json:"ids"`
 }
 
-// ListStatusRank returns the --group display order for a status.
 func ListStatusRank(status string) int {
 	if n, ok := listStatusOrder[status]; ok {
 		return n
@@ -58,7 +56,6 @@ func ListRows(index materialize.Index, ids []string) []ListIssue {
 	return rows
 }
 
-// ListGroupsByStatus buckets ids by status in workflow order.
 func ListGroupsByStatus(index materialize.Index, ids []string) []ListGroup {
 	buckets := make(map[string][]string)
 	for _, id := range ids {
@@ -81,7 +78,6 @@ func ListGroupsByStatus(index materialize.Index, ids []string) []ListGroup {
 	return groups
 }
 
-// listHelp is the trailing help for a list envelope.
 func listHelp(filtered bool, n int) []string {
 	if n == 0 {
 		reason := "no issues in the repository"
@@ -94,7 +90,7 @@ func listHelp(filtered bool, n int) []string {
 }
 
 // WriteListEnvelope emits the compact agent list object {count,issues,help}
-// and optional groups adjunct. This is the live arm list json/agent path.
+// and optional groups adjunct.
 func WriteListEnvelope(w io.Writer, rows []ListIssue, groups []ListGroup, grouped, filtered bool) error {
 	env, err := NewEnvelope("issues", rows, listHelp(filtered, len(rows)))
 	if err != nil {
