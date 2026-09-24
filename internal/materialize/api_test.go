@@ -2,6 +2,7 @@ package materialize
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -9,6 +10,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func materializeCold(allOps []ops.Op) (*State, error) {
+	state := NewState()
+	if err := ApplyOpsSorted(state, allOps); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+func materializeIncremental(state *State, allOps []ops.Op) error {
+	if state == nil {
+		return fmt.Errorf("materializeIncremental: state is nil")
+	}
+	*state = *NewState()
+	return ApplyOpsSorted(state, allOps)
+}
 
 func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 	t.Parallel()
@@ -28,15 +45,15 @@ func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 				Payload: ops.Payload{TTL: 60}},
 		}
 
-		seed, err := MaterializeCold(allOps[:3])
+		seed, err := materializeCold(allOps[:3])
 		require.NoError(t, err)
 		require.Equal(t, ops.StatusMerged, seed.Issues["story-01"].Status)
 		require.Equal(t, ops.StatusOpen, seed.Issues["story-01"].RollupStatusBefore)
 
 		cached := cloneMaterializeState(t, seed)
-		require.NoError(t, MaterializeIncremental(cached, allOps))
+		require.NoError(t, materializeIncremental(cached, allOps))
 
-		cold, err := MaterializeCold(allOps)
+		cold, err := materializeCold(allOps)
 		require.NoError(t, err)
 		require.Equal(t, ops.StatusInProgress, cold.Issues["story-01"].Status)
 
@@ -60,14 +77,14 @@ func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 				Payload: ops.Payload{To: ops.StatusMerged}},
 		}
 
-		seed, err := MaterializeCold(allOps)
+		seed, err := materializeCold(allOps)
 		require.NoError(t, err)
 		cached := cloneMaterializeState(t, seed)
 		delete(cached.Issues, "task-02")
 		_, stillMissing := cached.Issues["task-02"]
 		require.False(t, stillMissing, "precondition: cache omitted task-02")
 
-		require.NoError(t, MaterializeIncremental(cached, allOps))
+		require.NoError(t, materializeIncremental(cached, allOps))
 		_, recovered := cached.Issues["task-02"]
 		assert.True(t, recovered, "full replay must recreate issues absent from the snapshot")
 		assert.Equal(t, ops.StatusMerged, cached.Issues["story-01"].Status)
@@ -83,7 +100,7 @@ func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 			{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 102, WorkerID: "w1",
 				Payload: ops.Payload{To: ops.StatusMerged}},
 		}
-		seed, err := MaterializeCold(seedOps)
+		seed, err := materializeCold(seedOps)
 		require.NoError(t, err)
 		require.Equal(t, ops.StatusMerged, seed.Issues["story-01"].Status)
 
@@ -109,7 +126,7 @@ func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 		_, hasBefore := issueType.FieldByName("RollupStatusBefore")
 		assert.True(t, hasBefore)
 
-		cold, err := MaterializeCold([]ops.Op{
+		cold, err := materializeCold([]ops.Op{
 			{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100, WorkerID: "w1",
 				Payload: ops.Payload{Title: "Story", NodeType: "story"}},
 			{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 101, WorkerID: "w1",
@@ -142,13 +159,13 @@ func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 				Payload: ops.Payload{To: ops.StatusOpen}},
 		}
 
-		cold, err := MaterializeCold(allOps)
+		cold, err := materializeCold(allOps)
 		require.NoError(t, err)
 		require.Equal(t, []string{"first"}, cold.Issues["task-01"].PriorOutcomes)
 
 		cached := cloneMaterializeState(t, cold)
-		require.NoError(t, MaterializeIncremental(cached, allOps))
-		require.NoError(t, MaterializeIncremental(cached, allOps))
+		require.NoError(t, materializeIncremental(cached, allOps))
+		require.NoError(t, materializeIncremental(cached, allOps))
 		assert.Equal(t, []string{"first"}, cached.Issues["task-01"].PriorOutcomes)
 		assert.Equal(t, cold.Issues["task-01"].PriorOutcomes, cached.Issues["task-01"].PriorOutcomes)
 		assert.Equal(t, ops.StatusOpen, cached.Issues["task-01"].Status)
@@ -157,9 +174,9 @@ func TestMaterializeIncremental_REQ_MATENC_S1_T7(t *testing.T) {
 
 	t.Run("nil state is an error", func(t *testing.T) {
 		t.Parallel()
-		err := MaterializeIncremental(nil, nil)
+		err := materializeIncremental(nil, nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "MaterializeIncremental: state is nil")
+		assert.Contains(t, err.Error(), "materializeIncremental: state is nil")
 
 		err = ApplyOpsSorted(nil, nil)
 		require.Error(t, err)

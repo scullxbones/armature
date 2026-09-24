@@ -575,13 +575,6 @@ func writeScaffoldingMonotonic(path, label string, content []byte, warn io.Write
 	return nil
 }
 
-func writeGitignoreMonotonic(gitignorePath string, warn io.Writer) error {
-	return writeScaffoldingMonotonic(gitignorePath, ".gitignore", []byte(ops.GenerateOpsGitignore()), warn)
-}
-
-func writeSchemaMonotonic(schemaPath string, warn io.Writer) error {
-	return writeScaffoldingMonotonic(schemaPath, "SCHEMA", []byte(ops.GenerateSchema()), warn)
-}
 
 func commitObsoleteHookTemplateRemovals(worktreePath string, isCollapsedLayout bool) error {
 	client := adapters.New(worktreePath)
@@ -1390,12 +1383,12 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 
 	gitignorePath := filepath.Join(issuesDir, ".gitignore")
-	if err := writeGitignoreMonotonic(gitignorePath, cmd.ErrOrStderr()); err != nil {
+	if err := writeScaffoldingMonotonic(gitignorePath, ".gitignore", []byte(ops.GenerateOpsGitignore()), cmd.ErrOrStderr()); err != nil {
 		return RepoSetupResult{}, fmt.Errorf("write %s/.gitignore: %w", config.StateDirName, err)
 	}
 
 	schemaPath := filepath.Join(issuesDir, "ops", "SCHEMA")
-	if err := writeSchemaMonotonic(schemaPath, cmd.ErrOrStderr()); err != nil {
+	if err := writeScaffoldingMonotonic(schemaPath, "SCHEMA", []byte(ops.GenerateSchema()), cmd.ErrOrStderr()); err != nil {
 		return RepoSetupResult{}, err
 	}
 
@@ -1487,7 +1480,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			if err := os.MkdirAll(filepath.Join(stateDir, "issues"), 0o750); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to recreate state directories after migration: %v\n", err)
 			}
-			if err := writeGitignoreMonotonic(filepath.Join(issuesDir, ".gitignore"), cmd.ErrOrStderr()); err != nil {
+			if err := writeScaffoldingMonotonic(filepath.Join(issuesDir, ".gitignore"), ".gitignore", []byte(ops.GenerateOpsGitignore()), cmd.ErrOrStderr()); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to write .gitignore after migration: %v\n", err)
 			}
 		}
