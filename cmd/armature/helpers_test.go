@@ -21,7 +21,7 @@ import (
 
 func TestCommandFailureAgentEnvelope_REQ_LNGHZN_S6_T1(t *testing.T) {
 	t.Parallel()
-	cf := armerrors.New("CLAIM-1", "disk full", []string{"arm doctor"}, 1)
+	cf := armerrors.New("CLAIM-1", "disk full", []string{"arm doctor"})
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "agent", cf)
 
@@ -64,13 +64,13 @@ func TestCommandFailureAgentEnvelope_REQ_LNGHZN_S6_T1(t *testing.T) {
 
 func TestCommandFailureHumanRendering_REQ_LNGHZN_S6_T1(t *testing.T) {
 	t.Parallel()
-	cf := armerrors.New("USAGE", "disk full", []string{"arm doctor", "arm --help"}, 2)
+	cf := armerrors.New("USAGE", "disk full", []string{"arm doctor", "arm --help"})
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "human", cf)
 	got := buf.String()
 	assert.Equal(t, "Error [USAGE]: disk full\nTry: arm doctor\nTry: arm --help\n", got)
 
-	empty := armerrors.New("IO", "boom", nil, 1)
+	empty := armerrors.New("IO", "boom", nil)
 	emptyBuf := new(bytes.Buffer)
 	renderCommandFailure(emptyBuf, "human", empty)
 	assert.Equal(t, "Error [IO]: boom\n", emptyBuf.String())

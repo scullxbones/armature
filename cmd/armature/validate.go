@@ -189,23 +189,19 @@ func writeValidateEnvelope(w io.Writer, result validate.Result) error {
 	} else if len(rows) == 0 {
 		help = []string{"no graph findings", help[0]}
 	}
-	env, err := output.NewEnvelope("findings", rows, help)
-	if err != nil {
-		return err
-	}
-	if err := env.AddAdjunct("errors", result.Errors); err != nil {
-		return err
-	}
-	if err := env.AddAdjunct("warnings", result.Warnings); err != nil {
-		return err
-	}
-	if err := env.AddAdjunct("infos", result.Infos); err != nil {
-		return err
-	}
-	if result.Coverage != nil {
-		if err := env.AddAdjunct("coverage", result.Coverage); err != nil {
+	return writeCommandEnvelope(w, "findings", rows, help, func(env *output.Envelope) error {
+		if err := env.AddAdjunct("errors", result.Errors); err != nil {
 			return err
 		}
-	}
-	return output.WriteEnvelope(w, env)
+		if err := env.AddAdjunct("warnings", result.Warnings); err != nil {
+			return err
+		}
+		if err := env.AddAdjunct("infos", result.Infos); err != nil {
+			return err
+		}
+		if result.Coverage != nil {
+			return env.AddAdjunct("coverage", result.Coverage)
+		}
+		return nil
+	})
 }

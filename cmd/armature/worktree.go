@@ -340,47 +340,42 @@ func writeWorktreeGCEnvelope(cmd *cobra.Command, removed, skipped, failed, ambig
 	} else if dryRun {
 		help = []string{"dry-run: no worktrees were removed", help[0]}
 	}
-	env, err := output.NewEnvelope("worktrees", rows, help)
-	if err != nil {
-		return err
-	}
-	if dryRun {
-		if err := env.AddAdjunct("dry_run", true); err != nil {
+	return writeCommandEnvelope(cmd.OutOrStdout(), "worktrees", rows, help, func(env *output.Envelope) error {
+		if dryRun {
+			if err := env.AddAdjunct("dry_run", true); err != nil {
+				return err
+			}
+			if err := env.AddAdjunct("would_remove", removed); err != nil {
+				return err
+			}
+			if err := env.AddAdjunct("would_remove_count", len(removed)); err != nil {
+				return err
+			}
+		} else {
+			if err := env.AddAdjunct("removed", removed); err != nil {
+				return err
+			}
+			if err := env.AddAdjunct("removed_count", len(removed)); err != nil {
+				return err
+			}
+			if err := env.AddAdjunct("skipped", skipped); err != nil {
+				return err
+			}
+			if err := env.AddAdjunct("skipped_count", len(skipped)); err != nil {
+				return err
+			}
+			if err := env.AddAdjunct("failed", failed); err != nil {
+				return err
+			}
+			if err := env.AddAdjunct("failed_count", len(failed)); err != nil {
+				return err
+			}
+		}
+		if err := env.AddAdjunct("ambiguous", ambiguous); err != nil {
 			return err
 		}
-		if err := env.AddAdjunct("would_remove", removed); err != nil {
-			return err
-		}
-		if err := env.AddAdjunct("would_remove_count", len(removed)); err != nil {
-			return err
-		}
-	} else {
-		if err := env.AddAdjunct("removed", removed); err != nil {
-			return err
-		}
-		if err := env.AddAdjunct("removed_count", len(removed)); err != nil {
-			return err
-		}
-		if err := env.AddAdjunct("skipped", skipped); err != nil {
-			return err
-		}
-		if err := env.AddAdjunct("skipped_count", len(skipped)); err != nil {
-			return err
-		}
-		if err := env.AddAdjunct("failed", failed); err != nil {
-			return err
-		}
-		if err := env.AddAdjunct("failed_count", len(failed)); err != nil {
-			return err
-		}
-	}
-	if err := env.AddAdjunct("ambiguous", ambiguous); err != nil {
-		return err
-	}
-	if err := env.AddAdjunct("ambiguous_count", len(ambiguous)); err != nil {
-		return err
-	}
-	return output.WriteEnvelope(cmd.OutOrStdout(), env)
+		return env.AddAdjunct("ambiguous_count", len(ambiguous))
+	})
 }
 
 func writeWorktreeListEnvelope(cmd *cobra.Command, result worktree.ReconcileResult) error {
@@ -390,22 +385,20 @@ func writeWorktreeListEnvelope(cmd *cobra.Command, result worktree.ReconcileResu
 		len(result.Unrecognized) == 0 && len(result.GCAmbiguous) == 0 {
 		help = []string{"no managed worktrees found", help[0]}
 	}
-	env, err := output.NewEnvelope("worktrees", worktreeListRows(result), help)
-	if err != nil {
-		return err
-	}
-	adjuncts := map[string]any{
-		"bound":        result.BoundWorktrees,
-		"orphans":      result.Orphans,
-		"ghosts":       result.Ghosts,
-		"gc_ready":     result.GCRemovalSet,
-		"unrecognized": result.Unrecognized,
-		"ambiguous":    result.GCAmbiguous,
-	}
-	for key, value := range adjuncts {
-		if err := env.AddAdjunct(key, value); err != nil {
-			return err
+	return writeCommandEnvelope(cmd.OutOrStdout(), "worktrees", worktreeListRows(result), help, func(env *output.Envelope) error {
+		adjuncts := map[string]any{
+			"bound":        result.BoundWorktrees,
+			"orphans":      result.Orphans,
+			"ghosts":       result.Ghosts,
+			"gc_ready":     result.GCRemovalSet,
+			"unrecognized": result.Unrecognized,
+			"ambiguous":    result.GCAmbiguous,
 		}
-	}
-	return output.WriteEnvelope(cmd.OutOrStdout(), env)
+		for key, value := range adjuncts {
+			if err := env.AddAdjunct(key, value); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

@@ -72,11 +72,7 @@ func explainHelp(n int) []string {
 
 func writeReadyExplainEnvelope(w io.Writer, index materialize.Index, notReady map[string]string) error {
 	rows := readyExplainRows(index, notReady)
-	env, err := output.NewEnvelope("issues", rows, explainHelp(len(rows)))
-	if err != nil {
-		return err
-	}
-	return output.WriteEnvelope(w, env)
+	return writeNamedEnvelope(w, "issues", rows, explainHelp(len(rows)))
 }
 
 func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
@@ -300,7 +296,7 @@ func mapReadyError(err error) error {
 		return cf
 	}
 	if isLocalArmatureTipPublishError(err) {
-		return armerrors.Wrap(codeReady1, err.Error(), []string{"arm push-ops", "arm doctor"}, 1, err)
+		return armerrors.Wrap(codeReady1, err.Error(), []string{"arm push-ops", "arm doctor"}, err)
 	}
-	return armerrors.Wrap(codeReady1, err.Error(), []string{"arm doctor"}, 1, err)
+	return armerrors.Wrap(codeReady1, err.Error(), []string{"arm doctor"}, err)
 }

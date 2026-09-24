@@ -46,7 +46,7 @@ func TestUnmappedRemoved_REQ_LNGHZN_S6_T5(t *testing.T) {
 func TestCommandFailurePreservesUnwrap(t *testing.T) {
 	t.Parallel()
 	cause := stderrors.New("disk full")
-	got := Wrap(CodeIO, "disk full", nil, 1, cause)
+	got := Wrap(CodeIO, "disk full", nil, cause)
 	if !stderrors.Is(got, cause) {
 		t.Error("Wrap must unwrap to the original error")
 	}
@@ -54,9 +54,15 @@ func TestCommandFailurePreservesUnwrap(t *testing.T) {
 		t.Errorf("Error() = %q, want [IO] disk full", got.Error())
 	}
 
-	existing := New("USAGE", "bad flag", []string{"arm --help"}, 2)
+	existing := New("USAGE", "bad flag", []string{"arm --help"})
 	if existing.Code != "USAGE" {
 		t.Errorf("Code = %q, want USAGE", existing.Code)
+	}
+	if existing.ExitCode != 2 {
+		t.Errorf("USAGE ExitCode = %d, want 2", existing.ExitCode)
+	}
+	if got.ExitCode != 1 {
+		t.Errorf("IO ExitCode = %d, want 1", got.ExitCode)
 	}
 }
 

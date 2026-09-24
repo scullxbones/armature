@@ -435,7 +435,7 @@ func mapReviewError(err error) error {
 		strings.Contains(msg, "issue ID is required"),
 		strings.Contains(msg, "conflicting issue ID"),
 		strings.Contains(msg, "accepts at most"):
-		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm review --help"}, 2, err)
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm review --help"}, err)
 	case strings.Contains(msg, "read assessment file"),
 		strings.Contains(msg, "parse assessment JSON"),
 		strings.Contains(msg, "assessment validation failed"),
@@ -443,27 +443,27 @@ func mapReviewError(err error) error {
 		return armerrors.Wrap(codeReview1, msg, []string{
 			"jq empty <assessment.json>",
 			"arm review record --assessment <assessment.json>",
-		}, 1, err)
+		}, err)
 	case strings.Contains(msg, "failed to list commits"):
 		return armerrors.Wrap(codeReview1, msg, []string{
 			"arm review commits --issue <issue-id> --branch <reachable-branch>",
-		}, 1, err)
+		}, err)
 	case strings.Contains(msg, "failed to resolve base revision"),
 		strings.Contains(msg, "failed to resolve head revision"):
 		return armerrors.Wrap(codeReview1, msg, []string{
 			"arm review prepare --issue <issue-id> --base <reachable-ref> --head <reachable-ref>",
-		}, 1, err)
+		}, err)
 	case strings.Contains(msg, "not JSON content"),
 		strings.Contains(msg, "read bundle file"):
 		return armerrors.Wrap(codeReview1, msg, []string{
 			"arm review prepare --output <bundle.json>",
 			"arm review record --bundle <bundle.json>",
-		}, 1, err)
+		}, err)
 	case strings.Contains(msg, "issue") && strings.Contains(msg, "not found"):
-		return armerrors.Wrap(codeReview1, msg, []string{"arm list", "arm show"}, 1, err)
+		return armerrors.Wrap(codeReview1, msg, []string{"arm list", "arm show"}, err)
 	case strings.Contains(msg, "load snapshot"):
-		return armerrors.Wrap(codeReview1, msg, []string{"arm doctor"}, 1, err)
+		return armerrors.Wrap(codeReview1, msg, []string{"arm doctor"}, err)
 	default:
-		return armerrors.Wrap(codeReview1, msg, []string{"arm review prepare --output <bundle.json>"}, 1, err)
+		return armerrors.Wrap(codeReview1, msg, []string{"arm review prepare --output <bundle.json>"}, err)
 	}
 }

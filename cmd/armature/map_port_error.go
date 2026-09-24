@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	armerrors "github.com/scullxbones/armature/internal/errors"
-	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/spf13/cobra"
 )
 
@@ -80,10 +79,10 @@ func mapAgentFacingError(cmd *cobra.Command, err error) error {
 		return cf
 	}
 	if isUsageError(err) {
-		return armerrors.Wrap(armerrors.CodeUSAGE, err.Error(), []string{"arm --help"}, exitcodes.ExitUsageError.Int(), err)
+		return armerrors.Wrap(armerrors.CodeUSAGE, err.Error(), []string{"arm --help"}, err)
 	}
 	code := failureCodeForCommand(cmd)
-	return armerrors.Map(code, err.Error(), nextActionsForPortError(err), 1, err)
+	return armerrors.Map(code, err.Error(), nextActionsForPortError(err), err)
 }
 
 func failureCodeForCommand(cmd *cobra.Command) string {
@@ -159,7 +158,7 @@ func commandFailureAtPort(err error) *armerrors.CommandFailure {
 	if errors.As(mapped, &cf) && cf != nil {
 		return cf
 	}
-	return armerrors.New(armerrors.CodeIO, err.Error(), nil, 1)
+	return armerrors.New(armerrors.CodeIO, err.Error(), nil)
 }
 
 func installCommandFailureMapping(root *cobra.Command) {
