@@ -498,7 +498,7 @@ func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proc
 	return wrote, pushOpsBranch(opsPublishGit(ctx, gc), tracker)
 }
 
-func publishHighStakesOps(state *executionState) error {
+func publishLocalArmatureTip(state *executionState) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
@@ -571,7 +571,7 @@ func pushOpsBranch(gc *adapters.Client, tracker ops.PendingPushTracker) error {
 	return nil
 }
 
-func pushOpsBranchBestEffort(gc *adapters.Client, tracker ops.PendingPushTracker) {
+func pushOpsBranchAlwaysResetTracker(gc *adapters.Client, tracker ops.PendingPushTracker) {
 	if err := pushOpsBranch(gc, tracker); err != nil && tracker != nil {
 		swallowErr(tracker.Reset())
 	}
@@ -607,7 +607,7 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 			return err
 		}
 		if n >= threshold {
-			pushOpsBranchBestEffort(opsPublishGit(ctx, gc), tracker)
+			pushOpsBranchAlwaysResetTracker(opsPublishGit(ctx, gc), tracker)
 		}
 	}
 	return nil

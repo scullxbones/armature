@@ -349,7 +349,7 @@ func TestIsBindingStale_Claimed(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01", 1000)
+	stale := hasNoLiveClaim(snap, "task-01", 1000)
 
 	assert.False(t, stale)
 }
@@ -364,7 +364,7 @@ func TestIsBindingStale_InProgress(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01", 1000)
+	stale := hasNoLiveClaim(snap, "task-01", 1000)
 
 	assert.False(t, stale)
 }
@@ -379,7 +379,7 @@ func TestIsBindingStale_Done(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01", 1000)
+	stale := hasNoLiveClaim(snap, "task-01", 1000)
 
 	assert.True(t, stale)
 }
@@ -389,7 +389,7 @@ func TestIsBindingStale_Missing(t *testing.T) {
 		Issues: make(map[string]*materialize.Issue),
 	}
 
-	stale := isBindingStale(snap, "task-01", 1000)
+	stale := hasNoLiveClaim(snap, "task-01", 1000)
 
 	assert.True(t, stale)
 }
@@ -404,7 +404,7 @@ func TestIsBindingStale_Open(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01", 1000)
+	stale := hasNoLiveClaim(snap, "task-01", 1000)
 
 	assert.True(t, stale)
 }
@@ -427,7 +427,7 @@ func TestIsBindingStale_ClaimedWithExpiredTTL(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01", now)
+	stale := hasNoLiveClaim(snap, "task-01", now)
 
 	assert.True(t, stale, "claimed task with expired TTL should be stale")
 }
@@ -445,7 +445,7 @@ func TestIsBindingStale_ClaimedWithinTTLWindow(t *testing.T) {
 		},
 	}
 
-	stale := isBindingStale(snap, "task-01", 1600)
+	stale := hasNoLiveClaim(snap, "task-01", 1600)
 
 	assert.False(t, stale, "claimed task with heartbeat within TTL window should not be stale")
 }

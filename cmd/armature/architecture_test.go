@@ -328,7 +328,7 @@ func TestStatsAndShowDeriveSpendFromCapturedOps(t *testing.T) {
 		src, err := os.ReadFile(filepath.Join(baseDir, name))
 		require.NoError(t, err)
 		if strings.Contains(string(src), "stats.LoadOps") {
-			t.Errorf("%s must estimate spend from snap.Ops, not a second stats.LoadOps read", name)
+			t.Errorf("%s must estimate spend from snap.MaterializedOps, not a second stats.LoadOps read", name)
 		}
 	}
 }

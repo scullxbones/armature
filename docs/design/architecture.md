@@ -83,7 +83,7 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
 | Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .armature --force`, then re-run `arm bootstrap` |
-| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes call `pushOpsBranch` immediately after the local commit (publish failure is returned to the CLI; the local commit is not rolled back). Low-stakes writes stay local until `low_stakes_push_threshold`, then `pushOpsBranchBestEffort` |
+| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes call `pushOpsBranch` immediately after the local commit (publish failure is returned to the CLI; the local commit is not rolled back). Low-stakes writes stay local until `low_stakes_push_threshold`, then `pushOpsBranchAlwaysResetTracker` |
 | Worktree corruption | Manually remove the stale worktree (`git worktree remove .armature --force`), then re-run `arm bootstrap` to recreate it from remote |
 
 ### Directory Structure (within `.armature/` worktree)
@@ -350,7 +350,7 @@ No `git fetch` / `git pull` of `origin/_armature` on this path.
 
 Code commits happen separately in the developer's main worktree, on their feature branch. The CLI never touches the code worktree for ops writes.
 
-### Ops publish (`pushOpsBranch` / `pushOpsBranchBestEffort`)
+### Ops publish (`pushOpsBranch` / `pushOpsBranchAlwaysResetTracker`)
 
 `cmd/armature/helpers.go` publishes `_armature` with a single git sequence:
 
@@ -362,9 +362,9 @@ There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry 
 
 **High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranch`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, …) with Next Actions `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIf` `!wrote`, `doctor --fix` with no remaining actions) still publishes the local `_armature` tip: success may report no-op, but origin must contain the op; remaining git errors stay `opsPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
 
-**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call `pushOpsBranchBestEffort` — the **same git sequence**, but git errors are swallowed so a heartbeat cannot eject a worker. `tracker.Reset()` still runs after the attempt. Below threshold they stay local-only.
+**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call `pushOpsBranchAlwaysResetTracker` — the **same git sequence**, but git errors are swallowed so a heartbeat cannot eject a worker. `tracker.Reset()` still runs after the attempt. Below threshold they stay local-only.
 
-**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranch` / `pushOpsBranchBestEffort` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
+**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranch` / `pushOpsBranchAlwaysResetTracker` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
 
 `arm push-ops` is the explicit Push-only command (no FetchAndRebase retry) and **does** fail the CLI (`PUSH-OPS-1`). It is also the recovery command after a loud high-stakes publish failure.
 
@@ -1627,7 +1627,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 |---|---|---|
 | Worker crashes after claim, before completion | Issue stuck as claimed | Heartbeat + TTL expiry; other workers reclaim after TTL |
 | Worker crashes after append, before push | Op lost locally; shared state consistent | No mitigation needed — inherently safe, worker re-issues on restart |
-| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranch`: one `FetchAndRebase` then a second `Push`. High-stakes remaining git errors fail the CLI (`opsPublishError` → command Failure Code, Next Actions `arm push-ops` / `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchBestEffort`. `arm push-ops` is Push-only and fails as `PUSH-OPS-1` |
+| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranch`: one `FetchAndRebase` then a second `Push`. High-stakes remaining git errors fail the CLI (`opsPublishError` → command Failure Code, Next Actions `arm push-ops` / `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchAlwaysResetTracker`. `arm push-ops` is Push-only and fails as `PUSH-OPS-1` |
 | Corrupt log line | Materialization fails on one line | Skip unparseable lines + warn (implemented in parser) |
 | Clock skew between workers | Wrong claim winner | NTP keeps skew <1s; ms timestamps make races negligible |
 | Duplicate worker IDs | Real merge conflicts | UUID generation + uniqueness validation on first push |

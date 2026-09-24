@@ -81,7 +81,7 @@ func runStatsCost(cmd *cobra.Command, ratesPath string) error {
 	}
 
 	issues := snapshotIssueInfo(snap)
-	report := stats.Estimate(stats.CollectUsage(snap.Ops), issues, rates)
+	report := stats.Estimate(stats.CollectUsage(snap.MaterializedOps), issues, rates)
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if format == "json" || format == "agent" {

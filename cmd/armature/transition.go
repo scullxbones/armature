@@ -107,7 +107,7 @@ outcome) appends as an amendment at exit 0.`,
 			if replayErr == nil && liveIssue != nil {
 				currentStatus = liveIssue.Status
 				if ops.IdenticalTransition(allOps, issueID, liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, payload) {
-					if err := publishHighStakesOps(state); err != nil {
+					if err := publishLocalArmatureTip(state); err != nil {
 						return err
 					}
 					writeTransitionNoOp(cmd, issueID, to, fieldFlag)

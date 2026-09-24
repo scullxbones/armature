@@ -31,9 +31,9 @@ func TestLoad_EmptyDir(t *testing.T) {
 	assert.NotNil(t, snap.State)
 	assert.NotNil(t, snap.Index)
 	assert.NotNil(t, snap.Issues)
-	assert.NotNil(t, snap.Ops)
+	assert.NotNil(t, snap.MaterializedOps)
 	assert.Equal(t, 0, len(snap.Issues))
-	assert.Equal(t, 0, len(snap.Ops))
+	assert.Equal(t, 0, len(snap.MaterializedOps))
 	assert.Equal(t, 0, len(snap.Warnings))
 }
 
@@ -60,8 +60,8 @@ func TestLoad_SingleIssue(t *testing.T) {
 	assert.NotNil(t, snap.Issues["issue-1"])
 	assert.Equal(t, "issue-1", snap.Issues["issue-1"].ID)
 	assert.Equal(t, "Test Issue", snap.Issues["issue-1"].Title)
-	require.Len(t, snap.Ops, 1)
-	assert.Equal(t, "issue-1", snap.Ops[0].TargetID)
+	require.Len(t, snap.MaterializedOps, 1)
+	assert.Equal(t, "issue-1", snap.MaterializedOps[0].TargetID)
 }
 
 func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
@@ -82,7 +82,7 @@ func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
 
 	assert.NotNil(t, snap)
 	assert.Equal(t, 0, len(snap.Issues))
-	assert.Empty(t, snap.Ops, "mismatched ops must be excluded from the captured set")
+	assert.Empty(t, snap.MaterializedOps, "mismatched ops must be excluded from the captured set")
 	assert.Greater(t, len(snap.Warnings), 0)
 	found := false
 	for _, w := range snap.Warnings {
@@ -236,7 +236,7 @@ func TestLoad_AllFieldsPopulated(t *testing.T) {
 	assert.NotNil(t, snap.State, "State should not be nil")
 	assert.NotNil(t, snap.Index, "Index should not be nil")
 	assert.NotNil(t, snap.Issues, "Issues should not be nil")
-	assert.NotNil(t, snap.Ops, "Ops should not be nil")
+	assert.NotNil(t, snap.MaterializedOps, "MaterializedOps should not be nil")
 	assert.NotNil(t, snap.Warnings, "Warnings should not be nil")
 }
 
@@ -254,18 +254,18 @@ func TestLoad_CapturedOpsDoNotIncludeLaterAppends(t *testing.T) {
 
 	snap, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
-	require.Len(t, snap.Ops, 1)
+	require.Len(t, snap.MaterializedOps, 1)
 	require.Contains(t, snap.Issues, "issue-1")
 
 	second := first + `["create","issue-2",2000,"test-worker",{"title":"Second","type":"task","scope":[],"context_files":[]}]` + "\n"
 	require.NoError(t, adapters.WriteFile(logPath, []byte(second), 0644))
 
-	assert.Len(t, snap.Ops, 1, "captured op set must stay frozen after later appends")
+	assert.Len(t, snap.MaterializedOps, 1, "captured op set must stay frozen after later appends")
 	assert.NotContains(t, snap.Issues, "issue-2", "snapshot hierarchy must match the captured ops, not a later log read")
 
 	snap2, err := loadSnap(opsDir, stateDir)
 	require.NoError(t, err)
-	require.Len(t, snap2.Ops, 2)
+	require.Len(t, snap2.MaterializedOps, 2)
 	assert.Contains(t, snap2.Issues, "issue-2")
 }
 
