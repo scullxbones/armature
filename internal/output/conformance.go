@@ -80,7 +80,7 @@ func enumerateModes(root *Command) []Mode {
 	}
 	var modes []Mode
 	walkCommands(root, "", true, func(cmd *Command, path string, isRoot bool) {
-		if !enumerableCommand(cmd, isRoot) {
+		if !isResultMode(cmd, isRoot) {
 			return
 		}
 		for _, mode := range modesForCommand(path, cmd.Annotations) {
@@ -184,7 +184,7 @@ func checkResultStderr(stderr []byte) error {
 	}
 }
 
-func enumerableCommand(cmd *Command, isRoot bool) bool {
+func isResultMode(cmd *Command, isRoot bool) bool {
 	if cmd == nil || cmd.Name == "help" {
 		return false
 	}
@@ -194,7 +194,8 @@ func enumerableCommand(cmd *Command, isRoot bool) bool {
 	if isRoot {
 		return true
 	}
-	return !cmd.HasAvailableSubs
+	isGroupHelp := cmd.HasAvailableSubs
+	return !isGroupHelp
 }
 
 func modesForCommand(path string, ann map[string]string) []Mode {
