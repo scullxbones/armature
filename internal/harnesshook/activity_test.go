@@ -471,3 +471,78 @@ func TestActivityAppendActivityCapsOversizedCommand_REQ_EXECEV_M5(t *testing.T) 
 	assert.LessOrEqual(t, len(decoded.Command), maxCommandSize, "command must be capped at write time")
 	assert.Less(t, len(decoded.Command), len(hugeCommand), "command must actually have been truncated")
 }
+
+func TestAppendActivity_EmptyOrMissingCommandWritesNothing_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+
+	newGitDir := func(t *testing.T) string {
+		t.Helper()
+		gitDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("1234567890abcdef1234567890abcdef12345678\n"), 0o600))
+		return gitDir
+	}
+
+	assertNoLog := func(t *testing.T, gitDir string) {
+		t.Helper()
+		_, err := os.Stat(filepath.Join(gitDir, "armature-activity.log"))
+		assert.True(t, os.IsNotExist(err), "empty or missing command must not create an activity log")
+	}
+
+	t.Run("empty command string", func(t *testing.T) {
+		t.Parallel()
+		gitDir := newGitDir(t)
+		require.NoError(t, AppendActivity(gitDir, "", 0, true, []byte("unused")))
+		assertNoLog(t, gitDir)
+	})
+
+	t.Run("event with empty command", func(t *testing.T) {
+		t.Parallel()
+		gitDir := newGitDir(t)
+		adapter := NewCodexAdapter()
+		evt, err := adapter.Decode([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":""},"tool_response":{"exit_code":0}}`))
+		require.NoError(t, err)
+		require.Equal(t, "", evt.Command)
+		require.NoError(t, AppendActivity(gitDir, evt.Command, evt.ExitCode, evt.ExitCodeKnown, evt.Output))
+		assertNoLog(t, gitDir)
+	})
+
+	t.Run("event with no tool_input", func(t *testing.T) {
+		t.Parallel()
+		gitDir := newGitDir(t)
+		adapter := NewCodexAdapter()
+		evt, err := adapter.Decode([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"exit_code":0}}`))
+		require.NoError(t, err)
+		require.Equal(t, "", evt.Command)
+		require.NoError(t, AppendActivity(gitDir, evt.Command, evt.ExitCode, evt.ExitCodeKnown, evt.Output))
+		assertNoLog(t, gitDir)
+	})
+}
+
+func TestFallbackActivityJSONL_CannotEmitEmptyCommand_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, fallbackActivityJSONL(ActivityEntry{
+		Timestamp:    "2026-09-24T00:00:00Z",
+		WorktreeHead: "abc",
+	}))
+	assert.Empty(t, fallbackActivityJSONL(ActivityEntry{
+		Command:      "   ",
+		Timestamp:    "2026-09-24T00:00:00Z",
+		WorktreeHead: "abc",
+	}))
+
+	line := fallbackActivityJSONL(ActivityEntry{
+		Command:       `grep "foo"`,
+		ExitCode:      0,
+		ExitCodeKnown: true,
+		Timestamp:     "2026-09-24T00:00:00Z",
+		WorktreeHead:  "abc",
+		OutputHash:    "def",
+	})
+	require.NotEmpty(t, line)
+	var decoded activityLogLine
+	require.NoError(t, json.Unmarshal([]byte(line), &decoded))
+	assert.Equal(t, `grep "foo"`, decoded.Command)
+	assert.Equal(t, 0, decoded.ExitCode)
+	assert.True(t, decoded.ExitCodeKnown)
+}

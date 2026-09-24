@@ -99,3 +99,40 @@ func TestActivityWriterParserRoundTrip_MultipleEntriesHeadSHA_REQ_EXECEV(t *test
 		assert.Equal(t, i, details.ExitCode)
 	}
 }
+
+func TestAppendActivity_EverythingWrittenRoundTripsThroughParser_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+
+	gitDir := t.TempDir()
+	headSHA := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(headSHA+"\n"), 0o600))
+
+	writes := []struct {
+		command string
+		exit    int
+		known   bool
+		output  []byte
+	}{
+		{command: "make test", exit: 0, known: true, output: []byte("ok")},
+		{command: `echo "quoted"`, exit: 1, known: true, output: []byte("err")},
+		{command: "go test ./...", exit: 0, known: false, output: []byte("FAIL")},
+		{command: "printf héllo", exit: 0, known: true, output: []byte("héllo")},
+	}
+	for _, w := range writes {
+		require.NoError(t, harnesshook.AppendActivity(gitDir, w.command, w.exit, w.known, w.output))
+	}
+
+	logPath := filepath.Join(gitDir, "armature-activity.log")
+	entries := loadActivityEntries(t, logPath)
+	require.Len(t, entries, len(writes), "every AppendActivity line must parse")
+
+	for i, w := range writes {
+		details, ok := entries[i]
+		require.True(t, ok, "entry %d should be present", i)
+		assert.Equal(t, w.command, details.Command)
+		assert.Equal(t, w.known, details.ExitCodeKnown)
+		if w.known {
+			assert.Equal(t, w.exit, details.ExitCode)
+		}
+	}
+}

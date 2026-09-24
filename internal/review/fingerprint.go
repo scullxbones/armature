@@ -2,6 +2,7 @@ package review
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -147,7 +148,15 @@ func (l *activityLogLine) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	type alias activityLogLine
+	type alias struct {
+		Timestamp     string `json:"timestamp"`
+		Command       string `json:"command"`
+		ExitCodeKnown bool   `json:"exit_code_known"`
+		HeadSHA       string `json:"head_sha"`
+		OutputHash    string `json:"output_hash"`
+		OutputHead    string `json:"output_head"`
+		OutputTail    string `json:"output_tail"`
+	}
 	var a alias
 	if err := json.Unmarshal(data, &a); err != nil {
 		return err
@@ -155,13 +164,46 @@ func (l *activityLogLine) UnmarshalJSON(data []byte) error {
 	if strings.TrimSpace(a.Command) == "" {
 		return fmt.Errorf("missing command")
 	}
+	exitCode := 0
+	exitRaw, hasExit := raw["exit_code"]
 	if a.ExitCodeKnown {
-		if _, ok := raw["exit_code"]; !ok {
+		if !hasExit {
 			return fmt.Errorf("exit_code_known is true but exit_code is omitted")
 		}
+		n, err := decodeActivityExitCode(exitRaw)
+		if err != nil {
+			return err
+		}
+		exitCode = n
+	} else if hasExit && !bytes.Equal(bytes.TrimSpace(exitRaw), []byte("null")) {
+		n, err := decodeActivityExitCode(exitRaw)
+		if err != nil {
+			return err
+		}
+		exitCode = n
 	}
-	*l = activityLogLine(a)
+	*l = activityLogLine{
+		Timestamp:     a.Timestamp,
+		Command:       a.Command,
+		ExitCode:      exitCode,
+		ExitCodeKnown: a.ExitCodeKnown,
+		HeadSHA:       a.HeadSHA,
+		OutputHash:    a.OutputHash,
+		OutputHead:    a.OutputHead,
+		OutputTail:    a.OutputTail,
+	}
 	return nil
+}
+
+func decodeActivityExitCode(raw json.RawMessage) (int, error) {
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return 0, fmt.Errorf("exit_code must be an integer, not null")
+	}
+	var n int
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return 0, fmt.Errorf("exit_code must be an integer: %w", err)
+	}
+	return n, nil
 }
 
 func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, error) {

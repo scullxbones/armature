@@ -37,6 +37,21 @@ func TestParseActivityLogBytes_MalformedInputs_REQ_NOCOMMENTS(t *testing.T) {
 			wantSub: "exit_code is omitted",
 		},
 		{
+			name:    "known exit with null exit_code",
+			line:    `{"command":"make test","exit_code":null,"exit_code_known":true,"head_sha":"h"}`,
+			wantSub: "activity log line 0: exit_code must be an integer, not null",
+		},
+		{
+			name:    "known exit with string exit_code",
+			line:    `{"command":"make test","exit_code":"0","exit_code_known":true,"head_sha":"h"}`,
+			wantSub: "activity log line 0: exit_code must be an integer",
+		},
+		{
+			name:    "known exit with float exit_code",
+			line:    `{"command":"make test","exit_code":0.5,"exit_code_known":true,"head_sha":"h"}`,
+			wantSub: "activity log line 0: exit_code must be an integer",
+		},
+		{
 			name:    "truncated JSON object",
 			line:    `{"command":"make test"`,
 			wantSub: "activity log line 0",
