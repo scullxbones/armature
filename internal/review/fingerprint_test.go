@@ -5,7 +5,15 @@ import (
 
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func mustComputeBundleID(t *testing.T, bundle review.ReviewBundle) string {
+	t.Helper()
+	id, err := review.ComputeBundleID(bundle)
+	require.NoError(t, err)
+	return id
+}
 
 func TestFingerprintContract_Deterministic(t *testing.T) {
 	t.Parallel()
@@ -194,8 +202,8 @@ func TestBundleID_Deterministic(t *testing.T) {
 		},
 	}
 
-	bundleID1 := review.ComputeBundleID(bundle)
-	bundleID2 := review.ComputeBundleID(bundle)
+	bundleID1 := mustComputeBundleID(t, bundle)
+	bundleID2 := mustComputeBundleID(t, bundle)
 
 	assert.Equal(t, bundleID1, bundleID2)
 	assert.NotEmpty(t, bundleID1)
@@ -239,8 +247,8 @@ func TestBundleID_Different(t *testing.T) {
 		},
 	}
 
-	bundleID1 := review.ComputeBundleID(bundle1)
-	bundleID2 := review.ComputeBundleID(bundle2)
+	bundleID1 := mustComputeBundleID(t, bundle1)
+	bundleID2 := mustComputeBundleID(t, bundle2)
 
 	assert.NotEqual(t, bundleID1, bundleID2)
 }
@@ -278,7 +286,7 @@ func TestBundleIDFormat(t *testing.T) {
 		},
 	}
 
-	bundleID := review.ComputeBundleID(bundle)
+	bundleID := mustComputeBundleID(t, bundle)
 
 	assert.True(t, len(bundleID) > 7)
 	assert.Contains(t, bundleID, ":")
@@ -380,8 +388,8 @@ func TestBundleID_LogPath_Excluded(t *testing.T) {
 		},
 	}
 
-	bundleID1 := review.ComputeBundleID(bundle1)
-	bundleID2 := review.ComputeBundleID(bundle2)
+	bundleID1 := mustComputeBundleID(t, bundle1)
+	bundleID2 := mustComputeBundleID(t, bundle2)
 
 	assert.Equal(t, bundleID1, bundleID2, "ComputeBundleID should exclude LogPath from hash")
 }
@@ -441,8 +449,8 @@ func TestBundleID_Activity_Digest_Included(t *testing.T) {
 		},
 	}
 
-	bundleID1 := review.ComputeBundleID(bundle1)
-	bundleID2 := review.ComputeBundleID(bundle2)
+	bundleID1 := mustComputeBundleID(t, bundle1)
+	bundleID2 := mustComputeBundleID(t, bundle2)
 
 	assert.NotEqual(t, bundleID1, bundleID2, "ComputeBundleID should include Activity.Digest in hash")
 }

@@ -195,7 +195,11 @@ func Prepare(
 		}
 	}
 
-	bundle.BundleID = ComputeBundleID(*bundle)
+	id, err := ComputeBundleID(*bundle)
+	if err != nil {
+		return nil, err
+	}
+	bundle.BundleID = id
 
 	if err := bundle.Valid(); err != nil {
 		return nil, fmt.Errorf("invalid review bundle: %w", err)

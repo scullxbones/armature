@@ -43,7 +43,39 @@ func FingerprintResult(assessment ConformanceAssessment) string {
 	return fingerprintJSON(assessment, "assessment")
 }
 
-func ComputeBundleID(bundle ReviewBundle) string {
+// BundleIDError is returned when ComputeBundleID cannot hash a bundle.
+// Callers treat it as a normal validation/prepare failure, not a crash.
+type BundleIDError struct {
+	Err error
+}
+
+func (e *BundleIDError) Error() string {
+	if e == nil {
+		return "compute bundle id"
+	}
+	if e.Err == nil {
+		return "compute bundle id"
+	}
+	return fmt.Sprintf("compute bundle id: %v", e.Err)
+}
+
+func (e *BundleIDError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func bundleIDFromPayload(data any) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", &BundleIDError{Err: fmt.Errorf("marshal bundle data: %w", err)}
+	}
+	hash := sha256.Sum256(jsonData)
+	return fmt.Sprintf("sha256:%s", hex.EncodeToString(hash[:])), nil
+}
+
+func ComputeBundleID(bundle ReviewBundle) (string, error) {
 	var activityForHash *struct {
 		Digest            string
 		EntryCount        int
@@ -85,14 +117,7 @@ func ComputeBundleID(bundle ReviewBundle) string {
 		GateEvidence:  bundle.GateEvidence,
 	}
 
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		panic(fmt.Sprintf("failed to marshal bundle data: %v", err))
-	}
-
-	hash := sha256.Sum256(jsonData)
-	hashStr := hex.EncodeToString(hash[:])
-	return fmt.Sprintf("sha256:%s", hashStr)
+	return bundleIDFromPayload(data)
 }
 
 type ActivityLogEntry struct {

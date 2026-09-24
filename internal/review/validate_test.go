@@ -422,7 +422,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			},
 		}
-		bundle.BundleID = review.ComputeBundleID(*bundle)
+		bundle.BundleID = mustComputeBundleID(t, *bundle)
 		err := review.ValidateAssessment(review.RecordInput{
 			IssueID: "task-01",
 			Bundle:  bundle,
@@ -533,7 +533,7 @@ func validValidateInputWithActivity(t *testing.T, activity *review.Activity) rev
 		},
 		Activity: activity,
 	}
-	bundle.BundleID = review.ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 	return review.RecordInput{
 		IssueID: "task-01",
 		Bundle:  bundle,
@@ -1384,7 +1384,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 				LogPath:    e2eLogPath,
 			},
 		}
-		bundle.BundleID = review.ComputeBundleID(*bundle)
+		bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 		assessment := &review.ConformanceAssessment{
 			SchemaVersion:       review.SchemaVersion,

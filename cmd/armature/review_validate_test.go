@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func mustComputeBundleID(t *testing.T, bundle review.ReviewBundle) string {
+	t.Helper()
+	id, err := review.ComputeBundleID(bundle)
+	require.NoError(t, err)
+	return id
+}
+
+func TestReviewValidate_BundleIDErrorSurfacesAsFailure_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+
+	err := review.AnnotateValidateError(&review.BundleIDError{
+		Err: fmt.Errorf("marshal bundle data: json: unsupported type: chan int"),
+	})
+	failures := parseReviewValidateFailures(err)
+	require.NotEmpty(t, failures)
+	joined := strings.ToLower(failures[0].Message)
+	assert.Contains(t, joined, "compute bundle id")
+	assert.NotContains(t, joined, "panic")
+	assert.NotEmpty(t, failures[0].Suggestion)
+}
 
 func prepareReviewValidateFixture(t *testing.T) (repo, bundleFile, validAssessment, badCitationAssessment string) {
 	t.Helper()
@@ -318,7 +340,7 @@ func TestReviewValidateRejectsStructurallyInvalidBundle_REQ_LNGHZN_S8_T1(t *test
 			require.NoError(t, err)
 			var bundle review.ReviewBundle
 			require.NoError(t, json.Unmarshal(raw, &bundle))
-			newID = review.ComputeBundleID(bundle)
+			newID = mustComputeBundleID(t, bundle)
 			obj["bundle_id"] = newID
 		})
 		assessment := mutateAssessmentJSON(t, repo, validAssessment, "assessment_no_title_bundle.json", func(obj map[string]any) {
@@ -342,7 +364,7 @@ func TestReviewValidateRejectsStructurallyInvalidBundle_REQ_LNGHZN_S8_T1(t *test
 			require.NoError(t, err)
 			var bundle review.ReviewBundle
 			require.NoError(t, json.Unmarshal(raw, &bundle))
-			newID = review.ComputeBundleID(bundle)
+			newID = mustComputeBundleID(t, bundle)
 			obj["bundle_id"] = newID
 		})
 		assessment := mutateAssessmentJSON(t, repo, validAssessment, "assessment_no_changed_files.json", func(obj map[string]any) {
@@ -573,7 +595,7 @@ func rewriteBundleRecomputingID(t *testing.T, repo, src, name string, mut func(*
 	bundle, err := review.DecodeReviewBundle(data)
 	require.NoError(t, err)
 	mut(&bundle)
-	bundle.BundleID = review.ComputeBundleID(bundle)
+	bundle.BundleID = mustComputeBundleID(t, bundle)
 	out, err := json.MarshalIndent(&bundle, "", "  ")
 	require.NoError(t, err)
 	dst := filepath.Join(repo, name)

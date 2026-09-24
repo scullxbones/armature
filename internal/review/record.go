@@ -43,7 +43,11 @@ func Record(input RecordInput) (*RecordResult, error) {
 	}
 
 	if input.Bundle != nil {
-		if recomputed := ComputeBundleID(*input.Bundle); recomputed != input.Bundle.BundleID {
+		recomputed, err := ComputeBundleID(*input.Bundle)
+		if err != nil {
+			return nil, err
+		}
+		if recomputed != input.Bundle.BundleID {
 			return nil, fmt.Errorf(
 				"bundle integrity check failed: recomputed bundle_id %s does not match bundle's "+
 					"recorded bundle_id %s (bundle contents may have been altered since `arm review prepare` ran)",

@@ -49,7 +49,7 @@ func TestReviewBundleIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	require.NoError(t, review.AttachGateEvidence(bundle, issuesDir))
 	require.Len(t, bundle.GateEvidence, 1)
 	assert.Equal(t, ev, bundle.GateEvidence[0])
-	assert.Equal(t, review.ComputeBundleID(*bundle), bundle.BundleID,
+	assert.Equal(t, mustComputeBundleID(t, *bundle), bundle.BundleID,
 		"attach must finalize bundle_id so attestation covers the attached evidence")
 }
 
@@ -93,13 +93,13 @@ func TestBundleIDIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 		Exit:    0,
 	}}
 
-	idNone := review.ComputeBundleID(base)
-	idOne := review.ComputeBundleID(withEvidence)
-	idOther := review.ComputeBundleID(otherEvidence)
+	idNone := mustComputeBundleID(t, base)
+	idOne := mustComputeBundleID(t, withEvidence)
+	idOther := mustComputeBundleID(t, otherEvidence)
 
 	assert.NotEqual(t, idNone, idOne, "adding gate evidence must change bundle_id")
 	assert.NotEqual(t, idOne, idOther, "different gate evidence must change bundle_id")
-	assert.Equal(t, idOne, review.ComputeBundleID(withEvidence), "bundle_id must be deterministic")
+	assert.Equal(t, idOne, mustComputeBundleID(t, withEvidence), "bundle_id must be deterministic")
 }
 
 func attachFixture(t *testing.T, ev ops.GateEvidence, deliveryHead string) *review.ReviewBundle {
@@ -234,5 +234,5 @@ func TestAttachGateEvidence_CitableMatchFinalizesBundleID_REQ_LNGHZN_S10_T3(t *t
 	bundle := attachFixture(t, ev, head)
 	require.Len(t, bundle.GateEvidence, 1)
 	assert.Equal(t, ev, bundle.GateEvidence[0])
-	assert.Equal(t, review.ComputeBundleID(*bundle), bundle.BundleID)
+	assert.Equal(t, mustComputeBundleID(t, *bundle), bundle.BundleID)
 }

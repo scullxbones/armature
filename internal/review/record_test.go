@@ -14,6 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func mustComputeBundleID(t *testing.T, bundle ReviewBundle) string {
+	t.Helper()
+	id, err := ComputeBundleID(bundle)
+	require.NoError(t, err)
+	return id
+}
+
 func errsContain(errs []string, substr string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, substr) {
@@ -85,7 +92,7 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -131,7 +138,7 @@ func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	bundle.Delivery.HeadSHA = ""
 
@@ -269,7 +276,7 @@ func TestRecord_BundleIssueMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -306,7 +313,7 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -474,7 +481,7 @@ func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -524,7 +531,7 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -651,7 +658,7 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 		},
 		Activity: &Activity{Digest: digest, EntryCount: 1, LogPath: logPath},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -701,7 +708,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			},
 		}
-		bundle.BundleID = ComputeBundleID(*bundle)
+		bundle.BundleID = mustComputeBundleID(t, *bundle)
 		_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "activity")
@@ -831,7 +838,7 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 			LogPath:           logPath,
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -944,7 +951,7 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 			LogPath:           logPath,
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -1000,7 +1007,7 @@ func gateEvidenceRecordFixture(t *testing.T, ev ops.GateEvidence) (*ReviewBundle
 		},
 		GateEvidence: []ops.GateEvidence{ev},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
 		BundleID:            bundle.BundleID,
