@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // NormalizePath resolves symlinks in path for reliable comparison, falling back
@@ -76,7 +74,7 @@ func ApplyMitigations(repoRoot, worktreeRoot string) error {
 		return fmt.Errorf("stat main go.work: %w", err)
 	}
 
-	content, err := adapters.ReadFile(goWorkPath)
+	content, err := os.ReadFile(goWorkPath) //nolint:gosec // G304: repoRoot is internal, not user-controlled
 	if err != nil {
 		return fmt.Errorf("read main go.work: %w", err)
 	}

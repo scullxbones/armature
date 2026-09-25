@@ -7,8 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // List returns the complete, non-prunable worktree inventory for repoPath.
@@ -70,7 +68,7 @@ func ResolveGitDir(worktreePath string) (string, error) {
 	if info.IsDir() {
 		return gitPath, nil
 	}
-	data, err := adapters.ReadFile(gitPath)
+	data, err := os.ReadFile(gitPath) //nolint:gosec // path is the .git entry of a git worktree
 	if err != nil {
 		return "", fmt.Errorf("read .git file: %w", err)
 	}
@@ -91,7 +89,7 @@ func ResolveGitDir(worktreePath string) (string, error) {
 func ReadBinding(gitDir string) (string, error) {
 	for _, name := range []string{"armature-issue-id", "armature-task-id"} {
 		path := filepath.Join(gitDir, name)
-		data, err := adapters.ReadFile(path)
+		data, err := os.ReadFile(path) //nolint:gosec // path is derived from the resolved git directory
 		if err == nil {
 			return strings.TrimSpace(string(data)), nil
 		}
