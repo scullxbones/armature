@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // NormalizePath resolves symlinks in path for reliable comparison, falling back
@@ -47,7 +49,7 @@ func NormalizePathAllowingMissing(path string) string {
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
-			return abs // reached the filesystem root without resolving anything
+			return abs
 		}
 		missing = filepath.Join(filepath.Base(cur), missing)
 		cur = parent
@@ -69,13 +71,12 @@ func ApplyMitigations(repoRoot, worktreeRoot string) error {
 	info, err := os.Stat(goWorkPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // no main-tree go.work: worktree is already isolated
+			return nil
 		}
 		return fmt.Errorf("stat main go.work: %w", err)
 	}
 
-	// #nosec G304 - repoRoot is internal, not user-controlled
-	content, err := os.ReadFile(goWorkPath)
+	content, err := adapters.ReadFile(goWorkPath)
 	if err != nil {
 		return fmt.Errorf("read main go.work: %w", err)
 	}
@@ -217,8 +218,6 @@ func parseGoWorkToken(code string) (string, string, bool) {
 	return code[:end], code[end:], true
 }
 
-// useDirectiveMatches reports whether a `use` path (relative to repoRoot or
-// absolute) resolves to the target worktree path.
 func useDirectiveMatches(p, repoRoot, target string) bool {
 	if p == "" {
 		return false
