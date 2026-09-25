@@ -181,7 +181,12 @@ The command is idempotent: running it multiple times has the same effect as runn
 	return cmd
 }
 
-func recordArtifactAction(results *[]bootstrap.HarnessArtifactResult, platform bootstrap.Platform, artifact bootstrap.ArtifactKind, action bootstrap.ActionKind) {
+func recordArtifactAction(
+	results *[]bootstrap.HarnessArtifactResult,
+	platform bootstrap.Platform,
+	artifact bootstrap.ArtifactKind,
+	action bootstrap.ActionKind,
+) {
 	switch action {
 	case bootstrap.ActionInstall:
 		return
