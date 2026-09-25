@@ -8,6 +8,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -31,7 +32,7 @@ func newWorkersCmd() *cobra.Command {
 			opsDir := filepath.Join(appCtx.IssuesDir, "ops")
 			defaultTTL := appCtx.Config.DefaultTTL
 			if defaultTTL <= 0 {
-				defaultTTL = 60
+				defaultTTL = config.DefaultTTLMinutes
 			}
 			now := time.Now().Unix()
 
@@ -147,7 +148,7 @@ func (c claimOwnerClocks) lastActivity() claim.LastActivity {
 	return claim.FoldLastActivity(c.claimedAt, c.lastHeartbeat, c.lastClaimingWorkerActivity)
 }
 
-func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, defaultTTLMinutes int, now int64, winners map[string]string) WorkerStatus {
+func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, defaultTTL config.TTLMinutes, now int64, winners map[string]string) WorkerStatus {
 	lastOp := lastOpTimestampFromLog(allOps)
 
 	clocksByIssue := make(map[string]*claimOwnerClocks)
@@ -195,7 +196,7 @@ func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, de
 		}
 		ttl := c.ttl
 		if ttl <= 0 {
-			ttl = defaultTTLMinutes
+			ttl = int(defaultTTL)
 		}
 		if !claim.IsClaimStale(c.lastActivity(), ttl, now) {
 			return WorkerStatus{
@@ -214,7 +215,7 @@ func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, de
 		}
 	}
 
-	idleWindowSeconds := int64(2 * defaultTTLMinutes * 60)
+	idleWindowSeconds := int64(2 * defaultTTL.Duration() / time.Second)
 	if lastOp > 0 && now-lastOp <= idleWindowSeconds {
 		return WorkerStatus{
 			WorkerID:   workerID,

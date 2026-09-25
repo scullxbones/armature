@@ -1,13 +1,58 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestConfigUnitFieldsLoadFromDisk_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	require.NoError(t, os.WriteFile(configPath, []byte(`{
+		"project_type": "go",
+		"default_ttl": 90,
+		"token_budget": 1600,
+		"low_stakes_push_threshold": 7,
+		"hooks": []
+	}`), 0o600))
+
+	loaded, err := LoadConfig(configPath)
+	require.NoError(t, err)
+	assert.Equal(t, int64(90), int64(loaded.DefaultTTL), "default_ttl JSON minutes must load as 90 minutes")
+	assert.Equal(t, 90*time.Minute, loaded.DefaultTTL.Duration())
+	assert.Equal(t, int64(7), int64(loaded.LowStakesPushThreshold), "low_stakes_push_threshold JSON count must load as 7")
+
+	require.NoError(t, WriteConfig(configPath, loaded))
+	raw, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	var disk map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &disk))
+	assert.JSONEq(t, `90`, string(disk["default_ttl"]))
+	assert.JSONEq(t, `7`, string(disk["low_stakes_push_threshold"]))
+}
+
+func TestDefaultConfigDiskUnits_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	require.NoError(t, WriteConfig(configPath, DefaultConfig("go")))
+	raw, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	var disk struct {
+		DefaultTTL             json.RawMessage `json:"default_ttl"`
+		LowStakesPushThreshold json.RawMessage `json:"low_stakes_push_threshold"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &disk))
+	assert.JSONEq(t, `60`, string(disk.DefaultTTL))
+	assert.JSONEq(t, `5`, string(disk.LowStakesPushThreshold))
+}
 
 func TestConfigRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -26,7 +71,7 @@ func TestConfigRoundTrip(t *testing.T) {
 	loaded, err := LoadConfig(configPath)
 	require.NoError(t, err)
 	assert.Equal(t, "go", loaded.ProjectType)
-	assert.Equal(t, 60, loaded.DefaultTTL)
+	assert.Equal(t, TTLMinutes(60), loaded.DefaultTTL)
 }
 
 func TestLoadConfigRejectsUnknownField_REQ_LNGHZN_S7_T6(t *testing.T) {
@@ -57,9 +102,9 @@ func TestLoadConfigAcceptsRetiredModeField(t *testing.T) {
 	loaded, err := LoadConfig(configPath)
 	require.NoError(t, err)
 	assert.Equal(t, "go", loaded.ProjectType)
-	assert.Equal(t, 60, loaded.DefaultTTL)
+	assert.Equal(t, TTLMinutes(60), loaded.DefaultTTL)
 	assert.Equal(t, 1600, loaded.TokenBudget)
-	assert.Equal(t, 5, loaded.LowStakesPushThreshold)
+	assert.Equal(t, PendingOps(5), loaded.LowStakesPushThreshold)
 }
 
 func TestDetectProjectType(t *testing.T) {

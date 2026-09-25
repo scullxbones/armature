@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 )
@@ -17,11 +18,29 @@ const PublishGateProfile = "full"
 // declares gate profiles. arm gate run reads this file, not Config.Gates.
 const GatesFileName = "gates.json"
 
+// TTLMinutes is a claim TTL counted in whole minutes. JSON default_ttl stays
+// a bare number of minutes so existing config files load unchanged.
+type TTLMinutes int
+
+// Duration returns the TTL as a time.Duration.
+func (m TTLMinutes) Duration() time.Duration {
+	return time.Duration(m) * time.Minute
+}
+
+// PendingOps is a count of pending low-stakes ops. JSON
+// low_stakes_push_threshold stays a bare integer.
+type PendingOps int
+
+const (
+	DefaultTTLMinutes     TTLMinutes = 60
+	DefaultPendingOpCount PendingOps = 5
+)
+
 type Config struct {
 	ProjectType            string                `json:"project_type"`
-	DefaultTTL             int                   `json:"default_ttl"` // minutes
+	DefaultTTL             TTLMinutes            `json:"default_ttl"`
 	TokenBudget            int                   `json:"token_budget"`
-	LowStakesPushThreshold int                   `json:"low_stakes_push_threshold"` // ops before auto-push
+	LowStakesPushThreshold PendingOps            `json:"low_stakes_push_threshold"`
 	Hooks                  []HookConfig          `json:"hooks"`
 	Gates                  map[string]GateConfig `json:"gates,omitempty"`
 }
@@ -102,9 +121,9 @@ func DetectProjectType(repoPath string) string {
 func DefaultConfig(projectType string) Config {
 	return Config{
 		ProjectType:            projectType,
-		DefaultTTL:             60,
+		DefaultTTL:             DefaultTTLMinutes,
 		TokenBudget:            1600,
-		LowStakesPushThreshold: 5,
+		LowStakesPushThreshold: DefaultPendingOpCount,
 		Hooks:                  []HookConfig{},
 	}
 }

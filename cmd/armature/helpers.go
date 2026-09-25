@@ -605,7 +605,7 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 	gc := worktreeGit(ctx)
 	threshold := ctx.Config.LowStakesPushThreshold
 	if threshold <= 0 {
-		threshold = 5
+		threshold = config.DefaultPendingOpCount
 	}
 	for _, op := range proposed {
 		if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
@@ -615,7 +615,7 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 		if err != nil {
 			return err
 		}
-		if n >= threshold {
+		if config.PendingOps(n) >= threshold {
 			pushOpsBranchAlwaysResetTracker(opsPublishGit(ctx, gc), tracker)
 		}
 	}
