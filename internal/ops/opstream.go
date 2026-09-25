@@ -8,7 +8,6 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-// OpItem represents a single op loaded from a log file, with metadata about its source.
 type OpItem struct {
 	Op          Op
 	LogFilename string
@@ -17,23 +16,17 @@ type OpItem struct {
 	LineNumber  int
 }
 
-// FileEntry represents a log file to be loaded with expected worker ID validation.
 type FileEntry struct {
 	LogPath          string
 	ExpectedWorkerID string
 }
 
-// ValidatedOpStream loads operations from multiple log files, validating that
-// the worker ID in the op matches the expected worker ID from the filename,
-// and returns warnings for any validation failures.
 type ValidatedOpStream struct {
 	files []*FileEntry
 }
 
 type LoadResult struct {
-	Items []OpItem
-	// PhysicalEOF maps each log basename to the byte offset of the last line
-	// observed (accepted, rejected, or corrupt), or 0 if the file is empty.
+	Items       []OpItem
 	PhysicalEOF map[string]int64
 	Warnings    []string
 }
@@ -142,10 +135,6 @@ func LoadFromDirValidated(opsDir string) (LoadResult, error) {
 	return stream.loadAll()
 }
 
-// LoadFromDirWithOffsetsValidated loads all ops from a directory of .log files,
-// validating worker IDs and returning byte offsets for checkpoint tracking.
-// Returns items, a map of log filename -> byte offset (end position), warnings, and error.
-// Checkpoint offset for every file must equal its physical EOF after each load.
 func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64, []string, error) {
 	result, err := LoadFromDirValidated(opsDir)
 	if err != nil {

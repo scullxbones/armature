@@ -106,7 +106,7 @@ func TestMeasureShowMatchesWriteShowEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	require.NoError(t, err)
 
 	row := output.MarshalIssue(issue)
-	trunc := output.TruncateShowIssue(&row)
+	row, trunc := output.TruncateShowIssue(row)
 	var want bytes.Buffer
 	require.NoError(t, output.WriteShowEnvelope(&want, []string{issue.ID}, []output.IssueJSON{row}, trunc))
 	assert.Equal(t, want.Bytes(), got, "show meter must price writeShowEnvelope bytes, not RenderIssue+FormatSpend")

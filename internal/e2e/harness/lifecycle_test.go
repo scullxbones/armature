@@ -17,38 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHappyPathLifecycle_REQ_TOPTIER_S3_T1 exercises the complete happy-path lifecycle:
-// bootstrap → worker-init → create → claim → in-progress → done → merge detection (sync).
-// This test verifies that the harness correctly orchestrates the full workflow and that
-// materialized state progresses through each step.
 func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	t.Parallel()
 
-	// Build the arm binary first
 	armBinPath := buildArmBinary(t)
 
-	// Create harness with bare origin and work directory
 	h := harness.New(t, armBinPath)
-	// Capture the integration branch before any feature/worktree checkout. The
-	// merge below must be into main, never a feature branch merged into itself.
 	mainBranch := gitGetCurrentBranch(t, h.WorkDir)
 
-	// Step 1: Bootstrap the repository
 	t.Logf("Step 1: Bootstrap")
 	out, err := h.RunArm("bootstrap", "--repo", h.WorkDir)
 	require.NoError(t, err, "bootstrap failed: %s", out)
 
-	// Verify .armature/ directory is created
 	armatureDir := filepath.Join(h.WorkDir, ".armature")
 	assert.DirExists(t, armatureDir, ".armature directory should be created after bootstrap")
 
-	// Step 2: Worker init
 	t.Logf("Step 2: Worker init")
 	out, err = h.RunArm("worker-init", "--repo", h.WorkDir)
 	require.NoError(t, err, "worker-init failed: %s", out)
 	assert.Contains(t, out, "Worker ID", "worker-init should output Worker ID")
 
-	// Step 3: Create a plan and apply it via decompose-apply (dag apply)
 	t.Logf("Step 3: Apply plan via dag apply")
 	planData := map[string]any{
 		"version": 1,
@@ -75,15 +63,12 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	require.NoError(t, err, "dag apply failed: %s", out)
 	assert.Contains(t, out, `"action":"created"`, "dag apply should report created issues in the envelope")
 
-	// Step 3b: Promote applied draft subtree to verified via dag transition
 	t.Logf("Step 3b: Promote to verified via dag transition")
 	out, err = h.RunArm("dag", "transition", "--repo", h.WorkDir, "--issue", "TEST-001")
 	require.NoError(t, err, "dag transition failed: %s", out)
 	assert.Contains(t, out, "verified", "dag transition should promote to verified")
 	assertMaterializedField(t, h, "status", "open")
 
-	// Step 4: Claim the issue before recording progress. Claim creates the real
-	// worker worktree and branch that the later merge will promote to merged.
 	t.Logf("Step 4: Claim issue")
 	worktreePath := filepath.Join(h.WorkDir, ".worktrees", "TEST-001")
 	deliveryBase := gitRevision(t, h.WorkDir)
@@ -96,14 +81,11 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	claimedBy := materializedField(t, h, "TEST-001", "claimed_by")
 	assert.NotEmpty(t, claimedBy, "claim must have a materialized owner")
 
-	// Step 5: The worker makes progress only after the claim has succeeded.
 	t.Logf("Step 5: Transition to in-progress")
 	out, err = h.RunArmIn(worktreePath, "transition", "--repo", worktreePath, "--issue", "TEST-001", "--to", "in-progress")
 	require.NoError(t, err, "transition to in-progress failed: %s", out)
 	assertMaterializedField(t, h, "status", "in-progress")
 
-	// Step 6: Complete work on the branch created by claim, then record done
-	// with that actual branch for merge detection.
 	t.Logf("Step 6: Transition to done")
 	featureBranch := gitGetCurrentBranch(t, worktreePath)
 	require.NoError(t, os.WriteFile(filepath.Join(worktreePath, "task.go"), []byte("package task\n"), 0o600))
@@ -115,9 +97,6 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	assertMaterializedField(t, h, "status", "done")
 	assertMaterializedField(t, h, "outcome", "Implementation complete")
 
-	// Step 7: Prepare, strictly decode, and record the review assessment before
-	// merge detection. This keeps review attestation in the same composed happy
-	// path rather than testing it only as an isolated artifact pipeline.
 	t.Logf("Step 7: Prepare and record review assessment")
 	deliveryHead := gitRevision(t, worktreePath)
 	bundlePath := filepath.Join(h.TempDir, "review-bundle.json")
@@ -138,12 +117,12 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 			ID:        "definition_of_done",
 			Status:    review.Satisfied,
 			Rationale: "The task completed the declared happy-path lifecycle.",
-			Citations: []review.Citation{{Path: "task.go", Line: 1}},
+			Citations: []review.Citation{review.FileCitation("task.go", 1, 0)},
 		}, {
 			ID:        "acceptance[0]",
 			Status:    review.Satisfied,
 			Rationale: "The declared test-passes criterion was met by the lifecycle.",
-			Citations: []review.Citation{{Path: "task.go", Line: 1}},
+			Citations: []review.Citation{review.FileCitation("task.go", 1, 0)},
 		}},
 	}
 	assessmentJSON, err := json.Marshal(assessment)
@@ -158,18 +137,14 @@ func TestHappyPathLifecycle_REQ_TOPTIER_S3_T1(t *testing.T) {
 	require.NoError(t, err, "review record failed: %s", out)
 	assert.Contains(t, out, "recorded", "review record must durably attest the assessment")
 
-	// Step 8: Simulate a real PR merge into the branch captured before feature
-	// checkout. The issue remains done until sync observes that merge (I6).
 	t.Logf("Step 8: Merge into %s and sync", mainBranch)
 	gitRunInDir(t, h.WorkDir, "checkout", mainBranch)
 	gitRunInDir(t, h.WorkDir, "-c", "core.hooksPath=/dev/null", "merge", "--no-ff",
 		featureBranch, "-m", "Merge "+featureBranch)
 
-	// Push to origin to simulate PR merge being merged
 	gitRunInDir(t, h.WorkDir, "push", "-u", "origin", mainBranch)
 	assertMaterializedField(t, h, "status", "done")
 
-	// Run sync to detect merge
 	out, err = h.RunArm("sync", "--repo", h.WorkDir, "--into", mainBranch)
 	require.NoError(t, err, "sync failed: %s", out)
 	assertMaterializedField(t, h, "status", "merged")
@@ -192,30 +167,16 @@ func materializedField(t *testing.T, h *harness.Harness, issueID, field string) 
 	return strings.TrimSpace(out)
 }
 
-// buildArmBinaryOnce caches the result of the first buildArmBinary invocation
-// so parallel tests in this package share a single build rather than racing
-// `make build` writes to the same repo-level bin/arm path.
 var buildArmBinaryOnce struct {
 	sync.Once
 	path string
 	err  error
 }
 
-// buildArmBinary compiles the arm binary for use in tests. It returns the path
-// to the built binary or fails the test if compilation fails.
-//
-// Several tests that call this helper (TestArtifactPipelineUsesCLI,
-// TestHappyPathLifecycle, and the scenario tests) run with t.Parallel(). Each
-// invocation used to run its own `make build`, all writing the same
-// repo-level bin/arm path concurrently, which could corrupt the binary or
-// race with an in-flight execution. sync.Once ensures the build happens
-// exactly once per test binary run, and every caller (parallel or not)
-// observes the same completed build.
 func buildArmBinary(t *testing.T) string {
 	t.Helper()
 
 	buildArmBinaryOnce.Do(func() {
-		// Find the repo root by looking for go.mod
 		cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
 		rootOutput, err := cmd.Output()
 		if err != nil {
@@ -226,7 +187,6 @@ func buildArmBinary(t *testing.T) string {
 		repoRoot := strings.TrimSpace(string(rootOutput))
 		binPath := filepath.Join(repoRoot, "bin", "arm")
 
-		// Build the binary
 		buildCmd := exec.CommandContext(context.Background(), "make", "-C", repoRoot, "build")
 		buildCmd.Dir = repoRoot
 		buildOut, err := buildCmd.CombinedOutput()
@@ -247,7 +207,6 @@ func buildArmBinary(t *testing.T) string {
 	return buildArmBinaryOnce.path
 }
 
-// gitRunInDir runs a git command in a specified directory.
 func gitRunInDir(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
@@ -257,7 +216,6 @@ func gitRunInDir(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %v failed in %s: %s", args, dir, out)
 }
 
-// gitGetCurrentBranch returns the name of the current branch.
 func gitGetCurrentBranch(t *testing.T, dir string) string {
 	t.Helper()
 
