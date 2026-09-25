@@ -287,9 +287,6 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 	})
 }
 
-// TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5 verifies that the boolean
-// --worktree flag auto-provisions a worktree at the canonical .worktrees/<issue-id>
-// location (per ADR 0004).
 func TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
