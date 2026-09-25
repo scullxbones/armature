@@ -1,4 +1,3 @@
-// Package skilltranscript provides golden-transcript e2e tests for the coordinator skill's documented command sequence.
 package skilltranscript
 
 import (
@@ -10,13 +9,6 @@ import (
 	"testing"
 )
 
-// TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2 exercises the armature coordinator's
-// documented command sequence end-to-end against a real fixture repository.
-//
-// This is a DYNAMIC verification that tests the actual arm CLI surface,
-// complementing the static skill-lint checks in TOPTIER-S1-T1.
-// If any command's real behavior diverges from what's documented in the
-// armature-coordinator skill, the test reflects the REAL behavior (that's the point).
 func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -24,34 +16,27 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 	}
 
 	t.Run("coordinator wave dispatch sequence", func(t *testing.T) {
-		// Create a fixture repository
 		repo := NewTestRepo(t)
 
-		// Create a persistent temp directory for review files (survives across subtests)
 		persistentTmpDir := t.TempDir()
 
-		// Step 0: Create a feature branch for the story (required before dispatch)
 		storyBranch := "feat/test-story"
 		runCmd(repo.Path(), "checkout", "-b", storyBranch)
 
-		// Step 1: Create a story and task
 		storyID := repo.CreateStory(t, "Golden Transcript Story")
 		taskID := repo.HarnessCreateVerifiedTask(t,
 			storyID,
 			"Implement golden transcript test",
 			[]string{"internal/skilltranscript/golden_test.go"})
 
-		// Verify the task exists and is open
 		t.Logf("Created story %s and task %s", storyID, taskID)
 
-		// Step 2: Run 'arm ready' to find ready work
 		t.Run("arm ready returns ready tasks", func(t *testing.T) {
 			readyTasks := repo.Ready(t)
 			if len(readyTasks) == 0 {
 				t.Fatalf("expected at least one ready task, got none")
 			}
 
-			// Verify the created task is in the ready list
 			found := false
 			for _, task := range readyTasks {
 				taskMap, ok := task.(map[string]interface{})
@@ -72,18 +57,14 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Logf("Successfully found ready task %s", taskID)
 		})
 
-		// Step 3: Claim the task with a worktree
 		var worktreePath string
 		t.Run("arm claim creates worktree", func(t *testing.T) {
 			worktreePath = repo.Claim(t, taskID, 60)
 
-			// Verify worktree was created
 			if _, err := os.Stat(worktreePath); err != nil {
 				t.Fatalf("worktree not created at %s: %v", worktreePath, err)
 			}
 
-			// Verify armature-issue-id file exists in the worktree
-			// Note: .git in a worktree is a file pointing to the real git dir
 			gitFile := filepath.Join(worktreePath, ".git")
 			gitContent, err := os.ReadFile(gitFile)
 			if err != nil {
@@ -108,11 +89,9 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Logf("Successfully claimed task %s with worktree at %s", taskID, worktreePath)
 		})
 
-		// Step 4: Render context for the task
 		t.Run("arm render-context returns task specification", func(t *testing.T) {
 			context := repo.RenderContext(t, taskID)
 
-			// Verify the context contains expected top-level keys
 			expectedKeys := []string{"issue_id", "layers"}
 			for _, key := range expectedKeys {
 				if _, ok := context[key]; !ok {
@@ -120,12 +99,10 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 				}
 			}
 
-			// Verify issue_id matches
 			if id, ok := context["issue_id"].(string); !ok || id != taskID {
 				t.Fatalf("context issue_id mismatch: expected %s, got %v", taskID, context["issue_id"])
 			}
 
-			// Verify layers is an array
 			if _, ok := context["layers"].([]interface{}); !ok {
 				t.Fatalf("context layers is not an array: %T", context["layers"])
 			}
@@ -133,7 +110,6 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Logf("Successfully rendered context for task %s", taskID)
 		})
 
-		// Step 5: Transition the task to done
 		t.Run("arm transition marks task done", func(t *testing.T) {
 			outcome := "Implemented golden transcript test for coordinator skill verification"
 			repo.HarnessDriveTransition(t, taskID, "done", outcome)
@@ -141,20 +117,15 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Logf("Successfully transitioned task %s to done", taskID)
 		})
 
-		// Step 6: Get base and head commits for review
 		var baseCommit, headCommit string
 		t.Run("capture commit range for review", func(t *testing.T) {
-			// Base is the current HEAD in the main repo (where we started)
-			// Head is the latest commit in the worktree
 			baseCommit = runCmd(repo.Path(), "rev-parse", "HEAD")
 
-			// Make a commit in the worktree to have something to review
 			testFilePath := filepath.Join(worktreePath, "test_output.txt")
 			if err := os.WriteFile(testFilePath, []byte("Test output for golden transcript\n"), 0644); err != nil {
 				t.Fatalf("failed to write test file: %v", err)
 			}
 
-			// Stage and commit in the worktree
 			runCmd(worktreePath, "add", "test_output.txt")
 			runCmd(worktreePath, "commit", "-m", fmt.Sprintf("feat(%s): add test output", taskID))
 
@@ -163,12 +134,10 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Logf("Base commit: %s, Head commit: %s", baseCommit, headCommit)
 		})
 
-		// Step 7: Prepare review bundle
 		var bundleFile string
 		t.Run("arm review prepare creates bundle", func(t *testing.T) {
 			bundleFile = repo.ReviewPrepare(t, taskID, baseCommit, headCommit, persistentTmpDir)
 
-			// Verify bundle file contains valid JSON with expected structure
 			content, err := os.ReadFile(bundleFile)
 			if err != nil {
 				t.Fatalf("failed to read bundle file: %v", err)
@@ -179,7 +148,6 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 				t.Fatalf("bundle is not valid JSON: %v", err)
 			}
 
-			// Verify essential bundle fields
 			expectedBundleKeys := []string{"issue_id", "contract"}
 			for _, key := range expectedBundleKeys {
 				if _, ok := bundle[key]; !ok {
@@ -190,9 +158,7 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Logf("Successfully prepared review bundle at %s", bundleFile)
 		})
 
-		// Step 8: Create a minimal valid assessment and record it
 		t.Run("arm review record persists assessment", func(t *testing.T) {
-			// Read the bundle file to extract BundleID and fingerprints
 			bundleContent, err := os.ReadFile(bundleFile)
 			if err != nil {
 				t.Fatalf("failed to read bundle file: %v", err)
@@ -203,7 +169,6 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 				t.Fatalf("failed to parse bundle: %v", err)
 			}
 
-			// Extract bundle metadata
 			bundleID := bundle["bundle_id"]
 			var contractFingerprint, deliveryFingerprint string
 			if fingerprints, ok := bundle["fingerprints"].(map[string]interface{}); ok {
@@ -215,8 +180,6 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 				}
 			}
 
-			// Create a conformance assessment JSON with proper schema
-			// Must match the structure expected by `arm review record`
 			assessment := map[string]interface{}{
 				"schema_version":       1,
 				"bundle_id":            bundleID,
@@ -248,19 +211,14 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 				t.Fatalf("failed to write assessment file: %v", err)
 			}
 
-			// Record the assessment
 			repo.ReviewRecord(t, taskID, assessmentFile, bundleFile)
 
 			t.Logf("Successfully recorded assessment for task %s", taskID)
 		})
 
-		// Verify final state: task should be marked done
 		t.Run("verify final task state", func(t *testing.T) {
-			// Re-render context to verify status
 			context := repo.RenderContext(t, taskID)
 
-			// The context should still be valid (status might not be exposed in render-context,
-			// but the command should succeed)
 			if _, ok := context["issue_id"]; !ok {
 				t.Fatalf("failed to re-render context for completed task")
 			}
@@ -270,8 +228,6 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 	})
 }
 
-// TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2 verifies that documented coordinator
-// commands exist and respond with expected output shapes.
 func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -280,7 +236,6 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 
 	repo := NewTestRepo(t)
 
-	// Create minimal fixture
 	storyID := repo.CreateStory(t, "Command Surface Test Story")
 	taskID := repo.HarnessCreateVerifiedTask(t, storyID, "Test Task", []string{"test.go"})
 
@@ -313,7 +268,6 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Errorf("worktree .git not found: %v", err)
 		}
 
-		// Read the .git file to get the real git directory (worktrees use a file reference)
 		gitContent, err := os.ReadFile(gitFile)
 		if err != nil {
 			t.Errorf("failed to read .git file: %v", err)
@@ -346,27 +300,22 @@ func TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5(t *testing.T) {
 	storyID := repo.CreateStory(t, "Worktree Auto-Provisioning Test Story")
 	taskID := repo.HarnessCreateVerifiedTask(t, storyID, "Test auto-provisioning", []string{"test.go"})
 
-	// Claim with boolean --worktree flag
 	worktreePath := repo.Claim(t, taskID, 120)
 
-	// Verify worktree is created at canonical .worktrees/<issue-id> location
 	expectedPath := filepath.Join(repo.Path(), ".worktrees", taskID)
 	if worktreePath != expectedPath {
 		t.Fatalf("worktree path mismatch: expected %s, got %s", expectedPath, worktreePath)
 	}
 
-	// Verify the directory exists
 	if _, err := os.Stat(worktreePath); err != nil {
 		t.Fatalf("worktree not created at expected location: %v", err)
 	}
 
-	// Verify .git file exists (worktrees use a file pointer to the real git dir)
 	gitFile := filepath.Join(worktreePath, ".git")
 	if _, err := os.Stat(gitFile); err != nil {
 		t.Fatalf("worktree .git file not found: %v", err)
 	}
 
-	// Read the .git file to get the real git directory
 	gitContent, err := os.ReadFile(gitFile)
 	if err != nil {
 		t.Fatalf("failed to read .git file: %v", err)
@@ -377,7 +326,6 @@ func TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5(t *testing.T) {
 	gitDirPath := strings.TrimPrefix(strings.TrimSpace(string(gitContent)), "gitdir: ")
 	issueIDFile := filepath.Join(gitDirPath, "armature-issue-id")
 
-	// Verify the task ID binding file exists
 	// #nosec G703 -- path derived from worktree .git file created by the test
 	content, err := os.ReadFile(issueIDFile)
 	if err != nil {
@@ -391,9 +339,6 @@ func TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5(t *testing.T) {
 	t.Logf("Successfully verified worktree auto-provisioned at canonical location .worktrees/%s with valid binding", taskID)
 }
 
-// TestCoordinatorWavePlanningReference_REQ_TOPTIER_S1_T2 verifies that the
-// coordinator's wave-planning instructions use the machine-readable command
-// and the same issue field emitted by arm ready --waves.
 func TestCoordinatorWavePlanningReference_REQ_TOPTIER_S1_T2(t *testing.T) {
 	t.Parallel()
 
@@ -415,7 +360,6 @@ func TestCoordinatorWavePlanningReference_REQ_TOPTIER_S1_T2(t *testing.T) {
 	}
 }
 
-// getMapKeys returns the keys of a map as a slice of strings for debugging output.
 func getMapKeys(m map[string]interface{}) []string {
 	var keys []string
 	for k := range m {
