@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
@@ -65,25 +67,8 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 				t.Fatalf("worktree not created at %s: %v", worktreePath, err)
 			}
 
-			gitFile := filepath.Join(worktreePath, ".git")
-			gitContent, err := os.ReadFile(gitFile)
-			if err != nil {
-				t.Fatalf("failed to read .git file: %v", err)
-			}
-
-			// Parse gitdir path from .git file content
-			// Format: "gitdir: /path/to/.git/worktrees/name"
-			gitDirPath := strings.TrimPrefix(strings.TrimSpace(string(gitContent)), "gitdir: ")
-			issueIDFile := filepath.Join(gitDirPath, "armature-issue-id")
-
-			// #nosec G703 -- path derived from worktree .git file created by the test
-			content, err := os.ReadFile(issueIDFile)
-			if err != nil {
-				t.Fatalf("failed to read armature-issue-id: %v", err)
-			}
-
-			if string(content) != taskID {
-				t.Fatalf("armature-issue-id mismatch: expected %s, got %s", taskID, string(content))
+			if got := boundIssueID(t, worktreePath); got != taskID {
+				t.Fatalf("armature-issue-id mismatch: expected %s, got %s", taskID, got)
 			}
 
 			t.Logf("Successfully claimed task %s with worktree at %s", taskID, worktreePath)
@@ -263,24 +248,12 @@ func TestCoordinatorCommandSurface_REQ_TOPTIER_S1_T2(t *testing.T) {
 	t.Run("arm claim with --worktree creates git worktree", func(t *testing.T) {
 		worktreePath := repo.Claim(t, taskID, 120)
 
-		gitFile := filepath.Join(worktreePath, ".git")
-		if _, err := os.Stat(gitFile); err != nil {
+		if _, err := os.Stat(filepath.Join(worktreePath, ".git")); err != nil {
 			t.Errorf("worktree .git not found: %v", err)
 		}
 
-		gitContent, err := os.ReadFile(gitFile)
-		if err != nil {
-			t.Errorf("failed to read .git file: %v", err)
-		}
-
-		gitDirPath := strings.TrimPrefix(strings.TrimSpace(string(gitContent)), "gitdir: ")
-		issueIDFile := filepath.Join(gitDirPath, "armature-issue-id")
-		// #nosec G703 -- path derived from worktree .git file created by the test
-		content, err := os.ReadFile(issueIDFile)
-		if err != nil {
-			t.Errorf("armature-issue-id file not found: %v", err)
-		} else if string(content) != taskID {
-			t.Errorf("armature-issue-id mismatch: expected %s, got %s", taskID, string(content))
+		if got := boundIssueID(t, worktreePath); got != taskID {
+			t.Errorf("armature-issue-id mismatch: expected %s, got %s", taskID, got)
 		}
 
 		t.Logf("arm claim created worktree with valid armature-issue-id binding")
@@ -313,24 +286,8 @@ func TestE2EClaimAutoProvisionsWorktree_REQ_LNGHZN_S5_T5(t *testing.T) {
 		t.Fatalf("worktree .git file not found: %v", err)
 	}
 
-	gitContent, err := os.ReadFile(gitFile)
-	if err != nil {
-		t.Fatalf("failed to read .git file: %v", err)
-	}
-
-	// Parse gitdir path from .git file content
-	// Format: "gitdir: /path/to/.git/worktrees/name"
-	gitDirPath := strings.TrimPrefix(strings.TrimSpace(string(gitContent)), "gitdir: ")
-	issueIDFile := filepath.Join(gitDirPath, "armature-issue-id")
-
-	// #nosec G703 -- path derived from worktree .git file created by the test
-	content, err := os.ReadFile(issueIDFile)
-	if err != nil {
-		t.Fatalf("failed to read armature-issue-id: %v", err)
-	}
-
-	if string(content) != taskID {
-		t.Fatalf("armature-issue-id mismatch: expected %s, got %s", taskID, string(content))
+	if got := boundIssueID(t, worktreePath); got != taskID {
+		t.Fatalf("armature-issue-id mismatch: expected %s, got %s", taskID, got)
 	}
 
 	t.Logf("Successfully verified worktree auto-provisioned at canonical location .worktrees/%s with valid binding", taskID)
@@ -363,4 +320,17 @@ func getMapKeys(m map[string]interface{}) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func boundIssueID(t *testing.T, worktreePath string) string {
+	t.Helper()
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
+	if err != nil {
+		t.Fatalf("resolve worktree git dir: %v", err)
+	}
+	id, err := worktree.ReadBinding(gitDir)
+	if err != nil {
+		t.Fatalf("read worktree binding: %v", err)
+	}
+	return id
 }
