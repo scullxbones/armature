@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var requiredSeamWiring = map[string][]string{
+var tuiHostConstruction = map[string][]string{
 	"ready.go":       {"readytui.New", "tea.NewProgram"},
 	"stalereview.go": {"stalereview.New", "tea.NewProgram"},
 	"dagsum.go":      {"dagsummary.New", "tea.NewProgram"},
@@ -63,7 +63,7 @@ func TestInteractiveTUIConstructionLivesInCommandFiles_REQ_LNGHZN_S6_T4(t *testi
 		require.Contains(t, names, host, "expected command file %s", host)
 	}
 
-	for host, required := range requiredSeamWiring {
+	for host, required := range tuiHostConstruction {
 		hits := tuiSeamCalls(fset, parseGoFile(t, fset, filepath.Join(dir, host)))
 		got := make(map[string]bool, len(hits))
 		for _, hit := range hits {
