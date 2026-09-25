@@ -52,6 +52,56 @@ func TestDagApplyHonorsARMLogSlot_REQ_NOCOMMENTS(t *testing.T) {
 	})
 }
 
+func TestDagRevertHonorsARMLogSlot_REQ_NOCOMMENTS(t *testing.T) {
+	t.Run("with ARM_LOG_SLOT set, dag revert writes the same slot as create", func(t *testing.T) {
+		t.Setenv("ARM_LOG_SLOT", "beta")
+		repo := plantDagApplyLogSlotRepo(t)
+
+		_, err := runTrls(t, repo, "create",
+			"--type", "task",
+			"--title", "create path",
+			"--id", "SLOT-CREATE")
+		require.NoError(t, err)
+
+		planFile := writePlanIssue(t, "SLOT-REVERT")
+		_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
+		require.NoError(t, err)
+		_, err = runTrls(t, repo, "dag", "revert", "--plan", planFile)
+		require.NoError(t, err)
+
+		createLogs := logFilesContaining(t, repo, "SLOT-CREATE")
+		revertLogs := logFilesContaining(t, repo, `"to":"cancelled"`)
+		require.Equal(t, createLogs, revertLogs,
+			"dag revert must write to the same log file as create under ARM_LOG_SLOT")
+		require.Len(t, revertLogs, 1)
+		assert.Contains(t, revertLogs[0], "~beta")
+	})
+
+	t.Run("with ARM_LOG_SLOT unset, dag revert writes the unslotted log like create", func(t *testing.T) {
+		t.Setenv("ARM_LOG_SLOT", "")
+		repo := plantDagApplyLogSlotRepo(t)
+
+		_, err := runTrls(t, repo, "create",
+			"--type", "task",
+			"--title", "create path",
+			"--id", "SLOT-CREATE")
+		require.NoError(t, err)
+
+		planFile := writePlanIssue(t, "SLOT-REVERT")
+		_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
+		require.NoError(t, err)
+		_, err = runTrls(t, repo, "dag", "revert", "--plan", planFile)
+		require.NoError(t, err)
+
+		createLogs := logFilesContaining(t, repo, "SLOT-CREATE")
+		revertLogs := logFilesContaining(t, repo, `"to":"cancelled"`)
+		require.Equal(t, createLogs, revertLogs,
+			"unset ARM_LOG_SLOT must keep dag revert on the same unslotted log as create")
+		require.Len(t, revertLogs, 1)
+		assert.NotContains(t, revertLogs[0], "~")
+	})
+}
+
 func plantDagApplyLogSlotRepo(t *testing.T) string {
 	t.Helper()
 	repo := initTempRepo(t)
@@ -65,14 +115,20 @@ func plantDagApplyLogSlotRepo(t *testing.T) string {
 
 func applyPlanIssue(t *testing.T, repo, issueID string) {
 	t.Helper()
+	planFile := writePlanIssue(t, issueID)
+	_, err := runTrls(t, repo, "dag", "apply", "--plan", planFile)
+	require.NoError(t, err)
+}
+
+func writePlanIssue(t *testing.T, issueID string) string {
+	t.Helper()
 	planData := `{"version":1,"title":"Log slot plan","issues":[{` +
 		`"id":"` + issueID + `","title":"apply path","type":"task","source":"src-test",` +
 		`"scope":"internal/` + issueID + `.go","dod":"Apply path is complete and tested",` +
 		`"acceptance":[{"type":"test_passes"}]}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0o644))
-	_, err := runTrls(t, repo, "dag", "apply", "--plan", planFile)
-	require.NoError(t, err)
+	return planFile
 }
 
 func logFilesContaining(t *testing.T, repo, needle string) []string {

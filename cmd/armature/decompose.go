@@ -14,7 +14,6 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
-	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
 
@@ -323,7 +322,6 @@ It validates that no new children exist under the planned issues before removal.
   $ arm dag revert --plan plan.json --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
-			issuesDir := appCtx.IssuesDir
 
 			plan, err := decompose.ParsePlan(planPath)
 			if err != nil {
@@ -352,13 +350,12 @@ It validates that no new children exist under the planned issues before removal.
 				return nil
 			}
 
-			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
-				return fmt.Errorf("worker not initialized: %w", err)
+				return err
 			}
 
-			opsDir := issuesDir + "/ops"
-			count, err := decompose.RevertPlan(plan, opsDir, workerID, state, clock.System)
+			count, err := decompose.RevertPlan(plan, filepath.Dir(logPath), workerID, state, clock.System)
 			if err != nil {
 				return err
 			}
