@@ -62,4 +62,3 @@ func IsValidReference(subject string, parentCount int, issueID string) bool {
 	}
 	return parentCount >= 2 && MergeCommitPattern(issueID).MatchString(subject)
 }
-
