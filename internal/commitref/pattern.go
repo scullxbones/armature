@@ -6,7 +6,10 @@
 // cycle between those two packages.
 package commitref
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // CommitTypes enumerates the conventional-commit types documented by
 // docs/conventions.md. Shared by TypedCommitPattern (used by
@@ -27,7 +30,7 @@ func TypedCommitPattern(issueID string) *regexp.Regexp {
 	// metacharacters, so joining them with "|" for alternation is safe
 	// without per-entry quoting.
 	return regexp.MustCompile(
-		`^(` + joinTypes() + `)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
+		`^(` + strings.Join(CommitTypes, "|") + `)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
 	)
 }
 
@@ -60,13 +63,3 @@ func IsValidReference(subject string, parentCount int, issueID string) bool {
 	return parentCount >= 2 && MergeCommitPattern(issueID).MatchString(subject)
 }
 
-func joinTypes() string {
-	out := ""
-	for i, t := range CommitTypes {
-		if i > 0 {
-			out += "|"
-		}
-		out += t
-	}
-	return out
-}
