@@ -2,9 +2,6 @@
 // tests (make test-e2eharness). It is not a production package: it imports
 // testing, is excluded from UNIT_PACKAGES / coverage, and must not be imported
 // from cmd/ or other production code.
-//
-// It creates a bare origin repository, clones, and orchestrates the complete workflow:
-// bootstrap → worker-init → create → claim → in-progress → done → merge detection.
 package harness
 
 import (
@@ -17,29 +14,25 @@ import (
 	"testing"
 )
 
-// Harness manages a test repository lifecycle with a bare origin and clones.
 type Harness struct {
 	t          *testing.T
-	TempDir    string            // Root temporary directory for all test artifacts
-	OriginDir  string            // Bare git repository (origin)
-	WorkDir    string            // Primary working clone (coordinator perspective)
-	WorkerDirs map[string]string // Named worker directories (indexed by worker ID)
-	ArmBinPath string            // Path to the built arm binary
+	TempDir    string
+	OriginDir  string
+	WorkDir    string
+	WorkerDirs map[string]string
+	ArmBinPath string
 }
 
-// New creates a new harness with a temporary directory and bare origin repo.
 func New(t *testing.T, armBinPath string) *Harness {
 	t.Helper()
 
 	tempDir := t.TempDir()
 	originDir := filepath.Join(tempDir, "origin.git")
 
-	// Initialize bare origin repository
 	if err := gitInit(t, originDir, true); err != nil {
 		t.Fatalf("failed to initialize bare origin repo: %v", err)
 	}
 
-	// Create initial commit in temporary clone for bootstrap
 	initClone := filepath.Join(tempDir, ".init")
 	if err := gitInit(t, initClone, false); err != nil {
 		t.Fatalf("failed to initialize temporary clone: %v", err)
@@ -71,7 +64,6 @@ func New(t *testing.T, armBinPath string) *Harness {
 		ArmBinPath: armBinPath,
 	}
 
-	// Clone to work directory for coordinator
 	if err := h.Clone("work", h.WorkDir); err != nil {
 		t.Fatalf("failed to clone to work directory: %v", err)
 	}
@@ -79,7 +71,6 @@ func New(t *testing.T, armBinPath string) *Harness {
 	return h
 }
 
-// Clone creates a new clone of the origin repository at the specified path.
 func (h *Harness) Clone(name, path string) error {
 	if err := gitRun(h.t, h.TempDir, "clone", h.OriginDir, path); err != nil {
 		h.t.Fatalf("failed to clone: %v", err)
@@ -93,25 +84,20 @@ func (h *Harness) Clone(name, path string) error {
 	return nil
 }
 
-// RunArm executes an arm command in the work directory with the harness arm binary.
 func (h *Harness) RunArm(args ...string) (string, error) {
 	return runCmd(h.t, h.WorkDir, h.ArmBinPath, args...)
 }
 
-// RunArmIn executes an arm command in a specified clone directory.
 func (h *Harness) RunArmIn(path string, args ...string) (string, error) {
 	return runCmd(h.t, path, h.ArmBinPath, args...)
 }
 
-// GetWorkerDir returns the path to a named worker's clone directory.
 func (h *Harness) GetWorkerDir(name string) string {
 	if path, ok := h.WorkerDirs[name]; ok {
 		return path
 	}
 	return ""
 }
-
-// helper functions
 
 func gitInit(t *testing.T, dir string, bare bool) error {
 	t.Helper()
@@ -171,12 +157,6 @@ func runCmd(t *testing.T, dir, cmdName string, args ...string) (string, error) {
 	return output.String(), err
 }
 
-// envWithoutARMLogSlot copies the process environment minus ARM_LOG_SLOT.
-// Product bug, not a harness design: dag apply (internal/decompose/apply.go)
-// writes workerID+".log" and ignores ARM_LOG_SLOT. An inherited slot would
-// send later commands to a different file and break clone rematerialization.
-// Follow-up (not T4): honor the slot on dag apply and add a slotted E2E test.
-// This strip is a workaround so T4's e2e can run; it is not the fix.
 func envWithoutARMLogSlot() []string {
 	env := os.Environ()
 	out := make([]string, 0, len(env))

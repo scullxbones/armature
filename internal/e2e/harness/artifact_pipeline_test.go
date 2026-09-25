@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3 drives the production artifact
-// boundaries end to end: strict plan parsing by dag apply, materialized context
-// assembly by render-context, and strict assessment/bundle parsing by review record.
 func TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
