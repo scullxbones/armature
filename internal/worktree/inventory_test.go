@@ -263,3 +263,53 @@ func TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, got)
 }
+
+func TestResolveGitDir_AbsolutePointerMayLeaveWorktree_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	linked := t.TempDir()
+	target := filepath.Join(t.TempDir(), "linked.git")
+	require.NoError(t, os.Mkdir(target, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"), []byte("gitdir: "+target+"\n"), 0o644))
+	got, err := ResolveGitDir(linked)
+	require.NoError(t, err)
+	assert.Equal(t, target, got)
+}
+
+func TestReadBinding_MissingGitDirIsUnbound_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	got, err := ReadBinding(filepath.Join(t.TempDir(), "missing-git-dir"))
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestResolveGitDir_RejectsEscapingGitEntry_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	wt := filepath.Join(parent, "wt")
+	require.NoError(t, os.Mkdir(wt, 0o755))
+	outside := filepath.Join(parent, "outside.git")
+	require.NoError(t, os.WriteFile(outside, []byte("gitdir: /tmp/evil\n"), 0o644))
+	require.NoError(t, os.Symlink(outside, filepath.Join(wt, ".git")))
+	_, err := ResolveGitDir(wt)
+	require.Error(t, err)
+
+	secret := filepath.Join(parent, "secret")
+	require.NoError(t, os.WriteFile(secret, []byte("nope\n"), 0o644))
+	_, err = readFileInRoot(wt, filepath.Join("..", "secret"))
+	require.Error(t, err)
+}
+
+func TestReadBinding_RejectsEscapingBinding_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	gitDir := filepath.Join(parent, "git")
+	require.NoError(t, os.Mkdir(gitDir, 0o755))
+	outside := filepath.Join(parent, "stolen")
+	require.NoError(t, os.WriteFile(outside, []byte("stolen-id\n"), 0o644))
+	require.NoError(t, os.Symlink(outside, filepath.Join(gitDir, "armature-issue-id")))
+	_, err := ReadBinding(gitDir)
+	require.Error(t, err)
+
+	_, err = readFileInRoot(gitDir, filepath.Join("..", "stolen"))
+	require.Error(t, err)
+}

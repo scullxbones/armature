@@ -64,18 +64,29 @@ func NormalizePathAllowingMissing(path string) string {
 // a no-op: the worktree is already isolated because .worktrees/ is gitignored.
 // It NEVER creates a go.work file, in the worktree or anywhere else — a bare
 // go.work with no `use` would break `go build ./...` inside the worktree.
-func ApplyMitigations(repoRoot, worktreeRoot string) error {
-	goWorkPath := filepath.Join(repoRoot, "go.work")
-	info, err := os.Stat(goWorkPath)
+func ApplyMitigations(repoRoot, worktreeRoot string) (err error) {
+	root, err := os.OpenRoot(repoRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // no main-tree go.work: worktree is already isolated
+			return nil
+		}
+		return fmt.Errorf("stat main go.work: %w", err)
+	}
+	defer func() {
+		if cerr := root.Close(); err == nil {
+			err = cerr
+		}
+	}()
+
+	info, err := root.Stat("go.work")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
 		}
 		return fmt.Errorf("stat main go.work: %w", err)
 	}
 
-	// #nosec G304 - repoRoot is internal, not user-controlled
-	content, err := os.ReadFile(goWorkPath)
+	content, err := root.ReadFile("go.work")
 	if err != nil {
 		return fmt.Errorf("read main go.work: %w", err)
 	}
@@ -85,7 +96,7 @@ func ApplyMitigations(repoRoot, worktreeRoot string) error {
 		return nil
 	}
 
-	if err := os.WriteFile(goWorkPath, []byte(newContent), info.Mode().Perm()); err != nil {
+	if err := root.WriteFile("go.work", []byte(newContent), info.Mode().Perm()); err != nil {
 		return fmt.Errorf("rewrite main go.work: %w", err)
 	}
 	return nil
