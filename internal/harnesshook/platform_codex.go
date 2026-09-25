@@ -2,7 +2,6 @@ package harnesshook
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,10 +182,10 @@ func extractCommand(input map[string]any) string {
 	if input == nil {
 		return ""
 	}
-	for _, key := range []string{"command", "cmd"} {
+	for _, key := range []string{"command", "cmd", "input"} {
 		if value, ok := input[key].(string); ok {
 			return value
 		}
 	}
-	return fmt.Sprint(input["input"])
+	return ""
 }

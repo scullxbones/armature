@@ -24,21 +24,21 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 		}
 
 		for _, citation := range result.Citations {
-			if citation.ActivityEntryID != "" {
+			if citation.ActivityEntryID() != "" {
 				continue
 			}
 
-			if citation.Line == 0 {
-				if !idx.ContainsFile(citation.Path) {
+			if citation.Line() == 0 {
+				if !idx.ContainsFile(citation.Path()) {
 					errs = append(errs, fmt.Sprintf(
 						"criterion result %s: citation references %s which is not in diff (suggestion: remove the citation or cite a path present in the delivery diff)",
-						result.ID, citation.Path))
+						result.ID, citation.Path()))
 				}
 			} else {
-				if !idx.ContainsLine(citation.Path, citation.Line) {
-					msg := fmt.Sprintf("criterion result %s: citation references %s:%d which is not in diff", result.ID, citation.Path, citation.Line)
-					if idx.ContainsFile(citation.Path) {
-						msg += fmt.Sprintf(" (suggestion: downgrade citation to path-level; omit line %d and cite %s only)", citation.Line, citation.Path)
+				if !idx.ContainsLine(citation.Path(), citation.Line()) {
+					msg := fmt.Sprintf("criterion result %s: citation references %s:%d which is not in diff", result.ID, citation.Path(), citation.Line())
+					if idx.ContainsFile(citation.Path()) {
+						msg += fmt.Sprintf(" (suggestion: downgrade citation to path-level; omit line %d and cite %s only)", citation.Line(), citation.Path())
 					} else {
 						msg += " (suggestion: remove the citation or cite a path present in the delivery diff)"
 					}
@@ -328,7 +328,7 @@ func ValidateResultCoverage(assessment *ConformanceAssessment, contract Contract
 func hasActivityCitations(assessment *ConformanceAssessment) bool {
 	for _, result := range assessment.Results {
 		for _, citation := range result.Citations {
-			if citation.ActivityEntryID != "" {
+			if citation.ActivityEntryID() != "" {
 				return true
 			}
 		}
@@ -353,14 +353,14 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 		hasDiffCitation := false
 
 		for _, citation := range result.Citations {
-			if citation.ActivityEntryID != "" {
+			if citation.ActivityEntryID() != "" {
 				hasActivityCitation = true
 
-				entryID, err := strconv.Atoi(citation.ActivityEntryID)
+				entryID, err := strconv.Atoi(citation.ActivityEntryID())
 				if err != nil {
 					errs = append(errs, fmt.Sprintf(
 						"criterion result %s: invalid activity entry ID %q (must be numeric) (suggestion: cite a numeric activity_entry_id from the bundle activity log)",
-						result.ID, citation.ActivityEntryID))
+						result.ID, citation.ActivityEntryID()))
 					continue
 				}
 
@@ -398,7 +398,7 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 				}
 			}
 
-			if citation.Path != "" {
+			if citation.Path() != "" {
 				hasDiffCitation = true
 			}
 		}

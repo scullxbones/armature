@@ -75,6 +75,9 @@ func ParseCriterionStatus(s string) (CriterionStatus, error) {
 
 type Rating int
 
+// Unspecified is not a Conformance Rating. MaxRating returns it when given no ratings.
+const Unspecified Rating = -1
+
 const (
 	Green Rating = iota
 	Yellow
@@ -83,6 +86,8 @@ const (
 
 func (r Rating) String() string {
 	switch r {
+	case Unspecified:
+		return "unknown"
 	case Green:
 		return "green"
 	case Yellow:
@@ -128,12 +133,71 @@ func ParseRating(s string) (Rating, error) {
 	}
 }
 
+type citationKind uint8
+
+const (
+	citationEmpty citationKind = iota
+	citationFile
+	citationActivity
+	citationBoth
+)
+
+// Citation is a closed sum of file (diff) citations and activity-log citations.
+// Construct values with FileCitation or ActivityCitation; JSON still uses the
+// published assessment object shape.
 type Citation struct {
+	kind                 citationKind
+	path                 string
+	line                 int
+	column               int
+	activityEntryID      string
+	activityEntryDetails string
+}
+
+type citationWire struct {
 	Path                 string `json:"path,omitempty"`
 	Line                 int    `json:"line,omitempty"`
 	Column               int    `json:"column,omitempty"`
 	ActivityEntryID      string `json:"activity_entry_id,omitempty"`
 	ActivityEntryDetails string `json:"activity_entry_details,omitempty"`
+}
+
+func FileCitation(path string, line, column int) Citation {
+	return Citation{kind: citationFile, path: path, line: line, column: column}
+}
+
+func ActivityCitation(entryID string) Citation {
+	return Citation{kind: citationActivity, activityEntryID: entryID}
+}
+
+func (c Citation) Path() string                 { return c.path }
+func (c Citation) Line() int                    { return c.line }
+func (c Citation) Column() int                  { return c.column }
+func (c Citation) ActivityEntryID() string      { return c.activityEntryID }
+func (c Citation) ActivityEntryDetails() string { return c.activityEntryDetails }
+
+func (c *Citation) ClearActivityEntryDetails() {
+	if c == nil {
+		return
+	}
+	c.activityEntryDetails = ""
+}
+
+func (c *Citation) SetActivityEntryDetails(s string) {
+	if c == nil {
+		return
+	}
+	c.activityEntryDetails = s
+}
+
+func (c Citation) MarshalJSON() ([]byte, error) {
+	return json.Marshal(citationWire{
+		Path:                 c.path,
+		Line:                 c.line,
+		Column:               c.column,
+		ActivityEntryID:      c.activityEntryID,
+		ActivityEntryDetails: c.activityEntryDetails,
+	})
 }
 
 // UnmarshalJSON rejects schema-invalid citation coordinates. JSON null unmarshals
@@ -156,12 +220,27 @@ func (c *Citation) UnmarshalJSON(data []byte) error {
 			return err
 		}
 	}
-	type alias Citation
-	var a alias
-	if err := json.Unmarshal(data, &a); err != nil {
+	var w citationWire
+	if err := json.Unmarshal(data, &w); err != nil {
 		return err
 	}
-	*c = Citation(a)
+	*c = Citation{
+		path:                 w.Path,
+		line:                 w.Line,
+		column:               w.Column,
+		activityEntryID:      w.ActivityEntryID,
+		activityEntryDetails: w.ActivityEntryDetails,
+	}
+	switch {
+	case c.path != "" && c.activityEntryID != "":
+		c.kind = citationBoth
+	case c.activityEntryID != "":
+		c.kind = citationActivity
+	case c.path != "":
+		c.kind = citationFile
+	default:
+		c.kind = citationEmpty
+	}
 	return nil
 }
 
@@ -235,9 +314,9 @@ func (cr CriterionResult) Valid() error {
 		return fmt.Errorf("criterion result %s: citations or missing_evidence required for status %s", cr.ID, cr.Status)
 	}
 	for i, citation := range cr.Citations {
-		if citation.ActivityEntryID != "" && citation.Path != "" {
+		if citation.ActivityEntryID() != "" && citation.Path() != "" {
 			return fmt.Errorf("criterion result %s: citation %d has both path %q and activity_entry_id %q; these are mutually exclusive",
-				cr.ID, i, citation.Path, citation.ActivityEntryID)
+				cr.ID, i, citation.Path(), citation.ActivityEntryID())
 		}
 	}
 	return nil

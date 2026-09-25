@@ -87,3 +87,57 @@ func TestAssemble_ContextFilesLayerUsesReader_REQ_ARCHIMP_S16_T2(t *testing.T) {
 	assert.True(t, strings.Contains(contextFilesLayer.Content, "Markdown Content"), "context_files layer missing content from file2")
 	assert.True(t, strings.Contains(contextFilesLayer.Content, "missing/file.txt"), "context_files layer missing reference to missing file")
 }
+
+func TestAssemble_MissingGraphParentIsError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	state := materialize.NewState()
+	state.Issues["CHILD"] = &materialize.Issue{
+		ID:        "CHILD",
+		Title:     "Orphan child",
+		Type:      "task",
+		Status:    "open",
+		Parent:    "GHOST",
+		Children:  []string{},
+		BlockedBy: []string{},
+		Blocks:    []string{},
+	}
+	_, err := Assemble("CHILD", state, &fakeReader{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "GHOST")
+	assert.Contains(t, err.Error(), "missing")
+}
+
+func TestAssemble_MissingGraphSiblingIsError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	state := materialize.NewState()
+	state.Issues["PAR"] = &materialize.Issue{
+		ID:        "PAR",
+		Title:     "Parent",
+		Type:      "story",
+		Status:    "in-progress",
+		Children:  []string{"CHILD", "GHOST-SIB"},
+		BlockedBy: []string{},
+		Blocks:    []string{},
+	}
+	state.Issues["CHILD"] = &materialize.Issue{
+		ID:        "CHILD",
+		Title:     "Current",
+		Type:      "task",
+		Status:    "open",
+		Parent:    "PAR",
+		Children:  []string{},
+		BlockedBy: []string{},
+		Blocks:    []string{},
+	}
+	_, err := Assemble("CHILD", state, &fakeReader{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "GHOST-SIB")
+}
+
+func TestBuildParentChain_NilGraphIsError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{ID: "CHILD", Parent: "PAR"}
+	_, err := buildParentChain(issue, nil, materialize.NewState())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "graph is missing")
+}
