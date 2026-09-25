@@ -239,13 +239,12 @@ plan, or --schema to view the JSON schema.`,
 				return nil
 			}
 
-			workerID, err := worker.GetWorkerID(appCtx.RepoPath)
+			workerID, logPath, err := resolveWorkerAndLog(appCtx)
 			if err != nil {
-				return fmt.Errorf("worker not initialized: %w", err)
+				return err
 			}
 
-			opsDir := issuesDir + "/ops"
-			created, err := decompose.ApplyPlan(plan, opsDir, workerID, state, applyOpts, clock.System)
+			created, err := decompose.ApplyPlan(plan, filepath.Dir(logPath), workerID, state, applyOpts, clock.System)
 			if err != nil {
 				return err
 			}
