@@ -1,10 +1,12 @@
 package bootstrap_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/bootstrap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultPlatformsIncludesClaude(t *testing.T) {
@@ -33,7 +35,7 @@ func TestBuildPlanDefaults(t *testing.T) {
 	req := bootstrap.PlanRequest{}
 	plan, err := bootstrap.BuildPlan(req)
 	assert.NoError(t, err)
-	assert.Equal(t, "local", plan.Target)
+	assert.Equal(t, bootstrap.TargetLocal, plan.Target)
 	assert.Greater(t, len(plan.Rows), 0)
 	defaultPlatforms := bootstrap.DefaultPlatforms()
 	assert.Equal(t, len(defaultPlatforms), len(plan.Rows))
@@ -62,7 +64,7 @@ func TestBuildPlanWithHooks(t *testing.T) {
 	}
 	plan, err := bootstrap.BuildPlan(req)
 	assert.NoError(t, err)
-	assert.Equal(t, "local", plan.Target)
+	assert.Equal(t, bootstrap.TargetLocal, plan.Target)
 	assert.Equal(t, 1, len(plan.Rows))
 	row := plan.Rows[0]
 	assert.Equal(t, bootstrap.PlatformClaude, row.Platform)
@@ -98,7 +100,7 @@ func TestBuildPlanWithoutHooks(t *testing.T) {
 	}
 	plan, err := bootstrap.BuildPlan(req)
 	assert.NoError(t, err)
-	assert.Equal(t, "global", plan.Target)
+	assert.Equal(t, bootstrap.TargetGlobal, plan.Target)
 	assert.Equal(t, 1, len(plan.Rows))
 	row := plan.Rows[0]
 	assert.Equal(t, bootstrap.PlatformClaude, row.Platform)
@@ -117,7 +119,7 @@ func TestHarnessArtifactResultIncludesAction(t *testing.T) {
 		Status:   "ok",
 		Action:   "install",
 	}
-	assert.Equal(t, "install", result.Action)
+	assert.Equal(t, bootstrap.ActionInstall, result.Action)
 }
 
 // TestHarnessArtifactResultActionSkipped verifies the Action field is populated
@@ -130,7 +132,7 @@ func TestHarnessArtifactResultActionSkipped(t *testing.T) {
 		Status:   "skipped",
 		Action:   "install",
 	}
-	assert.Equal(t, "install", result.Action)
+	assert.Equal(t, bootstrap.ActionInstall, result.Action)
 }
 
 // TestHarnessArtifactResultActionUnsupported verifies the Action field is populated
@@ -143,5 +145,59 @@ func TestHarnessArtifactResultActionUnsupported(t *testing.T) {
 		Status:   "unsupported",
 		Action:   "unsupported",
 	}
-	assert.Equal(t, "unsupported", result.Action)
+	assert.Equal(t, bootstrap.ActionUnsupported, result.Action)
+}
+
+func TestHarnessArtifactResultJSONEnvelope_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	result := bootstrap.HarnessArtifactResult{
+		Platform: "claude",
+		Artifact: "skills",
+		Status:   "ok",
+		Action:   "install",
+		Note:     "Deployed to .claude/skills",
+	}
+	data, err := json.Marshal(result)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"platform": "claude",
+		"artifact": "skills",
+		"status": "ok",
+		"action": "install",
+		"note": "Deployed to .claude/skills"
+	}`, string(data))
+}
+
+func TestBuildPlanUnknownTargetPreserved_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	plan, err := bootstrap.BuildPlan(bootstrap.PlanRequest{
+		Platforms: []bootstrap.Platform{bootstrap.PlatformClaude},
+		Target:    "elsewhere",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "elsewhere", string(plan.Target))
+}
+
+func TestBuildPlanUnknownPlatformError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	_, err := bootstrap.BuildPlan(bootstrap.PlanRequest{
+		Platforms: []bootstrap.Platform{"codxe"},
+	})
+	require.Error(t, err)
+	assert.Equal(t, "unknown platform: codxe", err.Error())
+}
+
+func TestParseUnknownArtifactJSON_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	var result bootstrap.HarnessArtifactResult
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"platform": "mystery",
+		"artifact": "not-an-artifact",
+		"status": "weird",
+		"action": "nope"
+	}`), &result))
+	assert.Equal(t, "mystery", string(result.Platform))
+	assert.Equal(t, "not-an-artifact", string(result.Artifact))
+	assert.Equal(t, "weird", string(result.Status))
+	assert.Equal(t, "nope", string(result.Action))
 }

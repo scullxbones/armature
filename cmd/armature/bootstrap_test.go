@@ -1296,7 +1296,7 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 
 	req := bootstrap.PlanRequest{
 		Platforms: []bootstrap.Platform{bootstrap.PlatformCodex},
-		Target:    "local",
+		Target:    bootstrap.TargetLocal,
 		WithHooks: true,
 	}
 	plan, err := bootstrap.BuildPlan(req)
@@ -1307,9 +1307,9 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 
 	var foundSkipped bool
 	for _, result := range results {
-		if result.Artifact == "harness_hook_config" && result.Status == "skipped" {
+		if result.Artifact == bootstrap.ArtifactHarnessHookConfig && result.Status == bootstrap.StatusSkipped {
 			foundSkipped = true
-			assert.Equal(t, "codex", result.Platform)
+			assert.Equal(t, bootstrap.PlatformCodex, result.Platform)
 			assert.Equal(t, "existing config not managed by Armature", result.Note)
 			break
 		}
