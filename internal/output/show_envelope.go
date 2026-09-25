@@ -37,7 +37,7 @@ func truncateShowText(s string, limit int) (shown string, total int, truncated b
 	return shown, total, true
 }
 
-func TruncateShowIssue(row *IssueJSON) []ShowTruncation {
+func TruncateShowIssue(row IssueJSON) (IssueJSON, []ShowTruncation) {
 	var hints []ShowTruncation
 	if shown, total, truncated := truncateShowText(row.Outcome, ShowLargeFieldLimit); truncated {
 		row.Outcome = shown
@@ -51,7 +51,7 @@ func TruncateShowIssue(row *IssueJSON) []ShowTruncation {
 			TotalBytes: total,
 		})
 	}
-	return hints
+	return row, hints
 }
 
 func showHelp(ids []string, trunc []ShowTruncation) []string {
