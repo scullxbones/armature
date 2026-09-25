@@ -68,9 +68,9 @@ func ratingSeverity(r Rating) int {
 // MaxRating returns the highest-severity Conformance Rating (Green < Yellow < Red).
 // EffectiveRating built from this helper is advisory only and does not confer
 // merge authority (Constitution I5/N4).
-func MaxRating(ratings ...Rating) Rating {
+func MaxRating(ratings ...Rating) (Rating, bool) {
 	if len(ratings) == 0 {
-		return Green
+		return Unspecified, false
 	}
 	max := ratings[0]
 	for _, r := range ratings[1:] {
@@ -78,5 +78,5 @@ func MaxRating(ratings ...Rating) Rating {
 			max = r
 		}
 	}
-	return max
+	return max, true
 }
