@@ -107,58 +107,181 @@ func newRootCmd() *cobra.Command {
 	root.AddGroup(&cobra.Group{ID: "sync", Title: "Sync Commands:"})
 	root.AddGroup(&cobra.Group{ID: "admin", Title: "Admin Commands:"})
 
-	for _, item := range []struct {
-		group string
-		cmd   *cobra.Command
-	}{
-		{"admin", newVersionCmd()},
-		{"admin", newWorkerInitCmd()},
-		{"admin", newBootstrapCmd()},
-		{"workflow", newReadyCmd()},
-		{"workflow", newClaimCmd()},
-		{"workflow", newTransitionCmd()},
-		{"workflow", newUnassignCmd()},
-		{"workflow", newReopenCmd()},
-		{"workflow", newHeartbeatCmd()},
-		{"workflow", newNoteCmd()},
-		{"workflow", newDecisionCmd()},
-		{"workflow", newAmendCmd()},
-		{"workflow", newConfirmCmd()},
-		{"workflow", newAssignCmd()},
-		{"dag", newDAGCmd()},
-		{"dag", newLinkCmd()},
-		{"dag", newUnlinkCmd()},
-		{"sync", newSyncCmd()},
-		{"sync", newPushOpsCmd()},
-		{"sync", newMergedCmd()},
-		{"sync", newMaterializeCmd()},
-		{"sync", newImportCmd()},
-		{"admin", newCreateCmd()},
-		{"admin", newReparentCmd()},
-		{"admin", newValidateCmd()},
-		{"admin", newRenderContextCmd()},
-		{"admin", newLogCmd()},
-		{"admin", newStatsCmd()},
-		{"admin", newWorkersCmd()},
-		{"admin", newSourcesCmd()},
-		{"admin", newShowCmd()},
-		{"admin", newListCmd()},
-		{"admin", newScopeRenameCmd()},
-		{"admin", newScopeDeleteCmd()},
-		{"admin", newDoctorCmd()},
-		{"admin", newCompletionCmd()},
-		{"admin", newHookCmd()},
-		{"admin", newGateCmd()},
-		{"admin", newTUICmd()},
-		{"admin", newContextHistoryCmd()},
-		{"admin", newContextReportCmd()},
-		{"admin", newHarnessHookCmd()},
-		{"admin", newReviewCmd()},
-		{"admin", newWorktreeCmd()},
-	} {
-		item.cmd.GroupID = item.group
-		root.AddCommand(item.cmd)
-	}
+	versionCmd := newVersionCmd()
+	versionCmd.GroupID = "admin"
+	root.AddCommand(versionCmd)
+
+	workerInitCmd := newWorkerInitCmd()
+	workerInitCmd.GroupID = "admin"
+	root.AddCommand(workerInitCmd)
+
+	bootstrapCmd := newBootstrapCmd()
+	bootstrapCmd.GroupID = "admin"
+	root.AddCommand(bootstrapCmd)
+
+	readyCmd := newReadyCmd()
+	readyCmd.GroupID = "workflow"
+	root.AddCommand(readyCmd)
+
+	claimCmd := newClaimCmd()
+	claimCmd.GroupID = "workflow"
+	root.AddCommand(claimCmd)
+
+	transitionCmd := newTransitionCmd()
+	transitionCmd.GroupID = "workflow"
+	root.AddCommand(transitionCmd)
+
+	unassignCmd := newUnassignCmd()
+	unassignCmd.GroupID = "workflow"
+	root.AddCommand(unassignCmd)
+
+	reopenCmd := newReopenCmd()
+	reopenCmd.GroupID = "workflow"
+	root.AddCommand(reopenCmd)
+
+	heartbeatCmd := newHeartbeatCmd()
+	heartbeatCmd.GroupID = "workflow"
+	root.AddCommand(heartbeatCmd)
+
+	noteCmd := newNoteCmd()
+	noteCmd.GroupID = "workflow"
+	root.AddCommand(noteCmd)
+
+	decisionCmd := newDecisionCmd()
+	decisionCmd.GroupID = "workflow"
+	root.AddCommand(decisionCmd)
+
+	amendCmd := newAmendCmd()
+	amendCmd.GroupID = "workflow"
+	root.AddCommand(amendCmd)
+
+	confirmCmd := newConfirmCmd()
+	confirmCmd.GroupID = "workflow"
+	root.AddCommand(confirmCmd)
+
+	assignCmd := newAssignCmd()
+	assignCmd.GroupID = "workflow"
+	root.AddCommand(assignCmd)
+
+	dagCmd := newDAGCmd()
+	dagCmd.GroupID = "dag"
+	root.AddCommand(dagCmd)
+
+	linkCmd := newLinkCmd()
+	linkCmd.GroupID = "dag"
+	root.AddCommand(linkCmd)
+
+	unlinkCmd := newUnlinkCmd()
+	unlinkCmd.GroupID = "dag"
+	root.AddCommand(unlinkCmd)
+
+	syncCmd := newSyncCmd()
+	syncCmd.GroupID = "sync"
+	root.AddCommand(syncCmd)
+
+	pushOpsCmd := newPushOpsCmd()
+	pushOpsCmd.GroupID = "sync"
+	root.AddCommand(pushOpsCmd)
+
+	mergedCmd := newMergedCmd()
+	mergedCmd.GroupID = "sync"
+	root.AddCommand(mergedCmd)
+
+	materializeCmd := newMaterializeCmd()
+	materializeCmd.GroupID = "sync"
+	root.AddCommand(materializeCmd)
+
+	importCmd := newImportCmd()
+	importCmd.GroupID = "sync"
+	root.AddCommand(importCmd)
+
+	createCmd := newCreateCmd()
+	createCmd.GroupID = "admin"
+	root.AddCommand(createCmd)
+
+	reparentCmd := newReparentCmd()
+	reparentCmd.GroupID = "admin"
+	root.AddCommand(reparentCmd)
+
+	validateCmd := newValidateCmd()
+	validateCmd.GroupID = "admin"
+	root.AddCommand(validateCmd)
+
+	renderContextCmd := newRenderContextCmd()
+	renderContextCmd.GroupID = "admin"
+	root.AddCommand(renderContextCmd)
+
+	logCmd := newLogCmd()
+	logCmd.GroupID = "admin"
+	root.AddCommand(logCmd)
+
+	statsCmd := newStatsCmd()
+	statsCmd.GroupID = "admin"
+	root.AddCommand(statsCmd)
+
+	workersCmd := newWorkersCmd()
+	workersCmd.GroupID = "admin"
+	root.AddCommand(workersCmd)
+
+	sourcesCmd := newSourcesCmd()
+	sourcesCmd.GroupID = "admin"
+	root.AddCommand(sourcesCmd)
+
+	showCmd := newShowCmd()
+	showCmd.GroupID = "admin"
+	root.AddCommand(showCmd)
+
+	listCmd := newListCmd()
+	listCmd.GroupID = "admin"
+	root.AddCommand(listCmd)
+
+	scopeRenameCmd := newScopeRenameCmd()
+	scopeRenameCmd.GroupID = "admin"
+	root.AddCommand(scopeRenameCmd)
+
+	scopeDeleteCmd := newScopeDeleteCmd()
+	scopeDeleteCmd.GroupID = "admin"
+	root.AddCommand(scopeDeleteCmd)
+
+	doctorCmd := newDoctorCmd()
+	doctorCmd.GroupID = "admin"
+	root.AddCommand(doctorCmd)
+
+	completionCmd := newCompletionCmd()
+	completionCmd.GroupID = "admin"
+	root.AddCommand(completionCmd)
+
+	hookCmd := newHookCmd()
+	hookCmd.GroupID = "admin"
+	root.AddCommand(hookCmd)
+
+	gateCmd := newGateCmd()
+	gateCmd.GroupID = "admin"
+	root.AddCommand(gateCmd)
+
+	tuiCmd := newTUICmd()
+	tuiCmd.GroupID = "admin"
+	root.AddCommand(tuiCmd)
+
+	contextHistoryCmd := newContextHistoryCmd()
+	contextHistoryCmd.GroupID = "admin"
+	root.AddCommand(contextHistoryCmd)
+
+	contextReportCmd := newContextReportCmd()
+	contextReportCmd.GroupID = "admin"
+	root.AddCommand(contextReportCmd)
+
+	harnessHookCmd := newHarnessHookCmd()
+	harnessHookCmd.GroupID = "admin"
+	root.AddCommand(harnessHookCmd)
+
+	reviewCmd := newReviewCmd()
+	reviewCmd.GroupID = "admin"
+	root.AddCommand(reviewCmd)
+
+	worktreeCmd := newWorktreeCmd()
+	worktreeCmd.GroupID = "admin"
+	root.AddCommand(worktreeCmd)
 
 	root.SetHelpCommandGroupID("admin")
 	root.InitDefaultHelpCmd()
