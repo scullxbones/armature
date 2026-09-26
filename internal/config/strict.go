@@ -113,7 +113,7 @@ func ValidatePresentFields(data []byte) []string {
 		switch {
 		case cfg.DefaultTTL <= 0:
 			problems = append(problems, fmt.Sprintf("default_ttl %d is out of range (must be > 0 minutes)", cfg.DefaultTTL))
-		case int64(cfg.DefaultTTL) > math.MaxInt64/60:
+		case cfg.DefaultTTL.overflowsConversions():
 			problems = append(problems, fmt.Sprintf("default_ttl %d is out of range (must not overflow claim TTL seconds)", cfg.DefaultTTL))
 		}
 	}
