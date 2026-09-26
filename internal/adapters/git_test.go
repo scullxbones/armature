@@ -235,11 +235,6 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX proves that
-// after an AppendLog.Append call (which creates lock/pending-marker sidecars
-// under .arm-append-meta/) followed by CommitWorktreeOp, the ops worktree is
-// not left dirty by those untracked sidecar files. The .armature/.gitignore
-// shipped in this repo must ignore .arm-append-meta/ for this to hold.
 func TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -252,9 +247,6 @@ func TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX(t *testing.
 	opsDir := filepath.Join(worktreePath, ".armature", "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 
-	// Ship the same .gitignore content `arm bootstrap` writes to the ops
-	// worktree root, so this test tracks the real shipped behavior instead of
-	// a hand-maintained on-disk copy (which isn't committed to the repo).
 	gitignoreDst := filepath.Join(worktreePath, ".armature", ".gitignore")
 	require.NoError(t, os.WriteFile(gitignoreDst, []byte(adapters.OpsGitignore), 0644))
 
@@ -464,14 +456,16 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	require.NoError(t, os.WriteFile(lockPath, []byte("lock"), 0644))
 
 	var wg sync.WaitGroup
+	removed := make(chan error, 1)
 	wg.Go(func() {
 		time.Sleep(120 * time.Millisecond)
-		assert.NoError(t, os.Remove(lockPath))
+		removed <- os.Remove(lockPath)
 	})
 
 	wc := adapters.New(worktreePath)
 	err = wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
 	wg.Wait()
+	require.NoError(t, <-removed)
 	require.NoError(t, err)
 }
 
@@ -759,10 +753,6 @@ func TestLogRange_ExcludesBaseAndEarlier_REQ_LNGHZN_S4_T2(t *testing.T) {
 	assert.Equal(t, "commit after base", entries[0].Subject)
 }
 
-// TestLogRange_ReportsParentCount_REQ_LNGHZN_S4 verifies LogEntry exposes
-// the number of parent commits (from git log's %P), so callers can
-// distinguish an ordinary single-parent commit from a genuine merge commit
-// without a second git invocation.
 func TestLogRange_ReportsParentCount_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -781,14 +771,11 @@ func TestLogRange_ReportsParentCount_REQ_LNGHZN_S4(t *testing.T) {
 	require.NoError(t, err)
 	baseSHA := strings.TrimSpace(string(shaOut))
 
-	// A branch with a single-parent commit.
 	gitRun("checkout", "-b", "feature")
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "feature.txt"), []byte("f\n"), 0644))
 	gitRun("add", "feature.txt")
 	gitRun("commit", "-m", "single parent commit")
 
-	// Merge feature back into a second branch off base to create a genuine
-	// two-parent merge commit.
 	gitRun("checkout", "-b", "other", baseSHA)
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "other.txt"), []byte("o\n"), 0644))
 	gitRun("add", "other.txt")
@@ -888,13 +875,6 @@ func TestDiffNameStatus_NonRenameChangesHaveNoOldPath(t *testing.T) {
 	assert.Equal(t, "D", byPath["beta.txt"].Status)
 }
 
-// TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4 verifies that
-// DiffNameStatus reports the literal path for a filename containing
-// non-ASCII characters, rather than git's default octal-escaped quoted form
-// (e.g. "caf\303\251.go"). Without -z, `git diff --name-status` quotes such
-// paths, which breaks downstream scope-containment comparisons (e.g.
-// claim.IsWithinScope) against the literal path recorded in the issue's
-// declared scope.
 func TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -1365,12 +1345,6 @@ func TestCreateOrphanBranch_RestoresDetachedHEAD(t *testing.T) {
 	assert.Equal(t, originalSHA, currentSHA, "HEAD should be back at the original commit SHA")
 }
 
-// TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths verifies that
-// DirtyEntries (unlike IsWorkingTreeDirty, which ignores untracked files)
-// surfaces every dirty path in the working tree with its tracked/untracked
-// classification. Callers that need to classify dirty paths (e.g. an
-// allow-list for known-safe debris) need the full set, not just a yes/no
-// signal.
 func TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -1403,10 +1377,6 @@ func TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths(t *testing.T) {
 		"DirtyEntries must report the modified tracked file and the untracked file with correct classification")
 }
 
-// TestDirtyEntriesReportsOldPathForRename verifies that a staged rename
-// reports both its destination (Path) and source (OldPath) path, so callers
-// can detect a rename that crosses a boundary (e.g. into a state directory)
-// even though `git status --porcelain` collapses the rename to one line.
 func TestDirtyEntriesReportsOldPathForRename(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -1768,10 +1738,6 @@ func TestDirtyEntriesIncludingSubmodules_NotARepo(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestRemoveFromIndexReportsRealFailures verifies that RemoveFromIndex
-// distinguishes a genuine git failure from the benign "path is not tracked"
-// case. Swallowing the former lets a caller believe a path was untracked when
-// it is still in the index.
 func TestRemoveFromIndexReportsRealFailures(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
