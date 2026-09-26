@@ -153,7 +153,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 
 	defaultTTL := ctx.Config.DefaultTTL
 	if defaultTTL <= 0 {
-		defaultTTL = 60
+		defaultTTL = config.DefaultTTLMinutes
 	}
 	now := time.Now().Unix()
 
@@ -182,7 +182,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		}
 		ttl := c.ttl
 		if ttl <= 0 {
-			ttl = defaultTTL
+			ttl = int(defaultTTL)
 		}
 		if !claimPkg.IsClaimStale(c.lastActivity(), ttl, now) {
 			return issueID

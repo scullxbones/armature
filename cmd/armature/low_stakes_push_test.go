@@ -69,7 +69,7 @@ func lowStakesState(t *testing.T, repo, worktree string, threshold int) *executi
 			WorktreePath: worktree,
 			IssuesDir:    worktree,
 			StateDir:     filepath.Join(worktree, "state"),
-			Config:       config.Config{LowStakesPushThreshold: threshold},
+			Config:       config.Config{LowStakesPushThreshold: config.PendingOps(threshold)},
 		},
 		tracker: &fakePendingPushTracker{},
 	}
