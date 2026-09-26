@@ -149,7 +149,7 @@ func runCmd(t *testing.T, dir, cmdName string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), cmdName, args...) //nolint:gosec // G204: cmdName is from harness configuration
 	cmd.Dir = dir
-	cmd.Env = envWithoutARMLogSlot()
+	cmd.Env = stripInheritedARMLogSlot()
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output
@@ -157,7 +157,7 @@ func runCmd(t *testing.T, dir, cmdName string, args ...string) (string, error) {
 	return output.String(), err
 }
 
-func envWithoutARMLogSlot() []string {
+func stripInheritedARMLogSlot() []string {
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {

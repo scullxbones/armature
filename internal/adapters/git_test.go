@@ -25,7 +25,7 @@ func initTestRepo(t *testing.T) string {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	gitRun("init")
+	gitRun("init", "-b", "main")
 	gitRun("config", "user.email", "test@test.com")
 	gitRun("config", "user.name", "Test")
 	gitRun("config", "commit.gpgsign", "false")
@@ -465,7 +465,7 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		time.Sleep(120 * time.Millisecond)
-		_ = os.Remove(lockPath) //nolint:errcheck // os.Remove in goroutine; t.Fatal not callable from goroutine
+		assert.NoError(t, os.Remove(lockPath))
 	})
 
 	wc := adapters.New(worktreePath)
@@ -716,11 +716,7 @@ func TestMergeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
 	gitRun("add", "file.txt")
 	gitRun("commit", "-m", "feature commit")
 
-	got, err := c.MergeBase("feature", "master")
-	if err != nil {
-		// Default branch name may be "main" in some git configs.
-		got, err = c.MergeBase("feature", "main")
-	}
+	got, err := c.MergeBase("feature", "main")
 	require.NoError(t, err)
 	assert.Equal(t, baseSHA, got)
 }
@@ -1600,7 +1596,8 @@ func TestIsolatedClientIgnoresGITWorkTree_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, "src.txt", got[0].Path)
 }
 
-func TestIsolatedClientIgnoresCoreWorktree_REQ_LNGHZN_S10_T3(t *testing.T) { //nolint:paralleltest // t.Setenv is process-wide
+func TestIsolatedClientIgnoresCoreWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	gitRun := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", args...)
