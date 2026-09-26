@@ -4,7 +4,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -19,9 +18,9 @@ const GatesFileName = "gates.json"
 
 type Config struct {
 	ProjectType            string                `json:"project_type"`
-	DefaultTTL             int                   `json:"default_ttl"` // minutes
+	DefaultTTL             int                   `json:"default_ttl"`
 	TokenBudget            int                   `json:"token_budget"`
-	LowStakesPushThreshold int                   `json:"low_stakes_push_threshold"` // ops before auto-push
+	LowStakesPushThreshold int                   `json:"low_stakes_push_threshold"`
 	Hooks                  []HookConfig          `json:"hooks"`
 	Gates                  map[string]GateConfig `json:"gates,omitempty"`
 }
@@ -67,7 +66,7 @@ func WriteConfig(path string, cfg Config) error {
 }
 
 func LoadConfig(path string) (Config, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path is the repo's config.json
+	data, err := adapters.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}

@@ -32,9 +32,8 @@ func TestGenerateAndStoreWorkerID(t *testing.T) {
 
 	id, err := InitWorker(repo)
 	require.NoError(t, err)
-	assert.Len(t, id, 36) // UUID format
+	assert.Len(t, id, 36)
 
-	// Check reads back
 	got, err := GetWorkerID(repo)
 	require.NoError(t, err)
 	assert.Equal(t, id, got)
@@ -55,7 +54,8 @@ func TestCheckWorkerID(t *testing.T) {
 	ok, _ := CheckWorkerID(repo)
 	assert.False(t, ok)
 
-	_, _ = InitWorker(repo) //nolint:errcheck // testing idempotency; both return values intentionally discarded
+	_, err := InitWorker(repo)
+	require.NoError(t, err)
 
 	ok, id := CheckWorkerID(repo)
 	assert.True(t, ok)

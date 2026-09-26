@@ -249,7 +249,6 @@ func LocateBinding(items []Meta, id, recordedPath string) (BindingLocation, stri
 	return BindingElsewhere, path
 }
 
-// boundEntries returns the entries whose binding names id.
 func boundEntries(items []Meta, id string) []Meta {
 	var bound []Meta
 	for _, item := range items {

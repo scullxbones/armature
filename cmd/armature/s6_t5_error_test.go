@@ -153,7 +153,7 @@ func TestOperationalInvalidArgumentFilenameIsNotUsage_REQ_LNGHZN_S6_T5(t *testin
 	mapped := mapAgentFacingError(importCmd, fmt.Errorf("read file: %w", pathErr))
 	var cf *armerrors.CommandFailure
 	require.ErrorAs(t, mapped, &cf)
-	assert.Equal(t, codeImport1, cf.Code, "filename text must not flip an operational import failure to USAGE")
+	assert.Equal(t, "IMPORT-1", cf.Code, "filename text must not flip an operational import failure to USAGE")
 	assert.NotEqual(t, armerrors.CodeUSAGE, cf.Code)
 	assert.Equal(t, 1, cf.ExitCode)
 	assert.NotContains(t, strings.Join(cf.NextActions, "\n"), "arm --help")
@@ -169,7 +169,7 @@ func TestImportMissingFileNamedInvalidArgumentKeepsImport1_REQ_LNGHZN_S6_T5(t *t
 		"import", missing, "--repo", repo, "--format", "agent", "--non-interactive")
 	assert.Equal(t, 1, code)
 	cf := assertAgentFailureEnvelope(t, stdout.String())
-	assert.Equal(t, codeImport1, cf.Code)
+	assert.Equal(t, "IMPORT-1", cf.Code)
 	assert.Contains(t, cf.Cause, "invalid argument.csv")
 	assert.NotEqual(t, 2, cf.ExitCode)
 }

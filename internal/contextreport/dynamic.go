@@ -75,7 +75,7 @@ func measureShow(state *materialize.State) ([]byte, error) {
 		return nil, fmt.Errorf("fixture issue %s not found", FixtureShowIssue)
 	}
 	row := output.MarshalIssue(issue)
-	trunc := output.TruncateShowIssue(&row)
+	row, trunc := output.TruncateShowIssue(row)
 	var buf bytes.Buffer
 	if err := output.WriteShowEnvelope(&buf, []string{issue.ID}, []output.IssueJSON{row}, trunc); err != nil {
 		return nil, fmt.Errorf("render show envelope: %w", err)

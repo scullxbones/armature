@@ -17,17 +17,13 @@ type CheckResult struct {
 	Remediation string
 }
 
-// GateResult represents the combined results of all three delivery gate checks.
 type GateResult struct {
 	CleanTree        CheckResult
 	ScopeContainment CheckResult
 	CommitReference  CheckResult
 }
 
-// DeliveryGate evaluates a worktree against an issue via three checks:
-// 1. Clean tree: git status --porcelain is empty
-// 2. Scope containment: selected delivery range is subset of declared scope
-// 3. Commit reference: at least one commit matches conventional-commit format
+// DeliveryGate evaluates a worktree against an issue.
 //
 // CommitReference and ScopeContainment share one (rangeBase, rangeHead)
 // pair. Worktree-first that is claimBase..HEAD; primary-branch fallback

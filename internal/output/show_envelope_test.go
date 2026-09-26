@@ -10,6 +10,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTruncateShowIssueDoesNotMutateInput_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+
+	original := IssueJSON{
+		ID:               "T1",
+		Title:            "One",
+		Type:             "task",
+		Status:           "open",
+		Outcome:          strings.Repeat("out. ", 200),
+		DefinitionOfDone: strings.Repeat("done. ", 200),
+	}
+	require.Greater(t, len(original.Outcome), ShowLargeFieldLimit)
+	require.Greater(t, len(original.DefinitionOfDone), ShowLargeFieldLimit)
+	unchanged := original
+
+	wantRow := original
+	var wantTrunc []ShowTruncation
+	if shown, total, truncated := truncateShowText(wantRow.Outcome, ShowLargeFieldLimit); truncated {
+		wantRow.Outcome = shown
+		wantTrunc = append(wantTrunc, ShowTruncation{Field: "outcome", ShownBytes: len(shown), TotalBytes: total})
+	}
+	if shown, total, truncated := truncateShowText(wantRow.DefinitionOfDone, ShowLargeFieldLimit); truncated {
+		wantRow.DefinitionOfDone = shown
+		wantTrunc = append(wantTrunc, ShowTruncation{
+			Field:      "definition_of_done",
+			ShownBytes: len(shown),
+			TotalBytes: total,
+		})
+	}
+	var want bytes.Buffer
+	require.NoError(t, WriteShowEnvelope(&want, []string{"T1"}, []IssueJSON{wantRow}, wantTrunc))
+
+	gotRow, trunc := TruncateShowIssue(original)
+	assert.Equal(t, unchanged, original, "TruncateShowIssue must not mutate the IssueJSON it is given")
+	assert.Equal(t, wantRow, gotRow)
+	assert.Equal(t, wantTrunc, trunc)
+
+	var got bytes.Buffer
+	require.NoError(t, WriteShowEnvelope(&got, []string{"T1"}, []IssueJSON{gotRow}, trunc))
+	assert.Equal(t, want.Bytes(), got.Bytes(), "show envelope bytes must stay identical after the no-mutate reshape")
+}
+
 func TestWriteShowEnvelopeCompactAndTruncates(t *testing.T) {
 	t.Parallel()
 
@@ -21,7 +63,7 @@ func TestWriteShowEnvelopeCompactAndTruncates(t *testing.T) {
 		DefinitionOfDone: strings.Repeat("done. ", 200),
 	}
 	require.Greater(t, len(row.DefinitionOfDone), ShowLargeFieldLimit)
-	trunc := TruncateShowIssue(&row)
+	row, trunc := TruncateShowIssue(row)
 	require.NotEmpty(t, trunc)
 
 	var buf bytes.Buffer
