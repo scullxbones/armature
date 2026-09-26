@@ -315,9 +315,9 @@ func TestPlanFixes_DryRunListsWithoutWriting(t *testing.T) {
 	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 
-	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(filepath.Join(issuesDir, "ops"))
+	items, err := ops.LoadFromDirValidated(filepath.Join(issuesDir, "ops"))
 	require.NoError(t, err)
-	assert.Len(t, items, 2, "dry run must not append any ops")
+	assert.Len(t, items.Items, 2, "dry run must not append any ops")
 
 	_, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
@@ -357,9 +357,9 @@ func TestPlanFixes_IdempotentAfterApply(t *testing.T) {
 	assert.Empty(t, actions2, "second PlanFixes run must find nothing left to fix")
 
 	applyFixActions(t, fixerLogPath, actions2)
-	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(filepath.Join(issuesDir, "ops"))
+	items, err := ops.LoadFromDirValidated(filepath.Join(issuesDir, "ops"))
 	require.NoError(t, err)
-	assert.Len(t, items, 4, "no-op second apply must not append anything")
+	assert.Len(t, items.Items, 4, "no-op second apply must not append anything")
 }
 
 func TestPlanFixes_ReleasesClaimWithMissingWorktree(t *testing.T) {
