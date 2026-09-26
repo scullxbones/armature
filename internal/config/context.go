@@ -14,22 +14,18 @@ const StateDirName = ".armature"
 
 // Context holds resolved paths and config for the current armature session.
 type Context struct {
-	RepoPath     string // resolved repo root
-	IssuesDir    string // path to issues directory
-	WorktreePath string // path to ops worktree
-	StateDir     string // path to runtime state directory
-	Config       Config // loaded from IssuesDir/config.json
+	RepoPath     string
+	IssuesDir    string
+	WorktreePath string
+	StateDir     string
+	Config       Config
 }
 
-// repoProbeResult holds the repository facts collected through adapter-backed probing.
 type repoProbeResult struct {
 	RepoPath     string
 	WorktreePath string
 }
 
-// issuesDirFor derives the issues directory for callers that cannot probe the
-// filesystem. Collapsed worktrees conventionally use the .armature basename;
-// ResolveContext additionally recognizes collapsed custom paths from config.json.
 func issuesDirFor(worktreePath string) string {
 	if filepath.Base(worktreePath) == StateDirName {
 		return worktreePath
@@ -38,12 +34,6 @@ func issuesDirFor(worktreePath string) string {
 }
 
 func resolveIssuesDir(worktreePath string) string {
-	// A nested StateDirName subdirectory is the structural signature of the
-	// legacy dual-branch layout: collapsed worktrees never have that nested
-	// subdirectory by construction. Check for it first so a stray config.json
-	// that happens to sit at the worktree root (e.g. an accidental copy) can't
-	// be mistaken for an already-collapsed layout and suppress the "run
-	// arm bootstrap" refusal that unmigrated layouts must get.
 	nestedStateDir := filepath.Join(worktreePath, StateDirName)
 	if info, err := adapters.Stat(nestedStateDir); err == nil && info != nil && info.IsDir() {
 		return nestedStateDir
@@ -67,7 +57,6 @@ func isGitWorktree(path string) (bool, error) {
 	if info == nil {
 		return false, nil
 	}
-	// If .git is not a directory, it's a worktree
 	return !info.IsDir(), nil
 }
 
@@ -88,22 +77,16 @@ func resolveParentRepoFromWorktree(worktreePath string) (string, error) {
 	gitdirPath := strings.TrimPrefix(line, "gitdir: ")
 	gitdirPath = strings.TrimSpace(gitdirPath)
 
-	// gitdirPath typically points to .git/worktrees/<name>
-	// We need to find the parent repo root, which is the directory containing the actual .git directory
-	// Go up directories until we find a directory that contains a .git directory (the parent repo's .git)
 	current := gitdirPath
 	for {
 		parent := filepath.Dir(current)
 		if parent == current {
-			// reached filesystem root without finding parent repo
 			return "", fmt.Errorf("could not find parent repo root from gitdir: %s", gitdirPath)
 		}
 
-		// Check if parent/.git exists (the actual .git directory of the parent repo)
 		potentialGitDir := filepath.Join(parent, ".git")
 		info, err := adapters.Stat(potentialGitDir)
 		if err == nil && info != nil {
-			// Found the parent repo's .git directory, so parent is the repo root
 			return parent, nil
 		}
 
