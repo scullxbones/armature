@@ -110,7 +110,7 @@ func GitInitMain(dir string, extraEnv ...string) error {
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
 	}, extraEnv...)
-	env := overlayEnv(os.Environ(), isolated)
+	env := overlayEnv(stripGitOverrideEnv(os.Environ()), isolated)
 	initCmd := exec.CommandContext(context.Background(), "git", "init", dir) //nolint:gosec // G204: "git" is constant
 	initCmd.Env = env
 	if out, err := initCmd.CombinedOutput(); err != nil {

@@ -53,6 +53,58 @@ func TestNonInteractiveGitCommand(t *testing.T) {
 	}
 }
 
+func TestGitInitMainIgnoresInheritedGITDir(t *testing.T) {
+	other := t.TempDir()
+	otherInit := exec.CommandContext(context.Background(), "git", "init", other)
+	otherInit.Env = overlayEnv(stripGitOverrideEnv(os.Environ()), []string{
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+	})
+	if out, err := otherInit.CombinedOutput(); err != nil {
+		t.Fatalf("git init other: %v: %s", err, out)
+	}
+	marker := filepath.Join(other, "KEEP")
+	if err := os.WriteFile(marker, []byte("untouched"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	headBefore, err := os.ReadFile(filepath.Join(other, ".git", "HEAD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("GIT_DIR", filepath.Join(other, ".git"))
+	dir := t.TempDir()
+	if err := GitInitMain(dir); err != nil {
+		t.Fatalf("GitInitMain: %v", err)
+	}
+
+	head, err := os.ReadFile(filepath.Join(dir, ".git", "HEAD"))
+	if err != nil {
+		t.Fatalf("expected %s to be initialized: %v", dir, err)
+	}
+	if !strings.Contains(string(head), "refs/heads/main") {
+		t.Fatalf("initialized HEAD = %q, want refs/heads/main", head)
+	}
+
+	headAfter, err := os.ReadFile(filepath.Join(other, ".git", "HEAD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(headAfter) != string(headBefore) {
+		t.Fatalf("other repo HEAD changed: %q -> %q", headBefore, headAfter)
+	}
+	keep, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(keep) != "untouched" {
+		t.Fatalf("other worktree changed: %q", keep)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "KEEP")); !os.IsNotExist(err) {
+		t.Fatal("GitInitMain used GIT_DIR's worktree instead of dir")
+	}
+}
+
 func TestGitInitMainIgnoresGlobalInitTemplateDir(t *testing.T) {
 	template := t.TempDir()
 	hooks := filepath.Join(template, "hooks")
