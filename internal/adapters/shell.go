@@ -50,7 +50,6 @@ func RunProcessWithEnv(ctx context.Context, workdir string, cmdArgs []string, ex
 	}
 
 	if err := cmd.Run(); err != nil {
-		// Distinguish context-caused failures from ordinary exit errors.
 		ctxErr := ctx.Err()
 		if ctxErr != nil {
 			return ProcessTimeout, ctxErr
@@ -88,13 +87,10 @@ func GitLog(repoPath string, args ...string) (string, error) {
 	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: "git" is constant; args are internal
 	out, err := cmd.Output()
 	if err != nil {
-		// Not a git repo or no commits — return empty string
 		return "", nil
 	}
 	return string(out), nil
 }
-
-// ===== Hook Execution (from hooks/runner.go) =====
 
 // HookInput is the JSON input passed to a hook script.
 type HookInput struct {
