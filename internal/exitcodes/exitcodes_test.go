@@ -55,7 +55,6 @@ func TestExitCodeDistinct(t *testing.T) {
 
 func TestExitCodeInt(t *testing.T) {
 	t.Parallel()
-	// Verify Code.Int() returns the integer value.
 	if exitcodes.ExitSuccess.Int() != 0 {
 		t.Errorf("ExitSuccess.Int() expected 0, got %d", exitcodes.ExitSuccess.Int())
 	}

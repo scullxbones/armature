@@ -16,7 +16,47 @@ import (
 	"github.com/scullxbones/armature/internal/filelock"
 )
 
-// ===== Log File Operations (from ops/log.go) =====
+func closeOrKeep(errp *error, c io.Closer) {
+	if cerr := c.Close(); cerr != nil && *errp == nil {
+		*errp = cerr
+	}
+}
+
+type forcedClose struct {
+	io.Closer
+	err error
+}
+
+func (f forcedClose) Close() error {
+	cerr := f.Closer.Close()
+	if f.err != nil {
+		return f.err
+	}
+	return cerr
+}
+
+func closeUnlessCommitted(committed bool, errp *error, c io.Closer) {
+	if committed {
+		var ignored error
+		closeOrKeep(&ignored, c)
+		return
+	}
+	closeOrKeep(errp, c)
+}
+
+func closeOrKeepErr(primary error, c io.Closer) error {
+	if cerr := c.Close(); cerr != nil {
+		return errors.Join(primary, cerr)
+	}
+	return primary
+}
+
+func removeOrKeepErr(primary error, path string) error {
+	if rerr := os.Remove(path); rerr != nil && !os.IsNotExist(rerr) {
+		return errors.Join(primary, rerr)
+	}
+	return primary
+}
 
 // ListLogFiles finds all *.log files in the opsDir directory.
 // Returns their absolute paths.
@@ -43,7 +83,8 @@ func ListLogFiles(opsDir string) ([]string, error) {
 // protocol (see Append). Construct one fresh per call site with
 // NewAppendLog; it holds no state beyond the target path.
 type AppendLog struct {
-	Path string
+	Path     string
+	closeErr error
 }
 
 // NewAppendLog constructs an AppendLog for the given log file path.
@@ -76,7 +117,7 @@ func (a *AppendLog) Append(buf []byte) error {
 // without a TOCTOU gap versus this file's next append. A nil proceed always
 // writes. wrote is false when the call skipped (empty buf, recovered exact
 // retry, or proceed returned false).
-func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (bool, error) {
+func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (wrote bool, err error) {
 	logPath := a.Path
 	if len(buf) == 0 {
 		return false, nil
@@ -92,13 +133,14 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (bool, er
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = lock.Close() }() //nolint:errcheck // close error in defer not actionable
+	committed := false
+	defer func() { closeUnlessCommitted(committed, &err, forcedClose{Closer: lock, err: a.closeErr}) }()
 
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return false, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
+	defer func() { closeUnlessCommitted(committed, &err, forcedClose{Closer: f, err: a.closeErr}) }()
 
 	markerPath := metaBase + pendingMarkerSuffix
 	retry, err := recoverPendingAppend(f, markerPath, buf)
@@ -106,6 +148,7 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (bool, er
 		return false, err
 	}
 	if retry {
+		committed = true
 		return false, nil
 	}
 
@@ -134,10 +177,6 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (bool, er
 		wasTorn = tail[0] != '\n'
 	}
 
-	// Only a torn tail is eligible for content-based dedup. A newline-
-	// terminated final record was already committed by an unrelated completed
-	// call, so an identical record after it must be preserved. Complete retry
-	// detection is handled above using the marker's exact byte range.
 	duplicate := false
 	if wasTorn {
 		duplicate, err = lastRecordMatches(f, info.Size(), firstLine)
@@ -174,20 +213,19 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (bool, er
 	if err := syncDir(filepath.Dir(markerPath)); err != nil {
 		return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
 	}
+	committed = true
 	return true, nil
 }
 
-// pendingMarkerSuffix names the sidecar file that records the record
-// currently being appended, so a crash between the marker write and log
-// durability can be recognized as a retry on the next call. See
-// AppendLog.Append for the reasoning.
 const pendingMarkerSuffix = ".pending"
 
-// appendMetaSubdir holds lock and pending-marker sidecar files for
-// AppendLog.Append, kept out of the log's own directory so directory
-// listings of ops files (which may match log names by substring, e.g. a
-// slot suffix) never pick up a sidecar file instead of the log itself.
-const appendMetaSubdir = ".arm-append-meta"
+type appendSidecarDir string
+
+const appendSidecarDirName appendSidecarDir = ".arm-append-meta"
+
+func sidecarDirBesideLog(logPath string) string {
+	return filepath.Join(filepath.Dir(logPath), string(appendSidecarDirName))
+}
 
 // OpsGitignore is the ignore body `arm bootstrap` writes into the ops worktree
 // .gitignore (via ops.GenerateOpsGitignore, which prefixes scaffolding-version).
@@ -210,12 +248,11 @@ hooks/*.sh.template
 
 # Lock and pending-marker sidecar files for AppendRawLines. Never commit;
 # these are ephemeral, worker-local coordination files, not ops state.
-**/` + appendMetaSubdir + `/
+**/` + string(appendSidecarDirName) + `/
 `
 
-// appendMetaDir returns (creating if needed) the sidecar directory for logPath.
 func appendMetaDir(logPath string) (string, error) {
-	dir := filepath.Join(filepath.Dir(logPath), appendMetaSubdir)
+	dir := sidecarDirBesideLog(logPath)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create append metadata dir %s: %w", dir, err)
 	}
@@ -233,13 +270,12 @@ func lockLog(logPath string) (*os.File, error) {
 		return nil, fmt.Errorf("open log lock %s: %w", logPath, err)
 	}
 	if err := filelock.Lock(lock); err != nil {
-		_ = lock.Close() //nolint:errcheck // cleanup on error path
-		return nil, fmt.Errorf("lock log %s: %w", logPath, err)
+		return nil, closeOrKeepErr(fmt.Errorf("lock log %s: %w", logPath, err), lock)
 	}
 	return lock, nil
 }
 
-func writePendingMarker(path string, marker pendingAppend) error {
+func writePendingMarker(path string, marker pendingAppend) (err error) {
 	data, err := json.Marshal(marker)
 	if err != nil {
 		return fmt.Errorf("marshal pending marker: %w", err)
@@ -249,18 +285,19 @@ func writePendingMarker(path string, marker pendingAppend) error {
 		return fmt.Errorf("write pending marker %s: %w", path, err)
 	}
 	tmpPath := f.Name()
-	defer func() { _ = os.Remove(tmpPath) }() //nolint:errcheck // best-effort cleanup
+	defer func() {
+		if rerr := os.Remove(tmpPath); rerr != nil && !os.IsNotExist(rerr) && err == nil {
+			err = rerr
+		}
+	}()
 	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close() //nolint:errcheck // cleanup on error path
-		return fmt.Errorf("chmod pending marker %s: %w", path, err)
+		return closeOrKeepErr(fmt.Errorf("chmod pending marker %s: %w", path, err), f)
 	}
 	if _, err := f.Write(data); err != nil {
-		_ = f.Close() //nolint:errcheck // cleanup on error path
-		return fmt.Errorf("write pending marker %s: %w", path, err)
+		return closeOrKeepErr(fmt.Errorf("write pending marker %s: %w", path, err), f)
 	}
 	if err := f.Sync(); err != nil {
-		_ = f.Close() //nolint:errcheck // cleanup on error path
-		return fmt.Errorf("sync pending marker %s: %w", path, err)
+		return closeOrKeepErr(fmt.Errorf("sync pending marker %s: %w", path, err), f)
 	}
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("close pending marker %s: %w", path, err)
@@ -274,18 +311,21 @@ func writePendingMarker(path string, marker pendingAppend) error {
 	return nil
 }
 
-func syncDir(path string) error {
+func syncDir(path string) (err error) {
 	dir, err := os.Open(path) //nolint:gosec // internal state path
 	if err != nil {
 		return err
 	}
-	defer func() { _ = dir.Close() }() //nolint:errcheck // close error in defer not actionable
-	return dir.Sync()
+	err = dir.Sync()
+	if err != nil {
+		closeOrKeep(&err, dir)
+		return err
+	}
+	var ignored error
+	closeOrKeep(&ignored, dir)
+	return nil
 }
 
-// recoverPendingAppend completes recovery for the exact append described by a
-// surviving marker. It returns true only when buf is that already-complete
-// append, making a duplicate retry safe to suppress.
 func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, error) {
 	data, err := os.ReadFile(markerPath) //nolint:gosec // internal state path
 	if os.IsNotExist(err) {
@@ -320,16 +360,6 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 	}
 	complete := available == int64(len(marker.Data))
 	if !complete {
-		// The marker's own append never finished durably (a torn write left a
-		// partial, invalid JSONL record on disk, or nothing at all). The
-		// prefix already on disk was just verified byte-for-byte against
-		// marker.Data, so the remaining suffix is known exactly — completing
-		// the write requires no guessing (unlike patching in an assumed
-		// delimiter). Finish it from the marker's own recorded bytes so the
-		// originally attempted op is never silently lost, then fall through
-		// to append the caller's buf: usually a distinct record, but if buf
-		// happens to equal marker.Data (an exact retry of the now-completed
-		// write), the equality check below suppresses it as a duplicate.
 		remaining := marker.Data[available:]
 		if len(remaining) > 0 {
 			if _, err := f.Write(remaining); err != nil {
@@ -345,11 +375,6 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 		if err := syncDir(filepath.Dir(markerPath)); err != nil {
 			return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
 		}
-		// Now that the marker's own append is durable, buf may turn out to be
-		// an exact retry of it (e.g. only the trailing delimiter was torn) —
-		// in which case it must be suppressed as a duplicate just like the
-		// already-complete case below. Otherwise buf is a distinct record and
-		// must still be appended by the normal path.
 		return bytes.Equal(marker.Data, buf), nil
 	}
 	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
@@ -361,9 +386,6 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 	return bytes.Equal(marker.Data, buf), nil
 }
 
-// lastRecordMatches reports whether the final record, whether newline-terminated
-// or not, is line. It scans backwards in bounded chunks so appending an op does
-// not load the whole append-only log into memory.
 func lastRecordMatches(f *os.File, size int64, line []byte) (bool, error) {
 	if size == 0 {
 		return false, nil
@@ -408,12 +430,12 @@ func lastRecordMatches(f *os.File, size int64, line []byte) (bool, error) {
 }
 
 // ReadLogFromOffset reads lines starting from a byte offset.
-func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
+func ReadLogFromOffset(logPath string, offset int64) (lines [][]byte, err error) {
 	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
+	defer func() { closeOrKeep(&err, f) }()
 
 	if offset > 0 {
 		if _, err := f.Seek(offset, 0); err != nil {
@@ -421,7 +443,6 @@ func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
 		}
 	}
 
-	var lines [][]byte
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	for scanner.Scan() {
@@ -431,7 +452,8 @@ func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
 		}
 		lines = append(lines, append([]byte{}, line...))
 	}
-	return lines, scanner.Err()
+	err = scanner.Err()
+	return lines, err
 }
 
 // LineWithOffset represents a line from a log file and its ending byte offset.
@@ -442,12 +464,12 @@ type LineWithOffset struct {
 
 // ReadLogLinesWithOffsets reads lines starting from a byte offset and returns each line
 // with the byte offset where it ends (for checkpoint tracking).
-func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffset, error) {
+func ReadLogLinesWithOffsets(logPath string, startOffset int64) (lines []LineWithOffset, err error) {
 	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { _ = f.Close() }() //nolint:errcheck // close error in defer not actionable
+	defer func() { closeOrKeep(&err, f) }()
 
 	currentOffset := startOffset
 	if startOffset > 0 {
@@ -456,7 +478,6 @@ func ReadLogLinesWithOffsets(logPath string, startOffset int64) ([]LineWithOffse
 		}
 	}
 
-	var lines []LineWithOffset
 	reader := bufio.NewReaderSize(f, 1<<20)
 	for {
 		rawLine, err := reader.ReadBytes('\n')
@@ -492,8 +513,6 @@ func WorkerIDFromFilename(logPath string) string {
 	}
 	return name
 }
-
-// ===== Materialize State File Operations (from materialize/state.go) =====
 
 func writeJSONFile(path string, data any, kind string) error {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
@@ -551,8 +570,6 @@ func ReadIssuesDir(issuesDir string) ([]string, error) {
 	return issueIDs, nil
 }
 
-// ===== Checkpoint File Operations (from materialize/checkpoint.go) =====
-
 // WriteCheckpointJSON writes a JSON checkpoint to a file.
 func WriteCheckpointJSON(path string, data any) error {
 	return writeJSONFile(path, data, "checkpoint")
@@ -563,7 +580,7 @@ func LoadCheckpointJSON(path string, v any) error {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil // Return nil for missing checkpoint
+			return nil
 		}
 		return fmt.Errorf("read checkpoint: %w", err)
 	}
@@ -572,8 +589,6 @@ func LoadCheckpointJSON(path string, v any) error {
 	}
 	return nil
 }
-
-// ===== Manifest File Operations (from sources/manifest.go) =====
 
 // ReadManifestFile reads a manifest.json file from the given directory.
 // If the file does not exist, it returns nil, nil.
@@ -603,19 +618,15 @@ func WriteManifestFile(path string, data []byte) error {
 	tmpPath := tmpFile.Name()
 
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()    //nolint:errcheck,gosec // cleanup on error path
-		os.Remove(tmpPath) //nolint:errcheck,gosec // cleanup on error path
-		return fmt.Errorf("writing manifest temp file: %w", err)
+		return fmt.Errorf("writing manifest temp file: %w", removeOrKeepErr(closeOrKeepErr(err, tmpFile), tmpPath))
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath) //nolint:errcheck,gosec // cleanup on error path
-		return fmt.Errorf("closing manifest temp file: %w", err)
+		return fmt.Errorf("closing manifest temp file: %w", removeOrKeepErr(err, tmpPath))
 	}
 
 	dest := filepath.Join(path, "manifest.json")
 	if err := os.Rename(tmpPath, dest); err != nil {
-		os.Remove(tmpPath) //nolint:errcheck,gosec // cleanup on error path
-		return fmt.Errorf("renaming manifest temp file: %w", err)
+		return fmt.Errorf("renaming manifest temp file: %w", removeOrKeepErr(err, tmpPath))
 	}
 
 	return nil
@@ -648,8 +659,6 @@ func ReadCacheFile(path string, id string) ([]byte, error) {
 	return data, nil
 }
 
-// ===== Config File Operations (from config/config.go) =====
-
 // WriteConfigFile writes JSON config data to a file.
 func WriteConfigFile(path string, data any) error {
 	return writeJSONFile(path, data, "config")
@@ -661,8 +670,6 @@ func StatFile(path string) bool {
 	return err == nil
 }
 
-// ===== Plan File Operations (from decompose/plan.go) =====
-
 // ReadPlanFile reads a plan JSON file from the given path.
 func ReadPlanFile(path string) ([]byte, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
@@ -671,8 +678,6 @@ func ReadPlanFile(path string) ([]byte, error) {
 	}
 	return data, nil
 }
-
-// ===== Traceability Coverage Operations (from traceability/traceability.go) =====
 
 // WriteCoverageFile writes coverage data to a file (atomic write via temp file).
 func WriteCoverageFile(path string, data any) error {
@@ -701,8 +706,6 @@ func ReadCoverageFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-// ===== Glob Expansion (for scope validation) =====
-
 // ExpandGlobs expands a set of glob patterns and returns matching file paths.
 // Returns a map from issue ID to matching file paths.
 func ExpandGlobs(globs map[string][]string) map[string][]string {
@@ -727,8 +730,6 @@ func ExpandGlobs(globs map[string][]string) map[string][]string {
 	return result
 }
 
-// ===== Directory Operations (for state directories and ops directories) =====
-
 // MkdirAll creates directories recursively.
 func MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
@@ -746,8 +747,6 @@ func Stat(path string) (os.FileInfo, error) {
 	}
 	return info, nil
 }
-
-// ===== Generic File Read/Write (for packages that need raw I/O) =====
 
 // ReadFile reads the entire contents of a file.
 func ReadFile(path string) ([]byte, error) {

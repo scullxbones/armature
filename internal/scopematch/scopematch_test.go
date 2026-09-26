@@ -6,11 +6,6 @@ import (
 	"time"
 )
 
-// TestOverlaps_IgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7 verifies the
-// canonical implementation, added by LNGHZN-S10-T7 as the single source both
-// internal/claim and internal/validate delegate to, does not fall back to
-// "shares a containing/ancestor directory": two distinct files under the
-// same or a nested directory must not be reported as overlapping.
 func TestOverlaps_IgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
 	if Overlaps("docs/agents/quality-gates.md", "docs/use-cases.md") {
@@ -27,10 +22,6 @@ func TestOverlaps_IgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7(t *testing.T)
 	}
 }
 
-// TestOverlaps_StillMatchesGenuineOverlaps_REQ_LNGHZN_S10_T7 verifies that
-// removing directory-ancestry matching did not weaken genuine overlap
-// detection: identical paths, a glob matching a literal file, "**" spanning
-// directories, and a trailing-slash directory scope must all still overlap.
 func TestOverlaps_StillMatchesGenuineOverlaps_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
 	if !Overlaps("README.md", "README.md") {
@@ -50,13 +41,6 @@ func TestOverlaps_StillMatchesGenuineOverlaps_REQ_LNGHZN_S10_T7(t *testing.T) {
 	}
 }
 
-// TestOverlaps_GlobVsGlobIntersection_REQ_LNGHZN_S10_T7 verifies that
-// glob-vs-glob overlap is detected via pattern intersection, not just
-// glob-vs-literal containment: "src/auth/*.go" and "src/auth/login.*" both
-// match "src/auth/login.go" even though neither pattern matches the other's
-// literal string. Found by automated review on PR #102 as a correctness gap
-// in the T6 implementation — under-blocking here would let two claims with a
-// genuine glob-vs-glob conflict proceed concurrently.
 func TestOverlaps_GlobVsGlobIntersection_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
 	if !Overlaps("src/auth/*.go", "src/auth/login.*") {
@@ -67,11 +51,6 @@ func TestOverlaps_GlobVsGlobIntersection_REQ_LNGHZN_S10_T7(t *testing.T) {
 	}
 }
 
-// TestOverlaps_GlobVsGlobNoIntersection_REQ_LNGHZN_S10_T7 verifies the
-// glob-vs-glob over-approximation stays bounded: two globs whose literal
-// directory segments differ cannot possibly match a common path and must
-// still report no overlap, or "any two globs overlap" would recreate the
-// warning wall this whole line of work removed.
 func TestOverlaps_GlobVsGlobNoIntersection_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
 	if Overlaps("src/auth/*.go", "src/billing/*.go") {
@@ -82,12 +61,6 @@ func TestOverlaps_GlobVsGlobNoIntersection_REQ_LNGHZN_S10_T7(t *testing.T) {
 	}
 }
 
-// TestOverlaps_WildcardDirectoryScopeIncludesDescendants verifies that a
-// trailing-slash directory scope that also contains a wildcard (e.g.
-// "src/*/") still covers descendants of any matched directory. CleanScope
-// reports isDir, but throwing that flag away makes the segment matcher
-// require equal length, and Allows' descendant-prefix check is a literal
-// string prefix against "src/*/" — both miss src/auth/login.go.
 func TestOverlaps_WildcardDirectoryScopeIncludesDescendants(t *testing.T) {
 	t.Parallel()
 	if !Overlaps("src/*/", "src/auth/login.go") {
@@ -104,11 +77,6 @@ func TestOverlaps_WildcardDirectoryScopeIncludesDescendants(t *testing.T) {
 	}
 }
 
-// TestOverlaps_RepeatedDoublestarDoesNotHang verifies that a pair of
-// non-intersecting patterns with many "**" segments finishes in bounded
-// time. Naive suffix-slice recursion revisits the same (i, j) states
-// combinatorially; ten **/a repetitions already require hundreds of
-// millions of calls and can hang arm claim / arm validate.
 func TestOverlaps_RepeatedDoublestarDoesNotHang(t *testing.T) {
 	t.Parallel()
 	const reps = 10
@@ -132,11 +100,6 @@ func TestOverlaps_RepeatedDoublestarDoesNotHang(t *testing.T) {
 	}
 }
 
-// TestMatchPatternSegments_DoublestarBacktracking exercises the "**"
-// backtracking loops in matchPatternSegments directly (white-box, same
-// package) for both the a[0]=="**" and b[0]=="**" branches, including cases
-// where the loop finds a match partway through and cases where it exhausts
-// without finding one.
 func TestGlobPatternsMayIntersect_RootScope(t *testing.T) {
 	t.Parallel()
 	if !globPatternsMayIntersect(".", "src/foo.go") {
@@ -147,71 +110,62 @@ func TestGlobPatternsMayIntersect_RootScope(t *testing.T) {
 	}
 }
 
-func TestMatchPatternSegments_DoublestarBacktracking(t *testing.T) {
+func TestMemoizedSuffixIntersection_DoublestarBacktracking(t *testing.T) {
 	t.Parallel()
 
-	// a[0] == "**", trailing pattern matches after consuming some segments.
-	if !matchPatternSegments([]string{"**", "x"}, []string{"a", "b", "x"}) {
+	if !memoizedSuffixIntersection([]string{"**", "x"}, []string{"a", "b", "x"}) {
 		t.Fatal("** in a should backtrack to consume [a b] and match trailing x")
 	}
-	// a[0] == "**", no valid backtrack position matches.
-	if matchPatternSegments([]string{"**", "x"}, []string{"a", "b", "y"}) {
+	if memoizedSuffixIntersection([]string{"**", "x"}, []string{"a", "b", "y"}) {
 		t.Fatal("** in a should exhaust backtracking and report no match when trailing segment never matches")
 	}
-	// a == ["**"] alone (len(a)==1 short-circuit).
-	if !matchPatternSegments([]string{"**"}, []string{"anything", "at", "all"}) {
+	if !memoizedSuffixIntersection([]string{"**"}, []string{"anything", "at", "all"}) {
 		t.Fatal("a lone ** segment must match any remaining segments, including none")
 	}
-	if !matchPatternSegments([]string{"**"}, nil) {
+	if !memoizedSuffixIntersection([]string{"**"}, nil) {
 		t.Fatal("a lone ** segment must match zero remaining segments")
 	}
 
-	// b[0] == "**", symmetric to the above.
-	if !matchPatternSegments([]string{"a", "b", "x"}, []string{"**", "x"}) {
+	if !memoizedSuffixIntersection([]string{"a", "b", "x"}, []string{"**", "x"}) {
 		t.Fatal("** in b should backtrack to consume [a b] and match trailing x")
 	}
-	if matchPatternSegments([]string{"a", "b", "y"}, []string{"**", "x"}) {
+	if memoizedSuffixIntersection([]string{"a", "b", "y"}, []string{"**", "x"}) {
 		t.Fatal("** in b should exhaust backtracking and report no match when trailing segment never matches")
 	}
-	if !matchPatternSegments([]string{"anything", "at", "all"}, []string{"**"}) {
+	if !memoizedSuffixIntersection([]string{"anything", "at", "all"}, []string{"**"}) {
 		t.Fatal("a lone ** segment in b must match any remaining segments, including none")
 	}
-	if !matchPatternSegments(nil, []string{"**"}) {
+	if !memoizedSuffixIntersection(nil, []string{"**"}) {
 		t.Fatal("a lone ** segment in b must match zero remaining segments")
 	}
 
-	// Neither side has "**": differing lengths never match.
-	if matchPatternSegments([]string{"a", "b"}, []string{"a"}) {
+	if memoizedSuffixIntersection([]string{"a", "b"}, []string{"a"}) {
 		t.Fatal("differing segment counts without ** must not match")
 	}
 }
 
-// TestSegmentsCompatible_AllBranches exercises every branch of
-// segmentsCompatible directly: identical segments, literal-vs-literal
-// mismatch, wildcard-vs-literal in both directions (match and mismatch), and
-// wildcard-vs-wildcard (always conservatively compatible).
-func TestSegmentsCompatible_AllBranches(t *testing.T) {
+func TestConservativelyCompatibleSegments_AllBranches(t *testing.T) {
 	t.Parallel()
 
-	if !segmentsCompatible("x.go", "x.go") {
+	if !conservativelyCompatibleSegments("x.go", "x.go") {
 		t.Fatal("identical literal segments must be compatible")
 	}
-	if segmentsCompatible("a.go", "b.go") {
+	if conservativelyCompatibleSegments("a.go", "b.go") {
 		t.Fatal("distinct literal segments must not be compatible")
 	}
-	if !segmentsCompatible("*.go", "a.go") {
+	if !conservativelyCompatibleSegments("*.go", "a.go") {
 		t.Fatal("wildcard segment matching a literal segment must be compatible")
 	}
-	if segmentsCompatible("*.go", "a.py") {
+	if conservativelyCompatibleSegments("*.go", "a.py") {
 		t.Fatal("wildcard segment not matching a literal segment must not be compatible")
 	}
-	if !segmentsCompatible("a.go", "*.go") {
+	if !conservativelyCompatibleSegments("a.go", "*.go") {
 		t.Fatal("literal segment matched by a wildcard segment (args reversed) must be compatible")
 	}
-	if segmentsCompatible("a.py", "*.go") {
+	if conservativelyCompatibleSegments("a.py", "*.go") {
 		t.Fatal("literal segment not matched by a wildcard segment (args reversed) must not be compatible")
 	}
-	if !segmentsCompatible("*.go", "login.*") {
+	if !conservativelyCompatibleSegments("*.go", "login.*") {
 		t.Fatal("two wildcard segments must be conservatively treated as compatible")
 	}
 }
@@ -254,8 +208,6 @@ func TestAllows_TrailingSlashDirectoryScope(t *testing.T) {
 	if Allows([]string{"internal/"}, "other/foo.go") {
 		t.Fatal("expected trailing-slash directory scope to not cover unrelated path")
 	}
-	// Directory scope without trailing slash must not match by prefix
-	// alone (e.g. "internal" should not match "internal2/foo.go").
 	if Allows([]string{"internal"}, "internal2/foo.go") {
 		t.Fatal("expected exact directory entry without trailing slash to not match a differently-named sibling")
 	}

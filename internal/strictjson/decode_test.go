@@ -2,11 +2,6 @@ package strictjson
 
 import "testing"
 
-// TestDecode_AllowsUnknownFields guards against rejecting schema-valid
-// artifacts. The published schemas under docs/schemas/*.schema.json do not
-// set additionalProperties: false, so a plan, review bundle, or conformance
-// assessment carrying an extension/metadata field is schema-valid and must
-// decode successfully rather than fail at runtime.
 func TestDecode_AllowsUnknownFields(t *testing.T) {
 	t.Parallel()
 	type target struct {
