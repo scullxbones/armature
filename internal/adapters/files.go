@@ -193,7 +193,13 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (wrote bo
 
 const pendingMarkerSuffix = ".pending"
 
-const appendMetaSubdir = ".arm-append-meta"
+type appendSidecarDir string
+
+const appendSidecarDirName appendSidecarDir = ".arm-append-meta"
+
+func sidecarDirBesideLog(logPath string) string {
+	return filepath.Join(filepath.Dir(logPath), string(appendSidecarDirName))
+}
 
 // OpsGitignore is the ignore body `arm bootstrap` writes into the ops worktree
 // .gitignore (via ops.GenerateOpsGitignore, which prefixes scaffolding-version).
@@ -216,11 +222,11 @@ hooks/*.sh.template
 
 # Lock and pending-marker sidecar files for AppendRawLines. Never commit;
 # these are ephemeral, worker-local coordination files, not ops state.
-**/` + appendMetaSubdir + `/
+**/` + string(appendSidecarDirName) + `/
 `
 
 func appendMetaDir(logPath string) (string, error) {
-	dir := filepath.Join(filepath.Dir(logPath), appendMetaSubdir)
+	dir := sidecarDirBesideLog(logPath)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create append metadata dir %s: %w", dir, err)
 	}

@@ -28,7 +28,7 @@ import (
 // warning costs a reviewed `--force`, not silent concurrent writes.
 //
 // Directory scopes are rewritten to cleaned/** before matching (see
-// canonicalSegments) so descendant inclusion is a property of the pattern,
+// doublestarRewrittenSegments) so descendant inclusion is a property of the pattern,
 // not a parallel literal-prefix path that breaks once the directory itself
 // contains a wildcard (e.g. "src/*/"). Intersection is memoized on suffix
 // indexes so pairs of patterns with many "**" segments stay polynomial.
@@ -45,7 +45,7 @@ func Overlaps(a, b string) bool {
 	return globPatternsMayIntersect(a, b)
 }
 
-func canonicalSegments(raw string) []string {
+func doublestarRewrittenSegments(raw string) []string {
 	cleaned, isDir := CleanScope(raw)
 	if cleaned == "." {
 		return []string{"**"}
@@ -58,37 +58,37 @@ func canonicalSegments(raw string) []string {
 }
 
 func globPatternsMayIntersect(a, b string) bool {
-	segA := canonicalSegments(a)
-	segB := canonicalSegments(b)
+	segA := doublestarRewrittenSegments(a)
+	segB := doublestarRewrittenSegments(b)
 	if (len(segA) == 1 && segA[0] == "**") || (len(segB) == 1 && segB[0] == "**") {
 		return true
 	}
-	return matchPatternSegments(segA, segB)
+	return memoizedSuffixIntersection(segA, segB)
 }
 
-func matchPatternSegments(a, b []string) bool {
-	return matchPatternSegmentsAt(a, b, 0, 0, make(map[segmentKey]bool))
+func memoizedSuffixIntersection(a, b []string) bool {
+	return memoizedSuffixIntersectionAt(a, b, 0, 0, make(map[segmentKey]bool))
 }
 
 type segmentKey struct{ i, j int }
 
-func matchPatternSegmentsAt(a, b []string, i, j int, memo map[segmentKey]bool) bool {
+func memoizedSuffixIntersectionAt(a, b []string, i, j int, memo map[segmentKey]bool) bool {
 	k := segmentKey{i, j}
 	if v, ok := memo[k]; ok {
 		return v
 	}
-	result := computePatternSegments(a, b, i, j, memo)
+	result := computeSuffixIntersection(a, b, i, j, memo)
 	memo[k] = result
 	return result
 }
 
-func computePatternSegments(a, b []string, i, j int, memo map[segmentKey]bool) bool {
+func computeSuffixIntersection(a, b []string, i, j int, memo map[segmentKey]bool) bool {
 	if i < len(a) && a[i] == "**" {
 		if i+1 == len(a) {
 			return true
 		}
 		for t := j; t <= len(b); t++ {
-			if matchPatternSegmentsAt(a, b, i+1, t, memo) {
+			if memoizedSuffixIntersectionAt(a, b, i+1, t, memo) {
 				return true
 			}
 		}
@@ -99,7 +99,7 @@ func computePatternSegments(a, b []string, i, j int, memo map[segmentKey]bool) b
 			return true
 		}
 		for t := i; t <= len(a); t++ {
-			if matchPatternSegmentsAt(a, b, t, j+1, memo) {
+			if memoizedSuffixIntersectionAt(a, b, t, j+1, memo) {
 				return true
 			}
 		}
@@ -108,13 +108,13 @@ func computePatternSegments(a, b []string, i, j int, memo map[segmentKey]bool) b
 	if i == len(a) || j == len(b) {
 		return i == len(a) && j == len(b)
 	}
-	if !segmentsCompatible(a[i], b[j]) {
+	if !conservativelyCompatibleSegments(a[i], b[j]) {
 		return false
 	}
-	return matchPatternSegmentsAt(a, b, i+1, j+1, memo)
+	return memoizedSuffixIntersectionAt(a, b, i+1, j+1, memo)
 }
 
-func segmentsCompatible(s1, s2 string) bool {
+func conservativelyCompatibleSegments(s1, s2 string) bool {
 	if s1 == s2 {
 		return true
 	}
@@ -154,7 +154,7 @@ func Allows(scope []string, path string) bool {
 	cleanedPath := CleanRepoPath(path)
 	pathSegs := strings.Split(cleanedPath, "/")
 	for _, rawScope := range scope {
-		segs := canonicalSegments(rawScope)
+		segs := doublestarRewrittenSegments(rawScope)
 		if len(segs) == 1 && segs[0] == "**" {
 			return true
 		}
@@ -175,11 +175,11 @@ func Allows(scope []string, path string) bool {
 // including the annotation, so any exact-path matcher must strip it before
 // comparing against real file paths.
 func CleanScope(raw string) (string, bool) {
-	stripped := stripAnnotation(raw)
+	stripped := stripSpaceParenAnnotation(raw)
 	return CleanRepoPath(stripped), strings.HasSuffix(filepath.ToSlash(stripped), "/")
 }
 
-func stripAnnotation(glob string) string {
+func stripSpaceParenAnnotation(glob string) string {
 	if i := strings.LastIndex(glob, " ("); i >= 0 && strings.HasSuffix(glob, ")") {
 		return strings.TrimSpace(glob[:i])
 	}
