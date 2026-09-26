@@ -61,17 +61,20 @@ var allKnownPlatforms = []Platform{
 	PlatformClaude, PlatformCodex, PlatformAntigravity, PlatformDevin,
 }
 
-var verifiedSkills = map[Platform]bool{
-	PlatformClaude: true,
+type platformArtifacts struct {
+	skills, pluginMetadata, harnessHookConfig bool
 }
 
-var verifiedPluginMetadata = map[Platform]bool{
-	PlatformClaude: true,
+var verifiedArtifacts = map[Platform]platformArtifacts{
+	PlatformClaude: {skills: true, pluginMetadata: true, harnessHookConfig: true},
+	PlatformCodex:  {harnessHookConfig: true},
 }
 
-var verifiedHarnessHookConfig = map[Platform]bool{
-	PlatformClaude: true,
-	PlatformCodex:  true,
+func installOrUnsupported(verified bool) ActionKind {
+	if verified {
+		return ActionInstall
+	}
+	return ActionUnsupported
 }
 
 // DefaultPlatforms returns the verified default platform set.
@@ -79,7 +82,8 @@ var verifiedHarnessHookConfig = map[Platform]bool{
 func DefaultPlatforms() []Platform {
 	var result []Platform
 	for _, p := range allKnownPlatforms {
-		if verifiedSkills[p] || verifiedPluginMetadata[p] {
+		a := verifiedArtifacts[p]
+		if a.skills || a.pluginMetadata {
 			result = append(result, p)
 		}
 	}
@@ -108,27 +112,18 @@ func BuildPlan(req PlanRequest) (Plan, error) {
 
 	var rows []PlatformRow
 	for _, p := range platforms {
-		row := PlatformRow{Platform: p}
-
-		if verifiedSkills[p] {
-			row.Skills = ActionInstall
-		} else {
-			row.Skills = ActionUnsupported
-		}
-
-		if verifiedPluginMetadata[p] {
-			row.PluginMetadata = ActionInstall
-		} else {
-			row.PluginMetadata = ActionUnsupported
+		a := verifiedArtifacts[p]
+		row := PlatformRow{
+			Platform:       p,
+			Skills:         installOrUnsupported(a.skills),
+			PluginMetadata: installOrUnsupported(a.pluginMetadata),
 		}
 
 		switch {
 		case !req.WithHooks:
 			row.HarnessHookConfig = ActionSkip
-		case verifiedHarnessHookConfig[p]:
-			row.HarnessHookConfig = ActionInstall
 		default:
-			row.HarnessHookConfig = ActionUnsupported
+			row.HarnessHookConfig = installOrUnsupported(a.harnessHookConfig)
 		}
 
 		rows = append(rows, row)
