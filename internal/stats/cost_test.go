@@ -195,11 +195,11 @@ func TestUSDFromTokensUsesPerMillion(t *testing.T) {
 }
 
 func loadValidatedOps(opsDir string) ([]ops.Op, error) {
-	items, _, _, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	loaded, err := ops.LoadFromDirValidated(opsDir)
 	if err != nil {
 		return nil, err
 	}
-	return ops.ExtractOps(items), nil
+	return ops.ExtractOps(loaded.Items), nil
 }
 
 func TestLoadOpsAndRateFallbacks(t *testing.T) {

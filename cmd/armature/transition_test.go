@@ -35,7 +35,7 @@ func setupTransitionIdempotencyRepo(t *testing.T, issueID string) string {
 
 func transitionOpsForIssue(t *testing.T, repo, issueID string) []ops.Op {
 	t.Helper()
-	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
+	allOps, err := readAllOpsFromDir(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
 	require.NoError(t, err)
 	var out []ops.Op
 	for _, op := range allOps {
