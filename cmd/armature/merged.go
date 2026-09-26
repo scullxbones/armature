@@ -209,7 +209,7 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	if err != nil {
 		return worktreeSkipped, fmt.Errorf("read claim exclusion for %s: %w", issue.ID, err)
 	}
-	excludeFlock := blockingGitExcludeFlock{}
+	excludeFlock := gitDirFlock{}
 	if hasClaimExclusion {
 		var lockErr error
 		excludeFlock, lockErr = acquireBlockingGitExcludeFlock(repoPath)

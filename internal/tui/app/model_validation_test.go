@@ -13,6 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func loadDir(opsDir string) (items []ops.OpItem, offsets map[string]int64, warnings []string, err error) {
+	loaded, err := ops.LoadFromDirValidated(opsDir)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return loaded.Items, loaded.PhysicalEOF, loaded.Warnings, nil
+}
+
 func TestLoadFromDirWithOffsetsValidated_ExcludesCrossWorkerOps(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -48,7 +56,7 @@ func TestLoadFromDirWithOffsetsValidated_ExcludesCrossWorkerOps(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(mismatchLogPath, mismatchOp))
 
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	items, offsets, warnings, err := loadDir(opsDir)
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, warnings, "should have warning for mismatched op")
@@ -100,7 +108,7 @@ func TestLoadFromDirWithOffsetsValidated_ReturnsWarningsForMismatches(t *testing
 		require.NoError(t, ops.AppendOp(logPath, op))
 	}
 
-	items, _, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	items, _, warnings, err := loadDir(opsDir)
 	require.NoError(t, err)
 
 	assert.Len(t, warnings, 3, "should have warning for each mismatched op")
@@ -159,7 +167,7 @@ func TestTUIModel_MixedValidityLoadingCorrectly(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, validOp2))
 
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	items, offsets, warnings, err := loadDir(opsDir)
 	require.NoError(t, err)
 
 	assert.Len(t, warnings, 1, "should have exactly 1 warning for the mismatched op")
@@ -194,7 +202,7 @@ func TestTUIModel_EmptyOpsDir(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	items, offsets, warnings, err := loadDir(opsDir)
 	require.NoError(t, err)
 
 	assert.Empty(t, items, "empty ops dir should return no items")
