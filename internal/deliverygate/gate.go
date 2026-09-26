@@ -23,15 +23,6 @@ type GateResult struct {
 	CommitReference  CheckResult
 }
 
-// DeliveryGate evaluates a worktree against an issue.
-//
-// CommitReference and ScopeContainment share one (rangeBase, rangeHead)
-// pair. Worktree-first that is claimBase..HEAD; primary-branch fallback
-// isolates the complete landing that delivered the issue — an enclosing
-// merge's first-parent..M when a matching commit arrived via a 2+-parent
-// merge, otherwise first-parent..matching-SHA for a squash / single-parent
-// landing — so later unrelated commits on main/master are not attributed
-// to this issue.
 func DeliveryGate(worktreePath, issueID, baseCommit string, scope []string) *GateResult {
 	rng, commitRef := commitReferenceCheck(worktreePath, baseCommit, issueID)
 	return &GateResult{

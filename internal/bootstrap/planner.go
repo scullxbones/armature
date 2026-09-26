@@ -1,5 +1,4 @@
 // Package bootstrap provides the harness setup planner for arm bootstrap.
-// The planner is a pure functional module with no I/O.
 package bootstrap
 
 import (

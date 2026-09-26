@@ -1,34 +1,34 @@
 package harnesshook
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // ActivityEntry represents a single execution captured in the activity log.
 type ActivityEntry struct {
-	Command       string // The command that was executed
-	ExitCode      int    // The exit status of the command (only meaningful when ExitCodeKnown is true)
-	ExitCodeKnown bool   // Whether the harness reported an exit code for this command
-	OutputHead    string // First 1KB of output (or full output if shorter)
-	OutputTail    string // Last 1KB of output (or empty if total output is short)
-	OutputHash    string // SHA256 hash of full output for integrity checking
-	WorktreeHead  string // Worktree HEAD commit sha at execution time
-	Timestamp     string // RFC3339 UTC timestamp
+	Command       string
+	ExitCode      int
+	ExitCodeKnown bool
+	OutputHead    string
+	OutputTail    string
+	OutputHash    string
+	WorktreeHead  string
+	Timestamp     string
 }
 
 type TruncatedOutput struct {
-	Head string // First 1KB
-	Tail string // Last 1KB (empty if output was not truncated)
-	Hash string // Full output hash
+	Head string
+	Tail string
+	Hash string
 }
 
 const (
@@ -57,8 +57,6 @@ func truncateOutput(output []byte) TruncatedOutput {
 	}
 }
 
-// runeBoundaryAtOrBefore returns the largest index <= n that is not in the
-// middle of a UTF-8 multi-byte sequence.
 func runeBoundaryAtOrBefore(b []byte, n int) int {
 	if n >= len(b) {
 		return len(b)
@@ -69,8 +67,6 @@ func runeBoundaryAtOrBefore(b []byte, n int) int {
 	return n
 }
 
-// runeBoundaryAtOrAfter returns the smallest index >= n that is not in the
-// middle of a UTF-8 multi-byte sequence.
 func runeBoundaryAtOrAfter(b []byte, n int) int {
 	if n <= 0 {
 		return 0
@@ -91,29 +87,16 @@ func truncateCommand(command string) string {
 
 func getWorktreeHEAD(gitDir string) (string, error) {
 	headFile := filepath.Join(gitDir, "HEAD")
-	content, err := os.ReadFile(headFile) //nolint:gosec // G304: derived from trusted git directory
+	content, err := adapters.ReadFile(headFile)
 	if err != nil {
 		return "", fmt.Errorf("read HEAD: %w", err)
 	}
 
 	headRef := strings.TrimSpace(string(content))
-
 	if headRefLooksLikeSHA(headRef) {
 		return headRef, nil
 	}
-
-	if strings.HasPrefix(headRef, "ref: ") {
-		refPath := strings.TrimPrefix(headRef, "ref: ")
-		// Ref paths are relative to the git directory
-		refFilePath := filepath.Join(gitDir, refPath)
-		refContent, err := os.ReadFile(refFilePath) //nolint:gosec // G304: derived from ref in HEAD file
-		if err == nil {
-			return strings.TrimSpace(string(refContent)), nil
-		}
-		return fallbackGetHEAD(gitDir)
-	}
-
-	return headRef, nil
+	return fallbackGetHEAD(gitDir)
 }
 
 func headRefLooksLikeSHA(headRef string) bool {
@@ -122,8 +105,7 @@ func headRefLooksLikeSHA(headRef string) bool {
 }
 
 func fallbackGetHEAD(gitDir string) (string, error) {
-	//nolint:gosec // G204: git binary is constant, gitDir is internal, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
+	cmd := adapters.NonInteractiveGitCommand(gitDir, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
@@ -142,8 +124,7 @@ func isActivityLoggingDisabledByRepoConfig(gitDir string) bool {
 	if gitDir == "" {
 		return false
 	}
-	//nolint:gosec // G204: git binary is constant, gitDir/key are internal, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "config", "--local", "--bool", activityLoggingConfigKey)
+	cmd := adapters.NonInteractiveGitCommand(gitDir, "config", "--local", "--bool", activityLoggingConfigKey)
 	out, err := cmd.Output()
 	if err != nil {
 		return false
@@ -196,7 +177,9 @@ func AppendActivity(gitDir string, command string, exitCode int, exitCodeKnown b
 		return nil
 	}
 	defer func() {
-		_ = f.Close() //nolint:errcheck // closing log file, error is not actionable
+		if closeErr := f.Close(); closeErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: failed to close activity log: %v\n", closeErr)
+		}
 	}()
 
 	_, err = fmt.Fprintf(f, "%s\n", logLine)

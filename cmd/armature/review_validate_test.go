@@ -44,7 +44,7 @@ func prepareReviewValidateFixture(t *testing.T) (repo, bundleFile, validAssessme
 	require.NoError(t, err)
 
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "commit 1")
-	baseCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	baseCmd := newCmdInDir(repo, "rev-parse", "HEAD")
 	baseOut, err := baseCmd.Output()
 	require.NoError(t, err)
 	base := strings.TrimSpace(string(baseOut))
@@ -52,7 +52,7 @@ func prepareReviewValidateFixture(t *testing.T) (repo, bundleFile, validAssessme
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "git", "add", "impl.go")
 	run(t, repo, "git", "commit", "-m", "commit 2 — add implementation")
-	headCmd := newCmdInDir(repo, "git", "rev-parse", "HEAD")
+	headCmd := newCmdInDir(repo, "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
 	head := strings.TrimSpace(string(headOut))

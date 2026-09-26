@@ -133,20 +133,10 @@ func ParseRating(s string) (Rating, error) {
 	}
 }
 
-type citationKind uint8
-
-const (
-	citationEmpty citationKind = iota
-	citationFile
-	citationActivity
-	citationBoth
-)
-
 // Citation is a closed sum of file (diff) citations and activity-log citations.
 // Construct values with FileCitation or ActivityCitation; JSON still uses the
 // published assessment object shape.
 type Citation struct {
-	kind                 citationKind
 	path                 string
 	line                 int
 	column               int
@@ -163,11 +153,11 @@ type citationWire struct {
 }
 
 func FileCitation(path string, line, column int) Citation {
-	return Citation{kind: citationFile, path: path, line: line, column: column}
+	return Citation{path: path, line: line, column: column}
 }
 
 func ActivityCitation(entryID string) Citation {
-	return Citation{kind: citationActivity, activityEntryID: entryID}
+	return Citation{activityEntryID: entryID}
 }
 
 func (c Citation) Path() string                 { return c.path }
@@ -230,16 +220,6 @@ func (c *Citation) UnmarshalJSON(data []byte) error {
 		column:               w.Column,
 		activityEntryID:      w.ActivityEntryID,
 		activityEntryDetails: w.ActivityEntryDetails,
-	}
-	switch {
-	case c.path != "" && c.activityEntryID != "":
-		c.kind = citationBoth
-	case c.activityEntryID != "":
-		c.kind = citationActivity
-	case c.path != "":
-		c.kind = citationFile
-	default:
-		c.kind = citationEmpty
 	}
 	return nil
 }
@@ -304,9 +284,6 @@ func (cr CriterionResult) Valid() error {
 	if cr.Rationale == "" {
 		return fmt.Errorf("criterion result: missing rationale")
 	}
-	// Satisfied always needs at least one citation. missing_evidence can
-	// rescue the other three statuses, but it cannot manufacture a Green:
-	// dropping the last citation cannot leave status=satisfied.
 	if cr.Status == Satisfied && len(cr.Citations) == 0 {
 		return fmt.Errorf("criterion result %s: citations required for status %s", cr.ID, cr.Status)
 	}
