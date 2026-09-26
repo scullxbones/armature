@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 type TestRepo struct {
@@ -21,7 +23,9 @@ func NewTestRepo(t *testing.T) *TestRepo {
 
 	tmpDir := t.TempDir()
 
-	runCmd(tmpDir, "init", "-b", "main")
+	if err := adapters.GitInitMain(tmpDir); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
 
 	runCmd(tmpDir, "config", "user.email", "test@example.com")
 	runCmd(tmpDir, "config", "user.name", "Test User")

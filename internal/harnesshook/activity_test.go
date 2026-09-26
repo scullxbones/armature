@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -194,9 +195,44 @@ func initTestGitRepo(t *testing.T) string {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v failed: %s", args, out)
 	}
-	runGit("init", "-b", "main")
+	require.NoError(t, adapters.GitInitMain(dir))
 	runGit("commit", "--allow-empty", "-m", "initial")
 	return filepath.Join(dir, ".git")
+}
+
+func TestFallbackGetHEADAndKillSwitchIgnoreInheritedGITDir(t *testing.T) {
+	intended := initTestGitRepo(t)
+	other := initTestGitRepo(t)
+	otherWork := filepath.Dir(other)
+	cmd := exec.CommandContext(context.Background(), "git", "-C", otherWork, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "other")
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git commit failed: %s", out)
+
+	revParse := func(gitDir string) string {
+		t.Helper()
+		cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+	intendedSHA := revParse(intended)
+	otherSHA := revParse(other)
+	require.NotEqual(t, intendedSHA, otherSHA)
+
+	setGitConfigBool(t, intended, "true")
+	setGitConfigBool(t, other, "false")
+
+	t.Setenv("GIT_DIR", other)
+
+	gotSHA, err := fallbackGetHEAD(intended)
+	require.NoError(t, err)
+	assert.Equal(t, intendedSHA, gotSHA)
+
+	assert.True(t, isActivityLoggingDisabledByRepoConfig(intended))
 }
 
 func TestActivityRepoConfigKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T) {

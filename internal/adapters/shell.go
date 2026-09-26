@@ -78,8 +78,19 @@ func GitConfig(repoPath, key string) (string, error) {
 func NonInteractiveGitCommand(repoPath string, args ...string) *exec.Cmd {
 	fullArgs := append([]string{"-C", repoPath}, args...)
 	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: "git" is constant; args are internal
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
+	cmd.Env = append(stripGitOverrideEnv(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
 	return cmd
+}
+
+func GitInitMain(dir string) error {
+	if out, err := exec.CommandContext(context.Background(), "git", "init", dir).CombinedOutput(); err != nil {
+		return fmt.Errorf("git init: %w: %s", err, out)
+	}
+	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git symbolic-ref HEAD: %w: %s", err, out)
+	}
+	return nil
 }
 
 // GitLog runs git log with the given arguments and returns the output.

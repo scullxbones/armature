@@ -33,13 +33,17 @@ func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 }
 
 func TestNonInteractiveGitCommand(t *testing.T) {
-	t.Parallel()
+	t.Setenv("GIT_DIR", "/tmp/other.git")
+	t.Setenv("GIT_WORK_TREE", "/tmp/other")
+	t.Setenv("GIT_COMMON_DIR", "/tmp/other.git")
 	cmd := NonInteractiveGitCommand("/tmp", "version")
 	found := false
 	for _, e := range cmd.Env {
 		if strings.HasPrefix(e, "GIT_TERMINAL_PROMPT=") {
 			found = true
-			break
+		}
+		if strings.HasPrefix(e, "GIT_DIR=") || strings.HasPrefix(e, "GIT_WORK_TREE=") || strings.HasPrefix(e, "GIT_COMMON_DIR=") {
+			t.Fatalf("repo-selection env should be stripped, got %q", e)
 		}
 	}
 	if !found {
