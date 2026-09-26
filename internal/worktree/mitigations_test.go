@@ -93,3 +93,26 @@ func TestNormalizePath_NonexistentFallsBackToAbs_REQ_LNGHZN_S5_T3(t *testing.T) 
 	got := NormalizePath("relative/does-not-exist")
 	assert.True(t, filepath.IsAbs(got), "expected an absolute path, got %q", got)
 }
+
+func TestApplyMitigations_MissingRepoRootIsNoOp_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	missing := filepath.Join(t.TempDir(), "no-such-repo")
+	require.NoError(t, ApplyMitigations(missing, filepath.Join(missing, ".worktrees", "task-01")))
+	_, err := os.Stat(filepath.Join(missing, "go.work"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestApplyMitigations_RejectsEscapingGoWork_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	repoRoot := filepath.Join(parent, "repo")
+	require.NoError(t, os.Mkdir(repoRoot, 0o755))
+	outside := filepath.Join(parent, "go.work")
+	require.NoError(t, os.WriteFile(outside, []byte("go 1.26\n\nuse .\nuse ./.worktrees/task-01\n"), 0o644))
+	require.NoError(t, os.Symlink(outside, filepath.Join(repoRoot, "go.work")))
+	err := ApplyMitigations(repoRoot, filepath.Join(repoRoot, ".worktrees", "task-01"))
+	require.Error(t, err)
+
+	_, err = readFileInRoot(repoRoot, filepath.Join("..", "go.work"))
+	require.Error(t, err)
+}
