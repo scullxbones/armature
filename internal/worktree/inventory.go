@@ -59,16 +59,24 @@ func RegisteredPaths(repoPath string) ([]string, error) {
 // ResolveGitDir resolves the actual git directory for a linked or main
 // worktree. A linked worktree stores a relative or absolute gitdir pointer in
 // its .git file; the main worktree uses a .git directory directly.
-func ResolveGitDir(worktreePath string) (string, error) {
-	gitPath := filepath.Join(worktreePath, ".git")
-	info, err := os.Stat(gitPath)
+func ResolveGitDir(worktreePath string) (gitDir string, err error) {
+	root, err := os.OpenRoot(worktreePath)
+	if err != nil {
+		return "", fmt.Errorf("stat .git: %w", err)
+	}
+	defer func() {
+		if cerr := root.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	info, err := root.Stat(".git")
 	if err != nil {
 		return "", fmt.Errorf("stat .git: %w", err)
 	}
 	if info.IsDir() {
-		return gitPath, nil
+		return filepath.Join(worktreePath, ".git"), nil
 	}
-	data, err := os.ReadFile(gitPath) //nolint:gosec // path is the .git entry of a git worktree
+	data, err := root.ReadFile(".git")
 	if err != nil {
 		return "", fmt.Errorf("read .git file: %w", err)
 	}
@@ -76,7 +84,7 @@ func ResolveGitDir(worktreePath string) (string, error) {
 	if !strings.HasPrefix(line, "gitdir: ") {
 		return "", fmt.Errorf("unexpected .git file format: %s", line)
 	}
-	gitDir := strings.TrimPrefix(line, "gitdir: ")
+	gitDir = strings.TrimPrefix(line, "gitdir: ")
 	if !filepath.IsAbs(gitDir) {
 		gitDir = filepath.Join(worktreePath, gitDir)
 	}
@@ -88,16 +96,38 @@ func ResolveGitDir(worktreePath string) (string, error) {
 // closed so inventory consumers never silently downgrade a corrupted binding.
 func ReadBinding(gitDir string) (string, error) {
 	for _, name := range []string{"armature-issue-id", "armature-task-id"} {
-		path := filepath.Join(gitDir, name)
-		data, err := os.ReadFile(path) //nolint:gosec // path is derived from the resolved git directory
+		data, err := readFileInRoot(gitDir, name)
 		if err == nil {
 			return strings.TrimSpace(string(data)), nil
 		}
 		if !os.IsNotExist(err) {
-			return "", fmt.Errorf("read %s: %w", path, err)
+			return "", fmt.Errorf("read %s: %w", filepath.Join(gitDir, name), err)
 		}
 	}
 	return "", nil
+}
+
+func withRoot(dir string, fn func(*os.Root) error) (err error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := root.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	return fn(root)
+}
+
+func readFileInRoot(dir, name string) ([]byte, error) {
+	var data []byte
+	err := withRoot(dir, func(root *os.Root) error {
+		var readErr error
+		data, readErr = root.ReadFile(name)
+		return readErr
+	})
+	return data, err
 }
 
 // ListManaged returns canonical .worktrees entries and any non-main worktree
@@ -289,8 +319,7 @@ type porcelainBlock struct {
 }
 
 func listPorcelainBlocks(repoPath string) ([]porcelainBlock, error) {
-	// #nosec G204 - git and its arguments are controlled by Armature.
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain") // #nosec G204 - literal git; args built here
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
