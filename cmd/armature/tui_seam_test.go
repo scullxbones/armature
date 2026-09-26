@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Host command files that own an interactive TUI entrypoint. Construction
-// (tea.NewProgram / model New / WithScreens) lives in these files, not in
-// standalone *_tui.go companions.
 var requiredSeamWiring = map[string][]string{
 	"ready.go":       {"readytui.New", "tea.NewProgram"},
 	"stalereview.go": {"stalereview.New", "tea.NewProgram"},

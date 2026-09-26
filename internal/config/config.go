@@ -4,7 +4,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -86,7 +85,7 @@ func WriteConfig(path string, cfg Config) error {
 }
 
 func LoadConfig(path string) (Config, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path is the repo's config.json
+	data, err := adapters.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}

@@ -267,10 +267,6 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	if state == nil {
 		return fmt.Errorf("ApplyOpsSorted: state is nil")
 	}
-	return retractSortApplyRollup(state, proposed)
-}
-
-func retractSortApplyRollup(state *State, proposed []ops.Op) error {
 	state.RetractDerivedPromotions()
 	ordered := append([]ops.Op(nil), proposed...)
 	sortOpsByTimestamp(ordered)

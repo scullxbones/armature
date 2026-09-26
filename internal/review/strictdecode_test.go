@@ -68,8 +68,8 @@ func TestConformanceAssessmentRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "All decoders updated and tested",
 				Citations: []review.Citation{
-					{Path: "internal/decompose/plan.go", Line: 41},
-					{Path: "internal/review/types.go", Line: 54},
+					review.FileCitation("internal/decompose/plan.go", 41, 0),
+					review.FileCitation("internal/review/types.go", 54, 0),
 				},
 			},
 			{
@@ -77,8 +77,8 @@ func TestConformanceAssessmentRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Round-trip tests written for both packages",
 				Citations: []review.Citation{
-					{Path: "internal/decompose/strictdecode_test.go"},
-					{Path: "internal/review/strictdecode_test.go"},
+					review.FileCitation("internal/decompose/strictdecode_test.go", 0, 0),
+					review.FileCitation("internal/review/strictdecode_test.go", 0, 0),
 				},
 			},
 		},
@@ -192,8 +192,8 @@ func TestCriterionResultAllowsSchemaValidExtensionFieldsOnCitation_REQ_TOPTIER_S
 	err := json.Unmarshal([]byte(jsonStr), &result)
 	require.NoError(t, err, "schema-valid extension field on citation must not be rejected")
 	require.Len(t, result.Citations, 1)
-	assert.Equal(t, "internal/review/types.go", result.Citations[0].Path)
-	assert.Equal(t, 42, result.Citations[0].Line)
+	assert.Equal(t, "internal/review/types.go", result.Citations[0].Path())
+	assert.Equal(t, 42, result.Citations[0].Line())
 }
 
 func TestCriterionResultMissingStatusRejected_REQ_TOPTIER_S3_T3(t *testing.T) {

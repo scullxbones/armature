@@ -10,7 +10,6 @@ import (
 	"sort"
 )
 
-// validProjectTypes is the closed set documented in docs/configuration.md.
 var validProjectTypes = map[string]struct{}{
 	"go":      {},
 	"node":    {},
@@ -43,7 +42,6 @@ func StrictDecode(data []byte) (Config, error) {
 	var extra json.RawMessage
 	switch err := dec.Decode(&extra); {
 	case errors.Is(err, io.EOF):
-		// exactly one value
 	case err == nil:
 		return Config{}, fmt.Errorf("strict config decode: unexpected trailing JSON value")
 	default:

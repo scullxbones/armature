@@ -21,9 +21,6 @@ func TestDefaultPlatformsDoesNotIncludeUnverified(t *testing.T) {
 	assert.NotContains(t, platforms, bootstrap.PlatformAntigravity)
 }
 
-// TestDefaultPlatformsExcludesHooksOnlyPlatform pins that a platform with
-// verified hook config but no verified skills or plugin_metadata is excluded
-// from the default set (Codex is the current example).
 func TestDefaultPlatformsExcludesHooksOnlyPlatform(t *testing.T) {
 	t.Parallel()
 	platforms := bootstrap.DefaultPlatforms()
@@ -73,8 +70,6 @@ func TestBuildPlanWithHooks(t *testing.T) {
 	assert.Equal(t, bootstrap.ActionInstall, row.HarnessHookConfig)
 }
 
-// TestBuildPlanCodexRow exercises Codex, which has verified harness hook config
-// but no verified skills or plugin_metadata.
 func TestBuildPlanCodexRow(t *testing.T) {
 	t.Parallel()
 	req := bootstrap.PlanRequest{
@@ -109,8 +104,6 @@ func TestBuildPlanWithoutHooks(t *testing.T) {
 	assert.Equal(t, bootstrap.ActionSkip, row.HarnessHookConfig)
 }
 
-// TestHarnessArtifactResultIncludesAction verifies that HarnessArtifactResult
-// includes the Action field populated with the appropriate action value.
 func TestHarnessArtifactResultIncludesAction(t *testing.T) {
 	t.Parallel()
 	result := bootstrap.HarnessArtifactResult{
@@ -122,8 +115,6 @@ func TestHarnessArtifactResultIncludesAction(t *testing.T) {
 	assert.Equal(t, bootstrap.ActionInstall, result.Action)
 }
 
-// TestHarnessArtifactResultActionSkipped verifies the Action field is populated
-// for skipped artifacts.
 func TestHarnessArtifactResultActionSkipped(t *testing.T) {
 	t.Parallel()
 	result := bootstrap.HarnessArtifactResult{
@@ -135,8 +126,6 @@ func TestHarnessArtifactResultActionSkipped(t *testing.T) {
 	assert.Equal(t, bootstrap.ActionInstall, result.Action)
 }
 
-// TestHarnessArtifactResultActionUnsupported verifies the Action field is populated
-// for unsupported artifacts.
 func TestHarnessArtifactResultActionUnsupported(t *testing.T) {
 	t.Parallel()
 	result := bootstrap.HarnessArtifactResult{

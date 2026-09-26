@@ -182,7 +182,7 @@ func TestReviewRecordCommand_Success(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation is complete and tested.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -238,7 +238,7 @@ func TestReviewRecordCommand_WithCitation(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation verified.",
 				Citations: []review.Citation{
-					{Path: "internal/review/types.go", Line: 42},
+					review.FileCitation("internal/review/types.go", 42, 0),
 				},
 			},
 		},
@@ -293,7 +293,7 @@ func TestReviewRecordCommand_IsDuplicate(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation is complete and tested.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -354,7 +354,7 @@ func TestReviewRecordCommand_BundleValidatesCitationCoordinates(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation verified.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 9999},
+					review.FileCitation("impl.go", 9999, 0),
 				},
 			},
 		},
@@ -414,7 +414,7 @@ func TestReviewRecordCommand_ContractFingerprintMismatch(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "All requirements met.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -474,7 +474,7 @@ func TestReviewRecordCommand_BundleIDMismatch(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation verified.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -534,7 +534,7 @@ func TestReviewRecordCommand_DeliveryFingerprintMismatch(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation verified.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -594,7 +594,7 @@ func TestReviewRecordCommand_BundleContractFingerprintMismatch(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation verified.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -656,7 +656,7 @@ func TestReviewRecordCommand_BundleIssueMismatch(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation verified.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -718,7 +718,7 @@ func TestReviewRecordCommand_BundleIssueMatch(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "Implementation verified.",
 				Citations: []review.Citation{
-					{Path: "impl.go", Line: 1},
+					review.FileCitation("impl.go", 1, 0),
 				},
 			},
 		},
@@ -806,7 +806,7 @@ func TestReviewRecordCommand_AllowsUnknownBundleRootField_REQ_TOPTIER_S3(t *test
 		DeliveryFingerprint: "delivery",
 		Results: []review.CriterionResult{{
 			ID: "definition_of_done", Status: review.Satisfied, Rationale: "strict decoding is enforced",
-			Citations: []review.Citation{{Path: "impl.go", Line: 1}},
+			Citations: []review.Citation{review.FileCitation("impl.go", 1, 0)},
 		}},
 	}
 	assessmentJSON, err := json.Marshal(assessment)

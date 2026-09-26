@@ -157,6 +157,9 @@ func isActivityLoggingDisabledByRepoConfig(gitDir string) bool {
 // armature.disable-activity-logging.
 // Fails open on any capture error with stderr warning.
 func AppendActivity(gitDir string, command string, exitCode int, exitCodeKnown bool, output []byte) error {
+	if strings.TrimSpace(command) == "" {
+		return nil
+	}
 	if !shouldCaptureActivity(gitDir) {
 		return nil
 	}
@@ -181,6 +184,9 @@ func AppendActivity(gitDir string, command string, exitCode int, exitCodeKnown b
 	}
 
 	logLine := formatActivityLogEntry(entry)
+	if logLine == "" {
+		return nil
+	}
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
 	//nolint:gosec // G304: logPath is derived from trusted git directory
@@ -214,6 +220,9 @@ type activityLogLine struct {
 }
 
 func formatActivityLogEntry(entry ActivityEntry) string {
+	if strings.TrimSpace(entry.Command) == "" {
+		return ""
+	}
 	line := activityLogLine{
 		Timestamp:     entry.Timestamp,
 		Command:       entry.Command,
@@ -233,6 +242,11 @@ func formatActivityLogEntry(entry ActivityEntry) string {
 }
 
 func fallbackActivityJSONL(entry ActivityEntry) string {
-	return fmt.Sprintf(`{"timestamp":%q,"command":"","exit_code":0,"exit_code_known":false,"head_sha":%q,"output_hash":""}`,
-		entry.Timestamp, entry.WorktreeHead)
+	if strings.TrimSpace(entry.Command) == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		`{"timestamp":%q,"command":%q,"exit_code":%d,"exit_code_known":%t,"head_sha":%q,"output_hash":%q}`,
+		entry.Timestamp, entry.Command, entry.ExitCode, entry.ExitCodeKnown, entry.WorktreeHead, entry.OutputHash,
+	)
 }

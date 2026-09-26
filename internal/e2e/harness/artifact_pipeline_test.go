@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3 drives the production artifact
-// boundaries end to end: strict plan parsing by dag apply, materialized context
-// assembly by render-context, and strict assessment/bundle parsing by review record.
 func TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -76,12 +73,12 @@ func TestArtifactPipelineUsesCLI_REQ_TOPTIER_S3_T3(t *testing.T) {
 			ID:        "definition_of_done",
 			Status:    review.Satisfied,
 			Rationale: "The real CLI artifact boundaries completed successfully.",
-			Citations: []review.Citation{{Path: "pipeline.go", Line: 1}},
+			Citations: []review.Citation{review.FileCitation("pipeline.go", 1, 0)},
 		}, {
 			ID:        "acceptance[0]",
 			Status:    review.Satisfied,
 			Rationale: "The declared test-passes criterion was met by the pipeline.",
-			Citations: []review.Citation{{Path: "pipeline.go", Line: 1}},
+			Citations: []review.Citation{review.FileCitation("pipeline.go", 1, 0)},
 		}},
 	}
 	assessmentPath := filepath.Join(h.TempDir, "assessment.json")
