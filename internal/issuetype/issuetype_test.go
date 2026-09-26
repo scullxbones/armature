@@ -40,40 +40,33 @@ func TestIsLegalHierarchy(t *testing.T) {
 		child    string
 		expected bool
 	}{
-		// Epic can contain story, feature, task, bug
 		{"epic->story", "epic", "story", true},
 		{"epic->feature", "epic", "feature", true},
 		{"epic->task", "epic", "task", true},
 		{"epic->bug", "epic", "bug", true},
 		{"epic->epic", "epic", "epic", false},
 
-		// Story can contain task, feature, bug
 		{"story->task", "story", "task", true},
 		{"story->feature", "story", "feature", true},
 		{"story->bug", "story", "bug", true},
 		{"story->story", "story", "story", false},
 		{"story->epic", "story", "epic", false},
 
-		// Feature can contain task, bug
 		{"feature->task", "feature", "task", true},
 		{"feature->bug", "feature", "bug", true},
 		{"feature->story", "feature", "story", false},
 		{"feature->epic", "feature", "epic", false},
 		{"feature->feature", "feature", "feature", false},
 
-		// Task cannot contain anything
 		{"task->task", "task", "task", false},
 		{"task->epic", "task", "epic", false},
 		{"task->story", "task", "story", false},
 		{"task->bug", "task", "bug", false},
 
-		// Bug cannot contain anything
 		{"bug->bug", "bug", "bug", false},
 		{"bug->epic", "bug", "epic", false},
 		{"bug->task", "bug", "task", false},
 
-		// Invalid parents: previously unknown parent types returned true via default: return true.
-		// IsLegalHierarchy now returns false for unknown parents (intentional hardening).
 		{"invalid->task", "invalid", "task", false},
 		{"epic->invalid", "epic", "invalid", false},
 		{"invalid->invalid", "invalid", "invalid", false},
@@ -97,12 +90,10 @@ func TestIsReadyEligible(t *testing.T) {
 		t        string
 		expected bool
 	}{
-		// task, feature, story, and bug are eligible for the ready queue
 		{"task is ready-eligible", "task", true},
 		{"feature is ready-eligible", "feature", true},
 		{"story is ready-eligible", "story", true},
 		{"bug is ready-eligible", "bug", true},
-		// epic is not eligible
 		{"epic not ready-eligible", "epic", false},
 		{"invalid not ready-eligible", "invalid", false},
 		{"empty not ready-eligible", "", false},
@@ -123,7 +114,6 @@ func TestAll(t *testing.T) {
 	t.Parallel()
 	result := All()
 
-	// Check that all expected types are present
 	expected := map[string]bool{
 		"epic":    true,
 		"story":   true,
