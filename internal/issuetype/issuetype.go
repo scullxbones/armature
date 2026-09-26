@@ -15,15 +15,6 @@ func IsValid(t string) bool {
 //	feature → task, bug
 //	task    → (nothing)
 //	bug     → (nothing)
-//
-// Changes from the previous inline validHierarchy switch in validate.go:
-//   - epic→feature is now permitted (previously epic only allowed story, task, bug)
-//   - story→feature is now permitted to match the planned vocabulary
-//   - feature as a parent type now explicitly permits task and bug children
-//     (previously feature fell into the default: return true branch, making
-//     feature→anything silently pass, including illegal combinations)
-//   - unknown parent or child types now return false (hardening; previously an
-//     unknown parent type fell through to default: return true)
 func IsLegalHierarchy(parent, child string) bool {
 	if _, ok := validTypes[parent]; !ok {
 		return false
@@ -56,7 +47,6 @@ func All() []string {
 	return append([]string(nil), allTypes...)
 }
 
-// validTypes is the complete set of accepted issue types.
 var validTypes = map[string]bool{
 	"epic":    true,
 	"story":   true,
@@ -65,10 +55,8 @@ var validTypes = map[string]bool{
 	"bug":     true,
 }
 
-// allTypes is the ordered list of valid types (by hierarchy level, not alphabetically).
 var allTypes = []string{"epic", "story", "feature", "task", "bug"}
 
-// hierarchy defines which parent types may contain which child types.
 var hierarchy = map[string]map[string]bool{
 	"epic":    {"story": true, "feature": true, "task": true, "bug": true},
 	"story":   {"feature": true, "task": true, "bug": true},
@@ -77,7 +65,6 @@ var hierarchy = map[string]map[string]bool{
 	"bug":     {},
 }
 
-// readyEligible defines which types can appear in the ready queue.
 var readyEligible = map[string]bool{
 	"task":    true,
 	"feature": true,
@@ -85,7 +72,6 @@ var readyEligible = map[string]bool{
 	"bug":     true,
 }
 
-// requiredFields defines the canonical required fields for each issue type.
 var requiredFields = map[string][]string{
 	"task": {"scope", "acceptance", "definition_of_done"},
 }

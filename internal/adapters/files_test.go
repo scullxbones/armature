@@ -33,10 +33,6 @@ func TestAppendLogTornWriteRecovery_REQ_ARCHIMP_S19_T2(t *testing.T) {
 	line := []byte(`{"op":"scope-rename"}`)
 	retry := append(append([]byte{}, line...), '\n')
 
-	// Only a torn (non-newline-terminated) final record is ambiguous enough to
-	// treat as an interrupted write worth deduping: it has no successful
-	// delimiter, so it cannot yet be a legitimately persisted op that a
-	// concurrent caller intentionally repeated.
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 
@@ -51,13 +47,6 @@ func TestAppendLogTornWriteRecovery_REQ_ARCHIMP_S19_T2(t *testing.T) {
 	require.Equal(t, append(line, '\n'), contents)
 }
 
-// TestAppendLog_PreservesLegitimateRepeatedCompleteRecord guards against
-// silently losing history when a legitimate append happens to repeat the same
-// serialized bytes as the current final record (e.g. two identical notes from
-// the same worker within the same nowEpoch() second). Unlike a torn tail, the
-// prior record here is already newline-delimited, so it was already
-// successfully persisted: appending an identical record afterward is
-// indistinguishable from a genuine second op and must not be dropped.
 func TestAppendLog_PreservesLegitimateRepeatedCompleteRecord(t *testing.T) {
 	t.Parallel()
 	line := []byte(`{"op":"scope-rename"}`)
@@ -84,8 +73,6 @@ func TestAppendLog_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *testing.
 	repeat := append(append([]byte{}, line...), '\n')
 	require.NoError(t, os.WriteFile(logPath, initial, 0o600))
 
-	// Simulate a crash after the marker is durable but before its append wrote
-	// any bytes. The prior committed record is coincidentally identical.
 	require.NoError(t, SimulatePendingMarker(logPath, int64(len(initial)), repeat))
 	require.NoError(t, NewAppendLog(logPath).Append(repeat))
 
@@ -94,14 +81,6 @@ func TestAppendLog_PendingMarkerBeforeWriteDoesNotDropRepeatedRecord(t *testing.
 	require.Equal(t, [][]byte{line, line}, lines)
 }
 
-// TestAppendLog_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
-// reproduces a crash that lands after the marker is written and after the
-// JSON bytes are appended, but before the trailing '\n' delimiter. Before the
-// fix, recoverPendingAppend patched the missing '\n' into the log but never
-// recomputed its completeness verdict against the full marker buffer, so it
-// always reported the retry as unrecognized and the full record was appended
-// a second time. For non-idempotent ops (e.g. scope renames) that meant the
-// op replayed twice during materialization.
 func TestAppendLog_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -109,9 +88,6 @@ func TestAppendLog_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *tes
 	line := []byte(`{"op":"scope-rename"}`)
 	buf := append(append([]byte{}, line...), '\n')
 
-	// Simulate the crash state directly: the log contains every byte of buf
-	// except the final delimiter, and a surviving marker describes the full
-	// (delimited) buf as the pending append starting at offset 0.
 	require.NoError(t, os.WriteFile(logPath, buf[:len(buf)-1], 0o600))
 	require.NoError(t, SimulatePendingMarker(logPath, 0, buf))
 
@@ -125,13 +101,6 @@ func TestAppendLog_PendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *tes
 	require.Equal(t, buf, contents)
 }
 
-// TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
-// covers the same delimiter-only-torn crash, but for a multi-op buffer of the
-// kind ops.AppendOps writes ("op1\nop2\n"). Per-record dedup in AppendLog.Append
-// (wasTorn/lastRecordMatches) only ever compares the buffer's first line
-// against the log's last record, so it cannot recognize a multi-line buffer
-// as a duplicate; recovery must recognize the retry itself by comparing the
-// whole marker buffer.
 func TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -153,16 +122,6 @@ func TestAppendLog_MultiOpPendingMarkerWithOnlyDelimiterMissing_DoesNotDuplicate
 	require.Equal(t, buf, contents)
 }
 
-// TestAppendLog_TornWriteWithDifferentRetryCompletesPendingRecord_REQ_TOPTIER_S4_PRFIX
-// simulates a crash that left a partial (torn) write of one record on disk,
-// followed by a call to append a *different* buffer (not a retry of the
-// original). The marker's prefix-on-disk was already verified byte-for-byte
-// against marker.Data before this path runs, so the remaining suffix is known
-// exactly — completing the torn record from those recorded bytes requires no
-// guessing, unlike the previously rejected "patch in an assumed delimiter"
-// approach. The originally attempted op must therefore survive (not be
-// discarded), and the new buffer must still be appended afterward as its own
-// record.
 func TestAppendLog_TornWriteWithDifferentRetryCompletesPendingRecord_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -171,8 +130,6 @@ func TestAppendLog_TornWriteWithDifferentRetryCompletesPendingRecord_REQ_TOPTIER
 	prior := append(append([]byte{}, priorLine...), '\n')
 	require.NoError(t, os.WriteFile(logPath, prior, 0o600))
 
-	// Simulate a crash mid-append: the marker records a full intended record,
-	// but only a partial prefix of it actually made it to disk.
 	intended := []byte(`{"op":"torn-record","field":"value"}` + "\n")
 	partial := intended[:10]
 	require.NoError(t, os.WriteFile(logPath, append(append([]byte{}, prior...), partial...), 0o600))
@@ -183,17 +140,12 @@ func TestAppendLog_TornWriteWithDifferentRetryCompletesPendingRecord_REQ_TOPTIER
 		Start: int64(len(prior)), Data: intended,
 	}))
 
-	// The next call is NOT a retry of the interrupted record — it's a
-	// different buffer entirely.
 	newRecord := []byte(`{"op":"new-record"}` + "\n")
 	require.NoError(t, NewAppendLog(logPath).Append(newRecord))
 
 	raw, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 
-	// The torn record must be completed from the marker's own bytes (not
-	// discarded), followed by the new record — both valid JSONL, and the
-	// originally attempted op is not lost.
 	require.Equal(t, string(prior)+string(intended)+string(newRecord), string(raw))
 
 	lines, err := ReadLogFromOffset(logPath, 0)
@@ -321,7 +273,7 @@ func TestReadLogFromOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	lines, err := ReadLogFromOffset(logPath, 8) // skip first line
+	lines, err := ReadLogFromOffset(logPath, 8)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +533,6 @@ func TestReadLogLinesWithOffsets_UnterminatedLastLine(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 
-	// Create a file with a normal line and an unterminated final line
 	content := []byte("{\"a\":1}\n{\"b\":2}")
 	if err := os.WriteFile(logPath, content, 0644); err != nil {
 		t.Fatal(err)
@@ -592,25 +543,21 @@ func TestReadLogLinesWithOffsets_UnterminatedLastLine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify we got both lines
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 lines, got %d", len(lines))
 	}
 
-	// Get actual file size
 	info, err := os.Stat(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	actualFileSize := info.Size()
 
-	// The last line's EndOffset should equal the actual file size
 	lastLineEndOffset := lines[1].EndOffset
 	if lastLineEndOffset != actualFileSize {
 		t.Errorf("expected last line EndOffset to be %d (file size), got %d", actualFileSize, lastLineEndOffset)
 	}
 
-	// Verify line contents
 	if string(lines[0].Line) != "{\"a\":1}" {
 		t.Errorf("expected first line to be {\"a\":1}, got %s", lines[0].Line)
 	}
@@ -624,26 +571,20 @@ func TestReadLogLinesWithOffsets_StartOffsetPositive(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "test.log")
 
-	// Create a file: {"a":1}\n{"b":2}\n{"c":3}
-	// First line: 8 bytes, second line: 8 bytes, third line: 7 bytes. Total: 23 bytes.
-	// The last line has NO trailing newline.
 	content := []byte("{\"a\":1}\n{\"b\":2}\n{\"c\":3}")
 	if err := os.WriteFile(logPath, content, 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Read starting from offset 8 (after first line)
 	lines, err := ReadLogLinesWithOffsets(logPath, 8)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Should get 2 lines
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 lines, got %d", len(lines))
 	}
 
-	// Verify first line (lines[0])
 	if string(lines[0].Line) != "{\"b\":2}" {
 		t.Errorf("expected lines[0].Line to be {\"b\":2}, got %s", lines[0].Line)
 	}
@@ -651,7 +592,6 @@ func TestReadLogLinesWithOffsets_StartOffsetPositive(t *testing.T) {
 		t.Errorf("expected lines[0].EndOffset to be 16, got %d", lines[0].EndOffset)
 	}
 
-	// Verify second line (lines[1])
 	if string(lines[1].Line) != "{\"c\":3}" {
 		t.Errorf("expected lines[1].Line to be {\"c\":3}, got %s", lines[1].Line)
 	}
@@ -782,7 +722,6 @@ func TestRemoveIssueJSON_DeletesFileAndToleratesMissing_REQ_TOPTIER_B1(t *testin
 	require.NoError(t, RemoveIssueJSON(dir, "task-01"))
 	assert.NoFileExists(t, path)
 
-	// Removing what is already gone is the caller's goal, not an error.
 	assert.NoError(t, RemoveIssueJSON(dir, "task-01"))
 }
 

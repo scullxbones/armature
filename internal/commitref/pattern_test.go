@@ -8,10 +8,6 @@ import (
 	"github.com/scullxbones/armature/internal/commitref"
 )
 
-// TestTypedCommitPattern_REQ_LNGHZN_S4 verifies the shared typed
-// conventional-commit pattern matches every documented type from
-// docs/conventions.md, matches the breaking-change bang form, rejects a
-// disallowed type, and requires a non-empty description after the colon.
 func TestTypedCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
@@ -27,10 +23,6 @@ func TestTypedCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 	assert.False(t, pattern.MatchString("feat(ISSUE-2): description"), "different issue ID should not match")
 }
 
-// TestMergeCommitPattern_REQ_LNGHZN_S4 verifies the shared merge-commit
-// reference pattern accepts the documented "merge: ISSUE-ID description"
-// form, requires a non-empty description, and does not match an unrelated
-// issue ID.
 func TestMergeCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 

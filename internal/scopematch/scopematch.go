@@ -1,13 +1,6 @@
 // Package scopematch implements the canonical scope-glob matching logic
 // shared by internal/harnesspolicy (worker-facing scope checks) and
-// internal/claim (delivery-gate scope overlap checks). It is a leaf package
-// with no dependency on either caller, deliberately, to avoid the import
-// cycle that would otherwise result: internal/harnesspolicy imports
-// internal/materialize, which imports internal/claim, so internal/claim
-// cannot import internal/harnesspolicy (or vice versa). Both callers
-// previously carried their own hand-ported copy of this logic; keeping a
-// single implementation here means a fix (e.g. normalizing a "./" prefix in
-// a scope entry) only needs to happen once.
+// internal/claim (delivery-gate scope overlap checks).
 package scopematch
 
 import (
@@ -39,15 +32,11 @@ import (
 // not a parallel literal-prefix path that breaks once the directory itself
 // contains a wildcard (e.g. "src/*/"). Intersection is memoized on suffix
 // indexes so pairs of patterns with many "**" segments stay polynomial.
-//
-// This is the single canonical implementation shared by internal/claim
-// (delivery-gate overlap checks) and internal/validate (scope-overlap
-// warnings) so the two layers cannot diverge again as they once did.
 func Overlaps(a, b string) bool {
-	if matched, _ := filepath.Match(a, b); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+	if matched, err := filepath.Match(a, b); err == nil && matched {
 		return true
 	}
-	if matched, _ := filepath.Match(b, a); matched { //nolint:errcheck // ErrBadPattern unreachable for valid armature scope paths
+	if matched, err := filepath.Match(b, a); err == nil && matched {
 		return true
 	}
 	if Allows([]string{a}, b) || Allows([]string{b}, a) {
@@ -56,11 +45,6 @@ func Overlaps(a, b string) bool {
 	return globPatternsMayIntersect(a, b)
 }
 
-// canonicalSegments is the single scope-entry normalization used by both
-// Allows (pattern vs concrete path) and glob-vs-glob intersection. A
-// trailing-slash directory scope becomes cleaned/** so descendants are
-// matched by the same "**" expansion as an explicit directory glob. The
-// repo-root entry "." is "**".
 func canonicalSegments(raw string) []string {
 	cleaned, isDir := CleanScope(raw)
 	if cleaned == "." {
@@ -73,18 +57,6 @@ func canonicalSegments(raw string) []string {
 	return segs
 }
 
-// globPatternsMayIntersect reports whether two scope-glob patterns could
-// both match some common concrete path, comparing path segment by segment
-// (with "**" expanding to zero or more segments, via the same backtracking
-// approach as matchSegments). Two segments are considered
-// compatible if they are identical, if one is a literal string the other's
-// wildcard segment matches (via filepath.Match), or if both segments contain
-// wildcard characters — in the last case the exact intersection of the two
-// character classes/glob shapes is not computed; they are conservatively
-// assumed compatible. A literal-vs-literal mismatch at any segment (e.g.
-// "auth" vs "billing") is decisive and rules out intersection regardless of
-// wildcards elsewhere in the pattern, which is what keeps this bounded:
-// "src/auth/*.go" and "src/billing/*.go" still report no overlap.
 func globPatternsMayIntersect(a, b string) bool {
 	segA := canonicalSegments(a)
 	segB := canonicalSegments(b)
@@ -94,12 +66,6 @@ func globPatternsMayIntersect(a, b string) bool {
 	return matchPatternSegments(segA, segB)
 }
 
-// matchPatternSegments reports whether pattern segment lists a and b could
-// both match some common list of concrete path segments. "**" in either list
-// expands to zero or more segments via backtracking. Results are memoized
-// on (i, j) suffix indexes so a pair of patterns with many "**" segments is
-// polynomial in the segment counts instead of combinatorial in the
-// backtracking tree.
 func matchPatternSegments(a, b []string) bool {
 	return matchPatternSegmentsAt(a, b, 0, 0, make(map[segmentKey]bool))
 }
@@ -148,8 +114,6 @@ func computePatternSegments(a, b []string, i, j int, memo map[segmentKey]bool) b
 	return matchPatternSegmentsAt(a, b, i+1, j+1, memo)
 }
 
-// segmentsCompatible reports whether two single-path-segment glob patterns
-// could both match some common concrete segment string.
 func segmentsCompatible(s1, s2 string) bool {
 	if s1 == s2 {
 		return true
@@ -158,7 +122,6 @@ func segmentsCompatible(s1, s2 string) bool {
 	w2 := isWildcardSegment(s2)
 	switch {
 	case !w1 && !w2:
-		// Both literal and already known unequal (s1 == s2 handled above).
 		return false
 	case w1 && !w2:
 		matched, err := filepath.Match(s1, s2)
@@ -167,16 +130,10 @@ func segmentsCompatible(s1, s2 string) bool {
 		matched, err := filepath.Match(s2, s1)
 		return err == nil && matched
 	default:
-		// Both segments carry a wildcard; computing the precise
-		// intersection of what each can match is not cheap, so
-		// conservatively assume they can overlap. See Overlaps' doc
-		// comment for why over-approximation here is the safe direction.
 		return true
 	}
 }
 
-// isWildcardSegment reports whether a single path segment contains glob
-// wildcard characters.
 func isWildcardSegment(s string) bool {
 	return strings.ContainsAny(s, "*?[")
 }
@@ -222,11 +179,6 @@ func CleanScope(raw string) (string, bool) {
 	return CleanRepoPath(stripped), strings.HasSuffix(filepath.ToSlash(stripped), "/")
 }
 
-// stripAnnotation removes a trailing " (...)" annotation from a scope entry,
-// e.g. "internal/foo.go (new)" becomes "internal/foo.go". A parenthesized
-// suffix is only treated as an annotation when preceded by a space, so a
-// literal filename containing parens (e.g. "internal/foo/bar(baz).go") is
-// left untouched.
 func stripAnnotation(glob string) string {
 	if i := strings.LastIndex(glob, " ("); i >= 0 && strings.HasSuffix(glob, ")") {
 		return strings.TrimSpace(glob[:i])
@@ -248,10 +200,6 @@ func CleanRepoPath(path string) string {
 	return strings.TrimPrefix(cleaned, "/")
 }
 
-// matchSegments matches pattern segments against path segments, expanding a
-// "**" segment to zero or more path segments via backtracking, and matching
-// all other segments with filepath.Match (which itself supports
-// single-segment glob syntax like "*", "?", "[...]").
 func matchSegments(pattern, segments []string) bool {
 	for len(pattern) > 0 {
 		if pattern[0] == "**" {

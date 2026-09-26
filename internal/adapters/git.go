@@ -35,12 +35,11 @@ func NewIsolated(repoPath string) *Client {
 	return &Client{repoPath: repoPath, isolateEnv: true}
 }
 
-// cmd builds a non-interactive git command rooted at the client's repo path.
-// GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
 func (c *Client) cmd(args ...string) *exec.Cmd {
 	return c.cmdContext(context.Background(), args...)
 }
 
+// GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
 func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	// maintenance.auto=false (and gc.auto=0 for older git) prevent git from
 	// forking "git maintenance run --auto --detach" on commit-like commands.
@@ -453,8 +452,6 @@ func isBenignEmptyRepoRmError(output []byte) bool {
 	return strings.Contains(string(output), "did not match any files")
 }
 
-func ignoreBestEffortRemoteFetch(err error) { _ = err }
-
 // CreateOrphanBranch creates an orphan branch (no parent commits) with a single empty commit.
 // If the branch already exists locally, this is a no-op.
 // If the branch exists on origin but not locally, creates a local tracking branch from origin.
@@ -472,7 +469,9 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	fetchCmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
-	ignoreBestEffortRemoteFetch(fetchCmd.Run())
+	if err := fetchCmd.Run(); err != nil {
+		cancel()
+	}
 
 	remoteBranch := "origin/" + branch
 	remoteCheck := c.cmd("rev-parse", "--verify", remoteBranch)
