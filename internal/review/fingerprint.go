@@ -2,6 +2,7 @@ package review
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -43,7 +44,39 @@ func FingerprintResult(assessment ConformanceAssessment) string {
 	return fingerprintJSON(assessment, "assessment")
 }
 
-func ComputeBundleID(bundle ReviewBundle) string {
+// BundleIDError is returned when ComputeBundleID cannot hash a bundle.
+// Callers treat it as a normal validation/prepare failure, not a crash.
+type BundleIDError struct {
+	Err error
+}
+
+func (e *BundleIDError) Error() string {
+	if e == nil {
+		return "compute bundle id"
+	}
+	if e.Err == nil {
+		return "compute bundle id"
+	}
+	return fmt.Sprintf("compute bundle id: %v", e.Err)
+}
+
+func (e *BundleIDError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func bundleIDFromPayload(data any) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", &BundleIDError{Err: fmt.Errorf("marshal bundle data: %w", err)}
+	}
+	hash := sha256.Sum256(jsonData)
+	return fmt.Sprintf("sha256:%s", hex.EncodeToString(hash[:])), nil
+}
+
+func ComputeBundleID(bundle ReviewBundle) (string, error) {
 	var activityForHash *struct {
 		Digest            string
 		EntryCount        int
@@ -85,14 +118,7 @@ func ComputeBundleID(bundle ReviewBundle) string {
 		GateEvidence:  bundle.GateEvidence,
 	}
 
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		panic(fmt.Sprintf("failed to marshal bundle data: %v", err))
-	}
-
-	hash := sha256.Sum256(jsonData)
-	hashStr := hex.EncodeToString(hash[:])
-	return fmt.Sprintf("sha256:%s", hashStr)
+	return bundleIDFromPayload(data)
 }
 
 type ActivityLogEntry struct {
@@ -117,6 +143,69 @@ type activityLogLine struct {
 	OutputTail    string `json:"output_tail"`
 }
 
+func (l *activityLogLine) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	type alias struct {
+		Timestamp     string `json:"timestamp"`
+		Command       string `json:"command"`
+		ExitCodeKnown bool   `json:"exit_code_known"`
+		HeadSHA       string `json:"head_sha"`
+		OutputHash    string `json:"output_hash"`
+		OutputHead    string `json:"output_head"`
+		OutputTail    string `json:"output_tail"`
+	}
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	if strings.TrimSpace(a.Command) == "" {
+		return fmt.Errorf("missing command")
+	}
+	exitCode := 0
+	exitRaw, hasExit := raw["exit_code"]
+	if a.ExitCodeKnown {
+		if !hasExit {
+			return fmt.Errorf("exit_code_known is true but exit_code is omitted")
+		}
+		n, err := decodeActivityExitCode(exitRaw)
+		if err != nil {
+			return err
+		}
+		exitCode = n
+	} else if hasExit && !bytes.Equal(bytes.TrimSpace(exitRaw), []byte("null")) {
+		n, err := decodeActivityExitCode(exitRaw)
+		if err != nil {
+			return err
+		}
+		exitCode = n
+	}
+	*l = activityLogLine{
+		Timestamp:     a.Timestamp,
+		Command:       a.Command,
+		ExitCode:      exitCode,
+		ExitCodeKnown: a.ExitCodeKnown,
+		HeadSHA:       a.HeadSHA,
+		OutputHash:    a.OutputHash,
+		OutputHead:    a.OutputHead,
+		OutputTail:    a.OutputTail,
+	}
+	return nil
+}
+
+func decodeActivityExitCode(raw json.RawMessage) (int, error) {
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return 0, fmt.Errorf("exit_code must be an integer, not null")
+	}
+	var n int
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return 0, fmt.Errorf("exit_code must be an integer: %w", err)
+	}
+	return n, nil
+}
+
 func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, error) {
 	content, err := os.ReadFile(logPath) //nolint:gosec // G304: logPath is provided by Prepare
 	if err != nil {
@@ -136,6 +225,7 @@ func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	scanner.Buffer(make([]byte, 0, activityScannerBufferSize), activityScannerMaxTokenSize)
 
+	var errs []string
 	lineNum := 0
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -148,6 +238,7 @@ func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 
 		var raw activityLogLine
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+			errs = append(errs, fmt.Sprintf("activity log line %d: %v", id, err))
 			continue
 		}
 
@@ -156,6 +247,9 @@ func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan activity log: %w", err)
+	}
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("%s", strings.Join(errs, "\n"))
 	}
 
 	return entries, nil

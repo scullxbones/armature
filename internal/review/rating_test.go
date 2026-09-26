@@ -1,10 +1,12 @@
 package review_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDeriveRating_AllSatisfied_Green(t *testing.T) {
@@ -157,11 +159,30 @@ func TestCountCriteria(t *testing.T) {
 
 func TestMaxRating_SeverityOrder_REQ_TOPTIER_S13_T1(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, review.Green, review.MaxRating())
-	assert.Equal(t, review.Green, review.MaxRating(review.Green))
-	assert.Equal(t, review.Yellow, review.MaxRating(review.Green, review.Yellow))
-	assert.Equal(t, review.Red, review.MaxRating(review.Green, review.Yellow, review.Red))
-	assert.Equal(t, review.Red, review.MaxRating(review.Red, review.Green))
-	assert.Equal(t, review.Yellow, review.MaxRating(review.Yellow, review.Yellow))
-	assert.Equal(t, review.Green, review.MaxRating(review.Rating(99), review.Green))
+	empty, ok := review.MaxRating()
+	assert.False(t, ok)
+	assert.NotEqual(t, review.Green, empty, "empty MaxRating must not claim Green")
+	assert.Equal(t, "unknown", empty.String())
+	raw, err := json.Marshal(empty)
+	require.NoError(t, err)
+	assert.Equal(t, `"unknown"`, string(raw), "empty MaxRating renders as JSON unknown, not green")
+
+	got, ok := review.MaxRating(review.Green)
+	assert.True(t, ok)
+	assert.Equal(t, review.Green, got)
+	got, ok = review.MaxRating(review.Green, review.Yellow)
+	assert.True(t, ok)
+	assert.Equal(t, review.Yellow, got)
+	got, ok = review.MaxRating(review.Green, review.Yellow, review.Red)
+	assert.True(t, ok)
+	assert.Equal(t, review.Red, got)
+	got, ok = review.MaxRating(review.Red, review.Green)
+	assert.True(t, ok)
+	assert.Equal(t, review.Red, got)
+	got, ok = review.MaxRating(review.Yellow, review.Yellow)
+	assert.True(t, ok)
+	assert.Equal(t, review.Yellow, got)
+	got, ok = review.MaxRating(review.Rating(99), review.Green)
+	assert.True(t, ok)
+	assert.Equal(t, review.Green, got)
 }

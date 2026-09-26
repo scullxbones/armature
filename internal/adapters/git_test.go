@@ -82,13 +82,11 @@ func TestCreateOrphanBranch(t *testing.T) {
 	err := c.CreateOrphanBranch("_armature")
 	require.NoError(t, err)
 
-	// Verify branch exists
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "branch", "--list", "_armature")
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "_armature")
 
-	// Verify we are still on the original branch (not _armature)
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
@@ -101,11 +99,9 @@ func TestCreateOrphanBranch_Idempotent(t *testing.T) {
 	c := adapters.New(repo)
 
 	require.NoError(t, c.CreateOrphanBranch("_armature"))
-	// Second call should not error; branch already exists so it returns nil immediately
 	err := c.CreateOrphanBranch("_armature")
 	assert.NoError(t, err)
 
-	// Still on original branch
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
@@ -116,13 +112,11 @@ func TestCreateOrphanBranch_DirtyWorkingTree_Fails(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 
-	// Capture the current branch name (might be master or main)
 	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranchOut, err := currentBranchCmd.Output()
 	require.NoError(t, err)
 	originalBranch := strings.TrimSpace(string(currentBranchOut))
 
-	// Create a tracked file and commit it
 	testFile := filepath.Join(repo, "tracked.txt")
 	require.NoError(t, os.WriteFile(testFile, []byte("original content"), 0644))
 
@@ -135,29 +129,23 @@ func TestCreateOrphanBranch_DirtyWorkingTree_Fails(t *testing.T) {
 	gitRun("add", "tracked.txt")
 	gitRun("commit", "-m", "add tracked file")
 
-	// Modify the tracked file without committing (dirty working tree)
 	require.NoError(t, os.WriteFile(testFile, []byte("modified content"), 0644))
 
-	// Verify the file is modified and not staged
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "status", "--porcelain")
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "tracked.txt", "file should show as modified")
 
-	// Now try to create orphan branch - this should fail with dirty working tree error
 	c := adapters.New(repo)
 	err = c.CreateOrphanBranch("_armature")
 
-	// Must fail with a clear error about dirty working tree
 	require.Error(t, err, "CreateOrphanBranch should fail when working tree is dirty")
 	assert.Contains(t, err.Error(), "dirty", "error should mention dirty working tree")
 
-	// Most importantly: verify that the uncommitted change is still there (not destroyed)
 	content, readErr := os.ReadFile(testFile)
 	require.NoError(t, readErr, "file should still exist")
 	assert.Equal(t, "modified content", string(content), "uncommitted changes must be preserved")
 
-	// Verify we're still on the original branch
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
@@ -175,7 +163,6 @@ func TestAddWorktree(t *testing.T) {
 	err := c.AddWorktree("_armature", worktreePath)
 	require.NoError(t, err)
 
-	// Verify worktree directory exists
 	info, err := os.Stat(worktreePath)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
@@ -208,23 +195,19 @@ func TestCommitWorktreeOp(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Create orphan branch and worktree (using E2-001 methods)
 	require.NoError(t, c.CreateOrphanBranch("_armature"))
 	worktreePath := filepath.Join(repo, ".arm")
 	require.NoError(t, c.AddWorktree("_armature", worktreePath))
 
-	// Write a file in the worktree
 	opsDir := filepath.Join(worktreePath, ".armature", "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	logFile := filepath.Join(opsDir, "worker-abc.log")
 	require.NoError(t, os.WriteFile(logFile, []byte("test op\n"), 0644))
 
-	// CommitWorktreeOp is called on a client rooted at the worktree
 	wc := adapters.New(worktreePath)
 	err := wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
 	require.NoError(t, err)
 
-	// Verify commit exists in the worktree branch
 	cmd := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "log", "--oneline", "-1")
 	out, err := cmd.Output()
 	require.NoError(t, err)
@@ -240,7 +223,6 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	worktreePath := filepath.Join(repo, ".arm")
 	require.NoError(t, c.AddWorktree("_armature", worktreePath))
 
-	// Write and commit file first
 	opsDir := filepath.Join(worktreePath, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0755))
 	logFile := filepath.Join(opsDir, "worker-abc.log")
@@ -248,7 +230,6 @@ func TestCommitWorktreeOp_NoChanges_IsNoop(t *testing.T) {
 	wc := adapters.New(worktreePath)
 	require.NoError(t, wc.CommitWorktreeOp("ops/worker-abc.log", "first commit"))
 
-	// Call again without changes — should not error
 	err := wc.CommitWorktreeOp("ops/worker-abc.log", "second commit")
 	assert.NoError(t, err)
 }
@@ -279,7 +260,6 @@ func TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX(t *testing.
 	logFile := filepath.Join(opsDir, "worker-abc.log")
 	require.NoError(t, adapters.NewAppendLog(logFile).Append([]byte("{\"op\":1}\n")))
 
-	// Sidecar dir must exist as a side effect of AppendLog.Append.
 	_, statErr := os.Stat(filepath.Join(opsDir, ".arm-append-meta"))
 	require.NoError(t, statErr, "expected .arm-append-meta sidecar dir to be created")
 
@@ -297,13 +277,11 @@ func TestBranchMergedInto_Merged(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Detect what branch we're on
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	mainBranch := strings.TrimSpace(string(branchOut))
 
-	// Create and merge a feature branch
 	gitRun := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
 		out, err := cmd.CombinedOutput()
@@ -348,7 +326,6 @@ func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Non-existent branch should return (false, nil) not an error
 	merged, err := c.BranchMergedInto("feature/ghost", "main")
 	assert.NoError(t, err)
 	assert.False(t, merged)
@@ -365,13 +342,11 @@ func TestListFilesAtCommit(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	// Write two files and commit
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "alpha.txt"), []byte("a"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "beta.txt"), []byte("b"), 0644))
 	gitRun("add", "alpha.txt", "beta.txt")
 	gitRun("commit", "-m", "add files")
 
-	// Get the HEAD SHA
 	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
@@ -443,7 +418,6 @@ func TestLogBranch(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	// Add two more commits
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "f1.txt"), []byte("1"), 0644))
 	gitRun("add", "f1.txt")
 	gitRun("commit", "-m", "second commit")
@@ -700,15 +674,12 @@ func TestRemoveWorktree(t *testing.T) {
 	worktreePath := filepath.Join(repo, ".arm")
 	require.NoError(t, c.AddWorktree("_armature", worktreePath))
 
-	// Verify the worktree exists
 	_, err := os.Stat(worktreePath)
 	require.NoError(t, err)
 
-	// Remove the worktree
 	err = c.RemoveWorktree(worktreePath)
 	require.NoError(t, err)
 
-	// Verify the worktree directory is gone
 	_, err = os.Stat(worktreePath)
 	assert.True(t, os.IsNotExist(err))
 }
@@ -718,7 +689,6 @@ func TestRemoveWorktree_NonExistent(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Removing a non-existent worktree path should return an error
 	err := c.RemoveWorktree(filepath.Join(repo, "no-such-worktree"))
 	assert.Error(t, err)
 }
@@ -967,27 +937,22 @@ func TestResetHard(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	// Commit a file
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0644))
 	gitRun("add", "base.txt")
 	gitRun("commit", "-m", "base commit")
 
-	// Get base SHA
 	shaCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	shaOut, err := shaCmd.Output()
 	require.NoError(t, err)
 	baseSHA := strings.TrimSpace(string(shaOut))
 
-	// Make a second commit
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "extra.txt"), []byte("extra\n"), 0644))
 	gitRun("add", "extra.txt")
 	gitRun("commit", "-m", "extra commit")
 
-	// Reset back to base
 	err = c.ResetHard(baseSHA)
 	require.NoError(t, err)
 
-	// extra.txt should no longer be tracked
 	headCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
@@ -1032,14 +997,12 @@ func TestCommitWithMessage(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	// Stage a file
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "commit_me.txt"), []byte("data\n"), 0644))
 	gitRun("add", "commit_me.txt")
 
 	err := c.CommitWithMessage("test: my commit message")
 	require.NoError(t, err)
 
-	// Verify the commit message
 	logCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "log", "-1", "--pretty=%s")
 	logOut, err := logCmd.Output()
 	require.NoError(t, err)
@@ -1051,7 +1014,6 @@ func TestCommitWithMessage_NothingStaged(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// No staged changes — should return an error
 	err := c.CommitWithMessage("test: empty commit")
 	assert.Error(t, err)
 }
@@ -1067,18 +1029,15 @@ func TestResolveRevision(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	// Get HEAD SHA for comparison
 	headCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
 	expectedSHA := strings.TrimSpace(string(headOut))
 
-	// Resolve HEAD
 	sha, err := c.ResolveRevision("HEAD")
 	require.NoError(t, err)
 	assert.Equal(t, expectedSHA, sha)
 
-	// Create a tag and resolve it
 	gitRun("tag", "v1.0")
 	tagSHA, err := c.ResolveRevision("v1.0")
 	require.NoError(t, err)
@@ -1105,24 +1064,20 @@ func TestDiffRange(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	// Get the initial commit SHA
 	initCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	initOut, err := initCmd.Output()
 	require.NoError(t, err)
 	baseSHA := strings.TrimSpace(string(initOut))
 
-	// Create a new commit
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "test.txt"), []byte("hello\n"), 0644))
 	gitRun("add", "test.txt")
 	gitRun("commit", "-m", "add test file")
 
-	// Get the new commit SHA
 	newCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	newOut, err := newCmd.Output()
 	require.NoError(t, err)
 	headSHA := strings.TrimSpace(string(newOut))
 
-	// Diff the range
 	diff, err := c.DiffRange(baseSHA, headSHA)
 	require.NoError(t, err)
 	assert.Contains(t, diff, "test.txt")
@@ -1140,25 +1095,21 @@ func TestDiffNameOnlyRange(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	// Get the initial commit SHA
 	initCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	initOut, err := initCmd.Output()
 	require.NoError(t, err)
 	baseSHA := strings.TrimSpace(string(initOut))
 
-	// Create new commits with multiple files
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "file1.txt"), []byte("a\n"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "file2.txt"), []byte("b\n"), 0644))
 	gitRun("add", "file1.txt", "file2.txt")
 	gitRun("commit", "-m", "add files")
 
-	// Get the new commit SHA
 	newCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	newOut, err := newCmd.Output()
 	require.NoError(t, err)
 	headSHA := strings.TrimSpace(string(newOut))
 
-	// Get the name-only diff
 	files, err := c.DiffNameOnlyRange(baseSHA, headSHA)
 	require.NoError(t, err)
 	require.Len(t, files, 2)
@@ -1171,13 +1122,11 @@ func TestDiffNameOnlyRange_NoChanges(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Get HEAD SHA
 	headCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	headOut, err := headCmd.Output()
 	require.NoError(t, err)
 	sha := strings.TrimSpace(string(headOut))
 
-	// Diff the same commit (no changes)
 	files, err := c.DiffNameOnlyRange(sha, sha)
 	require.NoError(t, err)
 	assert.Empty(t, files)
@@ -1186,7 +1135,6 @@ func TestDiffNameOnlyRange_NoChanges(t *testing.T) {
 func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 	t.Parallel()
 
-	// Create a bare repo that acts as shared origin
 	originDir := t.TempDir()
 
 	gitRun := func(dir string, args ...string) {
@@ -1198,7 +1146,6 @@ func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 
 	gitRun(originDir, "init", "--bare")
 
-	// Create a temp clone to push initial content to origin
 	tempDir := t.TempDir()
 	gitRun(tempDir, "init")
 	gitRun(tempDir, "config", "user.email", "test@test.com")
@@ -1209,12 +1156,10 @@ func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 	gitRun(tempDir, "branch", "-M", "main")
 	gitRun(tempDir, "push", "-u", "origin", "main")
 
-	// Create and push _armature branch from main
 	gitRun(tempDir, "checkout", "-b", "_armature")
 	gitRun(tempDir, "commit", "--allow-empty", "-m", "init armature")
 	gitRun(tempDir, "push", "-u", "origin", "_armature")
 
-	// Create a fresh clone (will have origin/_armature but no local _armature)
 	cloneDir := t.TempDir()
 	gitRun(cloneDir, "clone", originDir, "cloned")
 	clonePath := filepath.Join(cloneDir, "cloned")
@@ -1222,7 +1167,6 @@ func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 	gitRun(clonePath, "config", "user.name", "Test")
 	gitRun(clonePath, "config", "commit.gpgsign", "false")
 
-	// Verify preconditions: origin/_armature exists but local _armature doesn't
 	checkBranch := func(ref string) bool {
 		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", "--verify", ref)
 		return cmd.Run() == nil
@@ -1230,15 +1174,12 @@ func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 	require.True(t, checkBranch("origin/_armature"), "origin/_armature should exist")
 	require.False(t, checkBranch("_armature"), "local _armature should not exist yet")
 
-	// Call CreateOrphanBranch
 	c := adapters.New(clonePath)
 	err := c.CreateOrphanBranch("_armature")
 	require.NoError(t, err)
 
-	// Verify _armature now exists locally
 	require.True(t, checkBranch("_armature"), "local _armature should exist after CreateOrphanBranch")
 
-	// Verify it's a tracking branch (same commit as origin/_armature)
 	getCommit := func(ref string) string {
 		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", ref)
 		out, err := cmd.Output()
@@ -1253,7 +1194,6 @@ func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 	repo := initTestRepo(t)
 
-	// Get current branch
 	getCurrentBranch := func() string {
 		cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 		out, err := cmd.Output()
@@ -1262,8 +1202,6 @@ func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 	}
 	originalBranch := getCurrentBranch()
 
-	// Track a file so we can verify the working tree is actually restored,
-	// not just the branch name.
 	trackedPath := filepath.Join(repo, "tracked.txt")
 	const trackedContent = "original content\n"
 	require.NoError(t, os.WriteFile(trackedPath, []byte(trackedContent), 0o644))
@@ -1278,16 +1216,13 @@ func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 	wrapperDir := installGitCommitFailureWrapper(t, repo)
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	// Try to create orphan branch (commit will fail due to pre-commit hook)
 	c := adapters.New(repo)
 	err := c.CreateOrphanBranch("_armature")
 	require.Error(t, err, "CreateOrphanBranch should fail when commit fails")
 
-	// Verify we're back on the original branch (not on the broken orphan)
 	currentBranch := getCurrentBranch()
 	require.Equal(t, originalBranch, currentBranch, "should be back on original branch after CreateOrphanBranch error")
 
-	// Verify the working tree was actually restored, not just the branch name
 	restoredContent, readErr := os.ReadFile(trackedPath)
 	require.NoError(t, readErr, "tracked file should still exist after restore")
 	require.Equal(t, trackedContent, string(restoredContent), "tracked file content should survive the restore")
@@ -1296,18 +1231,15 @@ func TestCreateOrphanBranch_RestoresOnCommitFailure(t *testing.T) {
 func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
 	repo := initTestRepo(t)
 
-	// Get the current commit SHA before detaching
 	headSHACmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	headSHAOut, err := headSHACmd.Output()
 	require.NoError(t, err)
 	originalSHA := strings.TrimSpace(string(headSHAOut))
 
-	// Detach HEAD at the current commit
 	detachCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "checkout", "--detach")
 	_, err = detachCmd.CombinedOutput()
 	require.NoError(t, err)
 
-	// Verify we're in detached HEAD state
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
@@ -1316,20 +1248,15 @@ func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
 	wrapperDir := installGitCommitFailureWrapper(t, repo)
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	// Call CreateOrphanBranch; the commit on the orphan branch should fail due
-	// to the pre-commit hook, and CreateOrphanBranch should restore HEAD back
-	// to the original detached SHA (not leave it on the broken orphan branch).
 	c := adapters.New(repo)
 	err = c.CreateOrphanBranch("_armature")
 	require.Error(t, err, "CreateOrphanBranch should fail when commit fails")
 
-	// Verify we're back in detached HEAD state (not on _armature)
 	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranchOut, err := currentBranchCmd.Output()
 	require.NoError(t, err)
 	assert.Equal(t, "HEAD", strings.TrimSpace(string(currentBranchOut)), "should be back in detached HEAD state")
 
-	// Verify we're at the original commit SHA
 	currentSHACmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	currentSHAOut, err := currentSHACmd.Output()
 	require.NoError(t, err)
@@ -1340,7 +1267,6 @@ func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
 func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	t.Parallel()
 
-	// Create a bare repo that acts as shared origin
 	originDir := t.TempDir()
 
 	gitRun := func(dir string, args ...string) {
@@ -1352,7 +1278,6 @@ func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 
 	gitRun(originDir, "init", "--bare")
 
-	// Create a temp clone to push initial content to origin
 	tempDir := t.TempDir()
 	gitRun(tempDir, "init")
 	gitRun(tempDir, "config", "user.email", "test@test.com")
@@ -1363,12 +1288,10 @@ func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	gitRun(tempDir, "branch", "-M", "main")
 	gitRun(tempDir, "push", "-u", "origin", "main")
 
-	// Create and push _armature branch from main
 	gitRun(tempDir, "checkout", "-b", "_armature")
 	gitRun(tempDir, "commit", "--allow-empty", "-m", "init armature")
 	gitRun(tempDir, "push", "-u", "origin", "_armature")
 
-	// Get the commit SHA of the _armature branch on origin
 	armatureCmd := exec.CommandContext(context.Background(), "git", "-C", tempDir, "rev-parse", "origin/_armature")
 	armatureOut, err := armatureCmd.Output()
 	require.NoError(t, err)
@@ -1392,15 +1315,12 @@ func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	require.False(t, checkBranch("origin/_armature"), "origin/_armature should not exist (single-branch clone)")
 	require.False(t, checkBranch("_armature"), "local _armature should not exist yet")
 
-	// Call CreateOrphanBranch
 	c := adapters.New(clonePath)
 	err = c.CreateOrphanBranch("_armature")
 	require.NoError(t, err, "CreateOrphanBranch should fetch _armature from origin if not present locally")
 
-	// Verify _armature now exists locally
 	require.True(t, checkBranch("_armature"), "local _armature should exist after CreateOrphanBranch")
 
-	// Verify it adopted the remote history (not a new orphan)
 	getCommit := func(ref string) string {
 		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", ref)
 		out, err := cmd.Output()
@@ -1416,38 +1336,31 @@ func TestCreateOrphanBranch_RestoresDetachedHEAD(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Get the current commit SHA before detaching
 	headSHACmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	headSHAOut, err := headSHACmd.Output()
 	require.NoError(t, err)
 	originalSHA := strings.TrimSpace(string(headSHAOut))
 
-	// Detach HEAD at the current commit
 	detachCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "checkout", "--detach")
 	_, err = detachCmd.CombinedOutput()
 	require.NoError(t, err)
 
-	// Verify we're in detached HEAD state
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := branchCmd.Output()
 	require.NoError(t, err)
 	assert.Equal(t, "HEAD", strings.TrimSpace(string(branchOut)), "should be in detached HEAD state")
 
-	// Call CreateOrphanBranch
 	err = c.CreateOrphanBranch("_armature")
 	require.NoError(t, err)
 
-	// Verify _armature branch was created
 	verifyBranch := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "_armature")
 	require.NoError(t, verifyBranch.Run(), "_armature branch should exist")
 
-	// Verify we're back in detached HEAD state at the original SHA (NOT on _armature)
 	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
 	currentBranchOut, err := currentBranchCmd.Output()
 	require.NoError(t, err)
 	assert.Equal(t, "HEAD", strings.TrimSpace(string(currentBranchOut)), "should be back in detached HEAD state")
 
-	// Verify we're at the original commit SHA (not on _armature)
 	currentSHACmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "HEAD")
 	currentSHAOut, err := currentSHACmd.Output()
 	require.NoError(t, err)
@@ -1466,12 +1379,10 @@ func TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Clean worktree: no dirty entries.
 	entries, err := c.DirtyEntries()
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 
-	// Modify a tracked file.
 	trackedFile := filepath.Join(repo, "tracked.txt")
 	require.NoError(t, os.WriteFile(trackedFile, []byte("v1"), 0o600))
 	gitRun := func(args ...string) {
@@ -1484,7 +1395,6 @@ func TestDirtyEntriesReturnsBothModifiedAndUntrackedPaths(t *testing.T) {
 	gitRun("commit", "-m", "add tracked file")
 	require.NoError(t, os.WriteFile(trackedFile, []byte("v2"), 0o600))
 
-	// Add an untracked file.
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "untracked.txt"), []byte("new"), 0o600))
 
 	entries, err = c.DirtyEntries()
@@ -1869,7 +1779,6 @@ func TestRemoveFromIndexReportsRealFailures(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	// Untracked path: nothing to do, and not an error.
 	require.NoError(t, c.RemoveFromIndex("never-tracked"))
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("x\n"), 0o600))

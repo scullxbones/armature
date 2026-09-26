@@ -14,6 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func mustComputeBundleID(t *testing.T, bundle ReviewBundle) string {
+	t.Helper()
+	id, err := ComputeBundleID(bundle)
+	require.NoError(t, err)
+	return id
+}
+
 func errsContain(errs []string, substr string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, substr) {
@@ -23,12 +30,19 @@ func errsContain(errs []string, substr string) bool {
 	return false
 }
 
+func mustUnmarshalCitation(t *testing.T, raw string) Citation {
+	t.Helper()
+	var c Citation
+	require.NoError(t, json.Unmarshal([]byte(raw), &c))
+	return c
+}
+
 func citedSatisfied(id, rationale string) CriterionResult {
 	return CriterionResult{
 		ID:        id,
 		Status:    Satisfied,
 		Rationale: rationale,
-		Citations: []Citation{{Path: "impl.go", Line: 1}},
+		Citations: []Citation{FileCitation("impl.go", 1, 0)},
 	}
 }
 
@@ -85,7 +99,7 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -131,7 +145,7 @@ func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	bundle.Delivery.HeadSHA = ""
 
@@ -269,7 +283,7 @@ func TestRecord_BundleIssueMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -306,7 +320,7 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -474,7 +488,7 @@ func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -487,7 +501,7 @@ func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "Done",
 				Citations: []Citation{
-					{Path: "impl.go", Line: 3},
+					FileCitation("impl.go", 3, 0),
 				},
 			},
 		},
@@ -524,7 +538,7 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 			Delivery: "sha256:bbbb",
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -537,7 +551,7 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "Done",
 				Citations: []Citation{
-					{Path: "impl.go", Line: 9999},
+					FileCitation("impl.go", 9999, 0),
 				},
 			},
 		},
@@ -651,7 +665,7 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 		},
 		Activity: &Activity{Digest: digest, EntryCount: 1, LogPath: logPath},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -659,8 +673,8 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 		ContractFingerprint: bundle.Fingerprints.Contract,
 		DeliveryFingerprint: bundle.Fingerprints.Delivery,
 		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
-			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ran", Citations: []Citation{{ActivityEntryID: "0"}}},
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{FileCitation("f.go", 1, 0)}},
+			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ran", Citations: []Citation{ActivityCitation("0")}},
 		},
 	}
 
@@ -678,7 +692,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{ActivityEntryID: "0"}}},
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{ActivityCitation("0")}},
 		},
 	}
 
@@ -701,7 +715,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			},
 		}
-		bundle.BundleID = ComputeBundleID(*bundle)
+		bundle.BundleID = mustComputeBundleID(t, *bundle)
 		_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "activity")
@@ -719,7 +733,11 @@ func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T)
 		Results: []CriterionResult{
 			{
 				ID: "acceptance[0]", Status: Satisfied, Rationale: "ok",
-				Citations: []Citation{{Path: "f.go", Line: 1, ActivityEntryDetails: "fabricated: exit_code=0 all tests passed"}},
+				Citations: []Citation{func() Citation {
+					c := FileCitation("f.go", 1, 0)
+					c.SetActivityEntryDetails("fabricated: exit_code=0 all tests passed")
+					return c
+				}()},
 			},
 		},
 	}
@@ -727,7 +745,7 @@ func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T)
 	result, err := Record(RecordInput{Assessment: assessment, IssueID: "task-01"})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Empty(t, assessment.Results[0].Citations[0].ActivityEntryDetails,
+	assert.Empty(t, assessment.Results[0].Citations[0].ActivityEntryDetails(),
 		"inbound ActivityEntryDetails must be reset, not passed through")
 }
 
@@ -737,7 +755,7 @@ func TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV(t *testing.T) {
 		ID:        "acceptance[0]",
 		Status:    Satisfied,
 		Rationale: "ok",
-		Citations: []Citation{{Path: "f.go", Line: 1, ActivityEntryID: "0"}},
+		Citations: []Citation{mustUnmarshalCitation(t, `{"path":"f.go","line":1,"activity_entry_id":"0"}`)},
 	}
 	err := result.Valid()
 	require.Error(t, err)
@@ -750,21 +768,21 @@ func TestParseActivityLogFile_IDsAreLinePositionNotSequentialCount_REQ_EXECEV(t 
 	dir := t.TempDir()
 	logPath := dir + "/armature-activity.log"
 	content := `{"timestamp":"t0","command":"first","exit_code":0,"exit_code_known":true,"head_sha":"h","output_hash":"o"}
-this line is not valid JSON at all
+
 {"timestamp":"t2","command":"third","exit_code":0,"exit_code_known":true,"head_sha":"h","output_hash":"o"}
 `
 	require.NoError(t, os.WriteFile(logPath, []byte(content), 0o600))
 
 	entries, _, err := parseActivityLogFile(logPath)
 	require.NoError(t, err)
-	require.Len(t, entries, 2, "the malformed line should be skipped, leaving 2 valid entries")
+	require.Len(t, entries, 2, "blank lines consume physical IDs but are not entries")
 
 	first, ok := entries[0]
 	require.True(t, ok, "the first entry must keep ID 0 (physical line 0)")
 	assert.Equal(t, "first", first.Command)
 
-	_, malformedPresent := entries[1]
-	assert.False(t, malformedPresent, "the malformed physical line 1 must not produce an entry")
+	_, blankPresent := entries[1]
+	assert.False(t, blankPresent, "the blank physical line 1 must not produce an entry")
 
 	third, ok := entries[2]
 	require.True(t, ok, "the third entry must be at ID 2 (physical line 2), not shifted to ID 1")
@@ -831,7 +849,7 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 			LogPath:           logPath,
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -843,13 +861,13 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 				ID:        "definition_of_done",
 				Status:    Satisfied,
 				Rationale: "Implementation ready",
-				Citations: []Citation{{Path: "t.go", Line: 1}},
+				Citations: []Citation{FileCitation("t.go", 1, 0)},
 			},
 			{
 				ID:        "acceptance[0]",
 				Status:    Satisfied,
 				Rationale: "Tests pass",
-				Citations: []Citation{{ActivityEntryID: "0"}},
+				Citations: []Citation{ActivityCitation("0")},
 			},
 		},
 	}
@@ -863,10 +881,10 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	assert.False(t, result.IsDuplicate)
 
 	activityCitation := &assessment.Results[1].Citations[0]
-	assert.NotEmpty(t, activityCitation.ActivityEntryDetails, "activity entry details must be populated from the log")
-	assert.Contains(t, activityCitation.ActivityEntryDetails, "entry 0")
-	assert.Contains(t, activityCitation.ActivityEntryDetails, "make test")
-	assert.Contains(t, activityCitation.ActivityEntryDetails, "exit_code=0")
+	assert.NotEmpty(t, activityCitation.ActivityEntryDetails(), "activity entry details must be populated from the log")
+	assert.Contains(t, activityCitation.ActivityEntryDetails(), "entry 0")
+	assert.Contains(t, activityCitation.ActivityEntryDetails(), "make test")
+	assert.Contains(t, activityCitation.ActivityEntryDetails(), "exit_code=0")
 }
 
 func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
@@ -944,7 +962,7 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 			LogPath:           logPath,
 		},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
@@ -956,14 +974,14 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 				ID:        "definition_of_done",
 				Status:    Satisfied,
 				Rationale: "Implementation ready",
-				Citations: []Citation{{Path: "t.go", Line: 1}},
+				Citations: []Citation{FileCitation("t.go", 1, 0)},
 			},
 			{
 				ID:        "acceptance[0]",
 				Status:    Satisfied,
 				Rationale: "Tests pass",
 
-				Citations: []Citation{{Path: "t.go", Line: 1}},
+				Citations: []Citation{FileCitation("t.go", 1, 0)},
 			},
 		},
 	}
@@ -1000,15 +1018,15 @@ func gateEvidenceRecordFixture(t *testing.T, ev ops.GateEvidence) (*ReviewBundle
 		},
 		GateEvidence: []ops.GateEvidence{ev},
 	}
-	bundle.BundleID = ComputeBundleID(*bundle)
+	bundle.BundleID = mustComputeBundleID(t, *bundle)
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
 		BundleID:            bundle.BundleID,
 		ContractFingerprint: bundle.Fingerprints.Contract,
 		DeliveryFingerprint: bundle.Fingerprints.Delivery,
 		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
-			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ok", Citations: []Citation{{Path: "f.go", Line: 1}}},
+			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{FileCitation("f.go", 1, 0)}},
+			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ok", Citations: []Citation{FileCitation("f.go", 1, 0)}},
 		},
 	}
 	return bundle, assessment
@@ -1107,7 +1125,7 @@ func disagreementAssessment(bundleID, rationale string, status CriterionStatus) 
 		Rationale: rationale,
 	}
 	if status == Satisfied {
-		result.Citations = []Citation{{Path: "impl.go", Line: 1}}
+		result.Citations = []Citation{FileCitation("impl.go", 1, 0)}
 	} else {
 		result.MissingEvidence = "not demonstrated"
 	}

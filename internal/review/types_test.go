@@ -189,7 +189,7 @@ func TestCriterionResult_Valid(t *testing.T) {
 				Status:    review.Satisfied,
 				Rationale: "all requirements met",
 				Citations: []review.Citation{
-					{Path: "internal/review/types.go", Line: 10},
+					review.FileCitation("internal/review/types.go", 10, 0),
 				},
 			},
 			wantErr: false,
@@ -210,7 +210,7 @@ func TestCriterionResult_Valid(t *testing.T) {
 				ID:     "acceptance[0]",
 				Status: review.PartiallySatisfied,
 				Citations: []review.Citation{
-					{Path: "internal/review/types.go", Line: 10},
+					review.FileCitation("internal/review/types.go", 10, 0),
 				},
 				Rationale: "some requirements met",
 			},
@@ -247,7 +247,7 @@ func TestCriterionResult_Valid(t *testing.T) {
 				ID:     "definition_of_done",
 				Status: review.NotSatisfied,
 				Citations: []review.Citation{
-					{Path: "file.go", Line: 1},
+					review.FileCitation("file.go", 1, 0),
 				},
 				Rationale: "not satisfied",
 			},
@@ -588,7 +588,7 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 						Status:    review.Satisfied,
 						Rationale: "implemented correctly",
 						Citations: []review.Citation{
-							{Path: "internal/review/types.go", Line: 10},
+							review.FileCitation("internal/review/types.go", 10, 0),
 						},
 					},
 					{
@@ -596,7 +596,7 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 						Status:    review.Satisfied,
 						Rationale: "working as designed",
 						Citations: []review.Citation{
-							{Path: "internal/review/types.go", Line: 20},
+							review.FileCitation("internal/review/types.go", 20, 0),
 						},
 					},
 				},
@@ -966,4 +966,35 @@ func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T)
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
 	assert.Empty(t, decoded.ActivityDigest)
+}
+
+func TestCitationJSONRoundTripMatchesFixtures_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+
+	fixtures := []string{
+		`{"path":"impl.go","line":1}`,
+		`{"path":"internal/review/types.go","line":42,"column":3}`,
+		`{"activity_entry_id":"0"}`,
+		`{"path":"f.go","line":1,"activity_entry_details":"entry 0: command=\"make test\" exit_code=0"}`,
+	}
+	for _, raw := range fixtures {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			var c review.Citation
+			require.NoError(t, json.Unmarshal([]byte(raw), &c))
+			got, err := json.Marshal(c)
+			require.NoError(t, err)
+			assert.JSONEq(t, raw, string(got))
+		})
+	}
+
+	file := review.FileCitation("impl.go", 1, 0)
+	got, err := json.Marshal(file)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"path":"impl.go","line":1}`, string(got))
+
+	act := review.ActivityCitation("0")
+	got, err = json.Marshal(act)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"activity_entry_id":"0"}`, string(got))
 }
