@@ -2687,7 +2687,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 	require.NoError(t, err)
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
-	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
+	allOps, err := readAllOpsFromDir(opsDir)
 	require.NoError(t, err)
 
 	countBefore := 0
@@ -2701,7 +2701,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "--issue", "task-02", "--worktree")
 	require.NoError(t, err)
 
-	allOps, _, err = readAllOpsFromDirWithOffsets(opsDir)
+	allOps, err = readAllOpsFromDir(opsDir)
 	require.NoError(t, err)
 
 	countAfter := 0

@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -16,10 +18,15 @@ func newMaterializeCmd() *cobra.Command {
 		Short: "Replay op logs and update materialized state files",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
-			allOps, offsets, err := readAllOpsFromDirWithOffsets(filepath.Join(appCtx.IssuesDir, "ops"))
+			loaded, err := ops.LoadFromDirValidated(filepath.Join(appCtx.IssuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
 			}
+			for _, w := range loaded.Warnings {
+				fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+			}
+			allOps := ops.ExtractOps(loaded.Items)
+			offsets := loaded.PhysicalEOF
 
 			if excludeWorker != "" {
 				_, result, err := materialize.Run("", allOps, nil, materialize.Options{
