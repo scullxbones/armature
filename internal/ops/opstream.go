@@ -135,14 +135,6 @@ func LoadFromDirValidated(opsDir string) (LoadResult, error) {
 	return stream.loadAll()
 }
 
-func LoadFromDirWithOffsetsValidated(opsDir string) ([]OpItem, map[string]int64, []string, error) {
-	result, err := LoadFromDirValidated(opsDir)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return result.Items, result.PhysicalEOF, result.Warnings, nil
-}
-
 func ExtractOps(items []OpItem) []Op {
 	ops := make([]Op, len(items))
 	for i, item := range items {

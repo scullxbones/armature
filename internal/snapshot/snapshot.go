@@ -33,17 +33,17 @@ func NewStore(opsDir, stateDir string) *Store {
 }
 
 func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(s.opsDir)
+	loaded, err := ops.LoadFromDirValidated(s.opsDir)
 	if err != nil {
 		return nil, fmt.Errorf("load ops: %w", err)
 	}
 
-	allOps := ops.ExtractOps(items)
+	allOps := ops.ExtractOps(loaded.Items)
 	if allOps == nil {
 		allOps = []ops.Op{}
 	}
 
-	state, result, err := materialize.Run(s.stateDir, allOps, offsets, materialize.Options{WriteStateFiles: true})
+	state, result, err := materialize.Run(s.stateDir, allOps, loaded.PhysicalEOF, materialize.Options{WriteStateFiles: true})
 	if err != nil {
 		return nil, fmt.Errorf("materialize: %w", err)
 	}
@@ -62,7 +62,7 @@ func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 		State:           state,
 		Index:           index,
 		Issues:          issues,
-		Warnings:        append(warnings, result.Warnings...),
+		Warnings:        append(loaded.Warnings, result.Warnings...),
 		MaterializedOps: allOps,
 	}
 	s.current = snap
