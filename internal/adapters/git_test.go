@@ -30,6 +30,7 @@ func initTestRepo(t *testing.T) string {
 	gitRun("config", "user.name", "Test")
 	gitRun("config", "commit.gpgsign", "false")
 	gitRun("commit", "--allow-empty", "-m", "init")
+	gitRun("branch", "-M", "main")
 	return dir
 }
 
@@ -710,11 +711,7 @@ func TestMergeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
 	gitRun("add", "file.txt")
 	gitRun("commit", "-m", "feature commit")
 
-	got, err := c.MergeBase("feature", "master")
-	if err != nil {
-		// Default branch name may be "main" in some git configs.
-		got, err = c.MergeBase("feature", "main")
-	}
+	got, err := c.MergeBase("feature", "main")
 	require.NoError(t, err)
 	assert.Equal(t, baseSHA, got)
 }
@@ -1570,7 +1567,8 @@ func TestIsolatedClientIgnoresGITWorkTree_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, "src.txt", got[0].Path)
 }
 
-func TestIsolatedClientIgnoresCoreWorktree_REQ_LNGHZN_S10_T3(t *testing.T) { //nolint:paralleltest // t.Setenv is process-wide
+func TestIsolatedClientIgnoresCoreWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	gitRun := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", args...)

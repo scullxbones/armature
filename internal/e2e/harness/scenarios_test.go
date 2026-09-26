@@ -46,28 +46,14 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	}
 	require.NotEqual(t, workerIDs[0], workerIDs[1], "the race needs two distinct workers")
 
-	recoveryDir := filepath.Join(h.TempDir, "race-recovery")
-	require.NoError(t, h.Clone("race-recovery", recoveryDir))
-	out, err := h.RunArmIn(recoveryDir, "bootstrap", "--repo", recoveryDir)
-	require.NoError(t, err, "race recovery bootstrap failed: %s", out)
-	out, err = h.RunArmIn(recoveryDir, "materialize", "--repo", recoveryDir)
-	require.NoError(t, err, "race recovery materialization failed: %s", out)
-	out, err = h.RunArmIn(recoveryDir, "show", "--repo", recoveryDir, "--issue", "RACE-001", "--field", "claimed_by")
-	require.NoError(t, err, "race recovery show failed: %s", out)
-	authoritativeOwner := strings.TrimSpace(out)
+	recoveryDir := bootstrapClone(t, h, "race-recovery")
+	authoritativeOwner := replayClaimedBy(t, h, recoveryDir, "RACE-001")
 	require.Contains(t, workerIDs, authoritativeOwner, "replay must choose exactly one race participant as owner")
 
-	secondRecoveryDir := filepath.Join(h.TempDir, "race-recovery-second")
-	require.NoError(t, h.Clone("race-recovery-second", secondRecoveryDir))
-	out, err = h.RunArmIn(secondRecoveryDir, "bootstrap", "--repo", secondRecoveryDir)
-	require.NoError(t, err, "second race recovery bootstrap failed: %s", out)
-	out, err = h.RunArmIn(secondRecoveryDir, "materialize", "--repo", secondRecoveryDir)
-	require.NoError(t, err, "second race recovery materialization failed: %s", out)
-	out, err = h.RunArmIn(secondRecoveryDir, "show", "--repo", secondRecoveryDir, "--issue", "RACE-001", "--field", "claimed_by")
-	require.NoError(t, err, "second race recovery show failed: %s", out)
-	assert.Equal(t, authoritativeOwner, strings.TrimSpace(out), "independent replays must retain one authoritative winner")
+	secondRecoveryDir := bootstrapClone(t, h, "race-recovery-second")
+	assert.Equal(t, authoritativeOwner, replayClaimedBy(t, h, secondRecoveryDir, "RACE-001"), "independent replays must retain one authoritative winner")
 
-	out, err = h.RunArmIn(workerB, "claim", "--repo", workerB, "--issue", "STALE-001", "--worktree")
+	out, err := h.RunArmIn(workerB, "claim", "--repo", workerB, "--issue", "STALE-001", "--worktree")
 	require.NoError(t, err, "reclaim after TTL expiry failed: %s", out)
 	assert.Contains(t, out, "STALE-001")
 }
@@ -84,10 +70,7 @@ func TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2(t *testing.T) {
 	assertScenarioStatus(t, h, h.WorkDir, "WAVE-001", "claimed")
 	assertScenarioStatus(t, h, h.WorkDir, "WAVE-002", "open")
 
-	recoveryDir := filepath.Join(h.TempDir, "recovery-coordinator")
-	require.NoError(t, h.Clone("recovery", recoveryDir))
-	out, err = h.RunArmIn(recoveryDir, "bootstrap", "--repo", recoveryDir)
-	require.NoError(t, err, "recovery bootstrap failed: %s", out)
+	recoveryDir := bootstrapClone(t, h, "recovery-coordinator")
 	out, err = h.RunArmIn(recoveryDir, "worker-init", "--repo", recoveryDir)
 	require.NoError(t, err, "recovery worker-init failed: %s", out)
 	assertScenarioStatus(t, h, recoveryDir, "WAVE-001", "claimed")
@@ -106,6 +89,24 @@ func assertScenarioStatus(t *testing.T, h *harness.Harness, repo, issueID, want 
 	out, err = h.RunArmIn(repo, "show", "--repo", repo, "--issue", issueID, "--field", "status")
 	require.NoError(t, err, "show status for %s failed: %s", issueID, out)
 	assert.Equal(t, want, strings.TrimSpace(out), "materialized status for %s", issueID)
+}
+
+func bootstrapClone(t *testing.T, h *harness.Harness, name string) string {
+	t.Helper()
+	dir := filepath.Join(h.TempDir, name)
+	require.NoError(t, h.Clone(name, dir))
+	out, err := h.RunArmIn(dir, "bootstrap", "--repo", dir)
+	require.NoError(t, err, "%s bootstrap failed: %s", name, out)
+	return dir
+}
+
+func replayClaimedBy(t *testing.T, h *harness.Harness, repo, issueID string) string {
+	t.Helper()
+	out, err := h.RunArmIn(repo, "materialize", "--repo", repo)
+	require.NoError(t, err, "materialize %s failed: %s", issueID, out)
+	out, err = h.RunArmIn(repo, "show", "--repo", repo, "--issue", issueID, "--field", "claimed_by")
+	require.NoError(t, err, "show claimed_by for %s failed: %s", issueID, out)
+	return strings.TrimSpace(out)
 }
 
 func scenarioHarness(t *testing.T, issueIDs ...string) *harness.Harness {
