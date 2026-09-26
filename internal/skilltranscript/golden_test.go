@@ -322,15 +322,51 @@ func getMapKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+func TestBoundIssueIDRejectsLegacyOnlyBinding(t *testing.T) {
+	t.Parallel()
+
+	worktreePath := t.TempDir()
+	gitDir := t.TempDir()
+	gitFile := filepath.Join(worktreePath, ".git")
+	if err := os.WriteFile(gitFile, []byte("gitdir: "+gitDir+"\n"), 0o600); err != nil {
+		t.Fatalf("write .git file: %v", err)
+	}
+	legacyPath := filepath.Join(gitDir, "armature-task-id")
+	if err := os.WriteFile(legacyPath, []byte("legacy-01\n"), 0o600); err != nil {
+		t.Fatalf("write armature-task-id: %v", err)
+	}
+
+	got, err := worktree.ReadBinding(gitDir)
+	if err != nil {
+		t.Fatalf("ReadBinding must keep falling back to armature-task-id: %v", err)
+	}
+	if got != "legacy-01" {
+		t.Fatalf("ReadBinding got %q, want legacy-01", got)
+	}
+
+	if _, err := currentIssueBinding(worktreePath); err == nil {
+		t.Fatal("currentIssueBinding must fail when armature-issue-id is missing")
+	}
+}
+
 func boundIssueID(t *testing.T, worktreePath string) string {
 	t.Helper()
-	gitDir, err := worktree.ResolveGitDir(worktreePath)
+	id, err := currentIssueBinding(worktreePath)
 	if err != nil {
-		t.Fatalf("resolve worktree git dir: %v", err)
-	}
-	id, err := worktree.ReadBinding(gitDir)
-	if err != nil {
-		t.Fatalf("read worktree binding: %v", err)
+		t.Fatalf("read armature-issue-id: %v", err)
 	}
 	return id
+}
+
+func currentIssueBinding(worktreePath string) (string, error) {
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(gitDir, "armature-issue-id")
+	data, err := os.ReadFile(path) //nolint:gosec // path is gitDir from ResolveGitDir plus a fixed binding name
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }
