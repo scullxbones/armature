@@ -27,6 +27,7 @@ func TestConfigUnitFieldsLoadFromDisk_REQ_NOCOMMENTS(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(90), int64(loaded.DefaultTTL), "default_ttl JSON minutes must load as 90 minutes")
 	assert.Equal(t, 90*time.Minute, loaded.DefaultTTL.Duration())
+	assert.Equal(t, int64(90*60), loaded.DefaultTTL.Seconds())
 	assert.Equal(t, int64(7), int64(loaded.LowStakesPushThreshold), "low_stakes_push_threshold JSON count must load as 7")
 
 	require.NoError(t, WriteConfig(configPath, loaded))

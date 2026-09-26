@@ -215,7 +215,7 @@ func foldWorkerStatusFromClaimOwnerActivity(workerID string, allOps []ops.Op, de
 		}
 	}
 
-	idleWindowSeconds := int64(2 * defaultTTL.Duration() / time.Second)
+	idleWindowSeconds := 2 * defaultTTL.Seconds()
 	if lastOp > 0 && now-lastOp <= idleWindowSeconds {
 		return WorkerStatus{
 			WorkerID:   workerID,

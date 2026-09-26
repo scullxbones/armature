@@ -2,8 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +37,40 @@ func TestWorkersEmitsEnvelopeNotJSONL_REQ_AOC_S2_T4(t *testing.T) {
 		assert.NotEmpty(t, workers[0].WorkerID)
 		assert.NotEmpty(t, workers[0].Status)
 	}
+}
+
+func maxAcceptedTTLMinutes() int64 {
+	max := math.MaxInt64 / int64(time.Minute)
+	doubledSeconds := int64(math.MaxInt64 / (2 * 60))
+	if doubledSeconds < max {
+		max = doubledSeconds
+	}
+	return max
+}
+
+func TestIdleWindowAtMaxAcceptedTTL_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	maxMinutes := maxAcceptedTTLMinutes()
+	if maxMinutes > int64(math.MaxInt) {
+		t.Skip("TTLMinutes cannot hold the duration-safe bound on this platform")
+	}
+
+	problems := config.ValidatePresentFields([]byte(`{"default_ttl":` + strconv.FormatInt(maxMinutes, 10) + `}`))
+	require.Empty(t, problems, "largest representable default_ttl must be accepted")
+
+	now := int64(1000)
+	allOps := []ops.Op{
+		{Type: ops.OpNote, TargetID: "T-001", Timestamp: now - 1, WorkerID: "worker-a"},
+	}
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, config.TTLMinutes(maxMinutes), now, map[string]string{})
+	assert.Equal(t, "idle", status.Status)
+	idleWindowSeconds := 2 * maxMinutes * 60
+	assert.Positive(t, idleWindowSeconds)
+	assert.LessOrEqual(t, now-(now-1), idleWindowSeconds)
+
+	problems = config.ValidatePresentFields([]byte(`{"default_ttl":` + strconv.FormatInt(maxMinutes+1, 10) + `}`))
+	require.NotEmpty(t, problems, "one minute past the representable bound must be rejected")
+	assert.Contains(t, fmt.Sprintf("%v", problems), "default_ttl")
 }
 
 func TestClaimingWorkerActivityIfAuthorOwnsLease(t *testing.T) {

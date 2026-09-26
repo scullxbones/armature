@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
 	"time"
 
@@ -24,6 +25,16 @@ type TTLMinutes int
 // Duration returns the TTL as a time.Duration.
 func (m TTLMinutes) Duration() time.Duration {
 	return time.Duration(m) * time.Minute
+}
+
+// Seconds returns the TTL as whole seconds.
+func (m TTLMinutes) Seconds() int64 {
+	return int64(m) * 60
+}
+
+func (m TTLMinutes) overflowsConversions() bool {
+	n := int64(m)
+	return n > math.MaxInt64/int64(time.Minute) || n > math.MaxInt64/(2*60) || n > math.MaxInt64/60
 }
 
 // PendingOps is a count of pending low-stakes ops. JSON
