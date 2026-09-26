@@ -98,7 +98,7 @@ func ReconcileWithLocalEvidence(
 		Unrecognized:   []string{},
 	}
 
-	recordedPathMatches := make(map[string]bool)
+	matchedRecordedPaths := make(recordedPathSet)
 	gcCandidates := make(map[string][]Meta)
 
 	for _, wt := range worktrees {
@@ -109,14 +109,14 @@ func ReconcileWithLocalEvidence(
 			continue
 		}
 		if issue.WorktreePath != "" && NormalizePathAllowingMissing(wt.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
-			recordedPathMatches[issueID] = true
+			matchedRecordedPaths.add(issueID)
 		}
 
 		switch {
 		case isTerminalStatus(issue.Status):
 			gcCandidates[issueID] = append(gcCandidates[issueID], wt)
 		case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
-			if issue.WorktreePath == "" || NormalizePathAllowingMissing(wt.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
+			if liveClaimBindsLocalPath(issue, wt.Path) {
 				result.BoundWorktrees = append(result.BoundWorktrees, issueID)
 			} else {
 				result.Orphans = append(result.Orphans, issueID)
@@ -128,8 +128,8 @@ func ReconcileWithLocalEvidence(
 
 	for issueID, candidates := range gcCandidates {
 		issue := issues[issueID]
-		selected, ok := selectGCRemoval(issue, candidates)
-		if !ok {
+		selected, res := selectGCRemoval(issue, candidates)
+		if res != Bound {
 			result.GCAmbiguous = append(result.GCAmbiguous, issueID)
 			continue
 		}
@@ -137,17 +137,18 @@ func ReconcileWithLocalEvidence(
 		result.GCRemovals = append(result.GCRemovals, selected)
 	}
 
+	ghostScopeDisabled := len(managedRoots) == 0
 	for _, issue := range issues {
 		if issue == nil || issue.WorktreePath == "" {
 			continue
 		}
-		if recordedPathMatches[issue.ID] {
+		if matchedRecordedPaths.has(issue.ID) {
 			continue
 		}
 		normPath := NormalizePathAllowingMissing(issue.WorktreePath)
 		if !isTerminalStatus(issue.Status) && issue.ClaimedBy != "" &&
 			!issue.ClaimStale(now.Unix()) &&
-			(isUnderManagedRoot(normPath, managedRoots) || isRegisteredPath(normPath, registeredPaths)) {
+			(ghostScopeDisabled || isUnderManagedRoot(normPath, managedRoots) || isRegisteredPath(normPath, registeredPaths)) {
 			result.Ghosts = append(result.Ghosts, issue.ID)
 		}
 	}
@@ -168,6 +169,19 @@ func ReconcileWithLocalEvidence(
 	return result
 }
 
+func liveClaimBindsLocalPath(issue *materialize.Issue, wtPath string) bool {
+	return issue.WorktreePath == "" || NormalizePathAllowingMissing(wtPath) == NormalizePathAllowingMissing(issue.WorktreePath)
+}
+
+type recordedPathSet map[string]struct{}
+
+func (s recordedPathSet) add(id string) { s[id] = struct{}{} }
+
+func (s recordedPathSet) has(id string) bool {
+	_, ok := s[id]
+	return ok
+}
+
 func isRegisteredPath(normPath string, registeredPaths []string) bool {
 	for _, path := range registeredPaths {
 		if NormalizePathAllowingMissing(path) == normPath {
@@ -177,9 +191,9 @@ func isRegisteredPath(normPath string, registeredPaths []string) bool {
 	return false
 }
 
-func selectGCRemoval(issue *materialize.Issue, candidates []Meta) (Meta, bool) {
+func selectGCRemoval(issue *materialize.Issue, candidates []Meta) (Meta, Resolution) {
 	if len(candidates) == 0 {
-		return Meta{}, false
+		return Meta{}, NotFound
 	}
 	if issue != nil && issue.WorktreePath != "" {
 		var matches []Meta
@@ -189,22 +203,19 @@ func selectGCRemoval(issue *materialize.Issue, candidates []Meta) (Meta, bool) {
 			}
 		}
 		if len(matches) == 1 {
-			return matches[0], true
+			return matches[0], Bound
 		}
 		if len(matches) > 1 {
-			return Meta{}, false
+			return Meta{}, Ambiguous
 		}
 	}
 	if len(candidates) == 1 {
-		return candidates[0], true
+		return candidates[0], Bound
 	}
-	return Meta{}, false
+	return Meta{}, Ambiguous
 }
 
 func isUnderManagedRoot(normPath string, managedRoots []string) bool {
-	if len(managedRoots) == 0 {
-		return true
-	}
 	for _, root := range managedRoots {
 		if root != "" && IsUnderRoot(normPath, root) {
 			return true
