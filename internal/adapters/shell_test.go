@@ -3,7 +3,9 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -48,6 +50,31 @@ func TestNonInteractiveGitCommand(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected GIT_TERMINAL_PROMPT in command env")
+	}
+}
+
+func TestGitInitMainIgnoresGlobalInitTemplateDir(t *testing.T) {
+	template := t.TempDir()
+	hooks := filepath.Join(template, "hooks")
+	if err := os.MkdirAll(hooks, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	hook := []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n")
+	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), hook, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	set := exec.CommandContext(context.Background(), "git", "config", "-f", cfg, "init.templateDir", template)
+	if err := set.Run(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	dir := t.TempDir()
+	if err := GitInitMain(dir); err != nil {
+		t.Fatalf("GitInitMain: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git", "hooks", "pre-commit")); !os.IsNotExist(err) {
+		t.Fatalf("template pre-commit should not be installed, err=%v", err)
 	}
 }
 

@@ -182,22 +182,62 @@ func TestActivityEnvVarKillSwitchHasNoEffect_REQ_EXECEV_T1(t *testing.T) {
 func initTestGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+	isolated := []string{
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com",
+	}
 	runGit := func(args ...string) {
 		t.Helper()
 		fullArgs := append([]string{"-C", dir, "-c", "commit.gpgsign=false"}, args...)
 		cmd := exec.CommandContext(context.Background(), "git", fullArgs...)
-		// Isolate from the developer's global/system git config (e.g. a global
-		// commit.gpgsign=true would hang the empty commit on a GPG pinentry).
-		cmd.Env = append(os.Environ(),
-			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+		cmd.Env = overlayTestEnv(os.Environ(), isolated)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v failed: %s", args, out)
 	}
-	require.NoError(t, adapters.GitInitMain(dir))
+	require.NoError(t, adapters.GitInitMain(dir, isolated...))
 	runGit("commit", "--allow-empty", "-m", "initial")
 	return filepath.Join(dir, ".git")
+}
+
+func TestInitTestGitRepoIgnoresGlobalInitTemplateDir(t *testing.T) {
+	template := t.TempDir()
+	hooks := filepath.Join(template, "hooks")
+	require.NoError(t, os.MkdirAll(hooks, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o755))
+
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	set := exec.CommandContext(context.Background(), "git", "config", "-f", cfg, "init.templateDir", template)
+	require.NoError(t, set.Run())
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+
+	gitDir := initTestGitRepo(t)
+	_, err := os.Stat(filepath.Join(gitDir, "hooks", "pre-commit"))
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(gitDir, "hooks", "post-commit"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func overlayTestEnv(base, extra []string) []string {
+	drop := make(map[string]struct{}, len(extra))
+	for _, e := range extra {
+		k, _, ok := strings.Cut(e, "=")
+		if ok {
+			drop[k] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	for _, e := range base {
+		k, _, ok := strings.Cut(e, "=")
+		if ok {
+			if _, skip := drop[k]; skip {
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return append(out, extra...)
 }
 
 func TestFallbackGetHEADAndKillSwitchIgnoreInheritedGITDir(t *testing.T) {
