@@ -83,10 +83,10 @@ func NonInteractiveGitCommand(repoPath string, args ...string) *exec.Cmd {
 }
 
 func GitInitMain(dir string) error {
-	if out, err := exec.CommandContext(context.Background(), "git", "init", dir).CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(context.Background(), "git", "init", dir).CombinedOutput(); err != nil { //nolint:gosec // G204: "git" is constant
 		return fmt.Errorf("git init: %w: %s", err, out)
 	}
-	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	cmd := NonInteractiveGitCommand(dir, "symbolic-ref", "HEAD", "refs/heads/main")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git symbolic-ref HEAD: %w: %s", err, out)
 	}
