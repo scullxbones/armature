@@ -31,9 +31,9 @@ func TestStrictDecodeAcceptsRetiredModeField(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 	assert.Equal(t, "go", cfg.ProjectType)
-	assert.Equal(t, 120, cfg.DefaultTTL)
+	assert.Equal(t, TTLMinutes(120), cfg.DefaultTTL)
 	assert.Equal(t, 3200, cfg.TokenBudget)
-	assert.Equal(t, 10, cfg.LowStakesPushThreshold)
+	assert.Equal(t, PendingOps(10), cfg.LowStakesPushThreshold)
 	assert.Empty(t, cfg.Hooks)
 }
 
@@ -59,9 +59,9 @@ func TestStrictDecodeAcceptsKnownFields(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 	assert.Equal(t, "go", cfg.ProjectType)
-	assert.Equal(t, 60, cfg.DefaultTTL)
+	assert.Equal(t, TTLMinutes(60), cfg.DefaultTTL)
 	assert.Equal(t, 1600, cfg.TokenBudget)
-	assert.Equal(t, 5, cfg.LowStakesPushThreshold)
+	assert.Equal(t, PendingOps(5), cfg.LowStakesPushThreshold)
 	assert.Empty(t, cfg.Hooks)
 	require.Contains(t, cfg.Gates, PublishGateProfile)
 	assert.Equal(t, []string{"make", "check"}, cfg.Gates[PublishGateProfile].Command)
