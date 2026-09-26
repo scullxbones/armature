@@ -318,8 +318,9 @@ func TestMaterializeOffsetTracking(t *testing.T) {
 
 	assert.Contains(t, out2, "Materialized 0 issues", "second run should also have 0 issues (new op is also mismatched)")
 
-	_, offsets, warnings, matErr := ops.LoadFromDirWithOffsetsValidated(opsDir)
+	loaded, matErr := ops.LoadFromDirValidated(opsDir)
 	require.NoError(t, matErr)
+	offsets, warnings := loaded.PhysicalEOF, loaded.Warnings
 
 	assert.Contains(t, offsets, "all-mismatch.log", "offset should be recorded for all-mismatch.log")
 
