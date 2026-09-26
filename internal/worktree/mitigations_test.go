@@ -9,9 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestApplyMitigations_NoMainGoWork_NoOp_REQ_LNGHZN_S5_T3 verifies that when the
-// main tree has no go.work, ApplyMitigations is a no-op and never creates a
-// go.work anywhere (neither in the main tree nor the worktree).
 func TestApplyMitigations_NoMainGoWork_NoOp_REQ_LNGHZN_S5_T3(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
@@ -26,9 +23,6 @@ func TestApplyMitigations_NoMainGoWork_NoOp_REQ_LNGHZN_S5_T3(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "no go.work should be created in the worktree")
 }
 
-// TestApplyMitigations_RemovesWorktreeFromUseBlock_REQ_LNGHZN_S5_T3 verifies that
-// a worktree listed in the main tree's go.work `use (...)` block is removed so
-// the main tree's gopls stops walking the worktree.
 func TestApplyMitigations_RemovesWorktreeFromUseBlock_REQ_LNGHZN_S5_T3(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
@@ -44,8 +38,6 @@ func TestApplyMitigations_RemovesWorktreeFromUseBlock_REQ_LNGHZN_S5_T3(t *testin
 	assert.Contains(t, string(content), "\t.\n", "unrelated use entries must be preserved")
 }
 
-// TestApplyMitigations_RemovesWorktreeFromSingleLineUse_REQ_LNGHZN_S5_T3 verifies
-// the single-line `use ./path` form is also handled.
 func TestApplyMitigations_RemovesWorktreeFromSingleLineUse_REQ_LNGHZN_S5_T3(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
@@ -61,8 +53,6 @@ func TestApplyMitigations_RemovesWorktreeFromSingleLineUse_REQ_LNGHZN_S5_T3(t *t
 	assert.Contains(t, string(content), "use .\n", "unrelated use entries must be preserved")
 }
 
-// TestApplyMitigations_GoWorkWithoutWorktree_Unchanged_REQ_LNGHZN_S5_T3 verifies
-// that a go.work not referencing the worktree is left untouched (idempotent).
 func TestApplyMitigations_GoWorkWithoutWorktree_Unchanged_REQ_LNGHZN_S5_T3(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
@@ -98,8 +88,6 @@ func TestApplyMitigations_PreservesCRLFWhenRemovingQuotedPath_REQ_LNGHZN_S5_T3(t
 	assert.Equal(t, "go 1.26\r\n\r\nuse (\r\n\t./other\r\n)\r\n", newContent)
 }
 
-// TestNormalizePath_NonexistentFallsBackToAbs_REQ_LNGHZN_S5_T3 verifies that a
-// non-existent path still normalizes to an absolute path rather than failing.
 func TestNormalizePath_NonexistentFallsBackToAbs_REQ_LNGHZN_S5_T3(t *testing.T) {
 	t.Parallel()
 	got := NormalizePath("relative/does-not-exist")

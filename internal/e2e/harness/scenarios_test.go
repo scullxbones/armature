@@ -14,9 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2 verifies both sides of the
-// failure contract: exactly one concurrent claimant owns a fresh task and a
-// task abandoned past its TTL can be reclaimed by another worker.
 func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	t.Parallel()
 
@@ -49,9 +46,6 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	}
 	require.NotEqual(t, workerIDs[0], workerIDs[1], "the race needs two distinct workers")
 
-	// Concurrent commands may each make a provisional local claim. The durable
-	// contract is the recovered materialized state: exactly one of those two
-	// workers is authoritative, and independent replays choose the same owner.
 	recoveryDir := filepath.Join(h.TempDir, "race-recovery")
 	require.NoError(t, h.Clone("race-recovery", recoveryDir))
 	out, err := h.RunArmIn(recoveryDir, "bootstrap", "--repo", recoveryDir)
@@ -78,10 +72,6 @@ func TestClaimRaceAndStaleReclaim_REQ_TOPTIER_S3_T2(t *testing.T) {
 	assert.Contains(t, out, "STALE-001")
 }
 
-// TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2 simulates a
-// coordinator crash after dispatching only the first item in a wave. A fresh
-// coordinator must observe that partial state and dispatch only the remaining
-// item instead of recreating the entire wave.
 func TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2(t *testing.T) {
 	t.Parallel()
 
@@ -89,14 +79,11 @@ func TestCoordinatorRecoveryResumesPartialWave_REQ_TOPTIER_S3_T2(t *testing.T) {
 	out, err := h.RunArm("worker-init", "--repo", h.WorkDir)
 	require.NoError(t, err, "initial coordinator worker-init failed: %s", out)
 
-	// The first coordinator gets only the first work item out before it crashes.
 	out, err = h.RunArm("claim", "--repo", h.WorkDir, "--issue", "WAVE-001", "--worktree")
 	require.NoError(t, err, "initial wave dispatch failed: %s", out)
 	assertScenarioStatus(t, h, h.WorkDir, "WAVE-001", "claimed")
 	assertScenarioStatus(t, h, h.WorkDir, "WAVE-002", "open")
 
-	// Do not reuse h.WorkDir: this is the interruption boundary. The new clone
-	// must observe the partial wave and dispatch only the remaining item.
 	recoveryDir := filepath.Join(h.TempDir, "recovery-coordinator")
 	require.NoError(t, h.Clone("recovery", recoveryDir))
 	out, err = h.RunArmIn(recoveryDir, "bootstrap", "--repo", recoveryDir)

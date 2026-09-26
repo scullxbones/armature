@@ -98,19 +98,9 @@ func ReconcileWithLocalEvidence(
 		Unrecognized:   []string{},
 	}
 
-	// recordedPathMatches tracks the exact local path recorded by a live claim.
-	// A wrong-path binding for the same issue is still an orphan and must not hide
-	// the recorded-path ghost.
 	recordedPathMatches := make(map[string]bool)
 	gcCandidates := make(map[string][]Meta)
 
-	// First pass: drive classification from THIS clone's on-disk worktrees.
-	// Identity is the armature-issue-id binding (wt.Binding) and nothing else.
-	// A worktree carrying no binding is Unrecognized — its directory basename is
-	// NOT an identity and must never be promoted to one. Inferring an issue from
-	// the basename would report a live claim as BOUND while doctor and the
-	// delivery gate, which both require the binding, reject the very same
-	// worktree: the anomaly would be suppressed exactly where an agent reads it.
 	for _, wt := range worktrees {
 		issueID := wt.Binding
 		issue := issues[issueID]
@@ -126,25 +116,16 @@ func ReconcileWithLocalEvidence(
 		case isTerminalStatus(issue.Status):
 			gcCandidates[issueID] = append(gcCandidates[issueID], wt)
 		case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
-			// A claim's absolute WorktreePath identifies the clone that owns the
-			// claim. A binding in this clone is not enough to call a local path
-			// bound when the materialized claim points at another clone; classify
-			// that local checkout as an orphan so it cannot be mistaken for the
-			// claimant's live worktree.
 			if issue.WorktreePath == "" || NormalizePathAllowingMissing(wt.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
 				result.BoundWorktrees = append(result.BoundWorktrees, issueID)
 			} else {
 				result.Orphans = append(result.Orphans, issueID)
 			}
 		default:
-			// Unclaimed, or a claim past its TTL: worktree with no live claim.
 			result.Orphans = append(result.Orphans, issueID)
 		}
 	}
 
-	// Select terminal worktrees by exact recorded path where available. If the
-	// recorded path cannot disambiguate multiple binding-bound candidates, leave
-	// the issue out of the removal set rather than guessing.
 	for issueID, candidates := range gcCandidates {
 		issue := issues[issueID]
 		selected, ok := selectGCRemoval(issue, candidates)
@@ -156,9 +137,6 @@ func ReconcileWithLocalEvidence(
 		result.GCRemovals = append(result.GCRemovals, selected)
 	}
 
-	// Second pass: issues holding a live claim whose worktree is missing on disk
-	// are ghosts. A terminal issue whose worktree is gone is the expected end
-	// state, not an anomaly, so terminal issues are excluded.
 	for _, issue := range issues {
 		if issue == nil || issue.WorktreePath == "" {
 			continue
@@ -166,11 +144,6 @@ func ReconcileWithLocalEvidence(
 		if recordedPathMatches[issue.ID] {
 			continue
 		}
-		// The worktree is missing on disk (that's the ghost condition), so the
-		// recorded path's leaf cannot be symlink-resolved directly. Resolve its
-		// existing parent instead so the managed-root prefix test stays symmetric
-		// with the EvalSymlinks-resolved roots even when the repo root is reached
-		// through a symlink (WSL /mnt/c, macOS /tmp→/private/tmp, symlinked $HOME).
 		normPath := NormalizePathAllowingMissing(issue.WorktreePath)
 		if !isTerminalStatus(issue.Status) && issue.ClaimedBy != "" &&
 			!issue.ClaimStale(now.Unix()) &&
@@ -179,7 +152,6 @@ func ReconcileWithLocalEvidence(
 		}
 	}
 
-	// Deterministic output: map iteration order is nondeterministic.
 	sort.Strings(result.BoundWorktrees)
 	sort.Strings(result.Orphans)
 	sort.Strings(result.Ghosts)
@@ -229,10 +201,6 @@ func selectGCRemoval(issue *materialize.Issue, candidates []Meta) (Meta, bool) {
 	return Meta{}, false
 }
 
-// isUnderManagedRoot reports whether normPath falls under one of the supplied
-// managed roots. With no roots supplied, scoping is disabled and it returns true
-// (legacy behavior). Both roots and paths are normalized, and a path-separator
-// boundary is required so a sibling such as .worktrees-old cannot match.
 func isUnderManagedRoot(normPath string, managedRoots []string) bool {
 	if len(managedRoots) == 0 {
 		return true
@@ -245,7 +213,6 @@ func isUnderManagedRoot(normPath string, managedRoots []string) bool {
 	return false
 }
 
-// isTerminalStatus returns true if the issue status is one where worktrees should be removed.
 func isTerminalStatus(status string) bool {
 	return status == ops.StatusMerged || status == ops.StatusCancelled
 }

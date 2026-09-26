@@ -47,7 +47,7 @@ func NormalizePathAllowingMissing(path string) string {
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
-			return abs // reached the filesystem root without resolving anything
+			return abs
 		}
 		missing = filepath.Join(filepath.Base(cur), missing)
 		cur = parent
@@ -228,8 +228,6 @@ func parseGoWorkToken(code string) (string, string, bool) {
 	return code[:end], code[end:], true
 }
 
-// useDirectiveMatches reports whether a `use` path (relative to repoRoot or
-// absolute) resolves to the target worktree path.
 func useDirectiveMatches(p, repoRoot, target string) bool {
 	if p == "" {
 		return false

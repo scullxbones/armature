@@ -23,7 +23,6 @@ func NewTestRepo(t *testing.T) *TestRepo {
 
 	runCmd(tmpDir, "init")
 
-	// Configure git user and disable GPG signing
 	runCmd(tmpDir, "config", "user.email", "test@example.com")
 	runCmd(tmpDir, "config", "user.name", "Test User")
 	runCmd(tmpDir, "config", "commit.gpgsign", "false")
@@ -38,8 +37,6 @@ func NewTestRepo(t *testing.T) *TestRepo {
 		runCmdWithEnv(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "worker-init")
 	}
 
-	// Create initial commit before bootstrap
-	// (bootstrap expects at least one commit to exist)
 	readmeFile := filepath.Join(tmpDir, "README.md")
 	if err := os.WriteFile(readmeFile, []byte("# Test Repository\n"), 0600); err != nil {
 		t.Fatalf("failed to create README: %v", err)
@@ -178,8 +175,6 @@ func (tr *TestRepo) HarnessDriveTransition(t *testing.T, issueID, status, outcom
 	tr.runArm(t, args...)
 }
 
-// ReviewPrepare prepares a review bundle for an issue.
-// If outputDir is empty, uses t.TempDir(); otherwise stores the bundle in outputDir.
 func (tr *TestRepo) ReviewPrepare(t *testing.T, issueID, baseSha, headSha, outputDir string) string {
 	t.Helper()
 

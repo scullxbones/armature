@@ -1,4 +1,4 @@
-// Package snapshot captures and restores point-in-time views of materialized task state.
+// Package snapshot captures point-in-time views of materialized task state.
 package snapshot
 
 import (
@@ -10,7 +10,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// Snapshot is the result of loading and materializing the full repo state.
 type Snapshot struct {
 	State           *materialize.State
 	Index           materialize.Index
@@ -19,9 +18,7 @@ type Snapshot struct {
 	MaterializedOps []ops.Op
 }
 
-// Store owns ops-read→materialize→snapshot operations for a configured directory pair.
-// Store is not safe for concurrent use. It is designed for sequential, per-command usage
-// where Load/Issue/Index are called from a single goroutine.
+// Store is not safe for concurrent use.
 type Store struct {
 	opsDir   string
 	stateDir string
@@ -35,10 +32,6 @@ func NewStore(opsDir, stateDir string) *Store {
 	}
 }
 
-// Load materializes state from disk and caches it, replacing any previously
-// cached snapshot. Call it both for the initial load and to refresh the
-// cache after the underlying ops/state have changed. Returns a non-nil
-// Snapshot with empty collections when opsDir is empty.
 func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(s.opsDir)
 	if err != nil {
@@ -76,7 +69,6 @@ func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 	return snap, nil
 }
 
-// Issue returns the Issue with the given ID, or nil if not found.
 func (s *Store) Issue(id string) *materialize.Issue {
 	if s.current == nil {
 		return nil
@@ -91,21 +83,10 @@ func (s *Store) Index() materialize.Index {
 	return s.current.Index
 }
 
-// ReadIndex reads the index directly from disk without triggering materialization and
-// without consulting the s.current cache. It does not call materialize.Materialize* or
-// write any state files. Use this instead of Index() when you need the on-disk index
-// without a full Load cycle, or instead of store.Load() when the caller only
-// needs index data before appending an op. Contrast with Index(), which returns the
-// cached data from the most recent Load call.
 func (s *Store) ReadIndex() (materialize.Index, error) {
 	return materialize.LoadIndex(s.IndexPath())
 }
 
-// ReadIssue reads a single issue directly from disk without triggering materialization and
-// without consulting the s.current cache. It does not call materialize.Materialize* or
-// write any state files. Use this instead of Issue() when you need a single issue from disk
-// without a full Load cycle. Contrast with Issue(), which returns the cached data
-// from the most recent Load call. Returns an error if the issue file does not exist.
 func (s *Store) ReadIssue(id string) (*materialize.Issue, error) {
 	issue, err := materialize.LoadIssue(s.IssuePath(id))
 	if err != nil {

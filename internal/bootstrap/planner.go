@@ -36,57 +36,39 @@ type PlatformRow struct {
 
 // Plan is the full declarative harness setup plan.
 type Plan struct {
-	Target string // "local" or "global"
+	Target string
 	Rows   []PlatformRow
 }
 
 // HarnessArtifactResult captures the outcome of deploying a single artifact.
 type HarnessArtifactResult struct {
-	Platform string `json:"platform"`         // e.g., "claude", "codex"
-	Artifact string `json:"artifact"`         // e.g., "skills", "plugin_metadata", "harness_hook_config"
-	Status   string `json:"status"`           // e.g., "ok", "skipped", "unsupported"
-	Action   string `json:"action,omitempty"` // e.g., "install", "skip", "unsupported" — the planned action from the cell
-	Note     string `json:"note,omitempty"`   // human-readable details
-	Error    string `json:"error,omitempty"`  // error message if Status is "error"
+	Platform string `json:"platform"`
+	Artifact string `json:"artifact"`
+	Status   string `json:"status"`
+	Action   string `json:"action,omitempty"`
+	Note     string `json:"note,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 // PlanRequest holds the inputs to BuildPlan.
 type PlanRequest struct {
 	Platforms []Platform // empty = DefaultPlatforms()
-	Target    string     // "local" or "global"; defaults to "local"
+	Target    string
 	WithHooks bool
 }
 
-// allKnownPlatforms is the exhaustive set of platforms Armature recognises.
 var allKnownPlatforms = []Platform{
 	PlatformClaude, PlatformCodex, PlatformAntigravity, PlatformDevin,
 }
 
-// Verification contract: a platform/artifact is "verified" and may appear in a
-// verified* map only when ALL of the following are true:
-//
-//  1. A writer function for that artifact exists in arm and targets the correct
-//     platform-specific path.
-//  2. An integration test exercises `arm bootstrap [--platform <p>]` and asserts
-//     that the artifact appears at the correct path.
-//  3. For harness_hook_config: additionally, ownership tests exist for both the
-//     managed-file and unmanaged-file cases.
-//
-// To add a platform, implement the writer, add the integration test, and update
-// the map below. Do not add a platform entry based on future intent alone.
-
-// verifiedSkills lists platforms with a verified arm-level skills+flat deploy path.
 var verifiedSkills = map[Platform]bool{
 	PlatformClaude: true,
 }
 
-// verifiedPluginMetadata lists platforms with a verified plugin metadata deploy path.
 var verifiedPluginMetadata = map[Platform]bool{
 	PlatformClaude: true,
 }
 
-// verifiedHarnessHookConfig lists platforms whose WriteConfig and OwnsConfig are
-// implemented and tested in harnesshook.
 var verifiedHarnessHookConfig = map[Platform]bool{
 	PlatformClaude: true,
 	PlatformCodex:  true,

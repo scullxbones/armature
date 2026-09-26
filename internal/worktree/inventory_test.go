@@ -114,10 +114,6 @@ func TestCanonicalRoot_RelativeRepoPathIsAbsolute(t *testing.T) {
 	assert.True(t, filepath.IsAbs(root), "canonical root must be absolute, got %q", root)
 }
 
-// TestCanonicalRoot_MissingThroughSymlink_REQ_ARCHIMP_S20 pins Codex 153 P2:
-// a not-yet-created .worktrees under a symlinked repo root must still resolve
-// through the symlink (e.g. /tmp -> /private/tmp), matching NormalizePath of
-// an existing sibling under the resolved root.
 func TestCanonicalRoot_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.T) {
 	t.Parallel()
 	realRepo := t.TempDir()
@@ -128,14 +124,9 @@ func TestCanonicalRoot_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.T) {
 	got := CanonicalRoot(link)
 	want := NormalizePathAllowingMissing(filepath.Join(realRepo, ".worktrees"))
 	assert.Equal(t, want, got)
-	// And equal to resolving via the real path directly.
 	assert.Equal(t, CanonicalRoot(realRepo), got)
 }
 
-// TestCanonicalPath_MissingThroughSymlinkAgreesWithRoot_REQ_ARCHIMP_S20 pins
-// Codex 154 P2: CanonicalPath must share CanonicalRoot's spelling when
-// .worktrees does not exist yet under a symlink, so filepath.Rel cannot treat
-// a valid issue ID as an escape.
 func TestCanonicalPath_MissingThroughSymlinkAgreesWithRoot_REQ_ARCHIMP_S20(t *testing.T) {
 	t.Parallel()
 	realRepo := t.TempDir()
@@ -153,25 +144,17 @@ func TestCanonicalPath_MissingThroughSymlinkAgreesWithRoot_REQ_ARCHIMP_S20(t *te
 	assert.Equal(t, CanonicalPath(realRepo, issueID), path)
 }
 
-// TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6 verifies that selection
-// reports THREE outcomes, not two. A single bool cannot distinguish "nothing to
-// act on" from "more than one candidate and no way to choose", and callers that
-// collapse the two skip a fail-closed gate instead of refusing (I5/I6).
 func TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6(t *testing.T) {
 	t.Parallel()
 
-	// No bound entry -> NotFound. There is genuinely nothing to act on; a
-	// caller may legitimately fall through to a read-only gate lookup.
 	_, res := SelectByIssue([]Meta{{Path: "/other", Binding: "other"}}, "task-01", "/repo/.worktrees/task-01")
 	assert.Equal(t, NotFound, res)
 
-	// Exactly one bound entry -> Bound, regardless of recorded path.
 	single := []Meta{{Path: "/repo/.worktrees/task-01", Binding: "task-01"}}
 	got, res := SelectByIssue(single, "task-01", "")
 	require.Equal(t, Bound, res)
 	assert.Equal(t, "/repo/.worktrees/task-01", got.Path)
 
-	// Two bound entries + recorded path -> the recorded-path entry wins.
 	dup := []Meta{
 		{Path: "/legacy/explicit", Binding: "task-01"},
 		{Path: "/repo/.worktrees/task-01", Binding: "task-01"},
@@ -180,22 +163,13 @@ func TestSelectByIssue_ResolutionTriState_REQ_LNGHZN_S5_T6(t *testing.T) {
 	require.Equal(t, Bound, res)
 	assert.Equal(t, "/repo/.worktrees/task-01", got.Path)
 
-	// Two bound entries + empty recorded path -> Ambiguous, NOT NotFound. This
-	// is the distinction the old bool erased: the caller must refuse, not treat
-	// it as "no worktree" and continue.
 	_, res = SelectByIssue(dup, "task-01", "")
 	assert.Equal(t, Ambiguous, res)
 
-	// Two bound entries + recorded path matching neither -> Ambiguous.
 	_, res = SelectByIssue(dup, "task-01", "/somewhere/else")
 	assert.Equal(t, Ambiguous, res)
 }
 
-// TestLocateBinding_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6 pins the
-// difference between the two questions. Existence is LocateBinding !=
-// BindingNone: it answers YES where selection refuses, because finding one
-// PREVENTS a destructive act (doctor releasing a live claim) rather than
-// causing one.
 func TestLocateBinding_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
 	t.Parallel()
 
@@ -204,34 +178,24 @@ func TestLocateBinding_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
 		{Path: "/repo/.worktrees/task-01", Binding: "task-01"},
 	}
 
-	// The defining case: selection is Ambiguous here, existence is not none. A
-	// live claim owning two bound worktrees must never be reported as having none.
 	_, res := SelectByIssue(dup, "task-01", "")
 	require.Equal(t, Ambiguous, res)
 	loc, _ := LocateBinding(dup, "task-01", "")
 	assert.Equal(t, BindingAmbiguous, loc)
 
-	// No bound entry -> none.
 	loc, _ = LocateBinding([]Meta{{Path: "/other", Binding: "other"}}, "task-01", "")
 	assert.Equal(t, BindingNone, loc)
 
-	// One bound entry, no recorded path -> at recorded path.
 	single := []Meta{{Path: "/legacy/explicit", Binding: "task-01"}}
 	loc, _ = LocateBinding(single, "task-01", "")
 	assert.Equal(t, BindingAtRecordedPath, loc)
 
-	// A recorded path may drift after `git worktree move`; the binding is still
-	// live evidence and must suppress destructive claim release.
 	loc, _ = LocateBinding(dup, "task-01", "/repo/.worktrees/task-01")
 	assert.NotEqual(t, BindingNone, loc)
 	loc, _ = LocateBinding(single, "task-01", "/repo/.worktrees/task-01")
 	assert.Equal(t, BindingElsewhere, loc)
 }
 
-// TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5 verifies a managed
-// worktree whose directory was deleted leaves a prunable registration that
-// HasPrunableRegistration detects at its exact path (and that a live worktree is
-// not reported as prunable).
 func TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
@@ -247,18 +211,15 @@ func TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(wtPath), 0755))
 	runInventoryGit(t, repo, "worktree", "add", "-b", "task/task-01", wtPath)
 
-	// Live worktree: not prunable.
 	got, err := HasPrunableRegistration(repo, wtPath)
 	require.NoError(t, err)
 	assert.False(t, got)
 
-	// Delete the directory out from under git: registration survives, prunable.
 	require.NoError(t, os.RemoveAll(wtPath))
 	got, err = HasPrunableRegistration(repo, wtPath)
 	require.NoError(t, err)
 	assert.True(t, got)
 
-	// A different, unregistered path is never reported prunable.
 	got, err = HasPrunableRegistration(repo, filepath.Join(repo, ".worktrees", "task-02"))
 	require.NoError(t, err)
 	assert.False(t, got)

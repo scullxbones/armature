@@ -12,22 +12,8 @@ import (
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
-// BaseCommitFileName is the name of the file (written into a worktree's
-// actual git directory, alongside armature-issue-id) that records the SHA
-// the task branch diverged from at claim time. The delivery gate reads this
-// to scope-check against the real branch-point rather than merge-basing
-// against a default branch, which is wrong whenever the task branch was cut
-// from a story branch containing completed sibling-task commits.
 const BaseCommitFileName = "armature-base-commit"
 
-// ClaimedBranchFileName is the name of the file (written into a worktree's
-// actual git directory, alongside armature-issue-id and armature-base-commit)
-// that records the branch name the issue was actually claimed under — derived
-// from materialize.DeriveBranchName against the issue's TYPE AT CLAIM TIME.
-// The delivery gate's VerifyIssueBranchBinding reads this (via
-// RecordedClaimedBranch) and prefers it over re-deriving the expected branch
-// from the CURRENT issue type, which may have been amended after claim (e.g.
-// task -> epic) to route around the branch-binding check.
 const ClaimedBranchFileName = "armature-claimed-branch"
 
 // ParentBranchConfigKey returns the git config key used to durably record,
@@ -90,23 +76,6 @@ func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 	return nil
 }
 
-// VerifyIssueBranchBinding fails closed unless worktreePath's current git
-// branch (HEAD) is the expected task branch for issueID, derived the same
-// way claim.go's createWorktreeAndBranch does (see materialize.DeriveBranchName).
-// The armature-issue-id marker file checked by VerifyIssueWorktreeBinding only
-// proves the worktree was once claimed for this issue — it does not prove
-// HEAD is still on the branch the coordinator will actually integrate. A
-// worker could check out an unrelated scratch branch after claiming and
-// still pass that check, silently stranding otherwise-valid commits off the
-// task branch. issueType empty or unmapped (DeriveBranchName returns "")
-// skips this check, matching the caller's existing task/bug/feature gating —
-// UNLESS claimedBy is non-empty, in which case skipping is never safe (see
-// below).
-//
-// claimedBy is the issue's CURRENT ClaimedBy (materialize.Issue.ClaimedBy),
-// passed separately from issueType because both can be amended
-// independently after claim. It is used only for the no-record fallback
-// path below.
 func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy string) error {
 	expectedBranch, recorded, err := RecordedClaimedBranch(worktreePath)
 	if err != nil {
@@ -213,24 +182,6 @@ func dynamicBaseCommit(git *adapters.Client) (string, error) {
 	return base, nil
 }
 
-// GatedBaseCommit returns the base commit the delivery gate must scope-check
-// against, trusting ONLY facts actually recorded at claim time: the
-// dynamically-recomputed merge-base against the recorded parent branch
-// (DynamicBaseCommit — the parent branch NAME is the recorded fact,
-// git-config, written once at claim; recomputing the merge-base against it
-// fresh on every check is what lets a rebased task branch or a
-// removed-and-recreated worktree keep resolving correctly, see
-// TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1 and
-// TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1), then the
-// SHA recorded once at claim time (RecordedBaseCommit) if no parent-branch
-// record exists (worktrees claimed before that config was introduced).
-//
-// Deliberately does NOT guess a default-branch merge-base: that tier has no
-// recorded claim-time fact behind it at all, so letting it stand in for
-// gating purposes would let the gate pass against data nobody actually
-// recorded for this claim. If neither a parent-branch config nor a recorded
-// base-commit file exists for worktreePath (e.g. it was claimed before
-// either mechanism existed), that must fail the gate closed.
 func GatedBaseCommit(worktreePath, issueID string, git *adapters.Client) (string, error) {
 	baseCommit, err := dynamicBaseCommit(git)
 	if err == nil {
