@@ -22,6 +22,28 @@ func closeOrKeep(errp *error, c io.Closer) {
 	}
 }
 
+type forcedClose struct {
+	io.Closer
+	err error
+}
+
+func (f forcedClose) Close() error {
+	cerr := f.Closer.Close()
+	if f.err != nil {
+		return f.err
+	}
+	return cerr
+}
+
+func closeUnlessCommitted(committed bool, errp *error, c io.Closer) {
+	if committed {
+		var ignored error
+		closeOrKeep(&ignored, c)
+		return
+	}
+	closeOrKeep(errp, c)
+}
+
 func closeOrKeepErr(primary error, c io.Closer) error {
 	if cerr := c.Close(); cerr != nil {
 		return errors.Join(primary, cerr)
@@ -61,7 +83,8 @@ func ListLogFiles(opsDir string) ([]string, error) {
 // protocol (see Append). Construct one fresh per call site with
 // NewAppendLog; it holds no state beyond the target path.
 type AppendLog struct {
-	Path string
+	Path     string
+	closeErr error
 }
 
 // NewAppendLog constructs an AppendLog for the given log file path.
@@ -110,13 +133,14 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (wrote bo
 	if err != nil {
 		return false, err
 	}
-	defer func() { closeOrKeep(&err, lock) }()
+	committed := false
+	defer func() { closeUnlessCommitted(committed, &err, forcedClose{Closer: lock, err: a.closeErr}) }()
 
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return false, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { closeOrKeep(&err, f) }()
+	defer func() { closeUnlessCommitted(committed, &err, forcedClose{Closer: f, err: a.closeErr}) }()
 
 	markerPath := metaBase + pendingMarkerSuffix
 	retry, err := recoverPendingAppend(f, markerPath, buf)
@@ -124,6 +148,7 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (wrote bo
 		return false, err
 	}
 	if retry {
+		committed = true
 		return false, nil
 	}
 
@@ -188,6 +213,7 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (wrote bo
 	if err := syncDir(filepath.Dir(markerPath)); err != nil {
 		return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
 	}
+	committed = true
 	return true, nil
 }
 
@@ -290,8 +316,14 @@ func syncDir(path string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() { closeOrKeep(&err, dir) }()
-	return dir.Sync()
+	err = dir.Sync()
+	if err != nil {
+		closeOrKeep(&err, dir)
+		return err
+	}
+	var ignored error
+	closeOrKeep(&ignored, dir)
+	return nil
 }
 
 func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, error) {

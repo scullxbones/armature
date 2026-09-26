@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -182,6 +183,25 @@ func TestAppendLog_ConcurrentIdenticalAppendsPreserveBoth(t *testing.T) {
 	lines, err := ReadLogFromOffset(logPath, 0)
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{line[:len(line)-1], line[:len(line)-1]}, lines)
+}
+
+func TestAppend_PostCommitCloseErrorDoesNotDuplicateOnRetry(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	buf := []byte("{\"op\":\"note\"}\n")
+	log := NewAppendLog(logPath)
+	log.closeErr = errors.New("close failed")
+
+	firstErr := log.Append(buf)
+	if firstErr != nil {
+		require.Error(t, log.Append(buf))
+	}
+
+	lines, err := ReadLogFromOffset(logPath, 0)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{buf[:len(buf)-1]}, lines)
+	require.NoError(t, firstErr)
 }
 
 func TestAppendIf_ProceedFalseSkipsWrite_REQ_AOC_S4_T1(t *testing.T) {
