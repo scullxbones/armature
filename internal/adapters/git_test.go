@@ -25,11 +25,12 @@ func initTestRepo(t *testing.T) string {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	gitRun("init", "-b", "main")
+	gitRun("init")
 	gitRun("config", "user.email", "test@test.com")
 	gitRun("config", "user.name", "Test")
 	gitRun("config", "commit.gpgsign", "false")
 	gitRun("commit", "--allow-empty", "-m", "init")
+	gitRun("branch", "-M", "main")
 	return dir
 }
 
