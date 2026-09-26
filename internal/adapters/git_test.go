@@ -30,6 +30,7 @@ func initTestRepo(t *testing.T) string {
 	gitRun("config", "user.name", "Test")
 	gitRun("config", "commit.gpgsign", "false")
 	gitRun("commit", "--allow-empty", "-m", "init")
+	gitRun("branch", "-M", "main")
 	return dir
 }
 
@@ -710,11 +711,7 @@ func TestMergeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
 	gitRun("add", "file.txt")
 	gitRun("commit", "-m", "feature commit")
 
-	got, err := c.MergeBase("feature", "master")
-	if err != nil {
-		// Default branch name may be "main" in some git configs.
-		got, err = c.MergeBase("feature", "main")
-	}
+	got, err := c.MergeBase("feature", "main")
 	require.NoError(t, err)
 	assert.Equal(t, baseSHA, got)
 }
