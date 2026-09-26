@@ -195,7 +195,7 @@ func TestAppend_PostCommitCloseErrorDoesNotDuplicateOnRetry(t *testing.T) {
 
 	firstErr := log.Append(buf)
 	if firstErr != nil {
-		_ = log.Append(buf)
+		require.Error(t, log.Append(buf))
 	}
 
 	lines, err := ReadLogFromOffset(logPath, 0)
