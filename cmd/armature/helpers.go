@@ -636,7 +636,7 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 		return nil
 	}
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
-	allOps, _, err := readAllOpsFromDirWithOffsets(opsDir)
+	allOps, err := readAllOpsFromDir(opsDir)
 	if err != nil {
 		return fmt.Errorf("load ops for introduction check: %w", err)
 	}
@@ -712,15 +712,15 @@ func renderStringSlice(values []string) string {
 	return string(rendered)
 }
 
-func readAllOpsFromDirWithOffsets(opsDir string) ([]ops.Op, map[string]int64, error) {
-	items, offsets, warnings, err := ops.LoadFromDirWithOffsetsValidated(opsDir)
+func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
+	loaded, err := ops.LoadFromDirValidated(opsDir)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	for _, w := range warnings {
+	for _, w := range loaded.Warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
-	return ops.ExtractOps(items), offsets, nil
+	return ops.ExtractOps(loaded.Items), nil
 }
 
 func newSnapshotStore(ctx *config.Context) *snapshot.Store {

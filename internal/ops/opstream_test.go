@@ -288,17 +288,17 @@ func TestLoadFile_LineNumberPopulated(t *testing.T) {
 	assert.Equal(t, 3, items[1].LineNumber, "second accepted op should be from physical line 3")
 }
 
-func TestLoadFromDirWithOffsetsValidated_DirDoesNotExist(t *testing.T) {
+func TestLoadFromDirValidated_DirDoesNotExist(t *testing.T) {
 	t.Parallel()
-	items, offsets, warnings, err := LoadFromDirWithOffsetsValidated("/nonexistent/directory/path")
+	got, err := LoadFromDirValidated("/nonexistent/directory/path")
 
 	require.NoError(t, err)
-	assert.Len(t, items, 0)
-	assert.Len(t, offsets, 0)
-	assert.Len(t, warnings, 0)
+	assert.Len(t, got.Items, 0)
+	assert.Len(t, got.PhysicalEOF, 0)
+	assert.Len(t, got.Warnings, 0)
 }
 
-func TestLoadFromDirWithOffsetsValidated_DirWithValidLogs(t *testing.T) {
+func TestLoadFromDirValidated_DirWithValidLogs(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath1 := filepath.Join(dir, "worker-a1.log")
@@ -312,16 +312,16 @@ func TestLoadFromDirWithOffsetsValidated_DirWithValidLogs(t *testing.T) {
 	require.NoError(t, AppendOp(logPath1, op1))
 	require.NoError(t, AppendOp(logPath2, op2))
 
-	items, _, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+	got, err := LoadFromDirValidated(dir)
 
 	require.NoError(t, err)
-	assert.Len(t, warnings, 0)
-	assert.Len(t, items, 2)
-	assert.Equal(t, "worker-a1", items[0].Op.WorkerID)
-	assert.Equal(t, "worker-b2", items[1].Op.WorkerID)
+	assert.Len(t, got.Warnings, 0)
+	assert.Len(t, got.Items, 2)
+	assert.Equal(t, "worker-a1", got.Items[0].Op.WorkerID)
+	assert.Equal(t, "worker-b2", got.Items[1].Op.WorkerID)
 }
 
-func TestLoadFromDirWithOffsetsValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
+func TestLoadFromDirValidated_ExtractsWorkerIDFromFilename(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "custom-id~slot-x.log")
@@ -331,15 +331,15 @@ func TestLoadFromDirWithOffsetsValidated_ExtractsWorkerIDFromFilename(t *testing
 
 	require.NoError(t, AppendOp(logPath, op))
 
-	items, _, warnings, err := LoadFromDirWithOffsetsValidated(dir)
+	got, err := LoadFromDirValidated(dir)
 
 	require.NoError(t, err)
-	assert.Len(t, warnings, 0)
-	assert.Len(t, items, 1)
-	assert.Equal(t, "custom-id~slot-x", items[0].Op.WorkerID)
+	assert.Len(t, got.Warnings, 0)
+	assert.Len(t, got.Items, 1)
+	assert.Equal(t, "custom-id~slot-x", got.Items[0].Op.WorkerID)
 }
 
-func TestLoadFromDirWithOffsetsValidated_KeysMapByBasename(t *testing.T) {
+func TestLoadFromDirValidated_KeysMapByBasename(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath1 := filepath.Join(dir, "worker-a1.log")
@@ -365,7 +365,7 @@ func TestLoadFromDirWithOffsetsValidated_KeysMapByBasename(t *testing.T) {
 	assert.Greater(t, got.PhysicalEOF["worker-b2.log"], int64(0))
 }
 
-func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
+func TestLoadFromDirValidated_AllMismatchedOps(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
@@ -393,7 +393,7 @@ func TestLoadFromDirWithOffsetsValidated_AllMismatchedOps(t *testing.T) {
 	assert.Equal(t, info.Size(), got.PhysicalEOF[logName])
 }
 
-func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t *testing.T) {
+func TestLoadFromDirValidated_AcceptedOpsFollowedByTrailingRejected(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
@@ -423,7 +423,7 @@ func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingRejected(t
 	assert.Greater(t, got.PhysicalEOF[logName], got.Items[0].Offset)
 }
 
-func TestLoadFromDirWithOffsetsValidated_AcceptedOpsFollowedByTrailingCorrupt(t *testing.T) {
+func TestLoadFromDirValidated_AcceptedOpsFollowedByTrailingCorrupt(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")

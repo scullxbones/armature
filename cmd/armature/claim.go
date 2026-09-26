@@ -928,7 +928,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 			}
 
-			allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+			allOps, err := readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
 			}

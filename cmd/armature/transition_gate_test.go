@@ -115,7 +115,7 @@ func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 	_, err = runTrls(t, wt, "transition", "--issue", "gate-03", "--to", "done", "--outcome", testIntroductionOutcome, "--skip-delivery-gate", "--force")
 	require.NoError(t, err)
 
-	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
+	allOps, err := readAllOpsFromDir(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
 	require.NoError(t, err)
 	for _, op := range allOps {
 		if op.Type == ops.OpTransition && op.TargetID == "gate-03" {
@@ -143,7 +143,7 @@ func TestTransitionRejectsGateOverrideOutsideDone_REQ_LNGHZN_S4_T2(t *testing.T)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only valid with --to done")
 
-	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
+	allOps, err := readAllOpsFromDir(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
 	require.NoError(t, err)
 	for _, op := range allOps {
 		assert.False(t, op.Type == ops.OpTransition && op.TargetID == "gate-override-01", "invalid override must not append a transition op")
