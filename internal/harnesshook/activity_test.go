@@ -70,22 +70,16 @@ func TestActivityTruncateOutputLong_REQ_EXECEV_T1(t *testing.T) {
 
 func TestActivityGetWorktreeHEAD_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
-	gitDir := t.TempDir()
+	gitDir := initTestGitRepo(t)
 
-	headContent := "ref: refs/heads/main\n"
-	headPath := filepath.Join(gitDir, "HEAD")
-	require.NoError(t, os.WriteFile(headPath, []byte(headContent), 0o600))
-
-	branchDir := filepath.Join(gitDir, "refs", "heads")
-	require.NoError(t, os.MkdirAll(branchDir, 0o750))
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
-	branchPath := filepath.Join(branchDir, "main")
-	require.NoError(t, os.WriteFile(branchPath, []byte(shaValue+"\n"), 0o600))
+	revParseCmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
+	expectedOut, err := revParseCmd.Output()
+	require.NoError(t, err)
+	expected := strings.TrimSpace(string(expectedOut))
 
 	sha, err := getWorktreeHEAD(gitDir)
-
 	require.NoError(t, err)
-	assert.Equal(t, shaValue, sha)
+	assert.Equal(t, expected, sha)
 }
 
 func TestActivityGetWorktreeHEADDetached_REQ_EXECEV_T1(t *testing.T) {
@@ -206,9 +200,7 @@ func initTestGitRepo(t *testing.T) string {
 }
 
 func TestActivityRepoConfigKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
-	// another test can't race this test's default-on assertion.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	t.Parallel()
 	gitDir := initTestGitRepo(t)
 
 	setGitConfigBool(t, gitDir, "true")
@@ -229,9 +221,7 @@ func setGitConfigBool(t *testing.T, gitDir, value string) {
 }
 
 func TestActivityRepoConfigEnabledByDefault_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
-	// another test can't race this test's default-on assertion.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	t.Parallel()
 	gitDir := initTestGitRepo(t)
 
 	err := AppendActivity(gitDir, "echo hello", 0, true, []byte("hello\n"))
@@ -243,9 +233,7 @@ func TestActivityRepoConfigEnabledByDefault_REQ_EXECEV_T1(t *testing.T) {
 }
 
 func TestActivityRepoConfigKillSwitchFalseLeavesEnabled_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
-	// another test can't race this test's default-on assertion.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	t.Parallel()
 	gitDir := initTestGitRepo(t)
 
 	setGitConfigBool(t, gitDir, "false")
@@ -258,11 +246,7 @@ func TestActivityRepoConfigKillSwitchFalseLeavesEnabled_REQ_EXECEV_T1(t *testing
 	assert.NoError(t, err, "activity log should exist when repo config kill-switch is explicitly false")
 }
 
-func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: this test redirects the global os.Stderr and must not observe
-	// the kill-switch env var set by other tests, so pin it via t.Setenv (which
-	// also forces serial execution).
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) { //nolint:paralleltest // redirects os.Stderr
 	gitDir := t.TempDir()
 
 	oldStderr := os.Stderr
@@ -289,10 +273,7 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
 	assert.Contains(t, stderrOutput, "warning")
 }
 
-func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: redirects global os.Stderr and depends on the kill-switch
-	// env var being unset; t.Setenv pins it and forces serial execution.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) { //nolint:paralleltest // redirects os.Stderr
 	gitDir := t.TempDir()
 
 	shaValue := "1234567890abcdef1234567890abcdef12345678"

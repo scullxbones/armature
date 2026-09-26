@@ -13,12 +13,7 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// activityScannerBufferSize is the initial buffer size handed to bufio.Scanner
-// when reading the activity log. bufio.Scanner's default 64KB token limit is
-// smaller than a single worst-case activity line (unbounded command up to
-// maxCommandSize plus ~2KB of truncated output plus JSON overhead), so a single
-// oversized line would otherwise fail the entire scan and silently drop the
-// whole activity section (M9). 1MB comfortably covers the writer's cap.
+// bufio.Scanner's default token limit is 64KB.
 const activityScannerBufferSize = 1 << 20
 
 const activityScannerMaxTokenSize = 4 << 20

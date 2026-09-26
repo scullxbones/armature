@@ -25,7 +25,7 @@ func initTestRepo(t *testing.T) string {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	gitRun("init")
+	gitRun("init", "-b", "main")
 	gitRun("config", "user.email", "test@test.com")
 	gitRun("config", "user.name", "Test")
 	gitRun("config", "commit.gpgsign", "false")
@@ -1573,7 +1573,8 @@ func TestIsolatedClientIgnoresGITWorkTree_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, "src.txt", got[0].Path)
 }
 
-func TestIsolatedClientIgnoresCoreWorktree_REQ_LNGHZN_S10_T3(t *testing.T) { //nolint:paralleltest // t.Setenv is process-wide
+func TestIsolatedClientIgnoresCoreWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := initTestRepo(t)
 	gitRun := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", args...)

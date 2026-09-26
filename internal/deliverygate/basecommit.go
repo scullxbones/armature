@@ -27,33 +27,14 @@ func ParentBranchConfigKey(branchName string) string {
 	return "branch." + branchName + ".armature-parent"
 }
 
-// ResolveWorktreeRoot resolves path to the top-level directory of the git
-// worktree that contains it, walking up through parent directories the way
-// git itself does (via `git rev-parse --show-toplevel`). worktree.ResolveGitDir
-// (and the checks built on it, e.g. VerifyIssueWorktreeBinding) stat
-// `<path>/.git` directly with no walk-up, so passing a subdirectory of a
-// worktree fails with "stat .git: no such file or directory" even though the
-// path IS inside a valid worktree. Callers that may receive a subdirectory
-// (e.g. the default "." when a command is run from anywhere inside a
-// worktree) should resolve through this first. If path is not inside a git
-// working tree at all, both the resolution here and the direct stat down-
-// stream fail the same way, so returning the original path on error is safe:
-// it never widens what would otherwise pass.
 func ResolveWorktreeRoot(path string) (string, error) {
 	toplevel, err := adapters.New(path).Toplevel()
 	if err != nil {
-		return path, fmt.Errorf("resolve worktree top level for %s: %w", path, err)
+		return "", fmt.Errorf("resolve worktree top level for %s: %w", path, err)
 	}
 	return toplevel, nil
 }
 
-// VerifyIssueWorktreeBinding fails closed unless worktreePath is the actual
-// worktree bound to issueID (the issue-ID marker file written by
-// updateIssueIDFile at claim time — see harnesshook.ReadIssueBindingFileErr).
-// This prevents `arm transition --to done --repo <some-other-checkout>` from
-// running the delivery gate against a directory that isn't the claimed
-// worktree for issueID, which would let a dirty or out-of-scope claimed
-// worktree pass because the wrong directory was checked instead.
 func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 	gitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
@@ -110,16 +91,12 @@ func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy string
 	return nil
 }
 
-// RecordedBaseCommit reads the branch-point SHA persisted at claim time
-// (see writeBaseCommitFileIfAbsent in cmd/armature/claim.go) from the
-// worktree's actual git directory. Returns an error if the worktree wasn't
-// claimed after this mechanism was introduced.
 func RecordedBaseCommit(worktreePath string) (string, error) {
 	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return "", fmt.Errorf("resolve worktree git dir: %w", err)
 	}
-	data, err := os.ReadFile(filepath.Join(actualGitDir, BaseCommitFileName)) //nolint:gosec // G304: derived from a trusted git directory
+	data, err := adapters.ReadFile(filepath.Join(actualGitDir, BaseCommitFileName))
 	if err != nil {
 		return "", err
 	}
@@ -130,22 +107,12 @@ func RecordedBaseCommit(worktreePath string) (string, error) {
 	return sha, nil
 }
 
-// RecordedClaimedBranch reads the branch name persisted at claim time (see
-// writeClaimedBranchFileIfAbsent in cmd/armature/claim.go) from the
-// worktree's actual git directory. Returns (_, false, nil) — not an error —
-// when the marker file simply doesn't exist, since that's the expected state
-// for worktrees claimed before this mechanism was introduced (or for
-// branchless types like epic/story, for which the marker is never written);
-// callers should fall back to re-deriving the expected branch in that case.
-// Any other read error (e.g. permission denied, or an unresolvable worktree
-// git dir) is returned as an error so it isn't silently treated the same as
-// "not recorded".
 func RecordedClaimedBranch(worktreePath string) (string, bool, error) {
 	actualGitDir, err := worktree.ResolveGitDir(worktreePath)
 	if err != nil {
 		return "", false, fmt.Errorf("resolve worktree git dir: %w", err)
 	}
-	data, err := os.ReadFile(filepath.Join(actualGitDir, ClaimedBranchFileName)) //nolint:gosec // G304: derived from a trusted git directory
+	data, err := adapters.ReadFile(filepath.Join(actualGitDir, ClaimedBranchFileName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", false, nil

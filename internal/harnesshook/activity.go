@@ -1,12 +1,10 @@
 package harnesshook
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -95,22 +93,10 @@ func getWorktreeHEAD(gitDir string) (string, error) {
 	}
 
 	headRef := strings.TrimSpace(string(content))
-
 	if headRefLooksLikeSHA(headRef) {
 		return headRef, nil
 	}
-
-	if strings.HasPrefix(headRef, "ref: ") {
-		refPath := strings.TrimPrefix(headRef, "ref: ")
-		refFilePath := filepath.Join(gitDir, refPath)
-		refContent, err := adapters.ReadFile(refFilePath)
-		if err == nil {
-			return strings.TrimSpace(string(refContent)), nil
-		}
-		return fallbackGetHEAD(gitDir)
-	}
-
-	return headRef, nil
+	return fallbackGetHEAD(gitDir)
 }
 
 func headRefLooksLikeSHA(headRef string) bool {
@@ -119,8 +105,7 @@ func headRefLooksLikeSHA(headRef string) bool {
 }
 
 func fallbackGetHEAD(gitDir string) (string, error) {
-	//nolint:gosec // G204: git binary is constant, gitDir is internal, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
+	cmd := adapters.NonInteractiveGitCommand(gitDir, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
@@ -139,8 +124,7 @@ func isActivityLoggingDisabledByRepoConfig(gitDir string) bool {
 	if gitDir == "" {
 		return false
 	}
-	//nolint:gosec // G204: git binary is constant, gitDir/key are internal, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "config", "--local", "--bool", activityLoggingConfigKey)
+	cmd := adapters.NonInteractiveGitCommand(gitDir, "config", "--local", "--bool", activityLoggingConfigKey)
 	out, err := cmd.Output()
 	if err != nil {
 		return false

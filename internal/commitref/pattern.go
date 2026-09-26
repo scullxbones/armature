@@ -7,8 +7,7 @@ import (
 	"strings"
 )
 
-// CommitTypes enumerates the conventional-commit types documented by
-// docs/conventions.md.
+// CommitTypes enumerates the conventional-commit types in docs/conventions.md.
 var CommitTypes = []string{"feat", "fix", "refactor", "test", "docs", "style", "polish"}
 
 // TypedCommitPattern returns a regex matching the conventional-commit
@@ -30,10 +29,6 @@ func MergeCommitPattern(issueID string) *regexp.Regexp {
 	return regexp.MustCompile(`^merge:[ \t]+` + regexp.QuoteMeta(issueID) + `[ \t]+\S`)
 }
 
-// IsValidReference reports whether subject is a valid commit reference for
-// issueID. The merge form requires parentCount >= 2 because git records a
-// real merge as a commit with two or more parents. A matching subject on a
-// single-parent commit is not a merge.
 func IsValidReference(subject string, parentCount int, issueID string) bool {
 	if TypedCommitPattern(issueID).MatchString(subject) {
 		return true

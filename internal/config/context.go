@@ -46,8 +46,6 @@ func resolveIssuesDir(worktreePath string) string {
 	return issuesDirFor(worktreePath)
 }
 
-// isGitWorktree reports whether path is a linked git worktree.
-// In those worktrees, .git is a file containing "gitdir: <path>".
 func isGitWorktree(path string) (bool, error) {
 	gitPath := filepath.Join(path, ".git")
 	info, err := adapters.Stat(gitPath)
@@ -60,8 +58,6 @@ func isGitWorktree(path string) (bool, error) {
 	return !info.IsDir(), nil
 }
 
-// resolveParentRepoFromWorktree reads a worktree .git file of the form
-// "gitdir: <gitdir-path>" and walks up from that gitdir to the parent repo.
 func resolveParentRepoFromWorktree(worktreePath string) (string, error) {
 	gitFile := filepath.Join(worktreePath, ".git")
 	content, err := adapters.ReadFile(gitFile)
