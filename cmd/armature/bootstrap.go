@@ -81,13 +81,17 @@ The command is idempotent: running it multiple times has the same effect as runn
 			if len(platforms) > 0 {
 				platformList = nil
 				for _, p := range platforms {
-					platformList = append(platformList, bootstrap.Platform(p))
+					parsed, perr := bootstrap.ParsePlatform(p)
+					if perr != nil {
+						return fmt.Errorf("build harness setup plan: %w", perr)
+					}
+					platformList = append(platformList, parsed)
 				}
 			}
 
-			target := "local"
+			target := bootstrap.TargetLocal
 			if global {
-				target = "global"
+				target = bootstrap.TargetGlobal
 			}
 
 			req := bootstrap.PlanRequest{
@@ -156,8 +160,8 @@ The command is idempotent: running it multiple times has the same effect as runn
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				for _, r := range harnessResults {
-					if r.Status == "unsupported" || r.Status == "skipped" {
-						msg := r.Status
+					if r.Status == bootstrap.StatusUnsupported || r.Status == bootstrap.StatusSkipped {
+						msg := string(r.Status)
 						if r.Note != "" {
 							msg = r.Note
 						}
@@ -177,23 +181,28 @@ The command is idempotent: running it multiple times has the same effect as runn
 	return cmd
 }
 
-func recordArtifactAction(results *[]bootstrap.HarnessArtifactResult, platformName, artifactName string, action bootstrap.ActionKind) {
+func recordArtifactAction(
+	results *[]bootstrap.HarnessArtifactResult,
+	platform bootstrap.Platform,
+	artifact bootstrap.ArtifactKind,
+	action bootstrap.ActionKind,
+) {
 	switch action {
 	case bootstrap.ActionInstall:
 		return
 	case bootstrap.ActionUnsupported:
 		*results = append(*results, bootstrap.HarnessArtifactResult{
-			Platform: platformName,
-			Artifact: artifactName,
-			Status:   "unsupported",
-			Action:   string(action),
+			Platform: platform,
+			Artifact: artifact,
+			Status:   bootstrap.StatusUnsupported,
+			Action:   action,
 		})
 	case bootstrap.ActionSkip:
 		*results = append(*results, bootstrap.HarnessArtifactResult{
-			Platform: platformName,
-			Artifact: artifactName,
-			Status:   "skipped",
-			Action:   string(action),
+			Platform: platform,
+			Artifact: artifact,
+			Status:   bootstrap.StatusSkipped,
+			Action:   action,
 		})
 	}
 }
@@ -219,10 +228,10 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			skillsDest := filepath.Join(destBase, ".claude", "skills")
 			if err := deploySkills(skillsembed.SkillsFS, skillsDest); err != nil {
 				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: platformName,
-					Artifact: "skills",
-					Status:   "error",
-					Action:   string(bootstrap.ActionInstall),
+					Platform: row.Platform,
+					Artifact: bootstrap.ArtifactSkills,
+					Status:   bootstrap.StatusError,
+					Action:   bootstrap.ActionInstall,
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("deploy skills for %s: %w", platformName, err)
@@ -230,25 +239,25 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 
 			if err := deployFlatSkills(skillsembed.SkillsFS, skillsDest); err != nil {
 				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: platformName,
-					Artifact: "skills",
-					Status:   "error",
-					Action:   string(bootstrap.ActionInstall),
+					Platform: row.Platform,
+					Artifact: bootstrap.ArtifactSkills,
+					Status:   bootstrap.StatusError,
+					Action:   bootstrap.ActionInstall,
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
 			}
 
 			results = append(results, bootstrap.HarnessArtifactResult{
-				Platform: platformName,
-				Artifact: "skills",
-				Status:   "ok",
-				Action:   string(bootstrap.ActionInstall),
+				Platform: row.Platform,
+				Artifact: bootstrap.ArtifactSkills,
+				Status:   bootstrap.StatusOK,
+				Action:   bootstrap.ActionInstall,
 				Note:     fmt.Sprintf("Deployed to %s", skillsDest),
 			})
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed skills to %s for %s\n", skillsDest, platformName)
 		} else {
-			recordArtifactAction(&results, platformName, "skills", row.Skills)
+			recordArtifactAction(&results, row.Platform, bootstrap.ArtifactSkills, row.Skills)
 		}
 
 		if row.PluginMetadata == bootstrap.ActionInstall {
@@ -260,35 +269,35 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			pluginsDest := filepath.Join(destBase, ".claude", "plugins", pluginName)
 			if err := deployPlugin(skillsembed.SkillsFS, pluginsDest); err != nil {
 				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: platformName,
-					Artifact: "plugin_metadata",
-					Status:   "error",
-					Action:   string(bootstrap.ActionInstall),
+					Platform: row.Platform,
+					Artifact: bootstrap.ArtifactPluginMetadata,
+					Status:   bootstrap.StatusError,
+					Action:   bootstrap.ActionInstall,
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
 			}
 
 			results = append(results, bootstrap.HarnessArtifactResult{
-				Platform: platformName,
-				Artifact: "plugin_metadata",
-				Status:   "ok",
-				Action:   string(bootstrap.ActionInstall),
+				Platform: row.Platform,
+				Artifact: bootstrap.ArtifactPluginMetadata,
+				Status:   bootstrap.StatusOK,
+				Action:   bootstrap.ActionInstall,
 				Note:     fmt.Sprintf("Deployed to %s", pluginsDest),
 			})
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed plugin configuration to %s for %s\n", pluginsDest, platformName)
 		} else {
-			recordArtifactAction(&results, platformName, "plugin_metadata", row.PluginMetadata)
+			recordArtifactAction(&results, row.Platform, bootstrap.ArtifactPluginMetadata, row.PluginMetadata)
 		}
 
 		if row.HarnessHookConfig == bootstrap.ActionInstall {
 			adapter, err := harnesshook.NewAdapterForPlatform(platformName)
 			if err != nil {
 				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: platformName,
-					Artifact: "harness_hook_config",
-					Status:   "error",
-					Action:   string(bootstrap.ActionInstall),
+					Platform: row.Platform,
+					Artifact: bootstrap.ArtifactHarnessHookConfig,
+					Status:   bootstrap.StatusError,
+					Action:   bootstrap.ActionInstall,
 					Error:    err.Error(),
 				})
 				return results, fmt.Errorf("create adapter for %s: %w", platformName, err)
@@ -300,35 +309,35 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 			}
 			if !owned {
 				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: platformName,
-					Artifact: "harness_hook_config",
-					Status:   "skipped",
-					Action:   string(bootstrap.ActionInstall),
+					Platform: row.Platform,
+					Artifact: bootstrap.ArtifactHarnessHookConfig,
+					Status:   bootstrap.StatusSkipped,
+					Action:   bootstrap.ActionInstall,
 					Note:     "existing config not managed by Armature",
 				})
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped harness hook config for %s (not managed by Armature)\n", platformName)
 			} else {
 				if err := adapter.WriteConfig(destBase); err != nil {
 					results = append(results, bootstrap.HarnessArtifactResult{
-						Platform: platformName,
-						Artifact: "harness_hook_config",
-						Status:   "error",
-						Action:   string(bootstrap.ActionInstall),
+						Platform: row.Platform,
+						Artifact: bootstrap.ArtifactHarnessHookConfig,
+						Status:   bootstrap.StatusError,
+						Action:   bootstrap.ActionInstall,
 						Error:    err.Error(),
 					})
 					return results, fmt.Errorf("write harness hook config for %s: %w", platformName, err)
 				}
 
 				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: platformName,
-					Artifact: "harness_hook_config",
-					Status:   "ok",
-					Action:   string(bootstrap.ActionInstall),
+					Platform: row.Platform,
+					Artifact: bootstrap.ArtifactHarnessHookConfig,
+					Status:   bootstrap.StatusOK,
+					Action:   bootstrap.ActionInstall,
 				})
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed harness hook config for %s\n", platformName)
 			}
 		} else {
-			recordArtifactAction(&results, platformName, "harness_hook_config", row.HarnessHookConfig)
+			recordArtifactAction(&results, row.Platform, bootstrap.ArtifactHarnessHookConfig, row.HarnessHookConfig)
 		}
 	}
 

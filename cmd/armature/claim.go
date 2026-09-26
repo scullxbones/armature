@@ -859,7 +859,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			defer func() { err = mapClaimError(err) }()
 			ctx := currentCtx(cmd)
 			if !cmd.Flags().Changed("ttl") && ctx.Config.DefaultTTL > 0 {
-				ttl = ctx.Config.DefaultTTL
+				ttl = int(ctx.Config.DefaultTTL)
 			}
 			var fromBranch, fromTip string
 			worktreePath, issueID, args = recoverSpacedOptionalWorktreeArg(worktreePath, issueID, args)

@@ -1296,7 +1296,7 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 
 	req := bootstrap.PlanRequest{
 		Platforms: []bootstrap.Platform{bootstrap.PlatformCodex},
-		Target:    "local",
+		Target:    bootstrap.TargetLocal,
 		WithHooks: true,
 	}
 	plan, err := bootstrap.BuildPlan(req)
@@ -1307,9 +1307,9 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 
 	var foundSkipped bool
 	for _, result := range results {
-		if result.Artifact == "harness_hook_config" && result.Status == "skipped" {
+		if result.Artifact == bootstrap.ArtifactHarnessHookConfig && result.Status == bootstrap.StatusSkipped {
 			foundSkipped = true
-			assert.Equal(t, "codex", result.Platform)
+			assert.Equal(t, bootstrap.PlatformCodex, result.Platform)
 			assert.Equal(t, "existing config not managed by Armature", result.Note)
 			break
 		}
@@ -1846,9 +1846,11 @@ func TestRunRepoSetupMigratesLegacyConfig_P2(t *testing.T) {
 	require.NoError(t, err, "config should be loadable from new location")
 
 	assert.Equal(t, "go", migratedConfig.ProjectType, "ProjectType should be preserved")
-	assert.Equal(t, 120, migratedConfig.DefaultTTL, "custom DefaultTTL should be preserved from legacy config (not reset to 60)")
+	assert.Equal(t, config.TTLMinutes(120), migratedConfig.DefaultTTL,
+		"custom DefaultTTL should be preserved from legacy config (not reset to 60)")
 	assert.Equal(t, 3200, migratedConfig.TokenBudget, "custom TokenBudget should be preserved from legacy config (not reset to 1600)")
-	assert.Equal(t, 10, migratedConfig.LowStakesPushThreshold, "custom LowStakesPushThreshold should be preserved from legacy config (not reset to 5)")
+	assert.Equal(t, config.PendingOps(10), migratedConfig.LowStakesPushThreshold,
+		"custom LowStakesPushThreshold should be preserved from legacy config (not reset to 5)")
 
 	gitClient := adapters.New(repo)
 	dirty, err := gitClient.IsWorkingTreeDirty()
@@ -2196,9 +2198,11 @@ func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
 	require.NoError(t, err, "committed config should be valid JSON")
 
 	assert.Equal(t, "go", committedConfig.ProjectType, "ProjectType should be committed")
-	assert.Equal(t, 120, committedConfig.DefaultTTL, "custom DefaultTTL should be committed (not default 60)")
+	assert.Equal(t, config.TTLMinutes(120), committedConfig.DefaultTTL,
+		"custom DefaultTTL should be committed (not default 60)")
 	assert.Equal(t, 3200, committedConfig.TokenBudget, "custom TokenBudget should be committed (not default 1600)")
-	assert.Equal(t, 10, committedConfig.LowStakesPushThreshold, "custom LowStakesPushThreshold should be committed (not default 5)")
+	assert.Equal(t, config.PendingOps(10), committedConfig.LowStakesPushThreshold,
+		"custom LowStakesPushThreshold should be committed (not default 5)")
 }
 
 func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) {

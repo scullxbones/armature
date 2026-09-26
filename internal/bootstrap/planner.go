@@ -34,27 +34,73 @@ type PlatformRow struct {
 	HarnessHookConfig ActionKind
 }
 
+// Target is a bootstrap deploy destination: local checkout or global home.
+type Target string
+
+const (
+	TargetLocal  Target = "local"
+	TargetGlobal Target = "global"
+)
+
+// ParseTarget maps CLI/API target strings onto the closed set. Empty input
+// becomes TargetLocal. Unknown values are returned as-is so BuildPlan keeps
+// today's accept-unknown behavior.
+func ParseTarget(s string) Target {
+	if s == "" {
+		return TargetLocal
+	}
+	return Target(s)
+}
+
+// ArtifactKind is a harness artifact cell in a plan row.
+type ArtifactKind string
+
+const (
+	ArtifactSkills            ArtifactKind = "skills"
+	ArtifactPluginMetadata    ArtifactKind = "plugin_metadata"
+	ArtifactHarnessHookConfig ArtifactKind = "harness_hook_config"
+)
+
+// ArtifactStatus is the recorded outcome of deploying one artifact.
+type ArtifactStatus string
+
+const (
+	StatusOK          ArtifactStatus = "ok"
+	StatusSkipped     ArtifactStatus = "skipped"
+	StatusUnsupported ArtifactStatus = "unsupported"
+	StatusError       ArtifactStatus = "error"
+)
+
 // Plan is the full declarative harness setup plan.
 type Plan struct {
-	Target string
+	Target Target
 	Rows   []PlatformRow
 }
 
 // HarnessArtifactResult captures the outcome of deploying a single artifact.
 type HarnessArtifactResult struct {
-	Platform string `json:"platform"`
-	Artifact string `json:"artifact"`
-	Status   string `json:"status"`
-	Action   string `json:"action,omitempty"`
-	Note     string `json:"note,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Platform Platform       `json:"platform"`
+	Artifact ArtifactKind   `json:"artifact"`
+	Status   ArtifactStatus `json:"status"`
+	Action   ActionKind     `json:"action,omitempty"`
+	Note     string         `json:"note,omitempty"`
+	Error    string         `json:"error,omitempty"`
 }
 
 // PlanRequest holds the inputs to BuildPlan.
 type PlanRequest struct {
 	Platforms []Platform // empty = DefaultPlatforms()
-	Target    string
+	Target    Target
 	WithHooks bool
+}
+
+// ParsePlatform maps a CLI platform flag onto the known set.
+func ParsePlatform(s string) (Platform, error) {
+	p := Platform(s)
+	if !slices.Contains(allKnownPlatforms, p) {
+		return "", fmt.Errorf("unknown platform: %s", s)
+	}
+	return p, nil
 }
 
 var allKnownPlatforms = []Platform{
@@ -90,10 +136,7 @@ func DefaultPlatforms() []Platform {
 // Unknown platforms are rejected. An empty Platforms slice defaults to DefaultPlatforms();
 // an empty Target defaults to "local".
 func BuildPlan(req PlanRequest) (Plan, error) {
-	target := req.Target
-	if target == "" {
-		target = "local"
-	}
+	target := ParseTarget(string(req.Target))
 
 	platforms := req.Platforms
 	if len(platforms) == 0 {
@@ -101,8 +144,8 @@ func BuildPlan(req PlanRequest) (Plan, error) {
 	}
 
 	for _, p := range platforms {
-		if !slices.Contains(allKnownPlatforms, p) {
-			return Plan{}, fmt.Errorf("unknown platform: %s", p)
+		if _, err := ParsePlatform(string(p)); err != nil {
+			return Plan{}, err
 		}
 	}
 
