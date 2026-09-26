@@ -266,8 +266,41 @@ func run(t *testing.T, dir string, name string, args ...string) { //nolint:unpar
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
+	if name == "git" {
+		cmd.Env = isolatedGitTestEnv()
+	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command %s %v failed: %s", name, args, out)
+}
+
+func isolatedGitTestEnv() []string {
+	drop := []string{"GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE=", "GIT_OBJECT_DIRECTORY=", "GIT_COMMON_DIR="}
+	out := make([]string, 0, len(os.Environ())+1)
+	for _, e := range os.Environ() {
+		skip := false
+		for _, p := range drop {
+			if strings.HasPrefix(e, p) {
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			out = append(out, e)
+		}
+	}
+	return append(out, "GIT_TERMINAL_PROMPT=0")
+}
+
+func TestInitTempRepoIgnoresInheritedGITWorkTree(t *testing.T) {
+	other := t.TempDir()
+	t.Setenv("GIT_WORK_TREE", other)
+	repo := initTempRepo(t)
+	if _, err := os.Stat(filepath.Join(repo, ".git")); err != nil {
+		t.Fatalf("initTempRepo should initialize dir despite GIT_WORK_TREE: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(other, ".git")); !os.IsNotExist(err) {
+		t.Fatal("inherited GIT_WORK_TREE must not become a repository")
+	}
 }
 
 func TestWorkerInitCommand(t *testing.T) {
