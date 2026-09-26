@@ -455,6 +455,7 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	require.NoError(t, os.WriteFile(lockPath, []byte("lock"), 0644))
 
 	var removeErr error
+	var wg sync.WaitGroup
 	wg.Go(func() {
 		time.Sleep(120 * time.Millisecond)
 		removeErr = os.Remove(lockPath)
