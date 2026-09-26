@@ -12,25 +12,19 @@ import (
 )
 
 // CommitTypes enumerates the conventional-commit types documented by
-// docs/conventions.md. Shared by TypedCommitPattern (used by
-// internal/deliverygate's CommitReferenceCheck) and
-// internal/review.ReviewCommits so the two
-// checks — "does this commit satisfy the delivery gate" and "does this
-// commit show up in review discovery" — can't independently drift apart on
-// which types/forms they recognize (the exact bug class that caused each of
-// them to need a separate later fix for the same missing merge-commit
-// form).
+// docs/conventions.md.
 var CommitTypes = []string{"feat", "fix", "refactor", "test", "docs", "style", "polish"}
 
 // TypedCommitPattern returns a regex matching the conventional-commit
 // reference form `type(ISSUE-ID): description` or `type(ISSUE-ID)!: description`,
 // where type is restricted to CommitTypes.
 func TypedCommitPattern(issueID string) *regexp.Regexp {
-	// CommitTypes entries are plain lowercase words with no regex
-	// metacharacters, so joining them with "|" for alternation is safe
-	// without per-entry quoting.
+	quoted := make([]string, len(CommitTypes))
+	for i, typ := range CommitTypes {
+		quoted[i] = regexp.QuoteMeta(typ)
+	}
 	return regexp.MustCompile(
-		`^(` + strings.Join(CommitTypes, "|") + `)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
+		`^(` + strings.Join(quoted, "|") + `)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
 	)
 }
 
@@ -46,13 +40,7 @@ func MergeCommitPattern(issueID string) *regexp.Regexp {
 // parents, per parentCount). Regex alone can't distinguish a real merge
 // commit from an ordinary single-parent commit whose author merely wrote a
 // subject that looks like the merge form, so the parent-count requirement is
-// mandatory for the merge form. This is the single shared decision point for
-// "does this commit satisfy issueID" so internal/deliverygate's
-// CommitReferenceCheck (pass/fail delivery gate) and internal/review's
-// ReviewCommits (discovery) can't independently drift on which forms they
-// accept — the exact bug class that let ReviewCommits accept a merge: ID
-// subject on an ordinary single-parent commit after the multi-parent guard
-// was added only to CommitReferenceCheck's loop.
+// mandatory for the merge form.
 //
 // Takes subject/parentCount rather than adapters.LogEntry so this
 // dependency-free package doesn't need to import internal/adapters.
