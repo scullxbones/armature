@@ -364,7 +364,7 @@ func currentIssueBinding(worktreePath string) (string, error) {
 		return "", err
 	}
 	path := filepath.Join(gitDir, "armature-issue-id")
-	data, err := os.ReadFile(path) //nolint:gosec // path is gitDir from ResolveGitDir plus a fixed binding name
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
