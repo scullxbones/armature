@@ -77,8 +77,51 @@ func GitConfig(repoPath, key string) (string, error) {
 func NonInteractiveGitCommand(repoPath string, args ...string) *exec.Cmd {
 	fullArgs := append([]string{"-C", repoPath}, args...)
 	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: "git" is constant; args are internal
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
+	cmd.Env = append(stripGitOverrideEnv(os.Environ()), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_ASKPASS=true")
 	return cmd
+}
+
+func overlayEnv(base []string, extra []string) []string {
+	if len(extra) == 0 {
+		return base
+	}
+	drop := make(map[string]struct{}, len(extra))
+	for _, e := range extra {
+		k, _, ok := strings.Cut(e, "=")
+		if ok {
+			drop[k] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	for _, e := range base {
+		k, _, ok := strings.Cut(e, "=")
+		if ok {
+			if _, skip := drop[k]; skip {
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return append(out, extra...)
+}
+
+func GitInitMain(dir string, extraEnv ...string) error {
+	isolated := append([]string{
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+	}, extraEnv...)
+	env := overlayEnv(stripGitOverrideEnv(os.Environ()), isolated)
+	initCmd := exec.CommandContext(context.Background(), "git", "init", dir) //nolint:gosec // G204: "git" is constant
+	initCmd.Env = env
+	if out, err := initCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git init: %w: %s", err, out)
+	}
+	cmd := NonInteractiveGitCommand(dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	cmd.Env = overlayEnv(cmd.Env, isolated)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git symbolic-ref HEAD: %w: %s", err, out)
+	}
+	return nil
 }
 
 // GitLog runs git log with the given arguments and returns the output.

@@ -257,8 +257,6 @@ func TestEnvelopeEmptyStateRequiresHelp_REQ_AOC_S1_T2(t *testing.T) {
 	require.NoError(t, err)
 	assertJSONEqual(t, []byte(`{"count":0,"issues":[],"help":["no issues match the filter"]}`), got)
 
-	// The helper enforces N6 only. A non-empty result may carry empty help;
-	// N5.3's "point at arm show" rule is per-command and not decidable here.
 	_, err = NewEnvelope("issues", []contractListRow{{ID: "AOC-S1-T2"}}, nil)
 	require.NoError(t, err, "help is mandatory only on the empty state")
 }

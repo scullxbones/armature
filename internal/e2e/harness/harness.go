@@ -1,7 +1,5 @@
 // Package harness is the test-only lifecycle harness for arm CLI end-to-end
-// tests (make test-e2eharness). It is not a production package: it imports
-// testing, is excluded from UNIT_PACKAGES / coverage, and must not be imported
-// from cmd/ or other production code.
+// tests (make test-e2eharness).
 package harness
 
 import (

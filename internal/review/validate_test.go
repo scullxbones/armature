@@ -1252,52 +1252,35 @@ func TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXE
 	assert.Empty(t, errs, "an earlier-commit citation supporting NotSatisfied must not be blocked by the HeadSHA gate")
 }
 
-func TestActivityCitationValidation_REQ_EXECEV_T3(t *testing.T) {
+func TestValidateActivityCitations_IndexReferenceRejected_REQ_EXECEV_T3(t *testing.T) {
 	t.Parallel()
-
-	t.Run("valid raw entry ID accepted", func(t *testing.T) { //nolint:paralleltest // delegated test below already calls t.Parallel()
-		TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t)
-	})
-
-	t.Run("index reference rejected", func(t *testing.T) {
-		t.Parallel()
-		assessment := &review.ConformanceAssessment{
-			SchemaVersion: 1,
-			BundleID:      "sha256:test123",
-			Results: []review.CriterionResult{
-				{
-					ID:        "acceptance[0]",
-					Status:    review.Satisfied,
-					Rationale: "test passed",
-					Citations: []review.Citation{
-						review.ActivityCitation("index:0"),
-					},
+	assessment := &review.ConformanceAssessment{
+		SchemaVersion: 1,
+		BundleID:      "sha256:test123",
+		Results: []review.CriterionResult{
+			{
+				ID:        "acceptance[0]",
+				Status:    review.Satisfied,
+				Rationale: "test passed",
+				Citations: []review.Citation{
+					review.ActivityCitation("index:0"),
 				},
 			},
-			ContractFingerprint: "sha256:contract123",
-			DeliveryFingerprint: "sha256:delivery123",
-		}
+		},
+		ContractFingerprint: "sha256:contract123",
+		DeliveryFingerprint: "sha256:delivery123",
+	}
 
-		activity := &review.Activity{
-			Digest:     "sha256:abc123",
-			EntryCount: 5,
-			LogPath:    "armature-activity.log",
-		}
+	activity := &review.Activity{
+		Digest:     "sha256:abc123",
+		EntryCount: 5,
+		LogPath:    "armature-activity.log",
+	}
 
-		errs := review.ValidateActivityCitations(assessment, activity, knownExitEntries(0, 1, 2, 3, 4), "")
-		assert.NotEmpty(t, errs, "index-terminology reference should be rejected")
-		assert.True(t, containsError(errs, "invalid activity entry ID"),
-			"error should reject the non-numeric index reference")
-	})
-
-	t.Run("unknown entry ID rejected", func(t *testing.T) { //nolint:paralleltest // delegated test below already calls t.Parallel()
-		TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t)
-	})
-
-	//nolint:paralleltest // delegated test below already calls t.Parallel()
-	t.Run("activity-only cannot satisfy implementation criteria (upgrade-only)", func(t *testing.T) {
-		TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECEV_T3(t)
-	})
+	errs := review.ValidateActivityCitations(assessment, activity, knownExitEntries(0, 1, 2, 3, 4), "")
+	assert.NotEmpty(t, errs, "index-terminology reference should be rejected")
+	assert.True(t, containsError(errs, "invalid activity entry ID"),
+		"error should reject the non-numeric index reference")
 }
 
 func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {

@@ -3,7 +3,9 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -33,17 +35,98 @@ func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 }
 
 func TestNonInteractiveGitCommand(t *testing.T) {
-	t.Parallel()
+	t.Setenv("GIT_DIR", "/tmp/other.git")
+	t.Setenv("GIT_WORK_TREE", "/tmp/other")
+	t.Setenv("GIT_COMMON_DIR", "/tmp/other.git")
 	cmd := NonInteractiveGitCommand("/tmp", "version")
 	found := false
 	for _, e := range cmd.Env {
 		if strings.HasPrefix(e, "GIT_TERMINAL_PROMPT=") {
 			found = true
-			break
+		}
+		if strings.HasPrefix(e, "GIT_DIR=") || strings.HasPrefix(e, "GIT_WORK_TREE=") || strings.HasPrefix(e, "GIT_COMMON_DIR=") {
+			t.Fatalf("repo-selection env should be stripped, got %q", e)
 		}
 	}
 	if !found {
 		t.Fatal("expected GIT_TERMINAL_PROMPT in command env")
+	}
+}
+
+func TestGitInitMainIgnoresInheritedGITDir(t *testing.T) {
+	other := t.TempDir()
+	otherInit := exec.CommandContext(context.Background(), "git", "init", other)
+	otherInit.Env = overlayEnv(stripGitOverrideEnv(os.Environ()), []string{
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+	})
+	if out, err := otherInit.CombinedOutput(); err != nil {
+		t.Fatalf("git init other: %v: %s", err, out)
+	}
+	marker := filepath.Join(other, "KEEP")
+	if err := os.WriteFile(marker, []byte("untouched"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	headBefore, err := os.ReadFile(filepath.Join(other, ".git", "HEAD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("GIT_DIR", filepath.Join(other, ".git"))
+	dir := t.TempDir()
+	if err := GitInitMain(dir); err != nil {
+		t.Fatalf("GitInitMain: %v", err)
+	}
+
+	head, err := os.ReadFile(filepath.Join(dir, ".git", "HEAD"))
+	if err != nil {
+		t.Fatalf("expected %s to be initialized: %v", dir, err)
+	}
+	if !strings.Contains(string(head), "refs/heads/main") {
+		t.Fatalf("initialized HEAD = %q, want refs/heads/main", head)
+	}
+
+	headAfter, err := os.ReadFile(filepath.Join(other, ".git", "HEAD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(headAfter) != string(headBefore) {
+		t.Fatalf("other repo HEAD changed: %q -> %q", headBefore, headAfter)
+	}
+	keep, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(keep) != "untouched" {
+		t.Fatalf("other worktree changed: %q", keep)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "KEEP")); !os.IsNotExist(err) {
+		t.Fatal("GitInitMain used GIT_DIR's worktree instead of dir")
+	}
+}
+
+func TestGitInitMainIgnoresGlobalInitTemplateDir(t *testing.T) {
+	template := t.TempDir()
+	hooks := filepath.Join(template, "hooks")
+	if err := os.MkdirAll(hooks, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	hook := []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n")
+	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), hook, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	set := exec.CommandContext(context.Background(), "git", "config", "-f", cfg, "init.templateDir", template)
+	if err := set.Run(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	dir := t.TempDir()
+	if err := GitInitMain(dir); err != nil {
+		t.Fatalf("GitInitMain: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git", "hooks", "pre-commit")); !os.IsNotExist(err) {
+		t.Fatalf("template pre-commit should not be installed, err=%v", err)
 	}
 }
 

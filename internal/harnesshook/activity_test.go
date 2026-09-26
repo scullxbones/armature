@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,22 +71,16 @@ func TestActivityTruncateOutputLong_REQ_EXECEV_T1(t *testing.T) {
 
 func TestActivityGetWorktreeHEAD_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
-	gitDir := t.TempDir()
+	gitDir := initTestGitRepo(t)
 
-	headContent := "ref: refs/heads/main\n"
-	headPath := filepath.Join(gitDir, "HEAD")
-	require.NoError(t, os.WriteFile(headPath, []byte(headContent), 0o600))
-
-	branchDir := filepath.Join(gitDir, "refs", "heads")
-	require.NoError(t, os.MkdirAll(branchDir, 0o750))
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
-	branchPath := filepath.Join(branchDir, "main")
-	require.NoError(t, os.WriteFile(branchPath, []byte(shaValue+"\n"), 0o600))
+	revParseCmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
+	expectedOut, err := revParseCmd.Output()
+	require.NoError(t, err)
+	expected := strings.TrimSpace(string(expectedOut))
 
 	sha, err := getWorktreeHEAD(gitDir)
-
 	require.NoError(t, err)
-	assert.Equal(t, shaValue, sha)
+	assert.Equal(t, expected, sha)
 }
 
 func TestActivityGetWorktreeHEADDetached_REQ_EXECEV_T1(t *testing.T) {
@@ -187,28 +182,101 @@ func TestActivityEnvVarKillSwitchHasNoEffect_REQ_EXECEV_T1(t *testing.T) {
 func initTestGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+	isolated := []string{
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com",
+	}
 	runGit := func(args ...string) {
 		t.Helper()
 		fullArgs := append([]string{"-C", dir, "-c", "commit.gpgsign=false"}, args...)
 		cmd := exec.CommandContext(context.Background(), "git", fullArgs...)
-		// Isolate from the developer's global/system git config (e.g. a global
-		// commit.gpgsign=true would hang the empty commit on a GPG pinentry).
-		cmd.Env = append(os.Environ(),
-			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+		cmd.Env = overlayTestEnv(os.Environ(), isolated)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v failed: %s", args, out)
 	}
-	runGit("init", "-b", "main")
+	require.NoError(t, adapters.GitInitMain(dir, isolated...))
 	runGit("commit", "--allow-empty", "-m", "initial")
 	return filepath.Join(dir, ".git")
 }
 
+func TestInitTestGitRepoIgnoresGlobalInitTemplateDir(t *testing.T) {
+	template := t.TempDir()
+	hooks := filepath.Join(template, "hooks")
+	require.NoError(t, os.MkdirAll(hooks, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o755))
+
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	set := exec.CommandContext(context.Background(), "git", "config", "-f", cfg, "init.templateDir", template)
+	require.NoError(t, set.Run())
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+
+	gitDir := initTestGitRepo(t)
+	_, err := os.Stat(filepath.Join(gitDir, "hooks", "pre-commit"))
+	assert.True(t, os.IsNotExist(err))
+	_, err = os.Stat(filepath.Join(gitDir, "hooks", "post-commit"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func overlayTestEnv(base, extra []string) []string {
+	drop := make(map[string]struct{}, len(extra))
+	for _, e := range extra {
+		k, _, ok := strings.Cut(e, "=")
+		if ok {
+			drop[k] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(base)+len(extra))
+	for _, e := range base {
+		k, _, ok := strings.Cut(e, "=")
+		if ok {
+			if _, skip := drop[k]; skip {
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return append(out, extra...)
+}
+
+func TestFallbackGetHEADAndKillSwitchIgnoreInheritedGITDir(t *testing.T) {
+	intended := initTestGitRepo(t)
+	other := initTestGitRepo(t)
+	otherWork := filepath.Dir(other)
+	cmd := exec.CommandContext(context.Background(), "git", "-C", otherWork, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "other")
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git commit failed: %s", out)
+
+	revParse := func(gitDir string) string {
+		t.Helper()
+		cmd := exec.CommandContext(context.Background(), "git", "--git-dir="+gitDir, "rev-parse", "HEAD")
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+	intendedSHA := revParse(intended)
+	otherSHA := revParse(other)
+	require.NotEqual(t, intendedSHA, otherSHA)
+
+	setGitConfigBool(t, intended, "true")
+	setGitConfigBool(t, other, "false")
+
+	t.Setenv("GIT_DIR", other)
+
+	gotSHA, err := fallbackGetHEAD(intended)
+	require.NoError(t, err)
+	assert.Equal(t, intendedSHA, gotSHA)
+
+	assert.True(t, isActivityLoggingDisabledByRepoConfig(intended))
+}
+
 func TestActivityRepoConfigKillSwitchDisablesLogging_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
-	// another test can't race this test's default-on assertion.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	t.Parallel()
 	gitDir := initTestGitRepo(t)
 
 	setGitConfigBool(t, gitDir, "true")
@@ -229,9 +297,7 @@ func setGitConfigBool(t *testing.T, gitDir, value string) {
 }
 
 func TestActivityRepoConfigEnabledByDefault_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
-	// another test can't race this test's default-on assertion.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	t.Parallel()
 	gitDir := initTestGitRepo(t)
 
 	err := AppendActivity(gitDir, "echo hello", 0, true, []byte("hello\n"))
@@ -243,9 +309,7 @@ func TestActivityRepoConfigEnabledByDefault_REQ_EXECEV_T1(t *testing.T) {
 }
 
 func TestActivityRepoConfigKillSwitchFalseLeavesEnabled_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: pins the env-var kill-switch (unset) so a t.Setenv from
-	// another test can't race this test's default-on assertion.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+	t.Parallel()
 	gitDir := initTestGitRepo(t)
 
 	setGitConfigBool(t, gitDir, "false")
@@ -258,11 +322,7 @@ func TestActivityRepoConfigKillSwitchFalseLeavesEnabled_REQ_EXECEV_T1(t *testing
 	assert.NoError(t, err, "activity log should exist when repo config kill-switch is explicitly false")
 }
 
-func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: this test redirects the global os.Stderr and must not observe
-	// the kill-switch env var set by other tests, so pin it via t.Setenv (which
-	// also forces serial execution).
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) { //nolint:paralleltest // redirects os.Stderr
 	gitDir := t.TempDir()
 
 	oldStderr := os.Stderr
@@ -280,18 +340,16 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	_ = w.Close() //nolint:errcheck // test code
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r) //nolint:errcheck // test code
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
 
 	stderrOutput := buf.String()
 	assert.Contains(t, stderrOutput, "warning")
 }
 
-func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
-	// Not parallel: redirects global os.Stderr and depends on the kill-switch
-	// env var being unset; t.Setenv pins it and forces serial execution.
-	t.Setenv("ARMATURE_DISABLE_ACTIVITY_LOGGING", "")
+func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) { //nolint:paralleltest // redirects os.Stderr
 	gitDir := t.TempDir()
 
 	shaValue := "1234567890abcdef1234567890abcdef12345678"
@@ -300,7 +358,7 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 
 	require.NoError(t, os.Chmod(gitDir, 0o500))
 	t.Cleanup(func() {
-		_ = os.Chmod(gitDir, 0o755) //nolint:errcheck // cleanup code
+		require.NoError(t, os.Chmod(gitDir, 0o755))
 	})
 
 	oldStderr := os.Stderr
@@ -318,9 +376,10 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	_ = w.Close() //nolint:errcheck // test code
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r) //nolint:errcheck // test code
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
 
 	stderrOutput := buf.String()
 	assert.Contains(t, stderrOutput, "warning")

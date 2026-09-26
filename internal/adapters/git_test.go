@@ -20,12 +20,11 @@ func initTestRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	gitRun := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", args...)
-		cmd.Dir = dir
+		cmd := adapters.NonInteractiveGitCommand(dir, args...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	gitRun("init")
+	require.NoError(t, adapters.GitInitMain(dir))
 	gitRun("config", "user.email", "test@test.com")
 	gitRun("config", "user.name", "Test")
 	gitRun("config", "commit.gpgsign", "false")
@@ -1274,8 +1273,6 @@ func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	require.NoError(t, err)
 	expectedArmatureSHA := strings.TrimSpace(string(armatureOut))
 
-	// Create a clone with --single-branch --branch main
-	// This will NOT create origin/_armature remote-tracking ref even though it exists on the remote
 	cloneDir := t.TempDir()
 	gitRun(cloneDir, "clone", "--single-branch", "--branch", "main", originDir, "cloned")
 	clonePath := filepath.Join(cloneDir, "cloned")
@@ -1283,8 +1280,6 @@ func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	gitRun(clonePath, "config", "user.name", "Test")
 	gitRun(clonePath, "config", "commit.gpgsign", "false")
 
-	// Verify preconditions: origin/_armature doesn't exist (because of single-branch),
-	// but the remote branch does exist on the server
 	checkBranch := func(ref string) bool {
 		cmd := exec.CommandContext(context.Background(), "git", "-C", clonePath, "rev-parse", "--verify", ref)
 		return cmd.Run() == nil

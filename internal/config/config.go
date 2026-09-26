@@ -127,7 +127,6 @@ func DetectProjectType(repoPath string) string {
 	return "unknown"
 }
 
-// DefaultConfig returns a config with sensible defaults.
 func DefaultConfig(projectType string) Config {
 	return Config{
 		ProjectType:            projectType,

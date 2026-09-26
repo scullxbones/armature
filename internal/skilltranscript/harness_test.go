@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 type TestRepo struct {
@@ -21,7 +23,9 @@ func NewTestRepo(t *testing.T) *TestRepo {
 
 	tmpDir := t.TempDir()
 
-	runCmd(tmpDir, "init")
+	if err := adapters.GitInitMain(tmpDir); err != nil {
+		t.Fatalf("git init: %v", err)
+	}
 
 	runCmd(tmpDir, "config", "user.email", "test@example.com")
 	runCmd(tmpDir, "config", "user.name", "Test User")
@@ -43,9 +47,6 @@ func NewTestRepo(t *testing.T) *TestRepo {
 	}
 	runCmd(tmpDir, "add", "-A")
 	runCmd(tmpDir, "commit", "-m", "initial: setup test repo")
-	// Git's default initial branch is configurable; normalize it explicitly so
-	// worktree-based transcript tests are independent of the runner's config.
-	runCmd(tmpDir, "branch", "-M", "main")
 
 	runCmdWithEnv(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "bootstrap")
 

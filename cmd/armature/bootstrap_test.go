@@ -1015,6 +1015,7 @@ func runOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = dir
+	cmd.Env = isolatedGitTestEnv()
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command git %v failed: %s", args, out)
 	return string(out)

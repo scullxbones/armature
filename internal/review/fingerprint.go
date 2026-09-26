@@ -7,18 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// activityScannerBufferSize is the initial buffer size handed to bufio.Scanner
-// when reading the activity log. bufio.Scanner's default 64KB token limit is
-// smaller than a single worst-case activity line (unbounded command up to
-// maxCommandSize plus ~2KB of truncated output plus JSON overhead), so a single
-// oversized line would otherwise fail the entire scan and silently drop the
-// whole activity section (M9). 1MB comfortably covers the writer's cap.
+// bufio.Scanner's default token limit is 64KB.
 const activityScannerBufferSize = 1 << 20
 
 const activityScannerMaxTokenSize = 4 << 20
@@ -207,7 +202,7 @@ func decodeActivityExitCode(raw json.RawMessage) (int, error) {
 }
 
 func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, error) {
-	content, err := os.ReadFile(logPath) //nolint:gosec // G304: logPath is provided by Prepare
+	content, err := adapters.ReadFile(logPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read activity log: %w", err)
 	}
@@ -290,7 +285,7 @@ func ValidateActivityDigestAndLoadEntries(activity *Activity) (map[int]ActivityE
 		return make(map[int]ActivityEntryDetails), errs
 	}
 
-	content, err := os.ReadFile(activity.LogPath)
+	content, err := adapters.ReadFile(activity.LogPath)
 	if err != nil {
 		errs = append(errs, formatActivityLogUnreadable(activity.LogPath, err))
 		return make(map[int]ActivityEntryDetails), errs

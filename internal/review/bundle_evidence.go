@@ -4,9 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"path/filepath"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -54,7 +54,7 @@ func ValidateGateEvidenceLogs(evidence []ops.GateEvidence) error {
 		if ev.LogPath == "" {
 			return fmt.Errorf("gate evidence %d: missing log_path", i)
 		}
-		data, err := os.ReadFile(ev.LogPath)
+		data, err := adapters.ReadFile(ev.LogPath)
 		if err != nil {
 			return fmt.Errorf("gate evidence %d: read log %s: %w", i, ev.LogPath, err)
 		}
