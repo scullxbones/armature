@@ -255,7 +255,7 @@ func writeTransitionFields(cmd *cobra.Command, issueID, to, fieldFlag string) bo
 }
 
 func replayIssueOps(issuesDir, issueID string) (*materialize.Issue, []ops.Op, error) {
-	allOps, _, err := readAllOpsFromDirWithOffsets(filepath.Join(issuesDir, "ops"))
+	allOps, err := readAllOpsFromDir(filepath.Join(issuesDir, "ops"))
 	if err != nil {
 		return nil, nil, fmt.Errorf("read ops: %w", err)
 	}
