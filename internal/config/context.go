@@ -26,6 +26,17 @@ type repoProbeResult struct {
 	WorktreePath string
 }
 
+func nestedStateDir(worktreePath string) (string, bool) {
+	dir := filepath.Join(worktreePath, StateDirName)
+	info, err := adapters.Stat(dir)
+	return dir, err == nil && info != nil && info.IsDir()
+}
+
+func hasCollapsedRootConfig(worktreePath string) bool {
+	info, err := adapters.Stat(filepath.Join(worktreePath, "config.json"))
+	return err == nil && info != nil
+}
+
 func issuesDirFor(worktreePath string) string {
 	if filepath.Base(worktreePath) == StateDirName {
 		return worktreePath
@@ -34,13 +45,10 @@ func issuesDirFor(worktreePath string) string {
 }
 
 func resolveIssuesDir(worktreePath string) string {
-	nestedStateDir := filepath.Join(worktreePath, StateDirName)
-	if info, err := adapters.Stat(nestedStateDir); err == nil && info != nil && info.IsDir() {
-		return nestedStateDir
+	if dir, ok := nestedStateDir(worktreePath); ok {
+		return dir
 	}
-
-	rootConfig := filepath.Join(worktreePath, "config.json")
-	if info, err := adapters.Stat(rootConfig); err == nil && info != nil {
+	if hasCollapsedRootConfig(worktreePath) {
 		return worktreePath
 	}
 	return issuesDirFor(worktreePath)
