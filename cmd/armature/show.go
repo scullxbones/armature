@@ -67,7 +67,9 @@ func newShowCmd() *cobra.Command {
 				for _, id := range ids {
 					row := output.MarshalIssue(snap.Issues[id])
 					if !full {
-						trunc = append(trunc, output.TruncateShowIssue(&row)...)
+						var hints []output.ShowTruncation
+						row, hints = output.TruncateShowIssue(row)
+						trunc = append(trunc, hints...)
 					}
 					rows = append(rows, row)
 				}

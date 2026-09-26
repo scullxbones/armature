@@ -38,12 +38,16 @@ func Record(input RecordInput) (*RecordResult, error) {
 
 	for i := range input.Assessment.Results {
 		for j := range input.Assessment.Results[i].Citations {
-			input.Assessment.Results[i].Citations[j].ActivityEntryDetails = ""
+			input.Assessment.Results[i].Citations[j].ClearActivityEntryDetails()
 		}
 	}
 
 	if input.Bundle != nil {
-		if recomputed := ComputeBundleID(*input.Bundle); recomputed != input.Bundle.BundleID {
+		recomputed, err := ComputeBundleID(*input.Bundle)
+		if err != nil {
+			return nil, err
+		}
+		if recomputed != input.Bundle.BundleID {
 			return nil, fmt.Errorf(
 				"bundle integrity check failed: recomputed bundle_id %s does not match bundle's "+
 					"recorded bundle_id %s (bundle contents may have been altered since `arm review prepare` ran)",
@@ -132,11 +136,11 @@ func Record(input RecordInput) (*RecordResult, error) {
 		for i := range input.Assessment.Results {
 			for j := range input.Assessment.Results[i].Citations {
 				citation := &input.Assessment.Results[i].Citations[j]
-				if citation.ActivityEntryID != "" {
-					entryID, err := strconv.Atoi(citation.ActivityEntryID)
+				if citation.ActivityEntryID() != "" {
+					entryID, err := strconv.Atoi(citation.ActivityEntryID())
 					if err == nil {
 						if details, ok := activityEntryMap[entryID]; ok {
-							citation.ActivityEntryDetails = FormatActivityEntryDetails(details)
+							citation.SetActivityEntryDetails(FormatActivityEntryDetails(details))
 						}
 					}
 				}
@@ -220,7 +224,9 @@ func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentA
 		if prior.ResultFingerprint == att.ResultFingerprint {
 			continue
 		}
-		att.EffectiveRating = MaxRating(att.EffectiveRating, prior.Rating)
+		if max, ok := MaxRating(att.EffectiveRating, prior.Rating); ok {
+			att.EffectiveRating = max
+		}
 		if prior.Rating == att.Rating {
 			continue
 		}

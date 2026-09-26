@@ -35,7 +35,11 @@ func AttachGateEvidence(bundle *ReviewBundle, issuesDir string) error {
 		return nil
 	}
 	bundle.GateEvidence = kept
-	bundle.BundleID = ComputeBundleID(*bundle)
+	id, err := ComputeBundleID(*bundle)
+	if err != nil {
+		return err
+	}
+	bundle.BundleID = id
 	return nil
 }
 

@@ -715,11 +715,10 @@ func TestPrepare_MalformedActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	bundle, err := review.Prepare(git, "EXECEV-T2", "Malformed activity", "dod", "task", "done",
 		[]string{}, []string{}, "main", "HEAD", logPath)
 
-	require.NoError(t, err)
-	require.NotNil(t, bundle)
-	require.NotNil(t, bundle.Activity, "Activity section should be present")
-
-	assert.Equal(t, 2, bundle.Activity.EntryCount, "Should skip malformed lines and parse valid ones")
+	require.Error(t, err)
+	assert.Nil(t, bundle)
+	assert.Contains(t, err.Error(), "parse activity log")
+	assert.Contains(t, err.Error(), "activity log line")
 }
 
 func TestActivityDigestDeterministic_REQ_EXECEV_T2(t *testing.T) {

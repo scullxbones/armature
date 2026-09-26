@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,12 +108,16 @@ func TestListGroupHonouredInStructuredOutput_REQ_AOC_S2_T2(t *testing.T) {
 
 	seen := map[string]bool{}
 	var groupedIDs []string
-	for i, g := range groups {
+	index := make(materialize.Index, len(issues))
+	ids := make([]string, 0, len(issues))
+	for _, row := range issues {
+		index[row.ID] = materialize.IndexEntry{Type: row.Type, Status: row.Status, Title: row.Title}
+		ids = append(ids, row.ID)
+	}
+	assert.Equal(t, output.ListGroupsByStatus(index, ids), groups, "group order must match ListGroupsByStatus")
+	for _, g := range groups {
 		assert.NotEmpty(t, g.Status)
 		assert.NotEmpty(t, g.IDs)
-		if i > 0 {
-			assert.LessOrEqual(t, output.ListStatusRank(groups[i-1].Status), output.ListStatusRank(g.Status))
-		}
 		for _, id := range g.IDs {
 			assert.False(t, seen[id], "grouped ids must not duplicate")
 			seen[id] = true

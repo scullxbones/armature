@@ -44,7 +44,6 @@ func TestLoadConfigAcceptsRetiredModeField(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
-	// Live _armature config.json still carries pre-SB-ELIM "mode".
 	require.NoError(t, os.WriteFile(configPath, []byte(`{
 		"mode": "dual-branch",
 		"project_type": "go",
@@ -66,10 +65,8 @@ func TestDetectProjectType(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	// No marker files — unknown
 	assert.Equal(t, "unknown", DetectProjectType(dir))
 
-	// Add go.mod
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644))
 	assert.Equal(t, "go", DetectProjectType(dir))
 }
@@ -78,7 +75,6 @@ func TestDetectProjectTypePriority(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	// Both go.mod and package.json — go wins
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}"), 0644))
 	assert.Equal(t, "go", DetectProjectType(dir))
