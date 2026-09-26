@@ -454,17 +454,17 @@ func TestCommitWorktreeOp_RetriesOnIndexLock(t *testing.T) {
 	lockPath := filepath.Join(gitDir, "index.lock")
 	require.NoError(t, os.WriteFile(lockPath, []byte("lock"), 0644))
 
-	var removeErr error
 	var wg sync.WaitGroup
+	removed := make(chan error, 1)
 	wg.Go(func() {
 		time.Sleep(120 * time.Millisecond)
-		removeErr = os.Remove(lockPath)
+		removed <- os.Remove(lockPath)
 	})
 
 	wc := adapters.New(worktreePath)
 	err = wc.CommitWorktreeOp(".armature/ops/worker-abc.log", "ops: append claim for E2-001")
 	wg.Wait()
-	require.NoError(t, removeErr)
+	require.NoError(t, <-removed)
 	require.NoError(t, err)
 }
 
@@ -878,13 +878,6 @@ func TestDiffNameStatus_NonRenameChangesHaveNoOldPath(t *testing.T) {
 	assert.Equal(t, "D", byPath["beta.txt"].Status)
 }
 
-// TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4 verifies that
-// DiffNameStatus reports the literal path for a filename containing
-// non-ASCII characters, rather than git's default octal-escaped quoted form
-// (e.g. "caf\303\251.go"). Without -z, `git diff --name-status` quotes such
-// paths, which breaks downstream scope-containment comparisons (e.g.
-// claim.IsWithinScope) against the literal path recorded in the issue's
-// declared scope.
 func TestDiffNameStatus_HandlesNonASCIIPath_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
