@@ -77,7 +77,6 @@ func InferRepoRoot(stateDir string) string {
 	if root := inferRepoRootByPath(stateDir); root != "" {
 		return root
 	}
-	// Fallback: ask git, handles worktree layouts where .arm/.armature is not in stateDir's path.
 	if root := inferRepoRootByGit(stateDir); root != "" {
 		return root
 	}

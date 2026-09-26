@@ -304,9 +304,6 @@ func (cr CriterionResult) Valid() error {
 	if cr.Rationale == "" {
 		return fmt.Errorf("criterion result: missing rationale")
 	}
-	// Satisfied always needs at least one citation. missing_evidence can
-	// rescue the other three statuses, but it cannot manufacture a Green:
-	// dropping the last citation cannot leave status=satisfied.
 	if cr.Status == Satisfied && len(cr.Citations) == 0 {
 		return fmt.Errorf("criterion result %s: citations required for status %s", cr.ID, cr.Status)
 	}

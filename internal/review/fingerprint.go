@@ -7,9 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -207,7 +207,7 @@ func decodeActivityExitCode(raw json.RawMessage) (int, error) {
 }
 
 func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, error) {
-	content, err := os.ReadFile(logPath) //nolint:gosec // G304: logPath is provided by Prepare
+	content, err := adapters.ReadFile(logPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read activity log: %w", err)
 	}
@@ -290,7 +290,7 @@ func ValidateActivityDigestAndLoadEntries(activity *Activity) (map[int]ActivityE
 		return make(map[int]ActivityEntryDetails), errs
 	}
 
-	content, err := os.ReadFile(activity.LogPath)
+	content, err := adapters.ReadFile(activity.LogPath)
 	if err != nil {
 		errs = append(errs, formatActivityLogUnreadable(activity.LogPath, err))
 		return make(map[int]ActivityEntryDetails), errs

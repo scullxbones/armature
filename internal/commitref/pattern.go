@@ -1,9 +1,5 @@
 // Package commitref holds the shared conventional-commit / merge-commit
 // reference patterns used to decide whether a commit "counts" for an issue.
-// It is deliberately dependency-free (only stdlib) so both
-// internal/deliverygate (the pass/fail delivery gate) and internal/review
-// (discovery for `arm review commits`) can depend on it without an import
-// cycle between those two packages.
 package commitref
 
 import (
@@ -12,25 +8,19 @@ import (
 )
 
 // CommitTypes enumerates the conventional-commit types documented by
-// docs/conventions.md. Shared by TypedCommitPattern (used by
-// internal/deliverygate's CommitReferenceCheck) and
-// internal/review.ReviewCommits so the two
-// checks — "does this commit satisfy the delivery gate" and "does this
-// commit show up in review discovery" — can't independently drift apart on
-// which types/forms they recognize (the exact bug class that caused each of
-// them to need a separate later fix for the same missing merge-commit
-// form).
+// docs/conventions.md.
 var CommitTypes = []string{"feat", "fix", "refactor", "test", "docs", "style", "polish"}
 
 // TypedCommitPattern returns a regex matching the conventional-commit
 // reference form `type(ISSUE-ID): description` or `type(ISSUE-ID)!: description`,
 // where type is restricted to CommitTypes.
 func TypedCommitPattern(issueID string) *regexp.Regexp {
-	// CommitTypes entries are plain lowercase words with no regex
-	// metacharacters, so joining them with "|" for alternation is safe
-	// without per-entry quoting.
+	quoted := make([]string, len(CommitTypes))
+	for i, typ := range CommitTypes {
+		quoted[i] = regexp.QuoteMeta(typ)
+	}
 	return regexp.MustCompile(
-		`^(` + strings.Join(CommitTypes, "|") + `)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
+		`^(` + strings.Join(quoted, "|") + `)\(` + regexp.QuoteMeta(issueID) + `\)!?:[ \t]+\S`,
 	)
 }
 
@@ -41,21 +31,9 @@ func MergeCommitPattern(issueID string) *regexp.Regexp {
 }
 
 // IsValidReference reports whether subject is a valid commit reference for
-// issueID, either as the typed form (TypedCommitPattern) or as the
-// merge-commit form (MergeCommitPattern) on a genuine merge commit (2+
-// parents, per parentCount). Regex alone can't distinguish a real merge
-// commit from an ordinary single-parent commit whose author merely wrote a
-// subject that looks like the merge form, so the parent-count requirement is
-// mandatory for the merge form. This is the single shared decision point for
-// "does this commit satisfy issueID" so internal/deliverygate's
-// CommitReferenceCheck (pass/fail delivery gate) and internal/review's
-// ReviewCommits (discovery) can't independently drift on which forms they
-// accept — the exact bug class that let ReviewCommits accept a merge: ID
-// subject on an ordinary single-parent commit after the multi-parent guard
-// was added only to CommitReferenceCheck's loop.
-//
-// Takes subject/parentCount rather than adapters.LogEntry so this
-// dependency-free package doesn't need to import internal/adapters.
+// issueID. The merge form requires parentCount >= 2 because git records a
+// real merge as a commit with two or more parents. A matching subject on a
+// single-parent commit is not a merge.
 func IsValidReference(subject string, parentCount int, issueID string) bool {
 	if TypedCommitPattern(issueID).MatchString(subject) {
 		return true

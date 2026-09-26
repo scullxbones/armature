@@ -280,9 +280,10 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	_ = w.Close() //nolint:errcheck // test code
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r) //nolint:errcheck // test code
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
 
 	stderrOutput := buf.String()
 	assert.Contains(t, stderrOutput, "warning")
@@ -300,7 +301,7 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 
 	require.NoError(t, os.Chmod(gitDir, 0o500))
 	t.Cleanup(func() {
-		_ = os.Chmod(gitDir, 0o755) //nolint:errcheck // cleanup code
+		require.NoError(t, os.Chmod(gitDir, 0o755))
 	})
 
 	oldStderr := os.Stderr
@@ -318,9 +319,10 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	_ = w.Close() //nolint:errcheck // test code
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r) //nolint:errcheck // test code
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
 
 	stderrOutput := buf.String()
 	assert.Contains(t, stderrOutput, "warning")
