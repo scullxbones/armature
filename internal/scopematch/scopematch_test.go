@@ -110,62 +110,62 @@ func TestGlobPatternsMayIntersect_RootScope(t *testing.T) {
 	}
 }
 
-func TestMatchPatternSegments_DoublestarBacktracking(t *testing.T) {
+func TestMemoizedSuffixIntersection_DoublestarBacktracking(t *testing.T) {
 	t.Parallel()
 
-	if !matchPatternSegments([]string{"**", "x"}, []string{"a", "b", "x"}) {
+	if !memoizedSuffixIntersection([]string{"**", "x"}, []string{"a", "b", "x"}) {
 		t.Fatal("** in a should backtrack to consume [a b] and match trailing x")
 	}
-	if matchPatternSegments([]string{"**", "x"}, []string{"a", "b", "y"}) {
+	if memoizedSuffixIntersection([]string{"**", "x"}, []string{"a", "b", "y"}) {
 		t.Fatal("** in a should exhaust backtracking and report no match when trailing segment never matches")
 	}
-	if !matchPatternSegments([]string{"**"}, []string{"anything", "at", "all"}) {
+	if !memoizedSuffixIntersection([]string{"**"}, []string{"anything", "at", "all"}) {
 		t.Fatal("a lone ** segment must match any remaining segments, including none")
 	}
-	if !matchPatternSegments([]string{"**"}, nil) {
+	if !memoizedSuffixIntersection([]string{"**"}, nil) {
 		t.Fatal("a lone ** segment must match zero remaining segments")
 	}
 
-	if !matchPatternSegments([]string{"a", "b", "x"}, []string{"**", "x"}) {
+	if !memoizedSuffixIntersection([]string{"a", "b", "x"}, []string{"**", "x"}) {
 		t.Fatal("** in b should backtrack to consume [a b] and match trailing x")
 	}
-	if matchPatternSegments([]string{"a", "b", "y"}, []string{"**", "x"}) {
+	if memoizedSuffixIntersection([]string{"a", "b", "y"}, []string{"**", "x"}) {
 		t.Fatal("** in b should exhaust backtracking and report no match when trailing segment never matches")
 	}
-	if !matchPatternSegments([]string{"anything", "at", "all"}, []string{"**"}) {
+	if !memoizedSuffixIntersection([]string{"anything", "at", "all"}, []string{"**"}) {
 		t.Fatal("a lone ** segment in b must match any remaining segments, including none")
 	}
-	if !matchPatternSegments(nil, []string{"**"}) {
+	if !memoizedSuffixIntersection(nil, []string{"**"}) {
 		t.Fatal("a lone ** segment in b must match zero remaining segments")
 	}
 
-	if matchPatternSegments([]string{"a", "b"}, []string{"a"}) {
+	if memoizedSuffixIntersection([]string{"a", "b"}, []string{"a"}) {
 		t.Fatal("differing segment counts without ** must not match")
 	}
 }
 
-func TestSegmentsCompatible_AllBranches(t *testing.T) {
+func TestConservativelyCompatibleSegments_AllBranches(t *testing.T) {
 	t.Parallel()
 
-	if !segmentsCompatible("x.go", "x.go") {
+	if !conservativelyCompatibleSegments("x.go", "x.go") {
 		t.Fatal("identical literal segments must be compatible")
 	}
-	if segmentsCompatible("a.go", "b.go") {
+	if conservativelyCompatibleSegments("a.go", "b.go") {
 		t.Fatal("distinct literal segments must not be compatible")
 	}
-	if !segmentsCompatible("*.go", "a.go") {
+	if !conservativelyCompatibleSegments("*.go", "a.go") {
 		t.Fatal("wildcard segment matching a literal segment must be compatible")
 	}
-	if segmentsCompatible("*.go", "a.py") {
+	if conservativelyCompatibleSegments("*.go", "a.py") {
 		t.Fatal("wildcard segment not matching a literal segment must not be compatible")
 	}
-	if !segmentsCompatible("a.go", "*.go") {
+	if !conservativelyCompatibleSegments("a.go", "*.go") {
 		t.Fatal("literal segment matched by a wildcard segment (args reversed) must be compatible")
 	}
-	if segmentsCompatible("a.py", "*.go") {
+	if conservativelyCompatibleSegments("a.py", "*.go") {
 		t.Fatal("literal segment not matched by a wildcard segment (args reversed) must not be compatible")
 	}
-	if !segmentsCompatible("*.go", "login.*") {
+	if !conservativelyCompatibleSegments("*.go", "login.*") {
 		t.Fatal("two wildcard segments must be conservatively treated as compatible")
 	}
 }
