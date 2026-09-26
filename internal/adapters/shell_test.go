@@ -93,7 +93,6 @@ func TestExecuteHook_BadOutput(t *testing.T) {
 func TestGitConfig_Unset(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	// init a real git repo
 	cmd := exec.CommandContext(context.Background(), "git", "init", dir)
 	if err := cmd.Run(); err != nil {
 		t.Skip("git not available")
