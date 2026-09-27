@@ -109,6 +109,42 @@ func TestBootstrapDeployFlatSkillsCreatesFlatMDFiles(t *testing.T) {
 	assert.Contains(t, string(content), "demo-skill", "flat md should contain SKILL.md body")
 }
 
+func TestBootstrapDeploysCapturingDogfoodFindingsFromAgentsSkills(t *testing.T) {
+	repo := gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	src := filepath.Join(projectRootDir(t), ".agents", "skills", "capturing-dogfood-findings")
+	require.DirExists(t, src)
+	dst := filepath.Join(repo, ".agents", "skills", "capturing-dogfood-findings")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o755))
+	require.NoError(t, os.CopyFS(dst, os.DirFS(src)))
+
+	cmd := newRootCmd()
+	cmd.SetOut(new(strings.Builder))
+	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
+	require.NoError(t, cmd.Execute())
+
+	skillPath := filepath.Join(repo, ".claude", "skills", "capturing-dogfood-findings", "SKILL.md")
+	content, err := os.ReadFile(skillPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "Capturing dogfood findings")
+
+	templatePath := filepath.Join(repo, ".claude", "skills", "capturing-dogfood-findings", "templates", "raw-finding.md")
+	_, err = os.Stat(templatePath)
+	require.NoError(t, err)
+
+	flatPath := filepath.Join(repo, ".claude", "skills", "capturing-dogfood-findings.md")
+	flat, err := os.ReadFile(flatPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(flat), "Capturing dogfood findings")
+}
+
+func TestBootstrapDeployRepoAgentSkillsNoopsWhenMissing(t *testing.T) {
+	dest := t.TempDir()
+	err := deployRepoAgentSkills(t.TempDir(), dest)
+	require.NoError(t, err)
+}
+
 func TestBootstrapDeployFlatSkillsRewritesReferencePaths(t *testing.T) {
 	src := fstest.MapFS{
 		"skills/demo-skill/SKILL.md": {

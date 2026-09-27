@@ -43,7 +43,7 @@ changed surfaces:
 | Changed surface | Steps |
 |---|---|
 | `**/*.go` | lint + build + `go test` on changed packages **plus reverse importers** (`go list`) |
-| `skills/**`, `docs/skills/**` | `validate-skills`, `validate-doc-examples` |
+| `skills/**`, `docs/skills/**`, `internal/skillsembed/skills/**`, `.agents/skills/**` | `validate-skills`, `validate-doc-examples` |
 | `cmd/**`, `docs/design/surface-census.md`, `docs/commands.md` | `census-drift-check` |
 | docs only | `adr-principles` lint only |
 
