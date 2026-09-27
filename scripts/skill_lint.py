@@ -90,6 +90,10 @@ def find_lint_files(root_dir):
     if skills_dir.exists():
         lint_files.extend(path for path in skills_dir.rglob("*.md") if path.is_file())
 
+    agents_skills = Path(root_dir) / ".agents" / "skills"
+    if agents_skills.exists():
+        lint_files.extend(path for path in agents_skills.rglob("*.md") if path.is_file())
+
     root = Path(root_dir)
     lint_files.extend(path for relative_path in CANONICAL_DOCS
                       if (path := root / relative_path).is_file())

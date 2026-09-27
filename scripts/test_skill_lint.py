@@ -30,6 +30,8 @@ class TestFindLintFiles(unittest.TestCase):
             root = Path(tmp_dir)
             (root / "internal/skillsembed/skills/example").mkdir(parents=True)
             (root / "internal/skillsembed/skills/example/SKILL.md").write_text("# skill\n")
+            (root / ".agents/skills/capturing-dogfood-findings").mkdir(parents=True)
+            (root / ".agents/skills/capturing-dogfood-findings/SKILL.md").write_text("# capture\n")
             for name in (
                 "README.md",
                 "docs/getting-started.md",
@@ -51,6 +53,7 @@ class TestFindLintFiles(unittest.TestCase):
 
             self.assertEqual(found, {
                 "internal/skillsembed/skills/example/SKILL.md",
+                ".agents/skills/capturing-dogfood-findings/SKILL.md",
                 "README.md",
                 "docs/getting-started.md",
                 "docs/use-cases.md",

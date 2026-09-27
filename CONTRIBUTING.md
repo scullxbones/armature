@@ -33,7 +33,7 @@ All commits must pass `make check`, which enforces:
 - **Tests** — All tests must pass
 - **Coverage** — Per-tree statement coverage: cmd ≥83%, internal ≥86% (use `make coverage` to check)
 - **Mutation testing** — Minimum 92% mcover, 99% efficacy with `gremlins`
-- **Skill validation** — All embedded skills must be valid
+- **Skill validation** — Skills under `internal/skillsembed/skills` and `.agents/skills` must be valid
 - **Build** — The project must compile successfully
 
 See [docs/agents/quality-gates.md](docs/agents/quality-gates.md) for detailed requirements and how to fix common issues.
@@ -47,7 +47,7 @@ make test               # Run tests only
 make coverage           # Generate coverage report (coverage.html)
 make coverage-check     # Verify per-tree coverage: cmd ≥83%, internal ≥86%
 make mutate             # Run mutation testing
-make validate-skills    # Validate embedded skills
+make validate-skills    # Validate embedded and .agents/skills
 make build              # Build the arm binary
 ```
 
