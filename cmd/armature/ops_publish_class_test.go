@@ -106,16 +106,21 @@ func TestOpsPublishErrorCarriesClass_REQ_OPS_PUBLISH(t *testing.T) {
 	assert.True(t, isLocalArmatureTipPublishError(err))
 
 	actions := nextActionsForOpsPublish(err)
+	require.GreaterOrEqual(t, len(actions), 2)
+	assert.Contains(t, actions[0], "Contents: Write")
+	assert.Contains(t, actions[0], "arm push-ops")
+	assert.Contains(t, actions[1], "write-capable environment")
+	assert.Contains(t, actions[1], "git fetch origin _armature")
 	joined := strings.Join(actions, "\n")
-	assert.Contains(t, joined, "Contents: Write")
 	assert.NotContains(t, joined, "arm doctor")
 
 	nonFF := newOpsPublishError(errors.New("! [rejected] _armature -> _armature (non-fast-forward)"))
 	assert.Equal(t, opsPublishClassNonFF, nonFF.class)
 	assert.Contains(t, nonFF.Error(), "class=non-fast-forward")
 	nonFFActions := strings.Join(nextActionsForOpsPublish(nonFF), "\n")
-	assert.Contains(t, nonFFActions, "arm push-ops")
+	assert.Contains(t, nonFFActions, "fetch")
 	assert.Contains(t, nonFFActions, "rebase")
+	assert.Contains(t, nonFFActions, "arm push-ops")
 	assert.NotContains(t, nonFFActions, "arm doctor")
 
 	other := newOpsPublishError(errors.New("fatal: Could not resolve host: github.com"))

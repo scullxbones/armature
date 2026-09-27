@@ -59,11 +59,11 @@ func nextActionsForOpsPublishClass(class opsPublishClass) []string {
 	switch class {
 	case opsPublishClassAuth:
 		return []string{
-			"grant Contents: Write (fine-grained PAT) or use SSH with push access",
+			"grant Contents: Write (fine-grained PAT) or use SSH with push access, then arm push-ops",
 			"publish _armature from a write-capable environment, then git fetch origin _armature",
 		}
 	case opsPublishClassNonFF:
-		return []string{"rebase onto origin/_armature, then arm push-ops"}
+		return []string{"git fetch origin _armature, rebase onto origin/_armature, then arm push-ops"}
 	default:
 		return []string{"arm push-ops", "arm doctor"}
 	}

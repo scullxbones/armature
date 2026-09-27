@@ -35,6 +35,8 @@ exit 1
 	assert.Contains(t, cf.Cause, "class=auth")
 	joined := strings.Join(cf.NextActions, "\n")
 	assert.Contains(t, joined, "Contents: Write")
+	assert.Contains(t, joined, "arm push-ops")
+	assert.Contains(t, cf.NextActions[0], "arm push-ops")
 	assert.NotContains(t, joined, "arm doctor")
 	assert.False(t, originArmatureContains(t, bareDir, "task-auth"),
 		"origin must not receive the claim when push is denied")
@@ -68,6 +70,7 @@ exit 1
 	assert.Contains(t, cf.Cause, "class=non-fast-forward")
 	joined := strings.Join(cf.NextActions, "\n")
 	assert.Contains(t, joined, "arm push-ops")
+	assert.Contains(t, joined, "fetch")
 	assert.Contains(t, joined, "rebase")
 	assert.NotContains(t, joined, "arm doctor")
 	headAfter := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
@@ -174,6 +177,70 @@ func TestPushOps_PushFailureStillPUSHOPS1_REQ_OPS_PUBLISH(t *testing.T) {
 	require.Error(t, err)
 	assert.NotContains(t, out, `"status":"pushed"`)
 	assert.Contains(t, err.Error(), "push-ops: push failed")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"push-ops", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "PUSH-OPS-1", cf.Code)
+	assert.Contains(t, cf.Cause, "class=other")
+	assert.Contains(t, cf.Cause, "push-ops: push failed")
+	joined := strings.Join(cf.NextActions, "\n")
+	assert.Contains(t, joined, "arm push-ops")
+	assert.Contains(t, joined, "arm doctor")
+}
+
+func TestPushOps_AuthClass_REQ_OPS_PUBLISH(t *testing.T) {
+	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "auth push-ops", "--id", "task-auth-po")
+	require.NoError(t, err)
+	installBarePreReceive(t, bareDir, `#!/bin/sh
+echo >&2 "remote: Permission to example.git denied to tester."
+echo >&2 "fatal: unable to access 'https://github.com/example/repo.git/': The requested URL returned error: 403"
+exit 1
+`)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"push-ops", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "PUSH-OPS-1", cf.Code)
+	assert.Contains(t, cf.Cause, "class=auth")
+	require.NotEmpty(t, cf.NextActions)
+	assert.Contains(t, cf.NextActions[0], "Contents: Write")
+	assert.Contains(t, cf.NextActions[0], "arm push-ops")
+	assert.NotContains(t, strings.Join(cf.NextActions, "\n"), "arm doctor")
+}
+
+func TestPushOps_NonFFClass_REQ_OPS_PUBLISH(t *testing.T) {
+	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "non-ff push-ops", "--id", "task-nff-po")
+	require.NoError(t, err)
+	installBarePreReceive(t, bareDir, `#!/bin/sh
+echo >&2 "! [rejected]        _armature -> _armature (non-fast-forward)"
+echo >&2 "error: failed to push some refs to 'origin'"
+echo >&2 "hint: Updates were rejected because the tip of your current branch is behind"
+exit 1
+`)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"push-ops", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "PUSH-OPS-1", cf.Code)
+	assert.Contains(t, cf.Cause, "class=non-fast-forward")
+	joined := strings.Join(cf.NextActions, "\n")
+	assert.Contains(t, joined, "fetch")
+	assert.Contains(t, joined, "rebase")
+	assert.Contains(t, joined, "arm push-ops")
+	assert.NotContains(t, joined, "arm doctor")
 }
 
 func TestTransitionIdenticalRetryPublishesUnpublishedLocalOp_REQ_OPS_PUBLISH(t *testing.T) {
