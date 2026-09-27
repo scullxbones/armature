@@ -21,6 +21,8 @@ func racingLiveOps() []ops.Op {
 
 func TestOwner_RacingLiveClaimsFirstKeeps_REQ_CLAIMTTL(t *testing.T) {
 	t.Parallel()
+	// Pre-C0 / timestamp Owner (claim-ttl). After cutover, first-published
+	// wins even with a later clock — see TestTwoClonesSkewedClocksExactlyOneOwner_REQ_CLAIMORD_W12.
 	log := racingLiveOps()
 	lease := Owner(log, "task-01")
 	assert.Equal(t, "worker-a", lease.Holder)
@@ -132,6 +134,47 @@ func TestOwners_MatchesPerIssueOwner_REQ_CLAIMTTL(t *testing.T) {
 	assert.Equal(t, Owner(log, "task-02"), byIssue["task-02"])
 	assert.Equal(t, "worker-a~slot-a", byIssue["task-01"].Holder)
 	assert.Equal(t, "worker-a~slot-b", byIssue["task-02"].Holder)
+}
+
+func TestAcceptAt_CommitterNowKeepsFirstPublished_REQ_CLAIMORD_W12(t *testing.T) {
+	t.Parallel()
+	// Reverses the #276 two-live-TTL timestamp winner when fold order is
+	// publish/commit order: B's later op.Timestamp is applied first; A's
+	// earlier clock cannot steal while B's lease is live at committer now.
+	first := ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100 + 3600, WorkerID: "worker-b",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "tok-b"}}
+	second := ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "tok-a"}}
+	held, took := AcceptAt(Lease{}, first, 1_700_000_000)
+	require.True(t, took)
+	assert.Equal(t, "tok-b", held.Token)
+	assert.Equal(t, int64(1_700_000_000), held.LastActivity)
+	next, stole := AcceptAt(held, second, 1_700_000_010)
+	assert.False(t, stole, "later-published earlier clock must not steal a live first-published lease")
+	assert.Equal(t, "tok-b", next.Token)
+}
+
+func TestApplyAt_TransitionUsesStealAt_REQ_CLAIMORD_W12(t *testing.T) {
+	t.Parallel()
+	claimOp := ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 1000, WorkerID: "worker-a",
+		Payload: ops.Payload{TTL: 1, ClaimToken: "tok-a"}}
+	held, took := AcceptAt(Lease{}, claimOp, 1000)
+	require.True(t, took)
+
+	futureSkew := ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 1000 + 3600, WorkerID: "worker-a",
+		Payload: ops.Payload{To: ops.StatusInProgress}}
+	afterFuture := ApplyAt(held, futureSkew, 1010)
+	assert.Equal(t, int64(1010), afterFuture.LastActivity)
+	assert.Equal(t, ops.StatusInProgress, afterFuture.Status)
+	assert.True(t, LeaseLive(afterFuture, 1010+59))
+	assert.False(t, LeaseLive(afterFuture, 1010+60), "future-skewed transition must not stretch TTL past stealAt")
+
+	pastSkew := ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 500, WorkerID: "worker-a",
+		Payload: ops.Payload{To: ops.StatusInProgress}}
+	afterPast := ApplyAt(held, pastSkew, 1500)
+	assert.Equal(t, int64(1500), afterPast.LastActivity, "past-skewed transition must extend lease to stealAt")
+	assert.True(t, LeaseLive(afterPast, 1500+59))
+	assert.False(t, LeaseLive(afterPast, 1500+60))
 }
 
 func TestOwner_HeartbeatExtendsLease_REQ_CLAIMTTL(t *testing.T) {

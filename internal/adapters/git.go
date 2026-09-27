@@ -1127,3 +1127,63 @@ func (c *Client) DiffNameOnlyRange(base, head string) ([]string, error) {
 	}
 	return strings.Split(raw, "\x00"), nil
 }
+
+// RevListReverse returns commit SHAs reachable from rev, oldest first.
+func (c *Client) RevListReverse(rev string) ([]string, error) {
+	cmd := c.cmd("rev-list", "--reverse", rev)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git rev-list --reverse %s: %w", rev, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []string{}, nil
+	}
+	return strings.Split(raw, "\n"), nil
+}
+
+// CommitterUnix returns the committer unix timestamp of sha.
+func (c *Client) CommitterUnix(sha string) (int64, error) {
+	cmd := c.cmd("log", "-1", "--format=%ct", sha)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("git log committer %s: %w", sha, err)
+	}
+	n, convErr := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if convErr != nil {
+		return 0, fmt.Errorf("parse committer unix %s: %w", sha, convErr)
+	}
+	return n, nil
+}
+
+// IsAncestor reports whether anc is an ancestor of desc (inclusive).
+func (c *Client) IsAncestor(anc, desc string) (bool, error) {
+	cmd := c.cmd("merge-base", "--is-ancestor", anc, desc)
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("git merge-base --is-ancestor %s %s: %w", anc, desc, err)
+}
+
+// FirstParent returns the first parent of sha. ok is false for a root commit.
+func (c *Client) FirstParent(sha string) (parent string, ok bool, err error) {
+	cmd := c.cmd("rev-parse", "--verify", sha+"^")
+	out, runErr := cmd.Output()
+	if runErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("git rev-parse %s^: %w", sha, runErr)
+	}
+	p := strings.TrimSpace(string(out))
+	if p == "" {
+		return "", false, nil
+	}
+	return p, true, nil
+}

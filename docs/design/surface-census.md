@@ -115,7 +115,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | Command | Defined | Purpose | Status | Notes |
 |---------|---------|---------|--------|-------|
 | `ready` | main.go:90, ready.go | List ready-to-claim tasks | **kept-evidence** | Core workflow. Queries open tasks not blocked by dependencies. |
-| `claim` | main.go:94, claim.go | Claim issue to worker with worktree | **kept-evidence** | Foundation of task assignment. Creates branch and worktree. Win check is published `Owner` (oporder.LocateOps), not status-gated HeldByExactWorkerAndClaimToken. |
+| `claim` | main.go:94, claim.go | Claim issue to worker with worktree | **kept-evidence** | Foundation of task assignment. Creates branch and worktree. Win check is published commit-order `Owner` (oporder.OwnerOf after C0; steal now = committer time). |
 | `transition` | main.go:98, transition.go | Change issue status | **kept-evidence** | Primary state machine driver. Sets outcome on done. |
 | `unassign` | main.go:102 | Remove worker assignment | **kept-evidence** | Reverse of assign. Clears assigned_worker. |
 | `reopen` | main.go:106, reopen.go | Transition done→open, preserve outcome | **kept-evidence** | Allows re-work of completed items. Moves outcome to prior_outcomes. |
