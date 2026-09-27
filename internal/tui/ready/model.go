@@ -13,7 +13,6 @@ import (
 // ClaimMsg is sent when the user selects a task to claim.
 type ClaimMsg struct{ IssueID string }
 
-// Model is the BubbleTea model for the ready task selection TUI.
 type Model struct {
 	entries  []ready.ReadyEntry
 	cursor   int
@@ -21,12 +20,10 @@ type Model struct {
 	quit     bool
 }
 
-// New creates a new Model with the given ready entries.
 func New(entries []ready.ReadyEntry) Model {
 	return Model{entries: entries}
 }
 
-// Cursor returns the current cursor position.
 func (m Model) Cursor() int { return m.cursor }
 
 // Selected returns the issue ID of the selected entry, or "" if none selected.
@@ -35,10 +32,8 @@ func (m Model) Selected() string { return m.selected }
 // Quit returns true if the user quit without selecting.
 func (m Model) Quit() bool { return m.quit }
 
-// Init implements tea.Model.
 func (m Model) Init() tea.Cmd { return nil }
 
-// Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
@@ -65,7 +60,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View implements tea.Model.
 func (m Model) View() string {
 	if len(m.entries) == 0 {
 		return "No tasks ready.\n"

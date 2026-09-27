@@ -63,7 +63,6 @@ func TestLoad_AllOps(t *testing.T) {
 	entries, err := audit.Load(logContents, audit.Filter{})
 	require.NoError(t, err)
 	assert.Len(t, entries, 3)
-	// Sorted by timestamp
 	assert.Equal(t, int64(100), entries[0].Timestamp)
 	assert.Equal(t, int64(150), entries[1].Timestamp)
 	assert.Equal(t, int64(200), entries[2].Timestamp)
@@ -71,7 +70,6 @@ func TestLoad_AllOps(t *testing.T) {
 
 func TestLoad_SortsTiesByWorkerID(t *testing.T) {
 	t.Parallel()
-	// Two ops with identical timestamps — must be sorted by WorkerID for determinism (audit.go:50)
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	writeLog(t, opsDir, "worker-b", []ops.Op{
@@ -87,7 +85,6 @@ func TestLoad_SortsTiesByWorkerID(t *testing.T) {
 	entries, err := audit.Load(logContents, audit.Filter{})
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
-	// worker-a sorts before worker-b lexicographically
 	assert.Equal(t, "worker-a", entries[0].WorkerID)
 	assert.Equal(t, "worker-b", entries[1].WorkerID)
 }
@@ -161,7 +158,6 @@ func TestLoad_LostRace(t *testing.T) {
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 
-	// Two workers claim the same task; worker-a wins (earlier timestamp)
 	writeLog(t, opsDir, "worker-a", []ops.Op{
 		{Type: ops.OpClaim, TargetID: "T1", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 60}},
@@ -176,7 +172,6 @@ func TestLoad_LostRace(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, entries, 2)
 
-	// worker-a's claim is the winner (not lost race)
 	var aEntry, bEntry audit.Entry
 	for _, e := range entries {
 		if e.WorkerID == "worker-a" {

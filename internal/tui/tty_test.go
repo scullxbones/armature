@@ -74,8 +74,6 @@ func TestIsInteractiveReturnsFalseWhenFormatAgent(t *testing.T) {
 func TestIsInteractiveReturnsFalseWhenNotTTY(t *testing.T) {
 	t.Parallel()
 	lockTTYState(t)
-	// In the test runner stdout is never a TTY, so IsInteractive must be false
-	// regardless of format.
 	SetFormat("human")
 	if IsInteractive() {
 		t.Error("expected IsInteractive() to return false when not a TTY")

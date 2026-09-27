@@ -29,7 +29,11 @@ func TestScreenSwitchByNumber(t *testing.T) {
 		"4": app.ScreenSources,
 	} {
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-		got := updated.(app.Model).CurrentScreen() //nolint:errcheck // panic on failed type assertion is acceptable in tests
+		next, ok := updated.(app.Model)
+		if !ok {
+			t.Fatalf("key %q: Update returned %T, want app.Model", key, updated)
+		}
+		got := next.CurrentScreen()
 		if got != want {
 			t.Errorf("key %q: screen = %v, want %v", key, got, want)
 		}
@@ -43,7 +47,6 @@ func TestSetStatePropagates(t *testing.T) {
 		"T1": {ID: "T1", Status: "open"},
 	}}
 	m = m.WithState(state)
-	// Nav bar should render without panic.
 	v := m.View()
 	if !strings.Contains(v, "[1]") {
 		t.Errorf("nav bar missing screen tab, got: %q", v)
@@ -99,7 +102,6 @@ func TestInitIncludesInitialRefresh(t *testing.T) {
 				found = true
 			}
 		case <-time.After(200 * time.Millisecond):
-			// Blocking cmd (watcher setup or scheduler) — skip
 		}
 		if found {
 			break
@@ -118,13 +120,19 @@ func TestLiveModeRefreshMsgRestartsListener(t *testing.T) {
 	if err != nil {
 		t.Skip("fsnotify not available:", err)
 	}
-	defer func() { _ = w.Close() }() //nolint:errcheck // close error in test defer not actionable
+	defer func() {
+		if err := w.Close(); err != nil {
+			t.Errorf("close watcher: %v", err)
+		}
+	}()
 
-	// Put model in live mode by sending WatcherReadyMsg
 	updated, _ := m.Update(app.WatcherReadyMsg{Watcher: w})
-	m = updated.(app.Model) //nolint:errcheck // panic on failed type assertion is acceptable in tests
+	live, ok := updated.(app.Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want app.Model", updated)
+	}
+	m = live
 
-	// RefreshMsg in live mode must return a batch: doRefresh + restarted listener
 	_, cmd := m.Update(app.RefreshMsg{})
 	if cmd == nil {
 		t.Fatal("Update(RefreshMsg{}) returned nil cmd in live mode")

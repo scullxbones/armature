@@ -58,7 +58,6 @@ func TestManifestPersistence(t *testing.T) {
 func TestReadManifestMissingReturnsEmpty(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	// Use a subdirectory that definitely doesn't have a manifest.json
 	nonexistent := dir + "/no-such-dir"
 
 	m, err := ReadManifest(nonexistent)

@@ -27,7 +27,6 @@ type Rate struct {
 	OutputUSDPerMTok float64 `json:"output_usd_per_mtok"`
 }
 
-// RateTable maps model identity to USD-per-MTok rates.
 type RateTable map[string]Rate
 
 // Usage is one recorded token observation (outcome or assessment). Zero counts
@@ -40,7 +39,6 @@ type Usage struct {
 	Source       string // "outcome" or "assessment"
 }
 
-// IssueInfo is the hierarchy/scope view cost aggregation needs.
 type IssueInfo struct {
 	ID             string
 	Type           string
@@ -49,7 +47,6 @@ type IssueInfo struct {
 	Scope          []string
 }
 
-// Totals is a summed token count plus dollar estimate.
 type Totals struct {
 	ID           string   `json:"id"`
 	USD          float64  `json:"usd"`
@@ -70,8 +67,6 @@ type rateFile struct {
 	Models map[string]Rate `json:"models"`
 }
 
-// DefaultRates returns built-in USD-per-MTok prices used when no table is configured.
-// Values are list prices for common 2026-era frontier models, not a billing guarantee.
 func defaultRates() RateTable {
 	return RateTable{
 		"claude-sonnet-4-5": {InputUSDPerMTok: 3.00, OutputUSDPerMTok: 15.00},
@@ -83,8 +78,6 @@ func defaultRates() RateTable {
 	}
 }
 
-// LoadRateTable reads a JSON object {"models": {name: {input_usd_per_mtok, output_usd_per_mtok}}}.
-// Unknown models still fall back to the "default" entry after merge with DefaultRates.
 func loadRateTable(path string) (RateTable, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
@@ -101,7 +94,9 @@ func loadRateTable(path string) (RateTable, error) {
 	return rates, nil
 }
 
-// ResolveRates returns flag path, else IssuesDir/cost-rates.json if present, else defaults.
+// ResolveRates returns flag path, else IssuesDir/cost-rates.json if present, else
+// built-in list prices for common 2026-era frontier models (not a billing guarantee).
+// Unknown models fall back to the "default" entry after merge with that table.
 func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
 	if ratesPath != "" {
 		return loadRateTable(ratesPath)
@@ -164,14 +159,12 @@ type attestationKey struct {
 	fingerprint string
 }
 
-// USDFromTokens converts token counts to dollars using the model's rate.
 func usdFromTokens(inputTokens, outputTokens int, rate Rate) float64 {
 	const million = 1_000_000.0
 	return float64(inputTokens)/million*rate.InputUSDPerMTok +
 		float64(outputTokens)/million*rate.OutputUSDPerMTok
 }
 
-// RateFor returns the rate for model, then issue preferred model, then default.
 func rateFor(table RateTable, model, preferred string) Rate {
 	if table == nil {
 		table = defaultRates()
@@ -228,7 +221,6 @@ func Estimate(usages []Usage, issues map[string]IssueInfo, rates RateTable) Repo
 	return report
 }
 
-// StoryRoot walks parents until a story (or the top-most ancestor).
 func storyRoot(issueID string, issues map[string]IssueInfo) string {
 	seen := map[string]bool{}
 	cur := issueID

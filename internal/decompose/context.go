@@ -40,7 +40,6 @@ func BuildContext(params ContextParams) (ContextOutput, error) {
 		sourcesDir := filepath.Join(params.IssuesDir, "sources")
 		lc := sources.NewLifecycle(sourcesDir)
 		for _, id := range params.SourceIDs {
-			// Get the source's cached content via Lifecycle.
 			data, err := lc.Content(id)
 			if err != nil || data == nil {
 				continue
@@ -93,12 +92,18 @@ func buildDAGBlock(params ContextParams) string {
 }
 
 func planSchemaBlock() string {
-	data, _ := json.MarshalIndent(defaultPlanSchema(), "", "  ") //nolint:errcheck // static schemas cannot contain non-serializable types
+	data, err := json.MarshalIndent(defaultPlanSchema(), "", "  ")
+	if err != nil {
+		return "(error serializing plan schema)"
+	}
 	return string(data)
 }
 
 func constraintsBlock() string {
-	data, _ := json.MarshalIndent(defaultConstraints(), "", "  ") //nolint:errcheck // static schemas cannot contain non-serializable types
+	data, err := json.MarshalIndent(defaultConstraints(), "", "  ")
+	if err != nil {
+		return "(error serializing constraints)"
+	}
 	return string(data)
 }
 

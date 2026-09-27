@@ -12,26 +12,23 @@ import (
 	"github.com/scullxbones/armature/internal/tui"
 )
 
-// Item represents a draft node in the DAG subtree.
 type Item struct {
 	ID      string
 	Title   string
 	IsCited bool // false = uncited, requires explicit ID acknowledgment
 }
 
-// Model is the BubbleTea model for the dag-summary sign-off TUI.
 type Model struct {
 	items        []Item
 	cursor       int
-	actions      map[string]string // id → "y" | "n" | "s"
-	awaitSignOff bool              // true when all items actioned, waiting for final y/n
-	done         bool              // true when sign-off confirmed
-	quitting     bool              // true when q pressed without sign-off
+	actions      map[string]string
+	awaitSignOff bool
+	done         bool
+	quitting     bool
 	rootID       string
-	pendingAck   string // buffer for uncited node ID acknowledgment
+	pendingAck   string
 }
 
-// New constructs a Model from the provided items and subtree root ID.
 func New(items []Item, rootID string) Model {
 	return Model{
 		items:   items,
@@ -39,8 +36,6 @@ func New(items []Item, rootID string) Model {
 		rootID:  rootID,
 	}
 }
-
-// --- Accessors ---
 
 func (m Model) Total() int            { return len(m.items) }
 func (m Model) Cursor() int           { return m.cursor }
@@ -62,26 +57,21 @@ func (m Model) ApprovedIDs() []string {
 	return ids
 }
 
-// --- tea.Model interface ---
-
 func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		k := msg.String()
 
-		// Global quit
 		if k == "q" || k == "ctrl+c" {
 			m.quitting = true
 			return m, tea.Quit
 		}
 
-		// Sign-off prompt
 		if m.awaitSignOff {
 			return m.handleSignOff(k)
 		}
 
-		// Normal item review
 		return m.handleItemKey(k)
 	}
 	return m, nil
@@ -94,7 +84,6 @@ func (m Model) handleSignOff(k string) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "n":
 		m.awaitSignOff = false
-		// Go back to last item so user can re-review
 		if m.cursor >= len(m.items) && len(m.items) > 0 {
 			m.cursor = len(m.items) - 1
 		}
@@ -110,24 +99,19 @@ func (m Model) handleItemKey(k string) (tea.Model, tea.Cmd) {
 
 	item := m.items[m.cursor]
 
-	// Uncited node: buffer input until ID is fully typed
 	if !item.IsCited {
 		if k == "y" || k == "n" || k == "s" {
-			// Only accept action if pendingAck matches the item ID
 			if m.pendingAck == item.ID {
 				return m.recordAction(item.ID, k)
 			}
-			// Not yet acknowledged — ignore action key
 			return m, nil
 		}
-		// Accumulate characters for ack
 		if len(k) == 1 {
 			m.pendingAck += k
 		}
 		return m, nil
 	}
 
-	// Cited node: accept action directly
 	switch k {
 	case "y", "n", "s":
 		return m.recordAction(item.ID, k)
@@ -137,7 +121,7 @@ func (m Model) handleItemKey(k string) (tea.Model, tea.Cmd) {
 
 func (m Model) recordAction(id, action string) (tea.Model, tea.Cmd) {
 	m.actions[id] = action
-	m.pendingAck = "" // reset ack buffer
+	m.pendingAck = ""
 	m.cursor++
 	if m.allActioned() {
 		m.awaitSignOff = true
@@ -153,8 +137,6 @@ func (m Model) allActioned() bool {
 	}
 	return true
 }
-
-// --- View ---
 
 func (m Model) View() string {
 	if len(m.items) == 0 {

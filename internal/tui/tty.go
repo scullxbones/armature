@@ -6,13 +6,10 @@ import (
 	"golang.org/x/term"
 )
 
-// currentFormat holds the output format set by SetFormat.
 var currentFormat string
 
-// nonInteractive is set when BubbleTea TUIs must be skipped.
 var nonInteractive bool
 
-// SetFormat stores the current output format for use by IsInteractive.
 func SetFormat(f string) {
 	currentFormat = f
 }
@@ -29,7 +26,6 @@ func IsNonInteractive() bool {
 	return nonInteractive
 }
 
-// IsTerminal returns true if stdout is connected to a TTY.
 func IsTerminal() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }

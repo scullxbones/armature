@@ -11,7 +11,6 @@ import (
 	"github.com/scullxbones/armature/internal/validate"
 )
 
-// Model implements app.Screen for the validation results view.
 type Model struct {
 	state   *materialize.State
 	results validate.Result
@@ -34,9 +33,6 @@ func (m *Model) SetState(state *materialize.State) {
 	m.state = state
 	if state != nil {
 		graph := materialize.GraphFromState(state)
-		// Now must be supplied: validate cannot reach a clock itself (depguard),
-		// and without one an aggregate parent whose claim has expired would read
-		// as actively claimed forever and show a false W1 overlap.
 		m.results = validate.Validate(state, graph, validate.Options{Now: clock.System()})
 	}
 }

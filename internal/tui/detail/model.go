@@ -55,7 +55,6 @@ func (m Model) SetSize(width, height int) Model {
 	return m
 }
 
-// Update implements the Bubble Tea update cycle.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.open {
 		return m, nil
@@ -70,7 +69,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.viewport.LineUp(1)
 		case "c":
 			if m.issue != nil {
-				_ = clipboard.WriteAll(m.issue.ID) //nolint:errcheck // clipboard write is best-effort UI action
+				if err := clipboard.WriteAll(m.issue.ID); err != nil {
+					return m, nil
+				}
 			}
 		}
 	}
@@ -79,7 +80,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View renders the overlay.
 func (m Model) View() string {
 	if !m.open || m.issue == nil {
 		return ""

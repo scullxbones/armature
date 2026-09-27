@@ -19,7 +19,7 @@ func TestSourcesInit(t *testing.T) {
 func TestSourcesSetSize(t *testing.T) {
 	t.Parallel()
 	m := sources.New()
-	m.SetSize(80, 24) // must not panic
+	m.SetSize(80, 24)
 }
 
 func TestSourcesHelpBar(t *testing.T) {
