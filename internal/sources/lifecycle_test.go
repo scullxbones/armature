@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (l *Lifecycle) sync(ctx context.Context, id string) SyncResult {
+func (l *Lifecycle) syncOneFromDisk(ctx context.Context, id string) SyncResult {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
 		return SyncResult{ID: id, Error: fmt.Errorf("read manifest: %w", err)}
@@ -23,7 +23,7 @@ func (l *Lifecycle) sync(ctx context.Context, id string) SyncResult {
 	return result
 }
 
-func (l *Lifecycle) verify(id string) VerifyResult {
+func (l *Lifecycle) verifyOneFromDisk(id string) VerifyResult {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
 		return VerifyResult{ID: id, Status: VerifyError, Error: err}
@@ -31,8 +31,8 @@ func (l *Lifecycle) verify(id string) VerifyResult {
 	return l.verifyEntry(&manifest, id)
 }
 
-func (l *Lifecycle) isFresh(id string) (bool, error) {
-	result := l.verify(id)
+func (l *Lifecycle) isFreshFromDisk(id string) (bool, error) {
+	result := l.verifyOneFromDisk(id)
 	if result.Error != nil {
 		return false, result.Error
 	}
@@ -151,7 +151,7 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result := lc.sync(ctx, "test-1")
+	result := lc.syncOneFromDisk(ctx, "test-1")
 
 	if result.Error != nil {
 		t.Fatalf("Sync failed: %v", result.Error)
@@ -202,7 +202,7 @@ func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result := lc.sync(ctx, "test-1")
+	result := lc.syncOneFromDisk(ctx, "test-1")
 
 	if result.Error == nil {
 		t.Fatal("expected Sync to fail but it didn't")
@@ -282,12 +282,12 @@ func TestLifecycleVerify_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	syncResult := lc.sync(ctx, "test-1")
+	syncResult := lc.syncOneFromDisk(ctx, "test-1")
 	if syncResult.Error != nil {
 		t.Fatalf("Sync failed: %v", syncResult.Error)
 	}
 
-	verifyResult := lc.verify("test-1")
+	verifyResult := lc.verifyOneFromDisk("test-1")
 	if verifyResult.Status != VerifyOK {
 		t.Errorf("expected VerifyOK, got %v", verifyResult.Status)
 	}
@@ -319,7 +319,7 @@ func TestLifecycleVerifyStale_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	verifyResult := lc.verify("test-1")
+	verifyResult := lc.verifyOneFromDisk("test-1")
 	if verifyResult.Status != VerifyStale {
 		t.Errorf("expected VerifyStale, got %v", verifyResult.Status)
 	}
@@ -341,7 +341,7 @@ func TestLifecycleVerifyMissing_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	verifyResult := lc.verify("test-1")
+	verifyResult := lc.verifyOneFromDisk("test-1")
 	if verifyResult.Status != VerifyMissing {
 		t.Errorf("expected VerifyMissing, got %v", verifyResult.Status)
 	}
@@ -370,12 +370,12 @@ func TestLifecycleIsFresh_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	syncResult := lc.sync(ctx, "test-1")
+	syncResult := lc.syncOneFromDisk(ctx, "test-1")
 	if syncResult.Error != nil {
 		t.Fatalf("Sync failed: %v", syncResult.Error)
 	}
 
-	fresh, err := lc.isFresh("test-1")
+	fresh, err := lc.isFreshFromDisk("test-1")
 	if err != nil {
 		t.Fatalf("IsFresh failed: %v", err)
 	}
@@ -508,7 +508,7 @@ func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	if _, err := lc.Register(entry); err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	if result := lc.sync(context.Background(), entry.ID); result.Error != nil {
+	if result := lc.syncOneFromDisk(context.Background(), entry.ID); result.Error != nil {
 		t.Fatalf("Sync failed: %v", result.Error)
 	}
 
@@ -516,7 +516,7 @@ func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("WriteCache failed: %v", err)
 	}
 
-	result := lc.verify(entry.ID)
+	result := lc.verifyOneFromDisk(entry.ID)
 	if result.Status != VerifyChanged {
 		t.Fatalf("expected VerifyChanged, got %v", result.Status)
 	}
@@ -612,7 +612,7 @@ func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	result := lc.sync(context.Background(), "fs-1")
+	result := lc.syncOneFromDisk(context.Background(), "fs-1")
 	if result.Error != nil {
 		t.Fatalf("Sync via FilesystemProvider failed: %v", result.Error)
 	}
@@ -623,7 +623,7 @@ func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Errorf("expected ProviderType filesystem, got %q", result.ProviderType)
 	}
 
-	verify := lc.verify("fs-1")
+	verify := lc.verifyOneFromDisk("fs-1")
 	if verify.Status != VerifyOK {
 		t.Errorf("expected VerifyOK after sync, got %v", verify.Status)
 	}
@@ -773,7 +773,7 @@ func TestLifecycleSyncWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 	fc.commits = nil
 
 	ctx := context.Background()
-	result := lc.sync(ctx, "test-1")
+	result := lc.syncOneFromDisk(ctx, "test-1")
 	if result.Error != nil {
 		t.Fatalf("Sync failed: %v", result.Error)
 	}
