@@ -152,7 +152,9 @@ func copyDirFiles(src, dest string) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dest, e.Name()), in, 0o600); err != nil {
+		outPath := filepath.Join(dest, e.Name())
+		//nolint:gosec // G703: dest is a temp overlay; names come from ReadDir of local ops/sources
+		if err := os.WriteFile(outPath, in, 0o600); err != nil {
 			return err
 		}
 	}
