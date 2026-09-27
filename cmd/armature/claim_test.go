@@ -21,6 +21,7 @@ import (
 	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worktree"
@@ -2204,6 +2205,14 @@ func TestClaimFromFlagRequiresExplicitNewWorktreePath_REQ_LNGHZN_S9_T1(t *testin
 	})
 }
 
+func persistOporderCutoverAtHEAD(t *testing.T, ctx *config.Context) {
+	t.Helper()
+	gc := adapters.New(ctx.WorktreePath)
+	sha, err := gc.HeadSHA()
+	require.NoError(t, err)
+	require.NoError(t, gc.SetGitConfig(oporder.CutoverConfigKey, sha))
+}
+
 func injectFutureSameWorkerClaim(t *testing.T, ctx *config.Context, issueID, impostorToken string) (ownerID string) {
 	t.Helper()
 	ownerID, logPath, err := resolveWorkerAndLog(ctx)
@@ -2219,6 +2228,7 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIM
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
+	persistOporderCutoverAtHEAD(t, ctx)
 
 	_ = injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
 
@@ -2242,6 +2252,7 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestampHuman_REQ_
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
+	persistOporderCutoverAtHEAD(t, ctx)
 
 	injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
 
