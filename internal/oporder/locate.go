@@ -96,7 +96,7 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 	if err != nil {
 		return nil, err
 	}
-	cutover := strings.TrimSpace(in.Cutover)
+	cutover := resolveCutover(gc, in)
 	prefs := prefixes(in)
 	var located []LocatedOp
 	for i, sha := range shas {
@@ -151,6 +151,19 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 		}
 	}
 	return located, nil
+}
+
+const CutoverConfigKey = "armature.oporder-cutover"
+
+func resolveCutover(gc *adapters.Client, in LocateInput) string {
+	if c := strings.TrimSpace(in.Cutover); c != "" {
+		return c
+	}
+	v, err := gc.ReadGitConfig(CutoverConfigKey)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(v)
 }
 
 func commitStrictlyBefore(gc *adapters.Client, sha, cutover string) (bool, error) {
