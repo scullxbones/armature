@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ import (
 
 func setupRepoWithDirtyDraftNode(t *testing.T) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -110,7 +111,7 @@ func TestOverrideReleaseAllowsWhenForeignFindingBlocksPlanRelease(t *testing.T) 
 }
 
 func TestCreateEmitsDraft_REQ_LNGHZN_S10_T12(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -133,7 +134,7 @@ func TestCreateEmitsDraft_REQ_LNGHZN_S10_T12(t *testing.T) {
 }
 
 func TestCreateRejectsConfidenceFlag(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -155,7 +156,7 @@ func TestCreateRejectsConfidenceFlag(t *testing.T) {
 }
 
 func TestConfirmRunsPlanReleaseGate_REQ_LNGHZN_S10_T12(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

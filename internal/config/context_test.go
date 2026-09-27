@@ -8,24 +8,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func initTestRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	run := func(args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-	run("init")
-	run("config", "user.email", "test@test.com")
-	run("config", "user.name", "Test")
-	run("config", "commit.gpgsign", "false")
-	run("commit", "--allow-empty", "-m", "init")
+	dir := gittest.InitRepo(t)
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
 	return dir
 }
 

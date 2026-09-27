@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/doctor"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,11 +19,7 @@ import (
 
 func initGitRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	runGit(t, dir, "init", "-q")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
+	dir := gittest.InitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0644))
 	runGit(t, dir, "add", "README.md")
 	runGit(t, dir, "commit", "-q", "-m", "initial commit")

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/require"
 )
@@ -48,11 +49,10 @@ func TestAppendLowStakesOps_DoesNotPushBelowThreshold(t *testing.T) {
 
 func bootstrappedRepoWithFileOrigin(t *testing.T) (bareDir, repo, worktree string) {
 	t.Helper()
-	bareDir = t.TempDir()
-	run(t, bareDir, "git", "init", "--bare")
+	bareDir = gittest.InitWithOrigin(t).Origin
 
-	repo = initTempRepo(t)
-	run(t, repo, "git", "remote", "set-url", "origin", "file://"+bareDir)
+	repo = gittest.InitRepo(t)
+	run(t, repo, "git", "remote", "add", "origin", "file://"+bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

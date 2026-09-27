@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -65,7 +66,7 @@ func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -119,7 +120,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -167,7 +168,7 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestMaterializeCommand_WarningsVisible(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -218,7 +219,7 @@ func TestMaterializeCommand_WarningsVisible(t *testing.T) {
 }
 
 func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -257,7 +258,7 @@ func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
 }
 
 func TestMaterializeOffsetTracking(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")

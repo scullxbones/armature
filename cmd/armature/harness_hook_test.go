@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -1141,7 +1142,7 @@ func TestHeartbeatRateLimitStateReadMalformedFileReturnsZero(t *testing.T) {
 }
 
 func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	armatureDir := filepath.Join(repo, ".armature")
 	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "ops"), 0o755))
