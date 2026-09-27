@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,7 +107,7 @@ func TestAppendLowStakesOps_PublishFailureIsBestEffort_REQ_OPS_PUBLISH(t *testin
 }
 
 func TestPushOps_PushFailureStillPUSHOPS1_REQ_OPS_PUBLISH(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

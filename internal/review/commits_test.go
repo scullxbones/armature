@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,19 +17,8 @@ import (
 func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	repo := tmpDir
-
-	run(t, repo, "init")
-	// Background Git maintenance can keep writing pack files after git commit
-	// exits, racing t.TempDir cleanup. This ephemeral repository needs neither
-	// automatic maintenance nor garbage collection.
-	run(t, repo, "config", "maintenance.auto", "false")
-	run(t, repo, "config", "gc.auto", "0")
-	run(t, repo, "config", "user.email", "test@example.com")
-	run(t, repo, "config", "user.name", "Test User")
-	run(t, repo, "config", "commit.gpgsign", "false")
-	run(t, repo, "commit", "--allow-empty", "-m", "initial commit")
+	repo := gittest.InitRepo(t)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "initial commit")
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "feat.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "add", "feat.go")
@@ -92,14 +82,8 @@ func TestReviewCommits_REQ_TOPTIER_S1_T3(t *testing.T) {
 
 func TestReviewCommits_EmptyRepo(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-	repo := tmpDir
-
-	run(t, repo, "init")
-	run(t, repo, "config", "user.email", "test@example.com")
-	run(t, repo, "config", "user.name", "Test User")
-	run(t, repo, "config", "commit.gpgsign", "false")
-	run(t, repo, "commit", "--allow-empty", "-m", "initial commit")
+	repo := gittest.InitRepo(t)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "initial commit")
 
 	git := adapters.New(repo)
 
@@ -118,16 +102,8 @@ func TestReviewCommits_RejectsOptionLikeBranch(t *testing.T) {
 
 func TestReviewCommits_RejectsDisallowedType(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-	repo := tmpDir
-
-	run(t, repo, "init")
-	run(t, repo, "config", "maintenance.auto", "false")
-	run(t, repo, "config", "gc.auto", "0")
-	run(t, repo, "config", "user.email", "test@example.com")
-	run(t, repo, "config", "user.name", "Test User")
-	run(t, repo, "config", "commit.gpgsign", "false")
-	run(t, repo, "commit", "--allow-empty", "-m", "initial commit")
+	repo := gittest.InitRepo(t)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "initial commit")
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "oops.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "add", "oops.go")
@@ -141,14 +117,8 @@ func TestReviewCommits_RejectsDisallowedType(t *testing.T) {
 
 func TestReviewCommits_PartialMatchIgnored(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-	repo := tmpDir
-
-	run(t, repo, "init")
-	run(t, repo, "config", "user.email", "test@example.com")
-	run(t, repo, "config", "user.name", "Test User")
-	run(t, repo, "config", "commit.gpgsign", "false")
-	run(t, repo, "commit", "--allow-empty", "-m", "initial commit")
+	repo := gittest.InitRepo(t)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "initial commit")
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "add", "file.go")
@@ -163,14 +133,8 @@ func TestReviewCommits_PartialMatchIgnored(t *testing.T) {
 
 func TestReviewCommits_MultilineMessage(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-	repo := tmpDir
-
-	run(t, repo, "init")
-	run(t, repo, "config", "user.email", "test@example.com")
-	run(t, repo, "config", "user.name", "Test User")
-	run(t, repo, "config", "commit.gpgsign", "false")
-	run(t, repo, "commit", "--allow-empty", "-m", "initial commit")
+	repo := gittest.InitRepo(t)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "initial commit")
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "add", "file.go")
@@ -190,16 +154,8 @@ func TestReviewCommits_MultilineMessage(t *testing.T) {
 
 func TestReviewCommits_IncludesMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-	repo := tmpDir
-
-	run(t, repo, "init")
-	run(t, repo, "config", "maintenance.auto", "false")
-	run(t, repo, "config", "gc.auto", "0")
-	run(t, repo, "config", "user.email", "test@example.com")
-	run(t, repo, "config", "user.name", "Test User")
-	run(t, repo, "config", "commit.gpgsign", "false")
-	run(t, repo, "commit", "--allow-empty", "-m", "initial commit")
+	repo := gittest.InitRepo(t)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "initial commit")
 
 	initialBranchOut := runOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD")
 
@@ -231,16 +187,8 @@ func TestReviewCommits_IncludesMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
 
 func TestReviewCommits_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
-	tmpDir := t.TempDir()
-	repo := tmpDir
-
-	run(t, repo, "init")
-	run(t, repo, "config", "maintenance.auto", "false")
-	run(t, repo, "config", "gc.auto", "0")
-	run(t, repo, "config", "user.email", "test@example.com")
-	run(t, repo, "config", "user.name", "Test User")
-	run(t, repo, "config", "commit.gpgsign", "false")
-	run(t, repo, "commit", "--allow-empty", "-m", "initial commit")
+	repo := gittest.InitRepo(t)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "initial commit")
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content"), 0o644))
 	run(t, repo, "add", "file.txt")

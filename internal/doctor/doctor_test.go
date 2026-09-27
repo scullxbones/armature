@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/doctor"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -167,7 +168,7 @@ func TestEvaluateD9UnrecognizedWorktrees_REQ_LNGHZN_S5_T8(t *testing.T) {
 func TestRunChecks_D9_SkippedWhenIssueDetailsOmitted_REQ_LNGHZN_S5_T8(t *testing.T) {
 	t.Parallel()
 
-	repoDir := t.TempDir()
+	repoDir := gittest.InitRepo(t)
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
@@ -175,12 +176,6 @@ func TestRunChecks_D9_SkippedWhenIssueDetailsOmitted_REQ_LNGHZN_S5_T8(t *testing
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "command %v failed: %s", args, out)
 	}
-	run("git", "init")
-	run("git", "config", "user.email", "test@test.com")
-	run("git", "config", "user.name", "Test")
-	run("git", "config", "commit.gpgsign", "false")
-	run("git", "config", "gc.auto", "0")
-	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "chore: initial commit")
 
 	boundPath := filepath.Join(repoDir, ".worktrees", "T-001")
@@ -201,7 +196,7 @@ func TestRunChecks_D9_SkippedWhenIssueDetailsOmitted_REQ_LNGHZN_S5_T8(t *testing
 func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testing.T) {
 	t.Parallel()
 
-	repoDir := t.TempDir()
+	repoDir := gittest.InitRepo(t)
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
@@ -209,12 +204,6 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "command %v failed: %s", args, out)
 	}
-	run("git", "init")
-	run("git", "config", "user.email", "test@test.com")
-	run("git", "config", "user.name", "Test")
-	run("git", "config", "commit.gpgsign", "false")
-	run("git", "config", "gc.auto", "0")
-	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "chore: initial commit")
 
 	strayPath := filepath.Join(repoDir, ".worktrees", "stray")
@@ -576,7 +565,7 @@ func TestDoctorRunUsesStateDir(t *testing.T) {
 func TestRunChecks_D1_GitDivergence(t *testing.T) {
 	t.Parallel()
 
-	repoDir := t.TempDir()
+	repoDir := gittest.InitRepo(t)
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
@@ -584,12 +573,6 @@ func TestRunChecks_D1_GitDivergence(t *testing.T) {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "command %v failed: %s", args, out)
 	}
-	run("git", "init")
-	run("git", "config", "user.email", "test@test.com")
-	run("git", "config", "user.name", "Test")
-	run("git", "config", "commit.gpgsign", "false")
-	run("git", "config", "gc.auto", "0")
-	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "feat(task-open-1): implement feature")
 
 	index := materialize.Index{
@@ -604,7 +587,7 @@ func TestRunChecks_D1_GitDivergence(t *testing.T) {
 func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
 	t.Parallel()
 
-	repoDir := t.TempDir()
+	repoDir := gittest.InitRepo(t)
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.CommandContext(context.Background(), args[0], args[1:]...)
@@ -612,12 +595,6 @@ func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "command %v failed: %s", args, out)
 	}
-	run("git", "init")
-	run("git", "config", "user.email", "test@test.com")
-	run("git", "config", "user.name", "Test")
-	run("git", "config", "commit.gpgsign", "false")
-	run("git", "config", "gc.auto", "0")
-	run("git", "config", "maintenance.auto", "false")
 	run("git", "commit", "--allow-empty", "-m", "feat(task-done-1): implement feature")
 
 	index := materialize.Index{
