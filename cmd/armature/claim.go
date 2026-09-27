@@ -45,7 +45,9 @@ func mapClaimError(err error) error {
 		strings.Contains(msg, "issue ID") && strings.Contains(msg, "must not"),
 		strings.Contains(msg, "--worktree is required"),
 		strings.Contains(msg, "--from requires an explicit --worktree"),
-		strings.Contains(msg, "accepts at most"):
+		strings.Contains(msg, "accepts at most"),
+		strings.Contains(msg, "must be > 0 minutes"),
+		strings.Contains(msg, "must not overflow claim TTL seconds"):
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm claim --help"}, err)
 	case strings.Contains(msg, "issue") && strings.Contains(msg, "not found") &&
 		!strings.Contains(msg, "after claim"):
@@ -857,6 +859,9 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			if !cmd.Flags().Changed("ttl") && ctx.Config.DefaultTTL > 0 {
 				ttl = int(ctx.Config.DefaultTTL)
 			}
+			if err := claimPkg.ValidateTTLMinutes(ttl); err != nil {
+				return err
+			}
 			var fromBranch, fromTip string
 			worktreePath, issueID, args = recoverSpacedOptionalWorktreeArg(worktreePath, issueID, args)
 			if worktreePath != defaultWorktreeFlagValue && issueID != "" && len(args) > 0 {
@@ -1054,9 +1059,12 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return fmt.Errorf("generate claim token: %w", err)
 			}
 			claimTimestamp := nowEpoch()
-			op := ops.Op{
-				Type: ops.OpClaim, TargetID: issueID, Timestamp: claimTimestamp,
-				WorkerID: workerID, Payload: ops.Payload{TTL: ttl, WorktreePath: worktreePath, ClaimToken: claimToken},
+			op, err := claimPkg.NewClaimOp(issueID, workerID, claimTimestamp, ttl, worktreePath, claimToken)
+			if err != nil {
+				if cleanupErr := cleanupClaimExclusionsLocked(ctx.RepoPath, claimExclusions); cleanupErr != nil {
+					return fmt.Errorf("%w; exclusion rollback failed: %v", err, cleanupErr)
+				}
+				return err
 			}
 			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
 				if cleanupErr := cleanupClaimExclusionsLocked(ctx.RepoPath, claimExclusions); cleanupErr != nil {

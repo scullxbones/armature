@@ -63,15 +63,15 @@ func TestForeignLiveLeaseBlocksChallenger_REQ_MATENC_S1_T2(t *testing.T) {
 		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 210))
 	})
 
-	t.Run("zero TTL uses replay default 60 minutes not never-expire", func(t *testing.T) {
+	t.Run("zero TTL uses replay default 60 minutes", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("worker-a", 100, 0)
-		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100+60*60),
-			"exact default-TTL boundary is still live (IsClaimStale is strict-after)")
-		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100+60*60+1),
-			"TTL<=0 on a held lease defaults to 60 minutes at replay, unlike IsClaimStale")
-		assert.False(t, IsClaimStale(FoldLastActivity(100, 100, 100), 0, 100+60*60+1),
-			"sanity: IsClaimStale TTL<=0 never expires — ForeignLiveLeaseBlocksChallenger must not copy that")
+		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100+60*60-1),
+			"legacy ttl 0 is live one second before the 60-minute default")
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100+60*60),
+			"legacy ttl 0 is takeable at exactly 60 minutes")
+		assert.True(t, IsClaimStale(FoldLastActivity(100, 100, 100), 0, 100+60*60),
+			"IsClaimStale replays ttl 0 as 60 minutes")
 	})
 
 	t.Run("heartbeat and activity clocks fold into staleness", func(t *testing.T) {
@@ -85,18 +85,17 @@ func TestForeignLiveLeaseBlocksChallenger_REQ_MATENC_S1_T2(t *testing.T) {
 			TTLMinutes:                 1,
 		}
 		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 209))
-		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 211))
+		assert.False(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 210))
 	})
 
-	t.Run("does not unify with ResolveClaim earliest-timestamp winner", func(t *testing.T) {
+	t.Run("does not use earliest-timestamp winner", func(t *testing.T) {
 		t.Parallel()
 		held := liveHeld("worker-a", 200, 60)
 		assert.True(t, ForeignLiveLeaseBlocksChallenger(held, "worker-b", 100))
-		winner := ResolveClaim([]ops.Op{
-			{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-a"},
-			{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-b"},
-		})
-		assert.Equal(t, "worker-b", winner.WorkerID)
+		_, took := Accept(LeaseFromClocks(
+			held.Status, held.ClaimedBy, "", held.ClaimedAt, held.LastHeartbeat, held.LastClaimingWorkerActivity, held.TTLMinutes, "",
+		), ops.Op{Type: ops.OpClaim, WorkerID: "worker-b", Timestamp: 100, Payload: ops.Payload{TTL: 60}})
+		assert.False(t, took, "an earlier foreign timestamp does not steal a later live held lease")
 	})
 }
 

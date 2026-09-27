@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -144,51 +145,32 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 
-	logPath := opsLogPath(ctx.IssuesDir, slottedWorkerID(workerID).String())
-
-	allOps, err := ops.ReadLog(logPath)
+	_, allOps, err := loadWorkerLogs(filepath.Join(ctx.IssuesDir, "ops"))
 	if err != nil {
 		return ""
 	}
-
-	defaultTTL := ctx.Config.DefaultTTL
-	if defaultTTL <= 0 {
-		defaultTTL = config.DefaultTTLMinutes
-	}
 	now := time.Now().Unix()
-
-	clocksByIssue := make(map[string]*claimOwnerClocks)
-
-	for _, op := range allOps {
-		c := clocksByIssue[op.TargetID]
-		if c == nil {
-			c = &claimOwnerClocks{}
-			clocksByIssue[op.TargetID] = c
-		}
-		switch op.Type {
-		case ops.OpClaim:
-			c.claimedAt = op.Timestamp
-			c.ttl = op.Payload.TTL
-		case ops.OpHeartbeat:
-			c.recordHeartbeat(op.Timestamp)
-		case ops.OpTransition:
-			c.recordTransitionAt(op.Timestamp, op.Payload.To)
-		}
-	}
-
-	for issueID, c := range clocksByIssue {
-		if c.claimedAt == 0 || c.transitioned {
+	want := slottedWorkerID(workerID).String()
+	var (
+		bestID  string
+		bestAct int64
+	)
+	for issueID, lease := range claimPkg.Owners(allOps) {
+		if lease.Holder != want {
 			continue
 		}
-		ttl := c.ttl
-		if ttl <= 0 {
-			ttl = int(defaultTTL)
+		if lease.Status != ops.StatusClaimed && lease.Status != ops.StatusInProgress {
+			continue
 		}
-		if !claimPkg.IsClaimStale(c.lastActivity(), ttl, now) {
-			return issueID
+		if !claimPkg.LeaseLive(lease, now) {
+			continue
+		}
+		if bestID == "" || lease.LastActivity > bestAct || (lease.LastActivity == bestAct && issueID < bestID) {
+			bestID = issueID
+			bestAct = lease.LastActivity
 		}
 	}
-	return ""
+	return bestID
 }
 
 func runPreCommitHook(cmd *cobra.Command) error {

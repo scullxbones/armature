@@ -166,6 +166,24 @@ func TestPlanCompensation_EncodesViaCompensation_REQ_MATENC_S1_T3(t *testing.T) 
 	assert.Equal(t, ops.WorktreeClear, ops.DecodeWorktreeRestore(got).Action)
 }
 
+func TestPlanCompensation_LegacyZeroTTLReplaysAs60_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
+	in := liveSameWorkerInput()
+	in.Prior.ClaimTTL = 0
+	in.Prior.ClaimedAt = 100
+	in.Prior.LastHeartbeat = 100
+	in.Prior.ClaimingWorkerActivity = 100
+	in.Now = 100 + int64(claim.DefaultReplayTTLMinutes)*60 - 1
+	got, err := claim.PlanCompensation(in)
+	require.NoError(t, err)
+	assert.Equal(t, in.Prior.Status, got.To)
+
+	in.Now = 100 + int64(claim.DefaultReplayTTLMinutes)*60
+	got, err = claim.PlanCompensation(in)
+	require.NoError(t, err)
+	assert.Equal(t, ops.StatusOpen, got.To)
+}
+
 func TestPlanCompensation_InputsUnchanged_REQ_ARCHIMP_S20_T3(t *testing.T) {
 	t.Parallel()
 

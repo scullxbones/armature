@@ -340,11 +340,6 @@ func slottedWorkerID(workerID string) SlottedWorkerID {
 	return SlottedWorkerID(workerID + "~" + slot)
 }
 
-func baseWorkerIdentity(workerID string) string {
-	before, _, _ := strings.Cut(workerID, "~")
-	return before
-}
-
 func nowEpoch() int64 {
 	return time.Now().Unix()
 }

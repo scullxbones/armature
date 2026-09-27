@@ -11,7 +11,7 @@ The `.armature/config.json` file is stored on the `_armature` branch and accesse
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `project_type` | string | auto-detected | Project type, auto-detected from repo markers. Possible values: `go`, `node`, `python`, `rust`, `make`, `unknown`. |
-| `default_ttl` | integer | `60` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted; an explicit `--ttl` always wins. The chosen value is written onto the claim op and drives claim staleness (see [Interaction with Stale Detection](#interaction-with-stale-detection)). If the field is omitted, the builtin fallback is 60. A present `0` is out of range: `arm doctor` D10 fails. |
+| `default_ttl` | integer | `60` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted; an explicit `--ttl` always wins and must be `> 0` minutes (same rule as D10). The chosen value is written onto the claim op and drives claim staleness (see [Interaction with Stale Detection](#interaction-with-stale-detection)). If the field is omitted, the builtin fallback is 60. A present `0` is out of range: `arm doctor` D10 fails. |
 | `token_budget` | integer | `1600` | Default token budget for `arm render-context`. Used when `--budget` is omitted; an explicit `--budget` always wins. Truncation approximates 4 characters per token (see [Interaction with Context Assembly](#interaction-with-context-assembly)). If the field is omitted, the builtin fallback is 4000. A present `0` is out of range: `arm doctor` D10 fails. `arm bootstrap` writes 1600. |
 | `low_stakes_push_threshold` | integer | `5` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), Armature attempts a **best-effort** push of `_armature` (`pushOpsBranchAlwaysResetTracker`: same Push / FetchAndRebase / Push sequence as high-stakes, git errors swallowed) and resets the pending-push counter. Below the threshold, those ops commit locally only. High-stakes ops push immediately after commit (`pushOpsBranch`: `claim`, `transition`, `assign`, `unassign`, `ready` when it claims, and `doctor --fix`) and **fail the CLI** if publish still fails; the local commit is not rolled back (`arm push-ops` is the recovery command). If the field is omitted, the builtin fallback is 5. A present `0` is out of range: `arm doctor` D10 fails. |
 | `hooks` | array | `[]` | Array of pre-transition hook configurations (see [Hooks](#hooks) below). |
@@ -103,13 +103,11 @@ When assembled context exceeds `budget * 4` characters, lowest-priority layers a
 
 ```
 last_activity = max(claimed_at, last_heartbeat, claiming_worker_activity)
-if claim_ttl <= 0:
-    never stale   # explicit `arm claim --ttl 0`; not the omitted-config fallback
-else:
-    is_stale = now > last_activity + claim_ttl * 60 seconds
+replay_ttl    = 60 if recorded ttl <= 0 else recorded ttl
+is_stale      = now >= last_activity + replay_ttl * 60 seconds
 ```
 
-An explicit `--ttl` on `arm claim` overrides config for that claim only. `--ttl 0` is accepted and never expires (`IsClaimStale` is false for TTL ≤ 0). That is distinct from omitting `default_ttl` in config, which falls back to 60, and from writing `"default_ttl": 0`, which is D10-invalid. Worker idle/inactive/stale classification also uses `default_ttl` when a claim recorded no TTL. See `arm list` for staleness indicators. `idle` is last op within `2 × default_ttl`; `inactive` is beyond that window or no last op.
+An explicit `--ttl` on `arm claim` overrides config for that claim only and must be a positive number of minutes (`ttl N is out of range (must be > 0 minutes)`). There is no never-expire lease: long work uses a large TTL or heartbeats. A historical claim op with ttl 0 or a missing ttl replays as 60 minutes. Writing `"default_ttl": 0` remains D10-invalid. Worker idle/inactive/stale classification uses config `default_ttl` (or 60 if omitted) as the idle window, not as a claim lease. See `arm list` for staleness indicators. `idle` is last op within `2 × default_ttl`; `inactive` is beyond that window or no last op.
 
 ## See Also
 

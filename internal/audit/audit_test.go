@@ -184,6 +184,36 @@ func TestLoad_LostRace(t *testing.T) {
 	assert.True(t, bEntry.LostRace, "worker-b should be the loser")
 }
 
+func TestLoad_LostRaceLoseThenWin_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
+	claimedAt := int64(100)
+	ttl := 1
+	takeAt := claimedAt + int64(ttl)*60
+	logContents := make([]string, 0, 3)
+	for _, op := range []ops.Op{
+		{Type: ops.OpClaim, TargetID: "T1", Timestamp: claimedAt, WorkerID: "worker-a",
+			Payload: ops.Payload{TTL: ttl, ClaimToken: "a"}},
+		{Type: ops.OpClaim, TargetID: "T1", Timestamp: claimedAt + 10, WorkerID: "worker-b",
+			Payload: ops.Payload{TTL: ttl, ClaimToken: "b-lose"}},
+		{Type: ops.OpClaim, TargetID: "T1", Timestamp: takeAt, WorkerID: "worker-b",
+			Payload: ops.Payload{TTL: ttl, ClaimToken: "b-win"}},
+	} {
+		line, err := ops.MarshalOp(op)
+		require.NoError(t, err)
+		logContents = append(logContents, string(line))
+	}
+	entries, err := audit.Load(logContents, audit.Filter{})
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+	byToken := map[string]audit.Entry{}
+	for _, e := range entries {
+		byToken[e.Payload.ClaimToken] = e
+	}
+	assert.False(t, byToken["a"].LostRace)
+	assert.True(t, byToken["b-lose"].LostRace)
+	assert.False(t, byToken["b-win"].LostRace)
+}
+
 func TestLoad_EmptyDir(t *testing.T) {
 	t.Parallel()
 	entries, err := audit.Load([]string{}, audit.Filter{})

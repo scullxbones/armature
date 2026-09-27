@@ -201,7 +201,7 @@ The transition op records metadata needed for merge detection:
 |---|---|---|
 | `open` | Created, not yet claimed | `create` op |
 | `claimed` | Worker has claimed, TTL active | `claim` op |
-| `in-progress` | Work actively underway | `heartbeat` op (implicit) |
+| `in-progress` | Work actively underway | `transition` op (or parent promotion when a child is claimed) |
 | `done` | Worker believes work is complete, PR submitted | `transition` op |
 | `merged` | Code confirmed on main via PR merge | CLI auto-detection during materialization |
 | `blocked` | Worker unable to complete, needs resolution | `transition` op |
@@ -455,7 +455,7 @@ A task is ready when all four conditions hold:
 1. `status == "open"`
 2. All `blocked_by` issues have `status == "merged"` (not `done` — two-phase completion requires code on main)
 3. Parent is `in-progress` (or parent is null)
-4. Not claimed, or current claim is expired (no heartbeat within TTL)
+4. Status is `open`. Expired claims stay `claimed` (or `in-progress`) until doctor, a compensating transition, or a later steal after TTL; they are listed separately, not queued as ready.
 
 A story becomes `in-progress` when at least one child task is `claimed` or `in-progress`.
 
@@ -486,7 +486,7 @@ Nodes with `confidence: "inferred"` (brownfield imports) include `"requires_conf
 
 ### Claim Race Resolution
 
-Two workers can both claim the same issue between pulls. Both pushes succeed (different files). Resolution is at **read time**: first claim by timestamp wins. Deterministic tiebreaker on worker ID (lexicographic) for identical timestamps.
+Two workers can both claim the same issue between pulls. Both pushes succeed (different files). Resolution is at **read time** via `claim.Owner` / `claim.Accept`: a foreign claim takes the lease only when the held lease is already stale at the new op's timestamp. Same worker always replaces. Equal timestamps keep apply order (stable sort by timestamp, then type key) — not worker ID.
 
 Losing worker discovers loss on a later materialize that includes the winner's log. That log is local-only until this clone has fetched `origin/_armature` (explicit fetch/rebase, or a `FetchAndRebase` inside a later publish). Reads do not pull first.
 
@@ -498,15 +498,13 @@ Workers append a heartbeat at the start of each significant operation while work
 ["heartbeat","abc-123",1740700850,"worker-a1",{}]
 ```
 
-**Stale claim rule:** A claim is reclaimable if no heartbeat or transition from the claiming worker exists within `ttl` minutes of the last heartbeat/claim timestamp.
+**Stale claim rule:** A claim is reclaimable at `last_activity + ttl minutes` (inclusive). `last_activity` is the max of claimed-at, claimant heartbeat, and claimant-authored activity. Recorded ttl ≤ 0 replays as 60 minutes. Writes of ttl ≤ 0 are rejected.
 
 TTL is per-claim. Ephemeral CI agents: `ttl: 15`. Long-running human-supervised agents: `ttl: 1440`.
 
 ### Claim-Time Scope Overlap Advisory
 
-When a worker claims a task, the CLI checks whether any currently `claimed` or `in-progress` task has overlapping scope (using the same glob-matching logic as W1). If overlap is detected, the claim still succeeds (no blocking — consistent with the advisory philosophy) but:
-- A warning is emitted to the claiming worker's output.
-- A `note` op is automatically appended to both the claimed task and the overlapping task, recording the overlap for context.
+When a worker claims a task, the CLI checks whether any currently `claimed` or `in-progress` task has overlapping scope (using the same glob-matching logic as W1). Foreign overlap **blocks** unless `--force`; same-worker overlap is dismissed with a note. See `docs/design/claim-overlap-plan.md`.
 
 This gives agents awareness of potential semantic conflicts before investing a full work cycle.
 
@@ -1649,7 +1647,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 
 Workers without network access can continue appending ops to their local ops worktree. They cannot push. When network is restored, they push accumulated ops normally. No special handling is required.
 
-**Stale claims:** A worker claims a task while offline. Another online worker claims the same task. When the offline worker pushes, both claims land in the log. Normal timestamp-based resolution applies — first claim by timestamp wins. The offline worker's clock accuracy determines whether they win.
+**Stale claims:** A worker claims a task while offline. Another online worker claims the same task. When the offline worker pushes, both claims land in the log. `claim.Owner` keeps the first lease that was still live at the later claim's timestamp. The offline worker's clock accuracy determines whether they still hold it.
 
 **Stale done transitions:** A worker transitions a task to `done` while offline. When they push, the `done` status propagates. The two-phase model handles this correctly — `done` does not unblock downstream work. No correctness issue.
 

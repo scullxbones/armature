@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -133,6 +134,31 @@ func TestAppendHighStakesOp_PublishFailureKeepsLocalCommit_REQ_OPS_PUBLISH(t *te
 	tracker, ok := state.tracker.(*fakePendingPushTracker)
 	require.True(t, ok)
 	assert.Equal(t, 0, tracker.resetCalls, "failed high-stakes publish must not Reset the pending tracker")
+}
+
+func TestClaimPublishFailureKeepsLocalClaim_REQ_CLAIMTTL(t *testing.T) {
+	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+
+	state := lowStakesState(t, repo, worktree, 5)
+	logPath := filepath.Join(worktree, "ops", "claim-publish.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
+	breakOrigin(t, repo)
+
+	op, err := claim.NewClaimOp("task-01", "worker-a", 100, 60, "", "tok-a")
+	require.NoError(t, err)
+	err = appendHighStakesOp(state, logPath, op)
+	require.Error(t, err)
+	assert.True(t, isLocalArmatureTipPublishError(err), "got %v", err)
+
+	logged, readErr := ops.ReadLog(logPath)
+	require.NoError(t, readErr)
+	require.NotEmpty(t, logged)
+	assert.Equal(t, ops.OpClaim, logged[len(logged)-1].Type)
+	lease := claim.Owner(logged, "task-01")
+	assert.Equal(t, "worker-a", lease.Holder)
+	assert.Equal(t, "tok-a", lease.Token)
 }
 
 func TestAppendHighStakesOp_SuccessfulPushResetsTracker_REQ_OPS_PUBLISH(t *testing.T) {

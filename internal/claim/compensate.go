@@ -46,11 +46,11 @@ func PlanCompensation(in CompensationInput) (ops.Payload, error) {
 	}
 
 	liveSameWorker := in.Prior.ClaimedBy == in.WorkerID &&
-		!IsClaimStale(
-			FoldLastActivity(in.Prior.ClaimedAt, in.Prior.LastHeartbeat, in.Prior.ClaimingWorkerActivity),
-			in.Prior.ClaimTTL,
-			in.Now,
-		)
+		LeaseLive(LeaseFromClocks(
+			in.Prior.Status, in.Prior.ClaimedBy, in.Prior.ClaimToken,
+			in.Prior.ClaimedAt, in.Prior.LastHeartbeat, in.Prior.ClaimingWorkerActivity,
+			in.Prior.ClaimTTL, in.Prior.WorktreePath,
+		), in.Now)
 	if liveSameWorker {
 		comp.To = in.Prior.Status
 		comp.RestoreClaimedBy = in.Prior.ClaimedBy
