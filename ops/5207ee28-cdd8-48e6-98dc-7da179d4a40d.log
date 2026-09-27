@@ -5312,3 +5312,4 @@
 ["amend","LNGHZN-S11-T3",1790547297,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["cmd/armature/sync.go","cmd/armature/sync_test.go (new)","cmd/armature/hook.go","cmd/armature/hook_test.go","cmd/armature/helpers.go","internal/output/sync_envelope.go (new)","docs/commands.md"]}]
 ["transition","OPSCLEAN-1",1790547734,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","outcome":"PR #141 merged the scaffolding commits onto main.","pr":"141"}]
 ["transition","CLAIMORD-W11",1790548902,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open","outcome":"Claim expired without worker transition; re-opening"}]
+["note","CLAIMORD-W11",1790548902,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"doctor --fix: released expired claim (previously claimed by d7cab84c-4a46-4511-bd9d-2685977753a3)","note_id":"doctor-fix-CLAIMORD-W11-1790548902"}]
