@@ -72,8 +72,8 @@ func TestPushOpsRefusesRemoteW1Shape_REQ_PUBLISH_VALIDATE(t *testing.T) {
 	require.True(t, originArmatureContains(t, bareDir, "CLAIMORD-W21"))
 
 	run(t, worktree, "git", "reset", "--hard", "HEAD~1")
-	_ = os.Remove(claimordLog)
-	_ = os.RemoveAll(filepath.Join(worktree, "state"))
+	require.NoError(t, os.Remove(claimordLog))
+	require.NoError(t, os.RemoveAll(filepath.Join(worktree, "state")))
 	require.NoFileExists(t, claimordLog)
 
 	_, err = runTrls(t, repo, "create",

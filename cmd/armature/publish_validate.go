@@ -48,9 +48,9 @@ func contextWithPublishedOps(ctx *config.Context, gc *adapters.Client) (*config.
 	if err != nil {
 		return nil, nil, err
 	}
-	cleanup := func() { _ = os.RemoveAll(tmp) }
+	cleanup := func() { swallowErr(os.RemoveAll(tmp)) }
 	tmpOps := filepath.Join(tmp, "ops")
-	if err := os.MkdirAll(tmpOps, 0o755); err != nil {
+	if err := os.MkdirAll(tmpOps, 0o750); err != nil {
 		cleanup()
 		return nil, nil, err
 	}
@@ -68,7 +68,7 @@ func contextWithPublishedOps(ctx *config.Context, gc *adapters.Client) (*config.
 	}
 	if src := filepath.Join(ctx.IssuesDir, "sources"); dirExists(src) {
 		tmpSrc := filepath.Join(tmp, "sources")
-		if err := os.MkdirAll(tmpSrc, 0o755); err != nil {
+		if err := os.MkdirAll(tmpSrc, 0o750); err != nil {
 			cleanup()
 			return nil, nil, err
 		}
@@ -80,7 +80,7 @@ func contextWithPublishedOps(ctx *config.Context, gc *adapters.Client) (*config.
 	cloned := *ctx
 	cloned.IssuesDir = tmp
 	cloned.StateDir = filepath.Join(tmp, "state")
-	if err := os.MkdirAll(cloned.StateDir, 0o755); err != nil {
+	if err := os.MkdirAll(cloned.StateDir, 0o750); err != nil {
 		cleanup()
 		return nil, nil, err
 	}
@@ -115,7 +115,7 @@ func overlayRemoteOpsLogs(gc *adapters.Client, destOps string) error {
 		if showErr != nil {
 			return showErr
 		}
-		if writeErr := os.WriteFile(dest, blob, 0o644); writeErr != nil {
+		if writeErr := os.WriteFile(dest, blob, 0o600); writeErr != nil {
 			return writeErr
 		}
 	}
@@ -152,7 +152,7 @@ func copyDirFiles(src, dest string) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dest, e.Name()), in, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dest, e.Name()), in, 0o600); err != nil {
 			return err
 		}
 	}

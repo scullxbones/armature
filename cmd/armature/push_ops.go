@@ -71,7 +71,8 @@ not name this flag.`,
 		},
 	}
 
-	cmd.Flags().BoolVar(&overrideValidate, "override-validate", false, "Human escape hatch: publish despite a dirty graph. Requires --reason and a controlling terminal. Never a green publish.")
+	cmd.Flags().BoolVar(&overrideValidate, "override-validate", false,
+		"Human escape hatch: publish despite a dirty graph. Requires --reason and a TTY. Never green.")
 	cmd.Flags().StringVar(&reason, "reason", "", "Recorded reason for --override-validate")
 	return cmd
 }
