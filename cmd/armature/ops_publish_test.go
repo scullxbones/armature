@@ -156,9 +156,10 @@ func TestClaimPublishFailureKeepsLocalClaim_REQ_CLAIMTTL(t *testing.T) {
 	require.NoError(t, readErr)
 	require.NotEmpty(t, logged)
 	assert.Equal(t, ops.OpClaim, logged[len(logged)-1].Type)
-	lease := claim.Owner(logged, "task-01")
-	assert.Equal(t, "worker-a", lease.Holder)
-	assert.Equal(t, "tok-a", lease.Token)
+	assert.True(t, claim.TokenPending(logged, "task-01", "tok-a"),
+		"publish failure keeps the local JSONL claim as Pending")
+	assert.Equal(t, "", claim.OwnerPublished(nil, "task-01").Holder,
+		"unpublished claim is not Owner on the published prefix (reverses #276 local-fold win)")
 }
 
 func TestAppendHighStakesOp_SuccessfulPushResetsTracker_REQ_OPS_PUBLISH(t *testing.T) {

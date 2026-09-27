@@ -111,6 +111,12 @@ arm bootstrap --platform claude --with-hooks
 
 Claim a ready task and associate it with a git worktree.
 
+Ownership is the `Owner` of the **published** `_armature` prefix (ops on
+`origin/_armature`, or this command's just-succeeded push). An unpublished
+local claim stays in JSONL as pending and does not win the race. After a
+successful publish, the CLI win check uses that published `Owner` (token +
+holder), not `HeldByExactWorkerAndClaimToken`.
+
 **Synopsis:**
 `arm claim [issue-id] [flags]`
 

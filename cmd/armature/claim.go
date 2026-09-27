@@ -15,11 +15,13 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worktree"
@@ -455,6 +457,29 @@ func reloadStoreHeldByExactWorkerAndClaimToken(store *snapshot.Store, issueID, w
 	}
 	issue := store.Issue(issueID)
 	return issue.HeldByExactWorkerAndClaimToken(workerID, claimToken), nil
+}
+
+func publishedClaimWon(ctx *config.Context, issueID, workerID, claimToken string) (bool, error) {
+	if ctx == nil || ctx.WorktreePath == "" {
+		return false, fmt.Errorf("published Owner: ops worktree path is required")
+	}
+	gc := worktreeGit(ctx)
+	if gc == nil {
+		return false, fmt.Errorf("published Owner: ops git client unavailable")
+	}
+	head, err := gc.HeadSHA()
+	if err != nil {
+		return false, fmt.Errorf("published Owner: resolve ops HEAD: %w", err)
+	}
+	located, err := oporder.LocateOps(oporder.LocateInput{
+		OpsWorktree:       ctx.WorktreePath,
+		ExtraPublishedTip: head,
+	})
+	if err != nil {
+		return false, fmt.Errorf("published Owner: locate ops: %w", err)
+	}
+	lease := claimPkg.OwnerPublished(oporder.Ops(oporder.Published(located)), issueID)
+	return lease.Holder == workerID && lease.Token == claimToken, nil
 }
 
 func priorLeaseFacts(prior priorClaimState) claimPkg.LeaseFacts {
@@ -1074,12 +1099,8 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 
 			stillOwnsClaim := func() bool {
-				owns, err := reloadStoreHeldByExactWorkerAndClaimToken(store, issueID, workerID, claimToken)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "warning: reload store to verify claim ownership failed: %v\n", err)
-					return false
-				}
-				return owns
+				ok, winErr := publishedClaimWon(ctx, issueID, workerID, claimToken)
+				return winErr == nil && ok
 			}
 
 			if _, err := store.Load(context.Background()); err != nil {
@@ -1090,7 +1111,10 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			if issueAfter == nil {
 				return fmt.Errorf("issue %s not found after claim", issueID)
 			}
-			won := issueAfter.HeldByExactWorkerAndClaimToken(workerID, claimToken)
+			won, winErr := publishedClaimWon(ctx, issueID, workerID, claimToken)
+			if winErr != nil {
+				return fmt.Errorf("verify published claim owner: %w", winErr)
+			}
 			if !won {
 				supersededBySameWorker := issueAfter.ClaimedBy == workerID
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
