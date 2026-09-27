@@ -58,6 +58,30 @@ func TestInitRepoIgnoresInheritedOverrideEnv(t *testing.T) {
 	}
 }
 
+func TestInitRepoDoesNotWriteHostGITConfig(t *testing.T) {
+	hostCfg := filepath.Join(t.TempDir(), "host-gitconfig")
+	original := []byte("[core]\n\tbare = false\n")
+	require.NoError(t, os.WriteFile(hostCfg, original, 0o600))
+	t.Setenv("GIT_CONFIG", hostCfg)
+	t.Setenv("GIT_CONFIG_KEY_0", "user.email")
+	t.Setenv("GIT_CONFIG_VALUE_0", "leak@example.com")
+	t.Setenv("GIT_CONFIG_KEY_1", "commit.gpgsign")
+	t.Setenv("GIT_CONFIG_VALUE_1", "true")
+
+	repo := InitRepo(t)
+
+	assert.Empty(t, os.Getenv("GIT_CONFIG"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_KEY_0"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_VALUE_0"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_KEY_1"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_VALUE_1"))
+	assert.Equal(t, "test@test.com", GitOutput(t, repo, "config", "--local", "user.email"))
+	assert.Equal(t, "false", GitOutput(t, repo, "config", "--local", "commit.gpgsign"))
+	got, err := os.ReadFile(hostCfg)
+	require.NoError(t, err)
+	assert.Equal(t, original, got)
+}
+
 func TestInitRepoDoesNotCreateInitialCommit(t *testing.T) {
 	t.Parallel()
 	repo := InitRepo(t)
