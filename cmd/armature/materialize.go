@@ -22,9 +22,7 @@ func newMaterializeCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read ops: %w", err)
 			}
-			for _, w := range loaded.Warnings {
-				fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-			}
+			emitSnapWarnings(os.Stderr, loaded.Warnings)
 			allOps := ops.ExtractOps(loaded.Items)
 			offsets := loaded.PhysicalEOF
 

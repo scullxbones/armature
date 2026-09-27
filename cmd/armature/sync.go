@@ -37,9 +37,7 @@ preview changes without committing them.`,
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-			}
+			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
 			if targetBranch == "" {
 				gc := adapters.New(appCtx.RepoPath)
@@ -87,9 +85,7 @@ preview changes without committing them.`,
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-			}
+			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
 			return nil
 		},

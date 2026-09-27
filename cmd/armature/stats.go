@@ -71,9 +71,7 @@ func runStatsCost(cmd *cobra.Command, ratesPath string) error {
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}
-	for _, w := range snap.Warnings {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-	}
+	emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
 	rates, err := stats.ResolveRates(ratesPath, ctx.IssuesDir)
 	if err != nil {

@@ -35,9 +35,7 @@ with an explicit error message.`,
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-			}
+			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
 			issue, ok := snap.Issues[issueID]
 			if !ok {

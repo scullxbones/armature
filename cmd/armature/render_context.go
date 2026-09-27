@@ -57,9 +57,7 @@ func newRenderContextCmd() *cobra.Command {
 				if snapErr != nil {
 					return fmt.Errorf("load snapshot: %w", snapErr)
 				}
-				for _, w := range snap.Warnings {
-					_, _ = fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-				}
+				emitSnapWarnings(os.Stderr, snap.Warnings)
 				state = snap.State
 			}
 
