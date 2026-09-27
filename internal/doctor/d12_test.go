@@ -109,7 +109,8 @@ func TestRun_D12_WarningWhenBehindOrigin(t *testing.T) {
 func TestRun_D12_ErrorWhenFetchFailsNotBehind(t *testing.T) {
 	t.Parallel()
 	worktree, _ := opsWorktreeWithOrigin(t)
-	runGit(t, worktree, "remote", "set-url", "origin", "file:///tmp/armature-d12-missing-origin.git")
+	missingOrigin := filepath.Join(t.TempDir(), "missing-origin.git")
+	runGit(t, worktree, "remote", "set-url", "origin", "file://"+missingOrigin)
 
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
@@ -129,7 +130,8 @@ func TestRun_D12_ErrorWhenFetchFailsBehind(t *testing.T) {
 	runGit(t, originClone, "commit", "--allow-empty", "-m", "remote ops ahead")
 	runGit(t, originClone, "push", "origin", "_armature")
 	runGit(t, worktree, "fetch", "origin", "+refs/heads/_armature:refs/remotes/origin/_armature")
-	runGit(t, worktree, "remote", "set-url", "origin", "file:///tmp/armature-d12-missing-origin.git")
+	missingOrigin := filepath.Join(t.TempDir(), "missing-origin.git")
+	runGit(t, worktree, "remote", "set-url", "origin", "file://"+missingOrigin)
 
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
