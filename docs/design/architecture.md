@@ -370,7 +370,7 @@ There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry 
 
 Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
 
-**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after a best-effort `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
+**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
 
 ### Incremental Materialization Algorithm
 

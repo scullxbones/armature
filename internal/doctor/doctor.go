@@ -538,16 +538,25 @@ func checkD12OpsWorktreeLag(worktreePath string) Finding {
 	if err != nil {
 		return skip
 	}
-	_ = fetchErr
-	return EvaluateD12OpsWorktreeLag(behind)
+	return EvaluateD12OpsWorktreeLag(behind, fetchErr)
 }
 
-func EvaluateD12OpsWorktreeLag(behind int) Finding {
+func EvaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 	f := Finding{Check: "D12", Severity: SeverityOK, Message: "Ops worktree is not behind origin/_armature"}
 	if behind > 0 {
 		f.Severity = SeverityWarning
 		f.Message = fmt.Sprintf("Ops worktree is %d commit(s) behind origin/_armature", behind)
 		f.Items = []string{fmt.Sprintf("%d", behind)}
+	}
+	if fetchErr != nil {
+		f.Severity = SeverityError
+		if behind > 0 {
+			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears %d commit(s) behind (result may be stale): %s", behind, fetchErr)
+			f.Items = []string{fmt.Sprintf("%d", behind), fetchErr.Error()}
+		} else {
+			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): %s", fetchErr)
+			f.Items = []string{fetchErr.Error()}
+		}
 	}
 	return f
 }

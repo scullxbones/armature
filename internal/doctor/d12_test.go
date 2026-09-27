@@ -1,6 +1,7 @@
 package doctor_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,15 +15,36 @@ import (
 func TestEvaluateD12OpsWorktreeLag(t *testing.T) {
 	t.Parallel()
 
-	ok := doctor.EvaluateD12OpsWorktreeLag(0)
+	fetchErr := errors.New("git fetch origin _armature: connection refused")
+
+	ok := doctor.EvaluateD12OpsWorktreeLag(0, nil)
 	assert.Equal(t, "D12", ok.Check)
 	assert.Equal(t, doctor.SeverityOK, ok.Severity)
 	assert.Equal(t, "Ops worktree is not behind origin/_armature", ok.Message)
+	assert.Empty(t, ok.Items)
 
-	warn := doctor.EvaluateD12OpsWorktreeLag(3)
+	warn := doctor.EvaluateD12OpsWorktreeLag(3, nil)
 	assert.Equal(t, doctor.SeverityWarning, warn.Severity)
-	assert.Contains(t, warn.Message, "3 commit(s) behind origin/_armature")
+	assert.Equal(t, "Ops worktree is 3 commit(s) behind origin/_armature", warn.Message)
 	assert.Equal(t, []string{"3"}, warn.Items)
+	assert.NotContains(t, warn.Message, "Could not fetch")
+	assert.NotContains(t, warn.Message, "may be stale")
+
+	staleOK := doctor.EvaluateD12OpsWorktreeLag(0, fetchErr)
+	assert.Equal(t, doctor.SeverityError, staleOK.Severity)
+	assert.Contains(t, staleOK.Message, "Could not fetch origin/_armature")
+	assert.Contains(t, staleOK.Message, "may be stale")
+	assert.Contains(t, staleOK.Message, fetchErr.Error())
+	assert.Contains(t, staleOK.Message, "appears not behind")
+	assert.Equal(t, []string{fetchErr.Error()}, staleOK.Items)
+
+	staleBehind := doctor.EvaluateD12OpsWorktreeLag(3, fetchErr)
+	assert.Equal(t, doctor.SeverityError, staleBehind.Severity)
+	assert.Contains(t, staleBehind.Message, "Could not fetch origin/_armature")
+	assert.Contains(t, staleBehind.Message, "may be stale")
+	assert.Contains(t, staleBehind.Message, fetchErr.Error())
+	assert.Contains(t, staleBehind.Message, "3 commit(s) behind")
+	assert.Equal(t, []string{"3", fetchErr.Error()}, staleBehind.Items)
 }
 
 func TestRun_D12_SkipWhenWorktreeMissing(t *testing.T) {
@@ -81,6 +103,44 @@ func TestRun_D12_WarningWhenBehindOrigin(t *testing.T) {
 	d12 := findCheck(t, report, "D12")
 	assert.Equal(t, doctor.SeverityWarning, d12.Severity)
 	assert.Contains(t, d12.Message, "behind origin/_armature")
+	require.NotEmpty(t, d12.Items)
+}
+
+func TestRun_D12_ErrorWhenFetchFailsNotBehind(t *testing.T) {
+	t.Parallel()
+	worktree, _ := opsWorktreeWithOrigin(t)
+	runGit(t, worktree, "remote", "set-url", "origin", "file:///tmp/armature-d12-missing-origin.git")
+
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	require.NoError(t, err)
+	d12 := findCheck(t, report, "D12")
+	assert.Equal(t, doctor.SeverityError, d12.Severity)
+	assert.Contains(t, d12.Message, "Could not fetch origin/_armature")
+	assert.Contains(t, d12.Message, "may be stale")
+	require.NotEmpty(t, d12.Items)
+}
+
+func TestRun_D12_ErrorWhenFetchFailsBehind(t *testing.T) {
+	t.Parallel()
+	worktree, originClone := opsWorktreeWithOrigin(t)
+	runGit(t, originClone, "commit", "--allow-empty", "-m", "remote ops ahead")
+	runGit(t, originClone, "push", "origin", "_armature")
+	runGit(t, worktree, "fetch", "origin", "+refs/heads/_armature:refs/remotes/origin/_armature")
+	runGit(t, worktree, "remote", "set-url", "origin", "file:///tmp/armature-d12-missing-origin.git")
+
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
+
+	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	require.NoError(t, err)
+	d12 := findCheck(t, report, "D12")
+	assert.Equal(t, doctor.SeverityError, d12.Severity)
+	assert.Contains(t, d12.Message, "Could not fetch origin/_armature")
+	assert.Contains(t, d12.Message, "may be stale")
+	assert.Contains(t, d12.Message, "behind")
 	require.NotEmpty(t, d12.Items)
 }
 
