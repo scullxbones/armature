@@ -316,6 +316,11 @@ func runCommitIncremental(stateDir string, opts Options) (*State, Result, error)
 	}
 	state.RetractDerivedPromotions()
 	newOps := oporder.Ops(located)
+	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, cp.ByteOffsets)
+	if pendErr != nil {
+		return nil, Result{}, pendErr
+	}
+	newOps = append(newOps, pending...)
 	unhandledOps, err := applyOpsWithTolerance(state, newOps, nil)
 	if err != nil {
 		return nil, Result{}, err
@@ -344,7 +349,7 @@ func runCommitIncremental(stateDir string, opts Options) (*State, Result, error)
 			}
 		}
 		swallowErr(adapters.WriteFile(filepath.Join(stateDir, "ready.json"), []byte("[]"), 0644))
-		offsets := cp.ByteOffsets
+		offsets := diskByteOffsets(opts.OpsWorktree)
 		if offsets == nil {
 			offsets = make(map[string]int64)
 		}
@@ -364,6 +369,74 @@ func runCommitIncremental(stateDir string, opts Options) (*State, Result, error)
 		UnhandledOps: unhandledOps,
 		Warnings:     formatUnhandledOpsWarnings(unhandledOps),
 	}, nil
+}
+
+func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op, error) {
+	if worktree == "" {
+		return nil, nil
+	}
+	if offsets == nil {
+		offsets = map[string]int64{}
+	}
+	gc := adapters.New(worktree)
+	head, err := gc.HeadSHA()
+	if err != nil {
+		return nil, fmt.Errorf("ops HEAD: %w", err)
+	}
+	var extra []ops.Op
+	dirs := []struct {
+		abs string
+		rel string
+	}{
+		{filepath.Join(worktree, "ops"), "ops"},
+		{filepath.Join(worktree, ".armature", "ops"), ".armature/ops"},
+	}
+	for _, dir := range dirs {
+		entries, readErr := os.ReadDir(dir.abs)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			return nil, readErr
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
+				continue
+			}
+			diskPath := filepath.Join(dir.abs, e.Name())
+			rel := dir.rel + "/" + e.Name()
+			committed, _ := gc.ShowFileAtCommit(head, rel)
+			if committed == nil {
+				committed, _ = gc.ShowFileAtCommit(head, "ops/"+e.Name())
+			}
+			start := int64(len(committed))
+			if off := offsets[e.Name()]; off > start {
+				start = off
+			}
+			suffix, readErr := ops.ReadLogFromOffset(diskPath, start)
+			if readErr != nil {
+				continue
+			}
+			extra = append(extra, suffix...)
+		}
+	}
+	return extra, nil
+}
+
+func diskByteOffsets(worktree string) map[string]int64 {
+	out := make(map[string]int64)
+	for _, dir := range []string{filepath.Join(worktree, "ops"), filepath.Join(worktree, ".armature", "ops")} {
+		loaded, err := ops.LoadFromDirValidated(dir)
+		if err != nil {
+			continue
+		}
+		for name, off := range loaded.PhysicalEOF {
+			if off > out[name] {
+				out[name] = off
+			}
+		}
+	}
+	return out
 }
 
 func ReplayOpsTolerant(allOps []ops.Op) (state *State, skipped int, firstErr error) {
