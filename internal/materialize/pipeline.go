@@ -314,7 +314,6 @@ func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[stri
 		switch {
 		case err != nil && oporder.IsFromCommitMissing(err):
 			shaMissing = true
-			fullReplay = true
 		case err != nil:
 			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 		default:
