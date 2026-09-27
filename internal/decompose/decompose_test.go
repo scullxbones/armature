@@ -26,8 +26,6 @@ func taskPlanIssue(id, title string) PlanIssue {
 	}
 }
 
-// --- Task 26: ApplyPlan tests ---
-
 func TestApplyPlan_CreatesOps(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -126,8 +124,6 @@ func TestApplyPlan_SkipsExisting(t *testing.T) {
 	assert.Len(t, created, 1)
 }
 
-// --- Task 27: RevertPlan tests ---
-
 func TestRevertPlan_CancelsOpen(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -174,8 +170,6 @@ func TestRevertPlan_SkipsNonOpen(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
-// --- QLTYCNTRL-S2-T3: Clock injection for RevertPlan ---
-
 func TestRevertPlan_InjectsClockTimestamp(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -205,8 +199,6 @@ func TestRevertPlan_InjectsClockTimestamp(t *testing.T) {
 	assert.Equal(t, fixedTimestamp, readOps[0].Timestamp,
 		"injected clock timestamp should appear in written op")
 }
-
-// --- E6-S3-T3: DryRunRevertPlan tests ---
 
 func TestDryRunRevertPlan_ReturnsWouldCancel(t *testing.T) {
 	t.Parallel()
@@ -268,7 +260,6 @@ func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
 	_, err := DryRunRevertPlan(plan, state)
 	require.NoError(t, err)
 
-	// Verify no files were written
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	assert.Empty(t, entries)
@@ -305,8 +296,6 @@ func TestDecomposeContextWithSources(t *testing.T) {
 	assert.Len(t, ctx.Sources, 1)
 	assert.Equal(t, "prd", ctx.Sources[0].ID)
 }
-
-// --- E6-S6-T1: acceptance field tests ---
 
 func TestApplyPlan_ImportsAcceptanceFromPlan(t *testing.T) {
 	t.Parallel()

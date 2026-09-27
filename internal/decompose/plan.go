@@ -9,7 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/strictjson"
 )
 
-// PlanIssue represents a single issue in a plan file.
 type PlanIssue struct {
 	ID           string          `json:"id"`
 	Title        string          `json:"title"`
@@ -27,15 +26,14 @@ type PlanIssue struct {
 	Source string `json:"source,omitempty"`
 }
 
-// Plan represents a parsed plan file.
 type Plan struct {
 	Version int         `json:"version"`
 	Title   string      `json:"title"`
 	Issues  []PlanIssue `json:"issues"`
 }
 
-// ParsePlan parses a plan JSON file from the given path.
-// It uses DisallowUnknownFields to catch malformed or deprecated input.
+// ParsePlan parses a plan JSON file from the given path via strictjson.Decode:
+// trailing data after a valid value is rejected; unknown object fields are accepted.
 func ParsePlan(path string) (*Plan, error) {
 	data, err := adapters.ReadPlanFile(path)
 	if err != nil {

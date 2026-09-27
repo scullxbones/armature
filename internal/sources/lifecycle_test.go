@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// Test-only single-source wrappers. Production uses SyncAll / VerifyAll.
 func (l *Lifecycle) sync(ctx context.Context, id string) SyncResult {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
@@ -40,7 +39,6 @@ func (l *Lifecycle) isFresh(id string) (bool, error) {
 	return result.Status == VerifyOK, nil
 }
 
-// MockProvider implements Provider for testing.
 type MockProvider struct {
 	data []byte
 	err  error
@@ -57,7 +55,6 @@ func (m *MockProvider) Type() string {
 	return "mock"
 }
 
-// MockRegistry implements ProviderRegistry for testing.
 type MockRegistry struct {
 	providers map[string]Provider
 }
@@ -122,7 +119,6 @@ func TestLifecycleRegister_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Errorf("ID mismatch: got %q, want %q", registered.ID, entry.ID)
 	}
 
-	// Verify the entry was persisted.
 	retrieved, err := lc.Get(entry.ID)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
@@ -143,7 +139,6 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 	lc := newLifecycleWithRegistry(dir, registry)
 
-	// Register a source first.
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -155,7 +150,6 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Sync the source.
 	ctx := context.Background()
 	result := lc.sync(ctx, "test-1")
 
@@ -169,7 +163,6 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Error("result Fingerprint is empty")
 	}
 
-	// Verify the entry was updated with fingerprint and LastSynced.
 	retrieved, err := lc.Get("test-1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
@@ -197,7 +190,6 @@ func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 	lc := newLifecycleWithRegistry(dir, registry)
 
-	// Register a source.
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -209,7 +201,6 @@ func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Sync should fail.
 	ctx := context.Background()
 	result := lc.sync(ctx, "test-1")
 
@@ -217,7 +208,6 @@ func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatal("expected Sync to fail but it didn't")
 	}
 
-	// Verify SyncFailed was set.
 	retrieved, err := lc.Get("test-1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
@@ -238,7 +228,6 @@ func TestLifecycleSyncAll_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 	lc := newLifecycleWithRegistry(dir, registry)
 
-	// Register multiple sources.
 	for i := 1; i <= 3; i++ {
 		id := "test-" + string(rune(48+i))
 		entry := SourceEntry{
@@ -253,7 +242,6 @@ func TestLifecycleSyncAll_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		}
 	}
 
-	// Sync all.
 	ctx := context.Background()
 	results, err := lc.SyncAll(ctx)
 
@@ -282,7 +270,6 @@ func TestLifecycleVerify_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 	lc := newLifecycleWithRegistry(dir, registry)
 
-	// Register and sync a source.
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -300,7 +287,6 @@ func TestLifecycleVerify_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Sync failed: %v", syncResult.Error)
 	}
 
-	// Verify should report OK.
 	verifyResult := lc.verify("test-1")
 	if verifyResult.Status != VerifyOK {
 		t.Errorf("expected VerifyOK, got %v", verifyResult.Status)
@@ -321,20 +307,18 @@ func TestLifecycleVerifyStale_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 	lc := newLifecycleWithRegistry(dir, registry)
 
-	// Register a source.
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
 		Title:        "Test Document",
 		ProviderType: "mock",
-		SyncFailed:   true, // Simulate a failed sync.
+		SyncFailed:   true,
 	}
 	_, err := lc.Register(entry)
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Verify should report STALE.
 	verifyResult := lc.verify("test-1")
 	if verifyResult.Status != VerifyStale {
 		t.Errorf("expected VerifyStale, got %v", verifyResult.Status)
@@ -346,7 +330,6 @@ func TestLifecycleVerifyMissing_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 	lc := NewLifecycle(dir)
 
-	// Register a source but don't sync it (no cache).
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -358,7 +341,6 @@ func TestLifecycleVerifyMissing_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Verify should report MISSING.
 	verifyResult := lc.verify("test-1")
 	if verifyResult.Status != VerifyMissing {
 		t.Errorf("expected VerifyMissing, got %v", verifyResult.Status)
@@ -376,7 +358,6 @@ func TestLifecycleIsFresh_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 	lc := newLifecycleWithRegistry(dir, registry)
 
-	// Register and sync a source.
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -394,7 +375,6 @@ func TestLifecycleIsFresh_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Sync failed: %v", syncResult.Error)
 	}
 
-	// IsFresh should return true.
 	fresh, err := lc.isFresh("test-1")
 	if err != nil {
 		t.Fatalf("IsFresh failed: %v", err)
@@ -409,7 +389,6 @@ func TestLifecycleListAll_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 	lc := NewLifecycle(dir)
 
-	// Register multiple sources.
 	for i := 1; i <= 3; i++ {
 		id := "test-" + string(rune(48+i))
 		entry := SourceEntry{
@@ -424,7 +403,6 @@ func TestLifecycleListAll_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		}
 	}
 
-	// ListAll should return all sources.
 	entries, err := lc.ListAll()
 	if err != nil {
 		t.Fatalf("ListAll failed: %v", err)
@@ -450,7 +428,6 @@ func TestLifecycleGet_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Get should return the registered entry.
 	retrieved, err := lc.Get("test-1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
@@ -468,7 +445,6 @@ func TestLifecycleRoundTripJSON_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 	lc := NewLifecycle(dir)
 
-	// Create a complex entry with all fields populated.
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -479,13 +455,11 @@ func TestLifecycleRoundTripJSON_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		SyncFailed:   false,
 	}
 
-	// Register the entry.
 	_, err := lc.Register(entry)
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Retrieve it and verify all fields round-trip correctly.
 	retrieved, err := lc.Get(entry.ID)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
@@ -538,7 +512,6 @@ func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("Sync failed: %v", result.Error)
 	}
 
-	// Mutate the cache file so its fingerprint diverges from the stored one.
 	if err := WriteCache(dir, entry.ID, []byte("tampered content")); err != nil {
 		t.Fatalf("WriteCache failed: %v", err)
 	}
@@ -617,7 +590,6 @@ func TestLifecycleSyncAll_AllFail_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	if !strings.Contains(err.Error(), "all sources failed") {
 		t.Errorf("error must mention all sources failed, got: %v", err)
 	}
-	// Per-source detail must be present in the combined error.
 	if !strings.Contains(err.Error(), "bad-1") || !strings.Contains(err.Error(), "bad-2") {
 		t.Errorf("error must include per-source detail, got: %v", err)
 	}
@@ -635,7 +607,6 @@ func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
 		t.Fatalf("write source file: %v", err)
 	}
 
-	// Default registry resolves the real FilesystemProvider.
 	lc := NewLifecycle(dir)
 	if _, err := lc.Register(SourceEntry{ID: "fs-1", URL: srcFile, Title: "Local Doc", ProviderType: "filesystem"}); err != nil {
 		t.Fatalf("Register failed: %v", err)
@@ -662,7 +633,6 @@ func TestLifecycleFilesystemProviderEndToEnd_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 }
 
-// MockFileCommitter tracks commits for testing.
 type MockFileCommitter struct {
 	commits []struct {
 		relPath string
@@ -702,7 +672,6 @@ func TestLifecycleRegisterWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Verify manifest.json was committed
 	if len(fc.commits) != 1 {
 		t.Fatalf("expected 1 commit, got %d", len(fc.commits))
 	}
@@ -727,7 +696,6 @@ func TestLifecycleSyncAllWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 	}
 	lc := NewLifecycleWithCommitter(dir, registry, worktreeDir, fc)
 
-	// Register a source
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -739,10 +707,8 @@ func TestLifecycleSyncAllWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Clear the commits from Register
 	fc.commits = nil
 
-	// Sync all sources
 	ctx := context.Background()
 	results, err := lc.SyncAll(ctx)
 	if err != nil {
@@ -752,7 +718,6 @@ func TestLifecycleSyncAllWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 		t.Fatalf("SyncAll had unexpected result: %v", results[0].Error)
 	}
 
-	// Verify both manifest.json and cache file were committed
 	if len(fc.commits) != 2 {
 		t.Fatalf("expected 2 commits (manifest + cache), got %d", len(fc.commits))
 	}
@@ -794,7 +759,6 @@ func TestLifecycleSyncWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 	}
 	lc := NewLifecycleWithCommitter(dir, registry, worktreeDir, fc)
 
-	// Register a source
 	entry := SourceEntry{
 		ID:           "test-1",
 		URL:          "https://example.com/doc",
@@ -806,17 +770,14 @@ func TestLifecycleSyncWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Clear the commits from Register
 	fc.commits = nil
 
-	// Sync the single source
 	ctx := context.Background()
 	result := lc.sync(ctx, "test-1")
 	if result.Error != nil {
 		t.Fatalf("Sync failed: %v", result.Error)
 	}
 
-	// Verify both manifest.json and cache file were committed
 	if len(fc.commits) != 2 {
 		t.Fatalf("expected 2 commits (manifest + cache), got %d", len(fc.commits))
 	}
@@ -850,7 +811,6 @@ func TestLifecycleNoAutoCommitWhenWorktreePathEmpty_REQ_LNGHZN_B1(t *testing.T) 
 	dir := t.TempDir()
 	fc := &MockFileCommitter{}
 
-	// Create lifecycle with empty worktreePath (should not commit)
 	lc := NewLifecycleWithCommitter(dir, &DefaultProviderRegistry{}, "", fc)
 
 	entry := SourceEntry{
@@ -865,7 +825,6 @@ func TestLifecycleNoAutoCommitWhenWorktreePathEmpty_REQ_LNGHZN_B1(t *testing.T) 
 		t.Fatalf("Register failed: %v", err)
 	}
 
-	// Verify no commits were made (single-branch mode)
 	if len(fc.commits) != 0 {
 		t.Fatalf("expected no commits in single-branch mode, got %d", len(fc.commits))
 	}

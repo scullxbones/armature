@@ -77,13 +77,9 @@ func TestDAGTreeUpdate_CursorNavigation(t *testing.T) {
 		&materialize.Issue{ID: "E1", Type: "epic", Status: "open", Title: "Epic"},
 		&materialize.Issue{ID: "E2", Type: "epic", Status: "open", Title: "Epic 2"},
 	))
-	// Move down
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	// Move up
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	// Boundary: cannot go above 0
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	// Expand/collapse
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
 }
@@ -194,7 +190,6 @@ func TestDAGTreeViewScrollsToKeepCursorVisible(t *testing.T) {
 		&materialize.Issue{ID: "T4", Status: "open", Title: "Task 4"},
 		&materialize.Issue{ID: "T5", Status: "open", Title: "Task 5"},
 	))
-	// Move cursor down past the visible window (height=3, so T4 is off-screen initially)
 	for i := 0; i < 3; i++ {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	}
@@ -218,11 +213,9 @@ func TestDAGTreeViewScrollsBackUpWithCursor(t *testing.T) {
 		&materialize.Issue{ID: "T4", Status: "open", Title: "Task 4"},
 		&materialize.Issue{ID: "T5", Status: "open", Title: "Task 5"},
 	))
-	// Scroll down to T5
 	for i := 0; i < 4; i++ {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	}
-	// Scroll back up to T1
 	for i := 0; i < 4; i++ {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 	}

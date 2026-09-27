@@ -52,7 +52,7 @@ func TestUpdate_FlagMsg(t *testing.T) {
 	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	m2, _ := m.Update(stalereview.FlagMsg{})
-	updated := m2.(stalereview.Model) //nolint:errcheck // panic on failed type assertion is an acceptable test outcome
+	updated := m2.(stalereview.Model)
 	assert.Equal(t, 0, updated.ConfirmedCount())
 }
 
@@ -60,7 +60,7 @@ func TestUpdate_SkipMsg(t *testing.T) {
 	t.Parallel()
 	m := stalereview.New(makeItems(), "w1")
 	m2, _ := m.Update(stalereview.SkipMsg{})
-	updated := m2.(stalereview.Model) //nolint:errcheck // panic on failed type assertion is an acceptable test outcome
+	updated := m2.(stalereview.Model)
 	assert.Equal(t, 0, updated.ConfirmedCount())
 }
 
