@@ -29,7 +29,11 @@ func TestScreenSwitchByNumber(t *testing.T) {
 		"4": app.ScreenSources,
 	} {
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-		got := updated.(app.Model).CurrentScreen()
+		next, ok := updated.(app.Model)
+		if !ok {
+			t.Fatalf("key %q: Update returned %T, want app.Model", key, updated)
+		}
+		got := next.CurrentScreen()
 		if got != want {
 			t.Errorf("key %q: screen = %v, want %v", key, got, want)
 		}
@@ -116,10 +120,18 @@ func TestLiveModeRefreshMsgRestartsListener(t *testing.T) {
 	if err != nil {
 		t.Skip("fsnotify not available:", err)
 	}
-	defer func() { _ = w.Close() }()
+	defer func() {
+		if err := w.Close(); err != nil {
+			t.Errorf("close watcher: %v", err)
+		}
+	}()
 
 	updated, _ := m.Update(app.WatcherReadyMsg{Watcher: w})
-	m = updated.(app.Model)
+	live, ok := updated.(app.Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want app.Model", updated)
+	}
+	m = live
 
 	_, cmd := m.Update(app.RefreshMsg{})
 	if cmd == nil {
