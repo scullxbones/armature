@@ -14,7 +14,7 @@ func TestMain(m *testing.M) {
 	os.Exit(Main(m))
 }
 
-func TestIsolateGitOverridesHostileHostEnv(t *testing.T) { //nolint:paralleltest // IsolateGit mutates process env
+func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
 	other := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(other, "KEEP"), []byte("victim"), 0o600))
 	t.Setenv("GIT_DIR", other)
