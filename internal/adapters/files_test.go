@@ -689,12 +689,18 @@ func TestExpandGlobs_NoMatchIsNotError_REQ_NOCOMMENTS(t *testing.T) {
 func TestExpandGlobs_BadPatternReturnsError_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 	bad := "["
-	_, err := ExpandGlobs(map[string][]string{"issue-01": {bad}})
+	result, err := ExpandGlobs(map[string][]string{"issue-01": {bad, "does-not-exist-xyz.go"}})
 	if err == nil {
 		t.Fatal("expected error for malformed glob")
 	}
 	if !strings.Contains(err.Error(), bad) {
 		t.Fatalf("error must name the pattern, got %q", err)
+	}
+	if result == nil {
+		t.Fatal("malformed patterns must be left unexpanded without dropping sibling expansions")
+	}
+	if _, ok := result["issue-01"]; !ok {
+		t.Fatal("issue with a malformed glob must still appear in the expansion map")
 	}
 }
 

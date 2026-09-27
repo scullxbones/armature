@@ -707,17 +707,21 @@ func ReadCoverageFile(path string) ([]byte, error) {
 
 // ExpandGlobs expands a set of glob patterns and returns matching file paths.
 // Returns a map from issue ID to matching file paths. A pattern that matches
-// nothing is not an error; a malformed pattern is, and the returned error
-// names that pattern.
+// nothing is not an error; a malformed pattern is left unexpanded, and the
+// returned error names that pattern.
 func ExpandGlobs(globs map[string][]string) (map[string][]string, error) {
 	result := make(map[string][]string)
+	var firstErr error
 	for id, globList := range globs {
 		var matches []string
 		seen := make(map[string]bool)
 		for _, glob := range globList {
 			expanded, err := filepath.Glob(glob)
 			if err != nil {
-				return nil, fmt.Errorf("expand glob %q: %w", glob, err)
+				if firstErr == nil {
+					firstErr = fmt.Errorf("expand glob %q: %w", glob, err)
+				}
+				continue
 			}
 			for _, path := range expanded {
 				if !seen[path] {
@@ -728,7 +732,7 @@ func ExpandGlobs(globs map[string][]string) (map[string][]string, error) {
 		}
 		result[id] = matches
 	}
-	return result, nil
+	return result, firstErr
 }
 
 // MkdirAll creates directories recursively.
