@@ -2215,30 +2215,26 @@ func injectFutureSameWorkerClaim(t *testing.T, ctx *config.Context, issueID, imp
 	return ownerID
 }
 
-func TestClaimCommand_SupersededBySameWorkerDifferentTokenLosesRaceAndSkipsWorktree_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIMORD_W12(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
 
-	ownerID := injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
+	injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
 
 	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
-	require.NoError(t, err, "losing a claim race is a normal outcome, not an error")
+	require.NoError(t, err)
 
 	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(claimOut)), &result), "output: %s", claimOut)
-	assert.Equal(t, false, result["claimed"])
-	assert.Equal(t, "lost_claim_race", result["reason"])
-	assert.Equal(t, ownerID, result["claimed_by"],
-		"claimed_by reports the same effective owner identity this worker used, not a different worker")
-	assert.Equal(t, true, result["superseded_by_same_worker"],
-		"the superseding claim carried the same workerID, so this must be flagged distinctly from an ordinary different-worker loss")
-
+	assert.NotContains(t, claimOut, "lost_claim_race",
+		"same holder later published commit replaces; a future-timestamp earlier impostor must not win (reverses #276 clock fold)")
+	assert.Nil(t, result["reason"])
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
-	assert.NoDirExists(t, worktreePath, "a lost claim race must never provision a worktree")
+	assert.DirExists(t, worktreePath, "later published same-worker claim must provision a worktree")
 }
 
-func TestClaimCommand_SupersededBySameWorkerDifferentTokenHumanFormat_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestampHuman_REQ_CLAIMORD_W12(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -2246,13 +2242,12 @@ func TestClaimCommand_SupersededBySameWorkerDifferentTokenHumanFormat_REQ_LNGHZN
 	injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
 
 	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "human")
-	require.NoError(t, err, "losing a claim race is a normal outcome, not an error")
-	assert.Contains(t, claimOut, "Claim lost")
-	assert.Contains(t, claimOut, "superseded by a different claim from this same worker ID",
-		"human output must distinguish same-worker supersession from an ordinary different-worker loss")
+	require.NoError(t, err)
+	assert.Contains(t, claimOut, "Claimed task-01")
+	assert.NotContains(t, claimOut, "Claim lost")
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
-	assert.NoDirExists(t, worktreePath, "a lost claim race must never provision a worktree")
+	assert.DirExists(t, worktreePath)
 }
 
 func TestClaimCommand_DifferentWorkerLostRaceJSONFormat_REQ_LNGHZN_S5_T9(t *testing.T) {

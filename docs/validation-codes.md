@@ -635,7 +635,7 @@ arm doctor [flags]
 | D4 | Doctor | Error | Broken parent refs |
 | D5 | Doctor | Error | Dependency cycles |
 | D6 | Doctor | Warning | Uncited issues |
-| D12 | Doctor | Warning | Ops worktree behind origin/_armature |
+| D12 | Doctor | Warning (lag) / Error (fetch failed) | Ops worktree behind origin/_armature |
 
 ---
 
