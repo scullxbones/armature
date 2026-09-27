@@ -19,6 +19,7 @@ type Context struct {
 	WorktreePath string
 	StateDir     string
 	Config       Config
+	WorkerIDFlag string
 }
 
 type repoProbeResult struct {

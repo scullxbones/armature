@@ -572,6 +572,49 @@ func (c *Client) SetGitConfig(key, value string) error {
 	return nil
 }
 
+// SetGitConfigWorktree writes a worktree-scoped git config key (--worktree).
+func (c *Client) SetGitConfigWorktree(key, value string) error {
+	cmd := c.cmd("config", "--worktree", key, value)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git config --worktree set %s: %w\n%s", key, err, out)
+	}
+	return nil
+}
+
+// ReadGitConfigWorktree reads a worktree-scoped git config key.
+func (c *Client) ReadGitConfigWorktree(key string) (string, error) {
+	cmd := c.cmd("config", "--worktree", "--get", key)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git config --worktree get %s: %w", key, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// CommonGitDir returns git rev-parse --git-common-dir (absolute).
+func (c *Client) CommonGitDir() (string, error) {
+	cmd := c.cmd("rev-parse", "--git-common-dir")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse --git-common-dir: %w", err)
+	}
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		return "", fmt.Errorf("git common dir empty")
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(c.repoPath, dir)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	if resolved, evalErr := filepath.EvalSymlinks(abs); evalErr == nil {
+		abs = resolved
+	}
+	return filepath.Clean(abs), nil
+}
+
 // ReadGitConfig reads a local git config key. Returns error if unset.
 func (c *Client) ReadGitConfig(key string) (string, error) {
 	cmd := c.cmd("config", "--local", key)
@@ -757,6 +800,12 @@ func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
 		return nil, fmt.Errorf("git show %s:%s: %w", sha, path, err)
 	}
 	return out, nil
+}
+
+// BlobExists reports whether rev:path names an object (git cat-file -e).
+func (c *Client) BlobExists(rev, path string) bool {
+	cmd := c.cmd("cat-file", "-e", rev+":"+path)
+	return cmd.Run() == nil
 }
 
 // LogBranch returns up to n log entries from the tip of branch, most recent first.

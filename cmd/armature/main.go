@@ -97,6 +97,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().Bool("debug", false, "dump debug diagnostics on error")
 	root.PersistentFlags().String("format", "human", "output format: human, json, agent")
 	root.PersistentFlags().String("repo", "", "repository path (default: current directory)")
+	root.PersistentFlags().String("worker-id", "", "override worker id for this invocation (highest ResolveIdentity source)")
 	root.PersistentFlags().Bool("non-interactive", false, "skip TUI and emit structured output (auto-set when --format=agent or non-TTY)")
 	root.Flags().BoolP("version", "v", false, "print version and exit")
 	root.Flags().BoolP("Version", "V", false, "print version and exit")

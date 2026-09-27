@@ -9,6 +9,7 @@ The following flags are available for all commands:
 - `--debug`: Dump debug diagnostics on error.
 - `--format string`: Output format: `human`, `json`, `agent` (default "human").
 - `--repo string`: Repository path (default: current directory).
+- `--worker-id string`: Override worker id for this invocation (highest ResolveIdentity source).
 - `--non-interactive`: Skip TUI and emit structured output (auto-set when --format=agent or non-TTY).
 
 Unknown or inapplicable flags fail by name at exit 2 (`USAGE`) and list the valid flags for that command.
@@ -1197,13 +1198,18 @@ Structured format (`--format json`, `--format agent`, `--non-interactive` implyi
 
 ## worker-init
 
-Generate or check worker identity.
+Generate or check worker identity. Writes a worktree-scoped `armature.worker-id`
+(never copies a baked clone-level id). `--id` must match `^[a-z0-9_-]{1,64}$`.
+A published `ops/<id>.log` is `WORKER-ID-IN-USE` unless `--reuse`.
 
 **Synopsis:**
 `arm worker-init [flags]`
 
 **Flags:**
 - `--check`: Verify existing worker ID without modifying state.
+- `--id string`: Worker id to write; omit to generate a UUID.
+- `--reuse`: Allow `--id` that already has a published log.
+- `--repo string`: Repository path (default: current directory).
 
 ---
 
