@@ -11,7 +11,6 @@ import (
 	"github.com/scullxbones/armature/internal/tui"
 )
 
-// Model implements app.Screen for the sources view.
 type Model struct {
 	state   *materialize.State
 	sources []sourceRow

@@ -1,6 +1,4 @@
-// Package audit implements the pre-merge audit gate: citation integrity, source freshness,
-// outcome quality, scope overlap, and repo health checks that must pass before a story is
-// transitioned to done.
+// Package audit loads JSONL ops logs, sorts them, and marks losing claim races.
 package audit
 
 import (
@@ -11,7 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// Entry is a single audit log entry with an optional lost-race marker.
 type Entry struct {
 	ops.Op
 	LostRace bool
@@ -29,7 +26,6 @@ type Filter struct {
 // the filter, and marks any losing claim ops as LostRace.
 // logContents should be a slice of JSONL log lines (one op per line).
 func Load(logContents []string, f Filter) ([]Entry, error) {
-	// Parse all log contents into ops
 	var allOps []ops.Op
 	for _, line := range logContents {
 		if len(line) == 0 {
@@ -37,13 +33,11 @@ func Load(logContents []string, f Filter) ([]Entry, error) {
 		}
 		op, err := ops.ParseLine([]byte(line))
 		if err != nil {
-			// Skip corrupt lines per spec — log warning
 			continue
 		}
 		allOps = append(allOps, op)
 	}
 
-	// Sort by timestamp, then worker ID for stability
 	sort.SliceStable(allOps, func(i, j int) bool {
 		if allOps[i].Timestamp != allOps[j].Timestamp {
 			return allOps[i].Timestamp < allOps[j].Timestamp
@@ -51,10 +45,8 @@ func Load(logContents []string, f Filter) ([]Entry, error) {
 		return allOps[i].WorkerID < allOps[j].WorkerID
 	})
 
-	// Identify lost-race claims
 	lostRace := identifyLostRaceClaims(allOps)
 
-	// Apply filter and build result
 	var sinceEpoch int64
 	if !f.Since.IsZero() {
 		sinceEpoch = f.Since.Unix()
@@ -82,12 +74,10 @@ func Load(logContents []string, f Filter) ([]Entry, error) {
 	return result, nil
 }
 
-// claimKey returns a unique key for a claim op: targetID|workerID.
 func claimKey(op ops.Op) string {
 	return op.TargetID + "|" + op.WorkerID
 }
 
-// identifyLostRaceClaims marks claim ops Accept rejected.
 func identifyLostRaceClaims(allOps []ops.Op) map[string]bool {
 	return claim.LostRaceClaimKeys(allOps)
 }

@@ -14,16 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// modelInvocableFrontMatterCapBytes is the skill-load ratchet for the sum of
-// YAML front-matter bytes across model-invocable embedded SKILL.md files.
-//
-// Measured sum when the gate was introduced: 2772 bytes
-// (armature 265, activity-indexer 386, auditor 333, coordinator 407,
-// planner 374, reviewer 638, worker 369). test-skill has no front matter
-// and does not contribute. No skill currently sets disable-model-invocation.
-//
-// The cap is seeded at that measured sum. This is a starting ratchet for
-// always-loaded skill metadata, not a runtime CLI economics budget.
 const modelInvocableFrontMatterCapBytes = 2772
 
 var errUnclosedFrontMatter = errors.New("unclosed YAML front matter")

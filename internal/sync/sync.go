@@ -6,7 +6,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// MergeChecker checks if a branch is merged into a target branch.
 type MergeChecker interface {
 	BranchMergedInto(branch, target string) (bool, error)
 }
@@ -25,7 +24,7 @@ func DetectMerges(issues []materialize.Issue, targetBranch string, mc MergeCheck
 		}
 		isMerged, err := mc.BranchMergedInto(issue.Branch, targetBranch)
 		if err != nil {
-			continue // skip on error, don't abort
+			continue
 		}
 		if isMerged {
 			merged = append(merged, issue.ID)

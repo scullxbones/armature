@@ -11,17 +11,14 @@ import (
 
 func TestDetectMerges_ReturnsMergedIssueIDs(t *testing.T) {
 	t.Parallel()
-	// done + merged branch
 	issue1 := materialize.Issue{
 		ID: "T-001", Status: "done", Branch: "feature/merged-work", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
-	// done + unmerged branch
 	issue2 := materialize.Issue{
 		ID: "T-002", Status: "done", Branch: "feature/unmerged-work", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
 	}
-	// in-progress — should be skipped regardless of branch status
 	issue3 := materialize.Issue{
 		ID: "T-003", Status: "in-progress", Branch: "feature/wip", Type: "task",
 		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
@@ -52,7 +49,6 @@ func TestDetectMerges_NoBranch_Skipped(t *testing.T) {
 
 func TestDetectMerges_EmptyDir(t *testing.T) {
 	t.Parallel()
-	// No issues provided
 	mc := NewFakeMergeChecker(map[string]bool{})
 	ids, err := armsync.DetectMerges([]materialize.Issue{}, "main", mc)
 	assert.NoError(t, err)
@@ -68,7 +64,6 @@ func TestSyncDetectMergesChecksAllIssues(t *testing.T) {
 
 	mc := NewFakeMergeChecker(map[string]bool{"feature/merged": true})
 
-	// DetectMerges should check all provided issues
 	ids, err := armsync.DetectMerges([]materialize.Issue{issue}, "main", mc)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"T-001"}, ids)

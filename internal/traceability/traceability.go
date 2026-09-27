@@ -1,4 +1,4 @@
-// Package traceability validates that DAG issues are properly cited in git history.
+// Package traceability computes citation coverage for DAG issues (ADR 0021).
 package traceability
 
 import (
@@ -19,9 +19,6 @@ const (
 	ConfidenceInferred = "inferred"
 )
 
-// IssueRef is a minimal description of an issue used for coverage computation.
-// Callers populate this from their own state representation so that this package
-// does not need to import materialize (which would create an import cycle).
 type IssueRef struct {
 	ID                      string
 	SourceLinkCount         int
@@ -107,9 +104,6 @@ func Compute(refs []IssueRef) Coverage {
 			continue
 		}
 		uncited = append(uncited, ref.ID)
-		// An acceptance record is an explicitly accepted risk, not a violation:
-		// E7 fires only when both source links and acceptances are absent, matching
-		// the checkE7E8E12Citations predicate in internal/validate.
 		if ref.CitationAcceptanceCount > 0 {
 			acceptedRisk++
 			continue

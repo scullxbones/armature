@@ -13,8 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- SFT-S1-T13: multi-file scope splitting ---
-
 func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -87,8 +85,6 @@ func TestApplyPlan_SingleScopeUnchanged(t *testing.T) {
 	assert.Equal(t, []string{"internal/foo/bar.go"}, readOps[0].Payload.Scope,
 		"single scope entry should remain as a single-element slice")
 }
-
-// --- QLTYCNTRL-S2-T2: Clock injection ---
 
 func TestApplyPlan_InjectsClockTimestamp(t *testing.T) {
 	t.Parallel()
@@ -302,8 +298,6 @@ func TestApplyPlan_FailedAppendLeavesNoPartialLog(t *testing.T) {
 func TestValidatePlan_DoesNotWarnOnInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {
 	t.Parallel()
 
-	// Invalid types are now always fatal (see validateTypes /
-	// TestApplyPlan_InvalidType_AlwaysFatal below), not advisory warnings.
 	plan := &Plan{
 		Version: 1,
 		Title:   "Plan with invalid type",
@@ -330,7 +324,6 @@ func TestApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 	state := materialize.NewState()
 	dir := t.TempDir()
 
-	// Invalid type is always fatal, regardless of other plan checks.
 	created, err := ApplyPlan(plan, dir, "worker-1", state, ApplyOptions{}, clock.System)
 	require.Error(t, err)
 	assert.Empty(t, created)
@@ -355,8 +348,6 @@ func TestDryRunApplyPlan_InvalidType_AlwaysFatal(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid type")
 }
 
-// TestApplyPlan_ReturnsAppendedCreateIDs_REQ_AOC_S2_T4: envelope rows must
-// come from this invocation's create ops, not a later global Issues map.
 func TestApplyPlan_ReturnsAppendedCreateIDs_REQ_AOC_S2_T4(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

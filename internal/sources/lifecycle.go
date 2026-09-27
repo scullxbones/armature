@@ -7,25 +7,19 @@ import (
 	"time"
 )
 
-// Lifecycle manages the full lifecycle of sources: registration, persistence,
-// fingerprinting, synchronization, and freshness checks.
 type Lifecycle struct {
 	manifestPath  string
 	provider      ProviderRegistry
-	fileCommitter FileCommitter // optional: if set, auto-commit manifest and cache changes
-	worktreePath  string        // required when fileCommitter is set; root of the worktree
+	fileCommitter FileCommitter
+	worktreePath  string
 }
 
-// ProviderRegistry is responsible for creating providers based on type.
 type ProviderRegistry interface {
-	// ProviderForType returns a Provider for the given type string.
 	ProviderForType(providerType string) (Provider, error)
 }
 
-// DefaultProviderRegistry implements ProviderRegistry.
 type DefaultProviderRegistry struct{}
 
-// ProviderForType returns the appropriate Provider for the given type.
 func (r *DefaultProviderRegistry) ProviderForType(providerType string) (Provider, error) {
 	switch providerType {
 	case "filesystem":
@@ -64,7 +58,6 @@ func NewLifecycleWithCommitter(manifestPath string, registry ProviderRegistry, w
 	}
 }
 
-// Register adds a new source to the manifest and returns the updated entry.
 func (l *Lifecycle) Register(entry SourceEntry) (SourceEntry, error) {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
@@ -80,7 +73,6 @@ func (l *Lifecycle) Register(entry SourceEntry) (SourceEntry, error) {
 	return entry, nil
 }
 
-// SyncResult holds the result of a source synchronization.
 type SyncResult struct {
 	ID           string
 	Fingerprint  string
@@ -89,9 +81,6 @@ type SyncResult struct {
 	Error        error
 }
 
-// syncEntry synchronizes a single source against the given in-memory manifest,
-// mutating the manifest's entry in place but not persisting it. Callers are
-// responsible for writing the manifest to disk.
 func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string) SyncResult {
 	entry, ok := manifest.Get(id)
 	if !ok {
@@ -172,7 +161,6 @@ func (l *Lifecycle) SyncAll(ctx context.Context) ([]SyncResult, error) {
 		return results, fmt.Errorf("write manifest: %w", writeErr)
 	}
 
-	// Return error only if all sources failed.
 	if successCount == 0 && len(manifest.Entries) > 0 {
 		details := make([]string, 0, len(results))
 		for _, r := range results {
@@ -184,34 +172,24 @@ func (l *Lifecycle) SyncAll(ctx context.Context) ([]SyncResult, error) {
 	return results, nil
 }
 
-// VerifyResult holds the result of a freshness check for a single source.
 type VerifyResult struct {
 	ID      string
 	Status  VerifyStatus
-	Stored  string // stored fingerprint
-	Current string // current fingerprint (if verifiable)
+	Stored  string
+	Current string
 	Error   error
 }
 
-// VerifyStatus describes the freshness state of a source.
 type VerifyStatus string
 
 const (
-	// VerifyOK indicates the cached content matches the stored fingerprint.
-	VerifyOK VerifyStatus = "OK"
-	// VerifyChanged indicates the cached content fingerprint differs from stored.
+	VerifyOK      VerifyStatus = "OK"
 	VerifyChanged VerifyStatus = "CHANGED"
-	// VerifyMissing indicates no cache file exists.
 	VerifyMissing VerifyStatus = "MISSING"
-	// VerifyStale indicates the last sync failed; cache may be stale.
-	VerifyStale VerifyStatus = "STALE"
-	// VerifyError indicates an error reading the cache.
-	VerifyError VerifyStatus = "ERROR"
+	VerifyStale   VerifyStatus = "STALE"
+	VerifyError   VerifyStatus = "ERROR"
 )
 
-// verifyEntry checks freshness for a single source against an already-loaded
-// manifest, avoiding a redundant re-read. Callers that already hold a manifest
-// (e.g. VerifyAll) should use this.
 func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 	entry, ok := manifest.Get(id)
 	if !ok {
@@ -222,7 +200,6 @@ func (l *Lifecycle) verifyEntry(manifest *Manifest, id string) VerifyResult {
 		}
 	}
 
-	// Check if the last sync attempt failed.
 	if entry.SyncFailed {
 		return VerifyResult{
 			ID:     id,
@@ -293,7 +270,6 @@ func (l *Lifecycle) VerifyAll() ([]VerifyResult, error) {
 	return results, nil
 }
 
-// ListAll returns all sources in the manifest with their current state.
 func (l *Lifecycle) ListAll() ([]SourceEntry, error) {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
@@ -317,7 +293,6 @@ func (l *Lifecycle) Content(id string) ([]byte, error) {
 	return ReadCache(l.manifestPath, id)
 }
 
-// Get retrieves a single source by ID.
 func (l *Lifecycle) Get(id string) (*SourceEntry, error) {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
@@ -332,7 +307,6 @@ func (l *Lifecycle) Get(id string) (*SourceEntry, error) {
 	return entry, nil
 }
 
-// GetByURL retrieves a single source by its URL.
 func (l *Lifecycle) GetByURL(url string) (*SourceEntry, error) {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
@@ -347,7 +321,6 @@ func (l *Lifecycle) GetByURL(url string) (*SourceEntry, error) {
 	return entry, nil
 }
 
-// writeManifest writes the manifest and commits it if a file committer is configured.
 func (l *Lifecycle) writeManifest(manifest Manifest) error {
 	if l.fileCommitter != nil && l.worktreePath != "" {
 		return WriteManifestAndCommit(l.manifestPath, l.worktreePath, manifest, l.fileCommitter)
@@ -355,7 +328,6 @@ func (l *Lifecycle) writeManifest(manifest Manifest) error {
 	return WriteManifest(l.manifestPath, manifest)
 }
 
-// writeCache writes a cache file and commits it if a file committer is configured.
 func (l *Lifecycle) writeCache(id string, data []byte) error {
 	if l.fileCommitter != nil && l.worktreePath != "" {
 		return WriteCacheAndCommit(l.manifestPath, l.worktreePath, id, data, l.fileCommitter)

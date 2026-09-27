@@ -12,13 +12,11 @@ import (
 	"github.com/scullxbones/armature/internal/tui"
 )
 
-// WorkerInfo represents a worker and the issues they have claimed.
 type WorkerInfo struct {
 	ID     string
 	Issues []*materialize.Issue
 }
 
-// Model implements tui.Screen for the Workers screen.
 type Model struct {
 	state        *materialize.State
 	workers      []WorkerInfo
@@ -28,32 +26,26 @@ type Model struct {
 	height       int
 }
 
-// New creates a new Workers screen model.
 func New() *Model {
 	return &Model{}
 }
 
-// Init initializes the model.
 func (m *Model) Init() tea.Cmd { return nil }
 
-// SetSize updates the model's dimensions.
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 }
 
-// SetState updates the materialized state and rebuilds the worker list.
 func (m *Model) SetState(state *materialize.State) {
 	m.state = state
 	m.rebuild()
 }
 
-// HelpBar returns the help bar content for the Workers screen.
 func (m *Model) HelpBar() string {
 	return tui.Muted.Render("j/k move  q quit  ? help")
 }
 
-// Update handles messages and returns the updated screen.
 func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
@@ -70,7 +62,6 @@ func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the Workers screen.
 func (m *Model) View() string {
 	if m.state == nil {
 		return "No state available."
@@ -95,9 +86,7 @@ func (m *Model) View() string {
 		lines = append(lines, "")
 	}
 
-	// Clip to viewport height when height is set.
 	if m.height > 0 && len(lines) > m.height {
-		// Scroll to keep cursor worker visible.
 		cursorLine := workerStart[m.cursor]
 		if cursorLine < m.scrollOffset {
 			m.scrollOffset = cursorLine

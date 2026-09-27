@@ -20,7 +20,7 @@ func TestWorkersInit(t *testing.T) {
 func TestWorkersSetSize(t *testing.T) {
 	t.Parallel()
 	m := New()
-	m.SetSize(80, 24) // must not panic
+	m.SetSize(80, 24)
 }
 
 func TestWorkersNilStateView(t *testing.T) {
@@ -45,7 +45,7 @@ func TestWorkersNoWorkersView(t *testing.T) {
 func TestWorkersSetStateNil(t *testing.T) {
 	t.Parallel()
 	m := New()
-	m.SetState(nil) // must not panic
+	m.SetState(nil)
 }
 
 func TestWorkersCursorMovement(t *testing.T) {
@@ -56,13 +56,9 @@ func TestWorkersCursorMovement(t *testing.T) {
 		"T2": {ID: "T2", ClaimedBy: "worker-b"},
 	}})
 
-	// cursor starts at 0; move down
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	// move back up
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	// boundary: cannot go below 0
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	// boundary: cannot go above len(workers)-1
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 }
@@ -112,7 +108,6 @@ func TestWorkersViewClipsToHeight(t *testing.T) {
 	t.Parallel()
 	m := New()
 	m.SetSize(120, 2)
-	// Each worker renders at least 2 lines (worker row + issue row), 4 workers → 8+ lines
 	m.SetState(makeWorkersState("worker-a", "worker-b", "worker-c", "worker-d"))
 	v := m.View()
 	lines := strings.Split(strings.TrimRight(v, "\n"), "\n")
@@ -125,9 +120,7 @@ func TestWorkersViewScrollsToKeepCursorVisible(t *testing.T) {
 	t.Parallel()
 	m := New()
 	m.SetSize(120, 3)
-	// Create 5 workers, each with one issue: each worker row = 1 line (worker) + 1 line (issue) + 1 blank = 3 lines
 	m.SetState(makeWorkersState("worker-a", "worker-b", "worker-c", "worker-d", "worker-e"))
-	// Move cursor down past height
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	v := m.View()

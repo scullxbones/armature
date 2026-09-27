@@ -13,14 +13,12 @@ import (
 	"github.com/scullxbones/armature/internal/tui/detail"
 )
 
-// visibleNode is a rendered tree row.
 type visibleNode struct {
 	issue  *materialize.Issue
 	depth  int
 	isLast bool
 }
 
-// Model implements app.Screen for the DAG tree view.
 type Model struct {
 	state        *materialize.State
 	visible      []visibleNode
@@ -113,7 +111,6 @@ func (m *Model) View() string {
 		lines = append(lines, m.renderNode(i))
 	}
 
-	// Clip to viewport height when height is set.
 	if m.height > 0 && len(lines) > m.height {
 		start := m.scrollOffset
 		end := start + m.height
@@ -131,7 +128,6 @@ func (m *Model) View() string {
 	return tree
 }
 
-// clampScroll adjusts scrollOffset to keep cursor within the visible window.
 func (m *Model) clampScroll() {
 	if m.height <= 0 {
 		return
@@ -171,7 +167,6 @@ func (m *Model) renderNode(idx int) string {
 
 func (m *Model) renderWithOverlay(tree string) string {
 	overlay := m.detail.View()
-	// Simple overlay for now
 	return tree + "\n" + overlay
 }
 
