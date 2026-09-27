@@ -50,7 +50,7 @@ func TestTransitionOwnerGateBeforeIdenticalNoOp_REQ_CLAIMORD_W13(t *testing.T) {
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "in-progress")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "NOT-CLAIM-OWNER")
-	assert.Equal(t, before, countTransitionOps(t, repo, "task-01"), "loser identical transition must not no-op as success")
+	assert.Equal(t, before, countTransitionOps(t, repo), "loser identical transition must not no-op as success")
 }
 
 func TestRenderContextOwnerDenied_OnlyLiveHolder_REQ_CLAIMORD_W13(t *testing.T) {
