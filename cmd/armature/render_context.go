@@ -44,9 +44,6 @@ func newRenderContextCmd() *cobra.Command {
 			if idErr != nil {
 				return idErr
 			}
-			if err := enforceRenderContextOwner(appCtx, rcIssue, workerID); err != nil {
-				return err
-			}
 			var state *materialize.State
 			if rcAt != "" {
 				opsRepoPath := appCtx.RepoPath
@@ -67,6 +64,9 @@ func newRenderContextCmd() *cobra.Command {
 				}
 				emitSnapWarnings(os.Stderr, snap.Warnings)
 				state = snap.State
+			}
+			if err := enforceRenderContextOwner(appCtx, rcIssue, workerID); err != nil {
+				return err
 			}
 
 			repoRoot := ctxpkg.InferRepoRoot(appCtx.StateDir)
@@ -133,7 +133,7 @@ func mapRenderContextError(err error) error {
 			"arm render-context --issue <issue-id>",
 		}, err)
 	}
-	if strings.Contains(msg, "load snapshot") {
+	if strings.Contains(msg, "load snapshot") || strings.Contains(msg, "locate ops") {
 		return armerrors.Wrap(codeRenderContext1, msg, []string{"arm doctor"}, err)
 	}
 	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, err)
