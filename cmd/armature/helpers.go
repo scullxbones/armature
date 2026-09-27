@@ -63,6 +63,12 @@ func skipCommandFailure(err error) error {
 
 func swallowErr(err error) { _ = err }
 
+func emitSnapWarnings(w io.Writer, warnings []string) {
+	for _, msg := range warnings {
+		_, _ = fmt.Fprintf(w, "warning: %s\n", msg)
+	}
+}
+
 func bestEffortClose(c io.Closer) {
 	if c == nil {
 		return
@@ -461,13 +467,6 @@ func validFlagNames(cmd *cobra.Command) []string {
 	return names
 }
 
-func fingerprintPrefix8(fp string) string {
-	if len(fp) < 8 {
-		return fp
-	}
-	return fp[:8]
-}
-
 func initPushDeps(ctx *config.Context) ops.PendingPushTracker {
 	if ctx != nil && ctx.WorktreePath != "" {
 		return ops.NewFilePushTracker(ctx.StateDir)
@@ -536,10 +535,6 @@ func (e *localArmatureTipPublishError) Unwrap() error {
 func isLocalArmatureTipPublishError(err error) bool {
 	var pub *localArmatureTipPublishError
 	return errors.As(err, &pub)
-}
-
-func opsPublishNextActions() []string {
-	return []string{"arm push-ops", "arm doctor"}
 }
 
 func opsPublishGit(ctx *config.Context, gc *adapters.Client) *adapters.Client {
@@ -717,9 +712,7 @@ func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, w := range loaded.Warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
-	}
+	emitSnapWarnings(os.Stderr, loaded.Warnings)
 	return ops.ExtractOps(loaded.Items), nil
 }
 

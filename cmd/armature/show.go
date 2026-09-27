@@ -36,9 +36,7 @@ func newShowCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-			}
+			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			structured := format == "json" || format == "agent"

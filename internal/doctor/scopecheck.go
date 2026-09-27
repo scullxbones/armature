@@ -13,6 +13,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 // CheckD8ScopeViolations reports out-of-scope artifacts among git-dirty paths
@@ -47,12 +48,12 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 			continue
 		}
 
-		if issue.Status == "claimed" || issue.Status == "in-progress" {
+		if issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress {
 			tasksToCheck = append(tasksToCheck, issue)
 			continue
 		}
 
-		if issue.Status == "done" || issue.Status == "merged" {
+		if issue.Status == ops.StatusDone || issue.Status == ops.StatusMerged {
 			if issue.Updated > 0 {
 				completedTime := time.Unix(issue.Updated, 0)
 				if now.Sub(completedTime) <= gracePeriod {

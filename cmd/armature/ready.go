@@ -89,9 +89,7 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	if err != nil {
 		return mapReadyError(fmt.Errorf("load snapshot: %w", err))
 	}
-	for _, w := range snap.Warnings {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-	}
+	emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 	entries := ready.ComputeReady(snap.Index, snap.Issues, "", nowEpoch())
 	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -144,9 +142,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}
-			for _, w := range snap.Warnings {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-			}
+			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 			index := snap.Index
 			issues := snap.Issues
 
