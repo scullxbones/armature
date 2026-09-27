@@ -67,7 +67,8 @@ func nextActionsForOpsPublishClass(class opsPublishClass) []string {
 		// updates origin/_armature; `git fetch origin _armature` can leave
 		// that tracking ref stale (FETCH_HEAD only).
 		return []string{
-			`git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature && git -C "$(git config armature.ops-worktree-path)" rebase origin/_armature`,
+			`git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature`,
+			`git -C "$(git config armature.ops-worktree-path)" rebase origin/_armature`,
 			"arm push-ops",
 		}
 	default:
