@@ -107,3 +107,10 @@ Date: 2026-09-27.
 - **Happened:** second `TryLock` returns `LOG-SLOT-COLLISION`; AOC append-once still holds because only one writer proceeds
 - **Should:** spec §9 wants collision, not blocking `Lock` (which would hang `TestLogSlotCollisionDetected`)
 - **Severity:** low; tests updated
+
+### DF-16 — `git config --local --get armature.worker-id` misses worktree-scoped ids
+- **Slice:** CLAIMORD-W21
+- **Command:** e2e `TestClaimRaceAndStaleReclaim` after `arm worker-init`
+- **Happened:** exit 1; id lives in `config.worktree`
+- **Should:** read `--worktree` then `--local` (or unscoped `--get`)
+- **Severity:** medium; harness helper updated
