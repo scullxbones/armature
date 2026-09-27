@@ -378,6 +378,31 @@ func TestMaterializeCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestMaterializeCommandPassesOpsWorktree_REQ_CLAIMORD_W14(t *testing.T) {
+	repo := gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd1 := newRootCmd()
+	cmd1.SetOut(new(bytes.Buffer))
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd1.Execute())
+
+	buf := new(bytes.Buffer)
+	cmdCreate := newRootCmd()
+	cmdCreate.SetOut(buf)
+	cmdCreate.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Fix bug", "--type", "task", "--id", "task-14"}))
+	require.NoError(t, cmdCreate.Execute())
+
+	cmdMat := newRootCmd()
+	cmdMat.SetOut(new(bytes.Buffer))
+	cmdMat.SetArgs([]string{"materialize", "--repo", repo})
+	require.NoError(t, cmdMat.Execute())
+
+	cp, err := materialize.LoadCheckpoint(filepath.Join(getTestStateDir(t, repo), "checkpoint.json"))
+	require.NoError(t, err)
+	require.NotEmpty(t, cp.LastCommitSHA, "arm materialize must pass OpsWorktree so the commit checkpoint is written")
+}
+
 func TestReadyCommand_EmptyRepo(t *testing.T) {
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
