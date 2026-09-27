@@ -185,7 +185,7 @@ Reuse `IsClaimStale` on the prior lease.
 
 ### Command adapter (T4)
 
-`rollbackClaim` keeps store reload / `ClaimHeldBy` / exclude cleanup /
+`rollbackClaim` keeps store reload / `HeldByExactWorkerAndClaimToken` / exclude cleanup /
 `appendHighStakesOp`. When still owned, build the compensating Op from
 `PlanCompensation`. Do not change lock or exclude behavior.
 
