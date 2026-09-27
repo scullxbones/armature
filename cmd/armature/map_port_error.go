@@ -118,7 +118,7 @@ func nextActionsForPortError(err error) []string {
 	msg := err.Error()
 	switch {
 	case isLocalArmatureTipPublishError(err):
-		return []string{"arm push-ops", "arm doctor"}
+		return nextActionsForOpsPublish(err)
 	case strings.Contains(msg, "ops-worktree-path"),
 		strings.Contains(msg, "unmigrated"),
 		strings.Contains(msg, "worker not initialized"):

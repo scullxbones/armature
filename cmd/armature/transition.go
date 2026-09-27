@@ -467,7 +467,7 @@ func mapTransitionError(err error) error {
 	case strings.Contains(msg, "delivery gate"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, err)
 	case isLocalArmatureTipPublishError(err):
-		return armerrors.Wrap(codeTransition1, msg, []string{"arm push-ops", "arm doctor"}, err)
+		return wrapOpsPublishFailure(codeTransition1, err)
 	default:
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, err)
 	}
