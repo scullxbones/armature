@@ -108,34 +108,11 @@ func preparePlan(plan *Plan, opts ApplyOptions) *Plan {
 	copy(issues, plan.Issues)
 
 	if opts.GenerateIDs {
-		idMap := make(map[string]string)
-		for i, issue := range issues {
-			newID := uuid.New().String()
-			idMap[issue.ID] = newID
-			issues[i].ID = newID
-		}
-		for i, issue := range issues {
-			if mapped, ok := idMap[issue.Parent]; ok {
-				issues[i].Parent = mapped
-			}
-			newBlockedBy := make([]string, len(issue.BlockedBy))
-			for j, dep := range issue.BlockedBy {
-				if mapped, ok := idMap[dep]; ok {
-					newBlockedBy[j] = mapped
-				} else {
-					newBlockedBy[j] = dep
-				}
-			}
-			issues[i].BlockedBy = newBlockedBy
-		}
+		issues = remapPlanIDsToUUIDs(issues)
 	}
 
 	if opts.Root != "" {
-		for i := range issues {
-			if issues[i].Parent == "" {
-				issues[i].Parent = opts.Root
-			}
-		}
+		issues = attachRootToOrphans(issues, opts.Root)
 	}
 
 	return &Plan{
@@ -143,6 +120,39 @@ func preparePlan(plan *Plan, opts ApplyOptions) *Plan {
 		Title:   plan.Title,
 		Issues:  issues,
 	}
+}
+
+func remapPlanIDsToUUIDs(issues []PlanIssue) []PlanIssue {
+	idMap := make(map[string]string)
+	for i, issue := range issues {
+		newID := uuid.New().String()
+		idMap[issue.ID] = newID
+		issues[i].ID = newID
+	}
+	for i, issue := range issues {
+		if mapped, ok := idMap[issue.Parent]; ok {
+			issues[i].Parent = mapped
+		}
+		newBlockedBy := make([]string, len(issue.BlockedBy))
+		for j, dep := range issue.BlockedBy {
+			if mapped, ok := idMap[dep]; ok {
+				newBlockedBy[j] = mapped
+			} else {
+				newBlockedBy[j] = dep
+			}
+		}
+		issues[i].BlockedBy = newBlockedBy
+	}
+	return issues
+}
+
+func attachRootToOrphans(issues []PlanIssue, root string) []PlanIssue {
+	for i := range issues {
+		if issues[i].Parent == "" {
+			issues[i].Parent = root
+		}
+	}
+	return issues
 }
 
 // DryRunApplyPlan validates the plan and returns what would be created, without writing any ops.

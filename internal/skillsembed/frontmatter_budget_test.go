@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const modelInvocableFrontMatterCapBytes = 2772
+const seededModelInvocableFrontMatterBytes = 2772
 
 var errUnclosedFrontMatter = errors.New("unclosed YAML front matter")
 
@@ -119,10 +119,10 @@ func TestSkillFrontMatterSumUnderCap_REQ_NXTTN_S3_T4(t *testing.T) {
 
 	sum, err := measureModelInvocableFrontMatter(SkillsFS)
 	require.NoError(t, err)
-	t.Logf("measured model-invocable front matter sum: %d bytes; cap %d", sum, modelInvocableFrontMatterCapBytes)
+	t.Logf("measured model-invocable front matter sum: %d bytes; cap %d", sum, seededModelInvocableFrontMatterBytes)
 	require.Greater(t, sum, 0, "embedded model-invocable skills must contribute front matter bytes")
-	require.NoError(t, checkModelInvocableFrontMatterCap(SkillsFS, modelInvocableFrontMatterCapBytes))
-	require.LessOrEqual(t, sum, modelInvocableFrontMatterCapBytes)
+	require.NoError(t, checkModelInvocableFrontMatterCap(SkillsFS, seededModelInvocableFrontMatterBytes))
+	require.LessOrEqual(t, sum, seededModelInvocableFrontMatterBytes)
 }
 
 func TestFrontMatterBudgetFailsWhenOverCap(t *testing.T) {
