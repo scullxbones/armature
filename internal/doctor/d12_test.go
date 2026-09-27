@@ -54,7 +54,11 @@ func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 	t.Parallel()
 
 	secret := "ghp_fakeSecretTokenForTest1234567890"
-	fetchErr := fmt.Errorf("git fetch origin _armature: exit status 128\nfatal: unable to access 'https://x-access-token:%s@github.com/org/repo.git/': 403", secret)
+	fetchErr := fmt.Errorf(
+		"git fetch origin _armature: exit status 128\n"+
+			"fatal: unable to access 'https://x-access-token:%s@github.com/org/repo.git/': 403",
+		secret,
+	)
 
 	assertFindingOmitsSecret := func(t *testing.T, f doctor.Finding) {
 		t.Helper()

@@ -1,3 +1,4 @@
+// Package redact strips credential-bearing substrings from text shown to operators.
 package redact
 
 import "regexp"

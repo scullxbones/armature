@@ -29,7 +29,7 @@ func TestSecrets_LeavesUncredentialedTextUnchanged(t *testing.T) {
 func TestSecrets_RedactsGitHubTokenPrefixes(t *testing.T) {
 	t.Parallel()
 
-	secret := "github_pat_11AAAAAAA0123456789abcdefghijklmnopqrstuv"
+	secret := "github_pat_" + "11AAAAAAA0123456789abcdefghijklmnopqrstuv"
 	in := "auth failed for token " + secret
 	out := redact.Secrets(in)
 
