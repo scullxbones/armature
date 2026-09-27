@@ -28,14 +28,14 @@ func TestLoserTransitionFailsNamedError_REQ_CLAIMORD_W13(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
-	before := countTransitionOps(t, repo, "task-01")
+	before := countTransitionOps(t, repo)
 
 	run(t, repo, "git", "config", "armature.worker-id", "loser-worker-w13")
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
 		"--skip-delivery-gate", "--force", "--outcome", "should fail")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "NOT-CLAIM-OWNER")
-	assert.Equal(t, before, countTransitionOps(t, repo, "task-01"), "loser must not mark done")
+	assert.Equal(t, before, countTransitionOps(t, repo), "loser must not mark done")
 }
 
 func TestTransitionOwnerGateBeforeIdenticalNoOp_REQ_CLAIMORD_W13(t *testing.T) {
@@ -44,7 +44,7 @@ func TestTransitionOwnerGateBeforeIdenticalNoOp_REQ_CLAIMORD_W13(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "in-progress")
 	require.NoError(t, err)
-	before := countTransitionOps(t, repo, "task-01")
+	before := countTransitionOps(t, repo)
 
 	run(t, repo, "git", "config", "armature.worker-id", "loser-worker-w13")
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "in-progress")
@@ -116,13 +116,13 @@ func countHeartbeatOps(t *testing.T, repo string) int {
 	return n
 }
 
-func countTransitionOps(t *testing.T, repo string, issueID string) int {
+func countTransitionOps(t *testing.T, repo string) int {
 	t.Helper()
 	allOps, err := readAllOpsFromDir(filepath.Join(getTestContext(t, repo).IssuesDir, "ops"))
 	require.NoError(t, err)
 	n := 0
 	for _, op := range allOps {
-		if op.Type == ops.OpTransition && op.TargetID == issueID {
+		if op.Type == ops.OpTransition && op.TargetID == "task-01" {
 			n++
 		}
 	}
