@@ -58,6 +58,28 @@ hint: not have locally.`,
 			want: opsPublishClassNonFF,
 		},
 		{
+			name:   "updates were rejected because the tip",
+			stderr: "hint: Updates were rejected because the tip of your current branch is behind",
+			want:   opsPublishClassNonFF,
+		},
+		{
+			name: "pre-receive hook declined is other not non-ff",
+			stderr: `! [remote rejected] _armature -> _armature (pre-receive hook declined)
+error: failed to push some refs to 'https://github.com/example/repo.git'`,
+			want: opsPublishClassOther,
+		},
+		{
+			name: "repo rule protected branch rejection is other not non-ff",
+			stderr: `remote: error: GH006: Protected branch update failed for refs/heads/_armature.
+! [remote rejected] _armature -> _armature (push declined due to repository rule)`,
+			want: opsPublishClassOther,
+		},
+		{
+			name:   "bare rejected without non-ff diagnostic is other",
+			stderr: "error: failed to push some refs to 'origin' (rejected)",
+			want:   opsPublishClassOther,
+		},
+		{
 			name:   "unknown host falls to other",
 			stderr: "fatal: unable to access 'https://github.com/example/repo.git/': Could not resolve host: github.com",
 			want:   opsPublishClassOther,

@@ -48,7 +48,7 @@ func gitPushFailureLooksLikeAuth(lower string) bool {
 func gitPushFailureLooksLikeNonFF(lower string) bool {
 	return strings.Contains(lower, "non-fast-forward") ||
 		strings.Contains(lower, "fetch first") ||
-		strings.Contains(lower, "rejected")
+		strings.Contains(lower, "updates were rejected because the tip")
 }
 
 func nextActionsForOpsPublish(err error) []string {

@@ -44,7 +44,7 @@ High-stakes commands (`arm claim`, `arm transition`, `arm assign`, `arm unassign
 
 1. Fix write access on this environment, **or** publish `_armature` from a write-capable clone.
 2. On a clone that lacked write access: `git fetch origin _armature` (or `git fetch origin refs/heads/_armature:refs/remotes/origin/_armature`).
-3. Smoke check: `arm push-ops --format agent --non-interactive`. Success means origin has the tip. `class=auth` means credentials still cannot write. `class=non-fast-forward` means rebase the ops worktree onto `origin/_armature` and run `arm push-ops` again. Other failures: `arm push-ops` and `arm doctor`.
+3. Smoke check: `arm push-ops --format agent --non-interactive`. Success means origin has the tip. `class=auth` means credentials still cannot write. `class=non-fast-forward` (explicit non-fast-forward / fetch-first diagnostics only — not a bare `rejected` or `[remote rejected]` pre-receive / repo-rule decline) means rebase the ops worktree onto `origin/_armature` and run `arm push-ops` again. Other failures (`class=other`, including hook and protected-branch rejections): `arm push-ops` and `arm doctor`.
 
 Do not confuse this with D12 lag (read-time) or claim-race resolution (also read-time). The local ops commit stays on publish failure (I2).
 
