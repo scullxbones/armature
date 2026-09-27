@@ -5,7 +5,12 @@ Date: 2026-09-27.
 
 ## Fixed in a slice
 
-None yet that required product code beyond CLAIMORD-W11 itself.
+### DF-11 — post-C0 steal used committer `now` against `op.Timestamp` LastActivity
+- **Slice:** CLAIMORD-W12
+- **Command:** `go test ./internal/oporder/ -run 'TestTwoClones|TestSameSecond'`
+- **Happened:** first-published B lost to A's earlier `op.Timestamp` because `LeaseLive` compared 2026 committer time to LastActivity=100
+- **Should:** `AcceptAt` stores LastActivity as steal/committer `now` so TTL is in the same domain as the challenger
+- **Severity:** high (would invert every post-C0 race)
 
 ## Open
 

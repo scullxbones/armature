@@ -112,7 +112,10 @@ arm bootstrap --platform claude --with-hooks
 Claim a ready task and associate it with a git worktree.
 
 Ownership is the `Owner` of the **published** `_armature` prefix (ops on
-`origin/_armature`, or this command's just-succeeded push). An unpublished
+`origin/_armature`, or this command's just-succeeded push), folded in
+**commit order** after cutover C0. Ops first introduced before C0 keep
+claim-ttl timestamp order among themselves. Steal `now` is the introducing
+commit's committer time, not the worker's `op.Timestamp`. An unpublished
 local claim stays in JSONL as pending and does not win the race. After a
 successful publish, the CLI win check uses that published `Owner` (token +
 holder), not `HeldByExactWorkerAndClaimToken`.

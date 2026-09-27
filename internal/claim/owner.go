@@ -95,13 +95,22 @@ func LeaseLive(l Lease, now int64) bool {
 // Accept is the single steal-on-stale step. Same holder always replaces.
 // A foreign claim takes only when the held lease is not live at claimOp.Timestamp.
 func Accept(held Lease, claimOp ops.Op) (Lease, bool) {
+	return AcceptAt(held, claimOp, claimOp.Timestamp)
+}
+
+// AcceptAt is Accept with an explicit steal clock (committer time after C0).
+func AcceptAt(held Lease, claimOp ops.Op, at int64) (Lease, bool) {
 	if claimOp.Type != ops.OpClaim {
 		return held, false
 	}
-	if foreignLiveLeaseBlocks(held, claimOp.WorkerID, claimOp.Timestamp) {
+	if foreignLiveLeaseBlocks(held, claimOp.WorkerID, at) {
 		return held, false
 	}
-	return leaseFromClaimOp(claimOp), true
+	next := leaseFromClaimOp(claimOp)
+	if at != 0 {
+		next.LastActivity = at
+	}
+	return next, true
 }
 
 func foreignLiveLeaseBlocks(held Lease, challengerID string, at int64) bool {
@@ -128,12 +137,21 @@ func leaseFromClaimOp(op ops.Op) Lease {
 
 // Apply folds one op into a lease. Owner is a loop of Apply.
 func Apply(held Lease, op ops.Op) Lease {
+	return ApplyAt(held, op, op.Timestamp)
+}
+
+// ApplyAt folds one op using stealAt for Accept (W1.2 committer time).
+func ApplyAt(held Lease, op ops.Op, stealAt int64) Lease {
 	switch op.Type {
 	case ops.OpClaim:
-		next, _ := Accept(held, op)
+		next, _ := AcceptAt(held, op, stealAt)
 		return next
 	case ops.OpHeartbeat:
-		return ApplyHeartbeat(held, op)
+		hb := op
+		if stealAt != 0 {
+			hb.Timestamp = stealAt
+		}
+		return ApplyHeartbeat(held, hb)
 	case ops.OpTransition:
 		return ApplyTransition(held, op)
 	default:

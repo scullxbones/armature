@@ -21,6 +21,8 @@ func racingLiveOps() []ops.Op {
 
 func TestOwner_RacingLiveClaimsFirstKeeps_REQ_CLAIMTTL(t *testing.T) {
 	t.Parallel()
+	// Pre-C0 / timestamp Owner (claim-ttl). After cutover, first-published
+	// wins even with a later clock — see TestTwoClonesSkewedClocksExactlyOneOwner_REQ_CLAIMORD_W12.
 	log := racingLiveOps()
 	lease := Owner(log, "task-01")
 	assert.Equal(t, "worker-a", lease.Holder)
@@ -132,6 +134,24 @@ func TestOwners_MatchesPerIssueOwner_REQ_CLAIMTTL(t *testing.T) {
 	assert.Equal(t, Owner(log, "task-02"), byIssue["task-02"])
 	assert.Equal(t, "worker-a~slot-a", byIssue["task-01"].Holder)
 	assert.Equal(t, "worker-a~slot-b", byIssue["task-02"].Holder)
+}
+
+func TestAcceptAt_CommitterNowKeepsFirstPublished_REQ_CLAIMORD_W12(t *testing.T) {
+	t.Parallel()
+	// Reverses the #276 two-live-TTL timestamp winner when fold order is
+	// publish/commit order: B's later op.Timestamp is applied first; A's
+	// earlier clock cannot steal while B's lease is live at committer now.
+	first := ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100 + 3600, WorkerID: "worker-b",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "tok-b"}}
+	second := ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "tok-a"}}
+	held, took := AcceptAt(Lease{}, first, 1_700_000_000)
+	require.True(t, took)
+	assert.Equal(t, "tok-b", held.Token)
+	assert.Equal(t, int64(1_700_000_000), held.LastActivity)
+	next, stole := AcceptAt(held, second, 1_700_000_010)
+	assert.False(t, stole, "later-published earlier clock must not steal a live first-published lease")
+	assert.Equal(t, "tok-b", next.Token)
 }
 
 func TestOwner_HeartbeatExtendsLease_REQ_CLAIMTTL(t *testing.T) {

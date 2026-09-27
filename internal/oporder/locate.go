@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -78,42 +79,190 @@ func LocateOps(in LocateInput) ([]LocatedOp, error) {
 		return located, nil
 	}
 	gc := adapters.New(in.OpsWorktree)
-	head, err := gc.ResolveRevision("HEAD")
-	if err != nil {
-		return nil, fmt.Errorf("resolve HEAD: %w", err)
-	}
-	headOps, err := loadOpsAt(gc, head, prefixes(in))
+	located, err := locateByCommitWalk(gc, in)
 	if err != nil {
 		return nil, err
+	}
+	SortLocated(located)
+	return located, nil
+}
+
+func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error) {
+	shas, err := gc.RevListReverse("HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("rev-list HEAD: %w", err)
 	}
 	pubSHA, err := resolvePublishedTip(gc, in)
 	if err != nil {
 		return nil, err
 	}
-	if pubSHA == "" {
-		SortLocated(headOps)
-		return headOps, nil
-	}
-	if pubSHA == head {
-		for i := range headOps {
-			headOps[i].Published = true
+	cutover := strings.TrimSpace(in.Cutover)
+	prefs := prefixes(in)
+	var located []LocatedOp
+	for i, sha := range shas {
+		committer, ctErr := gc.CommitterUnix(sha)
+		if ctErr != nil {
+			return nil, ctErr
 		}
-		SortLocated(headOps)
-		return headOps, nil
+		parent, hasParent, pErr := gc.FirstParent(sha)
+		if pErr != nil {
+			return nil, pErr
+		}
+		files, fErr := commitLogFiles(gc, sha, parent, hasParent, prefs)
+		if fErr != nil {
+			return nil, fErr
+		}
+		published := false
+		if pubSHA != "" {
+			if sha == pubSHA {
+				published = true
+			} else {
+				anc, aErr := gc.IsAncestor(sha, pubSHA)
+				if aErr != nil {
+					return nil, aErr
+				}
+				published = anc
+			}
+		}
+		epoch := 1
+		if cutover != "" {
+			before, bErr := commitStrictlyBefore(gc, sha, cutover)
+			if bErr != nil {
+				return nil, bErr
+			}
+			if before {
+				epoch = 0
+			}
+		}
+		commitN := int64(i + 1)
+		for _, f := range files {
+			opsInCommit, lErr := opsIntroducedInCommit(gc, sha, parent, hasParent, f)
+			if lErr != nil {
+				return nil, lErr
+			}
+			for _, loc := range opsInCommit {
+				loc.CommitSHA = sha
+				loc.CommitterUnix = committer
+				loc.Published = published
+				loc.Seq.Epoch = epoch
+				loc.Seq.CommitN = commitN
+				located = append(located, loc)
+			}
+		}
 	}
-	publishedKeys := map[string]bool{}
-	pubOps, loadErr := loadOpsAt(gc, pubSHA, prefixes(in))
-	if loadErr != nil {
-		return nil, loadErr
+	return located, nil
+}
+
+func commitStrictlyBefore(gc *adapters.Client, sha, cutover string) (bool, error) {
+	if sha == cutover {
+		return false, nil
 	}
-	for _, loc := range pubOps {
-		publishedKeys[opKey(loc.Op)] = true
+	return gc.IsAncestor(sha, cutover)
+}
+
+func commitLogFiles(gc *adapters.Client, sha, parent string, hasParent bool, opsPrefixes []string) ([]string, error) {
+	var files []string
+	if !hasParent {
+		all, err := gc.ListFilesAtCommit(sha)
+		if err != nil {
+			return nil, err
+		}
+		files = all
+	} else {
+		changed, err := gc.DiffNameOnlyRange(parent, sha)
+		if err != nil {
+			return nil, err
+		}
+		files = changed
 	}
-	for i := range headOps {
-		headOps[i].Published = publishedKeys[opKey(headOps[i].Op)]
+	var logs []string
+	for _, f := range files {
+		if !isOpLogPath(f, opsPrefixes) {
+			continue
+		}
+		logs = append(logs, f)
 	}
-	SortLocated(headOps)
-	return headOps, nil
+	return logs, nil
+}
+
+func isOpLogPath(f string, opsPrefixes []string) bool {
+	if !strings.HasSuffix(f, ".log") {
+		return false
+	}
+	if !strings.Contains(f, "/") {
+		return true
+	}
+	for _, p := range opsPrefixes {
+		pref := strings.TrimSuffix(p, "/") + "/"
+		if strings.HasPrefix(f, pref) {
+			return true
+		}
+	}
+	return false
+}
+
+func opsIntroducedInCommit(gc *adapters.Client, sha, parent string, hasParent bool, path string) ([]LocatedOp, error) {
+	var old []byte
+	if hasParent {
+		b, err := gc.ShowFileAtCommit(parent, path)
+		if err == nil {
+			old = b
+		}
+	}
+	neu, err := gc.ShowFileAtCommit(sha, path)
+	if err != nil {
+		return nil, nil
+	}
+	oldLines := countNonEmptyLines(old)
+	return parseLogBytesFromLine(neu, filepath.Base(path), oldLines)
+}
+
+func countNonEmptyLines(b []byte) int {
+	n := 0
+	scanner := bufio.NewScanner(bytes.NewReader(b))
+	for scanner.Scan() {
+		if len(scanner.Bytes()) > 0 {
+			n++
+		}
+	}
+	return n
+}
+
+func parseLogBytesFromLine(content []byte, filename string, skipNonEmpty int) ([]LocatedOp, error) {
+	expectedWorkerID := strings.TrimSuffix(filename, ".log")
+	legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+	seen := 0
+	line := 0
+	var located []LocatedOp
+	for scanner.Scan() {
+		raw := scanner.Bytes()
+		if len(raw) == 0 {
+			continue
+		}
+		seen++
+		if seen <= skipNonEmpty {
+			continue
+		}
+		line++
+		op, parseErr := ops.ParseLine(raw)
+		if parseErr != nil {
+			continue
+		}
+		if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
+			continue
+		}
+		located = append(located, LocatedOp{
+			Op: op,
+			Seq: Seq{
+				Line:      line,
+				Timestamp: op.Timestamp,
+				Filename:  filename,
+			},
+		})
+	}
+	return located, scanner.Err()
 }
 
 func resolvePublishedTip(gc *adapters.Client, in LocateInput) (string, error) {
@@ -201,76 +350,19 @@ func loadOpsFromWorktreeFiles(root string, opsPrefixes []string) ([]LocatedOp, e
 	return located, nil
 }
 
-func loadOpsAt(gc *adapters.Client, sha string, opsPrefixes []string) ([]LocatedOp, error) {
-	files, err := gc.ListFilesAtCommit(sha)
-	if err != nil {
-		return nil, fmt.Errorf("list files at %s: %w", sha, err)
-	}
-	prefixed := make([]string, len(opsPrefixes))
-	for i, p := range opsPrefixes {
-		prefixed[i] = strings.TrimSuffix(p, "/") + "/"
-	}
-	var located []LocatedOp
-	for _, f := range files {
-		if !strings.HasSuffix(f, ".log") {
-			continue
-		}
-		underPrefix := slices.ContainsFunc(prefixed, func(p string) bool { return strings.HasPrefix(f, p) })
-		if !underPrefix && strings.Contains(f, "/") {
-			continue
-		}
-		expectedWorkerID := strings.TrimSuffix(filepath.Base(f), ".log")
-		legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
-		content, err := gc.ShowFileAtCommit(sha, f)
-		if err != nil {
-			continue
-		}
-		scanner := bufio.NewScanner(bytes.NewReader(content))
-		scanner.Buffer(make([]byte, 1<<20), 1<<20)
-		line := 0
-		for scanner.Scan() {
-			raw := scanner.Bytes()
-			if len(raw) == 0 {
-				continue
-			}
-			line++
-			op, parseErr := ops.ParseLine(raw)
-			if parseErr != nil {
-				continue
-			}
-			if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
-				continue
-			}
-			filename := filepath.Base(f)
-			located = append(located, LocatedOp{
-				Op:        op,
-				CommitSHA: sha,
-				Seq: Seq{
-					Epoch:     0,
-					Line:      line,
-					Timestamp: op.Timestamp,
-					Filename:  filename,
-				},
-			})
-		}
-		if err := scanner.Err(); err != nil {
-			return nil, fmt.Errorf("scan file %s at %s: %w", f, sha, err)
-		}
-	}
-	return located, nil
-}
-
-func opKey(op ops.Op) string {
-	b, err := ops.MarshalOp(op)
-	if err != nil {
-		return fmt.Sprintf("%s|%s|%d|%s|%s", op.Type, op.TargetID, op.Timestamp, op.WorkerID, op.Payload.ClaimToken)
-	}
-	return string(b)
-}
-
-// SortLocated orders by timestamp, then filename, then line (W1.1 / pre-C0).
+// SortLocated orders pre-C0 (epoch 0) by timestamp/filename/line and post-C0
+// (epoch 1) by commit sequence then line.
 func SortLocated(located []LocatedOp) {
 	slices.SortStableFunc(located, func(a, b LocatedOp) int {
+		if n := cmp.Compare(a.Seq.Epoch, b.Seq.Epoch); n != 0 {
+			return n
+		}
+		if a.Seq.Epoch == 1 {
+			if n := cmp.Compare(a.Seq.CommitN, b.Seq.CommitN); n != 0 {
+				return n
+			}
+			return cmp.Compare(a.Seq.Line, b.Seq.Line)
+		}
 		if n := cmp.Compare(a.Seq.Timestamp, b.Seq.Timestamp); n != 0 {
 			return n
 		}
@@ -279,6 +371,25 @@ func SortLocated(located []LocatedOp) {
 		}
 		return cmp.Compare(a.Seq.Line, b.Seq.Line)
 	})
+}
+
+func stealAt(loc LocatedOp) int64 {
+	if loc.Seq.Epoch == 1 && loc.CommitterUnix > 0 {
+		return loc.CommitterUnix
+	}
+	return loc.Op.Timestamp
+}
+
+// OwnerOf folds claim.ApplyAt over located ops for one issue (commit-order after C0).
+func OwnerOf(located []LocatedOp, issueID string) claim.Lease {
+	var held claim.Lease
+	for _, loc := range located {
+		if loc.Op.TargetID != issueID {
+			continue
+		}
+		held = claim.ApplyAt(held, loc.Op, stealAt(loc))
+	}
+	return held
 }
 
 // Published returns located ops whose introducing content is on the published tip.

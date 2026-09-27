@@ -146,7 +146,7 @@ func (s *State) applyCreate(op ops.Op) error {
 
 func (s *State) applyClaim(op ops.Op) error {
 	issue := s.Issues[op.TargetID]
-	next, took := claimpkg.Accept(issue.lease(), op)
+	next, took := claimpkg.AcceptAt(issue.lease(), op, op.Timestamp)
 	if !took {
 		return nil
 	}

@@ -478,7 +478,7 @@ func publishedClaimWon(ctx *config.Context, issueID, workerID, claimToken string
 	if err != nil {
 		return false, fmt.Errorf("published Owner: locate ops: %w", err)
 	}
-	lease := claimPkg.OwnerPublished(oporder.Ops(oporder.Published(located)), issueID)
+	lease := oporder.OwnerOf(oporder.Published(located), issueID)
 	return lease.Holder == workerID && lease.Token == claimToken, nil
 }
 
