@@ -97,9 +97,29 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 		return nil, err
 	}
 	cutover := strings.TrimSpace(in.Cutover)
+	from := strings.TrimSpace(in.FromCommit)
+	pastFrom := from == ""
+	if from != "" {
+		found := false
+		for _, sha := range shas {
+			if sha == from {
+				found = true
+				break
+			}
+		}
+		if !found {
+			pastFrom = true
+		}
+	}
 	prefs := prefixes(in)
 	var located []LocatedOp
 	for i, sha := range shas {
+		if !pastFrom {
+			if sha == from {
+				pastFrom = true
+			}
+			continue
+		}
 		committer, ctErr := gc.CommitterUnix(sha)
 		if ctErr != nil {
 			return nil, ctErr

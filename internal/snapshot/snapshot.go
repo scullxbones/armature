@@ -4,6 +4,7 @@ package snapshot
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -43,7 +44,13 @@ func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 		allOps = []ops.Op{}
 	}
 
-	state, result, err := materialize.Run(s.stateDir, allOps, loaded.PhysicalEOF, materialize.Options{WriteStateFiles: true})
+	opts := materialize.Options{WriteStateFiles: true}
+	if wt := filepath.Dir(s.opsDir); wt != "" && wt != "." {
+		if _, statErr := os.Stat(filepath.Join(wt, ".git")); statErr == nil {
+			opts.OpsWorktree = wt
+		}
+	}
+	state, result, err := materialize.Run(s.stateDir, allOps, loaded.PhysicalEOF, opts)
 	if err != nil {
 		return nil, fmt.Errorf("materialize: %w", err)
 	}
