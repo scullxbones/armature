@@ -65,6 +65,40 @@ func TestReplayCostBoundedWithNOneRunLogs_REQ_CLAIMORD_W14(t *testing.T) { //nol
 	assert.JSONEq(t, string(gotCold), string(gotInc), "cold walk and incremental state must match")
 }
 
+func TestIncrementalReplayAppliesUncommittedDiskOps_REQ_CLAIMORD_W14(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	stateDir := t.TempDir()
+	_, _, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+
+	require.NoError(t, ops.AppendOp(filepath.Join(dir, "ops", "cattle-a.log"), ops.Op{
+		Type: ops.OpNote, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+		Payload: ops.Payload{Msg: "disk-only"},
+	}))
+
+	second, secondRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.False(t, secondRes.FullReplay)
+	assert.Equal(t, 1, secondRes.OpsProcessed)
+	require.NotEmpty(t, second.Issues["task-01"].Notes)
+	assert.Equal(t, "disk-only", second.Issues["task-01"].Notes[0].Msg)
+
+	third, thirdRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.Equal(t, 0, thirdRes.OpsProcessed, "already-applied disk ops must not replay every run")
+	assert.Equal(t, "disk-only", third.Issues["task-01"].Notes[0].Msg)
+}
+
 func issueDigest(state *State) map[string]string {
 	out := make(map[string]string, len(state.Issues))
 	for id, issue := range state.Issues {

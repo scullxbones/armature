@@ -18,6 +18,8 @@ import (
 
 type ScreenID int
 
+const watcherRefreshDebounce = 200 * time.Millisecond
+
 const (
 	ScreenDAGTree ScreenID = iota
 	ScreenWorkers
@@ -196,7 +198,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return pollTickMsg(t)
 		}))
 	case fetchMsg:
-		return m, tea.Batch(m.doFetch(), m.scheduleFetch())
+		return m, tea.Batch(m.skipRemoteFetch(), m.scheduleFetch())
 	case stateUpdatedMsg:
 		return m.WithState(msg.state), nil
 	}
@@ -214,7 +216,7 @@ func (m Model) listenForChanges() tea.Cmd {
 				return nil
 			}
 			_ = event
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(watcherRefreshDebounce)
 			return RefreshMsg{}
 		case err, ok := <-m.watcher.Errors:
 			if !ok || err != nil {
@@ -238,7 +240,7 @@ func (m Model) doRefresh() tea.Cmd {
 	}
 }
 
-func (m Model) doFetch() tea.Cmd {
+func (m Model) skipRemoteFetch() tea.Cmd {
 	return nil
 }
 
