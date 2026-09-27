@@ -8,7 +8,8 @@
 #   **/*.go                                          -> lint + build + go test
 #                                                        on changed packages
 #                                                        plus reverse importers
-#   skills/**, docs/skills/**                         -> validate-skills,
+#   skills/**, docs/skills/**,
+#   internal/skillsembed/skills/**, .agents/skills/** -> validate-skills,
 #                                                        validate-doc-examples
 #   cmd/**, docs/design/surface-census.md,
 #   docs/commands.md                                  -> census-drift-check
@@ -62,7 +63,7 @@ while IFS= read -r f; do
             ;;
     esac
     case "$f" in
-        skills/*|docs/skills/*)
+        skills/*|docs/skills/*|internal/skillsembed/skills/*|.agents/skills/*)
             HAS_SKILLS=1
             ;;
     esac
