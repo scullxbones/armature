@@ -514,18 +514,31 @@ func publishLocalArmatureTip(state *executionState) error {
 	return pushOpsBranch(opsPublishGit(ctx, worktreeGit(ctx)), state.tracker)
 }
 
-type localArmatureTipPublishError struct {
-	err error
+type opsPublishError struct {
+	class opsPublishClass
+	err   error
 }
 
-func (e *localArmatureTipPublishError) Error() string {
-	if e == nil || e.err == nil {
-		return "publish _armature"
+func newOpsPublishError(err error) *opsPublishError {
+	class := classifyGitPushFailureErr(err)
+	if class == "" {
+		class = opsPublishClassOther
 	}
-	return "publish _armature: " + e.err.Error()
+	return &opsPublishError{class: class, err: err}
 }
 
-func (e *localArmatureTipPublishError) Unwrap() error {
+func (e *opsPublishError) Error() string {
+	class := opsPublishClassOther
+	if e != nil && e.class != "" {
+		class = e.class
+	}
+	if e == nil || e.err == nil {
+		return "publish _armature class=" + string(class)
+	}
+	return "publish _armature class=" + string(class) + ": " + e.err.Error()
+}
+
+func (e *opsPublishError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
@@ -533,7 +546,7 @@ func (e *localArmatureTipPublishError) Unwrap() error {
 }
 
 func isLocalArmatureTipPublishError(err error) bool {
-	var pub *localArmatureTipPublishError
+	var pub *opsPublishError
 	return errors.As(err, &pub)
 }
 
@@ -566,7 +579,7 @@ func publishArmatureSequence(gc opsBranchPublisher) error {
 func pushOpsBranch(gc *adapters.Client, tracker ops.PendingPushTracker) error {
 	if gc != nil {
 		if err := publishArmatureSequence(gc); err != nil {
-			return &localArmatureTipPublishError{err: err}
+			return newOpsPublishError(err)
 		}
 	}
 	if tracker != nil {

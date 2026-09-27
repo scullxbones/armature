@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ import (
 
 func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -129,7 +130,7 @@ func TestScopeDeleteCmd_SameTimestampForAllOps(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_EmptyingLastTaskScopeIsRefused(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 	_, err := runTrls(t, repo, "worker-init")
@@ -180,7 +181,7 @@ func TestScopeDeleteCmd_JSONOutput(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)

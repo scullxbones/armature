@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,8 +16,7 @@ import (
 func TestCleanTreeCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	cleanFile := filepath.Join(tmpDir, "clean.txt")
 	require.NoError(t, os.WriteFile(cleanFile, []byte("clean content"), 0644))
@@ -37,8 +37,7 @@ func TestCleanTreeCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	outsideFile := filepath.Join(tmpDir, "outside.go")
 	require.NoError(t, os.WriteFile(outsideFile, []byte("package main"), 0644))
@@ -56,8 +55,7 @@ func TestCleanTreeCheck_RenameFromOutsideToArmatureDir_REQ_LNGHZN_S4_T1(t *testi
 func TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("bin/\ncoverage.out\n.armature/\n"), 0o644))
 	runGit(t, tmpDir, "add", ".gitignore")
 	runGit(t, tmpDir, "commit", "-m", "base")
@@ -78,8 +76,7 @@ func TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LN
 func TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file1 := filepath.Join(tmpDir, "pkg", "file1.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(file1), 0755))
@@ -101,8 +98,7 @@ func TestScopeContainmentCheck_AllFilesWithinScope_REQ_LNGHZN_S4_T1(t *testing.T
 func TestScopeContainmentCheck_FileOutsideScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file1 := filepath.Join(tmpDir, "pkg", "file1.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(file1), 0755))
@@ -127,8 +123,7 @@ func TestScopeContainmentCheck_FileOutsideScope_REQ_LNGHZN_S4_T1(t *testing.T) {
 func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	outsideFile := filepath.Join(tmpDir, "outside", "a.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(outsideFile), 0755))
@@ -157,8 +152,7 @@ func TestScopeContainmentCheck_RenameFromOutOfScopeToInScope_REQ_LNGHZN_S4(t *te
 func TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	oldFile := filepath.Join(tmpDir, "pkg", "old.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(oldFile), 0755))
@@ -183,8 +177,7 @@ func TestScopeContainmentCheck_RenameFullyWithinScope_REQ_LNGHZN_S4(t *testing.T
 func TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -205,8 +198,7 @@ func TestCommitReferenceCheck_ValidConventionalCommit_REQ_LNGHZN_S4_T1(t *testin
 func TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -227,8 +219,7 @@ func TestCommitReferenceCheck_RejectsBareSubjectWithNoDescription(t *testing.T) 
 func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -249,8 +240,7 @@ func TestCommitReferenceCheck_NoMatchingCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 func TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
@@ -279,8 +269,7 @@ func TestCommitReferenceCheck_AcceptsPrimaryBranchWhenWorktreeStale_REQ_MATENC(t
 func TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
@@ -302,8 +291,7 @@ func TestCommitReferenceCheck_StaleWorktreeStillFailsWithoutPrimaryEvidence_REQ_
 func TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	inFile := filepath.Join(tmpDir, "pkg", "in.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
@@ -334,8 +322,7 @@ func TestDeliveryGate_OutOfScopeSquashOnMainFailsWhenWorktreeStale_REQ_MATENC(t 
 func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquash_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	inFile := filepath.Join(tmpDir, "pkg", "in.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
@@ -374,8 +361,7 @@ func TestDeliveryGate_InterveningOutOfScopePrimaryCommitDoesNotBlockInScopeSquas
 func TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	inFile := filepath.Join(tmpDir, "pkg", "in.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(inFile), 0755))
@@ -417,8 +403,7 @@ func TestDeliveryGate_MultiCommitMergeLandingScopesAllCommits_REQ_MATENC(t *test
 func TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("base"), 0644))
@@ -445,8 +430,7 @@ func TestCommitReferenceCheck_SkipsStaleMainWhenEvidenceIsOnMaster_REQ_MATENC(t 
 func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -467,8 +451,7 @@ func TestCommitReferenceCheck_RejectsDisallowedType_REQ_LNGHZN_S4_T1(t *testing.
 func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -497,8 +480,7 @@ func TestCommitReferenceCheck_AcceptsMergeCommitFormat_REQ_LNGHZN_S4(t *testing.
 func TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -519,8 +501,7 @@ func TestCommitReferenceCheck_RejectsMergeFormOnSingleParentCommit_REQ_LNGHZN_S4
 func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("v0"), 0644))
@@ -541,8 +522,7 @@ func TestCommitReferenceCheck_IgnoresMatchBeforeBase_REQ_LNGHZN_S4_T2(t *testing
 func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -561,8 +541,7 @@ func TestCommitReferenceCheck_RejectsEmptyCommit_REQ_LNGHZN_S4_T1(t *testing.T) 
 func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("content"), 0644))
@@ -585,8 +564,7 @@ func TestCommitReferenceCheck_AcceptsMatchingCommitAmongEmptyOnes_REQ_LNGHZN_S4_
 func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("base content"), 0644))
@@ -611,8 +589,7 @@ func TestCommitReferenceCheck_RejectsSelfCancellingRevert_REQ_LNGHZN_S4_T1(t *te
 func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	widget := filepath.Join(tmpDir, "widget.txt")
 	other := filepath.Join(tmpDir, "other.txt")
@@ -643,8 +620,7 @@ func TestCommitReferenceCheck_AcceptsPaddedSelfCancellingRevert_REQ_LNGHZN_S4(t 
 func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
@@ -665,8 +641,7 @@ func TestCommitReferenceCheck_DeletionOnlyCommitSurvives_REQ_LNGHZN_S4(t *testin
 func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("keep this line\nDELETE THIS LONG DISTINCTIVE LINE HERE\n"), 0644))
@@ -691,8 +666,7 @@ func TestCommitReferenceCheck_RejectsRevertedDeletionOnlyCommit_REQ_LNGHZN_S4(t 
 func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.go")
 	require.NoError(t, os.WriteFile(file, []byte("package p\n"), 0644))
@@ -722,8 +696,7 @@ func TestCommitReferenceCheck_CosmeticReformattingByLaterCommitStillSatisfies_RE
 func TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "file.txt")
 	require.NoError(t, os.WriteFile(file, []byte("base content\n"), 0644))
@@ -745,8 +718,7 @@ func TestCommitReferenceCheck_NonASCIIFilenameSurvives_REQ_LNGHZN_S4(t *testing.
 func TestCommitReferenceCheck_ContentPreservingRenameSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	oldFile := filepath.Join(tmpDir, "oldname.txt")
 	content := ""
@@ -991,8 +963,7 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			tmpDir := t.TempDir()
-			initGitRepo(t, tmpDir)
+			tmpDir := gittest.InitRepo(t)
 			baseCommit := tc.setup(t, tmpDir)
 
 			_, result := commitReferenceCheck(tmpDir, baseCommit, "TEST-123")
@@ -1009,8 +980,7 @@ func TestCommitReferenceCheck_SurvivalMatrix_REQ_LNGHZN_S4(t *testing.T) {
 func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	scopedFile := filepath.Join(tmpDir, "pkg", "file.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(scopedFile), 0755))
@@ -1034,8 +1004,7 @@ func TestDeliveryGate_IntegrationCheck_REQ_LNGHZN_S4_T1(t *testing.T) {
 func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	file := filepath.Join(tmpDir, "gone.txt")
 	require.NoError(t, os.WriteFile(file, []byte("first removed line\nsecond removed line\n"), 0644))
@@ -1055,8 +1024,7 @@ func TestCommitReferenceCheck_WholeFileDeletionSurvives(t *testing.T) {
 func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	sourcePath := filepath.Join(tmpDir, "source.txt")
 	require.NoError(t, os.WriteFile(sourcePath, []byte(
@@ -1087,8 +1055,7 @@ func TestCommitReferenceCheck_CopySourceLaterDeletedStillSatisfiesNetDiffCheck_R
 func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	baseFile := filepath.Join(tmpDir, "base.txt")
 	require.NoError(t, os.WriteFile(baseFile, []byte("base content\n"), 0644))
@@ -1114,8 +1081,7 @@ func TestCommitReferenceCheck_MergeCommitWithMatchingSubjectSurvives_REQ_LNGHZN_
 func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffCheck_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	binFile := filepath.Join(tmpDir, "asset.bin")
 	require.NoError(t, os.WriteFile(binFile, []byte("\x00AAAA_UNIQUE_LINE_ONE\ntrailing\n"), 0644))
@@ -1140,8 +1106,7 @@ func TestCommitReferenceCheck_BinaryFileFurtherModifiedStillSatisfiesNetDiffChec
 func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 
 	binFile := filepath.Join(tmpDir, "stale-asset.bin")
 	require.NoError(t, os.WriteFile(binFile, []byte("\x00STALE_BINARY_CONTENT\n"), 0644))
@@ -1156,15 +1121,6 @@ func TestCommitReferenceCheck_BinaryFileDeletionSurvives_REQ_LNGHZN_S4(t *testin
 	assert.True(t, result.Pass,
 		"a matching commit that deletes a binary file, with the deletion never undone, must satisfy the check")
 	assert.Empty(t, result.Remediation)
-}
-
-func initGitRepo(t *testing.T, dir string) {
-	t.Helper()
-	runGit(t, dir, "init")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test User")
-	// Disable commit signing to avoid GPG issues in tests
-	runGit(t, dir, "config", "commit.gpgsign", "false")
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
