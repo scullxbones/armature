@@ -2124,7 +2124,7 @@ func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(excludePath, []byte("vendor.arm/\n"), 0o600))
 
-	require.NoError(t, excludeArmWorktreeFromGit(repo))
+	require.NoError(t, updateGitExclude(repo, ".arm/", ""))
 
 	content, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
@@ -2132,7 +2132,7 @@ func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
 	assert.Contains(t, lines, "vendor.arm/", "pre-existing unrelated line should be preserved")
 	assert.Contains(t, lines, ".arm/", "the real .arm/ exclude entry should be appended despite the similar existing line")
 
-	require.NoError(t, excludeArmWorktreeFromGit(repo))
+	require.NoError(t, updateGitExclude(repo, ".arm/", ""))
 	content2, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
 	count := 0

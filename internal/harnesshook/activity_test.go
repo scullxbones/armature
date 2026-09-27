@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/clock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -448,15 +449,16 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	beforeTime := time.Now().UTC()
+	const unix = int64(1_704_067_200)
+	want := time.Unix(unix, 0).UTC().Format(time.RFC3339)
+	clk := clock.Clock(func() int64 { return unix })
+
 	command := "test"
 	exitCode := 0
 	output := []byte("test output")
 
-	err := AppendActivity(gitDir, command, exitCode, true, output)
+	err := appendActivity(clk, gitDir, command, exitCode, true, output)
 	require.NoError(t, err)
-
-	afterTime := time.Now().UTC()
 
 	logPath := filepath.Join(gitDir, "armature-activity.log")
 	content, err := os.ReadFile(logPath)
@@ -467,11 +469,7 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(bytes.TrimSpace(content), &decoded))
 
-	logTime, err := time.Parse(time.RFC3339, decoded.Timestamp)
-	require.NoError(t, err)
-
-	assert.True(t, logTime.After(beforeTime.Add(-time.Second)))
-	assert.True(t, logTime.Before(afterTime.Add(time.Second)))
+	assert.Equal(t, want, decoded.Timestamp)
 }
 
 func TestActivityHashConsistency_REQ_EXECEV_T1(t *testing.T) {

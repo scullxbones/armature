@@ -582,7 +582,7 @@ func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
 	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
 	baseSHA := strings.TrimSpace(runGitOutput(t, legacyPath, "rev-parse", "HEAD"))
-	require.NoError(t, writeBaseCommitFileIfAbsent(legacyPath, baseSHA), "adoption requires original claim provenance")
+	require.NoError(t, writeGitDirFileIfAbsent(legacyPath, deliverygate.BaseCommitFileName, baseSHA), "adoption requires original claim provenance")
 
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
 	err := createWorktreeAndBranch(repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns)
@@ -663,7 +663,7 @@ func TestCreateWorktreeAndBranchAdoptionUsesAdoptedBranchPoint_REQ_LNGHZN_S5(t *
 	run(t, repo, "git", "branch", "task/task-01", "story-branch")
 	run(t, repo, "git", "worktree", "add", legacyPath, "task/task-01")
 	require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
-	require.NoError(t, writeBaseCommitFileIfAbsent(legacyPath, parentTip), "seed trusted branch-point metadata before adoption")
+	require.NoError(t, writeGitDirFileIfAbsent(legacyPath, deliverygate.BaseCommitFileName, parentTip), "seed trusted branch-point metadata before adoption")
 
 	run(t, repo, "git", "checkout", parentBranch)
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "coordinator.go"), []byte("package coordinator\n"), 0o644))
@@ -2824,7 +2824,7 @@ func TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6(t *testing.T) {
 		run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
 		require.NoError(t, updateIssueIDFile(legacyPath, "task-01"))
 		baseSHA := strings.TrimSpace(runGitOutput(t, legacyPath, "rev-parse", "HEAD"))
-		require.NoError(t, writeBaseCommitFileIfAbsent(legacyPath, baseSHA))
+		require.NoError(t, writeGitDirFileIfAbsent(legacyPath, deliverygate.BaseCommitFileName, baseSHA))
 
 		claim := newRootCmd()
 		claim.SetOut(new(bytes.Buffer))

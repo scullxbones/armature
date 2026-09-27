@@ -837,11 +837,10 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 
 	legacyInnerArmaturePath := filepath.Join(newWorktreePath, config.StateDirName)
 	if _, err := os.Stat(legacyInnerArmaturePath); err == nil {
-		skippedCount, err := copyLegacyOpsToNewWorktree(legacyInnerArmaturePath, newWorktreePath)
+		_, err := copyLegacyOpsToNewWorktree(legacyInnerArmaturePath, newWorktreePath)
 		if err != nil {
 			return false, "", rollback(fmt.Errorf("copy legacy ops to worktree root: %w", err))
 		}
-		_ = skippedCount
 
 		legacyConfigPath := filepath.Join(legacyInnerArmaturePath, "config.json")
 		if _, err := os.Stat(legacyConfigPath); err == nil {
@@ -1050,10 +1049,6 @@ func copyRecursive(src string, dst string) (int, error) {
 	}
 
 	return 0, nil
-}
-
-func excludeArmWorktreeFromGit(repoPath string) error {
-	return updateGitExclude(repoPath, ".arm/", "")
 }
 
 func printCollapseMigrationBackupGuidance(cmd *cobra.Command, backupDir string) {
@@ -1278,7 +1273,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude %s/ from git tracking: %v\n", config.StateDirName, err)
 			}
 		} else {
-			if err := excludeArmWorktreeFromGit(repoPath); err != nil {
+			if err := updateGitExclude(repoPath, ".arm/", ""); err != nil {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
 			}
 		}

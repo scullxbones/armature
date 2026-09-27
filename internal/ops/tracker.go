@@ -15,8 +15,6 @@ type PendingPushTracker interface {
 	Increment() (int, error)
 	// Reset sets the pending count back to zero.
 	Reset() error
-	// Count returns the current pending count.
-	Count() (int, error)
 }
 
 // NoTracker is a no-op PendingPushTracker (used in single-branch mode).

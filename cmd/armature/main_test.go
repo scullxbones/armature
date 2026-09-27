@@ -42,10 +42,6 @@ func (f *fakePendingPushTracker) Reset() error {
 	return nil
 }
 
-func (f *fakePendingPushTracker) Count() (int, error) {
-	return f.count, nil
-}
-
 var runTrlsMu sync.Mutex
 
 func appendRawCreate(logPath, workerID, id, dod, scope string) error {

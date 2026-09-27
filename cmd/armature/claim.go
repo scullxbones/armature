@@ -714,7 +714,7 @@ func persistBranchPointMetadata(
 	}
 
 	if headErr == nil {
-		if err := writeBaseCommitFileIfAbsent(worktreePath, headSHA); err != nil {
+		if err := writeGitDirFileIfAbsent(worktreePath, deliverygate.BaseCommitFileName, headSHA); err != nil {
 			return fmt.Errorf("write base commit file: %w", err)
 		}
 	}
@@ -747,10 +747,6 @@ func writeGitDirFileIfAbsent(worktreePath, filename, content string) error {
 		return fmt.Errorf("write %s: %w", filename, err)
 	}
 	return nil
-}
-
-func writeBaseCommitFileIfAbsent(worktreePath, headSHA string) error {
-	return writeGitDirFileIfAbsent(worktreePath, deliverygate.BaseCommitFileName, headSHA)
 }
 
 func writeClaimedBranchFileIfAbsent(worktreePath, branchName string) error {

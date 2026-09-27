@@ -326,9 +326,7 @@ func newHarnessHookCmd() *cobra.Command {
 			if err != nil {
 				return failOpenPassThrough(cmd.ErrOrStderr(), logGitDir, fmt.Sprintf("failed to load snapshot: %v", err), "snapshot load failed")
 			}
-			for _, w := range snap.Warnings {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)
-			}
+			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
 			if hasNoLiveClaim(snap, resolvedBinding.IssueID, time.Now().Unix()) {
 				logStalePassThroughScopeViolation(appCtx, resolvedBinding, event, logGitDir)
