@@ -1,6 +1,7 @@
 package materialize
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -115,12 +116,17 @@ func purgeOrphanedIssues(issuesDir string, keep map[string]*Issue) error {
 
 func runFullPipeline(stateDir string, allOps []ops.Op,
 	byteOffsets map[string]int64, opts Options) (*State, Result, error) {
-	writeStateFiles := opts.WriteStateFiles
 	if opts.OpsWorktree != "" {
 		if _, err := os.Stat(filepath.Join(opts.OpsWorktree, ".git")); err == nil {
-			return runCommitIncremental(stateDir, opts)
+			return runCommitIncremental(stateDir, allOps, byteOffsets, opts)
 		}
 	}
+	return runFileConcat(stateDir, allOps, byteOffsets, opts, "")
+}
+
+func runFileConcat(stateDir string, allOps []ops.Op,
+	byteOffsets map[string]int64, opts Options, lastCommitWorktree string) (*State, Result, error) {
+	writeStateFiles := opts.WriteStateFiles
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 
@@ -194,6 +200,13 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 			offsets = make(map[string]int64)
 		}
 		newCp := Checkpoint{ByteOffsets: offsets}
+		if lastCommitWorktree != "" {
+			head, headErr := adapters.New(lastCommitWorktree).HeadSHA()
+			if headErr != nil {
+				return nil, Result{}, fmt.Errorf("ops HEAD: %w", headErr)
+			}
+			newCp.LastCommitSHA = head
+		}
 		if err := WriteCheckpoint(checkpointPath, newCp); err != nil {
 			return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
 		}
@@ -274,7 +287,7 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	return nil
 }
 
-func runCommitIncremental(stateDir string, opts Options) (*State, Result, error) {
+func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Options) (*State, Result, error) {
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 	if opts.WriteStateFiles {
@@ -290,26 +303,50 @@ func runCommitIncremental(stateDir string, opts Options) (*State, Result, error)
 		}
 		cp = loaded
 	}
+	shaMissing := false
 	fullReplay := cp.LastCommitSHA == "" || cp.StateVersion != CurrentStateVersion
-	from := ""
 	if !fullReplay {
-		from = cp.LastCommitSHA
+		located, err := oporder.LocateOps(oporder.LocateInput{
+			OpsWorktree:       opts.OpsWorktree,
+			FromCommit:        cp.LastCommitSHA,
+			ExtraPublishedTip: "HEAD",
+		})
+		switch {
+		case err != nil && oporder.IsFromCommitMissing(err):
+			shaMissing = true
+			fullReplay = true
+		case err != nil:
+			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
+		default:
+			return applyCommitLocated(stateDir, opts, cp, located, false)
+		}
 	}
-	located, err := oporder.LocateOps(oporder.LocateInput{
-		OpsWorktree:       opts.OpsWorktree,
-		FromCommit:        from,
-		ExtraPublishedTip: "HEAD",
-	})
-	if err != nil && from != "" && oporder.IsFromCommitMissing(err) {
-		fullReplay = true
-		located, err = oporder.LocateOps(oporder.LocateInput{
+	if shaMissing || len(allOps) == 0 {
+		located, err := oporder.LocateOps(oporder.LocateInput{
 			OpsWorktree:       opts.OpsWorktree,
 			ExtraPublishedTip: "HEAD",
 		})
+		if err != nil {
+			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
+		}
+		return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
 	}
-	if err != nil {
-		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
-	}
+	return runFileConcat(stateDir, allOps, byteOffsets, opts, opts.OpsWorktree)
+}
+
+func sortLocatedByCommit(located []oporder.LocatedOp) {
+	slices.SortStableFunc(located, func(a, b oporder.LocatedOp) int {
+		if n := cmp.Compare(a.Seq.CommitN, b.Seq.CommitN); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Seq.Line, b.Seq.Line)
+	})
+}
+
+func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, fullReplay bool) (*State, Result, error) {
+	issuesStateDir := filepath.Join(stateDir, "issues")
+	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
+	sortLocatedByCommit(located)
 	var state *State
 	if !fullReplay {
 		loadedIssues, loadErr := LoadAllIssues(issuesStateDir)
@@ -323,7 +360,11 @@ func runCommitIncremental(stateDir string, opts Options) (*State, Result, error)
 	}
 	state.RetractDerivedPromotions()
 	newOps := oporder.Ops(located)
-	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, cp.ByteOffsets)
+	offsetHint := cp.ByteOffsets
+	if fullReplay {
+		offsetHint = nil
+	}
+	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, offsetHint)
 	if pendErr != nil {
 		return nil, Result{}, pendErr
 	}
