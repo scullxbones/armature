@@ -190,6 +190,39 @@ git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 git -C "$FIXTURE" clean -q -fd skills
 
 # ----------------------------------------------------------------------------
+# Test 4b: a .agents/skills/ change routes to validate-skills.
+# ----------------------------------------------------------------------------
+echo "Test 4b: .agents/skills/ change routes to validate-skills + validate-doc-examples..."
+mkdir -p "$FIXTURE/.agents/skills/capturing-dogfood-findings"
+echo "# capture" > "$FIXTURE/.agents/skills/capturing-dogfood-findings/SKILL.md"
+git -C "$FIXTURE" add .agents/skills/capturing-dogfood-findings/SKILL.md
+
+OUTPUT=$(run_check_fast)
+assert_make_target_ran "validate-skills" "validate-skills runs for .agents/skills/ change"
+assert_make_target_ran "validate-doc-examples" "validate-doc-examples runs for .agents/skills/ change"
+assert_make_target_not_ran "census-drift-check" ".agents/skills/ change alone is not a census surface"
+assert_make_target_not_ran "mutate" ".agents/skills/ change (fast gate) must not run mutate"
+
+git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
+git -C "$FIXTURE" clean -q -fd .agents
+
+# ----------------------------------------------------------------------------
+# Test 4c: an internal/skillsembed/skills/ change routes to validate-skills.
+# ----------------------------------------------------------------------------
+echo "Test 4c: internal/skillsembed/skills/ change routes to validate-skills..."
+mkdir -p "$FIXTURE/internal/skillsembed/skills/example"
+echo "# skill" > "$FIXTURE/internal/skillsembed/skills/example/SKILL.md"
+git -C "$FIXTURE" add internal/skillsembed/skills/example/SKILL.md
+
+OUTPUT=$(run_check_fast)
+assert_make_target_ran "validate-skills" "validate-skills runs for internal/skillsembed/skills/ change"
+assert_make_target_ran "validate-doc-examples" "validate-doc-examples runs for internal/skillsembed/skills/ change"
+assert_make_target_not_ran "mutate" "internal/skillsembed/skills/ change (fast gate) must not run mutate"
+
+git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
+git -C "$FIXTURE" clean -q -fd internal
+
+# ----------------------------------------------------------------------------
 # Test 5: BASE= override is honored — an unrelated stale BASE (e.g. current
 # HEAD, meaning no diff) yields no routed steps.
 # ----------------------------------------------------------------------------

@@ -34,7 +34,7 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 - [Workflow & operating model](docs/agents/workflow.md)
 - [Quality gates — TDD, `make check`, coverage/mutation thresholds](docs/agents/quality-gates.md)
 - [Dogfood findings capture](docs/agents/dogfood-findings.md)
-- [Repo-local skills](docs/agents/skills.md)
+- [Repo-local skills](docs/agents/skills.md) — `.agents/skills` is canonical; `.cursor/skills` entries are symlinks.
 
 ## Canonical references
 
