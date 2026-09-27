@@ -41,6 +41,7 @@ checkout, in one case), exits 1 after the transition has already succeeded, and
 - [A leftover `/tmp` PR-122 ops checkout stole `armature.ops-worktree-path`](../../raw/2026-08-31T0110Z-5207ee28-workflow-ops-worktree-hijack-drops-merged-ops.md) — Seven `--pr 116..122` transitions landed on a detached HEAD in `/tmp`; canonical `.armature` never moved. `arm show` read the configured path and reported `merged`; removing the `/tmp` tree would have dropped the only ref to those ops.
 - [`arm merged` exits 1 after the transition already succeeded](../../raw/2026-08-31T1150Z-claude-workflow-arm-merged-reports-failure-after-succeeding.md) — The inverse shape: op appended, checkout removed, registration gone — only the `.git/worktrees/<id>` unlink failed with WSL `EBUSY`, and the command reported `general_error`. Eight stale admin dirs show this has been happening for a while, so `git worktree prune` never converges.
 - [`RunRollup` counts a cancelled child as unmerged, permanently stranding the parent](../../raw/2026-09-01T1156Z-claude-materialize-rollup-strands-parents-with-cancelled-children.md) — `engine.go:607` tests `child.Status != ops.StatusMerged`, while `reconcile.go:250` already encodes the intended `merged || cancelled` predicate. Descoping one task silently prevents its parent from ever completing. `E6-S6` (21 merged / 2 cancelled) and `SMTC-S1` (12/1) had to be promoted by hand.
+- [Ready queue requires blockers merged, not `done`](../../raw/2026-09-27T1203Z-cursor-workflow-ready-requires-blockers-merged.md) — Stacked slices stay off `main`, so `arm ready` blocks dependents on I6. That gate is correct; the missing piece is a non-main stack-ready / "slice accepted" signal. Do not `arm merged` while GitHub PRs remain unmerged.
 
 Related display hole (write lands, agent cannot see it): [agent-facing-views-omit-state](../agent-facing-views-omit-state/README.md).
 
@@ -58,6 +59,7 @@ statuses can express the truth at all — is curated under
 - Fix `RunRollup` to treat `cancelled` as satisfying rollup (mirroring `reconcile.go:250`), with one guard: require at least one merged child, so a wholly-descoped story cannot claim delivery.
 - Refuse to treat an unbound `/tmp` checkout as the ops worktree when `.armature` already has `_armature`; have `arm merged` / `arm doctor` warn when `armature.ops-worktree-path` is not the live `_armature` worktree.
 - Make administrative-directory cleanup non-fatal: once the `merged` op is durable and the checkout is gone, a failed `.git/worktrees/<id>` unlink is a warning naming the leftover path, not `general_error`.
-- Make `arm sync` decide `merged` from git/GitHub evidence, including squash (dogfood L37). Keep `arm merged` as the explicit override.
+- Make `arm sync` decide `merged` from git/GitHub evidence, including squash (dogfood L37). Keep `arm merged` as the explicit override after work is on `main`, not as a stacked-PR shortcut.
+- Give stacked slices an honest ready signal (clearer stack-ready semantics, or an explicit non-main "slice accepted" status) so coordinators are not tempted to record `merged` before main.
 - Accept "PR/branch is on `origin/main`" as I6 evidence when no worktree remains, so `--force` is not required to tell the system what GitHub already knows.
 - Do not treat a skill sentence as the close-the-loop step.

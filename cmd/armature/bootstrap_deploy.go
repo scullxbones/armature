@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,18 +12,53 @@ import (
 )
 
 func deploySkills(src fs.FS, dest string) error {
-	const skillsRoot = "skills"
+	sub, err := fs.Sub(src, "skills")
+	if err != nil {
+		return fmt.Errorf("skills subtree: %w", err)
+	}
+	return deploySkillsRoot(sub, dest)
+}
 
-	return fs.WalkDir(src, skillsRoot, func(path string, d fs.DirEntry, err error) error {
+func deployFlatSkills(src fs.FS, dest string) error {
+	sub, err := fs.Sub(src, "skills")
+	if err != nil {
+		return fmt.Errorf("skills subtree: %w", err)
+	}
+	return deployFlatSkillsRoot(sub, dest)
+}
+
+func deployRepoAgentSkills(repoPath, dest string) error {
+	srcDir := filepath.Join(repoPath, ".agents", "skills")
+	info, err := os.Stat(srcDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat %s: %w", srcDir, err)
+	}
+	if !info.IsDir() {
+		return nil
+	}
+	src := os.DirFS(srcDir)
+	if err := deploySkillsRoot(src, dest); err != nil {
+		return fmt.Errorf("deploy repo agent skills: %w", err)
+	}
+	if err := deployFlatSkillsRoot(src, dest); err != nil {
+		return fmt.Errorf("deploy flat repo agent skills: %w", err)
+	}
+	return nil
+}
+
+func deploySkillsRoot(src fs.FS, dest string) error {
+	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+		if path == "." {
+			return os.MkdirAll(dest, 0o750)
+		}
 
-		rel := strings.TrimPrefix(path, skillsRoot)
-		rel = strings.TrimPrefix(rel, string(filepath.Separator))
-		rel = strings.TrimPrefix(rel, "/")
-
-		target := filepath.Join(dest, rel)
+		target := filepath.Join(dest, filepath.FromSlash(path))
 
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o750)
@@ -36,10 +72,8 @@ func deploySkills(src fs.FS, dest string) error {
 	})
 }
 
-func deployFlatSkills(src fs.FS, dest string) error {
-	const skillsRoot = "skills"
-
-	entries, err := fs.ReadDir(src, skillsRoot)
+func deployFlatSkillsRoot(src fs.FS, dest string) error {
+	entries, err := fs.ReadDir(src, ".")
 	if err != nil {
 		return fmt.Errorf("read skills root: %w", err)
 	}
@@ -49,7 +83,13 @@ func deployFlatSkills(src fs.FS, dest string) error {
 			continue
 		}
 		name := entry.Name()
-		skillFile := skillsRoot + "/" + name + "/SKILL.md"
+		skillFile := name + "/SKILL.md"
+		if _, err := fs.Stat(src, skillFile); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("stat skill %s: %w", name, err)
+		}
 		target := filepath.Join(dest, name+".md")
 		if err := copySkillWithRewrittenRefs(src, skillFile, name, target); err != nil {
 			return fmt.Errorf("deploy flat skill %s: %w", name, err)
