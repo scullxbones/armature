@@ -1,16 +1,3 @@
-// Package decompose provides plan parsing and decomposition.
-// This strictdecode_test.go file verifies JSON artifact decoders follow the
-// shared strict-decode policy (internal/strictjson.Decode): trailing JSON
-// data after a valid value is rejected, while unknown/extra object fields
-// are intentionally accepted, since the canonical validators
-// (docs/schemas/*.schema.json) do not set additionalProperties: false.
-//
-// Audit of JSON decoders in internal/decompose:
-//   - ParsePlan (plan.go, line 43): uses the strictjson decode policy;
-//     rejects trailing JSON to catch malformed or deprecated plan input
-//     early, while still tolerating unknown fields.
-//
-// See docs/design/top-tier-gap-analysis.md (T2.3) for background on this test suite.
 package decompose
 
 import (
@@ -24,13 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPlanRoundTrip_REQ_TOPTIER_S3_T3 verifies that a Plan marshals to JSON
-// and unmarshals back identically with DisallowUnknownFields enabled.
-// This test catches type mismatches like string-vs-int that unit tests previously hid.
 func TestPlanRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	// Step 1: Create a Plan struct with all field types
 	originalPlan := Plan{
 		Version: 1,
 		Title:   "Test Plan for Round-Trip",
@@ -50,18 +33,15 @@ func TestPlanRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 		},
 	}
 
-	// Step 2: Marshal the Plan to JSON
 	jsonData, err := json.MarshalIndent(originalPlan, "", "  ")
 	require.NoError(t, err, "failed to marshal Plan")
 
-	// Step 3: Unmarshal the JSON back into a Plan with DisallowUnknownFields
 	var roundTrippedPlan Plan
 	decoder := json.NewDecoder(strings.NewReader(string(jsonData)))
 	decoder.DisallowUnknownFields()
 	err = decoder.Decode(&roundTrippedPlan)
 	require.NoError(t, err, "failed to unmarshal Plan with DisallowUnknownFields")
 
-	// Step 4: Verify the round-tripped Plan matches the original
 	assert.Equal(t, originalPlan.Version, roundTrippedPlan.Version)
 	assert.Equal(t, originalPlan.Title, roundTrippedPlan.Title)
 	assert.Len(t, roundTrippedPlan.Issues, len(originalPlan.Issues))
@@ -70,15 +50,9 @@ func TestPlanRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Equal(t, originalPlan.Issues[0].Priority, roundTrippedPlan.Issues[0].Priority)
 }
 
-// TestPlanAllowsUnknownFields_REQ_TOPTIER_S3_T3 verifies that ParsePlan
-// accepts JSON with unknown fields. The canonical validator
-// (docs/schemas/plan.schema.json) does not set additionalProperties: false,
-// so a schema-valid plan may legitimately carry extension/metadata fields;
-// rejecting them here would fail artifacts the published contract accepts.
 func TestPlanAllowsUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	// JSON with an unknown field "unknown_field"
 	planJSON := `{
 		"version": 1,
 		"title": "Test Plan",
@@ -105,8 +79,6 @@ func TestParsePlanRejectsTrailingJSON_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Contains(t, err.Error(), "trailing")
 }
 
-// TestPlanValidRoundTrip_REQ_TOPTIER_S3_T3 verifies that a valid Plan
-// parses successfully and maintains all field values through a complete round-trip.
 func TestPlanValidRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -151,12 +123,9 @@ func TestPlanValidRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Equal(t, []string{"doc.md"}, parsed.Issues[0].ContextFiles)
 }
 
-// TestPlanMarshalAndParseRoundTrip_REQ_TOPTIER_S3_T3 verifies that
-// a parsed Plan can be marshaled to JSON and re-parsed without loss of information.
 func TestPlanMarshalAndParseRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	// Start with a JSON file
 	originalJSON := `{
 		"version": 1,
 		"title": "Marshal Round Trip Test",
@@ -179,23 +148,18 @@ func TestPlanMarshalAndParseRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	tmpFile1 := filepath.Join(tmpDir, "plan1.json")
 	require.NoError(t, os.WriteFile(tmpFile1, []byte(originalJSON), 0644))
 
-	// Parse the original
 	plan1, err := ParsePlan(tmpFile1)
 	require.NoError(t, err)
 
-	// Marshal it to JSON
 	jsonData, err := json.MarshalIndent(plan1, "", "  ")
 	require.NoError(t, err)
 
-	// Write the marshaled JSON to a new file
 	tmpFile2 := filepath.Join(tmpDir, "plan2.json")
 	require.NoError(t, os.WriteFile(tmpFile2, jsonData, 0644))
 
-	// Parse the marshaled JSON
 	plan2, err := ParsePlan(tmpFile2)
 	require.NoError(t, err)
 
-	// Verify both plans are equivalent
 	assert.Equal(t, plan1.Version, plan2.Version)
 	assert.Equal(t, plan1.Title, plan2.Title)
 	assert.Len(t, plan2.Issues, len(plan1.Issues))
@@ -204,9 +168,6 @@ func TestPlanMarshalAndParseRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	assert.Equal(t, plan1.Issues[0].Type, plan2.Issues[0].Type)
 }
 
-// TestPlanStrictDecode_REQ_TOPTIER_S3_T3 verifies that ParsePlan rejects
-// JSON with type mismatches (e.g., string where int is expected).
-// This test directly addresses the dogfood finding: "JSON string/int mismatch hidden by unit tests".
 func TestPlanStrictDecode_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
@@ -255,7 +216,7 @@ func TestPlanStrictDecode_REQ_TOPTIER_S3_T3(t *testing.T) {
 					}
 				]
 			}`,
-			expectError: false, // This should pass as all fields are correctly typed
+			expectError: false,
 			errorMsg:    "",
 		},
 	}

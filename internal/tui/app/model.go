@@ -16,10 +16,8 @@ import (
 	"github.com/scullxbones/armature/internal/tui"
 )
 
-// ScreenID identifies one of the four main screens.
 type ScreenID int
 
-// Screen identifiers for the four main views.
 const (
 	ScreenDAGTree ScreenID = iota
 	ScreenWorkers
@@ -27,22 +25,16 @@ const (
 	ScreenSources
 )
 
-// RefreshMsg triggers a re-materialisation.
 type RefreshMsg struct{}
 
-// fetchMsg triggers a git fetch.
 type fetchMsg struct{}
 
-// pollTickMsg is sent by the fallback poll ticker.
 type pollTickMsg time.Time
 
-// WatcherReadyMsg is sent when fsnotify watcher is started.
 type WatcherReadyMsg struct{ Watcher *fsnotify.Watcher }
 
-// stateUpdatedMsg is sent when materialization result is ready.
 type stateUpdatedMsg struct{ state *materialize.State }
 
-// Model is the root Bubble Tea model.
 type Model struct {
 	issuesDir      string
 	stateDir       string
@@ -55,7 +47,7 @@ type Model struct {
 	width          int
 	height         int
 	watcher        *fsnotify.Watcher
-	liveMode       bool // true = fsnotify active, false = poll fallback
+	liveMode       bool
 }
 
 // New constructs the root model. Screens are constructed lazily with placeholder
@@ -69,13 +61,11 @@ func New(issuesDir, stateDir, workerID string) Model {
 	}
 }
 
-// WithScreens injects the four screen implementations.
 func (m Model) WithScreens(tree, workers, validate, sources tui.Screen) Model {
 	m.screens = [4]tui.Screen{tree, workers, validate, sources}
 	return m
 }
 
-// WithState updates state on the model and propagates to all screens.
 func (m Model) WithState(state *materialize.State) Model {
 	m.state = state
 	for i := range m.screens {
@@ -86,13 +76,11 @@ func (m Model) WithState(state *materialize.State) Model {
 	return m
 }
 
-// WithValidateErrors sets the error badge count for the Validate tab.
 func (m Model) WithValidateErrors(n int) Model {
 	m.validateErrors = n
 	return m
 }
 
-// CurrentScreen returns the active screen ID.
 func (m Model) CurrentScreen() ScreenID { return m.current }
 
 // Init starts the fsnotify watcher on issuesDir/ops/ with 5s poll fallback.
@@ -119,7 +107,9 @@ func (m Model) startWatcher() tea.Cmd {
 		}
 		opsDir := filepath.Join(m.issuesDir, "ops")
 		if err := w.Add(opsDir); err != nil {
-			_ = w.Close() //nolint:errcheck // close during error-path cleanup not actionable
+			if closeErr := w.Close(); closeErr != nil {
+				return pollTickMsg(time.Now())
+			}
 			return pollTickMsg(time.Now())
 		}
 		return WatcherReadyMsg{Watcher: w}
@@ -132,13 +122,11 @@ func (m Model) scheduleFetch() tea.Cmd {
 	})
 }
 
-// NavBar renders the one-line navigation bar.
 func (m Model) NavBar() string {
 	tabs := []string{"Tree", "Workers", "Validate", "Sources"}
 	var parts []string
 	for i, name := range tabs {
 		label := fmt.Sprintf("[%d] %s", i+1, name)
-		// Add badge if applicable.
 		if ScreenID(i) == ScreenValidate && m.validateErrors > 0 {
 			label += tui.Critical.Render(fmt.Sprintf(" ⚠%d", m.validateErrors))
 		}
@@ -162,7 +150,6 @@ func (m Model) NavBar() string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// Update processes messages and returns the updated model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -227,7 +214,6 @@ func (m Model) listenForChanges() tea.Cmd {
 				return nil
 			}
 			_ = event
-			// Debounce: 200ms delay before re-materialize.
 			time.Sleep(200 * time.Millisecond)
 			return RefreshMsg{}
 		case err, ok := <-m.watcher.Errors:
@@ -253,11 +239,9 @@ func (m Model) doRefresh() tea.Cmd {
 }
 
 func (m Model) doFetch() tea.Cmd {
-	// Best-effort git fetch with 10s timeout — errors are silent.
 	return nil
 }
 
-// View renders nav bar + active screen + help bar.
 func (m Model) View() string {
 	nav := m.NavBar()
 	var content, help string
@@ -268,7 +252,6 @@ func (m Model) View() string {
 	return nav + "\n" + content + "\n" + help
 }
 
-// nilScreen is a placeholder Screen used before real screens are injected.
 type nilScreen struct{}
 
 func (nilScreen) Init() tea.Cmd                            { return nil }

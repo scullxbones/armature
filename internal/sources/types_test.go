@@ -17,7 +17,6 @@ func TestManifestGetByURL(t *testing.T) {
 	var m Manifest
 	m.Upsert(entry)
 
-	// Look up by exact URL match.
 	got, ok := m.GetByURL("https://example.com/doc")
 	if !ok {
 		t.Fatal("GetByURL: expected entry not found")
@@ -26,13 +25,11 @@ func TestManifestGetByURL(t *testing.T) {
 		t.Errorf("ID: got %q, want %q", got.ID, "src-abc")
 	}
 
-	// Missing URL returns false.
 	_, ok = m.GetByURL("https://example.com/other")
 	if ok {
 		t.Error("GetByURL: expected not found for unknown URL")
 	}
 
-	// Empty manifest returns false.
 	var empty Manifest
 	_, ok = empty.GetByURL("https://example.com/doc")
 	if ok {

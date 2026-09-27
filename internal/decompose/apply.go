@@ -16,15 +16,11 @@ import (
 	"github.com/scullxbones/armature/internal/validate"
 )
 
-// DryRunResult holds the result of a dry-run apply.
 type DryRunResult struct {
-	// WouldCreate contains the issue IDs and titles that would be created.
 	WouldCreate []DryRunEntry
-	// Warnings contains advisory messages from plan validation.
-	Warnings []string
+	Warnings    []string
 }
 
-// DryRunEntry is a single would-be or appended create entry.
 type DryRunEntry struct {
 	ID     string
 	Title  string
@@ -32,7 +28,6 @@ type DryRunEntry struct {
 	Status string
 }
 
-// ApplyOptions controls optional behaviour for ApplyPlan / DryRunApplyPlan.
 type ApplyOptions struct {
 	// GenerateIDs replaces plan-specified IDs with system-generated UUIDs.
 	GenerateIDs bool
@@ -43,11 +38,7 @@ type ApplyOptions struct {
 	// IDs and to run citation checks on the Introduction door. Empty skips
 	// membership checks (unit tests); the CLI always supplies the file.
 	ManifestData []byte
-	// appendOps writes a plan's ops in one append so a create cannot land
-	// without its source_link (apply is source-atomic). Nil means
-	// ops.AppendOps. Unexported: this seam exists for in-package tests to
-	// observe batching, and must not become part of the public API.
-	appendOps func(string, []ops.Op) error
+	appendOps    func(string, []ops.Op) error
 }
 
 func validatePlan(plan *Plan) []string {
@@ -93,9 +84,6 @@ func sourceIDsFromManifest(data []byte) (map[string]struct{}, error) {
 	return known, nil
 }
 
-// validateTypes rejects a plan containing any issue with an unrecognized
-// Type. Unlike the advisory warnings in validatePlan, this is always a hard
-// error: an unrecognized type is never a legitimate, salvageable situation.
 func validateTypes(plan *Plan) error {
 	for _, issue := range plan.Issues {
 		if !issuetype.IsValid(issue.Type) {
@@ -115,21 +103,17 @@ func validateIssueIDs(plan *Plan) error {
 	return nil
 }
 
-// preparePlan applies the ApplyOptions transformations to a copy of the plan.
 func preparePlan(plan *Plan, opts ApplyOptions) *Plan {
-	// Deep-copy issues to avoid mutating the caller's plan.
 	issues := make([]PlanIssue, len(plan.Issues))
 	copy(issues, plan.Issues)
 
 	if opts.GenerateIDs {
 		idMap := make(map[string]string)
-		// First pass: assign new UUIDs.
 		for i, issue := range issues {
 			newID := uuid.New().String()
 			idMap[issue.ID] = newID
 			issues[i].ID = newID
 		}
-		// Second pass: rewrite Parent and BlockedBy references.
 		for i, issue := range issues {
 			if mapped, ok := idMap[issue.Parent]; ok {
 				issues[i].Parent = mapped
@@ -146,7 +130,6 @@ func preparePlan(plan *Plan, opts ApplyOptions) *Plan {
 		}
 	}
 
-	// Apply --root: top-level issues (no parent) get root as their parent.
 	if opts.Root != "" {
 		for i := range issues {
 			if issues[i].Parent == "" {

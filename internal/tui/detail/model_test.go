@@ -77,7 +77,7 @@ func TestDetailSetSizeWhenOpen(t *testing.T) {
 	issue := &materialize.Issue{ID: "T1"}
 	m := detail.New()
 	m = m.Open(issue)
-	_ = m.SetSize(100, 30) // must not panic when open
+	_ = m.SetSize(100, 30)
 }
 
 func TestDetailBuildContentWithDefinitionOfDone(t *testing.T) {
@@ -144,14 +144,12 @@ func TestDetailViewRendersTitle(t *testing.T) {
 
 func TestDetailViewHidden(t *testing.T) {
 	t.Parallel()
-	// Case 1: Issue is nil
 	m := detail.New()
 	m = m.Open(nil)
 	if m.View() != "" {
 		t.Errorf("expected empty view for nil issue")
 	}
 
-	// Case 2: Closed
 	issue := &materialize.Issue{ID: "TASK-14"}
 	m2 := detail.New()
 	m2 = m2.Open(issue)

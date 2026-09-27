@@ -97,9 +97,6 @@ func TestValidateRepositoryExamples(t *testing.T) {
 	}
 }
 
-// TestRepositoryDiscoversCanonicalPlanAndActivityIndexExamples guards the
-// customer-facing plan and embedded activity-index examples that make the
-// documentation validator useful in practice.
 func TestRepositoryDiscoversCanonicalPlanAndActivityIndexExamples(t *testing.T) {
 	t.Parallel()
 

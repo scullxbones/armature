@@ -7,7 +7,6 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-// FileCommitter is an interface for committing file changes (manifest and cache).
 type FileCommitter interface {
 	CommitWorktreeOp(relPath, message string) error
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// Node represents a work item in the DAG.
 type Node struct {
 	ID        string
 	Title     string
@@ -97,7 +96,7 @@ func (g *Graph) Ancestry(id string) []string {
 	current := node.Parent
 	for current != "" {
 		if visited[current] {
-			break // cycle guard
+			break
 		}
 		visited[current] = true
 		ancestors = append(ancestors, current)
@@ -174,8 +173,6 @@ func (g *Graph) ScopedHasCycle(id string, scope map[string]bool) bool {
 	var dfs func(string) bool
 	dfs = func(nodeID string) bool {
 		if recStack[nodeID] {
-			// Cycle detected: only report true if the closing node is in scope.
-			// This prevents false positives from unrelated cycles outside the scope.
 			return scope[nodeID]
 		}
 		if visited[nodeID] {
@@ -185,17 +182,12 @@ func (g *Graph) ScopedHasCycle(id string, scope map[string]bool) bool {
 		visited[nodeID] = true
 		recStack[nodeID] = true
 
-		// Walk BlockedBy edges: follow ALL blockers (including out-of-scope ones)
-		// to detect cross-scope cycles that affect scoped nodes.
 		for _, dep := range g.blockers(nodeID) {
 			if dfs(dep) {
 				return true
 			}
 		}
 
-		// Walk Children edges within scope only. Parent-child cycles are structurally
-		// impossible once parent-link validation passes, so cross-scope child traversal
-		// adds no cycle-detection value and risks false positives.
 		_, children := g.Hierarchy(nodeID)
 		for _, child := range children {
 			if scope[child] {
@@ -225,7 +217,7 @@ func (g *Graph) Depth(id string) int {
 	current := node.Parent
 	for current != "" {
 		if visited[current] {
-			break // cycle guard
+			break
 		}
 		visited[current] = true
 		depth++
@@ -242,8 +234,7 @@ func (g *Graph) Depth(id string) int {
 func FromIndex(index map[string]*Node) *Graph {
 	g := newGraph()
 	for _, node := range index {
-		// We don't check for errors here since we own the nodes from the index
-		_ = g.addNode(node) //nolint:errcheck // addNode only errors on duplicate IDs; ID uniqueness is enforced by caller
+		g.nodes[node.ID] = node
 	}
 	return g
 }

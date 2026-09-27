@@ -21,7 +21,7 @@ func TestValidateInit(t *testing.T) {
 func TestValidateSetSize(t *testing.T) {
 	t.Parallel()
 	m := tuivalidate.New()
-	m.SetSize(80, 24) // must not panic
+	m.SetSize(80, 24)
 }
 
 func TestValidateHelpBar(t *testing.T) {
@@ -54,10 +54,6 @@ func TestValidateNilStateView(t *testing.T) {
 	}
 }
 
-// TestValidateScreenAgesOutExpiredAggregateClaim verifies SetState supplies a
-// clock to validate: an aggregate story whose claim outlived its TTL must not
-// render a W1 overlap against unrelated live work. With no Now injected,
-// validate cannot evaluate expiry and the stale claim reads as active forever.
 func TestValidateScreenAgesOutExpiredAggregateClaim(t *testing.T) {
 	t.Parallel()
 	now := time.Now().Unix()
@@ -86,15 +82,13 @@ func TestValidateScreenRendersIssues(t *testing.T) {
 	t.Parallel()
 	m := tuivalidate.New()
 	state := materialize.NewState()
-	// No issues -> should show OK.
 	m.SetState(state)
 	v := m.View()
 	if !strings.Contains(v, "No issues found") {
 		t.Errorf("expected OK, got:\n%s", v)
 	}
 
-	// Add an issue that causes an error.
-	state.Issues["T1"] = &materialize.Issue{ID: "T1", Type: "task", Parent: "E1"} // E1 missing
+	state.Issues["T1"] = &materialize.Issue{ID: "T1", Type: "task", Parent: "E1"}
 	m.SetState(state)
 	v = m.View()
 	if !strings.Contains(v, "ERROR:") {

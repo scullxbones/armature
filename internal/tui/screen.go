@@ -6,7 +6,6 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 )
 
-// Screen is implemented by every TUI sub-screen (dagtree, workers, validate, sources).
 type Screen interface {
 	Init() tea.Cmd
 	Update(msg tea.Msg) (Screen, tea.Cmd)
