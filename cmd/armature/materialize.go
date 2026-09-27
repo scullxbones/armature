@@ -44,7 +44,6 @@ func newMaterializeCmd() *cobra.Command {
 
 			_, result, err := materialize.Run(appCtx.StateDir, allOps, offsets, materialize.Options{
 				WriteStateFiles: true,
-				OpsWorktree:     appCtx.WorktreePath,
 			})
 			if err != nil {
 				return err

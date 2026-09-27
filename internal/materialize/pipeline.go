@@ -420,7 +420,14 @@ func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op
 			if readErr != nil {
 				continue
 			}
-			extra = append(extra, suffix...)
+			expectedWorkerID := strings.TrimSuffix(e.Name(), ".log")
+			legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
+			for _, op := range suffix {
+				if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
+					continue
+				}
+				extra = append(extra, op)
+			}
 		}
 	}
 	return extra, nil
