@@ -1,6 +1,6 @@
 # Keep semantic conformance review advisory and skill-driven
 
-Status: amended by ADR-0008 (harness-recorded execution evidence is now admissible review input, upgrade-only; hooks still neither initiate review nor gate on it)
+Status: amended by ADR-0008 (harness-recorded execution evidence is now admissible review input, upgrade-only; hooks still neither initiate review nor gate on it); amended by ADR-0022 (assessment *presence* is a prerequisite for the merged append; the rating remains unread and delivery is still not blocked on review results)
 
 ## Principles touched
 
