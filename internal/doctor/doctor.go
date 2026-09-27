@@ -153,7 +153,11 @@ func loadMaterializedState(issuesDir, stateDir string) (materializedState, error
 	opItems := loaded.Items
 	warnings := loaded.Warnings
 	allOps := ops.ExtractOps(opItems)
-	if _, _, err := materialize.Run(stateDir, allOps, nil, materialize.Options{WriteStateFiles: true}); err != nil {
+	opts := materialize.Options{WriteStateFiles: true}
+	if _, err := os.Stat(filepath.Join(issuesDir, ".git")); err == nil {
+		opts.OpsWorktree = issuesDir
+	}
+	if _, _, err := materialize.Run(stateDir, allOps, nil, opts); err != nil {
 		return materializedState{}, fmt.Errorf("materialize: %w", err)
 	}
 	index, err := materialize.LoadIndex(filepath.Join(stateDir, "index.json"))
