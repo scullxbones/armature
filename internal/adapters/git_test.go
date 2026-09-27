@@ -516,7 +516,6 @@ func TestListFilesAtCommit_EmptyTree(t *testing.T) {
 func TestFetchAndRebase_ReportsFetchError(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	gittest.Git(t, repo, "remote", "remove", "origin")
 	c := adapters.New(repo)
 
 	err := c.FetchAndRebase("main")
@@ -526,7 +525,7 @@ func TestFetchAndRebase_ReportsFetchError(t *testing.T) {
 
 func TestFetchAndRebase_ReportsRebaseError(t *testing.T) {
 	t.Parallel()
-	fx := gittest.Init(t)
+	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
 	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
 	gittest.Git(t, repo, "push", "-u", "origin", "HEAD:main")
@@ -539,7 +538,7 @@ func TestFetchAndRebase_ReportsRebaseError(t *testing.T) {
 
 func TestFetchTrackingRefWithoutMovingHEAD_UpdatesOriginRef(t *testing.T) {
 	t.Parallel()
-	fx := gittest.Init(t)
+	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
 	origin := fx.Origin
 	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
@@ -631,7 +630,6 @@ func TestCurrentBranch(t *testing.T) {
 func TestPush_ErrorOnNoRemote(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	gittest.Git(t, repo, "remote", "remove", "origin")
 	c := adapters.New(repo)
 
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
@@ -1095,7 +1093,7 @@ func TestDiffNameOnlyRange_NoChanges(t *testing.T) {
 func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 	t.Parallel()
 
-	seed := gittest.Init(t)
+	seed := gittest.InitWithOrigin(t)
 	originDir := seed.Origin
 	tempDir := seed.Dir
 
@@ -1220,7 +1218,7 @@ func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
 func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	t.Parallel()
 
-	seed := gittest.Init(t)
+	seed := gittest.InitWithOrigin(t)
 	originDir := seed.Origin
 	tempDir := seed.Dir
 

@@ -16,10 +16,10 @@ import (
 )
 
 func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
-	bareDir := gittest.Init(t).Origin
+	bareDir := gittest.InitWithOrigin(t).Origin
 
 	repo := gittest.InitRepo(t)
-	run(t, repo, "git", "remote", "set-url", "origin", bareDir)
+	run(t, repo, "git", "remote", "add", "origin", bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")

@@ -240,6 +240,11 @@ func TestVersionCommand(t *testing.T) {
 
 func dropOrigin(t *testing.T, repo string) {
 	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "git", "remote", "get-url", "origin")
+	cmd.Dir = repo
+	if cmd.Run() != nil {
+		return
+	}
 	run(t, repo, "git", "remote", "remove", "origin")
 }
 
@@ -1996,10 +2001,10 @@ func TestPushOpsCommand_P2(t *testing.T) {
 }
 
 func TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin(t *testing.T) {
-	bareDir := gittest.Init(t).Origin
+	bareDir := gittest.InitWithOrigin(t).Origin
 
 	repo := gittest.InitRepo(t)
-	run(t, repo, "git", "remote", "set-url", "origin", bareDir)
+	run(t, repo, "git", "remote", "add", "origin", bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")

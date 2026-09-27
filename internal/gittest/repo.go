@@ -16,7 +16,7 @@ type Fixture struct {
 	Origin string
 }
 
-func Init(t *testing.T) Fixture {
+func Init(t *testing.T) string {
 	t.Helper()
 	if err := IsolateGit(); err != nil {
 		t.Fatalf("IsolateGit: %v", err)
@@ -26,7 +26,18 @@ func Init(t *testing.T) Fixture {
 		t.Fatalf("GitInitMain: %v", err)
 	}
 	configureRepo(t, dir)
+	t.Cleanup(func() { waitGitIdle(dir) })
+	return dir
+}
 
+func InitRepo(t *testing.T) string {
+	t.Helper()
+	return Init(t)
+}
+
+func InitWithOrigin(t *testing.T) Fixture {
+	t.Helper()
+	dir := Init(t)
 	originParent := t.TempDir()
 	origin := filepath.Join(originParent, "origin.git")
 	if err := adapters.GitInitBareMain(origin); err != nil {
@@ -34,17 +45,8 @@ func Init(t *testing.T) Fixture {
 	}
 	configureRepo(t, origin)
 	Git(t, dir, "remote", "add", "origin", origin)
-
-	t.Cleanup(func() {
-		waitGitIdle(dir)
-		waitGitIdle(origin)
-	})
+	t.Cleanup(func() { waitGitIdle(origin) })
 	return Fixture{Dir: dir, Origin: origin}
-}
-
-func InitRepo(t *testing.T) string {
-	t.Helper()
-	return Init(t).Dir
 }
 
 func Git(t *testing.T, dir string, args ...string) {

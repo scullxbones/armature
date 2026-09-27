@@ -49,10 +49,10 @@ func TestAppendLowStakesOps_DoesNotPushBelowThreshold(t *testing.T) {
 
 func bootstrappedRepoWithFileOrigin(t *testing.T) (bareDir, repo, worktree string) {
 	t.Helper()
-	bareDir = gittest.Init(t).Origin
+	bareDir = gittest.InitWithOrigin(t).Origin
 
 	repo = gittest.InitRepo(t)
-	run(t, repo, "git", "remote", "set-url", "origin", "file://"+bareDir)
+	run(t, repo, "git", "remote", "add", "origin", "file://"+bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

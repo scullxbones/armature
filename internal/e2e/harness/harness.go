@@ -27,7 +27,7 @@ func New(t *testing.T, armBinPath string) *Harness {
 	t.Helper()
 
 	tempDir := t.TempDir()
-	fx := gittest.Init(t)
+	fx := gittest.InitWithOrigin(t)
 	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
 	if err := gitRun(t, fx.Dir, "push", "-u", "origin", "main"); err != nil {
 		t.Fatalf("failed to push to origin: %v", err)

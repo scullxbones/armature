@@ -1,4 +1,4 @@
-package adapters
+package adapters_test
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
@@ -15,7 +17,7 @@ func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 	var stdout strings.Builder
 	var stderr strings.Builder
 
-	status, err := RunProcessWithEnv(
+	status, err := adapters.RunProcessWithEnv(
 		context.Background(),
 		t.TempDir(),
 		[]string{"sh", "-c", "printf %s \"$ARMATURE_TEST_ENV\""},
@@ -26,7 +28,7 @@ func TestRunProcessWithEnvInjectsEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v stderr=%s", err, stderr.String())
 	}
-	if status != ProcessClean {
+	if status != adapters.ProcessClean {
 		t.Fatalf("expected clean status, got %v", status)
 	}
 	if stdout.String() != "TEST-VALUE" {
@@ -38,7 +40,7 @@ func TestNonInteractiveGitCommand(t *testing.T) {
 	t.Setenv("GIT_DIR", "/tmp/other.git")
 	t.Setenv("GIT_WORK_TREE", "/tmp/other")
 	t.Setenv("GIT_COMMON_DIR", "/tmp/other.git")
-	cmd := NonInteractiveGitCommand("/tmp", "version")
+	cmd := adapters.NonInteractiveGitCommand("/tmp", "version")
 	found := false
 	for _, e := range cmd.Env {
 		if strings.HasPrefix(e, "GIT_TERMINAL_PROMPT=") {
@@ -56,7 +58,7 @@ func TestNonInteractiveGitCommand(t *testing.T) {
 func TestGitInitBareMainSetsMainHEAD(t *testing.T) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "origin.git")
-	if err := GitInitBareMain(dir); err != nil {
+	if err := adapters.GitInitBareMain(dir); err != nil {
 		t.Fatalf("GitInitBareMain: %v", err)
 	}
 	head, err := os.ReadFile(filepath.Join(dir, "HEAD"))
@@ -70,7 +72,7 @@ func TestGitInitBareMainSetsMainHEAD(t *testing.T) {
 
 func TestGitInitMainIgnoresInheritedGITDir(t *testing.T) {
 	other := t.TempDir()
-	if err := GitInitMain(other); err != nil {
+	if err := adapters.GitInitMain(other); err != nil {
 		t.Fatalf("GitInitMain other: %v", err)
 	}
 	marker := filepath.Join(other, "KEEP")
@@ -84,7 +86,7 @@ func TestGitInitMainIgnoresInheritedGITDir(t *testing.T) {
 
 	t.Setenv("GIT_DIR", filepath.Join(other, ".git"))
 	dir := t.TempDir()
-	if err := GitInitMain(dir); err != nil {
+	if err := adapters.GitInitMain(dir); err != nil {
 		t.Fatalf("GitInitMain: %v", err)
 	}
 
@@ -132,7 +134,7 @@ func TestGitInitMainIgnoresGlobalInitTemplateDir(t *testing.T) {
 	}
 	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
 	dir := t.TempDir()
-	if err := GitInitMain(dir); err != nil {
+	if err := adapters.GitInitMain(dir); err != nil {
 		t.Fatalf("GitInitMain: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".git", "hooks", "pre-commit")); !os.IsNotExist(err) {
@@ -142,7 +144,7 @@ func TestGitInitMainIgnoresGlobalInitTemplateDir(t *testing.T) {
 
 func TestGitLog_InvalidRepo(t *testing.T) {
 	t.Parallel()
-	out, err := GitLog("/nonexistent/path")
+	out, err := adapters.GitLog("/nonexistent/path")
 	if err != nil {
 		t.Fatal("expected nil error for git log on invalid repo, got", err)
 	}
@@ -154,8 +156,8 @@ func TestGitLog_InvalidRepo(t *testing.T) {
 func TestExecuteHook_Allow(t *testing.T) {
 	t.Parallel()
 	cmd := []string{"echo", `{"allowed":true,"message":""}`}
-	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
-	if err := ExecuteHook("test-hook", cmd, input); err != nil {
+	input := adapters.HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
+	if err := adapters.ExecuteHook("test-hook", cmd, input); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -163,8 +165,8 @@ func TestExecuteHook_Allow(t *testing.T) {
 func TestExecuteHook_Reject(t *testing.T) {
 	t.Parallel()
 	cmd := []string{"echo", `{"allowed":false,"message":"blocked"}`}
-	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
-	err := ExecuteHook("test-hook", cmd, input)
+	input := adapters.HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w1"}
+	err := adapters.ExecuteHook("test-hook", cmd, input)
 	if err == nil {
 		t.Fatal("expected error for rejected hook")
 	}
@@ -176,8 +178,8 @@ func TestExecuteHook_Reject(t *testing.T) {
 func TestExecuteHook_BadOutput(t *testing.T) {
 	t.Parallel()
 	cmd := []string{"echo", "not-json"}
-	input := HookInput{}
-	err := ExecuteHook("test-hook", cmd, input)
+	input := adapters.HookInput{}
+	err := adapters.ExecuteHook("test-hook", cmd, input)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON output")
 	}
@@ -186,10 +188,10 @@ func TestExecuteHook_BadOutput(t *testing.T) {
 func TestGitConfig_Unset(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if err := GitInitMain(dir); err != nil {
+	if err := adapters.GitInitMain(dir); err != nil {
 		t.Skip("git not available")
 	}
-	_, err := GitConfig(dir, "armature.nonexistent-key")
+	_, err := adapters.GitConfig(dir, "armature.nonexistent-key")
 	if err == nil {
 		t.Fatal("expected error for unset git config key")
 	}
@@ -197,12 +199,12 @@ func TestGitConfig_Unset(t *testing.T) {
 
 func TestHookInput_MarshalRoundtrip(t *testing.T) {
 	t.Parallel()
-	input := HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w"}
+	input := adapters.HookInput{IssueID: "T1", FromStatus: "open", ToStatus: "done", WorkerID: "w"}
 	data, err := json.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got HookInput
+	var got adapters.HookInput
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}

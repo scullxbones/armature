@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInitCreatesWorkingRepoAndBareOrigin(t *testing.T) {
+func TestInitWithOriginCreatesWorkingRepoAndBareOrigin(t *testing.T) {
 	t.Parallel()
-	fx := Init(t)
+	fx := InitWithOrigin(t)
 
 	head, err := os.ReadFile(filepath.Join(fx.Dir, ".git", "HEAD"))
 	require.NoError(t, err)
@@ -31,6 +31,13 @@ func TestInitCreatesWorkingRepoAndBareOrigin(t *testing.T) {
 	assert.Equal(t, "false", GitOutput(t, fx.Origin, "config", "--local", "gc.autoDetach"))
 	assert.Equal(t, "false", GitOutput(t, fx.Origin, "config", "--local", "receive.autogc"))
 	assert.Equal(t, "false", GitOutput(t, fx.Dir, "config", "--local", "commit.gpgsign"))
+}
+
+func TestInitRepoHasNoOriginRemote(t *testing.T) {
+	t.Parallel()
+	repo := InitRepo(t)
+	_, err := gitCombined(repo, "remote", "get-url", "origin")
+	require.Error(t, err)
 }
 
 func TestInitRepoIgnoresInheritedOverrideEnv(t *testing.T) {

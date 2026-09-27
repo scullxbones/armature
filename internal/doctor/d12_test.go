@@ -85,7 +85,7 @@ func TestRun_D12_WarningWhenBehindOrigin(t *testing.T) {
 
 func opsWorktreeWithOrigin(t *testing.T) (worktree, originClone string) {
 	t.Helper()
-	fx := gittest.Init(t)
+	fx := gittest.InitWithOrigin(t)
 	worktree = fx.Dir
 	runGit(t, worktree, "checkout", "-b", "_armature")
 	runGit(t, worktree, "commit", "--allow-empty", "-m", "ops base")

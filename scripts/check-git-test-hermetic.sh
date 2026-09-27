@@ -1,6 +1,7 @@
 #!/bin/bash
 # Fail make check when a _test.go file runs raw `git init` / `git init -b`
-# outside internal/gittest (the shared isolation + repo helper).
+# outside internal/gittest, or when a package execs git in tests without
+# TestMain isolation via gittest.IsolateGit / gittest.Main.
 set -euo pipefail
 
 REPO_ROOT="${1:-.}"
@@ -30,3 +31,45 @@ if [[ -n "$hits" ]]; then
 fi
 
 echo "OK: no raw git init in _test.go files outside internal/gittest"
+
+git_pkgs=$(mktemp)
+iso_pkgs=$(mktemp)
+trap 'rm -f "$git_pkgs" "$iso_pkgs"' RETURN
+
+while IFS= read -r f; do
+    pkg=$(awk '/^package / { print $2; exit }' "$f")
+    [[ -n "$pkg" ]] || continue
+    key="$(dirname "$f") ${pkg}"
+    if rg -q \
+        -e 'gittest\.(Init|InitRepo|InitWithOrigin|Git|Main|IsolateGit)' \
+        -e '"git"' \
+        -e 'GitInitMain' \
+        -e 'GitInitBareMain' \
+        -e 'NonInteractiveGitCommand' \
+        "$f"; then
+        printf '%s\n' "$key" >> "$git_pkgs"
+    fi
+    if rg -q 'func TestMain' "$f" && rg -q 'gittest\.Main|gittest\.IsolateGit|IsolateGit\(|os\.Exit\(Main\(' "$f"; then
+        printf '%s\n' "$key" >> "$iso_pkgs"
+    fi
+done < <(rg --files --glob '*_test.go' .)
+
+sort -u "$git_pkgs" -o "$git_pkgs"
+sort -u "$iso_pkgs" -o "$iso_pkgs"
+
+missing=""
+while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    if ! rg -F -x -q "$key" "$iso_pkgs"; then
+        missing+="$key"$'\n'
+    fi
+done < "$git_pkgs"
+
+if [[ -n "$missing" ]]; then
+    echo "FAIL: packages exec git in tests without TestMain isolation (gittest.IsolateGit / gittest.Main):" >&2
+    printf '%s' "$missing" >&2
+    echo "Add a TestMain that calls gittest.Main or gittest.IsolateGit." >&2
+    exit 1
+fi
+
+echo "OK: every git-executing test package has TestMain isolation"
