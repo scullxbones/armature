@@ -18,7 +18,7 @@ See why `CLAIMORD-W12` is not ready (`arm ready --explain`) during a stacked PR 
 
 ## Impact
 
-Low (correct; easy to miss). Recorded because stacked PRs never land on `main` during this run. Coordinators must `arm merged` after each slice even though GitHub PRs stay stacked/unmerged.
+Low (correct I6; easy to miss). Stacked PRs in this run never land on `main`, so `arm ready` keeps dependents blocked after a slice is only `done`. `arm merged` is for confirmed-on-main. Recording `merged` while GitHub PRs stay stacked/unmerged would falsify append-only merge state and can unblock dependents early.
 
 ## Evidence
 
@@ -28,4 +28,4 @@ Low (correct; easy to miss). Recorded because stacked PRs never land on `main` d
 
 ## Suggested Follow-Up
 
-This is intended I6; coordinators must `arm merged` after each slice even though GitHub PRs stay stacked/unmerged.
+Keep `arm merged` for confirmed-on-main only (I6). The friction is that stacked-slice `ready` has no honest signal short of main. Prefer clearer stack-ready semantics, or an explicit non-main "slice accepted" status that does not write `merged`.
