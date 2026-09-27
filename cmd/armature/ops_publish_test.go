@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -156,9 +157,59 @@ func TestClaimPublishFailureKeepsLocalClaim_REQ_CLAIMTTL(t *testing.T) {
 	require.NoError(t, readErr)
 	require.NotEmpty(t, logged)
 	assert.Equal(t, ops.OpClaim, logged[len(logged)-1].Type)
-	lease := claim.Owner(logged, "task-01")
-	assert.Equal(t, "worker-a", lease.Holder)
-	assert.Equal(t, "tok-a", lease.Token)
+	assert.True(t, claim.TokenPending(logged, "task-01", "tok-a"),
+		"publish failure keeps the local JSONL claim as Pending")
+	assert.Equal(t, "", claim.OwnerPublished(nil, "task-01").Holder,
+		"unpublished claim is not Owner on the published prefix (reverses #276 local-fold win)")
+}
+
+func claimTokenFromLog(t *testing.T, repo, issueID string) (workerID, token string) {
+	t.Helper()
+	workerID = strings.TrimSpace(runOutput(t, repo, "config", "--get", "armature.worker-id"))
+	require.NotEmpty(t, workerID)
+	logged, err := ops.ReadLog(filepath.Join(repo, ".armature", "ops", workerID+".log"))
+	require.NoError(t, err)
+	for _, op := range logged {
+		if op.Type == ops.OpClaim && op.TargetID == issueID {
+			token = op.Payload.ClaimToken
+		}
+	}
+	require.NotEmpty(t, token, "expected a local claim op for %s", issueID)
+	return workerID, token
+}
+
+func TestUnpushedClaimDoesNotWinViaLocalHead_REQ_CLAIMORD_W11(t *testing.T) {
+	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "unpushed win", "--id", "task-unpub")
+	require.NoError(t, err)
+	breakOrigin(t, repo)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-unpub", "--worktree", "--format", "agent")
+	assert.Equal(t, 1, code)
+
+	workerID, token := claimTokenFromLog(t, repo, "task-unpub")
+	won, winErr := publishedClaimWon(&config.Context{RepoPath: repo, WorktreePath: worktree}, "task-unpub", workerID, token)
+	require.NoError(t, winErr)
+	assert.False(t, won, "failed push must not treat local ops HEAD as ExtraPublishedTip Owner")
+}
+
+func TestPublishedClaimWinsAfterPush_REQ_CLAIMORD_W11(t *testing.T) {
+	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "published win", "--id", "task-pub-win")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "task-pub-win", "--worktree")
+	require.NoError(t, err)
+
+	workerID, token := claimTokenFromLog(t, repo, "task-pub-win")
+	won, winErr := publishedClaimWon(&config.Context{RepoPath: repo, WorktreePath: worktree}, "task-pub-win", workerID, token)
+	require.NoError(t, winErr)
+	assert.True(t, won, "successful push must still count as published Owner")
 }
 
 func TestAppendHighStakesOp_SuccessfulPushResetsTracker_REQ_OPS_PUBLISH(t *testing.T) {
