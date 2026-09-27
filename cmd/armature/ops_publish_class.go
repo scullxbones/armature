@@ -63,7 +63,13 @@ func nextActionsForOpsPublishClass(class opsPublishClass) []string {
 			"publish _armature from a write-capable environment, then git fetch origin _armature",
 		}
 	case opsPublishClassNonFF:
-		return []string{"git fetch origin _armature, rebase onto origin/_armature, then arm push-ops"}
+		// Fetch+rebase in the ops worktree only. The destination refspec
+		// updates origin/_armature; `git fetch origin _armature` can leave
+		// that tracking ref stale (FETCH_HEAD only).
+		return []string{
+			`git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature && git -C "$(git config armature.ops-worktree-path)" rebase origin/_armature`,
+			"arm push-ops",
+		}
 	default:
 		return []string{"arm push-ops", "arm doctor"}
 	}
