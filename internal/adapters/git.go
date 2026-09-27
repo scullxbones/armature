@@ -445,9 +445,6 @@ func parseCheckIgnoreSource(raw string) string {
 	return line
 }
 
-// isBenignEmptyRepoRmError reports whether output from `git rm -rf --quiet .`
-// reflects the expected, harmless failure on an empty repo (no tracked files
-// to remove) rather than a real error that could leave stale index entries.
 func isBenignEmptyRepoRmError(output []byte) bool {
 	return strings.Contains(string(output), "did not match any files")
 }
@@ -654,8 +651,6 @@ func isGitContentionError(out string) bool {
 }
 
 func enhanceGitLockfileError(base, out string) string {
-	// In constrained sandboxes, nested git writes to .git/worktrees/*/index.lock
-	// can be denied even when direct top-level git works. Add an actionable hint.
 	if strings.Contains(out, "index.lock") && strings.Contains(strings.ToLower(out), "read-only file system") {
 		return base + "\nHint: sandbox blocked git lockfile writes (.git/worktrees/*/index.lock). Re-run this arm command with elevated permissions/approval."
 	}
