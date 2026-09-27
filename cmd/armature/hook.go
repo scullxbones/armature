@@ -145,13 +145,9 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 
-	workers, err := enumerateWorkers(filepath.Join(ctx.IssuesDir, "ops"))
+	_, allOps, err := loadWorkerLogs(filepath.Join(ctx.IssuesDir, "ops"))
 	if err != nil {
 		return ""
-	}
-	var allOps []ops.Op
-	for _, workerOps := range workers {
-		allOps = append(allOps, workerOps...)
 	}
 	now := time.Now().Unix()
 	want := baseWorkerIdentity(slottedWorkerID(workerID).String())

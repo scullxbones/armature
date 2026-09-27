@@ -14,6 +14,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestClaimStale_EmptyHolderInProgressIsNotExpired_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
+	issue := &Issue{
+		ID:        "FX-STORY",
+		Status:    ops.StatusInProgress,
+		ClaimedBy: "",
+		ClaimTTL:  0,
+		ClaimedAt: 0,
+	}
+	assert.False(t, issue.ClaimStale(1_700_000_000))
+}
+
 func TestOwnerMatchesMaterializeGoldenReplay_REQ_CLAIMTTL(t *testing.T) {
 	t.Parallel()
 	_, thisFile, _, ok := runtime.Caller(0)

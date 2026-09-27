@@ -13,7 +13,7 @@ import (
 
 // ClaimStale reports whether this issue's claim has expired as of now (Unix seconds).
 func (i *Issue) ClaimStale(now int64) bool {
-	if i == nil {
+	if i == nil || i.ClaimedBy == "" {
 		return false
 	}
 	return !claimpkg.LeaseLive(i.lease(), now)

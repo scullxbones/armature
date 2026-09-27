@@ -36,16 +36,12 @@ func newWorkersCmd() *cobra.Command {
 			}
 			now := time.Now().Unix()
 
-			workers, err := enumerateWorkers(opsDir)
+			workers, allOps, err := loadWorkerLogs(opsDir)
 			if err != nil {
 				return fmt.Errorf("enumerate workers: %w", err)
 			}
 
 			statuses := make([]WorkerStatus, 0, len(workers))
-			var allOps []ops.Op
-			for _, workerOps := range workers {
-				allOps = append(allOps, workerOps...)
-			}
 			for workerID, workerOps := range workers {
 				s := foldWorkerStatusFromClaimOwnerActivity(workerID, workerOps, allOps, defaultTTL, now)
 				statuses = append(statuses, s)
@@ -88,13 +84,14 @@ func newWorkersCmd() *cobra.Command {
 	return cmd
 }
 
-func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
-	logFiles, err := filepath.Glob(filepath.Join(opsDir, "*.log"))
+func loadWorkerLogs(opsDir string) (map[string][]ops.Op, []ops.Op, error) {
+	logFiles, err := adapters.ListLogFiles(opsDir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	result := make(map[string][]ops.Op)
+	var allOps []ops.Op
 	for _, logPath := range logFiles {
 		workerID := adapters.WorkerIDFromFilename(logPath)
 		logOps, err := ops.ReadLog(logPath)
@@ -102,8 +99,9 @@ func enumerateWorkers(opsDir string) (map[string][]ops.Op, error) {
 			continue
 		}
 		result[workerID] = append(result[workerID], logOps...)
+		allOps = append(allOps, logOps...)
 	}
-	return result, nil
+	return result, allOps, nil
 }
 
 func foldWorkerStatusFromClaimOwnerActivity(workerID string, workerOps, allOps []ops.Op, defaultTTL config.TTLMinutes, now int64) WorkerStatus {

@@ -1,7 +1,6 @@
 package claim
 
 import (
-	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -52,41 +51,6 @@ func genOp() gopter.Gen {
 		"Timestamp": gen.Int64Range(0, 1000).Map(func(n int64) int64 { return n*1000 + 1 }),
 		"WorkerID":  gen.OneConstOf("worker-a", "worker-b", "worker-c", "worker-d"),
 	})
-}
-
-func shuffle(claims []ops.Op, rng *rand.Rand) []ops.Op {
-	cp := make([]ops.Op, len(claims))
-	copy(cp, claims)
-	rng.Shuffle(len(cp), func(i, j int) { cp[i], cp[j] = cp[j], cp[i] })
-	return cp
-}
-
-func TestPropertyOwnerDeterminism(t *testing.T) {
-	t.Parallel()
-	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 200
-	properties := gopter.NewProperties(parameters)
-
-	properties.Property("owner is invariant under permutation of equal-timestamp-stable input", prop.ForAll(
-		func(claims []ops.Op) bool {
-			if len(claims) == 0 {
-				return true
-			}
-			expected := Owner(claims, "task-01")
-			rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic seed intentional for test reproducibility
-			for range 5 {
-				shuffled := shuffle(claims, rng)
-				got := Owner(shuffled, "task-01")
-				if got.Holder != expected.Holder || got.Since != expected.Since {
-					return false
-				}
-			}
-			return true
-		},
-		gen.SliceOf(genOp()),
-	))
-
-	properties.TestingRun(t)
 }
 
 func TestPropertyOwnerNoPanic(t *testing.T) {

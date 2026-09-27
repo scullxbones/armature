@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/audit"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
@@ -162,6 +163,40 @@ func exprMentionsOpClaim(e ast.Expr) bool {
 		return false
 	}
 	return sel.Sel.Name == "OpClaim"
+}
+
+func TestLoadWorkerLogs_ConcatMatchesListLogFiles_REQ_CLAIMTTL(t *testing.T) {
+	dir := t.TempDir()
+	opsDir := filepath.Join(dir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o755))
+
+	write := func(name string, op ops.Op) {
+		t.Helper()
+		b, err := ops.MarshalOp(op)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(opsDir, name), append(b, '\n'), 0o644))
+	}
+	write("z-worker.log", ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "z-worker",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "z"},
+	})
+	write("a-worker.log", ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "a-worker",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "a"},
+	})
+
+	_, allOps, err := loadWorkerLogs(opsDir)
+	require.NoError(t, err)
+	require.Len(t, allOps, 2)
+
+	files, err := adapters.ListLogFiles(opsDir)
+	require.NoError(t, err)
+	require.Len(t, files, 2)
+	wantFirst := adapters.WorkerIDFromFilename(files[0])
+	assert.Equal(t, wantFirst, allOps[0].WorkerID)
+
+	owner := claim.Owner(allOps, "task-01")
+	assert.Equal(t, wantFirst, owner.Holder)
 }
 
 func TestResolveClaimAbsent_REQ_CLAIMTTL(t *testing.T) {
