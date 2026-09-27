@@ -142,15 +142,67 @@ func TestGitInitMainIgnoresGlobalInitTemplateDir(t *testing.T) {
 	}
 }
 
-func TestGitLog_InvalidRepo(t *testing.T) {
+func TestGitLog_Success_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	dir := initGitRepoWithCommit(t, "feat(TASK-1): hello")
+	out, err := adapters.GitLog(dir, "-n", "1", "--pretty=%s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "feat(TASK-1): hello") {
+		t.Fatalf("expected commit subject in git log, got %q", out)
+	}
+}
+
+func TestGitLog_EmptyButSuccessful_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	dir := initGitRepoWithCommit(t, "init")
+	out, err := adapters.GitLog(dir, "-n", "0")
+	if err != nil {
+		t.Fatalf("empty successful git log must not error: %v", err)
+	}
+	if out != "" {
+		t.Fatalf("expected empty output, got %q", out)
+	}
+}
+
+func TestGitLog_InvalidRepo_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 	out, err := adapters.GitLog("/nonexistent/path")
-	if err != nil {
-		t.Fatal("expected nil error for git log on invalid repo, got", err)
+	if err == nil {
+		t.Fatal("expected error for git log on invalid repo")
+	}
+	if !strings.Contains(err.Error(), "git log") {
+		t.Fatalf("error must name the command, got %q", err)
 	}
 	if out != "" {
 		t.Fatalf("expected empty output for invalid repo, got %q", out)
 	}
+}
+
+func initGitRepoWithCommit(t *testing.T, message string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := adapters.GitInitMain(dir); err != nil {
+		t.Fatal(err)
+	}
+	run := exec.CommandContext(context.Background(), "git", "-C", dir, "config", "user.email", "test@test.com")
+	if out, err := run.CombinedOutput(); err != nil {
+		t.Fatalf("git config email: %v: %s", err, out)
+	}
+	run = exec.CommandContext(context.Background(), "git", "-C", dir, "config", "user.name", "Test")
+	if out, err := run.CombinedOutput(); err != nil {
+		t.Fatalf("git config name: %v: %s", err, out)
+	}
+	run = exec.CommandContext(context.Background(), "git", "-C", dir, "config", "commit.gpgsign", "false")
+	if out, err := run.CombinedOutput(); err != nil {
+		t.Fatalf("git config gpgsign: %v: %s", err, out)
+	}
+	run = exec.CommandContext(context.Background(), "git", "-C", dir, "commit", "--allow-empty", "-m", message)
+	if out, err := run.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v: %s", err, out)
+	}
+	return dir
 }
 
 func TestExecuteHook_Allow(t *testing.T) {
