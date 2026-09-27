@@ -503,7 +503,9 @@ arm gate run fast
 
 ## heartbeat
 
-Send heartbeat for an active claim.
+Send heartbeat for an active claim. The caller must be the published `Owner`
+(`NOT-CLAIM-OWNER` otherwise; nothing is appended). A renewing heartbeat
+publishes immediately (high-stakes), not on the low-stakes coalesce threshold.
 
 **Synopsis:**
 `arm heartbeat [issue-id] [flags]`
@@ -714,7 +716,9 @@ are). They are not folded into `issues`.
 
 ## render-context
 
-Render assembled context for an issue.
+Render assembled context for an issue. When a published live owner exists,
+the caller must be that owner (`NOT-CLAIM-OWNER` otherwise). Unheld issues
+may still be rendered.
 
 **Synopsis:**
 `arm render-context [issue-id] [flags]`
@@ -1067,7 +1071,9 @@ Detect merged branches and auto-transition done issues to merged.
 
 ## transition
 
-Transition an issue to a new status.
+Transition an issue to a new status. When the issue is `claimed` or
+`in-progress`, the caller must be the published `Owner` (`NOT-CLAIM-OWNER`
+otherwise; a loser cannot `--to done`). Doctor and unassign stay privileged.
 
 **Synopsis:**
 `arm transition [issue-id] [flags]`

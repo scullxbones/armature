@@ -116,10 +116,10 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 |---------|---------|---------|--------|-------|
 | `ready` | main.go:90, ready.go | List ready-to-claim tasks | **kept-evidence** | Core workflow. Queries open tasks not blocked by dependencies. |
 | `claim` | main.go:94, claim.go | Claim issue to worker with worktree | **kept-evidence** | Foundation of task assignment. Creates branch and worktree. Win check is published commit-order `Owner` (oporder.OwnerOf after C0; steal now = committer time). |
-| `transition` | main.go:98, transition.go | Change issue status | **kept-evidence** | Primary state machine driver. Sets outcome on done. |
-| `unassign` | main.go:102 | Remove worker assignment | **kept-evidence** | Reverse of assign. Clears assigned_worker. |
+| `transition` | main.go:98, transition.go | Change issue status | **kept-evidence** | Primary state machine driver. Sets outcome on done. Claimed/in-progress requires published Owner (`NOT-CLAIM-OWNER`). |
+| `unassign` | main.go:102 | Remove worker assignment | **kept-evidence** | Reverse of assign. Clears assigned_worker. Privileged (not owner-only). |
 | `reopen` | main.go:106, reopen.go | Transition done→open, preserve outcome | **kept-evidence** | Allows re-work of completed items. Moves outcome to prior_outcomes. |
-| `heartbeat` | main.go:110, heartbeat.go | Refresh claim TTL | **kept-evidence** | Prevents staleness during long work. Called periodically by workers. |
+| `heartbeat` | main.go:110, heartbeat.go | Refresh claim TTL | **kept-evidence** | Owner-only; renewing heartbeat publishes immediately (high-stakes). |
 | `note` | main.go:114, note.go | Add/delete worker note | **kept-evidence** | Progress tracking. Supports deletion by note_id. |
 | `decision` | main.go:118, decision.go | Record structured decision | **kept-evidence** | Couples scope changes with rationale. Affects field filters scope. |
 | `amend` | main.go:122, amend.go | Update issue metadata | **kept-evidence** | Allows corrections after creation. Payload-driven updates. |
@@ -161,7 +161,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `reparent` | main.go:193, reparent.go | Move issue to new parent | **kept-evidence** | Hierarchy adjustment. Payload: parent. |
 | `validate` | main.go:249, validate.go | Validate issue graph | **kept-evidence** | Linter. Strict by default (warnings fail the run; green is a single summary line). JSON keeps native error/warning/info buckets; Strict drives OK/exit only. Validates the whole graph (no --scope/--parent). Supports --ci (CI / make validate-graph, not make check), --strict (default true), --quiet. `--ci --strict=false` is rejected. |
 | `validate doc-examples` | validate_doc_examples.go | Validate typed JSON examples in canonical documentation | **kept-evidence** | Subcommand of `validate`. Used by `make check`. |
-| `render-context` | main.go, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. |
+| `render-context` | main.go, render_context.go | Render issue context | **kept-evidence** | Agent-facing. Truncates to token budget. Live published owner required when a lease is held. |
 | `log` | main.go, log.go | List ops log entries | **kept-evidence** | Audit/debugging. Supports filtering by issue/worker. |
 | `stats` | main.go, stats.go | Derived ops-log metrics | **kept-evidence** | G1.2 cost view. `--cost` aggregates recorded token counts into per-story and per-wave dollar estimates. |
 | `workers` | main.go, workers.go | List active workers | **kept-evidence** | Diagnostic. Shows claimed issues per worker. |

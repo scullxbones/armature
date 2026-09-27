@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	claimpkg "github.com/scullxbones/armature/internal/claim"
 	ctxpkg "github.com/scullxbones/armature/internal/context"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -39,6 +40,10 @@ func newRenderContextCmd() *cobra.Command {
 			if !cmd.Flags().Changed("budget") && appCtx.Config.TokenBudget > 0 {
 				rcBudget = appCtx.Config.TokenBudget
 			}
+			workerID, _, idErr := resolveWorkerAndLog(appCtx)
+			if idErr != nil {
+				return idErr
+			}
 			var state *materialize.State
 			if rcAt != "" {
 				opsRepoPath := appCtx.RepoPath
@@ -59,6 +64,9 @@ func newRenderContextCmd() *cobra.Command {
 				}
 				emitSnapWarnings(os.Stderr, snap.Warnings)
 				state = snap.State
+			}
+			if err := enforceRenderContextOwner(appCtx, rcIssue, workerID); err != nil {
+				return err
 			}
 
 			repoRoot := ctxpkg.InferRepoRoot(appCtx.StateDir)
@@ -110,6 +118,12 @@ func mapRenderContextError(err error) error {
 		return cf
 	}
 	msg := err.Error()
+	if strings.Contains(msg, "NOT-CLAIM-OWNER") {
+		return armerrors.Wrap(codeRenderContext1, claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
+	}
 	if strings.Contains(msg, "issue ID is required") || strings.Contains(msg, "accepts at most") {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, err)
 	}
@@ -119,7 +133,7 @@ func mapRenderContextError(err error) error {
 			"arm render-context --issue <issue-id>",
 		}, err)
 	}
-	if strings.Contains(msg, "load snapshot") {
+	if strings.Contains(msg, "load snapshot") || strings.Contains(msg, "locate ops") {
 		return armerrors.Wrap(codeRenderContext1, msg, []string{"arm doctor"}, err)
 	}
 	return armerrors.Wrap(codeRenderContext1, msg, []string{"arm list", "arm show"}, err)

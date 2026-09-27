@@ -389,13 +389,23 @@ func TestPublishArmatureBranchReturnsRebaseError_REQ_OPS_PUBLISH(t *testing.T) {
 	rebaseErr := errors.New("git rebase origin/_armature: conflict in ops/w1.log")
 	stub := &stubOpsPublisher{firstPushErr: pushErr, rebaseErr: rebaseErr}
 
-	err := publishArmatureSequence(stub)
+	err := publishArmatureSequence(stub, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, rebaseErr)
 	assert.Contains(t, err.Error(), "rebase")
 	assert.NotContains(t, err.Error(), "non-fast-forward",
 		"rebase failure must not hide behind the stale first-push rejection")
 	assert.Equal(t, 1, stub.pushes)
+	assert.Equal(t, 1, stub.rebases)
+}
+
+func TestPublishArmatureSequenceRevalidatesOwnerBeforeRetryPush_REQ_CLAIMORD_W13(t *testing.T) {
+	pushErr := errors.New("git push origin _armature: rejected (non-fast-forward)")
+	stub := &stubOpsPublisher{firstPushErr: pushErr, secondPush: errors.New("must not reach second push")}
+	err := publishArmatureSequence(stub, func() error { return claim.ErrNotClaimOwner })
+	require.Error(t, err)
+	assert.ErrorIs(t, err, claim.ErrNotClaimOwner)
+	assert.Equal(t, 1, stub.pushes, "must not push after integrated owner check fails")
 	assert.Equal(t, 1, stub.rebases)
 }
 

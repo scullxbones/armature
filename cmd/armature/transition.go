@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
@@ -106,14 +107,29 @@ outcome) appends as an amendment at exit 0.`,
 			sameStatusAmendment := false
 			if replayErr == nil && liveIssue != nil {
 				currentStatus = liveIssue.Status
+				sameStatusAmendment = liveIssue.Status == to
+			}
+
+			if leaseStatusAllowsOwnerGate(currentStatus) {
+				if err := requirePublishedOwner(appCtx, issueID, workerID); err != nil {
+					return err
+				}
+			}
+			recheckPublishedOwner := func() error {
+				if !leaseStatusAllowsOwnerGate(currentStatus) {
+					return nil
+				}
+				return requirePublishedOwner(appCtx, issueID, workerID)
+			}
+
+			if replayErr == nil && liveIssue != nil {
 				if ops.IdenticalTransition(allOps, issueID, liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, payload) {
-					if err := publishLocalArmatureTip(state); err != nil {
+					if err := publishLocalArmatureTipAfter(state, recheckPublishedOwner); err != nil {
 						return err
 					}
 					writeTransitionNoOp(cmd, issueID, to, fieldFlag)
 					return nil
 				}
-				sameStatusAmendment = liveIssue.Status == to
 			}
 
 			if to == "done" && !force {
@@ -183,7 +199,7 @@ outcome) appends as an amendment at exit 0.`,
 				WorkerID: workerID,
 				Payload:  payload,
 			}
-			wrote, err := appendHighStakesOpIf(state, logPath, op, func() (bool, error) {
+			wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) {
 				live, all, replayErr := replayIssueOps(appCtx.IssuesDir, issueID)
 				if replayErr != nil || live == nil {
 					return true, nil
@@ -192,7 +208,7 @@ outcome) appends as an amendment at exit 0.`,
 					return false, nil
 				}
 				return true, nil
-			})
+			}, recheckPublishedOwner)
 			if err != nil {
 				return err
 			}
@@ -458,6 +474,11 @@ func mapTransitionError(err error) error {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, err)
 	case strings.Contains(msg, "invalid status"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to <valid-status>", "arm show"}, err)
+	case strings.Contains(msg, "NOT-CLAIM-OWNER"):
+		return armerrors.Wrap(codeTransition1, claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
 	case strings.Contains(msg, "cannot transition to done"),
 		strings.Contains(msg, "Use --force"):
 		return armerrors.Wrap(codeTransition1, msg, []string{
