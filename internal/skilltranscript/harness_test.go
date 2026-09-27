@@ -21,7 +21,7 @@ type TestRepo struct {
 func NewTestRepo(t *testing.T) *TestRepo {
 	t.Helper()
 
-	tmpDir := gittest.InitRepo(t)
+	tmpDir := gittest.InitWithOrigin(t).Dir
 
 	armBin := getArmBinary(t)
 	if err := runCmdSafely(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "worker-init", "--check"); err != nil {

@@ -14,7 +14,7 @@ import (
 )
 
 func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)
@@ -48,7 +48,7 @@ func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
 }
 
 func TestDoctorLegacyRepoEmitsDiagnostic(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	legacyOps := filepath.Join(repo, ".armature", "ops")
@@ -62,7 +62,7 @@ func TestDoctorLegacyRepoEmitsDiagnostic(t *testing.T) {
 }
 
 func TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)
@@ -81,7 +81,7 @@ func TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback(t *testing.T) 
 }
 
 func TestDoctorFixReportsOutOfRangeConfig(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)

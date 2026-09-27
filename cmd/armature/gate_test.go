@@ -285,7 +285,7 @@ func TestGateRunSkipWorktreeInsideSubmoduleUncitable_REQ_LNGHZN_S10_T3(t *testin
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
 	})
-	sub := gittest.InitRepo(t)
+	sub := gittest.InitWithOrigin(t).Dir
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "test.txt"), []byte("v1"), 0o644))
 	run(t, sub, "git", "add", "test.txt")
 	run(t, sub, "git", "commit", "-m", "init")
@@ -308,7 +308,7 @@ func TestGateRunAssumeUnchangedInsideSubmoduleUncitable_REQ_LNGHZN_S10_T3(t *tes
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
 	})
-	sub := gittest.InitRepo(t)
+	sub := gittest.InitWithOrigin(t).Dir
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "test.txt"), []byte("v1"), 0o644))
 	run(t, sub, "git", "add", "test.txt")
 	run(t, sub, "git", "commit", "-m", "init")
@@ -332,7 +332,7 @@ func TestGateRunDirtySubmoduleDespiteIgnore_REQ_LNGHZN_S10_T3(t *testing.T) {
 		"full": {"true"},
 	})
 
-	sub := gittest.InitRepo(t)
+	sub := gittest.InitWithOrigin(t).Dir
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.txt"), []byte("a"), 0o644))
 	run(t, sub, "git", "add", "a.txt")
 	run(t, sub, "git", "commit", "-m", "init")
@@ -412,7 +412,7 @@ func TestGateRunGitlinkWithoutGitUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
 	})
-	sub := gittest.InitRepo(t)
+	sub := gittest.InitWithOrigin(t).Dir
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.txt"), []byte("a"), 0o644))
 	run(t, sub, "git", "add", "a.txt")
 	run(t, sub, "git", "commit", "-m", "init")
@@ -434,7 +434,7 @@ func TestGateRunSubmoduleUntrackedDespiteShowUntrackedFilesNo_REQ_LNGHZN_S10_T3(
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
 	})
-	sub := gittest.InitRepo(t)
+	sub := gittest.InitWithOrigin(t).Dir
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.txt"), []byte("a"), 0o644))
 	run(t, sub, "git", "add", "a.txt")
 	run(t, sub, "git", "commit", "-m", "init")

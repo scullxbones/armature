@@ -30,7 +30,7 @@ func TestGCExitError_AmbiguousExitsNonZero_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	wtPath := filepath.Join(repo, ".worktrees", "task-01")
@@ -55,7 +55,7 @@ type worktreeReconcileFixture struct {
 
 func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -346,7 +346,7 @@ func TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 	_, err := runTrls(t, repo, "worker-init")
@@ -379,7 +379,7 @@ func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *te
 }
 
 func TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 
@@ -399,7 +399,7 @@ func TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2(t *tes
 }
 
 func TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 
@@ -450,7 +450,7 @@ func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestWorktreeGCDryRunWithNoCandidatesSucceeds_REQ_LNGHZN_S5_T10(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 
@@ -467,7 +467,7 @@ func TestWorktreeGCDryRunWithNoCandidatesSucceeds_REQ_LNGHZN_S5_T10(t *testing.T
 
 func setupAmbiguousGCRepo(t *testing.T) (string, string) {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 	_, err := runTrls(t, repo, "worker-init")
@@ -521,7 +521,7 @@ func TestManagedWorktreeRoots_RelativeRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")

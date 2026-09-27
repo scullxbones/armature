@@ -41,7 +41,7 @@ func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue mater
 
 func setupRepoWithEpic(t *testing.T) string {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -56,7 +56,7 @@ func setupRepoWithEpic(t *testing.T) string {
 
 func setupRepoWithParentAndTask(t *testing.T) string {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -934,7 +934,7 @@ func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededB
 }
 
 func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -968,7 +968,7 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 }
 
 func TestClaimIgnoresNonTaskIssuesInOverlapCheck_REQ_LNGHZN_S10_T8(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -998,7 +998,7 @@ func TestClaimIgnoresNonTaskIssuesInOverlapCheck_REQ_LNGHZN_S10_T8(t *testing.T)
 }
 
 func TestClaimStillBlocksOnOverlappingClaimedTask_REQ_LNGHZN_S10_T8(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1032,7 +1032,7 @@ func TestClaimStillBlocksOnOverlappingClaimedTask_REQ_LNGHZN_S10_T8(t *testing.T
 }
 
 func TestClaimLockPrecedesStoreAndWorktreeReads_REQ_LNGHZN_S5_T9(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -1138,7 +1138,7 @@ func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
 }
 
 func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1268,7 +1268,7 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 }
 
 func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1326,7 +1326,7 @@ func TestClaimRejectsForeignWorktree(t *testing.T) {
 	repoA := setupRepoWithParentAndTask(t)
 
 	repoBTempDir := t.TempDir()
-	repoB := gittest.InitRepo(t)
+	repoB := gittest.InitWithOrigin(t).Dir
 	run(t, repoB, "git", "commit", "--allow-empty", "-m", "init from repo-B")
 	run(t, repoB, "git", "checkout", "-b", "task/task-01", "HEAD")
 	run(t, repoB, "git", "checkout", "-b", "main-branch")
@@ -1340,7 +1340,7 @@ func TestClaimRejectsForeignWorktree(t *testing.T) {
 }
 
 func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1396,7 +1396,7 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 }
 
 func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1479,7 +1479,7 @@ func TestClaimCompensationRestoreVsRelease_REQ_ARCHIMP_S20_T4(t *testing.T) {
 	})
 
 	t.Run("release stale foreign", func(t *testing.T) {
-		repo := gittest.InitRepo(t)
+		repo := gittest.InitWithOrigin(t).Dir
 		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 		_, err := runTrls(t, repo, "bootstrap")
 		require.NoError(t, err)
@@ -1580,7 +1580,7 @@ func TestCheckExistingWorktreeBindingFailsClosedOnPermissionError(t *testing.T) 
 
 func TestClaimCommand_NoFalsePositiveAgainstParentStory_REQ_TOPTIER_S17_T1(t *testing.T) {
 	t.Parallel()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -2388,7 +2388,7 @@ func TestRenderContextFallsBackToBuiltInBudgetWhenConfigAbsent_REQ_LNGHZN_S7_T1(
 }
 
 func TestSourceAdvancedOnlyByArmatureFalseOnNonArmatureChange_REQ_LNGHZN_S9_T1(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	oldTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
@@ -2403,7 +2403,7 @@ func TestSourceAdvancedOnlyByArmatureFalseOnNonArmatureChange_REQ_LNGHZN_S9_T1(t
 }
 
 func TestSourceAdvancedOnlyByArmatureErrorsOnUnresolvableRevision_REQ_LNGHZN_S9_T1(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	newTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 
@@ -2629,7 +2629,7 @@ func claimOpsFor(t *testing.T, repo, issueID string) []ops.Op {
 }
 
 func TestClaimBlockedPrintsAllReasonsAndCreatesNoWorktreeOrClaimOp_REQ_ARCHIMP_S20_T2(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2656,7 +2656,7 @@ func TestClaimBlockedPrintsAllReasonsAndCreatesNoWorktreeOrClaimOp_REQ_ARCHIMP_S
 }
 
 func TestClaimForceWritesReciprocalNotesInOrder_REQ_ARCHIMP_S20_T2(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2715,7 +2715,7 @@ func TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("running as root: file permissions do not block writes")
 	}
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2741,7 +2741,7 @@ func TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2(t *testing.T) {
 }
 
 func TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 	_, err := runTrls(t, repo, "worker-init")

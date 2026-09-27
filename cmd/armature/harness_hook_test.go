@@ -1142,7 +1142,7 @@ func TestHeartbeatRateLimitStateReadMalformedFileReturnsZero(t *testing.T) {
 }
 
 func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	armatureDir := filepath.Join(repo, ".armature")
 	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "ops"), 0o755))

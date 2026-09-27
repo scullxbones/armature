@@ -62,7 +62,7 @@ func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 }
 
 func TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestHookSubcommandHelp(t *testing.T) {
 }
 
 func TestHookPostCommit_InitialCommit(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -208,7 +208,7 @@ func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
 }
 
 func TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -490,7 +490,7 @@ func TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2(t *testing.T) {
 
 func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)

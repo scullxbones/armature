@@ -31,7 +31,7 @@ func TestMigrationInvariantMatrix_P1(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := gittest.InitRepo(t)
+			repo := gittest.InitWithOrigin(t).Dir
 			run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 			originalPath := os.Getenv("PATH")
 

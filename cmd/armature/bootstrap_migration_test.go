@@ -119,7 +119,7 @@ func TestUpdateGitExcludeConcurrentWritersKeepEveryPattern_REQ_LNGHZN_S9_T1(t *t
 }
 
 func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.T) {
-	tmpDir := gittest.InitRepo(t)
+	tmpDir := gittest.InitWithOrigin(t).Dir
 
 	gitClient := adapters.New(tmpDir)
 
@@ -202,7 +202,7 @@ func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.
 
 func setupDualBranchFixtureForSourcesDebris(t *testing.T) (repo string, armWorktreePath string) {
 	t.Helper()
-	repo = gittest.InitRepo(t)
+	repo = gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	gitClient := adapters.New(repo)

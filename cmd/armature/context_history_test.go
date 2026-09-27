@@ -97,7 +97,7 @@ func TestContextHistoryZeroLimitIsUnbounded_REQ_AOC_S2_T4(t *testing.T) {
 
 func plantContextHistoryBeyondSilentCap(t *testing.T) (repo, createSHA, noteSHA string) {
 	t.Helper()
-	repo = gittest.InitRepo(t)
+	repo = gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

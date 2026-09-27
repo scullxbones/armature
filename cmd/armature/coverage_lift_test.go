@@ -34,7 +34,7 @@ func TestNoteDeleteCommand_PositionalArgs_REQ_LNGHZN_S10(t *testing.T) {
 }
 
 func TestWorkersCommand_NoWorkers_REQ_LNGHZN_S10(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 

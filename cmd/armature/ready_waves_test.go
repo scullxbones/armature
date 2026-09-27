@@ -11,7 +11,7 @@ import (
 func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	t.Parallel()
 
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	armatureDir := setupArmatureLayout(t, repo)
 	t.Logf("armature dir: %s", armatureDir)

@@ -23,7 +23,7 @@ const (
 
 func setupTransitionIdempotencyRepo(t *testing.T, issueID string) string {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

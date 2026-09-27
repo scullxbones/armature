@@ -333,7 +333,7 @@ func TestStaleReviewCommand_NoStale(t *testing.T) {
 }
 
 func TestDecomposeRevertCommand(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -357,7 +357,7 @@ func TestDecomposeRevertCommand(t *testing.T) {
 }
 
 func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -896,7 +896,7 @@ func TestAcceptCitationCmd_NonInteractive_SkipsPrompt(t *testing.T) {
 
 func setupRepoWithTwoTasks(t *testing.T) string {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -962,7 +962,7 @@ func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
 
 func setupRepoWithStoryAndTask(t *testing.T) string {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -1042,7 +1042,7 @@ func TestListCmd_ParentFilter_NoMatch(t *testing.T) {
 }
 
 func TestDecomposeApplyExampleFlag(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
@@ -1066,7 +1066,7 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 }
 
 func TestDecomposeApplyDryRun_REQ_AOC_S2_T4(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1191,7 +1191,7 @@ func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
 }
 
 func TestDecomposeApplyUncitedPlan(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1214,7 +1214,7 @@ func TestDecomposeApplyUncitedPlan(t *testing.T) {
 }
 
 func TestDecomposeApplyRefusesUnknownSource(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -1244,7 +1244,7 @@ func TestDecomposeApplyRefusesUnknownSource(t *testing.T) {
 }
 
 func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1283,7 +1283,7 @@ func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1405,7 +1405,7 @@ func TestDoctorCmd_JSONFormat(t *testing.T) {
 }
 
 func TestDoctorCmd_BrokenParentRef(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1474,7 +1474,7 @@ func TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestDecomposeApplySchemaFlag(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
@@ -1555,7 +1555,7 @@ func TestReadyParentFilter(t *testing.T) {
 }
 
 func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1757,7 +1757,7 @@ func TestHarnessHookOutputUnchanged_REQ_AOC_S2_T4(t *testing.T) {
 
 func plantDagApplyEnvelopeFixture(t *testing.T) (string, string) {
 	t.Helper()
-	repo := gittest.InitRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
