@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,19 +17,8 @@ import (
 
 func initAtSHATestRepo(t *testing.T) (string, *adapters.Client) {
 	t.Helper()
-	dir := t.TempDir()
-	gitRun := func(args ...string) string { //nolint:unparam // return value unused in most callers but needed for SHA capture
-		cmd := exec.CommandContext(context.Background(), "git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-		return strings.TrimSpace(string(out))
-	}
-	gitRun("init")
-	gitRun("config", "user.email", "test@test.com")
-	gitRun("config", "user.name", "Test")
-	gitRun("config", "commit.gpgsign", "false")
-	gitRun("commit", "--allow-empty", "-m", "init")
+	dir := gittest.InitRepo(t)
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
 	return dir, adapters.New(dir)
 }
 

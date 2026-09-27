@@ -13,6 +13,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/config"
 	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -157,7 +158,7 @@ func decodeContractEnvelope(t *testing.T, stdout, payloadKey string) map[string]
 }
 
 func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -184,7 +185,7 @@ func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T)
 }
 
 func TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -232,7 +233,7 @@ func TestDoctorFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestBootstrapJSONFailureIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	writeFile(t, repo, "tracked.txt", "v1")
 	run(t, repo, "git", "add", "tracked.txt")
@@ -492,7 +493,7 @@ func TestPreRenderedReportsAreNotConcatenatedCommandFailures_REQ_LNGHZN_S6_T1(t 
 	})
 
 	t.Run("blocked dag transition", func(t *testing.T) {
-		repo := initTempRepo(t)
+		repo := gittest.InitWithOrigin(t).Dir
 		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 		_, err := runTrls(t, repo, "bootstrap")
 		require.NoError(t, err)

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,7 +97,7 @@ func TestContextHistoryZeroLimitIsUnbounded_REQ_AOC_S2_T4(t *testing.T) {
 
 func plantContextHistoryBeyondSilentCap(t *testing.T) (repo, createSHA, noteSHA string) {
 	t.Helper()
-	repo = initTempRepo(t)
+	repo = gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

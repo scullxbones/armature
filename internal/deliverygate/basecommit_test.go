@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -22,8 +23,7 @@ func writeIssueBindingFile(t *testing.T, worktreePath, issueID string) {
 func TestVerifyIssueWorktreeBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
 	err := VerifyIssueWorktreeBinding(tmpDir, "issue-1")
@@ -42,8 +42,7 @@ func TestVerifyIssueWorktreeBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 func TestVerifyIssueBranchBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
 	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", ""))
@@ -60,8 +59,7 @@ func TestVerifyIssueBranchBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 func TestVerifyIssueBranchBinding_FailsClosedWhenClaimedAndNoRecordOrMapping_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
 	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "worker-a")
@@ -75,8 +73,7 @@ func TestVerifyIssueBranchBinding_FailsClosedWhenClaimedAndNoRecordOrMapping_REQ
 func TestRecordedBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 	sha := getHeadSHA(t, tmpDir)
 
@@ -95,8 +92,7 @@ func TestRecordedBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 func TestVerifyIssueBranchBinding_FailsClosedWhenAmendedTypeHasNoBranchMapping_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
 	gitDir, err := worktree.ResolveGitDir(tmpDir)
@@ -114,8 +110,7 @@ func TestVerifyIssueBranchBinding_FailsClosedWhenAmendedTypeHasNoBranchMapping_R
 func TestRecordedClaimedBranch_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
 	branch, found, err := RecordedClaimedBranch(tmpDir)
@@ -136,8 +131,7 @@ func TestRecordedClaimedBranch_REQ_LNGHZN_S4(t *testing.T) {
 func TestDynamicBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 	baseSHA := getHeadSHA(t, tmpDir)
 	runGit(t, tmpDir, "checkout", "-b", "main-parent")
@@ -164,8 +158,7 @@ func TestDynamicBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
 func TestGatedBaseCommit_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 	baseSHA := getHeadSHA(t, tmpDir)
 	runGit(t, tmpDir, "checkout", "-b", "task/issue-1")
