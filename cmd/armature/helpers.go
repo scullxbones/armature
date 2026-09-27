@@ -485,6 +485,10 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 }
 
 func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proceed func() (bool, error)) (bool, error) {
+	return appendHighStakesOpIfAfter(state, logPath, op, proceed, nil)
+}
+
+func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op, proceed func() (bool, error), afterIntegrate func() error) (bool, error) {
 	if state == nil || state.ctx == nil {
 		return false, fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
@@ -498,15 +502,19 @@ func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proc
 	if err != nil {
 		return wrote, err
 	}
-	return wrote, pushOpsBranch(opsPublishGit(ctx, gc), tracker)
+	return wrote, pushOpsBranchAfter(opsPublishGit(ctx, gc), tracker, afterIntegrate)
 }
 
 func publishLocalArmatureTip(state *executionState) error {
+	return publishLocalArmatureTipAfter(state, nil)
+}
+
+func publishLocalArmatureTipAfter(state *executionState, afterIntegrate func() error) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
 	ctx := state.ctx
-	return pushOpsBranch(opsPublishGit(ctx, worktreeGit(ctx)), state.tracker)
+	return pushOpsBranchAfter(opsPublishGit(ctx, worktreeGit(ctx)), state.tracker, afterIntegrate)
 }
 
 type opsPublishError struct {
@@ -560,7 +568,7 @@ type opsBranchPublisher interface {
 	FetchAndRebase(branch string) error
 }
 
-func publishArmatureSequence(gc opsBranchPublisher) error {
+func publishArmatureSequence(gc opsBranchPublisher, afterIntegrate func() error) error {
 	err := gc.Push("_armature")
 	if err == nil {
 		return nil
@@ -568,12 +576,21 @@ func publishArmatureSequence(gc opsBranchPublisher) error {
 	if rbErr := gc.FetchAndRebase("_armature"); rbErr != nil {
 		return rbErr
 	}
+	if afterIntegrate != nil {
+		if vErr := afterIntegrate(); vErr != nil {
+			return vErr
+		}
+	}
 	return gc.Push("_armature")
 }
 
 func pushOpsBranch(gc *adapters.Client, tracker ops.PendingPushTracker) error {
+	return pushOpsBranchAfter(gc, tracker, nil)
+}
+
+func pushOpsBranchAfter(gc *adapters.Client, tracker ops.PendingPushTracker, afterIntegrate func() error) error {
 	if gc != nil {
-		if err := publishArmatureSequence(gc); err != nil {
+		if err := publishArmatureSequence(gc, afterIntegrate); err != nil {
 			return newOpsPublishError(err)
 		}
 	}
