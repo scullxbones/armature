@@ -112,3 +112,4 @@
 ["unlink","CLAIMORD-W20",1790530259,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"dep":"TOPTIER-S7-T1","rel":"blocked_by"}]
 ["unlink","CLAIMORD-W20",1790530259,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"dep":"TOPTIER-S7-T2","rel":"blocked_by"}]
 ["unlink","CLAIMORD-W20",1790530259,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"dep":"TOPTIER-S15-T2","rel":"blocked_by"}]
+["claim","CLAIMORD-W11",1790530311,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"ttl":240,"worktree_path":"/workspace/.worktrees/CLAIMORD-W11","claim_token":"80cbacf485294f3e4be6b227a790e513"}]
