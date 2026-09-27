@@ -3,12 +3,13 @@ package main
 import (
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRenderContext_IncludesIssueIDAndCoreLayer(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")

@@ -3,13 +3,14 @@ package main
 import (
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPessimisticCloneClaimFlockSecondAcquisitionFailsWhileHeld_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 
 	flock, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.NoError(t, err)
@@ -23,7 +24,7 @@ func TestPessimisticCloneClaimFlockSecondAcquisitionFailsWhileHeld_REQ_LNGHZN_S5
 
 func TestPessimisticCloneClaimFlockSucceedsAfterRelease_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 
 	flock, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.NoError(t, err)
@@ -36,7 +37,7 @@ func TestPessimisticCloneClaimFlockSucceedsAfterRelease_REQ_LNGHZN_S5_T9(t *test
 
 func TestPessimisticCloneClaimFlockIsPerIssue_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 
 	flockA, err := tryAcquirePessimisticCloneClaimFlock(repo, "task-01")
 	require.NoError(t, err)
@@ -49,7 +50,7 @@ func TestPessimisticCloneClaimFlockIsPerIssue_REQ_LNGHZN_S5_T9(t *testing.T) {
 
 func TestPessimisticCloneClaimFlockContractHoldsOnBuildPlatform_REQ_LNGHZN_S5_T9(t *testing.T) {
 	t.Parallel()
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 
 	flock1, err := tryAcquirePessimisticCloneClaimFlock(repo, "contract-task")
 	require.NoError(t, err, "first acquisition on this build platform must succeed")

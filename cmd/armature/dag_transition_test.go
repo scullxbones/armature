@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +34,7 @@ func TestDAGTransitionCmd_AcceptsValidToValue(t *testing.T) {
 
 func setupRepoWithValidDraftNode(t *testing.T) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -52,7 +53,7 @@ func setupRepoWithValidDraftNode(t *testing.T) string {
 }
 
 func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -83,7 +84,7 @@ func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestDagTransitionValidateFailureDistinguishesWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

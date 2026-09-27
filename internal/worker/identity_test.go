@@ -5,17 +5,14 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func initTempRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	run(t, dir, "git", "init")
-	run(t, dir, "git", "config", "user.email", "test@test.com")
-	run(t, dir, "git", "config", "user.name", "Test")
-	return dir
+	return gittest.InitRepo(t)
 }
 
 func run(t *testing.T, dir string, name string, args ...string) {

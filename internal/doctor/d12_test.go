@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/doctor"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,9 +106,7 @@ func TestRun_D12_SkipWhenWorktreeMissing(t *testing.T) {
 
 func TestRun_D12_SkipWhenOriginRefMissing(t *testing.T) {
 	t.Parallel()
-	worktree := t.TempDir()
-	gitInit(t, worktree)
-	gitConfigIdentity(t, worktree)
+	worktree := gittest.InitRepo(t)
 	runGit(t, worktree, "commit", "--allow-empty", "-m", "ops")
 
 	issuesDir := initIssuesDir(t)
@@ -192,34 +191,14 @@ func TestRun_D12_ErrorWhenFetchFailsBehind(t *testing.T) {
 
 func opsWorktreeWithOrigin(t *testing.T) (worktree, originClone string) {
 	t.Helper()
-	bare := t.TempDir()
-	runGit(t, t.TempDir(), "init", "--bare", bare)
-
-	worktree = t.TempDir()
-	gitInit(t, worktree)
-	gitConfigIdentity(t, worktree)
+	fx := gittest.InitWithOrigin(t)
+	worktree = fx.Dir
 	runGit(t, worktree, "checkout", "-b", "_armature")
 	runGit(t, worktree, "commit", "--allow-empty", "-m", "ops base")
-	runGit(t, worktree, "remote", "add", "origin", "file://"+bare)
 	runGit(t, worktree, "push", "-u", "origin", "_armature")
 
-	originClone = t.TempDir()
-	runGit(t, t.TempDir(), "clone", "file://"+bare, originClone)
-	gitConfigIdentity(t, originClone)
+	originClone = filepath.Join(t.TempDir(), "origin-clone")
+	runGit(t, t.TempDir(), "clone", fx.Origin, originClone)
 	runGit(t, originClone, "checkout", "_armature")
 	return worktree, originClone
-}
-
-func gitInit(t *testing.T, dir string) {
-	t.Helper()
-	runGit(t, dir, "init")
-}
-
-func gitConfigIdentity(t *testing.T, dir string) {
-	t.Helper()
-	runGit(t, dir, "config", "user.email", "test@test.com")
-	runGit(t, dir, "config", "user.name", "Test")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
-	runGit(t, dir, "config", "gc.auto", "0")
-	runGit(t, dir, "config", "maintenance.auto", "false")
 }

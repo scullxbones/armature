@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ func TestMigrationInvariantMatrix_P1(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := initTempRepo(t)
+			repo := gittest.InitWithOrigin(t).Dir
 			run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 			originalPath := os.Getenv("PATH")
 

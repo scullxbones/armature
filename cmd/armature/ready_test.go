@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
@@ -197,7 +198,7 @@ func TestReadyExpiredClaimsInEnvelopeNotStderr_REQ_AOC_S2_T1(t *testing.T) {
 }
 
 func TestReadyEmptyStateIsDefinitive_REQ_AOC_S2_T1(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
