@@ -83,7 +83,7 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
 | Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .armature --force`, then re-run `arm bootstrap` |
-| Worker operation | CLI `cd`s to ops worktree internally, pulls, materializes, executes, commits, pushes |
+| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes call `pushOpsBranch` immediately after the local commit (publish failure is returned to the CLI; the local commit is not rolled back). Low-stakes writes stay local until `low_stakes_push_threshold`, then `pushOpsBranchAlwaysResetTracker` |
 | Worktree corruption | Manually remove the stale worktree (`git worktree remove .armature --force`), then re-run `arm bootstrap` to recreate it from remote |
 
 ### Directory Structure (within `.armature/` worktree)
@@ -118,14 +118,14 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
     decomposition-prompt.md    # prompt template for dag context
   config.json                  # repository-level configuration
   hooks/
-    post-commit                # hook templates installed to .git/hooks/
+    post-commit                # LOCAL-ONLY — hook templates installed to .git/hooks/; never committed
     post-merge
-    prepare-commit-msg
-  review/
-    dag-summary.md             # generated at decomposition, audit artifact
+    pre-commit
+  gates/                             # LOCAL-ONLY — arm gate run stdout/stderr; never committed
+  review/                            # LOCAL-ONLY — reviewer assessment JSON input to arm review record; never committed
 ```
 
-**Key invariant:** All mutations go through log ops. `state/` files are derived/materialized locally by each worker and never committed to the ops branch — this is essential to the merge-conflict-free guarantee. `sources/` files are derived from provider fetches and committed to the ops branch for shared caching, but are never directly mutated during normal operations.
+**Key invariant:** All mutations go through log ops. `state/` files are derived/materialized locally by each worker and never committed to the ops branch — this is essential to the merge-conflict-free guarantee. `sources/` files are derived from provider fetches and committed to the ops branch for shared caching, but are never directly mutated during normal operations. `gates/` and `review/` are worker-local sidecars (the durable records are `gate-evidence` and `assessment-attested` ops) and are listed in the ops `.gitignore`, as are `hooks/*.sh.template` — every bootstrap regenerates the templates from its own binary and is the only reader of them, so committing them would only let clones on different versions fight over the same paths. `arm bootstrap` commits just `ops/SCHEMA` and that gitignore on `_armature`, and only when they change, so scaffolding does not leave the ops worktree dirty. Both are generated from the running binary, so their propagation is monotonic: each carries a scaffolding-version header and a clone rewrites them only when its own generator is at least that new, which keeps an older binary from committing a downgrade into a shared path.
 
 ---
 
@@ -193,7 +193,7 @@ The transition op records metadata needed for merge detection:
 ["transition","task-01",1740700900,"worker-a1",{"to":"done","outcome":"...","branch":"feat/task-01","pr":"#142"}]
 ```
 
-`branch` (feature branch name) and `pr` (PR/MR number) are both optional. They are used by the merge detection algorithm (section 10). The `prepare-commit-msg` hook ensures issue IDs appear in commit messages as the primary detection anchor.
+`branch` (feature branch name) and `pr` (PR/MR number) are both optional. They are used by the merge detection algorithm (section 10). The mandatory conventional-commit scope — `type(ISSUE-ID): ...`, see `docs/conventions.md` — is what puts issue IDs in commit messages as the primary detection anchor.
 
 ### Issue Statuses
 
@@ -201,7 +201,7 @@ The transition op records metadata needed for merge detection:
 |---|---|---|
 | `open` | Created, not yet claimed | `create` op |
 | `claimed` | Worker has claimed, TTL active | `claim` op |
-| `in-progress` | Work actively underway | `heartbeat` op (implicit) |
+| `in-progress` | Work actively underway | `transition` op (or parent promotion when a child is claimed) |
 | `done` | Worker believes work is complete, PR submitted | `transition` op |
 | `merged` | Code confirmed on main via PR merge | CLI auto-detection during materialization |
 | `blocked` | Worker unable to complete, needs resolution | `transition` op |
@@ -327,39 +327,50 @@ In single-repo mode (v1), `repo` is omitted (default: current repo). This is a s
 
 ### Canonical Process Flow
 
-Every CLI command follows one of two process flows. Sync is implicit — workers never need to think about it.
+Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** warns when this clone is behind). `arm sync` is **not** that fetch — see the `arm sync` spec below.
 
-**Read-only commands** (`arm ready`, `arm render-context`, `arm validate`, `arm status`, `arm metrics`, `arm context-history`):
-
-```
-1. cd ops-worktree && git pull          (sync ops)
-2. Incremental materialize              (only new ops since checkpoint)
-3. Execute command                      (read from state/ files)
-```
-
-**Read-write commands** (`arm claim`, `arm transition`, `arm heartbeat`, `arm note`, `arm create`, `arm link`, `arm dag apply`):
+**Read-only commands** (`arm ready`, `arm list`, `arm show`, `arm render-context`, `arm validate`, `arm status`, `arm metrics`, `arm context-history`):
 
 ```
-1. cd ops-worktree && git pull          (sync ops)
-2. Incremental materialize              (only new ops since checkpoint)
-3. Execute command                      (append to own log in ops-worktree)
-4. git add .armature/ops/<worker-id>.log  (in ops-worktree)
-5. git commit                           (in ops-worktree)
-6. git push (retry with pull --rebase)  (to _armature)
+1. Resolve ops worktree path (git config / layout)
+2. Incremental materialize from local ops logs (checkpoint / byte offsets)
+3. Execute command (read from state/ files)
+```
+
+No `git fetch` / `git pull` of `origin/_armature` on this path.
+
+**Read-write commands** (`arm claim`, `arm transition`, `arm heartbeat`, `arm note`, `arm create`, `arm link`, `arm dag apply`, …):
+
+```
+1. Resolve ops worktree path
+2. Incremental materialize from local ops logs
+3. Execute command (append to own log in ops-worktree; commit that log)
+4. Publish policy (see Ops publish below) — high-stakes push is attempted immediately and fails the command if git still errors; the local commit is kept
 ```
 
 Code commits happen separately in the developer's main worktree, on their feature branch. The CLI never touches the code worktree for ops writes.
 
-### Push Retry Loop
+### Ops publish (`pushOpsBranch` / `pushOpsBranchAlwaysResetTracker`)
 
-```bash
-while ! git push; do
-  git pull --rebase
-done
-# Cap at ~5 retries. Failure beyond that is network/auth, not data conflict.
-```
+`cmd/armature/helpers.go` publishes `_armature` with a single git sequence:
 
-Rebase always succeeds because each worker only modifies its own file. The retry targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
+1. `Push("_armature")`
+2. On error: `FetchAndRebase("_armature")` then a second `Push`
+3. On success: `tracker.Reset()` (pending-push counter)
+
+There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap.
+
+**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranch`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature class=<auth|non-fast-forward|other>: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, …). Next Actions depend on the class: **auth** (HTTP 403 / permission denied / authentication failed) points at Contents: Write or SSH then `arm push-ops`, or (alternate) publishing from a write-capable environment and fetching `origin/_armature`; **non-fast-forward** (explicit non-fast-forward / fetch-first diagnostics after the one FetchAndRebase retry; not a bare `rejected` or `[remote rejected]` hook/repo-rule decline) points at `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase onto `origin/_armature` in that same ops worktree, then `arm push-ops` (never a bare `git rebase` in the code worktree; never a branch-only fetch that can leave `origin/_armature` stale); **other** keeps `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIf` `!wrote`, `doctor --fix` with no remaining actions) still publishes the local `_armature` tip: success may report no-op, but origin must contain the op; remaining git errors stay `opsPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
+
+**Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call `pushOpsBranchAlwaysResetTracker` — the **same git sequence**, but git errors are swallowed so a heartbeat cannot eject a worker. `tracker.Reset()` still runs after the attempt. Below threshold they stay local-only.
+
+**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranch` / `pushOpsBranchAlwaysResetTracker` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
+
+`arm push-ops` is the explicit Push-only command (no FetchAndRebase retry) and **does** fail the CLI (`PUSH-OPS-1`). Remaining git errors are classified with the same `opsPublishError` (`class=auth|non-fast-forward|other`) so a smoke check can distinguish credential denial from a clone race. It is also the recovery command after a loud high-stakes publish failure.
+
+Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
+
+**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
 
 ### Incremental Materialization Algorithm
 
@@ -444,7 +455,7 @@ A task is ready when all four conditions hold:
 1. `status == "open"`
 2. All `blocked_by` issues have `status == "merged"` (not `done` — two-phase completion requires code on main)
 3. Parent is `in-progress` (or parent is null)
-4. Not claimed, or current claim is expired (no heartbeat within TTL)
+4. Status is `open`. Expired claims stay `claimed` (or `in-progress`) until doctor, a compensating transition, or a later steal after TTL; they are listed separately, not queued as ready.
 
 A story becomes `in-progress` when at least one child task is `claimed` or `in-progress`.
 
@@ -475,9 +486,9 @@ Nodes with `confidence: "inferred"` (brownfield imports) include `"requires_conf
 
 ### Claim Race Resolution
 
-Two workers can both claim the same issue between pulls. Both pushes succeed (different files). Resolution is at **read time**: first claim by timestamp wins. Deterministic tiebreaker on worker ID (lexicographic) for identical timestamps.
+Two workers can both claim the same issue between pulls. Both pushes succeed (different files). Resolution is at **read time** via `claim.Owner` / `claim.Accept`: a foreign claim takes the lease only when the held lease is already stale at the new op's timestamp. Same worker always replaces. Equal timestamps keep apply order (stable sort by timestamp, then type key) — not worker ID.
 
-Losing worker discovers loss on next `pull + materialize` cycle and moves on.
+Losing worker discovers loss on a later materialize that includes the winner's log. That log is local-only until this clone has fetched `origin/_armature` (explicit fetch/rebase, or a `FetchAndRebase` inside a later publish). Reads do not pull first.
 
 ### Claim TTL and Heartbeat Protocol
 
@@ -487,21 +498,19 @@ Workers append a heartbeat at the start of each significant operation while work
 ["heartbeat","abc-123",1740700850,"worker-a1",{}]
 ```
 
-**Stale claim rule:** A claim is reclaimable if no heartbeat or transition from the claiming worker exists within `ttl` minutes of the last heartbeat/claim timestamp.
+**Stale claim rule:** A claim is reclaimable at `last_activity + ttl minutes` (inclusive). `last_activity` is the max of claimed-at, claimant heartbeat, and claimant-authored activity. Recorded ttl ≤ 0 replays as 60 minutes. Writes of ttl ≤ 0 are rejected.
 
 TTL is per-claim. Ephemeral CI agents: `ttl: 15`. Long-running human-supervised agents: `ttl: 1440`.
 
 ### Claim-Time Scope Overlap Advisory
 
-When a worker claims a task, the CLI checks whether any currently `claimed` or `in-progress` task has overlapping scope (using the same glob-matching logic as W1). If overlap is detected, the claim still succeeds (no blocking — consistent with the advisory philosophy) but:
-- A warning is emitted to the claiming worker's output.
-- A `note` op is automatically appended to both the claimed task and the overlapping task, recording the overlap for context.
+When a worker claims a task, the CLI checks whether any currently `claimed` or `in-progress` task has overlapping scope (using the same glob-matching logic as W1). Foreign overlap **blocks** unless `--force`; same-worker overlap is dismissed with a note. See `docs/design/claim-overlap-plan.md`.
 
 This gives agents awareness of potential semantic conflicts before investing a full work cycle.
 
 ### Post-Claim Verification Flow
 
-After claiming and pushing, the worker should pull again and re-materialize to confirm it won the race before investing work. One extra pull — cheap insurance. The `arm claim` command handles this internally: claim, push, pull, re-check.
+After claiming, the CLI publishes `_armature` with `pushOpsBranch`. A git failure after the local claim commit is returned to the caller (`CLAIM-1`, class named in the cause, Next Actions per auth / non-fast-forward / other); the claim op is **not** rolled back. The CLI does **not** pull and re-materialize to confirm the race. Race resolution stays read-time on whatever logs this clone already has. A worker who needs origin's claims should fetch/rebase the ops worktree (D12 flags lag) and then re-read (`arm show` / `arm ready`), not assume `arm claim` did that.
 
 ---
 
@@ -1167,7 +1176,7 @@ The ready-task blocker rule requires `status == "merged"`, not `done`. This ensu
 
 ### Edge Cases
 
-**Squash-merge:** Commit-message scan (not ancestry) is the primary detection method, so squash-merges work as long as the issue ID appears in the squash commit message. The `prepare-commit-msg` hook ensures this.
+**Squash-merge:** Commit-message scan (not ancestry) is the primary detection method, so squash-merges work as long as the issue ID appears in the squash commit message. The conventional-commit scope required by `docs/conventions.md` provides it.
 
 **Abandoned PRs:** A task stuck at `done` with no PR merge triggers a staleness check. Configurable threshold (default: N days after `done` with no merge detected). Same pattern as expired claims — surfaced via `arm status`.
 
@@ -1181,15 +1190,16 @@ The ready-task blocker rule requires `status == "merged"`, not `done`. This ensu
 
 `arm bootstrap` installs hooks from `.armature/hooks/` into `.git/hooks/`. **Git hooks are convenience, never enforcement.** Every action a git hook performs is also available as an explicit CLI command. The system is correct without git hooks installed.
 
-**Important distinction:** Git hooks (this section) are convenience automation for heartbeats, commit-message stamping, and merge promotion. Pre-transition verification hooks (section 12) in `.armature/config.json` are **enforcement** — the CLI refuses to append the transition unless every hook exits 0 and prints `{"allowed":true}`. The `required` field is unused; there is no optional-failure path and hooks are not limited to `--to done`. These are separate mechanisms with different trust models.
+**Important distinction:** Git hooks (this section) are convenience automation for heartbeats and merge promotion. Pre-transition verification hooks (section 12) in `.armature/config.json` are **enforcement** — the CLI refuses to append the transition unless every hook exits 0 and prints `{"allowed":true}`. The `required` field is unused; there is no optional-failure path and hooks are not limited to `--to done`. These are separate mechanisms with different trust models.
 
 | Hook | Trigger | Action |
 |---|---|---|
 | `post-commit` | After any commit on a feature branch | Auto-emits heartbeat if worker has active claim; pushes to ops branch |
 | `post-merge` | After `git pull` brings new commits to main | Runs `arm materialize` to pick up newly merged tasks and auto-promote `done` → `merged` |
-| `prepare-commit-msg` | Before commit message editor opens | Prepends active claim's issue ID to commit message |
 
-The `post-commit` hook is the highest-leverage automation: every code commit becomes a heartbeat, eliminating the "remember to heartbeat" burden. The `prepare-commit-msg` hook ensures the commit-message convention needed for merge detection is enforced mechanically.
+The `post-commit` hook is the highest-leverage automation: every code commit becomes a heartbeat, eliminating the "remember to heartbeat" burden.
+
+A `prepare-commit-msg` hook that prepended the active claim's issue ID was removed (HOOKMSG-1). The ID it added was already mandatory inside the conventional-commit scope, and prefixing it ahead of `type(ISSUE-ID):` broke the `^`-anchored pattern in `internal/commitref` that the delivery gate and merge detection both rely on — so the hook could only ever damage the convention it was meant to enforce. `arm bootstrap` removes an Armature-managed copy from existing clones.
 
 ### Installation and Bypass
 
@@ -1297,7 +1307,7 @@ No cross-worktree operations occur within a single phase.
 | `transition` (with verification hooks) | ops worktree + code worktree | ops worktree |
 | `init`, `worker-init` | both | both (setup) |
 | `sources add/sync/verify` | ops worktree + external providers | ops worktree |
-| `sync` | ops worktree | (none, unless `--code`) |
+| `sync` | ops worktree + code repo (merge detection) | ops worktree when it writes `merged` transitions |
 
 ### Key Command Specifications
 
@@ -1307,26 +1317,31 @@ No cross-worktree operations occur within a single phase.
 arm sync [flags]
 
 Behavior:
-  1. Pull ops worktree (_armature branch)
-  2. Incremental materialize (process new ops since checkpoint)
-  3. Report summary of changes
+  1. Load a snapshot from the local ops worktree (no fetch of origin/_armature)
+  2. Detect code-branch merges for done issues (`internal/sync.DetectMerges`)
+  3. Unless --dry-run, append local `merged` transitions for those IDs
+
+This is merge-detection onto `main` (or `--into`), not “pull ops then materialize.”
+It is not implicit in other commands. Catching up `_armature` is an explicit
+git fetch/rebase of the ops worktree; `arm materialize` replays local logs;
+doctor D12 only warns when this clone is behind origin/_armature.
 
 Flags:
-  --quiet          Suppress output (for scripting)
-  --code           Also pull the code branch (convenience wrapper)
-  --check          Report sync status without pulling (is local behind remote?)
+  --into <branch>  Target branch to check merges against (default: current branch)
+  --dry-run        Print which issues would transition without writing ops
 
-Output:
-  synced: 3 new ops from 2 workers
-  materialized: 1 task claimed, 1 task merged, 0 new tasks
+Output (examples):
+  No merged branches detected.
+  Transitioned TASK-001 to merged
+  would transition: TASK-001 -> merged
+  dry-run: 1 issue(s) would be transitioned to merged
 
 Exit codes:
-  0  success (or already current)
-  1  ops branch not found (run arm bootstrap)
-  2  network error (offline — local state is stale)
+  0  success (or nothing to do)
+  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails
 ```
 
-Implicit in all commands. Explicit `arm sync` exists for diagnostics, scripting, and batch operations.
+Not a substitute for fetching `origin/_armature`. Not run at the start of `ready`/`list`/`show`.
 
 #### `arm bootstrap`
 
@@ -1596,7 +1611,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 | Error | Cause | Hint |
 |---|---|---|
 | `ops branch not found` | `_armature` branch missing | `run arm bootstrap` |
-| `ops worktree desync` | Local ops worktree is behind or corrupted | `run arm sync` or `arm bootstrap` |
+| `ops worktree desync` | Local ops worktree is behind or corrupted | fetch/rebase `origin/_armature` in the ops worktree (D12 names this lag); `arm bootstrap` if the worktree is missing |
 | `stale worktree` | Worktree path exists but points to wrong branch | `run arm bootstrap` |
 | `materialization failed` | Corrupt log line or unexpected state | Skip unparseable lines + warn; `--debug` shows details |
 
@@ -1610,7 +1625,8 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 |---|---|---|
 | Worker crashes after claim, before completion | Issue stuck as claimed | Heartbeat + TTL expiry; other workers reclaim after TTL |
 | Worker crashes after append, before push | Op lost locally; shared state consistent | No mitigation needed — inherently safe, worker re-issues on restart |
-| Push rejected (non-fast-forward) | Temporary delay | Retry loop with `pull --rebase`, cap at ~5 |
+| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranch`: one `FetchAndRebase` then a second `Push`. Remaining git output matching explicit non-fast-forward / fetch-first diagnostics (`non-fast-forward`, `[rejected] … (fetch first)`, `(non-fast-forward)`, `Updates were rejected because the tip`) is class `non-fast-forward`. Bare `rejected` and other remote rejections (pre-receive hook declined, repo-rule / protected-branch) are class `other`, not a rebase-and-retry race. High-stakes fail the CLI (`opsPublishError` → command Failure Code, Next Actions `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase that ops worktree onto `origin/_armature` then `arm push-ops` for non-fast-forward, else `arm push-ops` and `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchAlwaysResetTracker`. `arm push-ops` is Push-only (no FetchAndRebase retry) and classifies remaining git errors the same way (`opsPublishError` → `PUSH-OPS-1`) |
+| Push denied (auth) | Origin never sees the op; looks like a clone race if unclassified | Classifier matches HTTP 403, permission denied, authentication failed, could not read Username, publickey denied → class `auth`. High-stakes and `arm push-ops` fail the CLI with Next Actions to grant Contents: Write (fine-grained PAT) or SSH then `arm push-ops`, or (alternate) publish from a write-capable environment then `git fetch origin _armature`. Do not treat this as a non-fast-forward race. Local commit stays (I2). |
 | Corrupt log line | Materialization fails on one line | Skip unparseable lines + warn (implemented in parser) |
 | Clock skew between workers | Wrong claim winner | NTP keeps skew <1s; ms timestamps make races negligible |
 | Duplicate worker IDs | Real merge conflicts | UUID generation + uniqueness validation on first push |
@@ -1631,7 +1647,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 
 Workers without network access can continue appending ops to their local ops worktree. They cannot push. When network is restored, they push accumulated ops normally. No special handling is required.
 
-**Stale claims:** A worker claims a task while offline. Another online worker claims the same task. When the offline worker pushes, both claims land in the log. Normal timestamp-based resolution applies — first claim by timestamp wins. The offline worker's clock accuracy determines whether they win.
+**Stale claims:** A worker claims a task while offline. Another online worker claims the same task. When the offline worker pushes, both claims land in the log. `claim.Owner` keeps the first lease that was still live at the later claim's timestamp. The offline worker's clock accuracy determines whether they still hold it.
 
 **Stale done transitions:** A worker transitions a task to `done` while offline. When they push, the `done` status propagates. The two-phase model handles this correctly — `done` does not unblock downstream work. No correctness issue.
 
@@ -1683,7 +1699,7 @@ Git tags on the ops branch mark sprint boundaries. Example: `git tag sprint-12 _
 
 ### Code-Ops Correlation
 
-The transition op records `branch` and `pr` fields, bridging the ops history (on `_armature`) with the code history (on `main` and feature branches). Given an ops commit, you can find the corresponding code PR. Given a code commit, the issue ID in the commit message (from the `prepare-commit-msg` hook) links back to the ops.
+The transition op records `branch` and `pr` fields, bridging the ops history (on `_armature`) with the code history (on `main` and feature branches). Given an ops commit, you can find the corresponding code PR. Given a code commit, the issue ID in the commit message (from the mandatory conventional-commit scope) links back to the ops.
 
 ---
 
@@ -1861,4 +1877,4 @@ These decisions are locked and should not be revisited without significant new e
 | L9 | Worker impersonation via spoofed log filename (new file with fake UUID) | Low | Requires repo push access (git host ACL is primary control). Optional worker-registry.json cross-references git committer identity. |
 | L10 | Scope path validation (W10) cannot distinguish "create new file" from "typo in path" | Low | Warning only. Decomposition reviewers verify scope correctness at `dag summary` gate. |
 | L11 | Claim-time scope overlap check uses glob matching, which is approximate | Low | Same as L2. Advisory only — warns but does not block. |
-| L12 | Merge detection coverage degrades silently without `prepare-commit-msg` hook | Low | W9 validation warning monitors coverage. `arm validate` surfaces low coverage rate. Fallback detection methods remain available. |
+| L12 | Merge detection coverage degrades silently when commits omit the conventional-commit scope | Low | The delivery gate's Commit Reference check refuses `done` without a matching commit. W9 validation warning monitors coverage; `arm validate` surfaces a low coverage rate. Fallback detection methods remain available. |
