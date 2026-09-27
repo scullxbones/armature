@@ -344,8 +344,11 @@ func TestIsBindingStale_Claimed(t *testing.T) {
 	snap := &snapshot.Snapshot{
 		Issues: map[string]*materialize.Issue{
 			"task-01": {
-				ID:     "task-01",
-				Status: "claimed",
+				ID:        "task-01",
+				Status:    "claimed",
+				ClaimedBy: "worker-a",
+				ClaimedAt: 1000,
+				ClaimTTL:  60,
 			},
 		},
 	}
@@ -359,8 +362,11 @@ func TestIsBindingStale_InProgress(t *testing.T) {
 	snap := &snapshot.Snapshot{
 		Issues: map[string]*materialize.Issue{
 			"task-01": {
-				ID:     "task-01",
-				Status: "in-progress",
+				ID:        "task-01",
+				Status:    "in-progress",
+				ClaimedBy: "worker-a",
+				ClaimedAt: 1000,
+				ClaimTTL:  60,
 			},
 		},
 	}
@@ -421,6 +427,7 @@ func TestIsBindingStale_ClaimedWithExpiredTTL(t *testing.T) {
 			"task-01": {
 				ID:            "task-01",
 				Status:        "claimed",
+				ClaimedBy:     "worker-a",
 				ClaimedAt:     claimedAt,
 				LastHeartbeat: lastHeartbeat,
 				ClaimTTL:      ttlMinutes,
@@ -439,6 +446,7 @@ func TestIsBindingStale_ClaimedWithinTTLWindow(t *testing.T) {
 			"task-01": {
 				ID:            "task-01",
 				Status:        "claimed",
+				ClaimedBy:     "worker-a",
 				ClaimedAt:     1000,
 				LastHeartbeat: 1500,
 				ClaimTTL:      10,

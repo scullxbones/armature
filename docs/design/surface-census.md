@@ -238,7 +238,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
-| `--ttl` | claim | int | Claim TTL in minutes (default 60) | **kept-evidence** |
+| `--ttl` | claim | int | Claim TTL in minutes (default 60). Must be > 0; 0 and negatives fail the D10-shaped out-of-range rule | **kept-evidence** |
 | `--worktree` | claim | string | Required worktree destination; a value-less form remains compatible and provisions .worktrees/<issue-id>, while an explicit value selects a new destination | **kept-evidence** |
 | `--from` | claim | string | Parent worktree whose current branch and tip seed an explicit new --worktree destination | **kept-evidence** |
 | `--force` | claim, merged, sources accept-citation, transition | bool | Override warnings or require confirmation | **kept-evidence** |

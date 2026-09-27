@@ -2,8 +2,6 @@ package claim
 
 import "github.com/scullxbones/armature/internal/ops"
 
-const zeroTTLHeldLeaseReplayFallbackMinutes = 60
-
 // HeldClaim is the replay-visible lease ForeignLiveLeaseBlocksChallenger inspects.
 type HeldClaim struct {
 	Status                     string
@@ -17,18 +15,12 @@ type HeldClaim struct {
 // ForeignLiveLeaseBlocksChallenger reports whether a challenger's claim op is a no-op because
 // another worker still holds a live claimed or in-progress lease.
 func ForeignLiveLeaseBlocksChallenger(held HeldClaim, challengerID string, now int64) bool {
-	if held.Status != ops.StatusClaimed && held.Status != ops.StatusInProgress {
-		return false
-	}
-	if held.ClaimedBy == "" || held.ClaimedBy == challengerID {
-		return false
-	}
-	ttl := held.TTLMinutes
-	if ttl <= 0 {
-		ttl = zeroTTLHeldLeaseReplayFallbackMinutes
-	}
-	last := FoldLastActivity(held.ClaimedAt, held.LastHeartbeat, held.LastClaimingWorkerActivity)
-	return !IsClaimStale(last, ttl, now)
+	_, took := Accept(LeaseFromClocks(
+		held.Status, held.ClaimedBy, "",
+		held.ClaimedAt, held.LastHeartbeat, held.LastClaimingWorkerActivity,
+		held.TTLMinutes, "",
+	), ops.Op{Type: ops.OpClaim, WorkerID: challengerID, Timestamp: now})
+	return !took
 }
 
 // ClaimantHeartbeatClocks reports whether workerID may advance LastHeartbeat

@@ -14,9 +14,29 @@ import (
 
 var testNow = time.Unix(1_000_000, 0)
 
+func stampLiveLeasesAt(issues map[string]*materialize.Issue, now time.Time) {
+	ts := now.Unix()
+	for _, iss := range issues {
+		if iss == nil || iss.ClaimedBy == "" {
+			continue
+		}
+		if iss.ClaimedAt == 0 && iss.LastHeartbeat == 0 && iss.LastClaimingWorkerActivity == 0 && iss.ClaimTTL == 0 {
+			iss.ClaimedAt = ts
+			iss.LastHeartbeat = ts
+			iss.LastClaimingWorkerActivity = ts
+			iss.ClaimTTL = 60
+		}
+	}
+}
+
+func testReconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.Time, managedRoots ...string) ReconcileResult {
+	stampLiveLeasesAt(issues, now)
+	return Reconcile(worktrees, issues, now, managedRoots...)
+}
+
 func TestReconcile_EmptyInputs(t *testing.T) {
 	t.Parallel()
-	result := Reconcile([]Meta{}, map[string]*materialize.Issue{}, testNow)
+	result := testReconcile([]Meta{}, map[string]*materialize.Issue{}, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Empty(t, result.Orphans)
@@ -38,7 +58,7 @@ func TestReconcile_BoundWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.BoundWorktrees, 1)
 	assert.Contains(t, result.BoundWorktrees, "task-01")
@@ -58,7 +78,7 @@ func TestReconcile_ForeignLiveClaimIsOrphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Equal(t, []string{"task-foreign"}, result.Orphans)
@@ -78,7 +98,7 @@ func TestReconcile_Orphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Len(t, result.Orphans, 1)
@@ -98,7 +118,7 @@ func TestReconcile_Ghost_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Empty(t, result.Orphans)
@@ -120,7 +140,7 @@ func TestReconcile_GCRemovalMerged_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.GCRemovalSet, 1)
 	assert.Contains(t, result.GCRemovalSet, "task-04")
@@ -141,7 +161,7 @@ func TestReconcile_GCRemovalCancelled_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.GCRemovalSet, 1)
 	assert.Contains(t, result.GCRemovalSet, "task-05")
@@ -161,7 +181,7 @@ func TestReconcile_NoGCRemovalDone_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.GCRemovalSet)
 	assert.Len(t, result.BoundWorktrees, 1)
@@ -200,7 +220,7 @@ func TestReconcile_MixedScenario_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Len(t, result.BoundWorktrees, 1)
 	assert.Contains(t, result.BoundWorktrees, "task-01")
@@ -225,7 +245,7 @@ func TestReconcile_UnboundCanonicalWorktreeIsUnrecognized_REQ_LNGHZN_S5_T6(t *te
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Equal(t, []string{"/repo/.worktrees/task-unbound"}, result.Unrecognized)
 	assert.Empty(t, result.BoundWorktrees, "an unbound worktree must never be reported as bound")
@@ -239,7 +259,7 @@ func TestReconcile_WorktreeWithoutIssue_REQ_LNGHZN_S5_T2(t *testing.T) {
 	}
 	issues := map[string]*materialize.Issue{}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Empty(t, result.Orphans)
@@ -257,7 +277,7 @@ func TestReconcile_MergedWithoutWorktree_NotGhostNotRemoval_REQ_LNGHZN_S5_T2(t *
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.Ghosts)
 	assert.Empty(t, result.GCRemovalSet)
@@ -275,7 +295,7 @@ func TestReconcile_NonLiveClaimMissingWorktree_NotGhost_REQ_LNGHZN_S5_T2(t *test
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.Ghosts)
 }
@@ -293,7 +313,7 @@ func TestReconcile_SortedOutput_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-c": {ID: "task-c", Status: ops.StatusInProgress, ClaimedBy: "w", WorktreePath: "/repo/.worktrees/task-c"},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Equal(t, []string{"task-a", "task-b", "task-c"}, result.BoundWorktrees)
 }
@@ -311,7 +331,7 @@ func TestReconcile_SortsGCRemovals_REQ_LNGHZN_S5_T10(t *testing.T) {
 		"task-c": {ID: "task-c", Status: ops.StatusMerged, WorktreePath: "/repo/.worktrees/task-c"},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Equal(t, []string{"task-a", "task-b", "task-c"}, result.GCRemovalSet)
 	require.Len(t, result.GCRemovals, 3)
@@ -337,7 +357,7 @@ func TestReconcile_SymlinkNormalization_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-09": {ID: "task-09", Status: ops.StatusInProgress, ClaimedBy: "w", WorktreePath: symWorktree},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Equal(t, []string{"task-09"}, result.BoundWorktrees)
 	assert.Empty(t, result.Ghosts)
@@ -358,7 +378,7 @@ func TestReconcile_UnclaimedWorktreeIsOrphan_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Empty(t, result.BoundWorktrees)
 	assert.Len(t, result.Orphans, 1)
@@ -377,7 +397,7 @@ func TestWorktreeListFlagsOrphans_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-10": {ID: "task-10", Status: ops.StatusInProgress, ClaimedBy: "", WorktreePath: "/repo/.worktrees/task-10"},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Contains(t, result.BoundWorktrees, "task-09")
 	assert.Contains(t, result.Orphans, "task-10")
@@ -396,7 +416,7 @@ func TestReconcile_RemoteClaimNotGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow, localRoot)
+	result := testReconcile(worktrees, issues, testNow, localRoot)
 
 	assert.Empty(t, result.Ghosts, "a remote clone's live claim must not be a local ghost")
 }
@@ -423,7 +443,7 @@ func TestReconcile_SymlinkedRootLocalGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow, managedRoot)
+	result := testReconcile(worktrees, issues, testNow, managedRoot)
 
 	assert.Equal(t, []string{"task-sym"}, result.Ghosts,
 		"a genuine local ghost reached through a symlinked repo root must not be dropped")
@@ -442,7 +462,7 @@ func TestReconcile_LocalClaimStillGhost_REQ_LNGHZN_S5_T3(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow, localRoot)
+	result := testReconcile(worktrees, issues, testNow, localRoot)
 
 	assert.Equal(t, []string{"task-local"}, result.Ghosts)
 }
@@ -458,6 +478,7 @@ func TestReconcile_CustomInsideRepositoryGhostUsesLocalEvidence_REQ_LNGHZN_S9_T1
 		},
 	}
 
+	stampLiveLeasesAt(issues, testNow)
 	result := ReconcileWithLocalEvidence(nil, issues, testNow, []string{"/repo"}, nil)
 	assert.Equal(t, []string{"task-custom"}, result.Ghosts,
 		"a missing live claim at an explicit in-repository destination must be a local ghost")
@@ -474,6 +495,7 @@ func TestReconcile_CustomOutsideRepositoryGhostRequiresLocalRegistration_REQ_LNG
 		},
 	}
 
+	stampLiveLeasesAt(issues, testNow)
 	registered := []string{"/tmp/armature-custom/task-custom"}
 	result := ReconcileWithLocalEvidence(nil, issues, testNow, []string{"/repo/.worktrees"}, registered)
 	assert.Equal(t, []string{"task-custom"}, result.Ghosts,
@@ -497,7 +519,7 @@ func TestReconcile_TerminalForeignPathLocalWorktree_IsGCRemoval_REQ_LNGHZN_S5_T2
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Contains(t, result.GCRemovalSet, "task-foreign",
 		"a terminal issue with a local worktree must be gc-ready regardless of the foreign recorded path")
@@ -522,7 +544,7 @@ func TestReconcile_StaleClaimIsOrphanNotBound_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, now)
+	result := testReconcile(worktrees, issues, now)
 
 	assert.Contains(t, result.Orphans, "task-stale", "a claim past its TTL is an orphan")
 	assert.NotContains(t, result.BoundWorktrees, "task-stale", "a stale claim must not be bound")
@@ -545,7 +567,7 @@ func TestReconcile_FreshClaimStillBound_REQ_LNGHZN_S5_T2(t *testing.T) {
 		},
 	}
 
-	result := Reconcile(worktrees, issues, now)
+	result := testReconcile(worktrees, issues, now)
 
 	assert.Contains(t, result.BoundWorktrees, "task-fresh")
 	assert.NotContains(t, result.Orphans, "task-fresh")
@@ -565,7 +587,7 @@ func TestReconcile_BindingKeysIdentityOverBasename_REQ_LNGHZN_S5_T2(t *testing.T
 		},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Equal(t, []string{"LNGHZN-S5/T2"}, result.BoundWorktrees,
 		"the armature-issue-id binding must key identity, not the truncated basename")
@@ -589,7 +611,7 @@ func TestReconcile_StaleClaimMissingWorktree_NotGhost_REQ_LNGHZN_S5_T2(t *testin
 		},
 	}
 
-	result := Reconcile(worktrees, issues, now, localRoot)
+	result := testReconcile(worktrees, issues, now, localRoot)
 
 	assert.Empty(t, result.Ghosts, "a stale (no-longer-live) claim with a missing worktree is not a ghost")
 }
@@ -603,7 +625,7 @@ func TestWorktreeGCRemovesMergedWorktrees_REQ_LNGHZN_S5_T2(t *testing.T) {
 		"task-11": {ID: "task-11", Status: ops.StatusMerged, ClaimedBy: "worker-1", WorktreePath: "/repo/.worktrees/task-11"},
 	}
 
-	result := Reconcile(worktrees, issues, testNow)
+	result := testReconcile(worktrees, issues, testNow)
 
 	assert.Contains(t, result.GCRemovalSet, "task-11")
 	assert.NotContains(t, result.BoundWorktrees, "task-11")
@@ -614,7 +636,7 @@ func TestReconcile_GCSelectsRecordedPathAmongDuplicateMarkers_REQ_LNGHZN_S5_T2(t
 	t.Parallel()
 	legacyPath := "/tmp/legacy-task-12"
 	canonicalPath := "/repo/.worktrees/task-12"
-	result := Reconcile([]Meta{
+	result := testReconcile([]Meta{
 		{Path: legacyPath, Binding: "task-12"},
 		{Path: canonicalPath, Binding: "task-12"},
 	}, map[string]*materialize.Issue{
@@ -629,7 +651,7 @@ func TestReconcile_GCSelectsRecordedPathAmongDuplicateMarkers_REQ_LNGHZN_S5_T2(t
 
 func TestReconcile_GCAmbiguousDuplicateMarkersRemovesNothing_REQ_LNGHZN_S5_T2(t *testing.T) {
 	t.Parallel()
-	result := Reconcile([]Meta{
+	result := testReconcile([]Meta{
 		{Path: "/repo/.worktrees/task-13-a", Binding: "task-13"},
 		{Path: "/repo/.worktrees/task-13-b", Binding: "task-13"},
 	}, map[string]*materialize.Issue{
@@ -645,7 +667,7 @@ func TestReconcile_WrongPathMarkerStillLeavesRecordedPathGhost_REQ_LNGHZN_S5_T2(
 	t.Parallel()
 	recordedPath := "/repo/.worktrees/task-14"
 	wrongPath := "/repo/.worktrees/legacy-task-14"
-	result := Reconcile([]Meta{{Path: wrongPath, Binding: "task-14"}}, map[string]*materialize.Issue{
+	result := testReconcile([]Meta{{Path: wrongPath, Binding: "task-14"}}, map[string]*materialize.Issue{
 		"task-14": {ID: "task-14", Status: ops.StatusInProgress, ClaimedBy: "worker-1", WorktreePath: recordedPath},
 	}, testNow)
 
