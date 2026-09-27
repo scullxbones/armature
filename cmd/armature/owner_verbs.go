@@ -37,6 +37,28 @@ func leaseStatusAllowsOwnerGate(status string) bool {
 	return status == ops.StatusClaimed || status == ops.StatusInProgress
 }
 
+func enforceRenderContextOwner(ctx *config.Context, issueID, workerID string) error {
+	located, err := locatePublishedOps(ctx)
+	if err != nil {
+		return err
+	}
+	lease := oporder.OwnerOf(oporder.Published(located), issueID)
+	if renderContextOwnerDenied(lease, workerID, nowEpoch()) {
+		return claimpkg.ErrNotClaimOwner
+	}
+	return nil
+}
+
+func renderContextOwnerDenied(lease claimpkg.Lease, workerID string, now int64) bool {
+	if lease.Holder == "" || lease.Holder == workerID {
+		return false
+	}
+	if !leaseStatusAllowsOwnerGate(lease.Status) {
+		return false
+	}
+	return claimpkg.LeaseLive(lease, now)
+}
+
 func mapHeartbeatError(err error) error {
 	if err == nil {
 		return nil
