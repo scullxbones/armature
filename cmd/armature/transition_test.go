@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -22,7 +23,7 @@ const (
 
 func setupTransitionIdempotencyRepo(t *testing.T, issueID string) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -241,22 +242,6 @@ func TestVersionCommand(t *testing.T) {
 	assert.Contains(t, stdout.String(), "arm version")
 }
 
-func initTempRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	run(t, dir, "git", "init")
-	run(t, dir, "git", "config", "user.email", "test@test.com")
-	run(t, dir, "git", "config", "user.name", "Test")
-	run(t, dir, "git", "config", "commit.gpgsign", "false")
-	run(t, dir, "git", "config", "gc.auto", "0")
-	run(t, dir, "git", "config", "maintenance.auto", "false")
-	originParent := t.TempDir()
-	origin := filepath.Join(originParent, "origin.git")
-	run(t, originParent, "git", "init", "--bare", origin)
-	run(t, dir, "git", "remote", "add", "origin", origin)
-	return dir
-}
-
 func dropOrigin(t *testing.T, repo string) {
 	t.Helper()
 	run(t, repo, "git", "remote", "remove", "origin")
@@ -294,9 +279,9 @@ func isolatedGitTestEnv() []string {
 func TestInitTempRepoIgnoresInheritedGITWorkTree(t *testing.T) {
 	other := t.TempDir()
 	t.Setenv("GIT_WORK_TREE", other)
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	if _, err := os.Stat(filepath.Join(repo, ".git")); err != nil {
-		t.Fatalf("initTempRepo should initialize dir despite GIT_WORK_TREE: %v", err)
+		t.Fatalf("InitRepo should initialize dir despite GIT_WORK_TREE: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(other, ".git")); !os.IsNotExist(err) {
 		t.Fatal("inherited GIT_WORK_TREE must not become a repository")
@@ -304,7 +289,7 @@ func TestInitTempRepoIgnoresInheritedGITWorkTree(t *testing.T) {
 }
 
 func TestWorkerInitCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
@@ -316,7 +301,7 @@ func TestWorkerInitCommand(t *testing.T) {
 }
 
 func TestWorkerInitCheckNotConfigured(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	buf := new(bytes.Buffer)
 	cmd := newRootCmd()
 	cmd.SetOut(buf)
@@ -328,7 +313,7 @@ func TestWorkerInitCheckNotConfigured(t *testing.T) {
 }
 
 func TestWorkerInitCheckConfigured(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 
 	cmd1 := newRootCmd()
 	cmd1.SetOut(new(bytes.Buffer))
@@ -349,7 +334,7 @@ var _ = filepath.Join
 var _ = strings.Contains
 
 func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -362,7 +347,7 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 }
 
 func TestInitCommand_Idempotent(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	for range 2 {
@@ -374,7 +359,7 @@ func TestInitCommand_Idempotent(t *testing.T) {
 }
 
 func TestMaterializeCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	cmd1 := newRootCmd()
@@ -392,7 +377,7 @@ func TestMaterializeCommand(t *testing.T) {
 }
 
 func TestReadyCommand_EmptyRepo(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -407,7 +392,7 @@ func TestReadyCommand_EmptyRepo(t *testing.T) {
 }
 
 func TestCreateCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -440,7 +425,7 @@ func setupArmatureLayout(t *testing.T, repo string) string {
 
 func setupRepoWithTask(t *testing.T) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	setupArmatureLayout(t, repo)
@@ -576,7 +561,7 @@ func TestAmendCommand_RejectsInvalidType(t *testing.T) {
 }
 
 func TestRenderContextCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -599,7 +584,7 @@ func TestRenderContextCommand(t *testing.T) {
 }
 
 func TestRenderContextCommand_AtSHA(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -634,7 +619,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 }
 
 func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -659,7 +644,7 @@ func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
 }
 
 func TestValidateCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -687,7 +672,7 @@ func TestValidateCommand(t *testing.T) {
 }
 
 func TestDecomposeApplyCommand_REQ_AOC_S2_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -715,7 +700,7 @@ func TestDecomposeApplyCommand_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestInitCommand_DualBranch(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(bytes.Buffer)
@@ -755,7 +740,7 @@ func TestDecomposeContextCommand(t *testing.T) {
 }
 
 func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -785,7 +770,7 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 }
 
 func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -831,7 +816,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 }
 
 func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -895,7 +880,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 }
 
 func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -949,7 +934,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 }
 
 func TestStatus_ShowsInProgressIssue(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -976,7 +961,7 @@ func TestStatus_ShowsInProgressIssue(t *testing.T) {
 }
 
 func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1007,7 +992,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 }
 
 func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1020,7 +1005,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 }
 
 func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1036,7 +1021,7 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 }
 
 func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1058,7 +1043,7 @@ func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
 }
 
 func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1074,7 +1059,7 @@ func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
 }
 
 func TestInit_HooksAreBranchAware(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1094,7 +1079,7 @@ func TestInit_HooksAreBranchAware(t *testing.T) {
 }
 
 func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1112,7 +1097,7 @@ func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
 }
 
 func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1141,7 +1126,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 }
 
 func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1188,7 +1173,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 }
 
 func TestAppCtxStateDirSet(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1336,7 +1321,7 @@ func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
 }
 
 func TestWorkersCommand_EmptyRepo(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1440,7 +1425,7 @@ func TestDecisionCommand(t *testing.T) {
 }
 
 func TestLinkCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -1482,7 +1467,7 @@ func TestReopenCommand(t *testing.T) {
 }
 
 func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1500,7 +1485,7 @@ func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
 }
 
 func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1522,7 +1507,7 @@ func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
 }
 
 func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1540,7 +1525,7 @@ func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 }
 
 func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1573,7 +1558,7 @@ func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
 }
 
 func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1586,7 +1571,7 @@ func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
 }
 
 func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -1673,7 +1658,7 @@ func TestTransitionToOpenRejectsInvalidAlias(t *testing.T) {
 }
 
 func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1724,7 +1709,7 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 }
 
 func TestUnassignReleasesClaimedToOpen(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1778,7 +1763,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 }
 
 func TestContextHistoryCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1811,7 +1796,7 @@ func TestContextHistoryCommand(t *testing.T) {
 }
 
 func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1825,7 +1810,7 @@ func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
 }
 
 func TestInitDualBranchIdempotent(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1875,7 +1860,7 @@ func TestLogPayloadSummary(t *testing.T) {
 }
 
 func TestReadyCommand_ParentFilter(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1900,7 +1885,7 @@ func TestReadyCommand_ParentFilter(t *testing.T) {
 }
 
 func TestReadyCommand_TextFormat_WithTasks(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1997,7 +1982,7 @@ func TestHeartbeatCommand_JSONOutput(t *testing.T) {
 }
 
 func TestPushOpsCommand_P2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2015,10 +2000,9 @@ func TestPushOpsCommand_P2(t *testing.T) {
 }
 
 func TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin(t *testing.T) {
-	bareDir := t.TempDir()
-	run(t, bareDir, "git", "init", "--bare")
+	bareDir := gittest.Init(t).Origin
 
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "remote", "set-url", "origin", bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2035,7 +2019,7 @@ func TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin(t *testing.T) {
 }
 
 func TestPushOpsCommand_PushFailureReturnsErrorAndJSON(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2121,7 +2105,7 @@ func TestTransitionCommand_JSONOutput(t *testing.T) {
 }
 
 func TestInitCommand_AlreadyInitialized(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2249,7 +2233,7 @@ func TestSlottedWorkerID_REQ_LNGHZN_S3_T1(t *testing.T) {
 }
 
 func TestAppendLowStakesOp_ResetsTrackerWhenThresholdReachedInWorktree(t *testing.T) {
-	worktreePath := initTempRepo(t)
+	worktreePath := gittest.InitRepo(t)
 	logPath := filepath.Join(worktreePath, ".armature", "ops", "worker.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
 
@@ -2272,7 +2256,7 @@ func TestAppendLowStakesOp_ResetsTrackerWhenThresholdReachedInWorktree(t *testin
 }
 
 func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2316,7 +2300,7 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 }
 
 func TestCreateCommand_HumanOutput(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2328,7 +2312,7 @@ func TestCreateCommand_HumanOutput(t *testing.T) {
 }
 
 func TestCreateCommand_JSONOutput(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2397,7 +2381,7 @@ func TestDecisionCommand_JSONOutput(t *testing.T) {
 }
 
 func TestLinkCommand_HumanOutput(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2415,7 +2399,7 @@ func TestLinkCommand_HumanOutput(t *testing.T) {
 }
 
 func TestLinkCommand_JSONOutput(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2435,7 +2419,7 @@ func TestLinkCommand_JSONOutput(t *testing.T) {
 }
 
 func TestUnlinkCommand(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2462,7 +2446,7 @@ func TestUnlinkCommand(t *testing.T) {
 }
 
 func TestUnlinkCommand_JSONOutput(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2605,7 +2589,7 @@ func TestWorkersCommand_LegacyJSONFlag_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestWorkersCommand_SlottedLogs(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -2629,7 +2613,7 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -2659,7 +2643,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -2678,7 +2662,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -2703,7 +2687,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 }
 
 func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -2747,7 +2731,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -2773,7 +2757,7 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 }
 
 func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -2881,7 +2865,7 @@ func TestCommandGroups(t *testing.T) {
 }
 
 func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	require.NoError(t, err)
@@ -2907,7 +2891,7 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 }
 
 func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	require.NoError(t, err)
@@ -2932,7 +2916,7 @@ func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 }
 
 func TestTransitionToDone_PRCheck_SucceedsOnFeatureBranch(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2954,7 +2938,7 @@ func TestTransitionToDone_PRCheck_SucceedsOnFeatureBranch(t *testing.T) {
 }
 
 func SKIP_TestTransitionToDone_ParentStoryWarning(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2991,7 +2975,7 @@ func SKIP_TestTransitionToDone_ParentStoryWarning(t *testing.T) {
 }
 
 func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3059,7 +3043,7 @@ func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
 }
 
 func TestShowCommand_MultipleIDs(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3078,7 +3062,7 @@ func TestShowCommand_MultipleIDs(t *testing.T) {
 }
 
 func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3099,7 +3083,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 }
 
 func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3130,7 +3114,7 @@ func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 }
 
 func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3153,7 +3137,7 @@ func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
 }
 
 func TestAmendCommand_ReplacesAndClearsContextFiles(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3203,7 +3187,7 @@ func TestTransitionCommand_WithFieldFlag(t *testing.T) {
 }
 
 func TestCreateCommand_WithSourceFlag(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3286,7 +3270,7 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 }
 
 func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3309,7 +3293,7 @@ func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
 }
 
 func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3331,7 +3315,7 @@ func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
 }
 
 func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3356,7 +3340,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 }
 
 func TestSourceLinkCommand_MultiIssue(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3399,7 +3383,7 @@ func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 }
 
 func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3472,7 +3456,7 @@ func TestCreateCommand_InvalidParentTypeCombo(t *testing.T) {
 }
 
 func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3493,7 +3477,7 @@ func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
 }
 
 func TestReparentCommand_HappyPath(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3550,7 +3534,7 @@ func TestReparentCommand_IssueNotFound(t *testing.T) {
 }
 
 func TestCreateCmd_WithParent_DoesNotMaterialize(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -3627,7 +3611,7 @@ func TestValidateRejectsUnexpectedArguments(t *testing.T) {
 
 func TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 	t.Parallel()
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	armWorktreePath := filepath.Join(repo, ".arm")
@@ -3676,7 +3660,7 @@ func TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 
 func TestCommand_CustomOpsWorktreeLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 	t.Parallel()
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	customWorktree := filepath.Join(repo, ".custom-ops")

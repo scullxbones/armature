@@ -15,6 +15,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/gittest"
 )
 
 func TestMigrateDualBranchToCollapsed_NoLayout_REQ_LNGHZN_S1_T2(t *testing.T) {
@@ -118,7 +119,7 @@ func TestUpdateGitExcludeConcurrentWritersKeepEveryPattern_REQ_LNGHZN_S9_T1(t *t
 }
 
 func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := gittest.InitRepo(t)
 
 	gitClient := adapters.New(tmpDir)
 
@@ -126,19 +127,6 @@ func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.
 	require.NoError(t, os.Setenv("GIT_AUTHOR_EMAIL", "test@example.com"))
 	require.NoError(t, os.Setenv("GIT_COMMITTER_NAME", "Test User"))
 	require.NoError(t, os.Setenv("GIT_COMMITTER_EMAIL", "test@example.com"))
-
-	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "init").Run(); err != nil {
-		t.Fatalf("failed to init git repo: %v", err)
-	}
-	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "config", "user.email", "test@example.com").Run(); err != nil {
-		t.Fatalf("failed to set git email: %v", err)
-	}
-	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "config", "user.name", "Test User").Run(); err != nil {
-		t.Fatalf("failed to set git name: %v", err)
-	}
-	if err := exec.CommandContext(context.Background(), "git", "-C", tmpDir, "config", "commit.gpgsign", "false").Run(); err != nil {
-		t.Fatalf("failed to disable gpgsign: %v", err)
-	}
 	readmeFile := filepath.Join(tmpDir, "README.md")
 	if err := os.WriteFile(readmeFile, []byte("# Test Repo\n"), 0o600); err != nil {
 		t.Fatalf("failed to write README: %v", err)
@@ -214,7 +202,7 @@ func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.
 
 func setupDualBranchFixtureForSourcesDebris(t *testing.T) (repo string, armWorktreePath string) {
 	t.Helper()
-	repo = initTempRepo(t)
+	repo = gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	gitClient := adapters.New(repo)

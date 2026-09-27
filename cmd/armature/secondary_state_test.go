@@ -3,11 +3,12 @@ package main
 import (
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSecondaryStatePaths(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")

@@ -12,24 +12,15 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func initTestRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	gitRun := func(args ...string) {
-		cmd := adapters.NonInteractiveGitCommand(dir, args...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-	require.NoError(t, adapters.GitInitMain(dir))
-	gitRun("config", "user.email", "test@test.com")
-	gitRun("config", "user.name", "Test")
-	gitRun("config", "commit.gpgsign", "false")
-	gitRun("commit", "--allow-empty", "-m", "init")
-	gitRun("branch", "-M", "main")
+	dir := gittest.InitRepo(t)
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
 	return dir
 }
 
@@ -525,6 +516,7 @@ func TestListFilesAtCommit_EmptyTree(t *testing.T) {
 func TestFetchAndRebase_ReportsFetchError(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
+	gittest.Git(t, repo, "remote", "remove", "origin")
 	c := adapters.New(repo)
 
 	err := c.FetchAndRebase("main")
@@ -534,19 +526,10 @@ func TestFetchAndRebase_ReportsFetchError(t *testing.T) {
 
 func TestFetchAndRebase_ReportsRebaseError(t *testing.T) {
 	t.Parallel()
-	repo := initTestRepo(t)
-	origin := filepath.Join(t.TempDir(), "origin.git")
-
-	run := func(dir string, args ...string) {
-		cmd := exec.CommandContext(context.Background(), "git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-
-	run(t.TempDir(), "init", "--bare", origin)
-	run(repo, "remote", "add", "origin", origin)
-	run(repo, "push", "-u", "origin", "HEAD:main")
+	fx := gittest.Init(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "push", "-u", "origin", "HEAD:main")
 
 	c := adapters.New(repo)
 	err := c.FetchAndRebase("feature/missing")
@@ -556,11 +539,11 @@ func TestFetchAndRebase_ReportsRebaseError(t *testing.T) {
 
 func TestFetchTrackingRefWithoutMovingHEAD_UpdatesOriginRef(t *testing.T) {
 	t.Parallel()
-	repo := initTestRepo(t)
-	origin := filepath.Join(t.TempDir(), "origin.git")
-	runGitDir(t, t.TempDir(), "init", "--bare", origin)
+	fx := gittest.Init(t)
+	repo := fx.Dir
+	origin := fx.Origin
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
 	runGitDir(t, repo, "checkout", "-b", "_armature")
-	runGitDir(t, repo, "remote", "add", "origin", origin)
 	runGitDir(t, repo, "push", "-u", "origin", "_armature")
 
 	other := t.TempDir()
@@ -648,6 +631,7 @@ func TestCurrentBranch(t *testing.T) {
 func TestPush_ErrorOnNoRemote(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
+	gittest.Git(t, repo, "remote", "remove", "origin")
 	c := adapters.New(repo)
 
 	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
@@ -1111,7 +1095,9 @@ func TestDiffNameOnlyRange_NoChanges(t *testing.T) {
 func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 	t.Parallel()
 
-	originDir := t.TempDir()
+	seed := gittest.Init(t)
+	originDir := seed.Origin
+	tempDir := seed.Dir
 
 	gitRun := func(dir string, args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", args...)
@@ -1120,16 +1106,7 @@ func TestCreateOrphanBranch_WithRemoteBranch(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	gitRun(originDir, "init", "--bare")
-
-	tempDir := t.TempDir()
-	gitRun(tempDir, "init")
-	gitRun(tempDir, "config", "user.email", "test@test.com")
-	gitRun(tempDir, "config", "user.name", "Test")
-	gitRun(tempDir, "config", "commit.gpgsign", "false")
-	gitRun(tempDir, "remote", "add", "origin", originDir)
 	gitRun(tempDir, "commit", "--allow-empty", "-m", "init")
-	gitRun(tempDir, "branch", "-M", "main")
 	gitRun(tempDir, "push", "-u", "origin", "main")
 
 	gitRun(tempDir, "checkout", "-b", "_armature")
@@ -1243,7 +1220,9 @@ func TestCreateOrphanBranch_RestoresDetachedHEADOnCommitFailure(t *testing.T) {
 func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 	t.Parallel()
 
-	originDir := t.TempDir()
+	seed := gittest.Init(t)
+	originDir := seed.Origin
+	tempDir := seed.Dir
 
 	gitRun := func(dir string, args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", args...)
@@ -1252,16 +1231,7 @@ func TestCreateOrphanBranch_SingleBranchClone(t *testing.T) {
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
 
-	gitRun(originDir, "init", "--bare")
-
-	tempDir := t.TempDir()
-	gitRun(tempDir, "init")
-	gitRun(tempDir, "config", "user.email", "test@test.com")
-	gitRun(tempDir, "config", "user.name", "Test")
-	gitRun(tempDir, "config", "commit.gpgsign", "false")
-	gitRun(tempDir, "remote", "add", "origin", originDir)
 	gitRun(tempDir, "commit", "--allow-empty", "-m", "init")
-	gitRun(tempDir, "branch", "-M", "main")
 	gitRun(tempDir, "push", "-u", "origin", "main")
 
 	gitRun(tempDir, "checkout", "-b", "_armature")
@@ -1400,17 +1370,13 @@ func TestDirtyEntriesReportsOldPathForRename(t *testing.T) {
 
 func addFileSubmodule(t *testing.T, parent string) {
 	t.Helper()
-	sub := t.TempDir()
+	sub := gittest.InitRepo(t)
 	gitRun := func(dir string, args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", args...)
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, "git %v: %s", args, out)
 	}
-	gitRun(sub, "init")
-	gitRun(sub, "config", "user.email", "test@test.com")
-	gitRun(sub, "config", "user.name", "Test")
-	gitRun(sub, "config", "commit.gpgsign", "false")
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.txt"), []byte("a"), 0o644))
 	gitRun(sub, "add", "a.txt")
 	gitRun(sub, "commit", "-m", "init")

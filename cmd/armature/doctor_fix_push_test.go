@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
-	bareDir := t.TempDir()
-	run(t, bareDir, "git", "init", "--bare")
+	bareDir := gittest.Init(t).Origin
 
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "remote", "set-url", "origin", bareDir)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

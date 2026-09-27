@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +34,7 @@ func TestNoteDeleteCommand_PositionalArgs_REQ_LNGHZN_S10(t *testing.T) {
 }
 
 func TestWorkersCommand_NoWorkers_REQ_LNGHZN_S10(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 

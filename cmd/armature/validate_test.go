@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func createOverlappingTask(t *testing.T, repo, id, dod string) {
 }
 
 func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -55,7 +56,7 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -72,7 +73,7 @@ func TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -89,7 +90,7 @@ func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -108,7 +109,7 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -151,7 +152,7 @@ func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -187,7 +188,7 @@ func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -226,7 +227,7 @@ func nonEmptyLines(s string) []string {
 }
 
 func TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)

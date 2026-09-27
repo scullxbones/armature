@@ -1,14 +1,13 @@
 package context
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -949,10 +948,7 @@ func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
 
 func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
 	t.Parallel()
-	repoDir := t.TempDir()
-	initCmd := exec.CommandContext(context.Background(), "git", "init")
-	initCmd.Dir = repoDir
-	require.NoError(t, initCmd.Run(), "git init must succeed")
+	repoDir := gittest.InitRepo(t)
 
 	stateDir := filepath.Join(repoDir, "state", "worker-abc")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))

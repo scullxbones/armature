@@ -12,11 +12,12 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
 func TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -42,7 +43,7 @@ func TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestDeliveryGateBlocksMissingCommitReference_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -66,7 +67,7 @@ func TestDeliveryGateBlocksMissingCommitReference_REQ_LNGHZN_S4_T2(t *testing.T)
 }
 
 func TestTransitionDoneAcceptsSquashOnMainWhenClaimWorktreeStale_REQ_MATENC(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "branch", "-M", "main")
 
@@ -94,7 +95,7 @@ func TestTransitionDoneAcceptsSquashOnMainWhenClaimWorktreeStale_REQ_MATENC(t *t
 }
 
 func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -129,7 +130,7 @@ func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestTransitionRejectsGateOverrideOutsideDone_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -151,7 +152,7 @@ func TestTransitionRejectsGateOverrideOutsideDone_REQ_LNGHZN_S4_T2(t *testing.T)
 }
 
 func TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -170,7 +171,7 @@ func TestGateNotRunForNonDoneTransitions_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestTransitionDoneReplaysAmendedScopeBeforeGating_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -199,7 +200,7 @@ func TestTransitionDoneReplaysAmendedScopeBeforeGating_REQ_LNGHZN_S4_T2(t *testi
 }
 
 func TestTransitionDoneClaimedIssueAmendedToEpicStillRunsGate_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -223,7 +224,7 @@ func TestTransitionDoneClaimedIssueAmendedToEpicStillRunsGate_REQ_LNGHZN_S4_T2(t
 }
 
 func TestGateSkippedForNonTaskIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -241,7 +242,7 @@ func TestGateSkippedForNonTaskIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestTransitionDoneUnmaterializedStoryReplaysAuthoritativeOps_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -261,7 +262,7 @@ func TestTransitionDoneUnmaterializedStoryReplaysAuthoritativeOps_REQ_LNGHZN_S4_
 }
 
 func TestGateSkippedForUnclaimedEpicOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -279,7 +280,7 @@ func TestGateSkippedForUnclaimedEpicOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestGateAppliesToClaimedStoryWorktreeOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -301,7 +302,7 @@ func TestGateAppliesToClaimedStoryWorktreeOnDone_REQ_LNGHZN_S4_T2(t *testing.T) 
 }
 
 func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -323,7 +324,7 @@ func TestGateAppliesToClaimedStoryWorktreeFromDifferentCheckout_REQ_LNGHZN_S4_T2
 }
 
 func TestTransitionDoneSelfUnassignThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -347,7 +348,7 @@ func TestTransitionDoneSelfUnassignThenDoneStillGatesLingeringWorktree_REQ_LNGHZ
 }
 
 func TestTransitionDoneReopenedThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -371,7 +372,7 @@ func TestTransitionDoneReopenedThenDoneStillGatesLingeringWorktree_REQ_LNGHZN_S4
 }
 
 func TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -395,7 +396,7 @@ func TestTransitionDoneReleasedStoryWithWorktreeFullyRemovedStaysExempt_REQ_LNGH
 }
 
 func TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -420,7 +421,7 @@ func TestGateAppliesToClaimedStoryWorktreeInDetachedHEAD_REQ_LNGHZN_S4_T2(t *tes
 }
 
 func TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -444,7 +445,7 @@ func TestTransitionDoneClaimedStoryWithoutWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t
 }
 
 func TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_REQ_LNGHZN_S4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -471,7 +472,7 @@ func TestTransitionDoneUnassignedThenRetypedToEpicStillGatesLingeringWorktree_RE
 }
 
 func TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -493,7 +494,7 @@ func TestGateAppliesToBugIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestGateAppliesToFeatureIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -515,7 +516,7 @@ func TestGateAppliesToFeatureIssueKindOnDone_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestTransitionDoneNoBoundWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -529,7 +530,7 @@ func TestTransitionDoneNoBoundWorktreeFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T)
 }
 
 func TestDeliveryGateBlocksOutOfScopeFiles_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -553,7 +554,7 @@ func TestDeliveryGateBlocksOutOfScopeFiles_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestRunDeliveryGateCheck_AllThreeChecksFailSimultaneously(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -581,7 +582,7 @@ func TestRunDeliveryGateCheck_AllThreeChecksFailSimultaneously(t *testing.T) {
 }
 
 func TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -617,7 +618,7 @@ func TestDeliveryGateSurvivesWorktreeRecreation_REQ_LNGHZN_S4_T1(t *testing.T) {
 }
 
 func TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -649,7 +650,7 @@ func TestDeliveryGateSurvivesRebaseOntoUpdatedParent_REQ_LNGHZN_S4_T1(t *testing
 }
 
 func TestDeliveryGateFallsBackWhenParentBranchConfigIsLiteralHEAD_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "branch", "-m", "main")
 
@@ -676,7 +677,7 @@ func TestDeliveryGateFallsBackWhenParentBranchConfigIsLiteralHEAD_REQ_LNGHZN_S4_
 }
 
 func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -709,7 +710,7 @@ func TestTransitionDoneRepoNotBoundToIssueFailsClosed_REQ_LNGHZN_S4_T2(t *testin
 }
 
 func TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -736,7 +737,7 @@ func TestDeliveryGateBlocksWrongBranchCheckout_REQ_LNGHZN_S4_T2(t *testing.T) {
 }
 
 func TestTransitionDoneFromWorktreeSubdirectory_REQ_LNGHZN_S4(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
@@ -761,7 +762,7 @@ func TestTransitionDoneFromWorktreeSubdirectory_REQ_LNGHZN_S4(t *testing.T) {
 }
 
 func TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")

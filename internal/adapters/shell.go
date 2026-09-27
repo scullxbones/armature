@@ -106,12 +106,25 @@ func overlayEnv(base []string, extra []string) []string {
 }
 
 func GitInitMain(dir string, extraEnv ...string) error {
+	return gitInitMain(dir, false, extraEnv...)
+}
+
+func GitInitBareMain(dir string, extraEnv ...string) error {
+	return gitInitMain(dir, true, extraEnv...)
+}
+
+func gitInitMain(dir string, bare bool, extraEnv ...string) error {
 	isolated := append([]string{
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
 	}, extraEnv...)
 	env := overlayEnv(stripGitOverrideEnv(os.Environ()), isolated)
-	initCmd := exec.CommandContext(context.Background(), "git", "init", dir) //nolint:gosec // G204: "git" is constant
+	args := []string{"init"}
+	if bare {
+		args = append(args, "--bare")
+	}
+	args = append(args, dir)
+	initCmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // G204: "git" is constant
 	initCmd.Env = env
 	if out, err := initCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git init: %w: %s", err, out)

@@ -53,15 +53,24 @@ func TestNonInteractiveGitCommand(t *testing.T) {
 	}
 }
 
+func TestGitInitBareMainSetsMainHEAD(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "origin.git")
+	if err := GitInitBareMain(dir); err != nil {
+		t.Fatalf("GitInitBareMain: %v", err)
+	}
+	head, err := os.ReadFile(filepath.Join(dir, "HEAD"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(head), "refs/heads/main") {
+		t.Fatalf("bare HEAD = %q, want refs/heads/main", head)
+	}
+}
+
 func TestGitInitMainIgnoresInheritedGITDir(t *testing.T) {
 	other := t.TempDir()
-	otherInit := exec.CommandContext(context.Background(), "git", "init", other)
-	otherInit.Env = overlayEnv(stripGitOverrideEnv(os.Environ()), []string{
-		"GIT_CONFIG_GLOBAL=/dev/null",
-		"GIT_CONFIG_SYSTEM=/dev/null",
-	})
-	if out, err := otherInit.CombinedOutput(); err != nil {
-		t.Fatalf("git init other: %v: %s", err, out)
+	if err := GitInitMain(other); err != nil {
+		t.Fatalf("GitInitMain other: %v", err)
 	}
 	marker := filepath.Join(other, "KEEP")
 	if err := os.WriteFile(marker, []byte("untouched"), 0o644); err != nil {
@@ -176,8 +185,7 @@ func TestExecuteHook_BadOutput(t *testing.T) {
 func TestGitConfig_Unset(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	cmd := exec.CommandContext(context.Background(), "git", "init", dir)
-	if err := cmd.Run(); err != nil {
+	if err := GitInitMain(dir); err != nil {
 		t.Skip("git not available")
 	}
 	_, err := GitConfig(dir, "armature.nonexistent-key")

@@ -12,6 +12,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/stretchr/testify/assert"
@@ -235,7 +236,7 @@ func TestMergedClearsParentBranchMetadataFromRecordedClaim_REQ_LNGHZN_S5_T9(t *t
 }
 
 func TestMergedRemovesBugWorktree(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -274,7 +275,7 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 }
 
 func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -300,7 +301,7 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 }
 
 func TestMergedRemovesStoryWorktree(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -337,7 +338,7 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 }
 
 func TestMergedRemovesFeatureWorktree(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -374,7 +375,7 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 }
 
 func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -574,7 +575,7 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 }
 
 func TestMergedRejectsNonDoneStatus(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -640,7 +641,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 	})
 
 	t.Run("failure path: appendOp fails → worktree preserved", func(t *testing.T) {
-		repo := initTempRepo(t)
+		repo := gittest.InitRepo(t)
 		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 		bootstrapCmd := newRootCmd()
@@ -691,7 +692,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 }
 
 func TestMergedRecordsPROnRetry(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapCmd := newRootCmd()
@@ -837,7 +838,7 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 }
 
 func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapCmd := newRootCmd()

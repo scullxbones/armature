@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worker"
@@ -61,7 +62,7 @@ func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 }
 
 func TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -120,7 +121,7 @@ func TestHookSubcommandHelp(t *testing.T) {
 }
 
 func TestHookPostCommit_InitialCommit(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -207,7 +208,7 @@ func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
 }
 
 func TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -489,7 +490,7 @@ func TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2(t *testing.T) {
 
 func setupRepoWithScopedTask(t *testing.T, taskID, scopePath string) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)

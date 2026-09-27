@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ import (
 
 func setupRepoWithScopedTasks(t *testing.T) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
@@ -129,7 +130,7 @@ func TestScopeRenameCmd_SameTimestampForAllOps(t *testing.T) {
 }
 
 func TestScopeRenameCmd_RefusesBatchWhenAnyRenameIntroducesFinding(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
 	_, err := runTrls(t, repo, "worker-init")
@@ -198,7 +199,7 @@ func TestScopeRenameCmd_JSONOutput(t *testing.T) {
 }
 
 func TestScopeRenameCmd_UsesIndexForScan(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)

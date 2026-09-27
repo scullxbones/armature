@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/scullxbones/armature/internal/worker"
@@ -111,7 +112,7 @@ func TestStatsCostDedupesIdempotentAssessments(t *testing.T) {
 }
 
 func TestStatsWithoutCostFlagHints(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -129,7 +130,7 @@ func TestStatsWithoutCostFlagHints(t *testing.T) {
 
 func initCostFixture(t *testing.T) string {
 	t.Helper()
-	repo := initTempRepo(t)
+	repo := gittest.InitRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
