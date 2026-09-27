@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/clock"
 )
 
 // ActivityEntry represents a single execution captured in the activity log.
@@ -161,7 +162,7 @@ func AppendActivity(gitDir string, command string, exitCode int, exitCodeKnown b
 		OutputTail:    truncated.Tail,
 		OutputHash:    truncated.Hash,
 		WorktreeHead:  headSha,
-		Timestamp:     time.Now().UTC().Format(time.RFC3339), //nolint:forbidigo // required for activity log timestamps
+		Timestamp:     time.Unix(clock.System(), 0).UTC().Format(time.RFC3339),
 	}
 
 	logLine := formatActivityLogEntry(entry)
