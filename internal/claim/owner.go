@@ -153,7 +153,11 @@ func ApplyAt(held Lease, op ops.Op, stealAt int64) Lease {
 		}
 		return ApplyHeartbeat(held, hb)
 	case ops.OpTransition:
-		return ApplyTransition(held, op)
+		tr := op
+		if stealAt != 0 {
+			tr.Timestamp = stealAt
+		}
+		return ApplyTransition(held, tr)
 	default:
 		return held
 	}
