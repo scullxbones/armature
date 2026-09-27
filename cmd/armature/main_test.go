@@ -2603,10 +2603,9 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Slot task", "--id", "slot-task")
 	require.NoError(t, err)
 
+	t.Setenv("ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "claim", "--issue", "slot-task", "--worktree")
 	require.NoError(t, err)
-
-	t.Setenv("ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "via slot")
 	require.NoError(t, err)
 	t.Setenv("ARM_LOG_SLOT", "")
