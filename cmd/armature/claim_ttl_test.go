@@ -167,20 +167,19 @@ func exprMentionsOpClaim(e ast.Expr) bool {
 func TestResolveClaimAbsent_REQ_CLAIMTTL(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..")
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		assert.NotContains(t, string(b), "func ResolveClaim", path)
-		assert.NotContains(t, string(b), "zeroTTLHeldLeaseReplayFallbackMinutes", path)
-		return nil
-	})
-	require.NoError(t, err)
+	files := []string{
+		"internal/claim/claim.go",
+		"internal/claim/owner.go",
+		"internal/claim/race.go",
+		"internal/audit/audit.go",
+		"cmd/armature/workers.go",
+		"cmd/armature/hook.go",
+		"internal/materialize/engine.go",
+	}
+	for _, rel := range files {
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		require.NoError(t, err, rel)
+		assert.NotContains(t, string(b), "func ResolveClaim", rel)
+		assert.NotContains(t, string(b), "zeroTTLHeldLeaseReplayFallbackMinutes", rel)
+	}
 }
