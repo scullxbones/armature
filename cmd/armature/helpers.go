@@ -502,7 +502,7 @@ func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op,
 	if err != nil {
 		return wrote, err
 	}
-	return wrote, pushOpsBranchAfter(opsPublishGit(ctx, gc), tracker, afterIntegrate)
+	return wrote, pushOpsBranchAfter(ctx, opsPublishGit(ctx, gc), tracker, afterIntegrate, true)
 }
 
 func publishLocalArmatureTip(state *executionState) error {
@@ -514,7 +514,7 @@ func publishLocalArmatureTipAfter(state *executionState, afterIntegrate func() e
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
 	ctx := state.ctx
-	return pushOpsBranchAfter(opsPublishGit(ctx, worktreeGit(ctx)), state.tracker, afterIntegrate)
+	return pushOpsBranchAfter(ctx, opsPublishGit(ctx, worktreeGit(ctx)), state.tracker, afterIntegrate, true)
 }
 
 type opsPublishError struct {
@@ -584,11 +584,16 @@ func publishArmatureSequence(gc opsBranchPublisher, afterIntegrate func() error)
 	return gc.Push("_armature")
 }
 
-func pushOpsBranch(gc *adapters.Client, tracker ops.PendingPushTracker) error {
-	return pushOpsBranchAfter(gc, tracker, nil)
+func pushOpsBranch(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker) error {
+	return pushOpsBranchAfter(ctx, gc, tracker, nil, true)
 }
 
-func pushOpsBranchAfter(gc *adapters.Client, tracker ops.PendingPushTracker, afterIntegrate func() error) error {
+func pushOpsBranchAfter(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker, afterIntegrate func() error, skipValidate bool) error {
+	if !skipValidate && ctx != nil {
+		if err := refusePublishedGraph(ctx, gc); err != nil {
+			return newOpsPublishError(err)
+		}
+	}
 	if gc != nil {
 		if err := publishArmatureSequence(gc, afterIntegrate); err != nil {
 			return newOpsPublishError(err)
@@ -600,8 +605,8 @@ func pushOpsBranchAfter(gc *adapters.Client, tracker ops.PendingPushTracker, aft
 	return nil
 }
 
-func pushOpsBranchAlwaysResetTracker(gc *adapters.Client, tracker ops.PendingPushTracker) {
-	if err := pushOpsBranch(gc, tracker); err != nil && tracker != nil {
+func pushOpsBranchAlwaysResetTracker(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker) {
+	if err := pushOpsBranch(ctx, gc, tracker); err != nil && tracker != nil {
 		swallowErr(tracker.Reset())
 	}
 }
@@ -636,7 +641,7 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 			return err
 		}
 		if config.PendingOps(n) >= threshold {
-			pushOpsBranchAlwaysResetTracker(opsPublishGit(ctx, gc), tracker)
+			pushOpsBranchAlwaysResetTracker(ctx, opsPublishGit(ctx, gc), tracker)
 		}
 	}
 	return nil

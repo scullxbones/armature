@@ -24,6 +24,7 @@ func init() {
 	armerrors.Register("MERGED-1")
 	armerrors.Register("NOTE-1")
 	armerrors.Register("PUSH-OPS-1")
+	armerrors.Register("PUSH-OPS-2")
 	armerrors.Register("REOPEN-1")
 	armerrors.Register("REPARENT-1")
 	armerrors.Register("SCOPE-DELETE-1")

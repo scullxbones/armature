@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -53,9 +55,9 @@ Use --quiet to suppress INFO lines on a failing run.`,
 			if ci {
 				strict = true
 			}
-			opts := validate.Options{
-				Strict: strict,
-				Now:    nowEpoch(),
+			opts := validate.Options{Strict: strict, Now: nowEpoch()}
+			if ci {
+				opts = graphValidateCIOptions()
 			}
 			result, err := runGraphValidation(cmd, opts)
 			if err != nil {
@@ -90,15 +92,32 @@ Use --quiet to suppress INFO lines on a failing run.`,
 	return cmd
 }
 
+func graphValidateCIOptions() validate.Options {
+	return validate.CIOptions(nowEpoch())
+}
+
 func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Result, error) {
-	appCtx := currentCtx(cmd)
-	store := newSnapshotStore(appCtx)
-	snap, err := store.Load(cmd.Context())
+	result, err := runGraphValidationOnCtx(currentCtx(cmd), opts)
 	if err != nil {
-		return validate.Result{}, fmt.Errorf("load snapshot: %w", err)
+		return result, err
 	}
 	if !structuredFormat(cmd) {
-		emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
+		var msgs []string
+		for _, f := range result.Findings {
+			if f.Rule == snapshotFindingRule {
+				msgs = append(msgs, f.Message)
+			}
+		}
+		emitSnapWarnings(cmd.ErrOrStderr(), msgs)
+	}
+	return result, nil
+}
+
+func runGraphValidationOnCtx(appCtx *config.Context, opts validate.Options) (validate.Result, error) {
+	store := newSnapshotStore(appCtx)
+	snap, err := store.Load(context.Background())
+	if err != nil {
+		return validate.Result{}, fmt.Errorf("load snapshot: %w", err)
 	}
 
 	manifestData, err := adapters.ReadManifestFile(filepath.Join(appCtx.IssuesDir, "sources"))

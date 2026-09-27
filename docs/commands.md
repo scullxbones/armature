@@ -655,6 +655,26 @@ arm note TASK-001 --msg "Started implementation after architectural review."
 
 ---
 
+## push-ops
+
+Push the `_armature` ops branch to origin.
+
+**Synopsis:**
+`arm push-ops [flags]`
+
+Before pushing, rebases onto the current `origin/_armature` tip and runs the
+same fail-closed contract as `arm validate --ci` / `make validate-graph`.
+Warnings (including W1 scope overlap) fail the run. Findings are printed and
+the command exits non-zero; origin is not updated.
+
+**Flags:**
+- `--override-validate`: Human escape hatch. Publish despite a dirty graph.
+  Requires `--reason` and a controlling terminal. Records
+  `skipped_validate_gate`. Never a green publish.
+- `--reason string`: Recorded reason for `--override-validate`.
+
+---
+
 ## ready
 
 Show tasks ready to be claimed. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare array, never `null`, and never a second JSON value on stderr.
