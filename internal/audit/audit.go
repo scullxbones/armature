@@ -87,28 +87,7 @@ func claimKey(op ops.Op) string {
 	return op.TargetID + "|" + op.WorkerID
 }
 
-// identifyLostRaceClaims groups claim ops by target issue, resolves the winner
-// via claim.ResolveClaim, and returns a set of keys for the losing workers.
+// identifyLostRaceClaims marks claim ops Accept rejected.
 func identifyLostRaceClaims(allOps []ops.Op) map[string]bool {
-	// Group claims by target ID
-	claimsByTarget := make(map[string][]ops.Op)
-	for _, op := range allOps {
-		if op.Type == ops.OpClaim {
-			claimsByTarget[op.TargetID] = append(claimsByTarget[op.TargetID], op)
-		}
-	}
-
-	lost := make(map[string]bool)
-	for _, claims := range claimsByTarget {
-		if len(claims) < 2 {
-			continue // no race
-		}
-		winner := claim.ResolveClaim(claims)
-		for _, c := range claims {
-			if c.WorkerID != winner.WorkerID {
-				lost[claimKey(c)] = true
-			}
-		}
-	}
-	return lost
+	return claim.LostRaceClaimKeys(allOps)
 }

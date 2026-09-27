@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -144,51 +145,42 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 
-	logPath := opsLogPath(ctx.IssuesDir, slottedWorkerID(workerID).String())
-
-	allOps, err := ops.ReadLog(logPath)
+	workers, err := enumerateWorkers(filepath.Join(ctx.IssuesDir, "ops"))
 	if err != nil {
 		return ""
 	}
-
-	defaultTTL := ctx.Config.DefaultTTL
-	if defaultTTL <= 0 {
-		defaultTTL = config.DefaultTTLMinutes
+	var allOps []ops.Op
+	for _, workerOps := range workers {
+		allOps = append(allOps, workerOps...)
 	}
 	now := time.Now().Unix()
-
-	clocksByIssue := make(map[string]*claimOwnerClocks)
-
+	want := baseWorkerIdentity(slottedWorkerID(workerID).String())
+	var (
+		bestID  string
+		bestAct int64
+	)
+	seen := map[string]bool{}
 	for _, op := range allOps {
-		c := clocksByIssue[op.TargetID]
-		if c == nil {
-			c = &claimOwnerClocks{}
-			clocksByIssue[op.TargetID] = c
-		}
-		switch op.Type {
-		case ops.OpClaim:
-			c.claimedAt = op.Timestamp
-			c.ttl = op.Payload.TTL
-		case ops.OpHeartbeat:
-			c.recordHeartbeat(op.Timestamp)
-		case ops.OpTransition:
-			c.recordTransitionAt(op.Timestamp, op.Payload.To)
-		}
-	}
-
-	for issueID, c := range clocksByIssue {
-		if c.claimedAt == 0 || c.transitioned {
+		if op.TargetID == "" || seen[op.TargetID] {
 			continue
 		}
-		ttl := c.ttl
-		if ttl <= 0 {
-			ttl = int(defaultTTL)
+		seen[op.TargetID] = true
+		lease := claimPkg.Owner(allOps, op.TargetID)
+		if baseWorkerIdentity(lease.Holder) != want {
+			continue
 		}
-		if !claimPkg.IsClaimStale(c.lastActivity(), ttl, now) {
-			return issueID
+		if lease.Status != ops.StatusClaimed && lease.Status != ops.StatusInProgress {
+			continue
+		}
+		if !claimPkg.LeaseLive(lease, now) {
+			continue
+		}
+		if bestID == "" || lease.LastActivity > bestAct || (lease.LastActivity == bestAct && op.TargetID < bestID) {
+			bestID = op.TargetID
+			bestAct = lease.LastActivity
 		}
 	}
-	return ""
+	return bestID
 }
 
 func runPreCommitHook(cmd *cobra.Command) error {

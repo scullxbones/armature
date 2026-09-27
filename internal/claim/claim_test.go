@@ -13,26 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestResolveClaimRace_FirstTimestampWins(t *testing.T) {
-	t.Parallel()
-	claims := []ops.Op{
-		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-b"},
-		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
-	}
-	winner := ResolveClaim(claims)
-	assert.Equal(t, "worker-a", winner.WorkerID)
-}
-
-func TestResolveClaimRace_LexicographicTiebreaker(t *testing.T) {
-	t.Parallel()
-	claims := []ops.Op{
-		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-b"},
-		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a"},
-	}
-	winner := ResolveClaim(claims)
-	assert.Equal(t, "worker-a", winner.WorkerID)
-}
-
 func TestFoldLastActivity(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, LastActivity(100), FoldLastActivity(100, 0, 0))
@@ -43,17 +23,18 @@ func TestFoldLastActivity(t *testing.T) {
 
 func TestIsClaimStale(t *testing.T) {
 	t.Parallel()
-	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 0), 1, 161))
+	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 0), 1, 160))
 	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 0), 1, 159))
 	assert.False(t, IsClaimStale(FoldLastActivity(100, 150, 0), 1, 209))
-	assert.True(t, IsClaimStale(FoldLastActivity(100, 150, 0), 1, 211))
-	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 0), 0, 9999))
+	assert.True(t, IsClaimStale(FoldLastActivity(100, 150, 0), 1, 210))
+	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 0), 0, 100+int64(DefaultReplayTTLMinutes)*60-1))
+	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 0), 0, 100+int64(DefaultReplayTTLMinutes)*60))
 }
 
 func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
 	t.Parallel()
 	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 150), 1, 209))
-	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 150), 1, 211))
+	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 150), 1, 210))
 }
 
 func TestScopeOverlap(t *testing.T) {
@@ -68,7 +49,7 @@ func genOp() gopter.Gen {
 	return gen.Struct(reflect.TypeFor[ops.Op](), map[string]gopter.Gen{
 		"Type":      gen.Const(ops.OpClaim),
 		"TargetID":  gen.Const("task-01"),
-		"Timestamp": gen.Int64Range(0, 1000),
+		"Timestamp": gen.Int64Range(0, 1000).Map(func(n int64) int64 { return n*1000 + 1 }),
 		"WorkerID":  gen.OneConstOf("worker-a", "worker-b", "worker-c", "worker-d"),
 	})
 }
@@ -80,23 +61,23 @@ func shuffle(claims []ops.Op, rng *rand.Rand) []ops.Op {
 	return cp
 }
 
-func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
+func TestPropertyOwnerDeterminism(t *testing.T) {
 	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 200
 	properties := gopter.NewProperties(parameters)
 
-	properties.Property("winner is invariant under permutation", prop.ForAll(
+	properties.Property("owner is invariant under permutation of equal-timestamp-stable input", prop.ForAll(
 		func(claims []ops.Op) bool {
 			if len(claims) == 0 {
 				return true
 			}
-			expected := ResolveClaim(claims)
+			expected := Owner(claims, "task-01")
 			rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic seed intentional for test reproducibility
 			for range 5 {
 				shuffled := shuffle(claims, rng)
-				got := ResolveClaim(shuffled)
-				if got.WorkerID != expected.WorkerID || got.Timestamp != expected.Timestamp {
+				got := Owner(shuffled, "task-01")
+				if got.Holder != expected.Holder || got.Since != expected.Since {
 					return false
 				}
 			}
@@ -108,7 +89,7 @@ func TestPropertyClaimRaceWinnerDeterminism(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-func TestPropertyResolveClaimNoPanic(t *testing.T) {
+func TestPropertyOwnerNoPanic(t *testing.T) {
 	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 300
@@ -118,10 +99,10 @@ func TestPropertyResolveClaimNoPanic(t *testing.T) {
 		func(claims []ops.Op) bool {
 			defer func() {
 				if r := recover(); r != nil {
-					t.Errorf("ResolveClaim panicked: %v", r)
+					t.Errorf("Owner panicked: %v", r)
 				}
 			}()
-			_ = ResolveClaim(claims)
+			_ = Owner(claims, "task-01")
 			return true
 		},
 		gen.SliceOf(genOp()),
@@ -130,37 +111,39 @@ func TestPropertyResolveClaimNoPanic(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-func TestPropertyClaimWinnerMinimality(t *testing.T) {
+func TestPropertyAcceptStealsOnlyWhenNotLive(t *testing.T) {
 	t.Parallel()
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 200
 	properties := gopter.NewProperties(parameters)
 
-	properties.Property("winner has minimum (timestamp, workerID) tuple", prop.ForAll(
-		func(claims []ops.Op) bool {
-			if len(claims) == 0 {
-				return true
+	properties.Property("foreign steal iff held lease is not live at challenger timestamp", prop.ForAll(
+		func(first, second ops.Op) bool {
+			first.Type = ops.OpClaim
+			second.Type = ops.OpClaim
+			first.TargetID = "task-01"
+			second.TargetID = "task-01"
+			if first.WorkerID == "" {
+				first.WorkerID = "worker-a"
 			}
-			winner := ResolveClaim(claims)
-			for _, c := range claims {
-				if c.Timestamp < winner.Timestamp {
-					return false
-				}
-				if c.Timestamp == winner.Timestamp && c.WorkerID < winner.WorkerID {
-					return false
-				}
+			if second.WorkerID == "" {
+				second.WorkerID = "worker-b"
 			}
-			return true
+			if first.Payload.TTL <= 0 {
+				first.Payload.TTL = 1
+			}
+			held, took := Accept(Lease{}, first)
+			if !took {
+				return false
+			}
+			_, stole := Accept(held, second)
+			if first.WorkerID == second.WorkerID {
+				return stole
+			}
+			return stole == !LeaseLive(held, second.Timestamp)
 		},
-		gen.SliceOfN(1, genOp()).FlatMap(func(v any) gopter.Gen {
-			base, ok := v.([]ops.Op)
-			if !ok {
-				return gen.Fail(reflect.TypeFor[[]ops.Op]())
-			}
-			return gen.SliceOf(genOp()).Map(func(extra []ops.Op) []ops.Op {
-				return append(base, extra...)
-			})
-		}, reflect.TypeFor[[]ops.Op]()),
+		genOp(),
+		genOp(),
 	))
 
 	properties.TestingRun(t)
@@ -174,7 +157,7 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 
 	properties.Property("staleness is monotone in time", prop.ForAll(
 		func(claimedAt, lastHeartbeat int64, ttlMinutes int32, now int64) bool {
-			if ttlMinutes <= 0 {
+			if ttlMinutes < 0 {
 				return true
 			}
 			if !IsClaimStale(FoldLastActivity(claimedAt, lastHeartbeat, 0), int(ttlMinutes), now) {

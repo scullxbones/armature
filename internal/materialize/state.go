@@ -13,8 +13,18 @@ import (
 
 // ClaimStale reports whether this issue's claim has expired as of now (Unix seconds).
 func (i *Issue) ClaimStale(now int64) bool {
-	last := claimpkg.FoldLastActivity(i.ClaimedAt, i.LastHeartbeat, i.LastClaimingWorkerActivity)
-	return claimpkg.IsClaimStale(last, i.ClaimTTL, now)
+	if i == nil {
+		return false
+	}
+	return !claimpkg.LeaseLive(i.lease(), now)
+}
+
+func (i *Issue) lease() claimpkg.Lease {
+	return claimpkg.LeaseFromClocks(
+		i.Status, i.ClaimedBy, i.ClaimToken,
+		i.ClaimedAt, i.LastHeartbeat, i.LastClaimingWorkerActivity,
+		i.ClaimTTL, i.WorktreePath,
+	)
 }
 
 // HeldByExactWorkerAndClaimToken reports whether this issue is, right now, held by exactly the

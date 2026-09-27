@@ -1399,13 +1399,13 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 		"ClaimedBy must be cleared so other workers can pick up the task")
 }
 
-func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
+func TestClaimLegacyZeroTTLReplaysAs60Minutes_REQ_CLAIMTTL(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "create", "--title", "Task never-expiring", "--type", "task", "--id", "task-01")
+	_, err = runTrls(t, repo, "create", "--title", "Task legacy ttl", "--type", "task", "--id", "task-01")
 	require.NoError(t, err)
 
 	_, err = runTrls(t, repo, "materialize")
@@ -1418,42 +1418,23 @@ func TestClaimPreservesNeverExpiringClaimOnRetry(t *testing.T) {
 	})
 	require.NoError(t, err, "should resolve worker ID and log path")
 
-	neverExpiringClaimTime := time.Now().Unix() - 7200
-	neverExpiringClaimOp := ops.Op{
+	claimedAt := time.Now().Unix() - 7200
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type:      ops.OpClaim,
 		TargetID:  "task-01",
-		Timestamp: neverExpiringClaimTime,
+		Timestamp: claimedAt,
 		WorkerID:  workerID,
 		Payload:   ops.Payload{TTL: 0},
-	}
-	require.NoError(t, ops.AppendOp(logPath, neverExpiringClaimOp))
+	}))
 
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
 	require.NoError(t, err)
-	require.Equal(t, ops.StatusClaimed, issue.Status, "task should be claimed")
-	require.Equal(t, workerID, issue.ClaimedBy, "task should be claimed by same worker")
-	require.Equal(t, 0, issue.ClaimTTL, "task claim TTL should be 0 (never-expiring)")
-
-	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
-	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
-	blockingFile := filepath.Join(worktreePath, "blocking-file")
-	require.NoError(t, os.WriteFile(blockingFile, []byte("blocks worktree creation"), 0o644))
-
-	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
-	assert.Error(t, claimErr, "claim should fail when worktree creation is blocked. stderr: %s", stderr)
-
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	issueAfter, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
-	require.NoError(t, err)
-
-	assert.Equal(t, ops.StatusClaimed, issueAfter.Status,
-		"task should remain claimed after never-expiring same-worker claim failure (not be released to open)")
-	assert.Equal(t, workerID, issueAfter.ClaimedBy,
-		"ClaimedBy must remain set since the claim never expires")
+	assert.Equal(t, workerID, issue.ClaimedBy)
+	assert.Equal(t, 0, issue.ClaimTTL)
+	assert.True(t, issue.ClaimStale(time.Now().Unix()), "ttl 0 two hours ago is stale under the 60-minute replay default")
 }
 
 func TestClaimCompensationRestoreVsRelease_REQ_ARCHIMP_S20_T4(t *testing.T) {

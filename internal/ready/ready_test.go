@@ -215,6 +215,7 @@ func TestStaleClaims_ClaimingWorkerActivityPreventsStale(t *testing.T) {
 		"task-a": {
 			ID:                         "task-a",
 			Status:                     ops.StatusClaimed,
+			ClaimedBy:                  "worker-a",
 			ClaimedAt:                  0,
 			LastHeartbeat:              0,
 			LastClaimingWorkerActivity: 150,
@@ -231,6 +232,7 @@ func TestExpiredClaims_ClaimingWorkerActivityPreventsExpiry(t *testing.T) {
 		"task-a": {
 			ID:                         "task-a",
 			Status:                     ops.StatusInProgress,
+			ClaimedBy:                  "worker-a",
 			ClaimedAt:                  0,
 			LastHeartbeat:              0,
 			LastClaimingWorkerActivity: 150,

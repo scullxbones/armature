@@ -14,22 +14,6 @@ import (
 // once per interval, independent of claim TTL. Not configurable.
 const HeartbeatDebounceInterval = 5 * time.Minute
 
-// ResolveClaim resolves a claim race: earliest timestamp wins,
-// lexicographic worker ID as tiebreaker.
-func ResolveClaim(claims []ops.Op) ops.Op {
-	if len(claims) == 0 {
-		return ops.Op{}
-	}
-	winner := claims[0]
-	for _, c := range claims[1:] {
-		if c.Timestamp < winner.Timestamp ||
-			(c.Timestamp == winner.Timestamp && c.WorkerID < winner.WorkerID) {
-			winner = c
-		}
-	}
-	return winner
-}
-
 // HasOverlapDismissalNote checks if a same-worker overlap dismissal note
 // for the given issue pair already exists in the ops history.
 // Returns true if a note with the message pattern "Serial claim: scope overlap with {otherId} (same worker, dismissed)"
@@ -53,14 +37,11 @@ func FoldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity int64) La
 	return LastActivity(max(claimedAt, lastHeartbeat, claimingWorkerActivity))
 }
 
-// IsClaimStale reports whether last plus TTL is strictly before now.
-// ttlMinutes is converted to seconds. ttlMinutes <= 0 never expires.
+// IsClaimStale reports whether last plus the replay TTL is at or before now.
+// ttlMinutes <= 0 replays as DefaultReplayTTLMinutes. Takeable at exactly ttl.
 func IsClaimStale(last LastActivity, ttlMinutes int, now int64) bool {
-	if ttlMinutes <= 0 {
-		return false
-	}
-	ttlSeconds := int64(ttlMinutes) * 60
-	return now > int64(last)+ttlSeconds
+	ttlSeconds := int64(ReplayTTLMinutes(ttlMinutes)) * 60
+	return now >= int64(last)+ttlSeconds
 }
 
 func ShouldHeartbeat(lastHeartbeatTime, now time.Time) bool {

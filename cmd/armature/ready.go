@@ -8,9 +8,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	claimPkg "github.com/scullxbones/armature/internal/claim"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
 	"github.com/scullxbones/armature/internal/tui"
@@ -212,12 +212,17 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					if err != nil {
 						return err
 					}
-					op := ops.Op{
-						Type:      ops.OpClaim,
-						TargetID:  selected,
-						Timestamp: nowEpoch(),
-						WorkerID:  workerID,
-						Payload:   ops.Payload{TTL: 60},
+					ttl := 60
+					if ctx.Config.DefaultTTL > 0 {
+						ttl = int(ctx.Config.DefaultTTL)
+					}
+					token, err := newClaimToken()
+					if err != nil {
+						return err
+					}
+					op, err := claimPkg.NewClaimOp(selected, workerID, nowEpoch(), ttl, "", token)
+					if err != nil {
+						return err
 					}
 					if err := appendHighStakesOp(state, logPath, op); err != nil {
 						return err

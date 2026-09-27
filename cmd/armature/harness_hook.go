@@ -84,8 +84,7 @@ func hasNoLiveClaim(snap *snapshot.Snapshot, taskID string, now int64) bool {
 	if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
 		return true
 	}
-	last := claimPkg.FoldLastActivity(issue.ClaimedAt, issue.LastHeartbeat, issue.LastClaimingWorkerActivity)
-	return claimPkg.IsClaimStale(last, issue.ClaimTTL, now)
+	return issue.ClaimStale(now)
 }
 
 func isFileWriteEvent(eventKind harnesshook.EventKind, filePath string) bool {

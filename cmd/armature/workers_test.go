@@ -62,7 +62,7 @@ func TestIdleWindowAtMaxAcceptedTTL_REQ_NOCOMMENTS(t *testing.T) {
 	allOps := []ops.Op{
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: now - 1, WorkerID: "worker-a"},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, config.TTLMinutes(maxMinutes), now, map[string]string{})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, config.TTLMinutes(maxMinutes), now)
 	assert.Equal(t, "idle", status.Status)
 	idleWindowSeconds := 2 * maxMinutes * 60
 	assert.Positive(t, idleWindowSeconds)
@@ -71,13 +71,6 @@ func TestIdleWindowAtMaxAcceptedTTL_REQ_NOCOMMENTS(t *testing.T) {
 	problems = config.ValidatePresentFields([]byte(`{"default_ttl":` + strconv.FormatInt(maxMinutes+1, 10) + `}`))
 	require.NotEmpty(t, problems, "one minute past the representable bound must be rejected")
 	assert.Contains(t, fmt.Sprintf("%v", problems), "default_ttl")
-}
-
-func TestClaimingWorkerActivityIfAuthorOwnsLease(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, int64(100), claimingWorkerActivityIfAuthorOwnsLease("worker-b", "worker-a", 500, 100))
-	assert.Equal(t, int64(500), claimingWorkerActivityIfAuthorOwnsLease("worker-a", "worker-a", 500, 100))
-	assert.Equal(t, int64(100), claimingWorkerActivityIfAuthorOwnsLease("worker-a", "worker-a", 50, 100))
 }
 
 func TestFoldWorkerStatusFromClaimOwnerActivity_ForeignTransitionDoesNotExtendLease(t *testing.T) {
@@ -89,7 +82,7 @@ func TestFoldWorkerStatusFromClaimOwnerActivity_ForeignTransitionDoesNotExtendLe
 		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 9800, WorkerID: "worker-b",
 			Payload: ops.Payload{To: "in-progress"}},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, 60, now, map[string]string{"T-001": "worker-a"})
+	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
 	assert.Equal(t, "stale", status.Status)
 	assert.Empty(t, status.ActiveIssue)
 }
