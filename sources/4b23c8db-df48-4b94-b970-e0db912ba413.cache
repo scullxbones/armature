@@ -9,9 +9,9 @@
 
 ## G1. Real dollar/token spend observability
 
-**Gap:** Context Economics (Next-Ten №03) budgets artifact *byte-weight* — skill size, rendered-context size. `arm stats` (LH F5) measures latency and rework rate. Nothing in any of the three documents tracks actual LLM API spend per story, per worker, or per wave.
+**Gap:** Context Economics (Next-Ten №03) originally budgeted artifact *byte-weight* — skill size, rendered-context size. As delivered (`NXTTN-S3`), it meters T1/T2 runtime CLI payload weight and the T4 front-matter sum; skill *bodies* are out of that meter. `arm stats` (LH F5) measures latency and rework rate. Nothing in any of the three documents tracks actual LLM API spend per story, per worker, or per wave.
 
-**Why it matters:** Once a team runs a real agent fleet against Armature, the number they will ask for first is "what did this story cost in tokens/dollars," not "how many bytes did the coordinator skill weigh." The two are correlated but not the same metric, and neither existing proposal computes the second.
+**Why it matters:** Once a team runs a real agent fleet against Armature, the number they will ask for first is "what did this story cost in tokens/dollars," not "how many bytes did the last `arm list` payload weigh." The two are correlated but not the same metric, and neither existing proposal computes the second.
 
 **Incremental changes:**
 - **G1.1** Instrument dispatch points (coordinator/worker/reviewer prompts) to record token counts (input/output) as structured fields alongside existing ops, without requiring a new op type — piggyback on the outcome/assessment records already written at `done`/review time.
