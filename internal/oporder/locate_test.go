@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUnpublishedClaimNotOwnedOnRemoteClone_REQ_CLAIMORD_W11(t *testing.T) {
+func TestUnpublishedClaimNotOwnedOnRemoteClone_REQ_CLAIMORD_W11(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit mutates process env
 	fx := gittest.InitWithOrigin(t)
 	a := fx.Dir
 	gittest.Git(t, a, "commit", "--allow-empty", "-m", "init ops branch")
@@ -44,7 +44,7 @@ func TestUnpublishedClaimNotOwnedOnRemoteClone_REQ_CLAIMORD_W11(t *testing.T) {
 	assert.False(t, claim.TokenPending(Ops(Pending(locatedB)), "task-01", "tok-a"))
 }
 
-func TestPublishedClaimOwnedAfterPush_REQ_CLAIMORD_W11(t *testing.T) {
+func TestPublishedClaimOwnedAfterPush_REQ_CLAIMORD_W11(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit mutates process env
 	fx := gittest.InitWithOrigin(t)
 	a := fx.Dir
 	writeOpLog(t, a, "ops/worker-a.log", []ops.Op{
