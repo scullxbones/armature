@@ -1,9 +1,12 @@
 package doctor_test
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +48,43 @@ func TestEvaluateD12OpsWorktreeLag(t *testing.T) {
 	assert.Contains(t, staleBehind.Message, fetchErr.Error())
 	assert.Contains(t, staleBehind.Message, "3 commit(s) behind")
 	assert.Equal(t, []string{"3", fetchErr.Error()}, staleBehind.Items)
+}
+
+func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
+	t.Parallel()
+
+	secret := "ghp_fakeSecretTokenForTest1234567890"
+	fetchErr := fmt.Errorf("git fetch origin _armature: exit status 128\nfatal: unable to access 'https://x-access-token:%s@github.com/org/repo.git/': 403", secret)
+
+	assertFindingOmitsSecret := func(t *testing.T, f doctor.Finding) {
+		t.Helper()
+		assert.Equal(t, doctor.SeverityError, f.Severity)
+		assert.Contains(t, f.Message, "Could not fetch origin/_armature")
+		assert.Contains(t, f.Message, "may be stale")
+		assert.NotContains(t, f.Message, secret)
+		for _, item := range f.Items {
+			assert.NotContains(t, item, secret)
+		}
+
+		raw, err := json.Marshal(f)
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), secret)
+
+		var human strings.Builder
+		fmt.Fprintf(&human, "✗ %s: %s\n", f.Check, f.Message)
+		for _, item := range f.Items {
+			fmt.Fprintf(&human, "    - %s\n", item)
+		}
+		assert.NotContains(t, human.String(), secret)
+	}
+
+	staleOK := doctor.EvaluateD12OpsWorktreeLag(0, fetchErr)
+	assert.Contains(t, staleOK.Message, "appears not behind")
+	assertFindingOmitsSecret(t, staleOK)
+
+	staleBehind := doctor.EvaluateD12OpsWorktreeLag(3, fetchErr)
+	assert.Contains(t, staleBehind.Message, "3 commit(s) behind")
+	assertFindingOmitsSecret(t, staleBehind)
 }
 
 func TestRun_D12_SkipWhenWorktreeMissing(t *testing.T) {

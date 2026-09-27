@@ -17,6 +17,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/ready"
+	"github.com/scullxbones/armature/internal/redact"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -554,12 +555,13 @@ func EvaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 	}
 	if fetchErr != nil {
 		f.Severity = SeverityError
+		detail := redact.Secrets(fetchErr.Error())
 		if behind > 0 {
-			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears %d commit(s) behind (result may be stale): %s", behind, fetchErr)
-			f.Items = []string{fmt.Sprintf("%d", behind), fetchErr.Error()}
+			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears %d commit(s) behind (result may be stale): %s", behind, detail)
+			f.Items = []string{fmt.Sprintf("%d", behind), detail}
 		} else {
-			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): %s", fetchErr)
-			f.Items = []string{fetchErr.Error()}
+			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): %s", detail)
+			f.Items = []string{detail}
 		}
 	}
 	return f
