@@ -654,8 +654,6 @@ func isGitContentionError(out string) bool {
 }
 
 func enhanceGitLockfileError(base, out string) string {
-	// In constrained sandboxes, nested git writes to .git/worktrees/*/index.lock
-	// can be denied even when direct top-level git works. Add an actionable hint.
 	if strings.Contains(out, "index.lock") && strings.Contains(strings.ToLower(out), "read-only file system") {
 		return base + "\nHint: sandbox blocked git lockfile writes (.git/worktrees/*/index.lock). Re-run this arm command with elevated permissions/approval."
 	}

@@ -124,13 +124,10 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 	for _, s := range report.Stories {
 		byStory[s.ID] = s
 	}
-	// TASK-A: 1M in @ default $3; TASK-B: 1M in + 1M out @ haiku $1/$5
-	// TASK-E: assessment without model_identity uses default $3, not issue PreferredModel (haiku $1)
 	assert.InDelta(t, 3.00+1.00+5.00+3.00, byStory["STORY-1"].USD, 1e-9)
 	assert.Equal(t, 3_000_000, byStory["STORY-1"].InputTokens)
 	assert.Equal(t, 1_000_000, byStory["STORY-1"].OutputTokens)
 	assert.InDelta(t, 3.00, report.ByIssue["TASK-E"].USD, 1e-9)
-	// TASK-D: 1M out @ sonnet $15
 	assert.InDelta(t, 15.00, byStory["STORY-2"].USD, 1e-9)
 
 	require.GreaterOrEqual(t, len(report.Waves), 2, "overlapping scopes must not share a wave")
@@ -271,8 +268,6 @@ func TestLoadOpsAndRateFallbacks(t *testing.T) {
 func TestLoadOps_UnreadableLogReturnsError(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	// ListLogFiles includes *.log entries that are not directories; a dangling
-	// symlink is listed then fails to open, which must not be swallowed.
 	require.NoError(t, os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "broken.log")))
 
 	_, err := loadValidatedOps(dir)

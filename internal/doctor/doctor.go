@@ -533,12 +533,11 @@ func checkD12OpsWorktreeLag(worktreePath string) Finding {
 		return skip
 	}
 	gc := adapters.New(worktreePath)
-	fetchErr := gc.FetchTrackingRefWithoutMovingHEAD("_armature")
+	_ = gc.FetchTrackingRefWithoutMovingHEAD("_armature")
 	behind, err := gc.RevListCount("HEAD..origin/_armature")
 	if err != nil {
 		return skip
 	}
-	_ = fetchErr
 	return EvaluateD12OpsWorktreeLag(behind)
 }
 
