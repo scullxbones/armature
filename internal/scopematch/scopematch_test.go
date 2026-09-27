@@ -6,73 +6,82 @@ import (
 	"time"
 )
 
+func mustOverlaps(t *testing.T, a, b string) bool {
+	t.Helper()
+	ok, err := Overlaps(a, b)
+	if err != nil {
+		t.Fatalf("Overlaps(%q, %q): %v", a, b, err)
+	}
+	return ok
+}
+
 func TestOverlaps_IgnoresSharedAncestorDirectory_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
-	if Overlaps("docs/agents/quality-gates.md", "docs/use-cases.md") {
+	if mustOverlaps(t, "docs/agents/quality-gates.md", "docs/use-cases.md") {
 		t.Fatal("distinct files under an ancestor/descendant directory relationship must not overlap")
 	}
-	if Overlaps("docs/use-cases.md", "docs/agents/quality-gates.md") {
+	if mustOverlaps(t, "docs/use-cases.md", "docs/agents/quality-gates.md") {
 		t.Fatal("overlap check must be symmetric")
 	}
-	if Overlaps("internal/claim/a.go", "internal/claim/b.go") {
+	if mustOverlaps(t, "internal/claim/a.go", "internal/claim/b.go") {
 		t.Fatal("two distinct files in the same directory must not overlap merely by sharing that directory")
 	}
-	if Overlaps("internal/claim/sub/*.go", "internal/claim/*.go") {
+	if mustOverlaps(t, "internal/claim/sub/*.go", "internal/claim/*.go") {
 		t.Fatal("a single-segment glob must not overlap a deeper literal directory via ancestry alone")
 	}
 }
 
 func TestOverlaps_StillMatchesGenuineOverlaps_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
-	if !Overlaps("README.md", "README.md") {
+	if !mustOverlaps(t, "README.md", "README.md") {
 		t.Fatal("identical scope entries must overlap")
 	}
-	if !Overlaps("internal/claim/*.go", "internal/claim/a.go") {
+	if !mustOverlaps(t, "internal/claim/*.go", "internal/claim/a.go") {
 		t.Fatal("a glob must overlap a literal file it matches")
 	}
-	if !Overlaps("internal/claim/a.go", "internal/claim/*.go") {
+	if !mustOverlaps(t, "internal/claim/a.go", "internal/claim/*.go") {
 		t.Fatal("overlap check must be symmetric")
 	}
-	if !Overlaps("internal/claim/**", "internal/claim/sub/a.go") {
+	if !mustOverlaps(t, "internal/claim/**", "internal/claim/sub/a.go") {
 		t.Fatal("a doublestar glob spanning directories must overlap a nested file")
 	}
-	if !Overlaps("docs/agents/", "docs/agents/quality-gates.md") {
+	if !mustOverlaps(t, "docs/agents/", "docs/agents/quality-gates.md") {
 		t.Fatal("a trailing-slash directory scope must overlap a file beneath it")
 	}
 }
 
 func TestOverlaps_GlobVsGlobIntersection_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
-	if !Overlaps("src/auth/*.go", "src/auth/login.*") {
+	if !mustOverlaps(t, "src/auth/*.go", "src/auth/login.*") {
 		t.Fatal("src/auth/*.go and src/auth/login.* both match src/auth/login.go and must overlap")
 	}
-	if !Overlaps("src/auth/login.*", "src/auth/*.go") {
+	if !mustOverlaps(t, "src/auth/login.*", "src/auth/*.go") {
 		t.Fatal("overlap check must be symmetric")
 	}
 }
 
 func TestOverlaps_GlobVsGlobNoIntersection_REQ_LNGHZN_S10_T7(t *testing.T) {
 	t.Parallel()
-	if Overlaps("src/auth/*.go", "src/billing/*.go") {
+	if mustOverlaps(t, "src/auth/*.go", "src/billing/*.go") {
 		t.Fatal("src/auth and src/billing are distinct literal directories; these globs cannot intersect")
 	}
-	if Overlaps("src/billing/*.go", "src/auth/*.go") {
+	if mustOverlaps(t, "src/billing/*.go", "src/auth/*.go") {
 		t.Fatal("overlap check must be symmetric")
 	}
 }
 
 func TestOverlaps_WildcardDirectoryScopeIncludesDescendants(t *testing.T) {
 	t.Parallel()
-	if !Overlaps("src/*/", "src/auth/login.go") {
+	if !mustOverlaps(t, "src/*/", "src/auth/login.go") {
 		t.Fatal("src/*/ is a directory scope matching src/auth/, so it must overlap src/auth/login.go")
 	}
-	if !Overlaps("src/auth/login.go", "src/*/") {
+	if !mustOverlaps(t, "src/auth/login.go", "src/*/") {
 		t.Fatal("overlap check must be symmetric")
 	}
-	if !Overlaps("src/*/", "src/billing/*.go") {
+	if !mustOverlaps(t, "src/*/", "src/billing/*.go") {
 		t.Fatal("src/*/ covers every file under any src/<dir>/, including src/billing/*.go")
 	}
-	if Overlaps("src/*/", "lib/foo.go") {
+	if mustOverlaps(t, "src/*/", "lib/foo.go") {
 		t.Fatal("src/*/ must not overlap a path outside src/")
 	}
 }
@@ -82,13 +91,25 @@ func TestOverlaps_RepeatedDoublestarDoesNotHang(t *testing.T) {
 	const reps = 10
 	a := strings.Repeat("**/a/", reps) + "x"
 	b := strings.Repeat("**/a/", reps) + "y"
-	type result struct{ ab, ba bool }
+	type result struct {
+		ab, ba bool
+		err    error
+	}
 	done := make(chan result, 1)
 	go func() {
-		done <- result{Overlaps(a, b), Overlaps(b, a)}
+		ab, err1 := Overlaps(a, b)
+		ba, err2 := Overlaps(b, a)
+		err := err1
+		if err == nil {
+			err = err2
+		}
+		done <- result{ab, ba, err}
 	}()
 	select {
 	case got := <-done:
+		if got.err != nil {
+			t.Fatalf("Overlaps on repeated **/a: %v", got.err)
+		}
 		if got.ab {
 			t.Fatal("repeated **/a ending in distinct literals must not intersect")
 		}
@@ -290,6 +311,56 @@ func TestCleanScope_PreservesFilenameWithLiteralParens(t *testing.T) {
 	cleaned, _ := CleanScope("internal/foo/bar(baz).go")
 	if cleaned != "internal/foo/bar(baz).go" {
 		t.Fatalf("expected literal parens in filename to be preserved, got %q", cleaned)
+	}
+}
+
+func TestOverlaps_MalformedPatternReturnsError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	ok, err := Overlaps("foo[", "foo.go")
+	if err == nil {
+		t.Fatal("expected error for malformed scope pattern")
+	}
+	if ok {
+		t.Fatal("malformed pattern must not report overlap")
+	}
+	if !strings.Contains(err.Error(), "foo[") {
+		t.Fatalf("error must name the pattern, got %q", err)
+	}
+
+	ok, err = Overlaps("foo.go", "foo[")
+	if err == nil {
+		t.Fatal("expected error when the other side is malformed")
+	}
+	if ok {
+		t.Fatal("malformed pattern must not report overlap")
+	}
+}
+
+func TestOverlaps_ValidatesBothPatternsBeforeMatch_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ a, b string }{
+		{"*", "["},
+		{"[", "*"},
+	}
+	for _, tc := range cases {
+		ok, err := Overlaps(tc.a, tc.b)
+		if err == nil {
+			t.Fatalf("Overlaps(%q, %q): expected error, got match=%v", tc.a, tc.b, ok)
+		}
+		if ok {
+			t.Fatalf("Overlaps(%q, %q): malformed pattern must not report overlap", tc.a, tc.b)
+		}
+	}
+}
+
+func TestOverlaps_NoMatchIsNotError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	ok, err := Overlaps("src/a.go", "src/b.go")
+	if err != nil {
+		t.Fatalf("valid non-overlapping patterns must not error: %v", err)
+	}
+	if ok {
+		t.Fatal("distinct files must not overlap")
 	}
 }
 

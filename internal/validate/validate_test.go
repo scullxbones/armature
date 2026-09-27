@@ -20,7 +20,11 @@ import (
 )
 
 func globOverlaps(a, b string) bool {
-	return scopematch.Overlaps(a, b)
+	ok, err := scopematch.Overlaps(a, b)
+	if err != nil {
+		panic(err)
+	}
+	return ok
 }
 
 func makeState(issues ...*materialize.Issue) *materialize.State {
@@ -1419,16 +1423,50 @@ func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T7(t *tes
 
 func TestFirstGlobOverlapPair_ReportsMatchedPatterns_PR79(t *testing.T) {
 	t.Parallel()
-	a, b, overlaps := firstGlobOverlapPair(
+	a, b, overlaps, err := firstGlobOverlapPair(
 		[]string{"cmd/other/*.go", "cmd/armature/*.go"},
 		[]string{"cmd/armature/claim.go", "cmd/unrelated/x.go"},
 	)
+	require.NoError(t, err)
 	require.True(t, overlaps)
 	assert.Equal(t, "cmd/armature/*.go", a)
 	assert.Equal(t, "cmd/armature/claim.go", b)
 
-	_, _, overlaps = firstGlobOverlapPair([]string{"a/*.go"}, []string{"b/*.go"})
+	_, _, overlaps, err = firstGlobOverlapPair([]string{"a/*.go"}, []string{"b/*.go"})
+	require.NoError(t, err)
 	assert.False(t, overlaps)
+}
+
+func TestFirstGlobOverlapPair_MalformedPatternReturnsError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	a, b, overlaps, err := firstGlobOverlapPair([]string{"foo["}, []string{"foo.go"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "foo[")
+	assert.False(t, overlaps)
+	assert.Equal(t, "foo[", a)
+	assert.Equal(t, "foo.go", b)
+}
+
+func TestCheckW1ScopeOverlap_MalformedPatternIsErrorNotMissedOverlap_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	state := makeState(
+		&materialize.Issue{ID: "STORY-1", Type: "story"},
+		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"foo["}},
+		&materialize.Issue{ID: "STORY-2", Type: "story"},
+		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"foo.go"}},
+	)
+	result := Validate(state, graphFromState(state), Options{})
+	var overlapCheck string
+	for _, e := range result.Errors {
+		if strings.Contains(e, "while checking overlap") {
+			overlapCheck = e
+			break
+		}
+	}
+	require.NotEmpty(t, overlapCheck, "W1 must not treat Overlaps error as no overlap; got errors=%v", result.Errors)
+	assert.Contains(t, overlapCheck, "foo[")
+	assert.Contains(t, overlapCheck, "TSK-A")
+	assert.Contains(t, overlapCheck, "TSK-B")
 }
 
 func TestCheckW1ScopeOverlap_MessageReportsMatchedPatternPair_PR79(t *testing.T) {
