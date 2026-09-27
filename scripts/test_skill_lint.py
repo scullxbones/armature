@@ -17,7 +17,9 @@ from skill_lint import (
     extract_flags,
     find_lint_files,
     has_angle_bracket_placeholder,
+    has_unquoted_bracketed_synopsis,
     lint_show_cycle_recovery,
+    strip_persistent_prefix,
     strip_redirects,
     tokenize_shell_line,
     validate_command,
@@ -108,6 +110,37 @@ class TestTokenizeShellLine(unittest.TestCase):
 
     def test_unterminated_quote_returns_none(self):
         self.assertIsNone(tokenize_shell_line("arm note TASK-01 --msg 'oops"))
+
+
+class TestPersistentPrefixAndQuotedBrackets(unittest.TestCase):
+    def test_strip_persistent_prefix_leaves_subcommand(self):
+        tokens = tokenize_shell_line(
+            "arm --repo '$TARGET' --format agent --non-interactive bootstrap"
+        )
+        self.assertEqual(strip_persistent_prefix(tokens), ["bootstrap"])
+
+    def test_validate_accepts_persistent_flags_before_subcommand(self):
+        valid, error = validate_command(
+            "arm --repo '$TARGET' --format agent --non-interactive doctor",
+            {"doctor"},
+            {"doctor": {"--strict"}},
+        )
+        self.assertTrue(valid, error)
+
+    def test_quoted_json_is_not_synopsis_brackets(self):
+        command = (
+            "arm create --title T --acceptance '[{\"type\":\"test_passes\"}]'"
+        )
+        self.assertFalse(has_unquoted_bracketed_synopsis(command))
+        valid, error = validate_command(
+            command,
+            {"create"},
+            {"create": {"--title", "--acceptance"}},
+        )
+        self.assertTrue(valid, error)
+
+    def test_unquoted_synopsis_brackets_still_fail(self):
+        self.assertTrue(has_unquoted_bracketed_synopsis("arm claim ID --ttl [N]"))
 
 
 class TestStripRedirects(unittest.TestCase):

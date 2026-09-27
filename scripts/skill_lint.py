@@ -65,6 +65,11 @@ MANDATORY_FLAGS = {
 # point at a freshly built binary instead of relying on PATH.
 ARM_BIN = os.environ.get("ARM_BIN", "arm")
 
+# Root persistent flags (cmd/armature/main.go). Value-taking flags consume the
+# following token when written as `--flag value` rather than `--flag=value`.
+PERSISTENT_BOOL_FLAGS = {"--debug", "--non-interactive", "--help", "-h"}
+PERSISTENT_VALUE_FLAGS = {"--format", "--repo"}
+
 
 CANONICAL_DOCS = (
     "README.md",
@@ -412,6 +417,46 @@ def extract_valid_flags_from_help(help_text):
     return flags
 
 
+def strip_persistent_prefix(tokens):
+    """Drop leading `arm` and root persistent flags (and their values).
+
+    Skills often write `arm --repo "$TARGET" --format agent bootstrap`.
+    After this prefix the remaining tokens start at the subcommand.
+    """
+    if not tokens:
+        return tokens
+    i = 0
+    if tokens[0] == "arm":
+        i = 1
+    while i < len(tokens):
+        tok = tokens[i]
+        name = tok.split("=", 1)[0]
+        if name in PERSISTENT_BOOL_FLAGS:
+            i += 1
+            continue
+        if name in PERSISTENT_VALUE_FLAGS:
+            if "=" in tok:
+                i += 1
+            elif i + 1 < len(tokens):
+                i += 2
+            else:
+                i += 1
+            continue
+        break
+    return tokens[i:]
+
+
+def has_unquoted_bracketed_synopsis(command):
+    """Detect `[optional]` synopsis notation outside quoted strings.
+
+    Quoted JSON (e.g. `--acceptance '[{"type":"test_passes"}]'`) is a real
+    argument, not a synopsis placeholder.
+    """
+    stripped = re.sub(r"'[^']*'", "", command)
+    stripped = re.sub(r'"[^"]*"', "", stripped)
+    return re.search(r"\[[^\]\n]+\]", stripped) is not None
+
+
 def parse_command_line(tokens):
     """Split already-tokenized command tokens into subcommands and arguments.
 
@@ -499,7 +544,7 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     # flag+bracket token like "--ttl[=N]" is also caught, and the span may
     # cross a token boundary (e.g. "[--ttl 120]" tokenizes as "[--ttl" and
     # "120]"), so this scans the whole command string rather than per-token.
-    if re.search(r"\[[^\]\n]+\]", arm_command):
+    if has_unquoted_bracketed_synopsis(arm_command):
         return False, f"Command uses bracketed synopsis syntax in: {arm_command}"
 
     # Angle-bracket placeholders (e.g. "<old-path>") must be checked before
@@ -510,6 +555,8 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
 
     tokens = strip_redirects(tokens)
 
+    command_tokens = strip_persistent_prefix(tokens)
+
     # `--worktree` takes an optional value: bare for the canonical
     # `.worktrees/<issue-id>` path, or with an explicit path for a
     # caller-selected worktree. Both spellings are current guidance.
@@ -519,27 +566,25 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
         return any(
             token.startswith(flag + "=") and len(token) > len(flag) + 1
             or token == flag
-            and index + 1 < len(tokens)
-            and tokens[index + 1]
-            and not tokens[index + 1].startswith("-")
-            for index, token in enumerate(tokens)
+            and index + 1 < len(command_tokens)
+            and command_tokens[index + 1]
+            and not command_tokens[index + 1].startswith("-")
+            for index, token in enumerate(command_tokens)
         )
 
-    is_claim = tokens[:2] == ["arm", "claim"]
-    has_from = any(token == "--from" or token.startswith("--from=") for token in tokens)
+    is_claim = bool(command_tokens) and command_tokens[0] == "claim"
+    has_from = any(token == "--from" or token.startswith("--from=") for token in command_tokens)
     from_value = has_flag_value("--from")
     worktree_value = has_flag_value("--worktree")
     has_worktree = any(
-        token == "--worktree" or token.startswith("--worktree=") for token in tokens
+        token == "--worktree" or token.startswith("--worktree=") for token in command_tokens
     )
     if is_claim and has_from and not from_value:
         return False, f"claim --from requires a nonempty --from source in: {arm_command}"
     if is_claim and has_from and has_worktree and not worktree_value:
         return False, f"claim --from requires an explicit --worktree <new-path> in: {arm_command}"
-    if tokens and tokens[0] == "arm":
-        tokens = tokens[1:]
 
-    subcommands, args = parse_command_line(tokens)
+    subcommands, args = parse_command_line(command_tokens)
 
     if not subcommands:
         return False, f"Invalid arm command syntax: {arm_command}"
