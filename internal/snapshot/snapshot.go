@@ -43,7 +43,8 @@ func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 		allOps = []ops.Op{}
 	}
 
-	state, result, err := materialize.Run(s.stateDir, allOps, loaded.PhysicalEOF, materialize.Options{WriteStateFiles: true})
+	opts := materialize.Options{WriteStateFiles: true}
+	state, result, err := materialize.Run(s.stateDir, allOps, loaded.PhysicalEOF, opts)
 	if err != nil {
 		return nil, fmt.Errorf("materialize: %w", err)
 	}

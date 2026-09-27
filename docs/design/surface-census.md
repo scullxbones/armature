@@ -147,7 +147,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `sync` | main.go, sync.go | Auto-transition closed PRs | **kept-evidence** | CI integration. Scans git for merged branches and transitions issues. |
 | `push-ops` | main.go, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Called before PR or manually. |
 | `merged` | main.go, merged.go | Manually transition to merged | **kept-evidence** | Explicit merge record. Sets PR and branch fields. |
-| `materialize` | main.go, materialize.go | Regenerate state from ops log | **kept-evidence** | Diagnostic/recovery. Rebuilds snapshot from scratch. |
+| `materialize` | main.go, materialize.go | Regenerate state from ops log | **kept-evidence** | Incremental via LastCommitSHA when ops worktree is git; cold walk otherwise. |
 | `import` | main.go, import.go | Import issues from external source | **kept-evidence** | Onboarding tool. Creates issues with source links. |
 
 ### Admin Commands (admin group)
