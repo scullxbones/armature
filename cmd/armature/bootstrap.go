@@ -1052,10 +1052,6 @@ func copyRecursive(src string, dst string) (int, error) {
 	return 0, nil
 }
 
-func excludeArmWorktreeFromGit(repoPath string) error {
-	return updateGitExclude(repoPath, ".arm/", "")
-}
-
 func printCollapseMigrationBackupGuidance(cmd *cobra.Command, backupDir string) {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 		"safety snapshot of the pre-migration ops worktree left at %s; "+
@@ -1278,7 +1274,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude %s/ from git tracking: %v\n", config.StateDirName, err)
 			}
 		} else {
-			if err := excludeArmWorktreeFromGit(repoPath); err != nil {
+			if err := updateGitExclude(repoPath, ".arm/", ""); err != nil {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: failed to exclude .arm/ from git tracking: %v\n", err)
 			}
 		}
