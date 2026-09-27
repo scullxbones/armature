@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -105,6 +106,63 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
 	assert.Contains(t, out, "scope overlap")
 	assert.NotContains(t, out, `"errors": [
     "scope overlap`)
+}
+
+func TestValidate_MalformedGlobYieldsE10Envelope_REQ_NOCOMMENTS(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendRawCreate(logPath, workerID, "tsk-bad-glob", "Bad glob task", "["))
+	longDoD := strings.Repeat("x", 501)
+	require.NoError(t, appendRawCreate(logPath, workerID, "tsk-e9", longDoD, "internal/ops/*.go"))
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "validate", "--repo", repo, "--format", "json")
+	assert.Equal(t, 1, code, "graph findings still fail closed")
+	payload := assertSingleJSONObject(t, stdout.String())
+	_, hasCommandFailure := payload["error"]
+	assert.False(t, hasCommandFailure, "ExpandGlobs must not turn graph findings into a Command Failure")
+
+	decoded := decodeContractEnvelope(t, stdout.String(), "findings")
+	var findings []validateFindingRow
+	require.NoError(t, json.Unmarshal(decoded["findings"], &findings))
+	var sawE10, sawE9 bool
+	for _, f := range findings {
+		if f.Rule == "E10" && strings.Contains(f.Message, "invalid glob") && strings.Contains(f.Message, "tsk-bad-glob") {
+			sawE10 = true
+		}
+		if f.Rule == "E9" && strings.Contains(f.Message, "definition_of_done exceeds") {
+			sawE9 = true
+		}
+	}
+	assert.True(t, sawE10, "malformed glob must emit E10, got %#v", findings)
+	assert.True(t, sawE9, "unrelated graph findings must still be reported, got %#v", findings)
+
+	agentOut := new(bytes.Buffer)
+	code = executeThenHandleRootError(t, agentOut, new(bytes.Buffer), "validate", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	assert.NotContains(t, agentOut.String(), `"code":"GENERAL-1"`)
+	assert.NotContains(t, agentOut.String(), "Error [GENERAL-1]")
+	agentDecoded := decodeContractEnvelope(t, agentOut.String(), "findings")
+	var agentFindings []validateFindingRow
+	require.NoError(t, json.Unmarshal(agentDecoded["findings"], &agentFindings))
+	sawE10, sawE9 = false, false
+	for _, f := range agentFindings {
+		if f.Rule == "E10" {
+			sawE10 = true
+		}
+		if f.Rule == "E9" {
+			sawE9 = true
+		}
+	}
+	assert.True(t, sawE10 && sawE9, "agent envelope must include E10 and E9, got %#v", agentFindings)
 }
 
 func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
