@@ -129,6 +129,7 @@ func TestRunChecks_D2_StaleClaims_InjectedTime(t *testing.T) {
 		"claimed-task": {
 			ID:            "claimed-task",
 			Status:        "claimed",
+			ClaimedBy:     "worker-a",
 			ClaimedAt:     claimedAt,
 			LastHeartbeat: claimedAt,
 			ClaimTTL:      ttl,
