@@ -42,14 +42,19 @@ const (
 )
 
 // ParseTarget maps CLI/API target strings onto the closed set. Empty input
-// becomes TargetLocal. Unknown values are returned as-is so BuildPlan keeps
-// today's accept-unknown behavior.
-func ParseTarget(s string) Target {
+// becomes TargetLocal. Unknown values are rejected.
+func ParseTarget(s string) (Target, error) {
 	if s == "" {
-		return TargetLocal
+		return TargetLocal, nil
 	}
-	return Target(s)
+	t := Target(s)
+	if !slices.Contains(allKnownTargets, t) {
+		return "", fmt.Errorf("unknown target %q: allowed values are %q, %q", s, TargetLocal, TargetGlobal)
+	}
+	return t, nil
 }
+
+var allKnownTargets = []Target{TargetLocal, TargetGlobal}
 
 // ArtifactKind is a harness artifact cell in a plan row.
 type ArtifactKind string
@@ -137,9 +142,12 @@ func DefaultPlatforms() []Platform {
 
 // BuildPlan validates the request and generates a declarative harness setup plan.
 // Unknown platforms are rejected. An empty Platforms slice defaults to DefaultPlatforms();
-// an empty Target defaults to "local".
+// an empty Target defaults to local. Unknown Target values are rejected.
 func BuildPlan(req PlanRequest) (Plan, error) {
-	target := ParseTarget(string(req.Target))
+	target, err := ParseTarget(string(req.Target))
+	if err != nil {
+		return Plan{}, err
+	}
 
 	platforms := req.Platforms
 	if len(platforms) == 0 {
