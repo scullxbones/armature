@@ -78,7 +78,9 @@ func configureRepo(t *testing.T, dir string) {
 }
 
 func waitGitIdle(dir string) {
-	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "gc", "--auto")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "gc", "--auto") //nolint:gosec // G204: git is constant; dir is a test temp repo
 	cmd.Env = os.Environ()
-	_ = cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return
+	}
 }

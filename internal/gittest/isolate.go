@@ -74,7 +74,8 @@ func IsolateGit() error {
 
 func isolationConfigPath() (string, error) {
 	if existing := os.Getenv("GIT_CONFIG_GLOBAL"); existing != "" {
-		if data, err := os.ReadFile(existing); err == nil && strings.HasPrefix(string(data), isolationMarker) {
+		data, err := os.ReadFile(existing) //nolint:gosec // G304: path is GIT_CONFIG_GLOBAL we wrote
+		if err == nil && strings.HasPrefix(string(data), isolationMarker) {
 			return existing, nil
 		}
 	}

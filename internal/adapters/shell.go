@@ -119,12 +119,12 @@ func gitInitMain(dir string, bare bool, extraEnv ...string) error {
 		"GIT_CONFIG_SYSTEM=/dev/null",
 	}, extraEnv...)
 	env := overlayEnv(stripGitOverrideEnv(os.Environ()), isolated)
-	args := []string{"init"}
+	var initCmd *exec.Cmd
 	if bare {
-		args = append(args, "--bare")
+		initCmd = exec.CommandContext(context.Background(), "git", "init", "--bare", dir) //nolint:gosec // G204: git is constant
+	} else {
+		initCmd = exec.CommandContext(context.Background(), "git", "init", dir) //nolint:gosec // G204: git is constant
 	}
-	args = append(args, dir)
-	initCmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // G204: "git" is constant
 	initCmd.Env = env
 	if out, err := initCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git init: %w: %s", err, out)

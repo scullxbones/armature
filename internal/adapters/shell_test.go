@@ -54,6 +54,7 @@ func TestNonInteractiveGitCommand(t *testing.T) {
 }
 
 func TestGitInitBareMainSetsMainHEAD(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "origin.git")
 	if err := GitInitBareMain(dir); err != nil {
 		t.Fatalf("GitInitBareMain: %v", err)

@@ -39,7 +39,7 @@ func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
 	assert.Equal(t, "0", os.Getenv("GIT_TERMINAL_PROMPT"))
 	cfg := os.Getenv("GIT_CONFIG_GLOBAL")
 	require.NotEqual(t, hostile, cfg)
-	data, err := os.ReadFile(cfg)
+	data, err := os.ReadFile(cfg) //nolint:gosec // G703: cfg is GIT_CONFIG_GLOBAL IsolateGit just wrote
 	require.NoError(t, err)
 	text := string(data)
 	assert.Contains(t, text, isolationMarker)
@@ -54,7 +54,7 @@ func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
 	assert.Equal(t, "victim", string(keep))
 }
 
-func TestIsolateGitReusesExistingIsolatedConfig(t *testing.T) {
+func TestIsolateGitReusesExistingIsolatedConfig(t *testing.T) { //nolint:paralleltest // IsolateGit mutates process env
 	require.NoError(t, IsolateGit())
 	first := os.Getenv("GIT_CONFIG_GLOBAL")
 	require.NoError(t, IsolateGit())
