@@ -129,6 +129,13 @@ func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 			keep:   "github.com:***",
 			phrase: "Authentication failed",
 		},
+		{
+			name:   "ftp-opaque-path",
+			secret: "OPAQUE" + "SECRET123",
+			url:    "ftp://127.0.0.1:1/signed/" + "OPAQUE" + "SECRET123" + "/repo.git",
+			keep:   "ftp://127.0.0.1:1/***",
+			phrase: "Could not resolve host",
+		},
 	}
 
 	for _, tc := range cases {

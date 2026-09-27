@@ -135,6 +135,24 @@ func TestSecrets_RedactsOpaquePathAndScpRemotes(t *testing.T) {
 			keep:   "github.com:***",
 			secret: opaque,
 		},
+		{
+			name:   "ftp-opaque-path",
+			in:     "fatal: unable to access 'ftp://127.0.0.1:1/signed/" + opaque + "/repo.git': Could not resolve host",
+			keep:   "ftp://127.0.0.1:1/***",
+			secret: opaque,
+		},
+		{
+			name:   "ftps-opaque-path",
+			in:     "fatal: unable to access 'ftps://127.0.0.1:1/signed/" + opaque + "/repo.git': Authentication failed",
+			keep:   "ftps://127.0.0.1:1/***",
+			secret: opaque,
+		},
+		{
+			name:   "rsync-opaque-path",
+			in:     "fatal: unable to access 'rsync://127.0.0.1:1/signed/" + opaque + "/repo.git': Could not resolve host",
+			keep:   "rsync://127.0.0.1:1/***",
+			secret: opaque,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,10 +160,10 @@ func TestSecrets_RedactsOpaquePathAndScpRemotes(t *testing.T) {
 			out := redact.Secrets(tc.in)
 			assert.NotContains(t, out, tc.secret)
 			assert.Contains(t, out, tc.keep)
-			if tc.name == "opaque-https-path" {
+			if tc.name == "opaque-https-path" || tc.name == "ftp-opaque-path" || tc.name == "rsync-opaque-path" {
 				assert.Contains(t, out, "Could not resolve host")
 			}
-			if tc.name == "scp-style" {
+			if tc.name == "scp-style" || tc.name == "ftps-opaque-path" {
 				assert.Contains(t, out, "Authentication failed")
 			}
 		})

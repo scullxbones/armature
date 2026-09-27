@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var schemeURL = regexp.MustCompile(`(?i)\b(?:https?|ssh|git|file)://[^\s'"]+`)
+var schemeURL = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^\s'"]+`)
 
 var scpRemote = regexp.MustCompile(`(^|[\s'"])([^\s'":/@]+@)([^\s'":/]+):([^\s'"]+)`)
 
