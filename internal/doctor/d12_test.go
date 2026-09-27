@@ -54,42 +54,92 @@ func TestEvaluateD12OpsWorktreeLag(t *testing.T) {
 func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 	t.Parallel()
 
-	secret := "ghp_fakeSecretTokenForTest1234567890"
-	fetchErr := fmt.Errorf(
-		"git fetch origin _armature: exit status 128\n"+
-			"fatal: unable to access 'https://x-access-token:%s@github.com/org/repo.git/': 403",
-		secret,
-	)
-
-	assertFindingOmitsSecret := func(t *testing.T, f doctor.Finding) {
-		t.Helper()
-		assert.Equal(t, doctor.SeverityError, f.Severity)
-		assert.Contains(t, f.Message, "Could not fetch origin/_armature")
-		assert.Contains(t, f.Message, "may be stale")
-		assert.NotContains(t, f.Message, secret)
-		for _, item := range f.Items {
-			assert.NotContains(t, item, secret)
-		}
-
-		raw, err := json.Marshal(f)
-		require.NoError(t, err)
-		assert.NotContains(t, string(raw), secret)
-
-		var human strings.Builder
-		fmt.Fprintf(&human, "✗ %s: %s\n", f.Check, f.Message)
-		for _, item := range f.Items {
-			fmt.Fprintf(&human, "    - %s\n", item)
-		}
-		assert.NotContains(t, human.String(), secret)
+	userinfoSecret := "ghp_fakeSecretTokenForTest1234567890"
+	querySecret := "SUPER" + "SECRET"
+	pathSecret := "ghp_fakeSecretTokenForTest1234567890"
+	cases := []struct {
+		name   string
+		secret string
+		url    string
+	}{
+		{
+			name:   "userinfo",
+			secret: userinfoSecret,
+			url:    "https://x-access-token:" + userinfoSecret + "@github.com/org/repo.git/",
+		},
+		{
+			name:   "query-sig",
+			secret: querySecret,
+			url:    "https://host/repo.git?sig=" + querySecret,
+		},
+		{
+			name:   "query-token",
+			secret: querySecret,
+			url:    "https://host/repo.git?token=" + querySecret,
+		},
+		{
+			name:   "query-access-token",
+			secret: querySecret,
+			url:    "https://host/repo.git?access_token=" + querySecret,
+		},
+		{
+			name:   "query-presigned",
+			secret: querySecret,
+			url:    "https://bucket.s3.amazonaws.com/repo.git?X-Amz-Signature=" + querySecret,
+		},
+		{
+			name:   "path-token",
+			secret: pathSecret,
+			url:    "https://host/" + pathSecret + "/org/repo.git/",
+		},
+		{
+			name:   "path-jwt",
+			secret: "eyJhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiJ0ZXN0In0." + "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+			url: "https://host/t/" +
+				"eyJhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiJ0ZXN0In0." + "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk" +
+				"/repo.git/",
+		},
 	}
 
-	staleOK := doctor.EvaluateD12OpsWorktreeLag(0, fetchErr)
-	assert.Contains(t, staleOK.Message, "appears not behind")
-	assertFindingOmitsSecret(t, staleOK)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fetchErr := fmt.Errorf(
+				"git fetch origin _armature: exit status 128\n"+
+					"fatal: unable to access '%s': 403",
+				tc.url,
+			)
+			assertFindingOmitsSecret := func(t *testing.T, f doctor.Finding) {
+				t.Helper()
+				assert.Equal(t, doctor.SeverityError, f.Severity)
+				assert.Contains(t, f.Message, "Could not fetch origin/_armature")
+				assert.Contains(t, f.Message, "may be stale")
+				assert.NotContains(t, f.Message, tc.secret)
+				for _, item := range f.Items {
+					assert.NotContains(t, item, tc.secret)
+				}
 
-	staleBehind := doctor.EvaluateD12OpsWorktreeLag(3, fetchErr)
-	assert.Contains(t, staleBehind.Message, "3 commit(s) behind")
-	assertFindingOmitsSecret(t, staleBehind)
+				raw, err := json.Marshal(f)
+				require.NoError(t, err)
+				assert.NotContains(t, string(raw), tc.secret)
+
+				var human strings.Builder
+				fmt.Fprintf(&human, "✗ %s: %s\n", f.Check, f.Message)
+				for _, item := range f.Items {
+					fmt.Fprintf(&human, "    - %s\n", item)
+				}
+				assert.NotContains(t, human.String(), tc.secret)
+			}
+
+			staleOK := doctor.EvaluateD12OpsWorktreeLag(0, fetchErr)
+			assert.Contains(t, staleOK.Message, "appears not behind")
+			assertFindingOmitsSecret(t, staleOK)
+
+			staleBehind := doctor.EvaluateD12OpsWorktreeLag(3, fetchErr)
+			assert.Contains(t, staleBehind.Message, "3 commit(s) behind")
+			assertFindingOmitsSecret(t, staleBehind)
+		})
+	}
 }
 
 func TestRun_D12_SkipWhenWorktreeMissing(t *testing.T) {
