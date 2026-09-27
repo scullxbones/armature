@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/gittest"
 )
 
 type Harness struct {
@@ -25,38 +27,16 @@ func New(t *testing.T, armBinPath string) *Harness {
 	t.Helper()
 
 	tempDir := t.TempDir()
-	originDir := filepath.Join(tempDir, "origin.git")
-
-	if err := gitInit(t, originDir, true); err != nil {
-		t.Fatalf("failed to initialize bare origin repo: %v", err)
-	}
-
-	initClone := filepath.Join(tempDir, ".init")
-	if err := gitInit(t, initClone, false); err != nil {
-		t.Fatalf("failed to initialize temporary clone: %v", err)
-	}
-
-	configGit(t, initClone)
-	if err := gitRun(t, initClone, "commit", "--allow-empty", "-m", "init"); err != nil {
-		t.Fatalf("failed to create init commit: %v", err)
-	}
-	if err := gitRun(t, initClone, "remote", "add", "origin", originDir); err != nil {
-		t.Fatalf("failed to add origin remote: %v", err)
-	}
-	if err := gitRun(t, initClone, "branch", "-M", "main"); err != nil {
-		t.Fatalf("failed to rename branch to main: %v", err)
-	}
-	if err := gitRun(t, initClone, "push", "-u", "origin", "main"); err != nil {
+	fx := gittest.InitWithOrigin(t)
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
+	if err := gitRun(t, fx.Dir, "push", "-u", "origin", "main"); err != nil {
 		t.Fatalf("failed to push to origin: %v", err)
-	}
-	if err := gitRun(t, originDir, "symbolic-ref", "HEAD", "refs/heads/main"); err != nil {
-		t.Fatalf("failed to set origin HEAD: %v", err)
 	}
 
 	h := &Harness{
 		t:          t,
 		TempDir:    tempDir,
-		OriginDir:  originDir,
+		OriginDir:  fx.Origin,
 		WorkDir:    filepath.Join(tempDir, "work"),
 		WorkerDirs: make(map[string]string),
 		ArmBinPath: armBinPath,
@@ -95,21 +75,6 @@ func (h *Harness) GetWorkerDir(name string) string {
 		return path
 	}
 	return ""
-}
-
-func gitInit(t *testing.T, dir string, bare bool) error {
-	t.Helper()
-
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return err
-	}
-
-	args := []string{"init"}
-	if bare {
-		args = append(args, "--bare")
-	}
-
-	return gitRun(t, dir, args...)
 }
 
 func configGit(t *testing.T, dir string) {

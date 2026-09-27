@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,11 +75,7 @@ func TestReadBindingPrefersCurrentAndFallsBackToLegacy(t *testing.T) {
 
 func TestListManagedUsesCanonicalRootAndMarkerIdentity(t *testing.T) {
 	t.Parallel()
-	repo := t.TempDir()
-	runInventoryGit(t, repo, "init", "-q")
-	runInventoryGit(t, repo, "config", "user.email", "test@example.com")
-	runInventoryGit(t, repo, "config", "user.name", "Test")
-	runInventoryGit(t, repo, "config", "commit.gpgsign", "false")
+	repo := gittest.InitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0644))
 	runInventoryGit(t, repo, "add", "README.md")
 	runInventoryGit(t, repo, "commit", "-q", "-m", "initial")
@@ -198,11 +195,7 @@ func TestLocateBinding_ExistenceIsOverInclusive_REQ_LNGHZN_S5_T6(t *testing.T) {
 
 func TestHasPrunableRegistration_DetectsExactPath_REQ_LNGHZN_S5(t *testing.T) {
 	t.Parallel()
-	repo := t.TempDir()
-	runInventoryGit(t, repo, "init", "-q")
-	runInventoryGit(t, repo, "config", "user.email", "test@example.com")
-	runInventoryGit(t, repo, "config", "user.name", "Test")
-	runInventoryGit(t, repo, "config", "commit.gpgsign", "false")
+	repo := gittest.InitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0644))
 	runInventoryGit(t, repo, "add", "README.md")
 	runInventoryGit(t, repo, "commit", "-q", "-m", "initial")

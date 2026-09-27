@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check embed-examples crosscompile context-report
+.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
 
 # Variables
 GO ?= go
@@ -13,7 +13,7 @@ UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${G
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check               - Run publish gate: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, crosscompile"
+	@echo "  make check               - Run publish gate: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, git-test-hermetic-check, crosscompile"
 	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
@@ -30,6 +30,8 @@ help:
 	@echo "  make validate-graph      - arm validate --ci (story integration / CI; not part of make check)"
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
+	@echo "  make git-test-hermetic-check - Fail if _test.go files use raw git init outside internal/gittest"
+	@echo "  make test-git-test-hermetic-check - Test check-git-test-hermetic.sh itself"
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
 	@echo "  make context-report      - Price fixture-measured main-path CLI payloads (bytes and bytes/4 tokens)"
 	@echo "  make clean               - Remove build artifacts and test outputs"
@@ -39,7 +41,7 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check crosscompile
+check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check crosscompile
 
 validate-graph: build
 	@./bin/arm validate --ci
@@ -138,6 +140,12 @@ census-drift-check:
 
 test-census-drift-check:
 	@scripts/test_census_drift_check.sh .
+
+git-test-hermetic-check:
+	@scripts/check-git-test-hermetic.sh .
+
+test-git-test-hermetic-check:
+	@scripts/test_check_git_test_hermetic.sh .
 
 test-coverage-check:
 	@scripts/test_coverage_check.sh .

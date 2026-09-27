@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/gittest"
 )
 
 type TestRepo struct {
@@ -21,20 +21,7 @@ type TestRepo struct {
 func NewTestRepo(t *testing.T) *TestRepo {
 	t.Helper()
 
-	tmpDir := t.TempDir()
-
-	if err := adapters.GitInitMain(tmpDir); err != nil {
-		t.Fatalf("git init: %v", err)
-	}
-
-	runCmd(tmpDir, "config", "user.email", "test@example.com")
-	runCmd(tmpDir, "config", "user.name", "Test User")
-	runCmd(tmpDir, "config", "commit.gpgsign", "false")
-
-	originParent := t.TempDir()
-	origin := filepath.Join(originParent, "origin.git")
-	runCmd(originParent, "init", "--bare", origin)
-	runCmd(tmpDir, "remote", "add", "origin", origin)
+	tmpDir := gittest.InitWithOrigin(t).Dir
 
 	armBin := getArmBinary(t)
 	if err := runCmdSafely(tmpDir, map[string]string{"ARM_LOG_SLOT": "1"}, armBin, "worker-init", "--check"); err != nil {

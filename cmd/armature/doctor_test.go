@@ -7,13 +7,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)
@@ -47,7 +48,7 @@ func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
 }
 
 func TestDoctorLegacyRepoEmitsDiagnostic(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	legacyOps := filepath.Join(repo, ".armature", "ops")
@@ -61,7 +62,7 @@ func TestDoctorLegacyRepoEmitsDiagnostic(t *testing.T) {
 }
 
 func TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)
@@ -80,7 +81,7 @@ func TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback(t *testing.T) 
 }
 
 func TestDoctorFixReportsOutOfRangeConfig(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)

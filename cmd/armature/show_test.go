@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/stats"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,7 @@ func decodeShowIssue(t *testing.T, stdout string) map[string]any {
 }
 
 func TestShowOmitsTombstonedNotes(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -83,7 +84,7 @@ func TestShowOmitsTombstonedNotes(t *testing.T) {
 }
 
 func TestShow_BlockedBy(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -150,7 +151,7 @@ func TestShow_BlockedBy(t *testing.T) {
 }
 
 func TestShow_BlockedBy_MultiJSON(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -192,7 +193,7 @@ func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 }
 
 func TestShow_JSON_IncludesPriorityField(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
