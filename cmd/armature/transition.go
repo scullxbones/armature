@@ -107,19 +107,28 @@ outcome) appends as an amendment at exit 0.`,
 			sameStatusAmendment := false
 			if replayErr == nil && liveIssue != nil {
 				currentStatus = liveIssue.Status
-				if ops.IdenticalTransition(allOps, issueID, liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, payload) {
-					if err := publishLocalArmatureTip(state); err != nil {
-						return err
-					}
-					writeTransitionNoOp(cmd, issueID, to, fieldFlag)
-					return nil
-				}
 				sameStatusAmendment = liveIssue.Status == to
 			}
 
 			if leaseStatusAllowsOwnerGate(currentStatus) {
 				if err := requirePublishedOwner(appCtx, issueID, workerID); err != nil {
 					return err
+				}
+			}
+			recheckPublishedOwner := func() error {
+				if !leaseStatusAllowsOwnerGate(currentStatus) {
+					return nil
+				}
+				return requirePublishedOwner(appCtx, issueID, workerID)
+			}
+
+			if replayErr == nil && liveIssue != nil {
+				if ops.IdenticalTransition(allOps, issueID, liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, payload) {
+					if err := publishLocalArmatureTipAfter(state, recheckPublishedOwner); err != nil {
+						return err
+					}
+					writeTransitionNoOp(cmd, issueID, to, fieldFlag)
+					return nil
 				}
 			}
 
@@ -190,7 +199,7 @@ outcome) appends as an amendment at exit 0.`,
 				WorkerID: workerID,
 				Payload:  payload,
 			}
-			wrote, err := appendHighStakesOpIf(state, logPath, op, func() (bool, error) {
+			wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) {
 				live, all, replayErr := replayIssueOps(appCtx.IssuesDir, issueID)
 				if replayErr != nil || live == nil {
 					return true, nil
@@ -199,7 +208,7 @@ outcome) appends as an amendment at exit 0.`,
 					return false, nil
 				}
 				return true, nil
-			})
+			}, recheckPublishedOwner)
 			if err != nil {
 				return err
 			}
