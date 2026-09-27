@@ -100,6 +100,7 @@ linters:
             - "github.com/scullxbones/armature/internal/claim"
             - "github.com/scullxbones/armature/internal/dag"
             - "github.com/scullxbones/armature/internal/issueid"
+            - "github.com/scullxbones/armature/internal/oporder"
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/traceability"

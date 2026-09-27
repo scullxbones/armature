@@ -7,8 +7,8 @@ import (
 	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	armerrors "github.com/scullxbones/armature/internal/errors"
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/oporder"
+	"github.com/scullxbones/armature/internal/ops"
 )
 
 func locatePublishedOps(ctx *config.Context) ([]oporder.LocatedOp, error) {

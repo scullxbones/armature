@@ -33,7 +33,7 @@ func readRepoDoc(t *testing.T, rel string) string {
 	for {
 		candidate := filepath.Join(dir, rel)
 		if _, statErr := os.Stat(candidate); statErr == nil {
-			b, readErr := os.ReadFile(candidate) //nolint:gosec
+			b, readErr := os.ReadFile(candidate)
 			require.NoError(t, readErr)
 			return string(b)
 		}

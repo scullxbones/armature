@@ -188,9 +188,7 @@ func Init(in InitWorkerInput) (Identity, error) {
 		return Identity{}, err
 	}
 	if !in.Reuse {
-		if used, err := workerIDInUse(in, id); err != nil {
-			return Identity{}, err
-		} else if used {
+		if used := workerIDInUse(in, id); used {
 			return Identity{}, claim.ErrWorkerIDInUse
 		}
 	}
@@ -203,7 +201,7 @@ func Init(in InitWorkerInput) (Identity, error) {
 	return ResolveIdentity(IdentityInput{RepoPath: in.RepoPath, IssuesDir: in.IssuesDir})
 }
 
-func workerIDInUse(in InitWorkerInput, id string) (bool, error) {
+func workerIDInUse(in InitWorkerInput, id string) bool {
 	candidates := []string{
 		filepath.Join(in.RepoPath, "ops", id+".log"),
 		filepath.Join(in.IssuesDir, "ops", id+".log"),
@@ -214,16 +212,16 @@ func workerIDInUse(in InitWorkerInput, id string) (bool, error) {
 			continue
 		}
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			return true, nil
+			return true
 		}
 	}
 	gc := adapters.New(in.RepoPath)
 	for _, path := range []string{"ops/" + id + ".log", ".armature/ops/" + id + ".log"} {
 		if gc.BlobExists("origin/_armature", path) || gc.BlobExists("_armature", path) || gc.BlobExists("HEAD", path) {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
 }
 
 // LockLogID takes a non-blocking flock on <common-dir>/armature-log-<id>.lock.
@@ -242,15 +240,23 @@ func LockLogID(repoPath, workerID string) (unlock func(), err error) {
 	}
 	locked, lockErr := filelock.TryLock(f)
 	if lockErr != nil {
-		_ = f.Close()
+		if cerr := f.Close(); cerr != nil {
+			return nil, fmt.Errorf("%w: close lock: %v", lockErr, cerr)
+		}
 		return nil, lockErr
 	}
 	if !locked {
-		_ = f.Close()
+		if cerr := f.Close(); cerr != nil {
+			return nil, fmt.Errorf("%w: close lock: %v", claim.ErrLogSlotCollision, cerr)
+		}
 		return nil, claim.ErrLogSlotCollision
 	}
 	return func() {
-		_ = filelock.Unlock(f)
-		_ = f.Close()
+		if err := filelock.Unlock(f); err != nil {
+			fmt.Fprintf(os.Stderr, "unlock log flock: %v\n", err)
+		}
+		if err := f.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close log flock: %v\n", err)
+		}
 	}, nil
 }
