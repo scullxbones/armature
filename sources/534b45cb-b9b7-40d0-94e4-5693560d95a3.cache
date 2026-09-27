@@ -15,6 +15,7 @@
 - [Scope-overlap matches on directory prefix, so unrelated files in the same tree collide](../../raw/2026-08-14T2352Z-5207ee28-tooling-scope-overlap-matches-on-directory-not-file.md) — T2 and S7-T1 shared no file; claim still refused. Matcher treated a directory as overlapping every path under it.
 - [`arm claim` blocks on an in-progress story's aggregate scope, though no worker holds it](../../raw/2026-08-15T0018Z-5207ee28-tooling-claim-treats-in-progress-story-as-a-competing-worker.md) — T3 blocked on story LNGHZN-S7 after the only overlapping *task* had already merged. The story record is not a claimant.
 - [A cited create landed five cross-story W1 overlaps; the planner became janitor](../../raw/2026-08-17T0131Z-5207ee28-validation-create-conscripts-planner-as-janitor.md) — `arm create` succeeded; the next `validate` printed five W1s against foreign open tasks. Planner then amended scope and added `blocked_by` edges *onto T12 from other stories* so the queue would look clean.
+- [`arm dag apply --dry-run` rejects multi-task plans that share `engine.go`](../../raw/2026-09-21T1647Z-loops-validation-dag-apply-scope-overlap.md) — MATENC-S1 loops. Several tasks listed `internal/materialize/engine.go`; dry-run failed with Graph Finding scope overlap (T4 vs T1). Planner had to re-chain `blocked_by` so overlapping scopes never coexist as concurrently open work. PR sequence ≠ ready-wave parallelism when scopes collide. This is the checker firing *correctly* on a concentrated file — still extra planning iteration unless pairwise intersection is computed before dry-run.
 
 ## Pattern
 
@@ -26,6 +27,7 @@ The scope-overlap checker in both `arm validate` and `arm claim` reasons about t
 4. **No plan-time awareness of "will exist" files**: a task's `(new)` file annotation isn't cross-referenced against downstream tasks' scope declarations of the same path.
 5. **Directory-prefix matching**: a scope entry that is a directory collides with every file under it, including files no task named.
 6. **Create is fail-open on W1**: the write that introduces cross-story overlap succeeds; the planner inherits janitor work on stories they do not own.
+7. **`dag apply` dry-run is fail-closed on same-file overlap**: unlike create, apply refuses the graph until overlapping tasks are ordered. Human PR order does not count as sequencing.
 
 ## Impact
 
@@ -41,3 +43,4 @@ The scope-overlap checker in both `arm validate` and `arm claim` reasons about t
 - Cross-reference `(new)` file annotations from blocking tasks against scope declarations of blocked tasks before emitting phantom-scope INFO.
 - Match overlap on files/globs, not containing directory (S10-T6's contract; still biting T2 vs S7).
 - Do not treat an in-progress *story* as a competing claimant once its overlapping children are merged.
+- Planner skill: before `dag apply --dry-run`, compute pairwise scope file intersection and auto-suggest `blocked_by` edges. Document that PR sequence is not ready-wave parallelism when scopes collide.
