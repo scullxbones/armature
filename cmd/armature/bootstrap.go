@@ -248,6 +248,17 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 				return results, fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
 			}
 
+			if err := deployRepoAgentSkills(repoPath, skillsDest); err != nil {
+				results = append(results, bootstrap.HarnessArtifactResult{
+					Platform: row.Platform,
+					Artifact: bootstrap.ArtifactSkills,
+					Status:   bootstrap.StatusError,
+					Action:   bootstrap.ActionInstall,
+					Error:    err.Error(),
+				})
+				return results, fmt.Errorf("deploy repo agent skills for %s: %w", platformName, err)
+			}
+
 			results = append(results, bootstrap.HarnessArtifactResult{
 				Platform: row.Platform,
 				Artifact: bootstrap.ArtifactSkills,

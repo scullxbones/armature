@@ -295,7 +295,7 @@ The script is bash, `chmod +x`. It records evidence itself. Do not reverse-engin
 
 ## Interview corrections (vs the notes you were given)
 
-- Runtime for the **binary** is Go-built `arm` + git. **Building** this checkout uses `make build` (GNU make + Go). `make install` writes `~/.local/bin/arm`; verification uses `./bin/arm`.
+- Runtime for the **binary** is Go-built `arm` + git. **Building** this checkout uses `make build` (GNU make + Go). Installing to PATH writes `~/.local/bin/arm`; verification uses `./bin/arm`.
 - `arm bootstrap` already registers `armature.worker-id` when missing. `arm worker-init` without `--check` **rotates** that id.
 - `arm show --format agent` is human text; use `--format json` for the issue object.
 - `arm list` / `arm ready` structured output is a raw JSON array (ready empty → `null`), not the `{count, payload, help[]}` agent envelope.

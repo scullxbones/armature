@@ -25,7 +25,7 @@ help:
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make mutate              - Run mutation testing on core packages"
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
-	@echo "  make validate-skills     - Validate embedded skills and canonical CLI documentation"
+	@echo "  make validate-skills     - Validate embedded and .agents/skills plus canonical CLI documentation"
 	@echo "  make validate-doc-examples - Validate JSON examples in docs/skills against schemas"
 	@echo "  make validate-graph      - arm validate --ci (story integration / CI; not part of make check)"
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
@@ -123,7 +123,7 @@ embed-examples: build
 	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/embed_examples.py check
 
 validate-skills: skill-lint embed-examples
-	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md 2>/dev/null; then \
+	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md .agents/skills/*/SKILL.md 2>/dev/null; then \
 		echo "FAIL: 'make install' found in skill bodies — remove it or replace with: 'If arm is not found, stop and resolve this before proceeding'"; \
 		exit 1; \
 	fi
@@ -185,12 +185,16 @@ install: build
 	@echo "Ensure $(INSTALL_DIR) is on your PATH"
 
 deploy-skills:
-	@for name in internal/skillsembed/skills/*/; do \
-		name=$$(basename "$$name"); \
-		[ -f "internal/skillsembed/skills/$$name/SKILL.md" ] || continue; \
-		for harness in claude gemini codex; do \
-			mkdir -p ".$$harness/skills/$$name"; \
-			cp -r "internal/skillsembed/skills/$$name/." ".$$harness/skills/$$name/"; \
+	@for root in internal/skillsembed/skills .agents/skills; do \
+		[ -d "$$root" ] || continue; \
+		for name in "$$root"/*/; do \
+			[ -d "$$name" ] || continue; \
+			name=$$(basename "$$name"); \
+			[ -f "$$root/$$name/SKILL.md" ] || continue; \
+			for harness in claude gemini codex; do \
+				mkdir -p ".$$harness/skills/$$name"; \
+				cp -r "$$root/$$name/." ".$$harness/skills/$$name/"; \
+			done; \
 		done; \
 	done
 	@echo "Deployed skills to .claude/skills/ and .gemini/skills/ and .codex/skills/"
