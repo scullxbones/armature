@@ -5,12 +5,25 @@ Date: 2026-09-27.
 
 ## Fixed in a slice
 
-### DF-11 — post-C0 steal used committer `now` against `op.Timestamp` LastActivity
+### DF-12 — git LocateOps on snapshot Load dropped uncommitted test ops
+- **Slice:** CLAIMORD-W14/W21
+- **Command:** `go test ./cmd/armature/ -run TestClaimIgnoresNonTaskIssues`
+- **Happened:** auto-detecting `.git` on `filepath.Dir(opsDir)` walked the ops git history and skipped JSONL that was only on disk (`issue not found`)
+- **Should:** default snapshot load stays file concat; `Options.OpsWorktree` is the explicit incremental path (W14 test)
+- **Severity:** high if left on; **fixed** by not auto-wiring snapshot.Load to LocateOps
+
 - **Slice:** CLAIMORD-W12
 - **Command:** `go test ./internal/oporder/ -run 'TestTwoClones|TestSameSecond'`
 - **Happened:** first-published B lost to A's earlier `op.Timestamp` because `LeaseLive` compared 2026 committer time to LastActivity=100
 - **Should:** `AcceptAt` stores LastActivity as steal/committer `now` so TTL is in the same domain as the challenger
 - **Severity:** high (would invert every post-C0 race)
+
+### DF-12 — git LocateOps on snapshot Load dropped uncommitted test ops
+- **Slice:** CLAIMORD-W14 (fixed on W21 tip)
+- **Command:** `go test ./cmd/armature/ -run TestClaimIgnoresNonTaskIssues`
+- **Happened:** auto-detecting `.git` on `filepath.Dir(opsDir)` walked git history and skipped JSONL that existed only on disk (`issue not found`)
+- **Should:** default snapshot load stays file concat; `Options.OpsWorktree` is the explicit incremental path
+- **Severity:** high if left on; reverted auto-wiring
 
 ## Open
 

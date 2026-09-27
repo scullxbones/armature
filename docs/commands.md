@@ -604,10 +604,10 @@ Show the audit log of ops.
 
 ## materialize
 
-Replay op logs and update materialized state files. When the ops worktree is
-a git checkout, replay is incremental from `checkpoint.last_materialized_commit`
-(`LastCommitSHA`): only ops introduced after that commit are applied. A missing
-or version-mismatched checkpoint is a cold walk of `_armature`.
+Replay op logs and update materialized state files. `materialize.Run` with
+`Options.OpsWorktree` set to a git checkout is incremental from
+`checkpoint.last_materialized_commit`. Default snapshot load (claim/list)
+still concatenates log files so uncommitted test layouts keep working.
 
 **Synopsis:**
 `arm materialize [flags]`
