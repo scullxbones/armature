@@ -12,7 +12,6 @@ import (
 	ctxpkg "github.com/scullxbones/armature/internal/context"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/spf13/cobra"
 )
 
@@ -45,11 +44,8 @@ func newRenderContextCmd() *cobra.Command {
 			if idErr != nil {
 				return idErr
 			}
-			if located, locErr := locatePublishedOps(appCtx); locErr == nil {
-				lease := oporder.OwnerOf(oporder.Published(located), rcIssue)
-				if lease.Holder != "" && lease.Holder != workerID {
-					return claimpkg.ErrNotClaimOwner
-				}
+			if err := enforceRenderContextOwner(appCtx, rcIssue, workerID); err != nil {
+				return err
 			}
 			var state *materialize.State
 			if rcAt != "" {
