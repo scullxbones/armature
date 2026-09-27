@@ -392,6 +392,15 @@ func OwnerOf(located []LocatedOp, issueID string) claim.Lease {
 	return held
 }
 
+// RequireOwner fails unless workerID holds the published lease (token set).
+func RequireOwner(located []LocatedOp, issueID, workerID string) error {
+	lease := OwnerOf(Published(located), issueID)
+	if workerID == "" || lease.Holder != workerID || lease.Token == "" {
+		return claim.ErrNotClaimOwner
+	}
+	return nil
+}
+
 // Published returns located ops whose introducing content is on the published tip.
 func Published(located []LocatedOp) []LocatedOp {
 	var out []LocatedOp

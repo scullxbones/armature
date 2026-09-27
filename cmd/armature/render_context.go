@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	claimpkg "github.com/scullxbones/armature/internal/claim"
 	ctxpkg "github.com/scullxbones/armature/internal/context"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/spf13/cobra"
 )
 
@@ -38,6 +40,16 @@ func newRenderContextCmd() *cobra.Command {
 			appCtx := currentCtx(cmd)
 			if !cmd.Flags().Changed("budget") && appCtx.Config.TokenBudget > 0 {
 				rcBudget = appCtx.Config.TokenBudget
+			}
+			workerID, _, idErr := resolveWorkerAndLog(appCtx)
+			if idErr != nil {
+				return idErr
+			}
+			if located, locErr := locatePublishedOps(appCtx); locErr == nil {
+				lease := oporder.OwnerOf(oporder.Published(located), rcIssue)
+				if lease.Holder != "" && lease.Holder != workerID {
+					return claimpkg.ErrNotClaimOwner
+				}
 			}
 			var state *materialize.State
 			if rcAt != "" {
@@ -110,6 +122,9 @@ func mapRenderContextError(err error) error {
 		return cf
 	}
 	msg := err.Error()
+	if strings.Contains(msg, "NOT-CLAIM-OWNER") {
+		return wrapNotClaimOwner(codeRenderContext1, err)
+	}
 	if strings.Contains(msg, "issue ID is required") || strings.Contains(msg, "accepts at most") {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, err)
 	}

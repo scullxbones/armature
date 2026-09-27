@@ -116,6 +116,12 @@ outcome) appends as an amendment at exit 0.`,
 				sameStatusAmendment = liveIssue.Status == to
 			}
 
+			if leaseStatusAllowsOwnerGate(currentStatus) {
+				if err := requirePublishedOwner(appCtx, issueID, workerID); err != nil {
+					return err
+				}
+			}
+
 			if to == "done" && !force {
 				repoPath := appCtx.RepoPath
 				gc := adapters.New(repoPath)
@@ -458,6 +464,8 @@ func mapTransitionError(err error) error {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm transition --help"}, err)
 	case strings.Contains(msg, "invalid status"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to <valid-status>", "arm show"}, err)
+	case strings.Contains(msg, "NOT-CLAIM-OWNER"):
+		return wrapNotClaimOwner(codeTransition1, err)
 	case strings.Contains(msg, "cannot transition to done"),
 		strings.Contains(msg, "Use --force"):
 		return armerrors.Wrap(codeTransition1, msg, []string{
