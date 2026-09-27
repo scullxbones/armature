@@ -17,12 +17,17 @@ type HierarchyGraph interface {
 func ScopesOverlap(scopeA, scopeB []string) bool {
 	for _, a := range scopeA {
 		for _, b := range scopeB {
-			if scopematch.Overlaps(a, b) {
+			overlap, err := scopematch.Overlaps(a, b)
+			if claimTreatsMalformedScopeAsNoOverlap(overlap, err) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+func claimTreatsMalformedScopeAsNoOverlap(overlap bool, err error) bool {
+	return err == nil && overlap
 }
 
 // ScopesOverlapIgnoringAncestry reports glob overlap except when issueA and

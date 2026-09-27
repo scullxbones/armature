@@ -602,7 +602,16 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	for i, task1 := range tasks {
 		for j := i + 1; j < len(tasks); j++ {
 			task2 := tasks[j]
-			matchedA, matchedB, overlaps := firstGlobOverlapPair(task1.Scope, task2.Scope)
+			matchedA, matchedB, overlaps, err := firstGlobOverlapPair(task1.Scope, task2.Scope)
+			if err != nil {
+				findings = append(findings, Finding{
+					Severity: "error", Rule: "E10",
+					Message: fmt.Sprintf("invalid glob while checking overlap of %s and %s: %s",
+						task1.ID, task2.ID, err),
+					CitedIDs: []string{task1.ID, task2.ID},
+				})
+				continue
+			}
 			if !overlaps {
 				continue
 			}
@@ -700,15 +709,19 @@ func blocksReachable(start, target string, blocks map[string][]string) bool {
 	return false
 }
 
-func firstGlobOverlapPair(a, b []string) (patternA, patternB string, overlaps bool) {
+func firstGlobOverlapPair(a, b []string) (patternA, patternB string, overlaps bool, err error) {
 	for _, x := range a {
 		for _, y := range b {
-			if scopematch.Overlaps(x, y) {
-				return x, y, true
+			ok, err := scopematch.Overlaps(x, y)
+			if err != nil {
+				return x, y, false, err
+			}
+			if ok {
+				return x, y, true, nil
 			}
 		}
 	}
-	return "", "", false
+	return "", "", false, nil
 }
 
 func scopeIntersection(a, b []string) []string {

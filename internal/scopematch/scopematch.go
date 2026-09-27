@@ -4,6 +4,7 @@
 package scopematch
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -32,17 +33,33 @@ import (
 // not a parallel literal-prefix path that breaks once the directory itself
 // contains a wildcard (e.g. "src/*/"). Intersection is memoized on suffix
 // indexes so pairs of patterns with many "**" segments stay polynomial.
-func Overlaps(a, b string) bool {
-	if matched, err := filepath.Match(a, b); err == nil && matched {
-		return true
+func Overlaps(a, b string) (bool, error) {
+	matched, err := matchScopePattern(a, b)
+	if err != nil {
+		return false, err
 	}
-	if matched, err := filepath.Match(b, a); err == nil && matched {
-		return true
+	if matched {
+		return true, nil
+	}
+	matched, err = matchScopePattern(b, a)
+	if err != nil {
+		return false, err
+	}
+	if matched {
+		return true, nil
 	}
 	if Allows([]string{a}, b) || Allows([]string{b}, a) {
-		return true
+		return true, nil
 	}
-	return globPatternsMayIntersect(a, b)
+	return globPatternsMayIntersect(a, b), nil
+}
+
+func matchScopePattern(pattern, name string) (bool, error) {
+	matched, err := filepath.Match(pattern, name)
+	if err != nil {
+		return false, fmt.Errorf("scope pattern %q: %w", pattern, err)
+	}
+	return matched, nil
 }
 
 func doublestarRewrittenSegments(raw string) []string {

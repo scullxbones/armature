@@ -126,7 +126,11 @@ func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Res
 
 	opts.ManifestData = manifestData
 	opts.Coverage = cov
-	opts.PreExpandedScopes = adapters.ExpandGlobs(scopeGlobs)
+	expanded, err := adapters.ExpandGlobs(scopeGlobs)
+	if err != nil {
+		return validate.Result{}, err
+	}
+	opts.PreExpandedScopes = expanded
 	result := validate.Validate(state, materialize.GraphFromState(state), opts)
 	return attachSnapshotWarnings(result, snap.Warnings, opts.Strict), nil
 }

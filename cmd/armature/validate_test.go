@@ -107,6 +107,25 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
     "scope overlap`)
 }
 
+func TestValidate_ExpandGlobsBadPatternPropagates_REQ_NOCOMMENTS(t *testing.T) {
+	repo := initTempRepo(t)
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendRawCreate(logPath, workerID, "tsk-bad-glob", "Bad glob task", "["))
+
+	_, err = runTrls(t, repo, "validate", "--format", "human")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expand glob")
+	assert.Contains(t, err.Error(), "[")
+}
+
 func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
 	repo := initTempRepo(t)
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")

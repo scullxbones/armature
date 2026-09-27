@@ -6,10 +6,15 @@ import (
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func globOverlaps(a, b string) bool {
-	return scopematch.Overlaps(a, b)
+	ok, err := scopematch.Overlaps(a, b)
+	if err != nil {
+		panic(err)
+	}
+	return ok
 }
 
 func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *testing.T) {
@@ -352,4 +357,15 @@ func TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_REQ_LNGHZN_S4_T1(t *t
 	isIn, outOfScope = IsWithinScope([]string{"internal/foo/other.go"}, scope)
 	assert.False(t, isIn, "internal/**/api.go should not match internal/foo/other.go")
 	assert.Equal(t, "internal/foo/other.go", outOfScope)
+}
+
+func TestScopesOverlap_MalformedPatternFailOpen_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	_, err := scopematch.Overlaps("foo[", "foo.go")
+	require.Error(t, err, "helper must surface the malformed pattern")
+	assert.False(t, ScopesOverlap([]string{"foo["}, []string{"foo.go"}),
+		"claimTreatsMalformedScopeAsNoOverlap: claim keeps fail-open so TTL/race stay unchanged")
+	assert.False(t, ScopesOverlap([]string{"foo.go"}, []string{"foo["}))
+	assert.True(t, ScopesOverlap([]string{"src/a.go"}, []string{"src/a.go"}),
+		"valid overlapping scopes must still overlap")
 }
