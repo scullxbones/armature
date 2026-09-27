@@ -61,36 +61,50 @@ func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 		name   string
 		secret string
 		url    string
+		keep   string
+		phrase string
 	}{
 		{
 			name:   "userinfo",
 			secret: userinfoSecret,
 			url:    "https://x-access-token:" + userinfoSecret + "@github.com/org/repo.git/",
+			keep:   "https://github.com/***",
+			phrase: "403",
 		},
 		{
 			name:   "query-sig",
 			secret: querySecret,
 			url:    "https://host/repo.git?sig=" + querySecret,
+			keep:   "https://host/***",
+			phrase: "403",
 		},
 		{
 			name:   "query-token",
 			secret: querySecret,
 			url:    "https://host/repo.git?token=" + querySecret,
+			keep:   "https://host/***",
+			phrase: "403",
 		},
 		{
 			name:   "query-access-token",
 			secret: querySecret,
 			url:    "https://host/repo.git?access_token=" + querySecret,
+			keep:   "https://host/***",
+			phrase: "403",
 		},
 		{
 			name:   "query-presigned",
 			secret: querySecret,
 			url:    "https://bucket.s3.amazonaws.com/repo.git?X-Amz-Signature=" + querySecret,
+			keep:   "https://bucket.s3.amazonaws.com/***",
+			phrase: "403",
 		},
 		{
 			name:   "path-token",
 			secret: pathSecret,
 			url:    "https://host/" + pathSecret + "/org/repo.git/",
+			keep:   "https://host/***",
+			phrase: "403",
 		},
 		{
 			name:   "path-jwt",
@@ -98,6 +112,22 @@ func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 			url: "https://host/t/" +
 				"eyJhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiJ0ZXN0In0." + "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk" +
 				"/repo.git/",
+			keep:   "https://host/***",
+			phrase: "403",
+		},
+		{
+			name:   "opaque-path",
+			secret: "OPAQUE" + "SECRET123",
+			url:    "https://127.0.0.1:1/signed/" + "OPAQUE" + "SECRET123" + "/repo.git",
+			keep:   "https://127.0.0.1:1/***",
+			phrase: "Could not resolve host",
+		},
+		{
+			name:   "scp-style",
+			secret: "OPAQUE" + "SECRET123",
+			url:    "git@github.com:org/" + "OPAQUE" + "SECRET123" + "/repo.git",
+			keep:   "github.com:***",
+			phrase: "Authentication failed",
 		},
 	}
 
@@ -106,14 +136,16 @@ func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 			t.Parallel()
 			fetchErr := fmt.Errorf(
 				"git fetch origin _armature: exit status 128\n"+
-					"fatal: unable to access '%s': 403",
-				tc.url,
+					"fatal: unable to access '%s': %s",
+				tc.url, tc.phrase,
 			)
 			assertFindingOmitsSecret := func(t *testing.T, f doctor.Finding) {
 				t.Helper()
 				assert.Equal(t, doctor.SeverityError, f.Severity)
 				assert.Contains(t, f.Message, "Could not fetch origin/_armature")
 				assert.Contains(t, f.Message, "may be stale")
+				assert.Contains(t, f.Message, tc.keep)
+				assert.Contains(t, f.Message, tc.phrase)
 				assert.NotContains(t, f.Message, tc.secret)
 				for _, item := range f.Items {
 					assert.NotContains(t, item, tc.secret)
