@@ -371,6 +371,40 @@ func TestHookRunPostCommit_HeartbeatsOwnSlotOnly_REQ_CLAIMTTL(t *testing.T) {
 	assert.Empty(t, heartbeats(filepath.Join(opsDir, slotB+".log")), "sibling slot must not receive a heartbeat")
 }
 
+func TestHookFindActiveClaimID_IgnoresForgedWorkerID_REQ_CLAIMTTL(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	issuesDir := filepath.Join(repo, ".armature")
+	opsDir := filepath.Join(issuesDir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o755))
+	now := time.Now().Unix()
+	slot := workerID + "~slot-a"
+	require.NoError(t, ops.AppendOp(filepath.Join(opsDir, slot+".log"), ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: now - 40,
+		WorkerID:  slot,
+		Payload:   ops.Payload{TTL: 60, ClaimToken: "tok-real"},
+	}))
+	require.NoError(t, ops.AppendOp(filepath.Join(opsDir, "attacker.log"), ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-02",
+		Timestamp: now - 5,
+		WorkerID:  slot,
+		Payload:   ops.Payload{TTL: 60, ClaimToken: "tok-forged"},
+	}))
+
+	t.Setenv("ARM_LOG_SLOT", "slot-a")
+	ctx := &config.Context{
+		RepoPath:  repo,
+		IssuesDir: issuesDir,
+		Config:    config.Config{DefaultTTL: 60},
+	}
+	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx), "forged worker_id in another log must not win hook selection")
+}
+
 func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
 

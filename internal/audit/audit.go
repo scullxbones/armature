@@ -75,7 +75,7 @@ func Load(logContents []string, f Filter) ([]Entry, error) {
 }
 
 func claimKey(op ops.Op) string {
-	return op.TargetID + "|" + op.WorkerID
+	return claim.ClaimOpKey(op)
 }
 
 func identifyLostRaceClaims(allOps []ops.Op) map[string]bool {

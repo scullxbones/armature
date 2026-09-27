@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/ops"
@@ -90,28 +89,24 @@ func newWorkersCmd() *cobra.Command {
 	return cmd
 }
 
+func workerLogIdentity(logPath string) string {
+	return strings.TrimSuffix(filepath.Base(logPath), ".log")
+}
+
 func loadWorkerLogs(opsDir string) (map[string][]ops.Op, []ops.Op, error) {
-	logFiles, err := adapters.ListLogFiles(opsDir)
+	loaded, err := ops.LoadFromDirValidated(opsDir)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	result := make(map[string][]ops.Op)
 	var allOps []ops.Op
-	for _, logPath := range logFiles {
-		workerID := workerLogIdentity(logPath)
-		logOps, err := ops.ReadLog(logPath)
-		if err != nil {
-			continue
-		}
-		result[workerID] = append(result[workerID], logOps...)
-		allOps = append(allOps, logOps...)
+	for _, item := range loaded.Items {
+		workerID := workerLogIdentity(item.LogFilename)
+		result[workerID] = append(result[workerID], item.Op)
+		allOps = append(allOps, item.Op)
 	}
 	return result, allOps, nil
-}
-
-func workerLogIdentity(logPath string) string {
-	return strings.TrimSuffix(filepath.Base(logPath), ".log")
 }
 
 func foldWorkerStatusFromClaimOwnerActivity(workerID string, workerOps, allOps []ops.Op, defaultTTL config.TTLMinutes, now int64) WorkerStatus {

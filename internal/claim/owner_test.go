@@ -27,8 +27,29 @@ func TestOwner_RacingLiveClaimsFirstKeeps_REQ_CLAIMTTL(t *testing.T) {
 	assert.Equal(t, "token-a", lease.Token)
 	assert.True(t, LeaseLive(lease, 110))
 	lost := LostRaceClaimKeys(log)
-	assert.False(t, lost["task-01|worker-a"])
-	assert.True(t, lost["task-01|worker-b"])
+	assert.False(t, lost[ClaimOpKey(log[1])])
+	assert.True(t, lost[ClaimOpKey(log[2])])
+}
+
+func TestLostRaceClaimKeys_LoseThenWin_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
+	claimedAt := int64(100)
+	ttl := 1
+	takeAt := claimedAt + int64(ttl)*60
+	lose := ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: claimedAt + 10, WorkerID: "worker-b",
+		Payload: ops.Payload{TTL: ttl, ClaimToken: "b-lose"}}
+	win := ops.Op{Type: ops.OpClaim, TargetID: "task-01", Timestamp: takeAt, WorkerID: "worker-b",
+		Payload: ops.Payload{TTL: ttl, ClaimToken: "b-win"}}
+	log := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: claimedAt, WorkerID: "worker-a",
+			Payload: ops.Payload{TTL: ttl, ClaimToken: "a"}},
+		lose,
+		win,
+	}
+	assert.Equal(t, "worker-b", Owner(log, "task-01").Holder)
+	lost := LostRaceClaimKeys(log)
+	assert.True(t, lost[ClaimOpKey(lose)], "first reclaim while live is a lost race")
+	assert.False(t, lost[ClaimOpKey(win)], "later winning reclaim must not stay marked lost")
 }
 
 func TestAccept_ExactTTLBoundaryTakeable_REQ_CLAIMTTL(t *testing.T) {

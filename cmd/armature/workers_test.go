@@ -174,3 +174,12 @@ func TestFoldWorkerStatus_ExactSlotNotSibling_REQ_CLAIMTTL(t *testing.T) {
 	assert.NotEqual(t, "active", statusB.Status)
 	assert.Empty(t, statusB.ActiveIssue)
 }
+
+func TestWorkersLeaseHolderMatchesExactRowID_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("workers.go")
+	require.NoError(t, err)
+	body := string(src)
+	assert.NotContains(t, body, "baseWorkerIdentity")
+	assert.Contains(t, body, "lease.Holder != workerID")
+}

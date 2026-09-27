@@ -199,6 +199,34 @@ func TestLoadWorkerLogs_ConcatMatchesListLogFiles_REQ_CLAIMTTL(t *testing.T) {
 	assert.Equal(t, wantFirst, owner.Holder)
 }
 
+func TestLoadWorkerLogs_DropsFilenameWorkerMismatch_REQ_CLAIMTTL(t *testing.T) {
+	dir := t.TempDir()
+	opsDir := filepath.Join(dir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o755))
+	write := func(name string, op ops.Op) {
+		t.Helper()
+		b, err := ops.MarshalOp(op)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(opsDir, name), append(b, '\n'), 0o644))
+	}
+	write("worker-a~slot-a.log", ops.Op{
+		Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a~slot-a",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "real"},
+	})
+	write("attacker.log", ops.Op{
+		Type: ops.OpClaim, TargetID: "task-02", Timestamp: 110, WorkerID: "worker-a~slot-a",
+		Payload: ops.Payload{TTL: 60, ClaimToken: "forged"},
+	})
+
+	byWorker, allOps, err := loadWorkerLogs(opsDir)
+	require.NoError(t, err)
+	require.Len(t, allOps, 1)
+	assert.Equal(t, "task-01", allOps[0].TargetID)
+	assert.NotContains(t, byWorker, "attacker")
+	assert.Equal(t, "worker-a~slot-a", claim.Owner(allOps, "task-01").Holder)
+	assert.Empty(t, claim.Owner(allOps, "task-02").Holder)
+}
+
 func TestResolveClaimAbsent_REQ_CLAIMTTL(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..")

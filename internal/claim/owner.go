@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/scullxbones/armature/internal/ops"
@@ -231,7 +232,10 @@ func opSortKey(op ops.Op) int {
 	}
 }
 
-// LostRaceClaimKeys marks claim ops that Accept rejected (took == false).
+func ClaimOpKey(op ops.Op) string {
+	return op.TargetID + "|" + strconv.FormatInt(op.Timestamp, 10) + "|" + op.WorkerID + "|" + op.Payload.ClaimToken
+}
+
 func LostRaceClaimKeys(log []ops.Op) map[string]bool {
 	ordered := append([]ops.Op(nil), log...)
 	SortForReplay(ordered)
@@ -245,7 +249,7 @@ func LostRaceClaimKeys(log []ops.Op) map[string]bool {
 		held := heldByIssue[op.TargetID]
 		next, took := Accept(held, op)
 		if !took {
-			lost[op.TargetID+"|"+op.WorkerID] = true
+			lost[ClaimOpKey(op)] = true
 		}
 		heldByIssue[op.TargetID] = next
 	}
