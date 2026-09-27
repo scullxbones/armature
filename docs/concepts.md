@@ -37,10 +37,10 @@ cat .armature/state/checkpoint.json
 **Pattern:** Worker identity is stable within a clone and used to sign all ops. Multi-worker coordination relies on the worker ID to detect conflicts.
 
 **How it works:**
-- When you run `arm worker-init` (once per clone or per worktree), Armature writes a random UUID to git config `armature.worker-id` (worktree-scoped when `extensions.worktreeConfig` is on)
+- When you run `arm worker-init` (once per clone), Armature writes a random UUID to git config `armature.worker-id` with `git config --local`. That is clone-scoped: `extensions.worktreeConfig` does not make `--local` write per-worktree config. A second linked worktree that runs `worker-init` overwrites the identity every worktree sees; do not treat this as once per worktree until the implementation uses `git config --worktree`.
 - All ops written by that worker carry the worker ID in the `worker_id` field
 - After cutover, published claim races are decided by `_armature` commit order, not worker clocks or lexicographic IDs
-- The worker ID is stable for that worktree — `arm worker-init --check` reprints it
+- The worker ID is stable for that clone — `arm worker-init --check` reprints it
 
 **Platforms:** Linux and macOS only. See README [Windows is not supported](../README.md#windows-is-not-supported).
 
