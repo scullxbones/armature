@@ -14,7 +14,7 @@ func TestMain(m *testing.M) {
 	os.Exit(Main(m))
 }
 
-func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
+func TestIsolateGitOverridesHostileHostEnv(t *testing.T) { //nolint:paralleltest // IsolateGit mutates process env
 	other := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(other, "KEEP"), []byte("victim"), 0o600))
 	t.Setenv("GIT_DIR", other)
@@ -26,6 +26,13 @@ func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
 	require.NoError(t, os.WriteFile(hostile, []byte("[gc]\n\tauto = 1\n"), 0o600))
 	t.Setenv("GIT_CONFIG_GLOBAL", hostile)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "0")
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "commit.gpgsign")
+	t.Setenv("GIT_CONFIG_VALUE_0", "true")
+	t.Setenv("GIT_CONFIG_KEY_1", "tag.gpgsign")
+	t.Setenv("GIT_CONFIG_VALUE_1", "true")
+	t.Setenv("GIT_CONFIG_PARAMETERS", "'commit.gpgsign=true'")
+	t.Setenv("GIT_TEMPLATE_DIR", filepath.Join(other, "template"))
 
 	require.NoError(t, IsolateGit())
 
@@ -35,6 +42,13 @@ func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
 	assert.Empty(t, os.Getenv("GIT_INDEX_FILE"))
 	assert.Empty(t, os.Getenv("GIT_COMMON_DIR"))
 	assert.Empty(t, os.Getenv("GIT_OBJECT_DIRECTORY"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_COUNT"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_KEY_0"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_VALUE_0"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_KEY_1"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_VALUE_1"))
+	assert.Empty(t, os.Getenv("GIT_CONFIG_PARAMETERS"))
+	assert.Empty(t, os.Getenv("GIT_TEMPLATE_DIR"))
 	assert.Equal(t, "1", os.Getenv("GIT_CONFIG_NOSYSTEM"))
 	assert.Equal(t, "0", os.Getenv("GIT_TERMINAL_PROMPT"))
 	cfg := os.Getenv("GIT_CONFIG_GLOBAL")

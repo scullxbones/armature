@@ -9,6 +9,26 @@ chmod +x "$SCRIPT"
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
+expect_hit() {
+    local label="$1"
+    local file="$2"
+    local needle="$3"
+    echo "$label"
+    mkdir -p "$(dirname "$file")"
+    printf '%s\n' "$4" > "$file"
+    if "$SCRIPT" "$WORKDIR" >/dev/null 2>"$WORKDIR/err"; then
+        echo "FAIL: expected non-zero on injected git init" >&2
+        exit 1
+    fi
+    if ! rg -q --fixed-strings "$needle" "$WORKDIR/err"; then
+        echo "FAIL: expected hit in diagnostic, got:" >&2
+        cat "$WORKDIR/err" >&2
+        exit 1
+    fi
+    echo "  PASS"
+    rm -f "$file"
+}
+
 echo "Test 1: clean checkout passes..."
 if ! "$SCRIPT" "$REPO_ROOT" >/dev/null; then
     echo "FAIL: expected exit 0 on clean tree" >&2
@@ -16,15 +36,35 @@ if ! "$SCRIPT" "$REPO_ROOT" >/dev/null; then
 fi
 echo "  PASS"
 
-echo "Test 2: injected raw git init is rejected..."
+expect_hit \
+    "Test 2: injected raw git init is rejected..." \
+    "$WORKDIR/cmd/fake/x_test.go" \
+    '"git", "init"' \
+    'package fake
+func f() { _ = []string{"git", "init"} }'
+
+expect_hit \
+    "Test 3: injected git -C dir init is rejected..." \
+    "$WORKDIR/cmd/fake/dashc_test.go" \
+    '"git", "-C", dir, "init"' \
+    'package fake
+func f() { _ = exec.CommandContext(ctx, "git", "-C", dir, "init") }'
+
+expect_hit \
+    "Test 4: injected git -c key=val init is rejected..." \
+    "$WORKDIR/cmd/fake/dashcfg_test.go" \
+    'git -c commit.gpgsign=true init' \
+    'package fake
+func f() { _ = "git -c commit.gpgsign=true init" }'
+
+echo "Test 5: non-matching git -C status is allowed..."
 mkdir -p "$WORKDIR/cmd/fake"
-printf 'package fake\nfunc f() { _ = []string{"git", "init"} }\n' > "$WORKDIR/cmd/fake/x_test.go"
-if "$SCRIPT" "$WORKDIR" >/dev/null 2>"$WORKDIR/err"; then
-    echo "FAIL: expected non-zero on injected git init" >&2
-    exit 1
-fi
-if ! grep -q '"git", "init"' "$WORKDIR/err"; then
-    echo "FAIL: expected hit in diagnostic, got:" >&2
+printf '%s\n' 'package fake
+func f() { _ = exec.CommandContext(ctx, "git", "-C", dir, "status") }
+func g() { _ = []string{"git", "commit", "--allow-empty", "-m", "init"} }' \
+    > "$WORKDIR/cmd/fake/status_test.go"
+if ! "$SCRIPT" "$WORKDIR" >/dev/null 2>"$WORKDIR/err"; then
+    echo "FAIL: expected exit 0 on non-matching git usage, got:" >&2
     cat "$WORKDIR/err" >&2
     exit 1
 fi
