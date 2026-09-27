@@ -76,6 +76,31 @@ func TestPublishedClaimOwnedAfterPush_REQ_CLAIMORD_W11(t *testing.T) { //nolint:
 	assert.Equal(t, "tok-a", leaseB.Token)
 }
 
+func TestLocateOps_MissingFromCommitErrors_REQ_CLAIMORD_W14(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	writeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 90, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	located, err := LocateOps(LocateInput{
+		OpsWorktree:       dir,
+		FromCommit:        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		ExtraPublishedTip: "HEAD",
+	})
+	require.Error(t, err)
+	assert.True(t, IsFromCommitMissing(err), "absent checkpoint SHA must not silently replay all history")
+	assert.Nil(t, located)
+
+	ok, err := LocateOps(LocateInput{OpsWorktree: dir, ExtraPublishedTip: "HEAD"})
+	require.NoError(t, err)
+	assert.NotEmpty(t, ok)
+}
+
 func writeOpLog(t *testing.T, repo, rel string, log []ops.Op) {
 	t.Helper()
 	path := filepath.Join(repo, rel)

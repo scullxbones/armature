@@ -300,6 +300,13 @@ func runCommitIncremental(stateDir string, opts Options) (*State, Result, error)
 		FromCommit:        from,
 		ExtraPublishedTip: "HEAD",
 	})
+	if err != nil && from != "" && oporder.IsFromCommitMissing(err) {
+		fullReplay = true
+		located, err = oporder.LocateOps(oporder.LocateInput{
+			OpsWorktree:       opts.OpsWorktree,
+			ExtraPublishedTip: "HEAD",
+		})
+	}
 	if err != nil {
 		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 	}

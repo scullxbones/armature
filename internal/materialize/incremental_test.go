@@ -99,6 +99,46 @@ func TestIncrementalReplayAppliesUncommittedDiskOps_REQ_CLAIMORD_W14(t *testing.
 	assert.Equal(t, "disk-only", third.Issues["task-01"].Notes[0].Msg)
 }
 
+func TestCommitIncremental_MissingCheckpointSHAForcesColdReplay_REQ_CLAIMORD_W14(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"src/foo.go"}}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	stateDir := t.TempDir()
+	_, firstRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.True(t, firstRes.FullReplay)
+
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task", Scope: []string{"src/foo.go"}}},
+		{Type: ops.OpScopeRename, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+			Payload: ops.Payload{OldPath: "src", NewPath: "src2"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "rename src to src2")
+
+	second, secondRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.False(t, secondRes.FullReplay)
+	require.Equal(t, []string{"src2/foo.go"}, second.Issues["task-01"].Scope)
+
+	gittest.Git(t, dir, "commit", "--amend", "-m", "rename src to src2 amended")
+
+	third, thirdRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.True(t, thirdRes.FullReplay, "absent checkpoint SHA must force a cold replay")
+	require.Equal(t, []string{"src2/foo.go"}, third.Issues["task-01"].Scope,
+		"cold replay must not re-apply scope-rename on cached src2 (would become src22)")
+}
+
 func issueDigest(state *State) map[string]string {
 	out := make(map[string]string, len(state.Issues))
 	for id, issue := range state.Issues {
