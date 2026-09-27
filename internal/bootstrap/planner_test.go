@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/bootstrap"
@@ -157,14 +158,54 @@ func TestHarnessArtifactResultJSONEnvelope_REQ_NOCOMMENTS(t *testing.T) {
 	}`, string(data))
 }
 
-func TestBuildPlanUnknownTargetPreserved_REQ_NOCOMMENTS(t *testing.T) {
+func TestBuildPlanTarget_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
-	plan, err := bootstrap.BuildPlan(bootstrap.PlanRequest{
-		Platforms: []bootstrap.Platform{bootstrap.PlatformClaude},
-		Target:    "elsewhere",
+	claude := []bootstrap.Platform{bootstrap.PlatformClaude}
+
+	t.Run("empty defaults to local", func(t *testing.T) {
+		t.Parallel()
+		plan, err := bootstrap.BuildPlan(bootstrap.PlanRequest{Platforms: claude})
+		require.NoError(t, err)
+		assert.Equal(t, bootstrap.TargetLocal, plan.Target)
 	})
-	require.NoError(t, err)
-	assert.Equal(t, "elsewhere", string(plan.Target))
+
+	t.Run("local", func(t *testing.T) {
+		t.Parallel()
+		plan, err := bootstrap.BuildPlan(bootstrap.PlanRequest{
+			Platforms: claude,
+			Target:    bootstrap.TargetLocal,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, bootstrap.TargetLocal, plan.Target)
+	})
+
+	t.Run("global", func(t *testing.T) {
+		t.Parallel()
+		plan, err := bootstrap.BuildPlan(bootstrap.PlanRequest{
+			Platforms: claude,
+			Target:    bootstrap.TargetGlobal,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, bootstrap.TargetGlobal, plan.Target)
+	})
+}
+
+func TestBuildPlanUnknownTargetRejected_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	claude := []bootstrap.Platform{bootstrap.PlatformClaude}
+	for _, unknown := range []bootstrap.Target{"locl", "elsewhere"} {
+		t.Run(string(unknown), func(t *testing.T) {
+			t.Parallel()
+			_, err := bootstrap.BuildPlan(bootstrap.PlanRequest{
+				Platforms: claude,
+				Target:    unknown,
+			})
+			require.EqualError(t, err, fmt.Sprintf(
+				"unknown target %q: allowed values are %q, %q",
+				unknown, bootstrap.TargetLocal, bootstrap.TargetGlobal,
+			))
+		})
+	}
 }
 
 func TestBuildPlanUnknownPlatformError_REQ_NOCOMMENTS(t *testing.T) {
