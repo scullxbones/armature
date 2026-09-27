@@ -123,7 +123,7 @@ func mapRenderContextError(err error) error {
 	}
 	msg := err.Error()
 	if strings.Contains(msg, "NOT-CLAIM-OWNER") {
-		return wrapNotClaimOwner(codeRenderContext1, err)
+		return wrapRenderContextNotClaimOwner(err)
 	}
 	if strings.Contains(msg, "issue ID is required") || strings.Contains(msg, "accepts at most") {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, err)

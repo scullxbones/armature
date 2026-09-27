@@ -318,6 +318,8 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
+| `--id` | worker-init | string | Worktree-scoped worker id to write | **kept-evidence** |
+| `--reuse` | worker-init | bool | Allow --id that already has a published log | **kept-evidence** |
 | `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--fix` | doctor | bool | Reconcile expired claims (claimed->open, in-progress->blocked) by appending ops; see [recovery-state-machine.md](./recovery-state-machine.md) | **kept-evidence** |

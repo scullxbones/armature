@@ -16,8 +16,7 @@ func TestLoserHeartbeatFailsNamedError_REQ_CLAIMORD_W13(t *testing.T) {
 	require.NoError(t, err)
 	before := countHeartbeatOps(t, repo)
 
-	run(t, repo, "git", "config", "armature.worker-id", "loser-worker-w13")
-	_, err = runTrls(t, repo, "heartbeat", "--issue", "task-01")
+	_, err = runTrls(t, repo, "heartbeat", "--issue", "task-01", "--worker-id", "loser-worker-w13")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "NOT-CLAIM-OWNER")
 	assert.Equal(t, before, countHeartbeatOps(t, repo), "loser must not append a heartbeat")
@@ -29,9 +28,8 @@ func TestLoserTransitionFailsNamedError_REQ_CLAIMORD_W13(t *testing.T) {
 	require.NoError(t, err)
 	before := countTransitionOps(t, repo, "task-01")
 
-	run(t, repo, "git", "config", "armature.worker-id", "loser-worker-w13")
 	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
-		"--skip-delivery-gate", "--force", "--outcome", "should fail")
+		"--skip-delivery-gate", "--force", "--outcome", "should fail", "--worker-id", "loser-worker-w13")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "NOT-CLAIM-OWNER")
 	assert.Equal(t, before, countTransitionOps(t, repo, "task-01"), "loser must not mark done")

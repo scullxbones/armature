@@ -61,5 +61,5 @@ func mapWorkerInitError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return armerrors.Wrap("WORKER-INIT-1", err.Error(), []string{"arm worker-init --help", "arm doctor"}, err)
+	return armerrors.Wrap("WORKER-INIT-1", err.Error(), []string{"arm worker-init", "arm doctor"}, err)
 }

@@ -130,6 +130,19 @@ func bootstrapRepoForTest(t *testing.T, repo string) {
 	require.NoError(t, cmd.Execute(), "bootstrap failed")
 }
 
+func unsetWorkerIDConfig(t *testing.T, repo string) {
+	t.Helper()
+	for _, args := range [][]string{
+		{"config", "--worktree", "--unset", "armature.worker-id"},
+		{"config", "--local", "--unset", "armature.worker-id"},
+	} {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		cmd.Env = isolatedGitTestEnv()
+		_ = cmd.Run() // git exits 5 when the key is absent from that config file
+	}
+}
+
 func TestStateDirFor(t *testing.T) {
 	ctx := &config.Context{IssuesDir: "/repo/.armature", WorktreePath: ""}
 	assert.Equal(t, "/repo/.armature/state/w1", stateDirFor(ctx, "w1"))
@@ -1181,7 +1194,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	run(t, repo, "git", "config", "--local", "--unset", "armature.worker-id")
+	unsetWorkerIDConfig(t, repo)
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	defaultID := "default"
@@ -2603,10 +2616,9 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Slot task", "--id", "slot-task")
 	require.NoError(t, err)
 
+	t.Setenv("ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "claim", "--issue", "slot-task", "--worktree")
 	require.NoError(t, err)
-
-	t.Setenv("ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "via slot")
 	require.NoError(t, err)
 	t.Setenv("ARM_LOG_SLOT", "")
@@ -2628,8 +2640,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 
 	plantOverlappingFooPair(t, repo)
 
-	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--worker-id", "other-worker-abc")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2746,11 +2757,11 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 
 	plantOverlappingFooPair(t, repo)
 
-	t.Setenv("ARM_LOG_SLOT", "A")
+	t.Setenv("ARM_LOG_SLOT", "a")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "B")
+	t.Setenv("ARM_LOG_SLOT", "b")
 	errBuf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -2775,8 +2786,7 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 
-	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
-	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--worker-id", "other-worker-abc")
 	require.NoError(t, err, "claim lost is a normal outcome, not an error")
 	assert.True(t,
 		strings.Contains(claimOut, "Claim lost") || strings.Contains(claimOut, "lost_claim_race"),

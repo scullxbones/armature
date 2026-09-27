@@ -86,3 +86,24 @@ Date: 2026-09-27.
 - **Happened:** LocateOps against `git -C .armature` walked up to the code repo; win check lost the claim until filesystem fallback
 - **Should:** tests should use a real ops worktree, or LocateOps must detect missing `.git` (we did the latter in W11)
 - **Severity:** medium; fixed in W11 by non-git fallback (local logs treated as published so existing tests keep working)
+
+### DF-13 — clone `--local` worker-id does not override worktree-scoped id
+- **Slice:** CLAIMORD-W21
+- **Command:** `git config --local armature.worker-id other-worker-abc` then `arm claim`
+- **Happened:** ResolveIdentity still used worktree-config; lost-race tests claimed as the same worker
+- **Should:** flag > worktree config > env > clone config. Tests and coordinators must pass `--worker-id` (or init a new worktree) to impersonate another worker
+- **Severity:** high for W2.1; **fixed** in tests via `--worker-id`
+
+### DF-14 — invalid `ARM_LOG_SLOT` is no longer ignored
+- **Slice:** CLAIMORD-W21
+- **Command:** `ARM_LOG_SLOT=A arm claim`
+- **Happened:** `LOG-SLOT-INVALID` (uppercase fails `^[a-z0-9_-]{1,64}$`)
+- **Should:** fail loud, never fall back to the unslotted log. Tests that used `A`/`B` now use `a`/`b`
+- **Severity:** medium; intended
+
+### DF-15 — overlapping same-id appends fail `LOG-SLOT-COLLISION` instead of serializing
+- **Slice:** CLAIMORD-W21
+- **Command:** two concurrent `arm transition` on one worker id
+- **Happened:** second `TryLock` returns `LOG-SLOT-COLLISION`; AOC append-once still holds because only one writer proceeds
+- **Should:** spec §9 wants collision, not blocking `Lock` (which would hang `TestLogSlotCollisionDetected`)
+- **Severity:** low; tests updated

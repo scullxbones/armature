@@ -37,12 +37,38 @@ func leaseStatusAllowsOwnerGate(status string) bool {
 	return status == ops.StatusClaimed || status == ops.StatusInProgress
 }
 
-func wrapNotClaimOwner(code string, err error) error {
+func wrapHeartbeatNotClaimOwner(err error) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
-		return armerrors.Wrap(code, claimpkg.ErrNotClaimOwner.Error(), []string{
+		return armerrors.Wrap("HEARTBEAT-1", claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
+	}
+	return err
+}
+
+func wrapTransitionNotClaimOwner(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
+		return armerrors.Wrap(codeTransition1, claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
+	}
+	return err
+}
+
+func wrapRenderContextNotClaimOwner(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
+		return armerrors.Wrap(codeRenderContext1, claimpkg.ErrNotClaimOwner.Error(), []string{
 			"arm claim --worktree",
 			"arm show",
 		}, err)
@@ -58,7 +84,7 @@ func mapHeartbeatError(err error) error {
 	if errors.As(err, &cf) {
 		return cf
 	}
-	if wrapped := wrapNotClaimOwner("HEARTBEAT-1", err); wrapped != err {
+	if wrapped := wrapHeartbeatNotClaimOwner(err); wrapped != err {
 		return wrapped
 	}
 	if isLocalArmatureTipPublishError(err) {
