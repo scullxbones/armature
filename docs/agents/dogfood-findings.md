@@ -6,6 +6,8 @@ Armature is used to build Armature — every task is a live dogfood run. Capture
 Skill("capturing-dogfood-findings")
 ```
 
+`.agents/skills` is canonical; `.cursor/skills` entries are symlinks. The capture skill lives at `.agents/skills/capturing-dogfood-findings`.
+
 Invoke when:
 
 - an `arm` command fails, returns confusing output, or behaves differently than the docs describe
