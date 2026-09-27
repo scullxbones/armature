@@ -610,7 +610,6 @@ func WriteManifestFile(path string, data []byte) error {
 		return fmt.Errorf("creating manifest directory: %w", err)
 	}
 
-	// Write to a temp file in the same directory, then rename for atomicity.
 	tmpFile, err := os.CreateTemp(path, "manifest-*.tmp")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)

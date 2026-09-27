@@ -837,11 +837,10 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 
 	legacyInnerArmaturePath := filepath.Join(newWorktreePath, config.StateDirName)
 	if _, err := os.Stat(legacyInnerArmaturePath); err == nil {
-		skippedCount, err := copyLegacyOpsToNewWorktree(legacyInnerArmaturePath, newWorktreePath)
+		_, err := copyLegacyOpsToNewWorktree(legacyInnerArmaturePath, newWorktreePath)
 		if err != nil {
 			return false, "", rollback(fmt.Errorf("copy legacy ops to worktree root: %w", err))
 		}
-		_ = skippedCount
 
 		legacyConfigPath := filepath.Join(legacyInnerArmaturePath, "config.json")
 		if _, err := os.Stat(legacyConfigPath); err == nil {
