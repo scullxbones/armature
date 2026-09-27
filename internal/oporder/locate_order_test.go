@@ -129,6 +129,37 @@ func TestGrandfatherPreCutoverTimestampOrder_REQ_CLAIMORD_W12(t *testing.T) { //
 	assert.Equal(t, "tok-a", lease.Token)
 }
 
+func TestUnspecifiedCutoverKeepsTimestampOwner_REQ_CLAIMORD_W12(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, dir, "branch", "-M", "_armature")
+	writeOpLog(t, dir, "ops/worker-b.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 90, WorkerID: "worker-b",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "worker-b",
+			Payload: ops.Payload{TTL: 60, ClaimToken: "tok-b"}},
+	})
+	gittest.Git(t, dir, "add", "ops/worker-b.log")
+	gittest.Git(t, dir, "commit", "-m", "B first publish later clock")
+	writeOpLog(t, dir, "ops/worker-a.log", []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a",
+			Payload: ops.Payload{TTL: 60, ClaimToken: "tok-a"}},
+	})
+	gittest.Git(t, dir, "add", "ops/worker-a.log")
+	gittest.Git(t, dir, "commit", "-m", "A second publish earlier clock")
+	gittest.Git(t, dir, "push", "-u", "origin", "HEAD:refs/heads/_armature")
+
+	located, err := LocateOps(LocateInput{OpsWorktree: dir, ExtraPublishedTip: "HEAD"})
+	require.NoError(t, err)
+	for _, loc := range located {
+		assert.Equal(t, 0, loc.Seq.Epoch, "unspecified cutover stays epoch 0")
+	}
+	lease := OwnerOf(Published(located), "task-01")
+	assert.Equal(t, "worker-a", lease.Holder, "historical timestamp Owner must not flip to first-published")
+	assert.Equal(t, "tok-a", lease.Token)
+}
+
 func headSHA(t *testing.T, repo string) string {
 	t.Helper()
 	sha, err := adapters.New(repo).HeadSHA()

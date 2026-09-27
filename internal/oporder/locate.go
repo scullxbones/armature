@@ -124,14 +124,14 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 				published = anc
 			}
 		}
-		epoch := 1
+		epoch := 0
 		if cutover != "" {
 			before, bErr := commitStrictlyBefore(gc, sha, cutover)
 			if bErr != nil {
 				return nil, bErr
 			}
-			if before {
-				epoch = 0
+			if !before {
+				epoch = 1
 			}
 		}
 		commitN := int64(i + 1)
