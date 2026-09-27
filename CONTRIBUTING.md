@@ -13,7 +13,7 @@ Thank you for your interest in contributing to Armature! This document explains 
 
 1. Clone the repository
 2. Run `make install` to build and install the `arm` binary to `~/.local/bin/`
-3. Run `arm bootstrap` to initialize the repository and deploy skills
+3. Run `arm bootstrap` to initialize the repository and deploy skills (`.agents/skills` is canonical; `.cursor/skills` entries are symlinks)
 4. Run `arm worker-init` once per clone to register your worker identity
 
 ## Development Workflow

@@ -1,5 +1,7 @@
 # Repo-Local Skills
 
+`.agents/skills` is canonical; `.cursor/skills` entries are symlinks.
+
 Deployed via `arm bootstrap` or `make skill`, to `.claude/skills/`, `.gemini/skills/`, `.codex/skills/`.
 
 Invoke the bundled skill that matches your role:
