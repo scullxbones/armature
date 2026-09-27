@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"

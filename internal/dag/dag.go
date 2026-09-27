@@ -100,11 +100,11 @@ func (g *Graph) Ancestry(id string) []string {
 		}
 		visited[current] = true
 		ancestors = append(ancestors, current)
-		parentNode := g.nodes[current]
-		if parentNode == nil {
+		next, ok := g.parentOrStop(current)
+		if !ok {
 			break
 		}
-		current = parentNode.Parent
+		current = next
 	}
 	return ancestors
 }
@@ -182,19 +182,11 @@ func (g *Graph) ScopedHasCycle(id string, scope map[string]bool) bool {
 		visited[nodeID] = true
 		recStack[nodeID] = true
 
-		for _, dep := range g.blockers(nodeID) {
-			if dfs(dep) {
-				return true
-			}
+		if g.walkBlockedByIncludingOutOfScope(nodeID, dfs) {
+			return true
 		}
-
-		_, children := g.Hierarchy(nodeID)
-		for _, child := range children {
-			if scope[child] {
-				if dfs(child) {
-					return true
-				}
-			}
+		if g.walkChildrenInScope(nodeID, scope, dfs) {
+			return true
 		}
 
 		recStack[nodeID] = false
@@ -202,6 +194,25 @@ func (g *Graph) ScopedHasCycle(id string, scope map[string]bool) bool {
 	}
 
 	return dfs(id)
+}
+
+func (g *Graph) walkBlockedByIncludingOutOfScope(nodeID string, dfs func(string) bool) bool {
+	for _, dep := range g.blockers(nodeID) {
+		if dfs(dep) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Graph) walkChildrenInScope(nodeID string, scope map[string]bool, dfs func(string) bool) bool {
+	_, children := g.Hierarchy(nodeID)
+	for _, child := range children {
+		if scope[child] && dfs(child) {
+			return true
+		}
+	}
+	return false
 }
 
 // Depth returns the depth of a node from its root (node with no parent).
@@ -221,13 +232,21 @@ func (g *Graph) Depth(id string) int {
 		}
 		visited[current] = true
 		depth++
-		parentNode := g.nodes[current]
-		if parentNode == nil {
+		next, ok := g.parentOrStop(current)
+		if !ok {
 			break
 		}
-		current = parentNode.Parent
+		current = next
 	}
 	return depth
+}
+
+func (g *Graph) parentOrStop(id string) (string, bool) {
+	parentNode := g.nodes[id]
+	if parentNode == nil {
+		return "", false
+	}
+	return parentNode.Parent, true
 }
 
 // FromIndex constructs a Graph from a map of node IDs to Node pointers.

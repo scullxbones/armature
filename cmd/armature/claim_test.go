@@ -2215,7 +2215,7 @@ func injectFutureSameWorkerClaim(t *testing.T, ctx *config.Context, issueID, imp
 	return ownerID
 }
 
-func TestClaimCommand_SupersededBySameWorkerDifferentTokenLosesRaceAndSkipsWorktree_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIMORD_W12(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -2229,14 +2229,16 @@ func TestClaimCommand_SupersededBySameWorkerDifferentTokenLosesRaceAndSkipsWorkt
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(claimOut)), &result), "output: %s", claimOut)
 	// CLAIMORD: same holder always replaces. An earlier same-worker impostor
 	// (even with a future op.Timestamp) does not beat a later published claim.
-	assert.NotContains(t, claimOut, "lost_claim_race")
+	assert.NotContains(t, claimOut, "lost_claim_race",
+		"same holder later published commit replaces; a future-timestamp earlier impostor must not win (reverses #276 clock fold)")
 	assert.Contains(t, claimOut, "claimed_by")
+	assert.Nil(t, result["reason"])
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
-	assert.DirExists(t, worktreePath, "same-worker reclaim must provision a worktree")
+	assert.DirExists(t, worktreePath, "later published same-worker claim must provision a worktree")
 }
 
-func TestClaimCommand_SupersededBySameWorkerDifferentTokenHumanFormat_REQ_LNGHZN_S5_T9(t *testing.T) {
+func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestampHuman_REQ_CLAIMORD_W12(t *testing.T) {
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -2245,8 +2247,8 @@ func TestClaimCommand_SupersededBySameWorkerDifferentTokenHumanFormat_REQ_LNGHZN
 
 	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "human")
 	require.NoError(t, err)
+	assert.Contains(t, claimOut, "Claimed task-01")
 	assert.NotContains(t, claimOut, "Claim lost")
-	assert.Contains(t, claimOut, "Claimed")
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	assert.DirExists(t, worktreePath, "same-worker reclaim must provision a worktree")
