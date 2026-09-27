@@ -32,6 +32,22 @@ External tool APIs, CLI schemas, caching issues, or system-wide hooks introduce 
 - [CloudAgent launch rejects `.zip`/`.tgz` file attachments](../../raw/2026-09-21T1650Z-loops-integration-cloudagent-zip-attach.md) — Workaround for the 403: a 13-file `_armature` delta as one archive failed ("Could not read the file") even though `ls` showed it; attaching `.md`/`.log`/`.json` individually succeeded.
 - [`git fetch origin _armature` left `origin/_armature` stale after CA publish](../../raw/2026-09-21T1651Z-loops-workflow-stale-origin-armature-ref.md) — `ls-remote` showed `6a0013fe` while `git rev-parse origin/_armature` stayed at `7a7fb2f6` until `git fetch origin refs/heads/_armature:refs/remotes/origin/_armature`. A claim was briefly committed on the stale parent. Related to the stale `_trellis` upstream tracking finding above.
 
+## Credential runbook: pushing `_armature`
+
+High-stakes commands (`arm claim`, `arm transition`, `arm assign`, `arm unassign`, `arm ready` when it claims, `arm doctor --fix`) push `origin/_armature`. A GitHub credential without **Contents: Write** returns HTTP 403. Armature classifies that as **auth**, not a clone race (non-fast-forward).
+
+**HTTPS (fine-grained PAT).** The token needs repository **Contents: Write** (read is not enough). `git remote -v` should show `https://github.com/...`. Store the token in `gh auth` or the git credential helper.
+
+**SSH.** The deploy key or GitHub SSH key must have write access. `git remote -v` should show `git@github.com:...`. Confirm with `ssh -T git@github.com`.
+
+**Recovery.**
+
+1. Fix write access on this environment, **or** publish `_armature` from a write-capable clone.
+2. On a clone that lacked write access: `git fetch origin _armature` (or `git fetch origin refs/heads/_armature:refs/remotes/origin/_armature`).
+3. Smoke check: `arm push-ops --format agent --non-interactive`. Success means origin has the tip. `class=auth` means credentials still cannot write. `class=non-fast-forward` means rebase the ops worktree onto `origin/_armature` and run `arm push-ops` again. Other failures: `arm push-ops` and `arm doctor`.
+
+Do not confuse this with D12 lag (read-time) or claim-race resolution (also read-time). The local ops commit stays on publish failure (I2).
+
 ## Candidate Follow-Ups
 
 - Document in the `prfix` or review skills to use `in_reply_to` (not `in_reply_to_id`) when replying to review comments via `gh api`.
@@ -49,5 +65,5 @@ External tool APIs, CLI schemas, caching issues, or system-wide hooks introduce 
 - Replace the coordinator skill's wave-promotion shell snippet with a real subcommand (GAP T1.3's remit) — it is documented pseudocode encoding real logic, and it is already known-wrong.
 - Document planner/coordinator PATH: `export PATH="$(git rev-parse --show-toplevel)/bin:$PATH"` or `make install` to `~/.local/bin` as a prerequisite, so a missing `arm` is not treated as a rebuild problem.
 - Reduce `arm list` agent-capture volume (filtering, pagination, or compact rows) while keeping the non-TTY JSON envelope as the default — consumers pipe it into `jq` (see `docs/commands.md` and the armature-coordinator skill). Do not switch the agent default to human text.
-- Document which credential (gh, HTTPS token, SSH) the box must use to push `_armature`; after an external ops push, `git fetch origin refs/heads/_armature:refs/remotes/origin/_armature` (or `git remote update -p`) before claim.
+- Credential runbook for `_armature` push (Contents: Write / SSH and `arm push-ops` smoke) lives in this theme README. After an external ops push, `git fetch origin refs/heads/_armature:refs/remotes/origin/_armature` (or `git remote update -p`) before claim.
 - Allow zip/tar/gz on CloudAgent `files`, or document the restriction in coordinator/planner dogfood notes so the 403 fallback is not a 13-file attach.

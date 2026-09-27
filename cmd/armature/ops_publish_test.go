@@ -13,6 +13,90 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestClaimPublishAuthClassKeepsLocalCommit_REQ_OPS_PUBLISH(t *testing.T) {
+	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "auth fail", "--id", "task-auth")
+	require.NoError(t, err)
+	installBarePreReceive(t, bareDir, `#!/bin/sh
+echo >&2 "remote: Permission to example.git denied to tester."
+echo >&2 "fatal: unable to access 'https://github.com/example/repo.git/': The requested URL returned error: 403"
+exit 1
+`)
+
+	headBefore := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-auth", "--worktree", "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "CLAIM-1", cf.Code)
+	assert.Contains(t, cf.Cause, "class=auth")
+	joined := strings.Join(cf.NextActions, "\n")
+	assert.Contains(t, joined, "Contents: Write")
+	assert.NotContains(t, joined, "arm doctor")
+	assert.False(t, originArmatureContains(t, bareDir, "task-auth"),
+		"origin must not receive the claim when push is denied")
+
+	headAfter := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
+	assert.NotEqual(t, headBefore, headAfter, "local claim commit must remain after auth publish failure")
+	require.True(t, localOpsContainClaim(t, repo, "task-auth"), "local ops log must keep the claim")
+}
+
+func TestClaimPublishNonFFClass_REQ_OPS_PUBLISH(t *testing.T) {
+	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "non-ff fail", "--id", "task-nff")
+	require.NoError(t, err)
+	installBarePreReceive(t, bareDir, `#!/bin/sh
+echo >&2 "! [rejected]        _armature -> _armature (non-fast-forward)"
+echo >&2 "error: failed to push some refs to 'origin'"
+echo >&2 "hint: Updates were rejected because the tip of your current branch is behind"
+echo >&2 "hint: its remote counterpart. Fetch first."
+exit 1
+`)
+
+	headBefore := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"claim", "--repo", repo, "--issue", "task-nff", "--worktree", "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "CLAIM-1", cf.Code)
+	assert.Contains(t, cf.Cause, "class=non-fast-forward")
+	joined := strings.Join(cf.NextActions, "\n")
+	assert.Contains(t, joined, "arm push-ops")
+	assert.Contains(t, joined, "rebase")
+	assert.NotContains(t, joined, "arm doctor")
+	headAfter := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
+	assert.NotEqual(t, headBefore, headAfter, "local claim commit must remain after non-ff publish failure")
+	require.True(t, localOpsContainClaim(t, repo, "task-nff"))
+}
+
+func installBarePreReceive(t *testing.T, bareDir, script string) {
+	t.Helper()
+	hookDir := filepath.Join(bareDir, "hooks")
+	require.NoError(t, os.MkdirAll(hookDir, 0o755))
+	hook := filepath.Join(hookDir, "pre-receive")
+	require.NoError(t, os.WriteFile(hook, []byte(script), 0o755))
+}
+
+func localOpsContainClaim(t *testing.T, repo, issueID string) bool {
+	t.Helper()
+	workerID := strings.TrimSpace(runOutput(t, repo, "config", "--get", "armature.worker-id"))
+	require.NotEmpty(t, workerID)
+	logged, err := ops.ReadLog(filepath.Join(repo, ".armature", "ops", workerID+".log"))
+	require.NoError(t, err)
+	for _, op := range logged {
+		if op.Type == ops.OpClaim && op.TargetID == issueID {
+			return true
+		}
+	}
+	return false
+}
+
 func TestAppendHighStakesOp_PublishFailureKeepsLocalCommit_REQ_OPS_PUBLISH(t *testing.T) {
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
