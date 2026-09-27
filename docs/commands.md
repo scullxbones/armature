@@ -113,7 +113,9 @@ Claim a ready task and associate it with a git worktree.
 
 Ownership is the `Owner` of the **published** `_armature` prefix (ops on
 `origin/_armature`, or this command's just-succeeded push), folded in
-**commit order** after cutover C0. Ops first introduced before C0 keep
+**commit order** after cutover C0 (`git config armature.oporder-cutover`, a
+commit SHA on the ops worktree). Unset C0 keeps all history in claim-ttl
+timestamp order (epoch 0). Ops first introduced before C0 keep
 claim-ttl timestamp order among themselves. Steal `now` is the introducing
 commit's committer time, not the worker's `op.Timestamp`. An unpublished
 local claim stays in JSONL as pending and does not win the race. After a
