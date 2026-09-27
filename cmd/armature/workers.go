@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -12,6 +13,10 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
+
+// replayIssueLeases folds the combined worker log once. Tests replace it to
+// assert listing does not re-sort the log per worker row.
+var replayIssueLeases = claim.Owners
 
 // WorkerStatus describes the current activity state of a worker.
 type WorkerStatus struct {
@@ -41,9 +46,10 @@ func newWorkersCmd() *cobra.Command {
 				return fmt.Errorf("enumerate workers: %w", err)
 			}
 
+			leases := replayIssueLeases(allOps)
 			statuses := make([]WorkerStatus, 0, len(workers))
 			for workerID, workerOps := range workers {
-				s := foldWorkerStatusFromClaimOwnerActivity(workerID, workerOps, allOps, defaultTTL, now)
+				s := foldWorkerStatusFromLeases(workerID, workerOps, leases, defaultTTL, now)
 				statuses = append(statuses, s)
 			}
 
@@ -93,7 +99,7 @@ func loadWorkerLogs(opsDir string) (map[string][]ops.Op, []ops.Op, error) {
 	result := make(map[string][]ops.Op)
 	var allOps []ops.Op
 	for _, logPath := range logFiles {
-		workerID := adapters.WorkerIDFromFilename(logPath)
+		workerID := workerLogIdentity(logPath)
 		logOps, err := ops.ReadLog(logPath)
 		if err != nil {
 			continue
@@ -104,27 +110,26 @@ func loadWorkerLogs(opsDir string) (map[string][]ops.Op, []ops.Op, error) {
 	return result, allOps, nil
 }
 
+func workerLogIdentity(logPath string) string {
+	return strings.TrimSuffix(filepath.Base(logPath), ".log")
+}
+
 func foldWorkerStatusFromClaimOwnerActivity(workerID string, workerOps, allOps []ops.Op, defaultTTL config.TTLMinutes, now int64) WorkerStatus {
+	return foldWorkerStatusFromLeases(workerID, workerOps, claim.Owners(allOps), defaultTTL, now)
+}
+
+func foldWorkerStatusFromLeases(workerID string, workerOps []ops.Op, leases map[string]claim.Lease, defaultTTL config.TTLMinutes, now int64) WorkerStatus {
 	lastOp := lastOpTimestampFromLog(workerOps)
-	base := baseWorkerIdentity(workerID)
-	seen := map[string]struct{}{}
-	var issueIDs []string
-	for _, op := range allOps {
-		if op.TargetID == "" {
-			continue
-		}
-		if _, ok := seen[op.TargetID]; ok {
-			continue
-		}
-		seen[op.TargetID] = struct{}{}
-		issueIDs = append(issueIDs, op.TargetID)
+	issueIDs := make([]string, 0, len(leases))
+	for issueID := range leases {
+		issueIDs = append(issueIDs, issueID)
 	}
 	sort.Strings(issueIDs)
 
 	hasStale := false
 	for _, issueID := range issueIDs {
-		lease := claim.Owner(allOps, issueID)
-		if baseWorkerIdentity(lease.Holder) != base {
+		lease := leases[issueID]
+		if lease.Holder != workerID {
 			continue
 		}
 		if lease.Status != ops.StatusClaimed && lease.Status != ops.StatusInProgress {

@@ -150,19 +150,13 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 	now := time.Now().Unix()
-	want := baseWorkerIdentity(slottedWorkerID(workerID).String())
+	want := slottedWorkerID(workerID).String()
 	var (
 		bestID  string
 		bestAct int64
 	)
-	seen := map[string]bool{}
-	for _, op := range allOps {
-		if op.TargetID == "" || seen[op.TargetID] {
-			continue
-		}
-		seen[op.TargetID] = true
-		lease := claimPkg.Owner(allOps, op.TargetID)
-		if baseWorkerIdentity(lease.Holder) != want {
+	for issueID, lease := range claimPkg.Owners(allOps) {
+		if lease.Holder != want {
 			continue
 		}
 		if lease.Status != ops.StatusClaimed && lease.Status != ops.StatusInProgress {
@@ -171,8 +165,8 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		if !claimPkg.LeaseLive(lease, now) {
 			continue
 		}
-		if bestID == "" || lease.LastActivity > bestAct || (lease.LastActivity == bestAct && op.TargetID < bestID) {
-			bestID = op.TargetID
+		if bestID == "" || lease.LastActivity > bestAct || (lease.LastActivity == bestAct && issueID < bestID) {
+			bestID = issueID
 			bestAct = lease.LastActivity
 		}
 	}

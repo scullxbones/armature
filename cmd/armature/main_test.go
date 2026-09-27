@@ -1309,14 +1309,17 @@ func TestOwner_StaleClaimTakeoverPrefersCurrentOwner_REQ_CLAIMTTL(t *testing.T) 
 	assert.Equal(t, "worker-b", lease.Holder)
 }
 
-func TestBuildWorkerStatus_SlottedWinnerMatchesBaseWorker(t *testing.T) {
+func TestBuildWorkerStatus_SlottedWinnerDoesNotMatchUnslottedSibling_REQ_CLAIMTTL(t *testing.T) {
 	now := int64(1000)
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 900, WorkerID: "worker-a~slot-1", Payload: ops.Payload{TTL: 60}},
 	}
 	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
-	assert.Equal(t, "active", status.Status)
-	assert.Equal(t, "task-1", status.ActiveIssue)
+	assert.NotEqual(t, "active", status.Status)
+	assert.Empty(t, status.ActiveIssue)
+	slotted := foldWorkerStatusFromClaimOwnerActivity("worker-a~slot-1", allOps, allOps, 60, now)
+	assert.Equal(t, "active", slotted.Status)
+	assert.Equal(t, "task-1", slotted.ActiveIssue)
 }
 
 func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {

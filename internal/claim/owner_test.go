@@ -97,6 +97,22 @@ func TestOwner_LegacyZeroTTLReplaysAs60_REQ_CLAIMTTL(t *testing.T) {
 	assert.False(t, LeaseLive(Owner(missingTTL, "task-01"), boundary))
 }
 
+func TestOwners_MatchesPerIssueOwner_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
+	log := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a~slot-a",
+			Payload: ops.Payload{TTL: 60, ClaimToken: "a"}},
+		{Type: ops.OpClaim, TargetID: "task-02", Timestamp: 110, WorkerID: "worker-a~slot-b",
+			Payload: ops.Payload{TTL: 60, ClaimToken: "b"}},
+		{Type: ops.OpHeartbeat, TargetID: "task-01", Timestamp: 120, WorkerID: "worker-a~slot-a"},
+	}
+	byIssue := Owners(log)
+	assert.Equal(t, Owner(log, "task-01"), byIssue["task-01"])
+	assert.Equal(t, Owner(log, "task-02"), byIssue["task-02"])
+	assert.Equal(t, "worker-a~slot-a", byIssue["task-01"].Holder)
+	assert.Equal(t, "worker-a~slot-b", byIssue["task-02"].Holder)
+}
+
 func TestOwner_HeartbeatExtendsLease_REQ_CLAIMTTL(t *testing.T) {
 	t.Parallel()
 	log := []ops.Op{

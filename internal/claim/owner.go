@@ -193,16 +193,21 @@ func heldByExactWorkerAndClaimToken(l Lease, workerID, claimToken string) bool {
 // Owner folds claim, heartbeat, and claimant-transition ops for issueID in
 // the same order as materialize.ApplyOpsSorted.
 func Owner(log []ops.Op, issueID string) Lease {
+	return Owners(log)[issueID]
+}
+
+// Owners folds the combined log once into a lease per issue (same order as Owner).
+func Owners(log []ops.Op) map[string]Lease {
 	ordered := append([]ops.Op(nil), log...)
 	SortForReplay(ordered)
-	var held Lease
+	heldByIssue := make(map[string]Lease)
 	for _, op := range ordered {
-		if op.TargetID != issueID {
+		if op.TargetID == "" {
 			continue
 		}
-		held = Apply(held, op)
+		heldByIssue[op.TargetID] = Apply(heldByIssue[op.TargetID], op)
 	}
-	return held
+	return heldByIssue
 }
 
 // SortForReplay matches materialize's timestamp-then-type-key stable sort.

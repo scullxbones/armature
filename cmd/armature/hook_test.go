@@ -305,6 +305,71 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 	assert.Empty(t, hookFindActiveClaimID(ctx))
 }
 
+func TestHookRunPostCommit_HeartbeatsOwnSlotOnly_REQ_CLAIMTTL(t *testing.T) {
+	repo := setupRepoWithTask(t)
+
+	workerID, err := worker.GetWorkerID(repo)
+	require.NoError(t, err)
+
+	issuesDir := filepath.Join(repo, ".armature")
+	opsDir := filepath.Join(issuesDir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0o755))
+
+	now := time.Now().Unix()
+	slotA := workerID + "~slot-a"
+	slotB := workerID + "~slot-b"
+	require.NoError(t, ops.AppendOp(filepath.Join(opsDir, slotA+".log"), ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-01",
+		Timestamp: now - 40,
+		WorkerID:  slotA,
+		Payload:   ops.Payload{TTL: 60, ClaimToken: "tok-a"},
+	}))
+	require.NoError(t, ops.AppendOp(filepath.Join(opsDir, slotB+".log"), ops.Op{
+		Type:      ops.OpClaim,
+		TargetID:  "task-02",
+		Timestamp: now - 5,
+		WorkerID:  slotB,
+		Payload:   ops.Payload{TTL: 60, ClaimToken: "tok-b"},
+	}))
+
+	ctx := &config.Context{
+		RepoPath:  repo,
+		IssuesDir: issuesDir,
+		Config:    config.Config{DefaultTTL: 60},
+	}
+
+	t.Setenv("ARM_LOG_SLOT", "slot-a")
+	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx), "slot-a must not select the sibling's newer claim")
+
+	t.Setenv("ARM_LOG_SLOT", "slot-b")
+	assert.Equal(t, "task-02", hookFindActiveClaimID(ctx))
+
+	t.Setenv("ARM_LOG_SLOT", "slot-a")
+	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Heartbeat recorded for task-01")
+	assert.NotContains(t, out, "task-02")
+
+	heartbeats := func(path string) []ops.Op {
+		t.Helper()
+		logged, readErr := ops.ReadLog(path)
+		require.NoError(t, readErr)
+		var hb []ops.Op
+		for _, op := range logged {
+			if op.Type == ops.OpHeartbeat {
+				hb = append(hb, op)
+			}
+		}
+		return hb
+	}
+	own := heartbeats(filepath.Join(opsDir, slotA+".log"))
+	require.Len(t, own, 1)
+	assert.Equal(t, "task-01", own[0].TargetID)
+	assert.Equal(t, slotA, own[0].WorkerID)
+	assert.Empty(t, heartbeats(filepath.Join(opsDir, slotB+".log")), "sibling slot must not receive a heartbeat")
+}
+
 func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
 	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
 
