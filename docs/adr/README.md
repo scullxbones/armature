@@ -26,3 +26,4 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0018](0018-payload-keyed-op-idempotency.md) | Payload-Keyed Op Idempotency | Accepted |
 | [0019](0019-park-toon-output-format.md) | Park TOON as an Agent Output Encoding | Accepted |
 | [0020](0020-agent-error-contract.md) | Agent-grade error contract | Accepted |
+| [0022](0022-promotion-is-a-recorded-delivery.md) | Promotion Is a Recorded Delivery on the Target | Accepted |
