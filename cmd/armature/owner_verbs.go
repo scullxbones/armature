@@ -37,19 +37,6 @@ func leaseStatusAllowsOwnerGate(status string) bool {
 	return status == ops.StatusClaimed || status == ops.StatusInProgress
 }
 
-func wrapNotClaimOwner(code string, err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
-		return armerrors.Wrap(code, claimpkg.ErrNotClaimOwner.Error(), []string{
-			"arm claim --worktree",
-			"arm show",
-		}, err)
-	}
-	return err
-}
-
 func mapHeartbeatError(err error) error {
 	if err == nil {
 		return nil
@@ -58,8 +45,11 @@ func mapHeartbeatError(err error) error {
 	if errors.As(err, &cf) {
 		return cf
 	}
-	if wrapped := wrapNotClaimOwner("HEARTBEAT-1", err); wrapped != err {
-		return wrapped
+	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
+		return armerrors.Wrap("HEARTBEAT-1", claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
 	}
 	if isLocalArmatureTipPublishError(err) {
 		return wrapOpsPublishFailure("HEARTBEAT-1", err)
