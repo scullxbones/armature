@@ -34,6 +34,12 @@ import (
 // contains a wildcard (e.g. "src/*/"). Intersection is memoized on suffix
 // indexes so pairs of patterns with many "**" segments stay polynomial.
 func Overlaps(a, b string) (bool, error) {
+	if err := validateScopePattern(a); err != nil {
+		return false, err
+	}
+	if err := validateScopePattern(b); err != nil {
+		return false, err
+	}
 	matched, err := matchScopePattern(a, b)
 	if err != nil {
 		return false, err
@@ -52,6 +58,13 @@ func Overlaps(a, b string) (bool, error) {
 		return true, nil
 	}
 	return globPatternsMayIntersect(a, b), nil
+}
+
+func validateScopePattern(pattern string) error {
+	if _, err := filepath.Match(pattern, ""); err != nil {
+		return fmt.Errorf("scope pattern %q: %w", pattern, err)
+	}
+	return nil
 }
 
 func matchScopePattern(pattern, name string) (bool, error) {

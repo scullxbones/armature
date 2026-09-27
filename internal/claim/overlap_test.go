@@ -366,6 +366,10 @@ func TestScopesOverlap_MalformedPatternFailOpen_REQ_NOCOMMENTS(t *testing.T) {
 	assert.False(t, ScopesOverlap([]string{"foo["}, []string{"foo.go"}),
 		"claimTreatsMalformedScopeAsNoOverlap: claim keeps fail-open so TTL/race stay unchanged")
 	assert.False(t, ScopesOverlap([]string{"foo.go"}, []string{"foo["}))
+	assert.False(t, ScopesOverlap([]string{"*"}, []string{"["}),
+		"a valid glob matching the malformed literal must still fail open")
+	assert.False(t, ScopesOverlap([]string{"["}, []string{"*"}),
+		"fail-open must not depend on argument order")
 	assert.True(t, ScopesOverlap([]string{"src/a.go"}, []string{"src/a.go"}),
 		"valid overlapping scopes must still overlap")
 }

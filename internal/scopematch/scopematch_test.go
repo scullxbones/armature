@@ -336,6 +336,23 @@ func TestOverlaps_MalformedPatternReturnsError_REQ_NOCOMMENTS(t *testing.T) {
 	}
 }
 
+func TestOverlaps_ValidatesBothPatternsBeforeMatch_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ a, b string }{
+		{"*", "["},
+		{"[", "*"},
+	}
+	for _, tc := range cases {
+		ok, err := Overlaps(tc.a, tc.b)
+		if err == nil {
+			t.Fatalf("Overlaps(%q, %q): expected error, got match=%v", tc.a, tc.b, ok)
+		}
+		if ok {
+			t.Fatalf("Overlaps(%q, %q): malformed pattern must not report overlap", tc.a, tc.b)
+		}
+	}
+}
+
 func TestOverlaps_NoMatchIsNotError_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 	ok, err := Overlaps("src/a.go", "src/b.go")
