@@ -405,9 +405,12 @@ func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op
 			}
 			diskPath := filepath.Join(dir.abs, e.Name())
 			rel := dir.rel + "/" + e.Name()
-			committed, _ := gc.ShowFileAtCommit(head, rel)
-			if committed == nil {
-				committed, _ = gc.ShowFileAtCommit(head, "ops/"+e.Name())
+			committed, showErr := gc.ShowFileAtCommit(head, rel)
+			if showErr != nil {
+				alt, altErr := gc.ShowFileAtCommit(head, "ops/"+e.Name())
+				if altErr == nil {
+					committed = alt
+				}
 			}
 			start := int64(len(committed))
 			if off := offsets[e.Name()]; off > start {
