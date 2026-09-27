@@ -139,6 +139,10 @@ func isActivityLoggingDisabledByRepoConfig(gitDir string) bool {
 // armature.disable-activity-logging.
 // Fails open on any capture error with stderr warning.
 func AppendActivity(gitDir string, command string, exitCode int, exitCodeKnown bool, output []byte) error {
+	return appendActivity(clock.System, gitDir, command, exitCode, exitCodeKnown, output)
+}
+
+func appendActivity(clk clock.Clock, gitDir string, command string, exitCode int, exitCodeKnown bool, output []byte) error {
 	if strings.TrimSpace(command) == "" {
 		return nil
 	}
@@ -162,7 +166,7 @@ func AppendActivity(gitDir string, command string, exitCode int, exitCodeKnown b
 		OutputTail:    truncated.Tail,
 		OutputHash:    truncated.Hash,
 		WorktreeHead:  headSha,
-		Timestamp:     time.Unix(clock.System(), 0).UTC().Format(time.RFC3339),
+		Timestamp:     time.Unix(clk(), 0).UTC().Format(time.RFC3339),
 	}
 
 	logLine := formatActivityLogEntry(entry)
