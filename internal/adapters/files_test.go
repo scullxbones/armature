@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -661,9 +662,45 @@ func TestExpandGlobs_MatchesFiles(t *testing.T) {
 	globs := map[string][]string{
 		"issue-01": {filepath.Join(dir, "*.go")},
 	}
-	result := ExpandGlobs(globs)
+	result, err := ExpandGlobs(globs)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(result["issue-01"]) != 1 {
 		t.Fatalf("expected 1 match, got %v", result["issue-01"])
+	}
+}
+
+func TestExpandGlobs_NoMatchIsNotError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	globs := map[string][]string{
+		"issue-01": {filepath.Join(dir, "no-such-*.go")},
+	}
+	result, err := ExpandGlobs(globs)
+	if err != nil {
+		t.Fatalf("a pattern that matches nothing must not error: %v", err)
+	}
+	if len(result["issue-01"]) != 0 {
+		t.Fatalf("expected no matches, got %v", result["issue-01"])
+	}
+}
+
+func TestExpandGlobs_BadPatternReturnsError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	bad := "["
+	result, err := ExpandGlobs(map[string][]string{"issue-01": {bad, "does-not-exist-xyz.go"}})
+	if err == nil {
+		t.Fatal("expected error for malformed glob")
+	}
+	if !strings.Contains(err.Error(), bad) {
+		t.Fatalf("error must name the pattern, got %q", err)
+	}
+	if result == nil {
+		t.Fatal("malformed patterns must be left unexpanded without dropping sibling expansions")
+	}
+	if _, ok := result["issue-01"]; !ok {
+		t.Fatal("issue with a malformed glob must still appear in the expansion map")
 	}
 }
 

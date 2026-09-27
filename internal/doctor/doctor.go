@@ -192,7 +192,7 @@ func loadAllIssues(stateDir string, index materialize.Index) (map[string]*materi
 func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
 	out, err := adapters.GitLog(repoPath, "--oneline", "--no-merges", "--pretty=%s")
 	if err != nil {
-		return Finding{Check: "D1", Severity: SeverityOK, Message: "No git/armature divergence detected"}
+		return d1SkipGitLogUnavailable()
 	}
 
 	lines := strings.Split(out, "\n")
@@ -201,6 +201,10 @@ func checkD1GitDivergence(repoPath string, index materialize.Index) Finding {
 		statuses[id] = entry.Status
 	}
 	return evaluateD1GitDivergence(lines, statuses)
+}
+
+func d1SkipGitLogUnavailable() Finding {
+	return Finding{Check: "D1", Severity: SeverityOK, Message: "Git log unavailable; D1 not checked"}
 }
 
 func evaluateD1GitDivergence(commitSubjects []string, statuses map[string]string) Finding {

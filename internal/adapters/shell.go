@@ -125,12 +125,12 @@ func GitInitMain(dir string, extraEnv ...string) error {
 }
 
 // GitLog runs git log with the given arguments and returns the output.
+// A successful git call that prints nothing returns ("", nil).
 func GitLog(repoPath string, args ...string) (string, error) {
-	fullArgs := append([]string{"-C", repoPath, "log"}, args...)
-	cmd := exec.CommandContext(context.Background(), "git", fullArgs...) //nolint:gosec // G204: "git" is constant; args are internal
+	cmd := NonInteractiveGitCommand(repoPath, append([]string{"log"}, args...)...)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("git log: %w", err)
 	}
 	return string(out), nil
 }
