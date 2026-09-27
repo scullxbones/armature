@@ -44,7 +44,7 @@ Called by the post-commit hook after each commit.`,
 			// top-level error handler emit exactly one error message in the configured
 			// format. This prevents duplicate JSON objects on stderr.
 			if err := gitClient.Push("_armature"); err != nil {
-				return fmt.Errorf("push-ops: push failed: %w", err)
+				return wrapOpsPublishFailure("PUSH-OPS-1", newOpsPublishError(fmt.Errorf("push-ops: push failed: %w", err)))
 			}
 
 			if format == "json" || format == "agent" {

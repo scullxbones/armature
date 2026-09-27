@@ -60,7 +60,7 @@ func mapClaimError(err error) error {
 	case strings.Contains(msg, "confidence=inferred"):
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm confirm <node-id>"}, err)
 	case isLocalArmatureTipPublishError(err):
-		return armerrors.Wrap(codeClaim1, msg, []string{"arm push-ops", "arm doctor"}, err)
+		return wrapOpsPublishFailure(codeClaim1, err)
 	default:
 		return armerrors.Wrap(codeClaim1, msg, []string{"arm doctor", "arm show"}, err)
 	}
