@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -139,7 +140,15 @@ func unsetWorkerIDConfig(t *testing.T, repo string) {
 		cmd := exec.CommandContext(context.Background(), "git", args...)
 		cmd.Dir = repo
 		cmd.Env = isolatedGitTestEnv()
-		_ = cmd.Run() // git exits 5 when the key is absent from that config file
+		err := cmd.Run()
+		if err == nil {
+			continue
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 5 {
+			continue
+		}
+		t.Logf("git %v: %v", args, err)
 	}
 }
 
