@@ -137,10 +137,6 @@ func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
 	}
 }
 
-// codeBlockFence returns a backtick fence string long enough that it cannot
-// be closed prematurely by any backtick sequence in content.  The returned
-// fence is at least three backticks and always one longer than the longest
-// consecutive run of backticks found in content.
 func codeBlockFence(content string) string {
 	maxRun := 0
 	cur := 0

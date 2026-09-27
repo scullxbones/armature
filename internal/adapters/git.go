@@ -445,9 +445,6 @@ func parseCheckIgnoreSource(raw string) string {
 	return line
 }
 
-// isBenignEmptyRepoRmError reports whether output from `git rm -rf --quiet .`
-// reflects the expected, harmless failure on an empty repo (no tracked files
-// to remove) rather than a real error that could leave stale index entries.
 func isBenignEmptyRepoRmError(output []byte) bool {
 	return strings.Contains(string(output), "did not match any files")
 }
