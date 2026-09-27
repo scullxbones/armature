@@ -463,18 +463,10 @@ func publishedClaimWon(ctx *config.Context, issueID, workerID, claimToken string
 	if ctx == nil || ctx.WorktreePath == "" {
 		return false, fmt.Errorf("published Owner: ops worktree path is required")
 	}
-	gc := worktreeGit(ctx)
-	if gc == nil {
+	if worktreeGit(ctx) == nil {
 		return false, fmt.Errorf("published Owner: ops git client unavailable")
 	}
-	head, err := gc.HeadSHA()
-	if err != nil {
-		return false, fmt.Errorf("published Owner: resolve ops HEAD: %w", err)
-	}
-	located, err := oporder.LocateOps(oporder.LocateInput{
-		OpsWorktree:       ctx.WorktreePath,
-		ExtraPublishedTip: head,
-	})
+	located, err := oporder.LocateOps(oporder.LocateInput{OpsWorktree: ctx.WorktreePath})
 	if err != nil {
 		return false, fmt.Errorf("published Owner: locate ops: %w", err)
 	}
