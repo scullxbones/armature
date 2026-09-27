@@ -110,7 +110,7 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidate_MalformedGlobYieldsE10Envelope_REQ_NOCOMMENTS(t *testing.T) {
-	repo := initTempRepo(t)
+	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
