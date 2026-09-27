@@ -250,9 +250,9 @@ Key settings:
 | Setting | What it controls |
 |---|---|
 | `project_type` | Project language/framework: `"go"`, `"node"`, `"python"`, `"rust"`, `"make"`, or `"unknown"` |
-| `default_ttl` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted (explicit `--ttl` always wins). The value is written onto the claim op and drives staleness until a claim, heartbeat, or claimant-authored transition extends it. Notes, decisions, and other claimant ops do not renew the claim. If the field is omitted, the builtin fallback is 60. A present `0` is out of range: `arm doctor` D10 fails. |
+| `default_ttl` | Default claim TTL in minutes. `arm claim` uses this when `--ttl` is omitted (explicit `--ttl` always wins and must be `> 0`). The value is written onto the claim op and drives staleness until a claim, heartbeat, or claimant-authored transition extends it. Notes, decisions, and other claimant ops do not renew the claim. If the field is omitted, the builtin fallback is 60. A present `0` is out of range: `arm doctor` D10 fails. Historical claim ops with ttl 0 replay as 60 minutes. |
 | `token_budget` | Default token budget for `arm render-context`. Used when `--budget` is omitted (explicit `--budget` always wins). Truncation drops lowest-priority context layers until the bundle fits, approximating 4 characters per token. If the field is omitted, the builtin fallback is 4000; `arm bootstrap` writes 1600. A present `0` is out of range: `arm doctor` D10 fails. |
-| `low_stakes_push_threshold` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), Armature attempts a best-effort push of `_armature` (same Push / FetchAndRebase / Push sequence as high-stakes) and resets the pending-push counter. Below the threshold, those ops commit locally only. High-stakes ops still push immediately after commit: `claim`, `transition`, `assign`, `unassign`, `ready` when it claims, and `doctor --fix`. If the field is omitted, the builtin fallback is 5. A present `0` is out of range: `arm doctor` D10 fails. |
+| `low_stakes_push_threshold` | After this many consecutive low-stakes ops (notes, heartbeats, decisions), Armature attempts a **best-effort** push of `_armature` (`pushOpsBranchAlwaysResetTracker`: same Push / FetchAndRebase / Push sequence as high-stakes, git errors swallowed) and resets the pending-push counter. Below the threshold, those ops commit locally only. High-stakes ops push immediately after commit (`pushOpsBranch`: `claim`, `transition`, `assign`, `unassign`, `ready` when it claims, and `doctor --fix`) and **fail the CLI** if publish still fails; the local commit is not rolled back (`arm push-ops` is the recovery command). If the field is omitted, the builtin fallback is 5. A present `0` is out of range: `arm doctor` D10 fails. |
 | `hooks` | Array of pre-transition hooks: `name` and `command` array |
 
 ### Hook Configuration
@@ -353,7 +353,7 @@ The working tree must be clean: the gate runs `git status --porcelain --ignored`
 
 **2. Scope Containment**
 
-The diff between your base commit and `HEAD` must be a subset of the issue's declared scope. The base commit is resolved with a three-tier fallback, most-precise first:
+The delivery diff must be a subset of the issue's declared scope. The worktree-first path diffs `claimBase..HEAD`. When that range has no Commit Reference evidence, the gate falls back to `main` then `master`, isolates the complete landing that delivered the issue (enclosing merge `first-parent..M` when a matching commit arrived via a 2+-parent merge; otherwise `first-parent..matching-SHA` for a squash / single-parent landing), and scopes that same isolated range so a later unrelated commit on the primary branch is not attributed to this issue. The claim base is resolved with a three-tier fallback, most-precise first:
 
 1. **Dynamic parent-branch merge-base** — recomputed fresh on every gate check as `git merge-base` between the task branch and the parent branch it was cut from (recorded as git config at claim time). This is the branch the coordinator's checkout was actually on when the task branch was created — often a story branch containing completed sibling-task commits, not `main`. Recomputing on demand (rather than trusting a value cached once) means it self-corrects if the task branch is later rebased onto an updated parent tip.
 2. **Claim-time recorded SHA** — if no parent-branch record exists (e.g. a worktree claimed before this mechanism existed), fall back to the branch-point SHA persisted once at claim time.
@@ -368,7 +368,7 @@ This prevents scope creep: you cannot deliver changes that fall outside the issu
 
 **3. Commit Reference**
 
-At least one commit since the base commit must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. This ensures your work is traceable and tied to the issue ID.
+At least one commit in the selected delivery range must match the conventional-commit format `<type>(<ISSUE-ID>): ...` per `docs/conventions.md`. Search order is worktree `HEAD`, then `refs/heads/main`, then `refs/heads/master`, until evidence passes. Primary-branch fallback evaluates the complete isolated landing, not every commit since claim on the primary tip. This ensures your work is traceable and tied to the issue ID.
 
 *Remedy:* Add at least one properly-formatted commit. For example: `feat(LNGHZN-S4-T3): document the delivery gate in worker skill`.
 
