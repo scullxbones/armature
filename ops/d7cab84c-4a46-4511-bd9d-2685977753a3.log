@@ -108,3 +108,4 @@
 ["dag-transition","CLAIMORD",1790530248,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"to":"verified","issue_id":"CLAIMORD"}]
 ["unlink","CLAIMORD-W20",1790530258,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"dep":"TOPTIER-S8-T1","rel":"blocked_by"}]
 ["unlink","CLAIMORD-W20",1790530258,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"dep":"TOPTIER-S8-T2","rel":"blocked_by"}]
+["unlink","CLAIMORD-W20",1790530258,"d7cab84c-4a46-4511-bd9d-2685977753a3",{"dep":"TOPTIER-S8-T3","rel":"blocked_by"}]
