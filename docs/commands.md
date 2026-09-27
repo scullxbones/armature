@@ -118,7 +118,7 @@ Claim a ready task and associate it with a git worktree.
 - `--force`: Override scope overlap warning and proceed with claim.
 - `--from string`: Seed an explicit new `--worktree <path>` from the current branch and tip of this parent worktree.
 - `--issue string`: Issue ID to claim.
-- `--ttl int`: Claim TTL in minutes (default 60).
+- `--ttl int`: Claim TTL in minutes (default 60). Must be `> 0`; `--ttl 0` and negative values fail with the same out-of-range rule as config `default_ttl` D10.
 - `--worktree [new-path]`: Enable worktree provisioning (required). Without a value, provisions at `.worktrees/<issue-id>`; with an explicit path, provisions there instead. Both forms create a binding-managed worktree and a derived branch (`task/<id>`, `fix/<id>`, or `feat/<id>`).
 
 **Example:**

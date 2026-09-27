@@ -146,22 +146,16 @@ func (s *State) applyCreate(op ops.Op) error {
 
 func (s *State) applyClaim(op ops.Op) error {
 	issue := s.Issues[op.TargetID]
-	if claimpkg.ForeignLiveLeaseBlocksChallenger(claimpkg.HeldClaim{
-		Status:                     issue.Status,
-		ClaimedBy:                  issue.ClaimedBy,
-		ClaimedAt:                  issue.ClaimedAt,
-		LastHeartbeat:              issue.LastHeartbeat,
-		LastClaimingWorkerActivity: issue.LastClaimingWorkerActivity,
-		TTLMinutes:                 issue.ClaimTTL,
-	}, op.WorkerID, op.Timestamp) {
+	next, took := claimpkg.Accept(issue.lease(), op)
+	if !took {
 		return nil
 	}
 	issue.Status = ops.StatusClaimed
-	issue.ClaimedBy = op.WorkerID
-	issue.ClaimedAt = op.Timestamp
-	issue.ClaimToken = op.Payload.ClaimToken
-	issue.ClaimTTL = op.Payload.TTL
-	issue.WorktreePath = op.Payload.WorktreePath
+	issue.ClaimedBy = next.Holder
+	issue.ClaimedAt = next.Since
+	issue.ClaimToken = next.Token
+	issue.ClaimTTL = next.TTLMinutes
+	issue.WorktreePath = next.WorktreePath
 	issue.LastHeartbeat = op.Timestamp
 	issue.Updated = op.Timestamp
 	issue.LastClaimingWorkerActivity = op.Timestamp

@@ -1,7 +1,6 @@
 package materialize
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -243,24 +243,8 @@ func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Op
 	return runFullPipeline(stateDir, allOps, byteOffsets, opts.WriteStateFiles)
 }
 
-func opSortKey(op ops.Op) int {
-	switch op.Type {
-	case ops.OpCreate:
-		return 0
-	case ops.OpNoteDelete:
-		return 2
-	default:
-		return 1
-	}
-}
-
 func sortOpsByTimestamp(allOps []ops.Op) {
-	slices.SortStableFunc(allOps, func(a, b ops.Op) int {
-		if n := cmp.Compare(a.Timestamp, b.Timestamp); n != 0 {
-			return n
-		}
-		return cmp.Compare(opSortKey(a), opSortKey(b))
-	})
+	claimpkg.SortForReplay(allOps)
 }
 
 func ApplyOpsSorted(state *State, proposed []ops.Op) error {
