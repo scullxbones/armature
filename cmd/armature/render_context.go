@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	claimpkg "github.com/scullxbones/armature/internal/claim"
 	ctxpkg "github.com/scullxbones/armature/internal/context"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -119,10 +118,7 @@ func mapRenderContextError(err error) error {
 	}
 	msg := err.Error()
 	if strings.Contains(msg, "NOT-CLAIM-OWNER") {
-		return armerrors.Wrap(codeRenderContext1, claimpkg.ErrNotClaimOwner.Error(), []string{
-			"arm claim --worktree",
-			"arm show",
-		}, err)
+		return wrapRenderContextNotClaimOwner(err)
 	}
 	if strings.Contains(msg, "issue ID is required") || strings.Contains(msg, "accepts at most") {
 		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm render-context --help"}, err)

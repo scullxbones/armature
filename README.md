@@ -63,6 +63,16 @@ flowchart TD
 - **Git** (v2.25+ for sparse checkout support)
 - **Go** (for building from source)
 
+### Windows is not supported
+
+Armature runs on **Linux and macOS only**. Windows is not supported. Gaps that remain:
+
+- **File locking:** the supported path is `flock(2)` on a local git common dir. `LockFileEx` already exists in `internal/filelock/filelock_windows.go` and is built by `make crosscompile`, but that path is unvalidated; Windows remains unsupported.
+- **Per-command environment:** POSIX `VAR=x arm …` is one process; PowerShell `$env:VAR` persists for the session, which is why env is not worker identity.
+- **Worker-id filenames:** case-insensitive APFS/NTFS plus reserved `con`/`aux`/`nul` names. Validation rejects those even though Windows is unsupported.
+
+`docs/design/architecture.md` still lists Windows in a packaging matrix; that row is stale for support claims.
+
 ### Building from Source
 
 ```bash

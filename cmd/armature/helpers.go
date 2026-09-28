@@ -241,7 +241,10 @@ func mustState(cmd *cobra.Command) *executionState {
 }
 
 func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
-	workerID := slottedWorkerIDBestEffort(ctx.RepoPath)
+	if cmd != nil && cmd.Root() != nil {
+		ctx.WorkerIDFlag, _ = cmd.Root().PersistentFlags().GetString("worker-id")
+	}
+	workerID := slottedWorkerIDBestEffort(identityRepoPath(ctx))
 	if workerID == "" {
 		workerID = slottedWorkerID("default").String()
 	}
@@ -306,38 +309,71 @@ func stateDirFor(ctx *config.Context, workerID string) string {
 	return filepath.Join(ctx.IssuesDir, "state", workerID)
 }
 
+func identityRepoPath(ctx *config.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if ctx.InvocationPath != "" {
+		return ctx.InvocationPath
+	}
+	return ctx.RepoPath
+}
+
 func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
 	if ctx == nil {
 		return "", "", fmt.Errorf("worker not initialized: command context unavailable")
 	}
-	workerID, err := worker.GetWorkerID(ctx.RepoPath)
+	ident, err := worker.ResolveIdentity(worker.IdentityInput{
+		RepoPath:     identityRepoPath(ctx),
+		IssuesDir:    ctx.IssuesDir,
+		FlagWorkerID: ctx.WorkerIDFlag,
+		EnvWorkerID:  os.Getenv("ARM_WORKER_ID"),
+		EnvLogSlot:   os.Getenv("ARM_LOG_SLOT"),
+	})
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
 	}
-	ownerID := slottedWorkerID(workerID)
-	return ownerID.String(), opsLogPath(ctx.IssuesDir, ownerID.String()), nil
+	return ident.ID, opsLogPath(ctx.IssuesDir, ident.ID), nil
 }
 
 func opsLogPath(issuesDir, ownerID string) string {
 	return filepath.Join(issuesDir, "ops", ownerID+".log")
 }
 
-var validSlotPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-
 type SlottedWorkerID string
 
 func (id SlottedWorkerID) String() string { return string(id) }
 
 func slottedWorkerID(workerID string) SlottedWorkerID {
+	id, err := slottedWorkerIDChecked(workerID)
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
+func slottedWorkerIDChecked(workerID string) (SlottedWorkerID, error) {
 	slot := os.Getenv("ARM_LOG_SLOT")
 	if slot == "" {
-		return SlottedWorkerID(workerID)
+		return SlottedWorkerID(workerID), nil
 	}
-	if !validSlotPattern.MatchString(slot) {
-		fmt.Fprintf(os.Stderr, "warning: ARM_LOG_SLOT %q contains invalid characters, ignoring\n", slot)
-		return SlottedWorkerID(workerID)
+	if err := worker.ValidateLogSlot(slot); err != nil {
+		return "", err
 	}
-	return SlottedWorkerID(workerID + "~" + slot)
+	return SlottedWorkerID(workerID + "~" + slot), nil
+}
+
+func withWorkerLogLock(ctx *config.Context, logPath string, fn func() error) error {
+	if ctx == nil {
+		return fn()
+	}
+	id := strings.TrimSuffix(filepath.Base(logPath), ".log")
+	unlock, err := worker.LockLogID(ctx.RepoPath, id)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return fn()
 }
 
 func nowEpoch() int64 {
@@ -476,7 +512,9 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
 		return err
 	}
-	return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx))
+	return withWorkerLogLock(ctx, logPath, func() error {
+		return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx))
+	})
 }
 
 func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
@@ -498,7 +536,12 @@ func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op,
 		return false, err
 	}
 	gc := worktreeGit(ctx)
-	wrote, err := ops.AppendAndCommitIf(logPath, ctx.WorktreePath, op, gc, proceed)
+	var wrote bool
+	err := withWorkerLogLock(ctx, logPath, func() error {
+		var inner error
+		wrote, inner = ops.AppendAndCommitIf(logPath, ctx.WorktreePath, op, gc, proceed)
+		return inner
+	})
 	if err != nil {
 		return wrote, err
 	}
@@ -632,19 +675,22 @@ func appendLowStakesOps(state *executionState, logPath string, proposed []ops.Op
 	if threshold <= 0 {
 		threshold = config.DefaultPendingOpCount
 	}
-	for _, op := range proposed {
-		if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
-			return err
+	err := withWorkerLogLock(ctx, logPath, func() error {
+		for _, op := range proposed {
+			if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
+				return err
+			}
+			n, err := tracker.Increment()
+			if err != nil {
+				return err
+			}
+			if config.PendingOps(n) >= threshold {
+				pushOpsBranchAlwaysResetTracker(ctx, opsPublishGit(ctx, gc), tracker)
+			}
 		}
-		n, err := tracker.Increment()
-		if err != nil {
-			return err
-		}
-		if config.PendingOps(n) >= threshold {
-			pushOpsBranchAlwaysResetTracker(ctx, opsPublishGit(ctx, gc), tracker)
-		}
-	}
-	return nil
+		return nil
+	})
+	return err
 }
 
 func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {

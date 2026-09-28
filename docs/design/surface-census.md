@@ -147,7 +147,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `sync` | main.go, sync.go | Auto-transition closed PRs | **kept-evidence** | CI integration. Scans git for merged branches and transitions issues. |
 | `push-ops` | main.go, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Rebases onto origin/_armature, then runs the same fail-closed `arm validate --ci` / `make validate-graph` contract, then pushes. `--override-validate --reason` is a TTY-recorded escape hatch and is never green. |
 | `merged` | main.go, merged.go | Manually transition to merged | **kept-evidence** | Explicit merge record. Sets PR and branch fields. |
-| `materialize` | main.go, materialize.go | Regenerate state from ops log | **kept-evidence** | Diagnostic/recovery. Rebuilds snapshot from scratch. |
+| `materialize` | main.go, materialize.go | Regenerate state from ops log | **kept-evidence** | Incremental via LastCommitSHA when ops worktree is git; cold walk otherwise. |
 | `import` | main.go, import.go | Import issues from external source | **kept-evidence** | Onboarding tool. Creates issues with source links. |
 
 ### Admin Commands (admin group)
@@ -155,7 +155,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | Command | Defined | Purpose | Status | Notes |
 |---------|---------|---------|--------|-------|
 | `version` | main.go, version.go | Print arm version | **kept-evidence** | Agent-facing. Human/default is the bare `arm version <string>` line. json/agent (explicit or implied) is `{count, versions, help}` with count 1. Root-only `--version`, `-v`, and `-V` are the same fast path and are not persistent (so they fail loud on a subcommand). Bare `arm` on a non-TTY is the ready queue, not this command. |
-| `worker-init` | main.go:82, worker_init.go | Initialize worker ID | **kept-evidence** | One-time setup. Stores UUID in git config. |
+| `worker-init` | main.go:82, worker_init.go | Initialize worker ID | **kept-evidence** | Worktree-scoped UUID; `--id`/`--reuse`; enables `extensions.worktreeConfig` repo-wide. |
 | `bootstrap` | main.go:86, bootstrap.go | Deploy harness hook to project | **kept-evidence** | Setup command. Installs pre-commit or post-merge hooks. |
 | `create` | main.go:189, create.go | Create new issue | **kept-evidence** | Direct issue creation (not decompose-based). |
 | `reparent` | main.go:193, reparent.go | Move issue to new parent | **kept-evidence** | Hierarchy adjustment. Payload: parent. |
@@ -206,6 +206,7 @@ The following flags are defined across all commands. Grouped by usage pattern.
 | `--debug` | bool | false | Dump stack traces on error | **kept-evidence** | Diagnostic. Always available. |
 | `--format` | string | human | Output format: human, json, agent | **kept-evidence** | Auto-set to agent for non-TTY. Inherited by every command except `dag context`, which defines its own command-local `--format` (see DAG/Decompose Flags below). |
 | `--repo` | string | "" (current directory) | Repository path | **kept-evidence** | Allows multi-repo operation. |
+| `--worker-id` | string | "" | Override worker id for this invocation | **kept-evidence** | Highest ResolveIdentity source. |
 | `--non-interactive` | bool | false | Skip TUI, use structured output | **kept-evidence** | Auto-set in CI. |
 
 ### Root-only flags
@@ -318,6 +319,8 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
+| `--id` | worker-init | string | Worktree-scoped worker id to write | **kept-evidence** |
+| `--reuse` | worker-init | bool | Allow --id that already has a published log | **kept-evidence** |
 | `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--fix` | doctor | bool | Reconcile expired claims (claimed->open, in-progress->blocked) by appending ops; see [recovery-state-machine.md](./recovery-state-machine.md) | **kept-evidence** |

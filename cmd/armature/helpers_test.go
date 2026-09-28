@@ -14,6 +14,7 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -615,4 +616,56 @@ func asAnySlice(t *testing.T, v any) []any {
 	s, ok := v.([]any)
 	require.True(t, ok, "want []any, got %T", v)
 	return s
+}
+
+func TestLinkedWorktreeClaimUsesInvocationIdentity_REQ_CLAIMORD_W21(t *testing.T) {
+	repo := gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init", "--id", "wt-main")
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "linked")
+	gittest.Git(t, repo, "worktree", "add", wt, "HEAD")
+	_, err = runTrls(t, wt, "worker-init", "--id", "wt-linked")
+	require.NoError(t, err)
+
+	_, err = runTrls(t, wt, "create", "--title", "Linked", "--type", "task", "--id", "task-21")
+	require.NoError(t, err)
+
+	linkedLog := filepath.Join(repo, ".armature", "ops", "wt-linked.log")
+	mainLog := filepath.Join(repo, ".armature", "ops", "wt-main.log")
+	linkedBytes, err := os.ReadFile(linkedLog)
+	require.NoError(t, err)
+	assert.Contains(t, string(linkedBytes), `"wt-linked"`)
+	assert.Contains(t, string(linkedBytes), "task-21")
+	if _, statErr := os.Stat(mainLog); statErr == nil {
+		mainBytes, readErr := os.ReadFile(mainLog)
+		require.NoError(t, readErr)
+		assert.NotContains(t, string(mainBytes), "task-21",
+			"linked-worktree create must not attribute ops to the parent clone id")
+	}
+}
+
+func TestInvalidLogSlotSkipsHarnessHeartbeat_REQ_CLAIMORD_W21(t *testing.T) {
+	repo := gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init", "--id", "hook-worker")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--title", "HB", "--type", "task", "--id", "task-hb")
+	require.NoError(t, err)
+
+	t.Setenv("ARM_LOG_SLOT", "NOPE")
+	issuesDir := filepath.Join(repo, ".armature")
+	tryEmitHeartbeat(repo, issuesDir, filepath.Join(repo, ".armature"), "task-hb", harnesshook.EventPreToolUse)
+
+	baseLog := filepath.Join(issuesDir, "ops", "hook-worker.log")
+	content, err := os.ReadFile(baseLog)
+	require.NoError(t, err)
+	assert.NotContains(t, string(content), `"type":"heartbeat"`)
+	_, err = os.Stat(filepath.Join(issuesDir, "ops", "hook-worker~NOPE.log"))
+	assert.True(t, os.IsNotExist(err))
 }

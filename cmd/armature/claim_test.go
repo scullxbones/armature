@@ -2230,16 +2230,20 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIM
 	ctx.StateDir = getTestStateDir(t, repo)
 	persistOporderCutoverAtHEAD(t, ctx)
 
-	injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
+	_ = injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
 
 	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
 	require.NoError(t, err)
 
 	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(claimOut)), &result), "output: %s", claimOut)
+	// CLAIMORD: same holder always replaces. An earlier same-worker impostor
+	// (even with a future op.Timestamp) does not beat a later published claim.
 	assert.NotContains(t, claimOut, "lost_claim_race",
 		"same holder later published commit replaces; a future-timestamp earlier impostor must not win (reverses #276 clock fold)")
+	assert.Contains(t, claimOut, "claimed_by")
 	assert.Nil(t, result["reason"])
+
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	assert.DirExists(t, worktreePath, "later published same-worker claim must provision a worktree")
 }
@@ -2258,7 +2262,7 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestampHuman_REQ_
 	assert.NotContains(t, claimOut, "Claim lost")
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
-	assert.DirExists(t, worktreePath)
+	assert.DirExists(t, worktreePath, "same-worker reclaim must provision a worktree")
 }
 
 func TestClaimCommand_DifferentWorkerLostRaceJSONFormat_REQ_LNGHZN_S5_T9(t *testing.T) {
@@ -2267,8 +2271,7 @@ func TestClaimCommand_DifferentWorkerLostRaceJSONFormat_REQ_LNGHZN_S5_T9(t *test
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 
-	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
-	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json", "--worker-id", "other-worker-abc")
 	require.NoError(t, err, "losing a claim race is a normal outcome, not an error")
 
 	var result map[string]any

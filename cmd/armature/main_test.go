@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -128,6 +129,27 @@ func bootstrapRepoForTest(t *testing.T, repo string) {
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute(), "bootstrap failed")
+}
+
+func unsetWorkerIDConfig(t *testing.T, repo string) {
+	t.Helper()
+	for _, args := range [][]string{
+		{"config", "--worktree", "--unset", "armature.worker-id"},
+		{"config", "--local", "--unset", "armature.worker-id"},
+	} {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = repo
+		cmd.Env = isolatedGitTestEnv()
+		err := cmd.Run()
+		if err == nil {
+			continue
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 5 {
+			continue
+		}
+		t.Logf("git %v: %v", args, err)
+	}
 }
 
 func TestStateDirFor(t *testing.T) {
@@ -376,6 +398,31 @@ func TestMaterializeCommand(t *testing.T) {
 
 	err := cmd2.Execute()
 	assert.NoError(t, err)
+}
+
+func TestMaterializeCommandPassesOpsWorktree_REQ_CLAIMORD_W14(t *testing.T) {
+	repo := gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	cmd1 := newRootCmd()
+	cmd1.SetOut(new(bytes.Buffer))
+	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
+	require.NoError(t, cmd1.Execute())
+
+	buf := new(bytes.Buffer)
+	cmdCreate := newRootCmd()
+	cmdCreate.SetOut(buf)
+	cmdCreate.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Fix bug", "--type", "task", "--id", "task-14"}))
+	require.NoError(t, cmdCreate.Execute())
+
+	cmdMat := newRootCmd()
+	cmdMat.SetOut(new(bytes.Buffer))
+	cmdMat.SetArgs([]string{"materialize", "--repo", repo})
+	require.NoError(t, cmdMat.Execute())
+
+	cp, err := materialize.LoadCheckpoint(filepath.Join(getTestStateDir(t, repo), "checkpoint.json"))
+	require.NoError(t, err)
+	require.NotEmpty(t, cp.LastCommitSHA, "arm materialize must pass OpsWorktree so the commit checkpoint is written")
 }
 
 func TestReadyCommand_EmptyRepo(t *testing.T) {
@@ -1181,7 +1228,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
 
-	run(t, repo, "git", "config", "--local", "--unset", "armature.worker-id")
+	unsetWorkerIDConfig(t, repo)
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	defaultID := "default"
@@ -2221,14 +2268,18 @@ func TestSlottedWorkerID_REQ_LNGHZN_S3_T1(t *testing.T) {
 		assert.Equal(t, SlottedWorkerID("worker-123~lane-a_2"), slottedWorkerID("worker-123"))
 	})
 
-	t.Run("slot containing a path separator falls back to unslotted identity", func(t *testing.T) {
+	t.Run("slot containing a path separator is rejected", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "../../etc")
-		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
+		_, err := slottedWorkerIDChecked("worker-123")
+		require.Error(t, err)
+		assert.Equal(t, "", slottedWorkerID("worker-123").String())
 	})
 
-	t.Run("slot containing a slash falls back to unslotted identity", func(t *testing.T) {
+	t.Run("slot containing a slash is rejected", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "a/b")
-		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
+		_, err := slottedWorkerIDChecked("worker-123")
+		require.Error(t, err)
+		assert.Equal(t, "", slottedWorkerID("worker-123").String())
 	})
 
 	t.Run("empty slot is unslotted identity", func(t *testing.T) {
@@ -2627,8 +2678,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 
 	plantOverlappingFooPair(t, repo)
 
-	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
-	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--worker-id", "other-worker-abc")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2745,11 +2795,11 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 
 	plantOverlappingFooPair(t, repo)
 
-	t.Setenv("ARM_LOG_SLOT", "A")
+	t.Setenv("ARM_LOG_SLOT", "a")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "B")
+	t.Setenv("ARM_LOG_SLOT", "b")
 	errBuf := new(bytes.Buffer)
 	root := newRootCmd()
 	root.SetOut(new(bytes.Buffer))
@@ -2774,8 +2824,7 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 
-	run(t, repo, "git", "config", "--local", "armature.worker-id", "other-worker-abc")
-	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--worker-id", "other-worker-abc")
 	require.NoError(t, err, "claim lost is a normal outcome, not an error")
 	assert.True(t,
 		strings.Contains(claimOut, "Claim lost") || strings.Contains(claimOut, "lost_claim_race"),
