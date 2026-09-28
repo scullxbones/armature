@@ -549,7 +549,7 @@ func checkD12OpsWorktreeLag(worktreePath string) Finding {
 func EvaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 	f := Finding{Check: "D12", Severity: SeverityOK, Message: "Ops worktree is not behind origin/_armature"}
 	if behind > 0 {
-		f.Severity = SeverityWarning
+		f.Severity = SeverityError
 		f.Message = fmt.Sprintf("Ops worktree is %d commit(s) behind origin/_armature", behind)
 		f.Items = []string{fmt.Sprintf("%d", behind)}
 	}

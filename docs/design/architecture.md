@@ -327,7 +327,7 @@ In single-repo mode (v1), `repo` is omitted (default: current repo). This is a s
 
 ### Canonical Process Flow
 
-Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** warns when this clone is behind). `arm sync` is **not** that fetch — see the `arm sync` spec below.
+Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** errors when this clone is behind, because a lagging clone cannot confirm a fresh DAG). `arm sync` is **not** that fetch — see the `arm sync` spec below.
 
 **Read-only commands** (`arm ready`, `arm list`, `arm show`, `arm render-context`, `arm validate`, `arm status`, `arm metrics`, `arm context-history`):
 
@@ -370,7 +370,7 @@ There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry 
 
 Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
 
-**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
+**Doctor D12** (PR #198; behind promoted from warning to error) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, error if HEAD is N>0 commits behind. Warnings are ignored, so a stale clone must not be a warning. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
 
 ### Incremental Materialization Algorithm
 
@@ -1324,7 +1324,7 @@ Behavior:
 This is merge-detection onto `main` (or `--into`), not “pull ops then materialize.”
 It is not implicit in other commands. Catching up `_armature` is an explicit
 git fetch/rebase of the ops worktree; `arm materialize` replays local logs;
-doctor D12 only warns when this clone is behind origin/_armature.
+doctor D12 errors when this clone is behind origin/_armature.
 
 Flags:
   --into <branch>  Target branch to check merges against (default: current branch)
