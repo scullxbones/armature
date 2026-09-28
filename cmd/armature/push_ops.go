@@ -54,7 +54,7 @@ not name this flag.`,
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
-			if err := pushOpsBranchAfter(ctx, gc, state.tracker, nil, skipValidate); err != nil {
+			if err := pushOpsBranchAfter(ctx, gc, state.tracker, publishValidateAfterIntegrate(ctx, gc, skipValidate), skipValidate); err != nil {
 				code := "PUSH-OPS-1"
 				if strings.Contains(err.Error(), "push refused: validation") {
 					code = "PUSH-OPS-2"
