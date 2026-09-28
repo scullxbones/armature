@@ -12,6 +12,7 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/issueid"
+	"github.com/scullxbones/armature/internal/issueref"
 	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
@@ -33,10 +34,10 @@ type Result struct {
 	Warnings     []string
 }
 
-func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
-	refs := make([]traceability.IssueRef, 0, len(issues))
+func coverageRefs(issues map[string]*Issue) []issueref.IssueRef {
+	refs := make([]issueref.IssueRef, 0, len(issues))
 	for id, issue := range issues {
-		refs = append(refs, traceability.IssueRef{
+		refs = append(refs, issueref.IssueRef{
 			ID:                      id,
 			SourceLinkCount:         len(issue.SourceLinks),
 			CitationAcceptanceCount: len(issue.CitationAcceptances),
@@ -211,7 +212,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 			return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
 		}
 
-		cov := traceability.Compute(toTraceabilityRefs(state.Issues))
+		cov := traceability.Compute(coverageRefs(state.Issues))
 		swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
 	}
 
@@ -404,7 +405,7 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 		}); err != nil {
 			return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
 		}
-		cov := traceability.Compute(toTraceabilityRefs(state.Issues))
+		cov := traceability.Compute(coverageRefs(state.Issues))
 		swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
 	}
 	return state, Result{

@@ -1623,7 +1623,7 @@ func TestToTraceabilityRefs_PopulatesCitationAcceptanceCount(t *testing.T) {
 		},
 	}
 
-	refs := toTraceabilityRefs(issues)
+	refs := coverageRefs(issues)
 
 	refsByID := make(map[string]any)
 	for _, r := range refs {

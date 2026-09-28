@@ -30,7 +30,7 @@
 
 **Tests (existing files extended):**
 - `internal/materialize/engine_test.go` — citation-accepted apply case (`package materialize`, uses `NewState()` and `state.ApplyOp()`)
-- `internal/traceability/traceability_test.go` — Compute with CitationAcceptanceCount. This file uses `package traceability_test` (external); new tests follow the same style with `traceability.IssueRef{...}` prefix
+- `internal/traceability/traceability_test.go` — Compute with CitationAcceptanceCount. This file uses `package traceability_test` (external); new tests follow the same style with `issueref.IssueRef{...}` prefix
 - `internal/validate/validate_extra_test.go` — citation-accepted satisfies citation check
 - `cmd/trellis/cmd_extra_test.go` — source-link and accept-citation command integration tests
 - `cmd/trellis/main_test.go` — validate coverage output format
@@ -245,7 +245,7 @@ git commit -m "feat(E5-S0-ext): add CitationAcceptance to materialize state and 
 // (package traceability_test — already declared at top of file)
 
 func TestCompute_AllSourceLinked(t *testing.T) {
-    refs := []traceability.IssueRef{
+    refs := []issueref.IssueRef{
         {ID: "A", SourceLinkCount: 1},
         {ID: "B", SourceLinkCount: 2},
     }
@@ -259,7 +259,7 @@ func TestCompute_AllSourceLinked(t *testing.T) {
 }
 
 func TestCompute_MixedCitation(t *testing.T) {
-    refs := []traceability.IssueRef{
+    refs := []issueref.IssueRef{
         {ID: "A", SourceLinkCount: 1},
         {ID: "B", CitationAcceptanceCount: 1},
         {ID: "C"},
@@ -275,7 +275,7 @@ func TestCompute_MixedCitation(t *testing.T) {
 }
 
 func TestCompute_BothSourceLinkAndAcceptance_CountsAsSourceLinked(t *testing.T) {
-    refs := []traceability.IssueRef{
+    refs := []issueref.IssueRef{
         {ID: "A", SourceLinkCount: 1, CitationAcceptanceCount: 1},
     }
     cov := traceability.Compute(refs)
@@ -415,10 +415,10 @@ Expected: FAIL — `CitationAcceptanceCount` not populated.
 In `internal/materialize/pipeline.go`, update the function:
 
 ```go
-func toTraceabilityRefs(issues map[string]*Issue) []traceability.IssueRef {
-    refs := make([]traceability.IssueRef, 0, len(issues))
+func toTraceabilityRefs(issues map[string]*Issue) []issueref.IssueRef {
+    refs := make([]issueref.IssueRef, 0, len(issues))
     for id, issue := range issues {
-        refs = append(refs, traceability.IssueRef{
+        refs = append(refs, issueref.IssueRef{
             ID:                      id,
             SourceLinkCount:         len(issue.SourceLinks),
             CitationAcceptanceCount: len(issue.CitationAcceptances),

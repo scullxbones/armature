@@ -1,7 +1,6 @@
 package decompose
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -234,15 +233,6 @@ func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
 func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	var batches [][]string
-	opts := ApplyOptions{appendOps: func(path string, proposed []ops.Op) error {
-		types := make([]string, 0, len(proposed))
-		for _, op := range proposed {
-			types = append(types, op.Type)
-		}
-		batches = append(batches, types)
-		return ops.AppendOps(path, proposed)
-	}}
 
 	plan := &Plan{
 		Version: 1,
@@ -252,12 +242,18 @@ func TestApplyPlan_WritesCreateAndSourceLinkAtomically(t *testing.T) {
 			taskPlanIssue("PLAN-002", "Second"),
 		},
 	}
-	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{}, clock.System)
 	require.NoError(t, err)
 	assert.Len(t, created, 2)
-	require.Len(t, batches, 1, "create + source_link (+links) must be one write, not one write per op")
-	assert.Contains(t, batches[0], ops.OpCreate)
-	assert.Contains(t, batches[0], ops.OpSourceLink)
+
+	readOps, err := ops.ReadLog(filepath.Join(dir, "worker-test.log"))
+	require.NoError(t, err)
+	types := make([]string, 0, len(readOps))
+	for _, op := range readOps {
+		types = append(types, op.Type)
+	}
+	assert.Equal(t, []string{ops.OpCreate, ops.OpSourceLink, ops.OpCreate, ops.OpSourceLink}, types,
+		"create + source_link for every issue must land together in the worker log")
 }
 
 func TestApplyPlan_UsesRealAppenderWhenUnset(t *testing.T) {
@@ -272,27 +268,28 @@ func TestApplyPlan_UsesRealAppenderWhenUnset(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, created, 1)
 	data, readErr := os.ReadFile(filepath.Join(dir, "worker-test.log"))
-	require.NoError(t, readErr, "an unset appendOps must fall back to ops.AppendOps")
+	require.NoError(t, readErr, "ApplyPlan must write the worker log through ops.AppendOps")
 	assert.Contains(t, string(data), ops.OpCreate)
 }
 
 func TestApplyPlan_FailedAppendLeavesNoPartialLog(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	opts := ApplyOptions{appendOps: func(string, []ops.Op) error {
-		return errors.New("disk full")
-	}}
+	logPath := filepath.Join(dir, "worker-test.log")
+	require.NoError(t, os.Mkdir(logPath, 0755))
 
 	plan := &Plan{
 		Version: 1,
 		Title:   "Failing plan",
 		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Only")},
 	}
-	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
+	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{}, clock.System)
 	require.Error(t, err)
 	assert.Empty(t, created)
-	_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
-	assert.True(t, os.IsNotExist(statErr), "a failed atomic append must not leave an uncited create")
+	assert.Contains(t, err.Error(), "append plan ops")
+	entries, readErr := os.ReadDir(logPath)
+	require.NoError(t, readErr)
+	assert.Empty(t, entries, "a failed atomic append must not leave an uncited create")
 }
 
 func TestValidatePlan_DoesNotWarnOnInvalidType_REQ_NXTTN_S2_T2(t *testing.T) {

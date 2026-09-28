@@ -38,7 +38,6 @@ type ApplyOptions struct {
 	// IDs and to run citation checks on the Introduction door. Empty skips
 	// membership checks (unit tests); the CLI always supplies the file.
 	ManifestData []byte
-	appendOps    func(string, []ops.Op) error
 }
 
 func validatePlan(plan *Plan) []string {
@@ -199,12 +198,8 @@ func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize
 		return nil, err
 	}
 
-	appendOps := opts.appendOps
-	if appendOps == nil {
-		appendOps = ops.AppendOps
-	}
 	logPath := filepath.Join(issuesDir, workerID+".log")
-	if err := appendOps(logPath, proposed); err != nil {
+	if err := ops.AppendOps(logPath, proposed); err != nil {
 		return nil, fmt.Errorf("append plan ops: %w", err)
 	}
 	return entriesForCreates(proposed), nil

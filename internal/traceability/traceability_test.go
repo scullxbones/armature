@@ -3,12 +3,13 @@ package traceability_test
 import (
 	"testing"
 
+	"github.com/scullxbones/armature/internal/issueref"
 	"github.com/scullxbones/armature/internal/traceability"
 )
 
 func TestCoverageAllCited(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "ISSUE-1", SourceLinkCount: 2},
 		{ID: "ISSUE-2", SourceLinkCount: 1},
 		{ID: "ISSUE-3", SourceLinkCount: 3},
@@ -32,7 +33,7 @@ func TestCoverageAllCited(t *testing.T) {
 
 func TestCoverageNoneCited(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "ISSUE-A", SourceLinkCount: 0},
 		{ID: "ISSUE-B", SourceLinkCount: 0},
 	}
@@ -64,7 +65,7 @@ func TestCoverageNoneCited(t *testing.T) {
 
 func TestCoveragePartial(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "ISSUE-1", SourceLinkCount: 1},
 		{ID: "ISSUE-2", SourceLinkCount: 0},
 		{ID: "ISSUE-3", SourceLinkCount: 0},
@@ -98,7 +99,7 @@ func TestCoveragePartial(t *testing.T) {
 
 func TestCompute_AllSourceLinked(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "ISSUE-1", SourceLinkCount: 1, CitationAcceptanceCount: 0},
 		{ID: "ISSUE-2", SourceLinkCount: 2, CitationAcceptanceCount: 0},
 	}
@@ -124,7 +125,7 @@ func TestCompute_AllSourceLinked(t *testing.T) {
 
 func TestCompute_MixedCitation(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "ISSUE-1", SourceLinkCount: 1, CitationAcceptanceCount: 0},
 		{ID: "ISSUE-2", SourceLinkCount: 0, CitationAcceptanceCount: 1},
 		{ID: "ISSUE-3", SourceLinkCount: 0, CitationAcceptanceCount: 0},
@@ -152,7 +153,7 @@ func TestCompute_MixedCitation(t *testing.T) {
 
 func TestCompute_BothSourceLinkAndAcceptance_CountsAsSourceLinked(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "ISSUE-1", SourceLinkCount: 1, CitationAcceptanceCount: 1},
 	}
 
@@ -171,7 +172,7 @@ func TestCompute_BothSourceLinkAndAcceptance_CountsAsSourceLinked(t *testing.T) 
 
 func TestUngroundedDraftIsNotAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "DRAFT-1", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 0},
 	}
 
@@ -187,7 +188,7 @@ func TestUngroundedDraftIsNotAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 
 func TestUngroundedVerifiedIsAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "VER-1", Confidence: traceability.ConfidenceVerified, SourceLinkCount: 0},
 	}
 
@@ -206,7 +207,7 @@ func TestUngroundedVerifiedIsAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 
 func TestDraftCitationStatusIsPreserved_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "DRAFT-UNCITED", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 0},
 		{ID: "DRAFT-CITED", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 1},
 	}
@@ -229,7 +230,7 @@ func TestDraftCitationStatusIsPreserved_REQ_CITEGATE_T2(t *testing.T) {
 
 func TestInferredIsNotInVerifiedBand_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "INF-1", Confidence: traceability.ConfidenceInferred, SourceLinkCount: 0},
 	}
 
@@ -254,7 +255,7 @@ func TestInferredIsNotInVerifiedBand_REQ_CITEGATE_T2(t *testing.T) {
 
 func TestAcceptedRiskIsNotAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "VER-1", Confidence: traceability.ConfidenceVerified, SourceLinkCount: 0, CitationAcceptanceCount: 1},
 	}
 
@@ -273,7 +274,7 @@ func TestAcceptedRiskIsNotAGraphFinding_REQ_CITEGATE_T2(t *testing.T) {
 
 func TestCoverageSeparatesDraftFromVerified_REQ_CITEGATE_T2(t *testing.T) {
 	t.Parallel()
-	refs := []traceability.IssueRef{
+	refs := []issueref.IssueRef{
 		{ID: "DRAFT-1", Confidence: traceability.ConfidenceDraft, SourceLinkCount: 0},
 		{ID: "VER-1", Confidence: traceability.ConfidenceVerified, SourceLinkCount: 1},
 	}

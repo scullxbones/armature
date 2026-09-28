@@ -48,6 +48,13 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "issuetype is a pure vocabulary package and must not import other internal packages"
+        issueref-pure:
+          list-mode: lax
+          files:
+            - "**/internal/issueref/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "issueref is a pure projection type and must not import other internal packages"
         ops-boundary:
           list-mode: strict
           files:
@@ -73,6 +80,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/issueref"
         materialize-boundary:
           list-mode: strict
           files:
@@ -84,6 +92,7 @@ linters:
             - "github.com/scullxbones/armature/internal/claim"
             - "github.com/scullxbones/armature/internal/dag"
             - "github.com/scullxbones/armature/internal/issueid"
+            - "github.com/scullxbones/armature/internal/issueref"
             - "github.com/scullxbones/armature/internal/oporder"
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/oporder"
