@@ -45,6 +45,7 @@ claims a live ID. S12 remains held — reserve D11 only; do not implement
 | ID | Issue | Planned |
 |----|-------|--------|
 | `D11` | `TOPTIER-S12-T2` | Ops-branch backup / disaster-recovery doctor check (narrow-gaps G2.2). S12 remains held; this row reserves D11 only. |
+| `D13` | `LNGHZN-S11-T4` | Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run. |
 
 ## Allocating a new ID
 
