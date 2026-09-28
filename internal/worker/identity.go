@@ -1,3 +1,4 @@
+// Package worker resolves writer identity, log slots, and worktree-scoped git config.
 package worker
 
 import (
