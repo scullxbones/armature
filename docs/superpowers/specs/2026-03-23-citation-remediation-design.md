@@ -256,7 +256,7 @@ Designed for paste-able compliance reporting. Not part of this story.
 - `arm source-link` command implemented and tested (happy path, unknown source-id, missing flags)
 - `arm accept-citation` command implemented and tested (happy path interactive, rationale < 3 words rejected, confirmation mismatch aborts, `--ci` sets `confirmed_noninteractively`, non-TTY treated as `--ci`)
 - `citation-accepted` op type registered in `OpCitationAccepted` constant and `ValidOpTypes`; `Payload` struct gains `Rationale` and `ConfirmedNoninteractively` fields; `materialize.Issue` gains `CitationAcceptances []CitationAcceptance`; engine applies the op
-- `traceability.IssueRef` gains `CitationAcceptanceCount`; `traceability.Coverage` gains `AcceptedRiskNodes` and `AcceptedRiskPct`; `Compute` updated; `pipeline.go` populates new field
+- `issueref.IssueRef` gains `CitationAcceptanceCount`; `traceability.Coverage` gains `AcceptedRiskNodes` and `AcceptedRiskPct`; `Compute` updated; `pipeline.go` populates new field
 - Validator treats `citation-accepted` as satisfying citation requirement; manifest-membership check unchanged (source-link ops only); coverage output updated in both human and JSON formats
 - All 106 existing nodes cited (`arm validate` shows 0 `uncited node` errors; coverage line shows accepted-risk count)
 - `make check` green before remediation commit; remediation commit is data-only (`.armature/`, `docs/superpowers/`)
