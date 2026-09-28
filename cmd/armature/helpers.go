@@ -244,7 +244,7 @@ func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
 	if cmd != nil && cmd.Root() != nil {
 		ctx.WorkerIDFlag, _ = cmd.Root().PersistentFlags().GetString("worker-id")
 	}
-	workerID := slottedWorkerIDBestEffort(ctx.RepoPath)
+	workerID := slottedWorkerIDBestEffort(identityRepoPath(ctx))
 	if workerID == "" {
 		workerID = slottedWorkerID("default").String()
 	}
@@ -309,12 +309,22 @@ func stateDirFor(ctx *config.Context, workerID string) string {
 	return filepath.Join(ctx.IssuesDir, "state", workerID)
 }
 
+func identityRepoPath(ctx *config.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if ctx.InvocationPath != "" {
+		return ctx.InvocationPath
+	}
+	return ctx.RepoPath
+}
+
 func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
 	if ctx == nil {
 		return "", "", fmt.Errorf("worker not initialized: command context unavailable")
 	}
 	ident, err := worker.ResolveIdentity(worker.IdentityInput{
-		RepoPath:     ctx.RepoPath,
+		RepoPath:     identityRepoPath(ctx),
 		IssuesDir:    ctx.IssuesDir,
 		FlagWorkerID: ctx.WorkerIDFlag,
 		EnvWorkerID:  os.Getenv("ARM_WORKER_ID"),
@@ -335,14 +345,22 @@ type SlottedWorkerID string
 func (id SlottedWorkerID) String() string { return string(id) }
 
 func slottedWorkerID(workerID string) SlottedWorkerID {
+	id, err := slottedWorkerIDChecked(workerID)
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
+func slottedWorkerIDChecked(workerID string) (SlottedWorkerID, error) {
 	slot := os.Getenv("ARM_LOG_SLOT")
 	if slot == "" {
-		return SlottedWorkerID(workerID)
+		return SlottedWorkerID(workerID), nil
 	}
 	if err := worker.ValidateLogSlot(slot); err != nil {
-		return SlottedWorkerID(workerID)
+		return "", err
 	}
-	return SlottedWorkerID(workerID + "~" + slot)
+	return SlottedWorkerID(workerID + "~" + slot), nil
 }
 
 func withWorkerLogLock(ctx *config.Context, logPath string, fn func() error) error {

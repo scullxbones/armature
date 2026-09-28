@@ -2268,14 +2268,18 @@ func TestSlottedWorkerID_REQ_LNGHZN_S3_T1(t *testing.T) {
 		assert.Equal(t, SlottedWorkerID("worker-123~lane-a_2"), slottedWorkerID("worker-123"))
 	})
 
-	t.Run("slot containing a path separator falls back to unslotted identity", func(t *testing.T) {
+	t.Run("slot containing a path separator is rejected", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "../../etc")
-		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
+		_, err := slottedWorkerIDChecked("worker-123")
+		require.Error(t, err)
+		assert.Equal(t, "", slottedWorkerID("worker-123").String())
 	})
 
-	t.Run("slot containing a slash falls back to unslotted identity", func(t *testing.T) {
+	t.Run("slot containing a slash is rejected", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "a/b")
-		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
+		_, err := slottedWorkerIDChecked("worker-123")
+		require.Error(t, err)
+		assert.Equal(t, "", slottedWorkerID("worker-123").String())
 	})
 
 	t.Run("empty slot is unslotted identity", func(t *testing.T) {

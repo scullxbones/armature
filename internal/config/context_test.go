@@ -146,6 +146,7 @@ func TestResolveContext_GitWorktreeResolvedToParent_REQ_SB_T5(t *testing.T) {
 	ctx, err := ResolveContext(worktreeCheckout)
 	require.NoError(t, err)
 	assert.Equal(t, parentRepo, ctx.RepoPath)
+	assert.Equal(t, worktreeCheckout, ctx.InvocationPath)
 	assert.Equal(t, opsIssuesDir, ctx.IssuesDir)
 	assert.Equal(t, opsWorktree, ctx.WorktreePath)
 }
