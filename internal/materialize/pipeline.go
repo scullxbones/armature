@@ -266,8 +266,6 @@ func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Op
 }
 
 func sortOpsByTimestamp(allOps []ops.Op) {
-	// Pre-C0 / file-concat replay: timestamp then type key (claim-ttl).
-	// Post-C0 commit order lives in oporder.SortLocated / OwnerOf.
 	claimpkg.SortForReplay(allOps)
 }
 

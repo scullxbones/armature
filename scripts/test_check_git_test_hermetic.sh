@@ -1,5 +1,4 @@
 #!/bin/bash
-# Exercises check-git-test-hermetic.sh: clean tree passes; injected raw git init fails.
 set -euo pipefail
 
 REPO_ROOT="${1:-.}"

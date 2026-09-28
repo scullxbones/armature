@@ -40,8 +40,6 @@ func refusePublishedGraph(ctx *config.Context, gc *adapters.Client) error {
 		rendered.String(), len(result.Errors), len(result.Warnings)))
 }
 
-// publishValidateAfterIntegrate re-runs fail-closed CI validation after
-// FetchAndRebase, before the retry push. A recorded --override-validate skips it.
 func publishValidateAfterIntegrate(ctx *config.Context, gc *adapters.Client, skipValidate bool) func() error {
 	if skipValidate {
 		return nil
@@ -49,10 +47,6 @@ func publishValidateAfterIntegrate(ctx *config.Context, gc *adapters.Client, ski
 	return func() error { return refusePublishedGraph(ctx, gc) }
 }
 
-// contextWithPublishedOps returns a Context whose ops dir is the local logs
-// overlaid with any origin/_armature worker logs not present locally — the
-// graph CI will see after a successful integrate-and-push. Sources are the
-// union of local and origin/_armature manifests so remote-only citations resolve.
 func contextWithPublishedOps(ctx *config.Context, gc *adapters.Client) (*config.Context, func(), error) {
 	localOps := filepath.Join(ctx.IssuesDir, "ops")
 	tmp, err := os.MkdirTemp("", "arm-publish-validate-")

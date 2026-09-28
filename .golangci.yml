@@ -3,28 +3,19 @@ version: "2"
 linters:
   default: none
   enable:
-    # --- Architectural Structure ---
     - forbidigo
     - depguard
-
-    # --- Critical Input & Host Security ---
     - gosec
     - govet
-
-    # --- Context & Execution Control ---
     - contextcheck
     - containedctx
     - bodyclose
     - noctx
-
-    # --- Concurrency & Test Robustness ---
     - copyloopvar
     - tparallel
     - paralleltest
     - staticcheck
     - errcheck
-
-    # --- Hygiene ---
     - unparam
     - gocritic
     - revive
@@ -36,7 +27,6 @@ linters:
   settings:
     depguard:
       rules:
-        # internal packages must never import cmd — cmd is the entry point, not a library
         internal-no-cmd:
           list-mode: lax
           files:
@@ -44,7 +34,6 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/cmd"
               desc: "internal packages must not import cmd packages"
-        # dag is pure graph logic; any internal import would couple it to infrastructure
         dag-pure:
           list-mode: lax
           files:
@@ -52,7 +41,6 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "dag is a pure graph package and must not import other internal packages"
-        # issuetype is a pure vocabulary package; no internal imports allowed
         issuetype-pure:
           list-mode: lax
           files:
@@ -60,7 +48,6 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "issuetype is a pure vocabulary package and must not import other internal packages"
-        # ops uses adapters as its I/O port; all other internal imports are forbidden
         ops-boundary:
           list-mode: strict
           files:
@@ -69,7 +56,6 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
-        # claim uses ops as its natural sub-domain; all other internal imports are forbidden
         claim-boundary:
           list-mode: strict
           files:
@@ -79,7 +65,6 @@ linters:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/scopematch"
-        # traceability uses adapters as its I/O port; all other internal imports are forbidden
         traceability-boundary:
           list-mode: strict
           files:
@@ -88,7 +73,6 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
-        # materialize owns the replay pipeline; its allow list is its complete sub-domain
         materialize-boundary:
           list-mode: strict
           files:
@@ -105,8 +89,6 @@ linters:
             - "github.com/scullxbones/armature/internal/oporder"
             - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/traceability"
-        # sources (functional core) is a pure registry; only adapters for file I/O allowed.
-        # Provider implementations (Confluence, SharePoint, Filesystem) live in cmd/.
         sources-boundary:
           list-mode: strict
           files:
@@ -115,7 +97,6 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
-        # validate may only import the deep domain core below it
         validate-boundary:
           list-mode: strict
           files:
@@ -131,7 +112,6 @@ linters:
             - "github.com/scullxbones/armature/internal/sources"
             - "github.com/scullxbones/armature/internal/taskcontract"
             - "github.com/scullxbones/armature/internal/traceability"
-        # output may only import the domain layer beneath it; orchestration packages are forbidden
         output-boundary:
           list-mode: strict
           files:
@@ -143,8 +123,6 @@ linters:
             - "github.com/scullxbones/armature/internal/ready"
             - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/validate"
-        # worktree reconciles managed worktrees against materialized issue state;
-        # materialize (for Issue) and ops (for status constants) are its complete sub-domain
         worktree-boundary:
           list-mode: strict
           files:

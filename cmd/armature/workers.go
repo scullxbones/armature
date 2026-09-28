@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// replayIssueLeases folds the combined worker log once. Tests replace it to
-// assert listing does not re-sort the log per worker row.
 var replayIssueLeases = claim.Owners
 
 // WorkerStatus describes the current activity state of a worker.

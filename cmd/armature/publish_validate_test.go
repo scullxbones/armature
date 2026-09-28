@@ -206,8 +206,6 @@ func TestPushOpsAcceptsRemoteOnlySourceCitation_REQ_PUBLISH_VALIDATE(t *testing.
 	require.NoError(t, err)
 	require.True(t, originArmatureContains(t, bareDir, "REMOTE-SRC-TASK"))
 
-	// Stale worktree like a lagging clone: local manifest lacks the remote UUID
-	// and the remote worker log is missing on disk. HEAD still matches origin.
 	stale := sources.Manifest{}
 	stale.Upsert(sources.SourceEntry{ID: "00000000-0000-0000-0000-000000000001", Title: "stale-local"})
 	require.NoError(t, sources.WriteManifest(filepath.Join(worktree, "sources"), stale))
