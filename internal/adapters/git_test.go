@@ -324,12 +324,14 @@ func TestBranchMergedInto_MergeBaseExitCodes_REQ_NOCOMMENTS(t *testing.T) {
 	gitRun("checkout", mainBranch)
 
 	t.Run("exit1_notMerged", func(t *testing.T) {
+		t.Parallel()
 		merged, err := c.BranchMergedInto("feature/probe", mainBranch)
 		require.NoError(t, err)
 		assert.False(t, merged)
 	})
 
 	t.Run("missingTarget_error", func(t *testing.T) {
+		t.Parallel()
 		merged, err := c.BranchMergedInto("feature/probe", "refs/heads/does-not-exist")
 		require.Error(t, err)
 		assert.False(t, merged)
