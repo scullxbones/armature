@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/issueref"
 )
 
 // Confidence values on IssueRef. Empty Confidence is treated as Verified
@@ -18,13 +19,6 @@ const (
 	ConfidenceVerified = "verified"
 	ConfidenceInferred = "inferred"
 )
-
-type IssueRef struct {
-	ID                      string
-	SourceLinkCount         int
-	CitationAcceptanceCount int
-	Confidence              string
-}
 
 // Finding is a Graph Finding: a rule violation Compute reports, identified by
 // a rule and the issue IDs it cites. Ungrounded Verified issues are Findings;
@@ -61,14 +55,14 @@ type Coverage struct {
 	InferredCoveragePct float64  `json:"inferred_coverage_pct"`
 }
 
-// Compute calculates traceability coverage from a slice of IssueRef values.
+// Compute calculates traceability coverage from a slice of issueref.IssueRef values.
 // An issue is considered "cited" if its SourceLinkCount > 0.
 // An issue is counted as "accepted risk" if it has no source link but has one
 // or more CitationAcceptance records.
 //
 // Grounding is gated on Confidence (CITEGATE-T2 / ADR 0021): an ungrounded
 // Draft is legal and is not a Graph Finding; an ungrounded Verified is.
-func Compute(refs []IssueRef) Coverage {
+func Compute(refs []issueref.IssueRef) Coverage {
 	verifiedTotal := 0
 	verifiedCited := 0
 	acceptedRisk := 0

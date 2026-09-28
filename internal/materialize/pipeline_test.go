@@ -29,7 +29,7 @@ func TestToTraceabilityRefs_CarriesConfidence_REQ_CITEGATE_T2(t *testing.T) {
 	}
 
 	got := make(map[string]string, len(issues))
-	for _, ref := range toTraceabilityRefs(issues) {
+	for _, ref := range coverageRefs(issues) {
 		got[ref.ID] = ref.Confidence
 	}
 
