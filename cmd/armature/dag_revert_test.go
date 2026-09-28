@@ -218,16 +218,17 @@ func TestDagRevertDoesNotCallRefuseIntroduction_REQ_DECOMPOSE(t *testing.T) {
 		if !ok {
 			return true
 		}
-		switch fun := call.Fun.(type) {
-		case *ast.Ident:
-			switch fun.Name {
-			case "refuseIntroduction":
-				calledRefuse = true
-			case "withWorkerLogLock":
-				calledLock = true
-			case "pushOpsBranchAfter":
-				calledPublish = true
-			}
+		ident, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		switch ident.Name {
+		case "refuseIntroduction":
+			calledRefuse = true
+		case "withWorkerLogLock":
+			calledLock = true
+		case "pushOpsBranchAfter":
+			calledPublish = true
 		}
 		return true
 	})
