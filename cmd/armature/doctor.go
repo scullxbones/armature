@@ -242,7 +242,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 
 	state := mustState(cmd)
 	if len(actions) == 0 {
-		if err := publishLocalArmatureTip(state); err != nil {
+		if err := publishLocalArmatureTipAfter(state, nil); err != nil {
 			return err
 		}
 		renderDoctorFixPlan(cmd, format, actions)

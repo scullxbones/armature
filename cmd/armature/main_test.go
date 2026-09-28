@@ -1270,7 +1270,7 @@ func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 10}},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 60, now)
 	assert.Equal(t, "active", status.Status)
 	assert.Equal(t, "T-001", status.ActiveIssue)
 	assert.Equal(t, "worker-a", status.WorkerID)
@@ -1282,7 +1282,7 @@ func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 1}},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 60, now)
 	assert.Equal(t, "stale", status.Status)
 	assert.Empty(t, status.ActiveIssue)
 }
@@ -1292,7 +1292,7 @@ func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
 	allOps := []ops.Op{
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a"},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 1, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 1, now)
 	assert.Equal(t, "idle", status.Status)
 	assert.Equal(t, int64(900), status.LastOpTime)
 }
@@ -1302,13 +1302,13 @@ func TestBuildWorkerStatus_InactiveBeyondIdleWindow_REQ_NOCOMMENTS(t *testing.T)
 	allOps := []ops.Op{
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a"},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 1, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 1, now)
 	assert.Equal(t, "inactive", status.Status)
 	assert.Equal(t, int64(100), status.LastOpTime)
 }
 
 func TestBuildWorkerStatus_InactiveNoLastOp_REQ_NOCOMMENTS(t *testing.T) {
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", nil, nil, 60, 1000)
+	status := foldWorkerStatusFromOwners("worker-a", nil, nil, 60, 1000)
 	assert.Equal(t, "inactive", status.Status)
 	assert.Equal(t, int64(0), status.LastOpTime)
 }
@@ -1321,7 +1321,7 @@ func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
 		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a",
 			Payload: ops.Payload{To: "done"}},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 60, now)
 	assert.NotEqual(t, "active", status.Status)
 }
 
@@ -1333,7 +1333,7 @@ func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
 		{Type: ops.OpHeartbeat, TargetID: "T-001", Timestamp: 200, WorkerID: "worker-a"},
 		{Type: ops.OpHeartbeat, TargetID: "T-001", Timestamp: 9500, WorkerID: "worker-a"},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 60, now)
 	assert.NotEqual(t, "active", status.Status)
 }
 
@@ -1351,10 +1351,10 @@ func TestBuildWorkerStatus_SlottedWinnerDoesNotMatchUnslottedSibling_REQ_CLAIMTT
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 900, WorkerID: "worker-a~slot-1", Payload: ops.Payload{TTL: 60}},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 60, now)
 	assert.NotEqual(t, "active", status.Status)
 	assert.Empty(t, status.ActiveIssue)
-	slotted := foldWorkerStatusFromClaimOwnerActivity("worker-a~slot-1", allOps, allOps, 60, now)
+	slotted := foldWorkerStatusFromOwners("worker-a~slot-1", allOps, allOps, 60, now)
 	assert.Equal(t, "active", slotted.Status)
 	assert.Equal(t, "task-1", slotted.ActiveIssue)
 }
@@ -1368,7 +1368,7 @@ func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 100, WorkerID: "worker-b", Payload: ops.Payload{TTL: 60}},
 	}
 	all := append(append([]ops.Op{}, bOps...), allOps...)
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, all, 60, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, all, 60, now)
 	assert.Equal(t, "idle", status.Status)
 }
 

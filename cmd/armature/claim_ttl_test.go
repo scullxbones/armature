@@ -82,8 +82,8 @@ func TestRacingClaimsSameOwnerEveryCaller_REQ_CLAIMTTL(t *testing.T) {
 	assert.Equal(t, owner.Token, state.Issues["task-01"].ClaimToken)
 
 	now := int64(120)
-	statusA := foldWorkerStatusFromClaimOwnerActivity("worker-a", log, log, 60, now)
-	statusB := foldWorkerStatusFromClaimOwnerActivity("worker-b", log, log, 60, now)
+	statusA := foldWorkerStatusFromOwners("worker-a", log, log, 60, now)
+	statusB := foldWorkerStatusFromOwners("worker-b", log, log, 60, now)
 	assert.Equal(t, "active", statusA.Status)
 	assert.Equal(t, "task-01", statusA.ActiveIssue)
 	assert.NotEqual(t, "active", statusB.Status)

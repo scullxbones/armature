@@ -87,10 +87,6 @@ func newWorkersCmd() *cobra.Command {
 	return cmd
 }
 
-func workerLogIdentity(logPath string) string {
-	return strings.TrimSuffix(filepath.Base(logPath), ".log")
-}
-
 func loadWorkerLogs(opsDir string) (map[string][]ops.Op, []ops.Op, error) {
 	loaded, err := ops.LoadFromDirValidated(opsDir)
 	if err != nil {
@@ -100,15 +96,11 @@ func loadWorkerLogs(opsDir string) (map[string][]ops.Op, []ops.Op, error) {
 	result := make(map[string][]ops.Op)
 	var allOps []ops.Op
 	for _, item := range loaded.Items {
-		workerID := workerLogIdentity(item.LogFilename)
+		workerID := strings.TrimSuffix(filepath.Base(item.LogFilename), ".log")
 		result[workerID] = append(result[workerID], item.Op)
 		allOps = append(allOps, item.Op)
 	}
 	return result, allOps, nil
-}
-
-func foldWorkerStatusFromClaimOwnerActivity(workerID string, workerOps, allOps []ops.Op, defaultTTL config.TTLMinutes, now int64) WorkerStatus {
-	return foldWorkerStatusFromLeases(workerID, workerOps, claim.Owners(allOps), defaultTTL, now)
 }
 
 func foldWorkerStatusFromLeases(workerID string, workerOps []ops.Op, leases map[string]claim.Lease, defaultTTL config.TTLMinutes, now int64) WorkerStatus {

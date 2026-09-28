@@ -377,7 +377,7 @@ func TestAppendHighStakesOpIfNoWriteStillPublishes_REQ_OPS_PUBLISH(t *testing.T)
 	assert.False(t, originArmatureContains(t, bareDir, "T-HS-NW"))
 
 	restoreOrigin(t, repo, bareDir)
-	wrote, err := appendHighStakesOpIf(state, logPath, op, func() (bool, error) { return false, nil })
+	wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) { return false, nil }, nil)
 	require.NoError(t, err)
 	assert.False(t, wrote)
 	assert.True(t, originArmatureContains(t, bareDir, "T-HS-NW"),
