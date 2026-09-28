@@ -20,7 +20,7 @@ path is split, incomplete, and quiet.
 
 | Path | After local commit | On non-fast-forward | On remaining failure |
 | --- | --- | --- | --- |
-| High-stakes (`appendHighStakesOpIf` in `cmd/armature/helpers.go`) | `Push("_armature")` | one `FetchAndRebase` then a second `Push` with **errors ignored** | command succeeds; other clones never see the op |
+| High-stakes (`appendHighStakesOpIfAfter` in `cmd/armature/helpers.go`) | `Push("_armature")` | one `FetchAndRebase` then a second `Push` with **errors ignored** | command succeeds; other clones never see the op |
 | Low-stakes (`appendLowStakesOps`) | increment `pending-push-count`; **reset at threshold without pushing** | n/a | n/a |
 | `arm push-ops` | `Push` only | **no rebase retry** | Command Failure `PUSH-OPS-1` |
 | Read verbs (`ready`, `list`, `render-context`, …) | no fetch | n/a | clone can be arbitrarily behind origin |
@@ -89,14 +89,14 @@ which is the same `Publish` path.
 Today:
 
 ```text
-appendHighStakesOpIf → AppendAndCommitIf → Push; if err { FetchAndRebase; Push }
+appendHighStakesOpIfAfter → AppendAndCommitIf → Push; if err { FetchAndRebase; Push }
 appendLowStakesOps   → AppendAndCommit → Increment; if n >= threshold { Reset }
 ```
 
 Target:
 
 ```text
-appendHighStakesOpIf → AppendAndCommitIf → opsync.AfterCommit(ctx, High)
+appendHighStakesOpIfAfter → AppendAndCommitIf → opsync.AfterCommit(ctx, High)
 appendLowStakesOps   → AppendAndCommit    → opsync.AfterCommit(ctx, Low)
 ```
 
@@ -343,7 +343,7 @@ the user-facing publish verb.
 
 ```text
 claim/transition/assign/unassign/doctor --fix
-  → appendHighStakesOpIf → ops.AppendAndCommitIf → opsync.AfterCommit(High)
+  → appendHighStakesOpIfAfter → ops.AppendAndCommitIf → opsync.AfterCommit(High)
 note/heartbeat/decision
   → appendLowStakesOps → ops.AppendAndCommit → opsync.AfterCommit(Low)
 arm push-ops → opsync.Publish
