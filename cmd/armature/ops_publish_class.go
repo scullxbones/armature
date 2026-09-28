@@ -52,6 +52,13 @@ func gitPushFailureLooksLikeNonFF(lower string) bool {
 }
 
 func nextActionsForOpsPublish(err error) []string {
+	if err != nil && strings.Contains(err.Error(), "push refused: validation") {
+		return []string{
+			"arm validate --ci",
+			"arm link --source <later> --dep <earlier> --rel blocked_by",
+			"make validate-graph",
+		}
+	}
 	return nextActionsForOpsPublishClass(opsPublishClassOf(err))
 }
 

@@ -385,7 +385,7 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"unlink":               {Kind: pavedRoadKindEscape, Note: "Remove a dependency. The road adds blocked_by edges; it does not routinely delete them."},
 
 	"sync":        {Kind: pavedRoadKindPaved},
-	"push-ops":    {Kind: pavedRoadKindPaved},
+	"push-ops":    {Kind: pavedRoadKindPaved, Note: "--override-validate is a human escape hatch; never a green publish."},
 	"merged":      {Kind: pavedRoadKindEscape, Note: "Manual merged promotion. Prefer sync after the PR lands."},
 	"materialize": {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
 	"import":      {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},

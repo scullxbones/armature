@@ -70,6 +70,7 @@ stay on the platform/git protocol.
 | `MERGED-1` | merged | `arm merged` could not complete. | LNGHZN-S6-T5 | |
 | `NOTE-1` | note | `arm note` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-1` | push-ops | `arm push-ops` could not complete. | LNGHZN-S6-T5 | |
+| `PUSH-OPS-2` | push-ops | `arm push-ops` refused to publish because the graph failed `arm validate --ci` / `make validate-graph` after integrating `origin/_armature`. | PUBLISH-VALIDATE | |
 | `REOPEN-1` | reopen | `arm reopen` could not complete. | LNGHZN-S6-T5 | |
 | `REPARENT-1` | reparent | `arm reparent` could not complete. | LNGHZN-S6-T5 | |
 | `SCOPE-DELETE-1` | scope-delete | `arm scope-delete` could not complete. | LNGHZN-S6-T5 | |
