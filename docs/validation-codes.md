@@ -579,6 +579,28 @@ arm doctor --format json
 
 ---
 
+### D12: Ops Worktree Lag
+
+**Check:** After a best-effort fetch of `origin/_armature` in the ops worktree (HEAD is not moved), reports whether this clone is behind that tracking ref.
+
+**Trigger:** The ops worktree HEAD is N>0 commits behind `origin/_armature` after a successful fetch, or the fetch itself failed.
+
+**Message:** `Ops worktree is N commit(s) behind origin/_armature` (behind, fetch succeeded) or `Could not fetch origin/_armature; ... (result may be stale)` (fetch failed).
+
+**Items:** The behind count as a decimal string when lag is known; fetch-error text is appended when the fetch failed.
+
+**Severity:** Error. A lagging ops worktree cannot confirm a fresh DAG. Warnings are ignored, so behind cannot stay a warning. Plain `arm doctor` exits 1. Fetch failure is also an error (the lag number may be stale). Missing ops worktree, or inability to count commits against `origin/_armature` (typically a missing tracking ref), skips OK as "not checked".
+
+**Context:** Every CLI command materializes from the local ops worktree. Doctor D12 is the lag probe, not a fetch-on-every-read. `arm sync` is merge detection onto `main`, not this catch-up. D12 is not part of `doctor --fix`.
+
+**Fix:**
+```bash
+git -C .armature fetch origin _armature
+git -C .armature rebase origin/_armature
+```
+
+---
+
 ## Integration with Commands
 
 ### validate command flags
@@ -635,7 +657,7 @@ arm doctor [flags]
 | D4 | Doctor | Error | Broken parent refs |
 | D5 | Doctor | Error | Dependency cycles |
 | D6 | Doctor | Warning | Uncited issues |
-| D12 | Doctor | Warning (lag) / Error (fetch failed) | Ops worktree behind origin/_armature |
+| D12 | Doctor | Error | Ops worktree behind origin/_armature, or fetch failed |
 
 ---
 
