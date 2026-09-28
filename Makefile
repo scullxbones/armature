@@ -1,6 +1,5 @@
 .PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
 
-# Variables
 GO ?= go
 PYTHON ?= python3
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -8,7 +7,6 @@ LDFLAGS ?= -X main.Version=$(VERSION)
 INSTALL_DIR ?= $(HOME)/.local/bin
 UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$')
 
-# Default target
 .DEFAULT_GOAL := help
 
 help:
@@ -164,11 +162,6 @@ build:
 	mkdir -p bin
 	GOFLAGS=-buildvcs=false CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o bin/arm ./cmd/armature
 
-# Platform list mirrors .goreleaser.yaml's builds.goos/goarch/ignore exactly:
-# linux+darwin get amd64/arm64; windows ships amd64 only (goreleaser ignores
-# windows/arm64). Build-only (no tests) so this stays fast enough for `check`;
-# it exists to catch platform-specific compile breakage like undefined
-# syscall constants on non-unix platforms before it ships silently broken.
 crosscompile:
 	@for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
 		os=$${platform%/*}; arch=$${platform#*/}; \

@@ -2237,8 +2237,6 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIM
 
 	var result map[string]any
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(claimOut)), &result), "output: %s", claimOut)
-	// CLAIMORD: same holder always replaces. An earlier same-worker impostor
-	// (even with a future op.Timestamp) does not beat a later published claim.
 	assert.NotContains(t, claimOut, "lost_claim_race",
 		"same holder later published commit replaces; a future-timestamp earlier impostor must not win (reverses #276 clock fold)")
 	assert.Contains(t, claimOut, "claimed_by")

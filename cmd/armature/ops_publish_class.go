@@ -7,8 +7,6 @@ import (
 	armerrors "github.com/scullxbones/armature/internal/errors"
 )
 
-// opsPublishClass is the classified reason a high-stakes _armature push
-// failed after the one FetchAndRebase retry.
 type opsPublishClass string
 
 const (

@@ -35,7 +35,6 @@ type Identity struct {
 	Source  string
 }
 
-// IdentityInput is the ResolveIdentity argument bag.
 type IdentityInput struct {
 	RepoPath            string
 	IssuesDir           string
@@ -46,7 +45,6 @@ type IdentityInput struct {
 	CloneGitConfigID    string
 }
 
-// InitWorkerInput is arm worker-init.
 type InitWorkerInput struct {
 	RepoPath  string
 	IssuesDir string

@@ -1,7 +1,4 @@
 #!/bin/bash
-# Fail make check when a _test.go file runs raw `git init` / `git init -b`
-# outside internal/gittest, or when a package execs git in tests without
-# TestMain isolation via gittest.IsolateGit / gittest.Main.
 set -euo pipefail
 
 REPO_ROOT="${1:-.}"
