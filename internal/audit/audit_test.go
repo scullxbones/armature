@@ -21,9 +21,9 @@ func writeLog(t *testing.T, opsDir, workerID string, entries []ops.Op) {
 	}
 }
 
-func readLogContents(t *testing.T, opsDir string) []string {
+func readLogContents(t *testing.T, opsDir string) []audit.Input {
 	t.Helper()
-	var logContents []string
+	var logs []audit.Input
 
 	entries, err := os.ReadDir(opsDir)
 	require.NoError(t, err)
@@ -33,15 +33,25 @@ func readLogContents(t *testing.T, opsDir string) []string {
 			logPath := filepath.Join(opsDir, entry.Name())
 			logOps, err := ops.ReadLog(logPath)
 			require.NoError(t, err)
+			var lines []string
 			for _, op := range logOps {
 				line, err := ops.MarshalOp(op)
 				require.NoError(t, err)
-				logContents = append(logContents, string(line))
+				lines = append(lines, string(line))
 			}
+			logs = append(logs, audit.Input{File: entry.Name(), Lines: lines})
 		}
 	}
 
-	return logContents
+	return logs
+}
+
+func mustLoad(t *testing.T, logs []audit.Input, f audit.Filter) []audit.Entry {
+	t.Helper()
+	entries, warnings, err := audit.Load(logs, f)
+	require.NoError(t, err)
+	require.Empty(t, warnings)
+	return entries
 }
 
 func TestLoad_AllOps(t *testing.T) {
@@ -59,9 +69,7 @@ func TestLoad_AllOps(t *testing.T) {
 			Payload: ops.Payload{Msg: "from b"}},
 	})
 
-	logContents := readLogContents(t, opsDir)
-	entries, err := audit.Load(logContents, audit.Filter{})
-	require.NoError(t, err)
+	entries := mustLoad(t, readLogContents(t, opsDir), audit.Filter{})
 	assert.Len(t, entries, 3)
 	assert.Equal(t, int64(100), entries[0].Timestamp)
 	assert.Equal(t, int64(150), entries[1].Timestamp)
@@ -81,9 +89,7 @@ func TestLoad_SortsTiesByWorkerID(t *testing.T) {
 			Payload: ops.Payload{Msg: "from a"}},
 	})
 
-	logContents := readLogContents(t, opsDir)
-	entries, err := audit.Load(logContents, audit.Filter{})
-	require.NoError(t, err)
+	entries := mustLoad(t, readLogContents(t, opsDir), audit.Filter{})
 	require.Len(t, entries, 2)
 	assert.Equal(t, "worker-a", entries[0].WorkerID)
 	assert.Equal(t, "worker-b", entries[1].WorkerID)
@@ -102,9 +108,7 @@ func TestLoad_FilterByIssue(t *testing.T) {
 			Payload: ops.Payload{Msg: "about T1"}},
 	})
 
-	logContents := readLogContents(t, opsDir)
-	entries, err := audit.Load(logContents, audit.Filter{IssueID: "T1"})
-	require.NoError(t, err)
+	entries := mustLoad(t, readLogContents(t, opsDir), audit.Filter{IssueID: "T1"})
 	assert.Len(t, entries, 2)
 	for _, e := range entries {
 		assert.Equal(t, "T1", e.TargetID)
@@ -124,9 +128,7 @@ func TestLoad_FilterByWorker(t *testing.T) {
 			Payload: ops.Payload{Msg: "from b"}},
 	})
 
-	logContents := readLogContents(t, opsDir)
-	entries, err := audit.Load(logContents, audit.Filter{WorkerID: "worker-b"})
-	require.NoError(t, err)
+	entries := mustLoad(t, readLogContents(t, opsDir), audit.Filter{WorkerID: "worker-b"})
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "worker-b", entries[0].WorkerID)
 }
@@ -144,10 +146,8 @@ func TestLoad_FilterBySince(t *testing.T) {
 			Payload: ops.Payload{Msg: "newer"}},
 	})
 
-	logContents := readLogContents(t, opsDir)
 	since := time.Unix(200, 0)
-	entries, err := audit.Load(logContents, audit.Filter{Since: since})
-	require.NoError(t, err)
+	entries := mustLoad(t, readLogContents(t, opsDir), audit.Filter{Since: since})
 	assert.Len(t, entries, 2)
 	assert.Equal(t, int64(200), entries[0].Timestamp)
 	assert.Equal(t, int64(300), entries[1].Timestamp)
@@ -167,9 +167,7 @@ func TestLoad_LostRace(t *testing.T) {
 			Payload: ops.Payload{TTL: 60}},
 	})
 
-	logContents := readLogContents(t, opsDir)
-	entries, err := audit.Load(logContents, audit.Filter{})
-	require.NoError(t, err)
+	entries := mustLoad(t, readLogContents(t, opsDir), audit.Filter{})
 	assert.Len(t, entries, 2)
 
 	var aEntry, bEntry audit.Entry
@@ -202,8 +200,7 @@ func TestLoad_LostRaceLoseThenWin_REQ_CLAIMTTL(t *testing.T) {
 		require.NoError(t, err)
 		logContents = append(logContents, string(line))
 	}
-	entries, err := audit.Load(logContents, audit.Filter{})
-	require.NoError(t, err)
+	entries := mustLoad(t, []audit.Input{{File: "claims.log", Lines: logContents}}, audit.Filter{})
 	require.Len(t, entries, 3)
 	byToken := map[string]audit.Entry{}
 	for _, e := range entries {
@@ -216,14 +213,32 @@ func TestLoad_LostRaceLoseThenWin_REQ_CLAIMTTL(t *testing.T) {
 
 func TestLoad_EmptyDir(t *testing.T) {
 	t.Parallel()
-	entries, err := audit.Load([]string{}, audit.Filter{})
-	require.NoError(t, err)
+	entries := mustLoad(t, []audit.Input{}, audit.Filter{})
 	assert.Len(t, entries, 0)
 }
 
 func TestLoad_NonExistentDir(t *testing.T) {
 	t.Parallel()
-	entries, err := audit.Load([]string{}, audit.Filter{})
-	require.NoError(t, err)
+	entries := mustLoad(t, []audit.Input{}, audit.Filter{})
 	assert.Len(t, entries, 0)
+}
+
+func TestLoad_CorruptLineWarning_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	valid, err := ops.MarshalOp(ops.Op{
+		Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "worker-a",
+		Payload: ops.Payload{Msg: "ok"},
+	})
+	require.NoError(t, err)
+
+	entries, warnings, err := audit.Load([]audit.Input{{
+		File:  "worker-a.log",
+		Lines: []string{string(valid), "this is not json", ""},
+	}}, audit.Filter{})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "T1", entries[0].TargetID)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "worker-a.log")
+	assert.Contains(t, warnings[0], ":2:")
 }

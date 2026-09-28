@@ -443,7 +443,7 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []
 	}
 
 	for id, issue := range issues {
-		if len(issue.SourceLinks) == 0 && len(issue.CitationAcceptances) == 0 {
+		if !traceability.CitationSatisfied(len(issue.SourceLinks), len(issue.CitationAcceptances)) {
 			findings = append(findings, Finding{
 				Severity: "error", Rule: "E7",
 				Message:  fmt.Sprintf("uncited node: %s", id),

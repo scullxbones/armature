@@ -178,6 +178,40 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	}
 }
 
+func TestLifecycleSync_UsesInjectedClock_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	registry := &MockRegistry{
+		providers: map[string]Provider{
+			"mock": &MockProvider{data: []byte("clocked content")},
+		},
+	}
+	lc := newLifecycleWithRegistry(dir, registry)
+	fixed := time.Date(2026, 9, 28, 17, 0, 0, 0, time.UTC)
+	lc.now = func() int64 { return fixed.Unix() }
+
+	if _, err := lc.Register(SourceEntry{
+		ID: "test-clock", URL: "https://example.com/doc", Title: "Clock Doc", ProviderType: "mock",
+	}); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	result := lc.syncOneFromDisk(context.Background(), "test-clock")
+	if result.Error != nil {
+		t.Fatalf("Sync failed: %v", result.Error)
+	}
+	if !result.LastSynced.Equal(fixed) {
+		t.Errorf("result LastSynced: got %v, want %v", result.LastSynced, fixed)
+	}
+	retrieved, err := lc.Get("test-clock")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if !retrieved.LastSynced.Equal(fixed) {
+		t.Errorf("entry LastSynced: got %v, want %v", retrieved.LastSynced, fixed)
+	}
+}
+
 func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

@@ -1,6 +1,7 @@
 package sync_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -67,4 +68,26 @@ func TestSyncDetectMergesChecksAllIssues(t *testing.T) {
 	ids, err := armsync.DetectMerges([]materialize.Issue{issue}, "main", mc)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"T-001"}, ids)
+}
+
+func TestDetectMerges_PartialGitFailure_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	merged := materialize.Issue{
+		ID: "T-MERGED", Status: "done", Branch: "feature/merged-work", Type: "task",
+		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
+	}
+	broken := materialize.Issue{
+		ID: "T-BROKEN", Status: "done", Branch: "feature/broken-check", Type: "task",
+		Children: []string{}, BlockedBy: []string{}, Blocks: []string{},
+	}
+
+	mc := NewFakeMergeCheckerWithErrors(
+		map[string]bool{"feature/merged-work": true},
+		map[string]error{"feature/broken-check": errors.New("git cat-file failed")},
+	)
+
+	ids, err := armsync.DetectMerges([]materialize.Issue{broken, merged}, "main", mc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "feature/broken-check")
+	assert.Equal(t, []string{"T-MERGED"}, ids)
 }

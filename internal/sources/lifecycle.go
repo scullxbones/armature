@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/scullxbones/armature/internal/clock"
 )
 
 type Lifecycle struct {
@@ -12,6 +14,7 @@ type Lifecycle struct {
 	provider      ProviderRegistry
 	fileCommitter FileCommitter
 	worktreePath  string
+	now           clock.Clock
 }
 
 type ProviderRegistry interface {
@@ -43,6 +46,7 @@ func newLifecycleWithRegistry(manifestPath string, registry ProviderRegistry) *L
 	return &Lifecycle{
 		manifestPath: manifestPath,
 		provider:     registry,
+		now:          clock.System,
 	}
 }
 
@@ -55,6 +59,7 @@ func NewLifecycleWithCommitter(manifestPath string, registry ProviderRegistry, w
 		provider:      registry,
 		fileCommitter: fc,
 		worktreePath:  worktreePath,
+		now:           clock.System,
 	}
 }
 
@@ -126,7 +131,7 @@ func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string
 	}
 
 	entry.Fingerprint = fp
-	entry.LastSynced = time.Now().UTC() //nolint:forbidigo // sync records wall-clock time of update
+	entry.LastSynced = l.syncedAt()
 	entry.SyncFailed = false
 	manifest.Upsert(*entry)
 
@@ -136,6 +141,14 @@ func (l *Lifecycle) syncEntry(ctx context.Context, manifest *Manifest, id string
 		ProviderType: providerType,
 		LastSynced:   entry.LastSynced,
 	}
+}
+
+func (l *Lifecycle) syncedAt() time.Time {
+	now := l.now
+	if now == nil {
+		now = clock.System
+	}
+	return time.Unix(now(), 0).UTC()
 }
 
 // SyncAll synchronizes all sources in the manifest.

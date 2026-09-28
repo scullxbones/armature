@@ -94,8 +94,9 @@ func TestRacingClaimsSameOwnerEveryCaller_REQ_CLAIMTTL(t *testing.T) {
 		require.NoError(t, err)
 		lines = append(lines, string(b))
 	}
-	entries, err := audit.Load(lines, audit.Filter{})
+	entries, warnings, err := audit.Load([]audit.Input{{File: "workers.log", Lines: lines}}, audit.Filter{})
 	require.NoError(t, err)
+	require.Empty(t, warnings)
 	for _, e := range entries {
 		if e.Type != ops.OpClaim {
 			continue
