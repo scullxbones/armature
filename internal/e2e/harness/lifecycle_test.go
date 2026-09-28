@@ -229,12 +229,19 @@ func gitGetCurrentBranch(t *testing.T, dir string) string {
 
 func gitConfigValue(t *testing.T, dir, key string) string {
 	t.Helper()
-
-	cmd := exec.CommandContext(context.Background(), "git", "config", "--local", "--get", key)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	require.NoError(t, err, "read git config %s", key)
-	return strings.TrimSpace(string(out))
+	for _, args := range [][]string{
+		{"config", "--worktree", "--get", key},
+		{"config", "--local", "--get", key},
+	} {
+		cmd := exec.CommandContext(context.Background(), "git", args...)
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		if err == nil {
+			return strings.TrimSpace(string(out))
+		}
+	}
+	require.Fail(t, "read git config "+key)
+	return ""
 }
 
 func gitRevision(t *testing.T, dir string) string {

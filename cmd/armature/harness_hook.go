@@ -211,7 +211,11 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 		return
 	}
 
-	ownerID := slottedWorkerID(workerID)
+	ownerID, slotErr := slottedWorkerIDChecked(workerID)
+	if slotErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: invalid ARM_LOG_SLOT, skipping heartbeat: %v\n", slotErr)
+		return
+	}
 
 	lastHeartbeatTime := readHeartbeatRateLimitState(ownerID.String(), issueID)
 

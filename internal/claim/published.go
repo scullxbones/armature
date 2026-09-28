@@ -11,6 +11,11 @@ const (
 	ErrNotClaimOwner     OwnerError = "NOT-CLAIM-OWNER"
 	ErrClaimNotPublished OwnerError = "CLAIM-NOT-PUBLISHED"
 	ErrLostClaimRace     OwnerError = "lost_claim_race"
+	ErrLogSlotCollision  OwnerError = "LOG-SLOT-COLLISION"
+	ErrWorkerIDInvalid   OwnerError = "WORKER-ID-INVALID"
+	ErrLogSlotInvalid    OwnerError = "LOG-SLOT-INVALID"
+	ErrWorkerIDInUse     OwnerError = "WORKER-ID-IN-USE"
+	ErrWorkerIDMissing   OwnerError = "WORKER-ID-MISSING"
 )
 
 // OwnerPublished folds claim-ttl Owner over ops that are already the published prefix.

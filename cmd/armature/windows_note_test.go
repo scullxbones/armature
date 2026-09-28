@@ -21,8 +21,8 @@ func TestWindowsUnsupportedNoteInReadme_REQ_CLAIMORD_W20(t *testing.T) {
 	assert.Contains(t, body, "filelock_windows.go")
 	assert.Contains(t, body, "unvalidated")
 	assert.NotContains(t, body, "Windows would need `LockFileEx`")
-	assert.Contains(t, body, "does not reject those IDs")
-	assert.NotContains(t, body, "Validation rejects those")
+	assert.Contains(t, body, "Validation rejects those")
+	assert.NotContains(t, body, "does not reject those IDs")
 }
 
 func TestWindowsUnsupportedNoteInConcepts_REQ_CLAIMORD_W20(t *testing.T) {
@@ -30,10 +30,9 @@ func TestWindowsUnsupportedNoteInConcepts_REQ_CLAIMORD_W20(t *testing.T) {
 	body := readRepoDoc(t, filepath.Join("docs", "concepts.md"))
 	assert.Contains(t, body, "Windows is not supported")
 	assert.Contains(t, body, "README.md#windows-is-not-supported")
-	assert.Contains(t, body, "once per clone")
-	assert.Contains(t, body, "git config --local")
-	assert.Contains(t, body, "clone-scoped")
-	assert.NotContains(t, body, "once per clone or per worktree")
+	assert.Contains(t, body, "once per worktree")
+	assert.Contains(t, body, "git config --worktree")
+	assert.NotContains(t, body, "clone-scoped")
 }
 
 func readRepoDoc(t *testing.T, rel string) string {

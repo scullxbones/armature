@@ -37,6 +37,45 @@ func leaseStatusAllowsOwnerGate(status string) bool {
 	return status == ops.StatusClaimed || status == ops.StatusInProgress
 }
 
+func wrapHeartbeatNotClaimOwner(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
+		return armerrors.Wrap("HEARTBEAT-1", claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
+	}
+	return err
+}
+
+func wrapTransitionNotClaimOwner(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
+		return armerrors.Wrap(codeTransition1, claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
+	}
+	return err
+}
+
+func wrapRenderContextNotClaimOwner(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
+		return armerrors.Wrap(codeRenderContext1, claimpkg.ErrNotClaimOwner.Error(), []string{
+			"arm claim --worktree",
+			"arm show",
+		}, err)
+	}
+	return err
+}
+
 func enforceRenderContextOwner(ctx *config.Context, issueID, workerID string) error {
 	located, err := locatePublishedOps(ctx)
 	if err != nil {
@@ -67,11 +106,8 @@ func mapHeartbeatError(err error) error {
 	if errors.As(err, &cf) {
 		return cf
 	}
-	if errors.Is(err, claimpkg.ErrNotClaimOwner) {
-		return armerrors.Wrap("HEARTBEAT-1", claimpkg.ErrNotClaimOwner.Error(), []string{
-			"arm claim --worktree",
-			"arm show",
-		}, err)
+	if wrapped := wrapHeartbeatNotClaimOwner(err); wrapped != err {
+		return wrapped
 	}
 	if isLocalArmatureTipPublishError(err) {
 		return wrapOpsPublishFailure("HEARTBEAT-1", err)
