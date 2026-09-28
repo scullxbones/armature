@@ -648,7 +648,7 @@ func TestLinkedWorktreeClaimUsesInvocationIdentity_REQ_CLAIMORD_W21(t *testing.T
 	}
 }
 
-func TestInvalidLogSlotSkipsHarnessHeartbeat_REQ_CLAIMORD_W21(t *testing.T) { //nolint:paralleltest
+func TestInvalidLogSlotSkipsHarnessHeartbeat_REQ_CLAIMORD_W21(t *testing.T) {
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
