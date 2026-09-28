@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,27 @@ import (
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
 )
+
+// ErrFromCommitMissing is returned when LocateInput.FromCommit is set but is
+// not an ancestor of HEAD. Callers must cold-replay rather than treating the
+// whole walk as incremental on cached snapshots.
+var ErrFromCommitMissing = errors.New("from-commit is not in HEAD history")
+
+type fromCommitMissingError struct {
+	SHA string
+}
+
+func (e *fromCommitMissingError) Error() string {
+	return fmt.Sprintf("from-commit %s is not in HEAD history", e.SHA)
+}
+
+func (e *fromCommitMissingError) Unwrap() error { return ErrFromCommitMissing }
+
+// IsFromCommitMissing reports whether err means the incremental checkpoint SHA
+// is absent from HEAD (rebase/amend/orphan).
+func IsFromCommitMissing(err error) bool {
+	return errors.Is(err, ErrFromCommitMissing)
+}
 
 // DefaultPublishedRef is the tracking ref every clone agrees on after fetch.
 const DefaultPublishedRef = "origin/_armature"
@@ -97,9 +119,29 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 		return nil, err
 	}
 	cutover := resolveCutover(gc, in)
+	from := strings.TrimSpace(in.FromCommit)
+	pastFrom := from == ""
+	if from != "" {
+		found := false
+		for _, sha := range shas {
+			if sha == from {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, &fromCommitMissingError{SHA: from}
+		}
+	}
 	prefs := prefixes(in)
 	var located []LocatedOp
 	for i, sha := range shas {
+		if !pastFrom {
+			if sha == from {
+				pastFrom = true
+			}
+			continue
+		}
 		committer, ctErr := gc.CommitterUnix(sha)
 		if ctErr != nil {
 			return nil, ctErr

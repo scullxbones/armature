@@ -1,3 +1,4 @@
+// Package worker tests isolate GIT_* environment overrides.
 package worker
 
 import (

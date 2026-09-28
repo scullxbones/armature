@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
@@ -475,10 +474,7 @@ func mapTransitionError(err error) error {
 	case strings.Contains(msg, "invalid status"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to <valid-status>", "arm show"}, err)
 	case strings.Contains(msg, "NOT-CLAIM-OWNER"):
-		return armerrors.Wrap(codeTransition1, claimpkg.ErrNotClaimOwner.Error(), []string{
-			"arm claim --worktree",
-			"arm show",
-		}, err)
+		return wrapTransitionNotClaimOwner(err)
 	case strings.Contains(msg, "cannot transition to done"),
 		strings.Contains(msg, "Use --force"):
 		return armerrors.Wrap(codeTransition1, msg, []string{

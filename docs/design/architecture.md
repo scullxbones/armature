@@ -25,7 +25,7 @@ Invariants (git-native, append-only, merge-conflict-free by construction, etc.) 
 
 ### Supported Platforms and Agentic Tools
 
-Platform matrix: linux/macOS/Windows × amd64/arm64. Compatible with Claude Code, Gemini CLI, Cursor, Windsurf, Kiro, and any tool that can invoke a subprocess and parse JSON.
+Platform matrix: linux/macOS × amd64/arm64 (Windows is **not supported**; goreleaser may still cross-compile). Compatible with Claude Code, Gemini CLI, Cursor, Windsurf, Kiro, and any tool that can invoke a subprocess and parse JSON.
 
 ### Terminology
 
@@ -1804,7 +1804,7 @@ Single Go binary, `CGO_ENABLED=0`. Static compilation, zero runtime dependencies
 |---|---|
 | Linux | amd64, arm64 |
 | macOS | amd64, arm64 |
-| Windows | amd64, arm64 |
+| Windows | *stale — not a supported OS; see README “Windows is not supported”* |
 
 Binary size estimate: 8–12MB (4–6MB compressed).
 

@@ -32,20 +32,21 @@ cat .armature/state/checkpoint.json
 
 ## 2. Worker Identity
 
-**Concept:** Each worker (human, AI agent, or automation) has a unique identity registered once per clone. This identity is used to break claim races and sign all operations.
+**Concept:** Each worker (human, AI agent, or automation) has a unique identity registered once per worktree. This identity is used to break claim races and sign all operations.
 
-**Pattern:** Worker identity is stable within a clone and used to sign all ops. Multi-worker coordination relies on the worker ID to detect conflicts.
+**Pattern:** Worker identity is stable within a worktree and used to sign all ops. Multi-worker coordination relies on the worker ID to detect conflicts.
 
 **How it works:**
-- When you run `arm worker-init` (once per clone), your git config is scanned for `user.name` and `user.email`
-- These are hashed to create a unique, deterministic worker ID
+- When you run `arm worker-init` (once per worktree), Armature writes a random UUID to git config `armature.worker-id` with `git config --worktree` after enabling `extensions.worktreeConfig`. Commands resolve identity from the invoking checkout, not the parent clone path, so a linked worktree keeps its own ID.
 - All ops written by that worker carry the worker ID in the `worker_id` field
-- Claim races are resolved by timestamp; ties are broken lexicographically by worker ID
-- The worker ID is stable — running `arm worker-init --check` in the same clone always yields the same ID
+- After cutover, published claim races are decided by `_armature` commit order, not worker clocks or lexicographic IDs
+- The worker ID is stable for that worktree — `arm worker-init --check` reprints it
+
+**Platforms:** Linux and macOS only. See README [Windows is not supported](../README.md#windows-is-not-supported).
 
 **Command examples:**
 ```bash
-# Register yourself as a worker (run once per clone)
+# Register yourself as a worker (run once per worktree)
 arm worker-init
 
 # Check your worker ID

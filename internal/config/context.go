@@ -14,11 +14,13 @@ const StateDirName = ".armature"
 
 // Context holds resolved paths and config for the current armature session.
 type Context struct {
-	RepoPath     string
-	IssuesDir    string
-	WorktreePath string
-	StateDir     string
-	Config       Config
+	RepoPath       string
+	IssuesDir      string
+	WorktreePath   string
+	StateDir       string
+	Config         Config
+	WorkerIDFlag   string
+	InvocationPath string
 }
 
 type repoProbeResult struct {
@@ -110,9 +112,10 @@ func ResolveLayout(repoPath string) (*Context, error) {
 		return nil, fmt.Errorf("armature.ops-worktree-path must be set")
 	}
 	return &Context{
-		RepoPath:     probeResult.RepoPath,
-		IssuesDir:    resolveIssuesDir(probeResult.WorktreePath),
-		WorktreePath: probeResult.WorktreePath,
+		RepoPath:       probeResult.RepoPath,
+		IssuesDir:      resolveIssuesDir(probeResult.WorktreePath),
+		WorktreePath:   probeResult.WorktreePath,
+		InvocationPath: repoPath,
 	}, nil
 }
 

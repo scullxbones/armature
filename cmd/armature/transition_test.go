@@ -153,8 +153,19 @@ func TestOverlappingIdenticalTransitionsAppendOnce_REQ_AOC_S4_T1(t *testing.T) {
 		})
 	}
 	wg.Wait()
+	ok, collision := 0, 0
 	for i, err := range errs {
-		require.NoError(t, err, "overlapping transition %d must exit 0", i)
+		if err == nil {
+			ok++
+			continue
+		}
+		if strings.Contains(err.Error(), "LOG-SLOT-COLLISION") {
+			collision++
+			continue
+		}
+		require.NoError(t, err, "overlapping transition %d: unexpected error", i)
 	}
+	assert.Equal(t, 1, ok, "exactly one overlapping transition must append")
+	assert.Equal(t, 1, collision, "the other writer must fail LOG-SLOT-COLLISION (common-dir flock)")
 	assert.Len(t, transitionOpsForIssue(t, repo, issueID), 1, "overlapping identical retries must append once")
 }
