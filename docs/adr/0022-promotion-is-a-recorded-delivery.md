@@ -53,31 +53,47 @@ Failure `{error:{code,cause,next_actions,exit_code}}` on stdout.
    when both objects exist, the base is an ancestor of the tip, and the
    diff is non-empty. A readable worktree HEAD that disagrees refuses.
    Missing objects refuse, do not mark `done`, and do not recommend
-   `delivery record` again.
+   `delivery record` again. A missing or unreadable worktree does not
+   relax the record. The tip must sit on recorded branch or claim
+   provenance for that issue: it is the recorded claimed-branch tip, an
+   ancestor of that tip, or a descendant of the recorded claim-time HEAD.
+   Any other non-empty ancestor range refuses. No recorded branch or
+   claim provenance fails closed: provenance-free recovery is the human
+   override path, not another `delivery record` of an unrelated range.
 
 3. **On the target.** Walk the first-parent history of the integration
    branch after the base. The matched commit is the earliest that qualifies:
-   the tip is an ancestor, or the stable patch-id of `diff base tip` equals
-   that commit's diff, or every path changed in the range has the same tree
-   entry there as at the tip (mode and object ID, not blob ID alone). A
-   mode-only change such as `100644` to `100755` keeps the blob ID and must
-   still fail the predicate until that tree entry lands. An empty diff
-   matches nothing. Containment is path-literal. A rename still promotes
-   when the landing is an ancestor or an equal combined diff.
+   the tip is an ancestor; or the stable patch-id of `diff base tip` equals
+   that commit's diff **and** a second check then proves either byte-exact
+   `diff base tip` equality with that commit's patch or resulting-tree
+   equality of the delivery paths (mode and object ID); or every path
+   changed in the range has the same tree entry there as at the tip
+   (mode and object ID, not blob ID alone). A patch-id hit alone is not
+   proof: `git patch-id` ignores whitespace. A mode-only change such as
+   `100644` to `100755` keeps the blob ID and must still fail the
+   predicate until that tree entry lands. An empty diff matches nothing.
+   Containment is path-literal. A rename still promotes when the landing
+   is an ancestor or an equal combined diff.
 
 4. **Assessment.** The append also requires an attestation whose `base_sha`
-   and `head_sha` equal the recorded delivery, or an ADR-0016 Release
-   Override (`arm dag override-release`) on the issue. The override needs a
-   controlling terminal, an interactive type-the-id, and a recorded reason;
-   the result is never green. An ordinary `arm decision` (including topic
+   and `head_sha` equal the recorded delivery, or a post-delivery ADR-0016
+   Release Override bound to those same `base` and `tip` SHAs. Today's
+   `arm dag override-release` records only `to=verified`,
+   `skipped_validate_gate`, and a rationale
+   (`cmd/armature/dag_override_release.go`); that plan-time op does not
+   waive the promotion assessment. An unrelated planning override never
+   unlocks promotion. The post-delivery override still needs a controlling
+   terminal, an interactive type-the-id, and a recorded reason; the result
+   is never green. An ordinary `arm decision` (including topic
    `missing-assessment` / choice `waive`) does not unlock promotion. One
-   matching attestation or override is enough. The rating is not read. The
-   git check has no waiver. `--force` remains the hook-log override only.
+   matching attestation or post-delivery override is enough. The rating
+   is not read. The git check has no waiver. `--force` remains the
+   hook-log override only.
 
    This is a presence-only narrowing of ADR-0005 and ADR-0008: delivery
-   waits on a matching assessment record (or the Release Override), not on
-   the review rating. Hooks still neither initiate review nor gate on
-   results.
+   waits on a matching assessment record (or the post-delivery Release
+   Override bound to the recorded SHAs), not on the review rating. Hooks
+   still neither initiate review nor gate on results.
 
 5. **Writers.** One function. `arm sync` runs it for every `done` leaf.
    `arm merged --issue` runs it for one. Both append only on a pass, and the
@@ -120,4 +136,10 @@ Failure `{error:{code,cause,next_actions,exit_code}}` on stdout.
   only contained inside a larger squash stay `done`.
 - `LNGHZN` is a derived rollup. An open child returns it to the status it
   held before rollup until that child is `merged`.
-- Follow-up is `LNGHZN-S11`. This ADR is the source.
+- Follow-up is `LNGHZN-S11`. This ADR is the source. T1 (record the
+  delivery) binds a manual record to branch/claim provenance and fails
+  closed without it. T2 (promote one issue) verifies exact content after
+  a patch-id hit and requires a post-delivery override whose payload
+  names the recorded `base`/`tip`; the existing plan-time
+  `override-release` payload cannot express that. Do not invent new
+  issue IDs.

@@ -1,6 +1,6 @@
 # Admit harness-recorded execution evidence into semantic review, upgrade-only
 
-Status: accepted — amends ADR-0005 and the 2026-06-27 semantic conformance review design (Non-Goals: "do not collect general tool activity… or harness activity logs"; Architecture: "hooks… neither collect activity for nor initiate conformance review"); amended by ADR-0022 (a matching assessment attestation, or an ADR-0016 Release Override, is required before the merged append; hooks still never initiate review and never gate on the rating)
+Status: accepted — amends ADR-0005 and the 2026-06-27 semantic conformance review design (Non-Goals: "do not collect general tool activity… or harness activity logs"; Architecture: "hooks… neither collect activity for nor initiate conformance review"); amended by ADR-0022 (a matching assessment attestation, or a post-delivery ADR-0016 Release Override bound to the recorded delivery SHAs, is required before the merged append; a plan-time override does not waive promotion; hooks still never initiate review and never gate on the rating)
 
 ## Principles touched
 
