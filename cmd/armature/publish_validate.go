@@ -79,7 +79,7 @@ func contextWithPublishedOps(ctx *config.Context, gc *adapters.Client) (*config.
 			}
 		}
 	}
-	if src := filepath.Join(ctx.IssuesDir, "sources"); dirExists(src) {
+	if src := filepath.Join(ctx.IssuesDir, "sources"); repoPathReachable(src) {
 		tmpSrc := filepath.Join(tmp, "sources")
 		if err := os.MkdirAll(tmpSrc, 0o750); err != nil {
 			cleanup()
@@ -252,9 +252,4 @@ func copyDirFiles(src, dest string) error {
 		}
 	}
 	return nil
-}
-
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }

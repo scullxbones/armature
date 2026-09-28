@@ -18,6 +18,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func foldWorkerStatusFromOwners(workerID string, workerOps, allOps []ops.Op, defaultTTL config.TTLMinutes, now int64) WorkerStatus {
+	return foldWorkerStatusFromLeases(workerID, workerOps, claim.Owners(allOps), defaultTTL, now)
+}
+
 func TestWorkersEmitsEnvelopeNotJSONL_REQ_AOC_S2_T4(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
@@ -66,7 +70,7 @@ func TestIdleWindowAtMaxAcceptedTTL_REQ_NOCOMMENTS(t *testing.T) {
 	allOps := []ops.Op{
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: now - 1, WorkerID: "worker-a"},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, config.TTLMinutes(maxMinutes), now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, config.TTLMinutes(maxMinutes), now)
 	assert.Equal(t, "idle", status.Status)
 	idleWindowSeconds := 2 * maxMinutes * 60
 	assert.Positive(t, idleWindowSeconds)
@@ -86,7 +90,7 @@ func TestFoldWorkerStatusFromClaimOwnerActivity_ForeignTransitionDoesNotExtendLe
 		{Type: ops.OpTransition, TargetID: "T-001", Timestamp: 9800, WorkerID: "worker-b",
 			Payload: ops.Payload{To: "in-progress"}},
 	}
-	status := foldWorkerStatusFromClaimOwnerActivity("worker-a", allOps, allOps, 60, now)
+	status := foldWorkerStatusFromOwners("worker-a", allOps, allOps, 60, now)
 	assert.Equal(t, "stale", status.Status)
 	assert.Empty(t, status.ActiveIssue)
 }
@@ -167,8 +171,8 @@ func TestFoldWorkerStatus_ExactSlotNotSibling_REQ_CLAIMTTL(t *testing.T) {
 			Payload: ops.Payload{TTL: 60}},
 		{Type: ops.OpNote, TargetID: "T-002", Timestamp: 910, WorkerID: "worker-a~slot-b"},
 	}
-	statusA := foldWorkerStatusFromClaimOwnerActivity("worker-a~slot-a", allOps[:1], allOps, 60, now)
-	statusB := foldWorkerStatusFromClaimOwnerActivity("worker-a~slot-b", allOps[1:], allOps, 60, now)
+	statusA := foldWorkerStatusFromOwners("worker-a~slot-a", allOps[:1], allOps, 60, now)
+	statusB := foldWorkerStatusFromOwners("worker-a~slot-b", allOps[1:], allOps, 60, now)
 	assert.Equal(t, "active", statusA.Status)
 	assert.Equal(t, "T-001", statusA.ActiveIssue)
 	assert.NotEqual(t, "active", statusB.Status)

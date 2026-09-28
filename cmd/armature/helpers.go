@@ -518,12 +518,8 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 }
 
 func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
-	_, err := appendHighStakesOpIf(state, logPath, op, nil)
+	_, err := appendHighStakesOpIfAfter(state, logPath, op, nil, nil)
 	return err
-}
-
-func appendHighStakesOpIf(state *executionState, logPath string, op ops.Op, proceed func() (bool, error)) (bool, error) {
-	return appendHighStakesOpIfAfter(state, logPath, op, proceed, nil)
 }
 
 func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op, proceed func() (bool, error), afterIntegrate func() error) (bool, error) {
@@ -546,10 +542,6 @@ func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op,
 		return wrote, err
 	}
 	return wrote, pushOpsBranchAfter(ctx, opsPublishGit(ctx, gc), tracker, afterIntegrate, true)
-}
-
-func publishLocalArmatureTip(state *executionState) error {
-	return publishLocalArmatureTipAfter(state, nil)
 }
 
 func publishLocalArmatureTipAfter(state *executionState, afterIntegrate func() error) error {
@@ -627,10 +619,6 @@ func publishArmatureSequence(gc opsBranchPublisher, afterIntegrate func() error)
 	return gc.Push("_armature")
 }
 
-func pushOpsBranch(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker) error {
-	return pushOpsBranchAfter(ctx, gc, tracker, nil, true)
-}
-
 func pushOpsBranchAfter(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker, afterIntegrate func() error, skipValidate bool) error {
 	if !skipValidate && ctx != nil {
 		if err := refusePublishedGraph(ctx, gc); err != nil {
@@ -649,7 +637,7 @@ func pushOpsBranchAfter(ctx *config.Context, gc *adapters.Client, tracker ops.Pe
 }
 
 func pushOpsBranchAlwaysResetTracker(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker) {
-	if err := pushOpsBranch(ctx, gc, tracker); err != nil && tracker != nil {
+	if err := pushOpsBranchAfter(ctx, gc, tracker, nil, true); err != nil && tracker != nil {
 		swallowErr(tracker.Reset())
 	}
 }
