@@ -188,7 +188,7 @@ func TestLifecycleSync_UsesInjectedClock_REQ_NOCOMMENTS(t *testing.T) {
 	}
 	lc := newLifecycleWithRegistry(dir, registry)
 	fixed := time.Date(2026, 9, 28, 17, 0, 0, 0, time.UTC)
-	lc.now = func() int64 { return fixed.Unix() }
+	lc.now = fixed.Unix
 
 	if _, err := lc.Register(SourceEntry{
 		ID: "test-clock", URL: "https://example.com/doc", Title: "Clock Doc", ProviderType: "mock",
