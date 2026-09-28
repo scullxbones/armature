@@ -1591,7 +1591,7 @@ func productionFileCallsOpsAppend(t *testing.T, path string) bool {
 	}
 	src, err := os.ReadFile(path)
 	require.NoError(t, err, path)
-	for _, name := range []string{"AppendOp", "AppendOps", "AppendAndCommit"} {
+	for _, name := range []string{"AppendOp", "AppendOps", "AppendAndCommit", "AppendOpsAndCommit"} {
 		if strings.Contains(string(src), opsAlias+"."+name) {
 			return true
 		}

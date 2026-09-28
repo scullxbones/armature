@@ -316,8 +316,10 @@ func newDecomposeRevertCmd() *cobra.Command {
 This command cancels issues that were created by a plan application.
 It validates that no new children exist under the planned issues before removal:
 if any issue not in the plan currently has a planned issue as its parent, revert
-is refused and nothing is written. Cancellation ops are locked, committed in the
-ops worktree, and published like other high-stakes writes.`,
+is refused and nothing is written. The same foreign-child check runs again after
+integrating remote ops on a publish retry. Cancellation ops are locked, committed
+as one batch in the ops worktree, and published like other high-stakes writes.
+A rerun that finds nothing left to cancel still publishes the retained local tip.`,
 		Example: `  # Revert a plan application
   $ arm dag revert --plan plan.json
 
@@ -362,7 +364,7 @@ ops worktree, and published like other high-stakes writes.`,
 			if err != nil {
 				return err
 			}
-			if err := appendHighStakesOpsExemptIntroduction(mustState(cmd), logPath, proposed); err != nil {
+			if err := appendHighStakesOpsExemptIntroduction(mustState(cmd), logPath, proposed, recheckForeignChildrenAfterIntegrate(appCtx, plan)); err != nil {
 				return err
 			}
 

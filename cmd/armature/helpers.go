@@ -15,6 +15,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/decompose"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -532,29 +533,39 @@ const introductionExemptionDagRevert = "dag-revert-cancel-skips-refuseIntroducti
 // appendHighStakesOpsExemptIntroduction locks, commits, and publishes like
 // appendHighStakesOpIfAfter, but does not call refuseIntroduction. Only
 // dag revert cancel transitions may use this; see introductionExemptionDagRevert.
-func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string, proposed []ops.Op) error {
+func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string, proposed []ops.Op, afterIntegrate func() error) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
-	if len(proposed) == 0 {
-		return nil
-	}
 	_ = introductionExemptionDagRevert
-	ctx := state.ctx
-	tracker := state.tracker
-	gc := worktreeGit(ctx)
-	err := withWorkerLogLock(ctx, logPath, func() error {
-		for _, op := range proposed {
-			if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
-				return err
-			}
+	if len(proposed) > 0 {
+		ctx := state.ctx
+		gc := worktreeGit(ctx)
+		err := withWorkerLogLock(ctx, logPath, func() error {
+			return ops.AppendOpsAndCommit(logPath, ctx.WorktreePath, proposed, gc)
+		})
+		if err != nil {
+			return err
 		}
-		return nil
-	})
-	if err != nil {
-		return err
 	}
-	return pushOpsBranchAfter(ctx, opsPublishGit(ctx, gc), tracker, nil, true)
+	return publishLocalArmatureTipAfter(state, afterIntegrate)
+}
+
+func recheckForeignChildrenAfterIntegrate(ctx *config.Context, plan *decompose.Plan) func() error {
+	if ctx == nil || plan == nil {
+		return nil
+	}
+	return func() error {
+		snap, err := newSnapshotStore(ctx).Load(context.Background())
+		if err != nil {
+			return err
+		}
+		state := snap.State
+		if state == nil {
+			state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
+		}
+		return decompose.CheckForeignChildren(plan, state)
+	}
 }
 
 func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op, proceed func() (bool, error), afterIntegrate func() error) (bool, error) {

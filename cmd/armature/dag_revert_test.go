@@ -63,6 +63,106 @@ func TestDagRevertPublishFailureKeepsLocalCommit_REQ_DECOMPOSE(t *testing.T) {
 	require.True(t, localOpsContainCancel(t, repo, "REV-PUB-FAIL"))
 }
 
+func TestDagRevertRetryPublishesRetainedCommit_REQ_DECOMPOSE(t *testing.T) {
+	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+
+	planFile := writePlanIssue(t, "REV-RETRY-PUB")
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
+	require.NoError(t, err)
+	breakOrigin(t, repo)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"dag", "revert", "--repo", repo, "--plan", planFile, "--format", "agent")
+	assert.Equal(t, 1, code)
+	assert.False(t, originArmatureContains(t, bareDir, `"to":"cancelled"`),
+		"first revert must keep the cancel local when publish fails")
+	require.True(t, localOpsContainCancel(t, repo, "REV-RETRY-PUB"))
+	cancelsBefore := countLocalCancelOps(t, repo, "REV-RETRY-PUB")
+
+	restoreOrigin(t, repo, bareDir)
+	out, err := runTrls(t, repo, "dag", "revert", "--plan", planFile)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Reverted")
+	assert.Equal(t, cancelsBefore, countLocalCancelOps(t, repo, "REV-RETRY-PUB"),
+		"retry must not append a second cancel")
+	require.True(t, originArmatureContains(t, bareDir, `"to":"cancelled"`),
+		"retry must publish the retained local revert commit")
+	require.True(t, originArmatureContains(t, bareDir, "REV-RETRY-PUB"))
+}
+
+func TestDagRevertForeignChildAfterRemoteIntegrateRefuses_REQ_DECOMPOSE(t *testing.T) {
+	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+
+	planFile := writePlanIssue(t, "REV-NFF-PARENT")
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+
+	parent := t.TempDir()
+	competing := filepath.Join(parent, "rival")
+	run(t, parent, "git", "clone", "--branch", "_armature", "file://"+bareDir, competing)
+	run(t, competing, "git", "config", "user.email", "test@test.com")
+	run(t, competing, "git", "config", "user.name", "Test")
+	run(t, competing, "git", "config", "commit.gpgsign", "false")
+
+	rivalLog := filepath.Join(competing, "ops", "rival-worker.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(rivalLog), 0o755))
+	require.NoError(t, ops.AppendOp(rivalLog, ops.Op{
+		Type:      ops.OpCreate,
+		TargetID:  "FOREIGN-NFF-CHILD",
+		Timestamp: nowEpoch(),
+		WorkerID:  "rival-worker",
+		Payload: ops.Payload{
+			Title:            "Foreign child from rival",
+			NodeType:         "task",
+			Parent:           "REV-NFF-PARENT",
+			Scope:            []string{"internal/FOREIGN-NFF-CHILD.go"},
+			DefinitionOfDone: "Foreign child is complete and tested",
+			Acceptance:       json.RawMessage(`[{"type":"test_passes"}]`),
+			Confidence:       "draft",
+		},
+	}))
+	run(t, competing, "git", "add", "ops/rival-worker.log")
+	run(t, competing, "git", "commit", "-m", "ops: rival foreign child")
+
+	installOneShotPrePushRival(t, worktree, competing)
+
+	_, applyErr := runTrls(t, repo, "dag", "revert", "--plan", planFile)
+	require.Error(t, applyErr)
+	assert.Contains(t, applyErr.Error(), "FOREIGN-NFF-CHILD")
+	assert.Contains(t, applyErr.Error(), "REV-NFF-PARENT")
+	assert.False(t, originArmatureContains(t, bareDir, `"to":"cancelled"`),
+		"retry push must not publish a stale cancel plan after a foreign child appears")
+	assert.True(t, originArmatureContains(t, bareDir, "FOREIGN-NFF-CHILD"),
+		"the first-push hook should have published the rival foreign child")
+}
+
+func TestDagRevertCancelsAsOneCommit_REQ_DECOMPOSE(t *testing.T) {
+	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
+	_, err := runTrls(t, repo, "push-ops")
+	require.NoError(t, err)
+
+	planFile := writePlanIssues(t, "REV-BATCH-A", "REV-BATCH-B")
+	_, err = runTrls(t, repo, "dag", "apply", "--plan", planFile)
+	require.NoError(t, err)
+
+	headBefore := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
+	out, err := runTrls(t, repo, "dag", "revert", "--plan", planFile)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Reverted")
+
+	count := strings.TrimSpace(runOutput(t, worktree, "rev-list", "--count", headBefore+"..HEAD"))
+	assert.Equal(t, "1", count, "all revert cancellations must land in one commit")
+	require.True(t, localOpsContainCancel(t, repo, "REV-BATCH-A"))
+	require.True(t, localOpsContainCancel(t, repo, "REV-BATCH-B"))
+}
+
 func TestDagRevertSucceedsWhenIntroductionWouldReject_REQ_DECOMPOSE(t *testing.T) {
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	planFile := writePlanIssue(t, "REV-DIRTY")
@@ -178,7 +278,7 @@ func TestAppendHighStakesOpsExemptIntroductionPublishes_REQ_DECOMPOSE(t *testing
 		Type: ops.OpTransition, TargetID: "T-REV-EX", Timestamp: 100, WorkerID: "w1",
 		Payload: ops.Payload{To: ops.StatusCancelled},
 	}
-	require.NoError(t, appendHighStakesOpsExemptIntroduction(state, logPath, []ops.Op{op}))
+	require.NoError(t, appendHighStakesOpsExemptIntroduction(state, logPath, []ops.Op{op}, nil))
 
 	tracker, ok := state.tracker.(*fakePendingPushTracker)
 	require.True(t, ok)
@@ -213,27 +313,32 @@ func TestDagRevertDoesNotCallRefuseIntroduction_REQ_DECOMPOSE(t *testing.T) {
 	calledRefuse := false
 	calledLock := false
 	calledPublish := false
+	calledBatch := false
 	ast.Inspect(fn, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		ident, ok := call.Fun.(*ast.Ident)
-		if !ok {
-			return true
-		}
-		switch ident.Name {
-		case "refuseIntroduction":
-			calledRefuse = true
-		case "withWorkerLogLock":
-			calledLock = true
-		case "pushOpsBranchAfter":
-			calledPublish = true
+		switch fun := call.Fun.(type) {
+		case *ast.Ident:
+			switch fun.Name {
+			case "refuseIntroduction":
+				calledRefuse = true
+			case "withWorkerLogLock":
+				calledLock = true
+			case "publishLocalArmatureTipAfter", "pushOpsBranchAfter":
+				calledPublish = true
+			}
+		case *ast.SelectorExpr:
+			if fun.Sel != nil && fun.Sel.Name == "AppendOpsAndCommit" {
+				calledBatch = true
+			}
 		}
 		return true
 	})
 	assert.False(t, calledRefuse, "exemption must not call refuseIntroduction")
 	assert.True(t, calledLock, "exemption must take the per-worker log lock")
+	assert.True(t, calledBatch, "exemption must commit cancellations as one batch")
 	assert.True(t, calledPublish, "exemption must publish like other high-stakes writes")
 
 	helpersSrc, err := os.ReadFile("helpers.go")
@@ -244,14 +349,20 @@ func TestDagRevertDoesNotCallRefuseIntroduction_REQ_DECOMPOSE(t *testing.T) {
 
 func localOpsContainCancel(t *testing.T, repo, issueID string) bool {
 	t.Helper()
+	return countLocalCancelOps(t, repo, issueID) > 0
+}
+
+func countLocalCancelOps(t *testing.T, repo, issueID string) int {
+	t.Helper()
 	workerID := strings.TrimSpace(runOutput(t, repo, "config", "--get", "armature.worker-id"))
 	require.NotEmpty(t, workerID)
 	logged, err := ops.ReadLog(filepath.Join(repo, ".armature", "ops", workerID+".log"))
 	require.NoError(t, err)
+	n := 0
 	for _, op := range logged {
 		if op.Type == ops.OpTransition && op.TargetID == issueID && op.Payload.To == ops.StatusCancelled {
-			return true
+			n++
 		}
 	}
-	return false
+	return n
 }
