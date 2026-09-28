@@ -1434,12 +1434,12 @@ func TestLogCommand_CorruptLineAfterBlankUsesPhysicalLine_REQ_NOCOMMENTS(t *test
 	_, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
 
-	existing, err := os.ReadFile(logPath)
+	existing, err := os.ReadFile(logPath) //nolint:gosec // G703: logPath is the test worker log from resolveWorkerAndLog
 	require.NoError(t, err)
 	require.NotEmpty(t, existing)
 	require.Equal(t, byte('\n'), existing[len(existing)-1], "ops append writes a trailing newline")
 
-	require.NoError(t, os.WriteFile(logPath, append(existing, []byte("\nthis is not json\n")...), 0o600))
+	require.NoError(t, os.WriteFile(logPath, append(existing, []byte("\nthis is not json\n")...), 0o600)) //nolint:gosec // G703: logPath is the test worker log from resolveWorkerAndLog
 
 	_, stderr, err := runTrlsWithStderr(t, repo, "log")
 	require.NoError(t, err)
