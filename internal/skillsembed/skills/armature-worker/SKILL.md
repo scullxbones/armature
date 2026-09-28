@@ -43,7 +43,7 @@ flag. Birth is always draft.
 Before transitioning any task to `done` and after completing your work, run:
 ```bash
 arm validate       # zero ERRORs; all issues cited
-arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+arm doctor        # zero errors; no broken refs, orphaned ops, cycles, or D12 lag
 ```
 
 If either exits non-zero, fix the reported issues before transitioning. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
@@ -61,7 +61,10 @@ arm doctor
 ```
 
 Run `arm doctor` to verify repo health (no broken parent refs, no orphaned ops,
-no dependency cycles). Fix any errors before starting work.
+no dependency cycles, ops worktree not behind `origin/_armature`). D12 is an
+error when this clone is behind origin's ops branch — warnings are ignored, so
+lag cannot stay a warning. Fetch/rebase the ops worktree before starting if
+doctor reports D12. Fix any errors before starting work.
 
 ### 2. Receive Task Context
 

@@ -34,7 +34,7 @@ publish on failure.
 Before releasing any plan to the Coordinator and after every decomposition, run:
 ```bash
 arm validate       # zero ERRORs; all issues cited
-arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+arm doctor        # zero errors; no broken refs, orphaned ops, cycles, or D12 lag
 ```
 
 If either exits non-zero, fix the reported issues before releasing. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore. Graph Finding **E14** (doctor implement-claims: `doctor.run_wiring` and, beside those DoDs, `unit_only_acceptance`) is an error; do not release a plan that fails it.

@@ -469,12 +469,14 @@ an empty hook/gate executable, or a `default_ttl` that would overflow claim
 staleness arithmetic are errors, so `arm doctor` exits non-zero.
 
 **D12 — Ops worktree lag.** When the ops worktree exists, `arm doctor` fetches
-`origin/_armature` in that worktree without moving HEAD and warns if HEAD is
-N>0 commits behind. If that fetch fails (offline, auth, missing remote) the
-check still reports lag from the existing local tracking ref when it can, as
-an error: the remote could not be fetched and the result may be stale, with
-the fetch error text. Missing worktree or missing `origin/_armature` skips
-OK. D12 is not part of `doctor --fix`.
+`origin/_armature` in that worktree without moving HEAD. If HEAD is N>0 commits
+behind after a successful fetch, D12 is an error (plain `arm doctor` exits 1):
+the DAG cannot be confirmed fresh, and warnings are ignored. If that fetch
+fails (offline, auth, missing remote) the check still reports lag from the
+existing local tracking ref when it can, as an error: the remote could not be
+fetched and the result may be stale, with the fetch error text. Missing
+worktree or missing `origin/_armature` (lag not computable) skips OK. D12 is
+not part of `doctor --fix`.
 
 ---
 

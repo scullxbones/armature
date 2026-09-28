@@ -32,7 +32,8 @@ and close the story when all tasks are done.
    arm list --status blocked           # diagnose any blockers
    arm doctor                          # repo health check
    ```
-   Fix any `doctor` errors before claiming work.
+   Fix any `doctor` errors before claiming work. D12 (ops worktree behind
+   `origin/_armature`) is an error, not a warning; fetch/rebase the ops worktree.
 
 ## DAG Hygiene Mandate
 
@@ -41,7 +42,7 @@ and close the story when all tasks are done.
 Before dispatching any worker and after each wave completes, run:
 ```bash
 arm validate       # zero ERRORs; all issues cited
-arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+arm doctor        # zero errors; no broken refs, orphaned ops, cycles, or D12 lag
 ```
 
 If either exits non-zero, stop. Fix the reported issues before proceeding. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.
