@@ -1,6 +1,6 @@
 # Product doctor health check
 
-`arm doctor` is the user-facing D1–D10 health report for a **bootstrapped** repo: git/ops divergence, stale claims, orphaned ops, parent refs, cycles, uncited issues, worker-id mismatches, scope artifacts, unmanaged worktrees, config.json. Exit 0 means no error-severity checks (warnings still print). This is distinct from the verification skill's isolation Doctor.
+`arm doctor` is the user-facing D1–D10, D12 health report for a **bootstrapped** repo: git/ops divergence, stale claims, orphaned ops, parent refs, cycles, uncited issues, worker-id mismatches, scope artifacts, unmanaged worktrees, config.json, ops-worktree lag. Exit 0 means no error-severity checks (warnings still print). D12 is an **error** when the ops worktree is behind `origin/_armature` after a successful fetch (plain doctor exits 1); fetch failure is also an error. This is distinct from the verification skill's isolation Doctor.
 
 ## Sub-features
 
@@ -58,3 +58,4 @@ Default D3 lists orphan ids in `items` and omits `verbose_items`. `--verbose` ad
 - `--fix` is not read-only. Always try `--fix --dry-run` and observe the ops log before `--fix`.
 - Product doctor succeeding does not prove isolation; still require the skill Doctor (`arm-verify.sh doctor`).
 - D9 unmanaged `.worktrees/` entries are warnings; `--strict` fails on them. `arm worktree list` reports the same anomaly with exit 0 by design.
+- D12 behind `origin/_armature` is an error, not a warning. Isolated verify targets often have no `origin/_armature`; that skip is still OK (lag not checked). If the drive seeds a remote ops branch and leaves the worktree behind, default `doctor` exits nonzero.

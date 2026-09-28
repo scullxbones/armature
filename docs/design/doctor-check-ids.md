@@ -18,6 +18,10 @@ Generated from `doctor.LiveCheckIDs()`.
 `RunChecks` still omits D7 (worker-ID mismatches need the validated ops
 stream) and D12 (ops-worktree lag needs the ops worktree); that is
 documented, not changed.
+D12 is an error when HEAD is N>0 commits behind `origin/_armature` after a
+successful fetch (plain `arm doctor` exits 1). Fetch failure is also an
+error. Missing ops worktree stays skip-OK. Behind is not a warning:
+warnings get ignored, and a lagging clone cannot confirm a fresh DAG.
 
 <!-- live-check-ids: generated; do not hand-edit -->
 | ID |
