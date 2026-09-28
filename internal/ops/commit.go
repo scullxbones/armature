@@ -43,6 +43,31 @@ func AppendAndCommitIf(logPath, worktreePath string, op Op, gc GitCommitter, pro
 	return true, nil
 }
 
+// AppendOpsAndCommit appends proposed ops in one file write and, if
+// worktreePath is non-empty, commits the log file once. An empty slice is a
+// no-op. Pass worktreePath="" (and gc=nil) for single-branch mode.
+func AppendOpsAndCommit(logPath, worktreePath string, proposed []Op, gc GitCommitter) error {
+	if len(proposed) == 0 {
+		return nil
+	}
+	if err := AppendOps(logPath, proposed); err != nil {
+		return err
+	}
+	if worktreePath == "" {
+		return nil
+	}
+	relPath, err := filepath.Rel(worktreePath, logPath)
+	if err != nil {
+		return fmt.Errorf("resolve relative log path: %w", err)
+	}
+	message := fmt.Sprintf("ops: append %d ops by %s", len(proposed), TruncateWorkerID(proposed[0].WorkerID, 8))
+	if len(proposed) == 1 {
+		op := proposed[0]
+		message = fmt.Sprintf("ops: %s %s by %s", strings.ToLower(op.Type), op.TargetID, TruncateWorkerID(op.WorkerID, 8))
+	}
+	return gc.CommitWorktreeOp(relPath, message)
+}
+
 // TruncateWorkerID returns the leading n bytes of id, or id if it is shorter.
 func TruncateWorkerID(id string, n int) string {
 	if len(id) > n {

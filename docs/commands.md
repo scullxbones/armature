@@ -352,8 +352,11 @@ Revert a decomposition plan from the issue graph.
 **Synopsis:**
 `arm dag revert [flags]`
 
+Cancellation ops are one locked batch commit, then the high-stakes `_armature` publish. Revert refuses when an issue not in the plan has a planned issue as its parent (checked again after integrating remote ops). A rerun that finds nothing left to cancel still publishes the retained local tip.
+
 **Flags:**
 - `--plan string`: Path to plan JSON file.
+- `--dry-run`: Print which nodes would be cancelled without writing ops.
 
 ---
 

@@ -123,10 +123,20 @@ func applyPlanIssue(t *testing.T, repo, issueID string) {
 
 func writePlanIssue(t *testing.T, issueID string) string {
 	t.Helper()
-	planData := `{"version":1,"title":"Log slot plan","issues":[{` +
-		`"id":"` + issueID + `","title":"apply path","type":"task","source":"src-test",` +
-		`"scope":"internal/` + issueID + `.go","dod":"Apply path is complete and tested",` +
-		`"acceptance":[{"type":"test_passes"}]}]}`
+	return writePlanIssues(t, issueID)
+}
+
+func writePlanIssues(t *testing.T, ids ...string) string {
+	t.Helper()
+	require.NotEmpty(t, ids)
+	parts := make([]string, 0, len(ids))
+	for _, issueID := range ids {
+		parts = append(parts, `{`+
+			`"id":"`+issueID+`","title":"apply path","type":"task","source":"src-test",`+
+			`"scope":"internal/`+issueID+`.go","dod":"Apply path is complete and tested",`+
+			`"acceptance":[{"type":"test_passes"}]}`)
+	}
+	planData := `{"version":1,"title":"Log slot plan","issues":[` + strings.Join(parts, ",") + `]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0o644))
 	return planFile

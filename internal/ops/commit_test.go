@@ -110,6 +110,35 @@ func TestAppendAndCommitIf_SkipDoesNotCommit_REQ_AOC_S4_T1(t *testing.T) {
 	}
 }
 
+func TestAppendOpsAndCommit_DualBranch_OneCommit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	worktreePath := filepath.Join(dir, ".arm")
+	logPath := filepath.Join(worktreePath, ".issues", "ops", "abc.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))
+
+	fc := &FakeCommitter{}
+	proposed := []ops.Op{
+		{Type: ops.OpTransition, TargetID: "T1", Timestamp: 1000, WorkerID: "abc",
+			Payload: ops.Payload{To: "cancelled"}},
+		{Type: ops.OpTransition, TargetID: "T2", Timestamp: 1001, WorkerID: "abc",
+			Payload: ops.Payload{To: "cancelled"}},
+	}
+	require.NoError(t, ops.AppendOpsAndCommit(logPath, worktreePath, proposed, fc))
+	require.Len(t, fc.Calls, 1)
+	assert.Contains(t, fc.Calls[0].Message, "append 2 ops")
+	got, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+}
+
+func TestAppendOpsAndCommit_Empty_NoCommit(t *testing.T) {
+	t.Parallel()
+	fc := &FakeCommitter{}
+	require.NoError(t, ops.AppendOpsAndCommit("unused.log", "unused", nil, fc))
+	assert.Empty(t, fc.Calls)
+}
+
 func TestAppendAndCommit_DualBranch_Commits(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

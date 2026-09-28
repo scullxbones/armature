@@ -313,8 +313,13 @@ func newDecomposeRevertCmd() *cobra.Command {
 		Short: "Revert a decomposition plan from the issue graph",
 		Long: `Undo the creation of issues from a decomposition plan.
 
-This command removes issues that were created by a plan application, in reverse order.
-It validates that no new children exist under the planned issues before removal.`,
+This command cancels issues that were created by a plan application.
+It validates that no new children exist under the planned issues before removal:
+if any issue not in the plan currently has a planned issue as its parent, revert
+is refused and nothing is written. The same foreign-child check runs again after
+integrating remote ops on a publish retry. Cancellation ops are locked, committed
+as one batch in the ops worktree, and published like other high-stakes writes.
+A rerun that finds nothing left to cancel still publishes the retained local tip.`,
 		Example: `  # Revert a plan application
   $ arm dag revert --plan plan.json
 
@@ -355,12 +360,15 @@ It validates that no new children exist under the planned issues before removal.
 				return err
 			}
 
-			count, err := decompose.RevertPlan(plan, filepath.Dir(logPath), workerID, state, clock.System)
+			proposed, err := decompose.CancelOps(plan, workerID, state, clock.System)
 			if err != nil {
 				return err
 			}
+			if err := appendHighStakesOpsExemptIntroduction(mustState(cmd), logPath, proposed, recheckForeignChildrenAfterIntegrate(appCtx, plan)); err != nil {
+				return err
+			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reverted %d issues from plan\n", count)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Reverted %d issues from plan\n", len(proposed))
 			return nil
 		},
 	}
