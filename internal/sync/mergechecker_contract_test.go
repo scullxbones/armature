@@ -33,6 +33,7 @@ func RunMergeCheckerContract(t *testing.T, mc armsync.MergeChecker) {
 
 type FakeMergeChecker struct {
 	merged map[string]bool
+	errs   map[string]error
 	err    error
 }
 
@@ -40,7 +41,16 @@ func NewFakeMergeChecker(merged map[string]bool) *FakeMergeChecker {
 	return &FakeMergeChecker{merged: merged}
 }
 
+func NewFakeMergeCheckerWithErrors(merged map[string]bool, errs map[string]error) *FakeMergeChecker {
+	return &FakeMergeChecker{merged: merged, errs: errs}
+}
+
 func (f *FakeMergeChecker) BranchMergedInto(branch, target string) (bool, error) {
+	if f.errs != nil {
+		if err, ok := f.errs[branch]; ok {
+			return false, err
+		}
+	}
 	if f.err != nil {
 		return false, f.err
 	}

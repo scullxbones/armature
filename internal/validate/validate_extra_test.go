@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,4 +160,70 @@ func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
 	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
 	assert.False(t, containsWarning(result, "phantom scope"), "expected no phantom scope warning for existing file, got: %v", result.Warnings)
 	assert.False(t, containsPhantomScopeInfo(result), "expected no phantom scope info for existing file, got: %v", result.Infos)
+}
+
+func TestE7PredicateAgreesAcrossCallers_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	manifestData, err := json.Marshal(map[string]interface{}{
+		"entries": map[string]map[string]string{
+			"src-1": {"id": "src-1"},
+		},
+	})
+	require.NoError(t, err)
+
+	cases := []struct {
+		name     string
+		issue    *materialize.Issue
+		ref      traceability.IssueRef
+		wantE7   bool
+		wantPred bool
+	}{
+		{
+			name: "cited",
+			issue: &materialize.Issue{
+				ID: "CITED", Type: "task",
+				SourceLinks: []materialize.SourceLink{{SourceEntryID: "src-1"}},
+			},
+			ref:      traceability.IssueRef{ID: "CITED", SourceLinkCount: 1},
+			wantE7:   false,
+			wantPred: true,
+		},
+		{
+			name: "accepted",
+			issue: &materialize.Issue{
+				ID: "ACCEPTED", Type: "task",
+				CitationAcceptances: []materialize.CitationAcceptance{{WorkerID: "w", Timestamp: 1}},
+			},
+			ref:      traceability.IssueRef{ID: "ACCEPTED", CitationAcceptanceCount: 1},
+			wantE7:   false,
+			wantPred: true,
+		},
+		{
+			name:     "uncited",
+			issue:    &materialize.Issue{ID: "UNCITED", Type: "task"},
+			ref:      traceability.IssueRef{ID: "UNCITED"},
+			wantE7:   true,
+			wantPred: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.wantPred, traceability.CitationSatisfied(tc.ref.SourceLinkCount, tc.ref.CitationAcceptanceCount))
+
+			result := Validate(makeState(tc.issue), graphFromState(makeState(tc.issue)), Options{ManifestData: manifestData})
+			gotValidateE7 := containsError(result, "uncited node: "+tc.issue.ID)
+			assert.Equal(t, tc.wantE7, gotValidateE7, "validate E7: errors=%v", result.Errors)
+
+			cov := traceability.Compute([]traceability.IssueRef{tc.ref})
+			gotTraceE7 := false
+			for _, f := range cov.Findings {
+				if f.Rule == "E7" {
+					gotTraceE7 = true
+				}
+			}
+			assert.Equal(t, tc.wantE7, gotTraceE7, "traceability E7: findings=%v", cov.Findings)
+		})
+	}
 }

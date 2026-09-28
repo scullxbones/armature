@@ -304,6 +304,41 @@ func TestBranchMergedInto_NotMerged(t *testing.T) {
 	assert.False(t, merged)
 }
 
+func TestBranchMergedInto_MergeBaseExitCodes_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	branchOut, err := branchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(branchOut))
+
+	gitRun := func(args ...string) {
+		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	gitRun("checkout", "-b", "feature/probe")
+	gitRun("commit", "--allow-empty", "-m", "wip")
+	gitRun("checkout", mainBranch)
+
+	t.Run("exit1_notMerged", func(t *testing.T) {
+		t.Parallel()
+		merged, err := c.BranchMergedInto("feature/probe", mainBranch)
+		require.NoError(t, err)
+		assert.False(t, merged)
+	})
+
+	t.Run("missingTarget_error", func(t *testing.T) {
+		t.Parallel()
+		merged, err := c.BranchMergedInto("feature/probe", "refs/heads/does-not-exist")
+		require.Error(t, err)
+		assert.False(t, merged)
+		assert.Contains(t, err.Error(), "does-not-exist")
+	})
+}
+
 func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

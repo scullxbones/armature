@@ -2,6 +2,7 @@
 package audit
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -21,21 +22,36 @@ type Filter struct {
 	Since    time.Time // if non-zero, only entries with Timestamp >= Since.Unix()
 }
 
-// Load accepts a slice of pre-loaded log content strings, parses them into ops,
-// merges all ops sorted by timestamp (then worker ID for stable order), applies
-// the filter, and marks any losing claim ops as LostRace.
-// logContents should be a slice of JSONL log lines (one op per line).
-func Load(logContents []string, f Filter) ([]Entry, error) {
+// Input is one worker log's JSONL lines, used so corrupt-line warnings can name
+// the file and 1-based line number the way ops loading reports warnings.
+type Input struct {
+	File  string
+	Lines []string
+}
+
+// Load accepts pre-loaded JSONL log lines (one op per line), parses them into
+// ops, merges all ops sorted by timestamp (then worker ID for stable order),
+// applies the filter, and marks any losing claim ops as LostRace.
+// Corrupt lines are skipped and returned in the warning list.
+func Load(logs []Input, f Filter) ([]Entry, []string, error) {
 	var allOps []ops.Op
-	for _, line := range logContents {
-		if len(line) == 0 {
-			continue
+	var warnings []string
+	for _, log := range logs {
+		file := log.File
+		if file == "" {
+			file = "log"
 		}
-		op, err := ops.ParseLine([]byte(line))
-		if err != nil {
-			continue
+		for i, line := range log.Lines {
+			if len(line) == 0 {
+				continue
+			}
+			op, err := ops.ParseLine([]byte(line))
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("corrupt line in %s:%d: %v", file, i+1, err))
+				continue
+			}
+			allOps = append(allOps, op)
 		}
-		allOps = append(allOps, op)
 	}
 
 	sort.SliceStable(allOps, func(i, j int) bool {
@@ -71,7 +87,7 @@ func Load(logContents []string, f Filter) ([]Entry, error) {
 		result = append(result, e)
 	}
 
-	return result, nil
+	return result, warnings, nil
 }
 
 func claimKey(op ops.Op) string {

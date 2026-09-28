@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -27,15 +28,17 @@ func newLogCmd() *cobra.Command {
 				return fmt.Errorf("list log files: %w", err)
 			}
 
-			var logContents []string
+			var logs []audit.Input
 			for _, logPath := range logFiles {
-				lines, err := adapters.ReadLogFromOffset(logPath, 0)
+				lines, err := adapters.ReadLogPhysicalLines(logPath)
 				if err != nil {
 					continue
 				}
+				fileLines := make([]string, 0, len(lines))
 				for _, line := range lines {
-					logContents = append(logContents, string(line))
+					fileLines = append(fileLines, string(line))
 				}
+				logs = append(logs, audit.Input{File: filepath.Base(logPath), Lines: fileLines})
 			}
 
 			f := audit.Filter{
@@ -54,10 +57,11 @@ func newLogCmd() *cobra.Command {
 				f.Since = t
 			}
 
-			entries, err := audit.Load(logContents, f)
+			entries, warnings, err := audit.Load(logs, f)
 			if err != nil {
 				return fmt.Errorf("load audit log: %w", err)
 			}
+			emitSnapWarnings(cmd.ErrOrStderr(), warnings)
 
 			if jsonOut {
 				return printLogJSON(cmd, entries)

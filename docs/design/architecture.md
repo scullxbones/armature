@@ -1341,7 +1341,8 @@ Output (examples):
 
 Exit codes:
   0  success (or nothing to do)
-  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails
+  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails,
+            including a missing `--into` ref (merge-base exit other than 1)
 ```
 
 Not a substitute for fetching `origin/_armature`. Not run at the start of `ready`/`list`/`show`.

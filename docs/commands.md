@@ -1094,7 +1094,7 @@ Detect merged branches and auto-transition done issues to merged.
 `arm sync [flags]`
 
 **Flags:**
-- `--into string`: Target branch to check merges against (default: current branch).
+- `--into string`: Target branch to check merges against (default: current branch). A missing or otherwise unreadable target ref is a command failure (`SYNC-1`), not “no merged branches.”
 
 ---
 

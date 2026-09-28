@@ -78,6 +78,50 @@ func TestValidateScreenAgesOutExpiredAggregateClaim(t *testing.T) {
 	}
 }
 
+func TestValidateScreenUsesInjectedClock_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	claimedAt := int64(1_700_000_000)
+	expiredState := materialize.NewState()
+	expiredState.Issues["STORY-EXPIRED"] = &materialize.Issue{
+		ID: "STORY-EXPIRED", Type: "story", Status: ops.StatusClaimed,
+		ClaimedBy: "worker-a", ClaimedAt: claimedAt - 7200, LastHeartbeat: claimedAt - 7200, ClaimTTL: 60,
+		Scope: []string{"cmd/armature/claim.go"}, Children: []string{"TSK-DONE"},
+	}
+	expiredState.Issues["TSK-DONE"] = &materialize.Issue{
+		ID: "TSK-DONE", Type: "task", Parent: "STORY-EXPIRED", Status: "done",
+		Scope: []string{"cmd/armature/claim.go"},
+	}
+	expiredState.Issues["TSK-NEW"] = &materialize.Issue{
+		ID: "TSK-NEW", Type: "task", Scope: []string{"cmd/armature/claim.go"},
+	}
+
+	stale := tuivalidate.NewWithClock(func() int64 { return claimedAt })
+	stale.SetState(expiredState)
+	if v := stale.View(); strings.Contains(v, "scope overlap") {
+		t.Errorf("injected clock past TTL must not render a W1 overlap, got:\n%s", v)
+	}
+
+	liveState := materialize.NewState()
+	liveState.Issues["STORY-LIVE"] = &materialize.Issue{
+		ID: "STORY-LIVE", Type: "story", Status: ops.StatusClaimed,
+		ClaimedBy: "worker-a", ClaimedAt: claimedAt, LastHeartbeat: claimedAt, ClaimTTL: 60,
+		Scope: []string{"cmd/armature/claim.go"}, Children: []string{"TSK-DONE"},
+	}
+	liveState.Issues["TSK-DONE"] = &materialize.Issue{
+		ID: "TSK-DONE", Type: "task", Parent: "STORY-LIVE", Status: "done",
+		Scope: []string{"cmd/armature/claim.go"},
+	}
+	liveState.Issues["TSK-NEW"] = &materialize.Issue{
+		ID: "TSK-NEW", Type: "task", Scope: []string{"cmd/armature/claim.go"},
+	}
+
+	live := tuivalidate.NewWithClock(func() int64 { return claimedAt + 10 })
+	live.SetState(liveState)
+	if v := live.View(); !strings.Contains(v, "scope overlap") {
+		t.Errorf("injected clock within TTL must render a W1 overlap, got:\n%s", v)
+	}
+}
+
 func TestValidateScreenRendersIssues(t *testing.T) {
 	t.Parallel()
 	m := tuivalidate.New()
