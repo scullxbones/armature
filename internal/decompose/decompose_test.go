@@ -124,6 +124,88 @@ func TestApplyPlan_SkipsExisting(t *testing.T) {
 	assert.Len(t, created, 1)
 }
 
+func TestCheckForeignChildren_RefusesAttachedChild(t *testing.T) {
+	t.Parallel()
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues:  []PlanIssue{{ID: "PLAN-001", Title: "Parent", Type: "story"}},
+	}
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open", Children: []string{"FOREIGN-1"}}
+	state.Issues["FOREIGN-1"] = &materialize.Issue{ID: "FOREIGN-1", Status: "open", Parent: "PLAN-001"}
+
+	err := CheckForeignChildren(plan, state)
+	require.Error(t, err)
+	var foreign *ForeignChildError
+	require.ErrorAs(t, err, &foreign)
+	assert.Equal(t, "FOREIGN-1", foreign.Child)
+	assert.Equal(t, "PLAN-001", foreign.Parent)
+	assert.Contains(t, err.Error(), "FOREIGN-1")
+	assert.Contains(t, err.Error(), "PLAN-001")
+}
+
+func TestRevertPlan_RefusesForeignChildWritesNothing(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	workerID := "worker-test"
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues:  []PlanIssue{{ID: "PLAN-001", Title: "Parent", Type: "story"}},
+	}
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open", Children: []string{"FOREIGN-1"}}
+	state.Issues["FOREIGN-1"] = &materialize.Issue{ID: "FOREIGN-1", Status: "open", Parent: "PLAN-001"}
+
+	count, err := RevertPlan(plan, dir, workerID, state, clock.System)
+	require.Error(t, err)
+	assert.Equal(t, 0, count)
+	assert.Contains(t, err.Error(), "FOREIGN-1")
+	assert.Contains(t, err.Error(), "PLAN-001")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+func TestDryRunRevertPlan_RefusesForeignChild(t *testing.T) {
+	t.Parallel()
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues:  []PlanIssue{{ID: "PLAN-001", Title: "Parent", Type: "story"}},
+	}
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open", Children: []string{"FOREIGN-1"}}
+	state.Issues["FOREIGN-1"] = &materialize.Issue{ID: "FOREIGN-1", Status: "open", Parent: "PLAN-001"}
+
+	result, err := DryRunRevertPlan(plan, state)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "FOREIGN-1")
+	assert.Contains(t, err.Error(), "PLAN-001")
+}
+
+func TestCancelOps_AllowsChildrenInPlan(t *testing.T) {
+	t.Parallel()
+	plan := &Plan{
+		Version: 1,
+		Title:   "Test Plan",
+		Issues: []PlanIssue{
+			{ID: "PLAN-001", Title: "Parent", Type: "story"},
+			{ID: "PLAN-002", Title: "Child", Type: "task"},
+		},
+	}
+	state := materialize.NewState()
+	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open", Children: []string{"PLAN-002"}}
+	state.Issues["PLAN-002"] = &materialize.Issue{ID: "PLAN-002", Status: "open", Parent: "PLAN-001"}
+
+	proposed, err := CancelOps(plan, "worker-test", state, clock.System)
+	require.NoError(t, err)
+	require.Len(t, proposed, 2)
+}
+
 func TestRevertPlan_CancelsOpen(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
