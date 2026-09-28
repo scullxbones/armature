@@ -522,6 +522,41 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 	return err
 }
 
+// introductionExemptionDagRevert is the named Introduction-door exemption for
+// arm dag revert cancel transitions. ADR 0016 names revert/cancel as the
+// remedy when a graph already fails CheckIntroduction; a future cleanup that
+// routed revert through refuseIntroduction would strand those drafts.
+// Tests fail if revert is wired through refuseIntroduction.
+const introductionExemptionDagRevert = "dag-revert-cancel-skips-refuseIntroduction"
+
+// appendHighStakesOpsExemptIntroduction locks, commits, and publishes like
+// appendHighStakesOpIfAfter, but does not call refuseIntroduction. Only
+// dag revert cancel transitions may use this; see introductionExemptionDagRevert.
+func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string, proposed []ops.Op) error {
+	if state == nil || state.ctx == nil {
+		return fmt.Errorf("appendHighStakesOp: command context unavailable")
+	}
+	if len(proposed) == 0 {
+		return nil
+	}
+	_ = introductionExemptionDagRevert
+	ctx := state.ctx
+	tracker := state.tracker
+	gc := worktreeGit(ctx)
+	err := withWorkerLogLock(ctx, logPath, func() error {
+		for _, op := range proposed {
+			if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, gc); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return pushOpsBranchAfter(ctx, opsPublishGit(ctx, gc), tracker, nil, true)
+}
+
 func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op, proceed func() (bool, error), afterIntegrate func() error) (bool, error) {
 	if state == nil || state.ctx == nil {
 		return false, fmt.Errorf("appendHighStakesOp: command context unavailable")
