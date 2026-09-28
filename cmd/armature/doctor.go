@@ -208,7 +208,9 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 		return "config.json failed a strict decode or a present field is out of range.",
 			"edit .armature/config.json and re-run arm doctor"
 	case "D12":
-		return "The ops worktree is behind origin/_armature so the DAG cannot be confirmed fresh, or origin/_armature could not be fetched so the lag number may be stale. Warnings are ignored; behind is an error.",
+		return "The ops worktree is behind origin/_armature so the DAG cannot " +
+				"be confirmed fresh, or origin/_armature could not be fetched so " +
+				"the lag number may be stale. Warnings are ignored; behind is an error.",
 			"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
