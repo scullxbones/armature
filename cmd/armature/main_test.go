@@ -864,6 +864,46 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	assert.Equal(t, "merged", index["T-001"].Status)
 }
 
+func TestSync_MissingIntoRef_ReturnsError_REQ_NOCOMMENTS(t *testing.T) {
+	repo := gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "some feature", "--id", "T-001")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force",
+		"--branch", "feature/sync-missing-into", "--outcome", "done")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
+	currentBranchOut, err := currentBranchCmd.Output()
+	require.NoError(t, err)
+	mainBranch := strings.TrimSpace(string(currentBranchOut))
+
+	run(t, repo, "git", "checkout", "-b", "feature/sync-missing-into")
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: missing into probe")
+	run(t, repo, "git", "checkout", mainBranch)
+
+	out, err := runTrls(t, repo, "sync", "--into", "refs/heads/does-not-exist")
+	require.Error(t, err)
+	assert.NotContains(t, out, "No merged branches detected.")
+	assert.Contains(t, err.Error(), "detect merges")
+	assert.Contains(t, err.Error(), "does-not-exist")
+}
+
 func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
