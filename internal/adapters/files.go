@@ -429,8 +429,18 @@ func lastRecordMatches(f *os.File, size int64, line []byte) (bool, error) {
 	return bytes.Equal(record, line), nil
 }
 
-// ReadLogFromOffset reads lines starting from a byte offset.
-func ReadLogFromOffset(logPath string, offset int64) (lines [][]byte, err error) {
+// ReadLogFromOffset reads lines starting from a byte offset, skipping blank lines.
+func ReadLogFromOffset(logPath string, offset int64) ([][]byte, error) {
+	return readLogLines(logPath, offset, true)
+}
+
+// ReadLogPhysicalLines reads every physical line, including blanks, so callers
+// that report 1-based file line numbers (audit warnings) stay aligned with disk.
+func ReadLogPhysicalLines(logPath string) ([][]byte, error) {
+	return readLogLines(logPath, 0, false)
+}
+
+func readLogLines(logPath string, offset int64, skipBlank bool) (lines [][]byte, err error) {
 	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
@@ -447,7 +457,7 @@ func ReadLogFromOffset(logPath string, offset int64) (lines [][]byte, err error)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		if len(line) == 0 {
+		if skipBlank && len(line) == 0 {
 			continue
 		}
 		lines = append(lines, append([]byte{}, line...))

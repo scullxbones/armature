@@ -286,6 +286,20 @@ func TestAppendLog_DeduplicatesOnlyFinalRecord(t *testing.T) {
 	require.Equal(t, [][]byte{line, other, line}, lines)
 }
 
+func TestReadLogPhysicalLines_KeepsBlankLines_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	require.NoError(t, os.WriteFile(logPath, []byte("{\"a\":1}\n\nnot-json\n"), 0o600))
+
+	lines, err := ReadLogPhysicalLines(logPath)
+	require.NoError(t, err)
+	require.Len(t, lines, 3)
+	assert.Equal(t, []byte(`{"a":1}`), lines[0])
+	assert.Empty(t, lines[1])
+	assert.Equal(t, []byte("not-json"), lines[2])
+}
+
 func TestReadLogFromOffset(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

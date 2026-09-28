@@ -242,3 +242,22 @@ func TestLoad_CorruptLineWarning_REQ_NOCOMMENTS(t *testing.T) {
 	assert.Contains(t, warnings[0], "worker-a.log")
 	assert.Contains(t, warnings[0], ":2:")
 }
+
+func TestLoad_CorruptLineAfterBlankReportsPhysicalLine_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
+	valid, err := ops.MarshalOp(ops.Op{
+		Type: ops.OpNote, TargetID: "T1", Timestamp: 100, WorkerID: "worker-a",
+		Payload: ops.Payload{Msg: "ok"},
+	})
+	require.NoError(t, err)
+
+	entries, warnings, err := audit.Load([]audit.Input{{
+		File:  "worker-a.log",
+		Lines: []string{string(valid), "", "this is not json"},
+	}}, audit.Filter{})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Len(t, warnings, 1)
+	assert.Contains(t, warnings[0], "worker-a.log:3:")
+	assert.NotContains(t, warnings[0], "worker-a.log:2:")
+}

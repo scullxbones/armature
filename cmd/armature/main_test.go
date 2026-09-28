@@ -1428,6 +1428,25 @@ func TestLogCommand_FilterBySince_DateOnly(t *testing.T) {
 	assert.NotEmpty(t, out)
 }
 
+func TestLogCommand_CorruptLineAfterBlankUsesPhysicalLine_REQ_NOCOMMENTS(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	ctx := getTestContext(t, repo)
+	_, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+
+	existing, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	require.NotEmpty(t, existing)
+	require.Equal(t, byte('\n'), existing[len(existing)-1], "ops append writes a trailing newline")
+
+	require.NoError(t, os.WriteFile(logPath, append(existing, []byte("\nthis is not json\n")...), 0o600))
+
+	_, stderr, err := runTrlsWithStderr(t, repo, "log")
+	require.NoError(t, err)
+	assert.Contains(t, stderr, filepath.Base(logPath)+":3:")
+	assert.NotContains(t, stderr, filepath.Base(logPath)+":2:")
+}
+
 func TestAssignCommand(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
