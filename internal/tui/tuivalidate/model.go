@@ -16,10 +16,18 @@ type Model struct {
 	results validate.Result
 	width   int
 	height  int
+	now     clock.Clock
 }
 
 func New() *Model {
-	return &Model{}
+	return NewWithClock(clock.System)
+}
+
+func NewWithClock(now clock.Clock) *Model {
+	if now == nil {
+		now = clock.System
+	}
+	return &Model{now: now}
 }
 
 func (m *Model) Init() tea.Cmd { return nil }
@@ -33,7 +41,7 @@ func (m *Model) SetState(state *materialize.State) {
 	m.state = state
 	if state != nil {
 		graph := materialize.GraphFromState(state)
-		m.results = validate.Validate(state, graph, validate.Options{Now: clock.System()})
+		m.results = validate.Validate(state, graph, validate.Options{Now: m.now()})
 	}
 }
 

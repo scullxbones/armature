@@ -332,12 +332,12 @@ func runPostMergeHook(cmd *cobra.Command) error {
 	}
 
 	gc := adapters.New(appCtx.RepoPath)
-	mergedIDs, err := armsync.DetectMerges(issues, branch, gc)
-	if err != nil {
-		return fmt.Errorf("detect merges: %w", err)
-	}
+	mergedIDs, detectErr := armsync.DetectMerges(issues, branch, gc)
 
 	if len(mergedIDs) == 0 {
+		if detectErr != nil {
+			return fmt.Errorf("detect merges: %w", detectErr)
+		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No merged branches detected.")
 		return nil
 	}
@@ -353,5 +353,8 @@ func runPostMergeHook(cmd *cobra.Command) error {
 		return fmt.Errorf("refresh snapshot: %w", err)
 	}
 
+	if detectErr != nil {
+		return fmt.Errorf("detect merges: %w", detectErr)
+	}
 	return nil
 }

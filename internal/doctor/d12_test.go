@@ -21,34 +21,57 @@ func TestEvaluateD12OpsWorktreeLag(t *testing.T) {
 
 	fetchErr := errors.New("git fetch origin _armature: connection refused")
 
-	ok := doctor.EvaluateD12OpsWorktreeLag(0, nil)
-	assert.Equal(t, "D12", ok.Check)
-	assert.Equal(t, doctor.SeverityOK, ok.Severity)
-	assert.Equal(t, "Ops worktree is not behind origin/_armature", ok.Message)
-	assert.Empty(t, ok.Items)
+	tests := []struct {
+		name     string
+		behind   int
+		fetchErr error
+		severity doctor.Severity
+		message  string
+		items    []string
+	}{
+		{
+			name:     "behind=0 ok",
+			severity: doctor.SeverityOK,
+			message:  "Ops worktree is not behind origin/_armature",
+		},
+		{
+			name:     "behind>0 error",
+			behind:   3,
+			severity: doctor.SeverityError,
+			message:  "Ops worktree is 3 commit(s) behind origin/_armature",
+			items:    []string{"3"},
+		},
+		{
+			name:     "fetch fail + behind=0 error",
+			fetchErr: fetchErr,
+			severity: doctor.SeverityError,
+			message:  "Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): " + fetchErr.Error(),
+			items:    []string{fetchErr.Error()},
+		},
+		{
+			name:     "fetch fail + behind>0 error",
+			behind:   3,
+			fetchErr: fetchErr,
+			severity: doctor.SeverityError,
+			message:  "Could not fetch origin/_armature; ops worktree appears 3 commit(s) behind (result may be stale): " + fetchErr.Error(),
+			items:    []string{"3", fetchErr.Error()},
+		},
+	}
 
-	warn := doctor.EvaluateD12OpsWorktreeLag(3, nil)
-	assert.Equal(t, doctor.SeverityWarning, warn.Severity)
-	assert.Equal(t, "Ops worktree is 3 commit(s) behind origin/_armature", warn.Message)
-	assert.Equal(t, []string{"3"}, warn.Items)
-	assert.NotContains(t, warn.Message, "Could not fetch")
-	assert.NotContains(t, warn.Message, "may be stale")
-
-	staleOK := doctor.EvaluateD12OpsWorktreeLag(0, fetchErr)
-	assert.Equal(t, doctor.SeverityError, staleOK.Severity)
-	assert.Contains(t, staleOK.Message, "Could not fetch origin/_armature")
-	assert.Contains(t, staleOK.Message, "may be stale")
-	assert.Contains(t, staleOK.Message, fetchErr.Error())
-	assert.Contains(t, staleOK.Message, "appears not behind")
-	assert.Equal(t, []string{fetchErr.Error()}, staleOK.Items)
-
-	staleBehind := doctor.EvaluateD12OpsWorktreeLag(3, fetchErr)
-	assert.Equal(t, doctor.SeverityError, staleBehind.Severity)
-	assert.Contains(t, staleBehind.Message, "Could not fetch origin/_armature")
-	assert.Contains(t, staleBehind.Message, "may be stale")
-	assert.Contains(t, staleBehind.Message, fetchErr.Error())
-	assert.Contains(t, staleBehind.Message, "3 commit(s) behind")
-	assert.Equal(t, []string{"3", fetchErr.Error()}, staleBehind.Items)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := doctor.EvaluateD12OpsWorktreeLag(tc.behind, tc.fetchErr)
+			assert.Equal(t, "D12", got.Check)
+			assert.Equal(t, tc.severity, got.Severity)
+			assert.Equal(t, tc.message, got.Message)
+			assert.Equal(t, tc.items, got.Items)
+			if tc.fetchErr == nil {
+				assert.NotContains(t, got.Message, "Could not fetch")
+				assert.NotContains(t, got.Message, "may be stale")
+			}
+		})
+	}
 }
 
 func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
@@ -221,7 +244,7 @@ func TestRun_D12_OKWhenInSync(t *testing.T) {
 	assert.Equal(t, "Ops worktree is not behind origin/_armature", d12.Message)
 }
 
-func TestRun_D12_WarningWhenBehindOrigin(t *testing.T) {
+func TestRun_D12_ErrorWhenBehindOrigin(t *testing.T) {
 	t.Parallel()
 	worktree, originClone := opsWorktreeWithOrigin(t)
 	runGit(t, originClone, "commit", "--allow-empty", "-m", "remote ops ahead")
@@ -233,9 +256,10 @@ func TestRun_D12_WarningWhenBehindOrigin(t *testing.T) {
 	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
 	require.NoError(t, err)
 	d12 := findCheck(t, report, "D12")
-	assert.Equal(t, doctor.SeverityWarning, d12.Severity)
+	assert.Equal(t, doctor.SeverityError, d12.Severity)
 	assert.Contains(t, d12.Message, "behind origin/_armature")
-	require.NotEmpty(t, d12.Items)
+	assert.NotContains(t, d12.Message, "Could not fetch")
+	require.Equal(t, []string{"1"}, d12.Items)
 }
 
 func TestRun_D12_ErrorWhenFetchFailsNotBehind(t *testing.T) {

@@ -106,6 +106,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/clock"
         validate-boundary:
           list-mode: strict
           files:
@@ -180,7 +181,7 @@ linters:
         path: 'internal/clock/'
       - linters:
           - forbidigo
-        path: 'internal/tui/'
+        path: 'internal/tui/app/'
       # G204: subprocess launched with variable — inherent to git/shell adapter
       # G301/G302: directory/file permissions in tests use 0755 for git repo traversal
       - linters:

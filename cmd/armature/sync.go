@@ -54,12 +54,12 @@ preview changes without committing them.`,
 			}
 
 			gc := adapters.New(appCtx.RepoPath)
-			mergedIDs, err := armsync.DetectMerges(issues, targetBranch, gc)
-			if err != nil {
-				return fmt.Errorf("detect merges: %w", err)
-			}
+			mergedIDs, detectErr := armsync.DetectMerges(issues, targetBranch, gc)
 
 			if len(mergedIDs) == 0 {
+				if detectErr != nil {
+					return fmt.Errorf("detect merges: %w", detectErr)
+				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No merged branches detected.")
 				return nil
 			}
@@ -69,6 +69,9 @@ preview changes without committing them.`,
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would transition: %s -> merged\n", id)
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issue(s) would be transitioned to merged\n", len(mergedIDs))
+				if detectErr != nil {
+					return fmt.Errorf("detect merges: %w", detectErr)
+				}
 				return nil
 			}
 
@@ -87,6 +90,9 @@ preview changes without committing them.`,
 			}
 			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
+			if detectErr != nil {
+				return fmt.Errorf("detect merges: %w", detectErr)
+			}
 			return nil
 		},
 	}

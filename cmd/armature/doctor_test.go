@@ -152,6 +152,40 @@ func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing
 	assert.Contains(t, d12, "origin/_armature")
 }
 
+func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+
+	_, err := runTrls(t, repo, "bootstrap")
+	require.NoError(t, err)
+
+	opsPath := filepath.Join(repo, ".armature")
+	run(t, opsPath, "git", "push", "-u", "origin", "_armature")
+
+	currentOut := new(bytes.Buffer)
+	currentCode := executeThenHandleRootError(t, currentOut, new(bytes.Buffer), "doctor", "--repo", repo)
+	assert.Equal(t, 0, currentCode, currentOut.String())
+	assert.Contains(t, currentOut.String(), "D12")
+	assert.Contains(t, currentOut.String(), "not behind origin/_armature")
+
+	originClone := filepath.Join(t.TempDir(), "origin-clone")
+	run(t, t.TempDir(), "git", "clone", fx.Origin, originClone)
+	run(t, originClone, "git", "checkout", "_armature")
+	run(t, originClone, "git", "config", "user.email", "test@test.com")
+	run(t, originClone, "git", "config", "user.name", "Test")
+	run(t, originClone, "git", "config", "commit.gpgsign", "false")
+	run(t, originClone, "git", "commit", "--allow-empty", "-m", "remote ops ahead")
+	run(t, originClone, "git", "push", "origin", "_armature")
+
+	behindOut := new(bytes.Buffer)
+	behindCode := executeThenHandleRootError(t, behindOut, new(bytes.Buffer), "doctor", "--repo", repo)
+	assert.Equal(t, 1, behindCode, behindOut.String())
+	assert.Contains(t, behindOut.String(), "D12")
+	assert.Contains(t, behindOut.String(), "behind origin/_armature")
+	assert.NotContains(t, behindOut.String(), "Could not fetch")
+}
+
 func TestDoctorExplainFlag_RendersGuidedNarrative_REQ_TOPTIER_S15_T1(t *testing.T) {
 	repo := setupRepoWithTask(t)
 

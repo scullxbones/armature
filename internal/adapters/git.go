@@ -1116,7 +1116,9 @@ func (c *Client) CommitIndexNoVerify(message string) error {
 }
 
 // BranchMergedInto checks if branch has been fully merged into target.
-// Returns (false, nil) if the branch does not exist, rather than an error.
+// Returns (false, nil) if the source branch does not exist, rather than an error.
+// git merge-base --is-ancestor exit 1 means the tip is not an ancestor (false, nil).
+// Any other merge-base failure — including exit 128 for a missing target ref — is an error.
 func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err != nil {
@@ -1130,14 +1132,11 @@ func (c *Client) BranchMergedInto(branch, target string) (bool, error) {
 	}
 	sha := strings.TrimSpace(string(tipOut))
 
-	err = c.cmd("merge-base", "--is-ancestor", sha, target).Run()
-	if err == nil {
-		return true, nil
+	merged, err := c.IsAncestor(sha, target)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if %s is on %s: %w", sha, target, err)
 	}
-	if _, ok := err.(*exec.ExitError); ok {
-		return false, nil
-	}
-	return false, fmt.Errorf("failed to check if %s is on %s: %w", sha, target, err)
+	return merged, nil
 }
 
 func (c *Client) ResolveRevision(rev string) (string, error) {

@@ -18,7 +18,7 @@ The Auditor verifies that completed work is honest and traceable before story si
 Before running any audit and after completing your checks, confirm:
 ```bash
 arm validate       # zero ERRORs; all issues cited
-arm doctor        # zero errors; no broken refs, orphaned ops, or cycles
+arm doctor        # zero errors; no broken refs, orphaned ops, cycles, or D12 lag
 ```
 
 If either exits non-zero, do not approve the story. Report the specific issues back to workers for remediation. Treat DAG decay the same way you treat failing tests — it is a blocker, not a warning to ignore.

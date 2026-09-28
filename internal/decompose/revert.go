@@ -3,6 +3,7 @@ package decompose
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 
 	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -13,8 +14,82 @@ type DryRunRevertResult struct {
 	WouldCancel []DryRunEntry
 }
 
+// ForeignChildError is returned when revert would strand an issue that is
+// not in the plan but currently has a planned issue as its parent.
+type ForeignChildError struct {
+	Child  string
+	Parent string
+}
+
+func (e *ForeignChildError) Error() string {
+	if e == nil {
+		return "cannot revert: a child not in the plan is attached to a planned issue"
+	}
+	return fmt.Sprintf("cannot revert: issue %s is a child of planned issue %s and is not in the plan", e.Child, e.Parent)
+}
+
+// CheckForeignChildren refuses revert when any issue not in the plan has a
+// planned issue as its parent. The help text promises this guard; dry-run
+// and apply share the same error.
+func CheckForeignChildren(plan *Plan, state *materialize.State) error {
+	if plan == nil || state == nil {
+		return nil
+	}
+	inPlan := make(map[string]struct{}, len(plan.Issues))
+	for _, issue := range plan.Issues {
+		inPlan[issue.ID] = struct{}{}
+	}
+
+	type pair struct{ child, parent string }
+	var found []pair
+	seen := make(map[string]struct{})
+	add := func(child, parent string) {
+		if child == "" || parent == "" {
+			return
+		}
+		if _, ok := inPlan[child]; ok {
+			return
+		}
+		if _, ok := inPlan[parent]; !ok {
+			return
+		}
+		key := child + "\x00" + parent
+		if _, dup := seen[key]; dup {
+			return
+		}
+		seen[key] = struct{}{}
+		found = append(found, pair{child: child, parent: parent})
+	}
+
+	for id, issue := range state.Issues {
+		if issue == nil {
+			continue
+		}
+		add(id, issue.Parent)
+		if _, ok := inPlan[id]; !ok {
+			continue
+		}
+		for _, childID := range issue.Children {
+			add(childID, id)
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].child == found[j].child {
+			return found[i].parent < found[j].parent
+		}
+		return found[i].child < found[j].child
+	})
+	return &ForeignChildError{Child: found[0].child, Parent: found[0].parent}
+}
+
 // DryRunRevertPlan returns what would be cancelled by RevertPlan, without writing any ops.
 func DryRunRevertPlan(plan *Plan, state *materialize.State) (*DryRunRevertResult, error) {
+	if err := CheckForeignChildren(plan, state); err != nil {
+		return nil, err
+	}
 	result := &DryRunRevertResult{}
 	for _, issue := range plan.Issues {
 		stateIssue, exists := state.Issues[issue.ID]
@@ -29,12 +104,17 @@ func DryRunRevertPlan(plan *Plan, state *materialize.State) (*DryRunRevertResult
 	return result, nil
 }
 
-// RevertPlan appends cancel ops for each issue in the plan that exists in state with status "open".
-// Returns count of issues cancelled.
-func RevertPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State, clk clock.Clock) (int, error) {
-	logPath := filepath.Join(issuesDir, workerID+".log")
-	count := 0
-
+// CancelOps returns cancel transitions for still-open planned issues after
+// the foreign-child guard. Callers that write (CLI high-stakes path, RevertPlan)
+// must not skip this planning function.
+func CancelOps(plan *Plan, workerID string, state *materialize.State, clk clock.Clock) ([]ops.Op, error) {
+	if err := CheckForeignChildren(plan, state); err != nil {
+		return nil, err
+	}
+	var proposed []ops.Op
+	if plan == nil {
+		return proposed, nil
+	}
 	for _, issue := range plan.Issues {
 		stateIssue, exists := state.Issues[issue.ID]
 		if !exists {
@@ -43,8 +123,7 @@ func RevertPlan(plan *Plan, issuesDir string, workerID string, state *materializ
 		if stateIssue.Status != ops.StatusOpen {
 			continue
 		}
-
-		op := ops.Op{
+		proposed = append(proposed, ops.Op{
 			Type:      ops.OpTransition,
 			TargetID:  issue.ID,
 			Timestamp: clk(),
@@ -52,13 +131,23 @@ func RevertPlan(plan *Plan, issuesDir string, workerID string, state *materializ
 			Payload: ops.Payload{
 				To: ops.StatusCancelled,
 			},
-		}
-
-		if err := ops.AppendOp(logPath, op); err != nil {
-			return count, fmt.Errorf("append revert op for issue %s: %w", issue.ID, err)
-		}
-		count++
+		})
 	}
+	return proposed, nil
+}
 
-	return count, nil
+// RevertPlan appends cancel ops for each issue in the plan that exists in state with status "open".
+// Returns count of issues cancelled.
+func RevertPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State, clk clock.Clock) (int, error) {
+	proposed, err := CancelOps(plan, workerID, state, clk)
+	if err != nil {
+		return 0, err
+	}
+	logPath := filepath.Join(issuesDir, workerID+".log")
+	for i, op := range proposed {
+		if err := ops.AppendOp(logPath, op); err != nil {
+			return i, fmt.Errorf("append revert op for issue %s: %w", op.TargetID, err)
+		}
+	}
+	return len(proposed), nil
 }

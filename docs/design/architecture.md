@@ -327,7 +327,7 @@ In single-repo mode (v1), `repo` is omitted (default: current repo). This is a s
 
 ### Canonical Process Flow
 
-Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** warns when this clone is behind). `arm sync` is **not** that fetch — see the `arm sync` spec below.
+Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** errors when this clone is behind, because a lagging clone cannot confirm a fresh DAG). `arm sync` is **not** that fetch — see the `arm sync` spec below.
 
 **Read-only commands** (`arm ready`, `arm list`, `arm show`, `arm render-context`, `arm validate`, `arm status`, `arm metrics`, `arm context-history`):
 
@@ -360,7 +360,7 @@ Code commits happen separately in the developer's main worktree, on their featur
 
 There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap.
 
-**High-stakes writes** (`appendHighStakesOpIfAfter`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranchAfter`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature class=<auth|non-fast-forward|other>: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, …). Next Actions depend on the class: **auth** (HTTP 403 / permission denied / authentication failed) points at Contents: Write or SSH then `arm push-ops`, or (alternate) publishing from a write-capable environment and fetching `origin/_armature`; **non-fast-forward** (explicit non-fast-forward / fetch-first diagnostics after the one FetchAndRebase retry; not a bare `rejected` or `[remote rejected]` hook/repo-rule decline) points at `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase onto `origin/_armature` in that same ops worktree, then `arm push-ops` (never a bare `git rebase` in the code worktree; never a branch-only fetch that can leave `origin/_armature` stale); **other** keeps `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIfAfter` `!wrote`, `doctor --fix` with no remaining actions) still publishes the local `_armature` tip (`publishLocalArmatureTipAfter`): success may report no-op, but origin must contain the op; remaining git errors stay `opsPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
+**High-stakes writes** (`appendHighStakesOpIfAfter`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`; `appendHighStakesOpsExemptIntroduction`: `dag revert`): after a successful local commit, call `pushOpsBranchAfter`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature class=<auth|non-fast-forward|other>: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, `DAG-1`, …). Next Actions depend on the class: **auth** (HTTP 403 / permission denied / authentication failed) points at Contents: Write or SSH then `arm push-ops`, or (alternate) publishing from a write-capable environment and fetching `origin/_armature`; **non-fast-forward** (explicit non-fast-forward / fetch-first diagnostics after the one FetchAndRebase retry; not a bare `rejected` or `[remote rejected]` hook/repo-rule decline) points at `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase onto `origin/_armature` in that same ops worktree, then `arm push-ops` (never a bare `git rebase` in the code worktree; never a branch-only fetch that can leave `origin/_armature` stale); **other** keeps `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIfAfter` `!wrote`, `doctor --fix` with no remaining actions, `dag revert` with empty `CancelOps`) still publishes the local `_armature` tip (`publishLocalArmatureTipAfter`): success may report no-op, but origin must contain the op; remaining git errors stay `opsPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish. `dag revert` rematerializes and re-runs `CheckForeignChildren` after integrating remote ops (`afterIntegrate`) and refuses the retry push if a foreign child is now visible.
 
 **Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call `pushOpsBranchAlwaysResetTracker` — the **same git sequence**, but git errors are swallowed so a heartbeat cannot eject a worker. `tracker.Reset()` still runs after the attempt. Below threshold they stay local-only.
 
@@ -370,7 +370,7 @@ There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry 
 
 Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
 
-**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
+**Doctor D12** (PR #198; behind promoted from warning to error) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, error if HEAD is N>0 commits behind. Warnings are ignored, so a stale clone must not be a warning. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
 
 ### Incremental Materialization Algorithm
 
@@ -992,9 +992,12 @@ arm dag revert --plan <plan.json>
 
 Behavior:
   1. Resolves the nodes created by the plan file
-  2. For each of those nodes, emits a transition op: {"to": "cancelled"}
-  3. All cancellation ops are appended to the current worker's log
-  4. Single commit, single push
+  2. Refuses if any issue not in the plan currently has a planned issue as its parent
+  3. For each still-open planned node, emits a transition op: {"to": "cancelled"}
+  4. All cancellation ops are appended to the current worker's log in one write
+  5. Single commit, then the high-stakes publish sequence
+  6. After integrating remote ops on a publish retry, rematerialize and refuse if a foreign child is now visible
+  7. If nothing remains to cancel (including a retry after a failed first push), still publish the retained local `_armature` tip
 
 Effect:
   - All nodes created by the plan transition to 'cancelled' status
@@ -1324,7 +1327,7 @@ Behavior:
 This is merge-detection onto `main` (or `--into`), not “pull ops then materialize.”
 It is not implicit in other commands. Catching up `_armature` is an explicit
 git fetch/rebase of the ops worktree; `arm materialize` replays local logs;
-doctor D12 only warns when this clone is behind origin/_armature.
+doctor D12 errors when this clone is behind origin/_armature.
 
 Flags:
   --into <branch>  Target branch to check merges against (default: current branch)
@@ -1338,7 +1341,8 @@ Output (examples):
 
 Exit codes:
   0  success (or nothing to do)
-  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails
+  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails,
+            including a missing `--into` ref (merge-base exit other than 1)
 ```
 
 Not a substitute for fetching `origin/_armature`. Not run at the start of `ready`/`list`/`show`.

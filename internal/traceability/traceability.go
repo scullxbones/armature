@@ -98,7 +98,7 @@ func Compute(refs []issueref.IssueRef) Coverage {
 			continue
 		}
 		uncited = append(uncited, ref.ID)
-		if ref.CitationAcceptanceCount > 0 {
+		if CitationSatisfied(ref.SourceLinkCount, ref.CitationAcceptanceCount) {
 			acceptedRisk++
 			continue
 		}
@@ -154,6 +154,12 @@ func Compute(refs []issueref.IssueRef) Coverage {
 		InferredCited:       inferredCited,
 		InferredCoveragePct: inferredPct,
 	}
+}
+
+// CitationSatisfied is the E7 predicate shared with internal/validate: a node
+// has a citation record if it has at least one source link or citation acceptance.
+func CitationSatisfied(sourceLinkCount, citationAcceptanceCount int) bool {
+	return sourceLinkCount > 0 || citationAcceptanceCount > 0
 }
 
 // Write serializes a Coverage value to the given path as JSON (atomic write via temp file).
