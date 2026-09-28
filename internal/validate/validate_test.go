@@ -103,6 +103,14 @@ func TestValidate_UnknownBlocker(t *testing.T) {
 	assert.Contains(t, result.Errors[0], "unresolved link target")
 }
 
+func TestCIOptionsIsStrict_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
+	opts := CIOptions(123)
+	assert.True(t, opts.Strict)
+	assert.Equal(t, int64(123), opts.Now)
+	assert.Nil(t, opts.ManifestData)
+}
+
 func containsWarning(r Result, substr string) bool {
 	for _, w := range r.Warnings {
 		if strings.Contains(strings.ToLower(w), strings.ToLower(substr)) {

@@ -26,6 +26,10 @@ issues ready for workers to claim.
 ## DAG Hygiene Mandate
 
 **`arm validate` and `arm doctor` must exit clean at all times.** This is non-negotiable.
+`arm validate --ci` / `make validate-graph` is the integration contract. If it
+fails, **stop** and fix the graph before releasing. `arm push-ops` runs that
+same contract against the graph merged with `origin/_armature` and refuses to
+publish on failure.
 
 Before releasing any plan to the Coordinator and after every decomposition, run:
 ```bash
@@ -142,13 +146,27 @@ arm validate                   # scope overlap WARNINGs appear here; resolve eac
 
 ### 6. Validate and Release
 
+The integration door is one command: `arm validate --ci` (same as
+`make validate-graph`). Warnings are errors. Run it against the graph as it
+will exist after publish — fetch/rebase `origin/_armature` first, or just
+`arm push-ops`, which does that rebase then runs the same contract.
+
 ```bash
-arm validate --ci   # must exit 0 with no ERRORs; scope overlaps resolved; E14 (doctor claims) clean
-arm doctor          # repo health; live IDs from doctor.LiveCheckIDs / docs/design/doctor-check-ids.md
-arm list --group    # final sanity check — all issues visible and in expected states
+arm validate --ci   # must exit 0; scope overlaps resolved; E14 (doctor claims) clean
+make validate-graph # identical: ./bin/arm validate --ci
+arm push-ops        # rebases onto origin/_armature, then the same fail-closed validate, then push
+arm doctor
+arm list --group
 ```
 
-Only release to the Coordinator after both commands are clean.
+If `arm validate --ci`, `make validate-graph`, or `arm push-ops` exits
+non-zero, **stop**. Print the findings, fix them with honest graph edits
+(`arm link` or narrower scopes), and re-run. Do not release a plan whose
+publish path is red. Local-only validate against a stale ops worktree is not
+enough.
+
+Only release to the Coordinator after validate and doctor are clean and
+`arm push-ops` has published.
 
 ---
 
@@ -405,9 +423,11 @@ For dependency linking and overlap resolution, see `references/dependency-manage
 
 Run this checklist before handing work off to the Coordinator.
 
-1. **`arm validate`** — no ERRORs, citation coverage complete, E14 (doctor Task Contract) clean
+1. **`arm validate --ci` / `make validate-graph`** — no errors, no warnings, citation coverage complete, E14 (doctor Task Contract) clean. This is the same contract CI runs. Then `arm push-ops` (rebase onto `origin/_armature` + that validate + push). If either command fails, **stop**.
    ```bash
-   arm validate --ci   # exits non-zero on any error
+   arm validate --ci   # exits non-zero on errors or warnings
+   make validate-graph
+   arm push-ops
    ```
    **Note:** If `arm validate` reports `context_files` WARNINGs, treat them as decomposition
    signals—break large tasks into smaller subtasks or add blocking dependencies to reduce

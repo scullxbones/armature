@@ -27,6 +27,13 @@ type Options struct {
 	Now               int64
 }
 
+// CIOptions is the fail-closed contract used by `arm validate --ci`,
+// `make validate-graph`, and every path that publishes `_armature`.
+// Warnings are errors. There is no second, looser definition.
+func CIOptions(now int64) Options {
+	return Options{Strict: true, Now: now}
+}
+
 type Result struct {
 	OK       bool
 	Errors   []string
