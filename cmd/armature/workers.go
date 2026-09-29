@@ -60,7 +60,7 @@ func newWorkersCmd() *cobra.Command {
 				if len(statuses) == 0 {
 					help = []string{"no worker logs found", "arm worker-init registers a worker identity"}
 				}
-				return writeNamedEnvelope(cmd.OutOrStdout(), "workers", statuses, help)
+				return writeCommandEnvelope(cmd.OutOrStdout(), "workers", statuses, help, nil)
 			}
 
 			if len(statuses) == 0 {

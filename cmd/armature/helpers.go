@@ -95,7 +95,7 @@ func slottedWorkerIDBestEffort(repoPath string) string {
 	if id == "" {
 		return ""
 	}
-	return slottedWorkerID(id).String()
+	return slottedWorkerID(id)
 }
 
 type commandFailureEnvelope struct {
@@ -247,7 +247,7 @@ func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
 	}
 	workerID := slottedWorkerIDBestEffort(identityRepoPath(ctx))
 	if workerID == "" {
-		workerID = slottedWorkerID("default").String()
+		workerID = slottedWorkerID("default")
 	}
 	ctx.StateDir = stateDirFor(ctx, workerID)
 	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
@@ -341,11 +341,7 @@ func opsLogPath(issuesDir, ownerID string) string {
 	return filepath.Join(issuesDir, "ops", ownerID+".log")
 }
 
-type SlottedWorkerID string
-
-func (id SlottedWorkerID) String() string { return string(id) }
-
-func slottedWorkerID(workerID string) SlottedWorkerID {
+func slottedWorkerID(workerID string) string {
 	id, err := slottedWorkerIDChecked(workerID)
 	if err != nil {
 		return ""
@@ -353,15 +349,15 @@ func slottedWorkerID(workerID string) SlottedWorkerID {
 	return id
 }
 
-func slottedWorkerIDChecked(workerID string) (SlottedWorkerID, error) {
+func slottedWorkerIDChecked(workerID string) (string, error) {
 	slot := os.Getenv("ARM_LOG_SLOT")
 	if slot == "" {
-		return SlottedWorkerID(workerID), nil
+		return workerID, nil
 	}
 	if err := worker.ValidateLogSlot(slot); err != nil {
 		return "", err
 	}
-	return SlottedWorkerID(workerID + "~" + slot), nil
+	return workerID + "~" + slot, nil
 }
 
 func withWorkerLogLock(ctx *config.Context, logPath string, fn func() error) error {
@@ -423,10 +419,6 @@ func structuredFormat(cmd *cobra.Command) bool {
 	return format == "json" || format == "agent"
 }
 
-func writeNamedEnvelope(w io.Writer, key string, items any, help []string) error {
-	return writeCommandEnvelope(w, key, items, help, nil)
-}
-
 func writeCommandEnvelope(w io.Writer, key string, items any, help []string, decorate func(*output.Envelope) error) error {
 	env, err := output.NewEnvelope(key, items, help)
 	if err != nil {
@@ -446,8 +438,7 @@ func failLoudFlagError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil
 	}
-	var cf *armerrors.CommandFailure
-	if errors.As(err, &cf) {
+	if _, done := mappedCommandFailure(err); done {
 		return err
 	}
 	cause := err.Error()

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -72,7 +71,7 @@ func explainHelp(n int) []string {
 
 func writeReadyExplainEnvelope(w io.Writer, index materialize.Index, notReady map[string]string) error {
 	rows := readyExplainRows(index, notReady)
-	return writeNamedEnvelope(w, "issues", rows, explainHelp(len(rows)))
+	return writeCommandEnvelope(w, "issues", rows, explainHelp(len(rows)), nil)
 }
 
 func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
@@ -81,7 +80,7 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 			"not an Armature repository: " + emptyReason,
 			"run arm bootstrap in a git repository",
 		}
-		return writeNamedEnvelope(cmd.OutOrStdout(), "issues", []readyIssueRow{}, help)
+		return writeCommandEnvelope(cmd.OutOrStdout(), "issues", []readyIssueRow{}, help, nil)
 	}
 	ctx := currentCtx(cmd)
 	store := newSnapshotStore(ctx)
@@ -289,12 +288,8 @@ func runReadyTUI(entries []ready.ReadyEntry) (string, error) {
 }
 
 func mapReadyError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var cf *armerrors.CommandFailure
-	if errors.As(err, &cf) {
-		return cf
+	if mapped, done := mappedCommandFailure(err); done {
+		return mapped
 	}
 	if isLocalArmatureTipPublishError(err) {
 		return wrapOpsPublishFailure(codeReady1, err)

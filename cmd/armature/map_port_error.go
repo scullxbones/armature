@@ -61,6 +61,17 @@ var (
 	cobraFlagNeedsArgErr  = regexp.MustCompile(`(?i)^flag needs an argument:`)
 )
 
+func mappedCommandFailure(err error) (error, bool) {
+	if err == nil {
+		return nil, true
+	}
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
+		return cf, true
+	}
+	return err, false
+}
+
 func mapAgentFacingError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil
@@ -74,9 +85,8 @@ func mapAgentFacingError(cmd *cobra.Command, err error) error {
 	if staysOnPlatformProtocol(cmd) {
 		return skipCommandFailure(err)
 	}
-	var cf *armerrors.CommandFailure
-	if errors.As(err, &cf) {
-		return cf
+	if mapped, done := mappedCommandFailure(err); done {
+		return mapped
 	}
 	if isUsageError(err) {
 		return armerrors.Wrap(armerrors.CodeUSAGE, err.Error(), []string{"arm --help"}, err)

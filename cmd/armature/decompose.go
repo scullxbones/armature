@@ -301,7 +301,7 @@ func writeDagApplyEnvelope(cmd *cobra.Command, rows []applyIssueRow, dryRun bool
 	} else if len(rows) == 0 {
 		help = []string{"no issues were created", help[0]}
 	}
-	return writeNamedEnvelope(cmd.OutOrStdout(), "issues", rows, help)
+	return writeCommandEnvelope(cmd.OutOrStdout(), "issues", rows, help, nil)
 }
 
 func newDecomposeRevertCmd() *cobra.Command {

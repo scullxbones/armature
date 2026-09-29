@@ -101,50 +101,25 @@ func contextWithPublishedOps(ctx *config.Context, gc *adapters.Client) (*config.
 }
 
 func overlayRemoteOpsLogs(gc *adapters.Client, destOps string) error {
-	sha, err := gc.ResolveRevision("origin/_armature")
-	if err != nil {
-		if remoteOpsRefMissing(err) {
-			return nil
-		}
-		return err
-	}
-	files, err := gc.ListFilesAtCommit(sha)
-	if err != nil {
+	sha, files, err := originArmatureFiles(gc)
+	if err != nil || sha == "" {
 		return err
 	}
 	for _, rel := range files {
-		if !strings.HasPrefix(rel, "ops/") {
+		base, ok := overlayBaseName(rel, "ops/")
+		if !ok {
 			continue
 		}
-		base := filepath.Base(rel)
-		if base == "" || base == "." || base == "ops" {
-			continue
-		}
-		dest := filepath.Join(destOps, base)
-		if _, statErr := os.Stat(dest); statErr == nil {
-			continue
-		}
-		blob, showErr := gc.ShowFileAtCommit(sha, rel)
-		if showErr != nil {
-			return showErr
-		}
-		if writeErr := os.WriteFile(dest, blob, 0o600); writeErr != nil {
-			return writeErr
+		if err := writeRemoteFileIfMissing(gc, sha, rel, filepath.Join(destOps, base)); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
 func overlayRemoteSources(gc *adapters.Client, destSources string) error {
-	sha, err := gc.ResolveRevision("origin/_armature")
-	if err != nil {
-		if remoteOpsRefMissing(err) {
-			return nil
-		}
-		return err
-	}
-	files, err := gc.ListFilesAtCommit(sha)
-	if err != nil {
+	sha, files, err := originArmatureFiles(gc)
+	if err != nil || sha == "" {
 		return err
 	}
 	var remoteManifest []byte
@@ -157,32 +132,59 @@ func overlayRemoteSources(gc *adapters.Client, destSources string) error {
 			remoteManifest = blob
 			continue
 		}
-		if !strings.HasPrefix(rel, "sources/") {
-			continue
-		}
-		base := filepath.Base(rel)
-		if base == "" || base == "." || base == "sources" {
+		base, ok := overlayBaseName(rel, "sources/")
+		if !ok {
 			continue
 		}
 		if err := os.MkdirAll(destSources, 0o750); err != nil {
 			return err
 		}
-		dest := filepath.Join(destSources, base)
-		if _, statErr := os.Stat(dest); statErr == nil {
-			continue
-		}
-		blob, showErr := gc.ShowFileAtCommit(sha, rel)
-		if showErr != nil {
-			return showErr
-		}
-		if writeErr := os.WriteFile(dest, blob, 0o600); writeErr != nil {
-			return writeErr
+		if err := writeRemoteFileIfMissing(gc, sha, rel, filepath.Join(destSources, base)); err != nil {
+			return err
 		}
 	}
 	if len(remoteManifest) == 0 {
 		return nil
 	}
 	return mergeSourceManifestFile(destSources, remoteManifest)
+}
+
+func originArmatureFiles(gc *adapters.Client) (sha string, files []string, err error) {
+	sha, err = gc.ResolveRevision("origin/_armature")
+	if err != nil {
+		if remoteOpsRefMissing(err) {
+			return "", nil, nil
+		}
+		return "", nil, err
+	}
+	files, err = gc.ListFilesAtCommit(sha)
+	if err != nil {
+		return "", nil, err
+	}
+	return sha, files, nil
+}
+
+func overlayBaseName(rel, prefix string) (string, bool) {
+	if !strings.HasPrefix(rel, prefix) {
+		return "", false
+	}
+	base := filepath.Base(rel)
+	dirName := strings.TrimSuffix(prefix, "/")
+	if base == "" || base == "." || base == dirName {
+		return "", false
+	}
+	return base, true
+}
+
+func writeRemoteFileIfMissing(gc *adapters.Client, sha, rel, dest string) error {
+	if _, statErr := os.Stat(dest); statErr == nil {
+		return nil
+	}
+	blob, showErr := gc.ShowFileAtCommit(sha, rel)
+	if showErr != nil {
+		return showErr
+	}
+	return os.WriteFile(dest, blob, 0o600)
 }
 
 func mergeSourceManifestFile(destSources string, remoteBlob []byte) error {

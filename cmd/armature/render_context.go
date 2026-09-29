@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -109,12 +108,8 @@ func init() {
 }
 
 func mapRenderContextError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var cf *armerrors.CommandFailure
-	if errors.As(err, &cf) {
-		return cf
+	if mapped, done := mappedCommandFailure(err); done {
+		return mapped
 	}
 	msg := err.Error()
 	if strings.Contains(msg, "NOT-CLAIM-OWNER") {
