@@ -438,7 +438,8 @@ func failLoudFlagError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, done := mappedCommandFailure(err); done {
+	var cf *armerrors.CommandFailure
+	if errors.As(err, &cf) {
 		return err
 	}
 	cause := err.Error()
