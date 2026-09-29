@@ -60,7 +60,7 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 		}
 	}
 	prefix = append(prefix, args...)
-	cmd := exec.CommandContext(ctx, "git", prefix...) //nolint:gosec // G204
+	cmd := exec.CommandContext(ctx, "git", prefix...) //nolint:gosec // G204: internal args, not user input
 	env := os.Environ()
 	if c.isolateEnv {
 		env = stripGitOverrideEnv(env)

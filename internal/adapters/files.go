@@ -58,15 +58,15 @@ func removeOrKeepErr(primary error, path string) error {
 }
 
 func readStateFile(path string) ([]byte, error) {
-	return os.ReadFile(path) //nolint:gosec // G304
+	return os.ReadFile(path) //nolint:gosec // G304: internal state path
 }
 
 func openState(path string) (*os.File, error) {
-	return os.Open(path) //nolint:gosec // G304
+	return os.Open(path) //nolint:gosec // G304: internal state path
 }
 
 func openStateFile(path string, flag int, perm os.FileMode) (*os.File, error) {
-	return os.OpenFile(path, flag, perm) //nolint:gosec // G304
+	return os.OpenFile(path, flag, perm) //nolint:gosec // G304: internal state path
 }
 
 // ListLogFiles finds all *.log files in the opsDir directory.

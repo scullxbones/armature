@@ -249,7 +249,7 @@ func copyDirFiles(src, dest string) error {
 }
 
 func readOverlayFile(src, name string) ([]byte, error) {
-	return os.ReadFile(filepath.Join(src, name)) //nolint:gosec // G304
+	return os.ReadFile(filepath.Join(src, name)) //nolint:gosec // G304: overlay names from ReadDir of local ops/sources
 }
 
 func writeOverlayFile(dest, name string, body []byte) error {

@@ -261,5 +261,5 @@ func LockLogID(repoPath, workerID string) (unlock func(), err error) {
 }
 
 func openLogLockFile(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304
+	return os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: trusted lock path under git common dir
 }
