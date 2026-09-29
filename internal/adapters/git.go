@@ -118,7 +118,7 @@ func gitDirAt(dir string) (gitDir, workTree string, ok bool, err error) {
 	if info.IsDir() {
 		return p, dir, true, nil
 	}
-	data, err := os.ReadFile(p) //nolint:gosec // path is dir/.git
+	data, err := readStateFile(p)
 	if err != nil {
 		return "", "", false, err
 	}
@@ -397,7 +397,7 @@ func nonEmptyDir(dir string) bool {
 	if err != nil || !info.IsDir() {
 		return false
 	}
-	f, err := os.Open(dir) //nolint:gosec // path is a gitlink checkout
+	f, err := openState(dir)
 	if err != nil {
 		return false
 	}
@@ -488,7 +488,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 		return fmt.Errorf("working tree is dirty (contains uncommitted changes): please commit or stash your changes before running bootstrap")
 	}
 
-	// Capture current branch name so we can return to it explicitly.
 	// On detached HEAD, --abbrev-ref returns the literal string "HEAD".
 	// In that case, capture the concrete commit SHA instead so we can restore.
 	headCmd := c.cmd("rev-parse", "--abbrev-ref", "HEAD")

@@ -1552,7 +1552,7 @@ func TestCheckExistingWorktreeBindingFailsClosedOnPermissionError(t *testing.T) 
 	require.NoError(t, os.WriteFile(issueIDFile, []byte("task-01"), 0o600)) //nolint:gosec // test path is internal
 	require.NoError(t, os.Chmod(issueIDFile, 0o000))                        //nolint:gosec // test path is internal
 	t.Cleanup(func() {
-		swallowErr(os.Chmod(issueIDFile, 0o600)) //nolint:gosec
+		swallowErr(os.Chmod(issueIDFile, 0o600)) //nolint:gosec // G302: test path is internal
 	})
 
 	err = checkExistingWorktreeBinding(worktreePath, "task-01", "task/task-01")

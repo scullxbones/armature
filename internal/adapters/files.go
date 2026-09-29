@@ -1,5 +1,4 @@
 // Package adapters provides boundary adapters for external concerns like file I/O.
-// All file read/write operations from core packages are consolidated here.
 package adapters
 
 import (
@@ -56,6 +55,18 @@ func removeOrKeepErr(primary error, path string) error {
 		return errors.Join(primary, rerr)
 	}
 	return primary
+}
+
+func readStateFile(path string) ([]byte, error) {
+	return os.ReadFile(path) //nolint:gosec // G304: internal state path
+}
+
+func openState(path string) (*os.File, error) {
+	return os.Open(path) //nolint:gosec // G304: internal state path
+}
+
+func openStateFile(path string, flag int, perm os.FileMode) (*os.File, error) {
+	return os.OpenFile(path, flag, perm) //nolint:gosec // G304: internal state path
 }
 
 // ListLogFiles finds all *.log files in the opsDir directory.
@@ -136,7 +147,7 @@ func (a *AppendLog) AppendIf(buf []byte, proceed func() (bool, error)) (wrote bo
 	committed := false
 	defer func() { closeUnlessCommitted(committed, &err, forcedClose{Closer: lock, err: a.closeErr}) }()
 
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: internal state path
+	f, err := openStateFile(logPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return false, fmt.Errorf("open log %s: %w", logPath, err)
 	}
@@ -265,7 +276,7 @@ type pendingAppend struct {
 }
 
 func lockLog(logPath string) (*os.File, error) {
-	lock, err := os.OpenFile(logPath+".lock", os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // internal state path
+	lock, err := openStateFile(logPath+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open log lock %s: %w", logPath, err)
 	}
@@ -312,7 +323,7 @@ func writePendingMarker(path string, marker pendingAppend) (err error) {
 }
 
 func syncDir(path string) (err error) {
-	dir, err := os.Open(path) //nolint:gosec // internal state path
+	dir, err := openState(path)
 	if err != nil {
 		return err
 	}
@@ -327,7 +338,7 @@ func syncDir(path string) (err error) {
 }
 
 func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, error) {
-	data, err := os.ReadFile(markerPath) //nolint:gosec // internal state path
+	data, err := readStateFile(markerPath)
 	if os.IsNotExist(err) {
 		return false, nil
 	}
@@ -441,7 +452,7 @@ func ReadLogPhysicalLines(logPath string) ([][]byte, error) {
 }
 
 func readLogLines(logPath string, offset int64, skipBlank bool) (lines [][]byte, err error) {
-	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path
+	f, err := openState(logPath)
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
@@ -475,7 +486,7 @@ type LineWithOffset struct {
 // ReadLogLinesWithOffsets reads lines starting from a byte offset and returns each line
 // with the byte offset where it ends (for checkpoint tracking).
 func ReadLogLinesWithOffsets(logPath string, startOffset int64) (lines []LineWithOffset, err error) {
-	f, err := os.Open(logPath) //nolint:gosec // G304: internal state path
+	f, err := openState(logPath)
 	if err != nil {
 		return nil, fmt.Errorf("open log %s: %w", logPath, err)
 	}
@@ -549,7 +560,7 @@ func RemoveIssueJSON(issuesDir string, issueID string) error {
 
 // LoadIssueJSON reads a JSON file and unmarshals it into the provided struct.
 func LoadIssueJSON(path string, v any) error {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
+	data, err := readStateFile(path)
 	if err != nil {
 		return err
 	}
@@ -587,7 +598,7 @@ func WriteCheckpointJSON(path string, data any) error {
 
 // LoadCheckpointJSON reads and unmarshals a checkpoint file.
 func LoadCheckpointJSON(path string, v any) error {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
+	data, err := readStateFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -604,7 +615,7 @@ func LoadCheckpointJSON(path string, v any) error {
 // If the file does not exist, it returns nil, nil.
 func ReadManifestFile(path string) ([]byte, error) {
 	filePath := filepath.Join(path, "manifest.json")
-	data, err := os.ReadFile(filePath) //nolint:gosec // G304: internal state path
+	data, err := readStateFile(filePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -658,7 +669,7 @@ func WriteCacheFile(path string, id string, data []byte) error {
 // If the file does not exist, it returns nil, nil.
 func ReadCacheFile(path string, id string) ([]byte, error) {
 	cacheFile := filepath.Join(path, id+".cache")
-	data, err := os.ReadFile(cacheFile) //nolint:gosec // G304: internal state path
+	data, err := readStateFile(cacheFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -681,7 +692,7 @@ func StatFile(path string) bool {
 
 // ReadPlanFile reads a plan JSON file from the given path.
 func ReadPlanFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
+	data, err := readStateFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read plan file %s: %w", path, err)
 	}
@@ -705,7 +716,7 @@ func WriteCoverageFile(path string, data any) error {
 // ReadCoverageFile reads coverage data from a file.
 // If the file does not exist, it returns nil, nil.
 func ReadCoverageFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: internal state path
+	data, err := readStateFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -765,7 +776,7 @@ func Stat(path string) (os.FileInfo, error) {
 
 // ReadFile reads the entire contents of a file.
 func ReadFile(path string) ([]byte, error) {
-	return os.ReadFile(path) //nolint:gosec // G304: internal state path
+	return readStateFile(path)
 }
 
 // WriteFile writes data to a file, creating it if it does not exist.

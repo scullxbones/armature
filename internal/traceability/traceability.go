@@ -56,9 +56,6 @@ type Coverage struct {
 }
 
 // Compute calculates traceability coverage from a slice of issueref.IssueRef values.
-// An issue is considered "cited" if its SourceLinkCount > 0.
-// An issue is counted as "accepted risk" if it has no source link but has one
-// or more CitationAcceptance records.
 //
 // Grounding is gated on Confidence (CITEGATE-T2 / ADR 0021): an ungrounded
 // Draft is legal and is not a Graph Finding; an ungrounded Verified is.

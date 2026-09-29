@@ -182,8 +182,6 @@ linters:
       - linters:
           - forbidigo
         path: 'internal/tui/app/'
-      # G204: subprocess launched with variable — inherent to git/shell adapter
-      # G301/G302: directory/file permissions in tests use 0755 for git repo traversal
       - linters:
           - gosec
         path: '_test\.go$'
@@ -199,12 +197,6 @@ linters:
       - linters:
           - paralleltest
         path: 'cmd/'
-      # golden_test.go's t.Run subtests build sequential state within a single shared
-      # TestRepo fixture (worktreePath, baseCommit, headCommit, bundleFile carry from one
-      # subtest to the next; the whole point is to replay the coordinator's documented
-      # command sequence step by step) — parallelizing them would break that ordering.
-      # The top-level Test funcs themselves do use independent fixtures and are marked
-      # t.Parallel().
       - linters:
           - paralleltest
           - tparallel
