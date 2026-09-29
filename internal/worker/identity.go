@@ -233,7 +233,7 @@ func LockLogID(repoPath, workerID string) (unlock func(), err error) {
 		return func() {}, nil
 	}
 	lockPath := filepath.Join(common, "armature-log-"+workerID+".lock")
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec
+	f, err := openLogLockFile(lockPath)
 	if err != nil {
 		return nil, err
 	}
@@ -258,4 +258,8 @@ func LockLogID(repoPath, workerID string) (unlock func(), err error) {
 			fmt.Fprintf(os.Stderr, "close log flock: %v\n", err)
 		}
 	}, nil
+}
+
+func openLogLockFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304
 }

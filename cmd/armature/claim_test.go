@@ -113,7 +113,7 @@ func TestClaimNewWorktreeRecordsClaimedBranchFile_REQ_LNGHZN_S4(t *testing.T) {
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	claimedBranchData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-claimed-branch")) //nolint:gosec // test path is internal
+	claimedBranchData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-claimed-branch")) //nolint:gosec
 	require.NoError(t, err, "claimed-branch marker file should be recorded at claim time")
 	assert.Equal(t, "task/task-01", strings.TrimSpace(string(claimedBranchData)))
 }
@@ -148,7 +148,7 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	_, err = os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+	_, err = os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec
 	assert.Error(t, err, "existing worktree must not receive a guessed base commit")
 	_, err = deliverygate.GatedBaseCommit(worktreePath, "task-01", adapters.New(worktreePath))
 	assert.Error(t, err, "delivery gate must fail closed when legacy provenance is missing")
@@ -253,7 +253,7 @@ func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_R
 	if !filepath.IsAbs(actualGitDir) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
-	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+	baseCommitData, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec
 	if err == nil {
 		assert.NotEqual(t, mainHeadSHA, strings.TrimSpace(string(baseCommitData)),
 			"base commit file must not be contaminated with the coordinator's unrelated HEAD")
@@ -270,7 +270,7 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 		if !filepath.IsAbs(actualGitDir) {
 			actualGitDir = filepath.Join(worktreePath, actualGitDir)
 		}
-		data, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec // test path is internal
+		data, err := os.ReadFile(filepath.Join(actualGitDir, "armature-base-commit")) //nolint:gosec
 		require.NoError(t, err, "base-commit file should be recorded")
 		return string(data)
 	}
@@ -354,7 +354,7 @@ func TestClaimCreatesWorktreeIfAbsent(t *testing.T) {
 
 	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	assert.FileExists(t, taskIDFile, "armature-issue-id file should be created in actual git dir")
-	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // internal test path
+	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec
 	require.NoError(t, err)
 	assert.Equal(t, "task-01", string(taskID))
 }
@@ -380,7 +380,7 @@ func TestClaimUpdatesTaskIDIfWorktreeExists(t *testing.T) {
 	}
 
 	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // internal test path
+	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec
 	require.NoError(t, err)
 	assert.Equal(t, "task-01", string(taskID))
 }
@@ -424,7 +424,7 @@ func TestClaimCreatesTaskBranch(t *testing.T) {
 
 	headFile := filepath.Join(actualGitDir, "HEAD")
 	assert.FileExists(t, headFile, "HEAD file should exist in git directory")
-	headContent, err := os.ReadFile(headFile) //nolint:gosec // test path is safe
+	headContent, err := os.ReadFile(headFile) //nolint:gosec
 	require.NoError(t, err)
 	headStr := string(headContent)
 	assert.Contains(t, headStr, "task-01", "HEAD should reference task/task-01 branch")
@@ -1093,7 +1093,7 @@ func TestClaimAllowsWorktreeWithDetachedHEAD(t *testing.T) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
 	headFile := filepath.Join(actualGitDir, "HEAD")
-	headContent, err := os.ReadFile(headFile) //nolint:gosec // internal test path
+	headContent, err := os.ReadFile(headFile) //nolint:gosec
 	require.NoError(t, err)
 	headStr := strings.TrimSpace(string(headContent))
 	assert.False(t, strings.HasPrefix(headStr, "ref: "), "HEAD should be detached (not a branch ref)")
@@ -1208,19 +1208,19 @@ func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
 		actualGitDir = filepath.Join(worktreePath, actualGitDir)
 	}
 	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec // test path
+	taskID, err := os.ReadFile(taskIDFile) //nolint:gosec
 	require.NoError(t, err)
 	require.Equal(t, "task-01", string(taskID), "worktree should initially be bound to task-01")
 
 	run(t, worktreePath, "git", "checkout", "--detach", "HEAD")
 
 	headFile := filepath.Join(actualGitDir, "HEAD")
-	headContent, err := os.ReadFile(headFile) //nolint:gosec // internal test path
+	headContent, err := os.ReadFile(headFile) //nolint:gosec
 	require.NoError(t, err)
 	headStr := strings.TrimSpace(string(headContent))
 	require.False(t, strings.HasPrefix(headStr, "ref: "), "HEAD should be detached")
 
-	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-issue-id file") //nolint:gosec // internal test path
+	require.NoError(t, os.Remove(taskIDFile), "should be able to delete armature-issue-id file") //nolint:gosec
 
 	_, stderr, claimErr := runTrlsWithStderr(t, repo, "claim", "--issue", "task-01", "--worktree")
 	assert.Error(t, claimErr, "claim should fail when worktree has unbound detached HEAD. stderr: %s", stderr)
@@ -1519,10 +1519,10 @@ func TestCheckExistingWorktreeBindingReadsLegacyTaskID(t *testing.T) {
 	}
 
 	taskIDFile := filepath.Join(actualGitDir, "armature-task-id")
-	require.NoError(t, os.WriteFile(taskIDFile, []byte("task-01"), 0o600)) //nolint:gosec // test path is internal
+	require.NoError(t, os.WriteFile(taskIDFile, []byte("task-01"), 0o600)) //nolint:gosec
 
 	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	_, err = os.ReadFile(issueIDFile) //nolint:gosec // test path is internal
+	_, err = os.ReadFile(issueIDFile) //nolint:gosec
 	require.True(t, os.IsNotExist(err), "armature-issue-id should not exist (only legacy armature-task-id)")
 
 	err = checkExistingWorktreeBinding(worktreePath, "task-01", "task/task-01")
@@ -1549,10 +1549,10 @@ func TestCheckExistingWorktreeBindingFailsClosedOnPermissionError(t *testing.T) 
 	}
 
 	issueIDFile := filepath.Join(actualGitDir, "armature-issue-id")
-	require.NoError(t, os.WriteFile(issueIDFile, []byte("task-01"), 0o600)) //nolint:gosec // test path is internal
-	require.NoError(t, os.Chmod(issueIDFile, 0o000))                        //nolint:gosec // test path is internal
+	require.NoError(t, os.WriteFile(issueIDFile, []byte("task-01"), 0o600)) //nolint:gosec
+	require.NoError(t, os.Chmod(issueIDFile, 0o000))                        //nolint:gosec
 	t.Cleanup(func() {
-		swallowErr(os.Chmod(issueIDFile, 0o600)) //nolint:gosec
+		swallowErr(os.Chmod(issueIDFile, 0o600)) //nolint:gosec // G302
 	})
 
 	err = checkExistingWorktreeBinding(worktreePath, "task-01", "task/task-01")

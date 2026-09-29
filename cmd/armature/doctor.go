@@ -93,8 +93,7 @@ func newDoctorCmd() *cobra.Command {
 				renderDoctorHuman(cmd, report, verbose, explain)
 			}
 
-			// Determine exit condition. The report is already on stdout;
-			// it is not a Command Failure (ADR 0020 §7).
+			// Doctor report is not a Command Failure (ADR 0020 §7).
 			if report.HasErrors() {
 				return skipCommandFailure(fmt.Errorf("doctor: %d error(s) found", countBySeverity(report, doctor.SeverityError)))
 			}

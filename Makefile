@@ -72,10 +72,6 @@ coverage: build
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
-# Reads the coverage.out profile produced by `coverage` rather than re-running
-# the unit suite (D3, docs/design/gate-efficiency.md): the full gate runs the
-# suite exactly once. Declared as a prerequisite so `make -j check` cannot
-# start this target against a stale or missing profile.
 coverage-check: coverage
 	@scripts/coverage-check.sh . coverage.out
 

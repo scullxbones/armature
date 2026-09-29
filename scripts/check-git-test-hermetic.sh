@@ -9,8 +9,6 @@ if ! command -v rg >/dev/null 2>&1; then
     exit 1
 fi
 
-# Catch `git init` even when -C / -c (and Go argv equivalents) precede init.
-# Do not match `git commit -m init` or `"git", "commit", "-m", "init"`.
 hits=$(rg -n --glob '*_test.go' --glob '!internal/gittest/**' \
     -e '\bgit(?:\s+-[Cc]\s+\S+)+\s+init\b' \
     -e '\bgit\s+init\b' \

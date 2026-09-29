@@ -29,8 +29,7 @@ func (e *ForeignChildError) Error() string {
 }
 
 // CheckForeignChildren refuses revert when any issue not in the plan has a
-// planned issue as its parent. The help text promises this guard; dry-run
-// and apply share the same error.
+// planned issue as its parent. Dry-run and apply share the same error.
 func CheckForeignChildren(plan *Plan, state *materialize.State) error {
 	if plan == nil || state == nil {
 		return nil
@@ -105,8 +104,7 @@ func DryRunRevertPlan(plan *Plan, state *materialize.State) (*DryRunRevertResult
 }
 
 // CancelOps returns cancel transitions for still-open planned issues after
-// the foreign-child guard. Callers that write (CLI high-stakes path, RevertPlan)
-// must not skip this planning function.
+// the foreign-child guard.
 func CancelOps(plan *Plan, workerID string, state *materialize.State, clk clock.Clock) ([]ops.Op, error) {
 	if err := CheckForeignChildren(plan, state); err != nil {
 		return nil, err

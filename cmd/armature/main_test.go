@@ -1480,7 +1480,7 @@ func TestLogCommand_CorruptLineAfterBlankUsesPhysicalLine_REQ_NOCOMMENTS(t *test
 	require.Equal(t, byte('\n'), existing[len(existing)-1], "ops append writes a trailing newline")
 
 	existing = append(existing, []byte("\nthis is not json\n")...)
-	err = os.WriteFile(logPath, existing, 0o600) //nolint:gosec // G703: test-controlled worker log
+	err = os.WriteFile(logPath, existing, 0o600) //nolint:gosec
 	require.NoError(t, err)
 
 	_, stderr, err := runTrlsWithStderr(t, repo, "log")
