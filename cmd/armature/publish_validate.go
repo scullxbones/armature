@@ -251,5 +251,5 @@ func readOverlayFile(src, name string) ([]byte, error) {
 }
 
 func writeOverlayFile(dest, name string, body []byte) error {
-	return os.WriteFile(filepath.Join(dest, name), body, 0o600) //nolint:gosec // G306
+	return os.WriteFile(filepath.Join(dest, name), body, 0o600)
 }
