@@ -139,7 +139,7 @@ func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool) error 
 		}
 		rows = append(rows, row)
 	}
-	return writeNamedEnvelope(w, "checks", rows, doctorHelp(report))
+	return writeCommandEnvelope(w, "checks", rows, doctorHelp(report), nil)
 }
 
 func doctorHelp(report doctor.Report) []string {

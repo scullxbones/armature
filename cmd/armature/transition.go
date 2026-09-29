@@ -457,12 +457,8 @@ func init() {
 }
 
 func mapTransitionError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var cf *armerrors.CommandFailure
-	if errors.As(err, &cf) {
-		return cf
+	if mapped, done := mappedCommandFailure(err); done {
+		return mapped
 	}
 	msg := err.Error()
 	switch {

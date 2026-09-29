@@ -167,7 +167,7 @@ type heartbeatRateLimitState struct {
 func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
 	stateFile := rateLimitStateFilePath(workerID, issueID)
 	// #nosec G304 - stateFile is derived from workerID and issueID; ARM_LOG_SLOT
-	// charset is validated by SlottedWorkerID.
+	// charset is validated by slottedWorkerIDChecked.
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
 		return time.Time{}
@@ -189,7 +189,7 @@ func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.T
 		return fmt.Errorf("failed to marshal heartbeat state: %w", err)
 	}
 	// #nosec G304 - stateFile is derived from workerID and issueID; ARM_LOG_SLOT
-	// charset is validated by SlottedWorkerID.
+	// charset is validated by slottedWorkerIDChecked.
 	if err := os.WriteFile(stateFile, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write heartbeat state file: %w", err)
 	}
@@ -217,7 +217,7 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 		return
 	}
 
-	lastHeartbeatTime := readHeartbeatRateLimitState(ownerID.String(), issueID)
+	lastHeartbeatTime := readHeartbeatRateLimitState(ownerID, issueID)
 
 	if !claimPkg.ShouldHeartbeat(lastHeartbeatTime, time.Now()) {
 		return
@@ -227,13 +227,13 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 		Type:      ops.OpHeartbeat,
 		TargetID:  issueID,
 		Timestamp: nowEpoch(),
-		WorkerID:  ownerID.String(),
+		WorkerID:  ownerID,
 		Payload: ops.Payload{
 			Source: "hook",
 		},
 	}
 
-	logPath := opsLogPath(issuesDir, ownerID.String())
+	logPath := opsLogPath(issuesDir, ownerID)
 
 	var gc ops.GitCommitter
 	if worktreePath != "" {
@@ -245,7 +245,7 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 		return
 	}
 
-	if err := writeHeartbeatRateLimitState(ownerID.String(), issueID, time.Now()); err != nil {
+	if err := writeHeartbeatRateLimitState(ownerID, issueID, time.Now()); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to update heartbeat rate-limit state for %s: %v\n", issueID, err)
 		return
 	}

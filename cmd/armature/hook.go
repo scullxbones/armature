@@ -150,7 +150,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 	now := time.Now().Unix()
-	want := slottedWorkerID(workerID).String()
+	want := slottedWorkerID(workerID)
 	var (
 		bestID  string
 		bestAct int64

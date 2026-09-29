@@ -28,7 +28,7 @@ func newTUICmd() *cobra.Command {
 
 			workerID := slottedWorkerIDBestEffort(appCtx.RepoPath)
 			if workerID == "" {
-				workerID = slottedWorkerID("default").String()
+				workerID = slottedWorkerID("default")
 			}
 
 			if !tui.IsInteractive() {

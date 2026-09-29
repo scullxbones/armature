@@ -115,7 +115,7 @@ func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
 	workerID := slottedWorkerIDBestEffort(repo)
 	if workerID == "" {
-		workerID = slottedWorkerID("default").String()
+		workerID = slottedWorkerID("default")
 	}
 	if _, err := os.Stat(filepath.Join(repo, ".arm", ".git")); err == nil {
 		return filepath.Join(repo, ".armature", "state", workerID)
@@ -941,7 +941,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	issuesDir := filepath.Join(repo, ".armature")
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	workerID = slottedWorkerID(workerID).String()
+	workerID = slottedWorkerID(workerID)
 	logPath := filepath.Join(issuesDir, "ops", workerID+".log")
 	statBefore, err := os.Stat(logPath)
 	require.NoError(t, err)
@@ -1272,7 +1272,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
 	defaultID := "default"
-	defaultID = slottedWorkerID(defaultID).String()
+	defaultID = slottedWorkerID(defaultID)
 	expectedDefault := filepath.Join(repo, ".armature", "state", defaultID)
 	_, err = os.Stat(expectedDefault)
 	assert.NoError(t, err, "StateDir should exist at %s when no worker ID is set", expectedDefault)
@@ -1284,7 +1284,7 @@ func TestAppCtxStateDirSet(t *testing.T) {
 
 	_, err = runTrls(t, repo, "list")
 	require.NoError(t, err)
-	workerID = slottedWorkerID(workerID).String()
+	workerID = slottedWorkerID(workerID)
 	expectedWorker := filepath.Join(repo, ".armature", "state", workerID)
 	_, err = os.Stat(expectedWorker)
 	assert.NoError(t, err, "StateDir should exist at %s for configured worker ID", expectedWorker)
@@ -2316,7 +2316,7 @@ func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
 
 func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
 	t.Setenv("ARM_LOG_SLOT", "lane-a")
-	workerID := slottedWorkerID("worker-123").String()
+	workerID := slottedWorkerID("worker-123")
 	assert.Equal(t, "worker-123~lane-a", workerID)
 
 	ctx := &config.Context{IssuesDir: "/repo/.armature"}
@@ -2326,26 +2326,26 @@ func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
 func TestSlottedWorkerID_REQ_LNGHZN_S3_T1(t *testing.T) {
 	t.Run("valid slot is appended as before", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "lane-a_2")
-		assert.Equal(t, SlottedWorkerID("worker-123~lane-a_2"), slottedWorkerID("worker-123"))
+		assert.Equal(t, "worker-123~lane-a_2", slottedWorkerID("worker-123"))
 	})
 
 	t.Run("slot containing a path separator is rejected", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "../../etc")
 		_, err := slottedWorkerIDChecked("worker-123")
 		require.Error(t, err)
-		assert.Equal(t, "", slottedWorkerID("worker-123").String())
+		assert.Equal(t, "", slottedWorkerID("worker-123"))
 	})
 
 	t.Run("slot containing a slash is rejected", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "a/b")
 		_, err := slottedWorkerIDChecked("worker-123")
 		require.Error(t, err)
-		assert.Equal(t, "", slottedWorkerID("worker-123").String())
+		assert.Equal(t, "", slottedWorkerID("worker-123"))
 	})
 
 	t.Run("empty slot is unslotted identity", func(t *testing.T) {
 		t.Setenv("ARM_LOG_SLOT", "")
-		assert.Equal(t, SlottedWorkerID("worker-123"), slottedWorkerID("worker-123"))
+		assert.Equal(t, "worker-123", slottedWorkerID("worker-123"))
 	})
 }
 

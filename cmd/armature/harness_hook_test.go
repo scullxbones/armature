@@ -1163,7 +1163,7 @@ func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
 
 func heartbeatOpsForWorker(t *testing.T, repo, workerID string) []ops.Op {
 	t.Helper()
-	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerID(workerID).String())
+	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerID(workerID))
 	loggedOps, err := ops.ReadLog(logPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -1182,7 +1182,7 @@ func heartbeatOpsForWorker(t *testing.T, repo, workerID string) []ops.Op {
 
 func backdateAllOps(t *testing.T, repo, workerID string, delta time.Duration) {
 	t.Helper()
-	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerID(workerID).String())
+	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerID(workerID))
 	loggedOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
 
@@ -1233,7 +1233,7 @@ func TestHookEmitsHeartbeatMatchingSlottedClaimant_REQ_LNGHZN_S3_T1(t *testing.T
 
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(slottedWorkerID(workerID).String(), "task-01"))) }()
+	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(slottedWorkerID(workerID), "task-01"))) }()
 
 	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
 	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
@@ -1246,7 +1246,7 @@ func TestHookEmitsHeartbeatMatchingSlottedClaimant_REQ_LNGHZN_S3_T1(t *testing.T
 	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
 	require.NoError(t, hookCmd.Execute())
 
-	slottedID := slottedWorkerID(workerID).String()
+	slottedID := slottedWorkerID(workerID)
 	heartbeats := heartbeatOpsForWorker(t, repo, workerID)
 	require.Len(t, heartbeats, 1)
 	assert.Equal(t, slottedID, heartbeats[0].WorkerID,
