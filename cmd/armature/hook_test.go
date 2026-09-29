@@ -238,7 +238,7 @@ func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
 	require.NoError(t, err)
 
 	issuesDir := filepath.Join(repo, ".armature")
-	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, slottedWorkerID(workerID).String())
+	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, slottedWorkerID(workerID))
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
 
 	now := time.Now().Unix()
@@ -278,7 +278,7 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	issuesDir := filepath.Join(repo, ".armature")
-	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, slottedWorkerID(workerID).String())
+	logPath := fmt.Sprintf("%s/ops/%s.log", issuesDir, slottedWorkerID(workerID))
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
 
 	now := time.Now().Unix()

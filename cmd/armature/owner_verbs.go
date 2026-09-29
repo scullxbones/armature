@@ -99,12 +99,8 @@ func renderContextOwnerDenied(lease claimpkg.Lease, workerID string, now int64) 
 }
 
 func mapHeartbeatError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var cf *armerrors.CommandFailure
-	if errors.As(err, &cf) {
-		return cf
+	if mapped, done := mappedCommandFailure(err); done {
+		return mapped
 	}
 	if wrapped := wrapHeartbeatNotClaimOwner(err); wrapped != err {
 		return wrapped

@@ -36,7 +36,7 @@ func writeReviewAssessmentEnvelope(cmd *cobra.Command, row reviewAssessmentRow) 
 	if row.Status == "duplicate" {
 		help = []string{"assessment already recorded for this bundle; no op was appended", help[0]}
 	}
-	return writeNamedEnvelope(cmd.OutOrStdout(), "assessments", []reviewAssessmentRow{row}, help)
+	return writeCommandEnvelope(cmd.OutOrStdout(), "assessments", []reviewAssessmentRow{row}, help, nil)
 }
 
 func newReviewCmd() *cobra.Command {
@@ -153,7 +153,7 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 			help := []string{
 				"arm review record --issue " + issueID + " --assessment <assessment.json> --bundle " + outputFile,
 			}
-			return writeNamedEnvelope(cmd.OutOrStdout(), "bundles", []reviewBundleWriteRow{row}, help)
+			return writeCommandEnvelope(cmd.OutOrStdout(), "bundles", []reviewBundleWriteRow{row}, help, nil)
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Review bundle written to %s\n", outputFile)
 	} else {
@@ -251,7 +251,7 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 		if len(commits) == 0 {
 			help = []string{"no delivery commits found for " + issueID, help[0]}
 		}
-		return writeNamedEnvelope(cmd.OutOrStdout(), "commits", commits, help)
+		return writeCommandEnvelope(cmd.OutOrStdout(), "commits", commits, help, nil)
 	}
 
 	if len(commits) == 0 {
@@ -414,12 +414,8 @@ func readAssessmentFile(path string) ([]byte, error) {
 }
 
 func mapReviewError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var cf *armerrors.CommandFailure
-	if errors.As(err, &cf) {
-		return cf
+	if mapped, done := mappedCommandFailure(err); done {
+		return mapped
 	}
 	var skip protocolExitError
 	if errors.As(err, &skip) {

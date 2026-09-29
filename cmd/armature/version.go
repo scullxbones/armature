@@ -33,7 +33,7 @@ func writeVersionOutput(cmd *cobra.Command) error {
 	format, _ := flags.GetString("format")
 	explicitHuman := flags.Changed("format") && format == "human"
 	if !explicitHuman && (format == "json" || format == "agent" || tui.IsNonInteractive()) {
-		return writeNamedEnvelope(cmd.OutOrStdout(), "versions", []versionRow{{Version: Version}}, []string{versionHelp})
+		return writeCommandEnvelope(cmd.OutOrStdout(), "versions", []versionRow{{Version: Version}}, []string{versionHelp}, nil)
 	}
 	_, err := fmt.Fprintf(cmd.OutOrStdout(), "arm version %s\n", Version)
 	return err
