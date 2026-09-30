@@ -147,17 +147,9 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 	}
 
 	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion != CurrentStateVersion
-	var state *State
-
-	if !fullReplay {
-		loadedIssues, err := LoadAllIssues(issuesStateDir)
-		if err != nil {
-			return nil, Result{}, fmt.Errorf("load prior state: %w", err)
-		}
-		state = NewState()
-		state.Issues = loadedIssues
-	} else {
-		state = NewState()
+	state, err := loadOrNewState(issuesStateDir, fullReplay)
+	if err != nil {
+		return nil, Result{}, err
 	}
 
 	state.RetractDerivedPromotions()
@@ -266,6 +258,19 @@ func Run(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Op
 	return runFullPipeline(stateDir, allOps, byteOffsets, opts)
 }
 
+func loadOrNewState(issuesStateDir string, fullReplay bool) (*State, error) {
+	state := NewState()
+	if fullReplay {
+		return state, nil
+	}
+	loadedIssues, err := LoadAllIssues(issuesStateDir)
+	if err != nil {
+		return nil, fmt.Errorf("load prior state: %w", err)
+	}
+	state.Issues = loadedIssues
+	return state, nil
+}
+
 func sortOpsByTimestamp(allOps []ops.Op) {
 	claimpkg.SortForReplay(allOps)
 }
@@ -345,16 +350,9 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 	issuesStateDir := filepath.Join(stateDir, "issues")
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 	sortLocatedByCommit(located)
-	var state *State
-	if !fullReplay {
-		loadedIssues, loadErr := LoadAllIssues(issuesStateDir)
-		if loadErr != nil {
-			return nil, Result{}, fmt.Errorf("load prior state: %w", loadErr)
-		}
-		state = NewState()
-		state.Issues = loadedIssues
-	} else {
-		state = NewState()
+	state, loadErr := loadOrNewState(issuesStateDir, fullReplay)
+	if loadErr != nil {
+		return nil, Result{}, loadErr
 	}
 	state.RetractDerivedPromotions()
 	newOps := oporder.Ops(located)

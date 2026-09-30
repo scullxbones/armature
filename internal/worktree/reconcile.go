@@ -111,19 +111,7 @@ func ReconcileWithLocalEvidence(
 		if issue.WorktreePath != "" && NormalizePathAllowingMissing(wt.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
 			matchedRecordedPaths.add(issueID)
 		}
-
-		switch {
-		case isTerminalStatus(issue.Status):
-			gcCandidates[issueID] = append(gcCandidates[issueID], wt)
-		case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
-			if liveClaimBindsLocalPath(issue, wt.Path) {
-				result.BoundWorktrees = append(result.BoundWorktrees, issueID)
-			} else {
-				result.Orphans = append(result.Orphans, issueID)
-			}
-		default:
-			result.Orphans = append(result.Orphans, issueID)
-		}
+		classifyBoundWorktree(&result, gcCandidates, issueID, issue, wt, now)
 	}
 
 	for issueID, candidates := range gcCandidates {
@@ -137,22 +125,45 @@ func ReconcileWithLocalEvidence(
 		result.GCRemovals = append(result.GCRemovals, selected)
 	}
 
-	ghostScopeDisabled := len(managedRoots) == 0
-	for _, issue := range issues {
-		if issue == nil || issue.WorktreePath == "" {
-			continue
+	result.Ghosts = detectGhosts(issues, matchedRecordedPaths, now, managedRoots, registeredPaths)
+	sortReconcileResult(&result)
+	return result
+}
+
+func classifyBoundWorktree(result *ReconcileResult, gcCandidates map[string][]Meta, issueID string, issue *materialize.Issue, wt Meta, now time.Time) {
+	switch {
+	case isTerminalStatus(issue.Status):
+		gcCandidates[issueID] = append(gcCandidates[issueID], wt)
+	case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
+		if liveClaimBindsLocalPath(issue, wt.Path) {
+			result.BoundWorktrees = append(result.BoundWorktrees, issueID)
+		} else {
+			result.Orphans = append(result.Orphans, issueID)
 		}
-		if matchedRecordedPaths.has(issue.ID) {
+	default:
+		result.Orphans = append(result.Orphans, issueID)
+	}
+}
+
+func detectGhosts(issues map[string]*materialize.Issue, matched recordedPathSet, now time.Time, managedRoots, registeredPaths []string) []string {
+	ghostScopeDisabled := len(managedRoots) == 0
+	ghosts := []string{}
+	for _, issue := range issues {
+		if issue == nil || issue.WorktreePath == "" || matched.has(issue.ID) {
 			continue
 		}
 		normPath := NormalizePathAllowingMissing(issue.WorktreePath)
-		if !isTerminalStatus(issue.Status) && issue.ClaimedBy != "" &&
-			!issue.ClaimStale(now.Unix()) &&
-			(ghostScopeDisabled || isUnderManagedRoot(normPath, managedRoots) || isRegisteredPath(normPath, registeredPaths)) {
-			result.Ghosts = append(result.Ghosts, issue.ID)
+		if isTerminalStatus(issue.Status) || issue.ClaimedBy == "" || issue.ClaimStale(now.Unix()) {
+			continue
+		}
+		if ghostScopeDisabled || isUnderManagedRoot(normPath, managedRoots) || isRegisteredPath(normPath, registeredPaths) {
+			ghosts = append(ghosts, issue.ID)
 		}
 	}
+	return ghosts
+}
 
+func sortReconcileResult(result *ReconcileResult) {
 	sort.Strings(result.BoundWorktrees)
 	sort.Strings(result.Orphans)
 	sort.Strings(result.Ghosts)
@@ -165,8 +176,6 @@ func ReconcileWithLocalEvidence(
 	})
 	sort.Strings(result.GCAmbiguous)
 	sort.Strings(result.Unrecognized)
-
-	return result
 }
 
 func liveClaimBindsLocalPath(issue *materialize.Issue, wtPath string) bool {

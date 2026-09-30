@@ -36,63 +36,77 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 		return f
 	}
 
-	var tasksToCheck []*materialize.Issue
-	gracePeriod := 30 * time.Minute
-
-	for id, issue := range allIssues {
-		if issue == nil {
-			continue
-		}
-
-		if _, inIndex := index[id]; !inIndex {
-			continue
-		}
-
-		if issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress {
-			tasksToCheck = append(tasksToCheck, issue)
-			continue
-		}
-
-		if issue.Status == ops.StatusDone || issue.Status == ops.StatusMerged {
-			if issue.Updated > 0 {
-				completedTime := time.Unix(issue.Updated, 0)
-				if now.Sub(completedTime) <= gracePeriod {
-					tasksToCheck = append(tasksToCheck, issue)
-					continue
-				}
-			}
-		}
-	}
-
+	tasksToCheck := d8TasksToCheck(index, allIssues, now)
 	if len(tasksToCheck) == 0 {
 		return f
 	}
 
-	needsDirtyProbe := false
-	for _, issue := range tasksToCheck {
-		if len(issue.Scope) > 0 {
-			needsDirtyProbe = true
-			break
-		}
-	}
-	var dirtyPaths []string
-	if needsDirtyProbe {
-		var err error
-		dirtyPaths, err = gitDirtyPaths(repoPath)
-		if err != nil {
-			f.Severity = SeverityError
-			f.Message = "Could not list git-dirty paths"
-			f.Items = []string{err.Error()}
-			return f
-		}
+	dirtyPaths, err := d8DirtyPaths(repoPath, tasksToCheck)
+	if err != nil {
+		f.Severity = SeverityError
+		f.Message = "Could not list git-dirty paths"
+		f.Items = []string{err.Error()}
+		return f
 	}
 
+	allViolations := d8UnexplainedViolations(repoPath, tasksToCheck, dirtyPaths)
+	if len(allViolations) == 0 {
+		return f
+	}
+
+	f.Severity = SeverityError
+	f.Message = "Out-of-scope artifacts detected for active or recently-completed tasks"
+	for taskID, violations := range allViolations {
+		for _, v := range violations {
+			f.Items = append(f.Items, taskID+": "+v)
+		}
+	}
+	sort.Strings(f.Items)
+	return f
+}
+
+func d8TasksToCheck(index materialize.Index, allIssues map[string]*materialize.Issue, now time.Time) []*materialize.Issue {
+	gracePeriod := 30 * time.Minute
+	var tasksToCheck []*materialize.Issue
+	for id, issue := range allIssues {
+		if issue == nil {
+			continue
+		}
+		if _, inIndex := index[id]; !inIndex {
+			continue
+		}
+		if issue.Status == ops.StatusClaimed || issue.Status == ops.StatusInProgress {
+			tasksToCheck = append(tasksToCheck, issue)
+			continue
+		}
+		if issue.Status != ops.StatusDone && issue.Status != ops.StatusMerged {
+			continue
+		}
+		if issue.Updated > 0 {
+			completedTime := time.Unix(issue.Updated, 0)
+			if now.Sub(completedTime) <= gracePeriod {
+				tasksToCheck = append(tasksToCheck, issue)
+			}
+		}
+	}
+	return tasksToCheck
+}
+
+func d8DirtyPaths(repoPath string, tasks []*materialize.Issue) ([]string, error) {
+	for _, issue := range tasks {
+		if len(issue.Scope) > 0 {
+			return gitDirtyPaths(repoPath)
+		}
+	}
+	return nil, nil
+}
+
+func d8UnexplainedViolations(repoPath string, tasks []*materialize.Issue, dirtyPaths []string) map[string][]string {
 	rawViolations := make(map[string][]string)
-	for _, issue := range tasksToCheck {
+	for _, issue := range tasks {
 		if len(issue.Scope) == 0 {
 			continue
 		}
-
 		violations := findOutOfScopeArtifacts(repoPath, issue.Scope, dirtyPaths)
 		if len(violations) > 0 {
 			rawViolations[issue.ID] = violations
@@ -100,7 +114,7 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 	}
 
 	explainedBy := make(map[string][]*materialize.Issue)
-	for _, issue := range tasksToCheck {
+	for _, issue := range tasks {
 		if len(issue.Scope) == 0 {
 			continue
 		}
@@ -123,20 +137,7 @@ func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*mater
 			allViolations[taskID] = append(allViolations[taskID], path)
 		}
 	}
-
-	if len(allViolations) > 0 {
-		f.Severity = SeverityError
-		f.Message = "Out-of-scope artifacts detected for active or recently-completed tasks"
-
-		for taskID, violations := range allViolations {
-			for _, v := range violations {
-				f.Items = append(f.Items, taskID+": "+v)
-			}
-		}
-		sort.Strings(f.Items)
-	}
-
-	return f
+	return allViolations
 }
 
 func findOutOfScopeArtifacts(repoPath string, scope []string, candidates []string) []string {

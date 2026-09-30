@@ -29,36 +29,19 @@ type ReadyEntry struct {
 // workerID is used for assignment-aware sorting: assigned-to-me first, unassigned next,
 // other-assigned last. Pass "" to disable assignment-aware sorting.
 func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue, workerID string, now ...int64) []ReadyEntry {
-	var currentTime int64
-	if len(now) > 0 {
-		currentTime = now[0]
-	}
-
+	currentTime := optionalUnix(now)
 	graph := materialize.GraphFromIndex(index)
 
 	var ready []ReadyEntry
-
 	for id, entry := range index {
-		if !issuetype.IsReadyEligible(entry.Type) {
-			continue
-		}
-		if entry.Status != ops.StatusOpen {
+		issue := issues[id]
+		if skipReadyScan(entry, issue, currentTime) {
 			continue
 		}
 		if !allBlockersMerged(entry.BlockedBy, index) {
 			continue
 		}
-		if entry.Parent != "" {
-			parentEntry, ok := index[entry.Parent]
-			if !ok || (parentEntry.Status != ops.StatusInProgress && parentEntry.Status != ops.StatusClaimed && parentEntry.Status != ops.StatusOpen) {
-				continue
-			}
-		}
-		issue := issues[id]
-		if issue != nil && issue.Provenance.Confidence == "draft" {
-			continue
-		}
-		if issue != nil && issue.ClaimedBy != "" && !issue.ClaimStale(currentTime) {
+		if !parentIsActive(entry, index) {
 			continue
 		}
 
@@ -77,7 +60,6 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 				re.RequiresConfirmation = true
 			}
 		}
-
 		ready = append(ready, re)
 	}
 
@@ -90,56 +72,78 @@ func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue,
 // The reason string identifies which gate excluded the issue.
 // Pass variadic now parameter to inject deterministic time (for testing).
 func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Issue, now ...int64) map[string]string {
-	var currentTime int64
-	if len(now) > 0 {
-		currentTime = now[0]
-	}
-
+	currentTime := optionalUnix(now)
 	result := make(map[string]string)
 	for id, entry := range index {
-		if !issuetype.IsReadyEligible(entry.Type) {
-			continue
-		}
-		if entry.Status != ops.StatusOpen {
-			continue
-		}
 		issue := issues[id]
-		if issue != nil && issue.Provenance.Confidence == "draft" {
+		if skipReadyScan(entry, issue, currentTime) {
 			continue
 		}
-		if issue != nil && issue.ClaimedBy != "" && !issue.ClaimStale(currentTime) {
-			continue
-		}
-
 		if !allBlockersMerged(entry.BlockedBy, index) {
-			var unmerged []string
-			for _, bid := range entry.BlockedBy {
-				e, ok := index[bid]
-				if !ok || e.Status != ops.StatusMerged {
-					hint := ""
-					if ok && e.Status == ops.StatusDone {
-						hint = fmt.Sprintf(" — run: arm merged --issue %s", bid)
-					}
-					unmerged = append(unmerged, bid+hint)
-				}
-			}
-			result[id] = fmt.Sprintf("blocker(s) not merged: %s", strings.Join(unmerged, ", "))
+			result[id] = fmt.Sprintf("blocker(s) not merged: %s", unmergedBlockerHints(entry.BlockedBy, index))
 			continue
 		}
-		if entry.Parent != "" {
-			parentEntry, ok := index[entry.Parent]
-			if !ok || (parentEntry.Status != ops.StatusInProgress && parentEntry.Status != ops.StatusClaimed && parentEntry.Status != ops.StatusOpen) {
-				result[id] = fmt.Sprintf("parent %s is not active (status: %s)", entry.Parent, func() string {
-					if !ok {
-						return "missing"
-					}
-					return parentEntry.Status
-				}())
-				continue
-			}
+		if status, ok := inactiveParentStatus(entry, index); !ok {
+			result[id] = fmt.Sprintf("parent %s is not active (status: %s)", entry.Parent, status)
 		}
 	}
 	return result
+}
+
+func optionalUnix(now []int64) int64 {
+	if len(now) > 0 {
+		return now[0]
+	}
+	return 0
+}
+
+func skipReadyScan(entry materialize.IndexEntry, issue *materialize.Issue, currentTime int64) bool {
+	if !issuetype.IsReadyEligible(entry.Type) || entry.Status != ops.StatusOpen {
+		return true
+	}
+	if issue == nil {
+		return false
+	}
+	if issue.Provenance.Confidence == "draft" {
+		return true
+	}
+	return issue.ClaimedBy != "" && !issue.ClaimStale(currentTime)
+}
+
+func parentIsActive(entry materialize.IndexEntry, index materialize.Index) bool {
+	_, ok := inactiveParentStatus(entry, index)
+	return ok
+}
+
+func inactiveParentStatus(entry materialize.IndexEntry, index materialize.Index) (status string, active bool) {
+	if entry.Parent == "" {
+		return "", true
+	}
+	parentEntry, ok := index[entry.Parent]
+	if !ok {
+		return "missing", false
+	}
+	switch parentEntry.Status {
+	case ops.StatusInProgress, ops.StatusClaimed, ops.StatusOpen:
+		return parentEntry.Status, true
+	default:
+		return parentEntry.Status, false
+	}
+}
+
+func unmergedBlockerHints(blockers []string, index materialize.Index) string {
+	var unmerged []string
+	for _, bid := range blockers {
+		e, ok := index[bid]
+		if !ok || e.Status != ops.StatusMerged {
+			hint := ""
+			if ok && e.Status == ops.StatusDone {
+				hint = fmt.Sprintf(" — run: arm merged --issue %s", bid)
+			}
+			unmerged = append(unmerged, bid+hint)
+		}
+	}
+	return strings.Join(unmerged, ", ")
 }
 
 // FilterByAssignedTo returns entries whose AssignedWorker matches workerID.
