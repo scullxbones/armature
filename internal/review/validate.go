@@ -341,73 +341,74 @@ func hasActivityCitations(assessment *ConformanceAssessment) bool {
 // and harness-recorded exit status. Empty return means valid.
 func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]ActivityEntryDetails, deliveryHeadSHA string) []string {
 	var errs []string
-
 	if activity == nil {
 		return errs
 	}
 
 	activityOnlyByID := make(map[string]bool)
-
 	for _, result := range assessment.Results {
 		hasActivityCitation := false
 		hasDiffCitation := false
-
 		for _, citation := range result.Citations {
 			if citation.ActivityEntryID() != "" {
 				hasActivityCitation = true
-
-				entryID, err := strconv.Atoi(citation.ActivityEntryID())
-				if err != nil {
-					errs = append(errs, fmt.Sprintf(
-						"criterion result %s: invalid activity entry ID %q (must be numeric) (suggestion: cite a numeric activity_entry_id from the bundle activity log)",
-						result.ID, citation.ActivityEntryID()))
+				more, skipPath := activityCitationErrors(result, citation.ActivityEntryID(), entries, deliveryHeadSHA)
+				errs = append(errs, more...)
+				if skipPath {
 					continue
-				}
-
-				entry, ok := entries[entryID]
-				if !ok {
-					errs = append(errs, fmt.Sprintf(
-						"criterion result %s: unknown activity entry ID %d (not present in the activity log) (suggestion: cite an activity_entry_id present in the activity log)",
-						result.ID, entryID))
-					continue
-				}
-
-				supportsPositiveStatus := result.Status == Satisfied || result.Status == PartiallySatisfied
-
-				if supportsPositiveStatus && deliveryHeadSHA != "" && entry.HeadSHA != deliveryHeadSHA {
-					errs = append(errs, fmt.Sprintf(
-						"criterion result %s: activity entry %d was executed at head_sha=%q but delivery head_sha=%q; "+
-							"entries from earlier commits cannot be used as evidence for the current delivery "+
-							"(suggestion: cite an activity entry executed at the delivery head_sha)",
-						result.ID, entryID, entry.HeadSHA, deliveryHeadSHA))
-					continue
-				}
-
-				if !entry.ExitCodeKnown && result.Status == Satisfied {
-					errs = append(errs, fmt.Sprintf(
-						"criterion result %s: activity entry %d has an unknown exit code and cannot support satisfied status "+
-							"(suggestion: lower the status or cite an entry with a known zero exit code)",
-						result.ID, entryID))
-				}
-
-				if entry.ExitCodeKnown && entry.ExitCode != 0 && result.Status == Satisfied {
-					errs = append(errs, fmt.Sprintf(
-						"criterion result %s: activity entry %d has a failed exit code (%d) and cannot support satisfied status "+
-							"(suggestion: lower the status or cite a passing activity entry)",
-						result.ID, entryID, entry.ExitCode))
 				}
 			}
-
 			if citation.Path() != "" {
 				hasDiffCitation = true
 			}
 		}
-
 		if hasActivityCitation && !hasDiffCitation {
 			activityOnlyByID[result.ID] = true
 		}
 	}
 
+	return append(errs, activityOnlyUpgradeErrors(assessment, activityOnlyByID)...)
+}
+
+func activityCitationErrors(result CriterionResult, rawID string, entries map[int]ActivityEntryDetails, deliveryHeadSHA string) (errs []string, skipPath bool) {
+	entryID, err := strconv.Atoi(rawID)
+	if err != nil {
+		return []string{fmt.Sprintf(
+			"criterion result %s: invalid activity entry ID %q (must be numeric) (suggestion: cite a numeric activity_entry_id from the bundle activity log)",
+			result.ID, rawID)}, true
+	}
+	entry, ok := entries[entryID]
+	if !ok {
+		return []string{fmt.Sprintf(
+			"criterion result %s: unknown activity entry ID %d (not present in the activity log) (suggestion: cite an activity_entry_id present in the activity log)",
+			result.ID, entryID)}, true
+	}
+
+	supportsPositiveStatus := result.Status == Satisfied || result.Status == PartiallySatisfied
+	if supportsPositiveStatus && deliveryHeadSHA != "" && entry.HeadSHA != deliveryHeadSHA {
+		return []string{fmt.Sprintf(
+			"criterion result %s: activity entry %d was executed at head_sha=%q but delivery head_sha=%q; "+
+				"entries from earlier commits cannot be used as evidence for the current delivery "+
+				"(suggestion: cite an activity entry executed at the delivery head_sha)",
+			result.ID, entryID, entry.HeadSHA, deliveryHeadSHA)}, true
+	}
+	if !entry.ExitCodeKnown && result.Status == Satisfied {
+		errs = append(errs, fmt.Sprintf(
+			"criterion result %s: activity entry %d has an unknown exit code and cannot support satisfied status "+
+				"(suggestion: lower the status or cite an entry with a known zero exit code)",
+			result.ID, entryID))
+	}
+	if entry.ExitCodeKnown && entry.ExitCode != 0 && result.Status == Satisfied {
+		errs = append(errs, fmt.Sprintf(
+			"criterion result %s: activity entry %d has a failed exit code (%d) and cannot support satisfied status "+
+				"(suggestion: lower the status or cite a passing activity entry)",
+			result.ID, entryID, entry.ExitCode))
+	}
+	return errs, false
+}
+
+func activityOnlyUpgradeErrors(assessment *ConformanceAssessment, activityOnlyByID map[string]bool) []string {
+	var errs []string
 	for criterionID := range activityOnlyByID {
 		var result *CriterionResult
 		for i := range assessment.Results {
@@ -416,22 +417,16 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 				break
 			}
 		}
-
 		if result == nil {
 			continue
 		}
-
-		isImplementationCriterion := (criterionID == "definition_of_done")
-
-		if isImplementationCriterion && (result.Status == Satisfied || result.Status == PartiallySatisfied) {
-			msg := fmt.Sprintf(
+		if criterionID == "definition_of_done" && (result.Status == Satisfied || result.Status == PartiallySatisfied) {
+			errs = append(errs, fmt.Sprintf(
 				"criterion result %s: activity citations alone cannot support %s on implementation criterion (upgrade-only rule) "+
 					"(suggestion: add a diff citation (path) for this implementation criterion)",
 				result.ID, result.Status,
-			)
-			errs = append(errs, msg)
+			))
 		}
 	}
-
 	return errs
 }

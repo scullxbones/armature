@@ -31,121 +31,26 @@ func Record(input RecordInput) (*RecordResult, error) {
 	if input.IssueID == "" {
 		return nil, fmt.Errorf("issue ID is required")
 	}
-
 	if err := input.Assessment.Valid(); err != nil {
 		return nil, fmt.Errorf("assessment validation failed: %w", err)
 	}
 
-	for i := range input.Assessment.Results {
-		for j := range input.Assessment.Results[i].Citations {
-			input.Assessment.Results[i].Citations[j].ClearActivityEntryDetails()
-		}
-	}
+	clearAssessmentActivityDetails(input.Assessment)
 
-	if input.Bundle != nil {
-		recomputed, err := ComputeBundleID(*input.Bundle)
-		if err != nil {
-			return nil, err
-		}
-		if recomputed != input.Bundle.BundleID {
-			return nil, fmt.Errorf(
-				"bundle integrity check failed: recomputed bundle_id %s does not match bundle's "+
-					"recorded bundle_id %s (bundle contents may have been altered since `arm review prepare` ran)",
-				recomputed, input.Bundle.BundleID)
-		}
-		if err := ValidateGateEvidenceLogs(input.Bundle.GateEvidence); err != nil {
-			return nil, fmt.Errorf("gate evidence validation failed: %w", err)
-		}
+	if err := validateRecordBundleIntegrity(input); err != nil {
+		return nil, err
 	}
-
 	if hasActivityCitations(input.Assessment) && (input.Bundle == nil || input.Bundle.Activity == nil) {
 		return nil, fmt.Errorf("assessment cites activity log entries but no bundle activity section is available to validate against")
 	}
-
-	if errs := ValidateResultNoDiff(input.Assessment); len(errs) > 0 {
-		var sb strings.Builder
-		sb.WriteString("assessment validation errors:")
-		for _, e := range errs {
-			sb.WriteString("\n  - ")
-			sb.WriteString(e)
-		}
-		return nil, fmt.Errorf("%s", sb.String())
+	if err := joinValidationErrors("assessment validation errors:", ValidateResultNoDiff(input.Assessment)); err != nil {
+		return nil, err
 	}
-
-	if input.Bundle != nil {
-		if input.Bundle.Issue.ID != input.IssueID {
-			return nil, fmt.Errorf("bundle was prepared for issue %s, not %s",
-				input.Bundle.Issue.ID, input.IssueID)
-		}
+	if err := validateRecordBundleAgainstAssessment(input); err != nil {
+		return nil, err
 	}
-
-	if input.Bundle != nil {
-		if input.Assessment.BundleID != input.Bundle.BundleID {
-			return nil, fmt.Errorf("assessment bundle_id %s does not match bundle bundle_id %s",
-				input.Assessment.BundleID, input.Bundle.BundleID)
-		}
-		if input.Assessment.DeliveryFingerprint != input.Bundle.Fingerprints.Delivery {
-			return nil, fmt.Errorf("assessment delivery_fingerprint %s does not match bundle delivery_fingerprint %s",
-				input.Assessment.DeliveryFingerprint, input.Bundle.Fingerprints.Delivery)
-		}
-		if input.Assessment.ContractFingerprint != input.Bundle.Fingerprints.Contract {
-			return nil, fmt.Errorf("assessment contract_fingerprint %s does not match bundle contract_fingerprint %s",
-				input.Assessment.ContractFingerprint, input.Bundle.Fingerprints.Contract)
-		}
-	}
-
-	if input.Bundle != nil {
-		idx, err := BuildDiffIndex(input.Bundle.Delivery.Diff)
-		if err != nil {
-			return nil, fmt.Errorf("build diff index: %w", err)
-		}
-		if errs := ValidateResult(input.Assessment, idx); len(errs) > 0 {
-			var sb strings.Builder
-			sb.WriteString("assessment citation validation errors:")
-			for _, e := range errs {
-				sb.WriteString("\n  - ")
-				sb.WriteString(e)
-			}
-			return nil, fmt.Errorf("%s", sb.String())
-		}
-	}
-
-	if input.Bundle != nil && input.Bundle.Activity != nil {
-		activityEntryMap, digestErrs := ValidateActivityDigestAndLoadEntries(input.Bundle.Activity)
-
-		if len(digestErrs) > 0 {
-			var sb strings.Builder
-			sb.WriteString("activity log validation errors:")
-			for _, e := range digestErrs {
-				sb.WriteString("\n  - ")
-				sb.WriteString(e)
-			}
-			return nil, fmt.Errorf("%s", sb.String())
-		}
-
-		if errs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap, input.Bundle.Delivery.HeadSHA); len(errs) > 0 {
-			var sb strings.Builder
-			sb.WriteString("activity citation validation errors:")
-			for _, e := range errs {
-				sb.WriteString("\n  - ")
-				sb.WriteString(e)
-			}
-			return nil, fmt.Errorf("%s", sb.String())
-		}
-
-		for i := range input.Assessment.Results {
-			for j := range input.Assessment.Results[i].Citations {
-				citation := &input.Assessment.Results[i].Citations[j]
-				if citation.ActivityEntryID() != "" {
-					entryID, err := strconv.Atoi(citation.ActivityEntryID())
-					if err == nil {
-						if details, ok := activityEntryMap[entryID]; ok {
-							citation.SetActivityEntryDetails(FormatActivityEntryDetails(details))
-						}
-					}
-				}
-			}
-		}
+	if err := attachValidatedActivityDetails(input); err != nil {
+		return nil, err
 	}
 
 	var delivery Delivery
@@ -156,38 +61,133 @@ func Record(input RecordInput) (*RecordResult, error) {
 	}
 	attestation := NewAttestation(input.Assessment, delivery, activityForAttestation)
 
-	if input.Issue != nil {
-		criteria, err := ParseAcceptanceCriteria([]byte(input.Issue.Acceptance))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse acceptance criteria: %w", err)
-		}
-		contract := Contract{
-			DefinitionOfDone: input.Issue.DefinitionOfDone,
-			Scope:            input.Issue.Scope,
-			Acceptance:       criteria,
-		}
-
-		issueContractFP := FingerprintContract(contract)
-		if input.Assessment.ContractFingerprint != issueContractFP {
-			return nil, fmt.Errorf("assessment contract fingerprint %s does not match issue contract fingerprint %s",
-				input.Assessment.ContractFingerprint, issueContractFP)
-		}
-
-		if errs := ValidateResultCoverage(input.Assessment, contract); len(errs) > 0 {
-			var sb strings.Builder
-			sb.WriteString("assessment coverage validation errors:")
-			for _, e := range errs {
-				sb.WriteString("\n  - ")
-				sb.WriteString(e)
-			}
-			return nil, fmt.Errorf("%s", sb.String())
-		}
+	if err := validateRecordIssueContract(input); err != nil {
+		return nil, err
 	}
 
 	return &RecordResult{
 		Attestation: attestation,
 		IsDuplicate: false,
 	}, nil
+}
+
+func joinValidationErrors(prefix string, errs []string) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	var sb strings.Builder
+	sb.WriteString(prefix)
+	for _, e := range errs {
+		sb.WriteString("\n  - ")
+		sb.WriteString(e)
+	}
+	return fmt.Errorf("%s", sb.String())
+}
+
+func clearAssessmentActivityDetails(assessment *ConformanceAssessment) {
+	for i := range assessment.Results {
+		for j := range assessment.Results[i].Citations {
+			assessment.Results[i].Citations[j].ClearActivityEntryDetails()
+		}
+	}
+}
+
+func validateRecordBundleIntegrity(input RecordInput) error {
+	if input.Bundle == nil {
+		return nil
+	}
+	recomputed, err := ComputeBundleID(*input.Bundle)
+	if err != nil {
+		return err
+	}
+	if recomputed != input.Bundle.BundleID {
+		return fmt.Errorf(
+			"bundle integrity check failed: recomputed bundle_id %s does not match bundle's "+
+				"recorded bundle_id %s (bundle contents may have been altered since `arm review prepare` ran)",
+			recomputed, input.Bundle.BundleID)
+	}
+	if err := ValidateGateEvidenceLogs(input.Bundle.GateEvidence); err != nil {
+		return fmt.Errorf("gate evidence validation failed: %w", err)
+	}
+	return nil
+}
+
+func validateRecordBundleAgainstAssessment(input RecordInput) error {
+	if input.Bundle == nil {
+		return nil
+	}
+	if input.Bundle.Issue.ID != input.IssueID {
+		return fmt.Errorf("bundle was prepared for issue %s, not %s",
+			input.Bundle.Issue.ID, input.IssueID)
+	}
+	if input.Assessment.BundleID != input.Bundle.BundleID {
+		return fmt.Errorf("assessment bundle_id %s does not match bundle bundle_id %s",
+			input.Assessment.BundleID, input.Bundle.BundleID)
+	}
+	if input.Assessment.DeliveryFingerprint != input.Bundle.Fingerprints.Delivery {
+		return fmt.Errorf("assessment delivery_fingerprint %s does not match bundle delivery_fingerprint %s",
+			input.Assessment.DeliveryFingerprint, input.Bundle.Fingerprints.Delivery)
+	}
+	if input.Assessment.ContractFingerprint != input.Bundle.Fingerprints.Contract {
+		return fmt.Errorf("assessment contract_fingerprint %s does not match bundle contract_fingerprint %s",
+			input.Assessment.ContractFingerprint, input.Bundle.Fingerprints.Contract)
+	}
+	idx, err := BuildDiffIndex(input.Bundle.Delivery.Diff)
+	if err != nil {
+		return fmt.Errorf("build diff index: %w", err)
+	}
+	return joinValidationErrors("assessment citation validation errors:", ValidateResult(input.Assessment, idx))
+}
+
+func attachValidatedActivityDetails(input RecordInput) error {
+	if input.Bundle == nil || input.Bundle.Activity == nil {
+		return nil
+	}
+	activityEntryMap, digestErrs := ValidateActivityDigestAndLoadEntries(input.Bundle.Activity)
+	if err := joinValidationErrors("activity log validation errors:", digestErrs); err != nil {
+		return err
+	}
+	citationErrs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap, input.Bundle.Delivery.HeadSHA)
+	if err := joinValidationErrors("activity citation validation errors:", citationErrs); err != nil {
+		return err
+	}
+	for i := range input.Assessment.Results {
+		for j := range input.Assessment.Results[i].Citations {
+			citation := &input.Assessment.Results[i].Citations[j]
+			if citation.ActivityEntryID() == "" {
+				continue
+			}
+			entryID, err := strconv.Atoi(citation.ActivityEntryID())
+			if err != nil {
+				continue
+			}
+			if details, ok := activityEntryMap[entryID]; ok {
+				citation.SetActivityEntryDetails(FormatActivityEntryDetails(details))
+			}
+		}
+	}
+	return nil
+}
+
+func validateRecordIssueContract(input RecordInput) error {
+	if input.Issue == nil {
+		return nil
+	}
+	criteria, err := ParseAcceptanceCriteria([]byte(input.Issue.Acceptance))
+	if err != nil {
+		return fmt.Errorf("failed to parse acceptance criteria: %w", err)
+	}
+	contract := Contract{
+		DefinitionOfDone: input.Issue.DefinitionOfDone,
+		Scope:            input.Issue.Scope,
+		Acceptance:       criteria,
+	}
+	issueContractFP := FingerprintContract(contract)
+	if input.Assessment.ContractFingerprint != issueContractFP {
+		return fmt.Errorf("assessment contract fingerprint %s does not match issue contract fingerprint %s",
+			input.Assessment.ContractFingerprint, issueContractFP)
+	}
+	return joinValidationErrors("assessment coverage validation errors:", ValidateResultCoverage(input.Assessment, contract))
 }
 
 func RecordWithDuplicateCheck(input RecordInput, existingAttestations []AssessmentAttestation) (*RecordResult, error) {

@@ -552,24 +552,11 @@ func (s *State) RunRollup() {
 	queue := make([]string, 0)
 
 	for _, issue := range s.Issues {
-		if issue.Type == "task" || issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled || len(issue.Children) == 0 {
+		if skipRollupContainer(issue) {
 			continue
 		}
-
-		unresolvedCount := 0
-		hasMerged := false
-		for _, childID := range issue.Children {
-			child, ok := s.Issues[childID]
-			if !ok || !rollupSatisfied(child.Status) {
-				unresolvedCount++
-				continue
-			}
-			if child.Status == ops.StatusMerged {
-				hasMerged = true
-			}
-		}
+		unresolvedCount, hasMerged := rollupChildProgress(s, issue)
 		inDegree[issue.ID] = unresolvedCount
-
 		if unresolvedCount == 0 && hasMerged {
 			queue = append(queue, issue.ID)
 		}
@@ -583,30 +570,48 @@ func (s *State) RunRollup() {
 		if !ok {
 			continue
 		}
-
-		if issue.Status != ops.StatusMerged {
-			issue.RollupStatusBefore = issue.Status
-			issue.Status = ops.StatusMerged
-
-			if issue.Parent != "" {
-				parent, ok := s.Issues[issue.Parent]
-				if !ok {
-					continue
-				}
-
-				if parent.Type == "task" || parent.Status == ops.StatusMerged || parent.Status == ops.StatusCancelled || len(parent.Children) == 0 {
-					continue
-				}
-
-				if count, ok := inDegree[parent.ID]; ok {
-					inDegree[parent.ID] = count - 1
-
-					if inDegree[parent.ID] == 0 {
-						queue = append(queue, parent.ID)
-					}
-				}
-			}
+		if issue.Status == ops.StatusMerged {
+			continue
 		}
+		issue.RollupStatusBefore = issue.Status
+		issue.Status = ops.StatusMerged
+		s.enqueueRollupParent(issue, inDegree, &queue)
+	}
+}
+
+func skipRollupContainer(issue *Issue) bool {
+	return issue.Type == "task" || issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled || len(issue.Children) == 0
+}
+
+func rollupChildProgress(s *State, issue *Issue) (unresolvedCount int, hasMerged bool) {
+	for _, childID := range issue.Children {
+		child, ok := s.Issues[childID]
+		if !ok || !rollupSatisfied(child.Status) {
+			unresolvedCount++
+			continue
+		}
+		if child.Status == ops.StatusMerged {
+			hasMerged = true
+		}
+	}
+	return unresolvedCount, hasMerged
+}
+
+func (s *State) enqueueRollupParent(issue *Issue, inDegree map[string]int, queue *[]string) {
+	if issue.Parent == "" {
+		return
+	}
+	parent, ok := s.Issues[issue.Parent]
+	if !ok || skipRollupContainer(parent) {
+		return
+	}
+	count, ok := inDegree[parent.ID]
+	if !ok {
+		return
+	}
+	inDegree[parent.ID] = count - 1
+	if inDegree[parent.ID] == 0 {
+		*queue = append(*queue, parent.ID)
 	}
 }
 

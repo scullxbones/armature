@@ -77,72 +77,101 @@ func applyJSONSchema(schema map[string]any, instance any, path string) error {
 	if instance == nil {
 		return nil
 	}
-	if rawEnum, ok := schema["enum"]; ok {
-		enum, ok := rawEnum.([]any)
-		if !ok {
-			return fmt.Errorf("%s: schema enum must be an array", path)
-		}
-		if !enumContains(enum, instance) {
-			return fmt.Errorf("%s: value not in enum", path)
-		}
+	if err := applySchemaEnum(schema, instance, path); err != nil {
+		return err
 	}
 	switch inst := instance.(type) {
 	case map[string]any:
-		if rawReq, ok := schema["required"]; ok {
-			req, ok := rawReq.([]any)
-			if !ok {
-				return fmt.Errorf("%s: schema required must be an array", path)
-			}
-			for _, item := range req {
-				key, ok := item.(string)
-				if !ok {
-					return fmt.Errorf("%s: schema required entries must be strings", path)
-				}
-				if _, exists := inst[key]; !exists {
-					return fmt.Errorf("%s: missing %s", path, key)
-				}
-			}
-		}
-		props, ok := schema["properties"].(map[string]any)
-		if !ok {
-			props = map[string]any{}
-		}
-		for key, value := range inst {
-			sub, ok := props[key].(map[string]any)
-			if !ok {
-				continue
-			}
-			if err := applyJSONSchema(sub, value, path+"."+key); err != nil {
-				return err
-			}
-		}
+		return applyObjectSchema(schema, inst, path)
 	case []any:
-		items, ok := schema["items"].(map[string]any)
-		if !ok {
-			break
-		}
-		for i, item := range inst {
-			if err := applyJSONSchema(items, item, fmt.Sprintf("%s[%d]", path, i)); err != nil {
-				return err
-			}
-		}
+		return applyArraySchema(schema, inst, path)
 	case string:
-		if pat, ok := schema["pattern"].(string); ok {
-			re, err := regexp.Compile(pat)
-			if err != nil {
-				return fmt.Errorf("%s: invalid schema pattern: %w", path, err)
-			}
-			if !re.MatchString(inst) {
-				return fmt.Errorf("%s: does not match pattern %s", path, pat)
-			}
-		}
-		if min, ok := schemaInt(schema["minLength"]); ok && len(inst) < min {
-			return fmt.Errorf("%s: shorter than minLength %d", path, min)
-		}
+		return applyStringSchema(schema, inst, path)
 	case float64:
-		if min, ok := schemaFloat(schema["minimum"]); ok && inst < min {
-			return fmt.Errorf("%s: below minimum %v", path, min)
+		return applyNumberSchema(schema, inst, path)
+	}
+	return nil
+}
+
+func applySchemaEnum(schema map[string]any, instance any, path string) error {
+	rawEnum, ok := schema["enum"]
+	if !ok {
+		return nil
+	}
+	enum, ok := rawEnum.([]any)
+	if !ok {
+		return fmt.Errorf("%s: schema enum must be an array", path)
+	}
+	if !enumContains(enum, instance) {
+		return fmt.Errorf("%s: value not in enum", path)
+	}
+	return nil
+}
+
+func applyObjectSchema(schema map[string]any, inst map[string]any, path string) error {
+	if rawReq, ok := schema["required"]; ok {
+		req, ok := rawReq.([]any)
+		if !ok {
+			return fmt.Errorf("%s: schema required must be an array", path)
 		}
+		for _, item := range req {
+			key, ok := item.(string)
+			if !ok {
+				return fmt.Errorf("%s: schema required entries must be strings", path)
+			}
+			if _, exists := inst[key]; !exists {
+				return fmt.Errorf("%s: missing %s", path, key)
+			}
+		}
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		props = map[string]any{}
+	}
+	for key, value := range inst {
+		sub, ok := props[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := applyJSONSchema(sub, value, path+"."+key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyArraySchema(schema map[string]any, inst []any, path string) error {
+	items, ok := schema["items"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for i, item := range inst {
+		if err := applyJSONSchema(items, item, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyStringSchema(schema map[string]any, inst string, path string) error {
+	if pat, ok := schema["pattern"].(string); ok {
+		re, err := regexp.Compile(pat)
+		if err != nil {
+			return fmt.Errorf("%s: invalid schema pattern: %w", path, err)
+		}
+		if !re.MatchString(inst) {
+			return fmt.Errorf("%s: does not match pattern %s", path, pat)
+		}
+	}
+	if min, ok := schemaInt(schema["minLength"]); ok && len(inst) < min {
+		return fmt.Errorf("%s: shorter than minLength %d", path, min)
+	}
+	return nil
+}
+
+func applyNumberSchema(schema map[string]any, inst float64, path string) error {
+	if min, ok := schemaFloat(schema["minimum"]); ok && inst < min {
+		return fmt.Errorf("%s: below minimum %v", path, min)
 	}
 	return nil
 }
