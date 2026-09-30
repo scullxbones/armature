@@ -93,7 +93,7 @@ func TestHarnessHookAllowsInScopeEdit(t *testing.T) {
 
 	var out bytes.Buffer
 	cmd = newRootCmd()
-	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll
+	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll // one-line Codex PreToolUse fixture
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
 	cmd.SetArgs([]string{"harness-hook", "--repo", repo})
@@ -485,7 +485,7 @@ func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
 
 	var out bytes.Buffer
 	hookCmd := newRootCmd()
-	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll
+	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll // one-line Codex PreToolUse fixture
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
 	hookCmd.SetArgs([]string{"harness-hook", "--repo", worktreeDir})
@@ -1024,7 +1024,7 @@ func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
 	err = os.Chmod(actualGitDir, 0o500) //nolint:gosec // G703: test code to make directory read-only
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		swallowErr(os.Chmod(actualGitDir, 0o755)) //nolint:gosec
+		swallowErr(os.Chmod(actualGitDir, 0o755)) //nolint:gosec // G703: restore test git-dir mode after read-only chmod
 	})
 
 	t.Setenv("ARMATURE_ISSUE_ID", "task-01")

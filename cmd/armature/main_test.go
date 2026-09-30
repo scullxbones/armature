@@ -354,9 +354,6 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 	assert.Contains(t, buf.String(), "Worker ID:")
 }
 
-var _ = filepath.Join
-var _ = strings.Contains
-
 func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -2139,10 +2136,9 @@ func TestPushOpsCommand_PushFailureReturnsErrorAndJSON(t *testing.T) {
 	require.NoError(t, err)
 	dropOrigin(t, repo)
 
-	out, errBuf, err := runTrlsWithStderr(t, repo, "push-ops", "--format", "json")
+	out, _, err := runTrlsWithStderr(t, repo, "push-ops", "--format", "json")
 	require.Error(t, err, "push-ops should return a real error when the push fails")
 	assert.NotContains(t, out, `"status":"pushed"`)
-	_ = errBuf
 }
 
 func TestNoteCommand_HumanOutput(t *testing.T) {
