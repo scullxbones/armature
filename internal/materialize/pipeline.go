@@ -18,8 +18,6 @@ import (
 	"github.com/scullxbones/armature/internal/traceability"
 )
 
-func swallowErr(err error) { _ = err }
-
 type Options struct {
 	WriteStateFiles bool
 	ExcludeWorkerID string
@@ -184,7 +182,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 		}
 
 		readyPath := filepath.Join(stateDir, "ready.json")
-		swallowErr(adapters.WriteFile(readyPath, []byte("[]"), 0644))
+		_ = adapters.WriteFile(readyPath, []byte("[]"), 0644)
 	}
 
 	if writeStateFiles {
@@ -205,7 +203,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 		}
 
 		cov := traceability.Compute(coverageRefs(state.Issues))
-		swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
+		_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov)
 	}
 
 	warnings := formatUnhandledOpsWarnings(unhandledOps)
@@ -392,7 +390,7 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 				return nil, Result{}, err
 			}
 		}
-		swallowErr(adapters.WriteFile(filepath.Join(stateDir, "ready.json"), []byte("[]"), 0644))
+		_ = adapters.WriteFile(filepath.Join(stateDir, "ready.json"), []byte("[]"), 0644)
 		offsets := diskByteOffsets(opts.OpsWorktree)
 		if offsets == nil {
 			offsets = make(map[string]int64)
@@ -404,7 +402,7 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 			return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
 		}
 		cov := traceability.Compute(coverageRefs(state.Issues))
-		swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
+		_ = traceability.Write(filepath.Join(stateDir, "traceability.json"), cov)
 	}
 	return state, Result{
 		IssueCount:   len(state.Issues),

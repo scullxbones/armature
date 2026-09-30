@@ -45,9 +45,8 @@ func TestHookRunPostMerge(t *testing.T) {
 func TestHookRunPostCommit_NoActiveClaim(t *testing.T) {
 	repo := setupRepoWithTask(t)
 
-	out, err := runTrls(t, repo, "hook", "run", "post-commit")
+	_, err := runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
-	_ = out
 }
 
 func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {

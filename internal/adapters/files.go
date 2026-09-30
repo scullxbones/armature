@@ -91,8 +91,7 @@ func ListLogFiles(opsDir string) ([]string, error) {
 
 // AppendLog appends raw, pre-formatted JSONL lines to a single log file,
 // guarding against crash-induced corruption with a .pending marker
-// protocol (see Append). Construct one fresh per call site with
-// NewAppendLog; it holds no state beyond the target path.
+// protocol (see Append).
 type AppendLog struct {
 	Path     string
 	closeErr error
@@ -240,9 +239,6 @@ func sidecarDirBesideLog(logPath string) string {
 
 // OpsGitignore is the ignore body `arm bootstrap` writes into the ops worktree
 // .gitignore (via ops.GenerateOpsGitignore, which prefixes scaffolding-version).
-// It is the single source of truth for what must never be committed there —
-// bootstrap.go writes it through the generator, and tests reference this
-// constant directly instead of depending on an on-disk copy.
 const OpsGitignore = `# Materialized state — derived from ops logs, regenerated locally by each worker.
 # Never commit. See architecture.md §2 (Directory Structure).
 state/

@@ -30,7 +30,7 @@ func New(repoPath string) *Client {
 // NewIsolated is like New but the child git process binds to the checkout
 // at repoPath: env overrides (GIT_DIR / GIT_WORK_TREE / …) are stripped and
 // --git-dir/--work-tree are pinned from the filesystem .git (not
-// core.worktree or rev-parse --show-toplevel). Used by arm gate run.
+// core.worktree or rev-parse --show-toplevel).
 func NewIsolated(repoPath string) *Client {
 	return &Client{repoPath: repoPath, isolateEnv: true}
 }
@@ -933,7 +933,6 @@ func (c *Client) DiffNameStatusRange(baseSHA, head string) ([]DiffStatusEntry, e
 	// quotes and octal-escapes any path containing non-ASCII or special
 	// characters (e.g. "caf\303\251.go" instead of the literal "café.go"),
 	// which breaks scope-containment comparisons against the literal path.
-	// Mirrors DiffNameOnlyRange, which already handles this correctly.
 	cmd := c.cmd("diff", "--name-status", "-M", "-z", baseSHA, head)
 	out, err := cmd.Output()
 	if err != nil {

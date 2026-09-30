@@ -525,7 +525,6 @@ func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
-	_ = introductionExemptionDagRevert
 	if len(proposed) > 0 {
 		ctx := state.ctx
 		gc := worktreeGit(ctx)

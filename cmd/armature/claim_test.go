@@ -188,8 +188,6 @@ func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *te
 	_, err := deliverygate.GatedBaseCommit(worktreePath, "task-01", adapters.New(worktreePath))
 	assert.Error(t, err, "pre-existing worktree provenance must fail closed after rebase")
 	assert.Contains(t, err.Error(), "no recorded base commit")
-	_ = defaultTipSHA
-	_ = newDefaultTipSHA
 }
 
 func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t *testing.T) {
@@ -2230,7 +2228,7 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIM
 	ctx.StateDir = getTestStateDir(t, repo)
 	persistOporderCutoverAtHEAD(t, ctx)
 
-	_ = injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
+	injectFutureSameWorkerClaim(t, ctx, "task-01", "impostor-token")
 
 	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
 	require.NoError(t, err)
