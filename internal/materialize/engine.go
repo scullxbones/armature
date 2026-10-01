@@ -296,19 +296,23 @@ func noteIDExists(notes []Note, id string) bool {
 }
 
 func (s *State) applyLink(op ops.Op) error {
-	return s.applyBlockedByRel(op, appendUnique)
+	source := s.Issues[op.TargetID]
+	if op.Payload.Rel == "blocked_by" {
+		source.BlockedBy = appendUnique(source.BlockedBy, op.Payload.Dep)
+		if dep, ok := s.Issues[op.Payload.Dep]; ok {
+			dep.Blocks = appendUnique(dep.Blocks, op.TargetID)
+		}
+	}
+	source.Updated = op.Timestamp
+	return nil
 }
 
 func (s *State) applyUnlink(op ops.Op) error {
-	return s.applyBlockedByRel(op, removeString)
-}
-
-func (s *State) applyBlockedByRel(op ops.Op, update func([]string, string) []string) error {
 	source := s.Issues[op.TargetID]
 	if op.Payload.Rel == "blocked_by" {
-		source.BlockedBy = update(source.BlockedBy, op.Payload.Dep)
+		source.BlockedBy = removeString(source.BlockedBy, op.Payload.Dep)
 		if dep, ok := s.Issues[op.Payload.Dep]; ok {
-			dep.Blocks = update(dep.Blocks, op.TargetID)
+			dep.Blocks = removeString(dep.Blocks, op.TargetID)
 		}
 	}
 	source.Updated = op.Timestamp
