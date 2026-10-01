@@ -471,3 +471,13 @@ func TestExtractOps_EmptyInput(t *testing.T) {
 	result := ExtractOps([]OpItem{})
 	assert.Empty(t, result)
 }
+
+func TestWorkerOwnsLog_SlottedAndLegacyIDs(t *testing.T) {
+	t.Parallel()
+	assert.True(t, WorkerOwnsLog("worker-a1", "worker-a1.log"))
+	assert.True(t, WorkerOwnsLog("worker-a1", "ops/worker-a1.log"))
+	assert.True(t, WorkerOwnsLog("worker-a1~slot", "worker-a1~slot.log"))
+	assert.True(t, WorkerOwnsLog("worker-a1", "worker-a1~slot.log"))
+	assert.False(t, WorkerOwnsLog("worker-b", "worker-a1.log"))
+	assert.False(t, WorkerOwnsLog("worker-a1~other", "worker-a1~slot.log"))
+}

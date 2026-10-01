@@ -127,23 +127,9 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 
 func runFileConcat(stateDir string, allOps []ops.Op,
 	byteOffsets map[string]int64, opts Options, lastCommitWorktree string) (*State, Result, error) {
-	writeStateFiles := opts.WriteStateFiles
-	issuesStateDir := filepath.Join(stateDir, "issues")
-	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
-
-	if writeStateFiles {
-		if err := adapters.MkdirAll(issuesStateDir, 0755); err != nil {
-			return nil, Result{}, fmt.Errorf("create state dir: %w", err)
-		}
-	}
-
-	var cp Checkpoint
-	var err error
-	if writeStateFiles {
-		cp, err = LoadCheckpoint(checkpointPath)
-		if err != nil {
-			return nil, Result{}, fmt.Errorf("load checkpoint: %w", err)
-		}
+	issuesStateDir, cp, err := prepareWriteState(stateDir, opts.WriteStateFiles)
+	if err != nil {
+		return nil, Result{}, err
 	}
 
 	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion != CurrentStateVersion
@@ -162,32 +148,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 
 	state.RunRollup()
 
-	if writeStateFiles {
-		index := state.BuildIndex()
-		if err := WriteIndex(filepath.Join(stateDir, "index.json"), index); err != nil {
-			return nil, Result{}, fmt.Errorf("write index: %w", err)
-		}
-
-		for _, issue := range state.Issues {
-			if err := issueid.Validate(issue.ID); err != nil {
-				return nil, Result{}, fmt.Errorf("validate materialized issue ID %q: %w", issue.ID, err)
-			}
-			if err := WriteIssue(issuesStateDir, *issue); err != nil {
-				return nil, Result{}, fmt.Errorf("write issue %s: %w", issue.ID, err)
-			}
-		}
-
-		if fullReplay {
-			if err := purgeOrphanedIssues(issuesStateDir, state.Issues); err != nil {
-				return nil, Result{}, err
-			}
-		}
-
-		readyPath := filepath.Join(stateDir, "ready.json")
-		swallowErr(adapters.WriteFile(readyPath, []byte("[]"), 0644))
-	}
-
-	if writeStateFiles {
+	if opts.WriteStateFiles {
 		offsets := byteOffsets
 		if offsets == nil {
 			offsets = make(map[string]int64)
@@ -200,12 +161,9 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 			}
 			newCp.LastCommitSHA = head
 		}
-		if err := WriteCheckpoint(checkpointPath, newCp); err != nil {
-			return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
+		if err := persistReplayArtifacts(stateDir, state, fullReplay, newCp); err != nil {
+			return nil, Result{}, err
 		}
-
-		cov := traceability.Compute(coverageRefs(state.Issues))
-		swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
 	}
 
 	warnings := formatUnhandledOpsWarnings(unhandledOps)
@@ -292,20 +250,9 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 }
 
 func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Options) (*State, Result, error) {
-	issuesStateDir := filepath.Join(stateDir, "issues")
-	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
-	if opts.WriteStateFiles {
-		if err := adapters.MkdirAll(issuesStateDir, 0755); err != nil {
-			return nil, Result{}, fmt.Errorf("create state dir: %w", err)
-		}
-	}
-	var cp Checkpoint
-	if opts.WriteStateFiles {
-		loaded, err := LoadCheckpoint(checkpointPath)
-		if err != nil {
-			return nil, Result{}, fmt.Errorf("load checkpoint: %w", err)
-		}
-		cp = loaded
+	_, cp, err := prepareWriteState(stateDir, opts.WriteStateFiles)
+	if err != nil {
+		return nil, Result{}, err
 	}
 	shaMissing := false
 	fullReplay := cp.LastCommitSHA == "" || cp.StateVersion != CurrentStateVersion
@@ -347,10 +294,8 @@ func sortLocatedByCommit(located []oporder.LocatedOp) {
 }
 
 func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, fullReplay bool) (*State, Result, error) {
-	issuesStateDir := filepath.Join(stateDir, "issues")
-	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 	sortLocatedByCommit(located)
-	state, loadErr := loadOrNewState(issuesStateDir, fullReplay)
+	state, loadErr := loadOrNewState(filepath.Join(stateDir, "issues"), fullReplay)
 	if loadErr != nil {
 		return nil, Result{}, loadErr
 	}
@@ -375,36 +320,16 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 		return nil, Result{}, fmt.Errorf("ops HEAD: %w", headErr)
 	}
 	if opts.WriteStateFiles {
-		index := state.BuildIndex()
-		if err := WriteIndex(filepath.Join(stateDir, "index.json"), index); err != nil {
-			return nil, Result{}, fmt.Errorf("write index: %w", err)
-		}
-		for _, issue := range state.Issues {
-			if err := issueid.Validate(issue.ID); err != nil {
-				return nil, Result{}, fmt.Errorf("validate materialized issue ID %q: %w", issue.ID, err)
-			}
-			if err := WriteIssue(issuesStateDir, *issue); err != nil {
-				return nil, Result{}, fmt.Errorf("write issue %s: %w", issue.ID, err)
-			}
-		}
-		if fullReplay {
-			if err := purgeOrphanedIssues(issuesStateDir, state.Issues); err != nil {
-				return nil, Result{}, err
-			}
-		}
-		swallowErr(adapters.WriteFile(filepath.Join(stateDir, "ready.json"), []byte("[]"), 0644))
 		offsets := diskByteOffsets(opts.OpsWorktree)
 		if offsets == nil {
 			offsets = make(map[string]int64)
 		}
-		if err := WriteCheckpoint(checkpointPath, Checkpoint{
+		if err := persistReplayArtifacts(stateDir, state, fullReplay, Checkpoint{
 			LastCommitSHA: head,
 			ByteOffsets:   offsets,
 		}); err != nil {
-			return nil, Result{}, fmt.Errorf("write checkpoint: %w", err)
+			return nil, Result{}, err
 		}
-		cov := traceability.Compute(coverageRefs(state.Issues))
-		swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
 	}
 	return state, Result{
 		IssueCount:   len(state.Issues),
@@ -413,6 +338,49 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 		UnhandledOps: unhandledOps,
 		Warnings:     formatUnhandledOpsWarnings(unhandledOps),
 	}, nil
+}
+
+func prepareWriteState(stateDir string, write bool) (issuesStateDir string, cp Checkpoint, err error) {
+	issuesStateDir = filepath.Join(stateDir, "issues")
+	if !write {
+		return issuesStateDir, Checkpoint{}, nil
+	}
+	if err := adapters.MkdirAll(issuesStateDir, 0755); err != nil {
+		return "", Checkpoint{}, fmt.Errorf("create state dir: %w", err)
+	}
+	cp, err = LoadCheckpoint(filepath.Join(stateDir, "checkpoint.json"))
+	if err != nil {
+		return "", Checkpoint{}, fmt.Errorf("load checkpoint: %w", err)
+	}
+	return issuesStateDir, cp, nil
+}
+
+func persistReplayArtifacts(stateDir string, state *State, fullReplay bool, cp Checkpoint) error {
+	issuesStateDir := filepath.Join(stateDir, "issues")
+	index := state.BuildIndex()
+	if err := WriteIndex(filepath.Join(stateDir, "index.json"), index); err != nil {
+		return fmt.Errorf("write index: %w", err)
+	}
+	for _, issue := range state.Issues {
+		if err := issueid.Validate(issue.ID); err != nil {
+			return fmt.Errorf("validate materialized issue ID %q: %w", issue.ID, err)
+		}
+		if err := WriteIssue(issuesStateDir, *issue); err != nil {
+			return fmt.Errorf("write issue %s: %w", issue.ID, err)
+		}
+	}
+	if fullReplay {
+		if err := purgeOrphanedIssues(issuesStateDir, state.Issues); err != nil {
+			return err
+		}
+	}
+	swallowErr(adapters.WriteFile(filepath.Join(stateDir, "ready.json"), []byte("[]"), 0644))
+	if err := WriteCheckpoint(filepath.Join(stateDir, "checkpoint.json"), cp); err != nil {
+		return fmt.Errorf("write checkpoint: %w", err)
+	}
+	cov := traceability.Compute(coverageRefs(state.Issues))
+	swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
+	return nil
 }
 
 func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op, error) {
@@ -428,14 +396,7 @@ func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op
 		return nil, fmt.Errorf("ops HEAD: %w", err)
 	}
 	var extra []ops.Op
-	dirs := []struct {
-		abs string
-		rel string
-	}{
-		{filepath.Join(worktree, "ops"), "ops"},
-		{filepath.Join(worktree, ".armature", "ops"), ".armature/ops"},
-	}
-	for _, dir := range dirs {
+	for _, dir := range worktreeOpsLogDirs(worktree) {
 		entries, readErr := os.ReadDir(dir.abs)
 		if readErr != nil {
 			if os.IsNotExist(readErr) {
@@ -464,10 +425,8 @@ func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op
 			if readErr != nil {
 				continue
 			}
-			expectedWorkerID := strings.TrimSuffix(e.Name(), ".log")
-			legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
 			for _, op := range suffix {
-				if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
+				if !ops.WorkerOwnsLog(op.WorkerID, e.Name()) {
 					continue
 				}
 				extra = append(extra, op)
@@ -479,8 +438,8 @@ func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op
 
 func diskByteOffsets(worktree string) map[string]int64 {
 	out := make(map[string]int64)
-	for _, dir := range []string{filepath.Join(worktree, "ops"), filepath.Join(worktree, ".armature", "ops")} {
-		loaded, err := ops.LoadFromDirValidated(dir)
+	for _, dir := range worktreeOpsLogDirs(worktree) {
+		loaded, err := ops.LoadFromDirValidated(dir.abs)
 		if err != nil {
 			continue
 		}
@@ -491,6 +450,13 @@ func diskByteOffsets(worktree string) map[string]int64 {
 		}
 	}
 	return out
+}
+
+func worktreeOpsLogDirs(worktree string) []struct{ abs, rel string } {
+	return []struct{ abs, rel string }{
+		{filepath.Join(worktree, "ops"), "ops"},
+		{filepath.Join(worktree, ".armature", "ops"), ".armature/ops"},
+	}
 }
 
 func ReplayOpsTolerant(allOps []ops.Op) (state *State, skipped int, firstErr error) {
