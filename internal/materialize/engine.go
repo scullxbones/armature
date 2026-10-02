@@ -23,14 +23,12 @@ func NewState() *State {
 	}
 }
 
-// MissingTarget is handler-table metadata for a missing op.TargetID.
-// Error fails replay; Ignore is success (no-op). Empty means the handler
-// does not look up the target as an existing issue (create / no-ops).
 type MissingTarget string
 
 const (
-	MissingTargetError  MissingTarget = "Error"
-	MissingTargetIgnore MissingTarget = "Ignore"
+	MissingTargetUnspecified MissingTarget = ""
+	MissingTargetError       MissingTarget = "Error"
+	MissingTargetIgnore      MissingTarget = "Ignore"
 )
 
 type opHandler struct {
@@ -53,7 +51,7 @@ func (e missingTargetError) Error() string {
 }
 
 var opHandlers = map[string]opHandler{
-	ops.OpCreate:             {apply: (*State).applyCreate},
+	ops.OpCreate:             {apply: (*State).applyCreate, missingTarget: MissingTargetUnspecified},
 	ops.OpClaim:              {apply: (*State).applyClaim, missingTarget: MissingTargetError},
 	ops.OpHeartbeat:          {apply: (*State).applyHeartbeat, missingTarget: MissingTargetIgnore},
 	ops.OpTransition:         {apply: (*State).applyTransition, missingTarget: MissingTargetError},
@@ -65,8 +63,8 @@ var opHandlers = map[string]opHandler{
 	ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: MissingTargetIgnore},
 	ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: MissingTargetIgnore},
 	ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
-	ops.OpSourceFingerprint:  {apply: applyNoop},
-	ops.OpGateEvidence:       {apply: applyNoop},
+	ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: MissingTargetUnspecified},
+	ops.OpGateEvidence:       {apply: applyNoop, missingTarget: MissingTargetUnspecified},
 	ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: MissingTargetIgnore},
 	ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: MissingTargetIgnore},
 	ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: MissingTargetIgnore},
@@ -92,7 +90,7 @@ func (s *State) ApplyOp(op ops.Op) error {
 	if !exists {
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
-	if handler.missingTarget != "" {
+	if handler.missingTarget != MissingTargetUnspecified {
 		if _, ok := s.Issues[op.TargetID]; !ok {
 			if handler.missingTarget == MissingTargetIgnore {
 				return nil

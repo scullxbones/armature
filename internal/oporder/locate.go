@@ -38,6 +38,11 @@ func IsFromCommitMissing(err error) bool {
 
 const DefaultPublishedRef = "origin/_armature"
 
+const (
+	epochTimestampFilenameLine = 0
+	epochCommitThenLine        = 1
+)
+
 type Seq struct {
 	Epoch     int
 	CommitN   int64
@@ -159,14 +164,14 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 				published = anc
 			}
 		}
-		epoch := 0
+		epoch := epochTimestampFilenameLine
 		if cutover != "" {
 			before, bErr := commitStrictlyBefore(gc, sha, cutover)
 			if bErr != nil {
 				return nil, bErr
 			}
 			if !before {
-				epoch = 1
+				epoch = epochCommitThenLine
 			}
 		}
 		commitN := int64(i + 1)
@@ -383,7 +388,7 @@ func loadOpsFromWorktreeFiles(root string, opsPrefixes []string) ([]LocatedOp, e
 			located = append(located, LocatedOp{
 				Op: op,
 				Seq: Seq{
-					Epoch:     0,
+					Epoch:     epochTimestampFilenameLine,
 					Line:      line,
 					Timestamp: op.Timestamp,
 					Filename:  filepath.Base(path),
@@ -394,14 +399,12 @@ func loadOpsFromWorktreeFiles(root string, opsPrefixes []string) ([]LocatedOp, e
 	return located, nil
 }
 
-// SortLocated orders pre-C0 (epoch 0) by timestamp/filename/line and post-C0
-// (epoch 1) by commit sequence then line.
 func SortLocated(located []LocatedOp) {
 	slices.SortStableFunc(located, func(a, b LocatedOp) int {
 		if n := cmp.Compare(a.Seq.Epoch, b.Seq.Epoch); n != 0 {
 			return n
 		}
-		if a.Seq.Epoch == 1 {
+		if a.Seq.Epoch == epochCommitThenLine {
 			if n := cmp.Compare(a.Seq.CommitN, b.Seq.CommitN); n != 0 {
 				return n
 			}
@@ -418,7 +421,7 @@ func SortLocated(located []LocatedOp) {
 }
 
 func stealAt(loc LocatedOp) int64 {
-	if loc.Seq.Epoch == 1 && loc.CommitterUnix > 0 {
+	if loc.Seq.Epoch == epochCommitThenLine && loc.CommitterUnix > 0 {
 		return loc.CommitterUnix
 	}
 	return loc.Op.Timestamp
