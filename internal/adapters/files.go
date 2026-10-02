@@ -58,7 +58,7 @@ func removeOrKeepErr(primary error, path string) error {
 }
 
 func readStateFile(path string) ([]byte, error) {
-	return os.ReadFile(path) //nolint:gosec // G304: internal state path
+	return os.ReadFile(path) //nolint:gosec // G304: adapter file boundary
 }
 
 func readCallerFile(path string) ([]byte, error) {
