@@ -82,7 +82,7 @@ func runStatsCost(cmd *cobra.Command, ratesPath string) error {
 	report := stats.Estimate(stats.CollectUsage(snap.MaterializedOps), issues, rates)
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if format == "json" || format == "agent" {
+	if isStructuredFormat(format) {
 		data, err := json.MarshalIndent(report, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal cost report: %w", err)

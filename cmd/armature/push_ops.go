@@ -62,7 +62,7 @@ not name this flag.`,
 				return wrapOpsPublishFailure(code, newOpsPublishError(fmt.Errorf("push-ops: push failed: %w", err)))
 			}
 
-			if format == "json" || format == "agent" {
+			if isStructuredFormat(format) {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), `{"status":"pushed","branch":"_armature"}`+"\n")
 			} else {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Pushed _armature branch to remote\n")

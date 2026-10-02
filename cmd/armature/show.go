@@ -39,7 +39,7 @@ func newShowCmd() *cobra.Command {
 			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			structured := format == "json" || format == "agent"
+			structured := isStructuredFormat(format)
 
 			for _, id := range ids {
 				issuePtr, ok := snap.Issues[id]

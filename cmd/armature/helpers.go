@@ -106,7 +106,7 @@ func renderCommandFailure(w io.Writer, format string, cf *armerrors.CommandFailu
 	if cf == nil {
 		return
 	}
-	if format == "json" || format == "agent" {
+	if isStructuredFormat(format) {
 		b, err := json.Marshal(commandFailureEnvelope{Error: cf})
 		if err != nil {
 			fallback := armerrors.Wrap(armerrors.CodeIO, err.Error(), nil, err)
@@ -406,17 +406,20 @@ func resolveIssueID(flag string, args []string) (string, error) {
 }
 
 func writeCommandResult(cmd *cobra.Command, jsonValue any, humanFormat string, humanArgs ...any) {
-	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if format == "json" || format == "agent" {
+	if structuredFormat(cmd) {
 		fmt.Fprintln(cmd.OutOrStdout(), string(mustMarshal(jsonValue)))
 		return
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), humanFormat, humanArgs...)
 }
 
+func isStructuredFormat(format string) bool {
+	return format == "json" || format == "agent"
+}
+
 func structuredFormat(cmd *cobra.Command) bool {
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	return format == "json" || format == "agent"
+	return isStructuredFormat(format)
 }
 
 func writeCommandEnvelope(w io.Writer, key string, items any, help []string, decorate func(*output.Envelope) error) error {

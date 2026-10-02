@@ -80,7 +80,7 @@ func newRenderContextCmd() *cobra.Command {
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
+			if isStructuredFormat(format) {
 				out, err := ctxpkg.RenderAgent(ctx)
 				if err != nil {
 					return err

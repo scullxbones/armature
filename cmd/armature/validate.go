@@ -65,7 +65,7 @@ Use --quiet to suppress INFO lines on a failing run.`,
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if format == "json" || format == "agent" {
+			if isStructuredFormat(format) {
 				if err := writeValidateEnvelope(cmd.OutOrStdout(), result); err != nil {
 					return err
 				}

@@ -55,7 +55,7 @@ func newWorkersCmd() *cobra.Command {
 			})
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			if jsonOut || format == "json" || format == "agent" {
+			if jsonOut || isStructuredFormat(format) {
 				help := []string{"arm show <id> for the issue a worker is claimed on"}
 				if len(statuses) == 0 {
 					help = []string{"no worker logs found", "arm worker-init registers a worker identity"}

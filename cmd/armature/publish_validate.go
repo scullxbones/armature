@@ -237,21 +237,13 @@ func copyDirFiles(src, dest string) error {
 		if e.IsDir() {
 			continue
 		}
-		in, err := readOverlayFile(src, e.Name())
+		in, err := os.ReadFile(filepath.Join(src, e.Name())) //nolint:gosec // G304: overlay names from ReadDir of local ops/sources
 		if err != nil {
 			return err
 		}
-		if err := writeOverlayFile(dest, e.Name(), in); err != nil {
+		if err := os.WriteFile(filepath.Join(dest, e.Name()), in, 0o600); err != nil { //nolint:gosec // G703: overlay names from ReadDir of local ops/sources
 			return err
 		}
 	}
 	return nil
-}
-
-func readOverlayFile(src, name string) ([]byte, error) {
-	return os.ReadFile(filepath.Join(src, name)) //nolint:gosec // G304: overlay names from ReadDir of local ops/sources
-}
-
-func writeOverlayFile(dest, name string, body []byte) error {
-	return os.WriteFile(filepath.Join(dest, name), body, 0o600)
 }

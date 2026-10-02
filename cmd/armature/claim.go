@@ -1107,7 +1107,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				supersededBySameWorker := issueAfter.ClaimedBy == workerID
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
 				switch {
-				case format == "json" || format == "agent":
+				case isStructuredFormat(format):
 					result := map[string]any{
 						"issue":                     issueID,
 						"claimed":                   false,

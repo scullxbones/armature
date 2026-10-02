@@ -35,7 +35,7 @@ type BootstrapResult struct {
 }
 
 func silenceHumanStdoutWhenStructured(cmd *cobra.Command, format string) *cobra.Command {
-	if format == "json" || format == "agent" {
+	if isStructuredFormat(format) {
 		silentCmd := &cobra.Command{}
 		silentCmd.SetOut(io.Discard)
 		return silentCmd
@@ -118,15 +118,14 @@ The command is idempotent: running it multiple times has the same effect as runn
 
 			repoSetupResult, err := runRepoSetup(silenceHumanStdoutWhenStructured(cmd, format), repoPath)
 			if err != nil {
-				if format == "json" || format == "agent" {
+				if isStructuredFormat(format) {
 					repoSetupResult.Status = "error"
 					repoSetupResult.Error = err.Error()
-					result := BootstrapResult{
+					if jsonErr := writeBootstrapJSON(cmd.OutOrStdout(), BootstrapResult{
 						RepoSetup:    repoSetupResult,
 						HarnessSetup: []bootstrap.HarnessArtifactResult{},
-					}
-					if data, merr := json.MarshalIndent(result, "", "  "); merr == nil {
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					}); jsonErr != nil {
+						return fmt.Errorf("marshal JSON: %w", jsonErr)
 					}
 					return skipCommandFailure(fmt.Errorf("repo setup failed: %w", err))
 				}
@@ -135,29 +134,25 @@ The command is idempotent: running it multiple times has the same effect as runn
 
 			harnessResults, err := executeHarnessSetup(silenceHumanStdoutWhenStructured(cmd, format), plan, repoPath, global)
 			if err != nil {
-				if (format == "json" || format == "agent") && len(harnessResults) > 0 {
-					result := BootstrapResult{
+				if isStructuredFormat(format) && len(harnessResults) > 0 {
+					if jsonErr := writeBootstrapJSON(cmd.OutOrStdout(), BootstrapResult{
 						RepoSetup:    repoSetupResult,
 						HarnessSetup: harnessResults,
-					}
-					if data, merr := json.MarshalIndent(result, "", "  "); merr == nil {
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+					}); jsonErr != nil {
+						return fmt.Errorf("marshal JSON: %w", jsonErr)
 					}
 					return skipCommandFailure(fmt.Errorf("harness setup failed: %w", err))
 				}
 				return fmt.Errorf("harness setup failed: %w", err)
 			}
 
-			if format == "json" || format == "agent" {
-				result := BootstrapResult{
+			if isStructuredFormat(format) {
+				if err := writeBootstrapJSON(cmd.OutOrStdout(), BootstrapResult{
 					RepoSetup:    repoSetupResult,
 					HarnessSetup: harnessResults,
-				}
-				data, err := json.MarshalIndent(result, "", "  ")
-				if err != nil {
+				}); err != nil {
 					return fmt.Errorf("marshal JSON: %w", err)
 				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 			} else {
 				for _, r := range harnessResults {
 					if r.Status == bootstrap.StatusUnsupported || r.Status == bootstrap.StatusSkipped {
@@ -181,6 +176,45 @@ The command is idempotent: running it multiple times has the same effect as runn
 	return cmd
 }
 
+func writeBootstrapJSON(w io.Writer, result BootstrapResult) error {
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(w, string(data))
+	return nil
+}
+
+func harnessArtifactResult(
+	platform bootstrap.Platform,
+	artifact bootstrap.ArtifactKind,
+	status bootstrap.ArtifactStatus,
+	action bootstrap.ActionKind,
+	note, errMsg string,
+) bootstrap.HarnessArtifactResult {
+	return bootstrap.HarnessArtifactResult{
+		Platform: platform,
+		Artifact: artifact,
+		Status:   status,
+		Action:   action,
+		Note:     note,
+		Error:    errMsg,
+	}
+}
+
+func failHarnessInstall(
+	results *[]bootstrap.HarnessArtifactResult,
+	platform bootstrap.Platform,
+	artifact bootstrap.ArtifactKind,
+	verb, platformName string,
+	err error,
+) error {
+	*results = append(*results, harnessArtifactResult(
+		platform, artifact, bootstrap.StatusError, bootstrap.ActionInstall, "", err.Error(),
+	))
+	return fmt.Errorf("%s for %s: %w", verb, platformName, err)
+}
+
 func recordArtifactAction(
 	results *[]bootstrap.HarnessArtifactResult,
 	platform bootstrap.Platform,
@@ -191,19 +225,9 @@ func recordArtifactAction(
 	case bootstrap.ActionInstall:
 		return
 	case bootstrap.ActionUnsupported:
-		*results = append(*results, bootstrap.HarnessArtifactResult{
-			Platform: platform,
-			Artifact: artifact,
-			Status:   bootstrap.StatusUnsupported,
-			Action:   action,
-		})
+		*results = append(*results, harnessArtifactResult(platform, artifact, bootstrap.StatusUnsupported, action, "", ""))
 	case bootstrap.ActionSkip:
-		*results = append(*results, bootstrap.HarnessArtifactResult{
-			Platform: platform,
-			Artifact: artifact,
-			Status:   bootstrap.StatusSkipped,
-			Action:   action,
-		})
+		*results = append(*results, harnessArtifactResult(platform, artifact, bootstrap.StatusSkipped, action, "", ""))
 	}
 }
 
@@ -227,45 +251,18 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		if row.Skills == bootstrap.ActionInstall {
 			skillsDest := filepath.Join(destBase, ".claude", "skills")
 			if err := deploySkills(skillsembed.SkillsFS, skillsDest); err != nil {
-				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: row.Platform,
-					Artifact: bootstrap.ArtifactSkills,
-					Status:   bootstrap.StatusError,
-					Action:   bootstrap.ActionInstall,
-					Error:    err.Error(),
-				})
-				return results, fmt.Errorf("deploy skills for %s: %w", platformName, err)
+				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactSkills, "deploy skills", platformName, err)
 			}
-
 			if err := deployFlatSkills(skillsembed.SkillsFS, skillsDest); err != nil {
-				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: row.Platform,
-					Artifact: bootstrap.ArtifactSkills,
-					Status:   bootstrap.StatusError,
-					Action:   bootstrap.ActionInstall,
-					Error:    err.Error(),
-				})
-				return results, fmt.Errorf("deploy flat skills for %s: %w", platformName, err)
+				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactSkills, "deploy flat skills", platformName, err)
 			}
-
 			if err := deployRepoAgentSkills(repoPath, skillsDest); err != nil {
-				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: row.Platform,
-					Artifact: bootstrap.ArtifactSkills,
-					Status:   bootstrap.StatusError,
-					Action:   bootstrap.ActionInstall,
-					Error:    err.Error(),
-				})
-				return results, fmt.Errorf("deploy repo agent skills for %s: %w", platformName, err)
+				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactSkills, "deploy repo agent skills", platformName, err)
 			}
-
-			results = append(results, bootstrap.HarnessArtifactResult{
-				Platform: row.Platform,
-				Artifact: bootstrap.ArtifactSkills,
-				Status:   bootstrap.StatusOK,
-				Action:   bootstrap.ActionInstall,
-				Note:     fmt.Sprintf("Deployed to %s", skillsDest),
-			})
+			results = append(results, harnessArtifactResult(
+				row.Platform, bootstrap.ArtifactSkills, bootstrap.StatusOK, bootstrap.ActionInstall,
+				fmt.Sprintf("Deployed to %s", skillsDest), "",
+			))
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed skills to %s for %s\n", skillsDest, platformName)
 		} else {
 			recordArtifactAction(&results, row.Platform, bootstrap.ArtifactSkills, row.Skills)
@@ -279,23 +276,12 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 
 			pluginsDest := filepath.Join(destBase, ".claude", "plugins", pluginName)
 			if err := deployPlugin(skillsembed.SkillsFS, pluginsDest); err != nil {
-				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: row.Platform,
-					Artifact: bootstrap.ArtifactPluginMetadata,
-					Status:   bootstrap.StatusError,
-					Action:   bootstrap.ActionInstall,
-					Error:    err.Error(),
-				})
-				return results, fmt.Errorf("deploy plugin metadata for %s: %w", platformName, err)
+				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactPluginMetadata, "deploy plugin metadata", platformName, err)
 			}
-
-			results = append(results, bootstrap.HarnessArtifactResult{
-				Platform: row.Platform,
-				Artifact: bootstrap.ArtifactPluginMetadata,
-				Status:   bootstrap.StatusOK,
-				Action:   bootstrap.ActionInstall,
-				Note:     fmt.Sprintf("Deployed to %s", pluginsDest),
-			})
+			results = append(results, harnessArtifactResult(
+				row.Platform, bootstrap.ArtifactPluginMetadata, bootstrap.StatusOK, bootstrap.ActionInstall,
+				fmt.Sprintf("Deployed to %s", pluginsDest), "",
+			))
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed plugin configuration to %s for %s\n", pluginsDest, platformName)
 		} else {
 			recordArtifactAction(&results, row.Platform, bootstrap.ArtifactPluginMetadata, row.PluginMetadata)
@@ -304,14 +290,7 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		if row.HarnessHookConfig == bootstrap.ActionInstall {
 			adapter, err := harnesshook.NewAdapterForPlatform(platformName)
 			if err != nil {
-				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: row.Platform,
-					Artifact: bootstrap.ArtifactHarnessHookConfig,
-					Status:   bootstrap.StatusError,
-					Action:   bootstrap.ActionInstall,
-					Error:    err.Error(),
-				})
-				return results, fmt.Errorf("create adapter for %s: %w", platformName, err)
+				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactHarnessHookConfig, "create adapter", platformName, err)
 			}
 
 			owned, err := adapter.OwnsConfig(destBase)
@@ -319,32 +298,18 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 				return results, fmt.Errorf("check config ownership for %s: %w", platformName, err)
 			}
 			if !owned {
-				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: row.Platform,
-					Artifact: bootstrap.ArtifactHarnessHookConfig,
-					Status:   bootstrap.StatusSkipped,
-					Action:   bootstrap.ActionInstall,
-					Note:     "existing config not managed by Armature",
-				})
+				results = append(results, harnessArtifactResult(
+					row.Platform, bootstrap.ArtifactHarnessHookConfig, bootstrap.StatusSkipped, bootstrap.ActionInstall,
+					"existing config not managed by Armature", "",
+				))
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped harness hook config for %s (not managed by Armature)\n", platformName)
 			} else {
 				if err := adapter.WriteConfig(destBase); err != nil {
-					results = append(results, bootstrap.HarnessArtifactResult{
-						Platform: row.Platform,
-						Artifact: bootstrap.ArtifactHarnessHookConfig,
-						Status:   bootstrap.StatusError,
-						Action:   bootstrap.ActionInstall,
-						Error:    err.Error(),
-					})
-					return results, fmt.Errorf("write harness hook config for %s: %w", platformName, err)
+					return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactHarnessHookConfig, "write harness hook config", platformName, err)
 				}
-
-				results = append(results, bootstrap.HarnessArtifactResult{
-					Platform: row.Platform,
-					Artifact: bootstrap.ArtifactHarnessHookConfig,
-					Status:   bootstrap.StatusOK,
-					Action:   bootstrap.ActionInstall,
-				})
+				results = append(results, harnessArtifactResult(
+					row.Platform, bootstrap.ArtifactHarnessHookConfig, bootstrap.StatusOK, bootstrap.ActionInstall, "", "",
+				))
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Deployed harness hook config for %s\n", platformName)
 			}
 		} else {
@@ -442,11 +407,9 @@ func installHooks(repoPath string, issuesDir string) ([]string, error) {
 }
 
 func isArmatureManagedHook(content string) bool {
-	if strings.Contains(content, "# armature:managed") {
-		return true
-	}
-	return strings.HasPrefix(strings.TrimSpace(content), "#!/bin/sh") &&
-		strings.Contains(content, "\n# Armature ")
+	return strings.Contains(content, "# armature:managed") ||
+		(strings.HasPrefix(strings.TrimSpace(content), "#!/bin/sh") &&
+			strings.Contains(content, "\n# Armature "))
 }
 
 var obsoleteHooks = []string{"prepare-commit-msg"}
@@ -651,14 +614,7 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 		return false, "", "", false, nil
 	}
 
-	timestamp := time.Now().Format("20060102150405")
-	backupDir := filepath.Join(repoPath, fmt.Sprintf(".armature.migrated-%s", timestamp))
-	for i := 2; ; i++ {
-		if _, err := os.Lstat(backupDir); os.IsNotExist(err) {
-			break
-		}
-		backupDir = filepath.Join(repoPath, fmt.Sprintf(".armature.migrated-%s-%d", timestamp, i))
-	}
+	backupDir := uniqueTimestampedDir(repoPath, ".armature.migrated")
 
 	gitClient := adapters.New(repoPath)
 	isTracked := gitClient.IsTracked(config.StateDirName)
@@ -703,6 +659,38 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 	}
 
 	return true, backupDir, preMigrationSHA, isTracked, nil
+}
+
+func uniqueTimestampedDir(repoPath, prefix string) string {
+	timestamp := time.Now().Format("20060102150405")
+	backupDir := filepath.Join(repoPath, fmt.Sprintf("%s-%s", prefix, timestamp))
+	for i := 2; ; i++ {
+		if _, err := os.Lstat(backupDir); os.IsNotExist(err) {
+			return backupDir
+		}
+		backupDir = filepath.Join(repoPath, fmt.Sprintf("%s-%s-%d", prefix, timestamp, i))
+	}
+}
+
+func failAfterLegacyMigration(
+	migrated bool,
+	repoPath, backupDir, preMigrationSHA string,
+	migrationCommitted bool,
+	err error,
+	op, rolledBackMsg string,
+) error {
+	if migrated {
+		if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
+			return fmt.Errorf(
+				"%s: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
+				op, err, rbErr, backupDir,
+			)
+		}
+		if migrationCommitted && preMigrationSHA != "" {
+			return fmt.Errorf("%s: %w (%s; backup left at %s)", op, err, rolledBackMsg, backupDir)
+		}
+	}
+	return fmt.Errorf("%s: %w", op, err)
 }
 
 func rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA string, committed bool) error {
@@ -793,14 +781,7 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		return false, "", fmt.Errorf("snapshot _armature worktree before collapse: %w", err)
 	}
 
-	timestamp := time.Now().Format("20060102150405")
-	backupDir := filepath.Join(repoPath, fmt.Sprintf(".arm.collapsed-%s", timestamp))
-	for i := 2; ; i++ {
-		if _, err := os.Lstat(backupDir); os.IsNotExist(err) {
-			break
-		}
-		backupDir = filepath.Join(repoPath, fmt.Sprintf(".arm.collapsed-%s-%d", timestamp, i))
-	}
+	backupDir := uniqueTimestampedDir(repoPath, ".arm.collapsed")
 	if _, err := copyRecursive(armWorktreePath, backupDir); err != nil {
 		return false, "", fmt.Errorf("snapshot .arm worktree to backup %s: %w", backupDir, err)
 	}
@@ -1191,18 +1172,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	dualMigrated, dualBackupDir, err := migrateDualBranchToCollapsed(repoPath)
 	if err != nil {
-		if migrated {
-			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
-				return RepoSetupResult{}, fmt.Errorf(
-					"migrate dual-branch layout to collapsed: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
-					err, rbErr, backupDir,
-				)
-			}
-			if migrationCommitted && preMigrationSHA != "" {
-				return RepoSetupResult{}, fmt.Errorf("migrate dual-branch layout to collapsed: %w (legacy migration rolled back; backup left at %s)", err, backupDir)
-			}
-		}
-		return RepoSetupResult{}, fmt.Errorf("migrate dual-branch layout to collapsed: %w", err)
+		return RepoSetupResult{}, failAfterLegacyMigration(
+			migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
+			"migrate dual-branch layout to collapsed", "legacy migration rolled back",
+		)
 	}
 	if dualMigrated {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated dual-branch .arm/.armature layout to collapsed .armature at timestamped backup %s\n", dualBackupDir)
@@ -1213,18 +1186,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 
 	if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
-		if migrated {
-			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
-				return RepoSetupResult{}, fmt.Errorf(
-					"create _armature branch: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
-					err, rbErr, backupDir,
-				)
-			}
-			if migrationCommitted && preMigrationSHA != "" {
-				return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w (migration rolled back; backup left at %s)", err, backupDir)
-			}
-		}
-		return RepoSetupResult{}, fmt.Errorf("create _armature branch: %w", err)
+		return RepoSetupResult{}, failAfterLegacyMigration(
+			migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
+			"create _armature branch", "migration rolled back",
+		)
 	}
 
 	var worktreePath string
@@ -1257,18 +1222,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	worktreeLabel := filepath.Base(worktreePath)
 	if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
-		if migrated {
-			if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
-				return RepoSetupResult{}, fmt.Errorf(
-					"add %s worktree: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
-					worktreeLabel, err, rbErr, backupDir,
-				)
-			}
-			if migrationCommitted && preMigrationSHA != "" {
-				return RepoSetupResult{}, fmt.Errorf("add %s worktree: %w (migration rolled back; backup left at %s)", worktreeLabel, err, backupDir)
-			}
-		}
-		return RepoSetupResult{}, fmt.Errorf("add %s worktree: %w", worktreeLabel, err)
+		return RepoSetupResult{}, failAfterLegacyMigration(
+			migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
+			fmt.Sprintf("add %s worktree", worktreeLabel), "migration rolled back",
+		)
 	}
 
 	if !dualMigrated {

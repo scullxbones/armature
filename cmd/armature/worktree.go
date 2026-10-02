@@ -56,7 +56,7 @@ func newWorktreeListCmd() *cobra.Command {
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
-			if format == "json" || format == "agent" {
+			if isStructuredFormat(format) {
 				if err := writeWorktreeListEnvelope(cmd, result); err != nil {
 					return err
 				}
@@ -150,7 +150,7 @@ func newWorktreeGCCmd() *cobra.Command {
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if dryRun {
-				if format == "json" || format == "agent" {
+				if isStructuredFormat(format) {
 					if err := writeWorktreeGCEnvelope(cmd, result.GCRemovalSet, nil, nil, result.GCAmbiguous, true); err != nil {
 						return err
 					}
@@ -198,7 +198,7 @@ func newWorktreeGCCmd() *cobra.Command {
 				}
 			}
 
-			if format == "json" || format == "agent" {
+			if isStructuredFormat(format) {
 				if err := writeWorktreeGCEnvelope(cmd, removed, skipped, failed, result.GCAmbiguous, false); err != nil {
 					return err
 				}
@@ -311,15 +311,15 @@ func worktreeListRows(result worktree.ReconcileResult) []worktreeRow {
 }
 
 func writeWorktreeGCEnvelope(cmd *cobra.Command, removed, skipped, failed, ambiguous []string, dryRun bool) error {
-	rows := make([]worktreeRow, 0, len(removed)+len(skipped)+len(failed)+len(ambiguous))
+	removedAction := "removed"
 	if dryRun {
-		for _, id := range removed {
-			rows = append(rows, worktreeRow{ID: id, Action: "would_remove"})
-		}
-	} else {
-		for _, id := range removed {
-			rows = append(rows, worktreeRow{ID: id, Action: "removed"})
-		}
+		removedAction = "would_remove"
+	}
+	rows := make([]worktreeRow, 0, len(removed)+len(skipped)+len(failed)+len(ambiguous))
+	for _, id := range removed {
+		rows = append(rows, worktreeRow{ID: id, Action: removedAction})
+	}
+	if !dryRun {
 		for _, id := range skipped {
 			rows = append(rows, worktreeRow{ID: id, Action: "skipped"})
 		}
@@ -331,13 +331,12 @@ func writeWorktreeGCEnvelope(cmd *cobra.Command, removed, skipped, failed, ambig
 		rows = append(rows, worktreeRow{ID: id, Action: "ambiguous"})
 	}
 	help := []string{"arm worktree list classifies bound, orphan, ghost, and gc-ready worktrees"}
-	if len(rows) == 0 {
-		if dryRun {
-			help = []string{"dry-run: no worktrees would be removed", help[0]}
-		} else {
-			help = []string{"no worktrees removed", help[0]}
-		}
-	} else if dryRun {
+	switch {
+	case len(rows) == 0 && dryRun:
+		help = []string{"dry-run: no worktrees would be removed", help[0]}
+	case len(rows) == 0:
+		help = []string{"no worktrees removed", help[0]}
+	case dryRun:
 		help = []string{"dry-run: no worktrees were removed", help[0]}
 	}
 	return writeCommandEnvelope(cmd.OutOrStdout(), "worktrees", rows, help, func(env *output.Envelope) error {
@@ -345,37 +344,29 @@ func writeWorktreeGCEnvelope(cmd *cobra.Command, removed, skipped, failed, ambig
 			if err := env.AddAdjunct("dry_run", true); err != nil {
 				return err
 			}
-			if err := env.AddAdjunct("would_remove", removed); err != nil {
-				return err
-			}
-			if err := env.AddAdjunct("would_remove_count", len(removed)); err != nil {
+			if err := addSliceCountAdjuncts(env, "would_remove", removed); err != nil {
 				return err
 			}
 		} else {
-			if err := env.AddAdjunct("removed", removed); err != nil {
+			if err := addSliceCountAdjuncts(env, "removed", removed); err != nil {
 				return err
 			}
-			if err := env.AddAdjunct("removed_count", len(removed)); err != nil {
+			if err := addSliceCountAdjuncts(env, "skipped", skipped); err != nil {
 				return err
 			}
-			if err := env.AddAdjunct("skipped", skipped); err != nil {
-				return err
-			}
-			if err := env.AddAdjunct("skipped_count", len(skipped)); err != nil {
-				return err
-			}
-			if err := env.AddAdjunct("failed", failed); err != nil {
-				return err
-			}
-			if err := env.AddAdjunct("failed_count", len(failed)); err != nil {
+			if err := addSliceCountAdjuncts(env, "failed", failed); err != nil {
 				return err
 			}
 		}
-		if err := env.AddAdjunct("ambiguous", ambiguous); err != nil {
-			return err
-		}
-		return env.AddAdjunct("ambiguous_count", len(ambiguous))
+		return addSliceCountAdjuncts(env, "ambiguous", ambiguous)
 	})
+}
+
+func addSliceCountAdjuncts(env *output.Envelope, key string, ids []string) error {
+	if err := env.AddAdjunct(key, ids); err != nil {
+		return err
+	}
+	return env.AddAdjunct(key+"_count", len(ids))
 }
 
 func writeWorktreeListEnvelope(cmd *cobra.Command, result worktree.ReconcileResult) error {

@@ -81,7 +81,7 @@ mode (agents) to auto-approve all pending draft items.`,
 			})
 
 			if len(draftIssues) == 0 {
-				if format == "json" || format == "agent" || nonInteractive {
+				if isStructuredFormat(format) || nonInteractive {
 					data := mustMarshalIndent(map[string]interface{}{
 						"pending_dag_confirmation": []interface{}{},
 						"count":                    0,
@@ -94,7 +94,7 @@ mode (agents) to auto-approve all pending draft items.`,
 				return nil
 			}
 
-			if format == "json" || format == "agent" || nonInteractive {
+			if isStructuredFormat(format) || nonInteractive {
 				if approveAll && len(draftIssues) > 0 {
 					approvedIDs := make([]string, 0, len(draftIssues))
 					for _, issue := range draftIssues {

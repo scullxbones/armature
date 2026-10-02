@@ -246,7 +246,7 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 	}
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if format == "json" || format == "agent" {
+	if isStructuredFormat(format) {
 		help := []string{"arm review prepare --issue " + issueID + " --base <sha> --head <sha> builds a review bundle"}
 		if len(commits) == 0 {
 			help = []string{"no delivery commits found for " + issueID, help[0]}
@@ -337,7 +337,7 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 
 	if recordResult.IsDuplicate {
 		format, _ := cmd.Root().PersistentFlags().GetString("format")
-		if format == "json" || format == "agent" {
+		if isStructuredFormat(format) {
 			return writeReviewAssessmentEnvelope(cmd, reviewAssessmentRow{
 				Issue:    issueID,
 				Status:   "duplicate",
@@ -374,7 +374,7 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	}
 
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if format == "json" || format == "agent" {
+	if isStructuredFormat(format) {
 		return writeReviewAssessmentEnvelope(cmd, reviewAssessmentRow{
 			Issue:    issueID,
 			Status:   "recorded",
