@@ -69,11 +69,6 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 	var warnings []string
 	var physicalEOF int64
 
-	legacyWorkerID := entry.ExpectedWorkerID
-	if i := strings.Index(entry.ExpectedWorkerID, "~"); i >= 0 {
-		legacyWorkerID = entry.ExpectedWorkerID[:i]
-	}
-
 	linesWithOffsets, err := adapters.ReadLogLinesWithOffsets(entry.LogPath, 0)
 	if err != nil {
 		return nil, 0, nil, err
@@ -91,7 +86,7 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 			continue
 		}
 
-		if op.WorkerID != entry.ExpectedWorkerID && op.WorkerID != legacyWorkerID {
+		if !WorkerOwnsLog(op.WorkerID, entry.ExpectedWorkerID) {
 			warnings = append(warnings, fmt.Sprintf(
 				"worker ID mismatch in %s: expected %s, got %s (target: %s)",
 				filepath.Base(entry.LogPath),
@@ -133,6 +128,15 @@ func LoadFromDirValidated(opsDir string) (LoadResult, error) {
 		stream.addFile(logPath, strings.TrimSuffix(filepath.Base(logPath), ".log"))
 	}
 	return stream.loadAll()
+}
+
+// WorkerOwnsLog reports whether workerID may appear in the named log.
+// The name is `<workerID>.log` or `<workerID>~<slot>.log` (a path is ok).
+// Slotted logs also accept the unslotted worker ID for pre-slot lines.
+func WorkerOwnsLog(workerID, logPathOrName string) bool {
+	expected := strings.TrimSuffix(filepath.Base(logPathOrName), ".log")
+	legacy, _, _ := strings.Cut(expected, "~")
+	return workerID == expected || workerID == legacy
 }
 
 func ExtractOps(items []OpItem) []Op {

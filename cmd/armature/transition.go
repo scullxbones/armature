@@ -470,7 +470,7 @@ func mapTransitionError(err error) error {
 	case strings.Contains(msg, "invalid status"):
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm transition --to <valid-status>", "arm show"}, err)
 	case strings.Contains(msg, "NOT-CLAIM-OWNER"):
-		return wrapTransitionNotClaimOwner(err)
+		return wrapNotClaimOwner(codeTransition1, err)
 	case strings.Contains(msg, "cannot transition to done"),
 		strings.Contains(msg, "Use --force"):
 		return armerrors.Wrap(codeTransition1, msg, []string{

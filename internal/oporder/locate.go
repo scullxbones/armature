@@ -284,8 +284,6 @@ func countNonEmptyLines(b []byte) int {
 }
 
 func parseLogBytesFromLine(content []byte, filename string, skipNonEmpty int) ([]LocatedOp, error) {
-	expectedWorkerID := strings.TrimSuffix(filename, ".log")
-	legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	seen := 0
@@ -305,7 +303,7 @@ func parseLogBytesFromLine(content []byte, filename string, skipNonEmpty int) ([
 		if parseErr != nil {
 			continue
 		}
-		if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
+		if !ops.WorkerOwnsLog(op.WorkerID, filename) {
 			continue
 		}
 		located = append(located, LocatedOp{
@@ -373,8 +371,6 @@ func loadOpsFromWorktreeFiles(root string, opsPrefixes []string) ([]LocatedOp, e
 		if readErr != nil {
 			continue
 		}
-		expectedWorkerID := strings.TrimSuffix(filepath.Base(path), ".log")
-		legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
 		scanner := bufio.NewScanner(bytes.NewReader(content))
 		scanner.Buffer(make([]byte, 1<<20), 1<<20)
 		line := 0
@@ -388,7 +384,7 @@ func loadOpsFromWorktreeFiles(root string, opsPrefixes []string) ([]LocatedOp, e
 			if parseErr != nil {
 				continue
 			}
-			if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
+			if !ops.WorkerOwnsLog(op.WorkerID, path) {
 				continue
 			}
 			located = append(located, LocatedOp{

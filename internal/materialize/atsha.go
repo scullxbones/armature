@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -38,9 +37,6 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 			continue
 		}
 
-		expectedWorkerID := strings.TrimSuffix(filepath.Base(f), ".log")
-		legacyWorkerID, _, _ := strings.Cut(expectedWorkerID, "~")
-
 		content, err := history.ShowFileAtCommit(sha, f)
 		if err != nil {
 			return nil, fmt.Errorf("show file %s at %s: %w", f, sha, err)
@@ -57,7 +53,7 @@ func MaterializeAtSHA(history HistoryReader, sha string, opsPrefixes ...string) 
 			if err != nil {
 				continue
 			}
-			if op.WorkerID != expectedWorkerID && op.WorkerID != legacyWorkerID {
+			if !ops.WorkerOwnsLog(op.WorkerID, f) {
 				continue
 			}
 			allOps = append(allOps, op)
