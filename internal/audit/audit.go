@@ -15,10 +15,9 @@ type Entry struct {
 	LostRace bool
 }
 
-// Filter restricts which audit entries are returned.
 type Filter struct {
-	IssueID  string    // if non-empty, only entries targeting this issue
-	WorkerID string    // if non-empty, only entries from this worker
+	IssueID  string
+	WorkerID string
 	Since    time.Time // if non-zero, only entries with Timestamp >= Since.Unix()
 }
 

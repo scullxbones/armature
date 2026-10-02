@@ -21,14 +21,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// RepoSetupResult captures the outcome of repository initialization.
 type RepoSetupResult struct {
 	Status       string   `json:"status"`
 	SkippedHooks []string `json:"skipped_hooks,omitempty"`
 	Error        string   `json:"error,omitempty"`
 }
 
-// BootstrapResult is the complete output of a bootstrap operation.
 type BootstrapResult struct {
 	RepoSetup    RepoSetupResult                   `json:"repo_setup"`
 	HarnessSetup []bootstrap.HarnessArtifactResult `json:"harness_setup"`
@@ -990,7 +988,7 @@ func mergeAppendOnlyLog(srcPath, dstPath string) (int, error) {
 	if !strings.HasSuffix(mergedContent, "\n") {
 		mergedContent += "\n"
 	}
-	if err := os.WriteFile(dstPath, []byte(mergedContent), 0o600); err != nil { //nolint:gosec // G304: dstPath is derived from controlled repo paths
+	if err := adapters.WriteFile(dstPath, []byte(mergedContent), 0o600); err != nil {
 		return 0, fmt.Errorf("write merged log: %w", err)
 	}
 	return appended, nil
@@ -1031,12 +1029,12 @@ func copyRecursive(src string, dst string) (int, error) {
 		return 0, fmt.Errorf("stat destination: %w", err)
 	}
 
-	content, err := os.ReadFile(src) //nolint:gosec // G304: src is constructed from legacyOpsDir
+	content, err := adapters.ReadFile(src)
 	if err != nil {
 		return 0, fmt.Errorf("read file: %w", err)
 	}
 
-	if err := os.WriteFile(dst, content, info.Mode()); err != nil { //nolint:gosec // dst is constructed from newOpsDir
+	if err := adapters.WriteFile(dst, content, info.Mode()); err != nil {
 		return 0, fmt.Errorf("write file: %w", err)
 	}
 
@@ -1114,7 +1112,7 @@ func updateGitExcludeTrackedLocked(repoPath, addPattern, removePattern string) (
 		newContent += addPattern + "\n"
 	}
 
-	if err := os.WriteFile(excludePath, []byte(newContent), 0o600); err != nil { //nolint:gosec // G703: path is constructed from repo/.git/info/exclude
+	if err := adapters.WriteFile(excludePath, []byte(newContent), 0o600); err != nil {
 		return false, fmt.Errorf("write .git/info/exclude: %w", err)
 	}
 

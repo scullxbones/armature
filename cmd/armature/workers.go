@@ -15,7 +15,6 @@ import (
 
 var replayIssueLeases = claim.Owners
 
-// WorkerStatus describes the current activity state of a worker.
 type WorkerStatus struct {
 	WorkerID    string `json:"worker_id"`
 	Status      string `json:"status"`
