@@ -61,6 +61,10 @@ func readStateFile(path string) ([]byte, error) {
 	return os.ReadFile(path) //nolint:gosec // G304: adapter file boundary
 }
 
+func readCallerFile(path string) ([]byte, error) {
+	return os.ReadFile(path) //nolint:gosec // G304: caller path at adapter boundary
+}
+
 func openState(path string) (*os.File, error) {
 	return os.Open(path) //nolint:gosec // G304: internal state path
 }
@@ -673,7 +677,7 @@ func StatFile(path string) bool {
 }
 
 func ReadPlanFile(path string) ([]byte, error) {
-	data, err := readStateFile(path)
+	data, err := readCallerFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read plan file %s: %w", path, err)
 	}
@@ -755,7 +759,7 @@ func Stat(path string) (os.FileInfo, error) {
 }
 
 func ReadFile(path string) ([]byte, error) {
-	return readStateFile(path)
+	return readCallerFile(path)
 }
 
 func WriteFile(path string, data []byte, perm os.FileMode) error {

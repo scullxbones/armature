@@ -280,7 +280,7 @@ func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
 	if prunable {
 		addArgs = []string{"worktree", "add", "--force", "--detach", worktreePath, baseRef}
 	}
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
 	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repoPath}, addArgs...)...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree add --detach: %w\n%s", err, out)
@@ -289,7 +289,7 @@ func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
 }
 
 func checkoutBranchInWorktree(worktreePath, branchName string) error {
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
 	verify := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "rev-parse", "--verify", "refs/heads/"+branchName)
 	branchExists := verify.Run() == nil
 
@@ -299,7 +299,7 @@ func checkoutBranchInWorktree(worktreePath, branchName string) error {
 	} else {
 		args = append(args, "-b", branchName)
 	}
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
 	cmd := exec.CommandContext(context.Background(), "git", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout %s: %w\n%s", branchName, err, out)
@@ -308,7 +308,7 @@ func checkoutBranchInWorktree(worktreePath, branchName string) error {
 }
 
 func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branchName)
 	out, err := cmd.Output()
 	if err == nil {
@@ -321,7 +321,7 @@ func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
 }
 
 func branchConfigIfExists(repoPath, key string) (string, bool, error) {
-	// #nosec G204 - git binary and arguments are controlled by us, not user input
+	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "config", "--local", "--get", key)
 	out, err := cmd.Output()
 	if err == nil {
