@@ -58,7 +58,7 @@ func removeOrKeepErr(primary error, path string) error {
 }
 
 func readStateFile(path string) ([]byte, error) {
-	return os.ReadFile(path) //nolint:gosec // G304: internal state path
+	return os.ReadFile(path) //nolint:gosec // G304: adapter file boundary
 }
 
 func openState(path string) (*os.File, error) {
@@ -69,8 +69,6 @@ func openStateFile(path string, flag int, perm os.FileMode) (*os.File, error) {
 	return os.OpenFile(path, flag, perm) //nolint:gosec // G304: internal state path
 }
 
-// ListLogFiles finds all *.log files in the opsDir directory.
-// Returns their absolute paths.
 func ListLogFiles(opsDir string) ([]string, error) {
 	entries, err := os.ReadDir(opsDir)
 	if err != nil {
@@ -97,7 +95,6 @@ type AppendLog struct {
 	closeErr error
 }
 
-// NewAppendLog constructs an AppendLog for the given log file path.
 func NewAppendLog(path string) *AppendLog {
 	return &AppendLog{Path: path}
 }
@@ -472,14 +469,11 @@ func readLogLines(logPath string, offset int64, skipBlank bool) (lines [][]byte,
 	return lines, err
 }
 
-// LineWithOffset represents a line from a log file and its ending byte offset.
 type LineWithOffset struct {
 	Line      []byte
 	EndOffset int64
 }
 
-// ReadLogLinesWithOffsets reads lines starting from a byte offset and returns each line
-// with the byte offset where it ends (for checkpoint tracking).
 func ReadLogLinesWithOffsets(logPath string, startOffset int64) (lines []LineWithOffset, err error) {
 	f, err := openState(logPath)
 	if err != nil {
@@ -538,7 +532,6 @@ func writeJSONFile(path string, data any, kind string) error {
 	return os.WriteFile(path, jsonData, 0o600)
 }
 
-// WriteIssueJSON writes a JSON-marshalable issue to a file.
 func WriteIssueJSON(issuesDir string, issueID string, data any) error {
 	return writeJSONFile(filepath.Join(issuesDir, issueID+".json"), data, "issue")
 }
@@ -553,7 +546,6 @@ func RemoveIssueJSON(issuesDir string, issueID string) error {
 	return nil
 }
 
-// LoadIssueJSON reads a JSON file and unmarshals it into the provided struct.
 func LoadIssueJSON(path string, v any) error {
 	data, err := readStateFile(path)
 	if err != nil {
@@ -586,12 +578,10 @@ func ReadIssuesDir(issuesDir string) ([]string, error) {
 	return issueIDs, nil
 }
 
-// WriteCheckpointJSON writes a JSON checkpoint to a file.
 func WriteCheckpointJSON(path string, data any) error {
 	return writeJSONFile(path, data, "checkpoint")
 }
 
-// LoadCheckpointJSON reads and unmarshals a checkpoint file.
 func LoadCheckpointJSON(path string, v any) error {
 	data, err := readStateFile(path)
 	if err != nil {
@@ -647,7 +637,6 @@ func WriteManifestFile(path string, data []byte) error {
 	return nil
 }
 
-// WriteCacheFile writes raw bytes to a cache file named <id>.cache in path.
 func WriteCacheFile(path string, id string, data []byte) error {
 	if err := os.MkdirAll(path, 0o750); err != nil {
 		return fmt.Errorf("creating cache directory: %w", err)
@@ -674,18 +663,15 @@ func ReadCacheFile(path string, id string) ([]byte, error) {
 	return data, nil
 }
 
-// WriteConfigFile writes JSON config data to a file.
 func WriteConfigFile(path string, data any) error {
 	return writeJSONFile(path, data, "config")
 }
 
-// StatFile checks if a file exists and returns true if it does.
 func StatFile(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
 
-// ReadPlanFile reads a plan JSON file from the given path.
 func ReadPlanFile(path string) ([]byte, error) {
 	data, err := readStateFile(path)
 	if err != nil {
@@ -751,7 +737,6 @@ func ExpandGlobs(globs map[string][]string) (map[string][]string, error) {
 	return result, firstErr
 }
 
-// MkdirAll creates directories recursively.
 func MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
@@ -769,12 +754,10 @@ func Stat(path string) (os.FileInfo, error) {
 	return info, nil
 }
 
-// ReadFile reads the entire contents of a file.
 func ReadFile(path string) ([]byte, error) {
 	return readStateFile(path)
 }
 
-// WriteFile writes data to a file, creating it if it does not exist.
 func WriteFile(path string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(path, data, perm)
 }

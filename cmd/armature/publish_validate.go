@@ -241,7 +241,7 @@ func copyDirFiles(src, dest string) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dest, e.Name()), in, 0o600); err != nil { //nolint:gosec // G703: overlay names from ReadDir of local ops/sources
+		if err := adapters.WriteFile(filepath.Join(dest, e.Name()), in, 0o600); err != nil {
 			return err
 		}
 	}

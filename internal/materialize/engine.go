@@ -13,7 +13,6 @@ import (
 	"github.com/scullxbones/armature/internal/review"
 )
 
-// State holds the complete materialized state built from op replay.
 type State struct {
 	Issues map[string]*Issue
 }
@@ -78,7 +77,6 @@ var opHandlers = map[string]opHandler{
 
 func applyNoop(_ *State, _ ops.Op) error { return nil }
 
-// RegisteredOpTypes returns the set of supported op type strings.
 func RegisteredOpTypes() []string {
 	types := make([]string, 0, len(opHandlers))
 	for opType := range opHandlers {
@@ -532,8 +530,6 @@ func rollupSatisfied(status string) bool {
 	return status == ops.StatusMerged || status == ops.StatusCancelled
 }
 
-// RetractDerivedPromotions restores every issue that a previous RunRollup
-// promoted to the status that promotion replaced, clearing the marker.
 func (s *State) RetractDerivedPromotions() {
 	for _, issue := range s.Issues {
 		if issue.RollupStatusBefore != "" {
@@ -615,7 +611,6 @@ func (s *State) enqueueRollupParent(issue *Issue, inDegree map[string]int, queue
 	}
 }
 
-// BuildIndex creates the denormalized index from current state.
 func (s *State) BuildIndex() Index {
 	index := make(Index, len(s.Issues))
 	for id, issue := range s.Issues {

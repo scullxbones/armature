@@ -32,17 +32,12 @@ func (e *fromCommitMissingError) Error() string {
 
 func (e *fromCommitMissingError) Unwrap() error { return ErrFromCommitMissing }
 
-// IsFromCommitMissing reports whether err means the incremental checkpoint SHA
-// is absent from HEAD (rebase/amend/orphan).
 func IsFromCommitMissing(err error) bool {
 	return errors.Is(err, ErrFromCommitMissing)
 }
 
-// DefaultPublishedRef is the tracking ref every clone agrees on after fetch.
 const DefaultPublishedRef = "origin/_armature"
 
-// Seq is the total order every clone agrees on after fetch.
-// W1.1 fills Epoch 0 (timestamp + filename + line). CommitN is set in W1.2.
 type Seq struct {
 	Epoch     int
 	CommitN   int64
@@ -51,7 +46,6 @@ type Seq struct {
 	Filename  string
 }
 
-// LocatedOp is one JSONL op with git location metadata.
 type LocatedOp struct {
 	Op            ops.Op
 	Seq           Seq
@@ -60,7 +54,6 @@ type LocatedOp struct {
 	Published     bool
 }
 
-// LocateInput names the ops worktree and the published tip.
 type LocateInput struct {
 	OpsWorktree       string
 	FromCommit        string
@@ -474,7 +467,6 @@ func Pending(located []LocatedOp) []LocatedOp {
 	return out
 }
 
-// Ops unwraps LocatedOp values.
 func Ops(located []LocatedOp) []ops.Op {
 	out := make([]ops.Op, len(located))
 	for i, loc := range located {
