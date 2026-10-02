@@ -121,10 +121,12 @@ The command is idempotent: running it multiple times has the same effect as runn
 				if isStructuredFormat(format) {
 					repoSetupResult.Status = "error"
 					repoSetupResult.Error = err.Error()
-					_ = writeBootstrapJSON(cmd.OutOrStdout(), BootstrapResult{
+					if jsonErr := writeBootstrapJSON(cmd.OutOrStdout(), BootstrapResult{
 						RepoSetup:    repoSetupResult,
 						HarnessSetup: []bootstrap.HarnessArtifactResult{},
-					})
+					}); jsonErr != nil {
+						return fmt.Errorf("marshal JSON: %w", jsonErr)
+					}
 					return skipCommandFailure(fmt.Errorf("repo setup failed: %w", err))
 				}
 				return fmt.Errorf("repo setup failed: %w", err)
@@ -133,10 +135,12 @@ The command is idempotent: running it multiple times has the same effect as runn
 			harnessResults, err := executeHarnessSetup(silenceHumanStdoutWhenStructured(cmd, format), plan, repoPath, global)
 			if err != nil {
 				if isStructuredFormat(format) && len(harnessResults) > 0 {
-					_ = writeBootstrapJSON(cmd.OutOrStdout(), BootstrapResult{
+					if jsonErr := writeBootstrapJSON(cmd.OutOrStdout(), BootstrapResult{
 						RepoSetup:    repoSetupResult,
 						HarnessSetup: harnessResults,
-					})
+					}); jsonErr != nil {
+						return fmt.Errorf("marshal JSON: %w", jsonErr)
+					}
 					return skipCommandFailure(fmt.Errorf("harness setup failed: %w", err))
 				}
 				return fmt.Errorf("harness setup failed: %w", err)
