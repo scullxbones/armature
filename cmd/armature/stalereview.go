@@ -98,7 +98,7 @@ func newStaleReviewCmd() *cobra.Command {
 				return nil
 			}
 
-			if format == "json" || format == "agent" || nonInteractive {
+			if isStructuredFormat(format) || nonInteractive {
 				type staleSource struct {
 					SourceID      string   `json:"source_id"`
 					ChangeSummary string   `json:"change_summary"`

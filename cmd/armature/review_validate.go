@@ -129,7 +129,7 @@ func emitReviewValidateResult(cmd *cobra.Command, validateErr error) error {
 
 func writeReviewValidateReport(cmd *cobra.Command, format string, report reviewValidateReport) error {
 	out := cmd.OutOrStdout()
-	if format == "json" || format == "agent" {
+	if isStructuredFormat(format) {
 		data, err := json.Marshal(report)
 		if err != nil {
 			return fmt.Errorf("marshal validation report: %w", err)

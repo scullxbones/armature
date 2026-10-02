@@ -61,7 +61,7 @@ func Load(logs []Input, f Filter) ([]Entry, []string, error) {
 		return allOps[i].WorkerID < allOps[j].WorkerID
 	})
 
-	lostRace := identifyLostRaceClaims(allOps)
+	lostRace := claim.LostRaceClaimKeys(allOps)
 
 	var sinceEpoch int64
 	if !f.Since.IsZero() {
@@ -82,18 +82,10 @@ func Load(logs []Input, f Filter) ([]Entry, []string, error) {
 
 		e := Entry{Op: op}
 		if op.Type == ops.OpClaim {
-			e.LostRace = lostRace[claimKey(op)]
+			e.LostRace = lostRace[claim.ClaimOpKey(op)]
 		}
 		result = append(result, e)
 	}
 
 	return result, warnings, nil
-}
-
-func claimKey(op ops.Op) string {
-	return claim.ClaimOpKey(op)
-}
-
-func identifyLostRaceClaims(allOps []ops.Op) map[string]bool {
-	return claim.LostRaceClaimKeys(allOps)
 }

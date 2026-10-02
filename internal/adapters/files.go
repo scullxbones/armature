@@ -365,8 +365,7 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 			return false, fmt.Errorf("pending marker %s does not match log tail", markerPath)
 		}
 	}
-	complete := available == int64(len(marker.Data))
-	if !complete {
+	if available < int64(len(marker.Data)) {
 		remaining := marker.Data[available:]
 		if len(remaining) > 0 {
 			if _, err := f.Write(remaining); err != nil {
@@ -376,21 +375,21 @@ func recoverPendingAppend(f *os.File, markerPath string, buf []byte) (bool, erro
 				return false, fmt.Errorf("sync completed log %s: %w", f.Name(), err)
 			}
 		}
-		if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
-			return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
-		}
-		if err := syncDir(filepath.Dir(markerPath)); err != nil {
-			return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
-		}
-		return bytes.Equal(marker.Data, buf), nil
 	}
-	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("remove pending marker %s: %w", markerPath, err)
-	}
-	if err := syncDir(filepath.Dir(markerPath)); err != nil {
-		return false, fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
+	if err := clearPendingMarker(markerPath); err != nil {
+		return false, err
 	}
 	return bytes.Equal(marker.Data, buf), nil
+}
+
+func clearPendingMarker(markerPath string) error {
+	if err := os.Remove(markerPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove pending marker %s: %w", markerPath, err)
+	}
+	if err := syncDir(filepath.Dir(markerPath)); err != nil {
+		return fmt.Errorf("sync pending marker directory %s: %w", markerPath, err)
+	}
+	return nil
 }
 
 func lastRecordMatches(f *os.File, size int64, line []byte) (bool, error) {

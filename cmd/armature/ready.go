@@ -92,7 +92,7 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	entries := ready.ComputeReady(snap.Index, snap.Issues, "", nowEpoch())
 	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if format == "json" || format == "agent" || tui.IsNonInteractive() {
+	if isStructuredFormat(format) || tui.IsNonInteractive() {
 		return output.WriteReadyEnvelope(cmd.OutOrStdout(), entries, nil, false, expiredClaims, "", "")
 	}
 	if len(entries) == 0 {
@@ -148,7 +148,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			if explain {
 				notReady := ready.ExplainNotReady(index, issues, nowEpoch())
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
-				if format == "json" || format == "agent" || tui.IsNonInteractive() {
+				if isStructuredFormat(format) || tui.IsNonInteractive() {
 					return writeReadyExplainEnvelope(cmd.OutOrStdout(), index, notReady)
 				}
 				ids := make([]string, 0, len(notReady))
@@ -191,7 +191,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			switch {
-			case format == "json" || format == "agent" || tui.IsNonInteractive():
+			case isStructuredFormat(format) || tui.IsNonInteractive():
 				var wavesData [][]ready.ReadyEntry
 				if waves {
 					wavesData = ready.PartitionWaves(entries, index)

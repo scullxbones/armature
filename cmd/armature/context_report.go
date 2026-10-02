@@ -34,7 +34,7 @@ binary; --repo is not required.`,
 					format = f
 				}
 			}
-			if format == "json" || format == "agent" {
+			if isStructuredFormat(format) {
 				out, err := contextreport.RenderJSON(report)
 				if err != nil {
 					return err

@@ -490,10 +490,7 @@ func helpMentionsShow(help []string) bool {
 
 func jsonString(raw json.RawMessage) bool {
 	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return false
-	}
-	return true
+	return json.Unmarshal(raw, &s) == nil
 }
 
 func checkArtifactFixture(m Mode, body []byte) error {

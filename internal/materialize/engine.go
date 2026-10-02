@@ -580,7 +580,7 @@ func (s *State) RunRollup() {
 }
 
 func skipRollupContainer(issue *Issue) bool {
-	return issue.Type == "task" || issue.Status == ops.StatusMerged || issue.Status == ops.StatusCancelled || len(issue.Children) == 0
+	return issue.Type == "task" || rollupSatisfied(issue.Status) || len(issue.Children) == 0
 }
 
 func rollupChildProgress(s *State, issue *Issue) (unresolvedCount int, hasMerged bool) {
