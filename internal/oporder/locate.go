@@ -369,8 +369,11 @@ func loadOpsFromWorktreeFiles(root string, opsPrefixes []string) ([]LocatedOp, e
 		if readErr != nil {
 			continue
 		}
-		locs, _ := parseLogBytesFromLine(content, filepath.Base(path), 0)
+		locs, err := parseLogBytesFromLine(content, filepath.Base(path), 0)
 		located = append(located, locs...)
+		if err != nil {
+			continue
+		}
 	}
 	return located, nil
 }
