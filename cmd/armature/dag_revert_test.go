@@ -343,7 +343,7 @@ func TestDagRevertDoesNotCallRefuseIntroduction_REQ_DECOMPOSE(t *testing.T) {
 
 	helpersSrc, err := os.ReadFile("helpers.go")
 	require.NoError(t, err)
-	assert.Contains(t, string(helpersSrc), "introductionExemptionDagRevert",
+	assert.Contains(t, string(helpersSrc), "func appendHighStakesOpsExemptIntroduction",
 		"the skip must remain a named exemption, not an accidental omitted call")
 }
 

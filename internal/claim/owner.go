@@ -213,6 +213,12 @@ func heldByExactWorkerAndClaimToken(l Lease, workerID, claimToken string) bool {
 	return l.Status == ops.StatusClaimed && l.Holder == workerID && l.Token == claimToken
 }
 
+// ClaimantHeartbeatClocks reports whether workerID may advance LastHeartbeat
+// and LastClaimingWorkerActivity. Updated is always advanced by applyHeartbeat.
+func ClaimantHeartbeatClocks(claimedBy, workerID string) bool {
+	return workerID == claimedBy
+}
+
 // Owner folds claim, heartbeat, and claimant-transition ops for issueID in
 // the same order as materialize.ApplyOpsSorted.
 func Owner(log []ops.Op, issueID string) Lease {

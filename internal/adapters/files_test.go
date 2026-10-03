@@ -325,20 +325,6 @@ func TestReadLog_MissingFile(t *testing.T) {
 	}
 }
 
-func TestWorkerIDFromFilename(t *testing.T) {
-	t.Parallel()
-	cases := []struct{ input, want string }{
-		{"3357fe85.log", "3357fe85"},
-		{"3357fe85~a.log", "3357fe85"},
-		{"/path/to/abc123~t2.log", "abc123"},
-	}
-	for _, c := range cases {
-		if got := WorkerIDFromFilename(c.input); got != c.want {
-			t.Errorf("WorkerIDFromFilename(%q) = %q, want %q", c.input, got, c.want)
-		}
-	}
-}
-
 func TestWriteAndLoadIssueJSON(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

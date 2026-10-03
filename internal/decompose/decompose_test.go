@@ -145,10 +145,8 @@ func TestCheckForeignChildren_RefusesAttachedChild(t *testing.T) {
 	assert.Contains(t, err.Error(), "PLAN-001")
 }
 
-func TestRevertPlan_RefusesForeignChildWritesNothing(t *testing.T) {
+func TestCancelOps_RefusesForeignChild(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	workerID := "worker-test"
 	plan := &Plan{
 		Version: 1,
 		Title:   "Test Plan",
@@ -158,15 +156,11 @@ func TestRevertPlan_RefusesForeignChildWritesNothing(t *testing.T) {
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open", Children: []string{"FOREIGN-1"}}
 	state.Issues["FOREIGN-1"] = &materialize.Issue{ID: "FOREIGN-1", Status: "open", Parent: "PLAN-001"}
 
-	count, err := RevertPlan(plan, dir, workerID, state, clock.System)
+	proposed, err := CancelOps(plan, "worker-test", state, clock.System)
 	require.Error(t, err)
-	assert.Equal(t, 0, count)
+	assert.Nil(t, proposed)
 	assert.Contains(t, err.Error(), "FOREIGN-1")
 	assert.Contains(t, err.Error(), "PLAN-001")
-
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	assert.Empty(t, entries)
 }
 
 func TestDryRunRevertPlan_RefusesForeignChild(t *testing.T) {
@@ -206,9 +200,8 @@ func TestCancelOps_AllowsChildrenInPlan(t *testing.T) {
 	require.Len(t, proposed, 2)
 }
 
-func TestRevertPlan_CancelsOpen(t *testing.T) {
+func TestCancelOps_CancelsOpen(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
 	workerID := "worker-test"
 
 	plan := &Plan{
@@ -224,14 +217,13 @@ func TestRevertPlan_CancelsOpen(t *testing.T) {
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 	state.Issues["PLAN-002"] = &materialize.Issue{ID: "PLAN-002", Status: "open"}
 
-	count, err := RevertPlan(plan, dir, workerID, state, clock.System)
+	proposed, err := CancelOps(plan, workerID, state, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 2, count)
+	assert.Len(t, proposed, 2)
 }
 
-func TestRevertPlan_SkipsNonOpen(t *testing.T) {
+func TestCancelOps_SkipsNonOpen(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
 	workerID := "worker-test"
 
 	plan := &Plan{
@@ -247,14 +239,14 @@ func TestRevertPlan_SkipsNonOpen(t *testing.T) {
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 	state.Issues["PLAN-002"] = &materialize.Issue{ID: "PLAN-002", Status: "done"}
 
-	count, err := RevertPlan(plan, dir, workerID, state, clock.System)
+	proposed, err := CancelOps(plan, workerID, state, clock.System)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, proposed, 1)
+	assert.Equal(t, "PLAN-001", proposed[0].TargetID)
 }
 
-func TestRevertPlan_InjectsClockTimestamp(t *testing.T) {
+func TestCancelOps_InjectsClockTimestamp(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
 	workerID := "worker-test"
 	fixedTimestamp := int64(1234567890)
 
@@ -270,15 +262,10 @@ func TestRevertPlan_InjectsClockTimestamp(t *testing.T) {
 	state.Issues["PLAN-001"] = &materialize.Issue{ID: "PLAN-001", Status: "open"}
 	fixedClock := func() int64 { return fixedTimestamp }
 
-	count, err := RevertPlan(plan, dir, workerID, state, fixedClock)
+	proposed, err := CancelOps(plan, workerID, state, fixedClock)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
-
-	logPath := filepath.Join(dir, workerID+".log")
-	readOps, err := ops.ReadLog(logPath)
-	require.NoError(t, err)
-	require.Len(t, readOps, 1)
-	assert.Equal(t, fixedTimestamp, readOps[0].Timestamp,
+	require.Len(t, proposed, 1)
+	assert.Equal(t, fixedTimestamp, proposed[0].Timestamp,
 		"injected clock timestamp should appear in written op")
 }
 

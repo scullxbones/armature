@@ -193,7 +193,7 @@ func TestLoadWorkerLogs_ConcatMatchesListLogFiles_REQ_CLAIMTTL(t *testing.T) {
 	files, err := adapters.ListLogFiles(opsDir)
 	require.NoError(t, err)
 	require.Len(t, files, 2)
-	wantFirst := adapters.WorkerIDFromFilename(files[0])
+	wantFirst := strings.TrimSuffix(filepath.Base(files[0]), ".log")
 	assert.Equal(t, wantFirst, allOps[0].WorkerID)
 
 	owner := claim.Owner(allOps, "task-01")
@@ -234,7 +234,6 @@ func TestResolveClaimAbsent_REQ_CLAIMTTL(t *testing.T) {
 	files := []string{
 		"internal/claim/claim.go",
 		"internal/claim/owner.go",
-		"internal/claim/race.go",
 		"internal/audit/audit.go",
 		"cmd/armature/workers.go",
 		"cmd/armature/hook.go",
