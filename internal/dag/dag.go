@@ -60,53 +60,30 @@ func (g *Graph) hasCycleDFS(nodeID string, visited, recStack map[string]bool) bo
 		recStack[nodeID] = false
 		return false
 	}
-	for _, childID := range node.Children {
-		if !visited[childID] {
-			if g.hasCycleDFS(childID, visited, recStack) {
-				return true
-			}
-		} else if recStack[childID] {
-			return true
-		}
-	}
-
-	for _, blockedID := range node.BlockedBy {
-		if !visited[blockedID] {
-			if g.hasCycleDFS(blockedID, visited, recStack) {
-				return true
-			}
-		} else if recStack[blockedID] {
-			return true
-		}
+	if g.cycleThrough(node.Children, visited, recStack) || g.cycleThrough(node.BlockedBy, visited, recStack) {
+		return true
 	}
 
 	recStack[nodeID] = false
 	return false
 }
 
+func (g *Graph) cycleThrough(ids []string, visited, recStack map[string]bool) bool {
+	for _, id := range ids {
+		if !visited[id] {
+			if g.hasCycleDFS(id, visited, recStack) {
+				return true
+			}
+		} else if recStack[id] {
+			return true
+		}
+	}
+	return false
+}
+
 // Ancestry returns the chain of hierarchical parent nodes from the given node up to the root.
 func (g *Graph) Ancestry(id string) []string {
-	ancestors := []string{}
-	visited := map[string]bool{id: true}
-	node := g.nodes[id]
-	if node == nil {
-		return ancestors
-	}
-
-	current := node.Parent
-	for current != "" {
-		if visited[current] {
-			break
-		}
-		visited[current] = true
-		ancestors = append(ancestors, current)
-		next, ok := g.parentOrStop(current)
-		if !ok {
-			break
-		}
-		current = next
-	}
-	return ancestors
+	return g.walkParents(id, true)
 }
 
 // Descendants returns all downstream descendants of a node (all nodes that
@@ -218,27 +195,34 @@ func (g *Graph) walkChildrenInScope(nodeID string, scope map[string]bool, dfs fu
 // Depth returns the depth of a node from its root (node with no parent).
 // A root node has depth 0, its direct children have depth 1, etc.
 func (g *Graph) Depth(id string) int {
+	return len(g.walkParents(id, false))
+}
+
+func (g *Graph) walkParents(id string, markSelf bool) []string {
 	visited := map[string]bool{}
-	depth := 0
+	if markSelf {
+		visited[id] = true
+	}
 	node := g.nodes[id]
 	if node == nil {
-		return depth
+		return nil
 	}
 
+	parents := []string{}
 	current := node.Parent
 	for current != "" {
 		if visited[current] {
 			break
 		}
 		visited[current] = true
-		depth++
+		parents = append(parents, current)
 		next, ok := g.parentOrStop(current)
 		if !ok {
 			break
 		}
 		current = next
 	}
-	return depth
+	return parents
 }
 
 func (g *Graph) parentOrStop(id string) (string, bool) {

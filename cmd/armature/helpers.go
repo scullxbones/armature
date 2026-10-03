@@ -518,12 +518,6 @@ func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error 
 	return err
 }
 
-// introductionExemptionDagRevert is the named Introduction-door exemption for
-// arm dag revert cancel transitions. ADR 0016 names revert/cancel as the
-// remedy when a graph already fails CheckIntroduction; a future cleanup that
-// routed revert through refuseIntroduction would strand those drafts.
-const introductionExemptionDagRevert = "dag-revert-cancel-skips-refuseIntroduction"
-
 func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string, proposed []ops.Op, afterIntegrate func() error) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")

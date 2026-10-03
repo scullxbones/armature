@@ -2,7 +2,6 @@ package decompose
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/scullxbones/armature/internal/clock"
@@ -84,20 +83,28 @@ func CheckForeignChildren(plan *Plan, state *materialize.State) error {
 	return &ForeignChildError{Child: found[0].child, Parent: found[0].parent}
 }
 
-// DryRunRevertPlan returns what would be cancelled by RevertPlan, without writing any ops.
+func plannedOpenIssues(plan *Plan, state *materialize.State) []PlanIssue {
+	var out []PlanIssue
+	if plan == nil || state == nil {
+		return out
+	}
+	for _, issue := range plan.Issues {
+		stateIssue, exists := state.Issues[issue.ID]
+		if !exists || stateIssue.Status != ops.StatusOpen {
+			continue
+		}
+		out = append(out, issue)
+	}
+	return out
+}
+
+// DryRunRevertPlan returns what would be cancelled by CancelOps, without writing any ops.
 func DryRunRevertPlan(plan *Plan, state *materialize.State) (*DryRunRevertResult, error) {
 	if err := CheckForeignChildren(plan, state); err != nil {
 		return nil, err
 	}
 	result := &DryRunRevertResult{}
-	for _, issue := range plan.Issues {
-		stateIssue, exists := state.Issues[issue.ID]
-		if !exists {
-			continue
-		}
-		if stateIssue.Status != ops.StatusOpen {
-			continue
-		}
+	for _, issue := range plannedOpenIssues(plan, state) {
 		result.WouldCancel = append(result.WouldCancel, DryRunEntry{ID: issue.ID, Title: issue.Title})
 	}
 	return result, nil
@@ -110,17 +117,7 @@ func CancelOps(plan *Plan, workerID string, state *materialize.State, clk clock.
 		return nil, err
 	}
 	var proposed []ops.Op
-	if plan == nil {
-		return proposed, nil
-	}
-	for _, issue := range plan.Issues {
-		stateIssue, exists := state.Issues[issue.ID]
-		if !exists {
-			continue
-		}
-		if stateIssue.Status != ops.StatusOpen {
-			continue
-		}
+	for _, issue := range plannedOpenIssues(plan, state) {
 		proposed = append(proposed, ops.Op{
 			Type:      ops.OpTransition,
 			TargetID:  issue.ID,
@@ -132,20 +129,4 @@ func CancelOps(plan *Plan, workerID string, state *materialize.State, clk clock.
 		})
 	}
 	return proposed, nil
-}
-
-// RevertPlan appends cancel ops for each issue in the plan that exists in state with status "open".
-// Returns count of issues cancelled.
-func RevertPlan(plan *Plan, issuesDir string, workerID string, state *materialize.State, clk clock.Clock) (int, error) {
-	proposed, err := CancelOps(plan, workerID, state, clk)
-	if err != nil {
-		return 0, err
-	}
-	logPath := filepath.Join(issuesDir, workerID+".log")
-	for i, op := range proposed {
-		if err := ops.AppendOp(logPath, op); err != nil {
-			return i, fmt.Errorf("append revert op for issue %s: %w", op.TargetID, err)
-		}
-	}
-	return len(proposed), nil
 }

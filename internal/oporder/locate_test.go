@@ -30,9 +30,9 @@ func TestUnpublishedClaimNotOwnedOnRemoteClone_REQ_CLAIMORD_W11(t *testing.T) { 
 
 	locatedA, err := LocateOps(LocateInput{OpsWorktree: a, PublishedRef: "origin/_armature"})
 	require.NoError(t, err)
-	assert.Equal(t, "", claim.OwnerPublished(Ops(Published(locatedA)), "task-01").Holder,
+	assert.Equal(t, "", claim.Owner(Ops(Published(locatedA)), "task-01").Holder,
 		"unpublished local claim must not be Owner")
-	assert.True(t, claim.TokenPending(Ops(Pending(locatedA)), "task-01", "tok-a"))
+	assert.True(t, claimTokenPending(Ops(unpublished(locatedA)), "task-01", "tok-a"))
 
 	parent := t.TempDir()
 	gittest.Git(t, parent, "clone", fx.Origin, "b")
@@ -40,8 +40,8 @@ func TestUnpublishedClaimNotOwnedOnRemoteClone_REQ_CLAIMORD_W11(t *testing.T) { 
 	gittest.Git(t, b, "checkout", "_armature")
 	locatedB, err := LocateOps(LocateInput{OpsWorktree: b, PublishedRef: "origin/_armature"})
 	require.NoError(t, err)
-	assert.Equal(t, "", claim.OwnerPublished(Ops(Published(locatedB)), "task-01").Holder)
-	assert.False(t, claim.TokenPending(Ops(Pending(locatedB)), "task-01", "tok-a"))
+	assert.Equal(t, "", claim.Owner(Ops(Published(locatedB)), "task-01").Holder)
+	assert.False(t, claimTokenPending(Ops(unpublished(locatedB)), "task-01", "tok-a"))
 }
 
 func TestPublishedClaimOwnedAfterPush_REQ_CLAIMORD_W11(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit mutates process env
@@ -60,10 +60,10 @@ func TestPublishedClaimOwnedAfterPush_REQ_CLAIMORD_W11(t *testing.T) { //nolint:
 
 	locatedA, err := LocateOps(LocateInput{OpsWorktree: a, ExtraPublishedTip: "HEAD"})
 	require.NoError(t, err)
-	lease := claim.OwnerPublished(Ops(Published(locatedA)), "task-01")
+	lease := claim.Owner(Ops(Published(locatedA)), "task-01")
 	assert.Equal(t, "worker-a", lease.Holder)
 	assert.Equal(t, "tok-a", lease.Token)
-	assert.Empty(t, Pending(locatedA))
+	assert.Empty(t, unpublished(locatedA))
 
 	parent := t.TempDir()
 	gittest.Git(t, parent, "clone", fx.Origin, "b")
@@ -71,7 +71,7 @@ func TestPublishedClaimOwnedAfterPush_REQ_CLAIMORD_W11(t *testing.T) { //nolint:
 	gittest.Git(t, b, "checkout", "_armature")
 	locatedB, err := LocateOps(LocateInput{OpsWorktree: b, PublishedRef: "origin/_armature"})
 	require.NoError(t, err)
-	leaseB := claim.OwnerPublished(Ops(Published(locatedB)), "task-01")
+	leaseB := claim.Owner(Ops(Published(locatedB)), "task-01")
 	assert.Equal(t, "worker-a", leaseB.Holder)
 	assert.Equal(t, "tok-a", leaseB.Token)
 }
@@ -113,4 +113,26 @@ func writeOpLog(t *testing.T, repo, rel string, log []ops.Op) {
 		body = append(body, '\n')
 	}
 	require.NoError(t, os.WriteFile(path, body, 0o644))
+}
+
+func unpublished(located []LocatedOp) []LocatedOp {
+	var out []LocatedOp
+	for _, loc := range located {
+		if !loc.Published {
+			out = append(out, loc)
+		}
+	}
+	return out
+}
+
+func claimTokenPending(pending []ops.Op, issueID, token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, op := range pending {
+		if op.Type == ops.OpClaim && op.TargetID == issueID && op.Payload.ClaimToken == token {
+			return true
+		}
+	}
+	return false
 }

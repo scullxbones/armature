@@ -7,6 +7,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func claimTokenPending(pending []ops.Op, issueID, token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, op := range pending {
+		if op.Type == ops.OpClaim && op.TargetID == issueID && op.Payload.ClaimToken == token {
+			return true
+		}
+	}
+	return false
+}
+
 func TestOwnerPublishedIgnoresUnpublishedOps_REQ_CLAIMORD_W11(t *testing.T) {
 	t.Parallel()
 	published := []ops.Op{
@@ -17,9 +29,9 @@ func TestOwnerPublishedIgnoresUnpublishedOps_REQ_CLAIMORD_W11(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 60, ClaimToken: "tok-a"}},
 	}
-	assert.Equal(t, "", OwnerPublished(published, "task-01").Holder)
-	assert.True(t, TokenPending(unpublished, "task-01", "tok-a"))
-	assert.False(t, TokenPending(published, "task-01", "tok-a"))
+	assert.Equal(t, "", Owner(published, "task-01").Holder)
+	assert.True(t, claimTokenPending(unpublished, "task-01", "tok-a"))
+	assert.False(t, claimTokenPending(published, "task-01", "tok-a"))
 }
 
 func TestOwnerPublishedAfterPush_REQ_CLAIMORD_W11(t *testing.T) {
@@ -30,7 +42,7 @@ func TestOwnerPublishedAfterPush_REQ_CLAIMORD_W11(t *testing.T) {
 		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a",
 			Payload: ops.Payload{TTL: 60, ClaimToken: "tok-a"}},
 	}
-	lease := OwnerPublished(published, "task-01")
+	lease := Owner(published, "task-01")
 	assert.Equal(t, "worker-a", lease.Holder)
 	assert.Equal(t, "tok-a", lease.Token)
 }

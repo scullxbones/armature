@@ -516,18 +516,6 @@ func ReadLogLinesWithOffsets(logPath string, startOffset int64) (lines []LineWit
 	return lines, nil
 }
 
-// WorkerIDFromFilename extracts the worker ID from a log filename.
-// Plain log:   "3357fe85.log"   -> "3357fe85"
-// Slotted log: "3357fe85~a.log" -> "3357fe85"  (slot suffix stripped)
-func WorkerIDFromFilename(logPath string) string {
-	base := filepath.Base(logPath)
-	name := strings.TrimSuffix(base, ".log")
-	if idx := strings.Index(name, "~"); idx >= 0 {
-		name = name[:idx]
-	}
-	return name
-}
-
 func writeJSONFile(path string, data any, kind string) error {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {

@@ -369,32 +369,8 @@ func loadOpsFromWorktreeFiles(root string, opsPrefixes []string) ([]LocatedOp, e
 		if readErr != nil {
 			continue
 		}
-		scanner := bufio.NewScanner(bytes.NewReader(content))
-		scanner.Buffer(make([]byte, 1<<20), 1<<20)
-		line := 0
-		for scanner.Scan() {
-			raw := scanner.Bytes()
-			if len(raw) == 0 {
-				continue
-			}
-			line++
-			op, parseErr := ops.ParseLine(raw)
-			if parseErr != nil {
-				continue
-			}
-			if !ops.WorkerOwnsLog(op.WorkerID, path) {
-				continue
-			}
-			located = append(located, LocatedOp{
-				Op: op,
-				Seq: Seq{
-					Epoch:     epochTimestampFilenameLine,
-					Line:      line,
-					Timestamp: op.Timestamp,
-					Filename:  filepath.Base(path),
-				},
-			})
-		}
+		locs, _ := parseLogBytesFromLine(content, filepath.Base(path), 0)
+		located = append(located, locs...)
 	}
 	return located, nil
 }
@@ -460,16 +436,6 @@ func Published(located []LocatedOp) []LocatedOp {
 }
 
 // Pending returns located ops present at HEAD but not on the published tip.
-func Pending(located []LocatedOp) []LocatedOp {
-	var out []LocatedOp
-	for _, loc := range located {
-		if !loc.Published {
-			out = append(out, loc)
-		}
-	}
-	return out
-}
-
 func Ops(located []LocatedOp) []ops.Op {
 	out := make([]ops.Op, len(located))
 	for i, loc := range located {

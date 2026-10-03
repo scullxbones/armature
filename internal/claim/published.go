@@ -1,7 +1,5 @@
 package claim
 
-import "github.com/scullxbones/armature/internal/ops"
-
 // OwnerError is a named ownership / identity error (design sketch § errors).
 type OwnerError string
 
@@ -17,21 +15,3 @@ const (
 	ErrWorkerIDInUse     OwnerError = "WORKER-ID-IN-USE"
 	ErrWorkerIDMissing   OwnerError = "WORKER-ID-MISSING"
 )
-
-// OwnerPublished folds claim-ttl Owner over ops that are already the published prefix.
-func OwnerPublished(published []ops.Op, issueID string) Lease {
-	return Owner(published, issueID)
-}
-
-// TokenPending reports whether pending (unpublished) ops include this claim token.
-func TokenPending(pending []ops.Op, issueID, token string) bool {
-	if token == "" {
-		return false
-	}
-	for _, op := range pending {
-		if op.Type == ops.OpClaim && op.TargetID == issueID && op.Payload.ClaimToken == token {
-			return true
-		}
-	}
-	return false
-}
