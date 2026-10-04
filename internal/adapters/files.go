@@ -91,9 +91,6 @@ func ListLogFiles(opsDir string) ([]string, error) {
 	return logFiles, nil
 }
 
-// AppendLog appends raw, pre-formatted JSONL lines to a single log file,
-// guarding against crash-induced corruption with a .pending marker
-// protocol (see Append).
 type AppendLog struct {
 	Path     string
 	closeErr error
@@ -103,20 +100,6 @@ func NewAppendLog(path string) *AppendLog {
 	return &AppendLog{Path: path}
 }
 
-// Append appends raw bytes to the log file (for pre-formatted JSONL lines).
-//
-// A process can die mid-append: after writing part (or all) of an operation
-// but before writing its JSONL delimiter, or even after the delimiter but
-// before the caller learns the append succeeded and retries. Byte content
-// alone cannot safely tell such a retry apart from a legitimate second append
-// that happens to serialize to the same bytes (e.g. two identical notes from
-// one worker within the same nowEpoch() second) — both leave an identical
-// final record. So retry intent is tracked explicitly with a marker file
-// written before the record is durable and removed once it is. The marker
-// records both the append offset and the complete buffer, so recovery can
-// identify the exact attempted byte range rather than mistaking an earlier,
-// identical record for a retry. Calls for one log are serialized with an
-// advisory lock so they cannot overwrite or remove each other's marker.
 func (a *AppendLog) Append(buf []byte) error {
 	_, err := a.AppendIf(buf, nil)
 	return err

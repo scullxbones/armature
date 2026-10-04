@@ -531,8 +531,6 @@ func (s *State) RetractDerivedPromotions() {
 	}
 }
 
-// RunRollup promotes stories/epics to merged when every child has reached a
-// terminal state and at least one of them actually shipped.
 func (s *State) RunRollup() {
 	s.RetractDerivedPromotions()
 
