@@ -77,6 +77,7 @@ func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
 	require.NoError(t, statErr, "checkpoint.json should exist after materialize")
 	mtimeBefore := stat.ModTime()
 
+	landDeliveryAndAttest(t, repo, "task-01")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-01", "--force")
 	require.NoError(t, err)
 
@@ -108,6 +109,7 @@ func TestMergedRemovesTaskWorktree(t *testing.T) {
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	require.NoError(t, mergedCmd.Execute())
 
@@ -129,6 +131,7 @@ func TestMergedRemovesArmatureOwnedCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
+	landDeliveryAndAttest(t, repo, "task-01")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-01", "--force")
 	require.NoError(t, err)
 
@@ -190,6 +193,7 @@ func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 
 			merged := newRootCmd()
 			merged.SetOut(new(bytes.Buffer))
+			landDeliveryAndAttest(t, repo, "task-01")
 			merged.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
 			err = merged.Execute()
 			require.Error(t, err, "dirty worktree teardown must fail even with --force")
@@ -229,6 +233,7 @@ func TestMergedClearsParentBranchMetadataFromRecordedClaim_REQ_LNGHZN_S5_T9(t *t
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
+	landDeliveryAndAttest(t, repo, "task-01")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
 	require.NoError(t, err)
 	_, configErr := exec.CommandContext(context.Background(), "git", "-C", repo, "config", "--get", "branch.task/task-01.armature-parent").Output()
@@ -268,6 +273,7 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "bug-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "bug-01"})
 	require.NoError(t, mergedCmd.Execute())
 
@@ -296,6 +302,7 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "story-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01", "--force"})
 	require.NoError(t, mergedCmd.Execute())
 }
@@ -331,6 +338,7 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "story-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01"})
 	require.NoError(t, mergedCmd.Execute())
 
@@ -368,6 +376,7 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "feature-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01", "--force"})
 	require.NoError(t, mergedCmd.Execute())
 
@@ -396,6 +405,7 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "feature-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01", "--force"})
 	require.NoError(t, mergedCmd.Execute())
 }
@@ -438,6 +448,7 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
 	mergedCmd.SetErr(errBuf)
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err = mergedCmd.Execute()
 	require.NoError(t, err)
@@ -469,6 +480,7 @@ func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
 	mergedCmd.SetErr(errBuf)
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err := mergedCmd.Execute()
 	require.NoError(t, err)
@@ -634,6 +646,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 
 		mergedCmd := newRootCmd()
 		mergedCmd.SetOut(new(bytes.Buffer))
+		landDeliveryAndAttest(t, repo, "task-01")
 		mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 		require.NoError(t, mergedCmd.Execute())
 
@@ -732,6 +745,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 
 	mergedCmd1 := newRootCmd()
 	mergedCmd1.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd1.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "123"})
 	require.NoError(t, mergedCmd1.Execute())
 
@@ -740,6 +754,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 
 	mergedCmd2 := newRootCmd()
 	mergedCmd2.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd2.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "456"})
 	require.NoError(t, mergedCmd2.Execute())
 
@@ -780,6 +795,7 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
 	mergedCmd.SetErr(errBuf)
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err = mergedCmd.Execute()
 
@@ -826,6 +842,7 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
 	mergedCmd.SetErr(errBuf)
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err = mergedCmd.Execute()
 
@@ -880,6 +897,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 
 	mergedCmd1 := newRootCmd()
 	mergedCmd1.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd1.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
 	require.NoError(t, mergedCmd1.Execute())
 	assert.NoDirExists(t, worktreePath, "worktree should be removed after first merged call")
@@ -890,6 +908,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	mergedCmd2 := newRootCmd()
 	outBuf2 := new(bytes.Buffer)
 	mergedCmd2.SetOut(outBuf2)
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd2.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
 	err = mergedCmd2.Execute()
 	require.NoError(t, err, "merged must succeed on retry when status is already merged in dual-branch mode (P2 bug fix)")
@@ -981,6 +1000,7 @@ func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
 	mergedCmd.SetErr(errBuf)
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
 	err = mergedCmd.Execute()
 	require.NoError(t, err, "merged with --force should succeed despite violations")
@@ -1026,6 +1046,7 @@ func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
 	mergedCmd.SetErr(errBuf)
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err = mergedCmd.Execute()
 	require.NoError(t, err, "merged should succeed with pass-through entries (warnings only)")
@@ -1107,6 +1128,7 @@ func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	require.NoError(t, mergedCmd.Execute())
 
@@ -1148,6 +1170,7 @@ func TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9(t
 
 	mergedCmd := newRootCmd()
 	mergedCmd.SetOut(new(bytes.Buffer))
+	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	require.NoError(t, mergedCmd.Execute())
 
@@ -1155,4 +1178,37 @@ func TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9(t
 	getCmd.Dir = repo
 	_, getErr := getCmd.Output()
 	assert.Error(t, getErr, "parent-branch config for the claimed branch should be unset after arm merged")
+}
+
+func TestTransitionToMergedExitsTRANSITION1_REQ_LNGHZN_S11_T2(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"transition", "--repo", repo, "--issue", "task-01", "--to", "merged", "--format", "agent")
+	assert.NotEqual(t, 0, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "TRANSITION-1", cf.Code)
+	require.NotEmpty(t, cf.NextActions)
+	assert.Equal(t, "arm merged --issue task-01", cf.NextActions[0])
+}
+
+func TestMergedRefusalNamesRecovery_REQ_LNGHZN_S11_T2(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"merged", "--repo", repo, "--issue", "task-01", "--force", "--format", "agent")
+	assert.NotEqual(t, 0, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "MERGED-1", cf.Code)
+	require.NotEmpty(t, cf.NextActions)
+	assert.Contains(t, cf.NextActions[0], "task-01")
+
+	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, showErr)
+	assert.Equal(t, "done\n", status)
 }

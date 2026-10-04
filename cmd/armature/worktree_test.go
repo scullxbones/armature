@@ -82,8 +82,7 @@ func setupWorktreeReconcileFixture(t *testing.T) worktreeReconcileFixture {
 
 	_, err = runTrls(t, repo, "claim", "task-gc", "--worktree")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "task-gc", "--to", "merged", "--force")
-	require.NoError(t, err)
+	markIssueMergedForTest(t, repo, "task-gc")
 
 	_, err = runTrls(t, repo, "claim", "task-orphan", "--worktree")
 	require.NoError(t, err)
@@ -361,8 +360,7 @@ func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *te
 	run(t, repo, "git", "worktree", "add", "-b", "legacy-duplicate", legacyPath)
 	require.NoError(t, updateIssueIDFile(legacyPath, "task-duplicate"))
 
-	_, err = runTrls(t, repo, "transition", "--issue", "task-duplicate", "--to", "merged", "--force")
-	require.NoError(t, err)
+	markIssueMergedForTest(t, repo, "task-duplicate")
 	out, err := runTrls(t, repo, "worktree", "gc", "--format", "json")
 	require.NoError(t, err)
 	var result struct {
@@ -412,8 +410,7 @@ func TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2(t *testing.T
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-detached-gc")
 	run(t, worktreePath, "git", "checkout", "--detach", "HEAD")
-	_, err = runTrls(t, repo, "transition", "--issue", "task-detached-gc", "--to", "merged", "--force")
-	require.NoError(t, err)
+	markIssueMergedForTest(t, repo, "task-detached-gc")
 
 	out, err := runTrls(t, repo, "worktree", "gc", "--format", "json")
 	require.NoError(t, err)

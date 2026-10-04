@@ -27,7 +27,7 @@ func newTransitionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "transition [issue-id]",
 		Short: "Transition an issue to a new status",
-		Long: `Move an issue to a new status (e.g., from in-progress to done or merged).
+		Long: `Move an issue to a new status (e.g., from in-progress to done).
 
 Valid status transitions depend on the current status and workflow rules. Provide the target
 status with --to (required). You may optionally record an outcome description, branch name,
@@ -36,6 +36,8 @@ or PR number to document the completion context.
 When transitioning to done, you cannot be on main/master branch unless you use --force.
 This enforces branch + PR discipline.
 
+arm transition --to merged is refused. Promote a done leaf with arm merged --issue.
+
 Repeating a transition whose payload is byte-identical to the issue's current
 recorded state is a no-op at exit 0: nothing is appended, and the command says
 so. A same-status transition with a changed payload (for example a richer
@@ -43,8 +45,8 @@ outcome) appends as an amendment at exit 0.`,
 		Example: `  # Transition an issue to done with an outcome
   $ arm transition E6-S4-T2 --to done --outcome "Implemented all required features"
 
-  # Transition to merged and record the PR number
-  $ arm transition --issue E6-S4-T2 --to merged --pr 1234
+  # Promote a done leaf after its delivery lands
+  $ arm merged --issue E6-S4-T2 --pr 1234
 
   # Override branch check with --force
   $ arm transition E6-S4-T2 --to done --outcome "..." --force`,
@@ -56,6 +58,12 @@ outcome) appends as an amendment at exit 0.`,
 			issueID, err = resolveIssueID(issueID, args)
 			if err != nil {
 				return err
+			}
+			if to == "merged" {
+				return armerrors.Map(codeTransition1,
+					"arm transition --to merged is refused; use arm merged --issue to promote a done leaf",
+					[]string{"arm merged --issue " + issueID},
+					fmt.Errorf("arm transition --to merged is refused"))
 			}
 			if to == "" {
 				return fmt.Errorf(`required flag(s) "to" not set`)

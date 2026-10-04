@@ -41,6 +41,10 @@ type IssueJSON struct {
 	Base                   string          `json:"base,omitempty"`
 	Tip                    string          `json:"tip,omitempty"`
 	PR                     string          `json:"pr,omitempty"`
+	IntegrationBranch      string          `json:"integration_branch,omitempty"`
+	TargetSHA              string          `json:"target_sha,omitempty"`
+	CombinedPatchID        string          `json:"combined_patch_id,omitempty"`
+	MatchedCommit          string          `json:"matched_commit,omitempty"`
 	Derived                bool            `json:"derived,omitempty"`
 }
 
@@ -81,6 +85,10 @@ func MarshalIssue(issue *materialize.Issue) IssueJSON {
 		Base:                   issue.Base,
 		Tip:                    issue.Tip,
 		PR:                     issue.PR,
+		IntegrationBranch:      issue.IntegrationBranch,
+		TargetSHA:              issue.TargetSHA,
+		CombinedPatchID:        issue.CombinedPatchID,
+		MatchedCommit:          issue.MatchedCommit,
 		Derived:                issue.RollupStatusBefore != "",
 	}
 }
@@ -190,6 +198,15 @@ func RenderIssue(w io.Writer, issue *materialize.Issue) error {
 	}
 	if issue.PR != "" {
 		ew.printf("PR:        %s\n", issue.PR)
+	}
+	if issue.IntegrationBranch != "" {
+		ew.printf("Integration: %s\n", issue.IntegrationBranch)
+	}
+	if issue.TargetSHA != "" {
+		ew.printf("Target:    %s\n", issue.TargetSHA)
+	}
+	if issue.MatchedCommit != "" {
+		ew.printf("Matched:   %s\n", issue.MatchedCommit)
 	}
 	if issue.RollupStatusBefore != "" {
 		ew.printf("Derived:   true\n")

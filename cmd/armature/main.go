@@ -392,7 +392,7 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 
 	"sync":        {Kind: pavedRoadKindPaved},
 	"push-ops":    {Kind: pavedRoadKindPaved, Note: "--override-validate is a human escape hatch; never a green publish."},
-	"merged":      {Kind: pavedRoadKindEscape, Note: "Manual merged promotion. Prefer sync after the PR lands."},
+	"merged":      {Kind: pavedRoadKindEscape, Note: "Promote one done leaf when its recorded delivery is on the target. Prefer sync after the PR lands."},
 	"materialize": {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
 	"import":      {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},
 
@@ -493,7 +493,7 @@ var pavedRoadDefaultsAudit = []pavedRoadDefault{
 	{
 		Flag:     "--force",
 		Commands: []string{"merged"},
-		Reason:   "Bypasses hook-violation refusal at merge.",
+		Reason:   "Bypasses hook-log violations only; it does not waive the git check or the assessment.",
 	},
 	{
 		Flag:     "--force",

@@ -21,7 +21,9 @@ var schemaOpDocs = []schemaOpDoc{
 	{OpType: OpHeartbeat, PayloadField: "(empty object)"},
 	{OpType: OpTransition, PayloadField: "to, outcome, branch (optional), pr (optional),"},
 	{OpType: OpTransition, PayloadField: "                       input_tokens (optional), output_tokens (optional),"},
-	{OpType: OpTransition, PayloadField: "                       skipped_delivery_gate (optional)"},
+	{OpType: OpTransition, PayloadField: "                       skipped_delivery_gate (optional),"},
+	{OpType: OpTransition, PayloadField: "                       base, tip, integration_branch (delivery snapshot),"},
+	{OpType: OpTransition, PayloadField: "                       target_sha, combined_patch_id, matched_commit (merged)"},
 	{OpType: OpTransition, PayloadField: "                       restore_claim snapshot fields (rollback only)"},
 	{OpType: OpTransition, PayloadField: "                       if_claim_token (conditional compensating rollback only)"},
 	{OpType: OpNote, PayloadField: "msg, note_id"},
@@ -39,6 +41,7 @@ var schemaOpDocs = []schemaOpDoc{
 	{OpType: OpScopeDelete, PayloadField: "deleted_path"},
 	{OpType: OpReparent, PayloadField: "parent"},
 	{OpType: OpAssessmentAttested, PayloadField: "assessment"},
+	{OpType: OpPromotionCheck, PayloadField: "target_sha, tip, result, combined_patch_id, matched_commit"},
 	{OpType: OpGateEvidence, PayloadField: "profile, command, head_sha, start, end, exit, uncommitted,"},
 	{OpType: OpGateEvidence, PayloadField: "                    output_hash, output_head, output_tail, log_path"},
 }
@@ -64,7 +67,7 @@ func SchemaDocumentedOpTypes() []string {
 // strictly newer, so an older clone run after an upgrade cannot commit a
 // downgrade and set two clones fighting over the shared _armature branch
 // (AGENTS.md I3).
-const ScaffoldingVersion = 3
+const ScaffoldingVersion = 4
 
 const scaffoldingVersionPrefix = "# scaffolding-version: "
 

@@ -68,7 +68,7 @@ stay on the platform/git protocol.
 | `LIST-1` | list | `arm list` could not complete (ops/state load). | LNGHZN-S6-T5 | |
 | `LOG-1` | log | `arm log` could not complete. | LNGHZN-S6-T5 | |
 | `MATERIALIZE-1` | materialize | `arm materialize` could not complete. | LNGHZN-S6-T5 | |
-| `MERGED-1` | merged | `arm merged` could not complete. | LNGHZN-S6-T5 | |
+| `MERGED-1` | merged | `arm merged` could not complete, including an ADR 0022 promotion refusal (delivery not on the target, missing matching assessment, legacy done with no snapshot, or the git check cannot run). `next_actions[0]` is the recovery argv with the issue id filled in. | LNGHZN-S6-T5 | |
 | `NOTE-1` | note | `arm note` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-1` | push-ops | `arm push-ops` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-2` | push-ops | `arm push-ops` refused to publish because the graph failed `arm validate --ci` / `make validate-graph` after integrating `origin/_armature`. | PUBLISH-VALIDATE | |

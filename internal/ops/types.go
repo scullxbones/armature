@@ -27,6 +27,7 @@ const (
 
 	OpReparent           = "reparent"
 	OpAssessmentAttested = "assessment-attested"
+	OpPromotionCheck     = "promotion-check"
 )
 
 // IsAuditOnly reports ops that record evidence or metadata without mutating
@@ -111,6 +112,10 @@ type Payload struct {
 	Base                              string          `json:"base,omitempty"`
 	Tip                               string          `json:"tip,omitempty"`
 	IntegrationBranch                 string          `json:"integration_branch,omitempty"`
+	TargetSHA                         string          `json:"target_sha,omitempty"`
+	CombinedPatchID                   string          `json:"combined_patch_id,omitempty"`
+	MatchedCommit                     string          `json:"matched_commit,omitempty"`
+	Result                            string          `json:"result,omitempty"`
 	SkippedDeliveryGate               bool            `json:"skipped_delivery_gate,omitempty"`
 	SkippedValidateGate               bool            `json:"skipped_validate_gate,omitempty"`
 	IfClaimToken                      string          `json:"if_claim_token,omitempty"`

@@ -789,6 +789,14 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 			value = issue.Tip
 		case "pr":
 			value = issue.PR
+		case "integration_branch":
+			value = issue.IntegrationBranch
+		case "target_sha":
+			value = issue.TargetSHA
+		case "combined_patch_id":
+			value = issue.CombinedPatchID
+		case "matched_commit":
+			value = issue.MatchedCommit
 		case "derived":
 			if issue.RollupStatusBefore != "" {
 				value = "true"

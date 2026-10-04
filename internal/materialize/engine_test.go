@@ -363,7 +363,7 @@ func TestRegisteredOpTypes_ReturnsAllSupportedTypes(t *testing.T) {
 		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent, ops.OpAssessmentAttested,
-		ops.OpGateEvidence,
+		ops.OpGateEvidence, ops.OpPromotionCheck,
 	}
 
 	for _, expected := range expectedTypes {
@@ -400,7 +400,7 @@ func TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered(t *testing.T) {
 		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent,
-		ops.OpGateEvidence,
+		ops.OpGateEvidence, ops.OpPromotionCheck,
 	}
 	for _, opType := range standardOps {
 		assert.True(t, registeredSet[opType], "standard op type %q must be in RegisteredOpTypes", opType)
@@ -420,6 +420,7 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 			ops.OpHeartbeat: {}, ops.OpNote: {}, ops.OpNoteDelete: {}, ops.OpDecision: {},
 			ops.OpAssign: {}, ops.OpAmend: {}, ops.OpSourceLink: {}, ops.OpCitationAccepted: {},
 			ops.OpDAGTransition: {}, ops.OpScopeRename: {}, ops.OpScopeDelete: {}, ops.OpReparent: {},
+			ops.OpPromotionCheck: {},
 		}
 		wantUnspecified := map[string]struct{}{
 			ops.OpCreate: {}, ops.OpSourceFingerprint: {}, ops.OpGateEvidence: {},
@@ -540,6 +541,21 @@ func TestApplyTransitionOp_RecordsDeliverySnapshot_REQ_LNGHZN_S11_T1(t *testing.
 	assert.Equal(t, "aaa", issue.Base)
 	assert.Equal(t, "bbb", issue.Tip)
 	assert.Equal(t, "main", issue.IntegrationBranch)
+}
+
+func TestApplyTransitionOp_RecordsMergedMatch_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{
+			To: ops.StatusMerged, TargetSHA: "tgt", CombinedPatchID: "pid", MatchedCommit: "cmt",
+		}}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, "tgt", issue.TargetSHA)
+	assert.Equal(t, "pid", issue.CombinedPatchID)
+	assert.Equal(t, "cmt", issue.MatchedCommit)
 }
 
 func TestApplyNoteOp(t *testing.T) {

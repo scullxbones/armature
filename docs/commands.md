@@ -664,7 +664,17 @@ still concatenates log files so uncommitted test layouts keep working.
 
 ## merged
 
-Mark a done issue as merged after its branch or PR has landed on the main branch.
+Promote one done leaf when its recorded delivery is on the integration branch
+and a matching assessment (or post-delivery ADR-0016 Release Override bound to
+those `base`/`tip` SHAs) exists. The merged op stores the target SHA, combined
+patch-id, and matched commit, then deletes `refs/armature/deliveries/<id>` and
+removes the worktree. Otherwise the leaf stays `done` and a `promotion-check`
+op is appended. `--pr` may be stored and is not evidence. `--force` remains the
+hook-log override only; it does not waive the git check or the assessment.
+
+A refusal is `MERGED-1` with `next_actions[0]` naming the recovery command and
+the issue id. `arm transition --to merged` is refused (`TRANSITION-1`,
+`arm merged --issue <id>`).
 
 **Synopsis:**
 `arm merged [flags]`
@@ -672,6 +682,7 @@ Mark a done issue as merged after its branch or PR has landed on the main branch
 **Flags:**
 - `--issue string`: Issue ID (required).
 - `--pr string`: PR number or URL.
+- `--force`: Override hook-log violations only.
 
 **Example:**
 ```bash
@@ -1158,6 +1169,9 @@ at the tip. Without a worktree (and without `--base`/`--tip`) the command exits
 `TRANSITION-1` with next_actions naming
 `arm delivery record --issue TASK-001 --base abc123 --tip def456`
 (SHAs are placeholders in the live recovery argv).
+
+`--to merged` is refused (`TRANSITION-1`) with `next_actions` naming
+`arm merged --issue <id>`.
 
 **Example:**
 ```bash

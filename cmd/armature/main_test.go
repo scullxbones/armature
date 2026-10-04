@@ -112,6 +112,74 @@ func getTestContext(t *testing.T, repo string) *config.Context {
 	return ctx
 }
 
+// landDeliveryAndAttest puts the recorded delivery on the integration branch
+// and appends a red attestation bound to those SHAs so arm merged can promote.
+func landDeliveryAndAttest(t *testing.T, repo, issueID string) {
+	t.Helper()
+	loaded, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", issueID+".json"))
+	require.NoError(t, err)
+	issue := &loaded
+	require.NotEmpty(t, issue.Base, "issue %s missing delivery base", issueID)
+	require.NotEmpty(t, issue.Tip, "issue %s missing delivery tip", issueID)
+
+	integration := strings.TrimSpace(issue.IntegrationBranch)
+	if integration == "" {
+		integration = "main"
+	}
+	git := adapters.New(repo)
+	target, err := git.ResolveRevision(integration)
+	require.NoError(t, err)
+	isAnc, err := git.IsAncestor(issue.Tip, target)
+	require.NoError(t, err)
+	if !isAnc {
+		current, currErr := git.CurrentBranch()
+		require.NoError(t, currErr)
+		if current != integration {
+			run(t, repo, "git", "checkout", integration)
+		}
+		run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "-m", "test: land "+issueID, issue.Tip)
+	}
+	attestDeliveryForTest(t, repo, issueID, issue.Base, issue.Tip)
+}
+
+func attestDeliveryForTest(t *testing.T, repo, issueID, base, tip string) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	body, err := json.Marshal(map[string]string{
+		"base_sha": base,
+		"head_sha": tip,
+		"rating":   "red",
+	})
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpAssessmentAttested,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Assessment: body},
+	}))
+}
+
+// markIssueMergedForTest appends a merged transition without running ADR 0022
+// promotion or tearing down the worktree (worktree GC fixtures).
+func markIssueMergedForTest(t *testing.T, repo, issueID string) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{To: ops.StatusMerged},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+}
+
 func getTestStateDir(t *testing.T, repo string) string {
 	t.Helper()
 	workerID := slottedWorkerIDBestEffort(repo)
@@ -1374,6 +1442,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
+	landDeliveryAndAttest(t, repo, "T-001")
 	out, err := runTrls(t, repo, "merged", "--issue", "T-001", "--pr", "42")
 	require.NoError(t, err)
 	assert.Contains(t, out, "T-001")
@@ -1410,6 +1479,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	assert.Contains(t, statusOut, "F-001")
 	assert.Contains(t, statusOut, "feature/e2-test")
 
+	landDeliveryAndAttest(t, repo, "F-001")
 	mergedOut, err := runTrls(t, repo, "merged", "--issue", "F-001", "--pr", "99")
 	require.NoError(t, err)
 	assert.Contains(t, mergedOut, "F-001")
@@ -2567,8 +2637,10 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 
 	time.Sleep(1100 * time.Millisecond)
 
+	landDeliveryAndAttest(t, repo, "task-a")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-a")
 	require.NoError(t, err)
+	landDeliveryAndAttest(t, repo, "task-b")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-b")
 	require.NoError(t, err)
 

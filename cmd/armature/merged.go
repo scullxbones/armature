@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -8,10 +9,13 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
 )
@@ -241,74 +245,9 @@ func newMergedCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "merged",
-		Short: "Mark a done issue as merged after its branch/PR is merged",
+		Short: "Promote a done leaf when its recorded delivery is on the target",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := currentCtx(cmd)
-
-			store := newSnapshotStore(ctx)
-			index, err := store.ReadIndex()
-			if err != nil {
-				return fmt.Errorf("read index: %w", err)
-			}
-
-			entry, ok := index[issueID]
-			if !ok {
-				return fmt.Errorf("issue %s not found", issueID)
-			}
-
-			if entry.Status != ops.StatusDone && entry.Status != ops.StatusMerged {
-				return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
-			}
-
-			issue, err := store.ReadIssue(issueID)
-			if err != nil {
-				return fmt.Errorf("load issue %s: %w", issueID, err)
-			}
-
-			if !force {
-				hasViolations, err := issueWorktreeHasViolations(ctx.RepoPath, *issue)
-				if err != nil {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: cannot verify hook log for %s: %v\n", issueID, err)
-					return fmt.Errorf("issue %s cannot be merged: worktree inventory unreadable (use --force to override): %w", issueID, err)
-				}
-				if hasViolations {
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s has violation entries in armature-hook.log\n", issueID)
-					return fmt.Errorf("issue %s cannot be merged: hook log contains violations (use --force to override)", issueID)
-				}
-			}
-
-			alreadyMerged := entry.Status == ops.StatusMerged
-			prAlreadyRecorded := alreadyMerged && issue.PR == pr
-
-			if !alreadyMerged || (pr != "" && !prAlreadyRecorded) {
-				state := mustState(cmd)
-				workerID, logPath, err := resolveWorkerAndLog(state.ctx)
-				if err != nil {
-					return err
-				}
-
-				op := ops.Op{
-					Type:      ops.OpTransition,
-					TargetID:  issueID,
-					Timestamp: nowEpoch(),
-					WorkerID:  workerID,
-					Payload:   ops.Payload{To: ops.StatusMerged, PR: pr},
-				}
-				if err := appendOp(state.ctx, logPath, op); err != nil {
-					return err
-				}
-			}
-
-			if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
-				return err
-			}
-
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
-			if pr != "" {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
-			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout())
-			return nil
+			return mapMergedError(runMerged(cmd, issueID, pr, force))
 		},
 	}
 
@@ -317,4 +256,156 @@ func newMergedCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&force, "force", false, "force merge despite violations in hook log")
 	_ = cmd.MarkFlagRequired("issue")
 	return cmd
+}
+
+func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
+	ctx := currentCtx(cmd)
+
+	store := newSnapshotStore(ctx)
+	index, err := store.ReadIndex()
+	if err != nil {
+		return fmt.Errorf("read index: %w", err)
+	}
+
+	entry, ok := index[issueID]
+	if !ok {
+		return fmt.Errorf("issue %s not found", issueID)
+	}
+
+	if entry.Status != ops.StatusDone && entry.Status != ops.StatusMerged {
+		return fmt.Errorf("issue %s is in status %q; arm merged requires status=done (transition it to done first)", issueID, entry.Status)
+	}
+
+	issue, err := store.ReadIssue(issueID)
+	if err != nil {
+		return fmt.Errorf("load issue %s: %w", issueID, err)
+	}
+
+	if !force {
+		hasViolations, err := issueWorktreeHasViolations(ctx.RepoPath, *issue)
+		if err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: cannot verify hook log for %s: %v\n", issueID, err)
+			return fmt.Errorf("issue %s cannot be merged: worktree inventory unreadable (use --force to override): %w", issueID, err)
+		}
+		if hasViolations {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Error: %s has violation entries in armature-hook.log\n", issueID)
+			return fmt.Errorf("issue %s cannot be merged: hook log contains violations (use --force to override)", issueID)
+		}
+	}
+
+	alreadyMerged := entry.Status == ops.StatusMerged
+	prAlreadyRecorded := alreadyMerged && issue.PR == pr
+
+	if alreadyMerged {
+		if pr != "" && !prAlreadyRecorded {
+			state := mustState(cmd)
+			workerID, logPath, err := resolveWorkerAndLog(state.ctx)
+			if err != nil {
+				return err
+			}
+			op := ops.Op{
+				Type:      ops.OpTransition,
+				TargetID:  issueID,
+				Timestamp: nowEpoch(),
+				WorkerID:  workerID,
+				Payload:   ops.Payload{To: ops.StatusMerged, PR: pr},
+			}
+			if err := appendOp(state.ctx, logPath, op); err != nil {
+				return err
+			}
+		}
+		if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
+			return err
+		}
+		printMerged(cmd, issueID, pr)
+		return nil
+	}
+
+	allOps, err := readAllOpsFromDir(filepath.Join(ctx.IssuesDir, "ops"))
+	if err != nil {
+		return fmt.Errorf("read ops: %w", err)
+	}
+	git := adapters.New(ctx.RepoPath)
+	integration := issue.IntegrationBranch
+	if integration == "" {
+		integration = ctx.Config.IntegrationBranchOrDefault()
+	}
+	result := promotion.Evaluate(git, promotion.Input{
+		Issue:       *issue,
+		PriorOps:    allOps,
+		Integration: integration,
+		PR:          pr,
+	})
+	state := mustState(cmd)
+	workerID, logPath, err := resolveWorkerAndLog(state.ctx)
+	if err != nil {
+		return err
+	}
+	if result.AppendCheck {
+		checkOp := ops.Op{
+			Type:      ops.OpPromotionCheck,
+			TargetID:  issueID,
+			Timestamp: nowEpoch(),
+			WorkerID:  workerID,
+			Payload:   result.CheckPayload,
+		}
+		if err := appendOp(state.ctx, logPath, checkOp); err != nil {
+			return err
+		}
+	}
+	if !result.Promote {
+		if result.Err != nil {
+			return result.Err
+		}
+		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID}
+	}
+
+	op := ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   result.MergedPayload,
+	}
+	if err := appendOp(state.ctx, logPath, op); err != nil {
+		return err
+	}
+
+	if err := git.DeleteRef(delivery.RefName(issueID)); err != nil {
+		return err
+	}
+	if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
+		return err
+	}
+
+	printMerged(cmd, issueID, pr)
+	return nil
+}
+
+func printMerged(cmd *cobra.Command, issueID, pr string) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
+	if pr != "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+}
+
+const codeMerged1 = "MERGED-1"
+
+func mapMergedError(err error) error {
+	if mapped, done := mappedCommandFailure(err); done {
+		return mapped
+	}
+	var promo *promotion.Error
+	if errors.As(err, &promo) {
+		return armerrors.Map(codeMerged1, promo.Error(), []string{promo.RecoveryArgv()}, err)
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "required flag"),
+		strings.Contains(msg, "issue ID"):
+		return armerrors.Wrap(armerrors.CodeUSAGE, msg, []string{"arm merged --help"}, err)
+	default:
+		return armerrors.Map(codeMerged1, msg, []string{"arm doctor", "arm show"}, err)
+	}
 }

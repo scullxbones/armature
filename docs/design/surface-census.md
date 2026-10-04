@@ -79,6 +79,9 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `base` | string | state.go:55 | transition op (delivery base) | **kept-evidence** | Delivery base SHA recorded at done (ADR 0022). Set by bound-worktree done or `arm delivery record` / `transition --base/--tip`. |
 | `tip` | string | state.go:56 | transition op (delivery tip) | **kept-evidence** | Delivery tip SHA recorded at done (ADR 0022). Written to `refs/armature/deliveries/<id>`. |
 | `integration_branch` | string | state.go:57 | transition op (delivery integration branch) | **kept-evidence** | Integration branch the delivery must land on. Defaults to config `integration_branch` or `main`. |
+| `target_sha` | string | state.go | merged transition (ADR 0022) | **kept-evidence** | Integration-branch SHA stored on a successful promotion. |
+| `combined_patch_id` | string | state.go | merged transition (ADR 0022) | **kept-evidence** | Stable patch-id of `diff base tip` stored on a successful promotion. |
+| `matched_commit` | string | state.go | merged transition (ADR 0022) | **kept-evidence** | Earliest first-parent commit on the integration branch that matched the delivery. |
 | `assigned_worker` | string | state.go:58 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
 | `preferred_model` | string | state.go:59 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
 | `updated` | int64 | state.go:60 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
@@ -108,6 +111,7 @@ The following op types are defined in internal/ops/types.go and materialized by 
 | `scope-delete` | internal/ops/types.go:24 | engine.go | **kept-evidence** | Removes scope glob. Payload: deleted_path. Removes from scope array. |
 | `reparent` | internal/ops/types.go:27 | engine.go | **kept-evidence** | Moves issue to new parent. Payload: parent (new parent ID, can be empty for top-level). |
 | `assessment-attested` | internal/ops/types.go:30 | engine.go | **kept-evidence** | Records code review attestation. Payload: assessment (JSON blob). Used by review record. |
+| `promotion-check` | internal/ops/types.go | engine.go | **kept-evidence** | ADR 0022 check of a done leaf. Payload: target_sha, tip, result. Deduped for the same target SHA+tip+result. |
 
 ## CLI Commands
 
@@ -149,7 +153,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 |---------|---------|---------|--------|-------|
 | `sync` | main.go, sync.go | Auto-transition closed PRs | **kept-evidence** | CI integration. Scans git for merged branches and transitions issues. |
 | `push-ops` | main.go, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Rebases onto origin/_armature, then runs the same fail-closed `arm validate --ci` / `make validate-graph` contract, then pushes. `--override-validate --reason` is a TTY-recorded escape hatch and is never green. |
-| `merged` | main.go, merged.go | Manually transition to merged | **kept-evidence** | Explicit merge record. Sets PR and branch fields. |
+| `merged` | main.go, merged.go | Promote one done leaf | **kept-evidence** | ADR 0022 writer for one issue. Stores target SHA, combined patch-id, matched commit. `--pr` is not evidence. |
 | `delivery` | main.go, delivery.go | Delivery snapshot group | **kept-evidence** | Container for manual delivery recording (ADR 0022). Bound-worktree done writes the snapshot automatically. |
 | `delivery record` | delivery.go | Record delivery range and mark done | **kept-evidence** | Writes `refs/armature/deliveries/<id>` and a done transition with base/tip/integration_branch when no bound worktree can snapshot. |
 | `materialize` | main.go, materialize.go | Regenerate state from ops log | **kept-evidence** | Incremental via LastCommitSHA when ops worktree is git; cold walk otherwise. |

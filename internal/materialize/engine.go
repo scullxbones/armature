@@ -71,6 +71,7 @@ var opHandlers = map[string]opHandler{
 	ops.OpScopeDelete:        {apply: (*State).applyScopeDelete, missingTarget: MissingTargetIgnore},
 	ops.OpReparent:           {apply: (*State).applyReparent, missingTarget: MissingTargetIgnore},
 	ops.OpAssessmentAttested: {apply: (*State).applyAssessmentAttested, missingTarget: MissingTargetError},
+	ops.OpPromotionCheck:     {apply: applyNoop, missingTarget: MissingTargetIgnore},
 }
 
 func applyNoop(_ *State, _ ops.Op) error { return nil }
@@ -208,6 +209,15 @@ func (s *State) applyTransition(op ops.Op) error {
 	}
 	if op.Payload.IntegrationBranch != "" {
 		issue.IntegrationBranch = op.Payload.IntegrationBranch
+	}
+	if op.Payload.TargetSHA != "" {
+		issue.TargetSHA = op.Payload.TargetSHA
+	}
+	if op.Payload.CombinedPatchID != "" {
+		issue.CombinedPatchID = op.Payload.CombinedPatchID
+	}
+	if op.Payload.MatchedCommit != "" {
+		issue.MatchedCommit = op.Payload.MatchedCommit
 	}
 	return nil
 }

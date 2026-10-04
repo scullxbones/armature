@@ -99,6 +99,9 @@ type Issue struct {
 	Base                       string `json:"base,omitempty"`
 	Tip                        string `json:"tip,omitempty"`
 	IntegrationBranch          string `json:"integration_branch,omitempty"`
+	TargetSHA                  string `json:"target_sha,omitempty"`
+	CombinedPatchID            string `json:"combined_patch_id,omitempty"`
+	MatchedCommit              string `json:"matched_commit,omitempty"`
 	AssignedWorker             string `json:"assigned_worker,omitempty"`
 	PreferredModel             string `json:"preferred_model,omitempty"`
 	Updated                    int64  `json:"updated"`

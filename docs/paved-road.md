@@ -129,7 +129,7 @@ Zero unclassified leaf commands is a gate.
 - `arm import` — Bulk create from CSV/JSON. Prefer dag apply from a plan.
 - `arm log` — Ops audit log. Use when diagnosing, not when dispatching.
 - `arm materialize` — Replay ops to rebuild state. Recovery, not the daily loop.
-- `arm merged` — Manual merged promotion. Prefer sync after the PR lands.
+- `arm merged` — Promote one done leaf when its recorded delivery is on the target. Prefer sync after the PR lands.
 - `arm reopen` — Rework after done. The road completes once, then syncs.
 - `arm reparent` — Move an issue in the hierarchy after the fact.
 - `arm review validate` — Advisory assessment check. Record remains the enforcement gate.
@@ -161,7 +161,7 @@ Skip and force flags stay listed here. They are not the paved-road invocation.
 | `--skip-delivery-gate` | `arm transition` | Bypasses the delivery gate on --to done. The paved road runs the gate. |
 | `--force` | `arm transition` | Bypasses branch and PR discipline on --to done. |
 | `--force` | `arm claim` | Bypasses claim overlap planning. |
-| `--force` | `arm merged` | Bypasses hook-violation refusal at merge. |
+| `--force` | `arm merged` | Bypasses hook-log violations only; it does not waive the git check or the assessment. |
 | `--force` | `arm sources accept-citation` | Skips the confirmation prompt. The paved road cites sources at plan time. |
 | `--strict=false` | `arm validate` | Keeps warnings as warnings. The paved road is fail-closed (strict by default). |
 | `--global` | `arm bootstrap` | Deploys skills outside the repo. The paved road deploys locally. |
