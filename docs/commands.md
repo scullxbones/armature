@@ -431,7 +431,7 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 Record a delivery snapshot for an issue. `arm transition --to done` from a bound
 worktree writes this snapshot automatically. Use `arm delivery record` when there
 is no bound worktree: it writes the same record as
-`arm transition --to done --base <sha> --tip <sha>` when both objects exist, the
+`arm transition --to done --base abc123 --tip def456` when both objects exist, the
 base ancestors the tip, and the range is non-empty. Tip must sit on recorded
 branch or claim provenance. Missing objects, an empty range, a disagreeing
 worktree HEAD, or missing provenance exit `DELIVERY-1` and do not mark `done`.
@@ -443,7 +443,7 @@ worktree HEAD, or missing provenance exit `DELIVERY-1` and do not mark `done`.
 
 ### delivery record
 
-Write `refs/armature/deliveries/<issue-id>` at `--tip` and record `branch`,
+Write `refs/armature/deliveries/ISSUE-ID` at `--tip` and record `branch`,
 `base`, `tip`, and `integration_branch` on a `done` transition.
 
 **Synopsis:**
@@ -456,7 +456,7 @@ Write `refs/armature/deliveries/<issue-id>` at `--tip` and record `branch`,
 
 **Example:**
 ```bash
-arm delivery record --issue TASK-001 --base <sha> --tip <sha>
+arm delivery record --issue TASK-001 --base abc123 --tip def456
 ```
 
 ---
@@ -1153,9 +1153,11 @@ otherwise; a loser cannot `--to done`). Doctor and unassign stay privileged.
 - `--skip-delivery-gate`: Skip the delivery gate check only when transitioning to `done`; it is rejected for other states. The transition op records `Payload.SkippedDeliveryGate` (`skipped_delivery_gate` in the op log) as the audit flag. Supply `--outcome` with the reason for the override. See [Delivery Gate](use-cases.md#the-delivery-gate). `--skip-delivery-gate` and `--force` do not skip the delivery snapshot.
 
 When `--to done` runs from a bound worktree, Armature records `branch`, `base`,
-`tip`, and `integration_branch` and writes `refs/armature/deliveries/<issue-id>`
+`tip`, and `integration_branch` and writes `refs/armature/deliveries/ISSUE-ID`
 at the tip. Without a worktree (and without `--base`/`--tip`) the command exits
-`TRANSITION-1` with `arm delivery record --issue <id> --base <sha> --tip <sha>`.
+`TRANSITION-1` with next_actions naming
+`arm delivery record --issue TASK-001 --base abc123 --tip def456`
+(SHAs are placeholders in the live recovery argv).
 
 **Example:**
 ```bash
