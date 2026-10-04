@@ -39,9 +39,7 @@ func AppendGateEvidence(logPath, workerID string, ev GateEvidence) error {
 	if err != nil {
 		return fmt.Errorf("marshal gate evidence: %w", err)
 	}
-	target := ev.Profile
-	arr := []any{OpGateEvidence, target, ev.Start, workerID, json.RawMessage(payload)}
-	line, err := json.Marshal(arr)
+	line, err := marshalVersioned(OpGateEvidence, ev.Profile, ev.Start, workerID, payload, 0)
 	if err != nil {
 		return fmt.Errorf("marshal gate evidence op: %w", err)
 	}

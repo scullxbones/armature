@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,6 +31,20 @@ func TestAppendAndReadGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, ev, got[0])
 	assert.True(t, got[0].Citable())
+
+	raw, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	var arr []json.RawMessage
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(raw), &arr))
+	require.GreaterOrEqual(t, len(arr), 6, "gate-evidence must include schema_version at index 5")
+	var version int
+	require.NoError(t, json.Unmarshal(arr[5], &version))
+	assert.Equal(t, CurrentSchemaVersion, version)
+
+	parsed, err := ParseLine(bytes.TrimSpace(raw))
+	require.NoError(t, err)
+	assert.Equal(t, CurrentSchemaVersion, parsed.SchemaVersion)
+	assert.Equal(t, OpGateEvidence, parsed.Type)
 }
 
 func TestIsAuditOnly_REQ_LNGHZN_S10_T3(t *testing.T) {

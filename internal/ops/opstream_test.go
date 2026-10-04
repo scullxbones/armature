@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -133,6 +134,37 @@ func TestValidatedOpStream_PreservesLogFilename(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, logPath, items[0].LogFilename)
+}
+
+func TestValidatedOpStream_NewerSchemaFailsLoud_REQ_TOPTIER_S6_T2(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "worker-a1.log")
+
+	op1 := Op{Type: OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "worker-a1",
+		Payload: Payload{Title: "Valid", NodeType: "task"}}
+	require.NoError(t, AppendOp(logPath, op1))
+
+	newer := CurrentSchemaVersion + 1
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
+	require.NoError(t, err)
+	_, err = fmt.Fprintf(f, `["note","task-01",200,"worker-a1",{"msg":"future"},%d]`+"\n", newer)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	op2 := Op{Type: OpNote, TargetID: "task-01", Timestamp: 300, WorkerID: "worker-a1",
+		Payload: Payload{Msg: "after newer schema"}}
+	require.NoError(t, AppendOp(logPath, op2))
+
+	got, err := LoadFromDirValidated(dir)
+	require.Error(t, err, "newer schema must fail replay, not skip as corrupt")
+	assert.Empty(t, got.Items, "must not half-replay ops after a newer-schema record")
+	assert.Empty(t, got.PhysicalEOF, "must not persist EOF past a rejected newer-schema record")
+	var newerErr *NewerSchemaVersionError
+	require.ErrorAs(t, err, &newerErr)
+	assert.Equal(t, newer, newerErr.Seen)
+	assert.Equal(t, CurrentSchemaVersion, newerErr.Supported)
+	assert.NotContains(t, err.Error(), "corrupt")
 }
 
 func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {

@@ -1,0 +1,109 @@
+{
+  "FIX-STORY": {
+    "id": "FIX-STORY",
+    "type": "story",
+    "status": "in-progress",
+    "title": "v1 fixture story",
+    "children": [
+      "FIX-T1",
+      "FIX-T2"
+    ],
+    "blocked_by": [],
+    "blocks": [],
+    "priority": "high",
+    "definition_of_done": "children done",
+    "scope": [],
+    "provenance": {
+      "method": "decomposed",
+      "confidence": "verified",
+      "source_worker": "fixture-worker"
+    },
+    "decision_refs": [],
+    "updated": 1000
+  },
+  "FIX-T1": {
+    "id": "FIX-T1",
+    "type": "task",
+    "status": "done",
+    "title": "first fixture task",
+    "parent": "FIX-STORY",
+    "children": [],
+    "blocked_by": [],
+    "blocks": [
+      "FIX-T2"
+    ],
+    "priority": "high",
+    "definition_of_done": "ship versioning",
+    "scope": [
+      "internal/ops/**"
+    ],
+    "provenance": {
+      "method": "decomposed",
+      "confidence": "verified",
+      "source_worker": "fixture-worker"
+    },
+    "decision_refs": [],
+    "outcome": "versioning shipped",
+    "notes": [
+      {
+        "id": "note-fixture-1",
+        "worker_id": "fixture-worker",
+        "timestamp": 1004,
+        "msg": "corpus note for v1 replay"
+      }
+    ],
+    "decisions": [
+      {
+        "topic": "schema-version-placement",
+        "choice": "positional-index-5",
+        "rationale": "append-only array growth with fail-loud check",
+        "affects": [
+          "internal/ops/**"
+        ],
+        "worker_id": "fixture-worker",
+        "timestamp": 1005
+      }
+    ],
+    "claimed_by": "fixture-worker",
+    "claimed_at": 1006,
+    "claim_token": "fixture-claim-1",
+    "claim_ttl": 60,
+    "last_heartbeat": 1007,
+    "last_claiming_worker_activity": 1008,
+    "worktree_path": ".worktrees/FIX-T1",
+    "branch": "task/FIX-T1",
+    "updated": 1008
+  },
+  "FIX-T2": {
+    "id": "FIX-T2",
+    "type": "task",
+    "status": "done",
+    "title": "second fixture task",
+    "parent": "FIX-STORY",
+    "children": [],
+    "blocked_by": [
+      "FIX-T1"
+    ],
+    "blocks": [],
+    "priority": "medium",
+    "definition_of_done": "ship corpus",
+    "scope": [
+      "internal/materialize/**"
+    ],
+    "provenance": {
+      "method": "decomposed",
+      "confidence": "verified",
+      "source_worker": "fixture-worker"
+    },
+    "decision_refs": [],
+    "outcome": "corpus shipped",
+    "claimed_by": "fixture-worker",
+    "claimed_at": 1009,
+    "claim_token": "fixture-claim-2",
+    "claim_ttl": 60,
+    "last_heartbeat": 1009,
+    "last_claiming_worker_activity": 1010,
+    "branch": "task/FIX-T2",
+    "updated": 1010
+  }
+}
