@@ -575,12 +575,12 @@ func WriteCheckpointJSON(path string, data any) error {
 }
 
 func LoadCheckpointJSON(path string, v any) error {
-	data, err := readStateFile(path)
+	data, err := readOptionalStateFile(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
 		return fmt.Errorf("read checkpoint: %w", err)
+	}
+	if data == nil {
+		return nil
 	}
 	if err := json.Unmarshal(data, v); err != nil {
 		return fmt.Errorf("parse checkpoint: %w", err)
@@ -588,15 +588,20 @@ func LoadCheckpointJSON(path string, v any) error {
 	return nil
 }
 
+func readOptionalStateFile(path string) ([]byte, error) {
+	data, err := readStateFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return data, err
+}
+
 // ReadManifestFile reads a manifest.json file from the given directory.
 // If the file does not exist, it returns nil, nil.
 func ReadManifestFile(path string) ([]byte, error) {
 	filePath := filepath.Join(path, "manifest.json")
-	data, err := readStateFile(filePath)
+	data, err := readOptionalStateFile(filePath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("reading manifest: %w", err)
 	}
 	return data, nil
@@ -645,11 +650,8 @@ func WriteCacheFile(path string, id string, data []byte) error {
 // If the file does not exist, it returns nil, nil.
 func ReadCacheFile(path string, id string) ([]byte, error) {
 	cacheFile := filepath.Join(path, id+".cache")
-	data, err := readStateFile(cacheFile)
+	data, err := readOptionalStateFile(cacheFile)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("reading cache file: %w", err)
 	}
 	return data, nil
@@ -689,14 +691,7 @@ func WriteCoverageFile(path string, data any) error {
 // ReadCoverageFile reads coverage data from a file.
 // If the file does not exist, it returns nil, nil.
 func ReadCoverageFile(path string) ([]byte, error) {
-	data, err := readStateFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return data, nil
+	return readOptionalStateFile(path)
 }
 
 // ExpandGlobs expands a set of glob patterns and returns matching file paths.

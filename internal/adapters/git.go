@@ -199,10 +199,9 @@ func (c *Client) IsWorkingTreeDirty() (bool, error) {
 		return false, err
 	}
 	for _, entry := range entries {
-		if entry.Untracked || entry.Ignored {
-			continue
+		if !entry.Untracked && !entry.Ignored {
+			return true, nil
 		}
-		return true, nil
 	}
 	return false, nil
 }
@@ -252,27 +251,21 @@ func (c *Client) dirtyEntriesRecursive(prefix string) ([]DirtyEntry, error) {
 			}
 		}
 	}
-	gitlinks, err := c.gitlinkPaths()
-	if err != nil {
-		return nil, err
-	}
-	for _, gl := range gitlinks {
-		subDir := filepath.Join(c.repoPath, gl)
-		childPrefix := gl
-		if prefix != "" {
-			childPrefix = filepath.Join(prefix, gl)
-		}
+	if err := c.eachGitlink(prefix, func(sub *Client, childPrefix, subDir string) error {
 		if !populatedSubmodule(subDir) {
 			if nonEmptyDir(subDir) {
 				entries = append(entries, DirtyEntry{Path: childPrefix})
 			}
-			continue
+			return nil
 		}
-		inner, err := c.child(subDir).dirtyEntriesRecursive(childPrefix)
+		inner, err := sub.dirtyEntriesRecursive(childPrefix)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		entries = append(entries, inner...)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return entries, nil
 }
@@ -344,27 +337,38 @@ func (c *Client) indexConcealmentRecursive(prefix string) ([]string, error) {
 		}
 		paths = append(paths, rel)
 	}
-	gitlinks, err := c.gitlinkPaths()
-	if err != nil {
+	if err := c.eachGitlink(prefix, func(sub *Client, childPrefix, subDir string) error {
+		if !populatedSubmodule(subDir) {
+			return nil
+		}
+		inner, err := sub.indexConcealmentRecursive(childPrefix)
+		if err != nil {
+			return err
+		}
+		paths = append(paths, inner...)
+		return nil
+	}); err != nil {
 		return nil, err
 	}
+	return paths, nil
+}
+
+func (c *Client) eachGitlink(prefix string, visit func(sub *Client, childPrefix, subDir string) error) error {
+	gitlinks, err := c.gitlinkPaths()
+	if err != nil {
+		return err
+	}
 	for _, gl := range gitlinks {
-		subDir := filepath.Join(c.repoPath, gl)
-		if !populatedSubmodule(subDir) {
-			continue
-		}
-		sub := c.child(subDir)
 		childPrefix := gl
 		if prefix != "" {
 			childPrefix = filepath.Join(prefix, gl)
 		}
-		inner, err := sub.indexConcealmentRecursive(childPrefix)
-		if err != nil {
-			return nil, err
+		subDir := filepath.Join(c.repoPath, gl)
+		if err := visit(c.child(subDir), childPrefix, subDir); err != nil {
+			return err
 		}
-		paths = append(paths, inner...)
 	}
-	return paths, nil
+	return nil
 }
 
 func (c *Client) gitlinkPaths() ([]string, error) {
@@ -388,8 +392,8 @@ func (c *Client) gitlinkPaths() ([]string, error) {
 }
 
 func populatedSubmodule(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, ".git"))
-	return err == nil && info != nil
+	_, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 func nonEmptyDir(dir string) bool {
@@ -517,21 +521,11 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	// it as fatal and restore the prior branch.
 	rmCmd := c.cmd("rm", "-rf", "--quiet", ".")
 	if rmOut, rmErr := rmCmd.CombinedOutput(); rmErr != nil && !isBenignEmptyRepoRmError(rmOut) {
-		restore := c.cmd("checkout", priorBranch)
-		restoreErr := restore.Run()
-		if restoreErr != nil {
-			return fmt.Errorf("git rm -rf . on orphan branch failed: %w; then failed to restore to %s: %w\n%s", rmErr, priorBranch, restoreErr, rmOut)
-		}
-		return fmt.Errorf("git rm -rf . on orphan branch: %w\n%s", rmErr, rmOut)
+		return c.failAfterOrphanOp(priorBranch, rmErr, rmOut, "git rm -rf . on orphan branch")
 	}
 	commitCmd := c.cmd("commit", "--no-verify", "--allow-empty", "-m", "chore: init armature issues branch")
 	if out, err := commitCmd.CombinedOutput(); err != nil {
-		restore := c.cmd("checkout", priorBranch)
-		restoreErr := restore.Run()
-		if restoreErr != nil {
-			return fmt.Errorf("git commit on orphan branch failed: %w; then failed to restore to %s: %w\n%s", err, priorBranch, restoreErr, out)
-		}
-		return fmt.Errorf("git commit on orphan branch: %w\n%s", err, out)
+		return c.failAfterOrphanOp(priorBranch, err, out, "git commit on orphan branch")
 	}
 
 	// Return to the original branch by name (not `checkout -` which may fail on fresh repos)
@@ -540,6 +534,13 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 		return fmt.Errorf("git checkout %s: %w\n%s", priorBranch, err, out)
 	}
 	return nil
+}
+
+func (c *Client) failAfterOrphanOp(priorBranch string, opErr error, out []byte, op string) error {
+	if restoreErr := c.cmd("checkout", priorBranch).Run(); restoreErr != nil {
+		return fmt.Errorf("%s failed: %w; then failed to restore to %s: %w\n%s", op, opErr, priorBranch, restoreErr, out)
+	}
+	return fmt.Errorf("%s: %w\n%s", op, opErr, out)
 }
 
 // AddWorktree adds a linked worktree for an existing branch at the given path.
@@ -564,30 +565,24 @@ func (c *Client) AddWorktree(branch, path string) error {
 }
 
 func (c *Client) SetGitConfig(key, value string) error {
-	cmd := c.cmd("config", "--local", key, value)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git config set %s: %w\n%s", key, err, out)
-	}
-	return nil
+	return c.setGitConfig("--local", key, value, "git config set")
 }
 
 // SetGitConfigWorktree writes a worktree-scoped git config key (--worktree).
 func (c *Client) SetGitConfigWorktree(key, value string) error {
-	cmd := c.cmd("config", "--worktree", key, value)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git config --worktree set %s: %w\n%s", key, err, out)
+	return c.setGitConfig("--worktree", key, value, "git config --worktree set")
+}
+
+func (c *Client) setGitConfig(scope, key, value, errLabel string) error {
+	if out, err := c.cmd("config", scope, key, value).CombinedOutput(); err != nil {
+		return fmt.Errorf("%s %s: %w\n%s", errLabel, key, err, out)
 	}
 	return nil
 }
 
 // ReadGitConfigWorktree reads a worktree-scoped git config key.
 func (c *Client) ReadGitConfigWorktree(key string) (string, error) {
-	cmd := c.cmd("config", "--worktree", "--get", key)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git config --worktree get %s: %w", key, err)
-	}
-	return strings.TrimSpace(string(out)), nil
+	return c.getGitConfig([]string{"--worktree", "--get", key}, "git config --worktree get", key)
 }
 
 // CommonGitDir returns git rev-parse --git-common-dir (absolute).
@@ -616,10 +611,13 @@ func (c *Client) CommonGitDir() (string, error) {
 
 // ReadGitConfig reads a local git config key. Returns error if unset.
 func (c *Client) ReadGitConfig(key string) (string, error) {
-	cmd := c.cmd("config", "--local", key)
-	out, err := cmd.Output()
+	return c.getGitConfig([]string{"--local", key}, "git config get", key)
+}
+
+func (c *Client) getGitConfig(args []string, errLabel, key string) (string, error) {
+	out, err := c.cmd(append([]string{"config"}, args...)...).Output()
 	if err != nil {
-		return "", fmt.Errorf("git config get %s: %w", key, err)
+		return "", fmt.Errorf("%s %s: %w", errLabel, key, err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -767,16 +765,12 @@ func (e LogEntry) ParentCount() int {
 	return len(e.Parents)
 }
 
+const gitLogPretty = "%H%x00%s%x00%ae%x00%ai%x00%P"
+
 // LogRange returns log entries reachable from head but not from base
 // (`git log base..head`), most recent first.
 func (c *Client) LogRange(base, head string) ([]LogEntry, error) {
-	format := "%H%x00%s%x00%ae%x00%ai%x00%P"
-	cmd := c.cmd("log", base+".."+head, "--format="+format, "--")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git log %s..%s: %w", base, head, err)
-	}
-	return parseLogOutput(out), nil
+	return c.gitLogEntries("git log "+base+".."+head, "log", base+".."+head, "--format="+gitLogPretty, "--")
 }
 
 func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
@@ -813,18 +807,20 @@ func (c *Client) LogBranch(branch string, n int) ([]LogEntry, error) {
 	if strings.HasPrefix(branch, "-") {
 		return nil, fmt.Errorf("invalid branch %q", branch)
 	}
-	format := "%H%x00%s%x00%ae%x00%ai%x00%P"
-	args := []string{"log", branch, "--format=" + format}
+	args := []string{"log", branch, "--format=" + gitLogPretty}
 	if n > 0 {
 		args = append(args, fmt.Sprintf("-n%d", n))
 	}
 	// git log BRANCH -- disambiguates a branch name that collides with a path
 	// ("ambiguous argument").
 	args = append(args, "--")
-	cmd := c.cmd(args...)
-	out, err := cmd.Output()
+	return c.gitLogEntries("git log "+branch, args...)
+}
+
+func (c *Client) gitLogEntries(errPrefix string, args ...string) ([]LogEntry, error) {
+	out, err := c.cmd(args...).Output()
 	if err != nil {
-		return nil, fmt.Errorf("git log %s: %w", branch, err)
+		return nil, fmt.Errorf("%s: %w", errPrefix, err)
 	}
 	return parseLogOutput(out), nil
 }
@@ -1046,13 +1042,7 @@ func (c *Client) StagedPaths() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git diff --cached --name-only: %w", err)
 	}
-	var paths []string
-	for _, p := range strings.Split(string(out), "\x00") {
-		if p != "" {
-			paths = append(paths, p)
-		}
-	}
-	return paths, nil
+	return splitNUL(out), nil
 }
 
 func (c *Client) IsTracked(path string) bool {
@@ -1166,12 +1156,15 @@ func (c *Client) DiffNameOnlyRange(base, head string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to diff --name-only %s...%s: %w", base, head, err)
 	}
-	// git -z outputs NUL-terminated entries; trim trailing NUL before splitting.
-	raw := strings.TrimRight(string(output), "\x00")
+	return splitNUL(output), nil
+}
+
+func splitNUL(out []byte) []string {
+	raw := strings.TrimRight(string(out), "\x00")
 	if raw == "" {
-		return []string{}, nil
+		return []string{}
 	}
-	return strings.Split(raw, "\x00"), nil
+	return strings.Split(raw, "\x00")
 }
 
 // RevListReverse returns commit SHAs reachable from rev, oldest first.

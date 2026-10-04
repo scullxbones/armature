@@ -152,17 +152,9 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 		if fErr != nil {
 			return nil, fErr
 		}
-		published := false
-		if pubSHA != "" {
-			if sha == pubSHA {
-				published = true
-			} else {
-				anc, aErr := gc.IsAncestor(sha, pubSHA)
-				if aErr != nil {
-					return nil, aErr
-				}
-				published = anc
-			}
+		published, pubErr := commitPublished(gc, sha, pubSHA)
+		if pubErr != nil {
+			return nil, pubErr
 		}
 		epoch := epochTimestampFilenameLine
 		if cutover != "" {
@@ -191,6 +183,13 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 		}
 	}
 	return located, nil
+}
+
+func commitPublished(gc *adapters.Client, sha, pubSHA string) (bool, error) {
+	if pubSHA == "" || sha == pubSHA {
+		return pubSHA != "", nil
+	}
+	return gc.IsAncestor(sha, pubSHA)
 }
 
 const CutoverConfigKey = "armature.oporder-cutover"

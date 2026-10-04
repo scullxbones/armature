@@ -57,6 +57,16 @@ func (f Finding) identity() string {
 	return f.Rule + "\x00" + strings.Join(ids, "\x00") + "\x00" + f.Key
 }
 
+func finding(severity, rule, msg string, cited ...string) Finding {
+	return Finding{Severity: severity, Rule: rule, Message: msg, CitedIDs: cited}
+}
+
+func keyedFinding(severity, rule, key, msg string, cited ...string) Finding {
+	f := finding(severity, rule, msg, cited...)
+	f.Key = key
+	return f
+}
+
 func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 	var findings []Finding
 
@@ -396,12 +406,8 @@ func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materiali
 }
 
 func e6Missing(id, typ, field string) Finding {
-	return Finding{
-		Severity: "error", Rule: "E6",
-		Message:  fmt.Sprintf("missing required field: %s on %s %s", field, typ, id),
-		CitedIDs: []string{id},
-		Key:      field,
-	}
+	return keyedFinding("error", "E6", field,
+		fmt.Sprintf("missing required field: %s on %s %s", field, typ, id), id)
 }
 
 func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
@@ -765,11 +771,7 @@ func checkW2NoTestCriteria(issues map[string]*materialize.Issue) []Finding {
 			}
 		}
 		if !hasTest {
-			findings = append(findings, Finding{
-				Severity: "warning", Rule: "W2",
-				Message:  fmt.Sprintf("no test criteria on %s", id),
-				CitedIDs: []string{id},
-			})
+			findings = append(findings, finding("warning", "W2", fmt.Sprintf("no test criteria on %s", id), id))
 		}
 	}
 	return findings
@@ -785,12 +787,9 @@ func checkW3BudgetExceeded(issues map[string]*materialize.Issue) []Finding {
 			estimated += len(issue.Context) / 4
 		}
 		if estimated > defaultTokenBudget {
-			findings = append(findings, Finding{
-				Severity: "warning", Rule: "W3",
-				Message: fmt.Sprintf("budget advisory: %s est. %d tokens > %d",
-					id, estimated, defaultTokenBudget),
-				CitedIDs: []string{id},
-			})
+			findings = append(findings, finding("warning", "W3",
+				fmt.Sprintf("budget advisory: %s est. %d tokens > %d",
+					id, estimated, defaultTokenBudget), id))
 		}
 	}
 	return findings
@@ -804,11 +803,8 @@ func checkW4BroadScope(issues map[string]*materialize.Issue) []Finding {
 		}
 		for _, glob := range issue.Scope {
 			if glob == "**/*" || glob == "**" || glob == "." {
-				findings = append(findings, Finding{
-					Severity: "warning", Rule: "W4",
-					Message:  fmt.Sprintf("broad scope: %s scope covers entire tree", id),
-					CitedIDs: []string{id},
-				})
+				findings = append(findings, finding("warning", "W4",
+					fmt.Sprintf("broad scope: %s scope covers entire tree", id), id))
 				break
 			}
 		}
@@ -833,13 +829,9 @@ func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []Finding 
 			dirs[filepath.Dir(glob)] = struct{}{}
 		}
 		if len(dirs) >= 3 {
-			findings = append(findings, Finding{
-				Severity: "warning", Rule: "W5",
-				Message: fmt.Sprintf(
-					"missing context_files on %s with broad scope — split the task into smaller pieces or narrow scope via: arm amend %s --scope <glob>",
-					id, id),
-				CitedIDs: []string{id},
-			})
+			findings = append(findings, finding("warning", "W5", fmt.Sprintf(
+				"missing context_files on %s with broad scope — split the task into smaller pieces or narrow scope via: arm amend %s --scope <glob>",
+				id, id), id))
 		}
 	}
 	return findings
@@ -856,19 +848,13 @@ func checkW6ComplexityMismatch(issues map[string]*materialize.Issue) []Finding {
 		switch issue.EstComplexity {
 		case "small":
 			if n > 5 {
-				findings = append(findings, Finding{
-					Severity: "warning", Rule: "W6",
-					Message:  fmt.Sprintf("complexity mismatch: %s has %d files but marked small", id, n),
-					CitedIDs: []string{id},
-				})
+				findings = append(findings, finding("warning", "W6",
+					fmt.Sprintf("complexity mismatch: %s has %d files but marked small", id, n), id))
 			}
 		case "large":
 			if n < 2 {
-				findings = append(findings, Finding{
-					Severity: "warning", Rule: "W6",
-					Message:  fmt.Sprintf("complexity mismatch: %s has %d files but marked large", id, n),
-					CitedIDs: []string{id},
-				})
+				findings = append(findings, finding("warning", "W6",
+					fmt.Sprintf("complexity mismatch: %s has %d files but marked large", id, n), id))
 			}
 		}
 	}
@@ -886,11 +872,8 @@ func checkW7VagueDoD(issues map[string]*materialize.Issue) []Finding {
 		lower := strings.ToLower(issue.DefinitionOfDone)
 		for _, word := range vagueWords {
 			if strings.Contains(lower, word) {
-				findings = append(findings, Finding{
-					Severity: "warning", Rule: "W7",
-					Message:  fmt.Sprintf(`vague DoD: %s contains "%s"`, id, word),
-					CitedIDs: []string{id},
-				})
+				findings = append(findings, finding("warning", "W7",
+					fmt.Sprintf(`vague DoD: %s contains "%s"`, id, word), id))
 				break
 			}
 		}
@@ -920,13 +903,9 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []Finding
 		}
 		for topic, choices := range byTopic {
 			if len(choices) > 1 {
-				findings = append(findings, Finding{
-					Severity: "warning", Rule: "W8",
-					Message: fmt.Sprintf(`conflicting decisions: topic "%s" has %d choices: %s on %s`,
-						topic, len(choices), strings.Join(choices, ", "), id),
-					CitedIDs: []string{id},
-					Key:      topic,
-				})
+				findings = append(findings, keyedFinding("warning", "W8", topic,
+					fmt.Sprintf(`conflicting decisions: topic "%s" has %d choices: %s on %s`,
+						topic, len(choices), strings.Join(choices, ", "), id), id))
 			}
 		}
 	}
@@ -1016,20 +995,9 @@ func checkW11VagueOutcomes(issues map[string]*materialize.Issue) []Finding {
 			continue
 		}
 		lower := strings.TrimSpace(strings.ToLower(issue.Outcome))
-		if len(lower) < minOutcomeLength {
-			findings = append(findings, Finding{
-				Severity: "warning", Rule: "W11",
-				Message:  fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)),
-				CitedIDs: []string{id},
-			})
-			continue
-		}
-		if slices.Contains(vagueOutcomes, lower) {
-			findings = append(findings, Finding{
-				Severity: "warning", Rule: "W11",
-				Message:  fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)),
-				CitedIDs: []string{id},
-			})
+		if len(lower) < minOutcomeLength || slices.Contains(vagueOutcomes, lower) {
+			findings = append(findings, finding("warning", "W11",
+				fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)), id))
 		}
 	}
 	return findings

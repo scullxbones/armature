@@ -440,17 +440,11 @@ func (s *State) applyScopeRename(op ops.Op) error {
 
 func (s *State) applyScopeDelete(op ops.Op) error {
 	issue := s.Issues[op.TargetID]
-	result := make([]string, 0, len(issue.Scope))
-	matched := false
-	for _, entry := range issue.Scope {
-		if entry == op.Payload.DeletedPath {
-			matched = true
-		} else {
-			result = append(result, entry)
-		}
-	}
-	if matched {
-		issue.Scope = result
+	n := len(issue.Scope)
+	issue.Scope = slices.DeleteFunc(issue.Scope, func(entry string) bool {
+		return entry == op.Payload.DeletedPath
+	})
+	if len(issue.Scope) != n {
 		issue.Updated = op.Timestamp
 	}
 	return nil
