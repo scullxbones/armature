@@ -5600,3 +5600,4 @@
 ["note","CLAIMORD-W11",1791124795,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Verifying DoD on current main tip: W11 landed in #277 (5fd066ad6). Acceptance tests pass locally; checking make check / test-e2eharness before done.","note_id":"note-1791124795243191852"}]
 ["transition","TOPTIER-S6-T1",1791124803,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["heartbeat","TOPTIER-S6-T2",1791124880,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
+["citation-accepted","TOPTIER-S6-T2",1791124887,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"Self-citing implementation of GAP T5.2 ops-schema compatibility policy and v1 replay fixture corpus"}]
