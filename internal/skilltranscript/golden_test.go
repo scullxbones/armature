@@ -95,16 +95,9 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			t.Logf("Successfully rendered context for task %s", taskID)
 		})
 
-		t.Run("arm transition marks task done", func(t *testing.T) {
-			outcome := "Implemented golden transcript test for coordinator skill verification"
-			repo.HarnessDriveTransition(t, taskID, "done", outcome)
-
-			t.Logf("Successfully transitioned task %s to done", taskID)
-		})
-
 		var baseCommit, headCommit string
 		t.Run("capture commit range for review", func(t *testing.T) {
-			baseCommit = runCmd(repo.Path(), "rev-parse", "HEAD")
+			baseCommit = runCmd(worktreePath, "rev-parse", "HEAD")
 
 			testFilePath := filepath.Join(worktreePath, "test_output.txt")
 			if err := os.WriteFile(testFilePath, []byte("Test output for golden transcript\n"), 0644); err != nil {
@@ -117,6 +110,13 @@ func TestCoordinatorGoldenTranscript_REQ_TOPTIER_S1_T2(t *testing.T) {
 			headCommit = runCmd(worktreePath, "rev-parse", "HEAD")
 
 			t.Logf("Base commit: %s, Head commit: %s", baseCommit, headCommit)
+		})
+
+		t.Run("arm transition marks task done", func(t *testing.T) {
+			outcome := "Implemented golden transcript test for coordinator skill verification"
+			repo.HarnessDriveTransition(t, taskID, "done", outcome)
+
+			t.Logf("Successfully transitioned task %s to done", taskID)
 		})
 
 		var bundleFile string
