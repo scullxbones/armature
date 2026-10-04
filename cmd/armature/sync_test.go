@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -132,4 +133,65 @@ func TestSyncAgentEnvelopeShape_REQ_LNGHZN_S11_T3(t *testing.T) {
 	require.NoError(t, json.Unmarshal(decoded["help"], &help))
 	require.NotEmpty(t, help)
 	assert.True(t, strings.HasPrefix(help[0], "arm "))
+}
+
+func TestSyncDryRunWritesNothingOnReadOnlyState_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	markIssueDoneLegacy(t, repo, "task-01")
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	stateDir := getTestStateDir(t, repo)
+	require.NoError(t, filepath.Walk(stateDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return os.Chmod(path, 0o555)
+		}
+		return os.Chmod(path, 0o444)
+	}))
+	t.Cleanup(func() {
+		_ = filepath.Walk(stateDir, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return nil
+			}
+			if info.IsDir() {
+				_ = os.Chmod(path, 0o755)
+				return nil
+			}
+			_ = os.Chmod(path, 0o644)
+			return nil
+		})
+	})
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--dry-run", "--format", "agent")
+	assert.Equal(t, 0, code, "dry-run must not require a writable state directory")
+	_, rows := decodeSyncIssues(t, stdout.String())
+	require.Len(t, rows, 1)
+	assert.Equal(t, "legacy", rows[0].Kind)
+}
+
+func TestSyncLegacyOnlySucceedsWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	markIssueDoneLegacy(t, repo, "task-01")
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	unsetWorkerIDConfig(t, repo)
+	t.Setenv("ARM_WORKER_ID", "")
+	t.Setenv("ARM_LOG_SLOT", "")
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr,
+		"sync", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 0, code, "legacy-only sync must list without a registered worker; stderr=%s", stderr.String())
+	assert.NotContains(t, stdout.String(), `"error"`)
+	assert.NotContains(t, stdout.String(), "SYNC-1")
+	_, rows := decodeSyncIssues(t, stdout.String())
+	require.Len(t, rows, 1)
+	assert.Equal(t, "legacy", rows[0].Kind)
 }

@@ -342,6 +342,7 @@ func hasMatchingAssessment(in Input, base, tip string) bool {
 			return true
 		}
 	}
+	deliverySeen := false
 	for _, op := range in.PriorOps {
 		if op.TargetID != in.Issue.ID {
 			continue
@@ -358,8 +359,19 @@ func hasMatchingAssessment(in Input, base, tip string) bool {
 			if att.BaseSHA == base && att.HeadSHA == tip {
 				return true
 			}
+		case ops.OpTransition:
+			if op.Payload.To == ops.StatusDone && op.Payload.Base == base && op.Payload.Tip == tip {
+				deliverySeen = true
+			}
 		case ops.OpDAGTransition:
-			if op.Payload.SkippedValidateGate && op.Payload.Base == base && op.Payload.Tip == tip {
+			if !deliverySeen {
+				continue
+			}
+			if op.Payload.SkippedValidateGate &&
+				op.Payload.To == "verified" &&
+				strings.TrimSpace(op.Payload.Rationale) != "" &&
+				op.Payload.Base == base &&
+				op.Payload.Tip == tip {
 				return true
 			}
 		}

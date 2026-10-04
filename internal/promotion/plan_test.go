@@ -131,20 +131,88 @@ func TestPromoteRequiresMatchingAssessment_REQ_LNGHZN_S11_T2(t *testing.T) {
 	t.Run("post-delivery override bound to base and tip", func(t *testing.T) {
 		t.Parallel()
 		git, base, tip := land(t)
-		in := doneInput("task-ovr", base, tip, []ops.Op{{
-			Type:     ops.OpDAGTransition,
-			TargetID: "task-ovr",
-			Payload: ops.Payload{
-				IssueID:             "task-ovr",
-				To:                  "verified",
-				SkippedValidateGate: true,
-				Rationale:           "post-delivery",
-				Base:                base,
-				Tip:                 tip,
+		in := doneInput("task-ovr", base, tip, []ops.Op{
+			{
+				Type:      ops.OpTransition,
+				TargetID:  "task-ovr",
+				Timestamp: 1,
+				Payload:   ops.Payload{To: ops.StatusDone, Base: base, Tip: tip},
 			},
-		}})
+			{
+				Type:      ops.OpDAGTransition,
+				TargetID:  "task-ovr",
+				Timestamp: 2,
+				Payload: ops.Payload{
+					IssueID:             "task-ovr",
+					To:                  "verified",
+					SkippedValidateGate: true,
+					Rationale:           "post-delivery",
+					Base:                base,
+					Tip:                 tip,
+				},
+			},
+		})
 		res := Evaluate(git, in)
 		require.True(t, res.Promote, res.Kind)
+	})
+
+	t.Run("incomplete or pre-delivery override does not waive", func(t *testing.T) {
+		t.Parallel()
+		git, base, tip := land(t)
+		done := ops.Op{
+			Type:      ops.OpTransition,
+			TargetID:  "task-badovr",
+			Timestamp: 2,
+			Payload:   ops.Payload{To: ops.StatusDone, Base: base, Tip: tip},
+		}
+		complete := ops.Payload{
+			IssueID:             "task-badovr",
+			To:                  "verified",
+			SkippedValidateGate: true,
+			Rationale:           "post-delivery",
+			Base:                base,
+			Tip:                 tip,
+		}
+		cases := []struct {
+			name string
+			ops  []ops.Op
+		}{
+			{
+				name: "predates delivery",
+				ops: []ops.Op{
+					{Type: ops.OpDAGTransition, TargetID: "task-badovr", Timestamp: 1, Payload: complete},
+					done,
+				},
+			},
+			{
+				name: "not verified",
+				ops: []ops.Op{
+					done,
+					{Type: ops.OpDAGTransition, TargetID: "task-badovr", Timestamp: 3, Payload: ops.Payload{
+						IssueID: "task-badovr", To: ops.StatusDone, SkippedValidateGate: true,
+						Rationale: "post-delivery", Base: base, Tip: tip,
+					}},
+				},
+			},
+			{
+				name: "no rationale",
+				ops: []ops.Op{
+					done,
+					{Type: ops.OpDAGTransition, TargetID: "task-badovr", Timestamp: 3, Payload: ops.Payload{
+						IssueID: "task-badovr", To: "verified", SkippedValidateGate: true,
+						Base: base, Tip: tip,
+					}},
+				},
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				res := Evaluate(git, doneInput("task-badovr", base, tip, tc.ops))
+				assert.False(t, res.Promote)
+				assert.Equal(t, KindMissingAssessment, res.Kind)
+			})
+		}
 	})
 }
 

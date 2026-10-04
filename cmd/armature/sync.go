@@ -14,6 +14,7 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/promotion"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +62,13 @@ func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool
 	if loadCtx == nil {
 		loadCtx = context.Background()
 	}
-	snap, err := store.Load(loadCtx)
+	var snap *snapshot.Snapshot
+	var err error
+	if dryRun {
+		snap, err = store.LoadReadOnly(loadCtx)
+	} else {
+		snap, err = store.Load(loadCtx)
+	}
 	if err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}
@@ -155,7 +162,14 @@ func syncFails(rows []output.SyncIssue) bool {
 }
 
 func persistClassifications(ctx *config.Context, git *adapters.Client, items []classifiedLeaf, errWriter io.Writer) error {
-	if len(items) == 0 {
+	needsWrite := false
+	for _, item := range items {
+		if item.Result.AppendCheck || item.Result.Promote {
+			needsWrite = true
+			break
+		}
+	}
+	if !needsWrite {
 		return nil
 	}
 	workerID, logPath, err := resolveWorkerAndLog(ctx)

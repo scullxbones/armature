@@ -33,6 +33,16 @@ func NewStore(opsDir, stateDir string) *Store {
 }
 
 func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
+	return s.load(true)
+}
+
+// LoadReadOnly materializes in memory without writing checkpoint, index, or
+// issue state files. Used by dry-run classification paths.
+func (s *Store) LoadReadOnly(ctx context.Context) (*Snapshot, error) {
+	return s.load(false)
+}
+
+func (s *Store) load(writeStateFiles bool) (*Snapshot, error) {
 	loaded, err := ops.LoadFromDirValidated(s.opsDir)
 	if err != nil {
 		return nil, fmt.Errorf("load ops: %w", err)
@@ -43,19 +53,24 @@ func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 		allOps = []ops.Op{}
 	}
 
-	state, result, err := materialize.Run(s.stateDir, allOps, loaded.PhysicalEOF, materialize.Options{WriteStateFiles: true})
+	state, result, err := materialize.Run(s.stateDir, allOps, loaded.PhysicalEOF, materialize.Options{WriteStateFiles: writeStateFiles})
 	if err != nil {
 		return nil, fmt.Errorf("materialize: %w", err)
-	}
-
-	index, err := materialize.LoadIndex(filepath.Join(s.stateDir, "index.json"))
-	if err != nil {
-		return nil, fmt.Errorf("load index: %w", err)
 	}
 
 	issues := state.Issues
 	if issues == nil {
 		issues = make(map[string]*materialize.Issue)
+	}
+
+	var index materialize.Index
+	if writeStateFiles {
+		index, err = materialize.LoadIndex(filepath.Join(s.stateDir, "index.json"))
+		if err != nil {
+			return nil, fmt.Errorf("load index: %w", err)
+		}
+	} else {
+		index = state.BuildIndex()
 	}
 
 	snap := &Snapshot{
