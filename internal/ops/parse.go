@@ -6,12 +6,16 @@ import (
 )
 
 // ParseLine parses a single JSONL line in positional array format:
-// [op_type, target_id, timestamp, worker_id, payload_object]
+// [op_type, target_id, timestamp, worker_id, payload_object, schema_version?]
 //
 // ParseLine is intentionally permissive about op type values: it accepts any string
 // to support forward-compatibility with op types introduced in later versions of the
 // software. Unknown op types are surfaced as errors when the op is applied via
 // State.ApplyOp, not at parse time.
+//
+// schema_version (index 5) is required for fail-loud compatibility: a version newer
+// than CurrentSchemaVersion is rejected. Records that omit it (legacy 5-element
+// arrays) are treated as LegacySchemaVersion.
 func ParseLine(line []byte) (Op, error) {
 	var raw []json.RawMessage
 	if err := json.Unmarshal(line, &raw); err != nil {
@@ -40,16 +44,35 @@ func ParseLine(line []byte) (Op, error) {
 		return Op{}, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	op.SchemaVersion = LegacySchemaVersion
+	if len(raw) >= 6 {
+		if err := json.Unmarshal(raw[5], &op.SchemaVersion); err != nil {
+			return Op{}, fmt.Errorf("invalid schema_version: %w", err)
+		}
+	}
+	if err := CheckSchemaVersion(op.SchemaVersion); err != nil {
+		return Op{}, err
+	}
+
 	return op, nil
 }
 
-// MarshalOp serializes an Op to positional array JSONL format.
+// MarshalOp serializes an Op to positional array JSONL format, always including
+// schema_version at index 5 (CurrentSchemaVersion when Op.SchemaVersion is 0).
 func MarshalOp(op Op) ([]byte, error) {
 	payload, err := json.Marshal(op.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	arr := []interface{}{op.Type, op.TargetID, op.Timestamp, op.WorkerID, json.RawMessage(payload)}
+	return marshalVersioned(op.Type, op.TargetID, op.Timestamp, op.WorkerID, json.RawMessage(payload), op.SchemaVersion)
+}
+
+func marshalVersioned(opType, targetID string, timestamp int64, workerID string, payload json.RawMessage, schemaVersion int) ([]byte, error) {
+	version := EffectiveSchemaVersion(schemaVersion)
+	if err := CheckSchemaVersion(version); err != nil {
+		return nil, err
+	}
+	arr := []any{opType, targetID, timestamp, workerID, payload, version}
 	return json.Marshal(arr)
 }
