@@ -31,7 +31,7 @@ The Tier A feature spine is closed. `arm ready` is not a dispatch order. A coord
 | 28 | The Harness Compatibility Contract | Next-Ten №08 | not yet decomposed |
 | 29 | Model-tier dispatch policy | LH C8 | not yet decomposed |
 | 30 | README quickstart rewrite | GAP D1 | `TOPTIER-S7`. T1 is blocked by `TOPTIER-S6-T1` |
-| 31 | Shim-retirement policy | LH D3 | not yet decomposed |
+| 31 | Shim-retirement policy | LH D3 | **delivered** (retirement paragraph in `ops-schema-compatibility.md`; known shims deleted; no plugin system). Move to archive on next garden |
 | 32 | The Second Substrate (foreign-repo dogfood) | Next-Ten №06 | not yet decomposed |
 | 33 | Session handoff bundle | LH C10 | not yet decomposed |
 | 34 | Distribution and compatibility maturity | GAP T5 | `TOPTIER-S6`. T1 and T2 are the front-door vertical |

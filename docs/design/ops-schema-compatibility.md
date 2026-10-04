@@ -33,3 +33,7 @@ Scaffolding version (`# scaffolding-version:` in `ops/SCHEMA`) is separate: it v
 3. Keep `CheckSchemaVersion` rejecting anything above the new current.
 4. Add or extend fixtures so prior versions still replay to their goldens.
 5. Bump `ops.ScaffoldingVersion` when `GenerateSchema` text changes so bootstrap republishes `ops/SCHEMA`.
+
+## Shim retirement (backward edge)
+
+A backward-compatibility shim may live for at most one minor release after its replacement lands: `bootstrap` / `doctor --fix` migrate adopters in that window, then the shim is deleted outright in the next minor — no indefinite carve-outs, and no plugin or adapter framework invented to host them. Pre-`v0.1.0` shims (pre-marker Codex/Devin harness ownership, unslotted worker IDs in slotted ops logs, comma-joined scope entries) were deleted under this rule with zero external adopters; the Harness Compatibility Contract (Next-Ten №08) remains the forward seam for future harness format changes and is not a substitute for this deletion policy.

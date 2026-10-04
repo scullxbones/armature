@@ -135,11 +135,10 @@ func LoadFromDirValidated(opsDir string) (LoadResult, error) {
 
 // WorkerOwnsLog reports whether workerID may appear in the named log.
 // The name is `<workerID>.log` or `<workerID>~<slot>.log` (a path is ok).
-// Slotted logs also accept the unslotted worker ID for pre-slot lines.
+// The WorkerID on each line must match the log name exactly, including any slot.
 func WorkerOwnsLog(workerID, logPathOrName string) bool {
 	expected := strings.TrimSuffix(filepath.Base(logPathOrName), ".log")
-	legacy, _, _ := strings.Cut(expected, "~")
-	return workerID == expected || workerID == legacy
+	return workerID == expected
 }
 
 func ExtractOps(items []OpItem) []Op {

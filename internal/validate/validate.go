@@ -922,20 +922,18 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 		hasMatches := len(expandedFiles) > 0
 		blockerNewFiles := collectBlockerNewFiles(issue, allIssues)
 
-		for _, entry := range issue.Scope {
-			for _, path := range strings.Split(entry, ", ") {
-				path = strings.TrimSpace(path)
-				if strings.HasSuffix(path, " (new)") {
-					continue
-				}
-				phantom := !hasMatches || (!isGlobPattern(path) && !slices.Contains(expandedFiles, path))
-				if phantom && !blockerNewFiles[path] {
-					findings = append(findings, Finding{
-						Severity: "info", Rule: "W10",
-						Message:  fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id),
-						CitedIDs: []string{id},
-					})
-				}
+		for _, path := range issue.Scope {
+			path = strings.TrimSpace(path)
+			if path == "" || strings.HasSuffix(path, " (new)") {
+				continue
+			}
+			phantom := !hasMatches || (!isGlobPattern(path) && !slices.Contains(expandedFiles, path))
+			if phantom && !blockerNewFiles[path] {
+				findings = append(findings, Finding{
+					Severity: "info", Rule: "W10",
+					Message:  fmt.Sprintf("phantom scope: %s on %s does not match any file", path, id),
+					CitedIDs: []string{id},
+				})
 			}
 		}
 	}
@@ -962,12 +960,10 @@ func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materia
 			continue
 		}
 
-		for _, entry := range blocker.Scope {
-			for _, path := range strings.Split(entry, ", ") {
-				path = strings.TrimSpace(path)
-				if strings.HasSuffix(path, " (new)") {
-					result[strings.TrimSuffix(path, " (new)")] = true
-				}
+		for _, path := range blocker.Scope {
+			path = strings.TrimSpace(path)
+			if strings.HasSuffix(path, " (new)") {
+				result[strings.TrimSuffix(path, " (new)")] = true
 			}
 		}
 
