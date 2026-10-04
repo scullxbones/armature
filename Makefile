@@ -60,9 +60,12 @@ trace-report:
 context-report: build
 	@./bin/arm context-report --format human
 
+# Package timeout 20m: cmd/armature exceeds go test's default 10m on macos-latest CI.
+TEST_TIMEOUT ?= 20m
+
 test: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
-	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
+	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -timeout $(TEST_TIMEOUT) $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
