@@ -15,13 +15,15 @@ import (
 )
 
 func TestPromoteAncestorSquashAndStack_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
 	t.Run("ancestor merge commit", func(t *testing.T) {
-		dir, git, base, tip := deliveryRepo(t)
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
 		writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
-		tip = head(t, git)
+		tip := head(t, git)
 		gittest.Git(t, dir, "checkout", "main")
 		gittest.Git(t, dir, "merge", "--no-ff", "-m", "merge delivery", "delivery")
-		in := doneInput("task-anc", base, tip, attest(base, tip))
+		in := doneInput("task-anc", base, tip, attest(t, base, tip))
 		res := Evaluate(git, in)
 		require.True(t, res.Promote, res.Kind)
 		assert.Equal(t, KindPromote, res.Kind)
@@ -32,36 +34,39 @@ func TestPromoteAncestorSquashAndStack_REQ_LNGHZN_S11_T2(t *testing.T) {
 	})
 
 	t.Run("squash of one range", func(t *testing.T) {
-		dir, git, base, tip := deliveryRepo(t)
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
 		writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
-		tip = head(t, git)
+		tip := head(t, git)
 		gittest.Git(t, dir, "checkout", "main")
 		gittest.Git(t, dir, "merge", "--squash", "delivery")
 		gittest.Git(t, dir, "commit", "-m", "squash delivery")
-		res := Evaluate(git, doneInput("task-sq", base, tip, attest(base, tip)))
+		res := Evaluate(git, doneInput("task-sq", base, tip, attest(t, base, tip)))
 		require.True(t, res.Promote, res.Kind)
 		assert.Equal(t, KindPromote, res.Kind)
 		assert.NotEmpty(t, res.MatchedCommit)
 	})
 
 	t.Run("stack squash whose blobs contain the range", func(t *testing.T) {
-		dir, git, base, _ := deliveryRepo(t)
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
 		writeCommit(t, dir, "a.txt", "a1\n", "feat: a")
 		writeCommit(t, dir, "b.txt", "b1\n", "feat: b")
 		tip := head(t, git)
 		gittest.Git(t, dir, "checkout", "main")
 		gittest.Git(t, dir, "merge", "--squash", "delivery")
 		gittest.Git(t, dir, "commit", "-m", "squash stack")
-		res := Evaluate(git, doneInput("task-stack", base, tip, attest(base, tip)))
+		res := Evaluate(git, doneInput("task-stack", base, tip, attest(t, base, tip)))
 		require.True(t, res.Promote, res.Kind)
 		assert.Equal(t, KindPromote, res.Kind)
 	})
 }
 
 func TestPromoteRequiresMatchingAssessment_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
 	land := func(t *testing.T) (git *adapters.Client, base, tip string) {
 		t.Helper()
-		dir, git, base, _ := deliveryRepo(t)
+		dir, git, base := deliveryRepo(t)
 		writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
 		tip = head(t, git)
 		gittest.Git(t, dir, "checkout", "main")
@@ -71,12 +76,14 @@ func TestPromoteRequiresMatchingAssessment_REQ_LNGHZN_S11_T2(t *testing.T) {
 	}
 
 	t.Run("matching attestation even when red", func(t *testing.T) {
+		t.Parallel()
 		git, base, tip := land(t)
-		res := Evaluate(git, doneInput("task-att", base, tip, attest(base, tip)))
+		res := Evaluate(git, doneInput("task-att", base, tip, attest(t, base, tip)))
 		require.True(t, res.Promote, res.Kind)
 	})
 
 	t.Run("missing assessment stays done", func(t *testing.T) {
+		t.Parallel()
 		git, base, tip := land(t)
 		res := Evaluate(git, doneInput("task-noatt", base, tip, nil))
 		assert.False(t, res.Promote)
@@ -86,6 +93,7 @@ func TestPromoteRequiresMatchingAssessment_REQ_LNGHZN_S11_T2(t *testing.T) {
 	})
 
 	t.Run("plan-time override-release does not waive", func(t *testing.T) {
+		t.Parallel()
 		git, base, tip := land(t)
 		in := doneInput("task-plan", base, tip, []ops.Op{{
 			Type:     ops.OpDAGTransition,
@@ -103,6 +111,7 @@ func TestPromoteRequiresMatchingAssessment_REQ_LNGHZN_S11_T2(t *testing.T) {
 	})
 
 	t.Run("ordinary decision does not waive", func(t *testing.T) {
+		t.Parallel()
 		git, base, tip := land(t)
 		in := doneInput("task-dec", base, tip, []ops.Op{{
 			Type:     ops.OpDecision,
@@ -119,6 +128,7 @@ func TestPromoteRequiresMatchingAssessment_REQ_LNGHZN_S11_T2(t *testing.T) {
 	})
 
 	t.Run("post-delivery override bound to base and tip", func(t *testing.T) {
+		t.Parallel()
 		git, base, tip := land(t)
 		in := doneInput("task-ovr", base, tip, []ops.Op{{
 			Type:     ops.OpDAGTransition,
@@ -138,47 +148,50 @@ func TestPromoteRequiresMatchingAssessment_REQ_LNGHZN_S11_T2(t *testing.T) {
 }
 
 func TestPartialCherryPickAndEmptyDiffStayDone_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
 	t.Run("partial cherry-pick", func(t *testing.T) {
-		dir, git, base, _ := deliveryRepo(t)
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
 		first := writeCommit(t, dir, "a.txt", "a\n", "feat: a")
 		writeCommit(t, dir, "b.txt", "b\n", "feat: b")
 		tip := head(t, git)
 		gittest.Git(t, dir, "checkout", "main")
 		gittest.Git(t, dir, "cherry-pick", first)
-		res := Evaluate(git, doneInput("task-cherry", base, tip, attest(base, tip)))
+		res := Evaluate(git, doneInput("task-cherry", base, tip, attest(t, base, tip)))
 		assert.False(t, res.Promote)
 		assert.Equal(t, KindNotOnTarget, res.Kind)
 		assert.True(t, res.AppendCheck)
 	})
 
 	t.Run("empty diff", func(t *testing.T) {
-		dir, git, _, _ := deliveryRepo(t)
+		t.Parallel()
+		_, git, _ := deliveryRepo(t)
 		sha := head(t, git)
-		_ = dir
-		res := Evaluate(git, doneInput("task-empty", sha, sha, attest(sha, sha)))
+		res := Evaluate(git, doneInput("task-empty", sha, sha, attest(t, sha, sha)))
 		assert.False(t, res.Promote)
 		assert.Equal(t, KindEmptyDiff, res.Kind)
 	})
 
 	t.Run("whitespace-only squash is not a patch-id-only match", func(t *testing.T) {
-		dir, git, base, _ := deliveryRepo(t)
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
 		writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
 		tip := head(t, git)
 		gittest.Git(t, dir, "checkout", "main")
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "feat.txt"), []byte("one \n"), 0o644))
 		gittest.Git(t, dir, "add", "feat.txt")
 		gittest.Git(t, dir, "commit", "-m", "whitespace only")
-		res := Evaluate(git, doneInput("task-ws", base, tip, attest(base, tip)))
+		res := Evaluate(git, doneInput("task-ws", base, tip, attest(t, base, tip)))
 		assert.False(t, res.Promote)
 		assert.Equal(t, KindNotOnTarget, res.Kind)
 	})
 }
 
 func TestEvaluateDedupsPromotionCheck(t *testing.T) {
-	dir, git, base, _ := deliveryRepo(t)
+	t.Parallel()
+	dir, git, base := deliveryRepo(t)
 	writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
 	tip := head(t, git)
-	_ = dir
 	in := doneInput("task-dedup", base, tip, nil)
 	first := Evaluate(git, in)
 	require.Equal(t, KindNotOnTarget, first.Kind)
@@ -193,7 +206,7 @@ func TestEvaluateDedupsPromotionCheck(t *testing.T) {
 	assert.False(t, second.AppendCheck)
 }
 
-func deliveryRepo(t *testing.T) (dir string, git *adapters.Client, base, tip string) {
+func deliveryRepo(t *testing.T) (dir string, git *adapters.Client, base string) {
 	t.Helper()
 	dir = gittest.InitRepo(t)
 	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
@@ -201,7 +214,7 @@ func deliveryRepo(t *testing.T) (dir string, git *adapters.Client, base, tip str
 	git = adapters.New(dir)
 	base = head(t, git)
 	gittest.Git(t, dir, "checkout", "-b", "delivery")
-	return dir, git, base, base
+	return dir, git, base
 }
 
 func writeCommit(t *testing.T, dir, rel, content, msg string) string {
@@ -237,12 +250,14 @@ func doneInput(id, base, tip string, extra []ops.Op) Input {
 	return Input{Issue: issue, PriorOps: opsCopy, Integration: "main"}
 }
 
-func attest(base, tip string) []ops.Op {
-	body, _ := json.Marshal(map[string]string{
+func attest(t *testing.T, base, tip string) []ops.Op {
+	t.Helper()
+	body, err := json.Marshal(map[string]string{
 		"base_sha": base,
 		"head_sha": tip,
 		"rating":   "red",
 	})
+	require.NoError(t, err)
 	return []ops.Op{{
 		Type:     ops.OpAssessmentAttested,
 		TargetID: "ignored",
