@@ -518,7 +518,7 @@ func (s *State) promoteParentToInProgress(parentID string) {
 	}
 }
 
-func rollupSatisfied(status string) bool {
+func mergedOrCancelled(status string) bool {
 	return status == ops.StatusMerged || status == ops.StatusCancelled
 }
 
@@ -566,13 +566,13 @@ func (s *State) RunRollup() {
 }
 
 func skipRollupContainer(issue *Issue) bool {
-	return issue.Type == "task" || rollupSatisfied(issue.Status) || len(issue.Children) == 0
+	return issue.Type == "task" || mergedOrCancelled(issue.Status) || len(issue.Children) == 0
 }
 
 func rollupChildProgress(s *State, issue *Issue) (unresolvedCount int, hasMerged bool) {
 	for _, childID := range issue.Children {
 		child, ok := s.Issues[childID]
-		if !ok || !rollupSatisfied(child.Status) {
+		if !ok || !mergedOrCancelled(child.Status) {
 			unresolvedCount++
 			continue
 		}
