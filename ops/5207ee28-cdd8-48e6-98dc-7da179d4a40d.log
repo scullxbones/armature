@@ -5623,3 +5623,4 @@
 ["link","CLAIMORD-W20",1791125431,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"TOPTIER-S15-T2","rel":"blocked_by"}]
 ["note","CLAIMORD-W20",1791125432,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"v0.1.0 prep: blocked_by TOPTIER-S15-T2 so README docs train (S7/S8/S15) stays ordered ahead of W20 after S15-T2 is dropped from TOPTIER-S6-T3.blocked_by (UNLINK-1 W20↔S15-T2).","note_id":"note-1791125432717059841"}]
 ["note","TOPTIER-S6-T3",1791125432,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"v0.1.0 prep: CLAIMORD-W20 now also blocked_by TOPTIER-S15-T2 (README serial). Ready for Brian to drop S15-T2 from this cut task without introducing W1 vs W20/S7/S8/S15.","note_id":"note-1791125432987981011"}]
+["heartbeat","LNGHZN-S11-T1",1791125521,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
