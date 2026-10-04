@@ -61,7 +61,7 @@ flowchart TD
 ### Prerequisites
 
 - **Git** (v2.25+ for sparse checkout support)
-- **Go** (for building from source)
+- **Go** 1.26+ (for `go install` or building from source)
 
 ### Windows is not supported
 
@@ -73,7 +73,25 @@ Armature runs on **Linux and macOS only**. Windows is not supported. Gaps that r
 
 `docs/design/architecture.md` still lists Windows in a packaging matrix; that row is stale for support claims.
 
-### Building from Source
+### Released binaries
+
+Download the `arm` archive for your OS/arch from
+[GitHub Releases](https://github.com/scullxbones/armature/releases),
+verify the checksum, unpack it, and place `arm` on your `PATH` (for example
+`~/.local/bin/arm`).
+
+### go install
+
+```bash
+GOBIN="${GOBIN:-$HOME/.local/bin}" go install github.com/scullxbones/armature/cmd/armature@latest
+mv "$GOBIN/armature" "$GOBIN/arm"
+```
+
+`go install` names the binary after the package directory (`armature`); rename
+it to `arm` so docs and skills match. Pin a release instead of `@latest` when
+you need a fixed version (for example `@v0.1.0` after that tag exists).
+
+### Building from source
 
 ```bash
 git clone https://github.com/scullxbones/armature.git
@@ -81,83 +99,90 @@ cd armature
 make install
 ```
 
-This will build the `arm` binary and install it to `~/.local/bin/arm`. Ensure `~/.local/bin` is in your `PATH`.
+This builds `arm` and installs it to `~/.local/bin/arm`. Ensure `~/.local/bin`
+is in your `PATH`.
 
 ---
 
 ## 5-Minute Quickstart
 
-### 1. Initialize a Repository
+Run these commands from a clean git repository that already has a committed
+requirements doc at `docs/requirements.md`. `scripts/quickstart_check.sh`
+extracts every `bash` fence in this section and runs them verbatim in a
+scratch repo in CI.
 
-From your project root, run:
-
-```bash
-arm bootstrap
-```
-
-Armature will create an orphan `_armature` branch for coordination data and an ops worktree at `.armature/`, enabling safe separation of code and coordination state.
-
-### 2. Register Worker (Once Per Clone)
-
-Initialize the worker coordination system. Run this once per clone before decomposing tasks:
-
-```bash
-arm worker-init
-```
-
-This registers your worker identity and sets up log coordination.
-
-### 3. Install Skills
-
-Deploy workflow skills for all agent roles:
+`arm bootstrap` creates the orphan `_armature` branch and an ops worktree at
+`.armature/`. Coordination state (ops logs, materialized issues, config) lives
+at the root of that worktree. Older clones used a dual layout (`.arm/` worktree
+containing an inner `.armature/` state dir); bootstrap migrates those to the
+single `.armature/` worktree. Bootstrap also deploys bundled skills — there is
+no separate skill-install step.
 
 ```bash
 arm bootstrap
-```
+arm worker-init --check || arm worker-init
 
-(This step is already included in step 1 if you ran `arm bootstrap` — the bootstrap command both initializes the repository and deploys skills.)
-
-### 4. Add Requirements
-
-Register source documents (PRDs, architecture docs) that define your project's work:
-
-```bash
-arm sources add --url docs/armature-prd.md --type filesystem
+arm sources add --url docs/requirements.md --type filesystem
 arm sources sync
-arm sources verify   # note the UUID shown — you'll need it in the next step
-```
+SOURCE_UUID=$(arm sources verify | awk '/OK/{print $1; exit}')
+test -n "$SOURCE_UUID"
 
-### 5. Decompose into Tasks (via AI)
+# In production, feed context.json to an agent to produce plan.json.
+# The minimal plan below is what CI verifies so the path stays runnable.
+arm dag context --sources "$SOURCE_UUID" > context.json
+cat > plan.json <<EOF
+{
+  "version": 1,
+  "title": "Quickstart demo plan",
+  "issues": [
+    {
+      "id": "DEMO-S1",
+      "title": "Demo story",
+      "type": "story",
+      "scope": "docs/requirements.md",
+      "priority": "high",
+      "dod": "Greeting shipped",
+      "parent": "",
+      "blocked_by": [],
+      "acceptance": ["greeting done"],
+      "source": "$SOURCE_UUID"
+    },
+    {
+      "id": "DEMO-S1-T1",
+      "title": "Write greeting",
+      "type": "task",
+      "scope": "hello.txt",
+      "priority": "high",
+      "dod": "hello.txt contains Hello",
+      "parent": "DEMO-S1",
+      "blocked_by": [],
+      "acceptance": ["hello.txt exists"],
+      "source": "$SOURCE_UUID"
+    }
+  ]
+}
+EOF
 
-Generate a decomposition context for your AI agent to break down requirements into a task DAG:
-
-```bash
-arm dag context --sources SOURCE-UUID > context.json
-# Feed context.json to your AI agent to produce plan.json
 arm dag apply --plan plan.json
+arm dag transition --issue DEMO-S1
+arm dag transition --issue DEMO-S1-T1
+
+arm ready
+arm claim DEMO-S1-T1 --worktree
+arm render-context DEMO-S1-T1 --format agent > task-context.txt
+
+# Implement in the claim worktree, then mark done.
+# --force is required because the done-branch check reads the primary
+# checkout (often still main) even when the claim worktree is on task/*.
+cd .worktrees/DEMO-S1-T1
+printf 'Hello\n' > hello.txt
+git add hello.txt
+git commit -m "feat(DEMO-S1-T1): add greeting"
+arm transition DEMO-S1-T1 --to done --outcome "Wrote hello.txt greeting for the quickstart demo" --force
 ```
 
-### 6. Dispatch Work
-
-Find ready tasks and dispatch a worker agent for each one:
-
-```bash
-arm ready                                      # list unblocked tasks
-arm claim ISSUE-ID --worktree                  # claim; auto-provisions .worktrees/ISSUE-ID (or pass a path)
-arm render-context ISSUE-ID --format agent      # get task context for the agent
-# dispatch agent with render-context output
-arm transition ISSUE-ID --to done --outcome "what was done"
-```
-
-### 7. Complete and Verify
-
-Once you've finished the code changes, transition the task to `done`:
-
-```bash
-arm transition ISSUE-ID --to done --outcome "Brief summary of work"
-```
-
-Armature will automatically detect when your code is merged into the main branch to promote the task to `merged`.
+After the change lands on `main`, Armature promotes the task from `done` to
+`merged` (self-reported completion and confirmed-on-main stay distinct).
 
 ## Documentation
 
