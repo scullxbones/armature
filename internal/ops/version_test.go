@@ -20,7 +20,12 @@ func TestOpsVersionRejectsNewer_REQ_TOPTIER_S6_T2(t *testing.T) {
 	require.Error(t, err, "older binary must fail loudly on newer ops")
 	assert.Contains(t, err.Error(), "newer than supported")
 	assert.Contains(t, err.Error(), fmt.Sprintf("%d", newer))
+	var newerErr *NewerSchemaVersionError
+	require.ErrorAs(t, err, &newerErr)
+	assert.Equal(t, newer, newerErr.Seen)
+	assert.True(t, IsNewerSchemaVersion(err))
 	assert.Error(t, CheckSchemaVersion(newer))
+	assert.True(t, IsNewerSchemaVersion(CheckSchemaVersion(newer)))
 
 	legacy := []byte(`["create","LEGACY-1",1000,"worker-a",{"title":"legacy","type":"task"}]`)
 	op, err := ParseLine(legacy)
