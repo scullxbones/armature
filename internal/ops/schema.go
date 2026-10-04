@@ -64,7 +64,7 @@ func SchemaDocumentedOpTypes() []string {
 // strictly newer, so an older clone run after an upgrade cannot commit a
 // downgrade and set two clones fighting over the shared _armature branch
 // (AGENTS.md I3).
-const ScaffoldingVersion = 3
+const ScaffoldingVersion = 4
 
 const scaffoldingVersionPrefix = "# scaffolding-version: "
 
@@ -94,7 +94,7 @@ func GenerateSchema() string {
 	b.WriteString("# Trellis Op Log Schema v1\n")
 	fmt.Fprintf(&b, "%s%d\n", scaffoldingVersionPrefix, ScaffoldingVersion)
 	b.WriteString("#\n")
-	b.WriteString("# Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]\n")
+	b.WriteString("# Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload, schema_version]\n")
 	b.WriteString("#\n")
 	b.WriteString("# Position 0: op_type (string) - one of: ")
 	b.WriteString(strings.Join(SchemaDocumentedOpTypes(), ", "))
@@ -103,9 +103,12 @@ func GenerateSchema() string {
 	b.WriteString("# Position 2: timestamp (integer) - Unix epoch seconds\n")
 	b.WriteString("# Position 3: worker_id (string) - UUID of the worker emitting this op\n")
 	b.WriteString("# Position 4: payload (object) - op-type-specific fields (see below)\n")
+	fmt.Fprintf(&b, "# Position 5: schema_version (integer) - ops schema version; writers emit %d\n", CurrentSchemaVersion)
 	b.WriteString("#\n")
-	b.WriteString("# Forward compatibility: new fields may be appended to the array.\n")
-	b.WriteString("# Readers MUST ignore extra positions. Missing positions get defaults.\n")
+	b.WriteString("# Forward compatibility: new fields may be appended to the array after schema_version.\n")
+	b.WriteString("# Readers MUST ignore unknown trailing positions. Missing schema_version defaults to 1.\n")
+	b.WriteString("# Readers MUST reject schema_version greater than the version they support (fail loud).\n")
+	b.WriteString("# See docs/design/ops-schema-compatibility.md.\n")
 	b.WriteString("#\n")
 	b.WriteString("# Payload fields by op type:\n")
 
