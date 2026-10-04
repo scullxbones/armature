@@ -74,11 +74,14 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `last_heartbeat` | int64 | state.go:43 | heartbeat op | **kept-evidence** | Last heartbeat timestamp. Refreshed by heartbeat command to prevent staleness. |
 | `last_claiming_worker_activity` | int64 | state.go:51 | claim, heartbeat, transition ops (only when op.WorkerID == ClaimedBy) | **kept-evidence** | Liveness signal scoped to the claiming worker only, unlike `updated` (bumped by every op regardless of author). Used by `doctor --fix`'s `claimExpired` to avoid a third party's unrelated note/link op masking a crashed worker's stale claim. |
 | `worktree_path` | string | state.go:52 | claim op (auto-provisioned worktree path) | **kept-evidence** | Absolute path of the worktree provisioned by `arm claim --worktree`. Set by claim command; lets recovery tooling locate the worktree deterministically. Legacy claim ops without the field replay cleanly (omitempty). |
-| `branch` | string | state.go:53 | transition op (branch field) | **kept-evidence** | Feature branch name. Set by transition on completion. Used by merged flow. |
+| `branch` | string | state.go:53 | transition op (branch field) | **kept-evidence** | Feature branch name. Set by transition on completion / delivery snapshot. Used by merged and ADR 0022 promotion. |
 | `pr` | string | state.go:54 | transition op (pr field), merged op | **kept-evidence** | PR number or URL. Set by transition or merged command. |
-| `assigned_worker` | string | state.go:55 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
-| `preferred_model` | string | state.go:56 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
-| `updated` | int64 | state.go:57 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
+| `base` | string | state.go:55 | transition op (delivery base) | **kept-evidence** | Delivery base SHA recorded at done (ADR 0022). Set by bound-worktree done or `arm delivery record` / `transition --base/--tip`. |
+| `tip` | string | state.go:56 | transition op (delivery tip) | **kept-evidence** | Delivery tip SHA recorded at done (ADR 0022). Written to `refs/armature/deliveries/<id>`. |
+| `integration_branch` | string | state.go:57 | transition op (delivery integration branch) | **kept-evidence** | Integration branch the delivery must land on. Defaults to config `integration_branch` or `main`. |
+| `assigned_worker` | string | state.go:58 | assign op (assigned_to) | **kept-evidence** | Worker assigned for work (distinct from claim). Set by assign command. |
+| `preferred_model` | string | state.go:59 | (no writer found) | **parked** | Dead field: no CLI flag sets `Payload.PreferredModel` anywhere — `create.go` registers no `--preferred-model` flag (only --title through --source), and neither does `decompose-apply`. `applyCreate` (internal/materialize/engine.go) only copies through whatever is already in the payload, which is always empty. Same situation as `assignee` (row above). Re-entry criterion: a writer (flag or decompose plan field) is added and exercised by a test, or the field is removed from state.go. |
+| `updated` | int64 | state.go:60 | every op | **kept-evidence** | Last modified timestamp (epoch ms). Set to op timestamp for every state change. |
 
 ## Operation Types (OpTypes)
 
@@ -89,7 +92,7 @@ The following op types are defined in internal/ops/types.go and materialized by 
 | `create` | internal/ops/types.go:8 | engine.go | **kept-evidence** | Creates new issue. Emits create payload with type, title, parent, scope, etc. |
 | `claim` | internal/ops/types.go:9 | engine.go | **kept-evidence** | Assigns issue to worker with TTL. Sets claimed_by, claimed_at, claim_ttl. |
 | `heartbeat` | internal/ops/types.go:10 | engine.go | **kept-evidence** | Refreshes claim TTL. Updates last_heartbeat timestamp. |
-| `transition` | internal/ops/types.go:11 | engine.go | **kept-evidence** | Changes issue status. Payload: to (status), outcome, branch, pr. |
+| `transition` | internal/ops/types.go:11 | engine.go | **kept-evidence** | Changes issue status. Payload: to (status), outcome, branch, pr, base, tip, integration_branch. |
 | `note` | internal/ops/types.go:12 | engine.go | **kept-evidence** | Adds worker note. Payload: msg, note_id for deletion. |
 | `note-delete` | internal/ops/types.go:13 | engine.go | **kept-evidence** | Soft-deletes note by ID. Marks note.deleted=true. |
 | `link` | internal/ops/types.go:14 | engine.go | **kept-evidence** | Adds dependency. Payload: dep (target), rel (relationship type). Only rel=blocked_by is a supported input; invalid `--rel` values are rejected at the CLI layer (link.go's RunE) before the op is appended to the log, not at replay/materialize time. `blocks` is derived automatically as the inverse and is never a valid input. For backward compatibility, engine.go's `applyLink` silently no-ops on any non-blocked_by rel it encounters during replay, so historical op-log entries predating this validation still replay cleanly (see `TestApplyLinkOp_LegacyNonBlockedByRelIsNoOp`). |
@@ -147,6 +150,8 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `sync` | main.go, sync.go | Auto-transition closed PRs | **kept-evidence** | CI integration. Scans git for merged branches and transitions issues. |
 | `push-ops` | main.go, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Rebases onto origin/_armature, then runs the same fail-closed `arm validate --ci` / `make validate-graph` contract, then pushes. `--override-validate --reason` is a TTY-recorded escape hatch and is never green. |
 | `merged` | main.go, merged.go | Manually transition to merged | **kept-evidence** | Explicit merge record. Sets PR and branch fields. |
+| `delivery` | main.go, delivery.go | Delivery snapshot group | **kept-evidence** | Container for manual delivery recording (ADR 0022). Bound-worktree done writes the snapshot automatically. |
+| `delivery record` | delivery.go | Record delivery range and mark done | **kept-evidence** | Writes `refs/armature/deliveries/<id>` and a done transition with base/tip/integration_branch when no bound worktree can snapshot. |
 | `materialize` | main.go, materialize.go | Regenerate state from ops log | **kept-evidence** | Incremental via LastCommitSHA when ops worktree is git; cold walk otherwise. |
 | `import` | main.go, import.go | Import issues from external source | **kept-evidence** | Onboarding tool. Creates issues with source links. |
 
@@ -252,6 +257,8 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
+| `--base` | transition, delivery record | string | Delivery base SHA for the ADR 0022 snapshot (distinct from review prepare `--base`) | **kept-evidence** |
+| `--tip` | transition, delivery record | string | Delivery tip SHA for the ADR 0022 snapshot | **kept-evidence** |
 | `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
 | `--topic` | decision | string | Decision topic | **kept-evidence** |
 | `--choice` | decision | string | Chosen option | **kept-evidence** |
@@ -336,7 +343,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--source` | import | string | Source ID to link imported items to | **kept-evidence** |
 | `--assessment` | review record, review validate | string | Assessment file or '-' for stdin | **kept-evidence** |
 | `--bundle` | review record, review validate | string | Review bundle file path (required for review validate; optional for review record) | **kept-evidence** |
-| `--base` | review prepare | string | Base revision for diff | **kept-evidence** |
+| `--base` | review prepare | string | Base revision for review diff (also owned by transition / delivery record for delivery snapshots; see Workflow Flags) | **kept-evidence** |
 | `--head` | review prepare | string | Head revision for diff | **kept-evidence** |
 | `--clear-context-files` | amend | bool | Remove all context_files entries | **kept-evidence** |
 
@@ -428,6 +435,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `dag summary` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `dag transition` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `decision` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `delivery record` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Group `delivery` is not a mode. |
 | `doctor` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Sole Protocol Output. `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
@@ -478,11 +486,11 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - **Issue Types**: 5 (all kept-evidence)
 - **Statuses**: 7 (all kept-evidence)
 - **Confidence States**: 3 (all kept-evidence)
-- **Issue Fields**: 37 (33 kept-evidence, 2 kept-justified, 2 parked)
+- **Issue Fields**: 40 (36 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 19 (all kept-evidence)
-- **CLI Commands**: 52 (all kept-evidence, 4 groups)
+- **CLI Commands**: 54 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
-- **Command output modes**: 63 (58 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
+- **Command output modes**: 64 (59 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 
