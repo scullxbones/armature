@@ -49,6 +49,12 @@ jobs:
       - name: Test
         run: make test-ci
 
+      # go test -json output is huge; GHA often truncates it. On failure, re-run
+      # the usual flake package with plain -v so the failing test name is visible.
+      - name: Diagnose cmd/armature failures
+        if: failure() && runner.os != 'Windows'
+        run: go test -count=1 -timeout 20m -v ./cmd/armature/ 2>&1 | tail -n 200
+
   check:
     # Skip the heavy ubuntu gate when release.yml reuses this workflow; tag
     # releases only need the OS matrix (test-os) before goreleaser.

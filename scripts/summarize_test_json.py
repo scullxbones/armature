@@ -72,6 +72,12 @@ def main() -> int:
         for pkg, test in failures:
             print(f"  - {pkg}::{test}" if pkg else f"  - {test}")
 
+    failed_pkgs = [pkg for pkg, v in packages.items() if v["fail"]]
+    if failed_pkgs and not failures:
+        print("Failed packages (no per-test fail events captured):")
+        for pkg in failed_pkgs:
+            print(f"  - {pkg}")
+
     print(f"Summary: {passed} packages passed, {failed} packages failed")
     return 1 if failed or failures else 0
 
