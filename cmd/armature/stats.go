@@ -119,10 +119,10 @@ func printCostHuman(cmd *cobra.Command, report stats.Report) {
 }
 
 func snapshotIssueInfo(snap *snapshot.Snapshot) map[string]stats.IssueInfo {
-	out := make(map[string]stats.IssueInfo, len(snap.Issues))
 	if snap == nil {
-		return out
+		return map[string]stats.IssueInfo{}
 	}
+	out := make(map[string]stats.IssueInfo, len(snap.Issues))
 	for id, issue := range snap.Issues {
 		if issue == nil {
 			continue

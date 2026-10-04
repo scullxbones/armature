@@ -378,9 +378,14 @@ func prepareTestDeliveryRange(repo, issueID string) (base, tip string, err error
 	if branch == "" {
 		return base, tip, nil
 	}
-	current, _ := git.CurrentBranch()
+	current, err := git.CurrentBranch()
+	if err != nil {
+		return "", "", err
+	}
 	if current != branch {
-		_ = git.UpdateRef("refs/heads/"+branch, tip)
+		if err := git.UpdateRef("refs/heads/"+branch, tip); err != nil {
+			return "", "", err
+		}
 	}
 	return base, tip, nil
 }
