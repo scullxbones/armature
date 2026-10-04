@@ -5631,3 +5631,4 @@
 ["unlink","TOPTIER-S6-T3",1791125773,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"dep":"TOPTIER-S15-T2","rel":"blocked_by"}]
 ["heartbeat","TOPTIER-S6-T1",1791126080,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
 ["heartbeat","TOPTIER-S6-T1",1791126159,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
+["amend","TOPTIER-S6-T1",1791126549,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":[".github/workflows/ci.yml","Makefile","scripts/summarize_test_json.py",".github/workflows/release.yml","cmd/armature/claim_test.go","internal/context/context_test.go","internal/worktree/inventory_test.go"]}]
