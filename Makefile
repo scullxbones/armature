@@ -1,11 +1,20 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
 
 GO ?= go
 PYTHON ?= python3
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS ?= -X main.Version=$(VERSION)
 INSTALL_DIR ?= $(HOME)/.local/bin
-UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-/tmp/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$')
+# Go appends .exe on windows even for -o bin/arm; keep ARM_BIN pointing at the real file.
+GOOS_NATIVE := $(shell $(GO) env GOOS)
+ifeq ($(GOOS_NATIVE),windows)
+ARM_EXE := .exe
+else
+ARM_EXE :=
+endif
+ARM_BIN := $(CURDIR)/bin/arm$(ARM_EXE)
+# Honor GOCACHE; otherwise use $$TMPDIR (set on Windows Git Bash) before /tmp.
+UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$')
 
 .DEFAULT_GOAL := help
 
@@ -15,6 +24,7 @@ help:
 	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
+	@echo "  make test-ci             - OS-matrix test entry: full make test on unix; go test -c on windows"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
@@ -50,25 +60,45 @@ trace-report:
 context-report: build
 	@./bin/arm context-report --format human
 
+# Package timeout 20m: cmd/armature exceeds go test's default 10m on macos-latest CI.
+TEST_TIMEOUT ?= 20m
+
 test: build
-	@tmp=$$(mktemp); \
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -json -count=1 $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
-	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; \
+	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
+	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -timeout $(TEST_TIMEOUT) $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
+	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
+	if [ $$status -ne 0 ]; then exit $$status; fi; \
+	exit $$summary
+
+# OS-matrix entry point (TOPTIER-S6-T1). Windows is an unsupported runtime
+# (README); compile every unit package's tests so shipped windows binaries stay
+# compile-checked without requiring the full POSIX-assuming suite to pass.
+test-ci: build
+ifeq ($(GOOS_NATIVE),windows)
+	@status=0; \
+	for pkg in $(UNIT_PACKAGES); do \
+		echo "go test -c $$pkg"; \
+		$(GO) test -c -o NUL "$$pkg" || status=1; \
+	done; \
 	exit $$status
+else
+	@$(MAKE) test
+endif
 
 test-skill-transcript: build
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/skilltranscript/...
+	ARM_BIN=$(ARM_BIN) $(GO) test -v -count=1 ./internal/skilltranscript/...
 
 test-e2eharness: build
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -v -count=1 ./internal/e2e/harness/...
+	ARM_BIN=$(ARM_BIN) $(GO) test -v -count=1 ./internal/e2e/harness/...
 
 coverage: build
-	@tmp=$$(mktemp); \
-	ARM_BIN=$(CURDIR)/bin/arm $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
-	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; \
+	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
+	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
+	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
-	exit $$status
+	if [ $$status -ne 0 ]; then exit $$status; fi; \
+	if [ $$summary -ne 0 ]; then exit $$summary; fi
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
@@ -114,7 +144,7 @@ mutate:
 
 embed-examples: build
 	@$(PYTHON) -m unittest scripts/test_embed_examples.py
-	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/embed_examples.py check
+	@ARM_BIN=$(ARM_BIN) $(PYTHON) scripts/embed_examples.py check
 
 validate-skills: skill-lint embed-examples
 	@if grep -rn "make install" internal/skillsembed/skills/*/SKILL.md .agents/skills/*/SKILL.md 2>/dev/null; then \
@@ -127,7 +157,7 @@ validate-doc-examples:
 	@go run ./cmd/armature validate doc-examples --repo .
 
 skill-lint: build
-	@ARM_BIN=$(CURDIR)/bin/arm $(PYTHON) scripts/skill_lint.py .
+	@ARM_BIN=$(ARM_BIN) $(PYTHON) scripts/skill_lint.py .
 
 census-drift-check:
 	@scripts/census-drift-check.sh .
@@ -156,7 +186,7 @@ clean:
 
 build:
 	mkdir -p bin
-	GOFLAGS=-buildvcs=false CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o bin/arm ./cmd/armature
+	GOFLAGS=-buildvcs=false CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o bin/arm$(ARM_EXE) ./cmd/armature
 
 crosscompile:
 	@for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
@@ -168,9 +198,9 @@ crosscompile:
 
 install: build
 	mkdir -p $(INSTALL_DIR)
-	cp bin/arm $(INSTALL_DIR)/arm
-	chmod +x $(INSTALL_DIR)/arm
-	@echo "Installed arm to $(INSTALL_DIR)/arm"
+	cp $(ARM_BIN) $(INSTALL_DIR)/arm$(ARM_EXE)
+	chmod +x $(INSTALL_DIR)/arm$(ARM_EXE)
+	@echo "Installed arm to $(INSTALL_DIR)/arm$(ARM_EXE)"
 	@echo "Ensure $(INSTALL_DIR) is on your PATH"
 
 deploy-skills:

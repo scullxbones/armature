@@ -5,9 +5,72 @@ on:
     branches:
       - main
   pull_request:
+  # release.yml calls this workflow so tag releases wait on the OS matrix.
+  # github.event_name in a called workflow is the caller's event (push on
+  # tags), not workflow_call — skip non-matrix jobs via this input instead.
+  workflow_call:
+    inputs:
+      os-matrix-only:
+        description: >
+          When true, run only the OS test/build matrix. Tag releases pass this
+          so check, validate-graph, and e2eharness do not block publishing.
+        type: boolean
+        required: false
+        default: false
 
 jobs:
+  # T5.1 / TOPTIER-S6-T1: exercise make test + make build on every shipped OS.
+  # Lint, coverage, and mutation stay in the ubuntu-only `check` job below.
+  test-os:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make --no-progress -y
+
+      - name: Prefer python launcher on Windows
+        if: runner.os == 'Windows'
+        run: echo "PYTHON=python" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: make build
+
+      # Full make test on ubuntu/macos; windows uses make test-ci (go test -c)
+      # because the product runtime is Linux/macOS-only (see README).
+      - name: Test
+        run: make test-ci
+
+      # go test -json output is huge; GHA often truncates it. On failure, re-run
+      # cmd/armature and keep FAIL lines (tail alone hid the timeout).
+      - name: Diagnose cmd/armature failures
+        if: failure() && runner.os != 'Windows'
+        run: |
+          go test -count=1 -timeout 25m -v ./cmd/armature/ 2>&1 | tee /tmp/cmd-armature.log | rg -n 'FAIL|panic|timeout|PASS.*cmd/armature|ok  	github.com/scullxbones/armature/cmd/armature' || true
+          tail -n 80 /tmp/cmd-armature.log
+
   check:
+    # Skip the heavy ubuntu gate when release.yml reuses this workflow; tag
+    # releases only need the OS matrix (test-os) before goreleaser.
+    if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -55,6 +118,7 @@ jobs:
   # automated path for make validate-graph; it materializes the ops branch
   # because a PR checkout has no .armature worktree.
   validate-graph:
+    if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -74,6 +138,7 @@ jobs:
         run: make validate-graph
 
   e2eharness:
+    if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

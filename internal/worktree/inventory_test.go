@@ -89,7 +89,8 @@ func TestListManagedUsesCanonicalRootAndMarkerIdentity(t *testing.T) {
 	items, err := ListManaged(repo)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	assert.Equal(t, managedPath, items[0].Path)
+	// git porcelain on macOS may spell /var as /private/var; compare resolved forms.
+	assert.Equal(t, NormalizePath(managedPath), NormalizePath(items[0].Path))
 	assert.Equal(t, "team/task-01", items[0].Binding)
 
 	_, err = ListManaged(filepath.Join(t.TempDir(), "not-a-repo"))
