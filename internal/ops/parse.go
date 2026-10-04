@@ -65,11 +65,14 @@ func MarshalOp(op Op) ([]byte, error) {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	version := EffectiveSchemaVersion(op.SchemaVersion)
+	return marshalVersioned(op.Type, op.TargetID, op.Timestamp, op.WorkerID, json.RawMessage(payload), op.SchemaVersion)
+}
+
+func marshalVersioned(opType, targetID string, timestamp int64, workerID string, payload json.RawMessage, schemaVersion int) ([]byte, error) {
+	version := EffectiveSchemaVersion(schemaVersion)
 	if err := CheckSchemaVersion(version); err != nil {
 		return nil, err
 	}
-
-	arr := []interface{}{op.Type, op.TargetID, op.Timestamp, op.WorkerID, json.RawMessage(payload), version}
+	arr := []any{opType, targetID, timestamp, workerID, payload, version}
 	return json.Marshal(arr)
 }
