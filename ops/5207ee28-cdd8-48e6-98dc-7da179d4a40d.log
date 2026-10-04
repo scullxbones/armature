@@ -5659,3 +5659,4 @@
 ["transition","TOPTIER-S6-T1",1791130424,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"open"}]
 ["transition","TOPTIER-S6-T1",1791130427,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["note","TOPTIER-S6-T1",1791130446,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Serial claim: scope overlap with LNGHZN-S11-T1 (same worker, dismissed)"}]
+["claim","TOPTIER-S6-T1",1791130446,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":90,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-S6-T1","claim_token":"93d5a00f6e943a72d261a7052573276a"}]
