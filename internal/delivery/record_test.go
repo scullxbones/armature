@@ -139,6 +139,14 @@ func TestValidateRejectsUnknownIssueWithoutProvenance_REQ_LNGHZN_S11_T1(t *testi
 
 	_, resolveErr := git.ResolveRevision(RefName("does-not-exist"))
 	require.Error(t, resolveErr, "Validate must not write a delivery ref")
+
+	_, bareEpicErr := Validate(git, Request{
+		IssueID:   "epic-bare",
+		IssueType: "epic",
+		Base:      base,
+		Tip:       tip,
+	})
+	require.NoError(t, bareEpicErr, "known epic type may record without a derived branch name")
 }
 
 func TestValidateRejectsUnreadableBoundWorktreeHEAD_REQ_LNGHZN_S11_T1(t *testing.T) {
