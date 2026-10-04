@@ -88,20 +88,24 @@ func LocateOps(in LocateInput) ([]LocatedOp, error) {
 		return nil, fmt.Errorf("LocateOps: ops worktree is required")
 	}
 	if !hasGitDir(in.OpsWorktree) {
-		located, err := loadOpsFromWorktreeFiles(in.OpsWorktree, prefixes(in))
-		if err != nil {
-			return nil, err
-		}
-		for i := range located {
-			located[i].Published = true
-		}
-		SortLocated(located)
-		return located, nil
+		return locateAllPublishedFromWorktreeFiles(in)
 	}
 	gc := adapters.New(in.OpsWorktree)
 	located, err := locateByCommitWalk(gc, in)
 	if err != nil {
 		return nil, err
+	}
+	SortLocated(located)
+	return located, nil
+}
+
+func locateAllPublishedFromWorktreeFiles(in LocateInput) ([]LocatedOp, error) {
+	located, err := loadOpsFromWorktreeFiles(in.OpsWorktree, prefixes(in))
+	if err != nil {
+		return nil, err
+	}
+	for i := range located {
+		located[i].Published = true
 	}
 	SortLocated(located)
 	return located, nil
