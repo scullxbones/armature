@@ -437,7 +437,6 @@ func Published(located []LocatedOp) []LocatedOp {
 	return out
 }
 
-// Pending returns located ops present at HEAD but not on the published tip.
 func Ops(located []LocatedOp) []ops.Op {
 	out := make([]ops.Op, len(located))
 	for i, loc := range located {

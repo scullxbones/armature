@@ -1,4 +1,4 @@
-// Package validate implements armature's DAG and citation integrity checks (arm validate / arm doctor), reporting overlap, cycle, and coverage errors.
+// Package validate implements armature's DAG and citation integrity checks.
 package validate
 
 import (
@@ -27,9 +27,6 @@ type Options struct {
 	Now               int64
 }
 
-// CIOptions is the fail-closed contract used by `arm validate --ci`,
-// `make validate-graph`, and every path that publishes `_armature`.
-// Warnings are errors. There is no second, looser definition.
 func CIOptions(now int64) Options {
 	return Options{Strict: true, Now: now}
 }

@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// Client wraps git operations (boundary adapter).
 type Client struct {
 	repoPath   string
 	isolateEnv bool
@@ -206,11 +205,6 @@ func (c *Client) IsWorkingTreeDirty() (bool, error) {
 	return false, nil
 }
 
-// DirtyEntry is a single parsed line of `git status --porcelain` output: the
-// repo-relative path and whether it is untracked (status code "??") as
-// opposed to a tracked file with staged or unstaged changes. For a staged
-// rename, OldPath holds the source path (Path is always the destination);
-// OldPath is empty for all other statuses.
 type DirtyEntry struct {
 	Path      string
 	OldPath   string
@@ -218,22 +212,10 @@ type DirtyEntry struct {
 	Ignored   bool
 }
 
-// DirtyEntries returns every working-tree change, tracked or untracked
-// (unlike IsWorkingTreeDirty, which treats untracked files as never dirty).
-// Renamed paths report the destination path in Path and the source path in
-// OldPath, so a caller checking a rename against a boundary (e.g. a scope or
-// state directory) can inspect both sides rather than only seeing the
-// destination. Returns an empty (nil) slice for a clean working tree.
 func (c *Client) DirtyEntries() ([]DirtyEntry, error) {
 	return c.dirtyEntries("status", "--porcelain", "--ignored")
 }
 
-// DirtyEntriesIncludingSubmodules is like DirtyEntries but does not honor
-// submodule.<name>.ignore, status.ignoreSubmodules, or
-// status.showUntrackedFiles. `-c diff.ignoreSubmodules=none` is not enough:
-// `git status` still hides dirty submodule worktrees under those settings.
-// `--ignore-submodules=none` and `--untracked-files=all` are the status
-// flags that surface them.
 func (c *Client) DirtyEntriesIncludingSubmodules() ([]DirtyEntry, error) {
 	return c.dirtyEntriesRecursive("")
 }
@@ -457,7 +439,6 @@ func isBenignEmptyRepoRmError(output []byte) bool {
 // If the branch already exists locally, this is a no-op.
 // If the branch exists on origin but not locally, creates a local tracking branch from origin.
 // Otherwise, creates a new orphan branch with an empty commit.
-// Always returns to the original branch. Fails with an error if the working tree is dirty.
 func (c *Client) CreateOrphanBranch(branch string) error {
 	check := c.cmd("rev-parse", "--verify", branch)
 	if err := check.Run(); err == nil {
@@ -465,8 +446,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	}
 
 	// Fetch after git clone --single-branch so origin/<branch> exists locally.
-	// Best-effort: ignore failures when the remote is absent, offline, or the
-	// branch doesn't exist. Bounded so a black-holed network can't hang bootstrap.
 	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	fetchCmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
@@ -493,7 +472,6 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	}
 
 	// On detached HEAD, --abbrev-ref returns the literal string "HEAD".
-	// In that case, capture the concrete commit SHA instead so we can restore.
 	headCmd := c.cmd("rev-parse", "--abbrev-ref", "HEAD")
 	headOut, err := headCmd.Output()
 	if err != nil {
@@ -706,8 +684,6 @@ func (c *Client) Push(branch string) error {
 	return nil
 }
 
-// FetchAndRebase fetches from origin and rebases the local branch onto the
-// remote tracking branch.
 func (c *Client) FetchAndRebase(branch string) error {
 	fetch := c.cmd("fetch", "origin")
 	if out, err := fetch.CombinedOutput(); err != nil {
@@ -795,7 +771,6 @@ func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
 	return out, nil
 }
 
-// BlobExists reports whether rev:path names an object (git cat-file -e).
 func (c *Client) BlobExists(rev, path string) bool {
 	cmd := c.cmd("cat-file", "-e", rev+":"+path)
 	return cmd.Run() == nil
@@ -919,11 +894,6 @@ func (c *Client) DiffNameStatus(baseSHA string) ([]DiffStatusEntry, error) {
 	return c.DiffNameStatusRange(baseSHA, "HEAD")
 }
 
-// DiffNameStatusRange is DiffNameStatus against an arbitrary head ref
-// (two-dot `base head` semantics), used for the selected delivery range:
-// claimBase..HEAD on the worktree-first path, or the isolated complete
-// landing (enclosing merge first-parent..M, or first-parent..matching-SHA)
-// when CommitReference evidence is a primary-branch landing.
 func (c *Client) DiffNameStatusRange(baseSHA, head string) ([]DiffStatusEntry, error) {
 	// -z switches git to NUL-delimited, unquoted output: without it, git
 	// quotes and octal-escapes any path containing non-ASCII or special
@@ -976,7 +946,6 @@ func (c *Client) ResetHard(ref string) error {
 	return nil
 }
 
-// AddPaths stages only the given repository-relative paths.
 func (c *Client) AddPaths(paths []string) error {
 	if len(paths) == 0 {
 		return nil
@@ -1051,11 +1020,6 @@ func (c *Client) IsTracked(path string) bool {
 	return err == nil && len(out) > 0
 }
 
-// CommitPathsNoVerify creates a commit scoped to the given pathspecs with
-// --no-verify, so it cannot sweep in unrelated staged changes outside those
-// paths and cannot be blocked by user hooks. If there is nothing staged for
-// the given paths, this is a no-op (returns nil) rather than an error. Any
-// other commit failure (missing git identity, etc.) is returned as an error.
 func (c *Client) CommitPathsNoVerify(message string, paths ...string) error {
 	args := append([]string{"commit", "--no-verify", "-m", message, "--"}, paths...)
 	cmd := c.cmd(args...)
@@ -1063,9 +1027,6 @@ func (c *Client) CommitPathsNoVerify(message string, paths ...string) error {
 	if err == nil {
 		return nil
 	}
-	// Pathspec commits report "nothing to commit" when the index is clean,
-	// and "nothing added to commit" when the pathspec is clean but other
-	// untracked files exist. Both are a no-op for the caller.
 	if strings.Contains(string(out), "nothing to commit") ||
 		strings.Contains(string(out), "nothing added to commit") {
 		return nil
@@ -1087,7 +1048,7 @@ func (c *Client) CommitWithMessage(message string) error {
 	return nil
 }
 
-// CommitIndexNoVerify commits whatever is currently staged, skipping hooks. It
+// CommitIndexNoVerify commits whatever is currently staged. It
 // takes no pathspec, unlike CommitPathsNoVerify, because a path-scoped commit
 // re-reads those paths from the working tree and so cannot record an index-only
 // change such as a `git rm --cached` removal of a file that stays on disk.
@@ -1136,8 +1097,6 @@ func (c *Client) ResolveRevision(rev string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// DiffRange returns the unified diff between base and head commits using three-dot
-// (merge-base) notation. The trailing "--" ensures revisions are not mis-parsed as flags.
 func (c *Client) DiffRange(base, head string) (string, error) {
 	cmd := c.cmd("diff", base+"..."+head, "--")
 	output, err := cmd.Output()
@@ -1147,9 +1106,6 @@ func (c *Client) DiffRange(base, head string) (string, error) {
 	return string(output), nil
 }
 
-// DiffNameOnlyRange returns the list of changed file names between base and head commits.
-// Uses -z (NUL-delimited output) to handle filenames that contain newlines or special
-// characters. Three-dot notation and a trailing "--" prevent flag mis-parsing.
 func (c *Client) DiffNameOnlyRange(base, head string) ([]string, error) {
 	cmd := c.cmd("diff", "--name-only", "-z", base+"..."+head, "--")
 	output, err := cmd.Output()
@@ -1181,7 +1137,6 @@ func (c *Client) RevListReverse(rev string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
-// CommitterUnix returns the committer unix timestamp of sha.
 func (c *Client) CommitterUnix(sha string) (int64, error) {
 	cmd := c.cmd("log", "-1", "--format=%ct", sha)
 	out, err := cmd.Output()
