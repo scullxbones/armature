@@ -5691,3 +5691,4 @@
 ["claim","TOPTIER-S7-T1",1791150197,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-S7-T1","claim_token":"fa08248a4b9fd81ca62e5c996a4a26a7"}]
 ["transition","TOPTIER-S7",1791150481,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"}]
 ["transition","TOPTIER-S7-T1",1791151076,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress","outcome":"starting quickstart rewrite"}]
+["note","TOPTIER-S7-T1",1791151255,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Rewrote README install+quickstart; aligned getting-started; quickstart_check.sh green locally","note_id":"note-1791151255333696327"},1]
