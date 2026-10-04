@@ -1,4 +1,4 @@
-.PHONY: test test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
 
 GO ?= go
 PYTHON ?= python3
@@ -24,6 +24,7 @@ help:
 	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
+	@echo "  make test-ci             - OS-matrix test entry: full make test on unix; go test -c on windows"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
@@ -66,6 +67,21 @@ test: build
 	rm -f "$$tmp"; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	exit $$summary
+
+# OS-matrix entry point (TOPTIER-S6-T1). Windows is an unsupported runtime
+# (README); compile every unit package's tests so shipped windows binaries stay
+# compile-checked without requiring the full POSIX-assuming suite to pass.
+test-ci: build
+ifeq ($(GOOS_NATIVE),windows)
+	@status=0; \
+	for pkg in $(UNIT_PACKAGES); do \
+		echo "go test -c $$pkg"; \
+		$(GO) test -c -o NUL "$$pkg" || status=1; \
+	done; \
+	exit $$status
+else
+	@$(MAKE) test
+endif
 
 test-skill-transcript: build
 	ARM_BIN=$(ARM_BIN) $(GO) test -v -count=1 ./internal/skilltranscript/...

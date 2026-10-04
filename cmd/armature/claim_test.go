@@ -450,7 +450,7 @@ func TestCanonicalWorktreePathRejectsTraversalBeforeMutation_REQ_LNGHZN_S5_T1(t 
 
 	path, err := canonicalWorktreePath(root, "team")
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(root, ".worktrees", "team"), path)
+	assert.Equal(t, worktree.CanonicalPath(root, "team"), path)
 
 	_, err = canonicalWorktreePath(root, "../escaped")
 	assert.Error(t, err)
@@ -463,7 +463,7 @@ func TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5(t *testing.T
 
 	plain, err := canonicalWorktreePath(root, "task-1")
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(root, ".worktrees", "task-1"), plain)
+	assert.Equal(t, worktree.CanonicalPath(root, "task-1"), plain)
 
 	for _, id := range []string{"team/../task-1", "a/./b", "..", ".", "team/.."} {
 		_, err := canonicalWorktreePath(root, id)
@@ -494,7 +494,7 @@ func TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5(t *testing.T)
 
 	path, err := canonicalWorktreePath(root, "team")
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(root, ".worktrees", "team"), path)
+	assert.Equal(t, worktree.CanonicalPath(root, "team"), path)
 
 	_, err = canonicalWorktreePath(root, ".")
 	assert.Error(t, err)

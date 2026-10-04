@@ -44,8 +44,10 @@ jobs:
       - name: Build
         run: make build
 
+      # Full make test on ubuntu/macos; windows uses make test-ci (go test -c)
+      # because the product runtime is Linux/macOS-only (see README).
       - name: Test
-        run: make test
+        run: make test-ci
 
   check:
     # Skip the heavy ubuntu gate when release.yml reuses this workflow; tag
