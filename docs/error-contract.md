@@ -79,7 +79,7 @@ stay on the platform/git protocol.
 | `SHOW-1` | show | `arm show` could not complete (unknown issue, snapshot load). | LNGHZN-S6-T5 | |
 | `SOURCES-1` | sources | `arm sources` subcommands could not complete. | LNGHZN-S6-T5 | |
 | `STATS-1` | stats | `arm stats` could not complete. | LNGHZN-S6-T5 | |
-| `SYNC-1` | sync | `arm sync` could not complete (snapshot load, merge-detection probe failure such as a missing `--into` ref). | LNGHZN-S6-T5 | |
+| `SYNC-1` | sync | `arm sync` could not complete (snapshot/ops load or persist). A completed classification is an ADR 0017 envelope even when exit is 1 (`missing-assessment` or `check-failed`). A missing `--into` ref is that envelope, not this code. | LNGHZN-S6-T5 | |
 | `TUI-1` | tui | `arm tui` could not complete (non-interactive snapshot load). | LNGHZN-S6-T5 | |
 | `UNASSIGN-1` | unassign | `arm unassign` could not complete. | LNGHZN-S6-T5 | |
 | `UNLINK-1` | unlink | `arm unlink` could not complete. | LNGHZN-S6-T5 | |

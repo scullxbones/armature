@@ -1134,13 +1134,27 @@ Verify cached content matches stored fingerprints.
 
 ## sync
 
-Detect merged branches and auto-transition done issues to merged.
+Classify every done leaf with the same promotion check as `arm merged`. A pass appends `merged` (and deletes the delivery ref / bound worktree). `--dry-run` writes nothing. The post-merge hook calls the same function, prints the same envelope, and exits 0.
 
 **Synopsis:**
 `arm sync [flags]`
 
 **Flags:**
-- `--into string`: Target branch to check merges against (default: current branch). A missing or otherwise unreadable target ref is a command failure (`SYNC-1`), not “no merged branches.”
+- `--into string`: Override the integration branch for every leaf. Default: each issue's recorded `integration_branch`, else config `integration_branch` (`main`). A missing `--into` ref is classified per leaf that has a delivery record (`kind=check-failed`) and fails the command; a snapshot/ops load failure is `SYNC-1` and replaces the envelope.
+- `--dry-run`: Classify without writing ops, promotion-check records, delivery-ref deletes, or worktree removals. Same exit rule as a live run.
+
+**Output:** an ADR 0017 envelope even when the exit code is non-zero:
+
+```json
+{"count":1,"issues":[{"id":"TASK-001","type":"task","status":"done","title":"Landed without assessment","kind":"missing-assessment","next_action":"arm review record --issue TASK-001 --assessment <assessment.json>"}],"help":["arm review record --issue TASK-001 --assessment <assessment.json>"]}
+```
+
+`help[0]` is the most actionable `arm` command with the issue id filled in. Each blocked row carries that row's command in `next_action`.
+
+**Exit:**
+- 0 when no leaf is `missing-assessment` or `check-failed`. A legacy `done` with no delivery record is listed (`kind=legacy`) and does not fail.
+- 1 when a delivery is on the target and the assessment is missing, or a recorded delivery cannot be checked.
+- `SYNC-1` Command Failure when snapshot/ops load (or persist) fails; that replaces the envelope.
 
 ---
 

@@ -1,0 +1,135 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func markIssueDoneLegacy(t *testing.T, repo, issueID string) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{To: ops.StatusDone, Outcome: "legacy done without snapshot"},
+	}))
+}
+
+func doneWithoutAssessment(t *testing.T) string {
+	t.Helper()
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
+		"--skip-delivery-gate", "--force", "--outcome", "complete")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	landDelivery(t, repo, "task-01")
+	return repo
+}
+
+func decodeSyncIssues(t *testing.T, stdout string) (help []string, rows []output.SyncIssue) {
+	t.Helper()
+	decoded := decodeContractEnvelope(t, stdout, "issues")
+	require.NoError(t, json.Unmarshal(decoded["help"], &help))
+	require.NoError(t, json.Unmarshal(decoded["issues"], &rows))
+	require.NotEmpty(t, help)
+	assert.True(t, strings.HasPrefix(help[0], "arm "), "help[0] must name a concrete arm command, got %q", help[0])
+	return help, rows
+}
+
+func TestSyncReportsLegacyDoneWithoutFailing_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	markIssueDoneLegacy(t, repo, "task-01")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 0, code)
+	assert.NotContains(t, stdout.String(), `"error"`)
+
+	help, rows := decodeSyncIssues(t, stdout.String())
+	require.Len(t, rows, 1)
+	assert.Equal(t, "task-01", rows[0].ID)
+	assert.Equal(t, "legacy", rows[0].Kind)
+	assert.Equal(t, "done", rows[0].Status)
+	assert.Contains(t, rows[0].NextAction, "arm delivery record --issue task-01")
+	assert.Equal(t, rows[0].NextAction, help[0])
+}
+
+func TestSyncExitNonZeroWhenLandedDeliveryLacksAssessment_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := doneWithoutAssessment(t)
+
+	ctx := getTestContext(t, repo)
+	_, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	statBefore, err := os.Stat(logPath)
+	require.NoError(t, err)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--dry-run", "--format", "agent")
+	assert.Equal(t, 1, code, "dry-run uses the same exit rule")
+	assert.NotContains(t, stdout.String(), `"error"`, "completed sync is an ADR 0017 envelope")
+	statAfterDry, err := os.Stat(logPath)
+	require.NoError(t, err)
+	assert.Equal(t, statBefore.Size(), statAfterDry.Size(), "--dry-run writes nothing")
+
+	stdout.Reset()
+	code = executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	assert.NotContains(t, stdout.String(), `"error"`)
+
+	help, rows := decodeSyncIssues(t, stdout.String())
+	require.Len(t, rows, 1)
+	assert.Equal(t, "task-01", rows[0].ID)
+	assert.Equal(t, "missing-assessment", rows[0].Kind)
+	assert.Equal(t, "done", rows[0].Status)
+	assert.Equal(t, "arm review record --issue task-01 --assessment <assessment.json>", rows[0].NextAction)
+	assert.Equal(t, rows[0].NextAction, help[0])
+
+	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, showErr)
+	assert.Equal(t, "done\n", status)
+
+	logged, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	foundCheck := false
+	for _, op := range logged {
+		if op.Type == ops.OpPromotionCheck && op.TargetID == "task-01" {
+			foundCheck = true
+			assert.Equal(t, "missing-assessment", op.Payload.Result)
+		}
+	}
+	assert.True(t, foundCheck, "live sync appends a promotion-check for the refusal")
+}
+
+func TestSyncAgentEnvelopeShape_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 0, code)
+	decoded := decodeContractEnvelope(t, stdout.String(), "issues")
+	var count int
+	require.NoError(t, json.Unmarshal(decoded["count"], &count))
+	var issues []output.SyncIssue
+	require.NoError(t, json.Unmarshal(decoded["issues"], &issues))
+	assert.Equal(t, count, len(issues))
+	var help []string
+	require.NoError(t, json.Unmarshal(decoded["help"], &help))
+	require.NotEmpty(t, help)
+	assert.True(t, strings.HasPrefix(help[0], "arm "))
+}

@@ -151,7 +151,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 
 | Command | Defined | Purpose | Status | Notes |
 |---------|---------|---------|--------|-------|
-| `sync` | main.go, sync.go | Auto-transition closed PRs | **kept-evidence** | CI integration. Scans git for merged branches and transitions issues. |
+| `sync` | main.go, sync.go | Classify done leaves and promote | **kept-evidence** | ADR 0022 writer for every done leaf (`promotion.Evaluate`). Prints an ADR 0017 envelope. `--into` defaults to recorded integration branch. |
 | `push-ops` | main.go, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Rebases onto origin/_armature, then runs the same fail-closed `arm validate --ci` / `make validate-graph` contract, then pushes. `--override-validate --reason` is a TTY-recorded escape hatch and is never green. |
 | `merged` | main.go, merged.go | Promote one done leaf | **kept-evidence** | ADR 0022 writer for one issue. Stores target SHA, combined patch-id, matched commit. `--pr` is not evidence. |
 | `delivery` | main.go, delivery.go | Delivery snapshot group | **kept-evidence** | Container for manual delivery recording (ADR 0022). Bound-worktree done writes the snapshot automatically. |
@@ -274,7 +274,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--dry-run` | sync, dag apply, dag revert, import, doctor, worktree gc | bool | Preview without writing ops (for `worktree gc`, preview removals without removing) | **kept-evidence** |
-| `--into` | sync | string | Target branch for merge checks | **kept-evidence** |
+| `--into` | sync | string | Override integration branch for every leaf (default: recorded per issue, else config) | **kept-evidence** |
 | `--override-validate` | push-ops | bool | Human escape hatch: publish `_armature` even when `arm validate --ci` would fail. Requires `--reason` and a controlling terminal. Records `skipped_validate_gate`. Never a green publish. Skills must not name this flag. | **kept-evidence** |
 
 ### DAG/Decompose Flags

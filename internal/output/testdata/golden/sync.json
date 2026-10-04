@@ -1,1 +1,1 @@
-{"count":1,"issues":[{"id":"AOC-S3-T3"}],"help":["arm show <id> for outcome, scope, and acceptance"]}
+{"count":1,"issues":[{"id":"TASK-001","type":"task","status":"done","title":"Landed without assessment","kind":"missing-assessment","next_action":"arm review record --issue TASK-001 --assessment <assessment.json>"}],"help":["arm review record --issue TASK-001 --assessment <assessment.json>"]}

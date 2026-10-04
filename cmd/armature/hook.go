@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -13,7 +12,6 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	armsync "github.com/scullxbones/armature/internal/sync"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
 )
@@ -119,7 +117,7 @@ Examples:
 			case "post-commit":
 				runPostCommitHook(cmd)
 			case "post-merge":
-				err = runPostMergeHook(cmd)
+				runPostMergeHook(cmd)
 			default:
 				err = fmt.Errorf("unknown hook %q: supported hooks are pre-commit, post-commit, post-merge", hookName)
 			}
@@ -307,54 +305,12 @@ func hookDetectScopeChanges(cmd *cobra.Command, workerID, logPath string) {
 	}
 }
 
-func runPostMergeHook(cmd *cobra.Command) error {
-	appCtx := currentCtx(cmd)
-	branch := hookCurrentBranch(appCtx.RepoPath)
+func runPostMergeHook(cmd *cobra.Command) {
+	branch := hookCurrentBranch(currentCtx(cmd).RepoPath)
 	if branch == "_armature" {
-		return nil
+		return
 	}
-
-	store := newSnapshotStore(appCtx)
-	snap, err := store.Load(context.Background())
-	if err != nil {
-		return fmt.Errorf("load snapshot: %w", err)
+	if err := runDoneLeafPromotion(cmd, "", false, false); err != nil {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}
-
-	issuesMap := snap.State.Issues
-	if issuesMap == nil {
-		issuesMap = make(map[string]*materialize.Issue)
-	}
-	issues := make([]materialize.Issue, 0, len(issuesMap))
-	for _, issue := range issuesMap {
-		if issue != nil {
-			issues = append(issues, *issue)
-		}
-	}
-
-	gc := adapters.New(appCtx.RepoPath)
-	mergedIDs, detectErr := armsync.DetectMerges(issues, branch, gc)
-
-	if len(mergedIDs) == 0 {
-		if detectErr != nil {
-			return fmt.Errorf("detect merges: %w", detectErr)
-		}
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No merged branches detected.")
-		return nil
-	}
-
-	workerID, logPath, err := resolveWorkerAndLog(appCtx)
-	if err != nil {
-		return err
-	}
-
-	appendMergedTransitions(appCtx, logPath, workerID, branch, mergedIDs, cmd.OutOrStdout(), cmd.ErrOrStderr())
-
-	if _, err := store.Load(context.Background()); err != nil {
-		return fmt.Errorf("refresh snapshot: %w", err)
-	}
-
-	if detectErr != nil {
-		return fmt.Errorf("detect merges: %w", detectErr)
-	}
-	return nil
 }

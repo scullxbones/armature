@@ -39,7 +39,25 @@ func TestHookRunPostMerge(t *testing.T) {
 
 	out, err := runTrls(t, repo, "hook", "run", "post-merge")
 	require.NoError(t, err)
-	assert.Contains(t, out, "No merged branches detected")
+	assert.Contains(t, out, `"count"`)
+	assert.Contains(t, out, `"issues"`)
+	assert.Contains(t, out, `"help"`)
+}
+
+func TestPostMergeHookExitsZero_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := doneWithoutAssessment(t)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"hook", "run", "post-merge", "--repo", repo)
+	assert.Equal(t, 0, code, "post-merge hook exits 0 even when sync would be non-zero")
+
+	assert.Contains(t, stdout.String(), `"kind":"missing-assessment"`)
+	assert.Contains(t, stdout.String(), "arm review record --issue task-01")
+
+	status, err := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, err)
+	assert.Equal(t, "done\n", status)
 }
 
 func TestHookRunPostCommit_NoActiveClaim(t *testing.T) {

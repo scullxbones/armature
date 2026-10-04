@@ -268,26 +268,6 @@ func opsHistoryPrefixes(appCtx *config.Context, opsRepoPath string) (opsPrefix, 
 	return filepath.Join(issuesRel, "ops"), filepath.Join(".armature", "ops")
 }
 
-func appendMergedTransitions(ctx *config.Context, logPath, workerID, intoBranch string, mergedIDs []string, stdout, stderr io.Writer) {
-	for _, id := range mergedIDs {
-		op := ops.Op{
-			Type:      ops.OpTransition,
-			TargetID:  id,
-			WorkerID:  workerID,
-			Timestamp: nowEpoch(),
-			Payload: ops.Payload{
-				To:      ops.StatusMerged,
-				Outcome: "auto-detected merge into " + intoBranch,
-			},
-		}
-		if err := appendOp(ctx, logPath, op); err != nil {
-			_, _ = fmt.Fprintf(stderr, "Warning: failed to transition %s: %v\n", id, err)
-			continue
-		}
-		_, _ = fmt.Fprintf(stdout, "Transitioned %s to merged\n", id)
-	}
-}
-
 func currentCtx(cmd *cobra.Command) *config.Context {
 	return mustState(cmd).ctx
 }

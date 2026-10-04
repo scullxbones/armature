@@ -56,5 +56,7 @@ func TestSyncCommand_NoMergedBranches_REQ_LNGHZN_S10(t *testing.T) {
 
 	out, err := runTrls(t, repo, "sync")
 	require.NoError(t, err)
-	assert.Contains(t, out, "No merged branches detected.")
+	assert.Contains(t, out, `"count":0`)
+	assert.Contains(t, out, `"issues":[]`)
+	assert.Contains(t, out, "arm list --status done")
 }
