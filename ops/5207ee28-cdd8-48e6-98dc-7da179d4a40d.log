@@ -5652,3 +5652,4 @@
 ["heartbeat","TOPTIER-S6-T1",1791128653,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
 ["citation-accepted","LNGHZN-S11-T1",1791128655,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"ADR 0022 is the cited source for LNGHZN-S11 delivery recording"}]
 ["heartbeat","TOPTIER-S6-T1",1791128822,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
+["note","TOPTIER-S6-T1",1791128824,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"S6-T2 done (#305) includes identical SA5011 stats.go fix; our tip already matches. Not merging whole task/TOPTIER-S6-T2 into S6-T1 PR. Finishing DoD + Ready per Brian handoff (no post-Ready merge babysit).","note_id":"note-1791128824090555428"}]
