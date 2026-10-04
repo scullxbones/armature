@@ -6,7 +6,17 @@ on:
       - main
   pull_request:
   # release.yml calls this workflow so tag releases wait on the OS matrix.
+  # github.event_name in a called workflow is the caller's event (push on
+  # tags), not workflow_call — skip non-matrix jobs via this input instead.
   workflow_call:
+    inputs:
+      os-matrix-only:
+        description: >
+          When true, run only the OS test/build matrix. Tag releases pass this
+          so check, validate-graph, and e2eharness do not block publishing.
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   # T5.1 / TOPTIER-S6-T1: exercise make test + make build on every shipped OS.
@@ -60,7 +70,7 @@ jobs:
   check:
     # Skip the heavy ubuntu gate when release.yml reuses this workflow; tag
     # releases only need the OS matrix (test-os) before goreleaser.
-    if: github.event_name != 'workflow_call'
+    if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -108,7 +118,7 @@ jobs:
   # automated path for make validate-graph; it materializes the ops branch
   # because a PR checkout has no .armature worktree.
   validate-graph:
-    if: github.event_name != 'workflow_call'
+    if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -128,7 +138,7 @@ jobs:
         run: make validate-graph
 
   e2eharness:
-    if: github.event_name != 'workflow_call'
+    if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

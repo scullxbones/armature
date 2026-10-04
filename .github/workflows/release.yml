@@ -13,6 +13,8 @@ jobs:
   # binaries are not shipped from an ubuntu-only green check.
   test-os:
     uses: ./.github/workflows/ci.yml
+    with:
+      os-matrix-only: true
 
   release:
     needs: test-os
