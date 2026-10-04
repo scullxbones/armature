@@ -241,7 +241,7 @@ func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, mat
 	if err != nil {
 		return patchID, "", KindCheckFailed, err
 	}
-	skipTreeOnly := mixedAddDelete(git, base, tip, paths)
+	skipTreeOnly := containsRename(git, base, tip, paths)
 	for _, sha := range commits {
 		ok, matchErr := qualifies(git, sha, tip, diff, patchID, paths, skipTreeOnly)
 		if matchErr != nil {
@@ -254,21 +254,31 @@ func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, mat
 	return patchID, "", KindNotOnTarget, nil
 }
 
-func mixedAddDelete(git *adapters.Client, base, tip string, paths []string) bool {
-	del, add := false, false
+// containsRename is the ADR 0022 rename exception: same blob OID deleted at
+// one path and added at another. Mixed add/delete of different blobs must
+// still use tree matching.
+func containsRename(git *adapters.Client, base, tip string, paths []string) bool {
+	var deleted, added []string
 	for _, p := range paths {
 		_, oidB, errB := git.TreeEntry(base, p)
 		_, oidT, errT := git.TreeEntry(tip, p)
 		atB := errB == nil && oidB != ""
 		atT := errT == nil && oidT != ""
 		if atB && !atT {
-			del = true
+			deleted = append(deleted, oidB)
 		}
 		if !atB && atT {
-			add = true
+			added = append(added, oidT)
 		}
 	}
-	return del && add
+	for _, d := range deleted {
+		for _, a := range added {
+			if d == a {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func qualifies(git *adapters.Client, sha, tip, deliveryDiff, deliveryPatchID string, paths []string, skipTreeOnly bool) (bool, error) {

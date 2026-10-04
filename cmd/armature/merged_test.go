@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -912,6 +913,40 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	mergedCmd2.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
 	err = mergedCmd2.Execute()
 	require.NoError(t, err, "merged must succeed on retry when status is already merged in dual-branch mode (P2 bug fix)")
+}
+
+func TestMergedAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+
+	claimCmd := newRootCmd()
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, claimCmd.Execute())
+	assert.DirExists(t, worktreePath)
+
+	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force", "--skip-delivery-gate")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	git := adapters.New(repo)
+	ref := delivery.RefName("task-01")
+	_, err = git.ResolveRevision(ref)
+	require.NoError(t, err, "done transition must leave a delivery ref for the retry fixture")
+
+	markIssueMergedForTest(t, repo, "task-01")
+	_, err = git.ResolveRevision(ref)
+	require.NoError(t, err, "already-merged fixture must keep the stale delivery ref")
+
+	mergedCmd := newRootCmd()
+	mergedCmd.SetOut(new(bytes.Buffer))
+	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
+	require.NoError(t, mergedCmd.Execute())
+
+	_, err = git.ResolveRevision(ref)
+	require.Error(t, err, "already-merged retry must delete refs/armature/deliveries/<id>")
 }
 
 func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {

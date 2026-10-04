@@ -117,3 +117,28 @@ func TestRecordArgvFillsIssueKeepsShaPlaceholder(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "arm delivery record --issue TASK-01 --base <sha> --tip <sha>", RecordArgv("TASK-01"))
 }
+
+func TestValidateRejectsUnreadableBoundWorktreeHEAD_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
+	repo := gittest.InitRepo(t)
+	base := commitFile(t, repo, "a.txt", "one\n", "init")
+	gittest.Git(t, repo, "branch", "-M", "main")
+	gittest.Git(t, repo, "checkout", "-b", "task/rec-head")
+	tip := commitFile(t, repo, "b.txt", "two\n", "feat(rec-head): add b")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".git", "HEAD"), []byte("ref: refs/heads/missing-branch\n"), 0o644))
+
+	git := adapters.New(repo)
+	_, err := Validate(git, Request{
+		IssueID:      "rec-head",
+		IssueType:    "task",
+		Base:         base,
+		Tip:          tip,
+		Branch:       "task/rec-head",
+		WorktreePath: repo,
+	})
+	require.Error(t, err, "bound worktree with unreadable HEAD must fail closed")
+	var rec *RecordError
+	require.ErrorAs(t, err, &rec)
+	assert.Equal(t, "head-unreadable", rec.Kind)
+}

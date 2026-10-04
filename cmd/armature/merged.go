@@ -314,6 +314,10 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 				return err
 			}
 		}
+		git := adapters.New(ctx.RepoPath)
+		if err := git.DeleteRef(delivery.RefName(issueID)); err != nil {
+			return err
+		}
 		if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
 			return err
 		}

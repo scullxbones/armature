@@ -223,7 +223,10 @@ func checkWorktreeHEAD(git *adapters.Client, worktreePath, tip string) error {
 	}
 	head, err := git.HeadSHA()
 	if err != nil {
-		return nil
+		return &RecordError{
+			Kind: "head-unreadable",
+			Msg:  "bound worktree HEAD is unreadable",
+		}
 	}
 	if head != tip {
 		return &RecordError{
