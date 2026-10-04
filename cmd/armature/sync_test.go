@@ -142,27 +142,38 @@ func TestSyncDryRunWritesNothingOnReadOnlyState_REQ_LNGHZN_S11_T3(t *testing.T) 
 	require.NoError(t, err)
 
 	stateDir := getTestStateDir(t, repo)
-	require.NoError(t, filepath.Walk(stateDir, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if info.IsDir() {
-			return os.Chmod(path, 0o555)
-		}
-		return os.Chmod(path, 0o444)
-	}))
+	issuesDir := filepath.Join(stateDir, "issues")
+	entries, err := os.ReadDir(issuesDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		require.NoError(t, os.Chmod(filepath.Join(issuesDir, e.Name()), 0o444))
+	}
+	require.NoError(t, os.Chmod(filepath.Join(stateDir, "index.json"), 0o444))
+	require.NoError(t, os.Chmod(filepath.Join(stateDir, "checkpoint.json"), 0o444))
+	require.NoError(t, os.Chmod(issuesDir, 0o555))
+	require.NoError(t, os.Chmod(stateDir, 0o555))
 	t.Cleanup(func() {
-		_ = filepath.Walk(stateDir, func(path string, info os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return nil
+		if chmodErr := os.Chmod(stateDir, 0o755); chmodErr != nil {
+			t.Logf("restore state dir perms: %v", chmodErr)
+		}
+		if chmodErr := os.Chmod(issuesDir, 0o755); chmodErr != nil {
+			t.Logf("restore issues dir perms: %v", chmodErr)
+		}
+		for _, name := range []string{"index.json", "checkpoint.json"} {
+			if chmodErr := os.Chmod(filepath.Join(stateDir, name), 0o644); chmodErr != nil {
+				t.Logf("restore %s perms: %v", name, chmodErr)
 			}
-			if info.IsDir() {
-				_ = os.Chmod(path, 0o755)
-				return nil
+		}
+		restored, readErr := os.ReadDir(issuesDir)
+		if readErr != nil {
+			t.Logf("readdir issues after restore: %v", readErr)
+			return
+		}
+		for _, e := range restored {
+			if chmodErr := os.Chmod(filepath.Join(issuesDir, e.Name()), 0o644); chmodErr != nil {
+				t.Logf("restore issue perms %s: %v", e.Name(), chmodErr)
 			}
-			_ = os.Chmod(path, 0o644)
-			return nil
-		})
+		}
 	})
 
 	stdout := new(bytes.Buffer)
