@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,6 +44,63 @@ func setupRepoWithDirtyDraftNode(t *testing.T) string {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 	return repo
+}
+
+func TestOverrideReleaseRecordsDeliverySHAsAfterDone_REQ_LNGHZN_S11_T2(t *testing.T) {
+	repo := doneWithoutAssessment(t)
+	issuePath := filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json")
+	issue, err := materialize.LoadIssue(issuePath)
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusDone, issue.Status)
+	require.NotEmpty(t, issue.Base)
+	require.NotEmpty(t, issue.Tip)
+
+	payload := releaseOverridePayload("task-01", "post-delivery waive", &issue)
+	assert.Equal(t, issue.Base, payload.Base, "post-delivery override must bind delivery base")
+	assert.Equal(t, issue.Tip, payload.Tip, "post-delivery override must bind delivery tip")
+	assert.Equal(t, "verified", payload.To)
+	assert.True(t, payload.SkippedValidateGate)
+
+	root := newRootCmd()
+	root.SetOut(new(bytes.Buffer))
+	root.SetArgs([]string{"dag", "override-release", "--repo", repo, "task-01", "--reason", "x"})
+	// PersistentPreRun attaches execution state; run only that far via check helper.
+	require.NoError(t, root.PersistentFlags().Set("repo", repo))
+	attachExecutionState(root, getTestContext(t, repo))
+	_, checkErr := checkOverrideReleaseTarget(root, "task-01")
+	require.NoError(t, checkErr, "done delivery must be an allowed override target")
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpDAGTransition,
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   payload,
+	}))
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 0, code, "delivery-bound override must unlock promotion; out=%s", stdout.String())
+	assert.Contains(t, stdout.String(), `"kind":"promote"`)
+}
+
+func TestReleaseOverridePayloadBindsDoneDelivery(t *testing.T) {
+	t.Parallel()
+	p := releaseOverridePayload("task-01", "reason", &materialize.Issue{
+		Status: ops.StatusDone, Base: "aaa", Tip: "bbb",
+	})
+	assert.Equal(t, "aaa", p.Base)
+	assert.Equal(t, "bbb", p.Tip)
+
+	planTime := releaseOverridePayload("task-01", "reason", &materialize.Issue{
+		Status: ops.StatusOpen, Base: "aaa", Tip: "bbb",
+	})
+	assert.Empty(t, planTime.Base)
+	assert.Empty(t, planTime.Tip)
 }
 
 func TestOverrideReleaseRequiresTty_REQ_LNGHZN_S10_T12(t *testing.T) {

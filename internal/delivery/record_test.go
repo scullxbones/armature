@@ -118,6 +118,29 @@ func TestRecordArgvFillsIssueKeepsShaPlaceholder(t *testing.T) {
 	assert.Equal(t, "arm delivery record --issue TASK-01 --base <sha> --tip <sha>", RecordArgv("TASK-01"))
 }
 
+func TestValidateRejectsUnknownIssueWithoutProvenance_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
+	repo := gittest.InitRepo(t)
+	base := commitFile(t, repo, "a.txt", "one\n", "init")
+	gittest.Git(t, repo, "branch", "-M", "main")
+	tip := commitFile(t, repo, "b.txt", "two\n", "feat: add b")
+
+	git := adapters.New(repo)
+	_, err := Validate(git, Request{
+		IssueID:   "does-not-exist",
+		IssueType: "",
+		Base:      base,
+		Tip:       tip,
+	})
+	require.Error(t, err, "unknown issue with empty type must not get a provenance exemption")
+	var rec *RecordError
+	require.ErrorAs(t, err, &rec)
+	assert.Equal(t, "no-provenance", rec.Kind)
+
+	_, resolveErr := git.ResolveRevision(RefName("does-not-exist"))
+	require.Error(t, resolveErr, "Validate must not write a delivery ref")
+}
+
 func TestValidateRejectsUnreadableBoundWorktreeHEAD_REQ_LNGHZN_S11_T1(t *testing.T) {
 	t.Parallel()
 	repo := gittest.InitRepo(t)

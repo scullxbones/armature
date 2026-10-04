@@ -259,9 +259,6 @@ func checkProvenance(git *adapters.Client, req Request, tip, branch string) erro
 	}
 
 	if claimedTip == "" && claimHEAD == "" {
-		if materialize.DeriveBranchName(req.IssueType, req.IssueID) == "" && branch == "" {
-			return nil
-		}
 		return &RecordError{
 			Kind: "no-provenance",
 			Msg:  "no recorded branch or claim provenance for this issue",

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -10,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -168,4 +171,52 @@ func TestOverlappingIdenticalTransitionsAppendOnce_REQ_AOC_S4_T1(t *testing.T) {
 	assert.Equal(t, 1, ok, "exactly one overlapping transition must append")
 	assert.Equal(t, 1, collision, "the other writer must fail LOG-SLOT-COLLISION (common-dir flock)")
 	assert.Len(t, transitionOpsForIssue(t, repo, issueID), 1, "overlapping identical retries must append once")
+}
+
+func TestDoneAmendmentPreservesIntegrationBranch_REQ_LNGHZN_S11_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+	scoped := filepath.Join(wt, "cmd/armature/task_01.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(scoped), 0o755))
+	require.NoError(t, os.WriteFile(scoped, []byte("package main\n"), 0o644))
+	run(t, wt, "git", "add", "cmd/armature/task_01.go")
+	run(t, wt, "git", "commit", "-m", "feat(task-01): add scoped file")
+
+	_, err = runTrls(t, wt, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "first delivery", "--force")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	before, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.Equal(t, "main", before.IntegrationBranch)
+	require.NotEmpty(t, before.Base)
+	require.NotEmpty(t, before.Tip)
+
+	cfgPath := filepath.Join(getTestContext(t, repo).IssuesDir, "config.json")
+	cfg, err := config.LoadConfig(cfgPath)
+	require.NoError(t, err)
+	cfg.IntegrationBranch = "develop"
+	require.NoError(t, config.WriteConfig(cfgPath, cfg))
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "amended outcome", "--force", "--skip-delivery-gate")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	after, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "main", after.IntegrationBranch,
+		"same-status done amendment must keep the recorded integration branch")
+	assert.Equal(t, before.Base, after.Base)
+	assert.Equal(t, before.Tip, after.Tip)
+
+	opsFor := transitionOpsForIssue(t, repo, "task-01")
+	require.GreaterOrEqual(t, len(opsFor), 2)
+	last := opsFor[len(opsFor)-1]
+	assert.Equal(t, "main", last.Payload.IntegrationBranch)
 }

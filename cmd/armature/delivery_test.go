@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
@@ -95,6 +96,28 @@ func TestDeliveryRecordRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
 	out, err := runTrls(t, repo, "show", "--field", "status", "task-01")
 	require.NoError(t, err)
 	assert.Equal(t, "open", strings.TrimSpace(out), "missing objects must not mark done")
+}
+
+func TestTransitionDoneRejectsUnknownIssue_REQ_LNGHZN_S11_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	base := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "extra.txt"), []byte("x\n"), 0o644))
+	run(t, repo, "git", "add", "extra.txt")
+	run(t, repo, "git", "commit", "-m", "feat: tip")
+	tip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"transition", "--repo", repo, "--issue", "missing-issue", "--to", "done",
+		"--base", base, "--tip", tip, "--outcome", "oops", "--force", "--skip-delivery-gate",
+		"--format", "agent")
+	assert.Equal(t, 1, code, "unknown issue must fail closed before writing delivery/transition")
+	assert.Contains(t, stdout.String(), "not found")
+
+	_, err := runTrls(t, repo, "show", "missing-issue")
+	require.Error(t, err)
+	_, refErr := adapters.New(repo).ResolveRevision("refs/armature/deliveries/missing-issue")
+	require.Error(t, refErr, "must not write a delivery ref for an unknown issue")
 }
 
 func TestExtractFieldsDeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {

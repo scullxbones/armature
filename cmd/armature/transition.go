@@ -118,13 +118,21 @@ outcome) appends as an amendment at exit 0.`,
 				sameStatusAmendment = liveIssue.Status == to
 			}
 			if to == "done" {
+				if liveIssue == nil {
+					if replayErr != nil {
+						return replayErr
+					}
+					return fmt.Errorf("issue %s not found", issueID)
+				}
 				if (baseSHA == "") != (tipSHA == "") {
 					return fmt.Errorf(`required flag(s) "base" and "tip" must be set together`)
 				}
 				payload.Base = baseSHA
 				payload.Tip = tipSHA
-				payload.IntegrationBranch = cfg.IntegrationBranchOrDefault()
 				seedDoneSnapshotFromLive(liveIssue, &payload, sameStatusAmendment)
+				if payload.IntegrationBranch == "" {
+					payload.IntegrationBranch = cfg.IntegrationBranchOrDefault()
+				}
 				if payload.Base == "" || payload.Tip == "" {
 					if _, found, err := boundWorktreeForDelivery(appCtx.RepoPath, issueID); err != nil {
 						return err
