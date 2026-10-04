@@ -88,6 +88,22 @@ func TestApplyMitigations_PreservesCRLFWhenRemovingQuotedPath_REQ_LNGHZN_S5_T3(t
 	assert.Equal(t, "go 1.26\r\n\r\nuse (\r\n\t./other\r\n)\r\n", newContent)
 }
 
+func TestSamePath_ResolvesSymlinkSpellings_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	realRoot := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "var")
+	require.NoError(t, os.Symlink(realRoot, alias))
+
+	viaReal := filepath.Join(realRoot, ".worktrees", "task-unbound")
+	viaAlias := filepath.Join(alias, ".worktrees", "task-unbound")
+	require.NoError(t, os.MkdirAll(viaReal, 0o755))
+
+	assert.NotEqual(t, viaReal, viaAlias, "fixture must keep unresolved and realpath spellings distinct")
+	assert.True(t, SamePath(viaReal, viaAlias), "/var vs /private/var class of mismatch must compare equal")
+	assert.True(t, SamePath(viaAlias, NormalizePath(viaReal)))
+	assert.False(t, SamePath(viaReal, filepath.Join(realRoot, ".worktrees", "other")))
+}
+
 func TestNormalizePath_NonexistentFallsBackToAbs_REQ_LNGHZN_S5_T3(t *testing.T) {
 	t.Parallel()
 	got := NormalizePath("relative/does-not-exist")

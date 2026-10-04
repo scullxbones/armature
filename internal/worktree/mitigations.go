@@ -54,6 +54,14 @@ func NormalizePathAllowingMissing(path string) string {
 	}
 }
 
+// SamePath reports whether a and b name the same location after symlink
+// resolution. Use this instead of string equality whenever one side may be a
+// git porcelain path (realpath) and the other a Go TempDir path (unresolved).
+// On macOS, /var is a symlink to /private/var, so those spellings must match.
+func SamePath(a, b string) bool {
+	return NormalizePathAllowingMissing(a) == NormalizePathAllowingMissing(b)
+}
+
 // ApplyMitigations applies best-effort project-isolation for a newly provisioned
 // worktree. Its sole job is to keep the MAIN tree's tooling from walking the
 // worktree: if the main tree uses a go.work file, the worktree is removed from
