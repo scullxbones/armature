@@ -5591,3 +5591,4 @@
 ["claim","CLAIMORD-W11",1791124713,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/CLAIMORD-W11","claim_token":"2f27feef954b5cae24e5b9fc16f98f86"}]
 ["heartbeat","TOPTIER-S6-T2",1791124745,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
 ["amend","TOPTIER-S6-T1",1791124745,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":[".github/workflows/ci.yml","Makefile","scripts/summarize_test_json.py",".github/workflows/release.yml"]}]
+["decision","TOPTIER-S6-T1",1791124745,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"topic":"release.yml in scope","choice":"amend scope to include release.yml","rationale":"Acceptance requires tag releases gated on the matrix; that lives in release.yml, which was omitted from the original scope list."}]
