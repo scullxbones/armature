@@ -120,6 +120,8 @@ Zero unclassified leaf commands is a gate.
 - `arm dag override-release` — Human Plan Release that skipped validate. Never a green release.
 - `arm dag revert` — Undo a plan apply. Not part of the forward pipeline.
 - `arm dag summary` — Interactive draft survey. Prefer list and dag transition.
+- `arm delivery` — Manual delivery snapshot. Bound-worktree done records it.
+- `arm delivery record` — Record a delivery range when no bound worktree can snapshot it.
 - `arm harness-hook` — Internal harness entrypoint. Hidden from --help groups.
 - `arm heartbeat` — The harness hook heartbeats on tool use. Manual heartbeat is for long stretches with no tools.
 - `arm hook` — Git hook management. Bootstrap --with-hooks installs them.

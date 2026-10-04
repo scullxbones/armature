@@ -1752,3 +1752,16 @@ func TestRemoveFromIndexReportsRealFailures(t *testing.T) {
 	require.Error(t, err, "a locked index must not be reported as a successful untrack")
 	assert.Contains(t, err.Error(), "tracked.txt")
 }
+
+func TestUpdateRefPointsNamedRefAtSHA(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	sha, err := c.HeadSHA()
+	require.NoError(t, err)
+
+	require.NoError(t, c.UpdateRef("refs/armature/deliveries/test-01", sha))
+	got, err := c.ResolveRevision("refs/armature/deliveries/test-01")
+	require.NoError(t, err)
+	assert.Equal(t, sha, got)
+}

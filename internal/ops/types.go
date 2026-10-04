@@ -108,6 +108,9 @@ type Payload struct {
 	OutputTokens                      int             `json:"output_tokens,omitempty"`
 	Branch                            string          `json:"branch,omitempty"`
 	PR                                string          `json:"pr,omitempty"`
+	Base                              string          `json:"base,omitempty"`
+	Tip                               string          `json:"tip,omitempty"`
+	IntegrationBranch                 string          `json:"integration_branch,omitempty"`
 	SkippedDeliveryGate               bool            `json:"skipped_delivery_gate,omitempty"`
 	SkippedValidateGate               bool            `json:"skipped_validate_gate,omitempty"`
 	IfClaimToken                      string          `json:"if_claim_token,omitempty"`

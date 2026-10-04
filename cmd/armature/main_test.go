@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
@@ -223,7 +224,170 @@ func enrichTestTransitionArgs(args []string) []string {
 			out[i+1] = testIntroductionOutcome
 		}
 	}
+	if repo := cliFlagValue(out, "--repo"); repo != "" {
+		out = injectDoneDelivery(repo, out)
+	}
 	return out
+}
+
+func cliFlagValue(args []string, name string) string {
+	for i := 0; i < len(args); i++ {
+		if args[i] == name && i+1 < len(args) {
+			return args[i+1]
+		}
+		if prefix := name + "="; strings.HasPrefix(args[i], prefix) {
+			return strings.TrimPrefix(args[i], prefix)
+		}
+	}
+	return ""
+}
+
+func cliHasFlag(args []string, name string) bool {
+	for _, a := range args {
+		if a == name || strings.HasPrefix(a, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func cliToDone(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--to" && i+1 < len(args) && args[i+1] == "done" {
+			return true
+		}
+		if args[i] == "--to=done" {
+			return true
+		}
+	}
+	return false
+}
+
+func cliIssueID(args []string) string {
+	if v := cliFlagValue(args, "--issue"); v != "" {
+		return v
+	}
+	for i, a := range args {
+		if a == "transition" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func injectDoneDelivery(repo string, args []string) []string {
+	if repo == "" || !cliToDone(args) || cliHasFlag(args, "--base") {
+		return args
+	}
+	issueID := cliIssueID(args)
+	if issueID == "" {
+		return args
+	}
+	hasWT := testHasBoundWorktree(repo, issueID)
+	if hasWT && !cliHasFlag(args, "--skip-delivery-gate") {
+		return args
+	}
+	base, tip, err := prepareTestDeliveryRange(repo, issueID)
+	if err != nil {
+		return args
+	}
+	out := append([]string(nil), args...)
+	return append(out, "--base", base, "--tip", tip)
+}
+
+func testHasBoundWorktree(repo, issueID string) bool {
+	if dirExists(filepath.Join(repo, ".worktrees", issueID)) {
+		return true
+	}
+	return strings.Contains(filepath.ToSlash(repo), "/.worktrees/")
+}
+
+func inferTestIssueType(issueID string) string {
+	lower := strings.ToLower(issueID)
+	switch {
+	case strings.Contains(lower, "story"):
+		return "story"
+	case strings.Contains(lower, "epic"):
+		return "epic"
+	case strings.Contains(lower, "bug"):
+		return "bug"
+	case strings.Contains(lower, "feature") || strings.HasPrefix(lower, "feat"):
+		return "feature"
+	default:
+		return "task"
+	}
+}
+
+func testIssueType(repo, issueID string) string {
+	ctx, err := config.ResolveContext(repo)
+	if err != nil {
+		return inferTestIssueType(issueID)
+	}
+	issue, err := newSnapshotStore(ctx).ReadIssue(issueID)
+	if err != nil || issue == nil || issue.Type == "" {
+		return inferTestIssueType(issueID)
+	}
+	return issue.Type
+}
+
+func prepareTestDeliveryRange(repo, issueID string) (base, tip string, err error) {
+	checkout := repo
+	if wt := filepath.Join(repo, ".worktrees", issueID); dirExists(wt) {
+		checkout = wt
+	}
+	git := adapters.New(checkout)
+	tip, err = git.HeadSHA()
+	if err != nil {
+		return "", "", err
+	}
+	parent, ok, err := git.FirstParent(tip)
+	if err != nil {
+		return "", "", err
+	}
+	needCommit := !ok
+	if ok {
+		changed, diffErr := git.DiffNameOnlyRange(parent, tip)
+		if diffErr != nil || len(changed) == 0 {
+			needCommit = true
+		} else {
+			base = parent
+		}
+	}
+	if needCommit {
+		rel := "delivery-range-" + issueID + ".txt"
+		if writeErr := os.WriteFile(filepath.Join(checkout, rel), []byte(issueID+"\n"), 0o644); writeErr != nil {
+			return "", "", writeErr
+		}
+		if addErr := git.AddPaths([]string{rel}); addErr != nil {
+			return "", "", addErr
+		}
+		if commitErr := git.CommitPathsNoVerify("test("+issueID+"): delivery range", rel); commitErr != nil {
+			return "", "", commitErr
+		}
+		base = tip
+		tip, err = git.HeadSHA()
+		if err != nil {
+			return "", "", err
+		}
+	}
+	if checkout != repo {
+		return base, tip, nil
+	}
+	issueType := testIssueType(repo, issueID)
+	branch := materialize.DeriveBranchName(issueType, issueID)
+	if branch == "" {
+		return base, tip, nil
+	}
+	current, _ := git.CurrentBranch()
+	if current != branch {
+		_ = git.UpdateRef("refs/heads/"+branch, tip)
+	}
+	return base, tip, nil
+}
+
+func dirExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
 }
 
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
@@ -235,7 +399,7 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs(append(enrichTestCLIArgs(args), "--repo", repo))
+	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), err
 }
@@ -249,7 +413,7 @@ func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, strin
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs(append(enrichTestCLIArgs(args), "--repo", repo))
+	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), errBuf.String(), err
 }

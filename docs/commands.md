@@ -426,6 +426,41 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 
 ---
 
+## delivery
+
+Record a delivery snapshot for an issue. `arm transition --to done` from a bound
+worktree writes this snapshot automatically. Use `arm delivery record` when there
+is no bound worktree: it writes the same record as
+`arm transition --to done --base <sha> --tip <sha>` when both objects exist, the
+base ancestors the tip, and the range is non-empty. Tip must sit on recorded
+branch or claim provenance. Missing objects, an empty range, a disagreeing
+worktree HEAD, or missing provenance exit `DELIVERY-1` and do not mark `done`.
+
+**Synopsis:**
+`arm delivery [command]`
+
+**Subcommands:**
+
+### delivery record
+
+Write `refs/armature/deliveries/<issue-id>` at `--tip` and record `branch`,
+`base`, `tip`, and `integration_branch` on a `done` transition.
+
+**Synopsis:**
+`arm delivery record [flags]`
+
+**Flags:**
+- `--issue string`: Issue ID (required).
+- `--base string`: Base commit SHA (required).
+- `--tip string`: Tip commit SHA (required).
+
+**Example:**
+```bash
+arm delivery record --issue TASK-001 --base <sha> --tip <sha>
+```
+
+---
+
 ## doctor
 
 Run repository health checks (D1-D10, D12).
@@ -957,7 +992,7 @@ arm stats --cost --rates .armature/cost-rates.json
 
 Show a human-readable summary of one or more issues. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare issue object and never a top-level array.
 
-`issues[]` is the detail view. A found issue has `count` 1. Several positional IDs share one envelope whose `count` equals the number of issues shown. A missing ID is an error, not an empty envelope. Rows keep the existing issue fields (`id`, `type`, `status`, `title`, plus outcome, scope, notes, and the rest of the detail schema).
+`issues[]` is the detail view. A found issue has `count` 1. Several positional IDs share one envelope whose `count` equals the number of issues shown. A missing ID is an error, not an empty envelope. Rows keep the existing issue fields (`id`, `type`, `status`, `title`, plus outcome, scope, notes, `branch`, `base`, `tip`, `pr`, `derived` when `RollupStatusBefore` is set, and the rest of the detail schema).
 
 Large text fields (`outcome`, `definition_of_done`) are truncated by default at 512 bytes. Truncation keeps a prefix, states the total size in a `truncated` adjunct (`field`, `shown_bytes`, `total_bytes`), and puts `--full` in `help[0]`. `--full` returns complete fields and omits the adjunct. `--full` is offered in `help` only when truncation actually happened.
 
@@ -1113,7 +1148,14 @@ otherwise; a loser cannot `--to done`). Doctor and unassign stay privileged.
 - `--outcome string`: Outcome description.
 - `--pr string`: PR number.
 - `--to string`: Target status.
-- `--skip-delivery-gate`: Skip the delivery gate check only when transitioning to `done`; it is rejected for other states. The transition op records `Payload.SkippedDeliveryGate` (`skipped_delivery_gate` in the op log) as the audit flag. Supply `--outcome` with the reason for the override. See [Delivery Gate](use-cases.md#the-delivery-gate).
+- `--base string`: Delivery base SHA. With `--tip`, writes the same snapshot as `arm delivery record`.
+- `--tip string`: Delivery tip SHA.
+- `--skip-delivery-gate`: Skip the delivery gate check only when transitioning to `done`; it is rejected for other states. The transition op records `Payload.SkippedDeliveryGate` (`skipped_delivery_gate` in the op log) as the audit flag. Supply `--outcome` with the reason for the override. See [Delivery Gate](use-cases.md#the-delivery-gate). `--skip-delivery-gate` and `--force` do not skip the delivery snapshot.
+
+When `--to done` runs from a bound worktree, Armature records `branch`, `base`,
+`tip`, and `integration_branch` and writes `refs/armature/deliveries/<issue-id>`
+at the tip. Without a worktree (and without `--base`/`--tip`) the command exits
+`TRANSITION-1` with `arm delivery record --issue <id> --base <sha> --tip <sha>`.
 
 **Example:**
 ```bash

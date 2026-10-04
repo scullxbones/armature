@@ -1181,3 +1181,12 @@ func (c *Client) FirstParent(sha string) (parent string, ok bool, err error) {
 	}
 	return p, true, nil
 }
+
+// UpdateRef points ref at sha (fully resolved by the caller).
+func (c *Client) UpdateRef(ref, sha string) error {
+	out, err := c.cmd("update-ref", ref, sha).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git update-ref %s %s: %w\n%s", ref, sha, err, out)
+	}
+	return nil
+}

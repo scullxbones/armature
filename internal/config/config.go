@@ -53,6 +53,17 @@ type Config struct {
 	LowStakesPushThreshold PendingOps            `json:"low_stakes_push_threshold"`
 	Hooks                  []HookConfig          `json:"hooks"`
 	Gates                  map[string]GateConfig `json:"gates,omitempty"`
+	IntegrationBranch      string                `json:"integration_branch,omitempty"`
+}
+
+const DefaultIntegrationBranch = "main"
+
+// IntegrationBranchOrDefault returns Config.IntegrationBranch, or "main" when empty.
+func (c Config) IntegrationBranchOrDefault() string {
+	if c.IntegrationBranch == "" {
+		return DefaultIntegrationBranch
+	}
+	return c.IntegrationBranch
 }
 
 type HookConfig struct {

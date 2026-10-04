@@ -13,6 +13,7 @@ func init() {
 	armerrors.Register("CREATE-1")
 	armerrors.Register("DAG-1")
 	armerrors.Register("DECISION-1")
+	armerrors.Register("DELIVERY-1")
 	armerrors.Register("DOCTOR-1")
 	armerrors.Register("GATE-1")
 	armerrors.Register("HEARTBEAT-1")

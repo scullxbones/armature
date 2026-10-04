@@ -104,7 +104,7 @@ func runTransitionUnlocked(t *testing.T, repo string, args ...string) (string, e
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs(append(enrichTestCLIArgs(args), "--repo", repo))
+	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), err
 }

@@ -37,6 +37,11 @@ type IssueJSON struct {
 	Acceptance             json.RawMessage `json:"acceptance,omitempty"`
 	Notes                  []string        `json:"notes,omitempty"`
 	AssessmentAttestations json.RawMessage `json:"assessment_attestations,omitempty"`
+	Branch                 string          `json:"branch,omitempty"`
+	Base                   string          `json:"base,omitempty"`
+	Tip                    string          `json:"tip,omitempty"`
+	PR                     string          `json:"pr,omitempty"`
+	Derived                bool            `json:"derived,omitempty"`
 }
 
 func MarshalIssue(issue *materialize.Issue) IssueJSON {
@@ -72,6 +77,11 @@ func MarshalIssue(issue *materialize.Issue) IssueJSON {
 		Acceptance:             issue.Acceptance,
 		Notes:                  noteTexts,
 		AssessmentAttestations: attestationsJSON,
+		Branch:                 issue.Branch,
+		Base:                   issue.Base,
+		Tip:                    issue.Tip,
+		PR:                     issue.PR,
+		Derived:                issue.RollupStatusBefore != "",
 	}
 }
 
@@ -168,6 +178,21 @@ func RenderIssue(w io.Writer, issue *materialize.Issue) error {
 	}
 	if issue.Outcome != "" {
 		ew.printf("Outcome:   %s\n", issue.Outcome)
+	}
+	if issue.Branch != "" {
+		ew.printf("Branch:    %s\n", issue.Branch)
+	}
+	if issue.Base != "" {
+		ew.printf("Base:      %s\n", issue.Base)
+	}
+	if issue.Tip != "" {
+		ew.printf("Tip:       %s\n", issue.Tip)
+	}
+	if issue.PR != "" {
+		ew.printf("PR:        %s\n", issue.PR)
+	}
+	if issue.RollupStatusBefore != "" {
+		ew.printf("Derived:   true\n")
 	}
 	if len(issue.BlockedBy) > 0 {
 		ew.printf("BlockedBy: %s\n", strings.Join(issue.BlockedBy, ", "))

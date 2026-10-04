@@ -129,6 +129,21 @@ func TestValidatePresentFieldsRejectsRetiredGates(t *testing.T) {
 	assert.NotContains(t, joined, "command")
 }
 
+func TestStrictDecodeAcceptsIntegrationBranch(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := StrictDecode([]byte(`{"project_type":"go","integration_branch":"develop"}`))
+	require.NoError(t, err)
+	assert.Equal(t, "develop", cfg.IntegrationBranch)
+	assert.Equal(t, "develop", cfg.IntegrationBranchOrDefault())
+}
+
+func TestIntegrationBranchDefaultsToMainWhenEmpty(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "main", Config{}.IntegrationBranchOrDefault())
+	assert.Equal(t, DefaultIntegrationBranch, Config{IntegrationBranch: ""}.IntegrationBranchOrDefault())
+}
+
 func TestValidatePresentFieldsIgnoresRetiredMode(t *testing.T) {
 	t.Parallel()
 

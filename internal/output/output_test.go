@@ -399,6 +399,49 @@ func TestMarshalIssue_WithAllFields(t *testing.T) {
 	assert.Equal(t, []string{"TASK-02"}, got.Blocks)
 }
 
+func TestMarshalIssue_DeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
+	got := MarshalIssue(&materialize.Issue{
+		ID:                 "TASK-01",
+		Type:               "task",
+		Status:             "merged",
+		Title:              "Rolled up",
+		Branch:             "task/TASK-01",
+		Base:               "aaa",
+		Tip:                "bbb",
+		PR:                 "42",
+		RollupStatusBefore: "done",
+	})
+	assert.Equal(t, "task/TASK-01", got.Branch)
+	assert.Equal(t, "aaa", got.Base)
+	assert.Equal(t, "bbb", got.Tip)
+	assert.Equal(t, "42", got.PR)
+	assert.True(t, got.Derived)
+}
+
+func TestRenderIssue_DeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID:                 "TASK-01",
+		Type:               "task",
+		Status:             "merged",
+		Title:              "Rolled up",
+		Branch:             "task/TASK-01",
+		Base:               "aaa",
+		Tip:                "bbb",
+		PR:                 "42",
+		RollupStatusBefore: "open",
+	}
+	var buf bytes.Buffer
+	require.NoError(t, RenderIssue(&buf, issue))
+	output := buf.String()
+	assert.Contains(t, output, "Branch:    task/TASK-01")
+	assert.Contains(t, output, "Base:      aaa")
+	assert.Contains(t, output, "Tip:       bbb")
+	assert.Contains(t, output, "PR:        42")
+	assert.Contains(t, output, "Derived:   true")
+}
+
 func TestMarshalIssue_IncludesNotes(t *testing.T) {
 	t.Parallel()
 	got := MarshalIssue(&materialize.Issue{

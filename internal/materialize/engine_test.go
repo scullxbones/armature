@@ -526,6 +526,22 @@ func TestApplyTransitionOp(t *testing.T) {
 	assert.Equal(t, "Fixed it", issue.Outcome)
 }
 
+func TestApplyTransitionOp_RecordsDeliverySnapshot_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
+	state := NewState()
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100,
+		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"}}))
+	require.NoError(t, state.ApplyOp(ops.Op{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300,
+		WorkerID: "w1", Payload: ops.Payload{
+			To: "done", Branch: "task/task-01", Base: "aaa", Tip: "bbb", IntegrationBranch: "main",
+		}}))
+	issue := state.Issues["task-01"]
+	assert.Equal(t, "task/task-01", issue.Branch)
+	assert.Equal(t, "aaa", issue.Base)
+	assert.Equal(t, "bbb", issue.Tip)
+	assert.Equal(t, "main", issue.IntegrationBranch)
+}
+
 func TestApplyNoteOp(t *testing.T) {
 	t.Parallel()
 	state := NewState()

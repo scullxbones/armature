@@ -132,6 +132,10 @@ func newRootCmd() *cobra.Command {
 	transitionCmd.GroupID = "workflow"
 	root.AddCommand(transitionCmd)
 
+	deliveryCmd := newDeliveryCmd()
+	deliveryCmd.GroupID = "workflow"
+	root.AddCommand(deliveryCmd)
+
 	unassignCmd := newUnassignCmd()
 	unassignCmd.GroupID = "workflow"
 	root.AddCommand(unassignCmd)
@@ -362,17 +366,19 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"worker-init": {Kind: pavedRoadKindPaved},
 	"bootstrap":   {Kind: pavedRoadKindPaved},
 
-	"ready":      {Kind: pavedRoadKindPaved},
-	"claim":      {Kind: pavedRoadKindPaved},
-	"transition": {Kind: pavedRoadKindPaved},
-	"note":       {Kind: pavedRoadKindPaved},
-	"decision":   {Kind: pavedRoadKindPaved},
-	"unassign":   {Kind: pavedRoadKindEscape, Note: "Claim is the dispatch reservation. Unassign is recovery."},
-	"reopen":     {Kind: pavedRoadKindEscape, Note: "Rework after done. The road completes once, then syncs."},
-	"heartbeat":  {Kind: pavedRoadKindEscape, Note: "The harness hook heartbeats on tool use. Manual heartbeat is for long stretches with no tools."},
-	"amend":      {Kind: pavedRoadKindEscape, Note: "Correct fields after create or apply. Prefer getting the plan right."},
-	"confirm":    {Kind: pavedRoadKindEscape, Note: "Interactive promotion. The road uses dag transition after validate."},
-	"assign":     {Kind: pavedRoadKindEscape, Note: "Soft assignment without a claim. Dispatch uses claim --worktree."},
+	"ready":           {Kind: pavedRoadKindPaved},
+	"claim":           {Kind: pavedRoadKindPaved},
+	"transition":      {Kind: pavedRoadKindPaved},
+	"delivery":        {Kind: pavedRoadKindEscape, Note: "Manual delivery snapshot. Bound-worktree done records it."},
+	"delivery record": {Kind: pavedRoadKindEscape, Note: "Record a delivery range when no bound worktree can snapshot it."},
+	"note":            {Kind: pavedRoadKindPaved},
+	"decision":        {Kind: pavedRoadKindPaved},
+	"unassign":        {Kind: pavedRoadKindEscape, Note: "Claim is the dispatch reservation. Unassign is recovery."},
+	"reopen":          {Kind: pavedRoadKindEscape, Note: "Rework after done. The road completes once, then syncs."},
+	"heartbeat":       {Kind: pavedRoadKindEscape, Note: "The harness hook heartbeats on tool use. Manual heartbeat is for long stretches with no tools."},
+	"amend":           {Kind: pavedRoadKindEscape, Note: "Correct fields after create or apply. Prefer getting the plan right."},
+	"confirm":         {Kind: pavedRoadKindEscape, Note: "Interactive promotion. The road uses dag transition after validate."},
+	"assign":          {Kind: pavedRoadKindEscape, Note: "Soft assignment without a claim. Dispatch uses claim --worktree."},
 
 	"dag":                  {Kind: pavedRoadKindPaved},
 	"dag apply":            {Kind: pavedRoadKindPaved},

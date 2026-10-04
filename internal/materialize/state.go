@@ -96,6 +96,9 @@ type Issue struct {
 	WorktreePath               string `json:"worktree_path,omitempty"`
 	Branch                     string `json:"branch,omitempty"`
 	PR                         string `json:"pr,omitempty"`
+	Base                       string `json:"base,omitempty"`
+	Tip                        string `json:"tip,omitempty"`
+	IntegrationBranch          string `json:"integration_branch,omitempty"`
 	AssignedWorker             string `json:"assigned_worker,omitempty"`
 	PreferredModel             string `json:"preferred_model,omitempty"`
 	Updated                    int64  `json:"updated"`

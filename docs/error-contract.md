@@ -59,6 +59,7 @@ stay on the platform/git protocol.
 | `CREATE-1` | create | `arm create` could not complete (invalid type, introduction check, port error). | LNGHZN-S6-T5 | |
 | `DAG-1` | dag | `arm dag` subcommands could not complete (apply/context/transition/revert/summary/override-release). | LNGHZN-S6-T5 | |
 | `DECISION-1` | decision | `arm decision` could not complete. | LNGHZN-S6-T5 | |
+| `DELIVERY-1` | delivery | `arm delivery record` (or `arm transition --to done --base/--tip`) refused the snapshot: missing objects, empty range, HEAD disagreement, or no branch/claim provenance. Does not mark done and does not recommend `delivery record` again. | LNGHZN-S11-T1 | |
 | `DOCTOR-1` | doctor | `arm doctor` could not complete as a Command Failure (layout/load/fix-apply). Doctor checks remain a successful report, not this code. | LNGHZN-S6-T5 | |
 | `GATE-1` | gate | `arm gate run` could not complete when the failure is not already a gate protocol payload. | LNGHZN-S6-T5 | |
 | `HEARTBEAT-1` | heartbeat | `arm heartbeat` could not complete. | LNGHZN-S6-T5 | |

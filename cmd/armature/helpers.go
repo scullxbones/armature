@@ -781,6 +781,18 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 			value = renderStringSlice(issue.BlockedBy)
 		case "blocks":
 			value = renderStringSlice(issue.Blocks)
+		case "branch":
+			value = issue.Branch
+		case "base":
+			value = issue.Base
+		case "tip":
+			value = issue.Tip
+		case "pr":
+			value = issue.PR
+		case "derived":
+			if issue.RollupStatusBefore != "" {
+				value = "true"
+			}
 		default:
 			value = ""
 		}

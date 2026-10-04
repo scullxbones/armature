@@ -200,6 +200,15 @@ func (s *State) applyTransition(op ops.Op) error {
 	if op.Payload.PR != "" {
 		issue.PR = op.Payload.PR
 	}
+	if op.Payload.Base != "" {
+		issue.Base = op.Payload.Base
+	}
+	if op.Payload.Tip != "" {
+		issue.Tip = op.Payload.Tip
+	}
+	if op.Payload.IntegrationBranch != "" {
+		issue.IntegrationBranch = op.Payload.IntegrationBranch
+	}
 	return nil
 }
 

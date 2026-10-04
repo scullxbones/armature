@@ -10,6 +10,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
@@ -20,7 +21,7 @@ import (
 )
 
 func newTransitionCmd() *cobra.Command {
-	var issueID, to, outcome, branch, pr, fieldFlag string
+	var issueID, to, outcome, branch, pr, fieldFlag, baseSHA, tipSHA string
 	var force, skipDeliveryGate bool
 
 	cmd := &cobra.Command{
@@ -108,6 +109,22 @@ outcome) appends as an amendment at exit 0.`,
 				currentStatus = liveIssue.Status
 				sameStatusAmendment = liveIssue.Status == to
 			}
+			if to == "done" {
+				if (baseSHA == "") != (tipSHA == "") {
+					return fmt.Errorf(`required flag(s) "base" and "tip" must be set together`)
+				}
+				payload.Base = baseSHA
+				payload.Tip = tipSHA
+				payload.IntegrationBranch = cfg.IntegrationBranchOrDefault()
+				seedDoneSnapshotFromLive(liveIssue, &payload, sameStatusAmendment)
+				if payload.Base == "" || payload.Tip == "" {
+					if _, found, err := boundWorktreeForDelivery(appCtx.RepoPath, issueID); err != nil {
+						return err
+					} else if !found {
+						return &delivery.MissingSnapshotError{IssueID: issueID}
+					}
+				}
+			}
 
 			if leaseStatusAllowsOwnerGate(currentStatus) {
 				if err := requirePublishedOwner(appCtx, issueID, workerID); err != nil {
@@ -189,6 +206,15 @@ outcome) appends as an amendment at exit 0.`,
 				}
 			}
 
+			if to == "done" {
+				if err := fillDoneSnapshot(appCtx, issueID, liveIssue, &payload); err != nil {
+					return err
+				}
+				if err := writeDeliverySnapshot(appCtx.RepoPath, issueID, liveIssueType(liveIssue), &payload); err != nil {
+					return err
+				}
+			}
+
 			if testBarrierAfterIdempotencyCheck != nil {
 				testBarrierAfterIdempotencyCheck()
 			}
@@ -242,6 +268,8 @@ outcome) appends as an amendment at exit 0.`,
 	cmd.Flags().StringVar(&outcome, "outcome", "", "outcome description")
 	cmd.Flags().StringVar(&branch, "branch", "", "feature branch name")
 	cmd.Flags().StringVar(&pr, "pr", "", "PR number")
+	cmd.Flags().StringVar(&baseSHA, "base", "", "delivery base SHA")
+	cmd.Flags().StringVar(&tipSHA, "tip", "", "delivery tip SHA")
 	cmd.Flags().StringVar(&fieldFlag, "field", "", "comma-separated list of fields to extract (e.g., status)")
 	cmd.Flags().BoolVar(&force, "force", false, "skip branch check when transitioning to done")
 	cmd.Flags().BoolVar(&skipDeliveryGate, "skip-delivery-gate", false, "skip delivery gate check when transitioning to done")
@@ -460,6 +488,13 @@ func mapTransitionError(err error) error {
 	if mapped, done := mappedCommandFailure(err); done {
 		return mapped
 	}
+	var missing *delivery.MissingSnapshotError
+	if errors.As(err, &missing) {
+		return armerrors.Map(codeTransition1, missing.Error(), []string{delivery.RecordArgv(missing.IssueID)}, err)
+	}
+	if delivery.IsRecordError(err) {
+		return armerrors.Wrap(codeDelivery1, err.Error(), []string{"arm doctor", "arm show"}, err)
+	}
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "issue ID is required"),
@@ -484,4 +519,94 @@ func mapTransitionError(err error) error {
 	default:
 		return armerrors.Wrap(codeTransition1, msg, []string{"arm doctor", "arm show"}, err)
 	}
+}
+
+func liveIssueType(issue *materialize.Issue) string {
+	if issue == nil {
+		return ""
+	}
+	return issue.Type
+}
+
+func boundWorktreeForDelivery(repoPath, issueID string) (string, bool, error) {
+	invoking := repoPath
+	if resolved, err := deliverygate.ResolveWorktreeRoot(invoking); err == nil {
+		invoking = resolved
+	}
+	if binding, err := worktreeIssueBinding(invoking); err == nil && binding == issueID {
+		return invoking, true, nil
+	}
+	return discoverIssueBoundWorktreeIndependentOfCheckout(repoPath, issueID)
+}
+
+func seedDoneSnapshotFromLive(live *materialize.Issue, payload *ops.Payload, sameStatus bool) {
+	if !sameStatus || live == nil {
+		return
+	}
+	if payload.Base == "" && payload.Tip == "" && live.Base != "" && live.Tip != "" {
+		payload.Base = live.Base
+		payload.Tip = live.Tip
+	}
+	if payload.Branch == "" {
+		payload.Branch = live.Branch
+	}
+	if payload.IntegrationBranch == "" {
+		payload.IntegrationBranch = live.IntegrationBranch
+	}
+}
+
+func fillDoneSnapshot(appCtx *config.Context, issueID string, live *materialize.Issue, payload *ops.Payload) error {
+	if payload.Base != "" && payload.Tip != "" {
+		return nil
+	}
+	wt, found, err := boundWorktreeForDelivery(appCtx.RepoPath, issueID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return &delivery.MissingSnapshotError{IssueID: issueID}
+	}
+	git := adapters.New(wt)
+	snap, err := delivery.ComputeFromWorktree(git, wt, issueID, liveIssueType(live), appCtx.Config.IntegrationBranchOrDefault())
+	if err != nil {
+		return err
+	}
+	if payload.Branch == "" {
+		payload.Branch = snap.Branch
+	}
+	payload.Base = snap.Base
+	payload.Tip = snap.Tip
+	payload.IntegrationBranch = snap.IntegrationBranch
+	return nil
+}
+
+func writeDeliverySnapshot(repoPath, issueID, issueType string, payload *ops.Payload) error {
+	wt, found, err := boundWorktreeForDelivery(repoPath, issueID)
+	if err != nil {
+		return err
+	}
+	gitPath := repoPath
+	worktreePath := ""
+	if found {
+		gitPath = wt
+		worktreePath = wt
+	}
+	git := adapters.New(gitPath)
+	snap, err := delivery.Record(git, delivery.Request{
+		IssueID:           issueID,
+		IssueType:         issueType,
+		Base:              payload.Base,
+		Tip:               payload.Tip,
+		Branch:            payload.Branch,
+		IntegrationBranch: payload.IntegrationBranch,
+		WorktreePath:      worktreePath,
+	})
+	if err != nil {
+		return err
+	}
+	payload.Branch = snap.Branch
+	payload.Base = snap.Base
+	payload.Tip = snap.Tip
+	payload.IntegrationBranch = snap.IntegrationBranch
+	return nil
 }
