@@ -10,6 +10,7 @@ import (
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -263,4 +264,144 @@ func attest(t *testing.T, base, tip string) []ops.Op {
 		TargetID: "ignored",
 		Payload:  ops.Payload{Assessment: body},
 	}}
+}
+
+func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
+
+	t.Run("not done", func(t *testing.T) {
+		t.Parallel()
+		_, git, _ := deliveryRepo(t)
+		in := doneInput("task-open", "a", "b", nil)
+		in.Issue.Status = ops.StatusOpen
+		res := Evaluate(git, in)
+		assert.False(t, res.Promote)
+		assert.Equal(t, KindNotDone, res.Kind)
+	})
+
+	t.Run("not leaf", func(t *testing.T) {
+		t.Parallel()
+		_, git, _ := deliveryRepo(t)
+		in := doneInput("task-parent", "a", "b", nil)
+		in.Issue.Children = []string{"child"}
+		res := Evaluate(git, in)
+		assert.False(t, res.Promote)
+		assert.Equal(t, KindNotLeaf, res.Kind)
+		var pe *Error
+		require.ErrorAs(t, res.Err, &pe)
+		assert.Equal(t, "arm merged --issue task-parent", pe.RecoveryArgv())
+		assert.Contains(t, pe.Error(), "not a leaf")
+	})
+
+	t.Run("legacy without snapshot", func(t *testing.T) {
+		t.Parallel()
+		_, git, _ := deliveryRepo(t)
+		in := doneInput("task-legacy", "", "", nil)
+		res := Evaluate(git, in)
+		assert.False(t, res.Promote)
+		assert.Equal(t, KindLegacy, res.Kind)
+		assert.Contains(t, res.Recovery, "arm delivery record --issue task-legacy")
+	})
+
+	t.Run("empty commit range is empty-diff", func(t *testing.T) {
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
+		gittest.Git(t, dir, "commit", "--allow-empty", "-m", "empty")
+		tip := head(t, git)
+		res := Evaluate(git, doneInput("task-empty-commit", base, tip, attest(t, base, tip)))
+		assert.False(t, res.Promote)
+		assert.Equal(t, KindEmptyDiff, res.Kind)
+	})
+
+	t.Run("reads delivery from last done payload", func(t *testing.T) {
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
+		writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
+		tip := head(t, git)
+		in := doneInput("task-ops", "", "", nil)
+		in.Issue.Base = ""
+		in.Issue.Tip = ""
+		in.Issue.IntegrationBranch = ""
+		in.Integration = ""
+		in.PriorOps = []ops.Op{{
+			Type:     ops.OpTransition,
+			TargetID: "task-ops",
+			Payload: ops.Payload{
+				To: ops.StatusDone, Base: base, Tip: tip, IntegrationBranch: "main",
+			},
+		}}
+		res := Evaluate(git, in)
+		assert.Equal(t, KindNotOnTarget, res.Kind)
+		assert.NotEmpty(t, res.CombinedPatchID)
+	})
+
+	t.Run("matching issue attestation field", func(t *testing.T) {
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
+		writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
+		tip := head(t, git)
+		gittest.Git(t, dir, "checkout", "main")
+		gittest.Git(t, dir, "merge", "--squash", "delivery")
+		gittest.Git(t, dir, "commit", "-m", "squash delivery")
+		in := doneInput("task-field", base, tip, nil)
+		in.Issue.AssessmentAttestations = []review.AssessmentAttestation{{
+			BaseSHA: base,
+			HeadSHA: tip,
+			Rating:  review.Red,
+		}}
+		res := Evaluate(git, in)
+		require.True(t, res.Promote, res.Kind)
+	})
+
+	t.Run("unreadable integration is check-failed", func(t *testing.T) {
+		t.Parallel()
+		dir, git, base := deliveryRepo(t)
+		writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
+		tip := head(t, git)
+		in := doneInput("task-badint", base, tip, attest(t, base, tip))
+		in.Integration = "no-such-branch"
+		in.Issue.IntegrationBranch = "no-such-branch"
+		res := Evaluate(git, in)
+		assert.False(t, res.Promote)
+		assert.Equal(t, KindCheckFailed, res.Kind)
+		assert.Equal(t, "arm doctor", RecoveryArgv("task-badint", KindCheckFailed))
+	})
+
+	t.Run("rename inside a larger squash stays done", func(t *testing.T) {
+		t.Parallel()
+		dir := gittest.InitRepo(t)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "old.txt"), []byte("body\n"), 0o644))
+		gittest.Git(t, dir, "add", "old.txt")
+		gittest.Git(t, dir, "commit", "-m", "init")
+		gittest.Git(t, dir, "branch", "-M", "main")
+		git := adapters.New(dir)
+		base := head(t, git)
+		gittest.Git(t, dir, "checkout", "-b", "delivery")
+		require.NoError(t, os.Remove(filepath.Join(dir, "old.txt")))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("body\n"), 0o644))
+		gittest.Git(t, dir, "add", "-A")
+		gittest.Git(t, dir, "commit", "-m", "rename")
+		tip := head(t, git)
+		gittest.Git(t, dir, "checkout", "main")
+		require.NoError(t, os.Remove(filepath.Join(dir, "old.txt")))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("body\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.txt"), []byte("other\n"), 0o644))
+		gittest.Git(t, dir, "add", "-A")
+		gittest.Git(t, dir, "commit", "-m", "larger squash")
+		res := Evaluate(git, doneInput("task-rename", base, tip, attest(t, base, tip)))
+		assert.False(t, res.Promote)
+		assert.Equal(t, KindNotOnTarget, res.Kind)
+	})
+}
+
+func TestPromotionErrorNilAndDefaultRecovery(t *testing.T) {
+	t.Parallel()
+	var e *Error
+	assert.Empty(t, e.Error())
+	assert.Equal(t, "arm doctor", e.RecoveryArgv())
+	e = &Error{IssueID: "x", Kind: KindNotOnTarget, Msg: "nope"}
+	assert.Equal(t, "nope", e.Error())
+	assert.Equal(t, "arm merged --issue x", e.RecoveryArgv())
+	assert.Equal(t, "arm doctor", RecoveryArgv("x", "other"))
+	assert.Equal(t, "promotion check for x failed", checkMessage("x", "other"))
 }

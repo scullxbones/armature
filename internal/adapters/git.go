@@ -1217,9 +1217,9 @@ func (c *Client) FirstParentAfter(base, head string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
-// DiffTwoDot is `git diff base tip` (two-dot, the combined range).
+// DiffTwoDot is path-literal `git diff --no-renames base tip` (two-dot combined range).
 func (c *Client) DiffTwoDot(base, tip string) (string, error) {
-	cmd := c.cmd("diff", "--no-ext-diff", "--no-color", base, tip, "--")
+	cmd := c.cmd("diff", "--no-ext-diff", "--no-color", "--no-renames", base, tip, "--")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to diff %s %s: %w", base, tip, err)
@@ -1229,7 +1229,7 @@ func (c *Client) DiffTwoDot(base, tip string) (string, error) {
 
 // DiffNameOnlyTwoDot is path-literal `git diff --name-only base tip` (no rename detection).
 func (c *Client) DiffNameOnlyTwoDot(base, tip string) ([]string, error) {
-	cmd := c.cmd("diff", "--name-only", "-z", base, tip, "--")
+	cmd := c.cmd("diff", "--name-only", "--no-renames", "-z", base, tip, "--")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to diff --name-only %s %s: %w", base, tip, err)
