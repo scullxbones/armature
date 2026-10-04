@@ -1,125 +1,45 @@
-# Next-Work Sequencing — A Cross-Document Execution Order
+# Next-Work Sequencing
 
-**Date:** 2026-07-07 (updated 2026-07-08 — F2 grilling session added `TOPTIER-S17` and `LNGHZN-S2`; updated 2026-07-19 — Tier S delivered; Tier A's remaining items decomposed as `LNGHZN-S3`–`S8` and `NXTTN-S3`/`S4`; updated 2026-08-11 — Tier A status audit: items 10–14 and 17 delivered, `LNGHZN-S9` filed as item 14a; updated 2026-08-23 — Tier S closed out (items 8–9 merged), gate-efficiency work recorded as item 27 pulled forward from Tier B, Tier A statuses re-audited; updated 2026-08-23 — AXI grilling session added `AOC` as Tier A item 48, which is the first entry to introduce `blocked_by` edges between previously-independent Tier A items and into Tier B's item 36; item 27a re-homed to `LNGHZN-S6-T4`; updated 2026-08-27 — overnight wave delivered `AOC-S1-T1`/`T2`, `LNGHZN-S6-T1`–`T4`, `LNGHZN-S7-T2`/`T3`, and `LNGHZN-S8-T1`/`T2` as worker-`done` pending merge (I6); filed `LNGHZN-S6-T5`, `AOC-S1-T3`, `LNGHZN-S7-T6`, and `TOPTIER-S18`; recommended sequence rewritten around remaining AOC plus the S6-T5 trailer; updated 2026-08-27 — `ARCHIMP-S20` added as Tier A item 50; updated 2026-08-31 — the overnight wave's ten PRs (#113–#123) are all merged: item 20 (`LNGHZN-S8`) is **delivered**, items 16 and 19 are each reduced to a single open trailer, item 27a is merged, and `AOC-S1-T3` became the then-head of the remaining AOC chain; step 0 of the recommended sequence is complete; updated 2026-09-10 — `AOC-S1` including T3 is **merged** (PR #136); the critical-path head is now `AOC-S2-T2` (`arm ready` / `arm list`); `AOC-S4-T2` remains ready in parallel; S2-T3's live blockers are `TOPTIER-S11-T2`, `AOC-S2-T1`, and `NXTTN-S4-T3` (not story `TOPTIER-S11`, not `NXTTN-S3-T3`); cancelled `AOC-S2-T6` is off the spine; updated 2026-09-10 — `ARCHIMP-S20` / item 50 **merged** (PR #154, `d2af37b`); recommended sequence Codex P2s: `NXTTN-S4-T3` scheduled after `NXTTN-S4-T1` and before `AOC-S2-T3`; updated 2026-09-12 — truth-up vs live `_armature` (`1845b68a`) and `main` (`d57cbb21`): AOC epic S1–S4 **merged**; `TOPTIER-S15-T1` on `main` (PR #188) while the issue is still `open` (I6); `TOPTIER-S18` redesigned (T0 leaf, DAG `T0→T2→T1` and `T0→T3`, drop S14 product wait on T2, T4 reparented to `TOPTIER-S12`); `TOPTIER-S13` attest enrich (T2 is a package aggregator, not on `LNGHZN-S6-T5`); S6-T5 remaining unsatisfied fan-in is `TOPTIER-S15-T1`; in-flight PRs #189 (`TOPTIER-S18-T0`) and #190 (`TOPTIER-S13-T1`); updated 2026-09-18 — second-pass truth-up vs live `_armature` (`7a7fb2f6`) and `arm ready`/`arm show`: AOC epic still merged; `TOPTIER-S18` story merged (T0–T3 merged; **T4 still open**, parent `TOPTIER-S12`, blocked by held `TOPTIER-S12-T2`); `TOPTIER-S13` merged; `LNGHZN-S6-T5` merged; `TOPTIER-S15-T1` merged (story `TOPTIER-S15` stays open for T2 after `TOPTIER-S7-T2`); doctor **D12** landed in PR #198; **D11** stays reserved for `TOPTIER-S12-T2`; updated 2026-09-27 — LH D4 filed as `LNGHZN-S11` / ADR 0022, pulled forward of the S6→S7 vertical; doctor **D13** reserved for `LNGHZN-S11-T4`)
-**Purpose:** A single execution order across all proposals from the three planning rounds — `docs/design/top-tier-gap-analysis.md` (GAP), `docs/design/long-horizon-proposals.md` (LH), `docs/design/the-next-ten.html` (Round Three) — plus the `docs/design/narrow-gaps-addendum.md` items (G1–G6, tracked as `TOPTIER-S11`–`S16`), which are now woven into the tiers below at the rough tier each was originally recommended for, rather than listed separately.
+**Date:** 2026-10-04. Gardened so this page tracks remaining work toward v0.1.0.
 
-**Why this lives in markdown, not in Armature:** Armature's DAG models dependency and scope within a single epic/story tree — `blocked_by` edges, scope overlap, wave dispatch. It has no concept of *cross-document, cross-epic priority ordering* across independent proposals that don't share a scope or a `blocked_by` edge but still have a preferred execution order (e.g., "write the constitution before the census, even though nothing blocks the census on it"). Only the gap-analysis items are currently modeled as `TOPTIER` stories; the long-horizon and Round Three items are not yet decomposed into issues at all, and several of them (documents, policies, an internal memo) are not naturally issue-shaped work in the first place. Forcing this ordering into `blocked_by` edges would either be false precision (most of these items are *not* hard-blocked on each other) or would require inventing an epic spanning three separate planning documents that don't share a DAG today. This document is the citable ordering until — if ever — that changes.
+**Closed history:** Tier S, the Tier A feature spine, delivered pull-ins, the 2026-09-18 recommended sequence, and the F2 grilling decisions are in [`docs/archive/next-work-sequencing-closed-through-2026-09-27.md`](../archive/next-work-sequencing-closed-through-2026-09-27.md). Ordinals below match that snapshot. Do not renumber them.
 
----
+**Purpose:** One execution order across the planning rounds (`top-tier-gap-analysis.md`, `long-horizon-proposals.md`, `the-next-ten.html`, `narrow-gaps-addendum.md`) plus later filings that earned a row. Armature's DAG orders work inside a tree. It does not rank independent proposals that share no `blocked_by` edge. This file is that ranking. When an item is decomposed, its DAG is authoritative inside the item. This file only orders between items.
 
-## The ranked list (Tier S → C)
+Statuses below are the 2026-09-27 record. Re-audit with `arm show` before dispatch.
 
-Ranking combines each document's own scoring (Round Three's Σ/30, LH's six-axis table for C1–C10) with cross-document dependency, dogfood-corpus evidence weight, and expiry urgency (several items are only cheap before `v0.1.0` ships).
+## What to do next
 
-### Tier S — foundational, do first (everything else cites these, or their window closes soon)
+The Tier A feature spine is closed. `arm ready` is not a dispatch order. A coordinator that picks the first ready issue will treat held docs and Tier C extensibility as equal to the release front door.
 
-| # | Item | Source | Armature story |
-|---|---|---|---|
-| 1 | Doc corpus hygiene / archive (incl. ADR template) | GAP D5 | `TOPTIER-S10` |
-| 2 | The Armature Constitution | Next-Ten №01 | `NXTTN-S1B` (core ratified on `main` via ADR 0009/`CONSTITUTION.md`; only the ADR-template field remains) |
-| 3 | Skill lint / golden-transcript tests | GAP T1 | `TOPTIER-S1` |
-| 4 | The Subtractive Release (surface census) | Next-Ten №02 | `NXTTN-S2` |
-| 5 | Envelope/schema documentation | GAP D2 | `TOPTIER-S2` |
-| 6 | Collapse `.arm/.armature/` dotdir | LH D5 | `LNGHZN-S1` (precursor bug `LNGHZN-B1`; release-gates `TOPTIER-S6-T3`) |
-| 7 | The CLI Grammar Contract | Next-Ten №05 | `NXTTN-S5` |
-| 8 | Scope-overlap validation gaps (plan-time scope-overlap checker) | Dogfood theme `scope-overlap-validation-gaps` | `TOPTIER-S17` — **merged**; residual overlap defects (glob-vs-directory matching, duplicate matcher in `validate`, story-as-claimant) closed later under `LNGHZN-S10-T6`/`T7`/`T8` |
-| 9 | Scope-disjoint wave planning (`arm ready --waves`) | LH F2 | `LNGHZN-S2` — **merged** (ADR 0012 `scope-disjoint-wave-planning`) |
+1. **Item 24, `LNGHZN-S11` (ADR 0022).** Pulled forward of the S6 to S7 vertical. Closeout cannot see a squash or a stack land. Dispatch T1 when `TOPTIER-B1` (`engine.go`) is merged. T2 promotes one issue. T3 is `arm sync` and the hook. T4 is doctor **D13** and waits on T2 plus the open `doctor.go` holders (`TOPTIER-S12-T2`, `TOPTIER-S18-T4`, `bug-1783480206`).
+2. **Items 34 then 30, when S11 is not the story in hand.** `TOPTIER-S6-T1` and `TOPTIER-S6-T2` are the front door. `TOPTIER-S7-T1` is blocked by `TOPTIER-S6-T1`.
+3. **Hold item 22, `TOPTIER-S12`.** Leave it unless Brian needs G2. `TOPTIER-S18-T4` waits on S12-T2. That wait is not a reason to lift the hold. Doctor **D11** stays reserved for S12-T2. **D12** already landed (PR #198) and is lag, not disaster recovery.
+4. **Do not treat these as the successor to the closed spine.** `TOPTIER-S12-T1` (held), `TOPTIER-S14` / `TOPTIER-S14-T1` (Tier C, ready), and `bug-1783480206` (waits on S18-T4).
 
-Note: D5 is pulled forward from Tier C because its ADR-hygiene sub-item (D5.2) creates the ADR template the Constitution's "principles touched" field rides on — see Next-Ten №01. D5.1 and D5.3 travel with it since D5 is treated as one coherent unit (doc-corpus hygiene is small enough not to warrant splitting).
+## Still open
 
-Note on items 8–9 (added 2026-07-08, F2 grilling session): F2 (`arm ready --waves`, item 9) partitions the ready queue into scope-disjoint dispatch waves using the same glob-aware overlap primitive (`claimPkg.ScopesOverlap`, `internal/claim/overlap.go`) that `arm claim` already uses at claim time. That primitive has a known blind spot — documented in the `scope-overlap-validation-gaps` dogfood theme — where it misreads parent/child scope containment (a story's scope is the union of its children's by design) as a conflict. `story` is a ready-eligible type (`internal/issuetype/issuetype.go`), so a parent story and its own ready child task can co-occur in the ready queue, meaning F2's wave-partitioning would inherit this bug and manufacture false conflicts between every story and its children. **Item 8 (`TOPTIER-S17`) is therefore sequenced immediately before item 9 and is a hard prerequisite**, not an optional adjacent cleanup. The theme documents four distinct defects; only one of them (parent/child containment) blocks F2 — the grilling session concluded the other three do not apply to wave-partitioning (see full rationale below the tables). `TOPTIER-S17`'s leading task should fix the parent/child containment blind spot in `ScopesOverlap` itself (using `dag.Graph`'s existing ancestor/descendant queries), benefiting both the existing `arm claim` check and F2 — `LNGHZN-S2` blocks on that task specifically, not on the full `TOPTIER-S17` story.
-
-**Tier S is closed as of 2026-08-23:** all nine items are merged. `TOPTIER-S2` (item 5) is `merged` (`arm show TOPTIER-S2`).
-
-### Tier A — high impact, second wave
-
-| # | Item | Source | Armature story | Status (2026-09-18) |
-|---|---|---|---|---|
-| 10 | End-to-end workflow test harness | GAP T2 | `TOPTIER-S3` | delivered (`arm show`: story and T1–T3 `merged`) |
-| 11 | Crash/recovery resilience | GAP T3 | `TOPTIER-S4` | delivered |
-| 12 | Autonomic heartbeats via harness hook | LH C1 | `LNGHZN-S3` | delivered |
-| 13 | Transition-time delivery gate | LH C4 | `LNGHZN-S4` | delivered |
-| 14 | Managed worktree lifecycle | LH F1 | `LNGHZN-S5` | delivered (PR #89) |
-| 14a | `arm claim --from` for sub-task worktrees | LH F1.1 (F1 follow-on) | `LNGHZN-S9` | delivered (PRs #97, #98) |
-| 15 | Context Economics | Next-Ten №03 | `NXTTN-S3` | **delivered**: story `merged` (`arm show NXTTN-S3`). T1 runtime retarget PR #166; T2 #167; T3 hygiene #168; T4 front-matter #165; T5 live list/ready meter #180. Stale-`done` on `TOPTIER-S3-T1` is gone (children `merged`) |
-| 16 | Agent-grade error contract | LH C3 | `LNGHZN-S6` | **delivered**: story `merged` (`arm show LNGHZN-S6`). T1–T4 PRs #116–#119; **T5 merged** (PR #194). Grill 2026-08-26 / ADR 0020: Command Failure is a separate stdout object. Historical T5 `blocked_by` included `TOPTIER-S15-T1` (now `merged`, PR #188); **not** `TOPTIER-S13-T2` |
-| 17 | Scope enforcement hardening | GAP T4 | `TOPTIER-S5` | delivered |
-| 18 | The Paved Road | Next-Ten №04 | `NXTTN-S4` | **delivered**: story `merged`. T1 PR #159; T3 PR #164; T2 cancelled. Those edges into AOC-S2-T5 / AOC-S2-T3 are satisfied |
-| 19 | Make configuration honest | LH D1 | `LNGHZN-S7` | **delivered**: story `merged` (`arm show LNGHZN-S7`). T6 landed PR #146 (2026-09-10). T6 was unlinked from `TOPTIER-S12` / S12-T2 (D10 already in `Run`); do not pull item 22 to "finish S7" |
-| 20 | Reviewer self-validation (`arm review validate`) | LH C6 | `LNGHZN-S8` | **delivered** — T1, T2 merged (PRs #122, #123; #123's CI red was resolved and it landed 2026-08-31) and the story is `merged`. This unblocked `AOC-S1-T3`; `AOC-S3-T4` also waited on T1 |
-| 21 | Reviewer disagreement / consensus policy | Addendum G3 | `TOPTIER-S13` | **delivered**: story `merged` (`arm show TOPTIER-S13`). T1 PR #190; T2 PR #195 (package-level aggregator; `stats.go` out of T2 scope). **T2 did not block `LNGHZN-S6-T5`** |
-| 27 (pulled forward) | Tiered Quality Gates / gate efficiency | Next-Ten №07 + `docs/design/gate-efficiency.md` D1–D8 | `LNGHZN-S10` | delivered (PR #112; T9 and `task-1787058254` cancelled as redundant) |
-| 27a | TUI seam so interactive code is excludable from coverage/mutation gates | `LNGHZN-S10` follow-on (ADR 0015) | `LNGHZN-S6-T4` (was `LNGHZN-S10-T11`, cancelled) | **merged** (PR #119, landed 2026-08-30) — extra remaining S6 work, not part of the LH C3 DoD |
-| 48 | Agent Output Contract | `docs/design/agent-output-contract.md` (AXI grilling session, 2026-08-23) | `AOC` (S1–S4) | **delivered**: epic and S1–S4 **merged** (`arm show AOC`, `AOC-S2`, `AOC-S3`, `AOC-S4`). S2-T2 #156; S2-T1 #157; S2-T3 #173; S2-T4 #175; S2-T5 #176; S3-T1 #179; S3-T3 #181; S3-T2 #182; S3-T4 #183; S3-T5 #184; S4-T1 #172; S4-T2 #187. Cancelled `AOC-S2-T6` stays off the spine. **This is no longer the critical-path head** |
-| 49 | DoD must be implementable in scope; doctor check IDs allocated | overnight `LNGHZN-S7` grill (2026-08-26) | `TOPTIER-S18` | **story merged** (`arm show TOPTIER-S18`). Children **T0–T3 merged**: T0 PR #189, T2 PR #192, T3 PR #193, T1 PR #196. **T4 still open** (not a child; parent `TOPTIER-S12`, `blocked_by` `LNGHZN-S7-T6` merged and held `TOPTIER-S12-T2`). T2 still serializes `TOPTIER-S14-T1` (`validate.go`); that edge is satisfied |
-| 50 | Deepen Claim overlap planning behind a pure decision module | `docs/design/claim-overlap-plan.md` (`ARCHIMP`; supersedes cancelled `ARCHIMP-S15`) | `ARCHIMP-S20` | **delivered** — T1–T6 and the story **merged** (PR #154, landed 2026-09-10, merge commit `d2af37b`). `AOC-S2-T5`'s `ARCHIMP-S20-T2` edge and `LNGHZN-S6-T5`'s `ARCHIMP-S20-T6` edge are satisfied |
-
-Note: item 21 (G3) sits at the A/B boundary in the addendum's own scoring (high evidence, moderate cost) and is placed at the tail of Tier A rather than the head of Tier B; treat its position as a tie with the adjacent Tier B items, not a strict ranking.
-
-Note on item 14a (added 2026-08-11; closed 2026-08-23): `LNGHZN-S9` was filed during `LNGHZN-S5`'s PR #89 review (thread `claim.go:666`) and is direct spillover from F1 — it closes the case F1's managed-provisioning path does not cover, cutting a sub-task branch live from an already-open story worktree rather than adopting an externally pre-created branch after the fact. It is numbered `14a` rather than inserted as a new ordinal so the existing 1–47 numbering (cited from the source documents) does not shift. Delivered via PRs #97 (T1) and #98 (T2); story `merged` 2026-08-23.
-
-Note on Tier A status (audited 2026-08-11, re-audited 2026-08-23, amended 2026-08-23 for item 48, re-audited 2026-08-27, re-audited 2026-08-31, amended 2026-09-10 for item 50, re-audited 2026-09-12 against live `_armature` + `main`, **re-audited 2026-09-18 against live `_armature` + `arm show`/`arm ready`**): items 10–21, 14a, 27, 48, and 50 are merged, including item 16 (T5 PR #194) and item 21 (T1 #190, T2 #195). Item 19 closed with PR #146. Item 15 closed after the NXTTN-S3 runtime retarget (PRs #166/#167/#165/#168/#180). Item 18 closed (PRs #159/#164). Item 48 closed as an epic: S2–S4 followed S1 onto `main` (PRs listed in the item 48 row). Item 49's **story is merged**; the only leftover named Feature in this tier is **`TOPTIER-S18-T4`**, parked under held `TOPTIER-S12` and blocked by `TOPTIER-S12-T2`. Do not pull it.
-
-**The Tier A Feature critical path is closed.** `arm show AOC` / `TOPTIER-S18` / `TOPTIER-S13` / `LNGHZN-S6` / `TOPTIER-S15-T1` are `merged` (T4 of S18 is the open exception, not a child of the S18 story). `arm ready` on 2026-09-18 does **not** offer `TOPTIER-S18-T0` or `TOPTIER-S13-T1`. Do not copy the 2026-09-12 sentence that those two are next Features into a dispatch plan.
-
-The "no `blocked_by` edges between untouched items" property recorded in the 2026-08-11 audit **no longer holds.** Hard edges as of 2026-09-18 (`arm show` fields):
-
-- AOC S2 chain `T2 → T1 → T3 → T4 → T5 → S3…` is **merged through S4**. Historical blockers (`TOPTIER-S11-T2`, `NXTTN-S4-T3`, `NXTTN-S4-T1`, `NXTTN-S3-T2`, `TOPTIER-S11-T1`) are `merged` (PRs #161, #164, #159, #167, #158).
-- `LNGHZN-S6-T5` is `merged` (PR #194). Its listed `blocked_by` set is historical and satisfied, including `TOPTIER-S15-T1` (`merged`, PR #188). **Not** `TOPTIER-S13-T2`.
-- `TOPTIER-S18` T0–T3 `merged`. T2's serialize edge into `TOPTIER-S14-T1` is satisfied (`S14-T1` is `open` and `arm ready`). T4 parent is `TOPTIER-S12`, `blocked_by` `LNGHZN-S7-T6` (merged) and `TOPTIER-S12-T2` (open, hold).
-- `TOPTIER-S13-T1` and T2 are `merged`. T2 never sat on the T5 fan-in.
-- `LNGHZN-S7-T6` is `merged`; it does **not** wait on `TOPTIER-S12-T2`.
-- ADR 0020 still stands: `LNGHZN-S6-T1` is not blocked by `AOC-S1-T2`.
-
-For these items the DAG carries real ordering and this document's tier order is a tie-break within it, not the sole authority.
-
-**The 2026-08-31 stale-`done` note on `TOPTIER-S3-T1` is closed.** `arm show TOPTIER-S3-T1` / T2 / T3 are `merged`. **The 2026-09-12 I6 gap on `TOPTIER-S15-T1` is closed:** `arm show TOPTIER-S15-T1` is `merged` (PR #188). Story `TOPTIER-S15` stays `open` only for T2 (README troubleshooting appendix), which remains `open` and `blocked_by` `TOPTIER-S7-T2`.
-
-Note on item 48 (added 2026-08-23): `AOC` ("Agent Output Contract") was filed from a grilling session evaluating [AXI](https://axi.md/) against `arm`, and is the second entry in this table sourced from outside the four planning documents (after `TOPTIER-S17`). It takes ordinal 48 rather than a sub-ordinal because it is not a follow-on to any existing item; 1–47 stay stable. Its decision record is `docs/design/agent-output-contract.md`, registered as an Armature source and cited by all 19 issues.
-
-It is placed in Tier A on measured evidence, not proposal scoring: `arm list` emits 342,560 bytes (~86k estimated tokens) by default and the fix takes it to ~89,000 (−74%). Two of the three defects it closes are correctness, not cost — `arm list --group` is silently inert in non-TTY while the coordinator and planner skills both instruct agents to use it, and structured errors land on stderr with stdout empty, so an agent running `2>/dev/null` gets nothing. AXI itself is cited as prior art, deliberately not adopted as a standard: binding a `make check` gate to a third party's `principles.yaml` would put an external dependency inside a deterministic gate (I1, I5). TOON is parked with a re-entry criterion (`AOC-S3-T5`, ADR 0019) rather than rejected — it is the last 30% of the saving, after the 68% that costs nothing conceptually.
-
-Item 48 overlaps two existing Tier A items and absorbed work from one. Item 16's `LNGHZN-S6-T1` now carries the error-channel move that was first drafted as `AOC-S2-T6` (cancelled as the error-channel task; a later command-reference `AOC-S2-T6` is also cancelled — docs travel with each S2 vertical slice per E13): the two edited the same four files to do overlapping work, and `LNGHZN-S10-T12` turning out to be merged removed the queue-position argument for keeping them apart. The 2026-08-26 S6 grill then **un-nested** that payload: Command Failure is `{error:{code,cause,next_actions,exit_code}}` on stdout, not nested in the AOC success envelope (ADR 0020). Item 15's `NXTTN-S3` and `NXTTN-S3-T1` lost their "dynamic artifacts (render-context output, `--format agent` payloads) are explicitly out of scope" clause — that exclusion was precisely the gap item 48 exists to close, and `AOC-S3-T2` now extends the same reporter, budgets file and ratchet rather than building a parallel one.
-
-Overnight 2026-08-26/27 also filed `AOC-S1-T3` (mode-sensitive Artifact Output classification). It sat between the expand helpers (S1-T2) and the `arm list`/`arm ready` migrations, and was blocked by `LNGHZN-S8-T1` because `review.go` is shared. That task is **merged** (PR #136, 2026-09-07). The S2–S4 chain after it is also **merged** (see item 48 row). There is no remaining AOC implementation task.
-
-Note on item 49 (added 2026-08-27; redesigned 2026-09-12; closed as a story 2026-09-18): `TOPTIER-S18` was filed from the same S7 grill that produced `LNGHZN-S7-T6`. The original T2 D9 collision story is historical: S7-T6 landed D10 on `main` (PR #146) without waiting on S12. Live S18 is a Task Contract / check-ID story: T0 `internal/taskcontract` + `doctor.LiveCheckIDs` (PR #189); T2 Graph Finding E14 (PR #192) after T0, no S14 product wait; T1 planner skill (PR #196) after T2; T3 registry doc (PR #193) after T0; T4 (orphan-done doctor check) remains **reparented to `TOPTIER-S12`** and waits on S12-T2. Numbered 49 rather than 19a because it is a standing planner invariant, not leftover S7 wiring.
-
-**D11 vs D12:** doctor **D12** (ops worktree N>0 behind `origin/_armature` after a best-effort fetch of the tracking ref) landed in PR #198 with the low-stakes threshold push. **D11** stays reserved for `TOPTIER-S12-T2` (G2.2 backup / missing-upstream). D12 is lag, not disaster recovery. Do not implement D11 by pulling S12.
-
-Note on item 50 (added 2026-08-27; closed 2026-09-10): `ARCHIMP-S20` extracts three pure decision seams from `arm claim` — `PlanClaim` (overlap block/dismiss/force), `PlanCompensation` (restore-vs-release after failed post-claim setup), `PlanProvision` (refuse/adopt/already-at-dest/fresh) — into `internal/claim` and `internal/worktree`. `cmd/` adapts facts and performs I/O. Spec is `docs/design/claim-overlap-plan.md`; workers implemented that document, not cancelled `ARCHIMP-S15`. Numbered 50 rather than 14b because it is architecture deepening of the Claim subsystem, not leftover F1 worktree lifecycle (item 14 / 14a). It sat in Tier A because it modularized the hottest command before more claim-adjacent work landed on `claim.go`, and because the DAG hard-blocked `AOC-S2-T5` on T2 and `LNGHZN-S6-T5` on T6. **PR #154 merged T1–T6 and the story** (2026-09-10, `d2af37b`); those edges are now satisfied.
-
-Note on item 27a being re-homed (added 2026-08-23): `LNGHZN-S10-T11` is **cancelled**; the TUI-seam work it named now lives as `LNGHZN-S6-T4`, a child of item 16's story. The 27a row is kept — the work is still ADR 0015 follow-on rather than part of item 16's error contract — but it is no longer a standalone node under `LNGHZN` as the 2026-08-23 note below describes. T4 is **merged** (PR #119).
-
-Note on `LNGHZN-S6-T5` (added 2026-08-27; closed 2026-09-18): the 2026-08-26 S6 grill (ADR 0020) split the original T1–T3 error-contract story into expand-then-contract. T1 wraps unmapped `RunE` as `GENERAL-1`; T2 maps high-traffic commands; T3 is the ledger; **T5** mapped remaining agent-facing `RunE` and deleted the wrap (PR #194). T4 remains extra TUI-seam work housed under the same story. T5 was last in the S6 chain; it is no longer dispatchable work.
-
-Note on item 27 being pulled forward (added 2026-08-23): `LNGHZN-S10` ("Gate efficiency") delivers Next-Ten №07 (Tiered Quality Gates), a Tier B item, ahead of most of Tier A. This was not a re-ranking — the work was forced by a dogfooding finding that the full gate was too slow to run per-task, which made every other Tier A item more expensive to deliver. It ratified four ADRs (0014 two-tier gates and evidence-based acceptance, 0015 mutation/coverage recalibration, 0016 three-door validation, plus the D1–D8 decisions in `docs/design/gate-efficiency.md`) and absorbed the residual `scope-overlap-validation-gaps` defects left over from item 8 (T6, T7, T8). Its row stays numbered 27 so the source-document numbering does not shift; its Tier B row below is marked delivered-early rather than removed. `LNGHZN-S10-T11` was reparented out of the story to `LNGHZN` directly and is recorded here as item 27a — it is ADR 0015 follow-on, not part of D1–D8.
-
-### Tier B — solid, sequence after foundation
+### Tier B
 
 | # | Item | Source | Armature story |
 |---|---|---|---|
-| 22 | Ops-branch backup and disaster recovery | Addendum G2 | `TOPTIER-S12` (**hold**). Story `open`. T1 (docs) is `arm ready`; T2 (doctor **D11**, not D12) waits on T1 (`TOPTIER-S18-T0` is already `merged`); `TOPTIER-S18-T4` was reparented here and waits on T2. S7-T6 no longer needs this story. Do not pull S12 unless Brian needs G2 |
+| 22 | Ops-branch backup and disaster recovery | Addendum G2 | `TOPTIER-S12` (**hold**). T1 (docs) is ready. T2 is doctor **D11** and waits on T1. `TOPTIER-S18-T4` was reparented here and waits on T2 |
 | 23 | Authorship / copyright clarity for agent-authored commits | Addendum G6 | `TOPTIER-S16` |
-| 24 | One merged-promotion path | LH D4 | `LNGHZN-S11` — **filed 2026-09-27** (ADR 0022). Pulled forward of the S6→S7 vertical because closeout cannot see a squash or a stack land. T1 records the delivery, T2 promotes one issue, T3 is `arm sync` and the hook, T4 is doctor **D13** and waits on T2 plus the open `doctor.go` holders (`TOPTIER-S12-T2`, `TOPTIER-S18-T4`, `bug-1783480206`). T1 waits on unmerged `TOPTIER-B1` (`engine.go`). Parent `LNGHZN` is a derived rollup, so this open child returns the epic to its pre-rollup status until S11 merges |
+| 24 | One merged-promotion path | LH D4 | `LNGHZN-S11`, filed 2026-09-27 (ADR 0022). See "What to do next" |
 | 25 | Redesign transition hooks | LH D2 | not yet decomposed |
 | 26 | Event stream (`arm events --follow`) | LH F3 | not yet decomposed |
-| 27 | Tiered Quality Gates | Next-Ten №07 | `LNGHZN-S10` — **pulled forward into Tier A**, see item 27 above |
 | 28 | The Harness Compatibility Contract | Next-Ten №08 | not yet decomposed |
 | 29 | Model-tier dispatch policy | LH C8 | not yet decomposed |
-| 30 | README quickstart rewrite | GAP D1 | `TOPTIER-S7` |
+| 30 | README quickstart rewrite | GAP D1 | `TOPTIER-S7`. T1 is blocked by `TOPTIER-S6-T1` |
 | 31 | Shim-retirement policy | LH D3 | not yet decomposed |
 | 32 | The Second Substrate (foreign-repo dogfood) | Next-Ten №06 | not yet decomposed |
 | 33 | Session handoff bundle | LH C10 | not yet decomposed |
-| 34 | Distribution and compatibility maturity | GAP T5 | `TOPTIER-S6` |
+| 34 | Distribution and compatibility maturity | GAP T5 | `TOPTIER-S6`. T1 and T2 are the front-door vertical |
 | 35 | Adopter positioning | GAP D3 | `TOPTIER-S8` |
-| 36 | Cost / token spend observability | Addendum G1 | `TOPTIER-S11` (**delivered**; story `merged`; T1 PR #158, T2 PR #161). Pulled forward for AOC-S4-T1 / AOC-S2-T3; those dependents are merged |
 
-Note: G2 and G6 are placed early in Tier B per the addendum's own "cheap, should not wait" / "cheap, low urgency" framing; G1 is placed late per its own "high leverage once fleet volume grows" framing — its value is real but gated on a precondition (a real multi-worker fleet running at volume) that most of the rest of Tier B is not waiting on.
+G2 and G6 sit early in this tier because the addendum called them cheap. The old late-tier G1 row (item 36, `TOPTIER-S11`) is **delivered** and lives in the archive, as does item 27 (`LNGHZN-S10`), which was pulled forward and merged.
 
-Note on Tier B / Tier A interleaving in the ready queue (added 2026-08-11; refreshed 2026-09-12; refreshed 2026-09-18): with the Tier A Feature spine closed, `arm ready` is mostly release/docs/extensibility work: `TOPTIER-S6-T1` / `TOPTIER-S6-T2`, `TOPTIER-S12-T1` (and the open S12 story), `TOPTIER-S7` / `TOPTIER-S8` / `TOPTIER-S14` / `TOPTIER-S16` (and `S14-T1`, `S16-T1`), plus the open `TOPTIER-S15` story. **Ready is not tier-ordered.** `TOPTIER-S7-T1` is **not** ready (`blocked_by` `TOPTIER-S6-T1`). `blocked_by` cannot express cross-document tier ordering, so a coordinator picking work off `arm ready` without this table will treat S12 docs or S14 extensibility as equivalent to the S6→S7 release/front-door vertical. This is a known limitation, not a DAG defect; do not invent `blocked_by` edges between tiers.
-
-### Tier C — valuable, lower immediate leverage
+### Tier C
 
 | # | Item | Source | Armature story |
 |---|---|---|---|
@@ -133,83 +53,14 @@ Note on Tier B / Tier A interleaving in the ready queue (added 2026-08-11; refre
 | 44 | Ops compaction and snapshot checkpoints | LH C2 | not yet decomposed |
 | 45 | Redaction firewall for durable ops | LH C5 | not yet decomposed |
 | 46 | Extensibility seam for custom issue types | Addendum G4 | `TOPTIER-S14` |
-| 47 | Human-newcomer onboarding diagnostics | Addendum G5 | `TOPTIER-S15`. T1 **merged** (PR #188): doctor `--format agent|json` is the AOC envelope `{count, checks[], help[]}`; `--explain` is opt-in for humans and agents (structured `explanation`/`suggested` only when flagged). `arm show TOPTIER-S15-T1` is `merged`. Story stays `open` only for T2 (README troubleshooting appendix), which remains `open`, blocked by `TOPTIER-S7-T2` |
+| 47 | Human-newcomer onboarding diagnostics | Addendum G5 | `TOPTIER-S15`. T1 is merged (PR #188). The story stays open for T2 (README troubleshooting appendix), blocked by `TOPTIER-S7-T2` |
 
-Note: G4 and G5 are placed at the tail of Tier C consistent with the addendum's own "low urgency until external adopters" framing for both — the same zero-adopters timing argument the prior three rounds already applied to several other deferred items in this tier.
+G4 and G5 stay at the tail. The addendum framed both as low urgency until there are external adopters.
 
----
+## How to keep this page
 
-## Recommended Tier A sequence (2026-09-18, Tier A Feature spine closed)
+Ordinals are a line, not a score. Ties inside a tier are not a build sequence. `blocked_by` cannot express this cross-document order, so do not invent edges just to encode a tier.
 
-Ordered by what was actually unblocked, then by remaining impact-per-unit-effort. This supersedes the 2026-09-12 sequence, whose **S18/S13/S6-T5 head is now complete**: `TOPTIER-S18-T0`–`T3`, `TOPTIER-S13-T1`/`T2`, `LNGHZN-S6-T5`, and `TOPTIER-S15-T1` are `merged` (`arm show`; PRs in the table). Item 15, 16, 18, 19, 21, 36, 48, and 50 are closed as Features. Step numbering is left unchanged: completed steps stay struck through because they are cited elsewhere.
+When a story is filed from a PR review, a dogfood theme, or a grilling session, add a row at filing time. Use a sub-ordinal (`14a`) when it is a follow-on, so source-document numbers stay stable. A delivery pulled forward from a lower tier keeps its original number. Record the reason. Do not silently re-tier it.
 
-Unlike early revisions of this table, most of this order was **enforced by the DAG**. Steps marked ⛓ are hard `blocked_by` edges; the rest remain judgment calls.
-
-**Do not start `LNGHZN-S6-T5`.** It is `merged` (PR #194). `TOPTIER-S15-T1` is `merged` (PR #188). Item 21 T2 is also `merged` and was never on the T5 fan-in.
-
-**Do not pull `TOPTIER-S12`.** Item 19 is closed without it. T1 is ready (docs only) and sits in `arm ready`; leave it unless Brian needs G2. `TOPTIER-S18-T4` waits on S12-T2; that is not a reason to un-hold G2.
-
-There are **no remaining Tier A Features** in `arm ready`. Item 24 (`LNGHZN-S11`, ADR 0022) is filed and pulled forward of the S6→S7 release/front-door vertical: closeout cannot see a squash or a stack land. Dispatch T1 when `TOPTIER-B1` is merged. T4 stays behind the open `doctor.go` holders. `TOPTIER-S6-T1` and `TOPTIER-S6-T2` remain the front-door vertical when this story is not the one being worked. Do not treat `TOPTIER-S14-T1` (Tier C, ready) or `TOPTIER-S12-T1` as the successor to the closed AOC/S18/S13 spine.
-
-| Order | Work | Item | Why here |
-|---|---|---|---|
-| 0 | ~~Merge overnight PRs #113–#123 in DAG order~~ | 16, 19, 20, 27a, 48 | **Complete 2026-08-31.** All ten landed in DAG order: `AOC-S1-T1` (#113) → `AOC-S1-T2` (#114); `LNGHZN-S6-T1` (#116) → T2 (#117) → T3 (#118) and T4 (#119); `LNGHZN-S7-T2` (#120) → T3 (#121); `LNGHZN-S8-T1` (#122) → T2 (#123, CI red resolved before merge). |
-| 0a | ~~`ARCHIMP-S20-T1` and `T3` — `PlanClaim` and `PlanCompensation` modules~~ | 50 | **Complete 2026-09-10 (PR #154).** |
-| 1 ⛓ | ~~`AOC-S1-T3` — mode-sensitive Artifact Output classification~~ | 48 | **Complete 2026-09-07 (PR #136).** Was the 2026-08-31 critical-path head. |
-| 2 ⛓ | ~~`AOC-S2-T2` — `arm list` conforms~~ | 48 | **Complete (PR #156).** Was the 2026-09-10 critical-path head. `arm show AOC-S2-T2` is `merged`. |
-| 3 ⛓ | ~~`AOC-S2-T1` — `arm ready` conforms~~ | 48 | **Complete (PR #157).** |
-| 4 ⛓ | ~~`TOPTIER-S11-T1` — record token counts on outcome/assessment ops~~ | 36 | **Complete (PR #158).** Item 36 delivered. |
-| 5 ⛓ | ~~`AOC-S4-T1` — payload-keyed op idempotency (ADR 0018)~~ | 48 | **Complete (PR #172).** |
-| 9 | ~~`NXTTN-S4-T1` — paved-road doc and escape-hatch labeling~~ | 18 | **Complete (PR #159).** |
-| 9a ⛓ | ~~`NXTTN-S4-T3` — restructure docs and skills to lead with the paved road~~ | 18 | **Complete (PR #164).** |
-| 6 ⛓ | ~~`TOPTIER-S11-T2` then `AOC-S2-T3` — `arm show` conforms~~ | 36, 48 | **Complete (PRs #161, #173).** |
-| 7 ⛓ | ~~`AOC-S2-T4` — remaining structured commands~~ | 48 | **Complete (PR #175).** Then S2-T5 #176, S3-T1 #179, S3-T3 #181, S3-T2 #182, S3-T4 #183, S3-T5 #184, S4-T2 #187. Item 48 closed. |
-| 8 ⛓ | ~~Remainder of item 50~~ | 50 | **Complete 2026-09-10 (PR #154).** |
-| 10 ⛓ | ~~`AOC-S2-T5` then S3~~ | 48 | **Complete.** End of the S2/S3 chain is on `main`. |
-| 11 | ~~`NXTTN-S3` — Context Economics~~ | 15 | **Complete.** Story `merged` (runtime T1 #166, T2 #167, T4 #165, T3 #168, T5 #180). |
-| 12 | ~~`LNGHZN-S7-T6` — D10 / StrictDecode acceptance~~ | 19 | **Complete (PR #146, 2026-09-10).** Unlinked from S12. **Hold `TOPTIER-S12`** (step 12 is no longer a pull-in of item 22). |
-| 14a | ~~`TOPTIER-S18-T0` — `taskcontract` leaf + `doctor.LiveCheckIDs`~~ | 49 | **Complete (PR #189).** Unblocked T2, T3, and (later) S12-T2. |
-| 14b ⛓ | ~~`TOPTIER-S18-T2` — validate E14 (DoD not implementable in scope)~~ | 49 | **Complete (PR #192).** After T0 only. Did **not** wait on `TOPTIER-S14`. Reverse edge: `TOPTIER-S14-T1` waited on T2 (`validate.go` overlap) and is now `arm ready`. |
-| 14c ⛓ | ~~`TOPTIER-S18-T3` — doctor check-ID registry doc~~ | 49 | **Complete (PR #193).** After T0. Reserved **D11** for `TOPTIER-S12-T2`; did not implement D11. |
-| 14d ⛓ | ~~`TOPTIER-S18-T1` — planner skill same-surface rule~~ | 49 | **Complete (PR #196).** After T2. |
-| 15a | ~~`TOPTIER-S13-T1` — enrich new attestations with disagreement fields~~ | 21 | **Complete (PR #190).** |
-| 15b ⛓ | ~~`TOPTIER-S13-T2` — package aggregator over stored `IsDisagreement`~~ | 21 | **Complete (PR #195).** After T1. **Not** a `LNGHZN-S6-T5` blocker. `stats.go` out of T2 scope. |
-| 16 | ~~Promote `TOPTIER-S15-T1` to `merged` (I6)~~ | 47 | **Complete.** `arm show TOPTIER-S15-T1` is `merged` (PR #188). T2 of item 47 remains open behind `TOPTIER-S7-T2`. |
-| 13 ⛓ | ~~`LNGHZN-S6-T5` — migrate remaining agent-facing errors and delete the `GENERAL-1` wrap~~ | 16 | **Complete (PR #194).** Last S6 task. Story `LNGHZN-S6` is `merged`. |
-
-Opportunistic, outside the ordering: `bug-1783480206` (residual `trls` references) waits on `TOPTIER-S18-T4`, which waits on held S12-T2; do not schedule it to force S12. `AOC-S4-T2` is **merged** (PR #187). `TOPTIER-S18-T4` stays open under S12; it is not a next Feature.
-
-**Tier B pull-ins (updated 2026-09-18):** item 36 (`TOPTIER-S11`) was pulled at old step 4 and is **delivered**. Item 22 (`TOPTIER-S12`) stays **held**. Item 47 T1 is `merged` (PR #188); remaining G5 work is T2 after S7-T2. Item 50 is closed (PR #154). Doctor **D12** (PR #198) is not a pull-in of item 22 / D11.
-
-Not in this sequence but sitting in `arm ready`: `TOPTIER-S6-T1` / `TOPTIER-S6-T2` (release maturity — the S6→S7 front-door vertical), `TOPTIER-S12-T1` / open S12 story (hold), `TOPTIER-S7` / `TOPTIER-S8` / `TOPTIER-S14` / `TOPTIER-S14-T1` / `TOPTIER-S16` / `TOPTIER-S16-T1`, and open story `TOPTIER-S15`. See the interleaving note above. Ready is not a dispatch order. Hold S12. `TOPTIER-S7-T1` is **not** ready (`blocked_by` `TOPTIER-S6-T1`).
-
----
-
-## F2 grilling session — resolved decisions (2026-07-08)
-
-A grilling pass on LH F2 (`arm ready --waves`) resolved the following, ahead of decomposition. These should carry into F2's eventual ADR (per the constitution's ADR-template field) and into `LNGHZN-S2`'s definition of done:
-
-1. **`blocked_by` adds nothing to the partition rule.** Every entry in the ready queue already has all blockers merged (`ComputeReady`'s `allBlockersMerged` gate), so two ready entries can never have a `blocked_by` ordering relationship between them. F2's actual partition criterion is scope-disjointness alone.
-2. **Reuse `claimPkg.ScopesOverlap` (`internal/claim/overlap.go`), not `validate.go`'s `scopeIntersection`.** The two disagree today (glob-aware vs. exact-string-only); using the weaker one would let a wave pass partitioning that then fails at actual claim time.
-3. **F2's originally-proposed claim-time "companion check" is already shipped.** `cmd/armature/claim.go` already blocks/warns on scope overlap against actively-claimed issues (`ScopesOverlap`, same-worker auto-dismiss, cross-worker `--force`). F2 is net-new only for the `--waves` partition/output itself.
-4. **`--waves` is advisory and pre-dispatch only — not the authoritative source for the coordinator's wave manifest.** The existing wave-verification-gate PRD's `WAVE_TASK_IDS`/`WAVE_BASE_SHA` are inherently post-dispatch runtime facts (real SHAs only exist once workers commit); `--waves` runs before any claim exists and can't produce them. The coordinator skill's existing prose-recorded manifest is unchanged by F2.
-5. **Explicit non-goal (ADR-bound): scope-disjoint ≠ contract-safe.** The `2026-07-06` cross-task-format-drift finding showed scope-disjoint tasks in the same wave produced an interface mismatch (log format, entry IDs) invisible to per-task review. `--waves` guarantees freedom from file-level conflict only, never from shared-contract drift — this must be stated as an explicit non-goal in F2's ADR, not left implicit.
-6. **Parent/child scope containment is a real, reachable prerequisite bug, not hypothetical.** `story` is ready-eligible (`internal/issuetype/issuetype.go`), so a story and its own ready child can co-occur in the ready set; naive `ScopesOverlap` would flag them as conflicting. Fixed as `TOPTIER-S17`'s leading task (see item 8 above), which `LNGHZN-S2` blocks on.
-7. **The broader `scope-overlap-validation-gaps` theme is filed as its own story (`TOPTIER-S17`), not folded into F2.** Of its four documented defects — (a) no transitive closure over `blocked_by`, (b) parent/child containment, (c) no cross-story overlap awareness, (d) phantom-scope for blocker-created files — only (b) blocks F2. (a) is irrelevant to wave-partitioning (ready entries can't be mutually blocked_by-ordered). (c) is arguably *fixed for free* by F2, since partitioning runs across the whole ready set regardless of story boundary, unlike today's checkers which the theme says only compare within a story. (d) is orthogonal (filesystem-state validation, not pairwise overlap). Defects (a), (c), and (d) remain `TOPTIER-S17`'s scope but are **not** blockers for `LNGHZN-S2` — they should not be dropped or forgotten just because they don't gate F2; the theme documents this as "the single most frequently reported planning-time friction," recurring across at least 4 distinct stories (DF-S5, MIGH, HOOKBIND, EXECEV, ARCHIMP-S18).
-8. **Partition algorithm: greedy first-fit, with priority as a hard tier boundary and conflict-degree ordering within a tier.** Critical-tier items are never delayed into a later wave to improve packing for lower-priority items (and vice versa). Within a priority tier, the existing depth/blocks-count/ID tie-break (built for single-item dispatch order) is dropped in favor of packing by scope-conflict degree (most-constrained items placed first), to actually optimize the stated goal — maximum parallelism, minimum potential merge conflicts — rather than inheriting an ordering built for a different purpose. No wave-size cap.
-9. **Output shape: a new top-level grouped structure (array of waves, each an array of `ReadyEntry`), scoped to the `--waves` flag only.** Plain `arm ready` (no `--waves`) keeps today's flat-list shape unchanged. Since alpha software (pre-`v0.1.0`, no external adopters) removes backward-compat as a constraint, the shape was chosen for what's actually easiest for an agent coordinator to consume (dispatch-by-wave without a client-side groupby), not for minimizing diff against the existing flat-list contract.
-10. **`--waves` is a pure computed view — no new op type, nothing persisted.** Consistent with I1 (git-native) and I2 (append-only): wave assignment is advisory and can change between calls as claims/priorities shift; it is never a system-remembered commitment. This is also why `--waves` cannot be the source of truth for the coordinator's `WAVE_TASK_IDS`/`WAVE_BASE_SHA` manifest (see item 4) — that manifest is inherently stateful/recorded, which `--waves` by design is not.
-
----
-
-## Notes on reading this table
-
-- **Ordinal, not cardinal**, following Round Three's own colophon convention: a Tier S item is not "twice as valuable" as a Tier B item, it is *earlier in line*.
-- **Self-scored, single-author bias inherited from all three source documents** — this ranking synthesizes their own scores plus judgment; it does not re-run their adversarial rounds.
-- **Ties within a tier are not meaningfully ordered** — items 10–21 in Tier A, for instance, are close enough in leverage/evidence/cost that the numbered order should not be read as a strict build sequence within the tier. This applies doubly to the six former-addendum items (G1–G6, now items 22–23, 36, 46–47, and 21): their position within a tier reflects the addendum's own qualitative call ("cheap, should not wait," "A/B boundary," etc.), not a re-scored ranking against their tier-mates.
-- When any of these items is actually decomposed into Armature issues (as all six narrow gaps and thirteen other items now are), that DAG becomes authoritative for *that item's* internal sequencing — this document only orders *between* items and documents, which Armature has no mechanism for today.
-- **The "Armature story" column** is this document's link into the DAG: it names the epic-level story an item has been decomposed into, where one exists, so the ranked order above can drive cross-story dispatch priority even though `blocked_by` edges can't express it. As of this writing every GAP item (T1–T5, D1–D5) has a 1:1 `TOPTIER-S1`–`S10` story (in that same order — `S1`=T1, `S2`=D2, `S3`=T2, `S4`=T3, `S5`=T4, `S6`=T5, `S7`=D1, `S8`=D3, `S9`=D4, `S10`=D5); the six narrow-gaps addendum items (G1–G6) are `TOPTIER-S11`–`S16` respectively; the `scope-overlap-validation-gaps` dogfood theme is `TOPTIER-S17` (filed and decomposed 2026-07-08), independently of the three planning rounds (same category as G1–G6 — a real gap discovered outside the original documents) during F2's grilling session, as a hard prerequisite for `LNGHZN-S2`; three Next-Ten items (№01, №02, №05) are decomposed under the `NXTTN` epic (story# = item#, except №01: `NXTTN-S1` was a cancelled duplicate, and the one remaining genuine piece of that item's work is tracked as `NXTTN-S1B`); LH D5 and LH F2 are decomposed under the `LNGHZN` epic (`LNGHZN-S1` for D5, blocked by precursor bug `LNGHZN-B1`; `LNGHZN-S2` for F2, decomposed and filed 2026-07-08, blocked by `TOPTIER-S17-T1` specifically) — the epic is the standing home for future LH items, same pattern as `NXTTN`/`TOPTIER`. On 2026-07-19, with Tier S delivered, the eight remaining Tier A items were decomposed in ordinal order: LH C1/C4/F1/C3/D1/C6 as `LNGHZN-S3`–`S8` respectively, and Next-Ten №03/№04 as `NXTTN-S3`/`NXTTN-S4` (story# = item#, matching the existing NXTTN convention). Cross-story same-file scope overlaps against still-open `TOPTIER` tasks (harness-hook docs/evaluator vs `TOPTIER-S5`, Makefile vs `TOPTIER-S3-T1`/`TOPTIER-S6-T1`, workflow.md vs `TOPTIER-S4-T1`) were serialized with `blocked_by` edges following this document's ordinal order. On 2026-08-11 a status audit added the Status column to Tier A and recorded `LNGHZN-S9` as item 14a — a story filed from `LNGHZN-S5`'s PR-review thread rather than from any of the four planning documents, and therefore the first entry in this table whose source is the DAG itself (LH F1.1 is a back-reference added to `long-horizon-proposals.md` to give it a citable source ID, not an item from the original round). Update this column, not just the source doc, whenever an item crosses from "proposed" to "filed" **or from "filed" to "delivered"** — it is the only place this ordering and the DAG's IDs are cross-referenced, and an un-updated Status column makes the whole tier read as pending.
-
-- **Work filed outside the four planning documents needs a home here too.** `LNGHZN-S9` sat in the DAG untiered and uncited between its filing and the 2026-08-11 audit, which made it invisible to this ordering — it appeared in `arm ready` with no tier and no priority argument attached to it. Any story filed from a PR review, a dogfood theme, or a grilling session (as `TOPTIER-S17` was) should get a row here at filing time, using a sub-ordinal (`14a`) when it is a follow-on to an existing item, so the numbering cited from the source documents stays stable. Same rule caught `AOC` as item 48 on 2026-08-23, `TOPTIER-S18` as item 49 on 2026-08-27, and `ARCHIMP-S20` as item 50 on 2026-08-27. Item 50 was the remaining live `ARCHIMP` story (S1–S19 merged or cancelled) and is now **delivered** (PR #154, 2026-09-10); it was tracked here because it modularized Claim and because items 16 and 48 hard-blocked on it, not because the rest of the `ARCHIMP` epic is in scope for this ranking.
-
-- **Delivery pulled forward from a lower tier still gets a row in its own tier's position** (see item 27). Tier order is a recommendation, not a contract: when dogfooding forces a lower-tier item early because it is making the higher-tier items more expensive, record the reason rather than silently re-tiering the item.
+Update the story column when an item is filed and when it is delivered. Delivered rows move to the archive. This page should stay the remaining line.
