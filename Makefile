@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
 
 GO ?= go
 PYTHON ?= python3
@@ -20,7 +20,10 @@ UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} 
 
 help:
 	@echo "Armature Go build targets:"
-	@echo "  make check               - Run publish gate: lint, build, coverage-check, mutate, validate-skills, validate-doc-examples, census-drift-check, git-test-hermetic-check, crosscompile"
+	@echo "  make check               - Run publish gate serially (union of check-static, check-core, mutate)"
+	@echo "  make check-job JOB=<id>  - Run one CI partition (check-static | check-core | mutate)"
+	@echo "  make print-check-jobs    - Dump the check-job membership table"
+	@echo "  make install-check-tools - go install pinned golangci-lint and gremlins"
 	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
@@ -49,7 +52,84 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-check: lint build coverage-check test-coverage-check mutate validate-skills validate-doc-examples census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check crosscompile
+# Sole fan-out table. ci.yml must not restate these targets.
+# Roots only. Existing prerequisite edges stay the owners of order inside
+# a root (coverage-check → coverage → build, lint → adr-principles, …).
+# build is not a fan-out root: coverage-check and validate-skills already
+# depend on it.
+
+GOLANGCI_LINT_MODULE  := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+GREMLINS_MODULE       := github.com/go-gremlins/gremlins/cmd/gremlins
+GOLANGCI_LINT_VERSION := v2.14.0
+GREMLINS_VERSION      := v0.6.0
+
+CHECK_JOBS := check-static check-core mutate
+
+# Tail: lint, crosscompile, census/coverage/hermetic self-tests, job-id drift.
+CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check
+CHECK_TOOLS_check-static := golangci-lint
+
+# Suite pole plus short product validators. One go test via coverage-check (D3).
+CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check
+CHECK_TOOLS_check-core :=
+
+# Both mutation trees (./internal then ./cmd). Same .gremlins.yaml.
+CHECK_JOB_mutate := mutate
+CHECK_TOOLS_mutate := gremlins
+
+# No prerequisites: make -j check stays serial (loop, not a prereq DAG).
+check:
+	@set -e; \
+	for j in $(CHECK_JOBS); do \
+		echo "==> make check-job JOB=$$j"; \
+		$(MAKE) check-job JOB=$$j; \
+	done
+
+check-job:
+	@set -e; \
+	if [ "$(words $(JOB))" != "1" ] || [ -z "$(filter $(JOB),$(CHECK_JOBS))" ]; then \
+		echo "FAIL: unknown or empty JOB='$(JOB)' (want one of: $(CHECK_JOBS))" >&2; \
+		exit 1; \
+	fi; \
+	gobin="$$($(GO) env GOBIN)"; \
+	if [ -z "$$gobin" ]; then gobin="$$($(GO) env GOPATH)/bin"; fi; \
+	export PATH="$$gobin:$$PATH"; \
+	for t in $(CHECK_TOOLS_$(JOB)); do \
+		case $$t in \
+			golangci-lint) mod="$(GOLANGCI_LINT_MODULE)"; ver="$(GOLANGCI_LINT_VERSION)" ;; \
+			gremlins) mod="$(GREMLINS_MODULE)"; ver="$(GREMLINS_VERSION)" ;; \
+			*) echo "FAIL: unknown check tool $$t" >&2; exit 1 ;; \
+		esac; \
+		if [ "$(CHECK_INSTALL_TOOLS)" = "1" ]; then \
+			echo "Installing $$t@$$ver..."; \
+			$(GO) install "$$mod@$$ver"; \
+		elif ! command -v $$t >/dev/null 2>&1; then \
+			echo "$$t not found. Install with:"; \
+			echo "  go install $$mod@$$ver"; \
+			echo "Then ensure GOPATH/bin is on your PATH."; \
+			exit 1; \
+		fi; \
+	done; \
+	for t in $(CHECK_JOB_$(JOB)); do \
+		echo "==> make $$t"; \
+		$(MAKE) $$t; \
+	done
+
+print-check-jobs:
+	@$(foreach j,$(CHECK_JOBS),printf 'job %s\ntargets %s\ntools %s\n' '$(j)' '$(CHECK_JOB_$(j))' '$(CHECK_TOOLS_$(j))';)
+
+install-check-tools:
+	@set -e; \
+	gobin="$$($(GO) env GOBIN)"; \
+	if [ -z "$$gobin" ]; then gobin="$$($(GO) env GOPATH)/bin"; fi; \
+	export PATH="$$gobin:$$PATH"; \
+	echo "Installing golangci-lint@$(GOLANGCI_LINT_VERSION)..."; \
+	$(GO) install "$(GOLANGCI_LINT_MODULE)@$(GOLANGCI_LINT_VERSION)"; \
+	echo "Installing gremlins@$(GREMLINS_VERSION)..."; \
+	$(GO) install "$(GREMLINS_MODULE)@$(GREMLINS_VERSION)"
+
+test-check-jobs:
+	@scripts/test_check_jobs.sh .
 
 validate-graph: build
 	@./bin/arm validate --ci
@@ -108,7 +188,7 @@ coverage-check: coverage
 lint: adr-principles
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "golangci-lint not found. Install with:"; \
-		echo "  go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+		echo "  go install $(GOLANGCI_LINT_MODULE)@$(GOLANGCI_LINT_VERSION)"; \
 		echo "Then ensure ~/go/bin is on your PATH."; \
 		exit 1; \
 	}
@@ -120,7 +200,7 @@ adr-principles:
 mutate:
 	@command -v gremlins >/dev/null 2>&1 || { \
 		echo "gremlins not found. Install with:"; \
-		echo "  go install github.com/go-gremlins/gremlins/cmd/gremlins@latest"; \
+		echo "  go install $(GREMLINS_MODULE)@$(GREMLINS_VERSION)"; \
 		echo "Then ensure ~/go/bin is on your PATH."; \
 		exit 1; \
 	}
