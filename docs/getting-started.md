@@ -6,9 +6,29 @@ Armature is a git-native work orchestration system for multi-agent AI coordinati
 
 ### Prerequisites
 - **Git** (v2.25+)
-- **Go** (to build from source)
+- **Go** 1.26+ (for `go install` or building from source)
 
-### Build and Install
+### Released binaries
+Download the `arm` archive for your OS/arch from
+[GitHub Releases](https://github.com/scullxbones/armature/releases),
+verify the checksum, unpack it, and place `arm` on your `PATH` (for example
+`~/.local/bin/arm`).
+
+### go install
+
+```bash
+GOBIN="${GOBIN:-$HOME/.local/bin}"
+export GOBIN
+mkdir -p "$GOBIN"
+go install github.com/scullxbones/armature/cmd/armature@latest
+mv "$GOBIN/armature" "$GOBIN/arm"
+```
+
+`go install` names the binary after the package directory (`armature`); rename
+it to `arm`. Pin a release tag instead of `@latest` when you need a fixed
+version.
+
+### Build from source
 Clone the repository and install the `arm` binary:
 
 ```bash
@@ -28,7 +48,13 @@ arm bootstrap
 ```
 
 ### Initialization Details
-Armature creates an orphan `_armature` branch for coordination data, storing all state in the `.armature/` worktree. This separation ensures code and coordination state never conflict, enabling reliable multi-agent coordination.
+Bootstrap creates an orphan `_armature` branch and an ops worktree at
+`.armature/`. Coordination state (ops logs, materialized issues, config) lives
+at the root of that worktree. Older clones used a dual layout (`.arm/` worktree
+containing an inner `.armature/` state dir); bootstrap migrates those to the
+single `.armature/` worktree. Bootstrap also deploys bundled skills to
+`.claude/skills/` (and sibling harness skill dirs) — there is no separate
+skill-install step for the default path.
 
 For detailed configuration options (TTL, token budget, hooks), see [Configuration Reference](configuration.md).
 
@@ -42,15 +68,10 @@ arm worker-init --check || arm worker-init
 
 This command registers a unique worker UUID in your git config. It only needs to run once per clone—subsequent invocations will detect the existing registration and skip initialization.
 
-### Deploy Bundled Skills
+### Optional: refresh or global skills
 
-The `arm bootstrap` command deploys bundled skills to `.claude/skills/` by default. To refresh skills in your project:
-
-```bash
-arm bootstrap
-```
-
-To make bundled skills available globally to Claude Code agents, use `--global`:
+To refresh bundled skills in the project after an upgrade, run `arm bootstrap`
+again. To install skills globally for Claude Code:
 
 ```bash
 arm bootstrap --global
@@ -64,25 +85,30 @@ Armature uses source documents (PRDs, Architecture docs) to define work.
 
 ```bash
 # Add a source document from the local filesystem
-arm sources add --url docs/armature-prd.md --type filesystem
+arm sources add --url docs/requirements.md --type filesystem
 
 # Sync to cache the content locally
 arm sources sync
+arm sources verify
 ```
 
 ## 4. Decompose Requirements into Tasks
 
-Use an AI agent to break down your requirements into a Task DAG.
+Use an AI agent to break down your requirements into a Task DAG. The README
+quickstart shows a minimal runnable `plan.json`; in production an agent writes
+that file from `arm dag context` output.
 
 ```bash
 # 1. Generate context for the AI agent
-arm dag context --sources all > context.json
+SOURCE_UUID=$(arm sources verify | awk '/OK/{print $1; exit}')
+arm dag context --sources "$SOURCE_UUID" > context.json
 
-# 2. Provide context.json to your AI agent (e.g., Claude, Gemini) 
-# and ask it to produce a `plan.json`.
+# 2. Provide context.json to your AI agent and ask it to produce plan.json
+#    (each issue must cite a source UUID).
 
-# 3. Apply the plan to create the tasks
+# 3. Apply the plan and promote draft nodes
 arm dag apply --plan plan.json
+arm dag transition --issue DEMO-S1
 ```
 
 ## 5. Dispatch Work
@@ -92,27 +118,27 @@ The coordinator loop: find ready tasks, claim each one, render context, dispatch
 ### Find Ready Tasks
 ```bash
 arm ready
-# TASK-001  Write authentication middleware   [ready]
-# TASK-002  Add user profile endpoint         [ready]
+# DEMO-S1-T1  Write greeting   [ready]
 ```
 
 ### Claim and Dispatch
 ```bash
-arm claim TASK-001 --worktree
-arm render-context TASK-001 --format agent
+arm claim DEMO-S1-T1 --worktree
+arm render-context DEMO-S1-T1 --format agent
 # Pass the render-context output to your AI agent as its task spec
 ```
 
-### Create a Feature Branch and Complete
+### Complete in the claim worktree
 ```bash
-git checkout -b feature/TASK-001
-arm note TASK-001 --msg "Started implementation"
-arm transition TASK-001 --to done --outcome "Implemented auth middleware with JWT support"
+cd .worktrees/DEMO-S1-T1
+arm note DEMO-S1-T1 --msg "Started implementation"
+# implement, commit with feat(DEMO-S1-T1): ...
+arm transition DEMO-S1-T1 --to done --outcome "Implemented the greeting file for the demo story" --force
 ```
 
-> `arm transition --to done` rejects transitions on `main`/`master` to enforce
-> the PR workflow. Create a feature branch first, or pass `--force` to override
-> in rare emergency cases.
+> The done-branch check reads the primary checkout (often still `main`) even
+> when the claim worktree is already on `task/<id>`, so `--force` is required
+> for that path. Prefer a concrete outcome string; vague outcomes are refused.
 
 ### Loop Until Done
 ```bash

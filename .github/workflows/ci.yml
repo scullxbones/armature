@@ -162,3 +162,21 @@ jobs:
 
       - name: Run full e2eharness suite
         run: make test-e2eharness
+
+  # D1.1 / TOPTIER-S7-T1: README quickstart must stay runnable on a fresh clone.
+  quickstart:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+
+      - name: Build arm binary
+        run: make build
+
+      - name: Run README quickstart in a scratch repo
+        run: bash scripts/quickstart_check.sh
