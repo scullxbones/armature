@@ -22,6 +22,7 @@ Two consequences worth separating:
 - [Scope normalizer still requires comma-space, so a comma-joined create payload stays one phantom path](../../raw/2026-08-15T2049Z-5207ee28-commands-scope-normalize-requires-comma-space.md) — `arm create --scope "a.go,b.go"` stores one path. `amend` does not split it. Same leftover as `dag apply` joining scope.
 - [`DecodeScope` preserves comma-without-space as a single entry](../../raw/2026-09-21T1702Z-loops-validation-decode-scope-comma-no-space.md) — MATENC-S1-T1 loops. Worker kept bit-for-bit parity with `normalizeScopeEntries`: split only on comma-space; `a.go,b.go` remains one entry. Called out as an intentional non-goal for that unit ("that dogfood hole stays out of this unit"), so the August leftover is now an encoded product choice until a follow-on task.
 - [Handoff and plan JSON reused T6; the live DAG already had a merged T6](../../raw/2026-08-17T0129Z-5207ee28-workflow-plan-id-already-taken.md) — No "next free child ID" verb. Planner had to `arm show` the collision and invent T12 by hand.
+- [`arm amend --scope a b` treats extra tokens as args](../../raw/2026-09-27T1208Z-cursor-documentation-amend-scope-extra-tokens.md) — Same incomplete-family shape as dag-apply / DecodeScope: the `--scope` verb exists but does not accept the invocation agents try. Also listed under [documentation-gaps](../documentation-gaps/README.md).
 
 ## Candidate Follow-Ups
 
