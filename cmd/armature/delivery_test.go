@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
@@ -131,4 +132,50 @@ func TestExtractFieldsDeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
 	}
 	got := extractFieldsFromIssue(issue, "branch,base,tip,pr,derived")
 	assert.Equal(t, []string{"task/TASK-01", "aaa", "bbb", "7", "true"}, got)
+}
+
+func TestDeliveryRecordRetryPreservesIntegrationBranch_REQ_LNGHZN_S11_T1(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+	scoped := filepath.Join(wt, "cmd/armature/task_01.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(scoped), 0o755))
+	require.NoError(t, os.WriteFile(scoped, []byte("package main\n"), 0o644))
+	run(t, wt, "git", "add", "cmd/armature/task_01.go")
+	run(t, wt, "git", "commit", "-m", "feat(task-01): add scoped file")
+
+	_, err = runTrls(t, wt, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "first delivery", "--force")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	before, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.Equal(t, "main", before.IntegrationBranch)
+	require.NotEmpty(t, before.Base)
+	require.NotEmpty(t, before.Tip)
+
+	cfgPath := filepath.Join(getTestContext(t, repo).IssuesDir, "config.json")
+	cfg, err := config.LoadConfig(cfgPath)
+	require.NoError(t, err)
+	cfg.IntegrationBranch = "develop"
+	require.NoError(t, config.WriteConfig(cfgPath, cfg))
+
+	out, err := runTrls(t, repo, "delivery", "record", "--issue", "task-01",
+		"--base", before.Base, "--tip", before.Tip)
+	require.NoError(t, err)
+	assert.Contains(t, out, `"noop":true`, "same base/tip retry must stay idempotent after config change")
+
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	after, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "main", after.IntegrationBranch,
+		"delivery record retry must keep the recorded integration branch")
+
+	opsFor := transitionOpsForIssue(t, repo, "task-01")
+	require.NotEmpty(t, opsFor)
+	assert.Equal(t, "main", opsFor[len(opsFor)-1].Payload.IntegrationBranch)
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
@@ -205,4 +207,78 @@ func TestSyncLegacyOnlySucceedsWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
 	_, rows := decodeSyncIssues(t, stdout.String())
 	require.Len(t, rows, 1)
 	assert.Equal(t, "legacy", rows[0].Kind)
+}
+
+func TestSyncSkipsStalePromoteAfterReopen_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := doneWithoutAssessment(t)
+	landDeliveryAndAttest(t, repo, "task-01")
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	store := newSnapshotStore(ctx)
+	snap, err := store.Load(t.Context())
+	require.NoError(t, err)
+	allOps, err := readAllOpsFromDir(filepath.Join(ctx.IssuesDir, "ops"))
+	require.NoError(t, err)
+	git := adapters.New(repo)
+	items := classifyDoneLeaves(git, snap.Issues, allOps, "", ctx.Config.IntegrationBranchOrDefault())
+	require.Len(t, items, 1)
+	require.True(t, items[0].Result.Promote, "fixture must classify as promote; got %s", items[0].Result.Kind)
+
+	// Another worker reopens after classify, before persist.
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{To: ops.StatusOpen, Outcome: "reopened after classify"},
+	}))
+
+	require.NoError(t, persistClassifications(ctx, git, items, new(bytes.Buffer)))
+
+	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, showErr)
+	assert.Equal(t, "open\n", status, "stale promote must not append merged after reopen")
+
+	ref := delivery.RefName("task-01")
+	_, refErr := git.ResolveRevision(ref)
+	require.NoError(t, refErr, "stale promote must not tear down the delivery ref")
+
+	for _, op := range transitionOpsForIssue(t, repo, "task-01") {
+		assert.NotEqual(t, ops.StatusMerged, op.Payload.To, "merged must not be written from a stale promote")
+	}
+}
+
+func TestSyncAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+	assert.DirExists(t, worktreePath)
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force", "--skip-delivery-gate")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	git := adapters.New(repo)
+	ref := delivery.RefName("task-01")
+	_, err = git.ResolveRevision(ref)
+	require.NoError(t, err, "done transition must leave a delivery ref")
+
+	markIssueMergedForTest(t, repo, "task-01")
+	_, err = git.ResolveRevision(ref)
+	require.NoError(t, err, "already-merged fixture must keep the stale delivery ref")
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 0, code, "merged teardown retry must succeed; out=%s", stdout.String())
+
+	_, err = git.ResolveRevision(ref)
+	require.Error(t, err, "sync retry must delete refs/armature/deliveries/<id> for already-merged issues")
 }

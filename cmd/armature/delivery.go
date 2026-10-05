@@ -66,15 +66,22 @@ base must ancestor tip, and the range must be non-empty.`,
 			}
 
 			payload := ops.Payload{
-				To:                ops.StatusDone,
-				Base:              base,
-				Tip:               tip,
-				IntegrationBranch: appCtx.Config.IntegrationBranchOrDefault(),
+				To:   ops.StatusDone,
+				Base: base,
+				Tip:  tip,
 			}
 			if liveIssue != nil {
 				payload.Outcome = liveIssue.Outcome
 				payload.Branch = liveIssue.Branch
 				payload.PR = liveIssue.PR
+				// Same-status done retries must keep the recorded integration
+				// branch; config is only the default for a first snapshot.
+				if liveIssue.Status == ops.StatusDone {
+					payload.IntegrationBranch = liveIssue.IntegrationBranch
+				}
+			}
+			if payload.IntegrationBranch == "" {
+				payload.IntegrationBranch = appCtx.Config.IntegrationBranchOrDefault()
 			}
 
 			if replayErr == nil && liveIssue != nil {

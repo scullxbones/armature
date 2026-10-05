@@ -21,6 +21,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/scullxbones/armature/internal/worker"
@@ -491,6 +492,64 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	return withWorkerLogLock(ctx, logPath, func() error {
 		return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx))
 	})
+}
+
+// appendMergedIfCurrent re-reads ops under the worker log lock and appends
+// merged only when the issue is still a promotable done leaf with the same
+// delivery SHAs classification used. Returns wrote=false when another worker
+// reopened, replaced the delivery, or otherwise invalidated the promote.
+func appendMergedIfCurrent(
+	ctx *config.Context,
+	git *adapters.Client,
+	logPath, workerID string,
+	expected materialize.Issue,
+	integration, pr string,
+) (bool, error) {
+	if ctx == nil {
+		return false, fmt.Errorf("appendMergedIfCurrent: command context unavailable")
+	}
+	var wrote bool
+	err := withWorkerLogLock(ctx, logPath, func() error {
+		live, allOps, replayErr := replayIssueOps(ctx.IssuesDir, expected.ID)
+		if replayErr != nil {
+			return replayErr
+		}
+		if live == nil || live.Status != ops.StatusDone {
+			return nil
+		}
+		if live.Base != expected.Base || live.Tip != expected.Tip {
+			return nil
+		}
+		integ := integration
+		if integ == "" {
+			integ = live.IntegrationBranch
+		}
+		res := promotion.Evaluate(git, promotion.Input{
+			Issue:       *live,
+			PriorOps:    allOps,
+			Integration: integ,
+			PR:          pr,
+		})
+		if !res.Promote {
+			return nil
+		}
+		op := ops.Op{
+			Type:      ops.OpTransition,
+			TargetID:  expected.ID,
+			Timestamp: nowEpoch(),
+			WorkerID:  workerID,
+			Payload:   res.MergedPayload,
+		}
+		if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
+			return err
+		}
+		if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx)); err != nil {
+			return err
+		}
+		wrote = true
+		return nil
+	})
+	return wrote, err
 }
 
 func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {

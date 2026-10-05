@@ -9,7 +9,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
-	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
@@ -89,6 +88,12 @@ func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool
 				return persistErr
 			}
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", persistErr)
+		}
+		if teardownErr := teardownMergedLeftovers(ctx, git, snap.Issues, cmd.ErrOrStderr()); teardownErr != nil {
+			if failExit {
+				return teardownErr
+			}
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", teardownErr)
 		}
 	}
 
@@ -192,20 +197,35 @@ func persistClassifications(ctx *config.Context, git *adapters.Client, items []c
 		if !item.Result.Promote {
 			continue
 		}
-		op := ops.Op{
-			Type:      ops.OpTransition,
-			TargetID:  item.Issue.ID,
-			Timestamp: nowEpoch(),
-			WorkerID:  workerID,
-			Payload:   item.Result.MergedPayload,
+		integ := item.Issue.IntegrationBranch
+		wrote, appendErr := appendMergedIfCurrent(ctx, git, logPath, workerID, item.Issue, integ, "")
+		if appendErr != nil {
+			return appendErr
 		}
-		if err := appendOp(ctx, logPath, op); err != nil {
+		if !wrote {
+			continue
+		}
+		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, item.Issue, errWriter); err != nil {
 			return err
 		}
-		if err := git.DeleteRef(delivery.RefName(item.Issue.ID)); err != nil {
-			return err
+	}
+	return nil
+}
+
+// teardownMergedLeftovers finishes delivery-ref / worktree cleanup for issues
+// already promoted to merged when a prior sync append succeeded but teardown
+// failed. Idempotent with arm merged's already-merged retry path.
+func teardownMergedLeftovers(ctx *config.Context, git *adapters.Client, issues map[string]*materialize.Issue, errWriter io.Writer) error {
+	ids := make([]string, 0, len(issues))
+	for id, issue := range issues {
+		if issue == nil || issue.Status != ops.StatusMerged {
+			continue
 		}
-		if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, item.Issue, errWriter); err != nil {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issues[id], errWriter); err != nil {
 			return err
 		}
 	}

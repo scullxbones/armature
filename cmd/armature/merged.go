@@ -295,6 +295,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 
 	alreadyMerged := entry.Status == ops.StatusMerged
 	prAlreadyRecorded := alreadyMerged && issue.PR == pr
+	git := adapters.New(ctx.RepoPath)
 
 	if alreadyMerged {
 		if pr != "" && !prAlreadyRecorded {
@@ -314,11 +315,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 				return err
 			}
 		}
-		git := adapters.New(ctx.RepoPath)
-		if err := git.DeleteRef(delivery.RefName(issueID)); err != nil {
-			return err
-		}
-		if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
+		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {
 			return err
 		}
 		printMerged(cmd, issueID, pr)
@@ -329,7 +326,6 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 	if err != nil {
 		return fmt.Errorf("read ops: %w", err)
 	}
-	git := adapters.New(ctx.RepoPath)
 	integration := issue.IntegrationBranch
 	if integration == "" {
 		integration = ctx.Config.IntegrationBranchOrDefault()
@@ -361,15 +357,40 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 			}
 		}
 		if result.Promote {
-			op := ops.Op{
-				Type:      ops.OpTransition,
-				TargetID:  issueID,
-				Timestamp: nowEpoch(),
-				WorkerID:  workerID,
-				Payload:   result.MergedPayload,
+			wrote, appendErr := appendMergedIfCurrent(state.ctx, git, logPath, workerID, *issue, integration, pr)
+			if appendErr != nil {
+				return appendErr
 			}
-			if err := appendOp(state.ctx, logPath, op); err != nil {
-				return err
+			if !wrote {
+				live, _, replayErr := replayIssueOps(ctx.IssuesDir, issueID)
+				if replayErr != nil {
+					return replayErr
+				}
+				if live != nil && live.Status == ops.StatusMerged {
+					if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *live, cmd.ErrOrStderr()); err != nil {
+						return err
+					}
+					printMerged(cmd, issueID, pr)
+					return nil
+				}
+				freshOps, readErr := readAllOpsFromDir(filepath.Join(ctx.IssuesDir, "ops"))
+				if readErr != nil {
+					return fmt.Errorf("read ops: %w", readErr)
+				}
+				freshIssue := issue
+				if live != nil {
+					freshIssue = live
+				}
+				fresh := promotion.Evaluate(git, promotion.Input{
+					Issue:       *freshIssue,
+					PriorOps:    freshOps,
+					Integration: integration,
+					PR:          pr,
+				})
+				if fresh.Err != nil {
+					return fresh.Err
+				}
+				return &promotion.Error{IssueID: issueID, Kind: fresh.Kind, Msg: "promotion check did not pass for " + issueID}
 			}
 		}
 	}
@@ -380,10 +401,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID}
 	}
 
-	if err := git.DeleteRef(delivery.RefName(issueID)); err != nil {
-		return err
-	}
-	if _, err := removeWorktreeForIssueTracked(ctx.RepoPath, *issue, cmd.ErrOrStderr()); err != nil {
+	if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {
 		return err
 	}
 
@@ -397,6 +415,18 @@ func printMerged(cmd *cobra.Command, issueID, pr string) {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
 	}
 	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+}
+
+// teardownDeliveryArtifacts deletes the delivery ref and removes a bound
+// worktree. Idempotent: missing refs and unbound worktrees are no-ops.
+func teardownDeliveryArtifacts(repoPath string, git *adapters.Client, issue materialize.Issue, errWriter io.Writer) error {
+	if err := git.DeleteRef(delivery.RefName(issue.ID)); err != nil {
+		return err
+	}
+	if _, err := removeWorktreeForIssueTracked(repoPath, issue, errWriter); err != nil {
+		return err
+	}
+	return nil
 }
 
 const codeMerged1 = "MERGED-1"
