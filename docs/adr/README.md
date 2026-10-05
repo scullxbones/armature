@@ -9,7 +9,7 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0001](0001-arm-init-bootstrap-boundary.md) | `arm init` Owns Repository Bootstrap | Accepted |
 | [0002](0002-arm-bootstrap-unified-command.md) | `arm bootstrap` Owns Bootstrap And Reinstall | Accepted |
 | [0003](0003-task-dispatch-requires-worktree.md) | Task Dispatch Always Requires a Worktree | Accepted (superseded in part by ADR-0013) |
-| [0004](0004-deep-module-depguard-boundaries.md) | Depguard Boundaries for Deep Modules | Accepted |
+| [0004](0004-deep-module-depguard-boundaries.md) | Depguard Boundaries for Deep Modules | Accepted (amended by ADR-0023) |
 | [0005](0005-semantic-conformance-review-boundary.md) | Keep Semantic Conformance Review Advisory and Skill-Driven | Amended by ADR-0008 and ADR-0022 |
 | [0006](0006-eliminate-single-branch-mode.md) | Eliminate Single-Branch Mode | Accepted |
 | [0007](0007-path-based-issue-binding-resolution.md) | Path-Based Issue Binding Resolution in the Harness Hook | Accepted |
@@ -27,3 +27,4 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0019](0019-park-toon-output-format.md) | Park TOON as an Agent Output Encoding | Accepted |
 | [0020](0020-agent-error-contract.md) | Agent-grade error contract | Accepted |
 | [0022](0022-promotion-is-a-recorded-delivery.md) | Promotion Is a Recorded Delivery on the Target | Accepted (amends ADR-0005 and ADR-0008) |
+| [0023](0023-depguard-allow-list-widens-are-adr-class.md) | Widening a Depguard Fence Is ADR-Class | Accepted (amends ADR-0004) |
