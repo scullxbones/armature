@@ -15,7 +15,7 @@ for runtime use; CI still builds and compile-checks Windows as a packaging gate.
 
 ### Added
 
-- CI OS matrix: build and test on ubuntu, macos, and windows; tag releases wait on that matrix ([TOPTIER-S6-T1](https://github.com/scullxbones/armature/pull/304)).
+- CI OS matrix: full `make test` on ubuntu and macos; Windows is build plus compile-check only (`make test-ci` → `go test -c`); tag releases wait on that matrix ([TOPTIER-S6-T1](https://github.com/scullxbones/armature/pull/304)).
 - Ops-schema versioning at array index 5 with fail-loud rejection of newer versions, plus a committed v1 replay fixture corpus ([TOPTIER-S6-T2](https://github.com/scullxbones/armature/pull/305)).
 - README quickstart and install docs executed in CI ([TOPTIER-S7-T1](https://github.com/scullxbones/armature/pull/308)).
 - Agent Output Contract for structured CLI envelopes (epic AOC).
@@ -23,7 +23,7 @@ for runtime use; CI still builds and compile-checks Windows as a packaging gate.
 - `arm bootstrap` as the single repo setup path; collapsed `.armature/` ops layout (LNGHZN-S1).
 - Transition-time delivery gate, managed worktree lifecycle, autonomic harness-hook heartbeats.
 - Semantic conformance review (`arm review prepare` / `record` / `validate`).
-- Deterministic worker runtime (`arm worker run`) and paved-road docs.
+- Paved-road docs for the coordinator/worker skill workflow.
 - Gate evidence, `make check-fast`, and context-report budgets.
 - Recorded promotion path for `done → merged` (ADR 0022 / LNGHZN-S11 T1–T3).
 - Community scaffolding: CONTRIBUTING, SECURITY, issue templates (TOPTIER-S9).
