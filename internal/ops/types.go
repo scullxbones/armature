@@ -71,11 +71,12 @@ var ValidTransitionTargets = map[string]bool{
 }
 
 type Op struct {
-	Type      string
-	TargetID  string
-	Timestamp int64
-	WorkerID  string
-	Payload   Payload
+	Type          string
+	TargetID      string
+	Timestamp     int64
+	WorkerID      string
+	Payload       Payload
+	SchemaVersion int // positional array index 5; 0 means "write CurrentSchemaVersion"
 }
 
 type Payload struct {

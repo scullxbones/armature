@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -135,12 +137,68 @@ func TestWorktreeListClassifiesEachClass_REQ_LNGHZN_S5_T2(t *testing.T) {
 	assert.Contains(t, res["gc_ready"], "task-gc", "merged worktree still on disk must be gc_ready")
 	assert.Contains(t, res["ghosts"], "task-ghost", "claimed-but-removed worktree must be a ghost")
 
-	assert.Contains(t, res["unrecognized"], fx.unrecognizedPath, "unbound worktree must be unrecognized")
+	assertContainsPath(t, res["unrecognized"], fx.unrecognizedPath, "unbound worktree must be unrecognized")
 	assert.NotContains(t, res["bound"], "task-unbound")
 	assert.NotContains(t, res["orphans"], "task-unbound")
 
 	assert.NotContains(t, res["orphans"], "task-bound")
 	assert.NotContains(t, res["gc_ready"], "task-bound")
+}
+
+func containsPath(paths []string, want string) bool {
+	for _, p := range paths {
+		if worktree.SamePath(p, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func assertContainsPath(t *testing.T, paths []string, want string, msgAndArgs ...any) {
+	t.Helper()
+	if containsPath(paths, want) {
+		return
+	}
+	assert.Fail(t, fmt.Sprintf("%#v does not contain a path equivalent to %q (normalized %q)",
+		paths, want, worktree.NormalizePathAllowingMissing(want)), msgAndArgs...)
+}
+
+func TestContainsPath_TreatsSymlinkAndResolvedAsSame_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
+	realRoot := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "var")
+	require.NoError(t, os.Symlink(realRoot, alias))
+
+	resolved := filepath.Join(realRoot, ".worktrees", "task-unbound")
+	viaAlias := filepath.Join(alias, ".worktrees", "task-unbound")
+	require.NoError(t, os.MkdirAll(resolved, 0o755))
+
+	listed := []string{worktree.NormalizePath(resolved)}
+	require.NotEqual(t, listed[0], viaAlias, "regression fixture must reproduce two path spellings")
+	assert.NotContains(t, listed, viaAlias, "string membership is the macOS CI failure (/var vs /private/var)")
+	assert.True(t, containsPath(listed, viaAlias), "classification must treat symlink and realpath worktree paths as the same location")
+	assert.True(t, containsPath(listed, resolved))
+}
+
+func TestWorktreeListUnrecognizedMatchesSymlinkedRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
+	realRepo := gittest.InitWithOrigin(t).Dir
+	run(t, realRepo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, realRepo)
+	_, err := runTrls(t, realRepo, "worker-init")
+	require.NoError(t, err)
+
+	alias := filepath.Join(t.TempDir(), "var")
+	require.NoError(t, os.Symlink(realRepo, alias))
+
+	unrecognized := filepath.Join(alias, ".worktrees", "task-unbound")
+	run(t, alias, "git", "worktree", "add", unrecognized, "-b", "task/task-unbound")
+
+	res := listJSON(t, alias)
+	resolved := worktree.NormalizePath(unrecognized)
+	assertContainsPath(t, res["unrecognized"], unrecognized, "unbound worktree must be unrecognized across symlink spellings")
+	assertContainsPath(t, res["unrecognized"], resolved)
+	assert.NotContains(t, res["bound"], "task-unbound")
+	assert.NotContains(t, res["orphans"], "task-unbound")
 }
 
 func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {

@@ -954,7 +954,11 @@ func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
 	root := InferRepoRoot(stateDir)
-	assert.Equal(t, repoDir, root, "inferRepoRoot must return git repo root when no .arm/.armature directory exists in path")
+	want := repoDir
+	if resolved, err := filepath.EvalSymlinks(repoDir); err == nil {
+		want = resolved
+	}
+	assert.Equal(t, want, root, "inferRepoRoot must return git repo root when no .arm/.armature directory exists in path")
 }
 
 func TestInferRepoRoot_UsesArmatureDirectoryWhenPresent(t *testing.T) {

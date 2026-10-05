@@ -79,6 +79,9 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 
 		op, parseErr := ParseLine(lineInfo.Line)
 		if parseErr != nil {
+			if IsNewerSchemaVersion(parseErr) {
+				return nil, 0, nil, parseErr
+			}
 			warnings = append(warnings, fmt.Sprintf(
 				"corrupt line in %s: %v",
 				filepath.Base(entry.LogPath), parseErr,
