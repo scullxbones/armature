@@ -41,25 +41,11 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+# Release notes are Keep a Changelog (CHANGELOG.md), not auto-generated
+# conventional-commit lists. The release workflow passes
+# `--release-notes=CHANGELOG.md` so this disable stays in force at publish time.
 changelog:
-  sort: asc
-  use: github
-  groups:
-    - title: "New Features"
-      regexp: "^feat(\\(.+\\))?!?:"
-      order: 0
-    - title: "Bug Fixes"
-      regexp: "^fix(\\(.+\\))?!?:"
-      order: 1
-    - title: "Documentation"
-      regexp: "^docs(\\(.+\\))?!?:"
-      order: 2
-    - title: "Other Changes"
-      order: 999
-  filters:
-    exclude:
-      - "^chore(\\(.+\\))?!?:"
-      - "^ci(\\(.+\\))?!?:"
+  disable: true
 
 release:
   github:
@@ -67,3 +53,6 @@ release:
     name: armature
   draft: false
   prerelease: auto
+  # Attach the canonical changelog alongside binaries/checksums.
+  extra_files:
+    - glob: ./CHANGELOG.md
