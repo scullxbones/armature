@@ -546,8 +546,6 @@ func TestPostDeliveryOverrideUsesReplayOrder_REQ_LNGHZN_S11_T2(t *testing.T) {
 	gittest.Git(t, dir, "merge", "--squash", "delivery")
 	gittest.Git(t, dir, "commit", "-m", "squash delivery")
 
-	// Filename-order PriorOps: override log sorts before delivery log, but
-	// timestamps put the override after the delivery transition.
 	in := doneInput("task-order", base, tip, []ops.Op{
 		{
 			Type:      ops.OpDAGTransition,
@@ -585,8 +583,6 @@ func TestPostDeliveryOverrideSameSecondTieBreak_REQ_LNGHZN_S11_T2(t *testing.T) 
 	gittest.Git(t, dir, "merge", "--squash", "delivery")
 	gittest.Git(t, dir, "commit", "-m", "squash delivery")
 
-	// Same-second cross-worker write: filename order puts the override first.
-	// Replay must still treat the delivery transition as before its bound override.
 	const ts int64 = 42
 	in := doneInput("task-tie", base, tip, []ops.Op{
 		{

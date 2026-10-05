@@ -1,13 +1,4 @@
 #!/bin/bash
-# Drift test for required-check fan-out (Design D).
-#
-# Source of job ids: `make print-check-jobs`. This script does not embed the
-# membership target list. It fails when .github/workflows/ci.yml's make
-# check-job jobs disagree with that table, when a leftover job named `check`
-# exists, or when `make check` has prerequisites (which would let `make -j
-# check` become in-process fan-out).
-#
-# Wired into `make check` via the `test-check-jobs` target.
 
 set -euo pipefail
 
@@ -35,9 +26,6 @@ pass() {
     echo "  PASS: $1"
 }
 
-# ----------------------------------------------------------------------------
-# Test 1: print-check-jobs is the source set of ids
-# ----------------------------------------------------------------------------
 echo "Test 1: make print-check-jobs emits one record per CHECK_JOBS id..."
 
 PRINT_OUT=$(mktemp)
@@ -79,9 +67,6 @@ else
 fi
 rm -f "$PRINT_OUT" "$PRINT_ERR"
 
-# ----------------------------------------------------------------------------
-# Test 2–5: ci.yml fan-out jobs vs the Makefile table
-# ----------------------------------------------------------------------------
 echo "Test 2: ci.yml make check-job jobs match print-check-jobs (no check, no needs)..."
 
 PARSE_RESULT=$(python3 - "$CI_YML" "${IDS[@]+"${IDS[@]}"}" <<'PY'
@@ -178,9 +163,6 @@ else
     fail "${PARSE_RESULT:-ci.yml parse failed}"
 fi
 
-# ----------------------------------------------------------------------------
-# Test 3: make check has no prerequisites
-# ----------------------------------------------------------------------------
 echo "Test 3: Makefile check target has no prerequisites..."
 
 CHECK_LINE=$(awk '/^check:/{print; exit}' "$MAKEFILE")
@@ -192,9 +174,6 @@ else
     pass "check has no prerequisites"
 fi
 
-# ----------------------------------------------------------------------------
-# Test 4: unknown / empty JOB is rejected without running a partition
-# ----------------------------------------------------------------------------
 echo "Test 4: check-job rejects empty and unknown JOB..."
 
 set +e
@@ -236,11 +215,6 @@ for pat in '%' 'check-%' 'mut%'; do
     fi
 done
 
-# ----------------------------------------------------------------------------
-# Test 5: ubuntu test-os must not re-run the unit suite on PRs (check-core
-# owns it), but tag releases call this workflow with os-matrix-only and skip
-# check-core — Linux must still run make test-ci there.
-# ----------------------------------------------------------------------------
 echo "Test 5: ubuntu test-os skips make test-ci except os-matrix-only..."
 
 OS_RESULT=$(python3 - "$CI_YML" <<'PY'
@@ -322,9 +296,6 @@ else
     fail "${OS_RESULT:-test-os assertion failed}"
 fi
 
-# ----------------------------------------------------------------------------
-# Test 6: this script is committed executable
-# ----------------------------------------------------------------------------
 echo "Test 6: test_check_jobs.sh is committed executable..."
 mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/test_check_jobs.sh" | awk '{print $1}')
 if [[ "$mode" == "100755" ]]; then

@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Extract every bash fence from the README "5-Minute Quickstart" section and
-# run those commands verbatim in a scratch git repo. Fails CI when the
-# quickstart drifts from a runnable fresh-clone path.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,13 +17,11 @@ die() {
 }
 [[ -x "$ARM_BIN" ]] || die "arm binary not executable at $ARM_BIN"
 
-# Content gates for the Installation section (not executed here).
 grep -q 'go install github.com/scullxbones/armature/cmd/armature' "$README" \
 	|| die "README Installation must document go install"
 grep -Eqi 'GitHub Releases|github.com/scullxbones/armature/releases' "$README" \
 	|| die "README Installation must document released binaries"
 
-# Extract bash fences between the Quickstart heading and the next ## heading.
 extract_quickstart_bash() {
 	awk '
 		BEGIN { in_section = 0; in_fence = 0 }
@@ -70,7 +65,6 @@ export PATH="$(dirname "$ARM_BIN"):$PATH"
 hash -r
 command -v arm >/dev/null || die "arm not on PATH after prepending $(dirname "$ARM_BIN")"
 
-# Run the README quickstart body verbatim (own process so $vars expand there).
 bash -euo pipefail "$QUICKSTART_FILE"
 
 echo "quickstart_check: OK"

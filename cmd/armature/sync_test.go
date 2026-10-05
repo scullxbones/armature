@@ -227,7 +227,6 @@ func TestSyncSkipsStalePromoteAfterReopen_REQ_LNGHZN_S11_T3(t *testing.T) {
 	require.Len(t, items, 1)
 	require.True(t, items[0].Result.Promote, "fixture must classify as promote; got %s", items[0].Result.Kind)
 
-	// Another worker reopens after classify, before persist.
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
 	require.NoError(t, appendOp(ctx, logPath, ops.Op{
@@ -271,8 +270,6 @@ func TestSyncIntoOverrideUsedInLockedPersist_REQ_LNGHZN_S11_T3(t *testing.T) {
 	require.NotEmpty(t, issue.Base)
 	require.NotEmpty(t, issue.Tip)
 
-	// Retarget the recorded integration branch to a missing name while the tip
-	// remains on main. --into main must still promote through locked persist.
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)

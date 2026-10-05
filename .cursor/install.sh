@@ -18,7 +18,6 @@ if [ -z "${GOBIN_DIR}" ]; then
 fi
 export PATH="${GOBIN_DIR}:${PATH}"
 
-# Pins live in the Makefile (GOLANGCI_LINT_VERSION / GREMLINS_VERSION).
 make install-check-tools
 
 # Expose the Go tool binaries on PATH for every interactive shell without

@@ -25,7 +25,6 @@ def main() -> int:
     test_output: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
 
     try:
-        # newline="" + universal newlines keeps CRLF (Windows go test pipes) tidy.
         with path.open("r", encoding="utf-8", errors="replace", newline="") as fh:
             for raw in fh:
                 raw = raw.strip()
@@ -46,7 +45,6 @@ def main() -> int:
                     if action == "pass" and not test:
                         packages[pkg]["pass"] = True
                     elif action == "fail":
-                        # Package-level fail, or any test fail inside the package.
                         packages[pkg]["fail"] = True
 
                 if action == "output" and test:

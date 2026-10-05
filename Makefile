@@ -65,19 +65,15 @@ GREMLINS_VERSION      := v0.6.0
 
 CHECK_JOBS := check-static check-core mutate
 
-# Tail: lint, crosscompile, census/coverage/hermetic self-tests, job-id drift.
 CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check
 CHECK_TOOLS_check-static := golangci-lint
 
-# Suite pole plus short product validators. One go test via coverage-check (D3).
 CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check
 CHECK_TOOLS_check-core :=
 
-# Both mutation trees (./internal then ./cmd). Same .gremlins.yaml.
 CHECK_JOB_mutate := mutate
 CHECK_TOOLS_mutate := gremlins
 
-# No prerequisites: make -j check stays serial (loop, not a prereq DAG).
 check:
 	@set -e; \
 	for j in $(CHECK_JOBS); do \
@@ -155,9 +151,9 @@ test: build
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	exit $$summary
 
-# OS-matrix entry point (TOPTIER-S6-T1). Windows is an unsupported runtime
-# (README); compile every unit package's tests so shipped windows binaries stay
-# compile-checked without requiring the full POSIX-assuming suite to pass.
+# OS-matrix entry point. Windows is an unsupported runtime (README); compile
+# every unit package's tests so shipped windows binaries stay compile-checked
+# without requiring the full POSIX-assuming suite to pass.
 test-ci: build
 ifeq ($(GOOS_NATIVE),windows)
 	@status=0; \

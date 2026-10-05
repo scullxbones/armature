@@ -99,8 +99,6 @@ func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool
 		}
 	}
 
-	// Rows reflect post-persist outcomes so a locked promote skip cannot
-	// still report status=merged / kind=promote.
 	rows := syncRows(items)
 	if err := output.WriteSyncEnvelope(cmd.OutOrStdout(), rows); err != nil {
 		return err

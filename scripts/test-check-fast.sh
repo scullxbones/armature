@@ -268,11 +268,6 @@ for script in scripts/check-fast.sh scripts/test-check-fast.sh; do
     fi
 done
 
-# ----------------------------------------------------------------------------
-# Test 7: the suite pole's fan-out root is coverage-check, not a sibling
-# `test` / `coverage` that would run UNIT_PACKAGES twice (D3). CI names only
-# `make check-job`; membership lives in the Makefile table.
-# ----------------------------------------------------------------------------
 echo "Test 7: check-core membership runs coverage-check, not a second suite..."
 MAKEFILE="$REPO_ROOT/Makefile"
 CI_YML="$REPO_ROOT/.github/workflows/ci.yml"
@@ -307,14 +302,6 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
-# ----------------------------------------------------------------------------
-# Test 8: coverage-check must not start until the current coverage target
-# succeeds. coverage and coverage-check are both .PHONY, so a sibling listing
-# lets `make -j` (or inherited MAKEFLAGS=-j) read a stale coverage.out. The
-# ordering dependency lives on coverage-check itself so standalone
-# `make coverage-check` also generates a current profile. Fan-out CI must not
-# invoke `make coverage` as its own step — that would re-run the suite.
-# ----------------------------------------------------------------------------
 echo "Test 8: coverage-check depends on coverage (parallel-safe, single-run)..."
 DEP_RESULT=$(python3 - "$MAKEFILE" "$CI_YML" <<'PY'
 import sys

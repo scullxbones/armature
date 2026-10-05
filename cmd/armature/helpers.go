@@ -494,14 +494,6 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	})
 }
 
-// appendMergedIfCurrent re-reads ops under the worker log lock and appends
-// merged only when the issue is still a promotable done leaf with the same
-// delivery identity classification used. Returns wrote=false when another
-// worker reopened, replaced the delivery, or otherwise invalidated the promote.
-//
-// explicitInto means integration is an arm sync --into override; otherwise the
-// recorded integration branch is part of delivery identity and the live
-// recorded branch is the Evaluate target.
 func appendMergedIfCurrent(
 	ctx *config.Context,
 	git *adapters.Client,

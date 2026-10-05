@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Documented by docs/commands.md (arm sync agent envelope).
 const documentedSyncEnvelope = `{` +
 	`"count":1,` +
 	`"issues":[{` +
