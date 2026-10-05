@@ -87,7 +87,11 @@ check:
 
 check-job:
 	@set -e; \
-	if [ "$(words $(JOB))" != "1" ] || [ -z "$(filter $(JOB),$(CHECK_JOBS))" ]; then \
+	ok=0; \
+	for j in $(CHECK_JOBS); do \
+		if [ "$(JOB)" = "$$j" ]; then ok=1; fi; \
+	done; \
+	if [ "$(words $(JOB))" != "1" ] || [ "$$ok" != "1" ]; then \
 		echo "FAIL: unknown or empty JOB='$(JOB)' (want one of: $(CHECK_JOBS))" >&2; \
 		exit 1; \
 	fi; \

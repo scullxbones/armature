@@ -70,7 +70,8 @@ fans the same publish membership into three required jobs — `check-core`,
 (~6m), not the serial sum. Local `make check` remains one serial full
 entry. CI does not list make targets; it calls `make check-job JOB=<id>`.
 Ubuntu `test-os` does not re-run the unit suite already produced under
-`coverage-check`. See `docs/agents/quality-gates.md`.
+`coverage-check` on pull_request/push; tag releases pass `os-matrix-only`
+and still run Linux `make test-ci` because `check-core` is skipped. See `docs/agents/quality-gates.md`.
 
 ### D4 — Gate evidence (config-declared, wrapper-recorded)
 

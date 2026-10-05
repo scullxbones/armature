@@ -25,9 +25,11 @@ env:
 jobs:
   # T5.1 / TOPTIER-S6-T1: exercise make test + make build on every shipped OS.
   # Lint, coverage, and mutation live in the required check-core / check-static
-  # / mutate jobs below. Ubuntu does not re-run the unit suite: check-core
-  # already produces coverage.out via `make coverage-check` (D3). macos and
-  # windows keep the matrix tests.
+  # / mutate jobs below. On pull_request/push, Ubuntu does not re-run the unit
+  # suite: check-core already produces coverage.out via `make coverage-check`
+  # (D3). macos and windows keep the matrix tests. Tag releases call this
+  # workflow with os-matrix-only: true (check-core skipped), so Linux still
+  # runs make test-ci in that case.
   test-os:
     strategy:
       fail-fast: false
@@ -63,15 +65,17 @@ jobs:
 
       # Full make test on macos; windows uses make test-ci (go test -c)
       # because the product runtime is Linux/macOS-only (see README). Ubuntu
-      # skips this step so the UNIT_PACKAGES suite is not paid twice.
+      # skips this step on pull_request/push so UNIT_PACKAGES is not paid
+      # twice. When os-matrix-only is true, check-core is skipped and Linux
+      # must still run the suite.
       - name: Test
-        if: runner.os != 'Linux'
+        if: ${{ runner.os != 'Linux' || inputs.os-matrix-only }}
         run: make test-ci
 
       # go test -json output is huge; GHA often truncates it. On failure, re-run
       # cmd/armature and keep FAIL lines (tail alone hid the timeout).
       - name: Diagnose cmd/armature failures
-        if: failure() && runner.os != 'Windows' && runner.os != 'Linux'
+        if: ${{ failure() && runner.os != 'Windows' && (runner.os != 'Linux' || inputs.os-matrix-only) }}
         run: |
           go test -count=1 -timeout 25m -v ./cmd/armature/ 2>&1 | tee /tmp/cmd-armature.log | rg -n 'FAIL|panic|timeout|PASS.*cmd/armature|ok  	github.com/scullxbones/armature/cmd/armature' || true
           tail -n 80 /tmp/cmd-armature.log

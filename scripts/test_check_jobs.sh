@@ -210,16 +210,34 @@ if [[ $BOGUS_STATUS -eq 0 ]]; then
 else
     pass "unknown JOB exits $BOGUS_STATUS"
 fi
-if echo "$BOGUS_OUT" | grep -q "not-a-job"; then
+if echo "$BOGUS_OUT" | rg -q "not-a-job"; then
     pass "unknown JOB names the rejected id"
 else
     fail "unknown JOB output does not name not-a-job: $BOGUS_OUT"
 fi
 
+# GNU make $(filter) treats % as a wildcard. JOB=% / check-% / mut% must not
+# pass the membership gate and then run an empty target list (exit 0).
+echo "Test 4b: check-job rejects Make-filter wildcard JOB values..."
+for pat in '%' 'check-%' 'mut%'; do
+    set +e
+    WILD_OUT=$(run_make check-job JOB="$pat" 2>&1)
+    WILD_STATUS=$?
+    set -e
+    if [[ $WILD_STATUS -eq 0 ]]; then
+        fail "check-job JOB=$pat exited 0 (wildcard must not hollow-succeed)"
+        echo "$WILD_OUT"
+    else
+        pass "JOB=$pat exits $WILD_STATUS"
+    fi
+done
+
 # ----------------------------------------------------------------------------
-# Test 5: ubuntu test-os must not re-run the unit suite (check-core owns it)
+# Test 5: ubuntu test-os must not re-run the unit suite on PRs (check-core
+# owns it), but tag releases call this workflow with os-matrix-only and skip
+# check-core — Linux must still run make test-ci there.
 # ----------------------------------------------------------------------------
-echo "Test 5: ubuntu test-os does not run make test-ci..."
+echo "Test 5: ubuntu test-os skips make test-ci except os-matrix-only..."
 
 OS_RESULT=$(python3 - "$CI_YML" <<'PY'
 import re
@@ -277,14 +295,14 @@ for step in steps:
     saw_test_ci = True
     ifs = [ln.strip() for ln in step if ln.strip().startswith("if:")]
     joined = " ".join(ifs)
-    if "Linux" not in joined and "ubuntu" not in joined:
-        print("FAIL: make test-ci step has no Linux/ubuntu exclusion in if:")
+    if "Linux" not in joined:
+        print("FAIL: make test-ci step has no Linux exclusion in if:")
         sys.exit(1)
-    if "!= 'Linux'" not in joined and '!= "Linux"' not in joined and "ubuntu-latest" not in joined:
-        # Allow runner.os != 'Linux' (preferred) or matrix.os != ubuntu-latest
-        if "runner.os" in joined and "Linux" in joined and "!=" in joined:
-            continue
-        print(f"FAIL: make test-ci if: does not skip ubuntu ({joined})")
+    if "os-matrix-only" not in joined:
+        print("FAIL: Linux test-ci skip does not restore tests when os-matrix-only (tag releases skip check-core)")
+        sys.exit(1)
+    if "||" not in joined and "||" not in blob:
+        print(f"FAIL: make test-ci if: must OR os-matrix-only with the Linux skip ({joined})")
         sys.exit(1)
 
 if not saw_test_ci:
@@ -295,7 +313,7 @@ PY
 ) && OS_STATUS=0 || OS_STATUS=$?
 
 if [[ $OS_STATUS -eq 0 ]]; then
-    pass "test-os keeps make test-ci only off Linux"
+    pass "test-os skips Linux test-ci on PRs and restores it for os-matrix-only"
 else
     fail "${OS_RESULT:-test-os assertion failed}"
 fi
