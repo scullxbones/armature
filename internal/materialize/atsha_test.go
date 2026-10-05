@@ -213,7 +213,7 @@ func TestMaterializeAtSHA_MultiplePrefixes_PreAndPostCollapse(t *testing.T) {
 	assert.Contains(t, state.Issues, "E1-PRE", "passing both prefixes should see pre-collapse ops")
 }
 
-func TestMaterializeAtSHA_SlottedWorkerLogRejectsBaseWorkerID(t *testing.T) {
+func TestMaterializeAtSHA_SlottedWorkerLogLoadsLegacyBaseWorkerID(t *testing.T) {
 	t.Parallel()
 	dir, gc := initAtSHATestRepo(t)
 	opsDir := filepath.Join(dir, "ops")
@@ -242,5 +242,6 @@ func TestMaterializeAtSHA_SlottedWorkerLogRejectsBaseWorkerID(t *testing.T) {
 
 	state, err := MaterializeAtSHA(gc, sha, "ops")
 	require.NoError(t, err)
-	assert.NotContains(t, state.Issues, "E1-SLOT-LEGACY")
+	assert.Contains(t, state.Issues, "E1-SLOT-LEGACY",
+		"legacy base worker ID in a slotted log must still materialize")
 }
