@@ -13,14 +13,23 @@ on:
       os-matrix-only:
         description: >
           When true, run only the OS test/build matrix. Tag releases pass this
-          so check, validate-graph, and e2eharness do not block publishing.
+          so check-core, check-static, mutate, validate-graph, and e2eharness
+          do not block publishing.
         type: boolean
         required: false
         default: false
 
+env:
+  GO_VERSION: "1.26.1"
+
 jobs:
   # T5.1 / TOPTIER-S6-T1: exercise make test + make build on every shipped OS.
-  # Lint, coverage, and mutation stay in the ubuntu-only `check` job below.
+  # Lint, coverage, and mutation live in the required check-core / check-static
+  # / mutate jobs below. On pull_request/push, Ubuntu does not re-run the unit
+  # suite: check-core already produces coverage.out via `make coverage-check`
+  # (D3). macos and windows keep the matrix tests. Tag releases call this
+  # workflow with os-matrix-only: true (check-core skipped), so Linux still
+  # runs make test-ci in that case.
   test-os:
     strategy:
       fail-fast: false
@@ -36,7 +45,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -54,67 +63,67 @@ jobs:
       - name: Build
         run: make build
 
-      # Full make test on ubuntu/macos; windows uses make test-ci (go test -c)
-      # because the product runtime is Linux/macOS-only (see README).
+      # Full make test on macos; windows uses make test-ci (go test -c)
+      # because the product runtime is Linux/macOS-only (see README). Ubuntu
+      # skips this step on pull_request/push so UNIT_PACKAGES is not paid
+      # twice. When os-matrix-only is true, check-core is skipped and Linux
+      # must still run the suite.
       - name: Test
+        if: ${{ runner.os != 'Linux' || inputs.os-matrix-only }}
         run: make test-ci
 
       # go test -json output is huge; GHA often truncates it. On failure, re-run
       # cmd/armature and keep FAIL lines (tail alone hid the timeout).
       - name: Diagnose cmd/armature failures
-        if: failure() && runner.os != 'Windows'
+        if: ${{ failure() && runner.os != 'Windows' && (runner.os != 'Linux' || inputs.os-matrix-only) }}
         run: |
           go test -count=1 -timeout 25m -v ./cmd/armature/ 2>&1 | tee /tmp/cmd-armature.log | rg -n 'FAIL|panic|timeout|PASS.*cmd/armature|ok  	github.com/scullxbones/armature/cmd/armature' || true
           tail -n 80 /tmp/cmd-armature.log
 
-  check:
-    # Skip the heavy ubuntu gate when release.yml reuses this workflow; tag
-    # releases only need the OS matrix (test-os) before goreleaser.
+  # Skip the heavy ubuntu gate when release.yml reuses this workflow; tag
+  # releases only need the OS matrix (test-os) before goreleaser.
+  check-core:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version: ${{ env.GO_VERSION }}
+      # ubuntu-latest does not ship rg. git-test-hermetic-check requires it.
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: make check-job JOB=check-core
+        env:
+          CHECK_INSTALL_TOOLS: "1"
 
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+  check-static:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # ubuntu-latest does not ship rg. test-check-jobs uses rg -q.
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: make check-job JOB=check-static
+        env:
+          CHECK_INSTALL_TOOLS: "1"
 
-      - name: Install gremlins
-        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
-
-      - name: Lint
-        run: make lint
-
-      - name: Build
-        run: make build
-
-      - name: Cross-compile
-        run: make crosscompile
-
-      - name: Coverage
-        run: make coverage-check
-
-      - name: Mutation
-        run: make mutate
-
-      - name: Validate skills
-        run: make validate-skills
-
-      - name: Validate doc examples
-        run: make validate-doc-examples
-
-      - name: Census drift check
-        run: make census-drift-check
-
-      - name: Census drift-check regression tests
-        run: make test-census-drift-check
+  mutate:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: make check-job JOB=mutate
+        env:
+          CHECK_INSTALL_TOOLS: "1"
 
   # Integration door (D7): whole-graph arm validate --ci. Not part of the
-  # per-task `check` job — that gate must stay worker-local. This job is the
+  # per-task publish gate — that gate must stay worker-local. This job is the
   # automated path for make validate-graph; it materializes the ops branch
   # because a PR checkout has no .armature worktree.
   validate-graph:
@@ -126,7 +135,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Attach ops worktree
         run: |
@@ -146,7 +155,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Build arm binary
         run: make build

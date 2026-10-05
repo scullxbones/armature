@@ -64,6 +64,15 @@ re-runs it). The full gate runs the suite once with `-coverprofile`; the
 threshold check reads the profile. Saves ~140s per full gate with no rigor
 change.
 
+**PR schedule (implementation, not a change to D1 scope):** GitHub Actions
+fans the same publish membership into three required jobs — `check-core`,
+`check-static`, `mutate` — with no `needs` between them. Wall ≈ max(job)
+(~6m), not the serial sum. Local `make check` remains one serial full
+entry. CI does not list make targets; it calls `make check-job JOB=<id>`.
+Ubuntu `test-os` does not re-run the unit suite already produced under
+`coverage-check` on pull_request/push; tag releases pass `os-matrix-only`
+and still run Linux `make test-ci` because `check-core` is skipped. See `docs/agents/quality-gates.md`.
+
 ### D4 — Gate evidence (config-declared, wrapper-recorded)
 
 - `.armature/config.json` gains a `gates` map alongside `hooks`:

@@ -20,14 +20,28 @@ Armature uses a two-tier gate model (`docs/design/gate-efficiency.md` D1):
 ## `make check` must pass before every commit/push
 
 ```bash
-make check   # lint + build + coverage (single run, per-tree: cmd ≥83%, internal ≥86%) + mutate + validate-skills + validate-doc-examples + census-drift-check + crosscompile
+make check   # serial full publish: union of check-static + check-core + mutate
 ```
 
 Fix failures; never suppress. Linters: `govet`, `errcheck`, `ineffassign`, `staticcheck`, `misspell`, `unconvert`, `goimports`. No `//nolint` without justification. Current thresholds: statement coverage cmd ≥83% / internal ≥86% (per-tree), mutant-coverage ≥92%, efficacy ≥99%. Ratchet policy, amended by ADR 0015 Decision 3 (docs/adr/0015-recalibrate-mutation-and-coverage-gates.md): statement-coverage thresholds are seeded a point or so below each tree's measured value and ratchet upward from there; `mutant-coverage` is a secondary reachability proxy held at a single repo-wide 92 after the one-time Decision 2 correction (removal of an unintended double gate with per-tree statement coverage), and ratchets upward from there; efficacy is ratchet-only-up, unamended. Lowering any threshold requires a new ADR.
 
 This is the commit/push gate. It's distinct from `arm validate --ci` / `arm doctor`, which is the task-completion sanity check — see [workflow.md](workflow.md).
 
-`check` runs the unit suite exactly once: `coverage` runs `go test -coverprofile=coverage.out`, and `coverage-check` depends on `coverage` then reads that same profile rather than re-running the suite (docs/design/gate-efficiency.md D3). The dependency keeps `make -j check` from racing a stale `coverage.out`. Standalone `make coverage-check` generates a current profile first.
+`check` runs the unit suite exactly once: `coverage` runs `go test -coverprofile=coverage.out`, and `coverage-check` depends on `coverage` then reads that same profile rather than re-running the suite (docs/design/gate-efficiency.md D3). `make check` has no prerequisites; it loops `make check-job` so `make -j check` stays serial. Standalone `make coverage-check` generates a current profile first. `test-coverage-check` exercises the threshold script on fixtures and does not re-run the suite.
+
+## CI required checks
+
+PR wall is the **max** of three required GitHub Actions jobs (no `needs` between them, no aggregator job named `check`). Rigor matches local `make check`; only the schedule changes.
+
+| Context | Runs |
+|---|---|
+| `check-core` | coverage suite once + thresholds, validate-skills, validate-doc-examples, census-drift, git-test hermetic |
+| `check-static` | lint (pinned golangci-lint), crosscompile, census/coverage/hermetic self-tests, check-job drift test |
+| `mutate` | gremlins on `./internal` then `./cmd` (full, every PR) |
+
+CI calls `make check-job JOB=<id>` only — the membership table in the Makefile is the only step list. Expected wall is ~max of the two ~4m poles plus setup (~6m), not the former ~13m serial `check` job.
+
+Keep `e2eharness`, `validate-graph`, and the `test-os` matrix as they are. Ubuntu `test-os` skips `make test-ci` on pull_request/push (check-core already ran the suite) and still runs it when this workflow is called with `os-matrix-only` (tag releases skip check-core). macos and windows keep their matrix tests. Default ruleset must require the three new context names (copy the same string form already stored for `e2eharness`) and must drop `check`.
 
 ## `make check-fast` — diff-routed fast gate
 
@@ -60,11 +74,13 @@ make build           # build ./bin/arm
 make install         # build → ~/.local/bin/arm
 make test            # run all tests
 make check-fast      # diff-routed fast gate (see above)
+make check-job JOB=check-core  # one CI partition (also check-static, mutate)
+make test-check-jobs # drift test: ci.yml job ids vs Makefile table
 make test-check-fast # test check-fast.sh routing itself
 make lint            # golangci-lint run ./...
 make coverage        # run unit suite once with -coverprofile, generate coverage.html
 make coverage-check  # run coverage, then fail if cmd < 83% or internal < 86%
-make mutate          # gremlins mutation testing on ./internal
+make mutate          # gremlins mutation testing on ./internal then ./cmd
 make validate-skills # validate embedded skill source
 make skill           # deploy skills to .claude/skills/, .gemini/skills/, .codex/skills/
 make clean           # remove bin/, dist/, *.out, coverage.html, mutesting-report/, .claude/skills/
