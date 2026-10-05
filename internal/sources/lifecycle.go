@@ -28,7 +28,9 @@ func (r *DefaultProviderRegistry) ProviderForType(providerType string) (Provider
 	switch providerType {
 	case "filesystem":
 		return &FilesystemProvider{}, nil
-	case "confluence", "sharepoint":
+	case "confluence":
+		return nil, fmt.Errorf("provider %q not configured: base URL and credentials are required", providerType)
+	case "sharepoint":
 		return nil, fmt.Errorf("provider %q not configured: base URL and credentials are required", providerType)
 	default:
 		return nil, fmt.Errorf("unknown provider type %q", providerType)
