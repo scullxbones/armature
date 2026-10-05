@@ -5696,3 +5696,4 @@
 ["heartbeat","TOPTIER-S7-T1",1791152776,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{}]
 ["transition","TOPTIER-S7-T1",1791153623,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Rewrote README quickstart (verbatim CI via scripts/quickstart_check.sh), aligned getting-started on collapsed .armature/ ops worktree, documented go install and GitHub Releases; tip 2a2007165; PR #308. --force: primary checkout still on main while claim worktree is task/TOPTIER-S7-T1.","branch":"task/TOPTIER-S7-T1","base":"4bdc5b3d3797d090ab3f91f54eaeb040f703153d","tip":"2a20071650a9a682e4e8da7ea7bfee562241f5a4","integration_branch":"main"}]
 ["transition","LNGHZN-S11-T3",1791169192,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","outcome":"auto-detected merge into cursor/lnghzn-s11-t1-t3-9e96"},1]
+["transition","LNGHZN-S11-T1",1791169192,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","outcome":"auto-detected merge into cursor/lnghzn-s11-t1-t3-9e96"},1]
