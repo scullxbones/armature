@@ -856,7 +856,7 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 	assert.NotContains(t, phantomInfos[0], "planned.go")
 }
 
-func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
+func TestW10PhantomScope_CommaJoinedEntryIsOnePath(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -885,9 +885,7 @@ func TestW10PhantomScope_CommaSeparatedLegacyEntry(t *testing.T) {
 	}
 
 	assert.Len(t, phantomInfos, 1)
-	assert.Contains(t, phantomInfos[0], "ghost.go")
-	assert.NotContains(t, phantomInfos[0], "planned.go")
-	assert.NotContains(t, phantomInfos[0], "real.go")
+	assert.Contains(t, phantomInfos[0], "planned.go (new), real.go, ghost.go")
 }
 
 func TestValidateUsesCoverage(t *testing.T) {

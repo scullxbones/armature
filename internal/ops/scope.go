@@ -2,17 +2,14 @@ package ops
 
 import "strings"
 
-// DecodeScope splits comma-joined scope entries at the load boundary.
-// Historical create/amend payloads stored multiple paths as one comma-joined
-// string (with or without spaces); materialized state always holds one path
-// per element. Decode is on-read: ParseLine must not mutate Payload.Scope.
+// DecodeScope trims empty and whitespace-only scope entries at the load
+// boundary. Each array element is one path or glob; commas inside an entry are
+// part of the path. Historical comma-joined entries are not split.
 func DecodeScope(scope []string) []string {
 	result := make([]string, 0, len(scope))
 	for _, entry := range scope {
-		for part := range strings.SplitSeq(entry, ",") {
-			if part = strings.TrimSpace(part); part != "" {
-				result = append(result, part)
-			}
+		if entry = strings.TrimSpace(entry); entry != "" {
+			result = append(result, entry)
 		}
 	}
 	return result

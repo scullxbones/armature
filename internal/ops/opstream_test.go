@@ -268,7 +268,7 @@ func TestValidatedOpStream_SlottedLogFilename(t *testing.T) {
 	assert.Equal(t, logPath, items[0].LogFilename)
 }
 
-func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
+func TestValidatedOpStream_LoadsLegacyBaseIDInSlottedLog(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-alpha~slot-a.log")
@@ -284,8 +284,8 @@ func TestValidatedOpStream_AcceptsLegacyBaseIDInSlottedLog(t *testing.T) {
 	items, warnings := loaded.Items, loaded.Warnings
 
 	require.NoError(t, err)
-	assert.Len(t, items, 1, "should accept legacy base worker ID in slotted log")
-	assert.Len(t, warnings, 0, "should not generate warnings for valid legacy ops")
+	assert.Len(t, items, 1, "legacy base worker ID in a slotted log must still load")
+	assert.Len(t, warnings, 0, "grandfathered base-ID lines must not warn")
 	assert.Equal(t, "worker-alpha", items[0].Op.WorkerID)
 	assert.Equal(t, logPath, items[0].LogFilename)
 }
@@ -504,12 +504,15 @@ func TestExtractOps_EmptyInput(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-func TestWorkerOwnsLog_SlottedAndLegacyIDs(t *testing.T) {
+func TestWorkerOwnsLog_ExactOrGrandfatheredBaseInSlot(t *testing.T) {
 	t.Parallel()
 	assert.True(t, WorkerOwnsLog("worker-a1", "worker-a1.log"))
 	assert.True(t, WorkerOwnsLog("worker-a1", "ops/worker-a1.log"))
 	assert.True(t, WorkerOwnsLog("worker-a1~slot", "worker-a1~slot.log"))
-	assert.True(t, WorkerOwnsLog("worker-a1", "worker-a1~slot.log"))
+	assert.True(t, WorkerOwnsLog("worker-a1", "worker-a1~slot.log"),
+		"load grandfather: base ID owns its own slotted log")
 	assert.False(t, WorkerOwnsLog("worker-b", "worker-a1.log"))
 	assert.False(t, WorkerOwnsLog("worker-a1~other", "worker-a1~slot.log"))
+	assert.False(t, WorkerOwnsLog("worker-a1", "worker-b~slot.log"),
+		"base ID must not own another worker's slotted log")
 }

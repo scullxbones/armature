@@ -9,10 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-const legacyCodexConfig = "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
-
-const legacyCodexConfigPath = "codex.toml"
-
 type CodexAdapter struct{}
 
 func NewCodexAdapter() *CodexAdapter { return &CodexAdapter{} }
@@ -36,16 +32,7 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 	content, err := adapters.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
-			legacyContent, legacyErr := adapters.ReadFile(legacyPath)
-			if legacyErr != nil {
-				if os.IsNotExist(legacyErr) {
-					return true, nil
-				}
-				return false, legacyErr
-			}
-
-			return codexConfigOwned(string(legacyContent)), nil
+			return true, nil
 		}
 		return false, err
 	}
@@ -53,9 +40,6 @@ func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
 }
 
 func codexConfigOwned(content string) bool {
-	if strings.TrimSpace(content) == strings.TrimSpace(legacyCodexConfig) {
-		return true
-	}
 	firstLine, _, _ := strings.Cut(content, "\n")
 	return strings.TrimSpace(firstLine) == "# armature:managed"
 }
@@ -82,19 +66,7 @@ command = "arm harness-hook"
 type = "command"
 command = "arm harness-hook"
 `
-	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600); err != nil {
-		return err
-	}
-
-	legacyPath := filepath.Join(workdir, legacyCodexConfigPath)
-	legacyBytes, err := adapters.ReadFile(legacyPath)
-	if err == nil && codexConfigOwned(string(legacyBytes)) {
-		if rmErr := os.Remove(legacyPath); rmErr != nil {
-			return nil
-		}
-	}
-
-	return nil
+	return os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600)
 }
 
 func (a *CodexAdapter) Decode(input []byte) (Event, error) {

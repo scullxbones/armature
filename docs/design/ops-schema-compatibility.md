@@ -33,3 +33,9 @@ Scaffolding version (`# scaffolding-version:` in `ops/SCHEMA`) is separate: it v
 3. Keep `CheckSchemaVersion` rejecting anything above the new current.
 4. Add or extend fixtures so prior versions still replay to their goldens.
 5. Bump `ops.ScaffoldingVersion` when `GenerateSchema` text changes so bootstrap republishes `ops/SCHEMA`.
+
+## Shim retirement (backward edge)
+
+A backward-compatibility shim on a **migratable** surface (harness configs, on-disk layouts) may live for at most one minor release after its replacement lands: `bootstrap` / `doctor --fix` migrate adopters in that window, then the shim is deleted outright in the next minor — no indefinite carve-outs, and no plugin or adapter framework invented to host them. Pre-`v0.1.0` migratable shims (pre-marker Codex/Devin harness ownership, comma-joined scope entries) were deleted under this rule with zero external adopters.
+
+**Grandfather (not a timed shim):** append-only ops history (Constitution I2) cannot be rewritten, so a load-only carve-out may be permanent when historical lines would otherwise be dropped. Boundary: in a slotted log named `<base>~<slot>.log`, a line whose `worker_id` equals the unslotted `<base>` is accepted on load; every other mismatch is still rejected. Writers stamp the full slotted stem (`worker.ResolveIdentity` with `ARMATURE_LOG_SLOT`) and are unchanged by this carve-out. The Harness Compatibility Contract (Next-Ten №08) remains the forward seam for future harness format changes and is not a substitute for this deletion policy.

@@ -482,6 +482,21 @@ func TestCodexAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
 func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	codexDir := filepath.Join(dir, ".codex")
+	require.NoError(t, os.MkdirAll(codexDir, 0o755))
+	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
+	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600))
+
+	adapter := NewCodexAdapter()
+	owns, err := adapter.OwnsConfig(dir)
+
+	require.NoError(t, err)
+	assert.False(t, owns, "Codex must not own .codex/config.toml without the managed marker")
+}
+
+func TestCodexAdapterIgnoresLegacyRootCodexToml(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
 	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
 
@@ -489,20 +504,7 @@ func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
-	assert.True(t, owns, "Codex should own legacy config at root for migration")
-}
-
-func TestCodexAdapterDoesNotOwnUserConfigMentioningArmHarnessHook(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	content := "# my notes about arm harness-hook\n[hooks]\npre_tool_use = \"my-own-tool\"\n"
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
-
-	adapter := NewCodexAdapter()
-	owns, err := adapter.OwnsConfig(dir)
-
-	require.NoError(t, err)
-	assert.False(t, owns, "Codex must not own a user file at root that merely mentions arm harness-hook")
+	assert.True(t, owns, "absent .codex/config.toml is safe to create; root codex.toml is ignored")
 }
 
 func TestCodexAdapterOwnsConfigWhenUserManaged(t *testing.T) {
@@ -561,7 +563,7 @@ func TestDevinAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	assert.False(t, owns, "Devin should not own config when marker is absent")
 }
 
-func TestDevinAdapterOwnsConfigMigratesLegacyConfig(t *testing.T) {
+func TestDevinAdapterDoesNotOwnPreMarkerConfig(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	devinDir := filepath.Join(dir, ".devin")
@@ -573,7 +575,7 @@ func TestDevinAdapterOwnsConfigMigratesLegacyConfig(t *testing.T) {
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
-	assert.True(t, owns, "Devin should own legacy config containing arm harness-hook for migration")
+	assert.False(t, owns, "Devin must not own pre-marker config that only mentions arm harness-hook")
 }
 
 func TestDevinAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
@@ -616,7 +618,7 @@ func TestDevinAdapterWriteConfigIncludesMarker(t *testing.T) {
 	assert.True(t, ok && v, "WriteConfig should include managed marker")
 }
 
-func TestCodexAdapterMigratesLegacyRootConfigToNewPath(t *testing.T) {
+func TestCodexAdapterWriteConfigLeavesLegacyRootFileAlone(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	adapter := NewCodexAdapter()
@@ -624,10 +626,6 @@ func TestCodexAdapterMigratesLegacyRootConfigToNewPath(t *testing.T) {
 	legacyBody := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(legacyBody), 0o600))
 
-	owns, err := adapter.OwnsConfig(dir)
-	require.NoError(t, err)
-	assert.True(t, owns, "OwnsConfig should recognise pre-marker legacy root file as owned")
-
 	require.NoError(t, adapter.WriteConfig(dir))
 
 	data, err := os.ReadFile(filepath.Join(dir, ".codex", "config.toml"))
@@ -635,29 +633,7 @@ func TestCodexAdapterMigratesLegacyRootConfigToNewPath(t *testing.T) {
 	assert.Contains(t, string(data), "# armature:managed", "new config must contain marker")
 
 	_, statErr := os.Stat(filepath.Join(dir, "codex.toml"))
-	assert.True(t, os.IsNotExist(statErr), "legacy root codex.toml must be removed after migration")
-}
-
-func TestCodexAdapterMigratesMarkerBearingRootConfig(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	adapter := NewCodexAdapter()
-
-	markerBody := "# armature:managed\n[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(markerBody), 0o600))
-
-	owns, err := adapter.OwnsConfig(dir)
-	require.NoError(t, err)
-	assert.True(t, owns, "OwnsConfig should recognise marker-bearing root file as owned")
-
-	require.NoError(t, adapter.WriteConfig(dir))
-
-	data, err := os.ReadFile(filepath.Join(dir, ".codex", "config.toml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "# armature:managed", "new config must contain marker")
-
-	_, statErr := os.Stat(filepath.Join(dir, "codex.toml"))
-	assert.True(t, os.IsNotExist(statErr), "marker-bearing root codex.toml must be removed after migration")
+	assert.NoError(t, statErr, "legacy root codex.toml is not migrated or removed")
 }
 
 func TestCodexAdapterEncodeApproveDecision(t *testing.T) {

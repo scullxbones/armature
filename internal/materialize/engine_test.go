@@ -1422,7 +1422,7 @@ func TestApplyCreateOp_PreservesCommaInContextFilePath_REQ_MATENC_S1_T1(t *testi
 			ContextFiles: []string{"docs/design,v2.md"},
 		},
 	}))
-	assert.Equal(t, []string{"a.go", "b.go"}, state.Issues["T1"].Scope)
+	assert.Equal(t, []string{"a.go,b.go"}, state.Issues["T1"].Scope)
 	assert.Equal(t, []string{"docs/design,v2.md"}, state.Issues["T1"].ContextFiles)
 }
 
@@ -1450,7 +1450,7 @@ func TestApplyAmendOp_ReplacesAndClearsContextFiles(t *testing.T) {
 	assert.Empty(t, state.Issues["T1"].ContextFiles)
 }
 
-func TestApplyCreateOp_NormalizesCommaSeparatedScope(t *testing.T) {
+func TestApplyCreateOp_PreservesCommaJoinedScopeEntry(t *testing.T) {
 	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
@@ -1461,10 +1461,10 @@ func TestApplyCreateOp_NormalizesCommaSeparatedScope(t *testing.T) {
 			Scope:    []string{"cmd/a.go, cmd/b.go, cmd/c.go"},
 		},
 	}))
-	assert.Equal(t, []string{"cmd/a.go", "cmd/b.go", "cmd/c.go"}, state.Issues["T1"].Scope)
+	assert.Equal(t, []string{"cmd/a.go, cmd/b.go, cmd/c.go"}, state.Issues["T1"].Scope)
 }
 
-func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
+func TestApplyAmendOp_PreservesCommaJoinedScopeEntry(t *testing.T) {
 	t.Parallel()
 	state := NewState()
 	require.NoError(t, state.ApplyOp(ops.Op{
@@ -1475,7 +1475,7 @@ func TestApplyAmendOp_NormalizesCommaSeparatedScope(t *testing.T) {
 		Type: ops.OpAmend, TargetID: "T1", Timestamp: 200, WorkerID: "w1",
 		Payload: ops.Payload{Scope: []string{"cmd/x.go, cmd/y.go"}},
 	}))
-	assert.Equal(t, []string{"cmd/x.go", "cmd/y.go"}, state.Issues["T1"].Scope)
+	assert.Equal(t, []string{"cmd/x.go, cmd/y.go"}, state.Issues["T1"].Scope)
 }
 
 func TestApplyAmendOp_PreservesCommaInContextFilePath_REQ_MATENC_S1_T1(t *testing.T) {

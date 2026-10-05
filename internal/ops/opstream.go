@@ -135,11 +135,19 @@ func LoadFromDirValidated(opsDir string) (LoadResult, error) {
 
 // WorkerOwnsLog reports whether workerID may appear in the named log.
 // The name is `<workerID>.log` or `<workerID>~<slot>.log` (a path is ok).
-// Slotted logs also accept the unslotted worker ID for pre-slot lines.
+//
+// Exact match of the log stem is always accepted. Slotted logs also accept the
+// unslotted base worker ID (`<base>` for `<base>~<slot>.log`): those lines are
+// a permanent read grandfather for append-only history (Constitution I2) written
+// before writers stamped the full slotted stem. New writes still emit the exact
+// slotted ID via worker.ResolveIdentity; this carve-out is load-only.
 func WorkerOwnsLog(workerID, logPathOrName string) bool {
 	expected := strings.TrimSuffix(filepath.Base(logPathOrName), ".log")
-	legacy, _, _ := strings.Cut(expected, "~")
-	return workerID == expected || workerID == legacy
+	if workerID == expected {
+		return true
+	}
+	base, _, found := strings.Cut(expected, "~")
+	return found && workerID == base
 }
 
 func ExtractOps(items []OpItem) []Op {
