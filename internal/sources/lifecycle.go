@@ -2,6 +2,7 @@ package sources
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -27,9 +28,7 @@ func (r *DefaultProviderRegistry) ProviderForType(providerType string) (Provider
 	switch providerType {
 	case "filesystem":
 		return &FilesystemProvider{}, nil
-	case "confluence":
-		return nil, fmt.Errorf("provider %q not configured: base URL and credentials are required", providerType)
-	case "sharepoint":
+	case "confluence", "sharepoint":
 		return nil, fmt.Errorf("provider %q not configured: base URL and credentials are required", providerType)
 	default:
 		return nil, fmt.Errorf("unknown provider type %q", providerType)
@@ -307,30 +306,26 @@ func (l *Lifecycle) Content(id string) ([]byte, error) {
 }
 
 func (l *Lifecycle) Get(id string) (*SourceEntry, error) {
-	manifest, err := ReadManifest(l.manifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read manifest: %w", err)
-	}
-
-	entry, ok := manifest.Get(id)
-	if !ok {
-		return nil, fmt.Errorf("source %q not found", id)
-	}
-
-	return entry, nil
+	return l.entryFromManifest(func(m Manifest) (*SourceEntry, bool) {
+		return m.Get(id)
+	}, fmt.Sprintf("source %q not found", id))
 }
 
 func (l *Lifecycle) GetByURL(url string) (*SourceEntry, error) {
+	return l.entryFromManifest(func(m Manifest) (*SourceEntry, bool) {
+		return m.GetByURL(url)
+	}, fmt.Sprintf("source with URL %q not found", url))
+}
+
+func (l *Lifecycle) entryFromManifest(find func(Manifest) (*SourceEntry, bool), notFound string) (*SourceEntry, error) {
 	manifest, err := ReadManifest(l.manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
 	}
-
-	entry, ok := manifest.GetByURL(url)
+	entry, ok := find(manifest)
 	if !ok {
-		return nil, fmt.Errorf("source with URL %q not found", url)
+		return nil, errors.New(notFound)
 	}
-
 	return entry, nil
 }
 

@@ -75,14 +75,7 @@ func holdGitDirFlock(f *os.File) gitDirFlock {
 
 func resolveCommonGitDir(repoPath string) (string, error) {
 	if info, err := os.Stat(filepath.Join(repoPath, ".git")); err == nil && info.IsDir() {
-		gitDir, absErr := filepath.Abs(filepath.Join(repoPath, ".git"))
-		if absErr != nil {
-			return "", fmt.Errorf("resolve git common dir path: %w", absErr)
-		}
-		if resolved, evalErr := filepath.EvalSymlinks(gitDir); evalErr == nil {
-			gitDir = resolved
-		}
-		return filepath.Clean(gitDir), nil
+		return canonicalizeExistingPath(filepath.Join(repoPath, ".git"))
 	}
 	// #nosec G204 - git binary and arguments are controlled by Armature.
 	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "rev-parse", "--git-common-dir")
@@ -97,11 +90,15 @@ func resolveCommonGitDir(repoPath string) (string, error) {
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(repoPath, dir)
 	}
-	abs, err := filepath.Abs(dir)
+	return canonicalizeExistingPath(dir)
+}
+
+func canonicalizeExistingPath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", fmt.Errorf("resolve git common dir path: %w", err)
 	}
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+	if resolved, evalErr := filepath.EvalSymlinks(abs); evalErr == nil {
 		abs = resolved
 	}
 	return filepath.Clean(abs), nil

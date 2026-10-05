@@ -114,36 +114,23 @@ func Evaluate(git *adapters.Client, in Input) Result {
 
 	target, err := git.ResolveRevision(integration)
 	if err != nil {
-		res.Kind = KindCheckFailed
-		res.Err = fmt.Errorf("resolve integration branch %s: %w", integration, err)
-		res.Recovery = RecoveryArgv(id, KindCheckFailed)
-		return failCheck(res, in, target, tip, KindCheckFailed)
+		return refuse(res, in, target, tip, KindCheckFailed, fmt.Errorf("resolve integration branch %s: %w", integration, err))
 	}
 	res.TargetSHA = target
 
 	patchID, matched, kind, matchErr := matchDelivery(git, base, tip, target)
-	if matchErr != nil {
-		res.Kind = KindCheckFailed
-		res.CombinedPatchID = patchID
-		res.Err = matchErr
-		res.Recovery = RecoveryArgv(id, KindCheckFailed)
-		return failCheck(res, in, target, tip, KindCheckFailed)
-	}
 	res.CombinedPatchID = patchID
+	if matchErr != nil {
+		return refuse(res, in, target, tip, KindCheckFailed, matchErr)
+	}
 	res.MatchedCommit = matched
 
 	if kind == KindEmptyDiff || kind == KindNotOnTarget {
-		res.Kind = kind
-		res.Recovery = RecoveryArgv(id, kind)
-		res.Err = &Error{IssueID: id, Kind: kind, Msg: checkMessage(id, kind)}
-		return failCheck(res, in, target, tip, kind)
+		return refuse(res, in, target, tip, kind, &Error{IssueID: id, Kind: kind, Msg: checkMessage(id, kind)})
 	}
 
 	if !hasMatchingAssessment(in, base, tip) {
-		res.Kind = KindMissingAssessment
-		res.Recovery = RecoveryArgv(id, KindMissingAssessment)
-		res.Err = &Error{IssueID: id, Kind: KindMissingAssessment, Msg: checkMessage(id, KindMissingAssessment)}
-		return failCheck(res, in, target, tip, KindMissingAssessment)
+		return refuse(res, in, target, tip, KindMissingAssessment, &Error{IssueID: id, Kind: KindMissingAssessment, Msg: checkMessage(id, KindMissingAssessment)})
 	}
 
 	res.Kind = KindPromote
@@ -172,6 +159,13 @@ func checkMessage(id, kind string) string {
 	default:
 		return "promotion check for " + id + " failed"
 	}
+}
+
+func refuse(res Result, in Input, target, tip, kind string, err error) Result {
+	res.Kind = kind
+	res.Err = err
+	res.Recovery = RecoveryArgv(in.Issue.ID, kind)
+	return failCheck(res, in, target, tip, kind)
 }
 
 func failCheck(res Result, in Input, target, tip, kind string) Result {
