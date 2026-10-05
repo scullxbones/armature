@@ -17,7 +17,10 @@ verify the checksum, unpack it, and place `arm` on your `PATH` (for example
 ### go install
 
 ```bash
-GOBIN="${GOBIN:-$HOME/.local/bin}" go install github.com/scullxbones/armature/cmd/armature@latest
+GOBIN="${GOBIN:-$HOME/.local/bin}"
+export GOBIN
+mkdir -p "$GOBIN"
+go install github.com/scullxbones/armature/cmd/armature@latest
 mv "$GOBIN/armature" "$GOBIN/arm"
 ```
 
