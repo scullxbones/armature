@@ -28,11 +28,8 @@ func markUsageBoundary(err error) error {
 	if err == nil {
 		return nil
 	}
-	if ace, ok := errors.AsType[adapterExitError](err); ok {
-		return ace
-	}
-	if pe, ok := errors.AsType[protocolExitError](err); ok {
-		return pe
+	if mapped, ok := passthroughExitError(err); ok {
+		return mapped
 	}
 	var cf *armerrors.CommandFailure
 	if errors.As(err, &cf) {
@@ -72,15 +69,22 @@ func mappedCommandFailure(err error) (error, bool) {
 	return err, false
 }
 
+func passthroughExitError(err error) (error, bool) {
+	if ace, ok := errors.AsType[adapterExitError](err); ok {
+		return ace, true
+	}
+	if pe, ok := errors.AsType[protocolExitError](err); ok {
+		return pe, true
+	}
+	return err, false
+}
+
 func mapAgentFacingError(cmd *cobra.Command, err error) error {
 	if err == nil {
 		return nil
 	}
-	if ace, ok := errors.AsType[adapterExitError](err); ok {
-		return ace
-	}
-	if pe, ok := errors.AsType[protocolExitError](err); ok {
-		return pe
+	if mapped, ok := passthroughExitError(err); ok {
+		return mapped
 	}
 	if staysOnPlatformProtocol(cmd) {
 		return skipCommandFailure(err)

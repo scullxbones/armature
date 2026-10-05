@@ -12,19 +12,19 @@ import (
 )
 
 func deploySkills(src fs.FS, dest string) error {
-	sub, err := fs.Sub(src, "skills")
-	if err != nil {
-		return fmt.Errorf("skills subtree: %w", err)
-	}
-	return deploySkillsRoot(sub, dest)
+	return deploySkillsSubtree(src, dest, deploySkillsRoot)
 }
 
 func deployFlatSkills(src fs.FS, dest string) error {
+	return deploySkillsSubtree(src, dest, deployFlatSkillsRoot)
+}
+
+func deploySkillsSubtree(src fs.FS, dest string, deploy func(fs.FS, string) error) error {
 	sub, err := fs.Sub(src, "skills")
 	if err != nil {
 		return fmt.Errorf("skills subtree: %w", err)
 	}
-	return deployFlatSkillsRoot(sub, dest)
+	return deploy(sub, dest)
 }
 
 func deployRepoAgentSkills(repoPath, dest string) error {

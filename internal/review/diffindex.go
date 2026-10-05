@@ -11,6 +11,13 @@ type DiffIndex struct {
 	fileLines map[string]map[int]bool
 }
 
+var (
+	oldFileHeaderRegex = regexp.MustCompile(`^--- a/(.+)$`)
+	newFileHeaderRegex = regexp.MustCompile(`^\+\+\+ (?:b/(.+)|/dev/null)$`)
+	binaryFileRegex    = regexp.MustCompile(`^Binary files (.+) and (.+) differ$`)
+	hunkHeaderRegex    = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
+)
+
 func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 	idx := &DiffIndex{
 		fileLines: make(map[string]map[int]bool),
@@ -25,11 +32,6 @@ func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 	var currentLineNum int
 	var inHunk bool
 	var lastOldFile string
-
-	oldFileHeaderRegex := regexp.MustCompile(`^--- a/(.+)$`)
-	newFileHeaderRegex := regexp.MustCompile(`^\+\+\+ (?:b/(.+)|/dev/null)$`)
-	binaryFileRegex := regexp.MustCompile(`^Binary files (.+) and (.+) differ$`)
-	hunkHeaderRegex := regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -53,9 +55,7 @@ func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 
 			if binaryFilePath != "" {
 				inHunk = false
-				if _, exists := idx.fileLines[binaryFilePath]; !exists {
-					idx.fileLines[binaryFilePath] = make(map[int]bool)
-				}
+				idx.ensureFile(binaryFilePath)
 			}
 			continue
 		}
@@ -67,9 +67,7 @@ func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 				currentFile = lastOldFile
 			}
 			inHunk = false
-			if _, exists := idx.fileLines[currentFile]; !exists {
-				idx.fileLines[currentFile] = make(map[int]bool)
-			}
+			idx.ensureFile(currentFile)
 			continue
 		}
 
@@ -103,6 +101,12 @@ func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 	}
 
 	return idx, nil
+}
+
+func (d *DiffIndex) ensureFile(path string) {
+	if _, exists := d.fileLines[path]; !exists {
+		d.fileLines[path] = make(map[int]bool)
+	}
 }
 
 func (d *DiffIndex) ContainsLine(file string, line int) bool {
