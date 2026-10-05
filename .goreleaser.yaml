@@ -41,12 +41,9 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
-# Release notes are Keep a Changelog (CHANGELOG.md), not auto-generated
-# conventional-commit lists. The release workflow passes
-# `--release-notes=CHANGELOG.md` so this disable stays in force at publish time.
-changelog:
-  disable: true
-
+# Release notes: Keep a Changelog at CHANGELOG.md. The release workflow passes
+# `--release-notes=CHANGELOG.md`. Do not set changelog.disable — GoReleaser
+# ignores --release-notes when disable is true (empty GitHub release body).
 release:
   github:
     owner: scullxbones
