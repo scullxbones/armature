@@ -19,6 +19,13 @@ SCRIPT="$REPO_ROOT/scripts/test_check_jobs.sh"
 
 FAILURES=0
 
+# Nested `make` from inside `make check-job JOB=…` inherits MAKEOVERRIDES
+# (JOB=check-static). Clear that so empty/unknown JOB probes are real, and so
+# this script cannot recurse into check-static.
+run_make() {
+    env -u MAKEFLAGS -u MAKEOVERRIDES -u MFLAGS make -C "$REPO_ROOT" -s "$@"
+}
+
 fail() {
     echo "  FAIL: $1"
     FAILURES=$((FAILURES + 1))
@@ -37,7 +44,7 @@ PRINT_OUT=$(mktemp)
 PRINT_ERR=$(mktemp)
 IDS=()
 set +e
-make -C "$REPO_ROOT" -s print-check-jobs >"$PRINT_OUT" 2>"$PRINT_ERR"
+run_make print-check-jobs >"$PRINT_OUT" 2>"$PRINT_ERR"
 PRINT_STATUS=$?
 set -e
 
@@ -187,9 +194,9 @@ fi
 echo "Test 4: check-job rejects empty and unknown JOB..."
 
 set +e
-EMPTY_OUT=$(make -C "$REPO_ROOT" -s check-job 2>&1)
+EMPTY_OUT=$(run_make check-job JOB= 2>&1)
 EMPTY_STATUS=$?
-BOGUS_OUT=$(make -C "$REPO_ROOT" -s check-job JOB=not-a-job 2>&1)
+BOGUS_OUT=$(run_make check-job JOB=not-a-job 2>&1)
 BOGUS_STATUS=$?
 set -e
 
