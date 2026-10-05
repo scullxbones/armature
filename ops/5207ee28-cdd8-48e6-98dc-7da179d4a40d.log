@@ -5706,3 +5706,4 @@
 ["amend","TOPTIER-S6-T3",1791203486,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"scope":["CHANGELOG.md (new)",".goreleaser.yaml",".github/workflows/release.yml"]},1]
 ["note","TOPTIER-S6-T3",1791203486,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Amended scope to add release.yml so workflow can pass --release-notes=CHANGELOG.md (OS matrix + fixture corpus already on main via S6-T1/S6-T2; README install stays S7-T1).","note_id":"note-1791203486844750639"},1]
 ["transition","TOPTIER-S6-T3",1791203806,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress","outcome":"Cutting v0.1.0 release prep: CHANGELOG + goreleaser notes wiring"},1]
+["heartbeat","TOPTIER-S6-T3",1791203835,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
