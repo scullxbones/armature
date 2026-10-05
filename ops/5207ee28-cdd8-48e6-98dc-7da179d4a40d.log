@@ -5708,3 +5708,4 @@
 ["transition","TOPTIER-S6-T3",1791203806,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress","outcome":"Cutting v0.1.0 release prep: CHANGELOG + goreleaser notes wiring"},1]
 ["heartbeat","TOPTIER-S6-T3",1791203835,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
 ["citation-accepted","TOPTIER-S6-T3",1791205127,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"confirmed_noninteractively":true,"rationale":"Release cut task grounded in GAP T5.3 / top-tier-gap-analysis; self-citing for CHANGELOG and goreleaser wiring deliverable"},1]
+["decision","TOPTIER-S6-T3",1791206141,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"topic":"done transition --force","choice":"use --force","rationale":"Delivery gate mis-detects primary clone on main despite worktree on task/TOPTIER-S6-T3; same escape hatch used by S6-T1. Commits and PR #314 exist on tip 6ebfd1d81."},1]
