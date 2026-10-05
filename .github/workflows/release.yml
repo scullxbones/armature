@@ -30,6 +30,7 @@ jobs:
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          args: release --clean
+          # Keep a Changelog (CHANGELOG.md) is the release-notes source.
+          args: release --clean --release-notes=CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
