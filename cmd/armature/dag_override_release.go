@@ -95,9 +95,9 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
-			issue, ok := snapIssueForOverride(cmd, issueID)
-			if !ok {
-				return fmt.Errorf("issue %s not found", issueID)
+			issue, err := snapIssueForOverride(cmd, issueID)
+			if err != nil {
+				return err
 			}
 			op := ops.Op{
 				Type:      ops.OpDAGTransition,
@@ -120,21 +120,27 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 	return cmd
 }
 
-func snapIssueForOverride(cmd *cobra.Command, issueID string) (*materialize.Issue, bool) {
+func snapIssueForOverride(cmd *cobra.Command, issueID string) (*materialize.Issue, error) {
 	appCtx := currentCtx(cmd)
 	store := newSnapshotStore(appCtx)
 	snap, err := store.Load(cmd.Context())
-	if err != nil || snap == nil || snap.State == nil {
-		return nil, false
+	if err != nil {
+		return nil, fmt.Errorf("load snapshot: %w", err)
+	}
+	if snap == nil || snap.State == nil {
+		return nil, fmt.Errorf("load snapshot: empty state")
 	}
 	issue, ok := snap.State.Issues[issueID]
-	return issue, ok
+	if !ok || issue == nil {
+		return nil, fmt.Errorf("issue %s not found", issueID)
+	}
+	return issue, nil
 }
 
 func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (validate.Result, error) {
-	issue, ok := snapIssueForOverride(cmd, issueID)
-	if !ok {
-		return validate.Result{}, fmt.Errorf("issue %s not found", issueID)
+	issue, err := snapIssueForOverride(cmd, issueID)
+	if err != nil {
+		return validate.Result{}, err
 	}
 	if issue.Status == ops.StatusDone && issue.Base != "" && issue.Tip != "" {
 		// Post-delivery recovery: bind the override to the recorded delivery.

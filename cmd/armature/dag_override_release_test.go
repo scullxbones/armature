@@ -151,6 +151,26 @@ func TestOverrideReleaseRequiresExistingDirtyDraft(t *testing.T) {
 	assert.Contains(t, err.Error(), "no blocking findings")
 }
 
+func TestOverrideReleasePropagatesSnapshotLoadError_REQ_LNGHZN_S11_T2(t *testing.T) {
+	repo := setupRepoWithDirtyDraftNode(t)
+	ctx := getTestContext(t, repo)
+	opsDir := filepath.Join(ctx.IssuesDir, "ops")
+	require.NoError(t, os.Chmod(opsDir, 0o000))
+	t.Cleanup(func() {
+		if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {
+			t.Logf("restore ops dir perms: %v", chmodErr)
+		}
+	})
+
+	root := newRootCmd()
+	require.NoError(t, root.PersistentFlags().Set("repo", repo))
+	attachExecutionState(root, ctx)
+	_, err := checkOverrideReleaseTarget(root, "draft-task-01")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "not found", "load failures must not masquerade as missing issues")
+	assert.Contains(t, err.Error(), "load")
+}
+
 func TestOverrideReleaseAllowsWhenForeignFindingBlocksPlanRelease(t *testing.T) {
 	repo := setupRepoWithValidDraftNode(t)
 	ctx := getTestContext(t, repo)

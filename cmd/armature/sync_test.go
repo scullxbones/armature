@@ -14,14 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func markIssueDoneLegacy(t *testing.T, repo, issueID string) {
+func markIssueDoneLegacy(t *testing.T, repo string) {
 	t.Helper()
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
 	require.NoError(t, appendOp(ctx, logPath, ops.Op{
 		Type:      ops.OpTransition,
-		TargetID:  issueID,
+		TargetID:  "task-01",
 		Timestamp: nowEpoch(),
 		WorkerID:  workerID,
 		Payload:   ops.Payload{To: ops.StatusDone, Outcome: "legacy done without snapshot"},
@@ -52,7 +52,7 @@ func decodeSyncIssues(t *testing.T, stdout string) (help []string, rows []output
 
 func TestSyncReportsLegacyDoneWithoutFailing_REQ_LNGHZN_S11_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	markIssueDoneLegacy(t, repo, "task-01")
+	markIssueDoneLegacy(t, repo)
 
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
@@ -137,7 +137,7 @@ func TestSyncAgentEnvelopeShape_REQ_LNGHZN_S11_T3(t *testing.T) {
 
 func TestSyncDryRunWritesNothingOnReadOnlyState_REQ_LNGHZN_S11_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	markIssueDoneLegacy(t, repo, "task-01")
+	markIssueDoneLegacy(t, repo)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -187,7 +187,7 @@ func TestSyncDryRunWritesNothingOnReadOnlyState_REQ_LNGHZN_S11_T3(t *testing.T) 
 
 func TestSyncLegacyOnlySucceedsWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	markIssueDoneLegacy(t, repo, "task-01")
+	markIssueDoneLegacy(t, repo)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 

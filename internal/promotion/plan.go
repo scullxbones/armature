@@ -5,12 +5,13 @@
 package promotion
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -332,11 +333,16 @@ func hasMatchingAssessment(in Input, base, tip string) bool {
 			return true
 		}
 	}
-	// PriorOps may arrive in per-worker filename order; scan in the
-	// materializer's timestamp-then-type replay order so a later override
-	// from another worker is still after its delivery transition.
+	// PriorOps may arrive in per-worker filename order. Sort by timestamp,
+	// then put delivery transitions before same-second dag-transitions so a
+	// bound override is still after its delivery when clocks collide.
 	ordered := append([]ops.Op(nil), in.PriorOps...)
-	claim.SortForReplay(ordered)
+	slices.SortStableFunc(ordered, func(a, b ops.Op) int {
+		if n := cmp.Compare(a.Timestamp, b.Timestamp); n != 0 {
+			return n
+		}
+		return cmp.Compare(assessmentReplayKey(a), assessmentReplayKey(b))
+	})
 	deliverySeen := false
 	for _, op := range ordered {
 		if op.TargetID != in.Issue.ID {
@@ -372,6 +378,22 @@ func hasMatchingAssessment(in Input, base, tip string) bool {
 		}
 	}
 	return false
+}
+
+// assessmentReplayKey mirrors claim.SortForReplay's create/default/note-delete
+// buckets, but ranks OpTransition ahead of other same-second ops so a delivery
+// precedes its bound release override when timestamps collide at 1s resolution.
+func assessmentReplayKey(op ops.Op) int {
+	switch op.Type {
+	case ops.OpCreate:
+		return 0
+	case ops.OpTransition:
+		return 1
+	case ops.OpNoteDelete:
+		return 3
+	default:
+		return 2
+	}
 }
 
 func alreadyChecked(prior []ops.Op, issueID, targetSHA, tip, result string) bool {

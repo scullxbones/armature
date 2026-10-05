@@ -340,21 +340,37 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		Integration: integration,
 		PR:          pr,
 	})
-	state := mustState(cmd)
-	workerID, logPath, err := resolveWorkerAndLog(state.ctx)
-	if err != nil {
-		return err
-	}
-	if result.AppendCheck {
-		checkOp := ops.Op{
-			Type:      ops.OpPromotionCheck,
-			TargetID:  issueID,
-			Timestamp: nowEpoch(),
-			WorkerID:  workerID,
-			Payload:   result.CheckPayload,
+	// Resolve the worker only when an append is certain — legacy / non-leaf
+	// refusals must surface MERGED-1 recovery, not worker-init errors.
+	if result.AppendCheck || result.Promote {
+		state := mustState(cmd)
+		workerID, logPath, resolveErr := resolveWorkerAndLog(state.ctx)
+		if resolveErr != nil {
+			return resolveErr
 		}
-		if err := appendOp(state.ctx, logPath, checkOp); err != nil {
-			return err
+		if result.AppendCheck {
+			checkOp := ops.Op{
+				Type:      ops.OpPromotionCheck,
+				TargetID:  issueID,
+				Timestamp: nowEpoch(),
+				WorkerID:  workerID,
+				Payload:   result.CheckPayload,
+			}
+			if err := appendOp(state.ctx, logPath, checkOp); err != nil {
+				return err
+			}
+		}
+		if result.Promote {
+			op := ops.Op{
+				Type:      ops.OpTransition,
+				TargetID:  issueID,
+				Timestamp: nowEpoch(),
+				WorkerID:  workerID,
+				Payload:   result.MergedPayload,
+			}
+			if err := appendOp(state.ctx, logPath, op); err != nil {
+				return err
+			}
 		}
 	}
 	if !result.Promote {
@@ -362,17 +378,6 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 			return result.Err
 		}
 		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID}
-	}
-
-	op := ops.Op{
-		Type:      ops.OpTransition,
-		TargetID:  issueID,
-		Timestamp: nowEpoch(),
-		WorkerID:  workerID,
-		Payload:   result.MergedPayload,
-	}
-	if err := appendOp(state.ctx, logPath, op); err != nil {
-		return err
 	}
 
 	if err := git.DeleteRef(delivery.RefName(issueID)); err != nil {

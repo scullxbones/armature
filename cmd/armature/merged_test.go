@@ -1247,3 +1247,28 @@ func TestMergedRefusalNamesRecovery_REQ_LNGHZN_S11_T2(t *testing.T) {
 	require.NoError(t, showErr)
 	assert.Equal(t, "done\n", status)
 }
+
+func TestMergedLegacyRefusalWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	markIssueDoneLegacy(t, repo)
+
+	unsetWorkerIDConfig(t, repo)
+	t.Setenv("ARM_WORKER_ID", "")
+	t.Setenv("ARM_LOG_SLOT", "")
+
+	// Materialize into the no-worker default state dir so ReadIndex can see
+	// the issue — same shape as a clone with ops but no registered worker.
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, stderr,
+		"merged", "--repo", repo, "--issue", "task-01", "--force", "--format", "agent")
+	assert.NotEqual(t, 0, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "MERGED-1", cf.Code, "stderr=%s cause=%s", stderr.String(), cf.Cause)
+	assert.NotContains(t, cf.Cause, "worker not initialized")
+	require.NotEmpty(t, cf.NextActions)
+	assert.Contains(t, cf.NextActions[0], "arm delivery record --issue task-01")
+}

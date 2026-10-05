@@ -576,6 +576,46 @@ func TestPostDeliveryOverrideUsesReplayOrder_REQ_LNGHZN_S11_T2(t *testing.T) {
 	assert.Equal(t, KindPromote, res.Kind)
 }
 
+func TestPostDeliveryOverrideSameSecondTieBreak_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
+	dir, git, base := deliveryRepo(t)
+	writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
+	tip := head(t, git)
+	gittest.Git(t, dir, "checkout", "main")
+	gittest.Git(t, dir, "merge", "--squash", "delivery")
+	gittest.Git(t, dir, "commit", "-m", "squash delivery")
+
+	// Same-second cross-worker write: filename order puts the override first.
+	// Replay must still treat the delivery transition as before its bound override.
+	const ts int64 = 42
+	in := doneInput("task-tie", base, tip, []ops.Op{
+		{
+			Type:      ops.OpDAGTransition,
+			TargetID:  "task-tie",
+			Timestamp: ts,
+			WorkerID:  "aaa-worker",
+			Payload: ops.Payload{
+				IssueID:             "task-tie",
+				To:                  "verified",
+				SkippedValidateGate: true,
+				Rationale:           "post-delivery",
+				Base:                base,
+				Tip:                 tip,
+			},
+		},
+		{
+			Type:      ops.OpTransition,
+			TargetID:  "task-tie",
+			Timestamp: ts,
+			WorkerID:  "zzz-worker",
+			Payload:   ops.Payload{To: ops.StatusDone, Base: base, Tip: tip},
+		},
+	})
+	res := Evaluate(git, in)
+	require.True(t, res.Promote, "same-second delivery+override must waive via causal tie-break; got %s", res.Kind)
+	assert.Equal(t, KindPromote, res.Kind)
+}
+
 func TestPromotionErrorNilAndDefaultRecovery(t *testing.T) {
 	t.Parallel()
 	var e *Error
