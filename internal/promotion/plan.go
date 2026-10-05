@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -254,28 +255,17 @@ func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, mat
 	return patchID, "", KindNotOnTarget, nil
 }
 
-// containsRename is the ADR 0022 rename exception: same blob OID deleted at
-// one path and added at another. Mixed add/delete of different blobs must
-// still use tree matching.
-func containsRename(git *adapters.Client, base, tip string, paths []string) bool {
-	var deleted, added []string
-	for _, p := range paths {
-		_, oidB, errB := git.TreeEntry(base, p)
-		_, oidT, errT := git.TreeEntry(tip, p)
-		atB := errB == nil && oidB != ""
-		atT := errT == nil && oidT != ""
-		if atB && !atT {
-			deleted = append(deleted, oidB)
-		}
-		if !atB && atT {
-			added = append(added, oidT)
-		}
+// containsRename is the ADR 0022 rename exception: git -M rename detection
+// (including content-modifying renames). Mixed add/delete of dissimilar
+// blobs must still use tree matching.
+func containsRename(git *adapters.Client, base, tip string, _ []string) bool {
+	entries, err := git.DiffNameStatusRange(base, tip)
+	if err != nil {
+		return false
 	}
-	for _, d := range deleted {
-		for _, a := range added {
-			if d == a {
-				return true
-			}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Status, "R") {
+			return true
 		}
 	}
 	return false
@@ -342,8 +332,13 @@ func hasMatchingAssessment(in Input, base, tip string) bool {
 			return true
 		}
 	}
+	// PriorOps may arrive in per-worker filename order; scan in the
+	// materializer's timestamp-then-type replay order so a later override
+	// from another worker is still after its delivery transition.
+	ordered := append([]ops.Op(nil), in.PriorOps...)
+	claim.SortForReplay(ordered)
 	deliverySeen := false
-	for _, op := range in.PriorOps {
+	for _, op := range ordered {
 		if op.TargetID != in.Issue.ID {
 			continue
 		}

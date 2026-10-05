@@ -509,6 +509,71 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		require.True(t, res.Promote, "real rename with equal combined diff must still promote; got %s", res.Kind)
 		assert.Equal(t, KindPromote, res.Kind)
 	})
+
+	t.Run("rename with edits inside a larger squash stays done", func(t *testing.T) {
+		t.Parallel()
+		dir := gittest.InitRepo(t)
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "old.txt"), []byte("line one\nline two\nline three\n"), 0o644))
+		gittest.Git(t, dir, "add", "old.txt")
+		gittest.Git(t, dir, "commit", "-m", "init")
+		gittest.Git(t, dir, "branch", "-M", "main")
+		git := adapters.New(dir)
+		base := head(t, git)
+		gittest.Git(t, dir, "checkout", "-b", "delivery")
+		require.NoError(t, os.Remove(filepath.Join(dir, "old.txt")))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("line one\nline two edited\nline three\n"), 0o644))
+		gittest.Git(t, dir, "add", "-A")
+		gittest.Git(t, dir, "commit", "-m", "rename with edit")
+		tip := head(t, git)
+		gittest.Git(t, dir, "checkout", "main")
+		require.NoError(t, os.Remove(filepath.Join(dir, "old.txt")))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("line one\nline two edited\nline three\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.txt"), []byte("unrelated\n"), 0o644))
+		gittest.Git(t, dir, "add", "-A")
+		gittest.Git(t, dir, "commit", "-m", "larger squash")
+		res := Evaluate(git, doneInput("task-rename-edit", base, tip, attest(t, base, tip)))
+		assert.False(t, res.Promote, "modified rename must not tree-match inside a larger squash; got %s", res.Kind)
+		assert.Equal(t, KindNotOnTarget, res.Kind)
+	})
+}
+
+func TestPostDeliveryOverrideUsesReplayOrder_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
+	dir, git, base := deliveryRepo(t)
+	writeCommit(t, dir, "feat.txt", "one\n", "feat: add feat")
+	tip := head(t, git)
+	gittest.Git(t, dir, "checkout", "main")
+	gittest.Git(t, dir, "merge", "--squash", "delivery")
+	gittest.Git(t, dir, "commit", "-m", "squash delivery")
+
+	// Filename-order PriorOps: override log sorts before delivery log, but
+	// timestamps put the override after the delivery transition.
+	in := doneInput("task-order", base, tip, []ops.Op{
+		{
+			Type:      ops.OpDAGTransition,
+			TargetID:  "task-order",
+			Timestamp: 20,
+			WorkerID:  "aaa-worker",
+			Payload: ops.Payload{
+				IssueID:             "task-order",
+				To:                  "verified",
+				SkippedValidateGate: true,
+				Rationale:           "post-delivery",
+				Base:                base,
+				Tip:                 tip,
+			},
+		},
+		{
+			Type:      ops.OpTransition,
+			TargetID:  "task-order",
+			Timestamp: 10,
+			WorkerID:  "zzz-worker",
+			Payload:   ops.Payload{To: ops.StatusDone, Base: base, Tip: tip},
+		},
+	})
+	res := Evaluate(git, in)
+	require.True(t, res.Promote, "override after delivery in replay order must waive; got %s", res.Kind)
+	assert.Equal(t, KindPromote, res.Kind)
 }
 
 func TestPromotionErrorNilAndDefaultRecovery(t *testing.T) {
