@@ -1279,11 +1279,10 @@ func (c *Client) TreeEntry(rev, path string) (mode, oid string, err error) {
 		return "", "", nil
 	}
 	line, _, _ := strings.Cut(raw, "\x00")
-	modeType, rest, ok := strings.Cut(line, "\t")
+	modeType, _, ok := strings.Cut(line, "\t")
 	if !ok {
 		return "", "", fmt.Errorf("git ls-tree %s -- %s: malformed output", rev, path)
 	}
-	_ = rest
 	fields := strings.Fields(modeType)
 	if len(fields) < 3 {
 		return "", "", fmt.Errorf("git ls-tree %s -- %s: malformed output", rev, path)

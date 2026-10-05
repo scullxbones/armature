@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Idempotent repository bootstrap for Armature Cloud Agents.
-#
-# Installs the two developer tools that `make check` needs beyond the base
-# image (golangci-lint and gremlins), primes the Go module cache, and builds
-# the `arm` binary. Pins live in the Makefile (`GOLANGCI_LINT_VERSION`,
-# `GREMLINS_VERSION`); `make install-check-tools` is the install path.
-#
-# Runs after the repository is checked out. Must be safe to run repeatedly.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -18,7 +10,6 @@ if [ -z "${GOBIN_DIR}" ]; then
 fi
 export PATH="${GOBIN_DIR}:${PATH}"
 
-# Pins live in the Makefile (GOLANGCI_LINT_VERSION / GREMLINS_VERSION).
 make install-check-tools
 
 # Expose the Go tool binaries on PATH for every interactive shell without

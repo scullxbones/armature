@@ -1,7 +1,5 @@
-// Package promotion is the one ADR 0022 writer: match a recorded delivery on
-// the integration branch and require a matching assessment (or post-delivery
-// Release Override bound to those SHAs). arm merged and arm sync both call
-// Evaluate; they append a merged transition only on a pass.
+// Package promotion matches a recorded delivery on the integration branch
+// (ADR 0022) and requires a matching assessment or post-delivery Release Override.
 package promotion
 
 import (
@@ -237,7 +235,7 @@ func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, mat
 	if err != nil {
 		return patchID, "", KindCheckFailed, err
 	}
-	skipTreeOnly := containsRename(git, base, tip, paths)
+	skipTreeOnly := containsRename(git, base, tip)
 	for _, sha := range commits {
 		ok, matchErr := qualifies(git, sha, tip, diff, patchID, paths, skipTreeOnly)
 		if matchErr != nil {
@@ -253,7 +251,7 @@ func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, mat
 // containsRename is the ADR 0022 rename exception: git -M rename detection
 // (including content-modifying renames). Mixed add/delete of dissimilar
 // blobs must still use tree matching.
-func containsRename(git *adapters.Client, base, tip string, _ []string) bool {
+func containsRename(git *adapters.Client, base, tip string) bool {
 	entries, err := git.DiffNameStatusRange(base, tip)
 	if err != nil {
 		return false
@@ -327,9 +325,6 @@ func hasMatchingAssessment(in Input, base, tip string) bool {
 			return true
 		}
 	}
-	// PriorOps may arrive in per-worker filename order. Sort by timestamp,
-	// then put delivery transitions before same-second dag-transitions so a
-	// bound override is still after its delivery when clocks collide.
 	ordered := append([]ops.Op(nil), in.PriorOps...)
 	slices.SortStableFunc(ordered, func(a, b ops.Op) int {
 		if n := cmp.Compare(a.Timestamp, b.Timestamp); n != 0 {
@@ -374,9 +369,6 @@ func hasMatchingAssessment(in Input, base, tip string) bool {
 	return false
 }
 
-// assessmentReplayKey mirrors claim.SortForReplay's create/default/note-delete
-// buckets, but ranks OpTransition ahead of other same-second ops so a delivery
-// precedes its bound release override when timestamps collide at 1s resolution.
 func assessmentReplayKey(op ops.Op) int {
 	switch op.Type {
 	case ops.OpCreate:

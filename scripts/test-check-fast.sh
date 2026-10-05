@@ -1,15 +1,4 @@
 #!/bin/bash
-# Test for scripts/check-fast.sh routing logic (docs/design/gate-efficiency.md D2).
-#
-# Builds a synthetic git repo, commits a base state, then makes changes that
-# should route to specific surfaces, and asserts:
-#   1. The right steps ARE selected for the changed surface.
-#   2. The wrong steps are NOT selected — in particular a docs-only change
-#      must never trigger mutation, coverage, or crosscompile (those aren't
-#      even routable targets of check-fast, but we assert the script doesn't
-#      invoke make targets outside its declared routing table).
-#
-# Wired into `make check` via the `test-check-fast` target.
 
 set -euo pipefail
 
@@ -22,9 +11,6 @@ FAILURES=0
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
-# Build a minimal synthetic git repo with a fake `make` on PATH that just
-# records which targets were invoked, so we can assert routing without
-# depending on golangci-lint/gremlins/network being available in CI.
 FIXTURE="$WORKDIR/fixture"
 mkdir -p "$FIXTURE"
 git -C "$FIXTURE" init -q
@@ -65,7 +51,6 @@ git -C "$FIXTURE" add -A
 git -C "$FIXTURE" commit -q -m "base"
 BASE_SHA=$(git -C "$FIXTURE" rev-parse HEAD)
 
-# Fake `make` records invoked targets to a log file instead of running them.
 FAKE_BIN="$WORKDIR/bin"
 mkdir -p "$FAKE_BIN"
 MAKE_LOG="$WORKDIR/make.log"
@@ -107,10 +92,6 @@ assert_make_target_not_ran() {
     fi
 }
 
-# ----------------------------------------------------------------------------
-# Test 1: docs-only change routes to adr-principles only — no mutation,
-# coverage, crosscompile, census, or skills validation.
-# ----------------------------------------------------------------------------
 echo "Test 1: docs-only change routes to adr-principles only..."
 echo "more docs" >> "$FIXTURE/docs/README.md"
 git -C "$FIXTURE" add docs/README.md
@@ -126,10 +107,6 @@ assert_make_target_not_ran "build" "docs-only must not run build (no go changes)
 
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 
-# ----------------------------------------------------------------------------
-# Test 2: a Go-only change routes to build + go test, and does not run
-# census, skills, or adr-principles-only path.
-# ----------------------------------------------------------------------------
 echo "Test 2: Go change routes to build + test on changed pkg plus reverse importers..."
 cat >> "$FIXTURE/pkg1/pkg1.go" <<'EOF'
 
@@ -144,9 +121,6 @@ assert_make_target_not_ran "crosscompile" "go change (fast gate) must not run cr
 assert_make_target_not_ran "census-drift-check" "pkg1 change is not a census surface"
 assert_make_target_not_ran "validate-skills" "pkg1 change does not touch skills"
 
-# Assert the go test invocation covers both the changed package (pkg1) and
-# its reverse importer (pkg2, which imports pkg1) — inspect the script's own
-# stdout since `go test` isn't routed through the fake make.
 if grep -q "fixture/pkg1" <<< "$OUTPUT" && grep -q "fixture/pkg2" <<< "$OUTPUT"; then
     echo "  PASS: go test targets include changed package and reverse importer"
 else
@@ -157,9 +131,6 @@ fi
 
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 
-# ----------------------------------------------------------------------------
-# Test 3: a cmd/ change routes to census-drift-check.
-# ----------------------------------------------------------------------------
 echo "Test 3: cmd/ change routes to census-drift-check..."
 cat >> "$FIXTURE/cmd/main.go" <<'EOF'
 // touch
@@ -173,9 +144,6 @@ assert_make_target_not_ran "validate-skills" "cmd/ change alone does not touch s
 
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 
-# ----------------------------------------------------------------------------
-# Test 4: a skills/ change routes to validate-skills + validate-doc-examples.
-# ----------------------------------------------------------------------------
 echo "Test 4: skills/ change routes to validate-skills + validate-doc-examples..."
 echo "# skill" > "$FIXTURE/skills/SKILL.md"
 git -C "$FIXTURE" add skills/SKILL.md
@@ -189,9 +157,6 @@ assert_make_target_not_ran "mutate" "skills/ change (fast gate) must not run mut
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 git -C "$FIXTURE" clean -q -fd skills
 
-# ----------------------------------------------------------------------------
-# Test 4b: a .agents/skills/ change routes to validate-skills.
-# ----------------------------------------------------------------------------
 echo "Test 4b: .agents/skills/ change routes to validate-skills + validate-doc-examples..."
 mkdir -p "$FIXTURE/.agents/skills/capturing-dogfood-findings"
 echo "# capture" > "$FIXTURE/.agents/skills/capturing-dogfood-findings/SKILL.md"
@@ -206,9 +171,6 @@ assert_make_target_not_ran "mutate" ".agents/skills/ change (fast gate) must not
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 git -C "$FIXTURE" clean -q -fd .agents
 
-# ----------------------------------------------------------------------------
-# Test 4c: an internal/skillsembed/skills/ change routes to validate-skills.
-# ----------------------------------------------------------------------------
 echo "Test 4c: internal/skillsembed/skills/ change routes to validate-skills..."
 mkdir -p "$FIXTURE/internal/skillsembed/skills/example"
 echo "# skill" > "$FIXTURE/internal/skillsembed/skills/example/SKILL.md"
@@ -222,10 +184,6 @@ assert_make_target_not_ran "mutate" "internal/skillsembed/skills/ change (fast g
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 git -C "$FIXTURE" clean -q -fd internal
 
-# ----------------------------------------------------------------------------
-# Test 5: BASE= override is honored — an unrelated stale BASE (e.g. current
-# HEAD, meaning no diff) yields no routed steps.
-# ----------------------------------------------------------------------------
 echo "Test 5: BASE= override changes the diff base..."
 echo "more docs" >> "$FIXTURE/docs/README.md"
 git -C "$FIXTURE" add docs/README.md
@@ -246,11 +204,6 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
-# ----------------------------------------------------------------------------
-# Test 6: Makefile recipes invoke the routed scripts directly, so both must
-# be committed executable (100755). A 100644 checkout fails with
-# Permission denied on a normal umask.
-# ----------------------------------------------------------------------------
 echo "Test 6: routed gate scripts are committed executable..."
 for script in scripts/check-fast.sh scripts/test-check-fast.sh; do
     mode=$(git -C "$REPO_ROOT" ls-files -s -- "$script" | awk '{print $1}')
@@ -268,11 +221,6 @@ for script in scripts/check-fast.sh scripts/test-check-fast.sh; do
     fi
 done
 
-# ----------------------------------------------------------------------------
-# Test 7: the suite pole's fan-out root is coverage-check, not a sibling
-# `test` / `coverage` that would run UNIT_PACKAGES twice (D3). CI names only
-# `make check-job`; membership lives in the Makefile table.
-# ----------------------------------------------------------------------------
 echo "Test 7: check-core membership runs coverage-check, not a second suite..."
 MAKEFILE="$REPO_ROOT/Makefile"
 CI_YML="$REPO_ROOT/.github/workflows/ci.yml"
@@ -307,14 +255,6 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
-# ----------------------------------------------------------------------------
-# Test 8: coverage-check must not start until the current coverage target
-# succeeds. coverage and coverage-check are both .PHONY, so a sibling listing
-# lets `make -j` (or inherited MAKEFLAGS=-j) read a stale coverage.out. The
-# ordering dependency lives on coverage-check itself so standalone
-# `make coverage-check` also generates a current profile. Fan-out CI must not
-# invoke `make coverage` as its own step — that would re-run the suite.
-# ----------------------------------------------------------------------------
 echo "Test 8: coverage-check depends on coverage (parallel-safe, single-run)..."
 DEP_RESULT=$(python3 - "$MAKEFILE" "$CI_YML" <<'PY'
 import sys

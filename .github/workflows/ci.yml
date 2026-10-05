@@ -23,13 +23,6 @@ env:
   GO_VERSION: "1.26.1"
 
 jobs:
-  # T5.1 / TOPTIER-S6-T1: exercise make test + make build on every shipped OS.
-  # Lint, coverage, and mutation live in the required check-core / check-static
-  # / mutate jobs below. On pull_request/push, Ubuntu does not re-run the unit
-  # suite: check-core already produces coverage.out via `make coverage-check`
-  # (D3). macos and windows keep the matrix tests. Tag releases call this
-  # workflow with os-matrix-only: true (check-core skipped), so Linux still
-  # runs make test-ci in that case.
   test-os:
     strategy:
       fail-fast: false
@@ -72,16 +65,12 @@ jobs:
         if: ${{ runner.os != 'Linux' || inputs.os-matrix-only }}
         run: make test-ci
 
-      # go test -json output is huge; GHA often truncates it. On failure, re-run
-      # cmd/armature and keep FAIL lines (tail alone hid the timeout).
       - name: Diagnose cmd/armature failures
         if: ${{ failure() && runner.os != 'Windows' && (runner.os != 'Linux' || inputs.os-matrix-only) }}
         run: |
           go test -count=1 -timeout 25m -v ./cmd/armature/ 2>&1 | tee /tmp/cmd-armature.log | rg -n 'FAIL|panic|timeout|PASS.*cmd/armature|ok  	github.com/scullxbones/armature/cmd/armature' || true
           tail -n 80 /tmp/cmd-armature.log
 
-  # Skip the heavy ubuntu gate when release.yml reuses this workflow; tag
-  # releases only need the OS matrix (test-os) before goreleaser.
   check-core:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
@@ -163,7 +152,6 @@ jobs:
       - name: Run full e2eharness suite
         run: make test-e2eharness
 
-  # D1.1 / TOPTIER-S7-T1: README quickstart must stay runnable on a fresh clone.
   quickstart:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest

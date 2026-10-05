@@ -112,7 +112,6 @@ func getTestContext(t *testing.T, repo string) *config.Context {
 	return ctx
 }
 
-// landDelivery puts the recorded delivery on the integration branch.
 func landDelivery(t *testing.T, repo, issueID string) (base, tip string) {
 	t.Helper()
 	loaded, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", issueID+".json"))
@@ -141,8 +140,6 @@ func landDelivery(t *testing.T, repo, issueID string) (base, tip string) {
 	return issue.Base, issue.Tip
 }
 
-// landDeliveryAndAttest puts the recorded delivery on the integration branch
-// and appends a red attestation bound to those SHAs so arm merged can promote.
 func landDeliveryAndAttest(t *testing.T, repo, issueID string) {
 	t.Helper()
 	base, tip := landDelivery(t, repo, issueID)

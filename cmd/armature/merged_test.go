@@ -1256,8 +1256,6 @@ func TestMergedLegacyRefusalWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
 	t.Setenv("ARM_WORKER_ID", "")
 	t.Setenv("ARM_LOG_SLOT", "")
 
-	// Materialize into the no-worker default state dir so ReadIndex can see
-	// the issue — same shape as a clone with ops but no registered worker.
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 

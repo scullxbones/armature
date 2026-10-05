@@ -336,8 +336,6 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		Integration: integration,
 		PR:          pr,
 	})
-	// Resolve the worker only when an append is certain — legacy / non-leaf
-	// refusals must surface MERGED-1 recovery, not worker-init errors.
 	if result.AppendCheck || result.Promote {
 		state := mustState(cmd)
 		workerID, logPath, resolveErr := resolveWorkerAndLog(state.ctx)
@@ -417,8 +415,6 @@ func printMerged(cmd *cobra.Command, issueID, pr string) {
 	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 }
 
-// teardownDeliveryArtifacts deletes the delivery ref and removes a bound
-// worktree. Idempotent: missing refs and unbound worktrees are no-ops.
 func teardownDeliveryArtifacts(repoPath string, git *adapters.Client, issue materialize.Issue, errWriter io.Writer) error {
 	if err := git.DeleteRef(delivery.RefName(issue.ID)); err != nil {
 		return err

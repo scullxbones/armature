@@ -64,7 +64,6 @@ func TestOverrideReleaseRecordsDeliverySHAsAfterDone_REQ_LNGHZN_S11_T2(t *testin
 	root := newRootCmd()
 	root.SetOut(new(bytes.Buffer))
 	root.SetArgs([]string{"dag", "override-release", "--repo", repo, "task-01", "--reason", "x"})
-	// PersistentPreRun attaches execution state; run only that far via check helper.
 	require.NoError(t, root.PersistentFlags().Set("repo", repo))
 	attachExecutionState(root, getTestContext(t, repo))
 	_, checkErr := checkOverrideReleaseTarget(root, "task-01")

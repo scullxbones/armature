@@ -74,8 +74,6 @@ base must ancestor tip, and the range must be non-empty.`,
 				payload.Outcome = liveIssue.Outcome
 				payload.Branch = liveIssue.Branch
 				payload.PR = liveIssue.PR
-				// Same-status done retries must keep the recorded integration
-				// branch; config is only the default for a first snapshot.
 				if liveIssue.Status == ops.StatusDone {
 					payload.IntegrationBranch = liveIssue.IntegrationBranch
 				}

@@ -235,9 +235,6 @@ func checkProvenance(git *adapters.Client, req Request, tip, branch string) erro
 	}
 
 	if claimedTip == "" && claimHEAD == "" {
-		// Empty IssueType means the caller could not resolve the issue (unknown
-		// / misspelled id). That must fail closed. Known types with no branch
-		// convention (epic) may still record without a claimed branch tip.
 		if req.IssueType != "" && materialize.DeriveBranchName(req.IssueType, req.IssueID) == "" && branch == "" {
 			return nil
 		}
