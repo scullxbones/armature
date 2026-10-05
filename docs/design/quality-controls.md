@@ -81,6 +81,22 @@ Gremlins is the end-to-end check on test quality. If fakes plus state-based asse
 
 **Gap (R5 — domain typing):** Task IDs, worker IDs, and story IDs are currently `string`. Wrapping them in `NewType`-equivalent named types (`type TaskID string`) would catch accidental ID cross-assignment at compile time. Not enforced.
 
+### C7 — Architecture conformance (R4)
+
+**Status: ACTIVE**
+
+`depguard` in `.golangci.yml` (via `make lint` / `make check`) is the modularity map. It encodes the live package fences; it is not a backlog of fences still to invent.
+
+| Rule | Mode | Hold |
+|---|---|---|
+| `internal-no-cmd` | deny | `internal/**` must not import `cmd` |
+| `dag-pure`, `issuetype-pure`, `issueref-pure` | deny other `internal` | truly pure packages |
+| `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, `output`, `worktree` | strict allow-lists | deep-module / port-clean boundaries (ADR 0004; `worktree` is in the live YAML) |
+
+Prefer shrinking allow-lists. Growing an allow-list or removing a deny is an ADR-class change ([ADR 0004](../adr/0004-deep-module-depguard-boundaries.md) for the boundary model; [ADR 0023](../adr/0023-depguard-allow-list-widens-are-adr-class.md) for the ratchet). Overnight subtractive work may shrink fences; feature work must not widen them without that ADR.
+
+Unfenced packages are outside this map until a new rule is proven green against current imports. Do not add surface budgets, canaries, or a second architecture test suite.
+
 ---
 
 ## Controls not yet in `make check`
@@ -98,16 +114,6 @@ Current violations:
 - `internal/doctor/doctor.go:213` — `time.Now()` (passed to `ready.StaleClaims`)
 
 Target state: introduce a `Clock` port (a function type `type Clock func() int64` or a one-method interface), inject it at the composition root, and add a `staticcheck` or custom vet rule banning bare `time.Now()` in domain packages.
-
-### C7 — Architecture conformance (R4)
-
-**Status: GAP**
-
-No automated check enforces the intended import boundary: adapters (`platform`, `ops`, `sources`) must not be imported by the pure domain (`materialize`, `dag`, `ready`). Currently relies on code review and convention.
-
-Go equivalent of ArchUnit is either:
-- A small `TestArchitecture` test in each package using `golang.org/x/tools/go/packages` to assert allowed import sets.
-- `depguard` linter (addable to `.golangci.yml`) with explicit deny-lists per package.
 
 ### C8 — Contract verification for fakes (R2)
 
@@ -148,7 +154,7 @@ The `internal/traceability` package is the right home for that interim check, an
 | C4 Mutation (gremlins) | R6 | ACTIVE | `make mutate` |
 | C5 Build / type system | R5 | ACTIVE | `make build` |
 | C6 Clock purity in domain | R3 | GAP | — |
-| C7 Architecture conformance | R4 | GAP | — |
+| C7 Architecture conformance | R4 | ACTIVE | `make lint` (`depguard`) |
 | C8 Fake contract tests | R2 | GAP | — |
 | C9 Spec traceability | R8 | GAP | — |
 
@@ -161,7 +167,8 @@ R9 (boundary contracts / breaking-change detection) does not apply: armature is 
 Following the ratchet strategy from the guardrails doc — apply to new and modified code first, then backfill:
 
 1. **C6 (clock purity)** — six localized call sites; inject `Clock` port, add a lint ban. High signal-to-effort ratio.
-2. **C7 (architecture conformance)** — add `depguard` config to `.golangci.yml`; zero false positives if rules are written from the current import graph.
-3. **C8 (fake contracts)** — start with `GitCommitter` and `MergeChecker`; add integration test tag to CI.
-4. **C9 (traceability)** — adopt test naming convention for new stories; script check is a small CI addition.
-5. **C1 extensions** — add mock-library ban to lint config if `testify/mock` or `gomock` appears in `go.mod`.
+2. **C8 (fake contracts)** — start with `GitCommitter` and `MergeChecker`; add integration test tag to CI.
+3. **C9 (traceability)** — adopt test naming convention for new stories; script check is a small CI addition.
+4. **C1 extensions** — add mock-library ban to lint config if `testify/mock` or `gomock` appears in `go.mod`.
+
+C7 is ACTIVE: `depguard` already holds the map. Remaining architecture work is shrinking fences or proving a new one green, not installing depguard.

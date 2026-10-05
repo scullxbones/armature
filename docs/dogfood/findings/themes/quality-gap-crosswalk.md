@@ -7,7 +7,7 @@ date: 2026-10-05
 
 Maps open dogfood themes and raw findings to the controls in [`docs/design/quality-controls.md`](../../../design/quality-controls.md). Priority is **high / medium / low / none-yet**, grounded in the cited evidence. This file is a curated brief, not a scorecard: it does not assign status fields to themes.
 
-**Doc vs live code (not rewritten here):** `quality-controls.md` still labels **C6 GAP** and **C7 GAP**. Live `.golangci.yml` already enables `forbidigo` (`time.Now()` banned outside `cmd/`, tests, `internal/clock/`, `internal/tui/app/`) and `depguard` (ADR 0004 deep-module allow lists, including `dag`/`issuetype`/`issueref` purity and adapter deny for `internal`→`cmd`). Remaining C6/C7 work is the leftover domain-clock injection sites, test-time domain mix, and any import edges **not** in those allow lists — not “depguard is missing.” `quality-controls.md` is left unchanged in this PR; update it in a dedicated accuracy pass.
+**Doc vs live code:** `quality-controls.md` C7 is **ACTIVE** (`depguard` in `.golangci.yml` is the modularity map; widening an allow-list is ADR-class per ADR 0023). **C6** is still labeled GAP: leftover domain-clock injection sites remain even though `forbidigo` already bans `time.Now()` outside `cmd/`, tests, `internal/clock/`, and `internal/tui/app/`. Remaining architecture work is shrinking fences or proving a new one green — not “depguard is missing.”
 
 Themes are relative links from this file (`./<theme>/README.md`). Raw findings use `../raw/<file>.md`.
 
@@ -119,11 +119,11 @@ See also [Hermeticity beyond git-fixture](#hermeticity-beyond-the-git-fixture-ch
 
 ## C7 — Architecture conformance (R4)
 
-**quality-controls.md:** GAP — “add depguard.” **Live:** `depguard` is enabled and encodes ADR 0004 (strict allow lists for `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, `output`, `worktree`; pure `dag`/`issuetype`/`issueref`; `internal` must not import `cmd`).
+**quality-controls.md:** ACTIVE — `depguard` is the modularity map (ADR 0004 fences; ADR 0023: widening an allow-list or removing a deny is ADR-class). **Live:** strict allow lists for `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, `output`, `worktree`; pure `dag`/`issuetype`/`issueref`; `internal` must not import `cmd`.
 
 **Dogfood:** **no dogfood evidence yet** of domain importing adapters against those rules. Closest findings are duplicated composition-root patterns and silent error discard, which depguard does not catch.
 
-**Priority: low** for “turn depguard on” (already on). Treat remaining architecture work separately: document live C7 as PARTIAL/ACTIVE in `quality-controls.md` later; watch duplicated `PersistentPreRunE` / silent `_, _` error classes as review/convention, not import-graph.
+**Priority: none-yet** for “turn depguard on” (already on; C7 docs match). Remaining architecture work is shrinking fences or proving a new one green, plus duplicated `PersistentPreRunE` / silent `_, _` error classes as review/convention, not import-graph.
 
 **Evidence:**
 
@@ -236,8 +236,9 @@ This reorders `quality-controls.md` “Adoption order for gaps” using the pile
 3. **C6 leftover timestamp domains** (forbidigo is already on).
 4. **Publish-path `validate --ci` against `origin/_armature`** (required-CI adjacent).
 5. **C9 interim `_REQ_` docs + name check.**
-6. **C7 docs accuracy** (depguard live) — not a new linter.
-7. **C1 mock ban** if a mock library appears.
-8. **C3/C5** — already ACTIVE; do not raise as a response to this pile.
+6. **C1 mock ban** if a mock library appears.
+7. **C3/C5** — already ACTIVE; do not raise as a response to this pile.
+
+C7 docs accuracy (depguard live) is done; it was never a new linter.
 
 Product themes that quality-controls.md does not own (scope overlap, worktree bypass, render-context, show/list DTOs, sandbox D8) stay out of C1–C9 implementation; they remain in their theme READMEs.
