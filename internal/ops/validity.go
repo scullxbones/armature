@@ -21,6 +21,7 @@ var classifiedValidity = map[string]bool{
 	OpSourceFingerprint:  false,
 	OpGateEvidence:       false,
 	OpAssessmentAttested: false,
+	OpPromotionCheck:     false,
 }
 
 // AffectsValidity reports whether appending this op type can change what

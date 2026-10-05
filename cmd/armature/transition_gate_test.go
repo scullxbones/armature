@@ -91,7 +91,9 @@ func TestTransitionDoneAcceptsSquashOnMainWhenClaimWorktreeStale_REQ_MATENC(t *t
 	require.Equal(t, "task/gate-squash-01", head, "claim worktree must remain on the stale task branch")
 
 	_, err = runTrls(t, wt, "transition", "--issue", "gate-squash-01", "--to", "done", "--outcome", "test", "--force")
-	require.NoError(t, err, "main-only squash evidence must pass the delivery gate without --skip-delivery-gate")
+	require.Error(t, err, "stale worktree still passes the delivery gate, but done now requires a non-empty snapshot")
+	assert.Contains(t, err.Error(), "empty")
+	assert.NotContains(t, err.Error(), "delivery gate")
 }
 
 func TestTransitionDoneGateOverride_REQ_LNGHZN_S4_T2(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/validate"
@@ -14,6 +15,34 @@ import (
 
 var openControllingTTY = func() (*os.File, error) {
 	return os.OpenFile("/dev/tty", os.O_RDWR, 0)
+}
+
+// confirmOverrideRelease reads the typed issue id from tty. Tests replace this
+// to avoid needing a real controlling terminal.
+var confirmOverrideRelease = func(tty *os.File, issueID string) error {
+	_, _ = fmt.Fprintf(tty, "Type the issue ID %q to confirm release override: ", issueID)
+	line, err := bufio.NewReader(tty).ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("read confirmation: %w", err)
+	}
+	if strings.TrimSpace(line) != issueID {
+		return fmt.Errorf("typed id does not match %s", issueID)
+	}
+	return nil
+}
+
+func releaseOverridePayload(issueID, reason string, issue *materialize.Issue) ops.Payload {
+	payload := ops.Payload{
+		IssueID:             issueID,
+		To:                  "verified",
+		SkippedValidateGate: true,
+		Rationale:           reason,
+	}
+	if issue != nil && issue.Status == ops.StatusDone && issue.Base != "" && issue.Tip != "" {
+		payload.Base = issue.Base
+		payload.Tip = issue.Tip
+	}
+	return payload
 }
 
 func newDAGOverrideReleaseCmd() *cobra.Command {
@@ -57,13 +86,8 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			if renderErr := output.RenderValidation(tty, result, false); renderErr != nil {
 				return fmt.Errorf("render findings: %w", renderErr)
 			}
-			_, _ = fmt.Fprintf(tty, "Type the issue ID %q to confirm release override: ", issueID)
-			line, err := bufio.NewReader(tty).ReadString('\n')
-			if err != nil {
-				return fmt.Errorf("read confirmation: %w", err)
-			}
-			if strings.TrimSpace(line) != issueID {
-				return fmt.Errorf("typed id does not match %s", issueID)
+			if err := confirmOverrideRelease(tty, issueID); err != nil {
+				return err
 			}
 
 			workerID, logPath, err := resolveWorkerAndLog(ctx)
@@ -71,17 +95,16 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
 
+			issue, err := snapIssueForOverride(cmd, issueID)
+			if err != nil {
+				return err
+			}
 			op := ops.Op{
 				Type:      ops.OpDAGTransition,
 				TargetID:  issueID,
 				Timestamp: nowEpoch(),
 				WorkerID:  workerID,
-				Payload: ops.Payload{
-					IssueID:             issueID,
-					To:                  "verified",
-					SkippedValidateGate: true,
-					Rationale:           reason,
-				},
+				Payload:   releaseOverridePayload(issueID, reason, issue),
 			}
 			if err := appendOp(ctx, logPath, op); err != nil {
 				return err
@@ -97,16 +120,31 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 	return cmd
 }
 
-func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (validate.Result, error) {
+func snapIssueForOverride(cmd *cobra.Command, issueID string) (*materialize.Issue, error) {
 	appCtx := currentCtx(cmd)
 	store := newSnapshotStore(appCtx)
 	snap, err := store.Load(cmd.Context())
 	if err != nil {
-		return validate.Result{}, fmt.Errorf("load snapshot: %w", err)
+		return nil, fmt.Errorf("load snapshot: %w", err)
+	}
+	if snap == nil || snap.State == nil {
+		return nil, fmt.Errorf("load snapshot: empty state")
 	}
 	issue, ok := snap.State.Issues[issueID]
-	if !ok {
-		return validate.Result{}, fmt.Errorf("issue %s not found", issueID)
+	if !ok || issue == nil {
+		return nil, fmt.Errorf("issue %s not found", issueID)
+	}
+	return issue, nil
+}
+
+func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (validate.Result, error) {
+	issue, err := snapIssueForOverride(cmd, issueID)
+	if err != nil {
+		return validate.Result{}, err
+	}
+	if issue.Status == ops.StatusDone && issue.Base != "" && issue.Tip != "" {
+		// Post-delivery recovery: bind the override to the recorded delivery.
+		return validate.Result{}, nil
 	}
 	if issue.Provenance.Confidence == "verified" {
 		return validate.Result{}, fmt.Errorf("issue %s is already verified", issueID)

@@ -1752,3 +1752,73 @@ func TestRemoveFromIndexReportsRealFailures(t *testing.T) {
 	require.Error(t, err, "a locked index must not be reported as a successful untrack")
 	assert.Contains(t, err.Error(), "tracked.txt")
 }
+
+func TestUpdateRefPointsNamedRefAtSHA(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	sha, err := c.HeadSHA()
+	require.NoError(t, err)
+
+	require.NoError(t, c.UpdateRef("refs/armature/deliveries/test-01", sha))
+	got, err := c.ResolveRevision("refs/armature/deliveries/test-01")
+	require.NoError(t, err)
+	assert.Equal(t, sha, got)
+}
+
+func TestPromotionGitHelpers_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	base, err := c.HeadSHA()
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "feat.txt"), []byte("one\n"), 0o644))
+	gittest.Git(t, repo, "add", "feat.txt")
+	gittest.Git(t, repo, "commit", "-m", "feat: add feat")
+	tip, err := c.HeadSHA()
+	require.NoError(t, err)
+
+	paths, err := c.DiffNameOnlyTwoDot(base, tip)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"feat.txt"}, paths)
+
+	diff, err := c.DiffTwoDot(base, tip)
+	require.NoError(t, err)
+	require.NotEmpty(t, diff)
+
+	patchID, err := c.StablePatchID(diff)
+	require.NoError(t, err)
+	assert.NotEmpty(t, patchID)
+	emptyID, err := c.StablePatchID("   ")
+	require.NoError(t, err)
+	assert.Empty(t, emptyID)
+
+	after, err := c.FirstParentAfter(base, tip)
+	require.NoError(t, err)
+	require.Equal(t, []string{tip}, after)
+	none, err := c.FirstParentAfter(tip, tip)
+	require.NoError(t, err)
+	assert.Empty(t, none)
+
+	commitDiff, err := c.CommitDiff(tip)
+	require.NoError(t, err)
+	assert.Equal(t, diff, commitDiff)
+	_, err = c.CommitDiff(base)
+	require.Error(t, err)
+
+	mode, oid, err := c.TreeEntry(tip, "feat.txt")
+	require.NoError(t, err)
+	assert.Equal(t, "100644", mode)
+	assert.NotEmpty(t, oid)
+	mode, oid, err = c.TreeEntry(tip, "missing.txt")
+	require.NoError(t, err)
+	assert.Empty(t, mode)
+	assert.Empty(t, oid)
+
+	require.NoError(t, c.DeleteRef("refs/armature/deliveries/missing"))
+	require.NoError(t, c.UpdateRef("refs/armature/deliveries/task-01", tip))
+	require.NoError(t, c.DeleteRef("refs/armature/deliveries/task-01"))
+	_, err = c.ResolveRevision("refs/armature/deliveries/task-01")
+	require.Error(t, err)
+}

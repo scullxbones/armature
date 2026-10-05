@@ -1310,7 +1310,7 @@ No cross-worktree operations occur within a single phase.
 | `transition` (with verification hooks) | ops worktree + code worktree | ops worktree |
 | `init`, `worker-init` | both | both (setup) |
 | `sources add/sync/verify` | ops worktree + external providers | ops worktree |
-| `sync` | ops worktree + code repo (merge detection) | ops worktree when it writes `merged` transitions |
+| `sync` | ops worktree + code repo (promotion.Evaluate) | ops worktree when it writes `merged` / `promotion-check` |
 
 ### Key Command Specifications
 
@@ -1321,28 +1321,30 @@ arm sync [flags]
 
 Behavior:
   1. Load a snapshot from the local ops worktree (no fetch of origin/_armature)
-  2. Detect code-branch merges for done issues (`internal/sync.DetectMerges`)
-  3. Unless --dry-run, append local `merged` transitions for those IDs
+  2. Run promotion.Evaluate for every done leaf (the same function as arm merged)
+  3. Unless --dry-run, append promotion-check ops and merged transitions on a pass
+     (then delete the delivery ref and remove the bound worktree)
 
-This is merge-detection onto `main` (or `--into`), not “pull ops then materialize.”
-It is not implicit in other commands. Catching up `_armature` is an explicit
-git fetch/rebase of the ops worktree; `arm materialize` replays local logs;
-doctor D12 errors when this clone is behind origin/_armature.
+Default --into is each issue's recorded integration_branch, else config
+integration_branch (main). This is merge-detection onto the integration
+branch, not “pull ops then materialize.” It is not implicit in other
+commands. Catching up `_armature` is an explicit git fetch/rebase of the
+ops worktree; `arm materialize` replays local logs; doctor D12 errors when
+this clone is behind origin/_armature.
 
 Flags:
-  --into <branch>  Target branch to check merges against (default: current branch)
-  --dry-run        Print which issues would transition without writing ops
+  --into <branch>  Override integration branch for every leaf
+  --dry-run        Classify without writing ops (same exit rule)
 
-Output (examples):
-  No merged branches detected.
-  Transitioned TASK-001 to merged
-  would transition: TASK-001 -> merged
-  dry-run: 1 issue(s) would be transitioned to merged
+Output:
+  ADR 0017 envelope {count, issues[], help[]}. help[0] is a concrete arm
+  command. Blocked rows carry next_action with the issue id filled in.
 
 Exit codes:
-  0  success (or nothing to do)
-  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails,
-            including a missing `--into` ref (merge-base exit other than 1)
+  0  no missing-assessment or check-failed leaf (legacy done is listed)
+  1  a delivery is on the target without a matching assessment, or a
+     recorded delivery cannot be checked
+  SYNC-1  snapshot/ops load or persist failure (replaces the envelope)
 ```
 
 Not a substitute for fetching `origin/_armature`. Not run at the start of `ready`/`list`/`show`.

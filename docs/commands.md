@@ -426,6 +426,41 @@ arm decision TASK-001 --topic "Database Choice" --choice "PostgreSQL" --rational
 
 ---
 
+## delivery
+
+Record a delivery snapshot for an issue. `arm transition --to done` from a bound
+worktree writes this snapshot automatically. Use `arm delivery record` when there
+is no bound worktree: it writes the same record as
+`arm transition --to done --base abc123 --tip def456` when both objects exist, the
+base ancestors the tip, and the range is non-empty. Tip must sit on recorded
+branch or claim provenance. Missing objects, an empty range, a disagreeing
+worktree HEAD, or missing provenance exit `DELIVERY-1` and do not mark `done`.
+
+**Synopsis:**
+`arm delivery [command]`
+
+**Subcommands:**
+
+### delivery record
+
+Write `refs/armature/deliveries/ISSUE-ID` at `--tip` and record `branch`,
+`base`, `tip`, and `integration_branch` on a `done` transition.
+
+**Synopsis:**
+`arm delivery record [flags]`
+
+**Flags:**
+- `--issue string`: Issue ID (required).
+- `--base string`: Base commit SHA (required).
+- `--tip string`: Tip commit SHA (required).
+
+**Example:**
+```bash
+arm delivery record --issue TASK-001 --base abc123 --tip def456
+```
+
+---
+
 ## doctor
 
 Run repository health checks (D1-D10, D12).
@@ -629,7 +664,17 @@ still concatenates log files so uncommitted test layouts keep working.
 
 ## merged
 
-Mark a done issue as merged after its branch or PR has landed on the main branch.
+Promote one done leaf when its recorded delivery is on the integration branch
+and a matching assessment (or post-delivery ADR-0016 Release Override bound to
+those `base`/`tip` SHAs) exists. The merged op stores the target SHA, combined
+patch-id, and matched commit, then deletes `refs/armature/deliveries/<id>` and
+removes the worktree. Otherwise the leaf stays `done` and a `promotion-check`
+op is appended. `--pr` may be stored and is not evidence. `--force` remains the
+hook-log override only; it does not waive the git check or the assessment.
+
+A refusal is `MERGED-1` with `next_actions[0]` naming the recovery command and
+the issue id. `arm transition --to merged` is refused (`TRANSITION-1`,
+`arm merged --issue <id>`).
 
 **Synopsis:**
 `arm merged [flags]`
@@ -637,6 +682,7 @@ Mark a done issue as merged after its branch or PR has landed on the main branch
 **Flags:**
 - `--issue string`: Issue ID (required).
 - `--pr string`: PR number or URL.
+- `--force`: Override hook-log violations only.
 
 **Example:**
 ```bash
@@ -957,7 +1003,7 @@ arm stats --cost --rates .armature/cost-rates.json
 
 Show a human-readable summary of one or more issues. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare issue object and never a top-level array.
 
-`issues[]` is the detail view. A found issue has `count` 1. Several positional IDs share one envelope whose `count` equals the number of issues shown. A missing ID is an error, not an empty envelope. Rows keep the existing issue fields (`id`, `type`, `status`, `title`, plus outcome, scope, notes, and the rest of the detail schema).
+`issues[]` is the detail view. A found issue has `count` 1. Several positional IDs share one envelope whose `count` equals the number of issues shown. A missing ID is an error, not an empty envelope. Rows keep the existing issue fields (`id`, `type`, `status`, `title`, plus outcome, scope, notes, `branch`, `base`, `tip`, `pr`, `derived` when `RollupStatusBefore` is set, and the rest of the detail schema).
 
 Large text fields (`outcome`, `definition_of_done`) are truncated by default at 512 bytes. Truncation keeps a prefix, states the total size in a `truncated` adjunct (`field`, `shown_bytes`, `total_bytes`), and puts `--full` in `help[0]`. `--full` returns complete fields and omits the adjunct. `--full` is offered in `help` only when truncation actually happened.
 
@@ -1088,13 +1134,27 @@ Verify cached content matches stored fingerprints.
 
 ## sync
 
-Detect merged branches and auto-transition done issues to merged.
+Classify every done leaf with the same promotion check as `arm merged`. A pass appends `merged` (and deletes the delivery ref / bound worktree). `--dry-run` writes nothing. The post-merge hook calls the same function, prints the same envelope, and exits 0.
 
 **Synopsis:**
 `arm sync [flags]`
 
 **Flags:**
-- `--into string`: Target branch to check merges against (default: current branch). A missing or otherwise unreadable target ref is a command failure (`SYNC-1`), not “no merged branches.”
+- `--into string`: Override the integration branch for every leaf. Default: each issue's recorded `integration_branch`, else config `integration_branch` (`main`). A missing `--into` ref is classified per leaf that has a delivery record (`kind=check-failed`) and fails the command; a snapshot/ops load failure is `SYNC-1` and replaces the envelope.
+- `--dry-run`: Classify without writing ops, promotion-check records, delivery-ref deletes, or worktree removals. Same exit rule as a live run.
+
+**Output:** an ADR 0017 envelope even when the exit code is non-zero:
+
+```json
+{"count":1,"issues":[{"id":"TASK-001","type":"task","status":"done","title":"Landed without assessment","kind":"missing-assessment","next_action":"arm review record --issue TASK-001 --assessment <assessment.json>"}],"help":["arm review record --issue TASK-001 --assessment <assessment.json>"]}
+```
+
+`help[0]` is the most actionable `arm` command with the issue id filled in. Each blocked row carries that row's command in `next_action`.
+
+**Exit:**
+- 0 when no leaf is `missing-assessment` or `check-failed`. A legacy `done` with no delivery record is listed (`kind=legacy`) and does not fail.
+- 1 when a delivery is on the target and the assessment is missing, or a recorded delivery cannot be checked.
+- `SYNC-1` Command Failure when snapshot/ops load (or persist) fails; that replaces the envelope.
 
 ---
 
@@ -1113,7 +1173,19 @@ otherwise; a loser cannot `--to done`). Doctor and unassign stay privileged.
 - `--outcome string`: Outcome description.
 - `--pr string`: PR number.
 - `--to string`: Target status.
-- `--skip-delivery-gate`: Skip the delivery gate check only when transitioning to `done`; it is rejected for other states. The transition op records `Payload.SkippedDeliveryGate` (`skipped_delivery_gate` in the op log) as the audit flag. Supply `--outcome` with the reason for the override. See [Delivery Gate](use-cases.md#the-delivery-gate).
+- `--base string`: Delivery base SHA. With `--tip`, writes the same snapshot as `arm delivery record`.
+- `--tip string`: Delivery tip SHA.
+- `--skip-delivery-gate`: Skip the delivery gate check only when transitioning to `done`; it is rejected for other states. The transition op records `Payload.SkippedDeliveryGate` (`skipped_delivery_gate` in the op log) as the audit flag. Supply `--outcome` with the reason for the override. See [Delivery Gate](use-cases.md#the-delivery-gate). `--skip-delivery-gate` and `--force` do not skip the delivery snapshot.
+
+When `--to done` runs from a bound worktree, Armature records `branch`, `base`,
+`tip`, and `integration_branch` and writes `refs/armature/deliveries/ISSUE-ID`
+at the tip. Without a worktree (and without `--base`/`--tip`) the command exits
+`TRANSITION-1` with next_actions naming
+`arm delivery record --issue TASK-001 --base abc123 --tip def456`
+(SHAs are placeholders in the live recovery argv).
+
+`--to merged` is refused (`TRANSITION-1`) with `next_actions` naming
+`arm merged --issue <id>`.
 
 **Example:**
 ```bash

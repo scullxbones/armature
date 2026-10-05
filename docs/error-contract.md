@@ -59,6 +59,7 @@ stay on the platform/git protocol.
 | `CREATE-1` | create | `arm create` could not complete (invalid type, introduction check, port error). | LNGHZN-S6-T5 | |
 | `DAG-1` | dag | `arm dag` subcommands could not complete (apply/context/transition/revert/summary/override-release). | LNGHZN-S6-T5 | |
 | `DECISION-1` | decision | `arm decision` could not complete. | LNGHZN-S6-T5 | |
+| `DELIVERY-1` | delivery | `arm delivery record` (or `arm transition --to done --base/--tip`) refused the snapshot: missing objects, empty range, HEAD disagreement, or no branch/claim provenance. Does not mark done and does not recommend `delivery record` again. | LNGHZN-S11-T1 | |
 | `DOCTOR-1` | doctor | `arm doctor` could not complete as a Command Failure (layout/load/fix-apply). Doctor checks remain a successful report, not this code. | LNGHZN-S6-T5 | |
 | `GATE-1` | gate | `arm gate run` could not complete when the failure is not already a gate protocol payload. | LNGHZN-S6-T5 | |
 | `HEARTBEAT-1` | heartbeat | `arm heartbeat` could not complete. | LNGHZN-S6-T5 | |
@@ -67,7 +68,7 @@ stay on the platform/git protocol.
 | `LIST-1` | list | `arm list` could not complete (ops/state load). | LNGHZN-S6-T5 | |
 | `LOG-1` | log | `arm log` could not complete. | LNGHZN-S6-T5 | |
 | `MATERIALIZE-1` | materialize | `arm materialize` could not complete. | LNGHZN-S6-T5 | |
-| `MERGED-1` | merged | `arm merged` could not complete. | LNGHZN-S6-T5 | |
+| `MERGED-1` | merged | `arm merged` could not complete, including an ADR 0022 promotion refusal (delivery not on the target, missing matching assessment, legacy done with no snapshot, or the git check cannot run). `next_actions[0]` is the recovery argv with the issue id filled in. | LNGHZN-S6-T5 | |
 | `NOTE-1` | note | `arm note` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-1` | push-ops | `arm push-ops` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-2` | push-ops | `arm push-ops` refused to publish because the graph failed `arm validate --ci` / `make validate-graph` after integrating `origin/_armature`. | PUBLISH-VALIDATE | |
@@ -78,7 +79,7 @@ stay on the platform/git protocol.
 | `SHOW-1` | show | `arm show` could not complete (unknown issue, snapshot load). | LNGHZN-S6-T5 | |
 | `SOURCES-1` | sources | `arm sources` subcommands could not complete. | LNGHZN-S6-T5 | |
 | `STATS-1` | stats | `arm stats` could not complete. | LNGHZN-S6-T5 | |
-| `SYNC-1` | sync | `arm sync` could not complete (snapshot load, merge-detection probe failure such as a missing `--into` ref). | LNGHZN-S6-T5 | |
+| `SYNC-1` | sync | `arm sync` could not complete (snapshot/ops load or persist). A completed classification is an ADR 0017 envelope even when exit is 1 (`missing-assessment` or `check-failed`). A missing `--into` ref is that envelope, not this code. | LNGHZN-S6-T5 | |
 | `TUI-1` | tui | `arm tui` could not complete (non-interactive snapshot load). | LNGHZN-S6-T5 | |
 | `UNASSIGN-1` | unassign | `arm unassign` could not complete. | LNGHZN-S6-T5 | |
 | `UNLINK-1` | unlink | `arm unlink` could not complete. | LNGHZN-S6-T5 | |

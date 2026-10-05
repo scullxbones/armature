@@ -489,7 +489,8 @@ func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
 	branchDiscipline := new(bytes.Buffer)
 	code = executeThenHandleRootError(t, branchDiscipline, new(bytes.Buffer),
 		"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
-		"--skip-delivery-gate", "--outcome", "verified remediation", "--format", "agent")
+		"--skip-delivery-gate", "--base", "HEAD~1", "--tip", "HEAD",
+		"--outcome", "verified remediation", "--format", "agent")
 	assert.Equal(t, 1, code)
 	branchDisciplineCF := agentFailureFromStdout(t, branchDiscipline.String())
 	assert.Equal(t, "TRANSITION-1", branchDisciplineCF.Code)

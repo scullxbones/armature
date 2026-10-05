@@ -1,11 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/materialize"
-	armsync "github.com/scullxbones/armature/internal/sync"
+	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/promotion"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
@@ -15,89 +24,290 @@ func newSyncCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Detect merged branches and auto-transition done issues to merged",
-		Long: `Scan merged branches and automatically transition completed issues to merged status.
+		Short: "Classify done leaves and promote those whose delivery is on the target",
+		Long: `Run the same promotion check as arm merged for every done leaf.
 
-This command detects which feature branches have been merged (based on branch naming
-conventions or metadata) and transitions their corresponding issues from "done" to "merged".
-This keeps the issue graph synchronized with the actual git history. Use --dry-run to
-preview changes without committing them.`,
-		Example: `  # Detect merges on the current branch and sync issue statuses
+A pass appends merged (and tears down the delivery ref and worktree). A legacy
+done with no delivery record is listed and does not fail. Exit is non-zero only
+when a delivery is on the target and the assessment is missing, or a recorded
+delivery cannot be checked. --dry-run writes nothing. Default --into is each
+issue's recorded integration branch (else config).`,
+		Example: `  # Classify done leaves against recorded integration branches
   $ arm sync
 
-  # Check for merges into a specific target branch
+  # Override the integration branch for every leaf
   $ arm sync --into main
 
-  # Preview which issues would be transitioned without making changes
+  # Preview classifications without writing ops
   $ arm sync --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			appCtx := currentCtx(cmd)
-			store := newSnapshotStore(appCtx)
-			snap, err := store.Load(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
-
-			if targetBranch == "" {
-				gc := adapters.New(appCtx.RepoPath)
-				branch, err := gc.CurrentBranch()
-				if err != nil {
-					return fmt.Errorf("detect current branch: %w", err)
-				}
-				targetBranch = branch
-			}
-
-			issues := make([]materialize.Issue, 0, len(snap.Issues))
-			for _, issue := range snap.Issues {
-				issues = append(issues, *issue)
-			}
-
-			gc := adapters.New(appCtx.RepoPath)
-			mergedIDs, detectErr := armsync.DetectMerges(issues, targetBranch, gc)
-
-			if len(mergedIDs) == 0 {
-				if detectErr != nil {
-					return fmt.Errorf("detect merges: %w", detectErr)
-				}
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No merged branches detected.")
-				return nil
-			}
-
-			if dryRun {
-				for _, id := range mergedIDs {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would transition: %s -> merged\n", id)
-				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issue(s) would be transitioned to merged\n", len(mergedIDs))
-				if detectErr != nil {
-					return fmt.Errorf("detect merges: %w", detectErr)
-				}
-				return nil
-			}
-
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
-			if err != nil {
-				return err
-			}
-
-			appendMergedTransitions(ctx, logPath, workerID, targetBranch, mergedIDs, cmd.OutOrStdout(), cmd.ErrOrStderr())
-
-			snap, err = store.Load(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("load snapshot: %w", err)
-			}
-			emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
-
-			if detectErr != nil {
-				return fmt.Errorf("detect merges: %w", detectErr)
-			}
-			return nil
+			return runDoneLeafPromotion(cmd, targetBranch, dryRun, true)
 		},
 	}
 
-	cmd.Flags().StringVar(&targetBranch, "into", "", "target branch to check merges against (default: current branch)")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print which issues would be transitioned without writing ops")
+	cmd.Flags().StringVar(&targetBranch, "into", "", "override integration branch (default: recorded per issue, else config)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "classify without writing ops")
 	return cmd
+}
+
+type classifiedLeaf struct {
+	Issue        materialize.Issue
+	Result       promotion.Result
+	Integration  string // effective Evaluate target (--into, else recorded, else config)
+	ExplicitInto bool   // true when --into overrode the recorded integration branch
+}
+
+func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool) error {
+	ctx := currentCtx(cmd)
+	store := newSnapshotStore(ctx)
+	loadCtx := cmd.Context()
+	if loadCtx == nil {
+		loadCtx = context.Background()
+	}
+	var snap *snapshot.Snapshot
+	var err error
+	if dryRun {
+		snap, err = store.LoadReadOnly(loadCtx)
+	} else {
+		snap, err = store.Load(loadCtx)
+	}
+	if err != nil {
+		return fmt.Errorf("load snapshot: %w", err)
+	}
+	emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
+
+	allOps, err := readAllOpsFromDir(filepath.Join(ctx.IssuesDir, "ops"))
+	if err != nil {
+		return fmt.Errorf("read ops: %w", err)
+	}
+
+	git := adapters.New(ctx.RepoPath)
+	items := classifyDoneLeaves(git, snap.Issues, allOps, into, ctx.Config.IntegrationBranchOrDefault())
+
+	if !dryRun {
+		if persistErr := persistClassifications(ctx, git, items, cmd.ErrOrStderr()); persistErr != nil {
+			if failExit {
+				return persistErr
+			}
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", persistErr)
+		}
+		if teardownErr := teardownMergedLeftovers(ctx, git, snap.Issues, allOps, cmd.ErrOrStderr()); teardownErr != nil {
+			if failExit {
+				return teardownErr
+			}
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", teardownErr)
+		}
+	}
+
+	// Rows reflect post-persist outcomes so a locked promote skip cannot
+	// still report status=merged / kind=promote.
+	rows := syncRows(items)
+	if err := output.WriteSyncEnvelope(cmd.OutOrStdout(), rows); err != nil {
+		return err
+	}
+	if failExit && syncFails(rows) {
+		return protocolExitError{code: 1}
+	}
+	return nil
+}
+
+func classifyDoneLeaves(git *adapters.Client, issues map[string]*materialize.Issue, allOps []ops.Op, into, configDefault string) []classifiedLeaf {
+	ids := make([]string, 0, len(issues))
+	for id, issue := range issues {
+		if issue == nil || issue.Status != ops.StatusDone || len(issue.Children) > 0 {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	explicitInto := strings.TrimSpace(into) != ""
+	out := make([]classifiedLeaf, 0, len(ids))
+	for _, id := range ids {
+		issue := *issues[id]
+		integration := strings.TrimSpace(into)
+		if integration == "" {
+			integration = issue.IntegrationBranch
+			if integration == "" {
+				integration = configDefault
+			}
+		}
+		res := promotion.Evaluate(git, promotion.Input{
+			Issue:       issue,
+			PriorOps:    allOps,
+			Integration: integration,
+		})
+		out = append(out, classifiedLeaf{
+			Issue:        issue,
+			Result:       res,
+			Integration:  integration,
+			ExplicitInto: explicitInto,
+		})
+	}
+	return out
+}
+
+func syncRows(items []classifiedLeaf) []output.SyncIssue {
+	rows := make([]output.SyncIssue, 0, len(items))
+	for _, item := range items {
+		row := output.SyncIssue{
+			ID:     item.Issue.ID,
+			Type:   item.Issue.Type,
+			Status: item.Issue.Status,
+			Title:  item.Issue.Title,
+			Kind:   item.Result.Kind,
+		}
+		if item.Result.Kind == promotion.KindPromote {
+			row.Status = ops.StatusMerged
+		}
+		if !item.Result.Promote && item.Result.Recovery != "" {
+			row.NextAction = item.Result.Recovery
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func syncFails(rows []output.SyncIssue) bool {
+	for _, row := range rows {
+		if row.Kind == promotion.KindMissingAssessment || row.Kind == promotion.KindCheckFailed {
+			return true
+		}
+	}
+	return false
+}
+
+func persistClassifications(ctx *config.Context, git *adapters.Client, items []classifiedLeaf, errWriter io.Writer) error {
+	needsWrite := false
+	for _, item := range items {
+		if item.Result.AppendCheck || item.Result.Promote {
+			needsWrite = true
+			break
+		}
+	}
+	if !needsWrite {
+		return nil
+	}
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		item := &items[i]
+		if item.Result.AppendCheck {
+			checkOp := ops.Op{
+				Type:      ops.OpPromotionCheck,
+				TargetID:  item.Issue.ID,
+				Timestamp: nowEpoch(),
+				WorkerID:  workerID,
+				Payload:   item.Result.CheckPayload,
+			}
+			if err := appendOp(ctx, logPath, checkOp); err != nil {
+				return err
+			}
+		}
+		if !item.Result.Promote {
+			continue
+		}
+		wrote, appendErr := appendMergedIfCurrent(
+			ctx, git, logPath, workerID, item.Issue, item.Integration, item.ExplicitInto, "",
+		)
+		if appendErr != nil {
+			return appendErr
+		}
+		if !wrote {
+			if refreshErr := refreshClassifiedLeaf(ctx, git, item); refreshErr != nil {
+				return refreshErr
+			}
+			continue
+		}
+		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, item.Issue, errWriter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *classifiedLeaf) error {
+	live, allOps, err := replayIssueOps(ctx.IssuesDir, item.Issue.ID)
+	if err != nil {
+		return err
+	}
+	if live == nil {
+		return nil
+	}
+	item.Issue = *live
+	if live.Status != ops.StatusDone {
+		item.Result = promotion.Result{
+			IssueID: live.ID,
+			Kind:    promotion.KindNotDone,
+		}
+		return nil
+	}
+	if len(live.Children) > 0 {
+		item.Result = promotion.Result{
+			IssueID:  live.ID,
+			Kind:     promotion.KindNotLeaf,
+			Recovery: promotion.RecoveryArgv(live.ID, promotion.KindNotLeaf),
+		}
+		return nil
+	}
+	integ := item.Integration
+	if !item.ExplicitInto {
+		integ = live.IntegrationBranch
+		if integ == "" {
+			integ = item.Integration
+		}
+		item.Integration = integ
+	}
+	item.Result = promotion.Evaluate(git, promotion.Input{
+		Issue:       *live,
+		PriorOps:    allOps,
+		Integration: integ,
+	})
+	return nil
+}
+
+// teardownMergedLeftovers finishes delivery-ref / worktree cleanup for issues
+// already promoted via ADR 0022 when a prior sync append succeeded but
+// teardown failed. Legacy merged issues without recorded promotion evidence
+// are left alone (ADR 0022: already-merged stay put).
+func teardownMergedLeftovers(ctx *config.Context, git *adapters.Client, issues map[string]*materialize.Issue, allOps []ops.Op, errWriter io.Writer) error {
+	ids := make([]string, 0, len(issues))
+	for id, issue := range issues {
+		if issue == nil || issue.Status != ops.StatusMerged {
+			continue
+		}
+		if !recordedPromotionEvidence(allOps, id) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issues[id], errWriter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func recordedPromotionEvidence(allOps []ops.Op, issueID string) bool {
+	for _, op := range allOps {
+		if op.TargetID != issueID {
+			continue
+		}
+		switch op.Type {
+		case ops.OpPromotionCheck:
+			if op.Payload.Result == promotion.KindPromote {
+				return true
+			}
+		case ops.OpTransition:
+			if op.Payload.To == ops.StatusMerged &&
+				(op.Payload.TargetSHA != "" || op.Payload.CombinedPatchID != "" || op.Payload.MatchedCommit != "") {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -1147,6 +1147,7 @@ func TestListCmd_StatusFilter(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
+	landDeliveryAndAttest(t, repo, "task-01")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-01")
 	require.NoError(t, err)
 

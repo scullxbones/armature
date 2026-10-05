@@ -21,6 +21,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/scullxbones/armature/internal/worker"
@@ -268,26 +269,6 @@ func opsHistoryPrefixes(appCtx *config.Context, opsRepoPath string) (opsPrefix, 
 	return filepath.Join(issuesRel, "ops"), filepath.Join(".armature", "ops")
 }
 
-func appendMergedTransitions(ctx *config.Context, logPath, workerID, intoBranch string, mergedIDs []string, stdout, stderr io.Writer) {
-	for _, id := range mergedIDs {
-		op := ops.Op{
-			Type:      ops.OpTransition,
-			TargetID:  id,
-			WorkerID:  workerID,
-			Timestamp: nowEpoch(),
-			Payload: ops.Payload{
-				To:      ops.StatusMerged,
-				Outcome: "auto-detected merge into " + intoBranch,
-			},
-		}
-		if err := appendOp(ctx, logPath, op); err != nil {
-			_, _ = fmt.Fprintf(stderr, "Warning: failed to transition %s: %v\n", id, err)
-			continue
-		}
-		_, _ = fmt.Fprintf(stdout, "Transitioned %s to merged\n", id)
-	}
-}
-
 func currentCtx(cmd *cobra.Command) *config.Context {
 	return mustState(cmd).ctx
 }
@@ -511,6 +492,76 @@ func appendOp(ctx *config.Context, logPath string, op ops.Op) error {
 	return withWorkerLogLock(ctx, logPath, func() error {
 		return ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx))
 	})
+}
+
+// appendMergedIfCurrent re-reads ops under the worker log lock and appends
+// merged only when the issue is still a promotable done leaf with the same
+// delivery identity classification used. Returns wrote=false when another
+// worker reopened, replaced the delivery, or otherwise invalidated the promote.
+//
+// explicitInto means integration is an arm sync --into override; otherwise the
+// recorded integration branch is part of delivery identity and the live
+// recorded branch is the Evaluate target.
+func appendMergedIfCurrent(
+	ctx *config.Context,
+	git *adapters.Client,
+	logPath, workerID string,
+	expected materialize.Issue,
+	integration string,
+	explicitInto bool,
+	pr string,
+) (bool, error) {
+	if ctx == nil {
+		return false, fmt.Errorf("appendMergedIfCurrent: command context unavailable")
+	}
+	var wrote bool
+	err := withWorkerLogLock(ctx, logPath, func() error {
+		live, allOps, replayErr := replayIssueOps(ctx.IssuesDir, expected.ID)
+		if replayErr != nil {
+			return replayErr
+		}
+		if live == nil || live.Status != ops.StatusDone {
+			return nil
+		}
+		if live.Base != expected.Base || live.Tip != expected.Tip {
+			return nil
+		}
+		if !explicitInto && live.IntegrationBranch != expected.IntegrationBranch {
+			return nil
+		}
+		integ := integration
+		if !explicitInto {
+			integ = live.IntegrationBranch
+		}
+		if integ == "" {
+			integ = live.IntegrationBranch
+		}
+		res := promotion.Evaluate(git, promotion.Input{
+			Issue:       *live,
+			PriorOps:    allOps,
+			Integration: integ,
+			PR:          pr,
+		})
+		if !res.Promote {
+			return nil
+		}
+		op := ops.Op{
+			Type:      ops.OpTransition,
+			TargetID:  expected.ID,
+			Timestamp: nowEpoch(),
+			WorkerID:  workerID,
+			Payload:   res.MergedPayload,
+		}
+		if err := refuseIntroduction(ctx, []ops.Op{op}); err != nil {
+			return err
+		}
+		if err := ops.AppendAndCommit(logPath, ctx.WorktreePath, op, worktreeGit(ctx)); err != nil {
+			return err
+		}
+		wrote = true
+		return nil
+	})
+	return wrote, err
 }
 
 func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
@@ -781,6 +832,26 @@ func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string
 			value = renderStringSlice(issue.BlockedBy)
 		case "blocks":
 			value = renderStringSlice(issue.Blocks)
+		case "branch":
+			value = issue.Branch
+		case "base":
+			value = issue.Base
+		case "tip":
+			value = issue.Tip
+		case "pr":
+			value = issue.PR
+		case "integration_branch":
+			value = issue.IntegrationBranch
+		case "target_sha":
+			value = issue.TargetSHA
+		case "combined_patch_id":
+			value = issue.CombinedPatchID
+		case "matched_commit":
+			value = issue.MatchedCommit
+		case "derived":
+			if issue.RollupStatusBefore != "" {
+				value = "true"
+			}
 		default:
 			value = ""
 		}

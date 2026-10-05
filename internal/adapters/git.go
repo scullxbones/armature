@@ -1181,3 +1181,112 @@ func (c *Client) FirstParent(sha string) (parent string, ok bool, err error) {
 	}
 	return p, true, nil
 }
+
+// UpdateRef points ref at sha (fully resolved by the caller).
+func (c *Client) UpdateRef(ref, sha string) error {
+	out, err := c.cmd("update-ref", ref, sha).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git update-ref %s %s: %w\n%s", ref, sha, err, out)
+	}
+	return nil
+}
+
+// DeleteRef removes ref. A missing ref is success.
+func (c *Client) DeleteRef(ref string) error {
+	if _, err := c.ResolveRevision(ref); err != nil {
+		return nil
+	}
+	out, err := c.cmd("update-ref", "-d", ref).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git update-ref -d %s: %w\n%s", ref, err, out)
+	}
+	return nil
+}
+
+// FirstParentAfter returns first-parent commits of head after base, oldest first.
+func (c *Client) FirstParentAfter(base, head string) ([]string, error) {
+	cmd := c.cmd("rev-list", "--first-parent", "--reverse", base+".."+head)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git rev-list --first-parent %s..%s: %w", base, head, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []string{}, nil
+	}
+	return strings.Split(raw, "\n"), nil
+}
+
+// DiffTwoDot is path-literal `git diff --no-renames base tip` (two-dot combined range).
+func (c *Client) DiffTwoDot(base, tip string) (string, error) {
+	cmd := c.cmd("diff", "--no-ext-diff", "--no-color", "--no-renames", base, tip, "--")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to diff %s %s: %w", base, tip, err)
+	}
+	return string(output), nil
+}
+
+// DiffNameOnlyTwoDot is path-literal `git diff --name-only base tip` (no rename detection).
+func (c *Client) DiffNameOnlyTwoDot(base, tip string) ([]string, error) {
+	cmd := c.cmd("diff", "--name-only", "--no-renames", "-z", base, tip, "--")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to diff --name-only %s %s: %w", base, tip, err)
+	}
+	return splitNUL(output), nil
+}
+
+// StablePatchID is `git patch-id --stable` of a raw diff. Empty diff is "".
+func (c *Client) StablePatchID(diff string) (string, error) {
+	if strings.TrimSpace(diff) == "" {
+		return "", nil
+	}
+	cmd := c.cmd("patch-id", "--stable")
+	cmd.Stdin = strings.NewReader(diff)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git patch-id --stable: %w", err)
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) == 0 {
+		return "", nil
+	}
+	return fields[0], nil
+}
+
+// CommitDiff is the first-parent patch of sha (`git diff sha^ sha`).
+func (c *Client) CommitDiff(sha string) (string, error) {
+	parent, ok, err := c.FirstParent(sha)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("commit %s has no first parent", sha)
+	}
+	return c.DiffTwoDot(parent, sha)
+}
+
+// TreeEntry returns mode and object ID at rev:path. Missing paths are empty strings.
+func (c *Client) TreeEntry(rev, path string) (mode, oid string, err error) {
+	cmd := c.cmd("ls-tree", "-z", rev, "--", path)
+	out, runErr := cmd.Output()
+	if runErr != nil {
+		return "", "", fmt.Errorf("git ls-tree %s -- %s: %w", rev, path, runErr)
+	}
+	raw := strings.TrimRight(string(out), "\x00")
+	if raw == "" {
+		return "", "", nil
+	}
+	line, _, _ := strings.Cut(raw, "\x00")
+	modeType, rest, ok := strings.Cut(line, "\t")
+	if !ok {
+		return "", "", fmt.Errorf("git ls-tree %s -- %s: malformed output", rev, path)
+	}
+	_ = rest
+	fields := strings.Fields(modeType)
+	if len(fields) < 3 {
+		return "", "", fmt.Errorf("git ls-tree %s -- %s: malformed output", rev, path)
+	}
+	return fields[0], fields[2], nil
+}

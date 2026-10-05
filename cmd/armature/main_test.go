@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
@@ -109,6 +110,94 @@ func getTestContext(t *testing.T, repo string) *config.Context {
 	ctx, err := config.ResolveContext(repo)
 	require.NoError(t, err, "failed to resolve context for test repo %q", repo)
 	return ctx
+}
+
+// landDelivery puts the recorded delivery on the integration branch.
+func landDelivery(t *testing.T, repo, issueID string) (base, tip string) {
+	t.Helper()
+	loaded, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", issueID+".json"))
+	require.NoError(t, err)
+	issue := &loaded
+	require.NotEmpty(t, issue.Base, "issue %s missing delivery base", issueID)
+	require.NotEmpty(t, issue.Tip, "issue %s missing delivery tip", issueID)
+
+	integration := strings.TrimSpace(issue.IntegrationBranch)
+	if integration == "" {
+		integration = "main"
+	}
+	git := adapters.New(repo)
+	target, err := git.ResolveRevision(integration)
+	require.NoError(t, err)
+	isAnc, err := git.IsAncestor(issue.Tip, target)
+	require.NoError(t, err)
+	if !isAnc {
+		current, currErr := git.CurrentBranch()
+		require.NoError(t, currErr)
+		if current != integration {
+			run(t, repo, "git", "checkout", integration)
+		}
+		run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "-m", "test: land "+issueID, issue.Tip)
+	}
+	return issue.Base, issue.Tip
+}
+
+// landDeliveryAndAttest puts the recorded delivery on the integration branch
+// and appends a red attestation bound to those SHAs so arm merged can promote.
+func landDeliveryAndAttest(t *testing.T, repo, issueID string) {
+	t.Helper()
+	base, tip := landDelivery(t, repo, issueID)
+	attestDeliveryForTest(t, repo, issueID, base, tip)
+}
+
+func attestDeliveryForTest(t *testing.T, repo, issueID, base, tip string) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	body, err := json.Marshal(map[string]string{
+		"base_sha": base,
+		"head_sha": tip,
+		"rating":   "red",
+	})
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpAssessmentAttested,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   ops.Payload{Assessment: body},
+	}))
+}
+
+// markIssueMergedForTest appends a merged transition without running ADR 0022
+// promotion or tearing down the worktree (worktree GC fixtures).
+func markIssueMergedForTest(t *testing.T, repo, issueID string) {
+	t.Helper()
+	markIssueMergedForTestWithEvidence(t, repo, issueID, false)
+}
+
+// markIssueMergedForTestWithEvidence appends merged; when withEvidence is true
+// the payload carries ADR 0022 match fields so sync teardown retries apply.
+func markIssueMergedForTestWithEvidence(t *testing.T, repo, issueID string, withEvidence bool) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	payload := ops.Payload{To: ops.StatusMerged}
+	if withEvidence {
+		payload.TargetSHA = "target-sha"
+		payload.CombinedPatchID = "patch-id"
+		payload.MatchedCommit = "matched-sha"
+	}
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  issueID,
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload:   payload,
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
 }
 
 func getTestStateDir(t *testing.T, repo string) string {
@@ -223,7 +312,175 @@ func enrichTestTransitionArgs(args []string) []string {
 			out[i+1] = testIntroductionOutcome
 		}
 	}
+	if repo := cliFlagValue(out, "--repo"); repo != "" {
+		out = injectDoneDelivery(repo, out)
+	}
 	return out
+}
+
+func cliFlagValue(args []string, name string) string {
+	for i := 0; i < len(args); i++ {
+		if args[i] == name && i+1 < len(args) {
+			return args[i+1]
+		}
+		if prefix := name + "="; strings.HasPrefix(args[i], prefix) {
+			return strings.TrimPrefix(args[i], prefix)
+		}
+	}
+	return ""
+}
+
+func cliHasFlag(args []string, name string) bool {
+	for _, a := range args {
+		if a == name || strings.HasPrefix(a, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func cliToDone(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--to" && i+1 < len(args) && args[i+1] == "done" {
+			return true
+		}
+		if args[i] == "--to=done" {
+			return true
+		}
+	}
+	return false
+}
+
+func cliIssueID(args []string) string {
+	if v := cliFlagValue(args, "--issue"); v != "" {
+		return v
+	}
+	for i, a := range args {
+		if a == "transition" && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func injectDoneDelivery(repo string, args []string) []string {
+	if repo == "" || !cliToDone(args) || cliHasFlag(args, "--base") {
+		return args
+	}
+	issueID := cliIssueID(args)
+	if issueID == "" {
+		return args
+	}
+	hasWT := testHasBoundWorktree(repo, issueID)
+	if hasWT && !cliHasFlag(args, "--skip-delivery-gate") {
+		return args
+	}
+	base, tip, err := prepareTestDeliveryRange(repo, issueID)
+	if err != nil {
+		return args
+	}
+	out := append([]string(nil), args...)
+	return append(out, "--base", base, "--tip", tip)
+}
+
+func testHasBoundWorktree(repo, issueID string) bool {
+	if dirExists(filepath.Join(repo, ".worktrees", issueID)) {
+		return true
+	}
+	return strings.Contains(filepath.ToSlash(repo), "/.worktrees/")
+}
+
+func inferTestIssueType(issueID string) string {
+	lower := strings.ToLower(issueID)
+	switch {
+	case strings.Contains(lower, "story"):
+		return "story"
+	case strings.Contains(lower, "epic"):
+		return "epic"
+	case strings.Contains(lower, "bug"):
+		return "bug"
+	case strings.Contains(lower, "feature") || strings.HasPrefix(lower, "feat"):
+		return "feature"
+	default:
+		return "task"
+	}
+}
+
+func testIssueType(repo, issueID string) string {
+	ctx, err := config.ResolveContext(repo)
+	if err != nil {
+		return inferTestIssueType(issueID)
+	}
+	issue, err := newSnapshotStore(ctx).ReadIssue(issueID)
+	if err != nil || issue == nil || issue.Type == "" {
+		return inferTestIssueType(issueID)
+	}
+	return issue.Type
+}
+
+func prepareTestDeliveryRange(repo, issueID string) (base, tip string, err error) {
+	checkout := repo
+	if wt := filepath.Join(repo, ".worktrees", issueID); dirExists(wt) {
+		checkout = wt
+	}
+	git := adapters.New(checkout)
+	tip, err = git.HeadSHA()
+	if err != nil {
+		return "", "", err
+	}
+	parent, ok, err := git.FirstParent(tip)
+	if err != nil {
+		return "", "", err
+	}
+	needCommit := !ok
+	if ok {
+		changed, diffErr := git.DiffNameOnlyRange(parent, tip)
+		if diffErr != nil || len(changed) == 0 {
+			needCommit = true
+		} else {
+			base = parent
+		}
+	}
+	if needCommit {
+		rel := "delivery-range-" + issueID + ".txt"
+		if writeErr := os.WriteFile(filepath.Join(checkout, rel), []byte(issueID+"\n"), 0o644); writeErr != nil {
+			return "", "", writeErr
+		}
+		if addErr := git.AddPaths([]string{rel}); addErr != nil {
+			return "", "", addErr
+		}
+		if commitErr := git.CommitPathsNoVerify("test("+issueID+"): delivery range", rel); commitErr != nil {
+			return "", "", commitErr
+		}
+		base = tip
+		tip, err = git.HeadSHA()
+		if err != nil {
+			return "", "", err
+		}
+	}
+	if checkout != repo {
+		return base, tip, nil
+	}
+	issueType := testIssueType(repo, issueID)
+	branch := materialize.DeriveBranchName(issueType, issueID)
+	if branch == "" {
+		return base, tip, nil
+	}
+	current, err := git.CurrentBranch()
+	if err != nil {
+		return "", "", err
+	}
+	if current != branch {
+		if err := git.UpdateRef("refs/heads/"+branch, tip); err != nil {
+			return "", "", err
+		}
+	}
+	return base, tip, nil
+}
+
+func dirExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
 }
 
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
@@ -235,7 +492,7 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs(append(enrichTestCLIArgs(args), "--repo", repo))
+	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), err
 }
@@ -249,7 +506,7 @@ func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, strin
 	root := newRootCmd()
 	root.SetOut(buf)
 	root.SetErr(errBuf)
-	root.SetArgs(append(enrichTestCLIArgs(args), "--repo", repo))
+	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), errBuf.String(), err
 }
@@ -825,34 +1082,17 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "some feature", "--id", "T-001")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
-	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force",
-		"--branch", "feature/sync-test", "--outcome", "done")
+		"--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-
-	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
-	currentBranchOut, err := currentBranchCmd.Output()
-	require.NoError(t, err)
-	mainBranch := strings.TrimSpace(string(currentBranchOut))
-
-	run(t, repo, "git", "checkout", "-b", "feature/sync-test")
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: sync test work")
-	run(t, repo, "git", "checkout", mainBranch)
-	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "feature/sync-test", "-m", "Merge feature/sync-test")
+	landDeliveryAndAttest(t, repo, "T-001")
 
 	out, err := runTrls(t, repo, "sync")
 	require.NoError(t, err)
 	assert.Contains(t, out, "T-001")
-	assert.Contains(t, out, "merged")
+	assert.Contains(t, out, `"kind":"promote"`)
 
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -871,34 +1111,19 @@ func TestSync_MissingIntoRef_ReturnsError_REQ_NOCOMMENTS(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "some feature", "--id", "T-001")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
-	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force",
-		"--branch", "feature/sync-missing-into", "--outcome", "done")
+		"--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
-	currentBranchOut, err := currentBranchCmd.Output()
-	require.NoError(t, err)
-	mainBranch := strings.TrimSpace(string(currentBranchOut))
-
-	run(t, repo, "git", "checkout", "-b", "feature/sync-missing-into")
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: missing into probe")
-	run(t, repo, "git", "checkout", mainBranch)
-
-	out, err := runTrls(t, repo, "sync", "--into", "refs/heads/does-not-exist")
-	require.Error(t, err)
-	assert.NotContains(t, out, "No merged branches detected.")
-	assert.Contains(t, err.Error(), "detect merges")
-	assert.Contains(t, err.Error(), "does-not-exist")
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--into", "refs/heads/does-not-exist", "--format", "agent")
+	assert.Equal(t, 1, code)
+	assert.NotContains(t, stdout.String(), `"error"`)
+	assert.Contains(t, stdout.String(), `"kind":"check-failed"`)
+	assert.Contains(t, stdout.String(), "T-001")
 }
 
 func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
@@ -911,29 +1136,12 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "some feature", "--id", "T-001")
 	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "claim", "--issue", "T-001", "--worktree")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "materialize")
-	require.NoError(t, err)
-	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "in-progress")
-	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "T-001", "--to", "done", "--skip-delivery-gate", "--force",
-		"--branch", "feature/sync-dryrun-test", "--outcome", "done")
+		"--outcome", "done")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-
-	currentBranchCmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD")
-	currentBranchOut, err := currentBranchCmd.Output()
-	require.NoError(t, err)
-	mainBranch := strings.TrimSpace(string(currentBranchOut))
-
-	run(t, repo, "git", "checkout", "-b", "feature/sync-dryrun-test")
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "feat: dry-run test work")
-	run(t, repo, "git", "checkout", mainBranch)
-	run(t, repo, "git", "-c", "core.hooksPath=/dev/null", "merge", "--no-ff", "feature/sync-dryrun-test", "-m", "Merge feature/sync-dryrun-test")
+	landDeliveryAndAttest(t, repo, "T-001")
 
 	issuesDir := filepath.Join(repo, ".armature")
 	workerID, err := worker.GetWorkerID(repo)
@@ -946,7 +1154,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 	out, err := runTrls(t, repo, "sync", "--dry-run")
 	require.NoError(t, err)
 	assert.Contains(t, out, "T-001")
-	assert.Contains(t, out, "dry-run")
+	assert.Contains(t, out, `"kind":"promote"`)
 
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1205,6 +1413,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
+	landDeliveryAndAttest(t, repo, "T-001")
 	out, err := runTrls(t, repo, "merged", "--issue", "T-001", "--pr", "42")
 	require.NoError(t, err)
 	assert.Contains(t, out, "T-001")
@@ -1241,6 +1450,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 	assert.Contains(t, statusOut, "F-001")
 	assert.Contains(t, statusOut, "feature/e2-test")
 
+	landDeliveryAndAttest(t, repo, "F-001")
 	mergedOut, err := runTrls(t, repo, "merged", "--issue", "F-001", "--pr", "99")
 	require.NoError(t, err)
 	assert.Contains(t, mergedOut, "F-001")
@@ -2398,8 +2608,10 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 
 	time.Sleep(1100 * time.Millisecond)
 
+	landDeliveryAndAttest(t, repo, "task-a")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-a")
 	require.NoError(t, err)
+	landDeliveryAndAttest(t, repo, "task-b")
 	_, err = runTrls(t, repo, "merged", "--issue", "task-b")
 	require.NoError(t, err)
 
