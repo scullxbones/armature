@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
@@ -50,8 +51,10 @@ issue's recorded integration branch (else config).`,
 }
 
 type classifiedLeaf struct {
-	Issue  materialize.Issue
-	Result promotion.Result
+	Issue        materialize.Issue
+	Result       promotion.Result
+	Integration  string // effective Evaluate target (--into, else recorded, else config)
+	ExplicitInto bool   // true when --into overrode the recorded integration branch
 }
 
 func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool) error {
@@ -80,7 +83,6 @@ func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool
 
 	git := adapters.New(ctx.RepoPath)
 	items := classifyDoneLeaves(git, snap.Issues, allOps, into, ctx.Config.IntegrationBranchOrDefault())
-	rows := syncRows(items)
 
 	if !dryRun {
 		if persistErr := persistClassifications(ctx, git, items, cmd.ErrOrStderr()); persistErr != nil {
@@ -89,7 +91,7 @@ func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool
 			}
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", persistErr)
 		}
-		if teardownErr := teardownMergedLeftovers(ctx, git, snap.Issues, cmd.ErrOrStderr()); teardownErr != nil {
+		if teardownErr := teardownMergedLeftovers(ctx, git, snap.Issues, allOps, cmd.ErrOrStderr()); teardownErr != nil {
 			if failExit {
 				return teardownErr
 			}
@@ -97,6 +99,9 @@ func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool
 		}
 	}
 
+	// Rows reflect post-persist outcomes so a locked promote skip cannot
+	// still report status=merged / kind=promote.
+	rows := syncRows(items)
 	if err := output.WriteSyncEnvelope(cmd.OutOrStdout(), rows); err != nil {
 		return err
 	}
@@ -116,10 +121,11 @@ func classifyDoneLeaves(git *adapters.Client, issues map[string]*materialize.Iss
 	}
 	sort.Strings(ids)
 
+	explicitInto := strings.TrimSpace(into) != ""
 	out := make([]classifiedLeaf, 0, len(ids))
 	for _, id := range ids {
 		issue := *issues[id]
-		integration := into
+		integration := strings.TrimSpace(into)
 		if integration == "" {
 			integration = issue.IntegrationBranch
 			if integration == "" {
@@ -131,7 +137,12 @@ func classifyDoneLeaves(git *adapters.Client, issues map[string]*materialize.Iss
 			PriorOps:    allOps,
 			Integration: integration,
 		})
-		out = append(out, classifiedLeaf{Issue: issue, Result: res})
+		out = append(out, classifiedLeaf{
+			Issue:        issue,
+			Result:       res,
+			Integration:  integration,
+			ExplicitInto: explicitInto,
+		})
 	}
 	return out
 }
@@ -181,7 +192,8 @@ func persistClassifications(ctx *config.Context, git *adapters.Client, items []c
 	if err != nil {
 		return err
 	}
-	for _, item := range items {
+	for i := range items {
+		item := &items[i]
 		if item.Result.AppendCheck {
 			checkOp := ops.Op{
 				Type:      ops.OpPromotionCheck,
@@ -197,12 +209,16 @@ func persistClassifications(ctx *config.Context, git *adapters.Client, items []c
 		if !item.Result.Promote {
 			continue
 		}
-		integ := item.Issue.IntegrationBranch
-		wrote, appendErr := appendMergedIfCurrent(ctx, git, logPath, workerID, item.Issue, integ, "")
+		wrote, appendErr := appendMergedIfCurrent(
+			ctx, git, logPath, workerID, item.Issue, item.Integration, item.ExplicitInto, "",
+		)
 		if appendErr != nil {
 			return appendErr
 		}
 		if !wrote {
+			if refreshErr := refreshClassifiedLeaf(ctx, git, item); refreshErr != nil {
+				return refreshErr
+			}
 			continue
 		}
 		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, item.Issue, errWriter); err != nil {
@@ -212,13 +228,57 @@ func persistClassifications(ctx *config.Context, git *adapters.Client, items []c
 	return nil
 }
 
+func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *classifiedLeaf) error {
+	live, allOps, err := replayIssueOps(ctx.IssuesDir, item.Issue.ID)
+	if err != nil {
+		return err
+	}
+	if live == nil {
+		return nil
+	}
+	item.Issue = *live
+	if live.Status != ops.StatusDone {
+		item.Result = promotion.Result{
+			IssueID: live.ID,
+			Kind:    promotion.KindNotDone,
+		}
+		return nil
+	}
+	if len(live.Children) > 0 {
+		item.Result = promotion.Result{
+			IssueID:  live.ID,
+			Kind:     promotion.KindNotLeaf,
+			Recovery: promotion.RecoveryArgv(live.ID, promotion.KindNotLeaf),
+		}
+		return nil
+	}
+	integ := item.Integration
+	if !item.ExplicitInto {
+		integ = live.IntegrationBranch
+		if integ == "" {
+			integ = item.Integration
+		}
+		item.Integration = integ
+	}
+	item.Result = promotion.Evaluate(git, promotion.Input{
+		Issue:       *live,
+		PriorOps:    allOps,
+		Integration: integ,
+	})
+	return nil
+}
+
 // teardownMergedLeftovers finishes delivery-ref / worktree cleanup for issues
-// already promoted to merged when a prior sync append succeeded but teardown
-// failed. Idempotent with arm merged's already-merged retry path.
-func teardownMergedLeftovers(ctx *config.Context, git *adapters.Client, issues map[string]*materialize.Issue, errWriter io.Writer) error {
+// already promoted via ADR 0022 when a prior sync append succeeded but
+// teardown failed. Legacy merged issues without recorded promotion evidence
+// are left alone (ADR 0022: already-merged stay put).
+func teardownMergedLeftovers(ctx *config.Context, git *adapters.Client, issues map[string]*materialize.Issue, allOps []ops.Op, errWriter io.Writer) error {
 	ids := make([]string, 0, len(issues))
 	for id, issue := range issues {
 		if issue == nil || issue.Status != ops.StatusMerged {
+			continue
+		}
+		if !recordedPromotionEvidence(allOps, id) {
 			continue
 		}
 		ids = append(ids, id)
@@ -230,4 +290,24 @@ func teardownMergedLeftovers(ctx *config.Context, git *adapters.Client, issues m
 		}
 	}
 	return nil
+}
+
+func recordedPromotionEvidence(allOps []ops.Op, issueID string) bool {
+	for _, op := range allOps {
+		if op.TargetID != issueID {
+			continue
+		}
+		switch op.Type {
+		case ops.OpPromotionCheck:
+			if op.Payload.Result == promotion.KindPromote {
+				return true
+			}
+		case ops.OpTransition:
+			if op.Payload.To == ops.StatusMerged &&
+				(op.Payload.TargetSHA != "" || op.Payload.CombinedPatchID != "" || op.Payload.MatchedCommit != "") {
+				return true
+			}
+		}
+	}
+	return false
 }

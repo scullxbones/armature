@@ -173,15 +173,28 @@ func attestDeliveryForTest(t *testing.T, repo, issueID, base, tip string) {
 // promotion or tearing down the worktree (worktree GC fixtures).
 func markIssueMergedForTest(t *testing.T, repo, issueID string) {
 	t.Helper()
+	markIssueMergedForTestWithEvidence(t, repo, issueID, false)
+}
+
+// markIssueMergedForTestWithEvidence appends merged; when withEvidence is true
+// the payload carries ADR 0022 match fields so sync teardown retries apply.
+func markIssueMergedForTestWithEvidence(t *testing.T, repo, issueID string, withEvidence bool) {
+	t.Helper()
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
+	payload := ops.Payload{To: ops.StatusMerged}
+	if withEvidence {
+		payload.TargetSHA = "target-sha"
+		payload.CombinedPatchID = "patch-id"
+		payload.MatchedCommit = "matched-sha"
+	}
 	require.NoError(t, appendOp(ctx, logPath, ops.Op{
 		Type:      ops.OpTransition,
 		TargetID:  issueID,
 		Timestamp: nowEpoch(),
 		WorkerID:  workerID,
-		Payload:   ops.Payload{To: ops.StatusMerged},
+		Payload:   payload,
 	}))
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)

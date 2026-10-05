@@ -357,7 +357,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 			}
 		}
 		if result.Promote {
-			wrote, appendErr := appendMergedIfCurrent(state.ctx, git, logPath, workerID, *issue, integration, pr)
+			wrote, appendErr := appendMergedIfCurrent(state.ctx, git, logPath, workerID, *issue, integration, false, pr)
 			if appendErr != nil {
 				return appendErr
 			}

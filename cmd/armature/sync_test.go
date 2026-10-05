@@ -10,6 +10,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/delivery"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
@@ -238,6 +239,8 @@ func TestSyncSkipsStalePromoteAfterReopen_REQ_LNGHZN_S11_T3(t *testing.T) {
 	}))
 
 	require.NoError(t, persistClassifications(ctx, git, items, new(bytes.Buffer)))
+	assert.False(t, items[0].Result.Promote, "skipped promote must refresh the classified result")
+	assert.NotEqual(t, "promote", items[0].Result.Kind)
 
 	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")
 	require.NoError(t, showErr)
@@ -249,6 +252,101 @@ func TestSyncSkipsStalePromoteAfterReopen_REQ_LNGHZN_S11_T3(t *testing.T) {
 
 	for _, op := range transitionOpsForIssue(t, repo, "task-01") {
 		assert.NotEqual(t, ops.StatusMerged, op.Payload.To, "merged must not be written from a stale promote")
+	}
+
+	rows := syncRows(items)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "open", rows[0].Status, "envelope must not report merged after a locked skip")
+	assert.NotEqual(t, "promote", rows[0].Kind)
+}
+
+func TestSyncIntoOverrideUsedInLockedPersist_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := doneWithoutAssessment(t)
+	landDeliveryAndAttest(t, repo, "task-01")
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	issue, err := materialize.LoadIssue(filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json"))
+	require.NoError(t, err)
+	require.NotEmpty(t, issue.Base)
+	require.NotEmpty(t, issue.Tip)
+
+	// Retarget the recorded integration branch to a missing name while the tip
+	// remains on main. --into main must still promote through locked persist.
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			To:                ops.StatusDone,
+			Base:              issue.Base,
+			Tip:               issue.Tip,
+			Branch:            issue.Branch,
+			Outcome:           issue.Outcome,
+			IntegrationBranch: "missing-integration",
+		},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--into", "main", "--format", "agent")
+	assert.Equal(t, 0, code, "out=%s", stdout.String())
+	_, rows := decodeSyncIssues(t, stdout.String())
+	require.Len(t, rows, 1)
+	assert.Equal(t, "promote", rows[0].Kind, "locked persist must keep the --into target")
+	assert.Equal(t, "merged", rows[0].Status)
+
+	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")
+	require.NoError(t, showErr)
+	assert.Equal(t, "merged\n", status)
+}
+
+func TestSyncRejectsIntegrationBranchRetarget_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := doneWithoutAssessment(t)
+	landDeliveryAndAttest(t, repo, "task-01")
+	_, err := runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	ctx := getTestContext(t, repo)
+	store := newSnapshotStore(ctx)
+	snap, err := store.Load(t.Context())
+	require.NoError(t, err)
+	allOps, err := readAllOpsFromDir(filepath.Join(ctx.IssuesDir, "ops"))
+	require.NoError(t, err)
+	git := adapters.New(repo)
+	items := classifyDoneLeaves(git, snap.Issues, allOps, "", ctx.Config.IntegrationBranchOrDefault())
+	require.Len(t, items, 1)
+	require.True(t, items[0].Result.Promote)
+
+	issue := items[0].Issue
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type:      ops.OpTransition,
+		TargetID:  "task-01",
+		Timestamp: nowEpoch(),
+		WorkerID:  workerID,
+		Payload: ops.Payload{
+			To:                ops.StatusDone,
+			Base:              issue.Base,
+			Tip:               issue.Tip,
+			Branch:            issue.Branch,
+			Outcome:           issue.Outcome,
+			IntegrationBranch: "develop",
+		},
+	}))
+
+	require.NoError(t, persistClassifications(ctx, git, items, new(bytes.Buffer)))
+	assert.False(t, items[0].Result.Promote, "retargeted integration branch must invalidate the stale promote")
+
+	for _, op := range transitionOpsForIssue(t, repo, "task-01") {
+		assert.NotEqual(t, ops.StatusMerged, op.Payload.To)
 	}
 }
 
@@ -270,7 +368,7 @@ func TestSyncAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing.T
 	_, err = git.ResolveRevision(ref)
 	require.NoError(t, err, "done transition must leave a delivery ref")
 
-	markIssueMergedForTest(t, repo, "task-01")
+	markIssueMergedForTestWithEvidence(t, repo, "task-01", true)
 	_, err = git.ResolveRevision(ref)
 	require.NoError(t, err, "already-merged fixture must keep the stale delivery ref")
 
@@ -281,4 +379,28 @@ func TestSyncAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing.T
 
 	_, err = git.ResolveRevision(ref)
 	require.Error(t, err, "sync retry must delete refs/armature/deliveries/<id> for already-merged issues")
+}
+
+func TestSyncTeardownSkipsLegacyMergedWorktree_REQ_LNGHZN_S11_T3(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
+	require.NoError(t, err)
+	assert.DirExists(t, worktreePath)
+
+	_, err = runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force", "--skip-delivery-gate")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Legacy merged: no ADR 0022 match fields on the transition.
+	markIssueMergedForTestWithEvidence(t, repo, "task-01", false)
+	assert.DirExists(t, worktreePath)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"sync", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 0, code, "out=%s", stdout.String())
+	assert.DirExists(t, worktreePath, "legacy merged worktrees must not be swept by sync teardown")
 }
