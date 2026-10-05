@@ -163,6 +163,10 @@ for jid, (body, make_runs) in fanout.items():
         if stripped == "paths:" or stripped.startswith("paths:"):
             print(f"FAIL: job {jid} has paths:")
             sys.exit(1)
+    blob = "\n".join(body)
+    if jid in ("check-core", "check-static") and "ripgrep" not in blob:
+        print(f"FAIL: job {jid} must install ripgrep (ubuntu-latest has no rg; git-test-hermetic and test-check-jobs need it)")
+        sys.exit(1)
 
 print("PASS")
 PY

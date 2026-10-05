@@ -90,6 +90,8 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+      # ubuntu-latest does not ship rg. git-test-hermetic-check requires it.
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: make check-job JOB=check-core
         env:
           CHECK_INSTALL_TOOLS: "1"
@@ -102,6 +104,8 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+      # ubuntu-latest does not ship rg. test-check-jobs uses rg -q.
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: make check-job JOB=check-static
         env:
           CHECK_INSTALL_TOOLS: "1"
