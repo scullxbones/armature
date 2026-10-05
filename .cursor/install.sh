@@ -3,7 +3,8 @@
 #
 # Installs the two developer tools that `make check` needs beyond the base
 # image (golangci-lint and gremlins), primes the Go module cache, and builds
-# the `arm` binary. Mirrors the tool set pinned in .github/workflows/ci.yml.
+# the `arm` binary. Pins live in the Makefile (`GOLANGCI_LINT_VERSION`,
+# `GREMLINS_VERSION`); `make install-check-tools` is the install path.
 #
 # Runs after the repository is checked out. Must be safe to run repeatedly.
 set -euo pipefail
@@ -17,23 +18,8 @@ if [ -z "${GOBIN_DIR}" ]; then
 fi
 export PATH="${GOBIN_DIR}:${PATH}"
 
-# gremlins is pinned to the version CI uses; golangci-lint tracks CI's @latest.
-GREMLINS_VERSION="v0.6.0"
-GOLANGCI_LINT_VERSION="${GOLANGCI_LINT_VERSION:-latest}"
-
-if ! command -v golangci-lint >/dev/null 2>&1; then
-	echo "Installing golangci-lint@${GOLANGCI_LINT_VERSION}..."
-	go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
-else
-	echo "golangci-lint already present: $(golangci-lint version 2>/dev/null | head -1)"
-fi
-
-if ! command -v gremlins >/dev/null 2>&1; then
-	echo "Installing gremlins@${GREMLINS_VERSION}..."
-	go install "github.com/go-gremlins/gremlins/cmd/gremlins@${GREMLINS_VERSION}"
-else
-	echo "gremlins already present"
-fi
+# Pins live in the Makefile (GOLANGCI_LINT_VERSION / GREMLINS_VERSION).
+make install-check-tools
 
 # Expose the Go tool binaries on PATH for every interactive shell without
 # mutating a shell profile: symlink them into a directory already on PATH.
