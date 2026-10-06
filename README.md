@@ -187,8 +187,16 @@ arm transition DEMO-S1-T1 --to done --outcome "Wrote hello.txt greeting for the 
 After the change lands on `main`, Armature promotes the task from `done` to
 `merged` (self-reported completion and confirmed-on-main stay distinct).
 
+## Why Armature?
+
+Comparing GitHub Issues plus prompts, markdown task lists, or other
+agent-orchestration tools? Read **[Why Armature](docs/why-armature.md)** for an
+honest trade-off table, the paved road vs escape-hatch `create` path, and why
+**draft ≠ ready** (cite + `dag transition` before `arm ready` fills).
+
 ## Documentation
 
+- **[Why Armature](docs/why-armature.md)** — Alternatives comparison and adopter footguns from v0.1.0 dogfood
 - **[Core Concepts](docs/concepts.md)** — Agent reference for the 8 operational concepts: ops log & materialization, worker identity, claim lifecycle, DAG hierarchy, citations, confidence levels, branch modes, and decomposition
 - **[Getting Started](docs/getting-started.md)** — Setup workflow and first task
 - **[Commands Reference](docs/commands.md)** — Complete command documentation
