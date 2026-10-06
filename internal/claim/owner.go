@@ -27,8 +27,7 @@ type Lease struct {
 	Status       string
 }
 
-// ReplayTTLMinutes maps a recorded claim TTL onto a positive minute count.
-func ReplayTTLMinutes(recorded int) int {
+func replayTTLMinutes(recorded int) int {
 	if recorded <= 0 {
 		return DefaultReplayTTLMinutes
 	}
@@ -76,7 +75,7 @@ func LeaseFromClocks(status, holder, token string, claimedAt, lastHeartbeat, cla
 		Holder:       holder,
 		Token:        token,
 		Since:        claimedAt,
-		LastActivity: int64(FoldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity)),
+		LastActivity: foldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity),
 		TTLMinutes:   ttl,
 		WorktreePath: worktreePath,
 		Status:       status,
@@ -89,7 +88,7 @@ func LeaseLive(l Lease, now int64) bool {
 	if l.Holder == "" {
 		return false
 	}
-	return !IsClaimStale(LastActivity(l.LastActivity), l.TTLMinutes, now)
+	return !isClaimStale(l.LastActivity, l.TTLMinutes, now)
 }
 
 // Accept is the single steal-on-stale step. Same holder always replaces.
@@ -151,20 +150,19 @@ func ApplyAt(held Lease, op ops.Op, stealAt int64) Lease {
 		if stealAt != 0 {
 			hb.Timestamp = stealAt
 		}
-		return ApplyHeartbeat(held, hb)
+		return applyHeartbeat(held, hb)
 	case ops.OpTransition:
 		tr := op
 		if stealAt != 0 {
 			tr.Timestamp = stealAt
 		}
-		return ApplyTransition(held, tr)
+		return applyTransition(held, tr)
 	default:
 		return held
 	}
 }
 
-// ApplyHeartbeat extends LastActivity only for the current holder.
-func ApplyHeartbeat(held Lease, op ops.Op) Lease {
+func applyHeartbeat(held Lease, op ops.Op) Lease {
 	if !ClaimantHeartbeatClocks(held.Holder, op.WorkerID) {
 		return held
 	}
@@ -174,8 +172,7 @@ func ApplyHeartbeat(held Lease, op ops.Op) Lease {
 	return held
 }
 
-// ApplyTransition mirrors materialize's lease-relevant transition fold.
-func ApplyTransition(held Lease, op ops.Op) Lease {
+func applyTransition(held Lease, op ops.Op) Lease {
 	if op.Payload.IfClaimToken != "" && !heldByExactWorkerAndClaimToken(held, op.WorkerID, op.Payload.IfClaimToken) {
 		return held
 	}
@@ -197,11 +194,11 @@ func ApplyTransition(held Lease, op ops.Op) Lease {
 		held.Since = op.Payload.RestoreClaimedAt
 		held.TTLMinutes = op.Payload.RestoreClaimTTL
 		held.Token = op.Payload.RestoreClaimToken
-		held.LastActivity = int64(FoldLastActivity(
+		held.LastActivity = foldLastActivity(
 			op.Payload.RestoreClaimedAt,
 			op.Payload.RestoreLastHeartbeat,
 			op.Payload.RestoreLastClaimingWorkerActivity,
-		))
+		)
 	}
 	return held
 }

@@ -45,10 +45,10 @@ func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *tes
 	scopeParent := []string{"src/**"}
 	scopeChild := []string{"src/auth/**"}
 
-	result := ScopesOverlapIgnoringAncestry(scopeChild, scopeParent, graph, "task-01", "story-01")
+	result := scopesOverlapIgnoringAncestry(scopeChild, scopeParent, graph, "task-01", "story-01")
 	assert.False(t, result, "child task should not conflict with parent story despite scope overlap")
 
-	result = ScopesOverlapIgnoringAncestry(scopeParent, scopeChild, graph, "story-01", "task-01")
+	result = scopesOverlapIgnoringAncestry(scopeParent, scopeChild, graph, "story-01", "task-01")
 	assert.False(t, result, "parent story should not conflict with child task despite scope overlap")
 
 	sibling := &dag.Node{
@@ -63,7 +63,7 @@ func TestScopesOverlap_ExcludesAncestorDescendantPairs_REQ_TOPTIER_S17_T1(t *tes
 	nodes["task-02"] = sibling
 	graph = dag.FromIndex(nodes)
 
-	result = ScopesOverlapIgnoringAncestry(scopeChild, scopeChild, graph, "task-01", "task-02")
+	result = scopesOverlapIgnoringAncestry(scopeChild, scopeChild, graph, "task-01", "task-02")
 	assert.True(t, result, "sibling tasks with same scope should conflict")
 }
 
@@ -95,7 +95,7 @@ func TestScopesOverlap_StillDetectsNonAncestorOverlaps_REQ_TOPTIER_S17_T1(t *tes
 	scopeA := []string{"src/auth/**"}
 	scopeB := []string{"src/auth/login.go"}
 
-	result := ScopesOverlapIgnoringAncestry(scopeA, scopeB, graph, "task-a", "task-b")
+	result := scopesOverlapIgnoringAncestry(scopeA, scopeB, graph, "task-a", "task-b")
 	assert.True(t, result, "unrelated tasks with overlapping scopes should conflict")
 }
 

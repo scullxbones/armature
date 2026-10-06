@@ -30,9 +30,7 @@ func claimTreatsMalformedScopeAsNoOverlap(overlap bool, err error) bool {
 	return err == nil && overlap
 }
 
-// ScopesOverlapIgnoringAncestry reports glob overlap except when issueA and
-// issueB sit on the same parent-child chain (see IsAncestorOrDescendant).
-func ScopesOverlapIgnoringAncestry(scopeA, scopeB []string, graph HierarchyGraph, issueA, issueB string) bool {
+func scopesOverlapIgnoringAncestry(scopeA, scopeB []string, graph HierarchyGraph, issueA, issueB string) bool {
 	if IsAncestorOrDescendant(graph, issueA, issueB) {
 		return false
 	}

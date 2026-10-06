@@ -72,7 +72,7 @@ func PlanClaim(in PlanInput) (ClaimPlan, error) {
 		if !competes(fact) {
 			continue
 		}
-		if !ScopesOverlapIgnoringAncestry(in.TargetScope, fact.Scope, in.Graph, in.TargetID, id) {
+		if !scopesOverlapIgnoringAncestry(in.TargetScope, fact.Scope, in.Graph, in.TargetID, id) {
 			continue
 		}
 
@@ -127,7 +127,7 @@ func competes(fact IssueFacts) bool {
 }
 
 func hasSameWorkerDismissal(prior []ops.Op, targetID, otherID, workerID string) bool {
-	if !HasOverlapDismissalNote(prior, targetID, otherID) {
+	if !hasOverlapDismissalNote(prior, targetID, otherID) {
 		return false
 	}
 	expected := fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", otherID)
