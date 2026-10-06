@@ -5714,3 +5714,4 @@
 ["transition","TOPTIER-S8",1791251542,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"in-progress"},1]
 ["note","TOPTIER-S8-T1",1791251550,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Claimed; writing why-armature.md from v0.1.0 foreign-repo dogfood (draft≠ready, paved road vs create escape hatch) plus market-analysis distill.","note_id":"note-1791251550573727692"},1]
 ["source-link","TOPTIER-S8-T1",1791251914,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"34bc4866-43d5-4876-bfff-0fdb5b40ad01","source_url":"docs/design/top-tier-gap-analysis.md"},1]
+["decision","TOPTIER-S8-T1",1791251915,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"topic":"positioning-evidence","choice":"v0.1.0-foreign-dogfood","rationale":"Write alternatives comparison from query-guardian dogfood friction (draft≠ready, paved road vs create) plus market-analysis distill; not hopeful pre-dogfood claims."},1]
