@@ -5719,3 +5719,4 @@
 ["heartbeat","TOPTIER-S8-T1",1791253489,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
 ["transition","TOPTIER-S8-T1",1791254467,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added docs/why-armature.md with honest alternatives table, paved-road vs escape-hatch create, and draft≠ready from v0.1.0 foreign-repo dogfood; README links it. Tip 126428dd9."},1]
 ["claim","TOPTIER-S8-T2",1791254480,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-S8-T2","claim_token":"fba1d53acb0c64cfbacce51a9c645de4"},1]
+["source-link","TOPTIER-S8-T2",1791255105,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"34bc4866-43d5-4876-bfff-0fdb5b40ad01","source_url":"docs/design/top-tier-gap-analysis.md"},1]
