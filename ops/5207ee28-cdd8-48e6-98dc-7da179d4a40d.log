@@ -5722,3 +5722,4 @@
 ["source-link","TOPTIER-S8-T2",1791255105,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"34bc4866-43d5-4876-bfff-0fdb5b40ad01","source_url":"docs/design/top-tier-gap-analysis.md"},1]
 ["note","TOPTIER-S8-T2",1791255106,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"examples/completed-story from real TOPTIER-S7-T1 / PR #308; plan+assessment reconstructed where live plan/review files were absent.","note_id":"note-1791255106311792162"},1]
 ["heartbeat","TOPTIER-S8-T2",1791255106,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
+["transition","TOPTIER-S8-T2",1791256960,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Added examples/completed-story museum for TOPTIER-S7-T1 (PR #308): registered source, plan, ops excerpts, render-context, conformance assessment, READMEs; tip 4d17e3769."},1]
