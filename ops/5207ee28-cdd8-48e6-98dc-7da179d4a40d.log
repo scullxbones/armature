@@ -5721,3 +5721,4 @@
 ["claim","TOPTIER-S8-T2",1791254480,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":240,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-S8-T2","claim_token":"fba1d53acb0c64cfbacce51a9c645de4"},1]
 ["source-link","TOPTIER-S8-T2",1791255105,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"source_id":"34bc4866-43d5-4876-bfff-0fdb5b40ad01","source_url":"docs/design/top-tier-gap-analysis.md"},1]
 ["note","TOPTIER-S8-T2",1791255106,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"examples/completed-story from real TOPTIER-S7-T1 / PR #308; plan+assessment reconstructed where live plan/review files were absent.","note_id":"note-1791255106311792162"},1]
+["heartbeat","TOPTIER-S8-T2",1791255106,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
