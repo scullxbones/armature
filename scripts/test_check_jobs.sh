@@ -10,9 +10,6 @@ SCRIPT="$REPO_ROOT/scripts/test_check_jobs.sh"
 
 FAILURES=0
 
-# Nested `make` from inside `make check-job JOB=…` inherits MAKEOVERRIDES
-# (JOB=check-static). Clear that so empty/unknown JOB probes are real, and so
-# this script cannot recurse into check-static.
 run_make() {
     env -u MAKEFLAGS -u MAKEOVERRIDES -u MFLAGS make -C "$REPO_ROOT" -s "$@"
 }

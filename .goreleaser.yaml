@@ -41,15 +41,13 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
-# Release notes: Keep a Changelog at CHANGELOG.md. The release workflow passes
-# `--release-notes=CHANGELOG.md`. Do not set changelog.disable — GoReleaser
-# ignores --release-notes when disable is true (empty GitHub release body).
+# Do not set changelog.disable. GoReleaser ignores --release-notes when
+# disable is true and publishes an empty GitHub release body.
 release:
   github:
     owner: scullxbones
     name: armature
   draft: false
   prerelease: auto
-  # Attach the canonical changelog alongside binaries/checksums.
   extra_files:
     - glob: ./CHANGELOG.md

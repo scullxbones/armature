@@ -27,7 +27,6 @@ linters:
   settings:
     depguard:
       # Modularity map (quality-controls C7; ADR 0004 fences; ADR 0023 ratchet).
-      # These rules are the package-boundary hold. Prefer shrinking allow-lists.
       # Widening an allow-list or removing a deny requires an ADR.
       rules:
         internal-no-cmd:
