@@ -14,26 +14,26 @@ import (
 
 func TestFoldLastActivity(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, LastActivity(100), FoldLastActivity(100, 0, 0))
-	assert.Equal(t, LastActivity(150), FoldLastActivity(100, 150, 0))
-	assert.Equal(t, LastActivity(150), FoldLastActivity(100, 0, 150))
-	assert.Equal(t, LastActivity(200), FoldLastActivity(100, 150, 200))
+	assert.Equal(t, int64(100), foldLastActivity(100, 0, 0))
+	assert.Equal(t, int64(150), foldLastActivity(100, 150, 0))
+	assert.Equal(t, int64(150), foldLastActivity(100, 0, 150))
+	assert.Equal(t, int64(200), foldLastActivity(100, 150, 200))
 }
 
 func TestIsClaimStale(t *testing.T) {
 	t.Parallel()
-	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 0), 1, 160))
-	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 0), 1, 159))
-	assert.False(t, IsClaimStale(FoldLastActivity(100, 150, 0), 1, 209))
-	assert.True(t, IsClaimStale(FoldLastActivity(100, 150, 0), 1, 210))
-	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 0), 0, 100+int64(DefaultReplayTTLMinutes)*60-1))
-	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 0), 0, 100+int64(DefaultReplayTTLMinutes)*60))
+	assert.True(t, isClaimStale(foldLastActivity(100, 0, 0), 1, 160))
+	assert.False(t, isClaimStale(foldLastActivity(100, 0, 0), 1, 159))
+	assert.False(t, isClaimStale(foldLastActivity(100, 150, 0), 1, 209))
+	assert.True(t, isClaimStale(foldLastActivity(100, 150, 0), 1, 210))
+	assert.False(t, isClaimStale(foldLastActivity(100, 0, 0), 0, 100+int64(DefaultReplayTTLMinutes)*60-1))
+	assert.True(t, isClaimStale(foldLastActivity(100, 0, 0), 0, 100+int64(DefaultReplayTTLMinutes)*60))
 }
 
 func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
 	t.Parallel()
-	assert.False(t, IsClaimStale(FoldLastActivity(100, 0, 150), 1, 209))
-	assert.True(t, IsClaimStale(FoldLastActivity(100, 0, 150), 1, 210))
+	assert.False(t, isClaimStale(foldLastActivity(100, 0, 150), 1, 209))
+	assert.True(t, isClaimStale(foldLastActivity(100, 0, 150), 1, 210))
 }
 
 func TestScopeOverlap(t *testing.T) {
@@ -124,11 +124,11 @@ func TestPropertyIsClaimStaleMonotone(t *testing.T) {
 			if ttlMinutes < 0 {
 				return true
 			}
-			if !IsClaimStale(FoldLastActivity(claimedAt, lastHeartbeat, 0), int(ttlMinutes), now) {
+			if !isClaimStale(foldLastActivity(claimedAt, lastHeartbeat, 0), int(ttlMinutes), now) {
 				return true
 			}
 			laterNow := now + 1
-			return IsClaimStale(FoldLastActivity(claimedAt, lastHeartbeat, 0), int(ttlMinutes), laterNow)
+			return isClaimStale(foldLastActivity(claimedAt, lastHeartbeat, 0), int(ttlMinutes), laterNow)
 		},
 		gen.Int64Range(0, 10000),
 		gen.Int64Range(0, 10000),
@@ -146,7 +146,7 @@ func TestHasOverlapDismissalNote_NotFound(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
 			Payload: ops.Payload{Msg: "Some other note"}},
 	}
-	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
 	assert.False(t, found)
 }
 
@@ -157,7 +157,7 @@ func TestHasOverlapDismissalNote_Found(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 101, WorkerID: "worker-a",
 			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
 	}
-	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
 	assert.True(t, found)
 }
 
@@ -172,7 +172,7 @@ func TestHasOverlapDismissalNote_FoundAmongMultiple(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "task-02", Timestamp: 103, WorkerID: "worker-a",
 			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-01 (same worker, dismissed)"}},
 	}
-	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
 	assert.True(t, found)
 }
 
@@ -182,7 +182,7 @@ func TestHasOverlapDismissalNote_NotFoundDifferentTarget(t *testing.T) {
 		{Type: ops.OpNote, TargetID: "task-01", Timestamp: 101, WorkerID: "worker-a",
 			Payload: ops.Payload{Msg: "Serial claim: scope overlap with task-02 (same worker, dismissed)"}},
 	}
-	found := HasOverlapDismissalNote(ops, "task-02", "task-01")
+	found := hasOverlapDismissalNote(ops, "task-02", "task-01")
 	assert.False(t, found)
 }
 

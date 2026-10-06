@@ -1,9 +1,8 @@
-package claim_test
+package claim
 
 import (
 	"testing"
 
-	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 )
@@ -13,7 +12,7 @@ func TestWorktreeRestoreClearingEmptyPrior_REQ_MATENC_S1_T3(t *testing.T) {
 
 	t.Run("clear empty prior", func(t *testing.T) {
 		t.Parallel()
-		w := claim.WorktreeRestoreClearingEmptyPrior("")
+		w := worktreeRestoreClearingEmptyPrior("")
 		assert.Equal(t, ops.WorktreeClear, w.Action)
 		assert.Empty(t, w.Path)
 		p := ops.Compensation{Worktree: w}.Encode()
@@ -25,7 +24,7 @@ func TestWorktreeRestoreClearingEmptyPrior_REQ_MATENC_S1_T3(t *testing.T) {
 	t.Run("set nonempty prior", func(t *testing.T) {
 		t.Parallel()
 		prior := "/repo/.worktrees/TASK-1"
-		w := claim.WorktreeRestoreClearingEmptyPrior(prior)
+		w := worktreeRestoreClearingEmptyPrior(prior)
 		assert.Equal(t, ops.WorktreeSet, w.Action)
 		assert.Equal(t, prior, w.Path)
 		p := ops.Compensation{Worktree: w}.Encode()

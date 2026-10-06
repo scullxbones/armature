@@ -14,11 +14,7 @@ import (
 // once per interval, independent of claim TTL. Not configurable.
 const HeartbeatDebounceInterval = 5 * time.Minute
 
-// HasOverlapDismissalNote checks if a same-worker overlap dismissal note
-// for the given issue pair already exists in the ops history.
-// Returns true if a note with the message pattern "Serial claim: scope overlap with {otherId} (same worker, dismissed)"
-// is found on the targetID.
-func HasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
+func hasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
 	expectedMsg := fmt.Sprintf("Serial claim: scope overlap with %s (same worker, dismissed)", otherID)
 	for _, op := range allOps {
 		if op.Type == ops.OpNote && op.TargetID == targetID && op.Payload.Msg == expectedMsg {
@@ -28,20 +24,17 @@ func HasOverlapDismissalNote(allOps []ops.Op, targetID, otherID string) bool {
 	return false
 }
 
-// LastActivity is the claim TTL clock in unix seconds. It is the max of
-// claimed-at, last heartbeat, and claiming-worker activity.
-type LastActivity int64
-
-// FoldLastActivity collapses the three claim clocks into one LastActivity.
-func FoldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity int64) LastActivity {
-	return LastActivity(max(claimedAt, lastHeartbeat, claimingWorkerActivity))
+// foldLastActivity collapses claimed-at, last heartbeat, and claiming-worker
+// activity into the TTL clock (unix seconds).
+func foldLastActivity(claimedAt, lastHeartbeat, claimingWorkerActivity int64) int64 {
+	return max(claimedAt, lastHeartbeat, claimingWorkerActivity)
 }
 
-// IsClaimStale reports whether last plus the replay TTL is at or before now.
+// isClaimStale reports whether last plus the replay TTL is at or before now.
 // ttlMinutes <= 0 replays as DefaultReplayTTLMinutes. Takeable at exactly ttl.
-func IsClaimStale(last LastActivity, ttlMinutes int, now int64) bool {
-	ttlSeconds := int64(ReplayTTLMinutes(ttlMinutes)) * 60
-	return now >= int64(last)+ttlSeconds
+func isClaimStale(last int64, ttlMinutes int, now int64) bool {
+	ttlSeconds := int64(replayTTLMinutes(ttlMinutes)) * 60
+	return now >= last+ttlSeconds
 }
 
 func ShouldHeartbeat(lastHeartbeatTime, now time.Time) bool {

@@ -61,7 +61,7 @@ type ReconcileResult struct {
 // A GHOST is an issue holding a live claim (ClaimedBy set, non-terminal) whose
 // recorded worktree_path has no matching local worktree. A gc'd/merged worktree
 // that is simply gone is the EXPECTED end state, so terminal-status issues are
-// excluded. Staleness reuses claim.IsClaimStale against now so a claim past its
+// excluded. Staleness uses Issue.ClaimStale against now so a claim past its
 // TTL is treated as no-longer-live.
 //
 // managedRoots optionally scopes ghost detection to worktrees this clone owns.

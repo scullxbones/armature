@@ -68,8 +68,8 @@ func TestForeignLiveLeaseBlocksChallenger_REQ_MATENC_S1_T2(t *testing.T) {
 			"legacy ttl 0 is live one second before the 60-minute default")
 		assert.False(t, challengerBlocked(held, "worker-b", 100+60*60),
 			"legacy ttl 0 is takeable at exactly 60 minutes")
-		assert.True(t, IsClaimStale(FoldLastActivity(100, 100, 100), 0, 100+60*60),
-			"IsClaimStale replays ttl 0 as 60 minutes")
+		assert.True(t, isClaimStale(foldLastActivity(100, 100, 100), 0, 100+60*60),
+			"isClaimStale replays ttl 0 as 60 minutes")
 	})
 
 	t.Run("heartbeat and activity clocks fold into staleness", func(t *testing.T) {
