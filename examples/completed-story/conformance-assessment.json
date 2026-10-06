@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "bundle_id": "sha256:toptier-s7-t1-pr308-reconstructed",
+  "note": "Reconstructed after merge for the adopter examples trail. TOPTIER-S7-T1 had no stored ConformanceAssessment in .armature/review/; this evaluates the landed PR #308 against the issue contract.",
+  "results": [
+    {
+      "id": "definition_of_done",
+      "status": "satisfied",
+      "rationale": "README quickstart is verbatim-runnable via scripts/quickstart_check.sh in CI; getting-started aligns on collapsed .armature/ ops worktree; install covers go install and GitHub Releases.",
+      "citations": [
+        {
+          "path": "README.md",
+          "line": 110
+        },
+        {
+          "path": "docs/getting-started.md",
+          "line": 1
+        },
+        {
+          "path": "scripts/quickstart_check.sh",
+          "line": 1
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "acceptance[0]",
+      "status": "satisfied",
+      "rationale": "scripts/quickstart_check.sh extracts bash fences from the README quickstart and runs them in a scratch repo; CI invokes it.",
+      "citations": [
+        {
+          "path": "scripts/quickstart_check.sh",
+          "line": 1
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "acceptance[1]",
+      "status": "satisfied",
+      "rationale": "README has a single bootstrap path and states .armature/ as the ops worktree (legacy .arm/ migration noted once).",
+      "citations": [
+        {
+          "path": "README.md",
+          "line": 117
+        }
+      ]
+    },
+    {
+      "id": "acceptance[2]",
+      "status": "satisfied",
+      "rationale": "docs/getting-started.md matches README on bootstrap layout and install paths.",
+      "citations": [
+        {
+          "path": "docs/getting-started.md",
+          "line": 51
+        }
+      ]
+    },
+    {
+      "id": "acceptance[3]",
+      "status": "satisfied",
+      "rationale": "README installation covers released binaries and go install with rename to arm.",
+      "citations": [
+        {
+          "path": "README.md",
+          "line": 76
+        }
+      ]
+    },
+    {
+      "id": "scope",
+      "status": "satisfied",
+      "rationale": "PR #308 changed README.md, docs/getting-started.md, scripts/quickstart_check.sh, and .github/workflows/ci.yml \u2014 within declared scope.",
+      "citations": [
+        {
+          "path": "README.md",
+          "line": 1
+        }
+      ]
+    }
+  ],
+  "overall": "conformant",
+  "pr": "https://github.com/scullxbones/armature/pull/308"
+}

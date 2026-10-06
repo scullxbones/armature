@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "title": "Front-door documentation (TOPTIER-S7) \u2014 reconstructed from live ops for the examples trail",
+  "issues": [
+    {
+      "id": "TOPTIER-S7",
+      "title": "Front-door documentation: accurate quickstart, visible product",
+      "type": "story",
+      "scope": [],
+      "priority": "medium",
+      "dod": "The README quickstart executes verbatim on a fresh clone and is exercised in CI, the duplicate bootstrap step and .arm/.armature drift are gone, and the README shows the TUI. Closes gap D1.",
+      "parent": "TOPTIER",
+      "blocked_by": [],
+      "acceptance": [
+        "Quickstart accurate",
+        "Product visible"
+      ],
+      "source": "34bc4866-43d5-4876-bfff-0fdb5b40ad01"
+    },
+    {
+      "id": "TOPTIER-S7-T1",
+      "title": "Rewrite README quickstart and execute it in CI",
+      "type": "task",
+      "scope": [
+        "README.md",
+        "docs/getting-started.md",
+        "scripts/quickstart_check.sh (new)",
+        ".github/workflows/ci.yml"
+      ],
+      "priority": "high",
+      "dod": "The quickstart is rewritten against a fresh clone with every command verified verbatim: duplicate skill-install step removed, the .arm/ worktree vs .armature/ state-dir distinction stated once and matching getting-started.md, README installation covers go install and released binaries, and a CI job extracts and runs the quickstart commands in a scratch repo so future drift fails the build.",
+      "parent": "TOPTIER-S7",
+      "blocked_by": [
+        "TOPTIER-S6-T1"
+      ],
+      "acceptance": [
+        "scripts/quickstart_check.sh executes every quickstart command in a scratch repo and exits 0 in CI",
+        "README contains no duplicate bootstrap step and states .arm/ vs .armature/ correctly once",
+        "docs/getting-started.md agrees with README on paths",
+        "README installation section covers go install and released binaries"
+      ],
+      "source": "34bc4866-43d5-4876-bfff-0fdb5b40ad01"
+    }
+  ]
+}
