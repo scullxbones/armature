@@ -3,6 +3,7 @@ package decompose
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/clock"
@@ -11,6 +12,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParsePlan_ExamplesCompletedStory_REQ_TOPTIER_S8_T2(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "examples", "completed-story", "plan.json")
+	plan, err := ParsePlan(path)
+	require.NoError(t, err, "examples/completed-story/plan.json must decode as arm dag apply --plan input")
+	require.Len(t, plan.Issues, 2)
+
+	assert.Equal(t, "", plan.Issues[0].Scope, "story with no paths uses an empty scope string, not []")
+	assert.Equal(t,
+		"README.md, docs/getting-started.md, scripts/quickstart_check.sh (new), .github/workflows/ci.yml",
+		plan.Issues[1].Scope,
+		"multi-path scope is a comma-space-separated string per PlanIssue.Scope")
+	// Mirror apply.go: strings.Split(issue.Scope, ", ")
+	assert.Equal(t, []string{
+		"README.md",
+		"docs/getting-started.md",
+		"scripts/quickstart_check.sh (new)",
+		".github/workflows/ci.yml",
+	}, strings.Split(plan.Issues[1].Scope, ", "))
+}
 
 func TestApplyPlan_SplitsCommaSeparatedScope(t *testing.T) {
 	t.Parallel()

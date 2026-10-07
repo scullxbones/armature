@@ -187,8 +187,26 @@ arm transition DEMO-S1-T1 --to done --outcome "Wrote hello.txt greeting for the 
 After the change lands on `main`, Armature promotes the task from `done` to
 `merged` (self-reported completion and confirmed-on-main stay distinct).
 
+## Why Armature?
+
+Comparing GitHub Issues plus prompts, markdown task lists, or other
+agent-orchestration tools? Read **[Why Armature](docs/why-armature.md)** for an
+honest trade-off table, the paved road vs escape-hatch `create` path, and why
+**draft ≠ ready** (cite + `dag transition` before `arm ready` fills).
+
+Inspect a real completed trail without running anything:
+[`examples/completed-story/`](examples/completed-story/) (`TOPTIER-S7-T1`,
+[PR #308](https://github.com/scullxbones/armature/pull/308)).
+
+End-to-end paved-road demo (coordinator + two workers), asciinema cast:
+[`docs/assets/adopter-demo.cast`](docs/assets/adopter-demo.cast). Re-record with
+[`docs/assets/record-adopter-demo.sh`](docs/assets/record-adopter-demo.sh).
+
 ## Documentation
 
+- **[Why Armature](docs/why-armature.md)** — Alternatives comparison and adopter footguns from v0.1.0 dogfood
+- **[Examples](examples/README.md)** — Completed-story artifact trail (source, plan, ops, render-context, assessment)
+- **[Demo recording](docs/assets/README.md)** — Asciinema cast + re-record script
 - **[Core Concepts](docs/concepts.md)** — Agent reference for the 8 operational concepts: ops log & materialization, worker identity, claim lifecycle, DAG hierarchy, citations, confidence levels, branch modes, and decomposition
 - **[Getting Started](docs/getting-started.md)** — Setup workflow and first task
 - **[Commands Reference](docs/commands.md)** — Complete command documentation

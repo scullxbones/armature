@@ -1,0 +1,10 @@
+{
+  "issue_id": "TOPTIER-S7-T1",
+  "layers": [
+    {
+      "name": "core_spec",
+      "priority": 1,
+      "content": "# Issue: Rewrite README quickstart and execute it in CI\nType: task | Scope: README.md, docs/getting-started.md, scripts/quickstart_check.sh (new), .github/workflows/ci.yml | Priority: high\n\n## Definition of Done\nThe quickstart is rewritten against a fresh clone with every command verified verbatim: duplicate skill-install step removed, the .arm/ worktree vs .armature/ state-dir distinction stated once and matching getting-started.md, README installation covers go install and released binaries, and a CI job extracts and runs the quickstart commands in a scratch repo so future drift fails the build."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "TOPTIER-S7",
+  "title": "Front-door documentation: accurate quickstart, visible product",
+  "type": "story",
+  "status": "in-progress",
+  "definition_of_done": "The README quickstart executes verbatim on a fresh clone and is exercised in CI, the duplicate bootstrap step and .arm/.armature drift are gone, and the README shows the TUI. Closes gap D1.",
+  "children": [
+    "TOPTIER-S7-T1",
+    "TOPTIER-S7-T2"
+  ]
+}
