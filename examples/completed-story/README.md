@@ -12,7 +12,7 @@ follow the trail. Parent story: `TOPTIER-S7` (front-door documentation).
 | File | Produced by | Role |
 | --- | --- | --- |
 | [`registered-source.json`](registered-source.json) | `arm sources add` / sync against `docs/design/top-tier-gap-analysis.md` | Gap D1/D3 source the task cites (`34bc4866-…`) |
-| [`plan.json`](plan.json) | Reconstructed from live create/amend ops + materialized issues for the examples trail | Shape of `arm dag apply --plan` input (story + task, both cited) |
+| [`plan.json`](plan.json) | Reconstructed from live create/amend ops + materialized issues for the examples trail | Valid `arm dag apply --plan` input (story + task, both cited). `scope` is a string: empty, one path, or multiple paths joined with comma-space (`", "`), matching `PlanIssue.Scope` and `docs/schemas/plan.schema.json` — not a JSON array |
 | [`ops-excerpts.jsonl`](ops-excerpts.jsonl) | Worker ops log lines targeting `TOPTIER-S7-T1` | create → source-link → amend → claim → transition done → merged |
 | [`render-context.json`](render-context.json) | `arm render-context TOPTIER-S7-T1 --format agent` | What a worker receives as the task spec |
 | [`issue.json`](issue.json) / [`parent-story.json`](parent-story.json) | Materialized state under `.armature/state/` | Post-merge issue records |
