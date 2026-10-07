@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 type devinAdapter struct{}
@@ -24,12 +26,9 @@ func (a *devinAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
-// OwnsConfig reports whether Armature may write .devin/hooks.json in workdir.
-// Returns true when the file is absent (safe to create) or when it contains the
-// "_armature:managed" key written by WriteConfig.
 func (a *devinAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, ".devin", "hooks.json")
-	data, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
+	data, err := adapters.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return true, nil
@@ -75,9 +74,7 @@ func (a *devinAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-// Encode serialises the Decision into the JSON payload Devin expects on stdout.
 func (a *devinAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
-	// Devin processes the JSON response on exit 0, so exit code is always 0.
 	return encodeApproveOrBlockJSON(decision)
 }
 

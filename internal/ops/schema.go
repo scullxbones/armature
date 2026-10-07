@@ -46,7 +46,6 @@ var schemaOpDocs = []schemaOpDoc{
 	{OpType: OpGateEvidence, PayloadField: "                    output_hash, output_head, output_tail, log_path"},
 }
 
-// SchemaDocumentedOpTypes returns the ordered op types documented in the schema.
 func schemaDocumentedOpTypes() []string {
 	seen := make(map[string]bool, len(schemaOpDocs))
 	types := make([]string, 0, len(schemaOpDocs))
