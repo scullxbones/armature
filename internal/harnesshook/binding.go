@@ -226,13 +226,6 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 	return sessionFallback, nil
 }
 
-// extractExitCode extracts the exit code from a hook payload map, if available.
-// It is used against the PostToolUse "tool_response" payload (and, for
-// harnesses/tests that place the field alongside the tool call arguments,
-// "tool_input"). Returns (0, false) if the field is not present (e.g., for
-// PreToolUse events, which have no execution result yet) — callers must check
-// the ok return value rather than treating an absent code as exit 0, since
-// "unknown" and "succeeded" are distinguishable facts for activity logging.
 func extractExitCode(fields map[string]any) (int, bool) {
 	if fields == nil {
 		return 0, false
@@ -251,12 +244,6 @@ func extractExitCode(fields map[string]any) (int, bool) {
 	return 0, false
 }
 
-// extractOutput extracts the command output from a hook payload map, if
-// available. It is used against the PostToolUse "tool_response" payload.
-// Supports the explicit "output" key as well as the "stdout"/"stderr" shape
-// used by Claude Code's Bash tool_response (stdout and stderr are
-// concatenated, stdout first). Returns nil if no output field is present
-// (e.g., for PreToolUse events).
 func extractOutput(fields map[string]any) []byte {
 	if fields == nil {
 		return nil

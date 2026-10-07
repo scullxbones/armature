@@ -150,10 +150,6 @@ type Payload struct {
 	Assessment                        json.RawMessage `json:"assessment,omitempty"`
 }
 
-// PayloadsEqual reports whether a and b marshal to identical JSON bytes.
-// encoding/json omitempty means absent optional fields (including token
-// counts on legacy transition ops) match explicit zeros and do not need a
-// separate equality rule.
 func payloadsEqual(a, b Payload) bool {
 	left, err := json.Marshal(a)
 	if err != nil {

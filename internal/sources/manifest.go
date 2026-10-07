@@ -51,9 +51,6 @@ func ReadCache(path string, id string) ([]byte, error) {
 	return adapters.ReadCacheFile(path, id)
 }
 
-// WriteManifestAndCommit writes the manifest to manifest.json and commits it
-// to the worktree's _armature branch if worktreePath is non-empty.
-// Pass worktreePath="" to skip the commit (single-branch mode).
 func writeManifestAndCommit(manifestPath, worktreePath string, m Manifest, fc FileCommitter) error {
 	if err := WriteManifest(manifestPath, m); err != nil {
 		return err
@@ -61,9 +58,6 @@ func writeManifestAndCommit(manifestPath, worktreePath string, m Manifest, fc Fi
 	return commitWorktreeFile(worktreePath, filepath.Join(manifestPath, "manifest.json"), "sources: update manifest.json", fc)
 }
 
-// WriteCacheAndCommit writes cache data to a cache file and commits it
-// to the worktree's _armature branch if worktreePath is non-empty.
-// Pass worktreePath="" to skip the commit (single-branch mode).
 func writeCacheAndCommit(manifestPath, worktreePath, id string, data []byte, fc FileCommitter) error {
 	if err := WriteCache(manifestPath, id, data); err != nil {
 		return err

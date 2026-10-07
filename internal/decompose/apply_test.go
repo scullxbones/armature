@@ -26,7 +26,6 @@ func TestParsePlan_ExamplesCompletedStory_REQ_TOPTIER_S8_T2(t *testing.T) {
 		"README.md, docs/getting-started.md, scripts/quickstart_check.sh (new), .github/workflows/ci.yml",
 		plan.Issues[1].Scope,
 		"multi-path scope is a comma-space-separated string per PlanIssue.Scope")
-	// Mirror apply.go: strings.Split(issue.Scope, ", ")
 	assert.Equal(t, []string{
 		"README.md",
 		"docs/getting-started.md",

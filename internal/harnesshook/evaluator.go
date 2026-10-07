@@ -7,24 +7,20 @@ import (
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 )
 
-// evaluatorConfig holds the policy inputs needed to construct a defaultEvaluator.
 type evaluatorConfig struct {
 	ScopePolicy         harnesspolicy.ScopePolicy
 	VerificationService *harnesspolicy.VerificationService
 	VerificationInput   harnesspolicy.VerificationRequest
 }
 
-// defaultEvaluator is the standard policy evaluator for harness hook events.
 type defaultEvaluator struct {
 	cfg evaluatorConfig
 }
 
-// newEvaluator constructs a defaultEvaluator from the provided config.
 func newEvaluator(cfg evaluatorConfig) *defaultEvaluator {
 	return &defaultEvaluator{cfg: cfg}
 }
 
-// Evaluate applies scope and verification policy to the event and returns a Decision.
 func (e *defaultEvaluator) Evaluate(_ context.Context, event Event) (Decision, error) {
 	switch event.Kind {
 	case EventPreToolUse:

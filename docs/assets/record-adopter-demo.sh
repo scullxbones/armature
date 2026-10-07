@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Record (or re-record) the TOPTIER-S8-T3 adopter demo.
-# Usage (from repo root, with arm + asciinema on PATH):
-#   ./docs/assets/record-adopter-demo.sh
-#   ./docs/assets/record-adopter-demo.sh --record docs/assets/adopter-demo.cast
-#
-# The demo shows the paved road: bootstrap → sources → plan/apply →
-# dag transition (draft→verified) → ready → two claim/work/done cycles.
-# Escape-hatch create is intentionally not used.
-# Scratch dirs under /tmp are left for inspection; delete manually if needed.
-
 set -euo pipefail
 
 RECORD_OUT=""
@@ -44,7 +34,6 @@ Ship a farewell file for worker B.
 EOF
   git add docs/requirements.md
   git commit -qm "docs: seed requirements"
-  # claim publishes ops to origin/_armature; give the scratch a local bare remote
   git init -q --bare "$scratch/origin.git"
   git remote add origin "$scratch/origin.git"
   git push -q -u origin HEAD:main
@@ -156,7 +145,6 @@ if [[ -n "$RECORD_OUT" ]]; then
     exit 1
   fi
   mkdir -p "$(dirname "$RECORD_OUT")"
-  # Recurse without --record so the cast captures the demo body only.
   "$ASCIINEMA" record --overwrite -c "$0" "$RECORD_OUT"
   echo "Wrote $RECORD_OUT"
 else
