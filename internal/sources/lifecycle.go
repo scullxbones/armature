@@ -333,14 +333,14 @@ func (l *Lifecycle) entryFromManifest(find func(Manifest) (*SourceEntry, bool), 
 
 func (l *Lifecycle) writeManifest(manifest Manifest) error {
 	if l.fileCommitter != nil && l.worktreePath != "" {
-		return WriteManifestAndCommit(l.manifestPath, l.worktreePath, manifest, l.fileCommitter)
+		return writeManifestAndCommit(l.manifestPath, l.worktreePath, manifest, l.fileCommitter)
 	}
 	return WriteManifest(l.manifestPath, manifest)
 }
 
 func (l *Lifecycle) writeCache(id string, data []byte) error {
 	if l.fileCommitter != nil && l.worktreePath != "" {
-		return WriteCacheAndCommit(l.manifestPath, l.worktreePath, id, data, l.fileCommitter)
+		return writeCacheAndCommit(l.manifestPath, l.worktreePath, id, data, l.fileCommitter)
 	}
 	return WriteCache(l.manifestPath, id, data)
 }

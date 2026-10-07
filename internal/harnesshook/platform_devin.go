@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 )
 
-type DevinAdapter struct{}
+type devinAdapter struct{}
 
-func NewDevinAdapter() *DevinAdapter { return &DevinAdapter{} }
+func newDevinAdapter() *devinAdapter { return &devinAdapter{} }
 
-func (a *DevinAdapter) Name() string { return "devin" }
+func (a *devinAdapter) Name() string { return "devin" }
 
-func (a *DevinAdapter) Capabilities() PlatformCapabilities {
+func (a *devinAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:          true,
 		Stop:                true,
@@ -27,7 +27,7 @@ func (a *DevinAdapter) Capabilities() PlatformCapabilities {
 // OwnsConfig reports whether Armature may write .devin/hooks.json in workdir.
 // Returns true when the file is absent (safe to create) or when it contains the
 // "_armature:managed" key written by WriteConfig.
-func (a *DevinAdapter) OwnsConfig(workdir string) (bool, error) {
+func (a *devinAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, ".devin", "hooks.json")
 	data, err := os.ReadFile(path) //nolint:gosec // G304: internal config path
 	if err != nil {
@@ -46,7 +46,7 @@ func (a *DevinAdapter) OwnsConfig(workdir string) (bool, error) {
 	return ok && managed, nil
 }
 
-func (a *DevinAdapter) WriteConfig(workdir string) error {
+func (a *devinAdapter) WriteConfig(workdir string) error {
 	dir := filepath.Join(workdir, ".devin")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
@@ -71,12 +71,12 @@ func (a *DevinAdapter) WriteConfig(workdir string) error {
 	return writeJSONFile(filepath.Join(dir, "hooks.json"), cfg)
 }
 
-func (a *DevinAdapter) Decode(input []byte) (Event, error) {
+func (a *devinAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
 // Encode serialises the Decision into the JSON payload Devin expects on stdout.
-func (a *DevinAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
+func (a *devinAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	// Devin processes the JSON response on exit 0, so exit code is always 0.
 	return encodeApproveOrBlockJSON(decision)
 }

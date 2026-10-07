@@ -9,13 +9,13 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-type CodexAdapter struct{}
+type codexAdapter struct{}
 
-func NewCodexAdapter() *CodexAdapter { return &CodexAdapter{} }
+func newCodexAdapter() *codexAdapter { return &codexAdapter{} }
 
-func (a *CodexAdapter) Name() string { return "codex" }
+func (a *codexAdapter) Name() string { return "codex" }
 
-func (a *CodexAdapter) Capabilities() PlatformCapabilities {
+func (a *codexAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:          true,
 		Stop:                true,
@@ -27,7 +27,7 @@ func (a *CodexAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
-func (a *CodexAdapter) OwnsConfig(workdir string) (bool, error) {
+func (a *codexAdapter) OwnsConfig(workdir string) (bool, error) {
 	path := filepath.Join(workdir, ".codex", "config.toml")
 	content, err := adapters.ReadFile(path)
 	if err != nil {
@@ -44,7 +44,7 @@ func codexConfigOwned(content string) bool {
 	return strings.TrimSpace(firstLine) == "# armature:managed"
 }
 
-func (a *CodexAdapter) WriteConfig(workdir string) error {
+func (a *codexAdapter) WriteConfig(workdir string) error {
 	codexDir := filepath.Join(workdir, ".codex")
 	if err := os.MkdirAll(codexDir, 0o750); err != nil {
 		return err
@@ -69,11 +69,11 @@ command = "arm harness-hook"
 	return os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600)
 }
 
-func (a *CodexAdapter) Decode(input []byte) (Event, error) {
+func (a *codexAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-func (a *CodexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
+func (a *codexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 	return encodeApproveOrBlockJSON(decision)
 }
 
@@ -111,8 +111,8 @@ func decodeStructuredHookEvent(input []byte) (Event, error) {
 		return Event{}, err
 	}
 
-	exitCode, exitCodeKnown := ExtractExitCode(raw.ToolResponse)
-	output := ExtractOutput(raw.ToolResponse)
+	exitCode, exitCodeKnown := extractExitCode(raw.ToolResponse)
+	output := extractOutput(raw.ToolResponse)
 
 	return Event{
 		Kind:          normalizeEvent(raw.HookEventName),

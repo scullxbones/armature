@@ -17,7 +17,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 			Payload: Payload{Confirmed: true},
 		}
 		got := DecodeDAGMode(op)
-		assert.Equal(t, DAGEraLegacy, got.Era)
+		assert.False(t, got.Canonical())
 		assert.Equal(t, "task-01", got.RootID)
 		assert.True(t, got.Confirmed)
 		assert.Empty(t, got.Confidence)
@@ -30,7 +30,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 			Payload: Payload{IssueID: "epic-01", To: "verified"},
 		}
 		got := DecodeDAGMode(op)
-		assert.Equal(t, DAGEraCanonical, got.Era)
+		assert.True(t, got.Canonical())
 		assert.Equal(t, "epic-01", got.RootID)
 		assert.Equal(t, "verified", got.Confidence)
 		assert.False(t, got.Confirmed)
@@ -42,7 +42,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 			Type: OpDAGTransition, TargetID: "epic-01",
 			Payload: Payload{IssueID: "epic-01"},
 		})
-		assert.Equal(t, DAGEraCanonical, got.Era)
+		assert.True(t, got.Canonical())
 		assert.Equal(t, "verified", got.Confidence)
 	})
 
@@ -52,7 +52,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 			Type: OpDAGTransition, TargetID: "epic-01",
 			Payload: Payload{IssueID: "epic-01", To: "draft"},
 		})
-		assert.Equal(t, DAGEraCanonical, got.Era)
+		assert.True(t, got.Canonical())
 		assert.Equal(t, "draft", got.Confidence)
 	})
 
@@ -62,7 +62,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 			Type: OpDAGTransition, TargetID: "task-01",
 			Payload: Payload{To: "verified"},
 		})
-		assert.Equal(t, DAGEraLegacy, got.Era, "payload.To without IssueID is still arm-confirm era")
+		assert.False(t, got.Canonical(), "payload.To without IssueID is still arm-confirm era")
 		assert.Equal(t, "task-01", got.RootID)
 		assert.Empty(t, got.Confidence)
 	})
@@ -73,7 +73,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 			Type: OpDAGTransition, TargetID: "task-01",
 			Payload: Payload{IssueID: "task-01", Confirmed: true, To: "verified"},
 		})
-		assert.Equal(t, DAGEraCanonical, got.Era)
+		assert.True(t, got.Canonical())
 		assert.False(t, got.Confirmed, "canonical era does not carry the confirm flag")
 		assert.Equal(t, "verified", got.Confidence)
 	})
@@ -84,7 +84,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 			Type: OpDAGTransition, TargetID: "task-01",
 			Payload: Payload{IssueID: "epic-01"},
 		})
-		assert.Equal(t, DAGEraCanonical, got.Era)
+		assert.True(t, got.Canonical())
 		assert.Equal(t, "epic-01", got.RootID)
 	})
 
@@ -97,7 +97,7 @@ func TestDAGEra_REQ_MATENC_S1_T6(t *testing.T) {
 		assert.Empty(t, op.Payload.IssueID)
 
 		got := DecodeDAGMode(op)
-		assert.Equal(t, DAGEraLegacy, got.Era)
+		assert.False(t, got.Canonical())
 		assert.True(t, op.Payload.Confirmed)
 		assert.Empty(t, op.Payload.IssueID)
 

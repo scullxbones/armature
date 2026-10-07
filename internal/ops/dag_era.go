@@ -1,23 +1,23 @@
 package ops
 
-// DAGEra is the decode-on-read classification of a dag-transition payload.
-// Historical `arm confirm` ops set Confirmed on TargetID (legacy). Current
-// `arm dag transition` ops set IssueID and promote subtree confidence
-// (canonical). Decode does not rewrite JSONL: ParseLine must not mutate Payload.
-type DAGEra uint8
+type dagEra uint8
 
 const (
-	DAGEraLegacy DAGEra = iota
-	DAGEraCanonical
+	dagEraLegacy dagEra = iota
+	dagEraCanonical
 )
 
 // DAGMode is the classified dag-transition action. RootID is TargetID for
 // legacy confirm and Payload.IssueID for canonical promote (they may differ).
 type DAGMode struct {
-	Era        DAGEra
+	era        dagEra
 	RootID     string
 	Confidence string
 	Confirmed  bool
+}
+
+func (m DAGMode) Canonical() bool {
+	return m.era == dagEraCanonical
 }
 
 // DecodeDAGMode classifies a dag-transition op. Payload.To is confidence on
@@ -31,13 +31,13 @@ func DecodeDAGMode(op Op) DAGMode {
 			confidence = "verified"
 		}
 		return DAGMode{
-			Era:        DAGEraCanonical,
+			era:        dagEraCanonical,
 			RootID:     op.Payload.IssueID,
 			Confidence: confidence,
 		}
 	}
 	return DAGMode{
-		Era:       DAGEraLegacy,
+		era:       dagEraLegacy,
 		RootID:    op.TargetID,
 		Confirmed: op.Payload.Confirmed,
 	}

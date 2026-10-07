@@ -33,7 +33,7 @@ func TestValidatedOpStream_LoadSingleFile(t *testing.T) {
 	assert.Equal(t, OpCreate, items[0].Op.Type)
 	assert.Equal(t, OpClaim, items[1].Op.Type)
 	assert.Equal(t, logPath, items[0].LogFilename)
-	assert.Equal(t, entry, items[0].Source)
+	assert.Equal(t, entry, items[0].source)
 }
 
 func TestValidatedOpStream_MultipleFiles(t *testing.T) {
@@ -59,8 +59,8 @@ func TestValidatedOpStream_MultipleFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, warnings, 0)
 	assert.Len(t, items, 2)
-	assert.Equal(t, entry1, items[0].Source)
-	assert.Equal(t, entry2, items[1].Source)
+	assert.Equal(t, entry1, items[0].source)
+	assert.Equal(t, entry2, items[1].source)
 	assert.Equal(t, "From A", items[0].Op.Payload.Title)
 	assert.Equal(t, "From B", items[1].Op.Payload.Title)
 }

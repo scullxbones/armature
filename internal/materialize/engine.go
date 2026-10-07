@@ -432,17 +432,16 @@ func (s *State) applyCitationAccepted(op ops.Op) error {
 
 func (s *State) applyDAGTransition(op ops.Op) error {
 	mode := ops.DecodeDAGMode(op)
-	switch mode.Era {
-	case ops.DAGEraCanonical:
+	if mode.Canonical() {
 		s.promoteSubtreeConfidence(mode.RootID, mode.Confidence, op.Timestamp)
-	default:
-		issue, ok := s.Issues[mode.RootID]
-		if !ok {
-			return nil
-		}
-		issue.Provenance.DAGConfirmed = mode.Confirmed
-		issue.Updated = op.Timestamp
+		return nil
 	}
+	issue, ok := s.Issues[mode.RootID]
+	if !ok {
+		return nil
+	}
+	issue.Provenance.DAGConfirmed = mode.Confirmed
+	issue.Updated = op.Timestamp
 	return nil
 }
 

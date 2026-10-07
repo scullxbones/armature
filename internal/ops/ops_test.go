@@ -188,7 +188,7 @@ func TestGenerateSchema(t *testing.T) {
 func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
 	t.Parallel()
 	schema := GenerateSchema()
-	documentedTypes := SchemaDocumentedOpTypes()
+	documentedTypes := schemaDocumentedOpTypes()
 
 	documentedSet := make(map[string]bool, len(documentedTypes))
 	for _, opType := range documentedTypes {

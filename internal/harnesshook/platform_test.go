@@ -13,7 +13,7 @@ import (
 func TestClaudeAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -27,7 +27,7 @@ func TestClaudeAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 func TestCodexAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -41,7 +41,7 @@ func TestCodexAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 func TestDevinAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -54,7 +54,7 @@ func TestDevinAdapterWritesConfigCallingArmHarnessHook(t *testing.T) {
 
 func TestClaudeAdapterEncodesPreToolUseBlockWithPermissionDenial(t *testing.T) {
 	t.Parallel()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 	event := Event{Kind: EventPreToolUse}
 
 	out, code, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "blocked"})
@@ -71,7 +71,7 @@ func TestClaudeAdapterEncodesPreToolUseBlockWithPermissionDenial(t *testing.T) {
 
 func TestClaudeAdapterEncodesStopBlockWithDecisionBlock(t *testing.T) {
 	t.Parallel()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 	event := Event{Kind: EventStop}
 
 	out, code, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "stop blocked"})
@@ -87,7 +87,7 @@ func TestClaudeAdapterEncodesStopBlockWithDecisionBlock(t *testing.T) {
 
 func TestCodexAdapterEncodesBlockDecisionWithBlockNotDeny(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	event := Event{Kind: EventPreToolUse}
 
 	out, _, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "out of scope"})
@@ -106,7 +106,7 @@ func TestClaudeAdapterWriteConfigPreservesExistingSettings(t *testing.T) {
 	existing := `{"permissions":{"allow":["Bash(git status)"]},"hooks":{}}`
 	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(existing), 0o644))
 
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 	require.NoError(t, adapter.WriteConfig(dir))
 
 	data, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
@@ -117,7 +117,7 @@ func TestClaudeAdapterWriteConfigPreservesExistingSettings(t *testing.T) {
 
 func TestAdaptersExposeCapabilities(t *testing.T) {
 	t.Parallel()
-	adapters := []PlatformAdapter{NewClaudeAdapter(), NewCodexAdapter(), NewDevinAdapter()}
+	adapters := []PlatformAdapter{newClaudeAdapter(), newCodexAdapter(), newDevinAdapter()}
 	for _, adapter := range adapters {
 		caps := adapter.Capabilities()
 		assert.True(t, caps.PreToolUse, adapter.Name())
@@ -128,7 +128,7 @@ func TestAdaptersExposeCapabilities(t *testing.T) {
 
 func TestCodexAdapterDecodesApplyPatchPath(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	input := map[string]any{
 		"hook_event_name": "PreToolUse",
 		"tool_name":       "apply_patch",
@@ -146,36 +146,36 @@ func TestCodexAdapterDecodesApplyPatchPath(t *testing.T) {
 	assert.Equal(t, []string{"internal/harnesshook/evaluator.go"}, event.Paths)
 }
 
-func TestAdapterRegistryReturnsClaudeAdapterForEmptyPlatform(t *testing.T) {
+func TestAdapterRegistryReturnsclaudeAdapterForEmptyPlatform(t *testing.T) {
 	t.Parallel()
 	adapter, err := NewAdapterForPlatform("")
 	require.NoError(t, err)
 	assert.Equal(t, "claude", adapter.Name())
-	assert.IsType(t, (*ClaudeAdapter)(nil), adapter)
+	assert.IsType(t, (*claudeAdapter)(nil), adapter)
 }
 
-func TestAdapterRegistryReturnsClaudeAdapterForClaudePlatform(t *testing.T) {
+func TestAdapterRegistryReturnsclaudeAdapterForClaudePlatform(t *testing.T) {
 	t.Parallel()
 	adapter, err := NewAdapterForPlatform("claude")
 	require.NoError(t, err)
 	assert.Equal(t, "claude", adapter.Name())
-	assert.IsType(t, (*ClaudeAdapter)(nil), adapter)
+	assert.IsType(t, (*claudeAdapter)(nil), adapter)
 }
 
-func TestAdapterRegistryReturnsCodexAdapterForCodexPlatform(t *testing.T) {
+func TestAdapterRegistryReturnscodexAdapterForCodexPlatform(t *testing.T) {
 	t.Parallel()
 	adapter, err := NewAdapterForPlatform("codex")
 	require.NoError(t, err)
 	assert.Equal(t, "codex", adapter.Name())
-	assert.IsType(t, (*CodexAdapter)(nil), adapter)
+	assert.IsType(t, (*codexAdapter)(nil), adapter)
 }
 
-func TestAdapterRegistryReturnsDevinAdapterForDevinPlatform(t *testing.T) {
+func TestAdapterRegistryReturnsdevinAdapterForDevinPlatform(t *testing.T) {
 	t.Parallel()
 	adapter, err := NewAdapterForPlatform("devin")
 	require.NoError(t, err)
 	assert.Equal(t, "devin", adapter.Name())
-	assert.IsType(t, (*DevinAdapter)(nil), adapter)
+	assert.IsType(t, (*devinAdapter)(nil), adapter)
 }
 
 func TestAdapterRegistryErrorsOnUnknownPlatform(t *testing.T) {
@@ -225,7 +225,7 @@ func TestClaudeAdapterWriteConfigPreservesUserManagedHooks(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), existingBytes, 0o644))
 
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 	require.NoError(t, adapter.WriteConfig(dir))
 
 	data, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
@@ -281,7 +281,7 @@ func TestClaudeAdapterWriteConfigPreservesUserManagedHooks(t *testing.T) {
 func TestClaudeAdapterWriteConfigDeduplicates(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -386,7 +386,7 @@ func TestClaudeAdapterWriteConfigDeduplicatesWithUserHooks(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(claudeDir, "settings.json"), existingBytes, 0o644))
 
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -456,7 +456,7 @@ func TestClaudeAdapterWriteConfigDeduplicatesWithUserHooks(t *testing.T) {
 func TestClaudeAdapterOwnsConfigAlwaysTrue(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 
 	owns, err := adapter.OwnsConfig(dir)
 
@@ -472,7 +472,7 @@ func TestCodexAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
 	content := "# armature:managed\n[[hooks.PreToolUse]]\n"
 	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600))
 
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
@@ -487,7 +487,7 @@ func TestCodexAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600))
 
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
@@ -500,7 +500,7 @@ func TestCodexAdapterIgnoresLegacyRootCodexToml(t *testing.T) {
 	content := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(content), 0o600))
 
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
@@ -515,7 +515,7 @@ func TestCodexAdapterOwnsConfigWhenUserManaged(t *testing.T) {
 	content := "[hooks]\npre_tool_use = \"some-other-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(content), 0o600))
 
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
@@ -525,7 +525,7 @@ func TestCodexAdapterOwnsConfigWhenUserManaged(t *testing.T) {
 func TestCodexAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 
 	owns, err := adapter.OwnsConfig(dir)
 
@@ -541,7 +541,7 @@ func TestDevinAdapterOwnsConfigWhenMarkerPresent(t *testing.T) {
 	content := `{"_armature:managed": true, "hooks": {}}`
 	require.NoError(t, os.WriteFile(filepath.Join(devinDir, "hooks.json"), []byte(content), 0o600))
 
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
@@ -556,7 +556,7 @@ func TestDevinAdapterOwnsConfigWhenMarkerAbsent(t *testing.T) {
 	content := `{"hooks": {}}`
 	require.NoError(t, os.WriteFile(filepath.Join(devinDir, "hooks.json"), []byte(content), 0o600))
 
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
@@ -571,7 +571,7 @@ func TestDevinAdapterDoesNotOwnPreMarkerConfig(t *testing.T) {
 	content := `{"hooks": {"PreToolUse": [{"matcher": "edit|exec", "command": "arm harness-hook"}]}}`
 	require.NoError(t, os.WriteFile(filepath.Join(devinDir, "hooks.json"), []byte(content), 0o600))
 
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 	owns, err := adapter.OwnsConfig(dir)
 
 	require.NoError(t, err)
@@ -581,7 +581,7 @@ func TestDevinAdapterDoesNotOwnPreMarkerConfig(t *testing.T) {
 func TestDevinAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 
 	owns, err := adapter.OwnsConfig(dir)
 
@@ -592,7 +592,7 @@ func TestDevinAdapterOwnsConfigWhenFileDoesNotExist(t *testing.T) {
 func TestCodexAdapterWriteConfigIncludesMarker(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -606,7 +606,7 @@ func TestCodexAdapterWriteConfigIncludesMarker(t *testing.T) {
 func TestDevinAdapterWriteConfigIncludesMarker(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -621,7 +621,7 @@ func TestDevinAdapterWriteConfigIncludesMarker(t *testing.T) {
 func TestCodexAdapterWriteConfigLeavesLegacyRootFileAlone(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 
 	legacyBody := "[hooks]\npre_tool_use = \"arm harness-hook\"\nstop = \"arm harness-hook\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex.toml"), []byte(legacyBody), 0o600))
@@ -638,7 +638,7 @@ func TestCodexAdapterWriteConfigLeavesLegacyRootFileAlone(t *testing.T) {
 
 func TestCodexAdapterEncodeApproveDecision(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	event := Event{Kind: EventPreToolUse}
 
 	out, code, err := adapter.Encode(event, Decision{Action: DecisionAllow})
@@ -649,7 +649,7 @@ func TestCodexAdapterEncodeApproveDecision(t *testing.T) {
 
 func TestCodexAdapterNormalizeEventPostToolUse(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -659,7 +659,7 @@ func TestCodexAdapterNormalizeEventPostToolUse(t *testing.T) {
 
 func TestCodexAdapterNormalizeEventPostToolUseLower(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"post_tool_use","tool_name":"Bash","tool_input":{}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -669,7 +669,7 @@ func TestCodexAdapterNormalizeEventPostToolUseLower(t *testing.T) {
 
 func TestClaudeAdapterDecodePropagatesExitCodeAndOutputFromToolResponse(t *testing.T) {
 	t.Parallel()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 	payload := []byte(`{
 		"hook_event_name": "PostToolUse",
 		"tool_name": "Bash",
@@ -685,7 +685,7 @@ func TestClaudeAdapterDecodePropagatesExitCodeAndOutputFromToolResponse(t *testi
 
 func TestCodexAdapterDecodePropagatesExitCodeAndOutputFromToolResponse(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{
 		"hook_event_name": "post_tool_use",
 		"tool_name": "shell",
@@ -701,7 +701,7 @@ func TestCodexAdapterDecodePropagatesExitCodeAndOutputFromToolResponse(t *testin
 
 func TestDecodePreToolUseHasZeroExitCodeAndNilOutput(t *testing.T) {
 	t.Parallel()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -712,7 +712,7 @@ func TestDecodePreToolUseHasZeroExitCodeAndNilOutput(t *testing.T) {
 
 func TestCodexAdapterNormalizeEventStop(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"Stop","tool_name":"","tool_input":{}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -722,7 +722,7 @@ func TestCodexAdapterNormalizeEventStop(t *testing.T) {
 
 func TestCodexAdapterNormalizeEventStopLower(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"stop","tool_name":"","tool_input":{}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -732,7 +732,7 @@ func TestCodexAdapterNormalizeEventStopLower(t *testing.T) {
 
 func TestCodexAdapterNormalizeEventUnknown(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"CustomEvent","tool_name":"","tool_input":{}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -742,7 +742,7 @@ func TestCodexAdapterNormalizeEventUnknown(t *testing.T) {
 
 func TestCodexAdapterExtractPathsWithPathKey(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"path":"/some/file.go"}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -752,7 +752,7 @@ func TestCodexAdapterExtractPathsWithPathKey(t *testing.T) {
 
 func TestCodexAdapterExtractPathsWithChangesArray(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"changes":[{"path":"a.go"},{"path":"b.go"}]}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -762,7 +762,7 @@ func TestCodexAdapterExtractPathsWithChangesArray(t *testing.T) {
 
 func TestCodexAdapterExtractCommandWithCmdKey(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"cmd":"ls -la"}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -772,7 +772,7 @@ func TestCodexAdapterExtractCommandWithCmdKey(t *testing.T) {
 
 func TestCodexAdapterExtractCommandFallback(t *testing.T) {
 	t.Parallel()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"input":"something"}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -782,7 +782,7 @@ func TestCodexAdapterExtractCommandFallback(t *testing.T) {
 
 func TestDevinAdapterDecode_PreToolUse(t *testing.T) {
 	t.Parallel()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 	payload := []byte(`{"hook_event_name":"PreToolUse","tool_name":"edit","tool_input":{}}`)
 
 	evt, err := adapter.Decode(payload)
@@ -792,7 +792,7 @@ func TestDevinAdapterDecode_PreToolUse(t *testing.T) {
 
 func TestDevinAdapterEncode_ApproveDecision(t *testing.T) {
 	t.Parallel()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 
 	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: DecisionAllow})
 	require.NoError(t, err)
@@ -802,7 +802,7 @@ func TestDevinAdapterEncode_ApproveDecision(t *testing.T) {
 
 func TestDevinAdapterEncode_BlockDecision(t *testing.T) {
 	t.Parallel()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 
 	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: DecisionBlock, Message: "blocked"})
 	require.NoError(t, err)
@@ -813,7 +813,7 @@ func TestDevinAdapterEncode_BlockDecision(t *testing.T) {
 func TestClaudeAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -860,7 +860,7 @@ func TestClaudeAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
 func TestCodexAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -875,7 +875,7 @@ func TestCodexAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
 func TestDevinAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -909,7 +909,7 @@ func TestDevinAdapterWriteConfigInstallsPostToolUseHooks(t *testing.T) {
 func TestClaudeAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewClaudeAdapter()
+	adapter := newClaudeAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -954,7 +954,7 @@ func TestClaudeAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
 func TestCodexAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewCodexAdapter()
+	adapter := newCodexAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 
@@ -976,7 +976,7 @@ func TestCodexAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
 func TestDevinAdapterWriteConfigDeduplicatesPostToolUseHooks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	adapter := NewDevinAdapter()
+	adapter := newDevinAdapter()
 
 	require.NoError(t, adapter.WriteConfig(dir))
 

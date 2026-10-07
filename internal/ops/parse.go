@@ -50,7 +50,7 @@ func ParseLine(line []byte) (Op, error) {
 			return Op{}, fmt.Errorf("invalid schema_version: %w", err)
 		}
 	}
-	if err := CheckSchemaVersion(op.SchemaVersion); err != nil {
+	if err := checkSchemaVersion(op.SchemaVersion); err != nil {
 		return Op{}, err
 	}
 
@@ -69,8 +69,8 @@ func MarshalOp(op Op) ([]byte, error) {
 }
 
 func marshalVersioned(opType, targetID string, timestamp int64, workerID string, payload json.RawMessage, schemaVersion int) ([]byte, error) {
-	version := EffectiveSchemaVersion(schemaVersion)
-	if err := CheckSchemaVersion(version); err != nil {
+	version := effectiveSchemaVersion(schemaVersion)
+	if err := checkSchemaVersion(version); err != nil {
 		return nil, err
 	}
 	arr := []any{opType, targetID, timestamp, workerID, payload, version}

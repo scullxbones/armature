@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 )
 
-type ClaudeAdapter struct{}
+type claudeAdapter struct{}
 
-func NewClaudeAdapter() *ClaudeAdapter { return &ClaudeAdapter{} }
+func newClaudeAdapter() *claudeAdapter { return &claudeAdapter{} }
 
 func removeArmatureHooks(hooksArray []any) []any {
 	var filtered []any
@@ -54,9 +54,9 @@ func mergeArmatureHookEvent(hooks map[string]any, key string, entry map[string]a
 	hooks[key] = append(merged, entry)
 }
 
-func (a *ClaudeAdapter) Name() string { return "claude" }
+func (a *claudeAdapter) Name() string { return "claude" }
 
-func (a *ClaudeAdapter) Capabilities() PlatformCapabilities {
+func (a *claudeAdapter) Capabilities() PlatformCapabilities {
 	return PlatformCapabilities{
 		PreToolUse:          true,
 		Stop:                true,
@@ -68,11 +68,11 @@ func (a *ClaudeAdapter) Capabilities() PlatformCapabilities {
 	}
 }
 
-func (a *ClaudeAdapter) OwnsConfig(workdir string) (bool, error) {
+func (a *claudeAdapter) OwnsConfig(workdir string) (bool, error) {
 	return true, nil
 }
 
-func (a *ClaudeAdapter) WriteConfig(workdir string) error {
+func (a *claudeAdapter) WriteConfig(workdir string) error {
 	dir := filepath.Join(workdir, ".claude")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
@@ -124,11 +124,11 @@ func (a *ClaudeAdapter) WriteConfig(workdir string) error {
 	return writeJSONFile(settingsPath, cfg)
 }
 
-func (a *ClaudeAdapter) Decode(input []byte) (Event, error) {
+func (a *claudeAdapter) Decode(input []byte) (Event, error) {
 	return decodeStructuredHookEvent(input)
 }
 
-func (a *ClaudeAdapter) Encode(event Event, decision Decision) ([]byte, int, error) {
+func (a *claudeAdapter) Encode(event Event, decision Decision) ([]byte, int, error) {
 	if decision.Action != DecisionBlock {
 		data, err := json.Marshal(map[string]any{
 			"continue":       true,

@@ -8,11 +8,11 @@ import "fmt"
 func NewAdapterForPlatform(platform string) (PlatformAdapter, error) {
 	switch platform {
 	case "", "claude":
-		return NewClaudeAdapter(), nil
+		return newClaudeAdapter(), nil
 	case "codex":
-		return NewCodexAdapter(), nil
+		return newCodexAdapter(), nil
 	case "devin":
-		return NewDevinAdapter(), nil
+		return newDevinAdapter(), nil
 	default:
 		return nil, fmt.Errorf("unknown harness hook platform %q", platform)
 	}

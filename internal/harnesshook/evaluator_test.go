@@ -13,7 +13,7 @@ import (
 func TestEvaluatorBlocksOutOfScopeEdit(t *testing.T) {
 	t.Parallel()
 	service := harnesspolicy.NewVerificationService()
-	evaluator := NewEvaluator(EvaluatorConfig{
+	evaluator := newEvaluator(evaluatorConfig{
 		ScopePolicy:         harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 		VerificationService: &service,
 	})
@@ -31,7 +31,7 @@ func TestEvaluatorBlocksOutOfScopeEdit(t *testing.T) {
 
 func TestEvaluatorAllowsInScopeEdit(t *testing.T) {
 	t.Parallel()
-	evaluator := NewEvaluator(EvaluatorConfig{
+	evaluator := newEvaluator(evaluatorConfig{
 		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 	})
 
@@ -47,7 +47,7 @@ func TestEvaluatorAllowsInScopeEdit(t *testing.T) {
 
 func TestEvaluatorBlocksGitCommit(t *testing.T) {
 	t.Parallel()
-	evaluator := NewEvaluator(EvaluatorConfig{
+	evaluator := newEvaluator(evaluatorConfig{
 		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 	})
 
@@ -64,7 +64,7 @@ func TestEvaluatorBlocksGitCommit(t *testing.T) {
 
 func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
 	t.Parallel()
-	evaluator := NewEvaluator(EvaluatorConfig{
+	evaluator := newEvaluator(evaluatorConfig{
 		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 	})
 
@@ -90,7 +90,7 @@ func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
 func TestEvaluatorRunsStopVerification(t *testing.T) {
 	t.Parallel()
 	service := harnesspolicy.NewVerificationService()
-	evaluator := NewEvaluator(EvaluatorConfig{
+	evaluator := newEvaluator(evaluatorConfig{
 		ScopePolicy:         harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
 		VerificationService: &service,
 		VerificationInput: harnesspolicy.VerificationRequest{
@@ -111,7 +111,7 @@ func TestEvaluatorRunsStopVerification(t *testing.T) {
 func TestEvaluatorBlocksStopWhenVerificationFails(t *testing.T) {
 	t.Parallel()
 	service := harnesspolicy.NewVerificationService()
-	evaluator := NewEvaluator(EvaluatorConfig{
+	evaluator := newEvaluator(evaluatorConfig{
 		VerificationService: &service,
 		VerificationInput: harnesspolicy.VerificationRequest{
 			Acceptance: json.RawMessage(`["human review only"]`),
