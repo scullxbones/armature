@@ -6,13 +6,11 @@ import (
 
 // AppendOp appends a single op to the log file as a JSONL line.
 func AppendOp(logPath string, op Op) error {
-	_, err := AppendOpIf(logPath, op, nil)
+	_, err := appendOpIf(logPath, op, nil)
 	return err
 }
 
-// AppendOpIf marshals op and appends it unless proceed returns false.
-// proceed runs while the per-log append lock is held. A nil proceed always writes.
-func AppendOpIf(logPath string, op Op, proceed func() (bool, error)) (bool, error) {
+func appendOpIf(logPath string, op Op, proceed func() (bool, error)) (bool, error) {
 	line, err := MarshalOp(op)
 	if err != nil {
 		return false, err

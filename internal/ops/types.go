@@ -154,7 +154,7 @@ type Payload struct {
 // encoding/json omitempty means absent optional fields (including token
 // counts on legacy transition ops) match explicit zeros and do not need a
 // separate equality rule.
-func PayloadsEqual(a, b Payload) bool {
+func payloadsEqual(a, b Payload) bool {
 	left, err := json.Marshal(a)
 	if err != nil {
 		return false
@@ -178,7 +178,7 @@ func LastTransitionPayload(all []Op, issueID string) (Payload, bool) {
 	return last, found
 }
 
-func RecordedTransitionPayload(status, outcome, branch, pr string, last Payload, hasLast bool) Payload {
+func recordedTransitionPayload(status, outcome, branch, pr string, last Payload, hasLast bool) Payload {
 	if hasLast && last.To == status {
 		return last
 	}
@@ -190,5 +190,5 @@ func IdenticalTransition(all []Op, issueID, status, outcome, branch, pr string, 
 		return false
 	}
 	last, hasLast := LastTransitionPayload(all, issueID)
-	return PayloadsEqual(proposed, RecordedTransitionPayload(status, outcome, branch, pr, last, hasLast))
+	return payloadsEqual(proposed, recordedTransitionPayload(status, outcome, branch, pr, last, hasLast))
 }

@@ -7,25 +7,25 @@ import (
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 )
 
-// EvaluatorConfig holds the policy inputs needed to construct a DefaultEvaluator.
-type EvaluatorConfig struct {
+// evaluatorConfig holds the policy inputs needed to construct a defaultEvaluator.
+type evaluatorConfig struct {
 	ScopePolicy         harnesspolicy.ScopePolicy
 	VerificationService *harnesspolicy.VerificationService
 	VerificationInput   harnesspolicy.VerificationRequest
 }
 
-// DefaultEvaluator is the standard policy evaluator for harness hook events.
-type DefaultEvaluator struct {
-	cfg EvaluatorConfig
+// defaultEvaluator is the standard policy evaluator for harness hook events.
+type defaultEvaluator struct {
+	cfg evaluatorConfig
 }
 
-// NewEvaluator constructs a DefaultEvaluator from the provided config.
-func NewEvaluator(cfg EvaluatorConfig) *DefaultEvaluator {
-	return &DefaultEvaluator{cfg: cfg}
+// newEvaluator constructs a defaultEvaluator from the provided config.
+func newEvaluator(cfg evaluatorConfig) *defaultEvaluator {
+	return &defaultEvaluator{cfg: cfg}
 }
 
 // Evaluate applies scope and verification policy to the event and returns a Decision.
-func (e *DefaultEvaluator) Evaluate(_ context.Context, event Event) (Decision, error) {
+func (e *defaultEvaluator) Evaluate(_ context.Context, event Event) (Decision, error) {
 	switch event.Kind {
 	case EventPreToolUse:
 		return e.evaluatePreToolUse(event), nil
@@ -36,7 +36,7 @@ func (e *DefaultEvaluator) Evaluate(_ context.Context, event Event) (Decision, e
 	}
 }
 
-func (e *DefaultEvaluator) evaluatePreToolUse(event Event) Decision {
+func (e *defaultEvaluator) evaluatePreToolUse(event Event) Decision {
 	if isDirectCommitCommand(event.Command) {
 		return Decision{
 			Action:  DecisionBlock,
@@ -53,7 +53,7 @@ func (e *DefaultEvaluator) evaluatePreToolUse(event Event) Decision {
 	return Decision{Action: DecisionAllow, Message: "path is within task scope"}
 }
 
-func (e *DefaultEvaluator) evaluateStop() Decision {
+func (e *defaultEvaluator) evaluateStop() Decision {
 	if e.cfg.VerificationService == nil {
 		return Decision{Action: DecisionAllow, Message: "no verification service configured"}
 	}

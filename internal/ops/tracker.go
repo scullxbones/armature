@@ -24,20 +24,17 @@ func (NoTracker) Increment() (int, error) { return 0, nil }
 func (NoTracker) Reset() error            { return nil }
 func (NoTracker) Count() (int, error)     { return 0, nil }
 
-// FilePushTracker persists the pending push count to a file at
-// .armature/state/pending-push-count.
-type FilePushTracker struct {
+type filePushTracker struct {
 	Path string
 }
 
-// NewFilePushTracker creates a FilePushTracker writing to stateDir/pending-push-count.
-func NewFilePushTracker(stateDir string) *FilePushTracker {
-	return &FilePushTracker{
+func NewFilePushTracker(stateDir string) *filePushTracker {
+	return &filePushTracker{
 		Path: filepath.Join(stateDir, "pending-push-count"),
 	}
 }
 
-func (f *FilePushTracker) Count() (int, error) {
+func (f *filePushTracker) Count() (int, error) {
 	data, err := adapters.ReadFile(f.Path)
 	if err != nil {
 		if data == nil {
@@ -52,7 +49,7 @@ func (f *FilePushTracker) Count() (int, error) {
 	return n, nil
 }
 
-func (f *FilePushTracker) Increment() (int, error) {
+func (f *filePushTracker) Increment() (int, error) {
 	n, err := f.Count()
 	if err != nil {
 		return 0, err
@@ -64,11 +61,11 @@ func (f *FilePushTracker) Increment() (int, error) {
 	return n, nil
 }
 
-func (f *FilePushTracker) Reset() error {
+func (f *filePushTracker) Reset() error {
 	return f.write(0)
 }
 
-func (f *FilePushTracker) write(n int) error {
+func (f *filePushTracker) write(n int) error {
 	if err := adapters.MkdirAll(filepath.Dir(f.Path), 0755); err != nil {
 		return fmt.Errorf("mkdir pending-push-count: %w", err)
 	}

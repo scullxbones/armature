@@ -257,7 +257,7 @@ func TestResolveBindingFromEvent_DevinExec_UsesSessionBinding(t *testing.T) {
 	}
 	sessionGitDir := "/session/git/dir"
 
-	devinAdapter := NewDevinAdapter()
+	devinAdapter := newDevinAdapter()
 	devinShellTools := devinAdapter.Capabilities().SupportedShellTools
 
 	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, devinShellTools)
@@ -284,7 +284,7 @@ func TestResolveBindingFromEvent_CodexShell_UsesSessionBinding(t *testing.T) {
 	issueIDFile := filepath.Join(worktreeGitDir, "armature-issue-id")
 	require.NoError(t, os.WriteFile(issueIDFile, []byte("worktree-binding"), 0o644))
 
-	codexAdapter := NewCodexAdapter()
+	codexAdapter := newCodexAdapter()
 	codexShellTools := codexAdapter.Capabilities().SupportedShellTools
 	require.Contains(t, codexShellTools, "shell")
 	require.Contains(t, codexShellTools, "local_shell")

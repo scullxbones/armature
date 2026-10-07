@@ -555,7 +555,7 @@ func TestAppendActivity_EmptyOrMissingCommandWritesNothing_REQ_NOCOMMENTS(t *tes
 	t.Run("event with empty command", func(t *testing.T) {
 		t.Parallel()
 		gitDir := newGitDir(t)
-		adapter := NewCodexAdapter()
+		adapter := newCodexAdapter()
 		evt, err := adapter.Decode([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":""},"tool_response":{"exit_code":0}}`))
 		require.NoError(t, err)
 		require.Equal(t, "", evt.Command)
@@ -566,7 +566,7 @@ func TestAppendActivity_EmptyOrMissingCommandWritesNothing_REQ_NOCOMMENTS(t *tes
 	t.Run("event with no tool_input", func(t *testing.T) {
 		t.Parallel()
 		gitDir := newGitDir(t)
-		adapter := NewCodexAdapter()
+		adapter := newCodexAdapter()
 		evt, err := adapter.Decode([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":{"exit_code":0}}`))
 		require.NoError(t, err)
 		require.Equal(t, "", evt.Command)

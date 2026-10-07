@@ -23,9 +23,9 @@ func TestOpsVersionRejectsNewer_REQ_TOPTIER_S6_T2(t *testing.T) {
 	var newerErr *NewerSchemaVersionError
 	require.ErrorAs(t, err, &newerErr)
 	assert.Equal(t, newer, newerErr.Seen)
-	assert.True(t, IsNewerSchemaVersion(err))
-	assert.Error(t, CheckSchemaVersion(newer))
-	assert.True(t, IsNewerSchemaVersion(CheckSchemaVersion(newer)))
+	assert.True(t, isNewerSchemaVersion(err))
+	assert.Error(t, checkSchemaVersion(newer))
+	assert.True(t, isNewerSchemaVersion(checkSchemaVersion(newer)))
 
 	legacy := []byte(`["create","LEGACY-1",1000,"worker-a",{"title":"legacy","type":"task"}]`)
 	op, err := ParseLine(legacy)
@@ -50,8 +50,8 @@ func TestOpsVersionRejectsNewer_REQ_TOPTIER_S6_T2(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, CurrentSchemaVersion, roundTrip.SchemaVersion)
 
-	assert.Equal(t, CurrentSchemaVersion, EffectiveSchemaVersion(0))
-	assert.Equal(t, 2, EffectiveSchemaVersion(2))
-	assert.Error(t, CheckSchemaVersion(0))
-	assert.NoError(t, CheckSchemaVersion(CurrentSchemaVersion))
+	assert.Equal(t, CurrentSchemaVersion, effectiveSchemaVersion(0))
+	assert.Equal(t, 2, effectiveSchemaVersion(2))
+	assert.Error(t, checkSchemaVersion(0))
+	assert.NoError(t, checkSchemaVersion(CurrentSchemaVersion))
 }

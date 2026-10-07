@@ -1,9 +1,5 @@
 package harnesshook
 
-import (
-	"context"
-)
-
 // EventKind identifies the phase of a hook event (pre-tool-use, post-tool-use, stop).
 type EventKind string
 
@@ -64,9 +60,4 @@ type PlatformAdapter interface {
 	Decode(input []byte) (Event, error)
 	// Encode returns (payload, exitCode, err). exitCode is non-zero only when the platform uses exit status to signal blocking.
 	Encode(event Event, decision Decision) ([]byte, int, error)
-}
-
-// Evaluator applies policy to a hook event and returns an allow/block Decision.
-type Evaluator interface {
-	Evaluate(ctx context.Context, event Event) (Decision, error)
 }

@@ -26,7 +26,7 @@ func TestAppendAndReadGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	}
 	require.NoError(t, AppendGateEvidence(logPath, "worker-1", ev))
 
-	got, err := ReadGateEvidence(logPath)
+	got, err := readGateEvidence(logPath)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, ev, got[0])
@@ -102,7 +102,7 @@ func TestAppendGateEvidenceAndCommit_NoWorktreeSkipsCommit(t *testing.T) {
 	fc := &fakeCommitter{}
 	require.NoError(t, AppendGateEvidenceAndCommit(logPath, "", "worker-1", testEvidence(), fc))
 	assert.Empty(t, fc.message)
-	got, err := ReadGateEvidence(logPath)
+	got, err := readGateEvidence(logPath)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 }
@@ -161,7 +161,7 @@ func TestReadGateEvidence_InvalidPayloadErrors_REQ_LNGHZN_S10_T3(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker.log")
 	require.NoError(t, os.WriteFile(logPath, []byte(`["gate-evidence","full",1,"w","not-an-object"]`+"\n"), 0o644))
-	_, err := ReadGateEvidence(logPath)
+	_, err := readGateEvidence(logPath)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid")
 }
@@ -172,7 +172,7 @@ func TestReadGateEvidence_UnrelatedCorruptSkipped_REQ_LNGHZN_S10_T3(t *testing.T
 	logPath := filepath.Join(dir, "worker.log")
 	require.NoError(t, os.WriteFile(logPath, []byte("not-json\n"), 0o644))
 	require.NoError(t, AppendGateEvidence(logPath, "w1", testEvidence()))
-	got, err := ReadGateEvidence(logPath)
+	got, err := readGateEvidence(logPath)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 }
@@ -194,7 +194,7 @@ func TestAppendGateEvidenceConcurrent_REQ_LNGHZN_S10_T3(t *testing.T) {
 	for range 2 {
 		require.NoError(t, <-errCh)
 	}
-	got, err := ReadGateEvidence(logPath)
+	got, err := readGateEvidence(logPath)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 }

@@ -3,6 +3,7 @@ package ops_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestAppendAndCommitIf_OverlappingIdenticalSkip_REQ_AOC_S4_T1(t *testing.T) 
 			return false, err
 		}
 		last, ok := ops.LastTransitionPayload(all, "T1")
-		if ok && ops.PayloadsEqual(last, op.Payload) {
+		if ok && reflect.DeepEqual(last, op.Payload) {
 			return false, nil
 		}
 		return true, nil

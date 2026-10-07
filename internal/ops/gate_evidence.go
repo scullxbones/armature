@@ -69,7 +69,7 @@ func AppendGateEvidenceAndCommit(logPath, worktreePath, workerID string, ev Gate
 // ReadGateEvidence returns gate-evidence payloads from a single worker log.
 // Unrelated corrupt lines are skipped (same as ReadLog). A line whose type is
 // gate-evidence but whose payload cannot be decoded is an error.
-func ReadGateEvidence(logPath string) ([]GateEvidence, error) {
+func readGateEvidence(logPath string) ([]GateEvidence, error) {
 	lines, err := adapters.ReadLogFromOffset(logPath, 0)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func ReadAllGateEvidence(opsDir string) ([]GateEvidence, error) {
 	}
 	var out []GateEvidence
 	for _, file := range files {
-		evs, err := ReadGateEvidence(file)
+		evs, err := readGateEvidence(file)
 		if err != nil {
 			return nil, err
 		}

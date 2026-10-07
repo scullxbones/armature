@@ -29,16 +29,12 @@ func (e *NewerSchemaVersionError) Error() string {
 	)
 }
 
-// IsNewerSchemaVersion reports whether err is (or wraps) a newer-schema rejection.
-func IsNewerSchemaVersion(err error) bool {
+func isNewerSchemaVersion(err error) bool {
 	var newer *NewerSchemaVersionError
 	return errors.As(err, &newer)
 }
 
-// CheckSchemaVersion reports whether v is readable by this binary. Versions
-// newer than CurrentSchemaVersion fail loudly so an older arm never silently
-// mis-replays ops it cannot understand.
-func CheckSchemaVersion(v int) error {
+func checkSchemaVersion(v int) error {
 	if v < 1 {
 		return fmt.Errorf("ops schema version %d is invalid: versions start at 1", v)
 	}
@@ -48,9 +44,7 @@ func CheckSchemaVersion(v int) error {
 	return nil
 }
 
-// EffectiveSchemaVersion returns the version to emit when marshaling. Zero
-// (the Go zero value on Op) means "write current".
-func EffectiveSchemaVersion(v int) int {
+func effectiveSchemaVersion(v int) int {
 	if v == 0 {
 		return CurrentSchemaVersion
 	}

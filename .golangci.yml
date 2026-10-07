@@ -97,7 +97,6 @@ linters:
             - "github.com/scullxbones/armature/internal/issueref"
             - "github.com/scullxbones/armature/internal/oporder"
             - "github.com/scullxbones/armature/internal/ops"
-            - "github.com/scullxbones/armature/internal/oporder"
             - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/traceability"
         sources-boundary:
@@ -144,6 +143,17 @@ linters:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/materialize"
             - "github.com/scullxbones/armature/internal/ops"
+        harnesshook-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/harnesshook/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/clock"
+            - "github.com/scullxbones/armature/internal/harnesspolicy"
+            - "github.com/scullxbones/armature/internal/worktree"
     errcheck:
       check-type-assertions: true
       check-blank: true

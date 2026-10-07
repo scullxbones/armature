@@ -23,7 +23,7 @@ func AppendAndCommit(logPath, worktreePath string, op Op, gc GitCommitter) error
 // per-log lock is held. A skipped append does not commit. A nil proceed
 // always writes.
 func AppendAndCommitIf(logPath, worktreePath string, op Op, gc GitCommitter, proceed func() (bool, error)) (bool, error) {
-	wrote, err := AppendOpIf(logPath, op, proceed)
+	wrote, err := appendOpIf(logPath, op, proceed)
 	if err != nil || !wrote {
 		return wrote, err
 	}

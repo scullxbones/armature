@@ -47,7 +47,7 @@ var schemaOpDocs = []schemaOpDoc{
 }
 
 // SchemaDocumentedOpTypes returns the ordered op types documented in the schema.
-func SchemaDocumentedOpTypes() []string {
+func schemaDocumentedOpTypes() []string {
 	seen := make(map[string]bool, len(schemaOpDocs))
 	types := make([]string, 0, len(schemaOpDocs))
 	for _, doc := range schemaOpDocs {
@@ -100,7 +100,7 @@ func GenerateSchema() string {
 	b.WriteString("# Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload, schema_version]\n")
 	b.WriteString("#\n")
 	b.WriteString("# Position 0: op_type (string) - one of: ")
-	b.WriteString(strings.Join(SchemaDocumentedOpTypes(), ", "))
+	b.WriteString(strings.Join(schemaDocumentedOpTypes(), ", "))
 	b.WriteString("\n")
 	b.WriteString("# Position 1: target_id (string) - issue/node/source ID this op targets\n")
 	b.WriteString("# Position 2: timestamp (integer) - Unix epoch seconds\n")

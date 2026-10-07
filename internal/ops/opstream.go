@@ -11,34 +11,34 @@ import (
 type OpItem struct {
 	Op          Op
 	LogFilename string
-	Source      *FileEntry
+	source      *fileEntry
 	Offset      int64
 	LineNumber  int
 }
 
-type FileEntry struct {
+type fileEntry struct {
 	LogPath          string
 	ExpectedWorkerID string
 }
 
-type ValidatedOpStream struct {
-	files []*FileEntry
+type validatedOpStream struct {
+	files []*fileEntry
 }
 
-type LoadResult struct {
+type loadResult struct {
 	Items       []OpItem
 	PhysicalEOF map[string]int64
 	Warnings    []string
 }
 
-func newValidatedOpStream() *ValidatedOpStream {
-	return &ValidatedOpStream{
-		files: make([]*FileEntry, 0),
+func newValidatedOpStream() *validatedOpStream {
+	return &validatedOpStream{
+		files: make([]*fileEntry, 0),
 	}
 }
 
-func (s *ValidatedOpStream) addFile(logPath, expectedWorkerID string) *FileEntry {
-	entry := &FileEntry{
+func (s *validatedOpStream) addFile(logPath, expectedWorkerID string) *fileEntry {
+	entry := &fileEntry{
 		LogPath:          logPath,
 		ExpectedWorkerID: expectedWorkerID,
 	}
@@ -46,15 +46,15 @@ func (s *ValidatedOpStream) addFile(logPath, expectedWorkerID string) *FileEntry
 	return entry
 }
 
-func (s *ValidatedOpStream) loadAll() (LoadResult, error) {
-	result := LoadResult{
+func (s *validatedOpStream) loadAll() (loadResult, error) {
+	result := loadResult{
 		PhysicalEOF: make(map[string]int64),
 	}
 
 	for _, entry := range s.files {
 		fileItems, physicalEOF, fileWarnings, err := s.loadFile(entry)
 		if err != nil {
-			return LoadResult{}, fmt.Errorf("load file %s: %w", entry.LogPath, err)
+			return loadResult{}, fmt.Errorf("load file %s: %w", entry.LogPath, err)
 		}
 		result.Items = append(result.Items, fileItems...)
 		result.Warnings = append(result.Warnings, fileWarnings...)
@@ -64,7 +64,7 @@ func (s *ValidatedOpStream) loadAll() (LoadResult, error) {
 	return result, nil
 }
 
-func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []string, error) {
+func (s *validatedOpStream) loadFile(entry *fileEntry) ([]OpItem, int64, []string, error) {
 	var items []OpItem
 	var warnings []string
 	var physicalEOF int64
@@ -79,7 +79,7 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 
 		op, parseErr := ParseLine(lineInfo.Line)
 		if parseErr != nil {
-			if IsNewerSchemaVersion(parseErr) {
+			if isNewerSchemaVersion(parseErr) {
 				return nil, 0, nil, parseErr
 			}
 			warnings = append(warnings, fmt.Sprintf(
@@ -103,7 +103,7 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 		items = append(items, OpItem{
 			Op:          op,
 			LogFilename: entry.LogPath,
-			Source:      entry,
+			source:      entry,
 			Offset:      lineInfo.EndOffset,
 			LineNumber:  i + 1,
 		})
@@ -112,15 +112,15 @@ func (s *ValidatedOpStream) loadFile(entry *FileEntry) ([]OpItem, int64, []strin
 	return items, physicalEOF, warnings, nil
 }
 
-func LoadFromDirValidated(opsDir string) (LoadResult, error) {
-	empty := LoadResult{
+func LoadFromDirValidated(opsDir string) (loadResult, error) {
+	empty := loadResult{
 		Items:       []OpItem{},
 		PhysicalEOF: map[string]int64{},
 		Warnings:    []string{},
 	}
 	logFiles, err := adapters.ListLogFiles(opsDir)
 	if err != nil {
-		return LoadResult{}, err
+		return loadResult{}, err
 	}
 	if logFiles == nil {
 		return empty, nil

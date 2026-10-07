@@ -40,7 +40,7 @@ func AbsolutizePaths(paths []string, cwd, root string) []string {
 	return absolutized
 }
 
-type PolicyResolver interface {
+type policyResolver interface {
 	Resolve(taskID string) (harnesspolicy.IssuePolicy, error)
 }
 
@@ -69,10 +69,10 @@ type EvaluateInput struct {
 }
 
 type Hook struct {
-	resolver PolicyResolver
+	resolver policyResolver
 }
 
-func NewHook(resolver PolicyResolver) *Hook {
+func NewHook(resolver policyResolver) *Hook {
 	return &Hook{resolver: resolver}
 }
 
@@ -101,7 +101,7 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 	} else {
 		scopePolicy = harnesspolicy.NewScopePolicy(policy.Scope)
 	}
-	evaluator := NewEvaluator(EvaluatorConfig{
+	evaluator := newEvaluator(evaluatorConfig{
 		ScopePolicy:         scopePolicy,
 		VerificationService: &service,
 		VerificationInput: harnesspolicy.VerificationRequest{
