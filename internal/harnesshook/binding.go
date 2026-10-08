@@ -231,9 +231,6 @@ func extractExitCode(fields map[string]any) (int, bool) {
 		return 0, false
 	}
 
-	// Check for exit_code field (PostToolUse events). JSON numbers decode to
-	// float64 via encoding/json; the int case supports callers that construct
-	// the map directly (e.g. tests) rather than via json.Unmarshal.
 	if code, ok := fields["exit_code"].(float64); ok {
 		return int(code), true
 	}
