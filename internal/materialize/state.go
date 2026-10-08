@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/attestation"
 	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
 )
 
 // ClaimStale reports whether this issue's claim has expired as of now (Unix seconds).
@@ -50,32 +50,32 @@ type Issue struct {
 	// latching merged. Empty for every issue whose status came from the log —
 	// including one an op actually transitioned to merged, which rollup must
 	// never walk back. See TOPTIER-B1.
-	RollupStatusBefore     string                         `json:"rollup_status_before,omitempty"`
-	Title                  string                         `json:"title"`
-	Parent                 string                         `json:"parent,omitempty"`
-	Children               []string                       `json:"children"`
-	BlockedBy              []string                       `json:"blocked_by"`
-	Blocks                 []string                       `json:"blocks"`
-	Assignee               string                         `json:"assignee,omitempty"`
-	Priority               string                         `json:"priority,omitempty"`
-	EstComplexity          string                         `json:"estimated_complexity,omitempty"`
-	DefinitionOfDone       string                         `json:"definition_of_done,omitempty"`
-	Scope                  []string                       `json:"scope"`
-	ContextFiles           []string                       `json:"context_files,omitempty"`
-	Acceptance             json.RawMessage                `json:"acceptance,omitempty"`
-	Context                json.RawMessage                `json:"context,omitempty"`
-	SourceCitation         json.RawMessage                `json:"source_citation,omitempty"`
-	Provenance             Provenance                     `json:"provenance"`
-	DecisionRefs           []string                       `json:"decision_refs"`
-	Outcome                string                         `json:"outcome,omitempty"`
-	PriorOutcomes          []string                       `json:"prior_outcomes,omitempty"`
-	Notes                  []Note                         `json:"notes,omitempty"`
-	Decisions              []Decision                     `json:"decisions,omitempty"`
-	SourceLinks            []SourceLink                   `json:"source_links,omitempty"`
-	CitationAcceptances    []CitationAcceptance           `json:"citation_acceptances,omitempty"`
-	AssessmentAttestations []review.AssessmentAttestation `json:"assessment_attestations,omitempty"`
-	ClaimedBy              string                         `json:"claimed_by,omitempty"`
-	ClaimedAt              int64                          `json:"claimed_at,omitempty"`
+	RollupStatusBefore     string                              `json:"rollup_status_before,omitempty"`
+	Title                  string                              `json:"title"`
+	Parent                 string                              `json:"parent,omitempty"`
+	Children               []string                            `json:"children"`
+	BlockedBy              []string                            `json:"blocked_by"`
+	Blocks                 []string                            `json:"blocks"`
+	Assignee               string                              `json:"assignee,omitempty"`
+	Priority               string                              `json:"priority,omitempty"`
+	EstComplexity          string                              `json:"estimated_complexity,omitempty"`
+	DefinitionOfDone       string                              `json:"definition_of_done,omitempty"`
+	Scope                  []string                            `json:"scope"`
+	ContextFiles           []string                            `json:"context_files,omitempty"`
+	Acceptance             json.RawMessage                     `json:"acceptance,omitempty"`
+	Context                json.RawMessage                     `json:"context,omitempty"`
+	SourceCitation         json.RawMessage                     `json:"source_citation,omitempty"`
+	Provenance             Provenance                          `json:"provenance"`
+	DecisionRefs           []string                            `json:"decision_refs"`
+	Outcome                string                              `json:"outcome,omitempty"`
+	PriorOutcomes          []string                            `json:"prior_outcomes,omitempty"`
+	Notes                  []Note                              `json:"notes,omitempty"`
+	Decisions              []Decision                          `json:"decisions,omitempty"`
+	SourceLinks            []SourceLink                        `json:"source_links,omitempty"`
+	CitationAcceptances    []CitationAcceptance                `json:"citation_acceptances,omitempty"`
+	AssessmentAttestations []attestation.AssessmentAttestation `json:"assessment_attestations,omitempty"`
+	ClaimedBy              string                              `json:"claimed_by,omitempty"`
+	ClaimedAt              int64                               `json:"claimed_at,omitempty"`
 	// ClaimToken is the unique per-claim nonce (see ops.Payload.ClaimToken) of
 	// the claim currently held. Cleared whenever ClaimedBy/ClaimedAt are
 	// cleared (transition to open). Used by applyTransition to validate a

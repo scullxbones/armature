@@ -7,9 +7,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ready"
-	"github.com/scullxbones/armature/internal/review"
 	"github.com/scullxbones/armature/internal/validate"
 )
 
@@ -115,7 +115,7 @@ func truncateBundleID(bundleID string) string {
 	return id[:bundleIDDisplayHexLen]
 }
 
-func formatLatestAttestationLine(attestations []review.AssessmentAttestation) string {
+func formatLatestAttestationLine(attestations []attestation.AssessmentAttestation) string {
 	if len(attestations) == 0 {
 		return ""
 	}

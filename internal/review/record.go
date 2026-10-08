@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/attestation"
 )
 
 type IssueData struct {
@@ -20,7 +22,7 @@ type RecordInput struct {
 }
 
 type RecordResult struct {
-	Attestation *AssessmentAttestation
+	Attestation *attestation.AssessmentAttestation
 	IsDuplicate bool
 }
 
@@ -190,7 +192,7 @@ func validateRecordIssueContract(input RecordInput) error {
 	return joinValidationErrors("assessment coverage validation errors:", ValidateResultCoverage(input.Assessment, contract))
 }
 
-func RecordWithDuplicateCheck(input RecordInput, existingAttestations []AssessmentAttestation) (*RecordResult, error) {
+func RecordWithDuplicateCheck(input RecordInput, existingAttestations []attestation.AssessmentAttestation) (*RecordResult, error) {
 	result, err := Record(input)
 	if err != nil {
 		return nil, err
@@ -207,14 +209,14 @@ func RecordWithDuplicateCheck(input RecordInput, existingAttestations []Assessme
 	return result, nil
 }
 
-func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentAttestation) {
+func enrichDisagreementFields(att *attestation.AssessmentAttestation, existing []attestation.AssessmentAttestation) {
 	if att == nil {
 		return
 	}
 	att.EffectiveRating = att.Rating
 
 	var citedBundle string
-	var citedRating Rating
+	var citedRating attestation.Rating
 	haveCite := false
 
 	for _, prior := range existing {
@@ -224,14 +226,14 @@ func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentA
 		if prior.ResultFingerprint == att.ResultFingerprint {
 			continue
 		}
-		if max, ok := MaxRating(att.EffectiveRating, prior.Rating); ok {
+		if max, ok := attestation.MaxRating(att.EffectiveRating, prior.Rating); ok {
 			att.EffectiveRating = max
 		}
 		if prior.Rating == att.Rating {
 			continue
 		}
 		att.IsDisagreement = true
-		if !haveCite || ratingSeverity(prior.Rating) >= ratingSeverity(citedRating) {
+		if !haveCite || attestation.AtLeastAsSevere(prior.Rating, citedRating) {
 			haveCite = true
 			citedBundle = prior.BundleID
 			citedRating = prior.Rating
@@ -244,6 +246,6 @@ func enrichDisagreementFields(att *AssessmentAttestation, existing []AssessmentA
 	}
 }
 
-func ratingPointer(r Rating) *Rating {
+func ratingPointer(r attestation.Rating) *attestation.Rating {
 	return &r
 }

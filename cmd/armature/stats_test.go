@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/scullxbones/armature/internal/worker"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +73,7 @@ func TestStatsCostDedupesIdempotentAssessments(t *testing.T) {
 	repo := initCostFixture(t)
 	ctx := getTestContext(t, repo)
 	ghostPath := filepath.Join(ctx.IssuesDir, "ops", "worker-ghost.log")
-	attJSON, err := json.Marshal(review.AssessmentAttestation{
+	attJSON, err := json.Marshal(attestation.AssessmentAttestation{
 		SchemaVersion:       review.SchemaVersion,
 		BundleID:            "bundle-cost",
 		ContractFingerprint: "cf",
@@ -81,7 +83,7 @@ func TestStatsCostDedupesIdempotentAssessments(t *testing.T) {
 		ModelIdentity:       "claude-haiku-4-5",
 		InputTokens:         500_000,
 		OutputTokens:        100_000,
-		Rating:              review.Green,
+		Rating:              attestation.Green,
 		ResultFingerprint:   "fp-cost-b",
 	})
 	require.NoError(t, err)
@@ -175,7 +177,7 @@ func appendTokenOps(t *testing.T, repo string) {
 		},
 	}))
 
-	attJSON, err := json.Marshal(review.AssessmentAttestation{
+	attJSON, err := json.Marshal(attestation.AssessmentAttestation{
 		SchemaVersion:       review.SchemaVersion,
 		BundleID:            "bundle-cost",
 		ContractFingerprint: "cf",
@@ -185,7 +187,7 @@ func appendTokenOps(t *testing.T, repo string) {
 		ModelIdentity:       "claude-haiku-4-5",
 		InputTokens:         500_000,
 		OutputTokens:        100_000,
-		Rating:              review.Green,
+		Rating:              attestation.Green,
 		ResultFingerprint:   "fp-cost-b",
 	})
 	require.NoError(t, err)

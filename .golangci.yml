@@ -57,6 +57,13 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "issueref is a pure projection type and must not import other internal packages"
+        attestation-pure:
+          list-mode: lax
+          files:
+            - "**/internal/attestation/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "attestation is a pure vocabulary package and must not import other internal packages"
         ops-boundary:
           list-mode: strict
           files:
@@ -96,8 +103,8 @@ linters:
             - "github.com/scullxbones/armature/internal/issueid"
             - "github.com/scullxbones/armature/internal/issueref"
             - "github.com/scullxbones/armature/internal/oporder"
+            - "github.com/scullxbones/armature/internal/attestation"
             - "github.com/scullxbones/armature/internal/ops"
-            - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/traceability"
         sources-boundary:
           list-mode: strict
@@ -130,10 +137,24 @@ linters:
             - "!**/*_test.go"
           allow:
             - "$gostd"
+            - "github.com/scullxbones/armature/internal/attestation"
             - "github.com/scullxbones/armature/internal/materialize"
             - "github.com/scullxbones/armature/internal/ready"
-            - "github.com/scullxbones/armature/internal/review"
             - "github.com/scullxbones/armature/internal/validate"
+        review-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/review/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/attestation"
+            - "github.com/scullxbones/armature/internal/commitref"
+            - "github.com/scullxbones/armature/internal/config"
+            - "github.com/scullxbones/armature/internal/issuetype"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/strictjson"
         worktree-boundary:
           list-mode: strict
           files:

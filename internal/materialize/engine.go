@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	claimpkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
 )
 
 type State struct {
@@ -495,7 +495,7 @@ func (s *State) applyReparent(op ops.Op) error {
 func (s *State) applyAssessmentAttested(op ops.Op) error {
 	issue := s.Issues[op.TargetID]
 
-	var att review.AssessmentAttestation
+	var att attestation.AssessmentAttestation
 	if err := json.Unmarshal(op.Payload.Assessment, &att); err != nil {
 		return fmt.Errorf("unmarshal assessment attestation: %w", err)
 	}

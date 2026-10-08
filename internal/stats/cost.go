@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
 )
 
 // DefaultModel is the rate-table key used when a usage record has no model.
@@ -130,7 +130,7 @@ func CollectUsage(opList []ops.Op) []Usage {
 				Source:       "outcome",
 			})
 		case ops.OpAssessmentAttested:
-			var att review.AssessmentAttestation
+			var att attestation.AssessmentAttestation
 			if err := json.Unmarshal(op.Payload.Assessment, &att); err != nil {
 				continue
 			}

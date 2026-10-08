@@ -1,15 +1,10 @@
 package review
 
-// DeriveRating produces a conformance rating from criterion results.
-// The rating algebra follows the prioritization: Red > Yellow > Green.
-//
-//   - Green: all criteria are satisfied
-//   - Yellow: at least one criterion is partially_satisfied or indeterminate,
-//     and no criteria are not_satisfied
-//   - Red: at least one criterion is not_satisfied
-func DeriveRating(results []CriterionResult) Rating {
+import "github.com/scullxbones/armature/internal/attestation"
+
+func DeriveRating(results []CriterionResult) attestation.Rating {
 	if len(results) == 0 {
-		return Green
+		return attestation.Green
 	}
 
 	hasNotSatisfied := false
@@ -25,12 +20,12 @@ func DeriveRating(results []CriterionResult) Rating {
 	}
 
 	if hasNotSatisfied {
-		return Red
+		return attestation.Red
 	}
 	if hasPartialOrIndeterminate {
-		return Yellow
+		return attestation.Yellow
 	}
-	return Green
+	return attestation.Green
 }
 
 func CountCriteria(results []CriterionResult) (int, int, int, int) {
@@ -50,33 +45,4 @@ func CountCriteria(results []CriterionResult) (int, int, int, int) {
 	}
 
 	return satisfied, partiallySatisfied, notSatisfied, indeterminate
-}
-
-func ratingSeverity(r Rating) int {
-	switch r {
-	case Green:
-		return 1
-	case Yellow:
-		return 2
-	case Red:
-		return 3
-	default:
-		return 0
-	}
-}
-
-// MaxRating returns the highest-severity Conformance Rating (Green < Yellow < Red).
-// EffectiveRating built from this helper is advisory only and does not confer
-// merge authority (Constitution I5/N4).
-func MaxRating(ratings ...Rating) (Rating, bool) {
-	if len(ratings) == 0 {
-		return Unspecified, false
-	}
-	max := ratings[0]
-	for _, r := range ratings[1:] {
-		if ratingSeverity(r) > ratingSeverity(max) {
-			max = r
-		}
-	}
-	return max, true
 }

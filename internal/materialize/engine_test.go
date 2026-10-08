@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
+	"github.com/scullxbones/armature/internal/ops"
+
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
-	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -2057,14 +2058,14 @@ func TestApplyAssessmentAttested(t *testing.T) {
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"},
 	}))
 
-	att := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		SchemaVersion:           1,
 		BundleID:                "bundle-1",
 		ContractFingerprint:     "cf-hash",
 		DeliveryFingerprint:     "df-hash",
 		BaseSHA:                 "base-sha",
 		HeadSHA:                 "head-sha",
-		Rating:                  review.Green,
+		Rating:                  attestation.Green,
 		ResultFingerprint:       "result-fp-1",
 		SatisfiedCount:          3,
 		PartiallySatisfiedCount: 0,
@@ -2094,14 +2095,14 @@ func TestApplyAssessmentAttested_DeduplicatesByResultFingerprint(t *testing.T) {
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"},
 	}))
 
-	att := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		SchemaVersion:       1,
 		BundleID:            "bundle-1",
 		ContractFingerprint: "cf-hash",
 		DeliveryFingerprint: "df-hash",
 		BaseSHA:             "base-sha",
 		HeadSHA:             "head-sha",
-		Rating:              review.Green,
+		Rating:              attestation.Green,
 		ResultFingerprint:   "result-fp-1",
 		SatisfiedCount:      3,
 	}
@@ -2130,7 +2131,7 @@ func TestApplyAssessmentAttested_DifferentFingerprintAdded(t *testing.T) {
 		WorkerID: "w1", Payload: ops.Payload{Title: "T", NodeType: "task"},
 	}))
 
-	att1 := review.AssessmentAttestation{
+	att1 := attestation.AssessmentAttestation{
 		SchemaVersion:     1,
 		BundleID:          "bundle-1",
 		ResultFingerprint: "result-fp-1",
@@ -2144,7 +2145,7 @@ func TestApplyAssessmentAttested_DifferentFingerprintAdded(t *testing.T) {
 		WorkerID: "w1", Payload: ops.Payload{Assessment: assessmentJSON1},
 	}))
 
-	att2 := review.AssessmentAttestation{
+	att2 := attestation.AssessmentAttestation{
 		SchemaVersion:     1,
 		BundleID:          "bundle-2",
 		ResultFingerprint: "result-fp-2",
@@ -2168,7 +2169,7 @@ func TestApplyAssessmentAttested_IssueNotFound(t *testing.T) {
 	t.Parallel()
 	state := NewState()
 
-	att := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		ResultFingerprint: "result-fp-1",
 	}
 	assessmentJSON, err := json.Marshal(att)

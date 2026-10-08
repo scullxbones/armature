@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,34 +42,6 @@ func TestCriterionStatus_UnmarshalJSON_SkillOutput(t *testing.T) {
 	err := json.Unmarshal([]byte(input), &result)
 	require.NoError(t, err)
 	assert.Equal(t, review.Satisfied, result.Status)
-}
-
-func TestRating_JSONRoundTrip(t *testing.T) {
-	t.Parallel()
-	ratings := []review.Rating{review.Green, review.Yellow, review.Red}
-	for _, rating := range ratings {
-		t.Run(rating.String(), func(t *testing.T) {
-			t.Parallel()
-			data, err := json.Marshal(rating)
-			require.NoError(t, err)
-
-			assert.Equal(t, `"`+rating.String()+`"`, string(data))
-			var decoded review.Rating
-			require.NoError(t, json.Unmarshal(data, &decoded))
-			assert.Equal(t, rating, decoded)
-		})
-	}
-}
-
-func TestRating_UnmarshalJSON_SkillOutput(t *testing.T) {
-	t.Parallel()
-	input := `{"rating":"green"}`
-	var result struct {
-		Rating review.Rating `json:"rating"`
-	}
-	err := json.Unmarshal([]byte(input), &result)
-	require.NoError(t, err)
-	assert.Equal(t, review.Green, result.Rating)
 }
 
 func TestCriterionStatus_String(t *testing.T) {
@@ -114,53 +88,6 @@ func TestParseCriterionStatus(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expected, status)
-			}
-		})
-	}
-}
-
-func TestRating_String(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		rating   review.Rating
-		expected string
-	}{
-		{review.Green, "green"},
-		{review.Yellow, "yellow"},
-		{review.Red, "red"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.expected, tt.rating.String())
-		})
-	}
-}
-
-func TestParseRating(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		input    string
-		expected review.Rating
-		wantErr  bool
-	}{
-		{"green", review.Green, false},
-		{"yellow", review.Yellow, false},
-		{"red", review.Red, false},
-		{"invalid", 0, true},
-		{"", 0, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			t.Parallel()
-			rating, err := review.ParseRating(tt.input)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, rating)
 			}
 		})
 	}
@@ -754,7 +681,7 @@ func TestReviewBundle_WithoutActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) 
 func TestAssessmentAttestation_WithActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	attestation := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		SchemaVersion:           review.SchemaVersion,
 		BundleID:                "sha256:bundle123",
 		ContractFingerprint:     "fp_contract",
@@ -762,7 +689,7 @@ func TestAssessmentAttestation_WithActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 		ActivityDigest:          "fp_activity",
 		BaseSHA:                 "abc123",
 		HeadSHA:                 "def456",
-		Rating:                  review.Green,
+		Rating:                  attestation.Green,
 		ResultFingerprint:       "fp_result",
 		SatisfiedCount:          1,
 		PartiallySatisfiedCount: 0,
@@ -770,26 +697,26 @@ func TestAssessmentAttestation_WithActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 		IndeterminateCount:      0,
 	}
 
-	data, err := json.Marshal(attestation)
+	data, err := json.Marshal(att)
 	require.NoError(t, err)
 
-	var decoded review.AssessmentAttestation
+	var decoded attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
-	assert.Equal(t, attestation.ActivityDigest, decoded.ActivityDigest)
+	assert.Equal(t, att.ActivityDigest, decoded.ActivityDigest)
 }
 
 func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 	t.Parallel()
 
-	attestation := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		SchemaVersion:           review.SchemaVersion,
 		BundleID:                "sha256:bundle123",
 		ContractFingerprint:     "fp_contract",
 		DeliveryFingerprint:     "fp_delivery",
 		BaseSHA:                 "abc123",
 		HeadSHA:                 "def456",
-		Rating:                  review.Green,
+		Rating:                  attestation.Green,
 		ResultFingerprint:       "fp_result",
 		SatisfiedCount:          1,
 		PartiallySatisfiedCount: 0,
@@ -799,7 +726,7 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 		OutputTokens:            480,
 	}
 
-	data, err := json.Marshal(attestation)
+	data, err := json.Marshal(att)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"input_tokens":2100`)
 	assert.Contains(t, string(data), `"output_tokens":480`)
@@ -818,7 +745,7 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ops.OpAssessmentAttested, parsed.Type)
 
-	var decoded review.AssessmentAttestation
+	var decoded attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(parsed.Payload.Assessment, &decoded))
 	assert.Equal(t, 2100, decoded.InputTokens)
 	assert.Equal(t, 480, decoded.OutputTokens)
@@ -838,20 +765,20 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 		`"not_satisfied_count":0,` +
 		`"indeterminate_count":0` +
 		`}`)
-	var legacy review.AssessmentAttestation
+	var legacy attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(legacyJSON, &legacy), "legacy assessment without token fields must still decode")
 	assert.Equal(t, 0, legacy.InputTokens)
 	assert.Equal(t, 0, legacy.OutputTokens)
 	assert.Equal(t, "fp_result", legacy.ResultFingerprint)
 
-	withoutCounts := review.AssessmentAttestation{
+	withoutCounts := attestation.AssessmentAttestation{
 		SchemaVersion:       review.SchemaVersion,
 		BundleID:            "sha256:bundle123",
 		ContractFingerprint: "fp_contract",
 		DeliveryFingerprint: "fp_delivery",
 		BaseSHA:             "abc123",
 		HeadSHA:             "def456",
-		Rating:              review.Green,
+		Rating:              attestation.Green,
 		ResultFingerprint:   "fp_result",
 		SatisfiedCount:      1,
 	}
@@ -864,22 +791,22 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t *testing.T) {
 	t.Parallel()
 
-	attestation := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		SchemaVersion:         review.SchemaVersion,
 		BundleID:              "sha256:bundle-new",
 		ContractFingerprint:   "fp_contract",
 		DeliveryFingerprint:   "fp_delivery",
 		BaseSHA:               "abc123",
 		HeadSHA:               "def456",
-		Rating:                review.Green,
-		EffectiveRating:       review.Red,
+		Rating:                attestation.Green,
+		EffectiveRating:       attestation.Red,
 		IsDisagreement:        true,
 		ConflictsWithBundleID: "sha256:bundle-prior",
-		ConflictsWithRating:   ratingPtr(review.Red),
+		ConflictsWithRating:   ratingPtr(attestation.Red),
 		ResultFingerprint:     "fp_result",
 		SatisfiedCount:        1,
 	}
-	data, err := json.Marshal(attestation)
+	data, err := json.Marshal(att)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"effective_rating":"red"`)
 	assert.Contains(t, string(data), `"is_disagreement":true`)
@@ -887,17 +814,17 @@ func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t 
 	assert.Contains(t, string(data), `"conflicts_with_rating":"red"`)
 	assert.Contains(t, string(data), `"rating":"green"`)
 
-	var decoded review.AssessmentAttestation
+	var decoded attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(data, &decoded))
-	assert.Equal(t, review.Green, decoded.Rating)
-	assert.Equal(t, review.Red, decoded.EffectiveRating)
+	assert.Equal(t, attestation.Green, decoded.Rating)
+	assert.Equal(t, attestation.Red, decoded.EffectiveRating)
 	assert.True(t, decoded.IsDisagreement)
 	assert.Equal(t, "sha256:bundle-prior", decoded.ConflictsWithBundleID)
 	require.NotNil(t, decoded.ConflictsWithRating)
-	assert.Equal(t, review.Red, *decoded.ConflictsWithRating)
+	assert.Equal(t, attestation.Red, *decoded.ConflictsWithRating)
 
-	greenConflict := attestation
-	greenConflict.ConflictsWithRating = ratingPtr(review.Green)
+	greenConflict := att
+	greenConflict.ConflictsWithRating = ratingPtr(attestation.Green)
 	greenData, err := json.Marshal(greenConflict)
 	require.NoError(t, err)
 	assert.Contains(t, string(greenData), `"is_disagreement":true`)
@@ -905,11 +832,11 @@ func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t 
 	assert.Contains(t, string(greenData), `"conflicts_with_rating":"green"`,
 		"Green conflict rating must serialize; omitempty must not drop Rating zero")
 
-	var decodedGreen review.AssessmentAttestation
+	var decodedGreen attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(greenData, &decodedGreen))
 	assert.True(t, decodedGreen.IsDisagreement)
 	require.NotNil(t, decodedGreen.ConflictsWithRating)
-	assert.Equal(t, review.Green, *decodedGreen.ConflictsWithRating)
+	assert.Equal(t, attestation.Green, *decodedGreen.ConflictsWithRating)
 
 	legacyJSON := []byte(`{` +
 		`"schema_version":1,` +
@@ -925,23 +852,23 @@ func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t 
 		`"not_satisfied_count":1,` +
 		`"indeterminate_count":0` +
 		`}`)
-	var legacy review.AssessmentAttestation
+	var legacy attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(legacyJSON, &legacy), "legacy assessment without disagreement fields must still decode")
-	assert.Equal(t, review.Red, legacy.Rating)
-	assert.Equal(t, review.Green, legacy.EffectiveRating)
+	assert.Equal(t, attestation.Red, legacy.Rating)
+	assert.Equal(t, attestation.Green, legacy.EffectiveRating)
 	assert.False(t, legacy.IsDisagreement)
 	assert.Empty(t, legacy.ConflictsWithBundleID)
 	assert.Nil(t, legacy.ConflictsWithRating)
 }
 
-func ratingPtr(r review.Rating) *review.Rating {
+func ratingPtr(r attestation.Rating) *attestation.Rating {
 	return &r
 }
 
 func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	attestation := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		SchemaVersion:           review.SchemaVersion,
 		BundleID:                "sha256:bundle123",
 		ContractFingerprint:     "fp_contract",
@@ -949,7 +876,7 @@ func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T)
 		ActivityDigest:          "",
 		BaseSHA:                 "abc123",
 		HeadSHA:                 "def456",
-		Rating:                  review.Green,
+		Rating:                  attestation.Green,
 		ResultFingerprint:       "fp_result",
 		SatisfiedCount:          1,
 		PartiallySatisfiedCount: 0,
@@ -957,12 +884,12 @@ func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T)
 		IndeterminateCount:      0,
 	}
 
-	data, err := json.Marshal(attestation)
+	data, err := json.Marshal(att)
 	require.NoError(t, err)
 
 	assert.NotContains(t, string(data), "activity_digest")
 
-	var decoded review.AssessmentAttestation
+	var decoded attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
 	assert.Empty(t, decoded.ActivityDigest)

@@ -13,11 +13,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ready"
-	"github.com/scullxbones/armature/internal/review"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -519,15 +520,15 @@ func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {
 		Type:   "task",
 		Status: "done",
 		Title:  "Task with Review",
-		AssessmentAttestations: []review.AssessmentAttestation{
+		AssessmentAttestations: []attestation.AssessmentAttestation{
 			{
 				BundleID: "sha256:0123456789abcdef",
-				Rating:   review.Yellow,
+				Rating:   attestation.Yellow,
 				HeadSHA:  "abc1234567890def",
 			},
 			{
 				BundleID:           "sha256:fedcba9876543210",
-				Rating:             review.Yellow,
+				Rating:             attestation.Yellow,
 				HeadSHA:            "def4567890123abc",
 				SatisfiedCount:     1,
 				IndeterminateCount: 1,
@@ -556,17 +557,17 @@ func TestMarshalIssue_IncludesAttestations(t *testing.T) {
 		Type:   "task",
 		Status: "done",
 		Title:  "Task with Review",
-		AssessmentAttestations: []review.AssessmentAttestation{
+		AssessmentAttestations: []attestation.AssessmentAttestation{
 			{
 				BundleID:       "sha256:abc123def456",
-				Rating:         review.Green,
+				Rating:         attestation.Green,
 				HeadSHA:        "abc1234567890def",
 				SatisfiedCount: 2,
 			},
 		},
 	})
 	require.NotEmpty(t, got.AssessmentAttestations)
-	var attestations []review.AssessmentAttestation
+	var attestations []attestation.AssessmentAttestation
 	require.NoError(t, json.Unmarshal(got.AssessmentAttestations, &attestations))
 	require.Len(t, attestations, 1)
 	assert.Equal(t, "sha256:abc123def456", attestations[0].BundleID)
@@ -579,7 +580,7 @@ func TestRenderIssue_NoAssessmentAttestations_Human(t *testing.T) {
 		Type:                   "task",
 		Status:                 "open",
 		Title:                  "Task without Review",
-		AssessmentAttestations: []review.AssessmentAttestation{},
+		AssessmentAttestations: []attestation.AssessmentAttestation{},
 	}
 	var buf bytes.Buffer
 	err := RenderIssue(&buf, issue)
@@ -596,16 +597,16 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 		Type:   "task",
 		Status: "done",
 		Title:  "Task with Multiple Reviews",
-		AssessmentAttestations: []review.AssessmentAttestation{
+		AssessmentAttestations: []attestation.AssessmentAttestation{
 			{
 				BundleID:          "sha256:aaaaaabbbbbbccccccdddddd",
-				Rating:            review.Red,
+				Rating:            attestation.Red,
 				SatisfiedCount:    0,
 				NotSatisfiedCount: 1,
 			},
 			{
 				BundleID:       "sha256:eeeeeeffffffffgggggghhhhh",
-				Rating:         review.Green,
+				Rating:         attestation.Green,
 				SatisfiedCount: 2,
 			},
 		},

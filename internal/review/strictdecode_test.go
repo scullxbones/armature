@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/review"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -133,7 +135,7 @@ func TestCriterionStatusStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 func TestRatingStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	t.Parallel()
 
-	ratings := []review.Rating{review.Green, review.Yellow, review.Red}
+	ratings := []attestation.Rating{attestation.Green, attestation.Yellow, attestation.Red}
 
 	for _, rating := range ratings {
 		t.Run(rating.String(), func(t *testing.T) {
@@ -146,7 +148,7 @@ func TestRatingStringRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 			assert.True(t, strings.HasPrefix(dataStr, "\"") && strings.HasSuffix(dataStr, "\""),
 				"Rating %q marshaled as %s, expected quoted string", rating.String(), dataStr)
 
-			var decoded review.Rating
+			var decoded attestation.Rating
 			err = json.Unmarshal(data, &decoded)
 			require.NoError(t, err)
 
