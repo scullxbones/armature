@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +71,7 @@ func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	require.NotNil(t, result)
 	assert.NotNil(t, result.Attestation)
 	assert.Equal(t, "bundle-123", result.Attestation.BundleID)
-	assert.Equal(t, Green, result.Attestation.Rating)
+	assert.Equal(t, attestation.Green, result.Attestation.Rating)
 	assert.False(t, result.IsDuplicate)
 }
 
@@ -124,7 +126,7 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	assert.Equal(t, bundle.BundleID, result.Attestation.BundleID)
 	assert.Equal(t, "base123", result.Attestation.BaseSHA)
 	assert.Equal(t, "head456", result.Attestation.HeadSHA)
-	assert.Equal(t, Green, result.Attestation.Rating)
+	assert.Equal(t, attestation.Green, result.Attestation.Rating)
 	assert.Equal(t, 2, result.Attestation.SatisfiedCount)
 }
 
@@ -208,7 +210,7 @@ func TestRecord_WithIssueData_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	result, err := Record(input)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, Green, result.Attestation.Rating)
+	assert.Equal(t, attestation.Green, result.Attestation.Rating)
 }
 
 func TestRecord_AssessmentNil_REQ_ARCHIMP_S18_T1(t *testing.T) {
@@ -589,7 +591,7 @@ func TestRecordWithDuplicateCheck_Duplicate_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	result1, err := Record(input)
 	require.NoError(t, err)
 
-	existingAtts := []AssessmentAttestation{*result1.Attestation}
+	existingAtts := []attestation.AssessmentAttestation{*result1.Attestation}
 
 	result2, err := RecordWithDuplicateCheck(input, existingAtts)
 	require.NoError(t, err)
@@ -619,7 +621,7 @@ func TestRecordWithDuplicateCheck_NotDuplicate_REQ_ARCHIMP_S18_T1(t *testing.T) 
 
 	differentAtt := *result1.Attestation
 	differentAtt.ResultFingerprint = "sha256:different"
-	existingAtts := []AssessmentAttestation{differentAtt}
+	existingAtts := []attestation.AssessmentAttestation{differentAtt}
 
 	result2, err := RecordWithDuplicateCheck(input, existingAtts)
 	require.NoError(t, err)
@@ -877,7 +879,7 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	require.NotNil(t, result)
 	require.NotNil(t, result.Attestation)
 	assert.Equal(t, digest, result.Attestation.ActivityDigest, "attestation must carry activity digest")
-	assert.Equal(t, Green, result.Attestation.Rating, "activity citation should contribute to passing rating")
+	assert.Equal(t, attestation.Green, result.Attestation.Rating, "activity citation should contribute to passing rating")
 	assert.False(t, result.IsDuplicate)
 
 	activityCitation := &assessment.Results[1].Citations[0]
@@ -1138,7 +1140,7 @@ func disagreementAssessment(bundleID, rationale string, status CriterionStatus) 
 	}
 }
 
-func recordDisagreementAttestation(t *testing.T, bundleID, rationale string, status CriterionStatus) AssessmentAttestation {
+func recordDisagreementAttestation(t *testing.T, bundleID, rationale string, status CriterionStatus) attestation.AssessmentAttestation {
 	t.Helper()
 	result, err := Record(RecordInput{
 		Assessment: disagreementAssessment(bundleID, rationale, status),
@@ -1162,8 +1164,8 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result.Attestation)
 		assert.False(t, result.IsDuplicate)
-		assert.Equal(t, Green, result.Attestation.Rating)
-		assert.Equal(t, Green, result.Attestation.EffectiveRating)
+		assert.Equal(t, attestation.Green, result.Attestation.Rating)
+		assert.Equal(t, attestation.Green, result.Attestation.EffectiveRating)
 		assert.False(t, result.Attestation.IsDisagreement)
 		assert.Empty(t, result.Attestation.ConflictsWithBundleID)
 		assert.Nil(t, result.Attestation.ConflictsWithRating)
@@ -1177,12 +1179,12 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 			Assessment: disagreementAssessment("bundle-new", "second green review", Satisfied),
 			IssueID:    "task-01",
 		}
-		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{prior})
+		result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{prior})
 		require.NoError(t, err)
 		require.NotNil(t, result.Attestation)
 		assert.False(t, result.IsDuplicate)
-		assert.Equal(t, Green, result.Attestation.Rating)
-		assert.Equal(t, Green, result.Attestation.EffectiveRating)
+		assert.Equal(t, attestation.Green, result.Attestation.Rating)
+		assert.Equal(t, attestation.Green, result.Attestation.EffectiveRating)
 		assert.False(t, result.Attestation.IsDisagreement)
 		assert.Empty(t, result.Attestation.ConflictsWithBundleID)
 		assert.Equal(t, snapshot, prior, "prior Assessment Attestation must not be rewritten")
@@ -1195,19 +1197,19 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 			Assessment: disagreementAssessment("bundle-red", "red review", NotSatisfied),
 			IssueID:    "task-01",
 		}
-		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{prior})
+		result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{prior})
 		require.NoError(t, err)
 		require.NotNil(t, result.Attestation)
 		assert.False(t, result.IsDuplicate)
-		assert.Equal(t, Red, result.Attestation.Rating)
-		assert.Equal(t, Red, result.Attestation.EffectiveRating)
+		assert.Equal(t, attestation.Red, result.Attestation.Rating)
+		assert.Equal(t, attestation.Red, result.Attestation.EffectiveRating)
 		assert.True(t, result.Attestation.IsDisagreement)
 		assert.Equal(t, "bundle-green", result.Attestation.ConflictsWithBundleID)
 		require.NotNil(t, result.Attestation.ConflictsWithRating)
-		assert.Equal(t, Green, *result.Attestation.ConflictsWithRating)
-		assert.Equal(t, Green, prior.Rating)
+		assert.Equal(t, attestation.Green, *result.Attestation.ConflictsWithRating)
+		assert.Equal(t, attestation.Green, prior.Rating)
 		assert.False(t, prior.IsDisagreement)
-		assert.Equal(t, Rating(0), prior.EffectiveRating)
+		assert.Equal(t, attestation.Rating(0), prior.EffectiveRating)
 	})
 
 	t.Run("three mixed highest severity not most recent", func(t *testing.T) {
@@ -1216,7 +1218,7 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 		yellowPrior := recordDisagreementAttestation(t, "bundle-yellow", "newer yellow", PartiallySatisfied)
 		otherDelivery := recordDisagreementAttestation(t, "bundle-other", "other delivery green", Satisfied)
 		otherDelivery.DeliveryFingerprint = "sha256:other-delivery"
-		priors := []AssessmentAttestation{redPrior, yellowPrior, otherDelivery}
+		priors := []attestation.AssessmentAttestation{redPrior, yellowPrior, otherDelivery}
 		input := RecordInput{
 			Assessment: disagreementAssessment("bundle-green", "incoming green", Satisfied),
 			IssueID:    "task-01",
@@ -1225,14 +1227,14 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result.Attestation)
 		assert.False(t, result.IsDuplicate)
-		assert.Equal(t, Green, result.Attestation.Rating)
-		assert.Equal(t, Red, result.Attestation.EffectiveRating)
+		assert.Equal(t, attestation.Green, result.Attestation.Rating)
+		assert.Equal(t, attestation.Red, result.Attestation.EffectiveRating)
 		assert.True(t, result.Attestation.IsDisagreement)
 		assert.Equal(t, "bundle-red", result.Attestation.ConflictsWithBundleID)
 		require.NotNil(t, result.Attestation.ConflictsWithRating)
-		assert.Equal(t, Red, *result.Attestation.ConflictsWithRating)
-		assert.Equal(t, Red, priors[0].Rating)
-		assert.Equal(t, Yellow, priors[1].Rating)
+		assert.Equal(t, attestation.Red, *result.Attestation.ConflictsWithRating)
+		assert.Equal(t, attestation.Red, priors[0].Rating)
+		assert.Equal(t, attestation.Yellow, priors[1].Rating)
 		assert.False(t, priors[0].IsDisagreement)
 		assert.False(t, priors[1].IsDisagreement)
 	})
@@ -1245,14 +1247,14 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 			Assessment: disagreementAssessment("bundle-green", "incoming green", Satisfied),
 			IssueID:    "task-01",
 		}
-		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{older, newer})
+		result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{older, newer})
 		require.NoError(t, err)
 		require.NotNil(t, result.Attestation)
 		assert.True(t, result.Attestation.IsDisagreement)
-		assert.Equal(t, Yellow, result.Attestation.EffectiveRating)
+		assert.Equal(t, attestation.Yellow, result.Attestation.EffectiveRating)
 		assert.Equal(t, "bundle-yellow-new", result.Attestation.ConflictsWithBundleID)
 		require.NotNil(t, result.Attestation.ConflictsWithRating)
-		assert.Equal(t, Yellow, *result.Attestation.ConflictsWithRating)
+		assert.Equal(t, attestation.Yellow, *result.Attestation.ConflictsWithRating)
 	})
 
 	t.Run("incoming red cites disagreeing green not same-rating red", func(t *testing.T) {
@@ -1263,18 +1265,18 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 			Assessment: disagreementAssessment("bundle-red-new", "incoming red", NotSatisfied),
 			IssueID:    "task-01",
 		}
-		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{greenPrior, redPrior})
+		result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{greenPrior, redPrior})
 		require.NoError(t, err)
 		require.NotNil(t, result.Attestation)
 		assert.False(t, result.IsDuplicate)
-		assert.Equal(t, Red, result.Attestation.Rating)
-		assert.Equal(t, Red, result.Attestation.EffectiveRating)
+		assert.Equal(t, attestation.Red, result.Attestation.Rating)
+		assert.Equal(t, attestation.Red, result.Attestation.EffectiveRating)
 		assert.True(t, result.Attestation.IsDisagreement)
 		assert.Equal(t, "bundle-green", result.Attestation.ConflictsWithBundleID)
 		require.NotNil(t, result.Attestation.ConflictsWithRating)
-		assert.Equal(t, Green, *result.Attestation.ConflictsWithRating)
-		assert.Equal(t, Green, greenPrior.Rating)
-		assert.Equal(t, Red, redPrior.Rating)
+		assert.Equal(t, attestation.Green, *result.Attestation.ConflictsWithRating)
+		assert.Equal(t, attestation.Green, greenPrior.Rating)
+		assert.Equal(t, attestation.Red, redPrior.Rating)
 		assert.False(t, greenPrior.IsDisagreement)
 		assert.False(t, redPrior.IsDisagreement)
 	})
@@ -1287,13 +1289,13 @@ func TestReviewRecord_HandlesConflictingRatings_REQ_TOPTIER_S13(t *testing.T) {
 			Assessment: disagreementAssessment("bundle-dup", "same content", Satisfied),
 			IssueID:    "task-01",
 		}
-		result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{disagreeing, duplicateOfIncoming})
+		result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{disagreeing, duplicateOfIncoming})
 		require.NoError(t, err)
 		require.NotNil(t, result.Attestation)
 		assert.True(t, result.IsDuplicate, "exact ResultFingerprint match takes the duplicate path")
 		assert.False(t, result.Attestation.IsDisagreement)
 		assert.Empty(t, result.Attestation.ConflictsWithBundleID)
-		assert.Equal(t, Rating(0), result.Attestation.EffectiveRating)
+		assert.Equal(t, attestation.Rating(0), result.Attestation.EffectiveRating)
 	})
 }
 
@@ -1305,17 +1307,17 @@ func TestReviewRecord_ConformanceRatingNeverOverwritten_REQ_TOPTIER_S13_T1(t *te
 		Assessment: assessment,
 		IssueID:    "task-01",
 	}
-	result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{prior})
+	result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{prior})
 	require.NoError(t, err)
 	require.NotNil(t, result.Attestation)
 	assert.Equal(t, DeriveRating(assessment.Results), result.Attestation.Rating)
-	assert.Equal(t, Green, result.Attestation.Rating)
-	assert.Equal(t, Red, result.Attestation.EffectiveRating)
+	assert.Equal(t, attestation.Green, result.Attestation.Rating)
+	assert.Equal(t, attestation.Red, result.Attestation.EffectiveRating)
 	assert.NotEqual(t, result.Attestation.Rating, result.Attestation.EffectiveRating)
-	assert.Equal(t, Red, prior.Rating)
+	assert.Equal(t, attestation.Red, prior.Rating)
 }
 
 func TestEnrichDisagreementFields_NilAttestation(t *testing.T) {
 	t.Parallel()
-	enrichDisagreementFields(nil, []AssessmentAttestation{{Rating: Red}})
+	enrichDisagreementFields(nil, []attestation.AssessmentAttestation{{Rating: attestation.Red}})
 }

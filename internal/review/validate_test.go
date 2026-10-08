@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/review"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -236,7 +238,7 @@ func TestNewAttestation(t *testing.T) {
 	assert.Equal(t, "sha256:contract123", att.ContractFingerprint)
 	assert.Equal(t, "sha256:delivery123", att.DeliveryFingerprint)
 
-	assert.Equal(t, review.Red, att.Rating)
+	assert.Equal(t, attestation.Red, att.Rating)
 	assert.Equal(t, 1, att.SatisfiedCount)
 	assert.Equal(t, 1, att.PartiallySatisfiedCount)
 	assert.Equal(t, 1, att.NotSatisfiedCount)
@@ -259,7 +261,7 @@ func TestNewAttestation_AllGreen(t *testing.T) {
 
 	att := review.NewAttestation(assessment, delivery, nil)
 
-	assert.Equal(t, review.Green, att.Rating)
+	assert.Equal(t, attestation.Green, att.Rating)
 	assert.Equal(t, 2, att.SatisfiedCount)
 	assert.Equal(t, 0, att.PartiallySatisfiedCount)
 	assert.Equal(t, 0, att.NotSatisfiedCount)
@@ -292,11 +294,11 @@ func TestNewAttestation_PopulatesSHAs(t *testing.T) {
 func TestIsDuplicate_SameResultFingerprint(t *testing.T) {
 	t.Parallel()
 
-	att1 := &review.AssessmentAttestation{
+	att1 := &attestation.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		ResultFingerprint: "sha256:fingerprint123",
 	}
-	att2 := &review.AssessmentAttestation{
+	att2 := &attestation.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		ResultFingerprint: "sha256:fingerprint123",
 	}
@@ -307,11 +309,11 @@ func TestIsDuplicate_SameResultFingerprint(t *testing.T) {
 func TestIsDuplicate_DifferentResultFingerprint(t *testing.T) {
 	t.Parallel()
 
-	att1 := &review.AssessmentAttestation{
+	att1 := &attestation.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		ResultFingerprint: "sha256:fingerprint123",
 	}
-	att2 := &review.AssessmentAttestation{
+	att2 := &attestation.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		ResultFingerprint: "sha256:fingerprint456",
 	}
@@ -322,12 +324,12 @@ func TestIsDuplicate_DifferentResultFingerprint(t *testing.T) {
 func TestIsDuplicate_SameFingerprintDifferentSkillVersion(t *testing.T) {
 	t.Parallel()
 
-	att1 := &review.AssessmentAttestation{
+	att1 := &attestation.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		SkillVersion:      "v1.0.0",
 		ResultFingerprint: "sha256:fingerprint123",
 	}
-	att2 := &review.AssessmentAttestation{
+	att2 := &attestation.AssessmentAttestation{
 		BundleID:          "sha256:bundle123",
 		SkillVersion:      "v2.0.0",
 		ResultFingerprint: "sha256:fingerprint123",

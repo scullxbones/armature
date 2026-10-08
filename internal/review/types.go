@@ -73,66 +73,6 @@ func ParseCriterionStatus(s string) (CriterionStatus, error) {
 	}
 }
 
-type Rating int
-
-// Unspecified is not a Conformance Rating. MaxRating returns it when given no ratings.
-const Unspecified Rating = -1
-
-const (
-	Green Rating = iota
-	Yellow
-	Red
-)
-
-func (r Rating) String() string {
-	switch r {
-	case Unspecified:
-		return "unknown"
-	case Green:
-		return "green"
-	case Yellow:
-		return "yellow"
-	case Red:
-		return "red"
-	default:
-		return "unknown"
-	}
-}
-
-// MarshalJSON encodes Rating as its string name so JSON output uses "green",
-// "yellow", or "red" rather than opaque integers.
-func (r Rating) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.String())
-}
-
-// UnmarshalJSON decodes Rating from its string name, accepting "green", "yellow",
-// or "red" as emitted by the armature-reviewer skill.
-func (r *Rating) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	v, err := ParseRating(s)
-	if err != nil {
-		return err
-	}
-	*r = v
-	return nil
-}
-
-func ParseRating(s string) (Rating, error) {
-	switch strings.ToLower(s) {
-	case "green":
-		return Green, nil
-	case "yellow":
-		return Yellow, nil
-	case "red":
-		return Red, nil
-	default:
-		return 0, fmt.Errorf("invalid rating: %s", s)
-	}
-}
-
 // Citation is a closed sum of file (diff) citations and activity-log citations.
 // Construct values with FileCitation or ActivityCitation; JSON still uses the
 // published assessment object shape.
@@ -398,36 +338,4 @@ func (ca ConformanceAssessment) Valid() error {
 		}
 	}
 	return nil
-}
-
-type AssessmentAttestation struct {
-	SchemaVersion       int    `json:"schema_version"`
-	BundleID            string `json:"bundle_id"`
-	ContractFingerprint string `json:"contract_fingerprint"`
-	DeliveryFingerprint string `json:"delivery_fingerprint"`
-	ActivityDigest      string `json:"activity_digest,omitempty"`
-	BaseSHA             string `json:"base_sha"`
-	HeadSHA             string `json:"head_sha"`
-	SkillVersion        string `json:"skill_version,omitempty"`
-	ModelIdentity       string `json:"model_identity,omitempty"`
-	// InputTokens and OutputTokens record reviewer LLM usage on the same
-	// assessment-attested op (G1.1). They are optional: omitempty keeps every
-	// legacy attestation valid. Absent fields decode as 0. No new op type.
-	InputTokens  int    `json:"input_tokens,omitempty"`
-	OutputTokens int    `json:"output_tokens,omitempty"`
-	Rating       Rating `json:"rating"`
-	// EffectiveRating is the severity-max of this Conformance Rating and
-	// qualifying same-DeliveryFingerprint priors (Green < Yellow < Red).
-	// It is advisory only: it does not overwrite Rating and confers no merge
-	// authority (Constitution I5/N4). Populated at RecordWithDuplicateCheck
-	// for newly accepted (non-duplicate) attestations.
-	EffectiveRating         Rating  `json:"effective_rating,omitempty"`
-	IsDisagreement          bool    `json:"is_disagreement,omitempty"`
-	ConflictsWithBundleID   string  `json:"conflicts_with_bundle_id,omitempty"`
-	ConflictsWithRating     *Rating `json:"conflicts_with_rating,omitempty"`
-	ResultFingerprint       string  `json:"result_fingerprint"`
-	SatisfiedCount          int     `json:"satisfied_count"`
-	PartiallySatisfiedCount int     `json:"partially_satisfied_count"`
-	NotSatisfiedCount       int     `json:"not_satisfied_count"`
-	IndeterminateCount      int     `json:"indeterminate_count"`
 }

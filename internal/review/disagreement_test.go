@@ -3,6 +3,8 @@ package review
 import (
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -10,10 +12,10 @@ import (
 type disagreementEvent struct {
 	BundleID              string
 	DeliveryFingerprint   string
-	Rating                Rating
-	EffectiveRating       Rating
+	Rating                attestation.Rating
+	EffectiveRating       attestation.Rating
 	ConflictsWithBundleID string
-	ConflictsWithRating   *Rating
+	ConflictsWithRating   *attestation.Rating
 }
 
 type disagreementStats struct {
@@ -21,7 +23,7 @@ type disagreementStats struct {
 	Events []disagreementEvent
 }
 
-func collectDisagreementStats(atts []AssessmentAttestation) disagreementStats {
+func collectDisagreementStats(atts []attestation.AssessmentAttestation) disagreementStats {
 	var stats disagreementStats
 	for i := range atts {
 		att := atts[i]
@@ -41,7 +43,7 @@ func collectDisagreementStats(atts []AssessmentAttestation) disagreementStats {
 	return stats
 }
 
-func cloneRating(r *Rating) *Rating {
+func cloneRating(r *attestation.Rating) *attestation.Rating {
 	if r == nil {
 		return nil
 	}
@@ -57,17 +59,17 @@ func TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2(t *testing.T) 
 		Assessment: disagreementAssessment("bundle-red", "red review", NotSatisfied),
 		IssueID:    "task-01",
 	}
-	result, err := RecordWithDuplicateCheck(input, []AssessmentAttestation{prior})
+	result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{prior})
 	require.NoError(t, err)
 	require.NotNil(t, result.Attestation)
 	assert.False(t, result.IsDuplicate)
 	assert.True(t, result.Attestation.IsDisagreement)
 	assert.Equal(t, "bundle-green", result.Attestation.ConflictsWithBundleID)
 	require.NotNil(t, result.Attestation.ConflictsWithRating)
-	assert.Equal(t, Green, *result.Attestation.ConflictsWithRating)
+	assert.Equal(t, attestation.Green, *result.Attestation.ConflictsWithRating)
 	assert.False(t, prior.IsDisagreement, "T1 writes disagreement only on the new record")
 
-	history := []AssessmentAttestation{prior, *result.Attestation}
+	history := []attestation.AssessmentAttestation{prior, *result.Attestation}
 	stats := collectDisagreementStats(history)
 	assert.Equal(t, 1, stats.Count)
 	require.Len(t, stats.Events, 1)
@@ -75,44 +77,44 @@ func TestReviewRecord_TracksDisagreementEvents_REQ_TOPTIER_S13_T2(t *testing.T) 
 	event := stats.Events[0]
 	assert.Equal(t, "bundle-red", event.BundleID)
 	assert.Equal(t, disagreementDeliveryFP, event.DeliveryFingerprint)
-	assert.Equal(t, Red, event.Rating)
-	assert.Equal(t, Red, event.EffectiveRating)
+	assert.Equal(t, attestation.Red, event.Rating)
+	assert.Equal(t, attestation.Red, event.EffectiveRating)
 	assert.Equal(t, "bundle-green", event.ConflictsWithBundleID)
 	require.NotNil(t, event.ConflictsWithRating)
-	assert.Equal(t, Green, *event.ConflictsWithRating)
+	assert.Equal(t, attestation.Green, *event.ConflictsWithRating)
 
-	assert.Equal(t, 0, collectDisagreementStats([]AssessmentAttestation{prior}).Count,
+	assert.Equal(t, 0, collectDisagreementStats([]attestation.AssessmentAttestation{prior}).Count,
 		"the unre-written prior is not a disagreement fact")
 }
 
 func TestDisagreementStats_IgnoresNonDisagreementRows_REQ_TOPTIER_S13_T2(t *testing.T) {
 	t.Parallel()
 
-	red := Red
-	green := Green
-	rows := []AssessmentAttestation{
+	red := attestation.Red
+	green := attestation.Green
+	rows := []attestation.AssessmentAttestation{
 		{
 			BundleID:            "legacy-red",
 			DeliveryFingerprint: "fp-same",
-			Rating:              Red,
+			Rating:              attestation.Red,
 		},
 		{
 			BundleID:            "legacy-green",
 			DeliveryFingerprint: "fp-same",
-			Rating:              Green,
+			Rating:              attestation.Green,
 		},
 		{
 			BundleID:              "conflicts-without-flag",
 			DeliveryFingerprint:   "fp-same",
-			Rating:                Green,
+			Rating:                attestation.Green,
 			ConflictsWithBundleID: "legacy-red",
 			ConflictsWithRating:   &red,
 		},
 		{
 			BundleID:              "stored-disagreement",
 			DeliveryFingerprint:   "fp-same",
-			Rating:                Green,
-			EffectiveRating:       Red,
+			Rating:                attestation.Green,
+			EffectiveRating:       attestation.Red,
 			IsDisagreement:        true,
 			ConflictsWithBundleID: "legacy-red",
 			ConflictsWithRating:   &red,
@@ -120,8 +122,8 @@ func TestDisagreementStats_IgnoresNonDisagreementRows_REQ_TOPTIER_S13_T2(t *test
 		{
 			BundleID:              "second-disagreement",
 			DeliveryFingerprint:   "fp-other",
-			Rating:                Yellow,
-			EffectiveRating:       Yellow,
+			Rating:                attestation.Yellow,
+			EffectiveRating:       attestation.Yellow,
 			IsDisagreement:        true,
 			ConflictsWithBundleID: "bundle-green-prior",
 			ConflictsWithRating:   &green,
@@ -134,18 +136,18 @@ func TestDisagreementStats_IgnoresNonDisagreementRows_REQ_TOPTIER_S13_T2(t *test
 	assert.Equal(t, "stored-disagreement", stats.Events[0].BundleID)
 	assert.Equal(t, "legacy-red", stats.Events[0].ConflictsWithBundleID)
 	require.NotNil(t, stats.Events[0].ConflictsWithRating)
-	assert.Equal(t, Red, *stats.Events[0].ConflictsWithRating)
+	assert.Equal(t, attestation.Red, *stats.Events[0].ConflictsWithRating)
 	assert.Equal(t, "second-disagreement", stats.Events[1].BundleID)
 	assert.Equal(t, "bundle-green-prior", stats.Events[1].ConflictsWithBundleID)
 	require.NotNil(t, stats.Events[1].ConflictsWithRating)
-	assert.Equal(t, Green, *stats.Events[1].ConflictsWithRating)
+	assert.Equal(t, attestation.Green, *stats.Events[1].ConflictsWithRating)
 
 	empty := collectDisagreementStats(nil)
 	assert.Equal(t, 0, empty.Count)
 	assert.Empty(t, empty.Events)
 
-	red = Yellow
+	red = attestation.Yellow
 	require.NotNil(t, stats.Events[0].ConflictsWithRating)
-	assert.Equal(t, Red, *stats.Events[0].ConflictsWithRating,
+	assert.Equal(t, attestation.Red, *stats.Events[0].ConflictsWithRating,
 		"aggregator must clone ConflictsWithRating so callers cannot mutate source rows through Events")
 }

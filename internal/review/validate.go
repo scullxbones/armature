@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/attestation"
 )
 
 var criterionIDPattern = regexp.MustCompile(`^definition_of_done$|^acceptance\[\d+\]$`)
@@ -255,13 +257,13 @@ func firstQuoted(s string) string {
 
 // NewAttestation records delivery BaseSHA/HeadSHA and, when activity is present,
 // carries activity.Digest into the attestation per ADR-0008.
-func NewAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *Activity) *AssessmentAttestation {
+func NewAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *Activity) *attestation.AssessmentAttestation {
 	rating := DeriveRating(assessment.Results)
 	satisfied, partiallySatisfied, notSatisfied, indeterminate := CountCriteria(assessment.Results)
 
 	resultFingerprint := FingerprintResult(*assessment)
 
-	att := &AssessmentAttestation{
+	att := &attestation.AssessmentAttestation{
 		SchemaVersion:           SchemaVersion,
 		BundleID:                assessment.BundleID,
 		ContractFingerprint:     assessment.ContractFingerprint,
@@ -283,7 +285,7 @@ func NewAttestation(assessment *ConformanceAssessment, delivery Delivery, activi
 	return att
 }
 
-func IsDuplicate(a, b *AssessmentAttestation) bool {
+func IsDuplicate(a, b *attestation.AssessmentAttestation) bool {
 	if a == nil || b == nil {
 		return false
 	}

@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -883,7 +884,7 @@ func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
 		Payload:   ops.Payload{Title: "Test task", NodeType: "task"},
 	}
 
-	att := review.AssessmentAttestation{
+	att := attestation.AssessmentAttestation{
 		SchemaVersion:           1,
 		BundleID:                "bundle-test-01",
 		ContractFingerprint:     "cf-abc123",
@@ -892,7 +893,7 @@ func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
 		HeadSHA:                 "head-sha-456",
 		SkillVersion:            "1.0.0",
 		ModelIdentity:           "claude-opus",
-		Rating:                  review.Green,
+		Rating:                  attestation.Green,
 		ResultFingerprint:       "rf-ghi789",
 		SatisfiedCount:          2,
 		PartiallySatisfiedCount: 0,
@@ -923,20 +924,20 @@ func TestMaterialize_AssessmentAttestedOp(t *testing.T) {
 	require.NotNil(t, issue.AssessmentAttestations)
 	require.Len(t, issue.AssessmentAttestations, 1)
 
-	attestation := issue.AssessmentAttestations[0]
-	assert.Equal(t, "bundle-test-01", attestation.BundleID)
-	assert.Equal(t, "cf-abc123", attestation.ContractFingerprint)
-	assert.Equal(t, "df-def456", attestation.DeliveryFingerprint)
-	assert.Equal(t, "base-sha-123", attestation.BaseSHA)
-	assert.Equal(t, "head-sha-456", attestation.HeadSHA)
-	assert.Equal(t, "1.0.0", attestation.SkillVersion)
-	assert.Equal(t, "claude-opus", attestation.ModelIdentity)
-	assert.Equal(t, review.Green, attestation.Rating)
-	assert.Equal(t, "rf-ghi789", attestation.ResultFingerprint)
-	assert.Equal(t, 2, attestation.SatisfiedCount)
-	assert.Equal(t, 0, attestation.PartiallySatisfiedCount)
-	assert.Equal(t, 0, attestation.NotSatisfiedCount)
-	assert.Equal(t, 0, attestation.IndeterminateCount)
+	got := issue.AssessmentAttestations[0]
+	assert.Equal(t, "bundle-test-01", got.BundleID)
+	assert.Equal(t, "cf-abc123", got.ContractFingerprint)
+	assert.Equal(t, "df-def456", got.DeliveryFingerprint)
+	assert.Equal(t, "base-sha-123", got.BaseSHA)
+	assert.Equal(t, "head-sha-456", got.HeadSHA)
+	assert.Equal(t, "1.0.0", got.SkillVersion)
+	assert.Equal(t, "claude-opus", got.ModelIdentity)
+	assert.Equal(t, attestation.Green, got.Rating)
+	assert.Equal(t, "rf-ghi789", got.ResultFingerprint)
+	assert.Equal(t, 2, got.SatisfiedCount)
+	assert.Equal(t, 0, got.PartiallySatisfiedCount)
+	assert.Equal(t, 0, got.NotSatisfiedCount)
+	assert.Equal(t, 0, got.IndeterminateCount)
 }
 
 func TestIncremental_RetractsCachedPromotionBeforeReplay_REQ_TOPTIER_B1(t *testing.T) {

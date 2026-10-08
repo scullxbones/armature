@@ -1,12 +1,12 @@
 package review_test
 
 import (
-	"encoding/json"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/review"
+
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDeriveRating_AllSatisfied_Green(t *testing.T) {
@@ -30,7 +30,7 @@ func TestDeriveRating_AllSatisfied_Green(t *testing.T) {
 	}
 
 	rating := review.DeriveRating(results)
-	assert.Equal(t, review.Green, rating)
+	assert.Equal(t, attestation.Green, rating)
 }
 
 func TestDeriveRating_PartiallySatisfied_Yellow(t *testing.T) {
@@ -50,7 +50,7 @@ func TestDeriveRating_PartiallySatisfied_Yellow(t *testing.T) {
 	}
 
 	rating := review.DeriveRating(results)
-	assert.Equal(t, review.Yellow, rating)
+	assert.Equal(t, attestation.Yellow, rating)
 }
 
 func TestDeriveRating_Indeterminate_Yellow(t *testing.T) {
@@ -70,7 +70,7 @@ func TestDeriveRating_Indeterminate_Yellow(t *testing.T) {
 	}
 
 	rating := review.DeriveRating(results)
-	assert.Equal(t, review.Yellow, rating)
+	assert.Equal(t, attestation.Yellow, rating)
 }
 
 func TestDeriveRating_NotSatisfied_Red(t *testing.T) {
@@ -90,7 +90,7 @@ func TestDeriveRating_NotSatisfied_Red(t *testing.T) {
 	}
 
 	rating := review.DeriveRating(results)
-	assert.Equal(t, review.Red, rating)
+	assert.Equal(t, attestation.Red, rating)
 }
 
 func TestDeriveRating_Mixed_YellowAndRed_Red(t *testing.T) {
@@ -112,7 +112,7 @@ func TestDeriveRating_Mixed_YellowAndRed_Red(t *testing.T) {
 	}
 
 	rating := review.DeriveRating(results)
-	assert.Equal(t, review.Red, rating)
+	assert.Equal(t, attestation.Red, rating)
 }
 
 func TestDeriveRating_Empty_Green(t *testing.T) {
@@ -121,7 +121,7 @@ func TestDeriveRating_Empty_Green(t *testing.T) {
 	results := []review.CriterionResult{}
 
 	rating := review.DeriveRating(results)
-	assert.Equal(t, review.Green, rating)
+	assert.Equal(t, attestation.Green, rating)
 }
 
 func TestDeriveRating_SingleIndeterminate_Yellow(t *testing.T) {
@@ -136,7 +136,7 @@ func TestDeriveRating_SingleIndeterminate_Yellow(t *testing.T) {
 	}
 
 	rating := review.DeriveRating(results)
-	assert.Equal(t, review.Yellow, rating)
+	assert.Equal(t, attestation.Yellow, rating)
 }
 
 func TestCountCriteria(t *testing.T) {
@@ -155,34 +155,4 @@ func TestCountCriteria(t *testing.T) {
 	assert.Equal(t, 1, partial)
 	assert.Equal(t, 1, notSat)
 	assert.Equal(t, 1, indet)
-}
-
-func TestMaxRating_SeverityOrder_REQ_TOPTIER_S13_T1(t *testing.T) {
-	t.Parallel()
-	empty, ok := review.MaxRating()
-	assert.False(t, ok)
-	assert.NotEqual(t, review.Green, empty, "empty MaxRating must not claim Green")
-	assert.Equal(t, "unknown", empty.String())
-	raw, err := json.Marshal(empty)
-	require.NoError(t, err)
-	assert.Equal(t, `"unknown"`, string(raw), "empty MaxRating renders as JSON unknown, not green")
-
-	got, ok := review.MaxRating(review.Green)
-	assert.True(t, ok)
-	assert.Equal(t, review.Green, got)
-	got, ok = review.MaxRating(review.Green, review.Yellow)
-	assert.True(t, ok)
-	assert.Equal(t, review.Yellow, got)
-	got, ok = review.MaxRating(review.Green, review.Yellow, review.Red)
-	assert.True(t, ok)
-	assert.Equal(t, review.Red, got)
-	got, ok = review.MaxRating(review.Red, review.Green)
-	assert.True(t, ok)
-	assert.Equal(t, review.Red, got)
-	got, ok = review.MaxRating(review.Yellow, review.Yellow)
-	assert.True(t, ok)
-	assert.Equal(t, review.Yellow, got)
-	got, ok = review.MaxRating(review.Rating(99), review.Green)
-	assert.True(t, ok)
-	assert.Equal(t, review.Green, got)
 }

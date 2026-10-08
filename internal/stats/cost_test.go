@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +17,7 @@ import (
 func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 	t.Parallel()
 
-	attJSON, err := json.Marshal(review.AssessmentAttestation{
+	attJSON, err := json.Marshal(attestation.AssessmentAttestation{
 		SchemaVersion:       review.SchemaVersion,
 		BundleID:            "bundle-a",
 		ContractFingerprint: "cf",
@@ -25,19 +27,19 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		ModelIdentity:       "claude-haiku-4-5",
 		InputTokens:         1_000_000,
 		OutputTokens:        1_000_000,
-		Rating:              review.Green,
+		Rating:              attestation.Green,
 		ResultFingerprint:   "fp-haiku",
 	})
 	require.NoError(t, err)
 
-	legacyAttJSON, err := json.Marshal(review.AssessmentAttestation{
+	legacyAttJSON, err := json.Marshal(attestation.AssessmentAttestation{
 		SchemaVersion:       review.SchemaVersion,
 		BundleID:            "bundle-legacy",
 		ContractFingerprint: "cf",
 		DeliveryFingerprint: "df",
 		BaseSHA:             "aa",
 		HeadSHA:             "bb",
-		Rating:              review.Green,
+		Rating:              attestation.Green,
 		ResultFingerprint:   "fp-legacy",
 	})
 	require.NoError(t, err)
@@ -81,7 +83,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		},
 	}
 
-	anonAttJSON, err := json.Marshal(review.AssessmentAttestation{
+	anonAttJSON, err := json.Marshal(attestation.AssessmentAttestation{
 		SchemaVersion:       review.SchemaVersion,
 		BundleID:            "bundle-anon",
 		ContractFingerprint: "cf",
@@ -90,7 +92,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		HeadSHA:             "bb",
 		InputTokens:         1_000_000,
 		OutputTokens:        0,
-		Rating:              review.Green,
+		Rating:              attestation.Green,
 		ResultFingerprint:   "fp-anon",
 	})
 	require.NoError(t, err)
@@ -280,7 +282,7 @@ func TestCollectUsage_DedupesIdempotentAssessments(t *testing.T) {
 
 	att := func(fp string, in, out int) json.RawMessage {
 		t.Helper()
-		body, err := json.Marshal(review.AssessmentAttestation{
+		body, err := json.Marshal(attestation.AssessmentAttestation{
 			SchemaVersion:       review.SchemaVersion,
 			BundleID:            "bundle-" + fp,
 			ContractFingerprint: "cf",
@@ -290,7 +292,7 @@ func TestCollectUsage_DedupesIdempotentAssessments(t *testing.T) {
 			ModelIdentity:       "claude-haiku-4-5",
 			InputTokens:         in,
 			OutputTokens:        out,
-			Rating:              review.Green,
+			Rating:              attestation.Green,
 			ResultFingerprint:   fp,
 		})
 		require.NoError(t, err)
