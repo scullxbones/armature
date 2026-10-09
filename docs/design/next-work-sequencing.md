@@ -10,7 +10,7 @@ Statuses below audited 2026-10-08 with `arm show`. Re-audit before dispatch.
 
 ## What to do next
 
-v0.1.0 is shipped (`TOPTIER-S6` / `TOPTIER-S6-T3` **merged**; tag `v0.1.0`). `arm ready` is not a dispatch order. A coordinator that picks the first ready issue will treat held docs and Tier C extensibility as equal to real next work.
+v0.1.0 is shipped (`TOPTIER-S6-T3` **merged**; `TOPTIER-S6` stays `in-progress`; tag `v0.1.0`). `arm ready` is not a dispatch order. A coordinator that picks the first ready issue will treat held docs and Tier C extensibility as equal to real next work.
 
 1. **CLAIMORD ownership spine** (product DAG, not an ordinal here): `CLAIMORD-W12` → `CLAIMORD-W13` → `CLAIMORD-W14`. `CLAIMORD-W11` is `merged`.
 2. **Item 30 trailer / docs vertical:** `TOPTIER-S7-T2` (README TUI visual) → item 47 T2 (`TOPTIER-S15-T2`) → `CLAIMORD-W20` (also waits on the cut, now satisfied).
@@ -35,7 +35,7 @@ v0.1.0 is shipped (`TOPTIER-S6` / `TOPTIER-S6-T3` **merged**; tag `v0.1.0`). `ar
 | 32 | The Second Substrate (foreign-repo dogfood) | Next-Ten №06 | not yet decomposed (dogfood themes from the v0.1.0 cut are optional backlog) |
 | 33 | Session handoff bundle | LH C10 | not yet decomposed |
 
-G2 and G6 sit early in this tier because the addendum called them cheap. Items 31 (shims), 34 (`TOPTIER-S6`), and 35 (`TOPTIER-S8`) are **delivered** with the v0.1.0 cut and live in the v0.1.0 archive. The old late-tier G1 row (item 36, `TOPTIER-S11`) and item 27 (`LNGHZN-S10`) remain in the 2026-09-27 archive.
+G2 and G6 sit early in this tier because the addendum called them cheap. Items 31 (shims), 34 (`TOPTIER-S6` T1–T3 **merged**, story `in-progress`), and 35 (`TOPTIER-S8` **done**) live in the v0.1.0 archive. The old late-tier G1 row (item 36, `TOPTIER-S11`) and item 27 (`LNGHZN-S10`) remain in the 2026-09-27 archive.
 
 ### Tier C
 
@@ -52,7 +52,7 @@ G2 and G6 sit early in this tier because the addendum called them cheap. Items 3
 | 46 | Extensibility seam for custom issue types | Addendum G4 | `TOPTIER-S14` |
 | 47 | Human-newcomer onboarding diagnostics | Addendum G5 | `TOPTIER-S15`. T1 is merged (PR #188). The story stays open for T2 (README troubleshooting appendix), blocked by `TOPTIER-S7-T2` |
 
-Item 40 (`TOPTIER-S9`, community/contribution scaffolding) is **delivered** (`merged`) and lives in the v0.1.0 archive. G4 and G5 stay at the tail. The addendum framed both as low urgency until there are external adopters.
+Item 40 (`TOPTIER-S9`, community/contribution scaffolding) is **done** (only `TOPTIER-S9-T1` is `merged`) and lives in the v0.1.0 archive. G4 and G5 stay at the tail. The addendum framed both as low urgency until there are external adopters.
 
 ## How to keep this page
 
