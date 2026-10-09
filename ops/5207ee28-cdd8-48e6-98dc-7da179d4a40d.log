@@ -5756,3 +5756,4 @@
 ["transition","CLAIMORD-W13",1791517924,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Ops closeout: owner-only heartbeat/transition/render-context already on main via #279 (92cae4379). Reverified 3 named acceptance tests + e2eharness. No new delivery.","branch":"task/CLAIMORD-W13","pr":"279","skipped_delivery_gate":true},1]
 ["transition","CLAIMORD-W13",1791517933,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"279"},1]
 ["claim","CLAIMORD-W14",1791517950,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":60,"worktree_path":"/home/brian/development/armature/.worktrees/CLAIMORD-W14","claim_token":"cf11965d9759cec5effc0b759d8dd3fc"},1]
+["note","CLAIMORD-W14",1791518270,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Code already on main via #280 (36863062d). Reverified REQ_CLAIMORD_W14 tests (incl. cold vs incremental JSONEq) + e2eharness. Ops closeout after W13 merged.","note_id":"note-1791518270371005391"},1]
