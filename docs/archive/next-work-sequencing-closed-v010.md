@@ -17,12 +17,12 @@ Ordinals match the living page / 2026-09-27 archive. Do not renumber.
 | 24 (T1–T3) | One merged-promotion path | LH D4 | `LNGHZN-S11` | T1–T3 **merged** (PR #307, ADR 0022). Story stays `in-progress` for **T4** (doctor **D13**) — that trailer remains on the living page |
 | 30 (T1) | README quickstart rewrite | GAP D1 | `TOPTIER-S7-T1` | **merged** (PR #308). Story stays open for **T2** on the living page |
 | 31 | Shim-retirement policy | LH D3 | (policy + deletions) | **delivered**: retirement paragraph in `ops-schema-compatibility.md`; known shims deleted (PR #309); no plugin system |
-| 34 | Distribution and compatibility maturity | GAP T5 | `TOPTIER-S6` | **merged** (T1 PR #304, T2 PR #305, T3 / cut PR #314). Tag [`v0.1.0`](https://github.com/scullxbones/armature/releases/tag/v0.1.0) |
-| 35 | Adopter positioning | GAP D3 | `TOPTIER-S8` | Story **done**; T3 **merged** (PR #316). why-armature, examples trail, adopter demo |
-| 40 | Community/contribution scaffolding | GAP D4 | `TOPTIER-S9` | Story **merged** (was still listed open on the pre-cut living page) |
+| 34 | Distribution and compatibility maturity | GAP T5 | `TOPTIER-S6` | T1–T3 **merged** (T1 PR #304, T2 PR #305, T3 / cut PR #314). Story stays `in-progress` (no story-level `merged` op). Tag [`v0.1.0`](https://github.com/scullxbones/armature/releases/tag/v0.1.0) |
+| 35 | Adopter positioning | GAP D3 | `TOPTIER-S8` | Story **done**; T3 **merged** (PR #316). T1 and T2 remain `done`. why-armature, examples trail, adopter demo |
+| 40 | Community/contribution scaffolding | GAP D4 | `TOPTIER-S9` | Story **done**; T1 **merged** (was still listed open on the pre-cut living page) |
 
 ## Notes
 
 - First external cut is **v0.1.0** (`TOPTIER-S6-T3`). Do not redefine “1.0.”
-- Post-cut closeout (2026-10-08): `arm merged` promoted `CLAIMORD-W11`, `TOPTIER-S6-T3`, and `TOPTIER-S8-T3` from `done` → `merged`. `TOPTIER-S6` rolled to `merged` when T3 did.
+- Post-cut closeout (2026-10-08): `arm merged` promoted `CLAIMORD-W11`, `TOPTIER-S6-T3`, and `TOPTIER-S8-T3` from `done` → `merged`. `TOPTIER-S6` stayed `in-progress` after T3 merged.
 - Held item 22 (`TOPTIER-S12`) was **not** lifted. Doctor cascade `S18-T4` → `bug-1783480206` → `LNGHZN-S11-T4` stays behind that hold.
