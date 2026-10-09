@@ -16,6 +16,12 @@ Armature ships skills in the agentskills.io format covering every role in the wo
 
 All state lives in git. No database, no server, no daemon. A single Go binary (`arm`) and git are the only requirements.
 
+![`arm tui` DAG tree view from this repository](docs/assets/arm-tui-dag.gif)
+
+`arm tui` — interactive DAG tree over a real Armature issue graph.
+Cast: [`docs/assets/arm-tui-dag.cast`](docs/assets/arm-tui-dag.cast).
+Re-record: [`docs/assets/record-arm-tui-dag.sh`](docs/assets/record-arm-tui-dag.sh).
+
 ## Key Features
 
 - **Source Traceability**: Structural citations link every claim, transition, and agent decision to its originating source document. The result is a full, inspectable audit trail — useful for sign-off review, compliance, and understanding why any given decision was made.
