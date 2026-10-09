@@ -99,7 +99,15 @@ func measureReady(index materialize.Index, state *materialize.State, now time.Ti
 	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
 	expired := ready.ExpiredClaims(state.Issues, now)
 	var buf bytes.Buffer
-	if err := output.WriteReadyEnvelope(&buf, readyOutputIssues(entries), nil, false, readyOutputExpired(expired), "", ""); err != nil {
+	if err := output.WriteReadyEnvelope(
+		&buf,
+		readyOutputIssues(entries),
+		nil,
+		false,
+		readyOutputExpired(expired),
+		"",
+		"",
+	); err != nil {
 		return nil, fmt.Errorf("render ready envelope: %w", err)
 	}
 	return buf.Bytes(), nil

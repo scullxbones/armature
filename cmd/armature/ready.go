@@ -93,7 +93,15 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if isStructuredFormat(format) || tui.IsNonInteractive() {
-		return output.WriteReadyEnvelope(cmd.OutOrStdout(), readyOutputIssues(entries), nil, false, readyOutputExpired(expiredClaims), "", "")
+		return output.WriteReadyEnvelope(
+			cmd.OutOrStdout(),
+			readyOutputIssues(entries),
+			nil,
+			false,
+			readyOutputExpired(expiredClaims),
+			"",
+			"",
+		)
 	}
 	if len(entries) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
@@ -198,7 +206,16 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 						wavesData = append(wavesData, readyOutputIssues(wave))
 					}
 				}
-				if err := output.WriteReadyEnvelope(cmd.OutOrStdout(), readyOutputIssues(entries), wavesData, waves, readyOutputExpired(expiredClaims), filterParent, assignedTo); err != nil {
+				err := output.WriteReadyEnvelope(
+					cmd.OutOrStdout(),
+					readyOutputIssues(entries),
+					wavesData,
+					waves,
+					readyOutputExpired(expiredClaims),
+					filterParent,
+					assignedTo,
+				)
+				if err != nil {
 					return err
 				}
 			case tui.IsInteractive():
