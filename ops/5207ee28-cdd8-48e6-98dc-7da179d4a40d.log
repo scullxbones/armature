@@ -5743,3 +5743,4 @@
 ["note","TOPTIER-S16-T1",1791512473,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Claim/worktree healthy under worker 5207ee28; writing AUTHORSHIP.md from G6.1 + observed Co-authored-by practice on main.","note_id":"note-1791512473579789994"},1]
 ["decision","TOPTIER-S16-T1",1791512474,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"topic":"doc-shape","choice":"dedicated AUTHORSHIP.md with two sections (trailers + license)","rationale":"Matches T1 DoD/scope; CONTRIBUTING.md already exists so T1 stays scoped to AUTHORSHIP.md only (G6.1 allows either)."},1]
 ["claim","TOPTIER-S7-T2",1791512540,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-S7-T2","claim_token":"7c0726ac00f3aa048494d741992e175b"},1]
+["heartbeat","TOPTIER-S7-T2",1791512589,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
