@@ -82,7 +82,7 @@ func refusePlanRelease(cmd *cobra.Command) error {
 	if result.OK {
 		return nil
 	}
-	if renderErr := output.RenderValidation(cmd.OutOrStdout(), result, false); renderErr != nil {
+	if renderErr := output.RenderValidation(cmd.OutOrStdout(), validationView(result), false); renderErr != nil {
 		return fmt.Errorf("render validation: %w", renderErr)
 	}
 	// The findings were just rendered to stdout, so the refusal has already

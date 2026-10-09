@@ -139,8 +139,18 @@ linters:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/attestation"
             - "github.com/scullxbones/armature/internal/materialize"
-            - "github.com/scullxbones/armature/internal/ready"
-            - "github.com/scullxbones/armature/internal/validate"
+        ready-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/ready/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/claim"
+            - "github.com/scullxbones/armature/internal/dag"
+            - "github.com/scullxbones/armature/internal/issuetype"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ops"
         review-boundary:
           list-mode: strict
           files:

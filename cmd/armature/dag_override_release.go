@@ -81,7 +81,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			}
 			defer bestEffortClose(tty)
 
-			if renderErr := output.RenderValidation(tty, result, false); renderErr != nil {
+			if renderErr := output.RenderValidation(tty, validationView(result), false); renderErr != nil {
 				return fmt.Errorf("render findings: %w", renderErr)
 			}
 			if err := confirmOverrideRelease(tty, issueID); err != nil {

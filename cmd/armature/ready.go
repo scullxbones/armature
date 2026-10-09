@@ -93,14 +93,22 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if isStructuredFormat(format) || tui.IsNonInteractive() {
-		return output.WriteReadyEnvelope(cmd.OutOrStdout(), entries, nil, false, expiredClaims, "", "")
+		return output.WriteReadyEnvelope(
+			cmd.OutOrStdout(),
+			readyOutputIssues(entries),
+			nil,
+			false,
+			readyOutputExpired(expiredClaims),
+			"",
+			"",
+		)
 	}
 	if len(entries) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
-	} else if err := output.RenderReady(cmd.OutOrStdout(), entries); err != nil {
+	} else if err := output.RenderReady(cmd.OutOrStdout(), readyOutputIssues(entries)); err != nil {
 		return err
 	}
-	return output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims)
+	return output.RenderExpiredClaims(cmd.OutOrStdout(), readyOutputExpired(expiredClaims))
 }
 
 func newReadyCmd() *cobra.Command {
@@ -192,11 +200,22 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			switch {
 			case isStructuredFormat(format) || tui.IsNonInteractive():
-				var wavesData [][]ready.ReadyEntry
+				var wavesData [][]output.ReadyIssue
 				if waves {
-					wavesData = ready.PartitionWaves(entries, index)
+					for _, wave := range ready.PartitionWaves(entries, index) {
+						wavesData = append(wavesData, readyOutputIssues(wave))
+					}
 				}
-				if err := output.WriteReadyEnvelope(cmd.OutOrStdout(), entries, wavesData, waves, expiredClaims, filterParent, assignedTo); err != nil {
+				err := output.WriteReadyEnvelope(
+					cmd.OutOrStdout(),
+					readyOutputIssues(entries),
+					wavesData,
+					waves,
+					readyOutputExpired(expiredClaims),
+					filterParent,
+					assignedTo,
+				)
+				if err != nil {
 					return err
 				}
 			case tui.IsInteractive():
@@ -232,10 +251,10 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			default:
 				if len(entries) == 0 {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No tasks ready.")
-				} else if err := output.RenderReady(cmd.OutOrStdout(), entries); err != nil {
+				} else if err := output.RenderReady(cmd.OutOrStdout(), readyOutputIssues(entries)); err != nil {
 					return err
 				}
-				if err := output.RenderExpiredClaims(cmd.OutOrStdout(), expiredClaims); err != nil {
+				if err := output.RenderExpiredClaims(cmd.OutOrStdout(), readyOutputExpired(expiredClaims)); err != nil {
 					return err
 				}
 				return nil
@@ -250,6 +269,42 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	cmd.Flags().BoolVar(&explain, "explain", false, "diagnose why open tasks are not in the ready queue")
 	cmd.Flags().BoolVar(&waves, "waves", false, "partition ready entries into scope-disjoint waves (JSON/agent output only)")
 	return cmd
+}
+
+func readyOutputIssues(entries []ready.ReadyEntry) []output.ReadyIssue {
+	rows := make([]output.ReadyIssue, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, output.ReadyIssue{
+			ID:                   e.Issue,
+			Type:                 e.Type,
+			Status:               "open",
+			Title:                e.Title,
+			Parent:               e.Parent,
+			Priority:             e.Priority,
+			Scope:                e.Scope,
+			EstComplexity:        e.EstComplexity,
+			RequiresConfirmation: e.RequiresConfirmation,
+			AssignedWorker:       e.AssignedWorker,
+		})
+	}
+	return rows
+}
+
+func readyOutputExpired(claims []ready.ExpiredClaimEntry) []output.ExpiredClaim {
+	rows := make([]output.ExpiredClaim, 0, len(claims))
+	for _, c := range claims {
+		rows = append(rows, output.ExpiredClaim{
+			ID:                         c.Issue,
+			Title:                      c.Title,
+			Status:                     c.Status,
+			ClaimedBy:                  c.ClaimedBy,
+			ClaimedAt:                  c.ClaimedAt,
+			LastHeartbeat:              c.LastHeartbeat,
+			ClaimTTL:                   c.ClaimTTL,
+			LastClaimingWorkerActivity: c.LastClaimingWorkerActivity,
+		})
+	}
+	return rows
 }
 
 func filterExpiredClaimsByIssueAssignedWorker(

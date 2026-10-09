@@ -71,7 +71,7 @@ Use --quiet to suppress INFO lines on a failing run.`,
 				}
 			} else if strict && result.OK {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), validationSummary(result))
-			} else if err := output.RenderValidation(cmd.OutOrStdout(), result, quiet); err != nil {
+			} else if err := output.RenderValidation(cmd.OutOrStdout(), validationView(result), quiet); err != nil {
 				return fmt.Errorf("render validation: %w", err)
 			}
 
@@ -176,8 +176,25 @@ func attachSnapshotWarnings(result validate.Result, warnings []string, strict bo
 	return result
 }
 
+func validationView(result validate.Result) output.ValidationView {
+	view := output.ValidationView{
+		OK:       result.OK,
+		Errors:   result.Errors,
+		Warnings: result.Warnings,
+		Infos:    result.Infos,
+	}
+	if result.Coverage != nil {
+		view.Coverage = &output.CoverageSummary{
+			TotalNodes:        result.Coverage.TotalNodes,
+			CitedNodes:        result.Coverage.CitedNodes,
+			AcceptedRiskNodes: result.Coverage.AcceptedRiskNodes,
+		}
+	}
+	return view
+}
+
 func validationSummary(result validate.Result) string {
-	if line := output.CoverageLine(result); line != "" {
+	if line := output.CoverageLine(validationView(result)); line != "" {
 		return fmt.Sprintf("OK: no issues found (%s)", line)
 	}
 	return "OK: no issues found"
