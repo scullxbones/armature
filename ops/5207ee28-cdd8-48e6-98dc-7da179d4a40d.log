@@ -5749,3 +5749,4 @@
 ["heartbeat","TOPTIER-S7-T2",1791513575,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
 ["decision","CLAIMORD-W12",1791514747,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"topic":"closeout path","choice":"ops-only reverify; no new PR","rationale":"Code already squash-merged via #278; same reopen/close pattern as CLAIMORD-W11 after doctor reopen. Delivery tip 57ce22d2c on main."},1]
 ["transition","CLAIMORD-W12",1791515043,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"Ops closeout: commit-order locate + C0 already on main via #278 (57ce22d2c). Reverified acceptance (3 named tests, e2eharness, make check green). No new delivery.","branch":"task/CLAIMORD-W12","pr":"278","skipped_delivery_gate":true},1]
+["transition","CLAIMORD-W12",1791515273,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"278"},1]
