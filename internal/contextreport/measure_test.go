@@ -73,7 +73,7 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	require.NotEmpty(t, expired, "fixture in-progress claim must be TTL-expired at the frozen clock")
 
 	var want bytes.Buffer
-	require.NoError(t, output.WriteReadyEnvelope(&want, entries, nil, false, expired, "", ""))
+	require.NoError(t, output.WriteReadyEnvelope(&want, readyOutputIssues(entries), nil, false, readyOutputExpired(expired), "", ""))
 	assert.Equal(t, want.Bytes(), got, "ready meter must price writeReadyEnvelope bytes, including expired_claims")
 
 	raw := bytes.TrimSpace(got)

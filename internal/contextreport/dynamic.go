@@ -59,11 +59,47 @@ func measureList(index materialize.Index) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func readyOutputIssues(entries []ready.ReadyEntry) []output.ReadyIssue {
+	rows := make([]output.ReadyIssue, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, output.ReadyIssue{
+			ID:                   e.Issue,
+			Type:                 e.Type,
+			Status:               "open",
+			Title:                e.Title,
+			Parent:               e.Parent,
+			Priority:             e.Priority,
+			Scope:                e.Scope,
+			EstComplexity:        e.EstComplexity,
+			RequiresConfirmation: e.RequiresConfirmation,
+			AssignedWorker:       e.AssignedWorker,
+		})
+	}
+	return rows
+}
+
+func readyOutputExpired(claims []ready.ExpiredClaimEntry) []output.ExpiredClaim {
+	rows := make([]output.ExpiredClaim, 0, len(claims))
+	for _, c := range claims {
+		rows = append(rows, output.ExpiredClaim{
+			ID:                         c.Issue,
+			Title:                      c.Title,
+			Status:                     c.Status,
+			ClaimedBy:                  c.ClaimedBy,
+			ClaimedAt:                  c.ClaimedAt,
+			LastHeartbeat:              c.LastHeartbeat,
+			ClaimTTL:                   c.ClaimTTL,
+			LastClaimingWorkerActivity: c.LastClaimingWorkerActivity,
+		})
+	}
+	return rows
+}
+
 func measureReady(index materialize.Index, state *materialize.State, now time.Time) ([]byte, error) {
 	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
 	expired := ready.ExpiredClaims(state.Issues, now)
 	var buf bytes.Buffer
-	if err := output.WriteReadyEnvelope(&buf, entries, nil, false, expired, "", ""); err != nil {
+	if err := output.WriteReadyEnvelope(&buf, readyOutputIssues(entries), nil, false, readyOutputExpired(expired), "", ""); err != nil {
 		return nil, fmt.Errorf("render ready envelope: %w", err)
 	}
 	return buf.Bytes(), nil

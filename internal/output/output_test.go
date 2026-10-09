@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -15,9 +16,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ready"
-	"github.com/scullxbones/armature/internal/traceability"
-	"github.com/scullxbones/armature/internal/validate"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,9 +96,9 @@ func TestRenderList_HumanReadable(t *testing.T) {
 
 func TestRenderReady_HumanReadable(t *testing.T) {
 	t.Parallel()
-	entries := []ready.ReadyEntry{
+	entries := []ReadyIssue{
 		{
-			Issue:                "TASK-01",
+			ID:                   "TASK-01",
 			Type:                 "task",
 			Title:                "Ready Task",
 			Priority:             "high",
@@ -119,8 +117,8 @@ func TestRenderReady_HumanReadable(t *testing.T) {
 
 func TestRenderExpiredClaims_HumanReadable_REQ_TOPTIER_S4_T3(t *testing.T) {
 	t.Parallel()
-	claims := []ready.ExpiredClaimEntry{
-		{Issue: "TASK-01", Title: "Expired Task", Status: "claimed", ClaimedBy: "worker-1"},
+	claims := []ExpiredClaim{
+		{ID: "TASK-01", Title: "Expired Task", Status: "claimed", ClaimedBy: "worker-1"},
 	}
 	var buf bytes.Buffer
 	require.NoError(t, RenderExpiredClaims(&buf, claims))
@@ -140,7 +138,7 @@ func TestRenderExpiredClaims_HumanReadable_Empty(t *testing.T) {
 
 func TestRenderValidation_ErrorsOnly(t *testing.T) {
 	t.Parallel()
-	result := validate.Result{
+	result := ValidationView{
 		OK:       false,
 		Errors:   []string{"error 1", "error 2"},
 		Warnings: []string{},
@@ -156,7 +154,7 @@ func TestRenderValidation_ErrorsOnly(t *testing.T) {
 
 func TestRenderValidation_WithWarnings(t *testing.T) {
 	t.Parallel()
-	result := validate.Result{
+	result := ValidationView{
 		OK:       true,
 		Errors:   []string{},
 		Warnings: []string{"warning 1"},
@@ -171,7 +169,7 @@ func TestRenderValidation_WithWarnings(t *testing.T) {
 
 func TestRenderValidation_AllOK(t *testing.T) {
 	t.Parallel()
-	result := validate.Result{
+	result := ValidationView{
 		OK:       true,
 		Errors:   []string{},
 		Warnings: []string{},
@@ -186,7 +184,7 @@ func TestRenderValidation_AllOK(t *testing.T) {
 
 func TestRenderValidation_QuietSuppressesInfo(t *testing.T) {
 	t.Parallel()
-	result := validate.Result{
+	result := ValidationView{
 		OK:     true,
 		Errors: []string{},
 		Infos:  []string{"info line"},
@@ -257,9 +255,9 @@ func TestRenderIssue_WithAllFields(t *testing.T) {
 
 func TestRenderReady_RequiresConfirmation(t *testing.T) {
 	t.Parallel()
-	entries := []ready.ReadyEntry{
+	entries := []ReadyIssue{
 		{
-			Issue:                "TASK-01",
+			ID:                   "TASK-01",
 			Type:                 "task",
 			Title:                "Inferred Task",
 			Priority:             "medium",
@@ -276,7 +274,7 @@ func TestRenderReady_RequiresConfirmation(t *testing.T) {
 
 func TestRenderValidation_AllFields(t *testing.T) {
 	t.Parallel()
-	result := validate.Result{
+	result := ValidationView{
 		OK:       false,
 		Errors:   []string{"error 1", "error 2"},
 		Warnings: []string{"warning 1"},
@@ -294,9 +292,9 @@ func TestRenderValidation_AllFields(t *testing.T) {
 
 func TestRenderValidation_AcceptedRiskCoverage(t *testing.T) {
 	t.Parallel()
-	result := validate.Result{
+	result := ValidationView{
 		OK: true,
-		Coverage: &traceability.Coverage{
+		Coverage: &CoverageSummary{
 			TotalNodes:        4,
 			CitedNodes:        3,
 			AcceptedRiskNodes: 1,
@@ -314,12 +312,12 @@ func TestRenderValidation_AcceptedRiskCoverage(t *testing.T) {
 
 func TestCoverageLine_FormatsBothVariants(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "", CoverageLine(validate.Result{}))
-	assert.Equal(t, "COVERAGE: 3/4 cited", CoverageLine(validate.Result{
-		Coverage: &traceability.Coverage{TotalNodes: 4, CitedNodes: 3},
+	assert.Equal(t, "", CoverageLine(ValidationView{}))
+	assert.Equal(t, "COVERAGE: 3/4 cited", CoverageLine(ValidationView{
+		Coverage: &CoverageSummary{TotalNodes: 4, CitedNodes: 3},
 	}))
-	assert.Equal(t, "COVERAGE: 4/4 cited (3 source-linked, 1 accepted-risk)", CoverageLine(validate.Result{
-		Coverage: &traceability.Coverage{TotalNodes: 4, CitedNodes: 3, AcceptedRiskNodes: 1},
+	assert.Equal(t, "COVERAGE: 4/4 cited (3 source-linked, 1 accepted-risk)", CoverageLine(ValidationView{
+		Coverage: &CoverageSummary{TotalNodes: 4, CitedNodes: 3, AcceptedRiskNodes: 1},
 	}))
 }
 
@@ -362,7 +360,7 @@ func TestRenderList_WithMultipleStatuses(t *testing.T) {
 
 func TestRenderReady_Empty(t *testing.T) {
 	t.Parallel()
-	var entries []ready.ReadyEntry
+	var entries []ReadyIssue
 	var buf bytes.Buffer
 	err := RenderReady(&buf, entries)
 	require.NoError(t, err)
@@ -620,6 +618,42 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 	assert.Contains(t, output, "green")
 	assert.Contains(t, output, "eeeeeeffffff")
 	assert.NotContains(t, output, "aaaaaabb")
+}
+
+func TestProductionOutputDoesNotImportReadyOrValidate(t *testing.T) {
+	t.Parallel()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	pkgDir := filepath.Dir(thisFile)
+
+	entries, err := os.ReadDir(pkgDir)
+	require.NoError(t, err)
+
+	banned := map[string]string{
+		`"github.com/scullxbones/armature/internal/ready"`:    "ready queue computation belongs behind output view types",
+		`"github.com/scullxbones/armature/internal/validate"`: "validate results belong behind ValidationView",
+	}
+	fset := token.NewFileSet()
+	var violations []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, parseErr := parser.ParseFile(fset, filepath.Join(pkgDir, name), nil, parser.ImportsOnly)
+		require.NoError(t, parseErr, "parse %s", name)
+		for _, spec := range file.Imports {
+			if reason, hit := banned[spec.Path.Value]; hit {
+				pos := fset.Position(spec.Pos())
+				violations = append(violations, fmt.Sprintf("%s:%d: %s (%s)", name, pos.Line, spec.Path.Value, reason))
+			}
+		}
+	}
+	if len(violations) > 0 {
+		t.Fatalf("output production files import domain packages the view types replaced:\n%s",
+			strings.Join(violations, "\n"))
+	}
 }
 
 func TestNoLegacyOutputPathRemains_REQ_AOC_S3_T1(t *testing.T) {

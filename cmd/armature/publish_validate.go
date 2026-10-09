@@ -31,7 +31,7 @@ func refusePublishedGraph(ctx *config.Context, gc *adapters.Client) error {
 		return nil
 	}
 	var rendered strings.Builder
-	if renderErr := output.RenderValidation(&rendered, result, false); renderErr != nil {
+	if renderErr := output.RenderValidation(&rendered, validationView(result), false); renderErr != nil {
 		return fmt.Errorf("render validation: %w", renderErr)
 	}
 	return skipCommandFailure(fmt.Errorf(

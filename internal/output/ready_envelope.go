@@ -3,8 +3,6 @@ package output
 import (
 	"fmt"
 	"io"
-
-	"github.com/scullxbones/armature/internal/ready"
 )
 
 const (
@@ -42,52 +40,21 @@ type ExpiredClaim struct {
 	LastClaimingWorkerActivity int64  `json:"last_claiming_worker_activity,omitempty"`
 }
 
-func readyIssueRows(entries []ready.ReadyEntry) []ReadyIssue {
-	rows := make([]ReadyIssue, 0, len(entries))
-	for _, e := range entries {
-		rows = append(rows, ReadyIssue{
-			ID:                   e.Issue,
-			Type:                 e.Type,
-			Status:               "open",
-			Title:                e.Title,
-			Parent:               e.Parent,
-			Priority:             e.Priority,
-			Scope:                e.Scope,
-			EstComplexity:        e.EstComplexity,
-			RequiresConfirmation: e.RequiresConfirmation,
-			AssignedWorker:       e.AssignedWorker,
-		})
-	}
-	return rows
-}
-
-func readyWaveIDs(waves [][]ready.ReadyEntry) [][]string {
+func readyWaveIDs(waves [][]ReadyIssue) [][]string {
 	groups := make([][]string, 0, len(waves))
 	for _, wave := range waves {
 		ids := make([]string, 0, len(wave))
 		for _, e := range wave {
-			ids = append(ids, e.Issue)
+			ids = append(ids, e.ID)
 		}
 		groups = append(groups, ids)
 	}
 	return groups
 }
 
-func expiredClaimRows(claims []ready.ExpiredClaimEntry) []ExpiredClaim {
+func copyExpiredClaims(claims []ExpiredClaim) []ExpiredClaim {
 	rows := make([]ExpiredClaim, 0, len(claims))
-	for _, c := range claims {
-		rows = append(rows, ExpiredClaim{
-			ID:                         c.Issue,
-			Title:                      c.Title,
-			Status:                     c.Status,
-			ClaimedBy:                  c.ClaimedBy,
-			ClaimedAt:                  c.ClaimedAt,
-			LastHeartbeat:              c.LastHeartbeat,
-			ClaimTTL:                   c.ClaimTTL,
-			LastClaimingWorkerActivity: c.LastClaimingWorkerActivity,
-		})
-	}
-	return rows
+	return append(rows, claims...)
 }
 
 func readyEmptyReason(parent, assignedTo string, expiredN int) string {
@@ -126,13 +93,14 @@ func ReadyHelp(n int, waves bool, expiredN int, parent, assignedTo string) []str
 // {count,issues,expired_claims,help} and optional waves adjunct.
 func WriteReadyEnvelope(
 	w io.Writer,
-	entries []ready.ReadyEntry,
-	waves [][]ready.ReadyEntry,
+	entries []ReadyIssue,
+	waves [][]ReadyIssue,
 	includeWaves bool,
-	expired []ready.ExpiredClaimEntry,
+	expired []ExpiredClaim,
 	parent, assignedTo string,
 ) error {
-	rows := readyIssueRows(entries)
+	rows := make([]ReadyIssue, 0, len(entries))
+	rows = append(rows, entries...)
 	env, err := NewEnvelope("issues", rows, ReadyHelp(len(rows), includeWaves, len(expired), parent, assignedTo))
 	if err != nil {
 		return err
@@ -142,7 +110,7 @@ func WriteReadyEnvelope(
 			return err
 		}
 	}
-	if err := env.AddAdjunct("expired_claims", expiredClaimRows(expired)); err != nil {
+	if err := env.AddAdjunct("expired_claims", copyExpiredClaims(expired)); err != nil {
 		return err
 	}
 	return WriteEnvelope(w, env)

@@ -7,7 +7,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/ready"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,11 +45,11 @@ func TestWriteListEnvelopeCompactFourFieldRows(t *testing.T) {
 func TestWriteReadyEnvelopeIncludesExpiredClaims(t *testing.T) {
 	t.Parallel()
 
-	entries := []ready.ReadyEntry{{
-		Issue: "R1", Type: "task", Title: "Ready", Parent: "S1", Scope: []string{"a.go"},
+	entries := []ReadyIssue{{
+		ID: "R1", Type: "task", Status: "open", Title: "Ready", Parent: "S1", Scope: []string{"a.go"},
 	}}
-	expired := []ready.ExpiredClaimEntry{{
-		Issue: "X1", Title: "Stale", Status: ops.StatusInProgress, ClaimedBy: "w", ClaimTTL: 60,
+	expired := []ExpiredClaim{{
+		ID: "X1", Title: "Stale", Status: ops.StatusInProgress, ClaimedBy: "w", ClaimTTL: 60,
 	}}
 	var buf bytes.Buffer
 	require.NoError(t, WriteReadyEnvelope(&buf, entries, nil, false, expired, "", ""))
@@ -65,7 +64,7 @@ func TestWriteReadyEnvelopeIncludesExpiredClaims(t *testing.T) {
 		ID: "X1", Title: "Stale", Status: ops.StatusInProgress, ClaimedBy: "w", ClaimTTL: 60,
 	}}, claims)
 
-	waves := [][]ready.ReadyEntry{entries}
+	waves := [][]ReadyIssue{entries}
 	assert.Equal(t, [][]string{{"R1"}}, readyWaveIDs(waves))
 	var withWaves bytes.Buffer
 	require.NoError(t, WriteReadyEnvelope(&withWaves, entries, waves, true, nil, "", ""))
