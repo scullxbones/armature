@@ -5735,3 +5735,4 @@
 ["transition","CLAIMORD-W11",1791511395,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"277"},1]
 ["transition","TOPTIER-S6-T3",1791511396,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"314"},1]
 ["transition","TOPTIER-S8-T3",1791511396,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"316"},1]
+["claim","TOPTIER-S16-T1",1791511405,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":120,"worktree_path":"/home/brian/development/armature/.worktrees/TOPTIER-S16-T1","claim_token":"592d5b6891b2efc5de7a73fc0828b612"},1]
