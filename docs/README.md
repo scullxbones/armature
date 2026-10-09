@@ -90,7 +90,8 @@ otherwise closed out. Each file carries a `Superseded by` header.
 | `dogfooding-learnings.md` | Historical | Superseded — retrospective notes |
 | `ai-context-management-market-analysis.md` | Historical | Superseded — point-in-time market analysis |
 | `orchestration/` | Historical | Superseded — `arm orchestrate` subsystem removed (see `orchestration/README.md`) |
-| `next-work-sequencing-closed-through-2026-09-27.md` | Historical | Closed sequencing snapshot. Living order is `design/next-work-sequencing.md` |
+| `next-work-sequencing-closed-through-2026-09-27.md` | Historical | Closed sequencing snapshot through 2026-09-27. Living order is `design/next-work-sequencing.md` |
+| `next-work-sequencing-closed-v010.md` | Historical | v0.1.0 cut deliveries moved off the living sequencing page |
 
 ## Superpowers plans and specs (`superpowers/plans/`, `superpowers/specs/`)
 
