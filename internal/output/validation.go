@@ -6,8 +6,6 @@ import (
 )
 
 // ValidationView is the presentation shape of a graph-validation result.
-// Composition-root callers map validate.Result onto this type so output does
-// not import the validate module.
 type ValidationView struct {
 	OK       bool
 	Errors   []string

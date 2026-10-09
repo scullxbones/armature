@@ -231,14 +231,11 @@ func extractExitCode(fields map[string]any) (int, bool) {
 		return 0, false
 	}
 
-	if code, ok := fields["exit_code"].(float64); ok {
-		return int(code), true
+	code, ok := fields["exit_code"].(float64)
+	if !ok {
+		return 0, false
 	}
-	if code, ok := fields["exit_code"].(int); ok {
-		return code, true
-	}
-
-	return 0, false
+	return int(code), true
 }
 
 func extractOutput(fields map[string]any) []byte {
