@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/audit"
@@ -109,7 +108,7 @@ func TestRacingClaimsSameOwnerEveryCaller_REQ_CLAIMTTL(t *testing.T) {
 		}
 	}
 
-	expired := ready.ExpiredClaims(state.Issues, time.Unix(now, 0))
+	expired := ready.ExpiredClaims(readyClaimFacts(state.Issues, now))
 	assert.Empty(t, expired)
 	assert.False(t, state.Issues["task-01"].ClaimStale(now))
 	assert.True(t, claim.LeaseLive(owner, now))

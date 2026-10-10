@@ -26,7 +26,7 @@ func TestComputeWaves_TierBoundaryEnforcement_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-4": {Title: "Task 4", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	lastCriticalWaveIdx := -1
 	firstHighWaveIdx := -1
@@ -58,7 +58,7 @@ func TestComputeWaves_CustomPriorityTiersAreDeterministicAndComplete(t *testing.
 		{Issue: "custom-beta", Priority: "beta", Scope: []string{"beta/**"}},
 	}
 
-	waves := PartitionWaves(entries, materialize.Index{})
+	waves := PartitionWaves(entries, map[string]Facts{})
 
 	var got []string
 	for _, wave := range waves {
@@ -72,7 +72,7 @@ func TestComputeWaves_CustomPriorityTiersAreDeterministicAndComplete(t *testing.
 
 	reversed := []ReadyEntry{entries[4], entries[3], entries[2], entries[1], entries[0]}
 	var gotReversed []string
-	for _, wave := range PartitionWaves(reversed, materialize.Index{}) {
+	for _, wave := range PartitionWaves(reversed, map[string]Facts{}) {
 		for _, entry := range wave {
 			gotReversed = append(gotReversed, entry.Issue)
 		}
@@ -97,7 +97,7 @@ func TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.T)
 		"task-4": {Title: "Task 4", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	for _, wave := range waves {
 		for i, e1 := range wave {
@@ -126,7 +126,7 @@ func TestComputeWaves_AncestorDescendantExclusion_REQ_LNGHZN_S2_T1(t *testing.T)
 		"task-2":  {Title: "Task 2", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	for _, wave := range waves {
 		hasStory := false
@@ -162,7 +162,7 @@ func TestComputeWaves_GreedyFirstFitPlacement_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-5": {Title: "Task 5", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	assert.GreaterOrEqual(t, len(waves), 2, "Expected at least 2 waves")
 
@@ -186,7 +186,7 @@ func TestComputeWaves_EmptyInput_REQ_LNGHZN_S2_T1(t *testing.T) {
 
 	entries := []ReadyEntry{}
 	index := materialize.Index{}
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	assert.Empty(t, waves, "Empty input should produce empty output")
 }
@@ -202,7 +202,7 @@ func TestComputeWaves_SingleEntry_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-1": {Title: "Task 1", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	require.Len(t, waves, 1, "Single entry should produce one wave")
 	require.Len(t, waves[0], 1, "Single entry wave should have one entry")
@@ -224,7 +224,7 @@ func TestComputeWaves_AllDisjointScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-3": {Title: "Task 3", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	require.Len(t, waves, 1, "All disjoint scopes should fit in one wave")
 	require.Len(t, waves[0], 3, "All three entries should be in the same wave")
@@ -245,7 +245,7 @@ func TestComputeWaves_AllConflictingScopes_REQ_LNGHZN_S2_T1(t *testing.T) {
 		"task-3": {Title: "Task 3", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	require.Len(t, waves, 3, "All conflicting scopes should create separate waves")
 	for i, wave := range waves {
@@ -266,7 +266,7 @@ func TestComputeWaves_SiblingFilesInSameDirectoryShareAWave_REQ_LNGHZN_S10_T6(t 
 		"task-2": {Title: "Task 2", Type: "task"},
 	}
 
-	waves := PartitionWaves(entries, index)
+	waves := PartitionWaves(entries, queueFacts(index, nil, 0))
 
 	require.Len(t, waves, 1, "distinct sibling files in the same directory must not conflict, so both entries share one wave")
 	require.Len(t, waves[0], 2, "both entries should be in the single wave")

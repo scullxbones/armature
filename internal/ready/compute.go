@@ -1,4 +1,4 @@
-// Package ready computes the set of unblocked, unclaimed issues (the ready queue) and detects stale in-progress claims.
+// Package ready computes the set of unblocked, unclaimed issues (the Ready Queue) and detects stale in-progress claims.
 package ready
 
 import (
@@ -8,11 +8,17 @@ import (
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/issuetype"
-	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 )
 
-// ReadyEntry represents a task in the ready queue.
+const (
+	statusOpen       = "open"
+	statusClaimed    = "claimed"
+	statusInProgress = "in-progress"
+	statusMerged     = "merged"
+	statusDone       = "done"
+)
+
+// ReadyEntry represents a task in the Ready Queue.
 type ReadyEntry struct {
 	Issue                string   `json:"issue"`
 	Type                 string   `json:"type"`
@@ -25,119 +31,100 @@ type ReadyEntry struct {
 	AssignedWorker       string   `json:"assigned_worker,omitempty"`
 }
 
-// ComputeReady applies the 4-rule gate and returns a priority-sorted ready queue.
+// ComputeReady applies the 4-rule gate and returns a priority-sorted Ready Queue.
 // workerID is used for assignment-aware sorting: assigned-to-me first, unassigned next,
 // other-assigned last. Pass "" to disable assignment-aware sorting.
-func ComputeReady(index materialize.Index, issues map[string]*materialize.Issue, workerID string, now ...int64) []ReadyEntry {
-	currentTime := optionalUnix(now)
-	graph := materialize.GraphFromIndex(index)
+func ComputeReady(facts map[string]Facts, workerID string) []ReadyEntry {
+	graph := graphFromFacts(facts)
 
 	var ready []ReadyEntry
-	for id, entry := range index {
-		issue := issues[id]
-		if skipReadyScan(entry, issue, currentTime) {
+	for id, f := range facts {
+		if skipReadyScan(f) {
 			continue
 		}
-		if !allBlockersMerged(entry.BlockedBy, index) {
+		if !allBlockersMerged(f.BlockedBy, facts) {
 			continue
 		}
-		if !parentIsActive(entry, index) {
+		if !parentIsActive(f, facts) {
 			continue
 		}
 
 		re := ReadyEntry{
-			Issue:          id,
-			Type:           entry.Type,
-			Parent:         entry.Parent,
-			Title:          entry.Title,
-			AssignedWorker: entry.AssignedWorker,
-		}
-		if issue != nil {
-			re.Priority = issue.Priority
-			re.Scope = issue.Scope
-			re.EstComplexity = issue.EstComplexity
-			if issue.Provenance.Confidence == "inferred" {
-				re.RequiresConfirmation = true
-			}
+			Issue:                id,
+			Type:                 f.Type,
+			Parent:               f.Parent,
+			Title:                f.Title,
+			AssignedWorker:       f.AssignedWorker,
+			Priority:             f.Priority,
+			Scope:                f.Scope,
+			EstComplexity:        f.EstComplexity,
+			RequiresConfirmation: f.Confidence == "inferred",
 		}
 		ready = append(ready, re)
 	}
 
-	sortReady(ready, index, graph, workerID)
+	sortReady(ready, facts, graph, workerID)
 	return ready
 }
 
 // ExplainNotReady returns a map of issue ID to exclusion reason for every open
-// unclaimed task that is NOT in the ready queue. Keys are sorted deterministically.
+// unclaimed task that is NOT in the Ready Queue. Keys are sorted deterministically.
 // The reason string identifies which gate excluded the issue.
-// Pass variadic now parameter to inject deterministic time (for testing).
-func ExplainNotReady(index materialize.Index, issues map[string]*materialize.Issue, now ...int64) map[string]string {
-	currentTime := optionalUnix(now)
+func ExplainNotReady(facts map[string]Facts) map[string]string {
 	result := make(map[string]string)
-	for id, entry := range index {
-		issue := issues[id]
-		if skipReadyScan(entry, issue, currentTime) {
+	for id, f := range facts {
+		if skipReadyScan(f) {
 			continue
 		}
-		if !allBlockersMerged(entry.BlockedBy, index) {
-			result[id] = fmt.Sprintf("blocker(s) not merged: %s", unmergedBlockerHints(entry.BlockedBy, index))
+		if !allBlockersMerged(f.BlockedBy, facts) {
+			result[id] = fmt.Sprintf("blocker(s) not merged: %s", unmergedBlockerHints(f.BlockedBy, facts))
 			continue
 		}
-		if status, ok := inactiveParentStatus(entry, index); !ok {
-			result[id] = fmt.Sprintf("parent %s is not active (status: %s)", entry.Parent, status)
+		if status, ok := inactiveParentStatus(f, facts); !ok {
+			result[id] = fmt.Sprintf("parent %s is not active (status: %s)", f.Parent, status)
 		}
 	}
 	return result
 }
 
-func optionalUnix(now []int64) int64 {
-	if len(now) > 0 {
-		return now[0]
-	}
-	return 0
-}
-
-func skipReadyScan(entry materialize.IndexEntry, issue *materialize.Issue, currentTime int64) bool {
-	if !issuetype.IsReadyEligible(entry.Type) || entry.Status != ops.StatusOpen {
+func skipReadyScan(f Facts) bool {
+	if !issuetype.IsReadyEligible(f.Type) || f.Status != statusOpen {
 		return true
 	}
-	if issue == nil {
-		return false
-	}
-	if issue.Provenance.Confidence == "draft" {
+	if f.Confidence == "draft" {
 		return true
 	}
-	return issue.ClaimedBy != "" && !issue.ClaimStale(currentTime)
+	return f.ClaimedBy != "" && !f.ClaimStale
 }
 
-func parentIsActive(entry materialize.IndexEntry, index materialize.Index) bool {
-	_, ok := inactiveParentStatus(entry, index)
+func parentIsActive(f Facts, facts map[string]Facts) bool {
+	_, ok := inactiveParentStatus(f, facts)
 	return ok
 }
 
-func inactiveParentStatus(entry materialize.IndexEntry, index materialize.Index) (status string, active bool) {
-	if entry.Parent == "" {
+func inactiveParentStatus(f Facts, facts map[string]Facts) (status string, active bool) {
+	if f.Parent == "" {
 		return "", true
 	}
-	parentEntry, ok := index[entry.Parent]
+	parent, ok := facts[f.Parent]
 	if !ok {
 		return "missing", false
 	}
-	switch parentEntry.Status {
-	case ops.StatusInProgress, ops.StatusClaimed, ops.StatusOpen:
-		return parentEntry.Status, true
+	switch parent.Status {
+	case statusInProgress, statusClaimed, statusOpen:
+		return parent.Status, true
 	default:
-		return parentEntry.Status, false
+		return parent.Status, false
 	}
 }
 
-func unmergedBlockerHints(blockers []string, index materialize.Index) string {
+func unmergedBlockerHints(blockers []string, facts map[string]Facts) string {
 	var unmerged []string
 	for _, bid := range blockers {
-		e, ok := index[bid]
-		if !ok || e.Status != ops.StatusMerged {
+		e, ok := facts[bid]
+		if !ok || e.Status != statusMerged {
 			hint := ""
-			if ok && e.Status == ops.StatusDone {
+			if ok && e.Status == statusDone {
 				hint = fmt.Sprintf(" — run: arm merged --issue %s", bid)
 			}
 			unmerged = append(unmerged, bid+hint)
@@ -161,10 +148,10 @@ func FilterByAssignedTo(entries []ReadyEntry, workerID string) []ReadyEntry {
 	return filtered
 }
 
-func allBlockersMerged(blockers []string, index materialize.Index) bool {
+func allBlockersMerged(blockers []string, facts map[string]Facts) bool {
 	for _, bid := range blockers {
-		entry, ok := index[bid]
-		if !ok || entry.Status != ops.StatusMerged {
+		entry, ok := facts[bid]
+		if !ok || entry.Status != statusMerged {
 			return false
 		}
 	}
@@ -179,11 +166,11 @@ var priorityOrder = map[string]int{
 	"":         4,
 }
 
-func assignmentTier(issueID, workerID string, index materialize.Index) int {
+func assignmentTier(issueID, workerID string, facts map[string]Facts) int {
 	if workerID == "" {
 		return 1
 	}
-	entry := index[issueID]
+	entry := facts[issueID]
 	if entry.AssignedWorker == "" {
 		return 1
 	}
@@ -193,10 +180,10 @@ func assignmentTier(issueID, workerID string, index materialize.Index) int {
 	return 2
 }
 
-func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, workerID string) {
+func sortReady(entries []ReadyEntry, facts map[string]Facts, graph *dag.Graph, workerID string) {
 	sort.SliceStable(entries, func(i, j int) bool {
-		ai := assignmentTier(entries[i].Issue, workerID, index)
-		aj := assignmentTier(entries[j].Issue, workerID, index)
+		ai := assignmentTier(entries[i].Issue, workerID, facts)
+		aj := assignmentTier(entries[j].Issue, workerID, facts)
 		if ai != aj {
 			return ai < aj
 		}
@@ -210,8 +197,8 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 		if di != dj {
 			return di > dj
 		}
-		bi := len(index[entries[i].Issue].Blocks)
-		bj := len(index[entries[j].Issue].Blocks)
+		bi := len(facts[entries[i].Issue].Blocks)
+		bj := len(facts[entries[j].Issue].Blocks)
 		if bi != bj {
 			return bi > bj
 		}
@@ -220,8 +207,8 @@ func sortReady(entries []ReadyEntry, index materialize.Index, graph *dag.Graph, 
 }
 
 // CollectDescendants returns the set of all descendant IDs of root (not including root itself).
-func CollectDescendants(root string, index materialize.Index) map[string]bool {
-	descendants := materialize.GraphFromIndex(index).Descendants(root)
+func CollectDescendants(root string, facts map[string]Facts) map[string]bool {
+	descendants := graphFromFacts(facts).Descendants(root)
 
 	result := make(map[string]bool)
 	for _, id := range descendants {

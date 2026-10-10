@@ -95,9 +95,60 @@ func readyOutputExpired(claims []ready.ExpiredClaimEntry) []output.ExpiredClaim 
 	return rows
 }
 
+func readyQueueFacts(index materialize.Index, issues map[string]*materialize.Issue, now int64) map[string]ready.Facts {
+	out := make(map[string]ready.Facts, len(index))
+	for id, e := range index {
+		f := ready.Facts{
+			Type:           e.Type,
+			Status:         e.Status,
+			Parent:         e.Parent,
+			Title:          e.Title,
+			AssignedWorker: e.AssignedWorker,
+			Children:       e.Children,
+			BlockedBy:      e.BlockedBy,
+			Blocks:         e.Blocks,
+		}
+		if issue := issues[id]; issue != nil {
+			f.Priority = issue.Priority
+			f.Scope = issue.Scope
+			f.EstComplexity = issue.EstComplexity
+			f.Confidence = issue.Provenance.Confidence
+			f.ClaimedBy = issue.ClaimedBy
+			f.ClaimedAt = issue.ClaimedAt
+			f.LastHeartbeat = issue.LastHeartbeat
+			f.ClaimTTL = issue.ClaimTTL
+			f.LastClaimingWorkerActivity = issue.LastClaimingWorkerActivity
+			f.ClaimStale = issue.ClaimStale(now)
+		}
+		out[id] = f
+	}
+	return out
+}
+
+func readyClaimFacts(issues map[string]*materialize.Issue, now int64) map[string]ready.Facts {
+	out := make(map[string]ready.Facts, len(issues))
+	for id, issue := range issues {
+		if issue == nil {
+			continue
+		}
+		out[id] = ready.Facts{
+			Status:                     issue.Status,
+			Title:                      issue.Title,
+			ClaimedBy:                  issue.ClaimedBy,
+			ClaimedAt:                  issue.ClaimedAt,
+			LastHeartbeat:              issue.LastHeartbeat,
+			ClaimTTL:                   issue.ClaimTTL,
+			LastClaimingWorkerActivity: issue.LastClaimingWorkerActivity,
+			ClaimStale:                 issue.ClaimStale(now),
+		}
+	}
+	return out
+}
+
 func measureReady(index materialize.Index, state *materialize.State, now time.Time) ([]byte, error) {
-	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
-	expired := ready.ExpiredClaims(state.Issues, now)
+	nowUnix := now.Unix()
+	entries := ready.ComputeReady(readyQueueFacts(index, state.Issues, nowUnix), "")
+	expired := ready.ExpiredClaims(readyClaimFacts(state.Issues, nowUnix))
 	var buf bytes.Buffer
 	if err := output.WriteReadyEnvelope(
 		&buf,

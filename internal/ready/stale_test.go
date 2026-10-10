@@ -16,7 +16,7 @@ func TestStaleClaims_EmptyWhenNoClaims(t *testing.T) {
 		"task-02": {ID: "task-02", Status: ops.StatusInProgress},
 	}
 	now := time.Unix(1000, 0)
-	result := StaleClaims(issues, now)
+	result := StaleClaims(claimFactsFromIssues(issues, now.Unix()))
 	assert.Empty(t, result)
 }
 
@@ -32,7 +32,7 @@ func TestStaleClaims_ReturnsStaleClaimed(t *testing.T) {
 		},
 	}
 	now := time.Unix(200, 0)
-	result := StaleClaims(issues, now)
+	result := StaleClaims(claimFactsFromIssues(issues, now.Unix()))
 	assert.Equal(t, []string{"task-01"}, result)
 }
 
@@ -48,7 +48,7 @@ func TestStaleClaims_DoesNotReturnFreshClaim(t *testing.T) {
 		},
 	}
 	now := time.Unix(100, 0)
-	result := StaleClaims(issues, now)
+	result := StaleClaims(claimFactsFromIssues(issues, now.Unix()))
 	assert.Empty(t, result)
 }
 
@@ -64,7 +64,7 @@ func TestStaleClaims_DoesNotReturnNonClaimedStatus(t *testing.T) {
 		},
 	}
 	now := time.Unix(9999, 0)
-	result := StaleClaims(issues, now)
+	result := StaleClaims(claimFactsFromIssues(issues, now.Unix()))
 	assert.Empty(t, result)
 }
 
@@ -80,8 +80,8 @@ func TestStaleClaims_HeartbeatExtendsTTL(t *testing.T) {
 			LastHeartbeat: 500,
 		},
 	}
-	assert.Empty(t, StaleClaims(issues, time.Unix(530, 0)))
-	assert.Equal(t, []string{"task-01"}, StaleClaims(issues, time.Unix(561, 0)))
+	assert.Empty(t, StaleClaims(claimFactsFromIssues(issues, 530)))
+	assert.Equal(t, []string{"task-01"}, StaleClaims(claimFactsFromIssues(issues, 561)))
 }
 
 func TestStaleClaims_MultipleIssues_ReturnOnlyStale(t *testing.T) {
@@ -107,7 +107,7 @@ func TestStaleClaims_MultipleIssues_ReturnOnlyStale(t *testing.T) {
 		},
 	}
 	now := time.Unix(200, 0)
-	result := StaleClaims(issues, now)
+	result := StaleClaims(claimFactsFromIssues(issues, now.Unix()))
 	assert.Len(t, result, 1)
 	assert.Equal(t, "task-stale", result[0])
 }

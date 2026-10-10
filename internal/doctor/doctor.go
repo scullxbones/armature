@@ -242,7 +242,7 @@ func evaluateD1GitDivergence(commitSubjects []string, statuses map[string]string
 func checkD2StaleClaims(allIssues map[string]*materialize.Issue, now time.Time) Finding {
 	f := Finding{Check: "D2", Severity: SeverityOK, Message: "No stale claims"}
 
-	stale := ready.StaleClaims(allIssues, now)
+	stale := ready.StaleClaims(readyClaimFacts(allIssues, now.Unix()))
 	if len(stale) > 0 {
 		f.Severity = SeverityWarning
 		f.Message = "Claimed issues with expired TTL"
@@ -502,6 +502,26 @@ func checkD7WorkerIDMismatches(warnings []string) Finding {
 		f.Items = warnings
 	}
 	return f
+}
+
+func readyClaimFacts(issues map[string]*materialize.Issue, now int64) map[string]ready.Facts {
+	out := make(map[string]ready.Facts, len(issues))
+	for id, issue := range issues {
+		if issue == nil {
+			continue
+		}
+		out[id] = ready.Facts{
+			Status:                     issue.Status,
+			Title:                      issue.Title,
+			ClaimedBy:                  issue.ClaimedBy,
+			ClaimedAt:                  issue.ClaimedAt,
+			LastHeartbeat:              issue.LastHeartbeat,
+			ClaimTTL:                   issue.ClaimTTL,
+			LastClaimingWorkerActivity: issue.LastClaimingWorkerActivity,
+			ClaimStale:                 issue.ClaimStale(now),
+		}
+	}
+	return out
 }
 
 func worktreeFacts(issues map[string]*materialize.Issue, now time.Time) map[string]worktree.IssueFacts {

@@ -20,7 +20,7 @@ func TestReadyTask_AllRulesMet(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1)
 	assert.Equal(t, "task-01", ready[0].Issue)
 }
@@ -35,7 +35,7 @@ func TestReadyTask_BlockerNotMerged(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 0)
 }
 
@@ -49,7 +49,7 @@ func TestReadyTask_BlockerMerged(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1)
 }
 
@@ -62,7 +62,7 @@ func TestReadyTask_ParentClaimed_AppearsInQueue(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1, "task should be ready when parent story is claimed")
 	assert.Equal(t, "task-01", ready[0].Issue)
 }
@@ -76,7 +76,7 @@ func TestReadyTask_ParentNotInProgress(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	found := false
 	for _, r := range ready {
 		if r.Issue == "task-01" {
@@ -95,7 +95,7 @@ func TestComputeReady_SurfacesTaskWithOpenParent(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	found := false
 	for _, r := range ready {
 		if r.Issue == "task-01" {
@@ -113,7 +113,7 @@ func TestReadyTask_NoParent(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1)
 }
 
@@ -126,7 +126,7 @@ func TestReadyTask_InferredRequiresConfirmation(t *testing.T) {
 		"task-01": {ID: "task-01", Status: "open", Type: "task",
 			Provenance: materialize.Provenance{Confidence: "inferred"}},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1)
 	assert.True(t, ready[0].RequiresConfirmation)
 }
@@ -139,7 +139,7 @@ func TestReadyStory_NoParent_AppearsInQueue(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"story-01": {ID: "story-01", Status: "open", Type: "story"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1)
 	assert.Equal(t, "story-01", ready[0].Issue)
 }
@@ -153,7 +153,7 @@ func TestReadyStory_ParentInProgress_AppearsInQueue(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"story-01": {ID: "story-01", Status: "open", Type: "story", Parent: "epic-01"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1)
 	assert.Equal(t, "story-01", ready[0].Issue)
 }
@@ -168,7 +168,7 @@ func TestReadyTask_PrioritySort(t *testing.T) {
 		"task-a": {ID: "task-a", Status: "open", Type: "task", Priority: "medium"},
 		"task-b": {ID: "task-b", Status: "open", Type: "task", Priority: "high"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 2)
 	assert.Equal(t, "task-b", ready[0].Issue)
 }
@@ -185,7 +185,7 @@ func TestReadyTask_AssignedToMeFirst(t *testing.T) {
 		"task-b": {ID: "task-b", Status: "open", Type: "task"},
 		"task-c": {ID: "task-c", Status: "open", Type: "task"},
 	}
-	ready := ComputeReady(index, issues, "my-worker")
+	ready := ComputeReady(queueFacts(index, issues, 0), "my-worker")
 	assert.Len(t, ready, 3)
 	assert.Equal(t, "task-c", ready[0].Issue)
 	assert.Equal(t, "task-b", ready[1].Issue)
@@ -202,7 +202,7 @@ func TestReadyTask_NoWorkerID_NoAssignmentOrdering(t *testing.T) {
 		"task-a": {ID: "task-a", Status: "open", Type: "task"},
 		"task-b": {ID: "task-b", Status: "open", Type: "task"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 2)
 	assert.Equal(t, "task-a", ready[0].Issue)
 	assert.Equal(t, "task-b", ready[1].Issue)
@@ -222,7 +222,7 @@ func TestStaleClaims_ClaimingWorkerActivityPreventsStale(t *testing.T) {
 			ClaimTTL:                   1,
 		},
 	}
-	assert.Empty(t, StaleClaims(issues, now))
+	assert.Empty(t, StaleClaims(claimFactsFromIssues(issues, now.Unix())))
 }
 
 func TestExpiredClaims_ClaimingWorkerActivityPreventsExpiry(t *testing.T) {
@@ -239,7 +239,7 @@ func TestExpiredClaims_ClaimingWorkerActivityPreventsExpiry(t *testing.T) {
 			ClaimTTL:                   1,
 		},
 	}
-	assert.Empty(t, ExpiredClaims(issues, now))
+	assert.Empty(t, ExpiredClaims(claimFactsFromIssues(issues, now.Unix())))
 }
 
 func TestReadyTask_DraftConfidence_ExcludedFromReady(t *testing.T) {
@@ -251,7 +251,7 @@ func TestReadyTask_DraftConfidence_ExcludedFromReady(t *testing.T) {
 		"task-01": {ID: "task-01", Status: "open", Type: "task",
 			Provenance: materialize.Provenance{Confidence: "draft"}},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 0, "draft task should be excluded from ready queue")
 }
 
@@ -264,7 +264,7 @@ func TestReadyTask_VerifiedConfidence_IncludedInReady(t *testing.T) {
 		"task-01": {ID: "task-01", Status: "open", Type: "task",
 			Provenance: materialize.Provenance{Confidence: "verified"}},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1, "verified task should appear in ready queue")
 	assert.Equal(t, "task-01", ready[0].Issue)
 }
@@ -278,7 +278,7 @@ func TestReadyTask_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 		"task-01": {ID: "task-01", Status: "open", Type: "task",
 			Provenance: materialize.Provenance{Confidence: ""}},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 1, "task with no confidence field should default to verified and appear in ready queue")
 	assert.Equal(t, "task-01", ready[0].Issue)
 }
@@ -329,7 +329,7 @@ func TestDepth_DeepChain_CapsAt20(t *testing.T) {
 		index[id] = materialize.IndexEntry{Parent: parent}
 	}
 
-	graph := materialize.GraphFromIndex(index)
+	graph := graphFromFacts(queueFacts(index, nil, 0))
 	d := graph.Depth("issue-24")
 	assert.Equal(t, 24, d, "depth should be 24 (distance to root)")
 }
@@ -344,7 +344,7 @@ func TestComputeReady_AssignedWorkerFieldPopulated(t *testing.T) {
 		"task-01": {ID: "task-01", Status: "open", Type: "task"},
 		"task-02": {ID: "task-02", Status: "open", Type: "task"},
 	}
-	result := ComputeReady(index, issues, "")
+	result := ComputeReady(queueFacts(index, issues, 0), "")
 	entryMap := make(map[string]ReadyEntry)
 	for _, e := range result {
 		entryMap[e.Issue] = e
@@ -359,7 +359,7 @@ func TestComputeReady_AssignedWorkerFromIndex_EvenWithNoIssueEntry(t *testing.T)
 		"task-01": {Status: "open", Type: "task", AssignedWorker: "worker-x"},
 	}
 	issues := map[string]*materialize.Issue{}
-	result := ComputeReady(index, issues, "")
+	result := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, result, 1)
 	assert.Equal(t, "worker-x", result[0].AssignedWorker)
 }
@@ -369,14 +369,14 @@ func TestDepth_NoParent(t *testing.T) {
 	index := materialize.Index{
 		"task-01": {Parent: ""},
 	}
-	graph := materialize.GraphFromIndex(index)
+	graph := graphFromFacts(queueFacts(index, nil, 0))
 	assert.Equal(t, 0, graph.Depth("task-01"))
 }
 
 func TestDepth_MissingFromIndex(t *testing.T) {
 	t.Parallel()
 	index := materialize.Index{}
-	graph := materialize.GraphFromIndex(index)
+	graph := graphFromFacts(queueFacts(index, nil, 0))
 	assert.Equal(t, 0, graph.Depth("missing"))
 }
 
@@ -385,7 +385,7 @@ func TestAssignmentTier_AssignedToMe(t *testing.T) {
 	index := materialize.Index{
 		"T-001": {AssignedWorker: "worker-x"},
 	}
-	assert.Equal(t, 0, assignmentTier("T-001", "worker-x", index))
+	assert.Equal(t, 0, assignmentTier("T-001", "worker-x", queueFacts(index, nil, 0)))
 }
 
 func TestAssignmentTier_Unassigned(t *testing.T) {
@@ -393,7 +393,7 @@ func TestAssignmentTier_Unassigned(t *testing.T) {
 	index := materialize.Index{
 		"T-001": {AssignedWorker: ""},
 	}
-	assert.Equal(t, 1, assignmentTier("T-001", "worker-x", index))
+	assert.Equal(t, 1, assignmentTier("T-001", "worker-x", queueFacts(index, nil, 0)))
 }
 
 func TestAssignmentTier_AssignedToOther(t *testing.T) {
@@ -401,7 +401,7 @@ func TestAssignmentTier_AssignedToOther(t *testing.T) {
 	index := materialize.Index{
 		"T-001": {AssignedWorker: "worker-other"},
 	}
-	assert.Equal(t, 2, assignmentTier("T-001", "worker-x", index))
+	assert.Equal(t, 2, assignmentTier("T-001", "worker-x", queueFacts(index, nil, 0)))
 }
 
 func TestAssignmentTier_NoWorkerContext(t *testing.T) {
@@ -409,7 +409,7 @@ func TestAssignmentTier_NoWorkerContext(t *testing.T) {
 	index := materialize.Index{
 		"T-001": {AssignedWorker: "worker-x"},
 	}
-	assert.Equal(t, 1, assignmentTier("T-001", "", index))
+	assert.Equal(t, 1, assignmentTier("T-001", "", queueFacts(index, nil, 0)))
 }
 
 func TestReadyTask_SortByBlocksCount(t *testing.T) {
@@ -422,7 +422,7 @@ func TestReadyTask_SortByBlocksCount(t *testing.T) {
 		"task-a": {ID: "task-a", Status: "open", Type: "task"},
 		"task-b": {ID: "task-b", Status: "open", Type: "task"},
 	}
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	require.Len(t, ready, 2)
 	assert.Equal(t, "task-a", ready[0].Issue, "task with more Blocks should sort before task with fewer")
 }
@@ -437,7 +437,7 @@ func TestExplainNotReady_BlockerNotMerged(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
 	}
-	result := ExplainNotReady(index, issues)
+	result := ExplainNotReady(queueFacts(index, issues, 0))
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "task-02", "reason should mention the unmerged blocker")
@@ -452,7 +452,7 @@ func TestExplainNotReady_ParentNotActive(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01"},
 	}
-	result := ExplainNotReady(index, issues)
+	result := ExplainNotReady(queueFacts(index, issues, 0))
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "story-01", "reason should mention the inactive parent")
@@ -468,7 +468,7 @@ func TestExplainNotReady_BlockerDone_AppendsHint(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
 	}
-	result := ExplainNotReady(index, issues)
+	result := ExplainNotReady(queueFacts(index, issues, 0))
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "task-02", "reason should mention the blocker")
@@ -484,7 +484,7 @@ func TestExplainNotReady_BlockerMissing_NoHint(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-missing"}},
 	}
-	result := ExplainNotReady(index, issues)
+	result := ExplainNotReady(queueFacts(index, issues, 0))
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "task-missing", "reason should mention the blocker")
@@ -501,7 +501,7 @@ func TestExplainNotReady_BlockerCancelled_NoHint(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02"}},
 	}
-	result := ExplainNotReady(index, issues)
+	result := ExplainNotReady(queueFacts(index, issues, 0))
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "task-02", "reason should mention the blocker")
@@ -519,7 +519,7 @@ func TestExplainNotReady_MultipleDoneBlockers_HintForEach(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-02", "task-03"}},
 	}
-	result := ExplainNotReady(index, issues)
+	result := ExplainNotReady(queueFacts(index, issues, 0))
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "run: arm merged --issue task-02", "hint for task-02")
@@ -537,7 +537,7 @@ func TestExplainNotReady_MixedBlockers_HintOnlyForDone(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open", Type: "task", Parent: "story-01", BlockedBy: []string{"task-done", "task-missing", "task-cancelled"}},
 	}
-	result := ExplainNotReady(index, issues)
+	result := ExplainNotReady(queueFacts(index, issues, 0))
 	reason, ok := result["task-01"]
 	require.True(t, ok, "task-01 should be present in explain map")
 	assert.Contains(t, reason, "run: arm merged --issue task-done", "hint only for done blockers")
@@ -562,10 +562,10 @@ func TestFilterByParent_IncludesDescendantsOnly(t *testing.T) {
 		"task-c":     {ID: "task-c", Status: "open", Type: "task"},
 	}
 
-	ready := ComputeReady(index, issues, "")
+	ready := ComputeReady(queueFacts(index, issues, 0), "")
 	assert.Len(t, ready, 4, "should have 4 ready tasks before filtering")
 
-	descendants := CollectDescendants("story-01", index)
+	descendants := CollectDescendants("story-01", queueFacts(index, nil, 0))
 	filtered := ready[:0]
 	for _, e := range ready {
 		if descendants[e.Issue] {
@@ -594,7 +594,7 @@ func TestCollectDescendants_IncludesNestedChildren(t *testing.T) {
 		"grandchild1b": {Status: "open", Type: "task", Parent: "child1", Children: []string{}},
 	}
 
-	descendants := CollectDescendants("root", index)
+	descendants := CollectDescendants("root", queueFacts(index, nil, 0))
 
 	assert.Len(t, descendants, 4, "should have 4 descendants")
 	assert.True(t, descendants["child1"], "child1 should be a descendant")
@@ -610,7 +610,7 @@ func TestCollectDescendants_EmptyForLeaf(t *testing.T) {
 		"leaf": {Status: "open", Type: "task", Children: []string{}},
 	}
 
-	descendants := CollectDescendants("leaf", index)
+	descendants := CollectDescendants("leaf", queueFacts(index, nil, 0))
 	assert.Len(t, descendants, 0, "leaf node should have no descendants")
 }
 
@@ -620,7 +620,7 @@ func TestCollectDescendants_MissingRoot(t *testing.T) {
 		"child": {Status: "open", Type: "task", Parent: "missing-root"},
 	}
 
-	descendants := CollectDescendants("missing-root", index)
+	descendants := CollectDescendants("missing-root", queueFacts(index, nil, 0))
 	assert.Len(t, descendants, 0, "missing root should return empty set")
 }
 
@@ -640,7 +640,7 @@ func TestExplainNotReady_WithInjectedTime_StaleClaimExcluded(t *testing.T) {
 			ClaimTTL:      1,
 		},
 	}
-	result := ExplainNotReady(index, issues, 61)
+	result := ExplainNotReady(queueFacts(index, issues, 61))
 	_, ok := result["task-01"]
 	assert.False(t, ok, "stale claimed task should not appear in ExplainNotReady output")
 }
@@ -661,7 +661,7 @@ func TestExplainNotReady_WithInjectedTime_FreshClaimIncluded(t *testing.T) {
 			ClaimTTL:      1,
 		},
 	}
-	result := ExplainNotReady(index, issues, 30)
+	result := ExplainNotReady(queueFacts(index, issues, 30))
 	_, ok := result["task-01"]
 	assert.False(t, ok, "fresh claimed task should not appear in ExplainNotReady output")
 }
@@ -674,7 +674,7 @@ func TestExpiredClaims_ClaimedPastTTL_Surfaced(t *testing.T) {
 			ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 1,
 		},
 	}
-	entries := ExpiredClaims(issues, time.Unix(61, 0))
+	entries := ExpiredClaims(claimFactsFromIssues(issues, 61))
 	require.Len(t, entries, 1)
 	assert.Equal(t, "task-01", entries[0].Issue)
 	assert.Equal(t, "worker-a", entries[0].ClaimedBy)
@@ -693,7 +693,7 @@ func TestExpiredClaims_MultipleEntries_SortedByIssueID(t *testing.T) {
 			ClaimedBy: "worker-b", ClaimedAt: 0, ClaimTTL: 1,
 		},
 	}
-	entries := ExpiredClaims(issues, time.Unix(61, 0))
+	entries := ExpiredClaims(claimFactsFromIssues(issues, 61))
 	require.Len(t, entries, 2)
 	assert.Equal(t, "task-alpha", entries[0].Issue)
 	assert.Equal(t, "task-zebra", entries[1].Issue)
@@ -707,7 +707,7 @@ func TestExpiredClaims_InProgressPastTTL_Surfaced(t *testing.T) {
 			ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 1,
 		},
 	}
-	entries := ExpiredClaims(issues, time.Unix(61, 0))
+	entries := ExpiredClaims(claimFactsFromIssues(issues, 61))
 	require.Len(t, entries, 1)
 	assert.Equal(t, "in-progress", entries[0].Status)
 }
@@ -719,7 +719,7 @@ func TestExpiredClaims_ActiveClaim_NotSurfaced(t *testing.T) {
 			ID: "task-01", Status: "claimed", ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 60,
 		},
 	}
-	entries := ExpiredClaims(issues, time.Unix(30, 0))
+	entries := ExpiredClaims(claimFactsFromIssues(issues, 30))
 	assert.Empty(t, entries, "a claim within its TTL must not be surfaced as expired")
 }
 
@@ -728,7 +728,7 @@ func TestExpiredClaims_OpenIssue_NotSurfaced(t *testing.T) {
 	issues := map[string]*materialize.Issue{
 		"task-01": {ID: "task-01", Status: "open"},
 	}
-	entries := ExpiredClaims(issues, time.Unix(1_000_000, 0))
+	entries := ExpiredClaims(claimFactsFromIssues(issues, 1_000_000))
 	assert.Empty(t, entries, "an unclaimed open issue is never an expired claim")
 }
 
@@ -743,10 +743,10 @@ func TestExpiredClaims_DoesNotOverlapReadyQueue(t *testing.T) {
 			ClaimedBy: "worker-a", ClaimedAt: 0, ClaimTTL: 1,
 		},
 	}
-	ready := ComputeReady(index, issues, "", 61)
+	ready := ComputeReady(queueFacts(index, issues, 61), "")
 	assert.Empty(t, ready, "claimed issues never appear in the ready queue, expired or not")
 
-	expired := ExpiredClaims(issues, time.Unix(61, 0))
+	expired := ExpiredClaims(claimFactsFromIssues(issues, 61))
 	require.Len(t, expired, 1)
 	assert.Equal(t, "task-01", expired[0].Issue)
 }

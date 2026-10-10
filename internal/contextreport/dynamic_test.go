@@ -169,8 +169,8 @@ func TestMeasureReadyPassesFrozenClockToComputeReady(t *testing.T) {
 	got, err := measureReady(index, state, now)
 	require.NoError(t, err)
 
-	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
-	expired := ready.ExpiredClaims(state.Issues, now)
+	entries := ready.ComputeReady(readyQueueFacts(index, state.Issues, now.Unix()), "")
+	expired := ready.ExpiredClaims(readyClaimFacts(state.Issues, now.Unix()))
 	var want bytes.Buffer
 	require.NoError(t, output.WriteReadyEnvelope(&want, readyOutputIssues(entries), nil, false, readyOutputExpired(expired), "", ""))
 	assert.Equal(t, want.Bytes(), got)
