@@ -2,9 +2,6 @@ package ready
 
 import "github.com/scullxbones/armature/internal/dag"
 
-// Facts is the borrowed Ready Queue input: graph shape, assignment, confidence,
-// and a precomputed ClaimStale bit. Claim TTL policy stays in claim;
-// composition roots map materialized issues onto these fields.
 type Facts struct {
 	Type                       string
 	Status                     string
