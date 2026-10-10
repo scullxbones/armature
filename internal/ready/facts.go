@@ -2,6 +2,7 @@ package ready
 
 import "github.com/scullxbones/armature/internal/dag"
 
+// Facts is the borrowed Ready Queue input.
 type Facts struct {
 	Type                       string
 	Status                     string
