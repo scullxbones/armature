@@ -52,7 +52,7 @@ func newWorktreeListCmd() *cobra.Command {
 					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree list`", err)
 			}
 
-			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, managedWorktreeRoots(ctx.RepoPath), registeredPaths)
+			result := worktree.ReconcileWithLocalEvidence(worktrees, worktreeFacts(issues, time.Now()), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -145,7 +145,7 @@ func newWorktreeGCCmd() *cobra.Command {
 					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree gc`", err)
 			}
 
-			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, managedWorktreeRoots(ctx.RepoPath), registeredPaths)
+			result := worktree.ReconcileWithLocalEvidence(worktrees, worktreeFacts(issues, time.Now()), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -252,13 +252,16 @@ func managedWorktreeRoots(repoPath string) []string {
 	return []string{worktree.CanonicalRoot(repoPath), worktree.NormalizePath(abs)}
 }
 
-func loadIssuesForReconcile(ctx *config.Context) (map[string]worktree.IssueFacts, error) {
+func loadIssuesForReconcile(ctx *config.Context) (map[string]*materialize.Issue, error) {
 	store := newSnapshotStore(ctx)
 	snap, err := store.Load(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	return worktreeFacts(snap.Issues, time.Now()), nil
+	if snap.Issues == nil {
+		return map[string]*materialize.Issue{}, nil
+	}
+	return snap.Issues, nil
 }
 
 func worktreeFacts(issues map[string]*materialize.Issue, now time.Time) map[string]worktree.IssueFacts {
