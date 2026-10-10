@@ -3,13 +3,16 @@ package worktree
 
 import (
 	"sort"
-	"time"
-
-	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 )
 
-// Meta describes a worktree on disk.
+type IssueFacts struct {
+	ID           string
+	Status       string
+	ClaimedBy    string
+	WorktreePath string
+	ClaimStale   bool
+}
+
 type Meta struct {
 	Path   string
 	Branch string
@@ -45,7 +48,7 @@ type ReconcileResult struct {
 	Unrecognized []string
 }
 
-// Reconcile classifies managed worktrees against the set of issues and their claim state.
+// Reconcile classifies managed worktrees against borrowed issue facts.
 //
 // Classification is driven from THIS clone's on-disk worktrees (the []Meta), not
 // from the git-replicated absolute issue.WorktreePath. Each local worktree's
@@ -54,15 +57,15 @@ type ReconcileResult struct {
 //   - terminal issue (merged/cancelled) -> GCRemovalSet (a clone-local terminal
 //     worktree is gc-ready even when the recorded WorktreePath points at a foreign
 //     or reused clone)
-//   - live, non-stale claim (ClaimedBy set, TTL not expired) -> BoundWorktrees
+//   - live, non-stale claim (ClaimedBy set, ClaimStale false) -> BoundWorktrees
 //   - anything else (unclaimed, or a claim past its TTL) -> Orphans
 //   - a worktree mapping to no known issue -> Unrecognized (by PATH)
 //
 // A GHOST is an issue holding a live claim (ClaimedBy set, non-terminal) whose
 // recorded worktree_path has no matching local worktree. A gc'd/merged worktree
 // that is simply gone is the EXPECTED end state, so terminal-status issues are
-// excluded. Staleness uses Issue.ClaimStale against now so a claim past its
-// TTL is treated as no-longer-live.
+// excluded. Callers supply ClaimStale so a claim past its TTL is treated as
+// no-longer-live.
 //
 // managedRoots optionally scopes ghost detection to worktrees this clone owns.
 // A live claim's recorded WorktreePath is an absolute path captured in the
@@ -73,8 +76,8 @@ type ReconcileResult struct {
 // their inventory. A path outside those roots is local only when it appears in
 // registeredPaths, which is clone-local Git worktree evidence. When no roots or
 // registrations are supplied, ghost scoping is disabled for compatibility.
-func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.Time, managedRoots ...string) ReconcileResult {
-	return ReconcileWithLocalEvidence(worktrees, issues, now, managedRoots, nil)
+func Reconcile(worktrees []Meta, issues map[string]IssueFacts, managedRoots ...string) ReconcileResult {
+	return ReconcileWithLocalEvidence(worktrees, issues, managedRoots, nil)
 }
 
 // ReconcileWithLocalEvidence is Reconcile with an additional set of paths
@@ -83,8 +86,7 @@ func Reconcile(worktrees []Meta, issues map[string]*materialize.Issue, now time.
 // directories cannot provide a binding file.
 func ReconcileWithLocalEvidence(
 	worktrees []Meta,
-	issues map[string]*materialize.Issue,
-	now time.Time,
+	issues map[string]IssueFacts,
 	managedRoots []string,
 	registeredPaths []string,
 ) ReconcileResult {
@@ -103,20 +105,19 @@ func ReconcileWithLocalEvidence(
 
 	for _, wt := range worktrees {
 		issueID := wt.Binding
-		issue := issues[issueID]
-		if issueID == "" || issue == nil {
+		issue, known := issues[issueID]
+		if issueID == "" || !known {
 			result.Unrecognized = append(result.Unrecognized, wt.Path)
 			continue
 		}
 		if issue.WorktreePath != "" && NormalizePathAllowingMissing(wt.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
 			matchedRecordedPaths.add(issueID)
 		}
-		classifyBoundWorktree(&result, gcCandidates, issueID, issue, wt, now)
+		classifyBoundWorktree(&result, gcCandidates, issueID, issue, wt)
 	}
 
 	for issueID, candidates := range gcCandidates {
-		issue := issues[issueID]
-		selected, res := selectGCRemoval(issue, candidates)
+		selected, res := selectGCRemoval(issues[issueID], candidates)
 		if res != Bound {
 			result.GCAmbiguous = append(result.GCAmbiguous, issueID)
 			continue
@@ -125,16 +126,16 @@ func ReconcileWithLocalEvidence(
 		result.GCRemovals = append(result.GCRemovals, selected)
 	}
 
-	result.Ghosts = detectGhosts(issues, matchedRecordedPaths, now, managedRoots, registeredPaths)
+	result.Ghosts = detectGhosts(issues, matchedRecordedPaths, managedRoots, registeredPaths)
 	sortReconcileResult(&result)
 	return result
 }
 
-func classifyBoundWorktree(result *ReconcileResult, gcCandidates map[string][]Meta, issueID string, issue *materialize.Issue, wt Meta, now time.Time) {
+func classifyBoundWorktree(result *ReconcileResult, gcCandidates map[string][]Meta, issueID string, issue IssueFacts, wt Meta) {
 	switch {
 	case isTerminalStatus(issue.Status):
 		gcCandidates[issueID] = append(gcCandidates[issueID], wt)
-	case issue.ClaimedBy != "" && !issue.ClaimStale(now.Unix()):
+	case issue.ClaimedBy != "" && !issue.ClaimStale:
 		if liveClaimBindsLocalPath(issue, wt.Path) {
 			result.BoundWorktrees = append(result.BoundWorktrees, issueID)
 		} else {
@@ -145,15 +146,15 @@ func classifyBoundWorktree(result *ReconcileResult, gcCandidates map[string][]Me
 	}
 }
 
-func detectGhosts(issues map[string]*materialize.Issue, matched recordedPathSet, now time.Time, managedRoots, registeredPaths []string) []string {
+func detectGhosts(issues map[string]IssueFacts, matched recordedPathSet, managedRoots, registeredPaths []string) []string {
 	ghostScopeDisabled := len(managedRoots) == 0
 	ghosts := []string{}
 	for _, issue := range issues {
-		if issue == nil || issue.WorktreePath == "" || matched.has(issue.ID) {
+		if issue.WorktreePath == "" || matched.has(issue.ID) {
 			continue
 		}
 		normPath := NormalizePathAllowingMissing(issue.WorktreePath)
-		if isTerminalStatus(issue.Status) || issue.ClaimedBy == "" || issue.ClaimStale(now.Unix()) {
+		if isTerminalStatus(issue.Status) || issue.ClaimedBy == "" || issue.ClaimStale {
 			continue
 		}
 		if ghostScopeDisabled || isUnderManagedRoot(normPath, managedRoots) || isRegisteredPath(normPath, registeredPaths) {
@@ -178,7 +179,7 @@ func sortReconcileResult(result *ReconcileResult) {
 	sort.Strings(result.Unrecognized)
 }
 
-func liveClaimBindsLocalPath(issue *materialize.Issue, wtPath string) bool {
+func liveClaimBindsLocalPath(issue IssueFacts, wtPath string) bool {
 	return issue.WorktreePath == "" || NormalizePathAllowingMissing(wtPath) == NormalizePathAllowingMissing(issue.WorktreePath)
 }
 
@@ -200,11 +201,11 @@ func isRegisteredPath(normPath string, registeredPaths []string) bool {
 	return false
 }
 
-func selectGCRemoval(issue *materialize.Issue, candidates []Meta) (Meta, Resolution) {
+func selectGCRemoval(issue IssueFacts, candidates []Meta) (Meta, Resolution) {
 	if len(candidates) == 0 {
 		return Meta{}, NotFound
 	}
-	if issue != nil && issue.WorktreePath != "" {
+	if issue.WorktreePath != "" {
 		var matches []Meta
 		for _, candidate := range candidates {
 			if NormalizePathAllowingMissing(candidate.Path) == NormalizePathAllowingMissing(issue.WorktreePath) {
@@ -234,5 +235,5 @@ func isUnderManagedRoot(normPath string, managedRoots []string) bool {
 }
 
 func isTerminalStatus(status string) bool {
-	return status == ops.StatusMerged || status == ops.StatusCancelled
+	return status == "merged" || status == "cancelled"
 }

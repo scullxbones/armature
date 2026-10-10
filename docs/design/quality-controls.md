@@ -90,8 +90,8 @@ Gremlins is the end-to-end check on test quality. If fakes plus state-based asse
 | Rule | Mode | Hold |
 |---|---|---|
 | `internal-no-cmd` | deny | `internal/**` must not import `cmd` |
-| `dag-pure`, `issuetype-pure`, `issueref-pure` | deny other `internal` | truly pure packages |
-| `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, `output`, `worktree` | strict allow-lists | deep-module / port-clean boundaries (ADR 0004; `worktree` is in the live YAML) |
+| `dag-pure`, `issuetype-pure`, `issueref-pure`, `worktree-pure` | deny other `internal` | truly pure packages |
+| `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, `output` | strict allow-lists | deep-module / port-clean boundaries (ADR 0004) |
 
 Prefer shrinking allow-lists. Growing an allow-list or removing a deny is an ADR-class change ([ADR 0004](../adr/0004-deep-module-depguard-boundaries.md) for the boundary model; [ADR 0023](../adr/0023-depguard-allow-list-widens-are-adr-class.md) for the ratchet). Overnight subtractive work may shrink fences; feature work must not widen them without that ADR.
 

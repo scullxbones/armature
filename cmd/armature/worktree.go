@@ -52,7 +52,7 @@ func newWorktreeListCmd() *cobra.Command {
 					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree list`", err)
 			}
 
-			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, time.Now(), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
+			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -145,7 +145,7 @@ func newWorktreeGCCmd() *cobra.Command {
 					"run `arm materialize` (or repair the ops worktree) and retry `arm worktree gc`", err)
 			}
 
-			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, time.Now(), managedWorktreeRoots(ctx.RepoPath), registeredPaths)
+			result := worktree.ReconcileWithLocalEvidence(worktrees, issues, managedWorktreeRoots(ctx.RepoPath), registeredPaths)
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
@@ -252,16 +252,30 @@ func managedWorktreeRoots(repoPath string) []string {
 	return []string{worktree.CanonicalRoot(repoPath), worktree.NormalizePath(abs)}
 }
 
-func loadIssuesForReconcile(ctx *config.Context) (map[string]*materialize.Issue, error) {
+func loadIssuesForReconcile(ctx *config.Context) (map[string]worktree.IssueFacts, error) {
 	store := newSnapshotStore(ctx)
 	snap, err := store.Load(context.Background())
 	if err != nil {
 		return nil, err
 	}
-	if snap.Issues == nil {
-		return map[string]*materialize.Issue{}, nil
+	return worktreeFacts(snap.Issues, time.Now()), nil
+}
+
+func worktreeFacts(issues map[string]*materialize.Issue, now time.Time) map[string]worktree.IssueFacts {
+	out := make(map[string]worktree.IssueFacts, len(issues))
+	for id, iss := range issues {
+		if iss == nil {
+			continue
+		}
+		out[id] = worktree.IssueFacts{
+			ID:           iss.ID,
+			Status:       iss.Status,
+			ClaimedBy:    iss.ClaimedBy,
+			WorktreePath: iss.WorktreePath,
+			ClaimStale:   iss.ClaimStale(now.Unix()),
+		}
 	}
-	return snap.Issues, nil
+	return out
 }
 
 func gcExitError(failed, ambiguous []string) error {
