@@ -165,15 +165,14 @@ linters:
             - "github.com/scullxbones/armature/internal/issuetype"
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/strictjson"
-        worktree-boundary:
-          list-mode: strict
+        worktree-pure:
+          list-mode: lax
           files:
             - "**/internal/worktree/*.go"
             - "!**/*_test.go"
-          allow:
-            - "$gostd"
-            - "github.com/scullxbones/armature/internal/materialize"
-            - "github.com/scullxbones/armature/internal/ops"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "worktree classifies borrowed issue facts and must not import other internal packages"
         harnesshook-boundary:
           list-mode: strict
           files:

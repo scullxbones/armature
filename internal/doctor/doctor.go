@@ -504,6 +504,23 @@ func checkD7WorkerIDMismatches(warnings []string) Finding {
 	return f
 }
 
+func worktreeFacts(issues map[string]*materialize.Issue, now time.Time) map[string]worktree.IssueFacts {
+	out := make(map[string]worktree.IssueFacts, len(issues))
+	for id, iss := range issues {
+		if iss == nil {
+			continue
+		}
+		out[id] = worktree.IssueFacts{
+			ID:           iss.ID,
+			Status:       iss.Status,
+			ClaimedBy:    iss.ClaimedBy,
+			WorktreePath: iss.WorktreePath,
+			ClaimStale:   iss.ClaimStale(now.Unix()),
+		}
+	}
+	return out
+}
+
 func checkD9UnrecognizedWorktrees(repoPath string, allIssues map[string]*materialize.Issue, now time.Time) Finding {
 	if repoPath == "" || allIssues == nil {
 		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
@@ -512,7 +529,7 @@ func checkD9UnrecognizedWorktrees(repoPath string, allIssues map[string]*materia
 	if err != nil {
 		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
 	}
-	result := worktree.Reconcile(worktrees, allIssues, now, worktree.CanonicalRoot(repoPath))
+	result := worktree.Reconcile(worktrees, worktreeFacts(allIssues, now), worktree.CanonicalRoot(repoPath))
 	return EvaluateD9UnrecognizedWorktrees(result.Unrecognized)
 }
 
