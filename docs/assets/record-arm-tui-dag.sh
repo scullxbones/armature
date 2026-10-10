@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Record arm tui DAG tree from a real armature checkout into an asciinema cast,
-# then optionally render a GIF with agg (https://github.com/asciinema/agg).
-#
-# Usage (from repo root, with arm on PATH):
-#   ./docs/assets/record-arm-tui-dag.sh
-#   ./docs/assets/record-arm-tui-dag.sh --record docs/assets/arm-tui-dag.cast
-#   ./docs/assets/record-arm-tui-dag.sh --record docs/assets/arm-tui-dag.cast --gif docs/assets/arm-tui-dag.gif
 set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Record arm tui DAG tree from a real armature checkout into an asciinema cast,
+then optionally render a GIF with agg (https://github.com/asciinema/agg).
+
+Usage (from repo root, with arm on PATH):
+  ./docs/assets/record-arm-tui-dag.sh
+  ./docs/assets/record-arm-tui-dag.sh --record docs/assets/arm-tui-dag.cast
+  ./docs/assets/record-arm-tui-dag.sh --record docs/assets/arm-tui-dag.cast --gif docs/assets/arm-tui-dag.gif
+  ./docs/assets/record-arm-tui-dag.sh --repo /path/to/checkout
+EOF
+}
 
 RECORD_OUT="docs/assets/arm-tui-dag.cast"
 GIF_OUT=""
@@ -27,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      usage
       exit 0
       ;;
     *)
