@@ -24,7 +24,7 @@ Derived from `docs/design/deterministic-quality-guardrails.md`, adapted to Go an
 | `unconvert` | Unnecessary type conversions |
 | `goimports` | Import grouping and formatting |
 
-**Gap (R3 — purity):** No lint rule currently bans `time.Now()`, `rand.*`, or `os.Getenv` in domain packages. Six live violations exist in `internal/ready`, `internal/decompose`, and `internal/doctor`. See C4 below for the target state.
+**Gap (R3 — purity):** No lint rule currently bans `time.Now()`, `rand.*`, or `os.Getenv` in domain packages. Live violations remain in `internal/decompose` and `internal/doctor`. See C4 below for the target state.
 
 **Gap (R1 — mock ban):** No explicit ban on mock libraries. Go's stdlib lacks a mock framework, so this is low-risk today, but `gomock` or `testify/mock` could be introduced. Add `no-restricted-imports` equivalent if a mock package appears in `go.mod`.
 
@@ -91,7 +91,7 @@ Gremlins is the end-to-end check on test quality. If fakes plus state-based asse
 |---|---|---|
 | `internal-no-cmd` | deny | `internal/**` must not import `cmd` |
 | `dag-pure`, `issuetype-pure`, `issueref-pure`, `worktree-pure` | deny other `internal` | truly pure packages |
-| `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, `output` | strict allow-lists | deep-module / port-clean boundaries (ADR 0004) |
+| `ops`, `claim`, `traceability`, `materialize`, `sources`, `validate`, `output`, `ready` | strict allow-lists | deep-module / port-clean boundaries (ADR 0004) |
 
 Prefer shrinking allow-lists. Growing an allow-list or removing a deny is an ADR-class change ([ADR 0004](../adr/0004-deep-module-depguard-boundaries.md) for the boundary model; [ADR 0023](../adr/0023-depguard-allow-list-widens-are-adr-class.md) for the ratchet). Overnight subtractive work may shrink fences; feature work must not widen them without that ADR.
 
@@ -108,7 +108,6 @@ Unfenced packages are outside this map until a new rule is proven green against 
 Domain packages (`ready`, `decompose`, `materialize`, `dag`, `ops`) should not call `time.Now()` directly. Non-determinism in core logic causes flaky tests and makes fakes harder to write.
 
 Current violations:
-- `internal/ready/compute.go:35,113` — `time.Now().Unix()`
 - `internal/decompose/apply.go:160,185` — `time.Now().Unix()`
 - `internal/decompose/revert.go:52` — `time.Now().Unix()`
 - `internal/doctor/doctor.go:213` — `time.Now()` (passed to `ready.StaleClaims`)

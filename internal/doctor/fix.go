@@ -32,7 +32,7 @@ func PlanFixes(allIssues map[string]*materialize.Issue, workerID string, now tim
 	var actions []FixAction
 	fixed := make(map[string]bool)
 
-	for _, id := range ready.StaleClaims(allIssues, now) {
+	for _, id := range ready.StaleClaims(readyClaimFacts(allIssues, nowUnix)) {
 		actions = append(actions, releaseExpiredClaim(id, allIssues[id], workerID, nowUnix))
 		fixed[id] = true
 	}

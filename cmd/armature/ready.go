@@ -89,8 +89,9 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 		return mapReadyError(fmt.Errorf("load snapshot: %w", err))
 	}
 	emitSnapWarnings(cmd.ErrOrStderr(), snap.Warnings)
-	entries := ready.ComputeReady(snap.Index, snap.Issues, "", nowEpoch())
-	expiredClaims := ready.ExpiredClaims(snap.Issues, time.Now())
+	now := nowEpoch()
+	entries := ready.ComputeReady(readyQueueFacts(snap.Index, snap.Issues, now), "")
+	expiredClaims := ready.ExpiredClaims(readyClaimFacts(snap.Issues, time.Now().Unix()))
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	if isStructuredFormat(format) || tui.IsNonInteractive() {
 		return output.WriteReadyEnvelope(
@@ -154,7 +155,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			issues := snap.Issues
 
 			if explain {
-				notReady := ready.ExplainNotReady(index, issues, nowEpoch())
+				notReady := ready.ExplainNotReady(readyQueueFacts(index, issues, nowEpoch()))
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
 				if isStructuredFormat(format) || tui.IsNonInteractive() {
 					return writeReadyExplainEnvelope(cmd.OutOrStdout(), index, notReady)
@@ -170,8 +171,9 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				return nil
 			}
 
-			entries := ready.ComputeReady(index, issues, workerID, nowEpoch())
-			expiredClaims := ready.ExpiredClaims(issues, time.Now())
+			queue := readyQueueFacts(index, issues, nowEpoch())
+			entries := ready.ComputeReady(queue, workerID)
+			expiredClaims := ready.ExpiredClaims(readyClaimFacts(issues, time.Now().Unix()))
 
 			entries = ready.FilterByAssignedTo(entries, assignedTo)
 			if assignedTo != "" {
@@ -179,7 +181,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			}
 
 			if filterParent != "" {
-				descendants := ready.CollectDescendants(filterParent, index)
+				descendants := ready.CollectDescendants(filterParent, queue)
 				filtered := entries[:0]
 				for _, e := range entries {
 					if descendants[e.Issue] {
@@ -202,7 +204,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			case isStructuredFormat(format) || tui.IsNonInteractive():
 				var wavesData [][]output.ReadyIssue
 				if waves {
-					for _, wave := range ready.PartitionWaves(entries, index) {
+					for _, wave := range ready.PartitionWaves(entries, queue) {
 						wavesData = append(wavesData, readyOutputIssues(wave))
 					}
 				}
@@ -269,6 +271,56 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 	cmd.Flags().BoolVar(&explain, "explain", false, "diagnose why open tasks are not in the ready queue")
 	cmd.Flags().BoolVar(&waves, "waves", false, "partition ready entries into scope-disjoint waves (JSON/agent output only)")
 	return cmd
+}
+
+func readyQueueFacts(index materialize.Index, issues map[string]*materialize.Issue, now int64) map[string]ready.Facts {
+	out := make(map[string]ready.Facts, len(index))
+	for id, e := range index {
+		f := ready.Facts{
+			Type:           e.Type,
+			Status:         e.Status,
+			Parent:         e.Parent,
+			Title:          e.Title,
+			AssignedWorker: e.AssignedWorker,
+			Children:       e.Children,
+			BlockedBy:      e.BlockedBy,
+			Blocks:         e.Blocks,
+		}
+		if issue := issues[id]; issue != nil {
+			f.Priority = issue.Priority
+			f.Scope = issue.Scope
+			f.EstComplexity = issue.EstComplexity
+			f.Confidence = issue.Provenance.Confidence
+			f.ClaimedBy = issue.ClaimedBy
+			f.ClaimedAt = issue.ClaimedAt
+			f.LastHeartbeat = issue.LastHeartbeat
+			f.ClaimTTL = issue.ClaimTTL
+			f.LastClaimingWorkerActivity = issue.LastClaimingWorkerActivity
+			f.ClaimStale = issue.ClaimStale(now)
+		}
+		out[id] = f
+	}
+	return out
+}
+
+func readyClaimFacts(issues map[string]*materialize.Issue, now int64) map[string]ready.Facts {
+	out := make(map[string]ready.Facts, len(issues))
+	for id, issue := range issues {
+		if issue == nil {
+			continue
+		}
+		out[id] = ready.Facts{
+			Status:                     issue.Status,
+			Title:                      issue.Title,
+			ClaimedBy:                  issue.ClaimedBy,
+			ClaimedAt:                  issue.ClaimedAt,
+			LastHeartbeat:              issue.LastHeartbeat,
+			ClaimTTL:                   issue.ClaimTTL,
+			LastClaimingWorkerActivity: issue.LastClaimingWorkerActivity,
+			ClaimStale:                 issue.ClaimStale(now),
+		}
+	}
+	return out
 }
 
 func readyOutputIssues(entries []ready.ReadyEntry) []output.ReadyIssue {

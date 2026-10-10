@@ -68,8 +68,8 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	got, err := measureReady(index, state, now)
 	require.NoError(t, err)
 
-	entries := ready.ComputeReady(index, state.Issues, "", now.Unix())
-	expired := ready.ExpiredClaims(state.Issues, now)
+	entries := ready.ComputeReady(readyQueueFacts(index, state.Issues, now.Unix()), "")
+	expired := ready.ExpiredClaims(readyClaimFacts(state.Issues, now.Unix()))
 	require.NotEmpty(t, expired, "fixture in-progress claim must be TTL-expired at the frozen clock")
 
 	var want bytes.Buffer

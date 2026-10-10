@@ -5,7 +5,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/dag"
-	"github.com/scullxbones/armature/internal/materialize"
 )
 
 // PartitionWaves partitions ready entries into scope-disjoint waves using greedy first-fit.
@@ -15,11 +14,11 @@ import (
 // so items likely to conflict are considered first for placement.
 // Ancestor/descendant pairs are excluded from being placed in the same wave.
 // Returns a slice of waves, where each wave is a slice of ReadyEntry.
-func PartitionWaves(entries []ReadyEntry, index materialize.Index) [][]ReadyEntry {
+func PartitionWaves(entries []ReadyEntry, facts map[string]Facts) [][]ReadyEntry {
 	if len(entries) == 0 {
 		return [][]ReadyEntry{}
 	}
-	graph := materialize.GraphFromIndex(index)
+	graph := graphFromFacts(facts)
 
 	tierMap := make(map[string][]ReadyEntry)
 	priorityOrder := []string{"critical", "high", "medium", "low", ""}
