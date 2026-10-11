@@ -115,7 +115,7 @@ func Validate(issues map[string]IssueFacts, opts Options) Result {
 
 // CheckIntroduction refuses a proposed write that introduces a Graph Finding
 // on an issue the write created or targeted. Pre-existing findings on
-// foreign IDs do not block. extraPrior findings are treated as already present.
+// foreign IDs do not block.
 func CheckIntroduction(before, after map[string]IssueFacts, targeted []string, extraPrior []Finding, opts Options) error {
 	if before == nil {
 		before = map[string]IssueFacts{}
@@ -374,8 +374,6 @@ func checkE7E8E12Citations(issues map[string]IssueFacts, manifestData []byte) []
 	return findings
 }
 
-// sourceEntry mirrors sources.SourceEntry JSON so malformed entries fail
-// Unmarshal here. validate must not import sources.
 type sourceEntry struct {
 	ID           string    `json:"id"`
 	URL          string    `json:"url"`
