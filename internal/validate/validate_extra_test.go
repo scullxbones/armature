@@ -38,6 +38,27 @@ func TestValidate_WithIssuesDir_SkipsCitationsWhenNoManifest(t *testing.T) {
 	}
 }
 
+func TestValidate_MalformedSourceManifest_EmitsE7ParseFinding(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		manifest string
+	}{
+		{name: "non_object_entry", manifest: `{"entries":{"src":42}}`},
+		{name: "garbage_last_synced", manifest: `{"entries":{"src":{"last_synced":"garbage"}}}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			state := makeState(&materialize.Issue{ID: "TSK-1", Type: "task"})
+			result := validateState(state, Options{ManifestData: []byte(tc.manifest)})
+			assert.True(t, containsError(result, "citation check skipped: cannot parse source manifest:"),
+				"expected E7 parse finding, got: %v", result.Errors)
+		})
+	}
+}
+
 func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 	t.Parallel()
 	manifest := map[string]interface{}{

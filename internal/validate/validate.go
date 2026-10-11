@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/issuetype"
@@ -373,9 +374,21 @@ func checkE7E8E12Citations(issues map[string]IssueFacts, manifestData []byte) []
 	return findings
 }
 
+// sourceEntry mirrors sources.SourceEntry JSON so malformed entries fail
+// Unmarshal here. validate must not import sources.
+type sourceEntry struct {
+	ID           string    `json:"id"`
+	URL          string    `json:"url"`
+	Title        string    `json:"title"`
+	Fingerprint  string    `json:"fingerprint"`
+	LastSynced   time.Time `json:"last_synced"`
+	ProviderType string    `json:"provider_type"`
+	SyncFailed   bool      `json:"sync_failed"`
+}
+
 func parseManifestData(manifestData []byte) (map[string]struct{}, error) {
 	var m struct {
-		Entries map[string]json.RawMessage `json:"entries"`
+		Entries map[string]sourceEntry `json:"entries"`
 	}
 	if err := json.Unmarshal(manifestData, &m); err != nil {
 		return nil, err
