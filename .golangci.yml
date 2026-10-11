@@ -124,10 +124,7 @@ linters:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/dag"
             - "github.com/scullxbones/armature/internal/issuetype"
-            - "github.com/scullxbones/armature/internal/materialize"
-            - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/scopematch"
-            - "github.com/scullxbones/armature/internal/sources"
             - "github.com/scullxbones/armature/internal/taskcontract"
             - "github.com/scullxbones/armature/internal/traceability"
         output-boundary:

@@ -17,8 +17,7 @@ func TestValidate_StrictMode_PromotesWarnings(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{Strict: true})
+	result := validateState(state, Options{Strict: true})
 	assert.False(t, result.OK, "strict treats warnings as a failed run")
 	require.NotEmpty(t, result.Warnings, "strict must keep W-codes in Warnings")
 	assert.Empty(t, result.Errors, "strict must not move W-codes into Errors")
@@ -30,8 +29,7 @@ func TestValidate_WithIssuesDir_SkipsCitationsWhenNoManifest(t *testing.T) {
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
 
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ManifestData: nil})
+	result := validateState(state, Options{ManifestData: nil})
 
 	for _, e := range result.Errors {
 		if strings.Contains(e, "citation check skipped") {
@@ -54,8 +52,7 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
 
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ManifestData: manifestData})
+	result := validateState(state, Options{ManifestData: manifestData})
 
 	found := false
 	for _, e := range result.Errors {
@@ -75,8 +72,7 @@ func TestValidate_WithRepoPath_PhantomScope_AppearsInInfos(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"TSK-1": {},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 	assert.True(t, containsPhantomScopeInfo(result), "expected phantom scope in Infos, got: %v", result.Infos)
 	assert.False(t, containsWarning(result, "phantom scope"), "expected phantom scope NOT in Warnings, got: %v", result.Warnings)
 }
@@ -100,8 +96,7 @@ func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
 			},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ManifestData: manifestData})
+	result := validateState(state, Options{ManifestData: manifestData})
 	assert.False(t, containsError(result, "uncited node"), "expected no uncited node error for accepted citation, got: %v", result.Errors)
 }
 
@@ -117,8 +112,7 @@ func TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped(t *testing.T)
 			},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ManifestData: nil})
+	result := validateState(state, Options{ManifestData: nil})
 	assert.False(t, containsError(result, "uncited node"), "expected no citation error when manifest absent, got: %v", result.Errors)
 	assert.False(t, containsError(result, "citation check skipped"), "unexpected citation check skipped error: %v", result.Errors)
 }
@@ -142,8 +136,7 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 			},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{ManifestData: manifestData})
+	result := validateState(state, Options{ManifestData: manifestData})
 	assert.True(t, containsError(result, "unknown source"), "expected unknown source error for unregistered source link, got: %v", result.Errors)
 }
 
@@ -157,8 +150,7 @@ func TestValidate_WithRepoPath_ExistingScope(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"TSK-1": {"foo.go"},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 	assert.False(t, containsWarning(result, "phantom scope"), "expected no phantom scope warning for existing file, got: %v", result.Warnings)
 	assert.False(t, containsPhantomScopeInfo(result), "expected no phantom scope info for existing file, got: %v", result.Infos)
 }
@@ -213,7 +205,7 @@ func TestE7PredicateAgreesAcrossCallers_REQ_NOCOMMENTS(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.wantPred, traceability.CitationSatisfied(tc.ref.SourceLinkCount, tc.ref.CitationAcceptanceCount))
 
-			result := Validate(makeState(tc.issue), graphFromState(makeState(tc.issue)), Options{ManifestData: manifestData})
+			result := validateState(makeState(tc.issue), Options{ManifestData: manifestData})
 			gotValidateE7 := containsError(result, "uncited node: "+tc.issue.ID)
 			assert.Equal(t, tc.wantE7, gotValidateE7, "validate E7: errors=%v", result.Errors)
 

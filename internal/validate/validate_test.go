@@ -53,8 +53,7 @@ func TestValidate_Clean(t *testing.T) {
 		&materialize.Issue{ID: "A", BlockedBy: []string{}, Children: []string{}},
 		&materialize.Issue{ID: "B", BlockedBy: []string{}, Children: []string{}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, result.OK)
 	assert.Nil(t, result.Errors)
 }
@@ -64,8 +63,7 @@ func TestValidate_OrphanedChild(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "A", Parent: "nonexistent", BlockedBy: []string{}, Children: []string{}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, result.OK)
 	assert.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0], "unresolved parent")
@@ -77,8 +75,7 @@ func TestValidate_CircularDep(t *testing.T) {
 		&materialize.Issue{ID: "A", BlockedBy: []string{"B"}, Children: []string{}},
 		&materialize.Issue{ID: "B", BlockedBy: []string{"A"}, Children: []string{}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, result.OK)
 
 	found := false
@@ -96,8 +93,7 @@ func TestValidate_UnknownBlocker(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "A", BlockedBy: []string{"ghost"}, Children: []string{}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, result.OK)
 	assert.Len(t, result.Errors, 1)
 	assert.Contains(t, result.Errors[0], "unresolved link target")
@@ -144,8 +140,7 @@ func TestW1ScopeOverlap(t *testing.T) {
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "scope overlap"))
 }
 
@@ -155,8 +150,7 @@ func TestW1ScopeOverlap_SuppressedByBlockedBy(t *testing.T) {
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-B"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-A"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when one sibling blocks the other")
 }
 
@@ -166,8 +160,7 @@ func TestW1ScopeOverlap_SkipsTerminalTasks(t *testing.T) {
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "done"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Status: "merged"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"), "terminal sibling tasks should not trigger scope overlap warnings")
 }
 
@@ -177,8 +170,7 @@ func TestW1ScopeOverlap_SkipsNonTaskIssues(t *testing.T) {
 		&materialize.Issue{ID: "STORY-A", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
 		&materialize.Issue{ID: "STORY-B", Type: "story", Parent: "EPIC-1", Scope: []string{"internal/ops/*.go"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "scope overlap"), "sibling ready-eligible stories with overlapping scope must emit W1")
 }
 
@@ -188,7 +180,7 @@ func TestW1ReportsOverlapBetweenBugAndTask_REQ_W1TYPE_1(t *testing.T) {
 		&materialize.Issue{ID: "TSK-1", Type: "task", Scope: []string{"cmd/armature/*.go"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Scope: []string{"cmd/armature/bootstrap.go", "cmd/armature/bootstrap_test.go"}},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	require.True(t, containsWarning(result, "scope overlap"), "a bug overlapping a live task must emit W1")
 	var cited []string
 	for _, f := range result.Findings {
@@ -217,7 +209,7 @@ func TestW1SuppressesParentChildScopeUnion_REQ_W1TYPE_1(t *testing.T) {
 			Scope:  []string{"internal/ops/*.go"},
 		},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"a parent story's scope is the union of its children's and must not emit W1")
 }
@@ -231,7 +223,7 @@ func TestW1IgnoresTerminalAndEpicIssues_REQ_W1TYPE_1(t *testing.T) {
 		&materialize.Issue{ID: "STORY-CANCELLED", Type: "story", Status: "cancelled", Scope: []string{"internal/ops/*.go"}},
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Scope: []string{"internal/ops/*.go"}},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"terminal issues and type=epic must not participate in W1 even when scopes overlap")
 }
@@ -260,7 +252,7 @@ func TestW1ExcludesPassiveAggregateParents_REQ_W1TYPE_1(t *testing.T) {
 			Scope: []string{"cmd/armature/claim.go"},
 		},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"passive aggregate story must not W1 against an unrelated live task on rolled-up files")
 }
@@ -295,7 +287,7 @@ func TestW1KeepsExplicitlyClaimedAggregateParent_REQ_W1TYPE_1(t *testing.T) {
 			Scope: []string{"cmd/armature/claim.go"},
 		},
 	)
-	result := Validate(state, graphFromState(state), Options{Now: w1ClaimNow})
+	result := validateState(state, Options{Now: w1ClaimNow})
 	require.True(t, containsWarning(result, "scope overlap"),
 		"an explicitly claimed story must still W1 against an unrelated live task")
 	var cited []string
@@ -332,7 +324,7 @@ func TestW1InProgressRollupParentWithoutClaimantStaysPassive_REQ_W1TYPE_1(t *tes
 			Scope: []string{"cmd/armature/claim.go"},
 		},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"a rollup parent promoted to in-progress without a claimant must stay out of W1")
 }
@@ -364,7 +356,7 @@ func TestW1ExcludesExpiredAggregateClaim_REQ_W1TYPE_1(t *testing.T) {
 			Scope: []string{"cmd/armature/claim.go"},
 		},
 	)
-	result := Validate(state, graphFromState(state), Options{Now: w1ClaimNow})
+	result := validateState(state, Options{Now: w1ClaimNow})
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"an aggregate parent whose claim outlived its TTL must fall back to passive")
 }
@@ -390,7 +382,7 @@ func TestW1ActiveChildStillCompetesUnderAggregateParent_REQ_W1TYPE_1(t *testing.
 			Scope: []string{"internal/ops/*.go"},
 		},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	require.True(t, containsWarning(result, "scope overlap"),
 		"active child under an aggregate story must still W1 against an unrelated live task")
 	var cited []string
@@ -413,8 +405,7 @@ func TestW2NoTestCriteria(t *testing.T) {
 			Acceptance: json.RawMessage(`[{"type":"review","text":"look at it"}]`),
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "no test criteria"))
 }
 
@@ -426,8 +417,7 @@ func TestW2NoTestCriteria_ManualReviewSatisfies(t *testing.T) {
 			Acceptance: json.RawMessage(`[{"type":"manual_review","description":"docs reviewed"}]`),
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "no test criteria"), "manual_review should satisfy test criteria requirement")
 }
 
@@ -436,8 +426,7 @@ func TestW7VagueDoD(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", DefinitionOfDone: "Make it work properly and correctly"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "vague dod"))
 }
 
@@ -452,8 +441,7 @@ func TestW8ConflictingDecisions(t *testing.T) {
 			},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "conflicting decisions"))
 }
 
@@ -469,8 +457,7 @@ func TestW8ConflictingDecisions_IgnoresDuplicateChoices(t *testing.T) {
 			},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "conflicting decisions"), "repeating the same choice should not trigger a conflict warning")
 }
 
@@ -479,8 +466,7 @@ func TestW11VagueOutcome(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "vague outcome"))
 }
 
@@ -490,8 +476,7 @@ func TestE5TypeHierarchy(t *testing.T) {
 		&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"TASK-2"}},
 		&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsError(result, "invalid hierarchy"))
 }
 
@@ -500,8 +485,7 @@ func TestE6RequiredFields(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, result.OK)
 	assert.True(t, containsError(result, "missing required field"))
 }
@@ -511,8 +495,7 @@ func TestE6RequiredFields_SkipsMergedTask(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "merged"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, result.OK)
 	assert.False(t, containsError(result, "missing required field"))
 }
@@ -522,8 +505,7 @@ func TestE6RequiredFields_SkipsDoneTask(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, result.OK)
 	assert.False(t, containsError(result, "missing required field"))
 }
@@ -533,8 +515,7 @@ func TestE6RequiredFields_SkipsCancelledTask(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "cancelled"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, result.OK)
 	assert.False(t, containsError(result, "missing required field"))
 }
@@ -545,8 +526,7 @@ func TestE5TypeHierarchy_EpicWithTaskIsValid(t *testing.T) {
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"TASK-2"}},
 		&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "EPIC-1"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsError(result, "invalid hierarchy"), "epic with task child should be valid")
 }
 
@@ -557,8 +537,7 @@ func TestW1ScopeOverlap_SuppressedWhenBBlocksA(t *testing.T) {
 		&materialize.Issue{ID: "TSK-A", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-B"}},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-1", Scope: []string{"internal/ops/*.go"}, Blocks: []string{"TSK-A"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"), "scope overlap should be suppressed when B blocks A")
 }
 
@@ -589,8 +568,7 @@ func TestCheckW1ScopeOverlap_SuppressesTransitivelyOrderedPairs_REQ_TOPTIER_S17_
 			BlockedBy: []string{"TSK-B"},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"scope overlap should be suppressed when tasks are transitively ordered via blocked_by chain")
@@ -607,8 +585,7 @@ func TestW3BudgetExceeded_WithLargeContext(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Context: json.RawMessage(jsonContext)},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "budget advisory"))
 }
 
@@ -621,8 +598,7 @@ func TestW6ComplexityMismatch_SmallWith6Files(t *testing.T) {
 			EstComplexity: "small",
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "complexity mismatch"))
 }
 
@@ -635,8 +611,7 @@ func TestW6ComplexityMismatch_LargeWith1File(t *testing.T) {
 			EstComplexity: "large",
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "complexity mismatch"))
 }
 
@@ -646,8 +621,7 @@ func TestW11VagueOutcome_ExactVagueWord(t *testing.T) {
 	state := makeState(
 		&materialize.Issue{ID: "TSK-1", Type: "task", Status: "done", Outcome: "done"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "vague outcome"))
 }
 
@@ -667,8 +641,7 @@ func TestW5MissingContextFiles_TerminalStatusesSkipped(t *testing.T) {
 					"pkg/c/baz.go",
 				},
 			})
-			graph := graphFromState(state)
-			result := Validate(state, graph, Options{})
+			result := validateState(state, Options{})
 			assert.False(t, containsWarning(result, "missing context_files"),
 				"status=%q: terminal issues should not warn about missing context_files", status)
 		})
@@ -683,8 +656,7 @@ func TestW5MissingContextFiles_ActiveIssueStillWarns(t *testing.T) {
 		Status: "open",
 		Scope:  []string{"pkg/a/foo.go", "pkg/b/bar.go", "pkg/c/baz.go"},
 	})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "missing context_files"),
 		"active issues spanning 3+ dirs without context_files should still warn")
 
@@ -710,8 +682,7 @@ func TestW5MissingContextFiles_SkipsNonTasks_REQ_LNGHZN_S10_T4(t *testing.T) {
 				Status: "open",
 				Scope:  []string{"pkg/a/foo.go", "pkg/b/bar.go", "pkg/c/baz.go"},
 			})
-			graph := graphFromState(state)
-			result := Validate(state, graph, Options{})
+			result := validateState(state, Options{})
 			assert.False(t, containsWarning(result, "missing context_files"),
 				"type=%q: container types with multi-dir scope are intentional", typ)
 		})
@@ -729,8 +700,7 @@ func TestW5MissingContextFiles_NonContainerTypesStillWarn_REQ_LNGHZN_S10_T4(t *t
 				Status: "open",
 				Scope:  []string{"pkg/a/foo.go", "pkg/b/bar.go", "pkg/c/baz.go"},
 			})
-			graph := graphFromState(state)
-			result := Validate(state, graph, Options{})
+			result := validateState(state, Options{})
 			assert.True(t, containsWarning(result, "missing context_files"),
 				"type=%q: non-container types with 3-dir scope must still fire W5", typ)
 		})
@@ -750,8 +720,7 @@ func TestW10PhantomScope_TerminalStatusesSkipped(t *testing.T) {
 			},
 		)
 
-		graph := graphFromState(state)
-		result := Validate(state, graph, Options{PreExpandedScopes: nil})
+		result := validateState(state, Options{PreExpandedScopes: nil})
 		assert.False(t, containsPhantomScopeInfo(result),
 			"status=%s: phantom scope should be skipped for terminal status", status)
 	}
@@ -772,8 +741,7 @@ func TestW10PhantomScope_BlockedStillChecked(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"TSK-1": {},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 	assert.True(t, containsPhantomScopeInfo(result),
 		"blocked status should still trigger phantom scope warning")
 }
@@ -791,8 +759,7 @@ func TestW10PhantomScope_EpicsAndStoriesWithTerminalStatusSkipped(t *testing.T) 
 			},
 		)
 
-		graph := graphFromState(state)
-		result := Validate(state, graph, Options{PreExpandedScopes: nil})
+		result := validateState(state, Options{PreExpandedScopes: nil})
 		assert.False(t, containsPhantomScopeInfo(result),
 			"type=%s status=done: phantom scope should be skipped for terminal status", issueType)
 	}
@@ -813,8 +780,7 @@ func TestW10PhantomScope_NewSuffixSkipped(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"ISSUE-1": {},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 	assert.False(t, containsPhantomScopeInfo(result),
 		"scope entries with (new) suffix should not trigger phantom scope warnings")
 }
@@ -839,8 +805,7 @@ func TestW10PhantomScope_NewSuffixMixedWithExisting(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"ISSUE-1": {"real.go"},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 
 	assert.True(t, containsPhantomScopeInfo(result),
 		"nonexistent file without (new) suffix should still trigger phantom scope warning")
@@ -875,8 +840,7 @@ func TestW10PhantomScope_CommaJoinedEntryIsOnePath(t *testing.T) {
 	preExpandedScopes := map[string][]string{
 		"ISSUE-1": {"real.go"},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 	var phantomInfos []string
 	for _, info := range result.Infos {
 		if strings.Contains(info, "phantom scope") {
@@ -898,8 +862,7 @@ func TestValidateUsesCoverage(t *testing.T) {
 	}
 
 	state := makeState(&materialize.Issue{ID: "A"})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{Coverage: coverage})
+	result := validateState(state, Options{Coverage: coverage})
 	assert.NotNil(t, result.Coverage)
 	assert.Equal(t, 1, result.Coverage.CitedNodes)
 }
@@ -914,8 +877,7 @@ func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {
 				&materialize.Issue{ID: "TASK-1", Type: "task", Status: status, Children: []string{"TASK-2"}},
 				&materialize.Issue{ID: "TASK-2", Type: "task", Parent: "TASK-1"},
 			)
-			graph := graphFromState(state)
-			result := Validate(state, graph, Options{})
+			result := validateState(state, Options{})
 			assert.False(t, containsError(result, "invalid hierarchy"),
 				"terminal parent (status=%s) must not trigger hierarchy error", status)
 		})
@@ -932,8 +894,7 @@ func TestE5TypeHierarchy_SkipsTerminalChildren(t *testing.T) {
 				&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
 				&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1", Status: status},
 			)
-			graph := graphFromState(state)
-			result := Validate(state, graph, Options{})
+			result := validateState(state, Options{})
 			assert.False(t, containsError(result, "invalid hierarchy"),
 				"terminal child (status=%s) must not trigger hierarchy error", status)
 		})
@@ -946,8 +907,7 @@ func TestE5TypeHierarchy_BugUnderStoryIsValid(t *testing.T) {
 		&materialize.Issue{ID: "STORY-1", Type: "story", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "STORY-1"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsError(result, "invalid hierarchy"), "bug under story should be valid")
 }
 
@@ -957,8 +917,7 @@ func TestE5TypeHierarchy_BugUnderEpicIsValid(t *testing.T) {
 		&materialize.Issue{ID: "EPIC-1", Type: "epic", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "EPIC-1"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsError(result, "invalid hierarchy"), "bug under epic should be valid")
 }
 
@@ -968,8 +927,7 @@ func TestE5TypeHierarchy_BugUnderTaskIsInvalid(t *testing.T) {
 		&materialize.Issue{ID: "TASK-1", Type: "task", Children: []string{"BUG-1"}},
 		&materialize.Issue{ID: "BUG-1", Type: "bug", Parent: "TASK-1"},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsError(result, "invalid hierarchy"), "bug under task should be invalid")
 }
 
@@ -1046,8 +1004,7 @@ func TestE9DoDLength_Exceeds500Chars(t *testing.T) {
 		BlockedBy:        []string{},
 		Children:         []string{},
 	})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	hasErr := false
 	for _, e := range result.Errors {
 		if strings.Contains(e, "definition_of_done exceeds") {
@@ -1069,8 +1026,7 @@ func TestE9DoDLength_ExactlyAtLimit_NoError(t *testing.T) {
 		BlockedBy:        []string{},
 		Children:         []string{},
 	})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	for _, e := range result.Errors {
 		assert.NotContains(t, e, "definition_of_done exceeds")
 	}
@@ -1086,8 +1042,7 @@ func TestE10ScopeGlobs_InvalidGlob_EmitsError(t *testing.T) {
 		BlockedBy: []string{},
 		Children:  []string{},
 	})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	hasErr := false
 	for _, e := range result.Errors {
 		if strings.Contains(e, "invalid glob") {
@@ -1108,8 +1063,7 @@ func TestW4BroadScope_DoubleStarScope(t *testing.T) {
 		BlockedBy: []string{},
 		Children:  []string{},
 	})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	hasWarn := false
 	for _, w := range result.Warnings {
 		if strings.Contains(w, "broad scope") {
@@ -1130,8 +1084,7 @@ func TestW4BroadScope_DotScope(t *testing.T) {
 		BlockedBy: []string{},
 		Children:  []string{},
 	})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	hasWarn := false
 	for _, w := range result.Warnings {
 		if strings.Contains(w, "broad scope") {
@@ -1152,8 +1105,7 @@ func TestW4BroadScope_SkipsTerminalStatus(t *testing.T) {
 		BlockedBy: []string{},
 		Children:  []string{},
 	})
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	for _, w := range result.Warnings {
 		assert.NotContains(t, w, "broad scope", "done tasks must not produce broad scope warning")
 	}
@@ -1168,8 +1120,7 @@ func TestCheckW1ScopeOverlap_FlagsCrossStoryOverlap_REQ_TOPTIER_S17_T3(t *testin
 		&materialize.Issue{ID: "STORY-2", Type: "story"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"internal/ops/*.go"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "scope overlap"),
 		"cross-story tasks with overlapping scope and no ordering edge should produce scope overlap warning")
 }
@@ -1183,8 +1134,7 @@ func TestCheckW1ScopeOverlap_SuppressesCrossStoryWhenOrdered_REQ_TOPTIER_S17_T3(
 		&materialize.Issue{ID: "STORY-2", Type: "story"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"internal/ops/*.go"}, BlockedBy: []string{"TSK-A"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.False(t, containsWarning(result, "scope overlap"),
 		"cross-story tasks with overlapping scope but with ordering edge should not warn")
 }
@@ -1215,8 +1165,7 @@ func TestCheckW10PhantomScope_SuppressesForBlockerCreatedFiles_REQ_TOPTIER_S17_T
 		"TSK-BLOCKER":    {},
 		"TSK-DOWNSTREAM": {},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 
 	assert.False(t, containsPhantomScopeInfo(result),
 		"phantom scope should be suppressed when a blocking task declares the file with (new) suffix")
@@ -1253,17 +1202,11 @@ func TestCheckW1ScopeOverlap_ScopedSubsetSuppressesTransitiveChainThroughOutOfSc
 		},
 	)
 
-	scoped := map[string]*materialize.Issue{
-		"STORY-AC": state.Issues["STORY-AC"],
-		"TSK-A":    state.Issues["TSK-A"],
-		"TSK-C":    state.Issues["TSK-C"],
-	}
-	require.NotContains(t, scoped, "TSK-B", "test setup: TSK-B must be outside the scoped subset")
-
-	warns := checkW1ScopeOverlap(scoped, state, graphFromState(state), w1ClaimNow)
+	facts := factsFromIssues(state.Issues, w1ClaimNow)
+	warns := checkW1ScopeOverlap(facts, graphFromFacts(facts), w1ClaimNow)
 	for _, w := range warns {
-		assert.NotContains(t, w, "scope overlap",
-			"scope overlap should be suppressed when the transitive blocked_by chain passes through an out-of-scope issue: %s", w)
+		assert.NotContains(t, w.Message, "scope overlap",
+			"scope overlap should be suppressed when the transitive blocked_by chain passes through TSK-B: %s", w.Message)
 	}
 }
 
@@ -1280,7 +1223,7 @@ func TestDirectBlocks_DoesNotMaterializeTransitiveClosure(t *testing.T) {
 		state.Issues[id] = &materialize.Issue{ID: id}
 	}
 
-	blocks := directBlocks(state.Issues)
+	blocks := directBlocks(factsFromIssues(state.Issues, 0))
 	assert.Equal(t, []string{"TSK-B"}, blocks["TSK-A"])
 	assert.Equal(t, []string{"TSK-C"}, blocks["TSK-B"])
 	assert.NotContains(t, blocks["TSK-A"], "TSK-C", "index must contain only direct edges")
@@ -1320,8 +1263,7 @@ func TestCheckW10PhantomScope_SuppressesForTwoHopBlockerCreatedFiles(t *testing.
 		"TSK-MID":        {},
 		"TSK-DOWNSTREAM": {},
 	}
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{PreExpandedScopes: preExpandedScopes})
+	result := validateState(state, Options{PreExpandedScopes: preExpandedScopes})
 	for _, info := range result.Infos {
 		assert.NotContains(t, info, "new_file.go",
 			"phantom scope for new_file.go should be suppressed via the 2-hop blocked_by chain to TSK-BLOCKER: %s", info)
@@ -1337,8 +1279,7 @@ func TestCheckW1ScopeOverlap_FlagsGlobAwareCrossStoryOverlap_PR79(t *testing.T) 
 		&materialize.Issue{ID: "STORY-2", Type: "story"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"cmd/armature/claim.go"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 	assert.True(t, containsWarning(result, "scope overlap"),
 		"cross-story tasks whose scopes overlap only via glob-vs-literal matching should still produce a scope overlap warning")
 }
@@ -1368,19 +1309,13 @@ func TestCheckW10PhantomScope_ConsultsFullStateForCrossSubtreeBlocker_PR79(t *te
 		},
 	)
 
-	targets := map[string]*materialize.Issue{
-		"STORY-DOWNSTREAM": state.Issues["STORY-DOWNSTREAM"],
-		"TSK-DOWNSTREAM":   state.Issues["TSK-DOWNSTREAM"],
-	}
-	require.NotContains(t, targets, "TSK-BLOCKER", "test setup: TSK-BLOCKER must be outside the scoped subset")
-
 	preExpandedScopes := map[string][]string{
 		"TSK-DOWNSTREAM": {},
 	}
-	warns := checkW10PhantomScope(targets, preExpandedScopes, state.Issues)
+	warns := checkW10PhantomScope(factsFromIssues(state.Issues, 0), preExpandedScopes)
 	for _, w := range warns {
-		assert.NotContains(t, w, "new_file.go",
-			"phantom scope should be suppressed when the blocker declaring (new) lives outside the scoped subset but exists in full state: %s", w)
+		assert.NotContains(t, w.Message, "new_file.go",
+			"phantom scope should be suppressed when a blocking task declares the file with (new) suffix: %s", w.Message)
 	}
 }
 
@@ -1461,7 +1396,7 @@ func TestCheckW1ScopeOverlap_MalformedPatternIsErrorNotMissedOverlap_REQ_NOCOMME
 		&materialize.Issue{ID: "STORY-2", Type: "story"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"foo.go"}},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	var overlapCheck string
 	for _, e := range result.Errors {
 		if strings.Contains(e, "while checking overlap") {
@@ -1484,8 +1419,7 @@ func TestCheckW1ScopeOverlap_MessageReportsMatchedPatternPair_PR79(t *testing.T)
 		&materialize.Issue{ID: "STORY-2", Type: "story"},
 		&materialize.Issue{ID: "TSK-B", Type: "task", Parent: "STORY-2", Scope: []string{"cmd/armature/claim.go", "cmd/unrelated/x.go"}},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	var msg string
 	for _, w := range result.Warnings {
@@ -1627,7 +1561,7 @@ func TestIntroductionRefusesDirtyWrite_REQ_LNGHZN_S10_T12(t *testing.T) {
 			Confidence:       "draft",
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.Error(t, err, "a write that introduces a Graph Finding on a targeted issue must be refused")
 	assert.Contains(t, err.Error(), "scope overlap")
 	assert.Contains(t, err.Error(), "NEW-DIRTY")
@@ -1653,7 +1587,7 @@ func TestIntroductionIgnoresForeignFindings_REQ_LNGHZN_S10_T12(t *testing.T) {
 			Confidence:       "draft",
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "pre-existing findings on foreign IDs must not block an unrelated write")
 }
 
@@ -1672,7 +1606,7 @@ func TestIntroductionRefusesE6W8W11_REQ_LNGHZN_S10_T12(t *testing.T) {
 				Confidence: "draft",
 			},
 		}}
-		err := CheckIntroduction(state, proposed, Options{Strict: true})
+		err := checkIntroduction(state, proposed, Options{Strict: true})
 		require.Error(t, err, "Introduction must refuse a write that introduces E6 on a targeted issue")
 		assert.Contains(t, err.Error(), "missing required field")
 		assert.Contains(t, err.Error(), "NEW-INCOMPLETE")
@@ -1693,7 +1627,7 @@ func TestIntroductionRefusesE6W8W11_REQ_LNGHZN_S10_T12(t *testing.T) {
 				Choice: "sqlite",
 			},
 		}}
-		err := CheckIntroduction(state, proposed, Options{Strict: true})
+		err := checkIntroduction(state, proposed, Options{Strict: true})
 		require.Error(t, err, "Introduction must refuse a write that introduces W8 on a targeted issue")
 		assert.Contains(t, err.Error(), "conflicting decisions")
 		assert.Contains(t, err.Error(), "DECIDE")
@@ -1710,7 +1644,7 @@ func TestIntroductionRefusesE6W8W11_REQ_LNGHZN_S10_T12(t *testing.T) {
 				Outcome: "done",
 			},
 		}}
-		err := CheckIntroduction(state, proposed, Options{Strict: true})
+		err := checkIntroduction(state, proposed, Options{Strict: true})
 		require.Error(t, err, "Introduction must refuse a write that introduces W11 on a targeted issue")
 		assert.Contains(t, err.Error(), "vague outcome")
 		assert.Contains(t, err.Error(), "SHIP")
@@ -1738,7 +1672,7 @@ func TestIntroductionAllowsCiteAfterE7_REQ_LNGHZN_S10_T12(t *testing.T) {
 		"entries": map[string]map[string]string{"src-1": {"id": "src-1"}},
 	})
 	require.NoError(t, err)
-	err = CheckIntroduction(state, proposed, Options{Strict: true, ManifestData: manifest})
+	err = checkIntroduction(state, proposed, Options{Strict: true, ManifestData: manifest})
 	require.NoError(t, err, "cite-after remains legal: E7/E8 must not refuse Introduction")
 }
 
@@ -1759,7 +1693,7 @@ func TestIntroductionRefusesAliasedW8Finding(t *testing.T) {
 			Choice: "memcached",
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.Error(t, err, "a new W8 on a different topic must not alias an existing W8 on the same issue")
 	assert.Contains(t, err.Error(), "cache")
 }
@@ -1791,7 +1725,7 @@ func TestIntroductionProjectsLinkBeforeSameTimestampCreate(t *testing.T) {
 			},
 		},
 	}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "same-timestamp link-before-create must project via create-first sort, not fail ApplyOp")
 }
 
@@ -1832,7 +1766,7 @@ func TestIntroductionRollsUpProposedOps(t *testing.T) {
 			},
 		},
 	}
-	err := CheckIntroduction(materialize.NewState(), proposed, Options{Strict: true})
+	err := checkIntroduction(materialize.NewState(), proposed, Options{Strict: true})
 	require.NoError(t, err, "rollup must run on the projected state so a now-terminal story does not introduce W4")
 }
 
@@ -1842,7 +1776,7 @@ func TestValidate_CircularDepNamesParticipants(t *testing.T) {
 		&materialize.Issue{ID: "A", BlockedBy: []string{"B"}, Children: []string{}},
 		&materialize.Issue{ID: "B", BlockedBy: []string{"A"}, Children: []string{}},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 	require.False(t, result.OK)
 	require.NotEmpty(t, result.Errors)
 	assert.Contains(t, result.Errors[0], "cycle detected")
@@ -1858,7 +1792,7 @@ func TestIntroductionAllowsW1NarrowingResidualOverlap_REQ_LNGHZN_S10_T12(t *test
 	y.Scope = []string{"a.go", "b.go"}
 	state := makeState(x, y)
 
-	before := Validate(state, graphFromState(state), Options{})
+	before := validateState(state, Options{})
 	require.True(t, containsWarning(before, "scope overlap"))
 
 	proposed := []ops.Op{{
@@ -1868,7 +1802,7 @@ func TestIntroductionAllowsW1NarrowingResidualOverlap_REQ_LNGHZN_S10_T12(t *test
 			Scope: []string{"a.go"},
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "narrowing a foreign overlap down (still overlapping on a.go) must not read as newly introduced")
 }
 
@@ -1893,7 +1827,7 @@ func TestIntroductionE4PartialCycleBreakNotIntroduced_REQ_LNGHZN_S10_T12(t *test
 	c := &materialize.Issue{ID: "C", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{"B"}}
 	state := makeState(a, b, c)
 
-	before := Validate(state, graphFromState(state), Options{})
+	before := validateState(state, Options{})
 	require.True(t, containsError(before, "cycle detected"))
 
 	proposed := []ops.Op{{
@@ -1904,7 +1838,7 @@ func TestIntroductionE4PartialCycleBreakNotIntroduced_REQ_LNGHZN_S10_T12(t *test
 			Rel: "blocked_by",
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "a cycle that shrinks (residual CitedIDs subset of a pre-existing cycle) must not be reported as introduced")
 }
 
@@ -1915,7 +1849,7 @@ func TestIntroductionE4GrowingCycleStillIntroduced_REQ_LNGHZN_S10_T12(t *testing
 	c := &materialize.Issue{ID: "C", Type: "task", Status: ops.StatusOpen, BlockedBy: []string{}}
 	state := makeState(a, b, c)
 
-	before := Validate(state, graphFromState(state), Options{})
+	before := validateState(state, Options{})
 	require.True(t, containsError(before, "cycle detected"))
 
 	proposed := []ops.Op{
@@ -1930,7 +1864,7 @@ func TestIntroductionE4GrowingCycleStillIntroduced_REQ_LNGHZN_S10_T12(t *testing
 			Payload:  ops.Payload{Dep: "B", Rel: "blocked_by"},
 		},
 	}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.Error(t, err, "a cycle that grows to include a new node must still be refused as introduced")
 	assert.Contains(t, err.Error(), "cycle detected")
 }
@@ -1955,7 +1889,7 @@ func TestIntroductionRefusesSecondE10OnDifferentGlob_REQ_LNGHZN_S10_T12(t *testi
 	existing.Scope = []string{"[invalid"}
 	state := makeState(existing)
 
-	before := Validate(state, graphFromState(state), Options{})
+	before := validateState(state, Options{})
 	require.True(t, containsError(before, "invalid glob"))
 
 	proposed := []ops.Op{{
@@ -1965,7 +1899,7 @@ func TestIntroductionRefusesSecondE10OnDifferentGlob_REQ_LNGHZN_S10_T12(t *testi
 			Scope: []string{"[invalid", "[alsoinvalid"},
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.Error(t, err, "a second E10 finding on the same issue for a different glob must still be introduced")
 	assert.Contains(t, err.Error(), "[alsoinvalid")
 }
@@ -1979,7 +1913,7 @@ func TestIntroductionRefusesSecondW8OnDifferentTopic_REQ_LNGHZN_S10_T12(t *testi
 	}
 	state := makeState(existing)
 
-	before := Validate(state, graphFromState(state), Options{})
+	before := validateState(state, Options{})
 	require.True(t, containsWarning(before, "conflicting decisions"))
 
 	proposed := []ops.Op{
@@ -1994,7 +1928,7 @@ func TestIntroductionRefusesSecondW8OnDifferentTopic_REQ_LNGHZN_S10_T12(t *testi
 			Payload:  ops.Payload{Topic: "cache", Choice: "memcached"},
 		},
 	}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.Error(t, err, "a second W8 finding on the same issue for a different topic must still be introduced")
 	assert.Contains(t, err.Error(), "cache")
 }
@@ -2018,12 +1952,12 @@ func TestIntroductionAllowsReopenOfLegacyDoneIssueMissingRequiredFields_REQ_LNGH
 			To: ops.StatusOpen,
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "reopening a legacy issue must not be blocked by E6 findings that only exist because terminal suppression was lifted")
 
 	afterState, perr := projectState(state, proposed)
 	require.NoError(t, perr)
-	after := Validate(afterState, materialize.GraphFromState(afterState), Options{})
+	after := validateState(afterState, Options{})
 	assert.True(t, containsError(after, "missing required field"), "arm validate must still surface E6 on the reopened issue")
 }
 
@@ -2041,7 +1975,7 @@ func TestIntroductionAllowsReopenReenteringW1Overlap_REQ_LNGHZN_S10_T12(t *testi
 			To: ops.StatusOpen,
 		},
 	}}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err, "reopening a task back into a scope overlap with a foreign in-flight task must not be blocked")
 }
 
@@ -2065,7 +1999,7 @@ func TestIntroductionTransitionIntoTerminalDoesNotWidenBaseline_REQ_LNGHZN_S10_T
 		},
 	}}
 
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.NoError(t, err)
 }
 
@@ -2087,7 +2021,7 @@ func TestIntroductionRefusesReopenBatchWithGenuinelyNewFinding_REQ_LNGHZN_S10_T1
 			Payload:  ops.Payload{Scope: []string{"[invalid"}},
 		},
 	}
-	err := CheckIntroduction(state, proposed, Options{Strict: true})
+	err := checkIntroduction(state, proposed, Options{Strict: true})
 	require.Error(t, err, "a batch that reopens AND introduces a genuinely new finding on the target must still be refused")
 	assert.Contains(t, err.Error(), "invalid glob")
 }
@@ -2122,7 +2056,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 	t.Run("s7_t2_fixture_emits_e14_wiring_and_unit_only_acceptance", func(t *testing.T) {
 		t.Parallel()
 		state := makeState(s7T2Fixture())
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		assert.False(t, result.OK)
 
 		var wiring, unitOnly *Finding
@@ -2160,7 +2094,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		issue.ID = "WIRED-UNIT"
 		issue.Scope = []string{"internal/doctor/doctor.go", "internal/doctor/doctor_test.go"}
 		state := makeState(issue)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		assert.False(t, result.OK)
 		var sawWiring, sawUnit bool
 		for _, f := range result.Findings {
@@ -2185,7 +2119,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		issue.Scope = []string{"internal/doctor/doctor.go", "internal/doctor/doctor_test.go"}
 		issue.Acceptance = json.RawMessage(`["go test ./internal/doctor", "make check"]`)
 		state := makeState(issue)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		assert.False(t, result.OK)
 		var sawWiring, sawUnit bool
 		for _, f := range result.Findings {
@@ -2210,7 +2144,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		issue.Scope = []string{"internal/doctor/doctor.go"}
 		issue.Acceptance = json.RawMessage(`["arm doctor --format json", "make check"]`)
 		state := makeState(issue)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		for _, f := range result.Findings {
 			assert.NotEqual(t, "E14", f.Rule, "plain-string arm doctor Acceptance is same-surface, got %+v", f)
 		}
@@ -2223,7 +2157,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		issue.Scope = []string{"internal/doctor/doctor.go"}
 		issue.Acceptance = json.RawMessage(`[{"type":"test_passes","cmd":"arm doctor --format json"}]`)
 		state := makeState(issue)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		for _, f := range result.Findings {
 			assert.NotEqual(t, "E14", f.Rule, "well-formed CLI contract must not emit E14, got %+v", f)
 		}
@@ -2246,7 +2180,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 			Children:   []string{},
 		}
 		state := makeState(issue)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		for _, f := range result.Findings {
 			assert.NotEqual(t, "E14", f.Rule, "S15-T2 README pointer must not emit E14, got %+v", f)
 		}
@@ -2268,7 +2202,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 			Children:   []string{},
 		}
 		state := makeState(issue)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		for _, f := range result.Findings {
 			assert.NotEqual(t, "E14", f.Rule, "S18-T2 meta DoD must not self-hit E14, got %+v", f)
 		}
@@ -2280,7 +2214,7 @@ func TestValidateDoDScopeMismatch_REQ_TOPTIER_S18_T2(t *testing.T) {
 		issue.ID = "HELPER-T1"
 		issue.DefinitionOfDone = "arm doctor gains check D9 as an exported helper, not wired into Run"
 		state := makeState(issue)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		for _, f := range result.Findings {
 			assert.NotEqual(t, "E14", f.Rule, "helper-only DoD must not emit E14, got %+v", f)
 		}

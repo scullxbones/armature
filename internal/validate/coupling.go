@@ -5,17 +5,15 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
-func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Finding {
+func checkE13VerticalSliceCoupling(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 
-	byStory := make(map[string][]*materialize.Issue)
+	byStory := make(map[string][]IssueFacts)
 	for _, issue := range issues {
-		if issue.Type != "task" || issue.Parent == "" || ops.IsTerminalStatus(issue.Status) {
+		if issue.Type != "task" || issue.Parent == "" || isTerminalStatus(issue.Status) {
 			continue
 		}
 		byStory[issue.Parent] = append(byStory[issue.Parent], issue)
@@ -40,7 +38,7 @@ func checkE13VerticalSliceCoupling(issues map[string]*materialize.Issue) []Findi
 		for _, surfaceGlob := range surfaceGlobs {
 			docFiles := censusedSurfaces[surfaceGlob]
 
-			var docOwners []*materialize.Issue
+			var docOwners []IssueFacts
 			for _, t := range tasks {
 				if len(docFilesOwnedExcludingRepoWide(t.Scope, docFiles)) > 0 {
 					docOwners = append(docOwners, t)

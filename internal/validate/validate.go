@@ -11,10 +11,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/issuetype"
-	"github.com/scullxbones/armature/internal/materialize"
-	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/scopematch"
-	"github.com/scullxbones/armature/internal/sources"
 	"github.com/scullxbones/armature/internal/taskcontract"
 	"github.com/scullxbones/armature/internal/traceability"
 )
@@ -64,36 +61,35 @@ func keyedFinding(severity, rule, key, msg string, cited ...string) Finding {
 	return f
 }
 
-func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
+func Validate(issues map[string]IssueFacts, opts Options) Result {
 	var findings []Finding
+	graph := graphFromFacts(issues)
 
-	targets := state.Issues
-
-	findings = append(findings, checkE2E3ParentLinks(targets, state)...)
-	findings = append(findings, checkE4Cycles(targets, graph)...)
-	findings = append(findings, checkE5TypeHierarchy(targets, state)...)
-	findings = append(findings, checkE6RequiredFields(targets)...)
-	findings = append(findings, checkE9DoDLength(targets)...)
-	findings = append(findings, checkE10ScopeGlobs(targets)...)
-	findings = append(findings, checkE13VerticalSliceCoupling(targets)...)
-	findings = append(findings, checkE14TaskContract(targets)...)
+	findings = append(findings, checkE2E3ParentLinks(issues)...)
+	findings = append(findings, checkE4Cycles(issues, graph)...)
+	findings = append(findings, checkE5TypeHierarchy(issues)...)
+	findings = append(findings, checkE6RequiredFields(issues)...)
+	findings = append(findings, checkE9DoDLength(issues)...)
+	findings = append(findings, checkE10ScopeGlobs(issues)...)
+	findings = append(findings, checkE13VerticalSliceCoupling(issues)...)
+	findings = append(findings, checkE14TaskContract(issues)...)
 
 	if len(opts.ManifestData) > 0 {
-		findings = append(findings, checkE7E8E12Citations(targets, opts.ManifestData)...)
+		findings = append(findings, checkE7E8E12Citations(issues, opts.ManifestData)...)
 	}
 
-	findings = append(findings, checkW1ScopeOverlap(targets, state, graph, opts.Now)...)
-	findings = append(findings, checkW2NoTestCriteria(targets)...)
-	findings = append(findings, checkW3BudgetExceeded(targets)...)
-	findings = append(findings, checkW4BroadScope(targets)...)
-	findings = append(findings, checkW5MissingContextFiles(targets)...)
-	findings = append(findings, checkW6ComplexityMismatch(targets)...)
-	findings = append(findings, checkW7VagueDoD(targets)...)
-	findings = append(findings, checkW8ConflictingDecisions(targets)...)
-	findings = append(findings, checkW11VagueOutcomes(targets)...)
+	findings = append(findings, checkW1ScopeOverlap(issues, graph, opts.Now)...)
+	findings = append(findings, checkW2NoTestCriteria(issues)...)
+	findings = append(findings, checkW3BudgetExceeded(issues)...)
+	findings = append(findings, checkW4BroadScope(issues)...)
+	findings = append(findings, checkW5MissingContextFiles(issues)...)
+	findings = append(findings, checkW6ComplexityMismatch(issues)...)
+	findings = append(findings, checkW7VagueDoD(issues)...)
+	findings = append(findings, checkW8ConflictingDecisions(issues)...)
+	findings = append(findings, checkW11VagueOutcomes(issues)...)
 
 	if opts.PreExpandedScopes != nil {
-		findings = append(findings, checkW10PhantomScope(targets, opts.PreExpandedScopes, state.Issues)...)
+		findings = append(findings, checkW10PhantomScope(issues, opts.PreExpandedScopes)...)
 	}
 
 	var errors, warnings, infos []string
@@ -118,62 +114,25 @@ func Validate(state *materialize.State, graph *dag.Graph, opts Options) Result {
 
 // CheckIntroduction refuses a proposed write that introduces a Graph Finding
 // on an issue the write created or targeted. Pre-existing findings on
-// foreign IDs do not block.
-func CheckIntroduction(current *materialize.State, proposed []ops.Op, opts Options) error {
-	if current == nil {
-		current = materialize.NewState()
+// foreign IDs do not block. extraPrior findings are treated as already present.
+func CheckIntroduction(before, after map[string]IssueFacts, targeted []string, extraPrior []Finding, opts Options) error {
+	if before == nil {
+		before = map[string]IssueFacts{}
 	}
-	before := Validate(current, materialize.GraphFromState(current), opts)
-	afterState, err := projectState(current, proposed)
-	if err != nil {
-		return err
-	}
-	after := Validate(afterState, materialize.GraphFromState(afterState), opts)
-	priorIdentities := make(map[string]struct{}, len(before.Findings))
-	for _, f := range before.Findings {
+	beforeResult := Validate(before, opts)
+	afterResult := Validate(after, opts)
+	priorIdentities := make(map[string]struct{}, len(beforeResult.Findings)+len(extraPrior))
+	for _, f := range beforeResult.Findings {
 		priorIdentities[f.identity()] = struct{}{}
 	}
-	widened, werr := findingsAfterReopeningTerminalIssues(current, proposed, opts)
-	if werr != nil {
-		return werr
-	}
-	for _, f := range widened {
+	for _, f := range extraPrior {
 		priorIdentities[f.identity()] = struct{}{}
 	}
-	introduced := introducedOnTargets(before, after, priorIdentities, targetedIDs(proposed))
+	introduced := introducedOnTargets(beforeResult, afterResult, priorIdentities, targeted)
 	if len(introduced) == 0 {
 		return nil
 	}
 	return formatIntroductionError(introduced)
-}
-
-func findingsAfterReopeningTerminalIssues(current *materialize.State, proposed []ops.Op, opts Options) ([]Finding, error) {
-	var unsuppressing []ops.Op
-	for _, op := range proposed {
-		if op.Type != ops.OpTransition {
-			continue
-		}
-		issue, ok := current.Issues[op.TargetID]
-		if !ok || !ops.IsTerminalStatus(issue.Status) {
-			continue
-		}
-		if ops.IsTerminalStatus(op.Payload.To) {
-			continue
-		}
-		unsuppressing = append(unsuppressing, op)
-	}
-	if len(unsuppressing) == 0 {
-		return nil, nil
-	}
-	projected, err := cloneState(current)
-	if err != nil {
-		return nil, err
-	}
-	if err := materialize.ApplyOpsSorted(projected, unsuppressing); err != nil {
-		return nil, fmt.Errorf("project un-suppression baseline: %w", err)
-	}
-	result := Validate(projected, materialize.GraphFromState(projected), opts)
-	return result.Findings, nil
 }
 
 func introducedOnTargets(before, after Result, prior map[string]struct{}, targeted []string) []Finding {
@@ -250,59 +209,6 @@ func citedIDsSubsetOfAny(ids []string, sets []map[string]struct{}) bool {
 	return false
 }
 
-func projectState(current *materialize.State, proposed []ops.Op) (*materialize.State, error) {
-	after, err := cloneState(current)
-	if err != nil {
-		return nil, err
-	}
-	if err := materialize.ApplyOpsSorted(after, proposed); err != nil {
-		return nil, fmt.Errorf("project proposed: %w", err)
-	}
-	return after, nil
-}
-
-func cloneState(src *materialize.State) (*materialize.State, error) {
-	if src == nil {
-		return materialize.NewState(), nil
-	}
-	data, err := json.Marshal(src)
-	if err != nil {
-		return nil, fmt.Errorf("clone state: %w", err)
-	}
-	dst := materialize.NewState()
-	if err := json.Unmarshal(data, dst); err != nil {
-		return nil, fmt.Errorf("clone state: %w", err)
-	}
-	if dst.Issues == nil {
-		dst.Issues = make(map[string]*materialize.Issue)
-	}
-	return dst, nil
-}
-
-func targetedIDs(proposed []ops.Op) []string {
-	seen := make(map[string]struct{})
-	var ids []string
-	add := func(id string) {
-		if id == "" {
-			return
-		}
-		if _, ok := seen[id]; ok {
-			return
-		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
-	for _, op := range proposed {
-		add(op.TargetID)
-		add(op.Payload.Dep)
-		switch op.Type {
-		case ops.OpCreate, ops.OpReparent:
-			add(op.Payload.Parent)
-		}
-	}
-	return ids
-}
-
 func citesAny(cited []string, targets map[string]struct{}) bool {
 	for _, id := range cited {
 		if _, ok := targets[id]; ok {
@@ -327,11 +233,11 @@ func formatIntroductionError(findings []Finding) error {
 	return fmt.Errorf("%s", b.String())
 }
 
-func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materialize.State) []Finding {
+func checkE2E3ParentLinks(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		if issue.Parent != "" {
-			if _, ok := state.Issues[issue.Parent]; !ok {
+			if _, ok := issues[issue.Parent]; !ok {
 				findings = append(findings, Finding{
 					Severity: "error", Rule: "E2",
 					Message:  fmt.Sprintf("unresolved parent: %s for node %s", issue.Parent, id),
@@ -340,7 +246,7 @@ func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materiali
 			}
 		}
 		for _, blockerID := range issue.BlockedBy {
-			if _, ok := state.Issues[blockerID]; !ok {
+			if _, ok := issues[blockerID]; !ok {
 				findings = append(findings, Finding{
 					Severity: "error", Rule: "E3",
 					Message:  fmt.Sprintf("unresolved link target: %s from %s", blockerID, id),
@@ -352,7 +258,7 @@ func checkE2E3ParentLinks(issues map[string]*materialize.Issue, state *materiali
 	return findings
 }
 
-func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []Finding {
+func checkE4Cycles(issues map[string]IssueFacts, graph *dag.Graph) []Finding {
 	scope := make(map[string]bool)
 	for id := range issues {
 		scope[id] = true
@@ -375,18 +281,18 @@ func checkE4Cycles(issues map[string]*materialize.Issue, graph *dag.Graph) []Fin
 	}}
 }
 
-func checkE5TypeHierarchy(issues map[string]*materialize.Issue, state *materialize.State) []Finding {
+func checkE5TypeHierarchy(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if ops.IsTerminalStatus(issue.Status) {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, childID := range issue.Children {
-			child, ok := state.Issues[childID]
+			child, ok := issues[childID]
 			if !ok {
 				continue
 			}
-			if ops.IsTerminalStatus(child.Status) {
+			if isTerminalStatus(child.Status) {
 				continue
 			}
 			if !issuetype.IsLegalHierarchy(issue.Type, child.Type) {
@@ -407,10 +313,10 @@ func e6Missing(id, typ, field string) Finding {
 		fmt.Sprintf("missing required field: %s on %s %s", field, typ, id), id)
 }
 
-func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
+func checkE6RequiredFields(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if ops.IsTerminalStatus(issue.Status) {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, field := range issuetype.RequiredFields(issue.Type) {
@@ -433,7 +339,7 @@ func checkE6RequiredFields(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []byte) []Finding {
+func checkE7E8E12Citations(issues map[string]IssueFacts, manifestData []byte) []Finding {
 	var findings []Finding
 
 	manifest, err := parseManifestData(manifestData)
@@ -446,7 +352,7 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []
 	}
 
 	for id, issue := range issues {
-		if !traceability.CitationSatisfied(len(issue.SourceLinks), len(issue.CitationAcceptances)) {
+		if !traceability.CitationSatisfied(len(issue.SourceEntryIDs), issue.CitationAcceptances) {
 			findings = append(findings, Finding{
 				Severity: "error", Rule: "E7",
 				Message:  fmt.Sprintf("uncited node: %s", id),
@@ -454,11 +360,11 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []
 			})
 			continue
 		}
-		for _, link := range issue.SourceLinks {
-			if _, ok := manifest[link.SourceEntryID]; !ok {
+		for _, sourceID := range issue.SourceEntryIDs {
+			if _, ok := manifest[sourceID]; !ok {
 				findings = append(findings, Finding{
 					Severity: "error", Rule: "E8",
-					Message:  fmt.Sprintf("unknown source: %s in citation for %s", link.SourceEntryID, id),
+					Message:  fmt.Sprintf("unknown source: %s in citation for %s", sourceID, id),
 					CitedIDs: []string{id},
 				})
 			}
@@ -468,7 +374,9 @@ func checkE7E8E12Citations(issues map[string]*materialize.Issue, manifestData []
 }
 
 func parseManifestData(manifestData []byte) (map[string]struct{}, error) {
-	m := sources.Manifest{}
+	var m struct {
+		Entries map[string]json.RawMessage `json:"entries"`
+	}
 	if err := json.Unmarshal(manifestData, &m); err != nil {
 		return nil, err
 	}
@@ -481,7 +389,7 @@ func parseManifestData(manifestData []byte) (map[string]struct{}, error) {
 
 const maxDoDLength = 500
 
-func checkE9DoDLength(issues map[string]*materialize.Issue) []Finding {
+func checkE9DoDLength(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		if len(issue.DefinitionOfDone) > maxDoDLength {
@@ -495,7 +403,7 @@ func checkE9DoDLength(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func checkE10ScopeGlobs(issues map[string]*materialize.Issue) []Finding {
+func checkE10ScopeGlobs(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		for _, glob := range issue.Scope {
@@ -517,7 +425,7 @@ const (
 	e14KeyUnitOnlyAcceptance = "unit_only_acceptance"
 )
 
-func taskFromIssue(issue *materialize.Issue) taskcontract.Task {
+func taskFromIssue(issue IssueFacts) taskcontract.Task {
 	return taskcontract.Task{
 		ID:               issue.ID,
 		Type:             issue.Type,
@@ -527,7 +435,7 @@ func taskFromIssue(issue *materialize.Issue) taskcontract.Task {
 	}
 }
 
-func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
+func checkE14TaskContract(issues map[string]IssueFacts) []Finding {
 	ids := make([]string, 0, len(issues))
 	for id := range issues {
 		ids = append(ids, id)
@@ -551,9 +459,9 @@ func checkE14TaskContract(issues map[string]*materialize.Issue) []Finding {
 			})
 		}
 		if issue.Type == "task" &&
-			!ops.IsTerminalStatus(issue.Status) &&
+			!isTerminalStatus(issue.Status) &&
 			taskcontract.ClaimsDoctorRunWiring(issue.DefinitionOfDone) &&
-			unitOnlyAcceptance(issue.Acceptance) {
+			unitOnlyAcceptance(json.RawMessage(issue.Acceptance)) {
 			findings = append(findings, Finding{
 				Severity: "error",
 				Rule:     ruleE14,
@@ -593,12 +501,12 @@ func unitOnlyAcceptance(raw json.RawMessage) bool {
 	return !reArmDoctorSurface.Match(raw)
 }
 
-func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materialize.State, graph *dag.Graph, now int64) []Finding {
+func checkW1ScopeOverlap(issues map[string]IssueFacts, graph *dag.Graph, now int64) []Finding {
 	var findings []Finding
 
-	var tasks []*materialize.Issue
+	var tasks []IssueFacts
 	for _, issue := range issues {
-		if !issuetype.IsReadyEligible(issue.Type) || ops.IsTerminalStatus(issue.Status) {
+		if !issuetype.IsReadyEligible(issue.Type) || isTerminalStatus(issue.Status) {
 			continue
 		}
 		if unclaimedStoryOrFeatureWithDescendants(issue, graph, now) {
@@ -607,7 +515,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 		tasks = append(tasks, issue)
 	}
 
-	blocks := directBlocks(state.Issues)
+	blocks := directBlocks(issues)
 
 	for i, task1 := range tasks {
 		for j := i + 1; j < len(tasks); j++ {
@@ -649,7 +557,7 @@ func checkW1ScopeOverlap(issues map[string]*materialize.Issue, state *materializ
 	return findings
 }
 
-func unclaimedStoryOrFeatureWithDescendants(issue *materialize.Issue, graph *dag.Graph, now int64) bool {
+func unclaimedStoryOrFeatureWithDescendants(issue IssueFacts, graph *dag.Graph, now int64) bool {
 	if issue.Type != "story" && issue.Type != "feature" {
 		return false
 	}
@@ -662,14 +570,14 @@ func unclaimedStoryOrFeatureWithDescendants(issue *materialize.Issue, graph *dag
 	return len(graph.Descendants(issue.ID)) > 0
 }
 
-func holderPresentAndLeaseFresh(issue *materialize.Issue, now int64) bool {
+func holderPresentAndLeaseFresh(issue IssueFacts, now int64) bool {
 	if issue.ClaimedBy == "" {
 		return false
 	}
-	if issue.Status != ops.StatusClaimed && issue.Status != ops.StatusInProgress {
+	if issue.Status != statusClaimed && issue.Status != statusInProgress {
 		return false
 	}
-	return now == 0 || !issue.ClaimStale(now)
+	return now == 0 || !issue.ClaimStale
 }
 
 func isAncestorOrDescendant(graph *dag.Graph, a, b string) bool {
@@ -679,7 +587,7 @@ func isAncestorOrDescendant(graph *dag.Graph, a, b string) bool {
 	return slices.Contains(graph.Descendants(a), b) || slices.Contains(graph.Descendants(b), a)
 }
 
-func directBlocks(issues map[string]*materialize.Issue) map[string][]string {
+func directBlocks(issues map[string]IssueFacts) map[string][]string {
 	blocks := make(map[string][]string)
 	for id, issue := range issues {
 		for _, blockedID := range issue.Blocks {
@@ -696,7 +604,7 @@ func directBlocks(issues map[string]*materialize.Issue) map[string][]string {
 	return blocks
 }
 
-func hasSerialDependency(a, b *materialize.Issue, blocks map[string][]string) bool {
+func hasSerialDependency(a, b IssueFacts, blocks map[string][]string) bool {
 	return blocksReachable(a.ID, b.ID, blocks) || blocksReachable(b.ID, a.ID, blocks)
 }
 
@@ -748,7 +656,7 @@ func scopeIntersection(a, b []string) []string {
 	return result
 }
 
-func checkW2NoTestCriteria(issues map[string]*materialize.Issue) []Finding {
+func checkW2NoTestCriteria(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		if issue.Type != "task" || len(issue.Acceptance) == 0 {
@@ -776,7 +684,7 @@ func checkW2NoTestCriteria(issues map[string]*materialize.Issue) []Finding {
 
 const defaultTokenBudget = 4000
 
-func checkW3BudgetExceeded(issues map[string]*materialize.Issue) []Finding {
+func checkW3BudgetExceeded(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		estimated := (len(issue.DefinitionOfDone) + len(issue.Title)) / 4
@@ -792,10 +700,10 @@ func checkW3BudgetExceeded(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func checkW4BroadScope(issues map[string]*materialize.Issue) []Finding {
+func checkW4BroadScope(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if ops.IsTerminalStatus(issue.Status) {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		for _, glob := range issue.Scope {
@@ -809,13 +717,13 @@ func checkW4BroadScope(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func checkW5MissingContextFiles(issues map[string]*materialize.Issue) []Finding {
+func checkW5MissingContextFiles(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		if isW5ContainerType(issue.Type) {
 			continue
 		}
-		if ops.IsTerminalStatus(issue.Status) {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		if len(issue.ContextFiles) > 0 {
@@ -838,7 +746,7 @@ func isW5ContainerType(typ string) bool {
 	return typ == "story" || typ == "epic" || typ == "feature"
 }
 
-func checkW6ComplexityMismatch(issues map[string]*materialize.Issue) []Finding {
+func checkW6ComplexityMismatch(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		n := len(issue.Scope)
@@ -860,7 +768,7 @@ func checkW6ComplexityMismatch(issues map[string]*materialize.Issue) []Finding {
 
 var vagueWords = []string{"properly", "correctly", "good", "well", "appropriate", "suitable"}
 
-func checkW7VagueDoD(issues map[string]*materialize.Issue) []Finding {
+func checkW7VagueDoD(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		if issue.DefinitionOfDone == "" {
@@ -878,7 +786,7 @@ func checkW7VagueDoD(issues map[string]*materialize.Issue) []Finding {
 	return findings
 }
 
-func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []Finding {
+func checkW8ConflictingDecisions(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		byTopic := make(map[string][]string)
@@ -909,10 +817,10 @@ func checkW8ConflictingDecisions(issues map[string]*materialize.Issue) []Finding
 	return findings
 }
 
-func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScopes map[string][]string, allIssues map[string]*materialize.Issue) []Finding {
+func checkW10PhantomScope(issues map[string]IssueFacts, preExpandedScopes map[string][]string) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
-		if ops.IsTerminalStatus(issue.Status) {
+		if isTerminalStatus(issue.Status) {
 			continue
 		}
 		expandedFiles, ok := preExpandedScopes[id]
@@ -920,7 +828,7 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 			continue
 		}
 		hasMatches := len(expandedFiles) > 0
-		blockerNewFiles := collectBlockerNewFiles(issue, allIssues)
+		blockerNewFiles := collectBlockerNewFiles(issue, issues)
 
 		for _, path := range issue.Scope {
 			path = strings.TrimSpace(path)
@@ -940,7 +848,7 @@ func checkW10PhantomScope(issues map[string]*materialize.Issue, preExpandedScope
 	return findings
 }
 
-func collectBlockerNewFiles(issue *materialize.Issue, issues map[string]*materialize.Issue) map[string]bool {
+func collectBlockerNewFiles(issue IssueFacts, issues map[string]IssueFacts) map[string]bool {
 	result := make(map[string]bool)
 	toVisit := make([]string, len(issue.BlockedBy))
 	copy(toVisit, issue.BlockedBy)
@@ -981,7 +889,7 @@ const minOutcomeLength = 20
 
 var vagueOutcomes = []string{"done", "completed", "finished", "ok", "fixed"}
 
-func checkW11VagueOutcomes(issues map[string]*materialize.Issue) []Finding {
+func checkW11VagueOutcomes(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
 	for id, issue := range issues {
 		if issue.Outcome == "" {

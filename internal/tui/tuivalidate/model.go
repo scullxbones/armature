@@ -40,8 +40,7 @@ func (m *Model) SetSize(width, height int) {
 func (m *Model) SetState(state *materialize.State) {
 	m.state = state
 	if state != nil {
-		graph := materialize.GraphFromState(state)
-		m.results = validate.Validate(state, graph, validate.Options{Now: m.now()})
+		m.results = validate.Validate(validateFacts(state.Issues, m.now()), validate.Options{Now: m.now()})
 	}
 }
 

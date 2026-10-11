@@ -38,8 +38,7 @@ func TestPlanCouplingDetection_REQ_LNGHZN_S10_T5(t *testing.T) {
 			Acceptance:       json.RawMessage(`["docs/commands.md mentions the new flag"]`),
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	assert.False(t, result.OK)
 	e13 := findErrorContaining(result, "E13:")
@@ -69,8 +68,7 @@ func TestPlanCouplingCoLocatedScopePasses_REQ_LNGHZN_S10_T5(t *testing.T) {
 			Scope:  []string{"cmd/armature/flag.go (new)", "docs/commands.md"},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	assert.False(t, containsError(result, "E13"), "co-located scope should not trigger coupling error, got: %v", result.Errors)
 }
@@ -91,8 +89,7 @@ func TestPlanCouplingIgnoresOtherStories_REQ_LNGHZN_S10_T5(t *testing.T) {
 			Scope:  []string{"docs/commands.md"},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	assert.False(t, containsError(result, "E13"), "coupling across different stories should not trigger, got: %v", result.Errors)
 }
@@ -113,8 +110,7 @@ func TestPlanCouplingNoDocOwner_REQ_LNGHZN_S10_T5(t *testing.T) {
 			Scope:  []string{"internal/other/pkg.go"},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	assert.False(t, containsError(result, "E13"), "no coupling when no sibling owns the census/doc files, got: %v", result.Errors)
 }
@@ -137,8 +133,7 @@ func TestPlanCouplingSkipsTerminalStatusTasks_REQ_LNGHZN_S10_T5(t *testing.T) {
 			Scope:  []string{"docs/commands.md"},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	assert.False(t, containsError(result, "E13"), "merged sibling tasks should not trigger coupling error, got: %v", result.Errors)
 }
@@ -159,8 +154,7 @@ func TestPlanCouplingExemptsSelfCoLocatedSiblings_REQ_LNGHZN_S10_T5(t *testing.T
 			Scope:  []string{"cmd/armature/b.go (new)", "docs/commands.md"},
 		},
 	)
-	graph := graphFromState(state)
-	result := Validate(state, graph, Options{})
+	result := validateState(state, Options{})
 
 	assert.False(t, containsError(result, "E13"),
 		"self-co-located siblings are vertical slices, not coupling, got: %v", result.Errors)
@@ -183,7 +177,7 @@ func TestPlanCouplingIgnoresRepoWideScope_REQ_LNGHZN_S10_T5(t *testing.T) {
 				Scope:  []string{"docs/commands.md"},
 			},
 		)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		assert.False(t, containsError(result, "E13"),
 			"scope %q does not definitely land inside cmd/**, got: %v", scope, result.Errors)
 	}
@@ -198,7 +192,7 @@ func TestPlanCouplingReportsOncePerCodeTask_REQ_LNGHZN_S10_T5(t *testing.T) {
 		&materialize.Issue{ID: "TSK-D1", Type: "task", Parent: "STORY-1", Scope: []string{"docs/commands.md"}},
 		&materialize.Issue{ID: "TSK-D2", Type: "task", Parent: "STORY-1", Scope: []string{"docs/design/surface-census.md"}},
 	)
-	result := Validate(state, graphFromState(state), Options{})
+	result := validateState(state, Options{})
 
 	var e13 []string
 	for _, err := range result.Errors {
@@ -273,7 +267,7 @@ func TestCheckIntroductionDoesNotBlockOnE13_REQ_LNGHZN_S10_T5(t *testing.T) {
 		},
 	}}
 
-	err := CheckIntroduction(current, proposed, Options{Strict: true})
+	err := checkIntroduction(current, proposed, Options{Strict: true})
 	assert.NoError(t, err, "E13 is a plan-release gate, not a write-time refusal")
 }
 
@@ -292,7 +286,7 @@ func TestPlanCouplingRepoWideScopeIsNotADocOwner_REQ_LNGHZN_S10_T5(t *testing.T)
 			&materialize.Issue{ID: "TSK-SWEEP", Type: "task", Parent: "STORY-1", Scope: []string{tc.scope}},
 			&materialize.Issue{ID: "TSK-CODE", Type: "task", Parent: "STORY-1", Scope: []string{"cmd/armature/flag.go (new)"}},
 		)
-		result := Validate(state, graphFromState(state), Options{})
+		result := validateState(state, Options{})
 		assert.Equal(t, tc.owns, containsError(result, "E13"),
 			"scope %q as doc owner, got: %v", tc.scope, result.Errors)
 	}
