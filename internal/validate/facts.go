@@ -10,9 +10,7 @@ const (
 	statusCancelled  = "cancelled"
 )
 
-// IssueFacts is the borrowed Graph Finding input: issue shape, Task Contract
-// fields, citation counts, and a precomputed ClaimStale bit. Materialization
-// and Claim TTL stay at the composition root.
+// IssueFacts is the borrowed Graph Finding input.
 type IssueFacts struct {
 	ID                  string
 	Type                string
@@ -36,7 +34,6 @@ type IssueFacts struct {
 	Decisions           []DecisionFact
 }
 
-// DecisionFact is the Decision topic/choice pair W8 inspects.
 type DecisionFact struct {
 	Topic  string
 	Choice string
