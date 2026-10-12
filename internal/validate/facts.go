@@ -10,7 +10,6 @@ const (
 	statusCancelled  = "cancelled"
 )
 
-// IssueFacts is the borrowed Graph Finding input.
 type IssueFacts struct {
 	ID                  string
 	Type                string

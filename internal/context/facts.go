@@ -8,7 +8,6 @@ const (
 	stateDirName = ".armature"
 )
 
-// IssueFacts is the borrowed Render Context input.
 type IssueFacts struct {
 	ID               string
 	Title            string
