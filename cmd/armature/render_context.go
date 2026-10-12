@@ -70,7 +70,7 @@ func newRenderContextCmd() *cobra.Command {
 			repoRoot := ctxpkg.InferRepoRoot(appCtx.StateDir)
 			reader := &ctxpkg.OSFileReader{Root: repoRoot}
 
-			ctx, err := ctxpkg.Assemble(rcIssue, state, reader)
+			ctx, err := ctxpkg.Assemble(rcIssue, contextFacts(state), reader)
 			if err != nil {
 				return fmt.Errorf("assemble context: %w", err)
 			}

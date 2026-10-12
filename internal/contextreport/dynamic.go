@@ -145,6 +145,42 @@ func readyClaimFacts(issues map[string]*materialize.Issue, now int64) map[string
 	return out
 }
 
+func contextFacts(state *materialize.State) map[string]ctxpkg.IssueFacts {
+	if state == nil {
+		return nil
+	}
+	out := make(map[string]ctxpkg.IssueFacts, len(state.Issues))
+	for id, issue := range state.Issues {
+		if issue == nil {
+			continue
+		}
+		f := ctxpkg.IssueFacts{
+			ID:               issue.ID,
+			Title:            issue.Title,
+			Type:             issue.Type,
+			Status:           issue.Status,
+			Parent:           issue.Parent,
+			Priority:         issue.Priority,
+			DefinitionOfDone: issue.DefinitionOfDone,
+			Outcome:          issue.Outcome,
+			Scope:            append([]string(nil), issue.Scope...),
+			ContextFiles:     append([]string(nil), issue.ContextFiles...),
+			Children:         append([]string(nil), issue.Children...),
+			BlockedBy:        append([]string(nil), issue.BlockedBy...),
+			Blocks:           append([]string(nil), issue.Blocks...),
+			Context:          append([]byte(nil), issue.Context...),
+		}
+		for _, n := range issue.Notes {
+			f.Notes = append(f.Notes, ctxpkg.NoteFact{Timestamp: n.Timestamp, Msg: n.Msg, Deleted: n.Deleted})
+		}
+		for _, d := range issue.Decisions {
+			f.Decisions = append(f.Decisions, ctxpkg.DecisionFact{Topic: d.Topic, Choice: d.Choice, Rationale: d.Rationale})
+		}
+		out[id] = f
+	}
+	return out
+}
+
 func measureReady(index materialize.Index, state *materialize.State, now time.Time) ([]byte, error) {
 	nowUnix := now.Unix()
 	entries := ready.ComputeReady(readyQueueFacts(index, state.Issues, nowUnix), "")
@@ -179,7 +215,7 @@ func measureShow(state *materialize.State) ([]byte, error) {
 }
 
 func measureRenderContext(state *materialize.State, reader ctxpkg.FileReader) (invocation, bundle []byte, err error) {
-	assembled, err := ctxpkg.Assemble(FixtureShowIssue, state, reader)
+	assembled, err := ctxpkg.Assemble(FixtureShowIssue, contextFacts(state), reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("assemble render-context: %w", err)
 	}

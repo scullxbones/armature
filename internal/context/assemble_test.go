@@ -67,7 +67,7 @@ func TestAssemble_ContextFilesLayerUsesReader_REQ_ARCHIMP_S16_T2(t *testing.T) {
 		},
 	}
 
-	ctx, err := Assemble("TEST-1", state, reader)
+	ctx, err := Assemble("TEST-1", factsFromState(state), reader)
 	require.NoError(t, err, "Assemble failed")
 	require.NotNil(t, ctx, "Assemble returned nil context")
 
@@ -101,7 +101,7 @@ func TestAssemble_MissingGraphParentIsError_REQ_NOCOMMENTS(t *testing.T) {
 		BlockedBy: []string{},
 		Blocks:    []string{},
 	}
-	_, err := Assemble("CHILD", state, &fakeReader{})
+	_, err := Assemble("CHILD", factsFromState(state), &fakeReader{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GHOST")
 	assert.Contains(t, err.Error(), "missing")
@@ -129,15 +129,15 @@ func TestAssemble_MissingGraphSiblingIsError_REQ_NOCOMMENTS(t *testing.T) {
 		BlockedBy: []string{},
 		Blocks:    []string{},
 	}
-	_, err := Assemble("CHILD", state, &fakeReader{})
+	_, err := Assemble("CHILD", factsFromState(state), &fakeReader{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GHOST-SIB")
 }
 
 func TestBuildParentChain_NilGraphIsError_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{ID: "CHILD", Parent: "PAR"}
-	_, err := buildParentChain(issue, nil, materialize.NewState())
+	issue := IssueFacts{ID: "CHILD", Parent: "PAR"}
+	_, err := buildParentChain(issue, nil, map[string]IssueFacts{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "graph is missing")
 }

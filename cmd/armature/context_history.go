@@ -61,7 +61,7 @@ func newContextHistoryCmd() *cobra.Command {
 
 				reader := &context.OSFileReader{Root: appCtx.RepoPath}
 
-				ctx, err := context.Assemble(chIssue, state, reader)
+				ctx, err := context.Assemble(chIssue, contextFacts(state), reader)
 				if err != nil {
 					continue
 				}

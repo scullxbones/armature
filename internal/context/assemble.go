@@ -14,9 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/dag"
-	"github.com/scullxbones/armature/internal/materialize"
 )
 
 const (
@@ -36,28 +34,28 @@ type Context struct {
 	Layers  []Layer `json:"layers"`
 }
 
-func Assemble(issueID string, state *materialize.State, reader FileReader) (*Context, error) {
-	issue, ok := state.Issues[issueID]
+func Assemble(issueID string, issues map[string]IssueFacts, reader FileReader) (*Context, error) {
+	issue, ok := issues[issueID]
 	if !ok {
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
 	}
 
-	graph := materialize.GraphFromState(state)
+	graph := graphFromFacts(issues)
 
 	var layers []Layer
 
 	layers = append(layers, buildCoreSpec(issue))
 	layers = append(layers, buildContextFiles(issue, reader))
 	layers = append(layers, buildSnippets(issue))
-	layers = append(layers, buildBlockerOutcomes(issue, state))
-	parentLayer, err := buildParentChain(issue, graph, state)
+	layers = append(layers, buildBlockerOutcomes(issue, issues))
+	parentLayer, err := buildParentChain(issue, graph, issues)
 	if err != nil {
 		return nil, err
 	}
 	layers = append(layers, parentLayer)
 	layers = append(layers, buildDecisions(issue))
 	layers = append(layers, buildNotes(issue))
-	siblingLayer, err := buildSiblingOutcomes(issue, graph, state)
+	siblingLayer, err := buildSiblingOutcomes(issue, graph, issues)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +85,7 @@ func inferRepoRootByPath(stateDir string) string {
 	clean := filepath.Clean(stateDir)
 	for dir := clean; dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
 		base := filepath.Base(dir)
-		if base == ".arm" || base == config.StateDirName {
+		if base == ".arm" || base == stateDirName {
 			return filepath.Dir(dir)
 		}
 	}
@@ -115,7 +113,7 @@ func inferRepoRootByGit(stateDir string) string {
 	return strings.TrimSpace(out.String())
 }
 
-func buildContextFiles(issue *materialize.Issue, reader FileReader) Layer {
+func buildContextFiles(issue IssueFacts, reader FileReader) Layer {
 	if len(issue.ContextFiles) == 0 {
 		return Layer{Name: "context_files", DropRank: 2, Content: ""}
 	}
@@ -157,7 +155,7 @@ func codeBlockFence(content string) string {
 	return strings.Repeat("`", fenceLen)
 }
 
-func buildCoreSpec(issue *materialize.Issue) Layer {
+func buildCoreSpec(issue IssueFacts) Layer {
 	scope := strings.Join(issue.Scope, ", ")
 	if scope == "" {
 		scope = "(none)"
@@ -175,7 +173,7 @@ func buildCoreSpec(issue *materialize.Issue) Layer {
 	return Layer{Name: "core_spec", DropRank: 1, Content: content}
 }
 
-func buildSnippets(issue *materialize.Issue) Layer {
+func buildSnippets(issue IssueFacts) Layer {
 	if issue.Context == nil {
 		return Layer{Name: "snippets", DropRank: 3, Content: ""}
 	}
@@ -194,7 +192,7 @@ func buildSnippets(issue *materialize.Issue) Layer {
 	return Layer{Name: "snippets", DropRank: 3, Content: strings.Join(lines, "\n")}
 }
 
-func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) Layer {
+func buildBlockerOutcomes(issue IssueFacts, issues map[string]IssueFacts) Layer {
 	if len(issue.BlockedBy) == 0 {
 		return Layer{Name: "blocker_outcomes", DropRank: 3, Content: ""}
 	}
@@ -202,7 +200,7 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 	for _, blockerID := range issue.BlockedBy {
 		outcome := "outcome unknown"
 		var status string
-		if blocker, ok := state.Issues[blockerID]; ok {
+		if blocker, ok := issues[blockerID]; ok {
 			status = blocker.Status
 			if blocker.Outcome != "" {
 				outcome = blocker.Outcome
@@ -215,7 +213,7 @@ func buildBlockerOutcomes(issue *materialize.Issue, state *materialize.State) La
 	return Layer{Name: "blocker_outcomes", DropRank: 4, Content: content}
 }
 
-func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) (Layer, error) {
+func buildParentChain(issue IssueFacts, graph *dag.Graph, issues map[string]IssueFacts) (Layer, error) {
 	empty := Layer{Name: "parent_chain", DropRank: 5, Content: ""}
 	if graph == nil {
 		return empty, fmt.Errorf("parent chain: issue graph is missing")
@@ -227,7 +225,7 @@ func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materia
 		if len(lines) >= parentChainDisplayCap {
 			break
 		}
-		parentIssue, ok := state.Issues[parentID]
+		parentIssue, ok := issues[parentID]
 		if !ok {
 			return empty, fmt.Errorf("parent chain: graph node %s is missing from state", parentID)
 		}
@@ -241,7 +239,7 @@ func buildParentChain(issue *materialize.Issue, graph *dag.Graph, state *materia
 	return Layer{Name: "parent_chain", DropRank: 5, Content: content}, nil
 }
 
-func buildDecisions(issue *materialize.Issue) Layer {
+func buildDecisions(issue IssueFacts) Layer {
 	if len(issue.Decisions) == 0 {
 		return Layer{Name: "decisions", DropRank: 6, Content: ""}
 	}
@@ -253,11 +251,11 @@ func buildDecisions(issue *materialize.Issue) Layer {
 	return Layer{Name: "decisions", DropRank: 6, Content: content}
 }
 
-func buildNotes(issue *materialize.Issue) Layer {
+func buildNotes(issue IssueFacts) Layer {
 	if len(issue.Notes) == 0 {
 		return Layer{Name: "notes", DropRank: 7, Content: ""}
 	}
-	notes := make([]materialize.Note, 0, len(issue.Notes))
+	notes := make([]NoteFact, 0, len(issue.Notes))
 	for _, note := range issue.Notes {
 		if note.Deleted {
 			continue
@@ -279,7 +277,7 @@ func buildNotes(issue *materialize.Issue) Layer {
 	return Layer{Name: "notes", DropRank: 7, Content: content}
 }
 
-func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *materialize.State) (Layer, error) {
+func buildSiblingOutcomes(issue IssueFacts, graph *dag.Graph, issues map[string]IssueFacts) (Layer, error) {
 	empty := Layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
 	if issue.Parent == "" {
 		return empty, nil
@@ -295,11 +293,11 @@ func buildSiblingOutcomes(issue *materialize.Issue, graph *dag.Graph, state *mat
 		if sibID == issue.ID {
 			continue
 		}
-		sib, ok := state.Issues[sibID]
+		sib, ok := issues[sibID]
 		if !ok {
 			return empty, fmt.Errorf("sibling outcomes: graph node %s is missing from state", sibID)
 		}
-		if sib.Status == "done" || sib.Status == "merged" {
+		if sib.Status == statusDone || sib.Status == statusMerged {
 			outcome := sib.Outcome
 			if outcome == "" {
 				outcome = "(none)"
