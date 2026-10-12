@@ -143,6 +143,7 @@ linters:
             - "!**/*_test.go"
           allow:
             - "$gostd"
+            - "github.com/charmbracelet/glamour"
             - "github.com/scullxbones/armature/internal/dag"
         ready-boundary:
           list-mode: strict
