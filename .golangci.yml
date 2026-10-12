@@ -136,6 +136,14 @@ linters:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/attestation"
             - "github.com/scullxbones/armature/internal/materialize"
+        context-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/context/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/dag"
         ready-boundary:
           list-mode: strict
           files:

@@ -94,7 +94,7 @@ func TestContextReportPricesRenderContextFixture_REQ_NXTTN_S3_T1(t *testing.T) {
 
 	state, _, err := replayFixtureState()
 	require.NoError(t, err)
-	assembled, err := ctxpkg.Assemble(FixtureShowIssue, state, embedFileReader{})
+	assembled, err := ctxpkg.Assemble(FixtureShowIssue, contextFacts(state), embedFileReader{})
 	require.NoError(t, err)
 	raw, err := ctxpkg.RenderAgent(assembled)
 	require.NoError(t, err)
