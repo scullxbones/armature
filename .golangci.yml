@@ -188,6 +188,14 @@ linters:
             - "github.com/scullxbones/armature/internal/clock"
             - "github.com/scullxbones/armature/internal/harnesspolicy"
             - "github.com/scullxbones/armature/internal/worktree"
+        harnesspolicy-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/harnesspolicy/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/scopematch"
     errcheck:
       check-type-assertions: true
       check-blank: true

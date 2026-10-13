@@ -55,12 +55,11 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 	if len(event.Paths) == 0 {
 		return
 	}
-	resolver := harnesspolicy.NewIssuePolicyResolver(harnesspolicy.ResolverConfig{
-		RepoPath:   appCtx.RepoPath,
-		StateDir:   appCtx.StateDir,
-		SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
-	})
-	policy, err := resolver.Resolve(resolvedBinding.IssueID)
+	policy, err := newIssuePolicyLoader(
+		appCtx.RepoPath,
+		appCtx.StateDir,
+		filepath.Join(appCtx.IssuesDir, "sources"),
+	).Resolve(resolvedBinding.IssueID)
 	if err != nil {
 		return
 	}
@@ -339,13 +338,11 @@ func newHarnessHookCmd() *cobra.Command {
 
 			tryEmitHeartbeat(appCtx.RepoPath, appCtx.IssuesDir, appCtx.WorktreePath, resolvedBinding.IssueID, event.Kind)
 
-			resolver := harnesspolicy.NewIssuePolicyResolver(harnesspolicy.ResolverConfig{
-				RepoPath:   appCtx.RepoPath,
-				StateDir:   appCtx.StateDir,
-				SourcesDir: filepath.Join(appCtx.IssuesDir, "sources"),
-			})
-
-			hook := harnesshook.NewHook(resolver)
+			hook := harnesshook.NewHook(newIssuePolicyLoader(
+				appCtx.RepoPath,
+				appCtx.StateDir,
+				filepath.Join(appCtx.IssuesDir, "sources"),
+			))
 			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
 				Input:    inputData,
 				Binding:  resolvedBinding.IssueID,
