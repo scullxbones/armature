@@ -20,7 +20,7 @@ func TestIssuePolicyLoaderRejectsUnknownTask(t *testing.T) {
 	stateDir := filepath.Join(repo, ".armature", "state", "default")
 	require.NoError(t, os.MkdirAll(filepath.Join(stateDir, "issues"), 0o755))
 
-	_, err := newIssuePolicyLoader(repo, stateDir, "").Resolve("MISSING")
+	_, err := newIssuePolicyLoader(stateDir, "").Resolve("MISSING")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "task MISSING not found")
@@ -62,7 +62,7 @@ func TestIssuePolicyLoaderMapsMaterializedIssueAndSources(t *testing.T) {
 		},
 	}))
 
-	policy, err := newIssuePolicyLoader(repo, stateDir, sourcesDir).Resolve("TASK-1")
+	policy, err := newIssuePolicyLoader(stateDir, sourcesDir).Resolve("TASK-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, "TASK-1", policy.ID)

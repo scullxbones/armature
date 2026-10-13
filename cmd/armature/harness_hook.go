@@ -56,7 +56,6 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 		return
 	}
 	policy, err := newIssuePolicyLoader(
-		appCtx.RepoPath,
 		appCtx.StateDir,
 		filepath.Join(appCtx.IssuesDir, "sources"),
 	).Resolve(resolvedBinding.IssueID)
@@ -339,7 +338,6 @@ func newHarnessHookCmd() *cobra.Command {
 			tryEmitHeartbeat(appCtx.RepoPath, appCtx.IssuesDir, appCtx.WorktreePath, resolvedBinding.IssueID, event.Kind)
 
 			hook := harnesshook.NewHook(newIssuePolicyLoader(
-				appCtx.RepoPath,
 				appCtx.StateDir,
 				filepath.Join(appCtx.IssuesDir, "sources"),
 			))

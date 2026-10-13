@@ -15,13 +15,7 @@ type issuePolicyLoader struct {
 	sourcesDir string
 }
 
-func newIssuePolicyLoader(repoPath, stateDir, sourcesDir string) issuePolicyLoader {
-	if stateDir == "" {
-		stateDir = filepath.Join(repoPath, ".armature", "state", "default")
-	}
-	if sourcesDir == "" {
-		sourcesDir = filepath.Join(repoPath, ".armature", "sources")
-	}
+func newIssuePolicyLoader(stateDir, sourcesDir string) issuePolicyLoader {
 	return issuePolicyLoader{stateDir: stateDir, sourcesDir: sourcesDir}
 }
 
