@@ -1,15 +1,12 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -105,17 +102,11 @@ func isKnownWorktreeGitDir(repoPath, candidateGitDir string) bool {
 		}
 	}
 
-	// #nosec G204 - git binary and repoPath are controlled by us, not user input
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+	paths, err := worktree.RegisteredPaths(repoPath)
 	if err != nil {
 		return false
 	}
-	for line := range strings.SplitSeq(string(output), "\n") {
-		wtPath, ok := strings.CutPrefix(line, "worktree ")
-		if !ok {
-			continue
-		}
+	for _, wtPath := range paths {
 		wtGitDir, err := worktree.ResolveGitDir(wtPath)
 		if err != nil {
 			continue
@@ -164,10 +155,12 @@ type heartbeatRateLimitState struct {
 }
 
 func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
-	stateFile := rateLimitStateFilePath(workerID, issueID)
-	// #nosec G304 - stateFile is derived from workerID and issueID; ARM_LOG_SLOT
-	// charset is validated by slottedWorkerIDChecked.
-	data, err := os.ReadFile(stateFile)
+	root, err := os.OpenRoot(os.TempDir())
+	if err != nil {
+		return time.Time{}
+	}
+	defer swallowErr(root.Close())
+	data, err := root.ReadFile(rateLimitStateFileName(workerID, issueID))
 	if err != nil {
 		return time.Time{}
 	}
@@ -179,7 +172,6 @@ func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
 }
 
 func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.Time) error {
-	stateFile := rateLimitStateFilePath(workerID, issueID)
 	state := heartbeatRateLimitState{
 		LastHeartbeatTime: heartbeatTime.Unix(),
 	}
@@ -187,17 +179,23 @@ func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.T
 	if err != nil {
 		return fmt.Errorf("failed to marshal heartbeat state: %w", err)
 	}
-	// #nosec G304 - stateFile is derived from workerID and issueID; ARM_LOG_SLOT
-	// charset is validated by slottedWorkerIDChecked.
-	if err := os.WriteFile(stateFile, data, 0o600); err != nil {
+	root, err := os.OpenRoot(os.TempDir())
+	if err != nil {
+		return fmt.Errorf("failed to write heartbeat state file: %w", err)
+	}
+	defer swallowErr(root.Close())
+	if err := root.WriteFile(rateLimitStateFileName(workerID, issueID), data, 0o600); err != nil {
 		return fmt.Errorf("failed to write heartbeat state file: %w", err)
 	}
 	return nil
 }
 
+func rateLimitStateFileName(workerID, issueID string) string {
+	return fmt.Sprintf("armature-heartbeat-%s-%s.json", workerID, issueID)
+}
+
 func rateLimitStateFilePath(workerID, issueID string) string {
-	filename := fmt.Sprintf("armature-heartbeat-%s-%s.json", workerID, issueID)
-	return filepath.Join(os.TempDir(), filename)
+	return filepath.Join(os.TempDir(), rateLimitStateFileName(workerID, issueID))
 }
 
 func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKind harnesshook.EventKind) {
