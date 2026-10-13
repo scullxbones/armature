@@ -159,7 +159,7 @@ func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
 	if err != nil {
 		return time.Time{}
 	}
-	defer swallowErr(root.Close())
+	defer func() { swallowErr(root.Close()) }()
 	data, err := root.ReadFile(rateLimitStateFileName(workerID, issueID))
 	if err != nil {
 		return time.Time{}
@@ -183,7 +183,7 @@ func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.T
 	if err != nil {
 		return fmt.Errorf("failed to write heartbeat state file: %w", err)
 	}
-	defer swallowErr(root.Close())
+	defer func() { swallowErr(root.Close()) }()
 	if err := root.WriteFile(rateLimitStateFileName(workerID, issueID), data, 0o600); err != nil {
 		return fmt.Errorf("failed to write heartbeat state file: %w", err)
 	}
