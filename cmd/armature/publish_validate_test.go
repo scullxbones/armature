@@ -146,6 +146,7 @@ func TestPublishValidateAfterIntegrateNilWhenOverride_REQ_PUBLISH_VALIDATE(t *te
 }
 
 func TestMergeSourceManifestUnionsRemoteOnlyEntries_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	local := sources.Manifest{}
 	local.Upsert(sources.SourceEntry{ID: "local-id", Title: "local"})

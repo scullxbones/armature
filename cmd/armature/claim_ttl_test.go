@@ -166,6 +166,7 @@ func exprMentionsOpClaim(e ast.Expr) bool {
 }
 
 func TestLoadWorkerLogs_ConcatMatchesListLogFiles_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0o755))
@@ -200,6 +201,7 @@ func TestLoadWorkerLogs_ConcatMatchesListLogFiles_REQ_CLAIMTTL(t *testing.T) {
 }
 
 func TestLoadWorkerLogs_DropsFilenameWorkerMismatch_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opsDir := filepath.Join(dir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0o755))

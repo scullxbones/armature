@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -707,33 +708,74 @@ func TestCreateCommand(t *testing.T) {
 	assert.Contains(t, buf.String(), "task-99")
 }
 
-func setupArmatureLayout(t *testing.T, repo string) string {
-	t.Helper()
-	armatureDir := filepath.Join(repo, ".armature")
-	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "ops"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(armatureDir, "state"), 0o755))
+const testLayoutWorkerID = "test-worker-template"
 
-	cfg := config.DefaultConfig("go")
-	require.NoError(t, config.WriteConfig(filepath.Join(armatureDir, "config.json"), cfg))
+var clonedWorkerSeq atomic.Uint64
 
-	run(t, repo, "git", "config", "armature.ops-worktree-path", armatureDir)
+func prepareRepoTemplates() error {
+	layout, err := gittest.NewFixture()
+	if err != nil {
+		return fmt.Errorf("layout fixture: %w", err)
+	}
+	if _, err := gitCombinedOutput(layout.Dir, "commit", "--allow-empty", "-m", "init"); err != nil {
+		return fmt.Errorf("layout init commit: %w", err)
+	}
+	if _, err := writeArmatureLayout(layout.Dir, testLayoutWorkerID); err != nil {
+		return fmt.Errorf("layout armature files: %w", err)
+	}
+	testLayoutFixture = layout
 
-	run(t, repo, "git", "config", "armature.worker-id", "test-worker-"+fmt.Sprintf("%d", time.Now().UnixNano()))
-
-	return armatureDir
+	task, err := gittest.CloneFixtureTo(layout)
+	if err != nil {
+		return fmt.Errorf("task fixture clone: %w", err)
+	}
+	if err := appendTemplateTask(task.Dir); err != nil {
+		return fmt.Errorf("task fixture op: %w", err)
+	}
+	testTaskFixture = task
+	return nil
 }
 
-func setupRepoWithTask(t *testing.T) string {
-	t.Helper()
-	repo := gittest.InitWithOrigin(t).Dir
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+func gitCombinedOutput(dir string, args ...string) (string, error) {
+	cmd := adapters.NonInteractiveGitCommand(dir, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("git %v: %w: %s", args, err, out)
+	}
+	return string(out), nil
+}
 
-	setupArmatureLayout(t, repo)
+func writeArmatureLayout(repo, workerID string) (string, error) {
+	armatureDir := filepath.Join(repo, ".armature")
+	if err := os.MkdirAll(filepath.Join(armatureDir, "ops"), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Join(armatureDir, "state"), 0o755); err != nil {
+		return "", err
+	}
+	cfg := config.DefaultConfig("go")
+	if err := config.WriteConfig(filepath.Join(armatureDir, "config.json"), cfg); err != nil {
+		return "", err
+	}
+	if err := gittest.SetLocalConfig(repo, "armature.ops-worktree-path", armatureDir); err != nil {
+		return "", err
+	}
+	if err := gittest.SetLocalConfig(repo, "armature.worker-id", workerID); err != nil {
+		return "", err
+	}
+	return armatureDir, nil
+}
 
-	ctx := getTestContext(t, repo)
+func appendTemplateTask(repo string) error {
+	ctx, err := config.ResolveContext(repo)
+	if err != nil {
+		return err
+	}
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
-	require.NoError(t, err)
-	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+	if err != nil {
+		return err
+	}
+	return ops.AppendOp(logPath, ops.Op{
 		Type:      ops.OpCreate,
 		TargetID:  "task-01",
 		Timestamp: nowEpoch(),
@@ -745,8 +787,87 @@ func setupRepoWithTask(t *testing.T) string {
 			DefinitionOfDone: "Task implementation is complete and verified",
 			Confidence:       "verified",
 		},
-	}))
+	})
+}
+
+func uniquifyClonedWorker(repo string) error {
+	oldID := testLayoutWorkerID
+	newID := fmt.Sprintf("test-worker-%d-%d", time.Now().UnixNano(), clonedWorkerSeq.Add(1))
+	cfg := filepath.Join(repo, ".git", "config")
+	data, err := os.ReadFile(cfg) //nolint:gosec // G304: cloned test repo git config
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(cfg, []byte(strings.ReplaceAll(string(data), oldID, newID)), 0o644); err != nil {
+		return err
+	}
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	oldLog := filepath.Join(opsDir, oldID+".log")
+	newLog := filepath.Join(opsDir, newID+".log")
+	if body, err := os.ReadFile(oldLog); err == nil { //nolint:gosec // G304: cloned test ops log
+		if err := os.WriteFile(newLog, bytes.ReplaceAll(body, []byte(oldID), []byte(newID)), 0o644); err != nil {
+			return err
+		}
+		if err := os.Remove(oldLog); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	oldState := filepath.Join(repo, ".armature", "state", oldID)
+	newState := filepath.Join(repo, ".armature", "state", newID)
+	if err := os.Rename(oldState, newState); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func initTempRepo(t *testing.T) string {
+	t.Helper()
+	require.NotEmpty(t, testLayoutFixture.Dir, "TestMain must prepare layout fixture")
+	repo := gittest.CloneFixture(t, testLayoutFixture).Dir
+	require.NoError(t, uniquifyClonedWorker(repo))
 	return repo
+}
+
+func setupArmatureLayout(t *testing.T, repo string) string {
+	t.Helper()
+	armatureDir, err := writeArmatureLayout(repo, "test-worker-"+fmt.Sprintf("%d", time.Now().UnixNano()))
+	require.NoError(t, err)
+	return armatureDir
+}
+
+func setupRepoWithTask(t *testing.T) string {
+	t.Helper()
+	require.NotEmpty(t, testTaskFixture.Dir, "TestMain must prepare task fixture")
+	repo := gittest.CloneFixture(t, testTaskFixture).Dir
+	require.NoError(t, uniquifyClonedWorker(repo))
+	return repo
+}
+
+func TestInitTempRepoHasLayoutAndInitCommit(t *testing.T) {
+	t.Parallel()
+	repo := initTempRepo(t)
+	assert.DirExists(t, filepath.Join(repo, ".armature", "ops"))
+	ctx := getTestContext(t, repo)
+	assert.Equal(t, filepath.Join(repo, ".armature"), ctx.WorktreePath)
+	run(t, repo, "git", "rev-parse", "--verify", "HEAD")
+}
+
+func TestSetupRepoWithTaskCopiesAreIndependent(t *testing.T) {
+	t.Parallel()
+	a := setupRepoWithTask(t)
+	b := setupRepoWithTask(t)
+	require.NotEqual(t, a, b)
+	plantVerifiedTask(t, a, "task-99", "isolated.go")
+	ctx := getTestContext(t, b)
+	_, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	logged, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	for _, op := range logged {
+		assert.NotEqual(t, "task-99", op.TargetID)
+	}
 }
 
 func TestTransitionCommand(t *testing.T) {
@@ -2248,6 +2369,7 @@ func TestCollectDraftSubtree_ReturnsDraftIssuesInSubtree(t *testing.T) {
 }
 
 func TestWriteDAGSummaryArtifact_CreatesFile(t *testing.T) {
+	t.Parallel()
 	issuesDir := t.TempDir()
 	stateDir := filepath.Join(issuesDir, "state")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
@@ -2553,6 +2675,7 @@ func TestSlottedWorkerID_REQ_LNGHZN_S3_T1(t *testing.T) {
 }
 
 func TestAppendLowStakesOp_ResetsTrackerWhenThresholdReachedInWorktree(t *testing.T) {
+	t.Parallel()
 	worktreePath := gittest.InitWithOrigin(t).Dir
 	logPath := filepath.Join(worktreePath, ".armature", "ops", "worker.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0755))

@@ -2,19 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReadyCommand_WavesFlagGroupedOutput_REQ_LNGHZN_S2_T1(t *testing.T) {
 	t.Parallel()
 
-	repo := gittest.InitWithOrigin(t).Dir
-	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-	armatureDir := setupArmatureLayout(t, repo)
-	t.Logf("armature dir: %s", armatureDir)
+	repo := initTempRepo(t)
+	t.Logf("armature dir: %s", filepath.Join(repo, ".armature"))
 
 	tasks := []struct {
 		id    string

@@ -32,6 +32,7 @@ func TestGCExitError_AmbiguousExitsNonZero_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
