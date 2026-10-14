@@ -529,7 +529,7 @@ func appendMergedIfCurrent(
 			integ = live.IntegrationBranch
 		}
 		res := promotion.Evaluate(git, promotion.Input{
-			Issue:       *live,
+			Issue:       promotionIssueFacts(*live),
 			PriorOps:    allOps,
 			Integration: integ,
 			PR:          pr,

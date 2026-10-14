@@ -11,7 +11,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/delivery"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 )
 
@@ -29,7 +28,7 @@ const (
 // Input is the borrowed snapshot Evaluate needs. PriorOps is the source of
 // attestations, post-delivery overrides, and promotion-check dedup.
 type Input struct {
-	Issue       materialize.Issue
+	Issue       IssueFacts
 	PriorOps    []ops.Op
 	Integration string
 	PR          string

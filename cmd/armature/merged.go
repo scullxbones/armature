@@ -331,7 +331,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		integration = ctx.Config.IntegrationBranchOrDefault()
 	}
 	result := promotion.Evaluate(git, promotion.Input{
-		Issue:       *issue,
+		Issue:       promotionIssueFacts(*issue),
 		PriorOps:    allOps,
 		Integration: integration,
 		PR:          pr,
@@ -380,7 +380,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 					freshIssue = live
 				}
 				fresh := promotion.Evaluate(git, promotion.Input{
-					Issue:       *freshIssue,
+					Issue:       promotionIssueFacts(*freshIssue),
 					PriorOps:    freshOps,
 					Integration: integration,
 					PR:          pr,
