@@ -194,8 +194,6 @@ else
     fail "unknown JOB output does not name not-a-job: $BOGUS_OUT"
 fi
 
-# GNU make $(filter) treats % as a wildcard. JOB=% / check-% / mut% must not
-# pass the membership gate and then run an empty target list (exit 0).
 echo "Test 4b: check-job rejects Make-filter wildcard JOB values..."
 for pat in '%' 'check-%' 'mut%'; do
     set +e

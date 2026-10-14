@@ -5,7 +5,6 @@ PYTHON ?= python3
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS ?= -X main.Version=$(VERSION)
 INSTALL_DIR ?= $(HOME)/.local/bin
-# Go appends .exe on windows even for -o bin/arm; keep ARM_BIN pointing at the real file.
 GOOS_NATIVE := $(shell $(GO) env GOOS)
 ifeq ($(GOOS_NATIVE),windows)
 ARM_EXE := .exe
@@ -13,7 +12,6 @@ else
 ARM_EXE :=
 endif
 ARM_BIN := $(CURDIR)/bin/arm$(ARM_EXE)
-# Honor GOCACHE; otherwise use $$TMPDIR (set on Windows Git Bash) before /tmp.
 UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$')
 
 .DEFAULT_GOAL := help
@@ -135,7 +133,6 @@ trace-report:
 context-report: build
 	@./bin/arm context-report --format human
 
-# Package timeout 20m: cmd/armature exceeds go test's default 10m on macos-latest CI.
 TEST_TIMEOUT ?= 20m
 
 TEST_JSON_OUT ?=
@@ -152,9 +149,6 @@ test: build
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	exit $$summary
 
-# OS-matrix entry point. Windows is an unsupported runtime (README); compile
-# every unit package's tests so shipped windows binaries stay compile-checked
-# without requiring the full POSIX-assuming suite to pass.
 test-ci: build
 ifeq ($(GOOS_NATIVE),windows)
 	@status=0; \

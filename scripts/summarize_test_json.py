@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
 
-"""Summarize `go test -json` output for CI logs.
-
-Prints package elapsed times (slowest first), the slowest individual tests,
-and a warning when a package uses more than 75% of TEST_TIMEOUT. Writes the
-same report to $GITHUB_STEP_SUMMARY when that file is set.
-
-Exits non-zero when any package failed so `make test` can surface summary
-failures even if the shell status plumbing is lost (Windows make/bash).
-"""
-
 from __future__ import annotations
 
 import json
@@ -45,8 +35,7 @@ class Result:
         self.stdout = stdout
 
 
-def parse_go_duration(text: str) -> float | None:
-    """Parse a Go time.ParseDuration string into seconds."""
+def parse_go_duration_seconds(text: str) -> float | None:
     s = (text or "").strip()
     if not s:
         return None
@@ -75,7 +64,7 @@ def _pct_of_timeout(elapsed: float, timeout_secs: float) -> str:
 def summarize(path: Path, env: Mapping[str, str] | None = None) -> Result:
     environ = os.environ if env is None else env
     timeout_raw = (environ.get("TEST_TIMEOUT") or "").strip()
-    timeout_secs = parse_go_duration(timeout_raw) if timeout_raw else None
+    timeout_secs = parse_go_duration_seconds(timeout_raw) if timeout_raw else None
 
     packages: OrderedDict[str, dict] = OrderedDict()
     failures: list[tuple[str, str]] = []
