@@ -794,18 +794,18 @@ func uniquifyClonedWorker(repo string) error {
 	oldID := testLayoutWorkerID
 	newID := fmt.Sprintf("test-worker-%d-%d", time.Now().UnixNano(), clonedWorkerSeq.Add(1))
 	cfg := filepath.Join(repo, ".git", "config")
-	data, err := os.ReadFile(cfg) //nolint:gosec // G304: cloned test repo git config
+	data, err := os.ReadFile(cfg)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(cfg, []byte(strings.ReplaceAll(string(data), oldID, newID)), 0o644); err != nil {
+	if err := os.WriteFile(cfg, []byte(strings.ReplaceAll(string(data), oldID, newID)), 0o600); err != nil { //nolint:gosec // G703: cloned test repo git config
 		return err
 	}
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	oldLog := filepath.Join(opsDir, oldID+".log")
 	newLog := filepath.Join(opsDir, newID+".log")
-	if body, err := os.ReadFile(oldLog); err == nil { //nolint:gosec // G304: cloned test ops log
-		if err := os.WriteFile(newLog, bytes.ReplaceAll(body, []byte(oldID), []byte(newID)), 0o644); err != nil {
+	if body, err := os.ReadFile(oldLog); err == nil {
+		if err := os.WriteFile(newLog, bytes.ReplaceAll(body, []byte(oldID), []byte(newID)), 0o600); err != nil { //nolint:gosec // G703: cloned test ops log
 			return err
 		}
 		if err := os.Remove(oldLog); err != nil {

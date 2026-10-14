@@ -12,7 +12,6 @@ import (
 )
 
 func TestSkillLint_REQ_TOPTIER_S1_T1(t *testing.T) {
-	t.Parallel()
 	projectRoot, err := os.Getwd()
 	require.NoError(t, err)
 	for !fileExists(filepath.Join(projectRoot, "scripts", "skill_lint.py")) {

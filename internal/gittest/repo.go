@@ -50,7 +50,7 @@ func InitWithOrigin(t *testing.T) Fixture {
 	dir := Init(t)
 	originParent := t.TempDir()
 	origin := filepath.Join(originParent, "origin.git")
-	if err := os.MkdirAll(origin, 0o755); err != nil {
+	if err := os.MkdirAll(origin, 0o750); err != nil {
 		t.Fatalf("mkdir origin: %v", err)
 	}
 	if err := copyTree(originSeed, origin); err != nil {
@@ -92,7 +92,7 @@ func cloneFixtureInto(src Fixture, dir, origin string) (Fixture, error) {
 	}
 	clonedOrigin := ""
 	if src.Origin != "" {
-		if err := os.MkdirAll(origin, 0o755); err != nil {
+		if err := os.MkdirAll(origin, 0o750); err != nil {
 			return Fixture{}, fmt.Errorf("mkdir cloned origin: %w", err)
 		}
 		if err := copyTree(src.Origin, origin); err != nil {
@@ -125,7 +125,7 @@ func NewFixture() (Fixture, error) {
 		return Fixture{}, fmt.Errorf("mkdir origin parent: %w", err)
 	}
 	origin := filepath.Join(originParent, "origin.git")
-	if err := os.MkdirAll(origin, 0o755); err != nil {
+	if err := os.MkdirAll(origin, 0o750); err != nil {
 		return Fixture{}, fmt.Errorf("mkdir origin: %w", err)
 	}
 	if err := copyTree(originSeed, origin); err != nil {
@@ -221,30 +221,30 @@ func copyTree(src, dst string) error {
 		}
 		target := filepath.Join(dst, filepath.FromSlash(path))
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
+			return os.MkdirAll(target, 0o750)
 		}
 		data, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(path))) //nolint:gosec // G304: src is a test seed directory
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return err
 		}
-		return os.WriteFile(target, data, info.Mode().Perm())
+		return os.WriteFile(target, data, 0o600) //nolint:gosec // G703: copying test seed files
 	})
 }
 
-func appendOriginRemote(repo, origin string) error {
+func appendOriginRemote(repo, origin string) (err error) {
 	cfg := filepath.Join(repo, ".git", "config")
-	f, err := os.OpenFile(cfg, os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec // G302: test git config
+	f, err := os.OpenFile(cfg, os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // G302: test git config
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
 	_, err = fmt.Fprintf(f, "\n[remote \"origin\"]\n\turl = %s\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n", origin)
 	return err
 }
@@ -262,5 +262,5 @@ func rewriteClonedGitConfig(repo, oldDir, oldOrigin, newDir, newOrigin string) e
 	if oldDir != "" {
 		s = strings.ReplaceAll(s, oldDir, newDir)
 	}
-	return os.WriteFile(cfg, []byte(s), 0o644)
+	return os.WriteFile(cfg, []byte(s), 0o600) //nolint:gosec // G703: cloned test repo git config
 }
