@@ -34,6 +34,10 @@ func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
 	t.Setenv("GIT_CONFIG_VALUE_1", "true")
 	t.Setenv("GIT_CONFIG_PARAMETERS", "'commit.gpgsign=true'")
 	t.Setenv("GIT_TEMPLATE_DIR", filepath.Join(other, "template"))
+	t.Setenv("GIT_AUTHOR_NAME", "Hostile Author")
+	t.Setenv("GIT_AUTHOR_EMAIL", "hostile@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "Hostile Committer")
+	t.Setenv("GIT_COMMITTER_EMAIL", "hostile@example.com")
 
 	require.NoError(t, IsolateGit())
 
@@ -53,6 +57,10 @@ func TestIsolateGitOverridesHostileHostEnv(t *testing.T) {
 	assert.Empty(t, os.Getenv("GIT_TEMPLATE_DIR"))
 	assert.Equal(t, "1", os.Getenv("GIT_CONFIG_NOSYSTEM"))
 	assert.Equal(t, "0", os.Getenv("GIT_TERMINAL_PROMPT"))
+	assert.Equal(t, isolatedAuthorName, os.Getenv("GIT_AUTHOR_NAME"))
+	assert.Equal(t, isolatedAuthorEmail, os.Getenv("GIT_AUTHOR_EMAIL"))
+	assert.Equal(t, isolatedAuthorName, os.Getenv("GIT_COMMITTER_NAME"))
+	assert.Equal(t, isolatedAuthorEmail, os.Getenv("GIT_COMMITTER_EMAIL"))
 	cfg := os.Getenv("GIT_CONFIG_GLOBAL")
 	require.NotEqual(t, hostile, cfg)
 	data, err := os.ReadFile(cfg) //nolint:gosec // G703: cfg is GIT_CONFIG_GLOBAL IsolateGit just wrote

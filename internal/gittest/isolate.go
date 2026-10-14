@@ -12,6 +12,11 @@ import (
 
 const isolationMarker = "# armature-gittest-isolation\n"
 
+const (
+	isolatedAuthorName  = "Test"
+	isolatedAuthorEmail = "test@test.com"
+)
+
 const isolatedConfigBody = isolationMarker + `[user]
 	name = Armature Test
 	email = armature-test@example.com
@@ -67,6 +72,18 @@ func IsolateGit() error {
 	}
 	if err := os.Setenv("GIT_EDITOR", "true"); err != nil {
 		return fmt.Errorf("set GIT_EDITOR: %w", err)
+	}
+	if err := os.Setenv("GIT_AUTHOR_NAME", isolatedAuthorName); err != nil {
+		return fmt.Errorf("set GIT_AUTHOR_NAME: %w", err)
+	}
+	if err := os.Setenv("GIT_AUTHOR_EMAIL", isolatedAuthorEmail); err != nil {
+		return fmt.Errorf("set GIT_AUTHOR_EMAIL: %w", err)
+	}
+	if err := os.Setenv("GIT_COMMITTER_NAME", isolatedAuthorName); err != nil {
+		return fmt.Errorf("set GIT_COMMITTER_NAME: %w", err)
+	}
+	if err := os.Setenv("GIT_COMMITTER_EMAIL", isolatedAuthorEmail); err != nil {
+		return fmt.Errorf("set GIT_COMMITTER_EMAIL: %w", err)
 	}
 	for _, key := range gitOverrideEnvKeys {
 		if err := os.Unsetenv(key); err != nil {

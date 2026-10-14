@@ -19,6 +19,7 @@ import (
 )
 
 func TestMigrateDualBranchToCollapsed_NoLayout_REQ_LNGHZN_S1_T2(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	migrated, backupDir, err := migrateDualBranchToCollapsed(tmpDir)
@@ -36,6 +37,7 @@ func TestMigrateDualBranchToCollapsed_NoLayout_REQ_LNGHZN_S1_T2(t *testing.T) {
 }
 
 func TestUpdateGitExclude_REQ_LNGHZN_S1_T2(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	infoDir := filepath.Join(tmpDir, ".git", "info")
@@ -92,6 +94,7 @@ func TestUpdateGitExclude_REQ_LNGHZN_S1_T2(t *testing.T) {
 }
 
 func TestUpdateGitExcludeConcurrentWritersKeepEveryPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".git"), 0o750))
 	const writers = 24

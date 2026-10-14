@@ -24,7 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testArmBin string
+var (
+	testArmBin        string
+	testLayoutFixture gittest.Fixture
+	testTaskFixture   gittest.Fixture
+)
 
 func TestMain(m *testing.M) {
 	if err := gittest.IsolateGit(); err != nil {
@@ -64,6 +68,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "TestMain: PATH: %v\n", err)
 		os.Exit(code)
 	}
+	if err := prepareRepoTemplates(); err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: repo templates: %v\n", err)
+		os.Exit(code)
+	}
 	code = m.Run()
 	if err := os.RemoveAll(wrapperDir); err != nil {
 		fmt.Fprintf(os.Stderr, "TestMain: cleanup: %v\n", err)
@@ -72,6 +80,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestBootstrapDeploySkillsDeploysFiles(t *testing.T) {
+	t.Parallel()
 	src := makeBootstrapTestFS(t)
 	dest := t.TempDir()
 
@@ -84,6 +93,7 @@ func TestBootstrapDeploySkillsDeploysFiles(t *testing.T) {
 }
 
 func TestBootstrapDeploySkillsCreatesDestDir(t *testing.T) {
+	t.Parallel()
 	src := makeBootstrapTestFS(t)
 	dest := filepath.Join(t.TempDir(), "nonexistent", "skills")
 
@@ -96,6 +106,7 @@ func TestBootstrapDeploySkillsCreatesDestDir(t *testing.T) {
 }
 
 func TestBootstrapDeployFlatSkillsCreatesFlatMDFiles(t *testing.T) {
+	t.Parallel()
 	src := makeBootstrapTestFS(t)
 	dest := t.TempDir()
 
@@ -140,12 +151,14 @@ func TestBootstrapDeploysCapturingDogfoodFindingsFromAgentsSkills(t *testing.T) 
 }
 
 func TestBootstrapDeployRepoAgentSkillsNoopsWhenMissing(t *testing.T) {
+	t.Parallel()
 	dest := t.TempDir()
 	err := deployRepoAgentSkills(t.TempDir(), dest)
 	require.NoError(t, err)
 }
 
 func TestBootstrapDeployFlatSkillsRewritesReferencePaths(t *testing.T) {
+	t.Parallel()
 	src := fstest.MapFS{
 		"skills/demo-skill/SKILL.md": {
 			Data: []byte("# demo-skill\nSee `references/guide.md` for details.\n"),
@@ -165,6 +178,7 @@ func TestBootstrapDeployFlatSkillsRewritesReferencePaths(t *testing.T) {
 }
 
 func TestBootstrapDeployPluginCreatesPluginJSON(t *testing.T) {
+	t.Parallel()
 	src := makeBootstrapTestFSWithPlugin(t)
 	dest := t.TempDir()
 
@@ -177,6 +191,7 @@ func TestBootstrapDeployPluginCreatesPluginJSON(t *testing.T) {
 }
 
 func TestBootstrapCopyFileWorks(t *testing.T) {
+	t.Parallel()
 	src := fstest.MapFS{
 		"test.txt": {
 			Data: []byte("test content"),
@@ -194,6 +209,7 @@ func TestBootstrapCopyFileWorks(t *testing.T) {
 }
 
 func TestBootstrapCopySkillWithRewrittenRefsWorks(t *testing.T) {
+	t.Parallel()
 	src := fstest.MapFS{
 		"skills/demo-skill/SKILL.md": {
 			Data: []byte("# demo\nCheck references/guide.md\n"),
@@ -1028,6 +1044,7 @@ exec "$real_git" "$@"
 }
 
 func TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2013,6 +2030,7 @@ func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 }
 
 func TestCopyRecursiveDoesNotOverwriteExistingFiles_P2(t *testing.T) {
+	t.Parallel()
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
 
@@ -2081,6 +2099,7 @@ func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
 }
 
 func TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3(t *testing.T) {
+	t.Parallel()
 	backupDir := t.TempDir()
 	newIssuesDir := t.TempDir()
 	newOpsDir := filepath.Join(newIssuesDir, "ops")
@@ -2113,6 +2132,7 @@ func TestCopyLegacyOpsToNewWorktreeMergesAppendOnlyLogs_P3(t *testing.T) {
 }
 
 func TestListMigrationBackupsSortsAndIgnoresUnreadableRepo_P3(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703010101"), 0o750))
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703000101"), 0o750))
@@ -2124,6 +2144,7 @@ func TestListMigrationBackupsSortsAndIgnoresUnreadableRepo_P3(t *testing.T) {
 }
 
 func TestListMigrationBackupsIncludesCollapsedBackups_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".arm.collapsed-20260703010101"), 0o750))
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703000101"), 0o750))
@@ -2153,6 +2174,7 @@ func TestRunRepoSetupNotesStrandedMigrationBackups_P3(t *testing.T) {
 }
 
 func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	infoDir := filepath.Join(repo, ".git", "info")
 	require.NoError(t, os.MkdirAll(infoDir, 0o750))
@@ -2766,6 +2788,7 @@ func TestBootstrapHonorsConfiguredCustomCollapsedWorktree(t *testing.T) {
 }
 
 func TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	preSHA := strings.TrimSpace(runOutput(t, repo, "rev-parse", "HEAD"))
@@ -3037,25 +3060,6 @@ exec %q "$@"
 
 func buildWorktreeArm(t *testing.T) string {
 	t.Helper()
-	if testArmBin != "" {
-		return testArmBin
-	}
-	dir, err := os.Getwd()
-	require.NoError(t, err)
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("go.mod not found from test working directory")
-		}
-		dir = parent
-	}
-	dest := filepath.Join(t.TempDir(), "arm")
-	cmd := exec.CommandContext(context.Background(), "go", "build", "-o", dest, "./cmd/armature")
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "go build: %s", out)
-	return dest
+	require.NotEmpty(t, testArmBin, "TestMain must build the package arm binary")
+	return testArmBin
 }

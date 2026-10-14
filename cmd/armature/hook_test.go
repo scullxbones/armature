@@ -249,6 +249,7 @@ func TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG(t *
 }
 
 func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	workerID, err := worker.GetWorkerID(repo)
@@ -289,6 +290,7 @@ func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
 }
 
 func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	workerID, err := worker.GetWorkerID(repo)

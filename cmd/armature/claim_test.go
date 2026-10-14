@@ -442,6 +442,7 @@ func TestClaimStillAppendsClaimOpToLog(t *testing.T) {
 }
 
 func TestCanonicalWorktreePathRejectsTraversalBeforeMutation_REQ_LNGHZN_S5_T1(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "repo")
 
 	_, err := canonicalWorktreePath(root, "team/task-1")
@@ -459,6 +460,7 @@ func TestCanonicalWorktreePathRejectsTraversalBeforeMutation_REQ_LNGHZN_S5_T1(t 
 }
 
 func TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "repo")
 
 	plain, err := canonicalWorktreePath(root, "task-1")
@@ -486,6 +488,7 @@ func TestClaimRejectsTraversalBeforeClaimAppend_REQ_LNGHZN_S5_T1(t *testing.T) {
 }
 
 func TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join(t.TempDir(), "repo")
 
 	_, err := canonicalWorktreePath(root, "team/task-1")
@@ -507,6 +510,7 @@ func TestCanonicalWorktreePathRejectsSlashBearingIDs_REQ_LNGHZN_S5(t *testing.T)
 }
 
 func TestCanonicalWorktreePath_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.T) {
+	t.Parallel()
 	realRepo := t.TempDir()
 	link := filepath.Join(t.TempDir(), "repo-link")
 	require.NoError(t, os.Symlink(realRepo, link))
@@ -563,6 +567,7 @@ func TestCreateWorktreeAndBranchRejectsEmptyBranchName(t *testing.T) {
 }
 
 func TestCreateWorktreeAndBranchFailsWhenWorktreeCannotBeCreated(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	issue := materialize.Issue{Type: "task"}
 
@@ -576,6 +581,7 @@ func TestCreateWorktreeAndBranchFailsWhenWorktreeCannotBeCreated(t *testing.T) {
 }
 
 func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
@@ -593,6 +599,7 @@ func TestCreateWorktreeAndBranchAdoptsBoundCheckedOutBranch_REQ_LNGHZN_S5_T4(t *
 }
 
 func TestCreateWorktreeAndBranchFailsClosedOnBoundDetachedWorktree_REQ_LNGHZN_S5_T6(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
@@ -611,6 +618,7 @@ func TestCreateWorktreeAndBranchFailsClosedOnBoundDetachedWorktree_REQ_LNGHZN_S5
 }
 
 func TestCreateWorktreeAndBranchFailsClosedOnAmbiguousBinding_REQ_LNGHZN_S5_T6(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	onBranchPath := filepath.Join(t.TempDir(), "aaa-on-branch")
@@ -635,6 +643,7 @@ func TestCreateWorktreeAndBranchFailsClosedOnAmbiguousBinding_REQ_LNGHZN_S5_T6(t
 }
 
 func TestCreateWorktreeAndBranchFailsClosedOnBoundScratchBranch_REQ_LNGHZN_S5_T6(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
@@ -649,6 +658,7 @@ func TestCreateWorktreeAndBranchFailsClosedOnBoundScratchBranch_REQ_LNGHZN_S5_T6
 }
 
 func TestCreateWorktreeAndBranchAdoptionUsesAdoptedBranchPoint_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
 	parentTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
@@ -690,6 +700,7 @@ func TestCreateWorktreeAndBranchAdoptionUsesAdoptedBranchPoint_REQ_LNGHZN_S5(t *
 }
 
 func TestCreateWorktreeAndBranchRejectsAdoptionWithoutProvenance_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
@@ -704,6 +715,7 @@ func TestCreateWorktreeAndBranchRejectsAdoptionWithoutProvenance_REQ_LNGHZN_S5(t
 }
 
 func TestCreateWorktreeAndBranchLeavesAdoptedWorktreeInPlaceWhenSuperseded(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	legacyPath := filepath.Join(t.TempDir(), "legacy-task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", legacyPath)
@@ -1051,6 +1063,7 @@ func TestClaimLockPrecedesStoreAndWorktreeReads_REQ_LNGHZN_S5_T9(t *testing.T) {
 }
 
 func TestClaimRejectsWorktreeBoundToDifferentTask(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(t.TempDir(), "shared-worktree")
@@ -1101,6 +1114,7 @@ func TestClaimAllowsWorktreeWithDetachedHEAD(t *testing.T) {
 }
 
 func TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(t.TempDir(), "shared-worktree")
@@ -1322,6 +1336,7 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 }
 
 func TestClaimRejectsForeignWorktree(t *testing.T) {
+	t.Parallel()
 	repoA := setupRepoWithParentAndTask(t)
 
 	repoBTempDir := t.TempDir()
@@ -1498,6 +1513,7 @@ func TestClaimCompensationRestoreVsRelease_REQ_ARCHIMP_S20_T4(t *testing.T) {
 }
 
 func TestCheckExistingWorktreeBindingReadsLegacyTaskID(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(t.TempDir(), "legacy-worktree")
@@ -1528,6 +1544,7 @@ func TestCheckExistingWorktreeBindingReadsLegacyTaskID(t *testing.T) {
 }
 
 func TestCheckExistingWorktreeBindingFailsClosedOnPermissionError(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() == 0 {
 		t.Skip("running as root: file permissions do not block reads")
 	}
@@ -1840,6 +1857,7 @@ func TestClaimFromFlagCreatesBranchFromParentWorktree_REQ_LNGHZN_S9_T1(t *testin
 }
 
 func TestCreateWorktreeAndBranchRejectsUnavailableValidatedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
@@ -1866,6 +1884,7 @@ func TestCreateWorktreeAndBranchRejectsUnavailableValidatedSource_REQ_LNGHZN_S9_
 }
 
 func TestCreateWorktreeAndBranchRejectsChangedValidatedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
@@ -2374,6 +2393,7 @@ func TestRenderContextFallsBackToBuiltInBudgetWhenConfigAbsent_REQ_LNGHZN_S7_T1(
 }
 
 func TestSourceAdvancedOnlyByArmatureFalseOnNonArmatureChange_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	oldTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
@@ -2389,6 +2409,7 @@ func TestSourceAdvancedOnlyByArmatureFalseOnNonArmatureChange_REQ_LNGHZN_S9_T1(t
 }
 
 func TestSourceAdvancedOnlyByArmatureErrorsOnUnresolvableRevision_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	newTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
@@ -2399,6 +2420,7 @@ func TestSourceAdvancedOnlyByArmatureErrorsOnUnresolvableRevision_REQ_LNGHZN_S9_
 }
 
 func TestRollbackClaimReportsExclusionCleanupFailure_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -2423,6 +2445,7 @@ func TestRollbackClaimReportsExclusionCleanupFailure_REQ_LNGHZN_S9_T1(t *testing
 }
 
 func TestCreateWorktreeAndBranchRejectsMalformedSourceArgCount_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "child")
 
@@ -2436,6 +2459,7 @@ func TestCreateWorktreeAndBranchRejectsMalformedSourceArgCount_REQ_LNGHZN_S9_T1(
 }
 
 func TestCreateWorktreeAndBranchRejectsIssueTypeWithNoBranchMapping_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "child")
 
@@ -2446,6 +2470,7 @@ func TestCreateWorktreeAndBranchRejectsIssueTypeWithNoBranchMapping_REQ_LNGHZN_S
 }
 
 func TestCreateWorktreeAndBranchRejectsSourceBranchChange_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
@@ -2464,6 +2489,7 @@ func TestCreateWorktreeAndBranchRejectsSourceBranchChange_REQ_LNGHZN_S9_T1(t *te
 }
 
 func TestCreateWorktreeAndBranchRejectsIncompleteSourceArgs_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "child")
 
@@ -2477,6 +2503,7 @@ func TestCreateWorktreeAndBranchRejectsIncompleteSourceArgs_REQ_LNGHZN_S9_T1(t *
 }
 
 func TestWriteClaimExclusionMarkerRejectsConflictingPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(t.TempDir(), "marker-wt")
 	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
@@ -2496,6 +2523,7 @@ func TestWriteClaimExclusionMarkerRejectsConflictingPattern_REQ_LNGHZN_S9_T1(t *
 }
 
 func TestWriteClaimExclusionMarkerFailsClosedOnUnreadableMarker_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() == 0 {
 		t.Skip("running as root: file permissions do not block reads")
 	}
@@ -2518,6 +2546,7 @@ func TestWriteClaimExclusionMarkerFailsClosedOnUnreadableMarker_REQ_LNGHZN_S9_T1
 }
 
 func TestReadClaimExclusionMarkerRejectsEmptyMarker_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(t.TempDir(), "empty-marker-wt")
 	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
@@ -2532,6 +2561,7 @@ func TestReadClaimExclusionMarkerRejectsEmptyMarker_REQ_LNGHZN_S9_T1(t *testing.
 }
 
 func TestReadClaimExclusionMarkerFailsClosedOnUnresolvableWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	notAWorktree := t.TempDir()
 
 	_, ok, err := readClaimExclusionMarker(notAWorktree)
@@ -2541,6 +2571,7 @@ func TestReadClaimExclusionMarkerFailsClosedOnUnresolvableWorktree_REQ_LNGHZN_S9
 }
 
 func TestCleanupClaimExclusionsFailsClosedOnUnresolvableRepo_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	notARepo := t.TempDir()
 
 	err := cleanupClaimExclusions(notARepo, []claimExclusion{{pattern: "/x/", destination: notARepo}})
@@ -2548,6 +2579,7 @@ func TestCleanupClaimExclusionsFailsClosedOnUnresolvableRepo_REQ_LNGHZN_S9_T1(t 
 }
 
 func TestCleanupClaimExclusionsIsNoOpForEmptySlice_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	notARepo := t.TempDir()
 
 	err := cleanupClaimExclusions(notARepo, nil)
@@ -2555,6 +2587,7 @@ func TestCleanupClaimExclusionsIsNoOpForEmptySlice_REQ_LNGHZN_S9_T1(t *testing.T
 }
 
 func TestCleanupClaimExclusionsLockedRemovesUnprotectedPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	gone := filepath.Join(t.TempDir(), "gone")
 
@@ -2572,6 +2605,7 @@ func TestCleanupClaimExclusionsLockedRemovesUnprotectedPattern_REQ_LNGHZN_S9_T1(
 }
 
 func TestCleanupClaimExclusionsLockedPreservesProtectedPattern_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	live := filepath.Join(repo, ".worktrees", "still-here")
 	run(t, repo, "git", "worktree", "add", live, "-b", "still-here-branch")

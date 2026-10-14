@@ -74,6 +74,7 @@ func TestFilterExpiredClaimsByIssueAssignedWorker_MissingIssueExcluded(t *testin
 }
 
 func TestReadyEmitsEnvelopeOnStdout_REQ_AOC_S2_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, errOut := runReadyJSON(t, repo)
@@ -326,6 +327,7 @@ func TestReadyHelpEmptyReasonNamesFilterAndExpired(t *testing.T) {
 }
 
 func TestReadyEmptyHelpNamesActiveFilter_REQ_AOC_S2_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	parentOut, _ := runReadyJSON(t, repo, "--parent", "nonexistent-parent")

@@ -198,6 +198,7 @@ func TestApplyRunResult_ZeroExitCode(t *testing.T) {
 }
 
 func TestResolveIssueBinding_FromFile(t *testing.T) {
+	t.Parallel()
 	gitDir := t.TempDir()
 	taskIDPath := filepath.Join(gitDir, "armature-issue-id")
 	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
@@ -239,6 +240,7 @@ func TestResolveIssueBinding_FilePreferredOverEnv(t *testing.T) {
 }
 
 func TestResolveIssueBinding_FallsBackToLegacyTaskIDFile(t *testing.T) {
+	t.Parallel()
 	gitDir := t.TempDir()
 	taskIDPath := filepath.Join(gitDir, "armature-task-id")
 	err := os.WriteFile(taskIDPath, []byte("legacy-task-id"), 0o644)
@@ -292,6 +294,7 @@ func TestHarnessHookUntrustedPathResolvedGitDir_FallsBackToSessionBinding(t *tes
 }
 
 func TestIsKnownWorktreeGitDir_SymlinkedWorktree_NotFalselyRejected(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	realParent := t.TempDir()
@@ -309,6 +312,7 @@ func TestIsKnownWorktreeGitDir_SymlinkedWorktree_NotFalselyRejected(t *testing.T
 }
 
 func TestLogPassThrough(t *testing.T) {
+	t.Parallel()
 	gitDir := t.TempDir()
 
 	err := logPassThrough(gitDir, "test reason")
@@ -323,6 +327,7 @@ func TestLogPassThrough(t *testing.T) {
 }
 
 func TestLogPassThrough_Append(t *testing.T) {
+	t.Parallel()
 	gitDir := t.TempDir()
 
 	err := logPassThrough(gitDir, "first reason")
@@ -1150,6 +1155,7 @@ func TestHeartbeatRateLimitStateReadMalformedFileReturnsZero(t *testing.T) {
 }
 
 func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	armatureDir := filepath.Join(repo, ".armature")
