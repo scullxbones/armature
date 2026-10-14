@@ -53,6 +53,8 @@ var gitOverrideEnvKeys = []string{
 	"GIT_TEMPLATE_DIR",
 }
 
+var isolatedGlobalConfig string
+
 func IsolateGit() error {
 	cfgPath, err := isolationConfigPath()
 	if err != nil {
@@ -113,11 +115,8 @@ func unsetPrefixedEnv(prefix string) error {
 }
 
 func isolationConfigPath() (string, error) {
-	if existing := os.Getenv("GIT_CONFIG_GLOBAL"); existing != "" {
-		data, err := os.ReadFile(existing) //nolint:gosec // G304: path is GIT_CONFIG_GLOBAL we wrote
-		if err == nil && strings.HasPrefix(string(data), isolationMarker) {
-			return existing, nil
-		}
+	if isolatedGlobalConfig != "" {
+		return isolatedGlobalConfig, nil
 	}
 	dir, err := os.MkdirTemp("", "armature-gittest-config-")
 	if err != nil {
@@ -127,6 +126,7 @@ func isolationConfigPath() (string, error) {
 	if err := os.WriteFile(path, []byte(isolatedConfigBody), 0o600); err != nil {
 		return "", fmt.Errorf("write git test config: %w", err)
 	}
+	isolatedGlobalConfig = path
 	return path, nil
 }
 
