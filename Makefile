@@ -5,7 +5,6 @@ PYTHON ?= python3
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS ?= -X main.Version=$(VERSION)
 INSTALL_DIR ?= $(HOME)/.local/bin
-# Go appends .exe on windows even for -o bin/arm; keep ARM_BIN pointing at the real file.
 GOOS_NATIVE := $(shell $(GO) env GOOS)
 ifeq ($(GOOS_NATIVE),windows)
 ARM_EXE := .exe
@@ -13,7 +12,6 @@ else
 ARM_EXE :=
 endif
 ARM_BIN := $(CURDIR)/bin/arm$(ARM_EXE)
-# Honor GOCACHE; otherwise use $$TMPDIR (set on Windows Git Bash) before /tmp.
 UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$')
 
 .DEFAULT_GOAL := help
@@ -52,12 +50,6 @@ help:
 	@echo "  make skill               - Build binary and deploy all skills/ to .claude/ and .gemini/ and .codex/"
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
-
-# Sole fan-out table. ci.yml must not restate these targets.
-# Roots only. Existing prerequisite edges stay the owners of order inside
-# a root (coverage-check → coverage → build, lint → adr-principles, …).
-# build is not a fan-out root: coverage-check and validate-skills already
-# depend on it.
 
 GOLANGCI_LINT_MODULE  := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GREMLINS_MODULE       := github.com/go-gremlins/gremlins/cmd/gremlins
@@ -141,11 +133,8 @@ trace-report:
 context-report: build
 	@./bin/arm context-report --format human
 
-# Package timeout 20m: cmd/armature exceeds go test's default 10m on macos-latest CI.
-# summarize_test_json.py warns when a package uses more than 75% of this budget.
 TEST_TIMEOUT ?= 20m
 
-# Optional path to keep the raw `go test -json` stream (CI uploads this).
 TEST_JSON_OUT ?=
 
 test: build
@@ -160,9 +149,6 @@ test: build
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	exit $$summary
 
-# OS-matrix entry point. Windows is an unsupported runtime (README); compile
-# every unit package's tests so shipped windows binaries stay compile-checked
-# without requiring the full POSIX-assuming suite to pass.
 test-ci: build
 ifeq ($(GOOS_NATIVE),windows)
 	@status=0; \

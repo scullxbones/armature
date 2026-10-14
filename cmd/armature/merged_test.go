@@ -20,6 +20,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHookLogContainsEntry_FollowsSymlinkOutsideGitDir(t *testing.T) {
+	t.Parallel()
+
+	t.Run("symlink target outside git dir is read", func(t *testing.T) {
+		t.Parallel()
+		gitDir := t.TempDir()
+		outside := t.TempDir()
+		target := filepath.Join(outside, "hook.log")
+		require.NoError(t, os.WriteFile(target, []byte("2026-07-04T00:00:00Z violation: unbound write\n"), 0o600))
+		require.NoError(t, os.Symlink(target, filepath.Join(gitDir, "armature-hook.log")))
+
+		found, err := hookLogContainsEntry(gitDir, "violation:")
+		require.NoError(t, err)
+		assert.True(t, found)
+	})
+
+	t.Run("dangling symlink is no entries", func(t *testing.T) {
+		t.Parallel()
+		gitDir := t.TempDir()
+		require.NoError(t, os.Symlink(filepath.Join(gitDir, "missing-hook.log"), filepath.Join(gitDir, "armature-hook.log")))
+
+		found, err := hookLogContainsEntry(gitDir, "violation:")
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
+}
+
 func TestIssueWorktreeHasViolations_FailsClosedOnUnreadableInventory_REQ_LNGHZN_S5(t *testing.T) {
 	t.Parallel()
 	notARepo := t.TempDir()

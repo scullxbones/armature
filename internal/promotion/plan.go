@@ -34,8 +34,6 @@ type Input struct {
 	PR          string
 }
 
-// Result is one check of one done leaf. Callers append CheckPayload when
-// AppendCheck is set, and the merged transition only when Promote is true.
 type Result struct {
 	IssueID         string
 	Kind            string
@@ -50,7 +48,6 @@ type Result struct {
 	Err             error
 }
 
-// Error is a promotion refusal the CLI maps to MERGED-1 / sync rows.
 type Error struct {
 	IssueID string
 	Kind    string
@@ -71,7 +68,6 @@ func (e *Error) RecoveryArgv() string {
 	return RecoveryArgv(e.IssueID, e.Kind)
 }
 
-// RecoveryArgv is next_actions[0] / help[0] with the issue id filled in.
 func RecoveryArgv(issueID, kind string) string {
 	switch kind {
 	case KindMissingAssessment:
@@ -85,7 +81,6 @@ func RecoveryArgv(issueID, kind string) string {
 	}
 }
 
-// Evaluate is the one ADR 0022 promotion function.
 func Evaluate(git *adapters.Client, in Input) Result {
 	id := in.Issue.ID
 	res := Result{IssueID: id, Recovery: RecoveryArgv(id, KindCheckFailed)}

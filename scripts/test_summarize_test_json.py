@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Tests for scripts/summarize_test_json.py timing and warning output."""
 
 from __future__ import annotations
 
@@ -24,11 +23,11 @@ def _events(*rows: dict) -> str:
 
 class ParseGoDurationTest(unittest.TestCase):
     def test_parses_go_test_timeout_units(self):
-        self.assertEqual(summarize_test_json.parse_go_duration("20m"), 20 * 60)
-        self.assertEqual(summarize_test_json.parse_go_duration("1h30m"), 90 * 60)
-        self.assertEqual(summarize_test_json.parse_go_duration("90s"), 90.0)
-        self.assertEqual(summarize_test_json.parse_go_duration("1.5s"), 1.5)
-        self.assertIsNone(summarize_test_json.parse_go_duration("bogus"))
+        self.assertEqual(summarize_test_json.parse_go_duration_seconds("20m"), 20 * 60)
+        self.assertEqual(summarize_test_json.parse_go_duration_seconds("1h30m"), 90 * 60)
+        self.assertEqual(summarize_test_json.parse_go_duration_seconds("90s"), 90.0)
+        self.assertEqual(summarize_test_json.parse_go_duration_seconds("1.5s"), 1.5)
+        self.assertIsNone(summarize_test_json.parse_go_duration_seconds("bogus"))
 
 
 class SummarizeTimingsTest(unittest.TestCase):
@@ -89,7 +88,6 @@ class SummarizeTimingsTest(unittest.TestCase):
         self.assertNotIn("WARNING:", result.stdout)
 
     def test_warns_when_package_exceeds_75_percent_of_timeout(self):
-        # 20m * 0.75 = 900s; equal to 75% is not "more than".
         body = _events(
             {
                 "Action": "pass",
