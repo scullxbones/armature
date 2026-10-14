@@ -2,10 +2,12 @@ package gittest
 
 import (
 	"bytes"
-	"context"
+	"fmt"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -16,17 +18,25 @@ type Fixture struct {
 	Origin string
 }
 
+var (
+	seedOnce     sync.Once
+	seedErr      error
+	worktreeSeed string
+	originSeed   string
+)
+
 func Init(t *testing.T) string {
 	t.Helper()
 	if err := IsolateGit(); err != nil {
 		t.Fatalf("IsolateGit: %v", err)
 	}
-	dir := t.TempDir()
-	if err := adapters.GitInitMain(dir); err != nil {
-		t.Fatalf("GitInitMain: %v", err)
+	if err := ensureSeeds(); err != nil {
+		t.Fatalf("ensureSeeds: %v", err)
 	}
-	configureRepo(t, dir)
-	t.Cleanup(func() { waitGitIdle(dir) })
+	dir := t.TempDir()
+	if err := copyTree(worktreeSeed, dir); err != nil {
+		t.Fatalf("copy worktree seed: %v", err)
+	}
 	return dir
 }
 
@@ -40,13 +50,91 @@ func InitWithOrigin(t *testing.T) Fixture {
 	dir := Init(t)
 	originParent := t.TempDir()
 	origin := filepath.Join(originParent, "origin.git")
-	if err := adapters.GitInitBareMain(origin); err != nil {
-		t.Fatalf("GitInitBareMain: %v", err)
+	if err := os.MkdirAll(origin, 0o755); err != nil {
+		t.Fatalf("mkdir origin: %v", err)
 	}
-	configureRepo(t, origin)
-	Git(t, dir, "remote", "add", "origin", origin)
-	t.Cleanup(func() { waitGitIdle(origin) })
+	if err := copyTree(originSeed, origin); err != nil {
+		t.Fatalf("copy origin seed: %v", err)
+	}
+	if err := appendOriginRemote(dir, origin); err != nil {
+		t.Fatalf("attach origin: %v", err)
+	}
 	return Fixture{Dir: dir, Origin: origin}
+}
+
+func CloneFixture(t *testing.T, src Fixture) Fixture {
+	t.Helper()
+	fx, err := cloneFixtureInto(src, t.TempDir(), filepath.Join(t.TempDir(), "origin.git"))
+	if err != nil {
+		t.Fatalf("CloneFixture: %v", err)
+	}
+	return fx
+}
+
+func CloneFixtureTo(src Fixture) (Fixture, error) {
+	dir, err := os.MkdirTemp("", "gittest-clone-wt-")
+	if err != nil {
+		return Fixture{}, fmt.Errorf("mkdir clone worktree: %w", err)
+	}
+	originParent, err := os.MkdirTemp("", "gittest-clone-origin-")
+	if err != nil {
+		return Fixture{}, fmt.Errorf("mkdir clone origin parent: %w", err)
+	}
+	return cloneFixtureInto(src, dir, filepath.Join(originParent, "origin.git"))
+}
+
+func cloneFixtureInto(src Fixture, dir, origin string) (Fixture, error) {
+	if src.Dir == "" {
+		return Fixture{}, fmt.Errorf("empty source dir")
+	}
+	if err := copyTree(src.Dir, dir); err != nil {
+		return Fixture{}, fmt.Errorf("copy fixture worktree: %w", err)
+	}
+	clonedOrigin := ""
+	if src.Origin != "" {
+		if err := os.MkdirAll(origin, 0o755); err != nil {
+			return Fixture{}, fmt.Errorf("mkdir cloned origin: %w", err)
+		}
+		if err := copyTree(src.Origin, origin); err != nil {
+			return Fixture{}, fmt.Errorf("copy fixture origin: %w", err)
+		}
+		clonedOrigin = origin
+	}
+	if err := rewriteClonedGitConfig(dir, src.Dir, src.Origin, dir, clonedOrigin); err != nil {
+		return Fixture{}, fmt.Errorf("rewrite cloned git config: %w", err)
+	}
+	return Fixture{Dir: dir, Origin: clonedOrigin}, nil
+}
+
+func NewFixture() (Fixture, error) {
+	if err := IsolateGit(); err != nil {
+		return Fixture{}, err
+	}
+	if err := ensureSeeds(); err != nil {
+		return Fixture{}, err
+	}
+	dir, err := os.MkdirTemp("", "gittest-wt-")
+	if err != nil {
+		return Fixture{}, fmt.Errorf("mkdir worktree: %w", err)
+	}
+	if err := copyTree(worktreeSeed, dir); err != nil {
+		return Fixture{}, fmt.Errorf("copy worktree seed: %w", err)
+	}
+	originParent, err := os.MkdirTemp("", "gittest-origin-")
+	if err != nil {
+		return Fixture{}, fmt.Errorf("mkdir origin parent: %w", err)
+	}
+	origin := filepath.Join(originParent, "origin.git")
+	if err := os.MkdirAll(origin, 0o755); err != nil {
+		return Fixture{}, fmt.Errorf("mkdir origin: %w", err)
+	}
+	if err := copyTree(originSeed, origin); err != nil {
+		return Fixture{}, fmt.Errorf("copy origin seed: %w", err)
+	}
+	if err := appendOriginRemote(dir, origin); err != nil {
+		return Fixture{}, fmt.Errorf("attach origin: %w", err)
+	}
+	return Fixture{Dir: dir, Origin: origin}, nil
 }
 
 func Git(t *testing.T, dir string, args ...string) {
@@ -55,6 +143,11 @@ func Git(t *testing.T, dir string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %v: %v: %s", args, err, out)
 	}
+}
+
+func SetLocalConfig(dir, key, value string) error {
+	_, err := gitCombined(dir, "config", key, value)
+	return err
 }
 
 func gitCombined(dir string, args ...string) (string, error) {
@@ -66,23 +159,108 @@ func gitCombined(dir string, args ...string) (string, error) {
 	return buf.String(), err
 }
 
-func configureRepo(t *testing.T, dir string) {
-	t.Helper()
-	Git(t, dir, "config", "user.email", "test@test.com")
-	Git(t, dir, "config", "user.name", "Test")
-	Git(t, dir, "config", "commit.gpgsign", "false")
-	Git(t, dir, "config", "tag.gpgsign", "false")
-	Git(t, dir, "config", "gc.auto", "0")
-	Git(t, dir, "config", "gc.autoDetach", "false")
-	Git(t, dir, "config", "maintenance.auto", "false")
-	Git(t, dir, "config", "receive.autogc", "false")
-	Git(t, dir, "config", "credential.helper", "")
+func ensureSeeds() error {
+	seedOnce.Do(func() {
+		seedErr = buildSeeds()
+	})
+	return seedErr
 }
 
-func waitGitIdle(dir string) {
-	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "gc", "--auto") //nolint:gosec // G204: git is constant; dir is a test temp repo
-	cmd.Env = os.Environ()
-	if err := cmd.Run(); err != nil {
-		return
+func buildSeeds() error {
+	if err := IsolateGit(); err != nil {
+		return err
 	}
+	worktree, err := os.MkdirTemp("", "gittest-seed-wt-")
+	if err != nil {
+		return fmt.Errorf("mkdir worktree seed: %w", err)
+	}
+	if err := adapters.GitInitMain(worktree); err != nil {
+		return fmt.Errorf("GitInitMain: %w", err)
+	}
+	if err := configureRepoDir(worktree); err != nil {
+		return fmt.Errorf("configure worktree seed: %w", err)
+	}
+	origin, err := os.MkdirTemp("", "gittest-seed-origin-")
+	if err != nil {
+		return fmt.Errorf("mkdir origin seed: %w", err)
+	}
+	if err := adapters.GitInitBareMain(origin); err != nil {
+		return fmt.Errorf("GitInitBareMain: %w", err)
+	}
+	if err := configureRepoDir(origin); err != nil {
+		return fmt.Errorf("configure origin seed: %w", err)
+	}
+	worktreeSeed = worktree
+	originSeed = origin
+	return nil
+}
+
+func configureRepoDir(dir string) error {
+	for _, args := range [][]string{
+		{"config", "user.email", isolatedAuthorEmail},
+		{"config", "user.name", isolatedAuthorName},
+		{"config", "commit.gpgsign", "false"},
+		{"config", "tag.gpgsign", "false"},
+		{"config", "gc.auto", "0"},
+		{"config", "gc.autoDetach", "false"},
+		{"config", "maintenance.auto", "false"},
+		{"config", "receive.autogc", "false"},
+		{"config", "credential.helper", ""},
+	} {
+		if _, err := gitCombined(dir, args...); err != nil {
+			return fmt.Errorf("git %v: %w", args, err)
+		}
+	}
+	return nil
+}
+
+func copyTree(src, dst string) error {
+	return fs.WalkDir(os.DirFS(src), ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, filepath.FromSlash(path))
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(path))) //nolint:gosec // G304: src is a test seed directory
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode().Perm())
+	})
+}
+
+func appendOriginRemote(repo, origin string) error {
+	cfg := filepath.Join(repo, ".git", "config")
+	f, err := os.OpenFile(cfg, os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec // G302: test git config
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	_, err = fmt.Fprintf(f, "\n[remote \"origin\"]\n\turl = %s\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n", origin)
+	return err
+}
+
+func rewriteClonedGitConfig(repo, oldDir, oldOrigin, newDir, newOrigin string) error {
+	cfg := filepath.Join(repo, ".git", "config")
+	data, err := os.ReadFile(cfg) //nolint:gosec // G304: path is the cloned test repo git config
+	if err != nil {
+		return err
+	}
+	s := string(data)
+	if oldOrigin != "" {
+		s = strings.ReplaceAll(s, oldOrigin, newOrigin)
+	}
+	if oldDir != "" {
+		s = strings.ReplaceAll(s, oldDir, newDir)
+	}
+	return os.WriteFile(cfg, []byte(s), 0o644)
 }

@@ -89,6 +89,20 @@ func TestInitRepoDoesNotCreateInitialCommit(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestInitWithOriginFixturesDoNotShareOrigin(t *testing.T) {
+	t.Parallel()
+	a := InitWithOrigin(t)
+	b := InitWithOrigin(t)
+	assert.NotEqual(t, a.Origin, b.Origin)
+	assert.NotEqual(t, a.Dir, b.Dir)
+
+	Git(t, a.Dir, "commit", "--allow-empty", "-m", "from-a")
+	Git(t, a.Dir, "push", "origin", "HEAD:main")
+
+	_, err := gitCombined(b.Origin, "rev-parse", "--verify", "refs/heads/main")
+	require.Error(t, err, "pushing to fixture A must not populate fixture B origin")
+}
+
 func GitOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := gitCombined(dir, args...)
