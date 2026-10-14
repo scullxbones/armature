@@ -53,8 +53,8 @@ issue's recorded integration branch (else config).`,
 type classifiedLeaf struct {
 	Issue        materialize.Issue
 	Result       promotion.Result
-	Integration  string // effective Evaluate target (--into, else recorded, else config)
-	ExplicitInto bool   // true when --into overrode the recorded integration branch
+	Integration  string
+	ExplicitInto bool
 }
 
 func runDoneLeafPromotion(cmd *cobra.Command, into string, dryRun, failExit bool) error {

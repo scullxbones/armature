@@ -80,8 +80,6 @@ if "@latest" in text:
     print("FAIL: ci.yml still contains @latest")
     sys.exit(1)
 
-# Workflow-level pull_request paths: forbidden on the fan-out (Design D: no
-# paths: filters). A job-level paths: is also forbidden for check-job jobs.
 jobs = {}
 current = None
 buf = []
@@ -249,7 +247,6 @@ if body is None:
     print("FAIL: no test-os job")
     sys.exit(1)
 
-# Split into steps on lines matching "      - " at the start of a step.
 steps = []
 cur = []
 for raw in body:

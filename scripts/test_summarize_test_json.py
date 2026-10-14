@@ -89,7 +89,6 @@ class SummarizeTimingsTest(unittest.TestCase):
         self.assertNotIn("WARNING:", result.stdout)
 
     def test_warns_when_package_exceeds_75_percent_of_timeout(self):
-        # 20m * 0.75 = 900s; equal to 75% is not "more than".
         body = _events(
             {
                 "Action": "pass",

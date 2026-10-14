@@ -53,12 +53,6 @@ help:
 	@echo "  make dist-skills         - Package skills for distribution (no binaries) into dist/"
 	@echo "  make install             - Build binary and install to ~/.local/bin/arm (adds to PATH)"
 
-# Sole fan-out table. ci.yml must not restate these targets.
-# Roots only. Existing prerequisite edges stay the owners of order inside
-# a root (coverage-check → coverage → build, lint → adr-principles, …).
-# build is not a fan-out root: coverage-check and validate-skills already
-# depend on it.
-
 GOLANGCI_LINT_MODULE  := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GREMLINS_MODULE       := github.com/go-gremlins/gremlins/cmd/gremlins
 GOLANGCI_LINT_VERSION := v2.14.0
@@ -142,10 +136,8 @@ context-report: build
 	@./bin/arm context-report --format human
 
 # Package timeout 20m: cmd/armature exceeds go test's default 10m on macos-latest CI.
-# summarize_test_json.py warns when a package uses more than 75% of this budget.
 TEST_TIMEOUT ?= 20m
 
-# Optional path to keep the raw `go test -json` stream (CI uploads this).
 TEST_JSON_OUT ?=
 
 test: build
