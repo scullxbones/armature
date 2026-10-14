@@ -7,9 +7,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/gittest"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 
 	"github.com/stretchr/testify/assert"
@@ -305,7 +303,7 @@ func head(t *testing.T, git *adapters.Client) string {
 }
 
 func doneInput(id, base, tip string, extra []ops.Op) Input {
-	issue := materialize.Issue{
+	issue := IssueFacts{
 		ID:                id,
 		Status:            ops.StatusDone,
 		Base:              base,
@@ -413,10 +411,9 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		gittest.Git(t, dir, "merge", "--squash", "delivery")
 		gittest.Git(t, dir, "commit", "-m", "squash delivery")
 		in := doneInput("task-field", base, tip, nil)
-		in.Issue.AssessmentAttestations = []attestation.AssessmentAttestation{{
+		in.Issue.AssessmentAttestations = []AssessmentFact{{
 			BaseSHA: base,
 			HeadSHA: tip,
-			Rating:  attestation.Red,
 		}}
 		res := Evaluate(git, in)
 		require.True(t, res.Promote, res.Kind)

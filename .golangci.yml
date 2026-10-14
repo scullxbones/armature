@@ -196,6 +196,16 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/scopematch"
+        promotion-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/promotion/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/delivery"
+            - "github.com/scullxbones/armature/internal/ops"
     errcheck:
       check-type-assertions: true
       check-blank: true

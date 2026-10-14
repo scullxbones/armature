@@ -131,7 +131,7 @@ func classifyDoneLeaves(git *adapters.Client, issues map[string]*materialize.Iss
 			}
 		}
 		res := promotion.Evaluate(git, promotion.Input{
-			Issue:       issue,
+			Issue:       promotionIssueFacts(issue),
 			PriorOps:    allOps,
 			Integration: integration,
 		})
@@ -259,7 +259,7 @@ func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *clas
 		item.Integration = integ
 	}
 	item.Result = promotion.Evaluate(git, promotion.Input{
-		Issue:       *live,
+		Issue:       promotionIssueFacts(*live),
 		PriorOps:    allOps,
 		Integration: integ,
 	})
