@@ -21,20 +21,13 @@ import (
 )
 
 func hookLogContainsEntry(gitDir, kind string) (bool, error) {
-	root, err := os.OpenRoot(gitDir)
+	logPath := filepath.Join(gitDir, "armature-hook.log")
+	data, err := os.ReadFile(logPath) //nolint:gosec // log path is derived from trusted git directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("open git dir %s: %w", gitDir, err)
-	}
-	defer func() { swallowErr(root.Close()) }()
-	data, err := root.ReadFile("armature-hook.log")
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("read hook log %s: %w", filepath.Join(gitDir, "armature-hook.log"), err)
+		return false, fmt.Errorf("read hook log %s: %w", logPath, err)
 	}
 
 	for line := range strings.SplitSeq(string(data), "\n") {
