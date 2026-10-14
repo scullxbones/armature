@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI `test-os` reports per-package and slowest-test timings from `go test -json`, warns when a package exceeds 75% of `TEST_TIMEOUT`, writes the same report to the GitHub job summary, and uploads the raw JSON (14-day retention) on every matrix run.
+
 ## [0.1.0] - 2026-10-05
 
 First external cut. Install via GitHub Releases or `go install` (see README).

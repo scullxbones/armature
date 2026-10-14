@@ -41,7 +41,7 @@ PR wall is the **max** of three required GitHub Actions jobs (no `needs` between
 
 CI calls `make check-job JOB=<id>` only — the membership table in the Makefile is the only step list. Expected wall is ~max of the two ~4m poles plus setup (~6m), not the former ~13m serial `check` job.
 
-Keep `e2eharness`, `validate-graph`, and the `test-os` matrix as they are. Ubuntu `test-os` skips `make test-ci` on pull_request/push (check-core already ran the suite) and still runs it when this workflow is called with `os-matrix-only` (tag releases skip check-core). macos and windows keep their matrix tests. Default ruleset must require the three new context names (copy the same string form already stored for `e2eharness`) and must drop `check`.
+Keep `e2eharness`, `validate-graph`, and the `test-os` matrix as they are. Ubuntu `test-os` skips `make test-ci` on pull_request/push (check-core already ran the suite) and still runs it when this workflow is called with `os-matrix-only` (tag releases skip check-core). macos and windows keep their matrix tests. Unix `make test-ci` prints per-package elapsed times (slowest first), the top 20 slowest tests, and a warning when a package exceeds 75% of `TEST_TIMEOUT`; the same report goes to `$GITHUB_STEP_SUMMARY` and the raw `go test -json` stream is uploaded as a 14-day artifact. Windows `test-ci` stays compile-only (`go test -c`). Default ruleset must require the three new context names (copy the same string form already stored for `e2eharness`) and must drop `check`.
 
 ## `make check-fast` — diff-routed fast gate
 

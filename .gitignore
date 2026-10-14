@@ -11,6 +11,9 @@
 coverage.out
 coverage.html
 
+# Captured `go test -json` stream (make test TEST_JSON_OUT=...)
+/test-results/
+
 # Mutation testing reports
 *.mutations.json
 mutesting-report/

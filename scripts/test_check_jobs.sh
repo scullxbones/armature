@@ -293,6 +293,39 @@ else
     fail "${OS_RESULT:-test-os assertion failed}"
 fi
 
+echo "Test 5b: test-os uploads go test JSON and keeps diagnose-on-failure..."
+
+JSON_RESULT=$(python3 - "$CI_YML" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+if "retention-days: 14" not in text:
+    print("FAIL: go test JSON artifact retention is not 14 days")
+    sys.exit(1)
+if "actions/upload-artifact@" not in text:
+    print("FAIL: test-os does not upload a go test JSON artifact")
+    sys.exit(1)
+if "TEST_JSON_OUT" not in text:
+    print("FAIL: Test step does not set TEST_JSON_OUT for the JSON artifact")
+    sys.exit(1)
+if not re.search(r"(?m)^\s*- name: Diagnose cmd/armature failures\s*$", text):
+    print("FAIL: diagnose cmd/armature step is missing")
+    sys.exit(1)
+if "go test -count=1 -timeout 25m -v ./cmd/armature/" not in text:
+    print("FAIL: diagnose rerun of ./cmd/armature/ changed")
+    sys.exit(1)
+print("PASS")
+PY
+) && JSON_STATUS=0 || JSON_STATUS=$?
+
+if [[ $JSON_STATUS -eq 0 ]]; then
+    pass "test-os keeps diagnose rerun and uploads go-test JSON (14d)"
+else
+    fail "${JSON_RESULT:-test-os JSON artifact assertion failed}"
+fi
+
 echo "Test 6: test_check_jobs.sh is committed executable..."
 mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/test_check_jobs.sh" | awk '{print $1}')
 if [[ "$mode" == "100755" ]]; then

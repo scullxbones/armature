@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json
 
 GO ?= go
 PYTHON ?= python3
@@ -28,6 +28,7 @@ help:
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
 	@echo "  make test-ci             - OS-matrix test entry: full make test on unix; go test -c on windows"
+	@echo "  make test-summarize-test-json - Test go test -json timing summarizer"
 	@echo "  make test-skill-transcript - Run coordinator skill golden transcript tests"
 	@echo "  make test-e2eharness     - Run full end-to-end harness suite (separate CI job)"
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
@@ -65,7 +66,7 @@ GREMLINS_VERSION      := v0.6.0
 
 CHECK_JOBS := check-static check-core mutate
 
-CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check
+CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-summarize-test-json
 CHECK_TOOLS_check-static := golangci-lint
 
 CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check
@@ -141,12 +142,20 @@ context-report: build
 	@./bin/arm context-report --format human
 
 # Package timeout 20m: cmd/armature exceeds go test's default 10m on macos-latest CI.
+# summarize_test_json.py warns when a package uses more than 75% of this budget.
 TEST_TIMEOUT ?= 20m
+
+# Optional path to keep the raw `go test -json` stream (CI uploads this).
+TEST_JSON_OUT ?=
 
 test: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -timeout $(TEST_TIMEOUT) $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
-	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
+	if [ -n "$(TEST_JSON_OUT)" ]; then \
+		mkdir -p "$$(dirname "$(TEST_JSON_OUT)")"; \
+		cp "$$tmp" "$(TEST_JSON_OUT)"; \
+	fi; \
+	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	exit $$summary
@@ -175,7 +184,7 @@ test-e2eharness: build
 coverage: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
-	$(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
+	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	if [ $$summary -ne 0 ]; then exit $$summary; fi
@@ -254,6 +263,9 @@ test-git-test-hermetic-check:
 test-coverage-check:
 	@scripts/test_coverage_check.sh .
 
+test-summarize-test-json:
+	@$(PYTHON) -m unittest scripts/test_summarize_test_json.py
+
 check-fast:
 	@scripts/check-fast.sh .
 
@@ -261,7 +273,7 @@ test-check-fast:
 	@scripts/test-check-fast.sh .
 
 clean:
-	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/ .gemini/skills/
+	rm -rf bin/ dist/ *.out coverage.html mutesting-report/ .claude/skills/ .gemini/skills/ test-results/
 	$(GO) clean -testcache
 
 build:

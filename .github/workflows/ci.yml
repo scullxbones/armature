@@ -63,6 +63,8 @@ jobs:
       # must still run the suite.
       - name: Test
         if: ${{ runner.os != 'Linux' || inputs.os-matrix-only }}
+        env:
+          TEST_JSON_OUT: test-results/go-test.json
         run: make test-ci
 
       - name: Diagnose cmd/armature failures
@@ -70,6 +72,16 @@ jobs:
         run: |
           go test -count=1 -timeout 25m -v ./cmd/armature/ 2>&1 | tee /tmp/cmd-armature.log | rg -n 'FAIL|panic|timeout|PASS.*cmd/armature|ok  	github.com/scullxbones/armature/cmd/armature' || true
           tail -n 80 /tmp/cmd-armature.log
+
+      # Windows test-ci is compile-only (`go test -c`) and writes no JSON.
+      - name: Upload go test JSON
+        if: ${{ always() && (runner.os != 'Linux' || inputs.os-matrix-only) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-test-json-${{ matrix.os }}
+          path: test-results/go-test.json
+          retention-days: 14
+          if-no-files-found: ${{ runner.os == 'Windows' && 'ignore' || 'warn' }}
 
   check-core:
     if: ${{ !inputs.os-matrix-only }}
