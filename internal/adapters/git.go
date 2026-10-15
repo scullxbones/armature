@@ -50,6 +50,32 @@ func (c *Client) cmd(args ...string) *exec.Cmd {
 	return c.cmdContext(context.Background(), args...)
 }
 
+// CommandGit builds a git command. A nil/empty environ uses the process PATH
+// via exec.Command (exec.ErrDot protected). A non-empty environ is the child
+// environment; git is resolved against that PATH, rejecting relative and empty
+// PATH entries with the same semantics as exec.LookPath.
+func CommandGit(ctx context.Context, environ []string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204: git plus caller-built args
+	if len(environ) == 0 {
+		return cmd
+	}
+	cmd.Env = append([]string(nil), environ...)
+	if path := envVal(environ, "PATH"); path != "" {
+		applyOverlayLookPath(cmd, path, "git")
+	}
+	return cmd
+}
+
+func applyOverlayLookPath(cmd *exec.Cmd, pathList, file string) {
+	lp, err := lookPathOn(pathList, file)
+	if lp != "" {
+		cmd.Path = lp
+	}
+	if err != nil {
+		cmd.Err = err
+	}
+}
+
 // GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
 func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	// maintenance.auto=false (and gc.auto=0 for older git) prevent git from
@@ -71,17 +97,13 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 		}
 	}
 	prefix = append(prefix, args...)
-	env := os.Environ()
-	if len(c.environ) > 0 {
-		env = append([]string(nil), c.environ...)
+	cmd := CommandGit(ctx, c.environ, prefix...)
+	env := cmd.Env
+	if len(env) == 0 {
+		env = os.Environ()
+	} else {
+		env = append([]string(nil), env...)
 	}
-	gitBin := "git"
-	if path := envVal(env, "PATH"); path != "" {
-		if abs, err := lookPathOn(path, "git"); err == nil {
-			gitBin = abs
-		}
-	}
-	cmd := exec.CommandContext(ctx, gitBin, prefix...) //nolint:gosec // G204: internal args, not user input
 	if c.isolateEnv {
 		env = stripGitOverrideEnv(env)
 	}
@@ -1324,7 +1346,7 @@ func envVal(environ []string, key string) string {
 func lookPathOn(pathList, file string) (string, error) {
 	for _, dir := range filepath.SplitList(pathList) {
 		if dir == "" {
-			continue
+			dir = "."
 		}
 		candidate := filepath.Join(dir, file)
 		st, err := os.Stat(candidate)
@@ -1334,7 +1356,10 @@ func lookPathOn(pathList, file string) (string, error) {
 		if st.Mode()&0o111 == 0 {
 			continue
 		}
+		if !filepath.IsAbs(candidate) {
+			return candidate, &exec.Error{Name: file, Err: exec.ErrDot}
+		}
 		return candidate, nil
 	}
-	return "", os.ErrNotExist
+	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 }
