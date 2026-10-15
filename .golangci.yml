@@ -269,6 +269,12 @@ linters:
       - linters:
           - gosec
         text: 'G115'
+      # cmd/armature tests call t.Parallel at the Test* level; many t.Run
+      # subtests share a repo fixture and cannot all be marked parallel.
+      - linters:
+          - paralleltest
+          - tparallel
+        path: 'cmd/'
       # cmd/armature tests now run via Invocation/Run with per-test env overlays.
       - linters:
           - paralleltest

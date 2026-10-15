@@ -333,7 +333,7 @@ func commandFor(inv Invocation) *cobra.Command {
 func Run(ctx context.Context, inv Invocation) int {
 	root := commandFor(inv)
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = context.TODO() //nolint:contextcheck // Run is the process root; callers pass ctx or nil
 	}
 	if sess := sessionFrom(root); sess != nil {
 		root.SetContext(context.WithValue(ctx, sessionKey{}, sess))

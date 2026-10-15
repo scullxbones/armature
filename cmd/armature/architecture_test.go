@@ -338,21 +338,29 @@ func TestNoProcessEnvCwdOrTempDirInProduction_REQ_PARCLI(t *testing.T) {
 	banned := []string{"os.Getenv(", "os.LookupEnv(", "os.Chdir(", "os.TempDir("}
 
 	var violations []string
-	scan := func(root string) {
-		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
-				return err
+	var scan func(string)
+	scan = func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			violations = append(violations, err.Error())
+			return
+		}
+		for _, entry := range entries {
+			path := filepath.Join(dir, entry.Name())
+			if entry.IsDir() {
+				scan(path)
+				continue
 			}
 			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
+				continue
 			}
 			if allow[path] {
-				return nil
+				continue
 			}
 			src, readErr := os.ReadFile(path)
 			if readErr != nil {
 				violations = append(violations, readErr.Error())
-				return nil
+				continue
 			}
 			body := string(src)
 			for _, needle := range banned {
@@ -360,8 +368,7 @@ func TestNoProcessEnvCwdOrTempDirInProduction_REQ_PARCLI(t *testing.T) {
 					violations = append(violations, fmt.Sprintf("%s uses %s", path, strings.TrimSuffix(needle, "(")))
 				}
 			}
-			return nil
-		})
+		}
 	}
 	scan(cmdDir)
 	scan(internalDir)

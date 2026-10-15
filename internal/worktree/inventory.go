@@ -330,7 +330,7 @@ func listPorcelainBlocks(repoPath string, environ []string) ([]porcelainBlock, e
 			gitBin = abs
 		}
 	}
-	cmd := exec.CommandContext(context.Background(), gitBin, "-C", repoPath, "worktree", "list", "--porcelain") //nolint:gosec // G204: literal git; args built here
+	cmd := exec.CommandContext(context.Background(), gitBin, "-C", repoPath, "worktree", "list", "--porcelain") //nolint:gosec // G204: git args built here
 	if len(environ) > 0 {
 		cmd.Env = append([]string(nil), environ...)
 	}
