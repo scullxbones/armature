@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // List returns the complete, non-prunable worktree inventory for repoPath.
@@ -324,16 +325,7 @@ type porcelainBlock struct {
 }
 
 func listPorcelainBlocks(repoPath string, environ []string) ([]porcelainBlock, error) {
-	gitBin := "git"
-	if path := envVal(environ, "PATH"); path != "" {
-		if abs, err := lookPathOn(path, "git"); err == nil {
-			gitBin = abs
-		}
-	}
-	cmd := exec.CommandContext(context.Background(), gitBin, "-C", repoPath, "worktree", "list", "--porcelain") //nolint:gosec // G204: git args built here
-	if len(environ) > 0 {
-		cmd.Env = append([]string(nil), environ...)
-	}
+	cmd := adapters.CommandGit(context.Background(), environ, "-C", repoPath, "worktree", "list", "--porcelain")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
@@ -372,32 +364,4 @@ func parsePorcelainBlocks(output string) []porcelainBlock {
 	}
 	flush()
 	return result
-}
-
-func envVal(environ []string, key string) string {
-	prefix := key + "="
-	for i := len(environ) - 1; i >= 0; i-- {
-		if strings.HasPrefix(environ[i], prefix) {
-			return strings.TrimPrefix(environ[i], prefix)
-		}
-	}
-	return ""
-}
-
-func lookPathOn(pathList, file string) (string, error) {
-	for _, dir := range filepath.SplitList(pathList) {
-		if dir == "" {
-			continue
-		}
-		candidate := filepath.Join(dir, file)
-		st, err := os.Stat(candidate)
-		if err != nil || st.IsDir() {
-			continue
-		}
-		if st.Mode()&0o111 == 0 {
-			continue
-		}
-		return candidate, nil
-	}
-	return "", os.ErrNotExist
 }

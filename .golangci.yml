@@ -170,13 +170,13 @@ linters:
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/strictjson"
         worktree-pure:
-          list-mode: lax
+          list-mode: strict
           files:
             - "**/internal/worktree/*.go"
             - "!**/*_test.go"
-          deny:
-            - pkg: "github.com/scullxbones/armature/internal"
-              desc: "worktree classifies borrowed issue facts and must not import other internal packages"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
         harnesshook-boundary:
           list-mode: strict
           files:

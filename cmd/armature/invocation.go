@@ -239,46 +239,8 @@ func environFrom(cmd *cobra.Command) []string {
 	return os.Environ()
 }
 
-func envSliceVal(environ []string, key string) string {
-	prefix := key + "="
-	for i := len(environ) - 1; i >= 0; i-- {
-		if len(environ[i]) >= len(prefix) && environ[i][:len(prefix)] == prefix {
-			return environ[i][len(prefix):]
-		}
-	}
-	return ""
-}
-
-func lookPathOnEnv(pathList, file string) (string, error) {
-	for _, dir := range filepath.SplitList(pathList) {
-		if dir == "" {
-			continue
-		}
-		candidate := filepath.Join(dir, file)
-		st, err := os.Stat(candidate)
-		if err != nil || st.IsDir() {
-			continue
-		}
-		if st.Mode()&0o111 == 0 {
-			continue
-		}
-		return candidate, nil
-	}
-	return "", os.ErrNotExist
-}
-
 func gitCommand(environ []string, args ...string) *exec.Cmd {
-	gitBin := "git"
-	if path := envSliceVal(environ, "PATH"); path != "" {
-		if abs, err := lookPathOnEnv(path, "git"); err == nil {
-			gitBin = abs
-		}
-	}
-	cmd := exec.CommandContext(context.Background(), gitBin, args...) //nolint:gosec // G204: git binary plus caller-built args
-	if len(environ) > 0 {
-		cmd.Env = append([]string(nil), environ...)
-	}
-	return cmd
+	return adapters.CommandGit(context.Background(), environ, args...)
 }
 
 func gitWith(env Env, repoPath string) *adapters.Client {
@@ -330,14 +292,19 @@ func commandFor(inv Invocation) *cobra.Command {
 }
 
 // Run is the only CLI entrypoint. main() and tests both call it.
+// A nil ctx keeps the session context attachSession already bound (that helper
+// has no context parameter, so it may call context.Background). Run never
+// assigns context.Background itself: doing so is a non-inherited context.
 //
-//nolint:contextcheck // cobra command tree and git helpers take context from cmd.Context after SetContext
+//nolint:contextcheck // cobra takes ctx from Command.SetContext; constructors and git helpers cannot accept Run's ctx
 func Run(ctx context.Context, inv Invocation) int {
 	root := commandFor(inv)
-	if sess := sessionFrom(root); sess != nil {
-		root.SetContext(context.WithValue(ctx, sessionKey{}, sess))
-	} else {
-		root.SetContext(ctx)
+	if ctx != nil {
+		if sess := sessionFrom(root); sess != nil {
+			root.SetContext(context.WithValue(ctx, sessionKey{}, sess))
+		} else {
+			root.SetContext(ctx)
+		}
 	}
 	return executeRoot(root, inv.Args, inv.Stdout, inv.Stderr)
 }

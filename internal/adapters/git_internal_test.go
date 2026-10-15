@@ -1,7 +1,9 @@
 package adapters
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -137,12 +139,29 @@ func TestLookPathOnAndEnvVal_REQ_PARCLI(t *testing.T) {
 	if _, err := lookPathOn(nested+string(os.PathListSeparator)+dir, "plain"); err == nil {
 		t.Fatal("non-executable and directory entries must be skipped")
 	}
-	got, err = lookPathOn(":"+dir, binName)
+	got, err = lookPathOn(string(os.PathListSeparator)+dir, binName)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != binPath {
-		t.Fatalf("empty PATH element skipped: lookPathOn=%q want %q", got, binPath)
+		t.Fatalf("empty PATH element is cwd then later abs: lookPathOn=%q want %q", got, binPath)
+	}
+}
+
+func TestLookPathOnRejectsRelativeEntry_REQ_PARCLI(t *testing.T) { //nolint:paralleltest // t.Chdir is process-wide
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir("rel", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("rel", "mybin"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := lookPathOn("rel", "mybin")
+	if got == "" {
+		t.Fatal("LookPath returns the relative path together with ErrDot")
+	}
+	if !errors.Is(err, exec.ErrDot) {
+		t.Fatalf("err=%v want ErrDot", err)
 	}
 }
 
