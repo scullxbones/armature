@@ -268,3 +268,37 @@ func TestReadBinding_RejectsEscapingBinding_REQ_NOCOMMENTS(t *testing.T) {
 	_, err = readFileInRoot(gitDir, filepath.Join("..", "stolen"))
 	require.Error(t, err)
 }
+
+func TestEnvValAndLookPathOn_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, envVal(nil, "PATH"))
+	assert.Equal(t, "later", envVal([]string{"FOO=bar", "FOO=later"}, "FOO"))
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "mybin")
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	got, err := lookPathOn(dir, "mybin")
+	require.NoError(t, err)
+	assert.Equal(t, bin, got)
+	_, err = lookPathOn(dir, "missing")
+	assert.Error(t, err)
+}
+
+func TestListEnvHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	repo := gittest.InitRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0644))
+	runInventoryGit(t, repo, "add", "README.md")
+	runInventoryGit(t, repo, "commit", "-q", "-m", "initial")
+
+	viaList, err := List(repo)
+	require.NoError(t, err)
+	viaEnv, err := ListEnv(repo, nil)
+	require.NoError(t, err)
+	assert.Equal(t, viaList, viaEnv)
+
+	wrapperDir := t.TempDir()
+	script := "#!/bin/sh\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	_, err = ListEnv(repo, []string{"PATH=" + wrapperDir})
+	require.Error(t, err)
+}
