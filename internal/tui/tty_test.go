@@ -1,107 +1,115 @@
 package tui
 
 import (
-	"os"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-var ttyStateMu sync.Mutex
-
-func lockTTYState(t *testing.T) {
-	ttyStateMu.Lock()
-	t.Cleanup(func() {
-		SetFormat("")
-		SetNonInteractive(false)
-		ttyStateMu.Unlock()
-	})
-}
-
-func TestIsTerminalReturnsFalseInTests(t *testing.T) {
+func TestStdoutIsTerminalReturnsFalseInTests(t *testing.T) {
 	t.Parallel()
-	if IsTerminal() {
-		t.Error("expected IsTerminal() to return false in test runner (no TTY attached)")
+	if StdoutIsTerminal() {
+		t.Error("expected StdoutIsTerminal() to return false in test runner (no TTY attached)")
 	}
 }
 
-func TestSetNonInteractive(t *testing.T) {
+func TestRendererSetNonInteractive(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	SetNonInteractive(true)
-	if !IsNonInteractive() {
-		t.Error("expected IsNonInteractive() to return true after SetNonInteractive(true)")
+	r := NewRenderer(false, nil)
+	r.Apply("human", true)
+	if !r.IsNonInteractive() {
+		t.Error("expected IsNonInteractive() to return true after Apply(..., true)")
 	}
 }
 
-func TestIsNonInteractive_DefaultFalse(t *testing.T) {
+func TestRendererIsNonInteractive_DefaultFalse(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	SetNonInteractive(false)
-	if IsNonInteractive() {
+	r := NewRenderer(false, nil)
+	if r.IsNonInteractive() {
 		t.Error("expected IsNonInteractive() to return false by default")
 	}
 }
 
-func TestIsInteractiveReturnsFalseWhenNonInteractiveSet(t *testing.T) {
+func TestRendererIsInteractiveReturnsFalseWhenNonInteractiveSet(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	SetNonInteractive(true)
-	if IsInteractive() {
+	r := NewRenderer(true, nil)
+	r.Apply("human", true)
+	if r.IsInteractive() {
 		t.Error("expected IsInteractive() to return false when non-interactive is set")
 	}
 }
 
-func TestIsInteractiveReturnsFalseWhenFormatJSON(t *testing.T) {
+func TestRendererIsInteractiveReturnsFalseWhenFormatJSON(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	SetFormat("json")
-	if IsInteractive() {
+	r := NewRenderer(true, mapLookup(nil))
+	r.Apply("json", false)
+	if r.IsInteractive() {
 		t.Error("expected IsInteractive() to return false when format=json")
 	}
 }
 
-func TestIsInteractiveReturnsFalseWhenFormatAgent(t *testing.T) {
+func TestRendererIsInteractiveReturnsFalseWhenFormatAgent(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	SetFormat("agent")
-	if IsInteractive() {
+	r := NewRenderer(true, mapLookup(nil))
+	r.Apply("agent", false)
+	if r.IsInteractive() {
 		t.Error("expected IsInteractive() to return false when format=agent")
 	}
 }
 
-func TestIsInteractiveReturnsFalseWhenNotTTY(t *testing.T) {
+func TestRendererIsInteractiveReturnsFalseWhenNotTTY(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	SetFormat("human")
-	if IsInteractive() {
+	r := NewRenderer(false, mapLookup(nil))
+	r.Apply("human", false)
+	if r.IsInteractive() {
 		t.Error("expected IsInteractive() to return false when not a TTY")
 	}
 }
 
-func TestIsInteractiveReturnsFalseWhenGeminiCLISet(t *testing.T) {
+func TestRendererIsInteractiveReturnsFalseWhenGeminiCLISet(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	require.NoError(t, os.Setenv("GEMINI_CLI", "1"))
-	t.Cleanup(func() {
-		require.NoError(t, os.Unsetenv("GEMINI_CLI"))
-	})
-	SetFormat("human")
-	if IsInteractive() {
+	r := NewRenderer(true, mapLookup(map[string]string{"GEMINI_CLI": "1"}))
+	r.Apply("human", false)
+	if r.IsInteractive() {
 		t.Error("expected IsInteractive() to return false when GEMINI_CLI is set")
 	}
 }
 
-func TestIsInteractiveReturnsFalseWhenTermIsDumb(t *testing.T) {
+func TestRendererIsInteractiveReturnsFalseWhenTermIsDumb(t *testing.T) {
 	t.Parallel()
-	lockTTYState(t)
-	require.NoError(t, os.Setenv("TERM", "dumb"))
-	t.Cleanup(func() {
-		require.NoError(t, os.Unsetenv("TERM"))
-	})
-	SetFormat("human")
-	if IsInteractive() {
+	r := NewRenderer(true, mapLookup(map[string]string{"TERM": "dumb"}))
+	r.Apply("human", false)
+	if r.IsInteractive() {
 		t.Error("expected IsInteractive() to return false when TERM=dumb")
+	}
+}
+
+func TestRendererIsInteractiveOnTTYHuman(t *testing.T) {
+	t.Parallel()
+	r := NewRenderer(true, mapLookup(nil))
+	r.Apply("human", false)
+	require.True(t, r.IsInteractive())
+	require.True(t, r.IsTerminal())
+}
+
+func TestRendererInstancesDoNotShareState(t *testing.T) {
+	t.Parallel()
+	a := NewRenderer(true, mapLookup(nil))
+	b := NewRenderer(false, mapLookup(nil))
+	a.Apply("human", false)
+	b.Apply("json", true)
+	require.True(t, a.IsInteractive())
+	require.False(t, b.IsInteractive())
+	require.False(t, a.IsNonInteractive())
+	require.True(t, b.IsNonInteractive())
+}
+
+func mapLookup(m map[string]string) EnvLookup {
+	return func(key string) (string, bool) {
+		if m == nil {
+			return "", false
+		}
+		v, ok := m[key]
+		return v, ok
 	}
 }

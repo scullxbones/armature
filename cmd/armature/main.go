@@ -10,7 +10,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/exitcodes"
-	"github.com/scullxbones/armature/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -18,22 +17,49 @@ import (
 var Version = "dev"
 
 func applyTTYDetectionPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
+	sess := ensureSession(cmd)
 	flags := cmd.Flags()
+	if flags.Lookup("format") == nil && cmd.Root() != nil {
+		flags = cmd.Root().PersistentFlags()
+	}
+	tty := sess.ui.IsTerminal()
 
 	format, _ = flags.GetString("format")
 	if !flags.Changed("format") && format == "human" &&
-		(os.Getenv("GEMINI_CLI") != "" || os.Getenv("TERM") == "dumb" || !tui.IsTerminal()) {
+		(envLookup(sess.inv.Env, "GEMINI_CLI") != "" || envLookup(sess.inv.Env, "TERM") == "dumb" || !tty) {
 		format = "agent"
 		_ = flags.Set("format", "agent")
 	}
 
 	nonInteractive, _ = flags.GetBool("non-interactive")
-	if !nonInteractive && (format == "agent" || !tui.IsTerminal()) {
+	if !nonInteractive && (format == "agent" || !tty) {
 		nonInteractive = true
 		_ = flags.Set("non-interactive", "true")
 	}
 
+	sess.ui.Apply(format, nonInteractive)
 	return format, nonInteractive
+}
+
+func ensureSession(cmd *cobra.Command) *session {
+	if cmd == nil {
+		return newSession(OSInvocation(nil, os.Stdout, os.Stderr))
+	}
+	if sess := sessionFrom(cmd); sess != nil {
+		return sess
+	}
+	if root := cmd.Root(); root != nil && root != cmd {
+		if sess := sessionFrom(root); sess != nil {
+			attachSession(cmd, sess)
+			return sess
+		}
+	}
+	sess := newSession(OSInvocation(nil, os.Stdout, os.Stderr))
+	attachSession(cmd, sess)
+	if root := cmd.Root(); root != nil && root != cmd {
+		attachSession(root, sess)
+	}
+	return sess
 }
 
 func newRootCmd() *cobra.Command {
@@ -44,14 +70,13 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			format, nonInteractive := applyTTYDetectionPolicy(cmd)
-			tui.SetFormat(format)
-			tui.SetNonInteractive(nonInteractive)
+			ui := uiFrom(cmd)
 
 			if versionRequested(cmd) {
 				return nil
 			}
 
-			if cmd.Parent() == nil && shouldPrintRootHelp(format, nonInteractive, tui.IsTerminal()) {
+			if cmd.Parent() == nil && shouldPrintRootHelp(format, nonInteractive, ui.IsTerminal()) {
 				return nil
 			}
 
@@ -87,7 +112,8 @@ func newRootCmd() *cobra.Command {
 				return writeVersionOutput(cmd)
 			}
 			format, _ := cmd.Flags().GetString("format")
-			if shouldPrintRootHelp(format, tui.IsNonInteractive(), tui.IsTerminal()) {
+			ui := uiFrom(cmd)
+			if shouldPrintRootHelp(format, ui.IsNonInteractive(), ui.IsTerminal()) {
 				return cmd.Help()
 			}
 			return writeReadyHome(cmd, homeEmptyReason(cmd))
@@ -330,7 +356,7 @@ func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) i
 }
 
 func main() {
-	os.Exit(executeRoot(newRootCmd(), os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(Run(context.Background(), OSInvocation(os.Args[1:], os.Stdout, os.Stderr)))
 }
 
 const (

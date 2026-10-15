@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/scullxbones/armature/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +31,7 @@ func writeVersionOutput(cmd *cobra.Command) error {
 	flags := cmd.Root().PersistentFlags()
 	format, _ := flags.GetString("format")
 	explicitHuman := flags.Changed("format") && format == "human"
-	if !explicitHuman && (isStructuredFormat(format) || tui.IsNonInteractive()) {
+	if !explicitHuman && (isStructuredFormat(format) || uiFrom(cmd).IsNonInteractive()) {
 		return writeCommandEnvelope(cmd.OutOrStdout(), "versions", []versionRow{{Version: Version}}, []string{versionHelp}, nil)
 	}
 	_, err := fmt.Fprintf(cmd.OutOrStdout(), "arm version %s\n", Version)
@@ -44,9 +43,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print arm version",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			format, nonInteractive := applyTTYDetectionPolicy(cmd)
-			tui.SetFormat(format)
-			tui.SetNonInteractive(nonInteractive)
+			applyTTYDetectionPolicy(cmd)
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

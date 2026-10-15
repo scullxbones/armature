@@ -12,7 +12,6 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/ready"
-	"github.com/scullxbones/armature/internal/tui"
 	readytui "github.com/scullxbones/armature/internal/tui/ready"
 	"github.com/spf13/cobra"
 )
@@ -93,7 +92,7 @@ func writeReadyHome(cmd *cobra.Command, emptyReason string) error {
 	entries := ready.ComputeReady(readyQueueFacts(snap.Index, snap.Issues, now), "")
 	expiredClaims := ready.ExpiredClaims(readyClaimFacts(snap.Issues, time.Now().Unix()))
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
-	if isStructuredFormat(format) || tui.IsNonInteractive() {
+	if isStructuredFormat(format) || uiFrom(cmd).IsNonInteractive() {
 		return output.WriteReadyEnvelope(
 			cmd.OutOrStdout(),
 			readyOutputIssues(entries),
@@ -157,7 +156,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 			if explain {
 				notReady := ready.ExplainNotReady(readyQueueFacts(index, issues, nowEpoch()))
 				format, _ := cmd.Root().PersistentFlags().GetString("format")
-				if isStructuredFormat(format) || tui.IsNonInteractive() {
+				if isStructuredFormat(format) || uiFrom(cmd).IsNonInteractive() {
 					return writeReadyExplainEnvelope(cmd.OutOrStdout(), index, notReady)
 				}
 				ids := make([]string, 0, len(notReady))
@@ -201,7 +200,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			switch {
-			case isStructuredFormat(format) || tui.IsNonInteractive():
+			case isStructuredFormat(format) || uiFrom(cmd).IsNonInteractive():
 				var wavesData [][]output.ReadyIssue
 				if waves {
 					for _, wave := range ready.PartitionWaves(entries, queue) {
@@ -220,7 +219,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				if err != nil {
 					return err
 				}
-			case tui.IsInteractive():
+			case uiFrom(cmd).IsInteractive():
 				selected, err := runReadyTUI(entries)
 				if err != nil {
 					return err

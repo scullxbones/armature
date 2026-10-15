@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/snapshot"
-	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/tui/app"
 	"github.com/scullxbones/armature/internal/tui/dagtree"
 	"github.com/scullxbones/armature/internal/tui/sources"
@@ -31,7 +30,7 @@ func newTUICmd() *cobra.Command {
 				workerID = slottedWorkerID("default")
 			}
 
-			if !tui.IsInteractive() {
+			if !uiFrom(cmd).IsInteractive() {
 				tuiOpsDir := filepath.Join(appCtx.IssuesDir, "ops")
 				store := snapshot.NewStore(tuiOpsDir, stateDir)
 				snap, err := store.Load(context.Background())
