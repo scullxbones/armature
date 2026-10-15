@@ -315,4 +315,8 @@ func TestListEnvHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	mixed, err := ListEnv(repo, []string{"PATH=" + filepath.Dir(realGit) + string(os.PathListSeparator) + wrapperDir})
 	require.NoError(t, err)
 	assert.Equal(t, viaList, mixed)
+
+	fallback, err := ListEnv(repo, []string{"PATH=/no-such-git-wrapper"})
+	require.NoError(t, err, "missing PATH entries fall back to the process git binary")
+	assert.Equal(t, viaList, fallback)
 }
