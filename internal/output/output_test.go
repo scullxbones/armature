@@ -626,6 +626,13 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 	assert.NotContains(t, output, "aaaaaabb")
 }
 
+func TestFormatLatestAttestationLine_InvalidOrEmptyJSON(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "", formatLatestAttestationLine(nil))
+	assert.Equal(t, "", formatLatestAttestationLine(json.RawMessage("not-json")))
+	assert.Equal(t, "", formatLatestAttestationLine(json.RawMessage("[]")))
+}
+
 func TestProductionOutputDoesNotImportMaterializeOrAttestation(t *testing.T) {
 	t.Parallel()
 
