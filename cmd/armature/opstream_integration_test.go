@@ -17,6 +17,7 @@ import (
 )
 
 func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -66,6 +67,7 @@ func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -120,6 +122,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -168,6 +171,7 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestMaterializeCommand_WarningsVisible(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -219,6 +223,7 @@ func TestMaterializeCommand_WarningsVisible(t *testing.T) {
 }
 
 func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -258,6 +263,7 @@ func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
 }
 
 func TestMaterializeOffsetTracking(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

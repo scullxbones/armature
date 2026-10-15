@@ -16,6 +16,7 @@ import (
 )
 
 func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
+	t.Parallel()
 	bareDir := gittest.InitWithOrigin(t).Origin
 
 	repo := gittest.InitRepo(t)
@@ -67,6 +68,7 @@ func TestDoctorFixPushesToOriginInDualBranchMode(t *testing.T) {
 }
 
 func TestDoctorFixPublishFailureKeepsLocalRepair_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	_, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)

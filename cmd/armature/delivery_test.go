@@ -16,6 +16,7 @@ import (
 )
 
 func TestDeliveryRecordedOnDone_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "branch", "-M", "main")
@@ -62,6 +63,7 @@ func TestDeliveryRecordedOnDone_REQ_LNGHZN_S11_T1(t *testing.T) {
 }
 
 func TestDoneWithoutWorktreeNamesDeliveryRecord_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -79,6 +81,7 @@ func TestDoneWithoutWorktreeNamesDeliveryRecord_REQ_LNGHZN_S11_T1(t *testing.T) 
 }
 
 func TestDeliveryRecordRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -100,6 +103,7 @@ func TestDeliveryRecordRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
 }
 
 func TestTransitionDoneRejectsUnknownIssue_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	base := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "extra.txt"), []byte("x\n"), 0o644))
@@ -122,6 +126,7 @@ func TestTransitionDoneRejectsUnknownIssue_REQ_LNGHZN_S11_T1(t *testing.T) {
 }
 
 func TestExtractFieldsDeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
 	issue := &materialize.Issue{
 		ID:                 "TASK-01",
 		Branch:             "task/TASK-01",
@@ -135,6 +140,7 @@ func TestExtractFieldsDeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
 }
 
 func TestDeliveryRecordRetryPreservesIntegrationBranch_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	wt := filepath.Join(repo, ".worktrees", "task-01")
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")

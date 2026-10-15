@@ -137,7 +137,7 @@ func hookCurrentBranch(repoPath string) string {
 	return branch
 }
 
-func hookFindActiveClaimID(ctx *config.Context) string {
+func hookFindActiveClaimID(ctx *config.Context, env Env) string {
 	workerID, err := worker.GetWorkerID(ctx.RepoPath)
 	if err != nil {
 		return ""
@@ -148,7 +148,7 @@ func hookFindActiveClaimID(ctx *config.Context) string {
 		return ""
 	}
 	now := time.Now().Unix()
-	want := slottedWorkerID(workerID)
+	want := slottedWorkerIDEnv(workerID, env)
 	var (
 		bestID  string
 		bestAct int64
@@ -202,7 +202,7 @@ func runPostCommitHook(cmd *cobra.Command) {
 		return
 	}
 
-	claimID := hookFindActiveClaimID(appCtx)
+	claimID := hookFindActiveClaimID(appCtx, envFrom(cmd))
 	if claimID == "" {
 		return
 	}

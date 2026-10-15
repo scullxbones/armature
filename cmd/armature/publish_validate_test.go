@@ -15,6 +15,7 @@ import (
 )
 
 func TestMakefileValidateGraphIsArmValidateCI_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	root := projectRootDir(t)
 	data, err := os.ReadFile(filepath.Join(root, "Makefile"))
 	require.NoError(t, err)
@@ -25,6 +26,7 @@ func TestMakefileValidateGraphIsArmValidateCI_REQ_PUBLISH_VALIDATE(t *testing.T)
 }
 
 func TestPushOpsAndValidateCIAgreeOnW1_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -48,6 +50,7 @@ func TestPushOpsAndValidateCIAgreeOnW1_REQ_PUBLISH_VALIDATE(t *testing.T) {
 }
 
 func TestPushOpsRefusesRemoteW1Shape_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -101,6 +104,7 @@ func TestPushOpsRefusesRemoteW1Shape_REQ_PUBLISH_VALIDATE(t *testing.T) {
 }
 
 func TestPushOpsCleanGraphStillPushes_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -114,6 +118,7 @@ func TestPushOpsCleanGraphStillPushes_REQ_PUBLISH_VALIDATE(t *testing.T) {
 }
 
 func TestPushOpsOverrideRequiresReasonAndTTY_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	_, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops", "--override-validate")
 	require.Error(t, err)
@@ -125,6 +130,7 @@ func TestPushOpsOverrideRequiresReasonAndTTY_REQ_PUBLISH_VALIDATE(t *testing.T) 
 }
 
 func TestPlannerSkillTreatsPublishValidateFailureAsStop_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	root := projectRootDir(t)
 	data, err := os.ReadFile(filepath.Join(root, "internal/skillsembed/skills/armature-planner/SKILL.md"))
 	require.NoError(t, err)
@@ -136,6 +142,7 @@ func TestPlannerSkillTreatsPublishValidateFailureAsStop_REQ_PUBLISH_VALIDATE(t *
 }
 
 func TestPublishValidateAfterIntegrateNilWhenOverride_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	assert.Nil(t, publishValidateAfterIntegrate(nil, nil, true),
 		"recorded override must not revalidate after rebase")
 	cb := publishValidateAfterIntegrate(nil, nil, false)
@@ -167,6 +174,7 @@ func TestMergeSourceManifestUnionsRemoteOnlyEntries_REQ_PUBLISH_VALIDATE(t *test
 }
 
 func TestPushOpsAcceptsRemoteOnlySourceCitation_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -220,6 +228,7 @@ func TestPushOpsAcceptsRemoteOnlySourceCitation_REQ_PUBLISH_VALIDATE(t *testing.
 }
 
 func TestPushOpsRevalidatesAfterNonFFRebase_REQ_PUBLISH_VALIDATE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)

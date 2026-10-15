@@ -17,6 +17,7 @@ import (
 )
 
 func TestStatsCostCLI_REQ_TOPTIER_S11_T2(t *testing.T) {
+	t.Parallel()
 	repo := initCostFixture(t)
 
 	out, err := runTrls(t, repo, "stats", "--cost", "--format", "human")
@@ -39,6 +40,7 @@ func TestStatsCostCLI_REQ_TOPTIER_S11_T2(t *testing.T) {
 }
 
 func TestStatsCostExcludesMismatchedWorkerOps(t *testing.T) {
+	t.Parallel()
 	repo := initCostFixture(t)
 	ctx := getTestContext(t, repo)
 	ghostPath := filepath.Join(ctx.IssuesDir, "ops", "worker-ghost.log")
@@ -70,6 +72,7 @@ func TestStatsCostExcludesMismatchedWorkerOps(t *testing.T) {
 }
 
 func TestStatsCostDedupesIdempotentAssessments(t *testing.T) {
+	t.Parallel()
 	repo := initCostFixture(t)
 	ctx := getTestContext(t, repo)
 	ghostPath := filepath.Join(ctx.IssuesDir, "ops", "worker-ghost.log")
@@ -114,6 +117,7 @@ func TestStatsCostDedupesIdempotentAssessments(t *testing.T) {
 }
 
 func TestStatsWithoutCostFlagHints(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")

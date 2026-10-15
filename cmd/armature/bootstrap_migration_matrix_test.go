@@ -22,6 +22,7 @@ type migrationMatrixCase struct {
 }
 
 func TestMigrationInvariantMatrix_P1(t *testing.T) {
+	t.Parallel()
 	cases := []migrationMatrixCase{
 		{name: "tracked-success", tracked: true},
 		{name: "tracked-commit-failure", tracked: true, injectCommitFail: true},
@@ -33,8 +34,6 @@ func TestMigrationInvariantMatrix_P1(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := gittest.InitWithOrigin(t).Dir
 			run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
-			originalPath := os.Getenv("PATH")
-
 			legacyArmaturePath := filepath.Join(repo, ".armature")
 			legacyOpsPath := filepath.Join(legacyArmaturePath, "ops")
 			require.NoError(t, os.MkdirAll(legacyOpsPath, 0o750))
@@ -50,22 +49,16 @@ func TestMigrationInvariantMatrix_P1(t *testing.T) {
 
 			if tc.injectCommitFail {
 				wrapperDir := installCommitFailureWrapper(t, repo)
-				t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-				t.Cleanup(func() {
-					require.NoError(t, os.Setenv("PATH", originalPath))
-				})
+				prependPATH(t, wrapperDir)
 			}
 
 			if tc.injectWorktreeBad {
 				wrapperDir := installWorktreeAddFailureWrapper(t, filepath.Join(repo, ".armature"))
-				t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-				t.Cleanup(func() {
-					require.NoError(t, os.Setenv("PATH", originalPath))
-				})
+				prependPATH(t, wrapperDir)
 			}
 
 			buf := new(bytes.Buffer)
-			cmd := newRootCmd()
+			cmd := testRootCmd(t)
 			cmd.SetOut(buf)
 
 			_, err := runRepoSetup(cmd, repo)
@@ -78,9 +71,9 @@ func TestMigrationInvariantMatrix_P1(t *testing.T) {
 			assertLegacyContentFindable(t, repo, legacyContent, tc.tracked)
 
 			if tc.injectCommitFail || tc.injectWorktreeBad {
-				require.NoError(t, os.Setenv("PATH", originalPath))
+				unsetCLIEnv(t, "PATH")
 				buf2 := new(bytes.Buffer)
-				cmd2 := newRootCmd()
+				cmd2 := testRootCmd(t)
 				cmd2.SetOut(buf2)
 				_, err2 := runRepoSetup(cmd2, repo)
 				require.NoError(t, err2)

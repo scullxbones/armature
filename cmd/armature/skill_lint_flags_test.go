@@ -12,6 +12,7 @@ import (
 )
 
 func TestMandatoryFlagsMatchMarkFlagRequired(t *testing.T) {
+	t.Parallel()
 	root := projectRootDir(t)
 
 	mandatoryFlags := parseMandatoryFlags(t, filepath.Join(root, "scripts", "skill_lint.py"))

@@ -150,6 +150,7 @@ func TestReadyEmitsEnvelopeOnStdout_REQ_AOC_S2_T1(t *testing.T) {
 }
 
 func TestReadyExpiredClaimsInEnvelopeNotStderr_REQ_AOC_S2_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "materialize")
@@ -199,6 +200,7 @@ func TestReadyExpiredClaimsInEnvelopeNotStderr_REQ_AOC_S2_T1(t *testing.T) {
 }
 
 func TestReadyEmptyStateIsDefinitive_REQ_AOC_S2_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -378,6 +380,7 @@ func plantBlockedReadyExplainFixture(t *testing.T) string {
 }
 
 func TestReadyExplainEmitsEnvelope_REQ_AOC_S2_T1(t *testing.T) {
+	t.Parallel()
 	repo := plantBlockedReadyExplainFixture(t)
 
 	out, errOut := runReadyJSON(t, repo, "--explain")

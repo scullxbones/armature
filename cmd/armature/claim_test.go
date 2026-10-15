@@ -47,7 +47,7 @@ func setupRepoWithEpic(t *testing.T) string {
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test epic", "--type", "epic", "--id", "epic-01"}))
 	require.NoError(t, cmd2.Execute())
@@ -62,7 +62,7 @@ func setupRepoWithParentAndTask(t *testing.T) string {
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Parent story", "--type", "story", "--id", "story-01"}))
 	require.NoError(t, cmd2.Execute())
@@ -70,7 +70,7 @@ func setupRepoWithParentAndTask(t *testing.T) string {
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	cmd3 := newRootCmd()
+	cmd3 := testRootCmd(t)
 	cmd3.SetOut(new(bytes.Buffer))
 	cmd3.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Child task", "--type", "task", "--id", "task-01", "--parent", "story-01"}))
 	require.NoError(t, cmd3.Execute())
@@ -79,13 +79,14 @@ func setupRepoWithParentAndTask(t *testing.T) string {
 }
 
 func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	headSHA := runGitOutput(t, repo, "rev-parse", "HEAD")
 	run(t, repo, "git", "checkout", "--detach", strings.TrimSpace(headSHA))
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -97,11 +98,12 @@ func TestClaimDetachedHEADDoesNotPersistAsParentBranch(t *testing.T) {
 }
 
 func TestClaimNewWorktreeRecordsClaimedBranchFile_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -119,6 +121,7 @@ func TestClaimNewWorktreeRecordsClaimedBranchFile_REQ_LNGHZN_S4(t *testing.T) {
 }
 
 func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	run(t, repo, "git", "checkout", "-b", "story-branch")
@@ -131,7 +134,7 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -156,6 +159,7 @@ func TestClaimExistingWorktreePersistsComputedForkPointWhenDiverged_REQ_LNGHZN_S
 }
 
 func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
@@ -171,7 +175,7 @@ func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *te
 	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -191,6 +195,7 @@ func TestClaimExistingWorktreeBaseCommitGoesStaleAfterRebase_REQ_LNGHZN_S4(t *te
 }
 
 func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
@@ -198,7 +203,7 @@ func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t 
 	run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -209,6 +214,7 @@ func TestClaimExistingWorktreePersistsBaseCommitWhenNotDiverged_REQ_LNGHZN_S4(t 
 }
 
 func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
 
@@ -231,7 +237,7 @@ func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_R
 	require.NotEqual(t, storyHeadSHA, mainHeadSHA)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -259,6 +265,7 @@ func TestClaimExistingWorktreeDoesNotContaminateFromUnrelatedCoordinatorBranch_R
 }
 
 func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.T) {
+	t.Parallel()
 	readBaseCommitFile := func(t *testing.T, worktreePath string) string {
 		t.Helper()
 		gitPath := filepath.Join(worktreePath, ".git")
@@ -279,7 +286,7 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 		buf := new(bytes.Buffer)
-		cmd := newRootCmd()
+		cmd := testRootCmd(t)
 		cmd.SetOut(buf)
 		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, cmd.Execute())
@@ -298,7 +305,7 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 		run(t, repo, "git", "worktree", "add", worktreePath, "task/task-01")
 
 		buf := new(bytes.Buffer)
-		cmd := newRootCmd()
+		cmd := testRootCmd(t)
 		cmd.SetOut(buf)
 		cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, cmd.Execute())
@@ -309,11 +316,12 @@ func TestClaim_AllEntryPathsPersistBaseCommitViaConsolidatedFunction(t *testing.
 }
 
 func TestClaimWithoutWorktreeFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01"})
@@ -324,11 +332,12 @@ func TestClaimWithoutWorktreeFlag(t *testing.T) {
 }
 
 func TestClaimCreatesWorktreeIfAbsent(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
@@ -358,11 +367,12 @@ func TestClaimCreatesWorktreeIfAbsent(t *testing.T) {
 }
 
 func TestClaimUpdatesTaskIDIfWorktreeExists(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -384,11 +394,12 @@ func TestClaimUpdatesTaskIDIfWorktreeExists(t *testing.T) {
 }
 
 func TestClaimWithEpicReturnsError(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithEpic(t)
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "epic-01", "--worktree"})
@@ -399,11 +410,12 @@ func TestClaimWithEpicReturnsError(t *testing.T) {
 }
 
 func TestClaimCreatesTaskBranch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
@@ -429,10 +441,11 @@ func TestClaimCreatesTaskBranch(t *testing.T) {
 }
 
 func TestClaimStillAppendsClaimOpToLog(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
@@ -474,9 +487,10 @@ func TestCanonicalWorktreePathRejectsDotDotAliasedIDs_REQ_LNGHZN_S5(t *testing.T
 }
 
 func TestClaimRejectsTraversalBeforeClaimAppend_REQ_LNGHZN_S5_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetErr(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "../escaped", "--worktree"})
@@ -525,6 +539,7 @@ func TestCanonicalWorktreePath_MissingThroughSymlink_REQ_ARCHIMP_S20(t *testing.
 }
 
 func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	markerFile := filepath.Join(repo, "marker.txt")
@@ -535,7 +550,7 @@ func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
@@ -552,11 +567,12 @@ func TestCreateWorktreeAndBranchInheritsFilesFromHEAD(t *testing.T) {
 }
 
 func TestCreateWorktreeAndBranchRejectsEmptyBranchName(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithEpic(t)
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "epic-01", "--worktree"})
@@ -731,6 +747,7 @@ func TestCreateWorktreeAndBranchLeavesAdoptedWorktreeInPlaceWhenSuperseded(t *te
 }
 
 func TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	canonicalPath := filepath.Join(repo, ".worktrees", "bad-id")
 
@@ -741,6 +758,7 @@ func TestCreateWorktreeAndBranchRemovesFreshPartialWorktreeWhenStillOwned(t *tes
 }
 
 func TestCreateWorktreeAndBranchLeavesAlreadyAtDestOnMetadataFailure(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", canonicalPath)
@@ -759,6 +777,7 @@ func TestCreateWorktreeAndBranchLeavesAlreadyAtDestOnMetadataFailure(t *testing.
 }
 
 func TestCreateWorktreeAndBranchLeavesFreshPartialWorktreeWhenSuperseded(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	canonicalPath := filepath.Join(repo, ".worktrees", "bad-id")
 
@@ -791,6 +810,7 @@ func rollbackClaimTestCmd(ctx *config.Context) *cobra.Command {
 }
 
 func TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -829,6 +849,7 @@ func TestRollbackClaimSkipsCompensatingOpWhenClaimSuperseded_REQ_LNGHZN_S5(t *te
 }
 
 func TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -857,6 +878,7 @@ func TestRollbackClaimAppendsCompensatingOpWhenOwnershipConfirmed_REQ_LNGHZN_S5(
 }
 
 func TestRollbackClaimSameWorkerSameSecondDistinctTokensPreventsClobber_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -896,6 +918,7 @@ func TestRollbackClaimSameWorkerSameSecondDistinctTokensPreventsClobber_REQ_LNGH
 }
 
 func TestClaimStillOwnedByReportsFalseAfterTransitionToInProgress_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -917,6 +940,7 @@ func TestClaimStillOwnedByReportsFalseAfterTransitionToInProgress_REQ_LNGHZN_S5_
 }
 
 func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededByTransition_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -945,6 +969,7 @@ func TestCreateWorktreeAndBranchLeavesPartialWorktreeInPlaceWhenClaimSupersededB
 }
 
 func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -979,6 +1004,7 @@ func TestClaimDoesNotCreateWorktreeWhenOverlapFails(t *testing.T) {
 }
 
 func TestClaimIgnoresNonTaskIssuesInOverlapCheck_REQ_LNGHZN_S10_T8(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1009,6 +1035,7 @@ func TestClaimIgnoresNonTaskIssuesInOverlapCheck_REQ_LNGHZN_S10_T8(t *testing.T)
 }
 
 func TestClaimStillBlocksOnOverlappingClaimedTask_REQ_LNGHZN_S10_T8(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1043,6 +1070,7 @@ func TestClaimStillBlocksOnOverlappingClaimedTask_REQ_LNGHZN_S10_T8(t *testing.T
 }
 
 func TestClaimLockPrecedesStoreAndWorktreeReads_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1077,6 +1105,7 @@ func TestClaimRejectsWorktreeBoundToDifferentTask(t *testing.T) {
 }
 
 func TestClaimRejectsWorktreeWithMismatchedBranch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
@@ -1088,6 +1117,7 @@ func TestClaimRejectsWorktreeWithMismatchedBranch(t *testing.T) {
 }
 
 func TestClaimAllowsWorktreeWithDetachedHEAD(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
@@ -1128,6 +1158,7 @@ func TestClaimBoundToOtherTaskErrorDoesNotSuggestMerged(t *testing.T) {
 }
 
 func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
@@ -1151,6 +1182,7 @@ func TestClaimReleasesClaimOnWorktreeSetupFailure(t *testing.T) {
 }
 
 func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1206,6 +1238,7 @@ func TestClaimReleasesPushesInDualBranchMode(t *testing.T) {
 }
 
 func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
@@ -1243,6 +1276,7 @@ func TestClaimRejectsUnboundDetachedWorktree(t *testing.T) {
 }
 
 func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	worktree1 := filepath.Join(repo, ".worktrees", "task-01")
@@ -1281,6 +1315,7 @@ func TestClaimDoesNotReleaseExistingClaimOnWorktreeRetryFailure(t *testing.T) {
 }
 
 func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1354,6 +1389,7 @@ func TestClaimRejectsForeignWorktree(t *testing.T) {
 }
 
 func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1410,6 +1446,7 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 }
 
 func TestClaimLegacyZeroTTLReplaysAs60Minutes_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1448,6 +1485,7 @@ func TestClaimLegacyZeroTTLReplaysAs60Minutes_REQ_CLAIMTTL(t *testing.T) {
 }
 
 func TestClaimCompensationRestoreVsRelease_REQ_ARCHIMP_S20_T4(t *testing.T) {
+	t.Parallel()
 	t.Run("restore live same-worker", func(t *testing.T) {
 		repo := setupRepoWithParentAndTask(t)
 		worktree1 := filepath.Join(repo, ".worktrees", "task-01")
@@ -1608,10 +1646,11 @@ func TestClaimCommand_NoFalsePositiveAgainstParentStory_REQ_TOPTIER_S17_T1(t *te
 }
 
 func TestClaimAutoProvisionsWorktreeAtDefaultRoot_REQ_LNGHZN_S5_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -1629,13 +1668,14 @@ func TestClaimAutoProvisionsWorktreeAtDefaultRoot_REQ_LNGHZN_S5_T4(t *testing.T)
 }
 
 func TestClaimProvisionExcludesManagedWorktrees_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 	excludeBefore, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
 	assert.NotContains(t, string(excludeBefore), ".worktrees/", "fixture must model an existing installation without the managed-worktree exclusion")
 
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claim.Execute())
@@ -1646,13 +1686,14 @@ func TestClaimProvisionExcludesManagedWorktrees_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestClaimRejectsRepoRelativeCustomDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(repo, "child")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 	excludeBefore, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
 
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
 	err = claim.Execute()
@@ -1668,13 +1709,14 @@ func TestClaimRejectsRepoRelativeCustomDestination_REQ_LNGHZN_S9_T1(t *testing.T
 }
 
 func TestClaimExternalCustomWorktreeDoesNotWriteSharedExclusion_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "#literal-worktree")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 	excludeBefore, err := os.ReadFile(excludePath)
 	require.NoError(t, err)
 
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
 	require.NoError(t, claim.Execute())
@@ -1687,6 +1729,7 @@ func TestClaimExternalCustomWorktreeDoesNotWriteSharedExclusion_REQ_LNGHZN_S9_T1
 }
 
 func TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	parent := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "parent", parent)
@@ -1720,6 +1763,7 @@ func TestClaimRejectsDestinationNestedInRegisteredWorktree_REQ_LNGHZN_S9_T1(t *t
 }
 
 func TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", worktreePath)
@@ -1729,7 +1773,7 @@ func TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5(t *
 	require.NoError(t, err)
 	assert.NotContains(t, string(excludeBefore), ".worktrees/", "fixture must model an older installation")
 
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claim.Execute())
@@ -1743,12 +1787,13 @@ func TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5(t *
 }
 
 func TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
 	require.NoError(t, os.Remove(excludePath))
 	require.NoError(t, os.Mkdir(excludePath, 0o700), "a directory at the exclusion-file path makes its write fail deterministically")
 
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	err := claim.Execute()
@@ -1766,6 +1811,7 @@ func TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestClaimWorktreeFailureRollsBackNewExclusions_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	wrapperDir := t.TempDir()
 	realGit, err := exec.LookPath("git")
@@ -1780,10 +1826,10 @@ done
 exec "$real_git" "$@"
 `, realGit)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
 	destination := filepath.Join(t.TempDir(), "child")
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
 	err = claim.Execute()
@@ -1803,10 +1849,11 @@ exec "$real_git" "$@"
 }
 
 func TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	first := newRootCmd()
+	first := testRootCmd(t)
 	first.SetOut(new(bytes.Buffer))
 	first.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, first.Execute())
@@ -1816,7 +1863,7 @@ func TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4
 	require.NoDirExists(t, worktreePath)
 	run(t, repo, "git", "rev-parse", "--verify", "refs/heads/task/task-01")
 
-	second := newRootCmd()
+	second := testRootCmd(t)
 	second.SetOut(new(bytes.Buffer))
 	second.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, second.Execute(),
@@ -1832,6 +1879,7 @@ func TestClaimDetachedCheckoutAvoidsBranchAlreadyCheckedOutRace_REQ_LNGHZN_S5_T4
 }
 
 func TestClaimFromFlagCreatesBranchFromParentWorktree_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
@@ -1841,7 +1889,7 @@ func TestClaimFromFlagCreatesBranchFromParentWorktree_REQ_LNGHZN_S9_T1(t *testin
 	parentTip := strings.TrimSpace(runGitOutput(t, parentPath, "rev-parse", "HEAD"))
 
 	childPath := filepath.Join(t.TempDir(), "child")
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", childPath, "--from", parentPath})
 	require.NoError(t, claim.Execute())
@@ -1912,6 +1960,7 @@ func TestCreateWorktreeAndBranchRejectsChangedValidatedSource_REQ_LNGHZN_S9_T1(t
 }
 
 func TestClaimFromFlagRollsBackWhenSourceDisappears_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "parent")
 	run(t, repo, "git", "worktree", "add", "-b", "feature-parent", parentPath)
@@ -1946,9 +1995,9 @@ fi
 exec "$real_git" "$@"
 `, realGit, countPath, parentPath, backupPath)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
 	err = claim.Execute()
@@ -1966,14 +2015,15 @@ exec "$real_git" "$@"
 }
 
 func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
-	create := newRootCmd()
+	create := testRootCmd(t)
 	create.SetOut(new(bytes.Buffer))
 	create.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"}))
 	require.NoError(t, create.Execute())
 
 	boundPath := filepath.Join(t.TempDir(), "bound")
-	bind := newRootCmd()
+	bind := testRootCmd(t)
 	bind.SetOut(new(bytes.Buffer))
 	bind.SetArgs([]string{"claim", "task-02", "--repo", repo, "--worktree", boundPath})
 	require.NoError(t, bind.Execute())
@@ -1982,7 +2032,7 @@ func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T)
 	bindingBefore, err := os.ReadFile(filepath.Join(boundGitDir, "armature-issue-id"))
 	require.NoError(t, err)
 
-	rejected := newRootCmd()
+	rejected := testRootCmd(t)
 	rejected.SetOut(new(bytes.Buffer))
 	rejected.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", boundPath, "--from", repo})
 	err = rejected.Execute()
@@ -1994,6 +2044,7 @@ func TestClaimFromFlagRejectsExistingWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T)
 }
 
 func TestClaimReusesPrunableCustomDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "custom-prunable")
 
@@ -2015,9 +2066,10 @@ func TestClaimReusesPrunableCustomDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
 }
 
 func TestClaimFromFlagRejectsUnresolvableFrom_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "child")
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", filepath.Join(repo, "missing")})
 	err := claim.Execute()
@@ -2029,12 +2081,13 @@ func TestClaimFromFlagRejectsUnresolvableFrom_REQ_LNGHZN_S9_T1(t *testing.T) {
 }
 
 func TestClaimFromFlagRejectsDetachedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	parentPath := filepath.Join(repo, "detached-parent")
 	run(t, repo, "git", "worktree", "add", "--detach", parentPath)
 	destination := filepath.Join(t.TempDir(), "child")
 
-	claim := newRootCmd()
+	claim := testRootCmd(t)
 	claim.SetOut(new(bytes.Buffer))
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
 	err := claim.Execute()
@@ -2052,6 +2105,7 @@ func TestClaimFromFlagRejectsDetachedSource_REQ_LNGHZN_S9_T1(t *testing.T) {
 }
 
 func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	t.Run("mismatched branch is preserved without claim side effects", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
 		parentPath := filepath.Join(repo, "parent")
@@ -2063,7 +2117,7 @@ func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *te
 		branchBefore := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "refs/heads/task/task-01"))
 		destination := filepath.Join(t.TempDir(), "child")
 
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
 		err := claim.Execute()
@@ -2085,7 +2139,7 @@ func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *te
 		run(t, repo, "git", "branch", "task/task-01", "HEAD")
 		sourceTip := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 		destination := filepath.Join(t.TempDir(), "child")
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", repo})
 		require.NoError(t, claim.Execute())
@@ -2094,6 +2148,7 @@ func TestClaimFromFlagRejectsMismatchedExistingTaskBranch_REQ_LNGHZN_S9_T1(t *te
 }
 
 func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	setup := func(t *testing.T) (string, string, string, string) {
 		t.Helper()
 		repo := setupRepoWithTask(t)
@@ -2121,7 +2176,7 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 		parentKey := deliverygate.ParentBranchConfigKey("task/task-01")
 		run(t, repo, "git", "config", parentKey, "other-parent")
 
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
 		err := claim.Execute()
@@ -2139,7 +2194,7 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 		staleBase := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "HEAD"))
 		run(t, repo, "git", "config", baseKey, staleBase)
 
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
 		require.NoError(t, claim.Execute())
@@ -2151,16 +2206,17 @@ func TestClaimFromFlagRejectsConflictingExistingProvenance_REQ_LNGHZN_S9_T1(t *t
 }
 
 func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
 
-	fresh := newRootCmd()
+	fresh := testRootCmd(t)
 	fresh.SetOut(new(bytes.Buffer))
 	fresh.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
 	require.NoError(t, fresh.Execute())
 	require.DirExists(t, canonicalPath)
 
-	existing := newRootCmd()
+	existing := testRootCmd(t)
 	existing.SetOut(new(bytes.Buffer))
 	existing.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
 	require.NoError(t, existing.Execute())
@@ -2170,7 +2226,7 @@ func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "task-01", strings.TrimSpace(string(binding)))
 
-	surplus := newRootCmd()
+	surplus := testRootCmd(t)
 	surplus.SetOut(new(bytes.Buffer))
 	surplus.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree=unused", "surplus"})
 	err = surplus.Execute()
@@ -2179,10 +2235,11 @@ func TestClaimWithoutFromFlagUnchanged_REQ_LNGHZN_S9_T1(t *testing.T) {
 }
 
 func TestClaimFromFlagRequiresExplicitNewWorktreePath_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	t.Run("existing canonical worktree remains unchanged", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
 		canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-		setup := newRootCmd()
+		setup := testRootCmd(t)
 		setup.SetOut(new(bytes.Buffer))
 		setup.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree"})
 		require.NoError(t, setup.Execute())
@@ -2194,7 +2251,7 @@ func TestClaimFromFlagRequiresExplicitNewWorktreePath_REQ_LNGHZN_S9_T1(t *testin
 		baseBefore, err := os.ReadFile(filepath.Join(gitDir, "armature-base-commit"))
 		require.NoError(t, err)
 
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", "--from", repo})
 		err = claim.Execute()
@@ -2212,7 +2269,7 @@ func TestClaimFromFlagRequiresExplicitNewWorktreePath_REQ_LNGHZN_S9_T1(t *testin
 	t.Run("missing canonical worktree is not provisioned", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
 		canonicalPath := filepath.Join(repo, ".worktrees", "task-01")
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", "--from", repo})
 		err := claim.Execute()
@@ -2242,6 +2299,7 @@ func injectFutureSameWorkerClaim(t *testing.T, ctx *config.Context, issueID, imp
 }
 
 func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIMORD_W12(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -2264,6 +2322,7 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestamp_REQ_CLAIM
 }
 
 func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestampHuman_REQ_CLAIMORD_W12(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
@@ -2281,6 +2340,7 @@ func TestClaimCommand_LaterCommitBeatsEarlierSameWorkerFutureTimestampHuman_REQ_
 }
 
 func TestClaimCommand_DifferentWorkerLostRaceJSONFormat_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
@@ -2299,6 +2359,7 @@ func TestClaimCommand_DifferentWorkerLostRaceJSONFormat_REQ_LNGHZN_S5_T9(t *test
 }
 
 func TestClaimCommand_OrdinaryWinStillProvisionsWorktree_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithParentAndTask(t)
 
 	claimOut, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree", "--format", "json")
@@ -2310,6 +2371,7 @@ func TestClaimCommand_OrdinaryWinStillProvisionsWorktree_REQ_LNGHZN_S5_T9(t *tes
 }
 
 func TestDefaultTTLGovernsClaim_REQ_LNGHZN_S7_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	cfg := config.DefaultConfig("go")
@@ -2327,6 +2389,7 @@ func TestDefaultTTLGovernsClaim_REQ_LNGHZN_S7_T1(t *testing.T) {
 }
 
 func TestClaimFallsBackToBuiltInTTLWhenConfigAbsent_REQ_LNGHZN_S7_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	cfg := config.Config{ProjectType: "go"}
@@ -2343,6 +2406,7 @@ func TestClaimFallsBackToBuiltInTTLWhenConfigAbsent_REQ_LNGHZN_S7_T1(t *testing.
 }
 
 func TestClaimExplicitTTLOverridesConfigDefault_REQ_LNGHZN_S7_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	cfg := config.DefaultConfig("go")
@@ -2360,6 +2424,7 @@ func TestClaimExplicitTTLOverridesConfigDefault_REQ_LNGHZN_S7_T1(t *testing.T) {
 }
 
 func TestTokenBudgetHonoredByRenderContext_REQ_LNGHZN_S7_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	cfg := config.DefaultConfig("go")
@@ -2377,6 +2442,7 @@ func TestTokenBudgetHonoredByRenderContext_REQ_LNGHZN_S7_T1(t *testing.T) {
 }
 
 func TestRenderContextFallsBackToBuiltInBudgetWhenConfigAbsent_REQ_LNGHZN_S7_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	cfg := config.Config{ProjectType: "go"}
@@ -2649,6 +2715,7 @@ func claimOpsFor(t *testing.T, repo, issueID string) []ops.Op {
 }
 
 func TestClaimBlockedPrintsAllReasonsAndCreatesNoWorktreeOrClaimOp_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2676,6 +2743,7 @@ func TestClaimBlockedPrintsAllReasonsAndCreatesNoWorktreeOrClaimOp_REQ_ARCHIMP_S
 }
 
 func TestClaimForceWritesReciprocalNotesInOrder_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2732,6 +2800,7 @@ func TestClaimForceWritesReciprocalNotesInOrder_REQ_ARCHIMP_S20_T2(t *testing.T)
 }
 
 func TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() == 0 {
 		t.Skip("running as root: file permissions do not block writes")
 	}
@@ -2761,6 +2830,7 @@ func TestClaimNoteWriteFailureDoesNotClaim_REQ_ARCHIMP_S20_T2(t *testing.T) {
 }
 
 func TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -2797,6 +2867,7 @@ func TestClaimSameWorkerDismissalUnderForce_REQ_ARCHIMP_S20_T2(t *testing.T) {
 }
 
 func TestClaimRefusesAmbiguousBindingWhenDestExists_REQ_ARCHIMP_S20(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	canonical := filepath.Join(repo, ".worktrees", "task-01")
@@ -2824,10 +2895,11 @@ func TestClaimRefusesAmbiguousBindingWhenDestExists_REQ_ARCHIMP_S20(t *testing.T
 }
 
 func TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6(t *testing.T) {
+	t.Parallel()
 	t.Run("refuse", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
 		destination := filepath.Join(repo, "child")
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
 		err := claim.Execute()
@@ -2846,7 +2918,7 @@ func TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6(t *testing.T) {
 		baseSHA := strings.TrimSpace(runGitOutput(t, legacyPath, "rev-parse", "HEAD"))
 		require.NoError(t, writeGitDirFileIfAbsent(legacyPath, deliverygate.BaseCommitFileName, baseSHA))
 
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, claim.Execute())
@@ -2859,7 +2931,7 @@ func TestClaimUsesPlanProvision_REQ_ARCHIMP_S20_T6(t *testing.T) {
 
 	t.Run("fresh", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
-		claim := newRootCmd()
+		claim := testRootCmd(t)
 		claim.SetOut(new(bytes.Buffer))
 		claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, claim.Execute())

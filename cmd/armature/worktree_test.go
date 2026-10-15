@@ -129,6 +129,7 @@ func listJSON(t *testing.T, repo string) map[string][]string {
 }
 
 func TestWorktreeListClassifiesEachClass_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	fx := setupWorktreeReconcileFixture(t)
 
 	res := listJSON(t, fx.repo)
@@ -182,6 +183,7 @@ func TestContainsPath_TreatsSymlinkAndResolvedAsSame_REQ_LNGHZN_S5_T2(t *testing
 }
 
 func TestWorktreeListUnrecognizedMatchesSymlinkedRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	realRepo := gittest.InitWithOrigin(t).Dir
 	run(t, realRepo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, realRepo)
@@ -203,6 +205,7 @@ func TestWorktreeListUnrecognizedMatchesSymlinkedRepoPath_REQ_LNGHZN_S5_T2(t *te
 }
 
 func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	fx := setupWorktreeReconcileFixture(t)
 
 	_, err := os.Stat(fx.gcPath)
@@ -226,6 +229,7 @@ func TestWorktreeGCRemovesMergedWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "child")
 
@@ -253,6 +257,7 @@ func TestWorktreeLifecycleIncludesExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *t
 }
 
 func TestWorktreeGCRemovesArmatureOwnedCustomExclusionAndAllowsReuse_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "custom-reuse")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
@@ -285,6 +290,7 @@ func TestWorktreeGCRemovesArmatureOwnedCustomExclusionAndAllowsReuse_REQ_LNGHZN_
 }
 
 func TestWorktreeGCPreservesPreExistingCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "custom-user-exclude")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
@@ -310,6 +316,7 @@ func TestWorktreeGCPreservesPreExistingCustomExclusion_REQ_LNGHZN_S9_T1(t *testi
 }
 
 func TestWorktreeGCPreservesDirtyExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "custom-dirty")
 
@@ -334,6 +341,7 @@ func TestWorktreeGCPreservesDirtyExplicitClaimDestination_REQ_LNGHZN_S9_T1(t *te
 }
 
 func TestWorktreeListReportsMissingCustomGhostWithCloneLocalEvidence_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	for _, destinationFor := range []struct {
 		name string
 		path func(repo string) string
@@ -344,7 +352,7 @@ func TestWorktreeListReportsMissingCustomGhostWithCloneLocalEvidence_REQ_LNGHZN_
 		t.Run(destinationFor.name, func(t *testing.T) {
 			repo := setupRepoWithTask(t)
 			destination := destinationFor.path(repo)
-			claim := newRootCmd()
+			claim := testRootCmd(t)
 			claim.SetOut(new(bytes.Buffer))
 			claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination})
 			require.NoError(t, claim.Execute())
@@ -358,6 +366,7 @@ func TestWorktreeListReportsMissingCustomGhostWithCloneLocalEvidence_REQ_LNGHZN_
 }
 
 func TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		prepare func(t *testing.T, path string)
@@ -404,6 +413,7 @@ func TestWorktreeGCPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -436,6 +446,7 @@ func TestWorktreeGCDuplicateMarkerRemovesRecordedPathOnly_REQ_LNGHZN_S5_T2(t *te
 }
 
 func TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -456,6 +467,7 @@ func TestWorktreeListTreatsPrunableRegistrationAsMissing_REQ_LNGHZN_S5_T2(t *tes
 }
 
 func TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -488,6 +500,7 @@ func TestWorktreeGCRemovesDetachedTerminalWorktree_REQ_LNGHZN_S5_T2(t *testing.T
 }
 
 func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	fx := setupWorktreeReconcileFixture(t)
 
 	out, err := runTrls(t, fx.repo, "worktree", "gc", "--dry-run", "--format", "json")
@@ -506,6 +519,7 @@ func TestWorktreeGCDryRunKeepsWorktree_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestWorktreeGCDryRunWithNoCandidatesSucceeds_REQ_LNGHZN_S5_T10(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -541,6 +555,7 @@ func setupAmbiguousGCRepo(t *testing.T) (string, string) {
 }
 
 func TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10(t *testing.T) {
+	t.Parallel()
 	repo, issueID := setupAmbiguousGCRepo(t)
 
 	out, dryErr := runTrls(t, repo, "worktree", "gc", "--dry-run", "--format", "json")
@@ -557,6 +572,7 @@ func TestWorktreeGCDryRunReportsAmbiguous_REQ_LNGHZN_S5_T10(t *testing.T) {
 }
 
 func TestWorktreeListHumanFormat_REQ_LNGHZN_S5_T2(t *testing.T) {
+	t.Parallel()
 	fx := setupWorktreeReconcileFixture(t)
 
 	out, err := runTrls(t, fx.repo, "worktree", "list", "--format", "human")
@@ -577,6 +593,7 @@ func TestManagedWorktreeRoots_RelativeRepoPath_REQ_LNGHZN_S5_T2(t *testing.T) {
 }
 
 func TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -599,6 +616,7 @@ func TestGoWorkMitigationApplied_REQ_LNGHZN_S5_T3(t *testing.T) {
 }
 
 func TestWorktreeListHumanFormatReportsAmbiguous_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo, issueID := setupAmbiguousGCRepo(t)
 
 	out, err := runTrls(t, repo, "worktree", "list", "--format", "human")
@@ -608,6 +626,7 @@ func TestWorktreeListHumanFormatReportsAmbiguous_REQ_LNGHZN_S9_T1(t *testing.T) 
 }
 
 func TestWorktreeGCHumanFormatReportsFailure_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "custom-dirty-human")
 

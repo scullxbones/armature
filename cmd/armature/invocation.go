@@ -233,8 +233,16 @@ func environFrom(cmd *cobra.Command) []string {
 	return os.Environ()
 }
 
+func gitWith(env Env, repoPath string) *adapters.Client {
+	c := adapters.New(repoPath)
+	if e, ok := env.(interface{ Environ() []string }); ok {
+		return c.WithEnviron(e.Environ())
+	}
+	return c
+}
+
 func gitAt(cmd *cobra.Command, repoPath string) *adapters.Client {
-	return adapters.New(repoPath).WithEnviron(environFrom(cmd))
+	return gitWith(envFrom(cmd), repoPath)
 }
 
 func gitIsolatedAt(cmd *cobra.Command, repoPath string) *adapters.Client {

@@ -14,11 +14,12 @@ import (
 )
 
 func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)
-	bootstrapCmd := newRootCmd()
+	bootstrapCmd := testRootCmd(t)
 	bootstrapCmd.SetOut(bootstrapBuf)
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
@@ -37,7 +38,7 @@ func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
 	})
 
 	doctorBuf := new(bytes.Buffer)
-	doctorCmd := newRootCmd()
+	doctorCmd := testRootCmd(t)
 	doctorCmd.SetOut(doctorBuf)
 	doctorCmd.SetArgs([]string{"doctor", "--repo", repo})
 	swallowErr(doctorCmd.Execute())
@@ -48,6 +49,7 @@ func TestDoctorModernRepoDoesNotLeakStateDirToCWD(t *testing.T) {
 }
 
 func TestDoctorLegacyRepoEmitsDiagnostic(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -62,11 +64,12 @@ func TestDoctorLegacyRepoEmitsDiagnostic(t *testing.T) {
 }
 
 func TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)
-	bootstrapCmd := newRootCmd()
+	bootstrapCmd := testRootCmd(t)
 	bootstrapCmd.SetOut(bootstrapBuf)
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
@@ -81,11 +84,12 @@ func TestDoctorModernRepoUnknownConfigKeyDoesNotUseLegacyFallback(t *testing.T) 
 }
 
 func TestDoctorFixReportsOutOfRangeConfig(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapBuf := new(bytes.Buffer)
-	bootstrapCmd := newRootCmd()
+	bootstrapCmd := testRootCmd(t)
 	bootstrapCmd.SetOut(bootstrapBuf)
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
@@ -107,6 +111,7 @@ func TestDoctorFixReportsOutOfRangeConfig(t *testing.T) {
 }
 
 func TestDoctorAgentEnvelope_AOC_REQ_TOPTIER_S15_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	agentOut, err := runTrls(t, repo, "doctor", "--format", "agent")
@@ -153,6 +158,7 @@ func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing
 }
 
 func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {
+	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -187,6 +193,7 @@ func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {
 }
 
 func TestDoctorExplainFlag_RendersGuidedNarrative_REQ_TOPTIER_S15_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	plain, err := runTrls(t, repo, "doctor", "--format", "human")
@@ -203,6 +210,7 @@ func TestDoctorExplainFlag_RendersGuidedNarrative_REQ_TOPTIER_S15_T1(t *testing.
 }
 
 func TestDoctorExplainFlag_AgentFormatAddsStructuredFields_REQ_TOPTIER_S15_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "doctor", "--explain", "--format", "agent")

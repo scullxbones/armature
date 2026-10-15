@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,8 @@ import (
 )
 
 func TestHarnessHookCommandIsRegistered(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	cmd, _, err := root.Find([]string{"harness-hook"})
 
@@ -35,9 +37,10 @@ func TestHarnessHookCommandIsRegistered(t *testing.T) {
 }
 
 func TestHarnessHookPassesThroughWithoutTaskID(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetIn(strings.NewReader(`{}`))
 	out := new(bytes.Buffer)
 	cmd.SetOut(out)
@@ -50,21 +53,22 @@ func TestHarnessHookPassesThroughWithoutTaskID(t *testing.T) {
 }
 
 func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
@@ -78,21 +82,22 @@ func TestHarnessHookBlocksOutOfScopeEdit(t *testing.T) {
 }
 
 func TestHarnessHookAllowsInScopeEdit(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	cmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll // one-line Codex PreToolUse fixture
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
@@ -105,21 +110,22 @@ func TestHarnessHookAllowsInScopeEdit(t *testing.T) {
 }
 
 func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["human review only"]`)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	cmd.SetIn(strings.NewReader(`{"hook_event_name":"Stop","tool_name":"","tool_input":{}}`))
 	cmd.SetOut(&out)
 	cmd.SetErr(new(bytes.Buffer))
@@ -133,6 +139,7 @@ func TestHarnessHookBlocksStopWhenVerificationFails(t *testing.T) {
 }
 
 func TestAdapterExitError(t *testing.T) {
+	t.Parallel()
 	err := adapterExitError{code: 42}
 	assert.Equal(t, 42, err.code, "code should be preserved on the struct")
 
@@ -145,6 +152,7 @@ func TestAdapterExitError(t *testing.T) {
 }
 
 func TestHarnessHookCmdSilencesErrors(t *testing.T) {
+	t.Parallel()
 	cmd := newHarnessHookCmd()
 	assert.True(t, cmd.SilenceErrors, "harness-hook command must have SilenceErrors: true to suppress cobra error output")
 }
@@ -156,7 +164,7 @@ func TestHarnessHookIsSoleProtocolOutput_REQ_AOC_S1_T2(t *testing.T) {
 	require.Equal(t, output.ChannelProtocolOutput, output.Classify(cmd.Annotations),
 		"harness-hook must declare itself Protocol Output at the cobra constructor")
 
-	root := newRootCmd()
+	root := testRootCmd(t)
 	var protocol []string
 	var walk func(*cobra.Command)
 	walk = func(c *cobra.Command) {
@@ -173,6 +181,7 @@ func TestHarnessHookIsSoleProtocolOutput_REQ_AOC_S1_T2(t *testing.T) {
 }
 
 func TestApplyRunResult_PropagatesExitCode(t *testing.T) {
+	t.Parallel()
 	result := harnesshook.RunResult{
 		Output:   []byte(`{"decision":"block"}`),
 		ExitCode: 2,
@@ -187,6 +196,7 @@ func TestApplyRunResult_PropagatesExitCode(t *testing.T) {
 }
 
 func TestApplyRunResult_ZeroExitCode(t *testing.T) {
+	t.Parallel()
 	result := harnesshook.RunResult{
 		Output:   []byte(`{"decision":"approve"}`),
 		ExitCode: 0,
@@ -204,37 +214,40 @@ func TestResolveIssueBinding_FromFile(t *testing.T) {
 	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
 	require.NoError(t, err)
 
-	taskID := issueBindingFromGitDirOrEnv(gitDir)
+	taskID := issueBindingFromGitDirOrEnvLookup(gitDir, testEnv(t))
 
 	assert.Equal(t, "task-from-file", taskID)
 }
 
 func TestResolveIssueBinding_FromEnv(t *testing.T) {
+	t.Parallel()
 	gitDir := t.TempDir()
-	t.Setenv("ARMATURE_ISSUE_ID", "task-from-env")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-from-env")
 
-	taskID := issueBindingFromGitDirOrEnv(gitDir)
+	taskID := issueBindingFromGitDirOrEnvLookup(gitDir, testEnv(t))
 
 	assert.Equal(t, "task-from-env", taskID)
 }
 
 func TestResolveIssueBinding_Empty(t *testing.T) {
+	t.Parallel()
 	gitDir := t.TempDir()
-	t.Setenv("ARMATURE_ISSUE_ID", "")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "")
 
-	taskID := issueBindingFromGitDirOrEnv(gitDir)
+	taskID := issueBindingFromGitDirOrEnvLookup(gitDir, testEnv(t))
 
 	assert.Equal(t, "", taskID)
 }
 
 func TestResolveIssueBinding_FilePreferredOverEnv(t *testing.T) {
+	t.Parallel()
 	gitDir := t.TempDir()
 	taskIDPath := filepath.Join(gitDir, "armature-issue-id")
 	err := os.WriteFile(taskIDPath, []byte("task-from-file"), 0o644)
 	require.NoError(t, err)
-	t.Setenv("ARMATURE_ISSUE_ID", "task-from-env")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-from-env")
 
-	taskID := issueBindingFromGitDirOrEnv(gitDir)
+	taskID := issueBindingFromGitDirOrEnvLookup(gitDir, testEnv(t))
 
 	assert.Equal(t, "task-from-file", taskID)
 }
@@ -246,17 +259,18 @@ func TestResolveIssueBinding_FallsBackToLegacyTaskIDFile(t *testing.T) {
 	err := os.WriteFile(taskIDPath, []byte("legacy-task-id"), 0o644)
 	require.NoError(t, err)
 
-	taskID := issueBindingFromGitDirOrEnv(gitDir)
+	taskID := issueBindingFromGitDirOrEnvLookup(gitDir, testEnv(t))
 
 	assert.Equal(t, "legacy-task-id", taskID)
 }
 
 func TestHarnessHookUntrustedPathResolvedGitDir_FallsBackToSessionBinding(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -269,11 +283,11 @@ func TestHarnessHookUntrustedPathResolvedGitDir_FallsBackToSessionBinding(t *tes
 	attackerFile := filepath.Join(attackerDir, "some", "file.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(attackerFile), 0o755))
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out, errOut bytes.Buffer
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	payload := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":%q}]}}`, attackerFile)
 	cmd.SetIn(strings.NewReader(payload))
 	cmd.SetOut(&out)
@@ -346,6 +360,7 @@ func TestLogPassThrough_Append(t *testing.T) {
 }
 
 func TestIsBindingStale_Claimed(t *testing.T) {
+	t.Parallel()
 	snap := &snapshot.Snapshot{
 		Issues: map[string]*materialize.Issue{
 			"task-01": {
@@ -364,6 +379,7 @@ func TestIsBindingStale_Claimed(t *testing.T) {
 }
 
 func TestIsBindingStale_InProgress(t *testing.T) {
+	t.Parallel()
 	snap := &snapshot.Snapshot{
 		Issues: map[string]*materialize.Issue{
 			"task-01": {
@@ -382,6 +398,7 @@ func TestIsBindingStale_InProgress(t *testing.T) {
 }
 
 func TestIsBindingStale_Done(t *testing.T) {
+	t.Parallel()
 	snap := &snapshot.Snapshot{
 		Issues: map[string]*materialize.Issue{
 			"task-01": {
@@ -397,6 +414,7 @@ func TestIsBindingStale_Done(t *testing.T) {
 }
 
 func TestIsBindingStale_Missing(t *testing.T) {
+	t.Parallel()
 	snap := &snapshot.Snapshot{
 		Issues: make(map[string]*materialize.Issue),
 	}
@@ -407,6 +425,7 @@ func TestIsBindingStale_Missing(t *testing.T) {
 }
 
 func TestIsBindingStale_Open(t *testing.T) {
+	t.Parallel()
 	snap := &snapshot.Snapshot{
 		Issues: map[string]*materialize.Issue{
 			"task-01": {
@@ -422,6 +441,7 @@ func TestIsBindingStale_Open(t *testing.T) {
 }
 
 func TestIsBindingStale_ClaimedWithExpiredTTL(t *testing.T) {
+	t.Parallel()
 	now := int64(2000)
 	claimedAt := int64(1000)
 	lastHeartbeat := int64(1100)
@@ -446,6 +466,7 @@ func TestIsBindingStale_ClaimedWithExpiredTTL(t *testing.T) {
 }
 
 func TestIsBindingStale_ClaimedWithinTTLWindow(t *testing.T) {
+	t.Parallel()
 	snap := &snapshot.Snapshot{
 		Issues: map[string]*materialize.Issue{
 			"task-01": {
@@ -465,12 +486,13 @@ func TestIsBindingStale_ClaimedWithinTTLWindow(t *testing.T) {
 }
 
 func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -485,11 +507,11 @@ func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
 	taskIDFile := filepath.Join(actualGitDir, "armature-issue-id")
 	require.FileExists(t, taskIDFile, "armature-issue-id must exist in worktree git dir")
 
-	t.Setenv("ARMATURE_ISSUE_ID", "")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/harnesshook/evaluator.go"}]}}`)) //nolint:lll // one-line Codex PreToolUse fixture
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -502,12 +524,13 @@ func TestHarnessHookReadsBindingFromFileWithoutEnv(t *testing.T) {
 }
 
 func TestDecisionLoggedToResolvedWorktree_REQ_HOOKBIND_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	claimedWorktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = claimCmd.Execute()
@@ -521,7 +544,7 @@ func TestDecisionLoggedToResolvedWorktree_REQ_HOOKBIND_T3(t *testing.T) {
 		actualGitDir = filepath.Join(claimedWorktreeDir, actualGitDir)
 	}
 
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	filePath := filepath.Join(claimedWorktreeDir, "internal/harnesshook/hook.go")
 	fileDir := filepath.Dir(filePath)
@@ -529,7 +552,7 @@ func TestDecisionLoggedToResolvedWorktree_REQ_HOOKBIND_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"%s"}]}}`, filePath)))
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -556,18 +579,19 @@ func TestDecisionLoggedToResolvedWorktree_REQ_HOOKBIND_T3(t *testing.T) {
 }
 
 func TestUnboundFileWriteLogsViolation_REQ_HOOKBIND_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_ISSUE_ID", "")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	targetPath := filepath.Join(repo, "internal", "harnesshook", "hook.go")
 
 	var out, errOut bytes.Buffer
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetIn(strings.NewReader(fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"%s"}]}}`, targetPath)))
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
@@ -587,17 +611,18 @@ func TestUnboundFileWriteLogsViolation_REQ_HOOKBIND_T3(t *testing.T) {
 }
 
 func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs(enrichTestCLIArgs([]string{
 		"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
@@ -605,14 +630,14 @@ func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.
 	}))
 	require.NoError(t, cmd.Execute())
 
-	t.Setenv("ARMATURE_ISSUE_ID", "")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	outOfScopePath := filepath.Join(worktreeDir, "cmd", "armature", "main.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(outOfScopePath), 0o755))
 
 	var out, errOut bytes.Buffer
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	payload := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":%q}]}}`, outOfScopePath)
 	cmd.SetIn(strings.NewReader(payload))
 	cmd.SetOut(&out)
@@ -636,17 +661,18 @@ func TestStaleBindingPassThroughLogsScopeViolation_REQ_TOPTIER_S5_T2(t *testing.
 }
 
 func TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER_S5_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs(enrichTestCLIArgs([]string{
 		"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
@@ -654,14 +680,14 @@ func TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER
 	}))
 	require.NoError(t, cmd.Execute())
 
-	t.Setenv("ARMATURE_ISSUE_ID", "")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	subCwd := filepath.Join(worktreeDir, "docs")
 	require.NoError(t, os.MkdirAll(filepath.Join(subCwd, "internal"), 0o755))
 
 	var out, errOut bytes.Buffer
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	payload := fmt.Sprintf(`{"hook_event_name":"PreToolUse","cwd":%q,"tool_name":"apply_patch","tool_input":{"changes":[{"path":"internal/foo.go"}]}}`, subCwd)
 	cmd.SetIn(strings.NewReader(payload))
 	cmd.SetOut(&out)
@@ -685,11 +711,12 @@ func TestStaleBindingPassThroughScopeViolation_RelativePathBelowRoot_REQ_TOPTIER
 }
 
 func TestResolverErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -706,11 +733,11 @@ func TestResolverErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out, errOut bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	jsonInput := `{"hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
 		`"tool_input":{"changes":[{"path":"internal/harnesshook/hook.go"}]}}`
 	hookCmd.SetIn(strings.NewReader(jsonInput))
@@ -732,12 +759,13 @@ func TestResolverErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 }
 
 func TestFailOpenOnEventDecodeError_REQ_HOOKBIND_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out, errOut bytes.Buffer
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetIn(strings.NewReader(`{invalid json`))
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
@@ -760,6 +788,7 @@ func TestFailOpenOnEventDecodeError_REQ_HOOKBIND_T3(t *testing.T) {
 }
 
 func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("chmod 0o000 has no effect for the root user; cannot exercise unreadable-dir fail-open this way")
 	}
@@ -767,14 +796,14 @@ func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
 	require.NoError(t, err)
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	require.DirExists(t, opsDir, "opsDir should exist")
@@ -786,7 +815,7 @@ func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 	})
 
 	var out, errOut bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	jsonInput := `{"hook_event_name":"PreToolUse","tool_name":"apply_patch",` +
 		`"tool_input":{"changes":[{"path":"internal/harnesshook/hook.go"}]}}`
 	hookCmd.SetIn(strings.NewReader(jsonInput))
@@ -811,12 +840,13 @@ func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 }
 
 func TestHarnessHookCapturesActivityForBashPostToolUse_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -830,11 +860,11 @@ func TestHarnessHookCapturesActivityForBashPostToolUse_REQ_EXECEV_T1(t *testing.
 		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 	}
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
@@ -858,6 +888,7 @@ func TestHarnessHookCapturesActivityForBashPostToolUse_REQ_EXECEV_T1(t *testing.
 }
 
 func TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
 		platform string
@@ -874,7 +905,7 @@ func TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2(t *testin
 			require.NoError(t, err)
 
 			worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-			cmd := newRootCmd()
+			cmd := testRootCmd(t)
 			cmd.SetOut(new(bytes.Buffer))
 			cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 			err = cmd.Execute()
@@ -888,11 +919,11 @@ func TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2(t *testin
 				actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 			}
 
-			t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-			t.Setenv("ARMATURE_HOOK_PLATFORM", tc.platform)
+			setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+			setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", tc.platform)
 
 			var out bytes.Buffer
-			hookCmd := newRootCmd()
+			hookCmd := testRootCmd(t)
 			payload := fmt.Sprintf(
 				`{"hook_event_name":"PostToolUse","tool_name":%q,"tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`,
 				tc.tool)
@@ -913,12 +944,13 @@ func TestHarnessHookCapturesActivityForNonBashShellTools_REQ_EXECEV_T2(t *testin
 }
 
 func TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -932,13 +964,13 @@ func TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1(t *testing.T) 
 		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 	}
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	largeOutput := strings.Repeat("x", 3000)
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	payload := fmt.Sprintf(
 		`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":%q}}`,
 		largeOutput)
@@ -959,12 +991,13 @@ func TestHarnessHookActivityLogTruncatesLargeOutput_REQ_EXECEV_T1(t *testing.T) 
 }
 
 func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -982,11 +1015,11 @@ func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T
 		"config", "--local", "--bool", "armature.disable-activity-logging", "true")
 	require.NoError(t, killSwitchCmd.Run())
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
@@ -1003,6 +1036,7 @@ func TestHarnessHookActivityKillSwitchDisablesCapture_REQ_EXECEV_T1(t *testing.T
 }
 
 func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("chmod 0o000 has no effect for the root user; cannot exercise write-error fail-open this way")
 	}
@@ -1012,7 +1046,7 @@ func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -1032,11 +1066,11 @@ func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
 		swallowErr(os.Chmod(actualGitDir, 0o755)) //nolint:gosec // G703: restore test git-dir mode after read-only chmod
 	})
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out, errOut bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	payload := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo test"},"tool_response":{"exit_code":0,"output":"test output\n"}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
@@ -1049,12 +1083,13 @@ func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
 }
 
 func TestHarnessHookNoActivityForNonBashTools_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -1068,11 +1103,11 @@ func TestHarnessHookNoActivityForNonBashTools_REQ_EXECEV_T1(t *testing.T) {
 		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 	}
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	payload := `{"hook_event_name":"PostToolUse","tool_name":"Edit",` +
 		`"tool_input":{"file_path":"internal/harnesshook/hook.go"},"tool_response":{"exit_code":0,"output":""}}`
 	hookCmd.SetIn(strings.NewReader(payload))
@@ -1090,12 +1125,13 @@ func TestHarnessHookNoActivityForNonBashTools_REQ_EXECEV_T1(t *testing.T) {
 }
 
 func TestHarnessHookNoActivityForPreToolUse_REQ_EXECEV_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	err = cmd.Execute()
@@ -1109,11 +1145,11 @@ func TestHarnessHookNoActivityForPreToolUse_REQ_EXECEV_T1(t *testing.T) {
 		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 	}
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	payload := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo test"}}`
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(&out)
@@ -1130,28 +1166,30 @@ func TestHarnessHookNoActivityForPreToolUse_REQ_EXECEV_T1(t *testing.T) {
 }
 
 func TestHeartbeatRateLimitStateRoundTrip(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
 	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
 	issueID := "task-round-trip"
-	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(workerID, issueID))) }()
 
-	assert.True(t, readHeartbeatRateLimitState(workerID, issueID).IsZero())
+	assert.True(t, readHeartbeatRateLimitStateAt(tempDir, workerID, issueID).IsZero())
 
 	now := time.Now().Truncate(time.Second)
-	require.NoError(t, writeHeartbeatRateLimitState(workerID, issueID, now))
+	require.NoError(t, writeHeartbeatRateLimitStateAt(tempDir, workerID, issueID, now))
 
-	got := readHeartbeatRateLimitState(workerID, issueID)
+	got := readHeartbeatRateLimitStateAt(tempDir, workerID, issueID)
 	assert.Equal(t, now.Unix(), got.Unix())
 }
 
 func TestHeartbeatRateLimitStateReadMalformedFileReturnsZero(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
 	workerID := fmt.Sprintf("test-worker-%d", time.Now().UnixNano())
 	issueID := "task-malformed"
-	stateFile := rateLimitStateFilePath(workerID, issueID)
-	defer func() { swallowErr(os.Remove(stateFile)) }()
+	stateFile := rateLimitStateFilePathAt(tempDir, workerID, issueID)
 
 	require.NoError(t, os.WriteFile(stateFile, []byte("not json"), 0o600))
 
-	assert.True(t, readHeartbeatRateLimitState(workerID, issueID).IsZero())
+	assert.True(t, readHeartbeatRateLimitStateAt(tempDir, workerID, issueID).IsZero())
 }
 
 func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
@@ -1163,13 +1201,13 @@ func TestTryEmitHeartbeatFailsOpenWhenWorkerUnset(t *testing.T) {
 
 	issuesDir := filepath.Join(repo, ".armature")
 	assert.NotPanics(t, func() {
-		tryEmitHeartbeat(repo, issuesDir, "", "task-emit-04", harnesshook.EventPreToolUse)
+		tryEmitHeartbeatAt(repo, issuesDir, "", "task-emit-04", harnesshook.EventPreToolUse, testEnv(t), t.TempDir(), io.Discard)
 	})
 }
 
 func heartbeatOpsForWorker(t *testing.T, repo, workerID string) []ops.Op {
 	t.Helper()
-	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerID(workerID))
+	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerIDEnv(workerID, testEnv(t)))
 	loggedOps, err := ops.ReadLog(logPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -1188,7 +1226,7 @@ func heartbeatOpsForWorker(t *testing.T, repo, workerID string) []ops.Op {
 
 func backdateAllOps(t *testing.T, repo, workerID string, delta time.Duration) {
 	t.Helper()
-	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerID(workerID))
+	logPath := opsLogPath(filepath.Join(repo, ".armature"), slottedWorkerIDEnv(workerID, testEnv(t)))
 	loggedOps, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
 
@@ -1200,22 +1238,22 @@ func backdateAllOps(t *testing.T, repo, workerID string, delta time.Duration) {
 }
 
 func TestHookEmitsRateLimitedHeartbeat_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(workerID, "task-01"))) }()
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 	payload := `{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`
 
 	for i := 0; i < 2; i++ {
-		hookCmd := newRootCmd()
+		hookCmd := testRootCmd(t)
 		hookCmd.SetIn(strings.NewReader(payload))
 		hookCmd.SetOut(new(bytes.Buffer))
 		hookCmd.SetErr(new(bytes.Buffer))
@@ -1229,36 +1267,36 @@ func TestHookEmitsRateLimitedHeartbeat_REQ_LNGHZN_S3_T1(t *testing.T) {
 }
 
 func TestHookEmitsHeartbeatMatchingSlottedClaimant_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
-	t.Setenv("ARM_LOG_SLOT", "slot-1")
+	setCLIEnv(t, "ARM_LOG_SLOT", "slot-1")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(slottedWorkerID(workerID), "task-01"))) }()
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 	payload := `{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`
 
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(payload))
 	hookCmd.SetOut(new(bytes.Buffer))
 	hookCmd.SetErr(new(bytes.Buffer))
 	hookCmd.SetArgs([]string{"harness-hook", "--repo", repo})
 	require.NoError(t, hookCmd.Execute())
 
-	slottedID := slottedWorkerID(workerID)
+	slottedID := slottedWorkerIDEnv(workerID, testEnv(t))
 	heartbeats := heartbeatOpsForWorker(t, repo, workerID)
 	require.Len(t, heartbeats, 1)
 	assert.Equal(t, slottedID, heartbeats[0].WorkerID,
 		"heartbeat op.WorkerID must match the slotted identity recorded as ClaimedBy, or applyHeartbeat silently ignores it")
 
-	materializeCmd := newRootCmd()
+	materializeCmd := testRootCmd(t)
 	materializeCmd.SetOut(new(bytes.Buffer))
 	materializeCmd.SetArgs([]string{"materialize", "--repo", repo})
 	require.NoError(t, materializeCmd.Execute())
@@ -1274,11 +1312,12 @@ func TestHookEmitsHeartbeatMatchingSlottedClaimant_REQ_LNGHZN_S3_T1(t *testing.T
 }
 
 func TestHookSkipsHeartbeatWhenUnbound_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
-	t.Setenv("ARMATURE_ISSUE_ID", "")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hi"}}`))
 	hookCmd.SetOut(new(bytes.Buffer))
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -1291,22 +1330,22 @@ func TestHookSkipsHeartbeatWhenUnbound_REQ_LNGHZN_S3_T1(t *testing.T) {
 }
 
 func TestShouldHeartbeatSkipsAlreadyStaleClaim_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree", "--ttl", "10"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(workerID, "task-01"))) }()
 
 	backdateAllOps(t, repo, workerID, time.Hour)
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
 	hookCmd.SetOut(new(bytes.Buffer))
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -1317,20 +1356,20 @@ func TestShouldHeartbeatSkipsAlreadyStaleClaim_REQ_LNGHZN_S3_T1(t *testing.T) {
 }
 
 func TestHookHeartbeatSourceIsAutoHook_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(workerID, "task-01"))) }()
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
 	hookCmd.SetOut(new(bytes.Buffer))
 	hookCmd.SetErr(new(bytes.Buffer))
@@ -1343,8 +1382,9 @@ func TestHookHeartbeatSourceIsAutoHook_REQ_LNGHZN_S3_T1(t *testing.T) {
 }
 
 func TestManualHeartbeatSourceIsManual_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
@@ -1352,7 +1392,7 @@ func TestManualHeartbeatSourceIsManual_REQ_LNGHZN_S3_T1(t *testing.T) {
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
 
-	heartbeatCmd := newRootCmd()
+	heartbeatCmd := testRootCmd(t)
 	heartbeatCmd.SetOut(new(bytes.Buffer))
 	heartbeatCmd.SetArgs([]string{"heartbeat", "--repo", repo, "task-01"})
 	require.NoError(t, heartbeatCmd.Execute())
@@ -1363,24 +1403,24 @@ func TestManualHeartbeatSourceIsManual_REQ_LNGHZN_S3_T1(t *testing.T) {
 }
 
 func TestHookHeartbeatFiresOnBlockedToolCall_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "task-01", "--scope", "internal/harnesshook/", "--acceptance", `["go test ./... passes"]`)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, cmd.Execute())
 
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
-	defer func() { swallowErr(os.Remove(rateLimitStateFilePath(workerID, "task-01"))) }()
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	var out bytes.Buffer
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"cmd/armature/main.go"}]}}`))
 	hookCmd.SetOut(&out)
 	hookCmd.SetErr(new(bytes.Buffer))

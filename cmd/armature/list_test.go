@@ -35,6 +35,7 @@ func decodeListEnvelope(t *testing.T, stdout string) map[string]json.RawMessage 
 }
 
 func TestListDefaultRowIsFourFields_REQ_AOC_S2_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	decoded := decodeListEnvelope(t, runListJSON(t, repo))
@@ -61,6 +62,7 @@ func TestListDefaultRowIsFourFields_REQ_AOC_S2_T2(t *testing.T) {
 }
 
 func TestListOmitsOutcome_REQ_AOC_S2_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -85,6 +87,7 @@ func TestListOmitsOutcome_REQ_AOC_S2_T2(t *testing.T) {
 }
 
 func TestListGroupHonouredInStructuredOutput_REQ_AOC_S2_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	ungrouped := runListJSON(t, repo)
@@ -138,6 +141,7 @@ func TestListGroupHonouredInStructuredOutput_REQ_AOC_S2_T2(t *testing.T) {
 }
 
 func TestListCountIsTrueTotal_REQ_AOC_S2_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	decoded := decodeListEnvelope(t, runListJSON(t, repo))

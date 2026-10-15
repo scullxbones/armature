@@ -10,6 +10,7 @@ import (
 )
 
 func TestNoteDeleteCommand_PositionalArgs_REQ_LNGHZN_S10(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	addOut, err := runTrls(t, repo, "--format", "human", "note", "task-01", "hello world")
@@ -34,6 +35,7 @@ func TestNoteDeleteCommand_PositionalArgs_REQ_LNGHZN_S10(t *testing.T) {
 }
 
 func TestWorkersCommand_NoWorkers_REQ_LNGHZN_S10(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -44,6 +46,7 @@ func TestWorkersCommand_NoWorkers_REQ_LNGHZN_S10(t *testing.T) {
 }
 
 func TestReparentCommand_ToRoot_REQ_LNGHZN_S10(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "--format", "human", "reparent", "--issue", "task-01", "--parent", "")
@@ -52,6 +55,7 @@ func TestReparentCommand_ToRoot_REQ_LNGHZN_S10(t *testing.T) {
 }
 
 func TestSyncCommand_NoMergedBranches_REQ_LNGHZN_S10(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "sync")

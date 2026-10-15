@@ -434,8 +434,8 @@ func removeObsoleteHooks(gitHooksDir, hooksDir string) error {
 	return nil
 }
 
-func commitOpsScaffolding(worktreePath string, isCollapsedLayout bool) error {
-	client := adapters.New(worktreePath)
+func commitOpsScaffolding(env Env, worktreePath string, isCollapsedLayout bool) error {
+	client := gitWith(env, worktreePath)
 	prefix := ""
 	if !isCollapsedLayout {
 		prefix = config.StateDirName + "/"
@@ -553,8 +553,8 @@ func writeScaffoldingMonotonic(path, label string, content []byte, warn io.Write
 	return nil
 }
 
-func commitObsoleteHookTemplateRemovals(worktreePath string, isCollapsedLayout bool) error {
-	client := adapters.New(worktreePath)
+func commitObsoleteHookTemplateRemovals(env Env, worktreePath string, isCollapsedLayout bool) error {
+	client := gitWith(env, worktreePath)
 	prefix := "hooks/"
 	if !isCollapsedLayout {
 		prefix = config.StateDirName + "/hooks/"
@@ -579,7 +579,7 @@ func commitObsoleteHookTemplateRemovals(worktreePath string, isCollapsedLayout b
 	return nil
 }
 
-func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, error) {
+func migrateLegacySingleBranchOps(env Env, repoPath string) (bool, string, string, bool, error) {
 	legacyArmatureDir := filepath.Join(repoPath, config.StateDirName)
 	legacyOpsDir := filepath.Join(legacyArmatureDir, "ops")
 	preMigrationSHA := ""
@@ -611,7 +611,7 @@ func migrateLegacySingleBranchOps(repoPath string) (bool, string, string, bool, 
 
 	backupDir := uniqueTimestampedDir(repoPath, ".armature.migrated")
 
-	gitClient := adapters.New(repoPath)
+	gitClient := gitWith(env, repoPath)
 	isTracked := gitClient.IsTracked(config.StateDirName)
 	if isTracked {
 		preMigrationSHA, err = gitClient.HeadSHA()
@@ -668,6 +668,7 @@ func uniqueTimestampedDir(repoPath, prefix string) string {
 }
 
 func failAfterLegacyMigration(
+	env Env,
 	migrated bool,
 	repoPath, backupDir, preMigrationSHA string,
 	migrationCommitted bool,
@@ -675,7 +676,7 @@ func failAfterLegacyMigration(
 	op, rolledBackMsg string,
 ) error {
 	if migrated {
-		if rbErr := rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
+		if rbErr := rollbackLegacyMigration(env, repoPath, backupDir, preMigrationSHA, migrationCommitted); rbErr != nil {
 			return fmt.Errorf(
 				"%s: %w; additionally, rollback of legacy migration failed: %w (backup left at %s)",
 				op, err, rbErr, backupDir,
@@ -688,9 +689,9 @@ func failAfterLegacyMigration(
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-func rollbackLegacyMigration(repoPath, backupDir, preMigrationSHA string, committed bool) error {
+func rollbackLegacyMigration(env Env, repoPath, backupDir, preMigrationSHA string, committed bool) error {
 	if committed {
-		gitClient := adapters.New(repoPath)
+		gitClient := gitWith(env, repoPath)
 		currentBranch, err := gitClient.CurrentBranch()
 		if err != nil {
 			return fmt.Errorf("determine current branch before rollback reset: %w (backup left at %s)", err, backupDir)
@@ -727,8 +728,8 @@ func isPreB1SourcesDebrisPath(path string) bool {
 	return name == "manifest.json" || strings.HasSuffix(name, ".cache")
 }
 
-func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
-	gitClient := adapters.New(repoPath)
+func migrateDualBranchToCollapsed(env Env, repoPath string) (bool, string, error) {
+	gitClient := gitWith(env, repoPath)
 
 	armWorktreePath := filepath.Join(repoPath, ".arm")
 	innerArmaturePath := filepath.Join(armWorktreePath, config.StateDirName)
@@ -745,7 +746,7 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 		return false, "", fmt.Errorf("check for inner .armature/ directory: %w", err)
 	}
 
-	armtreeGitClient := adapters.New(armWorktreePath)
+	armtreeGitClient := gitWith(env, armWorktreePath)
 	dirtyEntries, err := armtreeGitClient.DirtyEntries()
 	if err != nil {
 		return false, "", fmt.Errorf("check _armature worktree for uncommitted changes: %w", err)
@@ -791,7 +792,7 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 
 	migrationRootPaths := []string{"ops", "templates", "hooks", "review", "sources", "config.json"}
 	rollback := func(cause error) error {
-		worktreeGitClient := adapters.New(newWorktreePath)
+		worktreeGitClient := gitWith(env, newWorktreePath)
 		if resetErr := worktreeGitClient.ResetHard(preCollapseSHA); resetErr != nil {
 			return fmt.Errorf("%w; additionally, reset collapsed worktree failed: %w (backup at %s)", cause, resetErr, backupDir)
 		}
@@ -836,7 +837,7 @@ func migrateDualBranchToCollapsed(repoPath string) (bool, string, error) {
 			}
 		}
 
-		worktreeGitClient := adapters.New(newWorktreePath)
+		worktreeGitClient := gitWith(env, newWorktreePath)
 		if err := worktreeGitClient.RemoveTree(config.StateDirName); err != nil {
 			return false, "", rollback(fmt.Errorf("remove stale nested %s subtree: %w", config.StateDirName, err))
 		}
@@ -1122,8 +1123,9 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		return RepoSetupResult{}, fmt.Errorf("resolve repo path: %w", err)
 	}
 	repoPath = absRepoPath
+	env := envFrom(cmd)
 
-	gitClient := adapters.New(repoPath)
+	gitClient := gitWith(env, repoPath)
 
 	if branch, err := gitClient.CurrentBranch(); err == nil && branch == "_armature" {
 		return RepoSetupResult{}, fmt.Errorf(
@@ -1157,7 +1159,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		}
 	}
 
-	migrated, backupDir, preMigrationSHA, migrationCommitted, err := migrateLegacySingleBranchOps(repoPath)
+	migrated, backupDir, preMigrationSHA, migrationCommitted, err := migrateLegacySingleBranchOps(env, repoPath)
 	if err != nil {
 		return RepoSetupResult{}, fmt.Errorf("migrate legacy single-branch layout: %w", err)
 	}
@@ -1165,10 +1167,10 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Migrated legacy single-branch .armature layout to timestamped backup at %s\n", backupDir)
 	}
 
-	dualMigrated, dualBackupDir, err := migrateDualBranchToCollapsed(repoPath)
+	dualMigrated, dualBackupDir, err := migrateDualBranchToCollapsed(env, repoPath)
 	if err != nil {
 		return RepoSetupResult{}, failAfterLegacyMigration(
-			migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
+			env, migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
 			"migrate dual-branch layout to collapsed", "legacy migration rolled back",
 		)
 	}
@@ -1182,7 +1184,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 
 	if err := gitClient.CreateOrphanBranch("_armature"); err != nil {
 		return RepoSetupResult{}, failAfterLegacyMigration(
-			migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
+			env, migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
 			"create _armature branch", "migration rolled back",
 		)
 	}
@@ -1218,7 +1220,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	worktreeLabel := filepath.Base(worktreePath)
 	if err := gitClient.AddWorktree("_armature", worktreePath); err != nil {
 		return RepoSetupResult{}, failAfterLegacyMigration(
-			migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
+			env, migrated, repoPath, backupDir, preMigrationSHA, migrationCommitted, err,
 			fmt.Sprintf("add %s worktree", worktreeLabel), "migration rolled back",
 		)
 	}
@@ -1318,7 +1320,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			}
 		}
 
-		worktreeGitClient := adapters.New(worktreePath)
+		worktreeGitClient := gitWith(env, worktreePath)
 
 		stagePrefix := ""
 		commitScope := "."
@@ -1384,7 +1386,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping git hook %s (not Armature-managed)\n", hookName)
 	}
 
-	if err := commitObsoleteHookTemplateRemovals(worktreePath, isCollapsedLayout); err != nil {
+	if err := commitObsoleteHookTemplateRemovals(env, worktreePath, isCollapsedLayout); err != nil {
 		return RepoSetupResult{}, err
 	}
 
@@ -1398,7 +1400,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 			return RepoSetupResult{}, fmt.Errorf("write config: %w", err)
 		}
 
-		worktreeGitClient := adapters.New(worktreePath)
+		worktreeGitClient := gitWith(env, worktreePath)
 
 		configRelPath := "config.json"
 		commitScope := "."
@@ -1426,7 +1428,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 
 	if !dualMigrated && !isCollapsedLayout {
-		chainedDualMigrated, chainedDualBackupDir, err := migrateDualBranchToCollapsed(repoPath)
+		chainedDualMigrated, chainedDualBackupDir, err := migrateDualBranchToCollapsed(env, repoPath)
 		if err != nil {
 			return RepoSetupResult{}, fmt.Errorf("chain dual-branch to collapsed migration after legacy migration: %w", err)
 		}
@@ -1453,7 +1455,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 		}
 	}
 
-	if err := commitOpsScaffolding(worktreePath, isCollapsedLayout); err != nil {
+	if err := commitOpsScaffolding(env, worktreePath, isCollapsedLayout); err != nil {
 		return RepoSetupResult{}, err
 	}
 
