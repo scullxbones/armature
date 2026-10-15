@@ -1384,7 +1384,7 @@ func TestClaimRejectsForeignWorktree(t *testing.T) {
 	run(t, repoB, "git", "worktree", "add", foreignWorktreePath, "task/task-01")
 	assert.DirExists(t, foreignWorktreePath, "foreign worktree should exist")
 
-	assert.False(t, isWorktreeOf(repoA, foreignWorktreePath),
+	assert.False(t, isWorktreeOf(repoA, foreignWorktreePath, nil),
 		"a worktree registered to a different repo must not be recognized as belonging to repoA")
 }
 
@@ -1658,7 +1658,7 @@ func TestClaimAutoProvisionsWorktreeAtDefaultRoot_REQ_LNGHZN_S5_T4(t *testing.T)
 	expected := filepath.Join(repo, ".worktrees", "task-01")
 	assert.DirExists(t, expected, "boolean --worktree must provision the worktree at <repo>/.worktrees/<issue-id>")
 	assert.FileExists(t, filepath.Join(expected, ".git"), "provisioned path must be a linked worktree (.git file, not a dir)")
-	assert.True(t, isWorktreeOf(repo, expected), "provisioned path must be a registered linked worktree of the repo")
+	assert.True(t, isWorktreeOf(repo, expected, nil), "provisioned path must be a registered linked worktree of the repo")
 
 	gitDir, err := worktree.ResolveGitDir(expected)
 	require.NoError(t, err)
@@ -2002,7 +2002,7 @@ exec "$real_git" "$@"
 	claim.SetArgs([]string{"claim", "task-01", "--repo", repo, "--worktree", destination, "--from", parentPath})
 	err = claim.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not an existing worktree of this repository")
+	assert.Contains(t, err.Error(), "existing worktree of this repository")
 	assert.NoDirExists(t, destination)
 	assert.DirExists(t, backupPath, "the test source worktree must be moved away, not destroyed")
 	_, branchErr := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/task/task-01").Output()

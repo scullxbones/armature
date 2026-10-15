@@ -38,12 +38,12 @@ func TestAddWorktreeDetached_RecoversPrunableRegistration_REQ_LNGHZN_S5(t *testi
 
 	wtPath := filepath.Join(repo, ".worktrees", "task-01")
 	require.NoError(t, os.MkdirAll(filepath.Dir(wtPath), 0o755))
-	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD"))
+	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD", nil))
 	require.DirExists(t, wtPath)
 
 	require.NoError(t, os.RemoveAll(wtPath))
 
-	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD"))
+	require.NoError(t, addWorktreeDetached(repo, wtPath, "HEAD", nil))
 	assert.DirExists(t, wtPath)
 }
 

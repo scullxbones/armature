@@ -13,7 +13,12 @@ import (
 // Identity is read from each worktree's binding file; branch and path are
 // observations only. A failed git listing or unreadable binding fails closed.
 func List(repoPath string) ([]Meta, error) {
-	blocks, err := listPorcelainBlocks(repoPath)
+	return ListEnv(repoPath, nil)
+}
+
+// ListEnv is List with an optional child environment (PATH overlays for tests).
+func ListEnv(repoPath string, environ []string) ([]Meta, error) {
+	blocks, err := listPorcelainBlocks(repoPath, environ)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +46,7 @@ func List(repoPath string) ([]Meta, error) {
 // paths are clone-local evidence: callers must not use replicated issue paths
 // alone to infer ownership in another clone.
 func RegisteredPaths(repoPath string) ([]string, error) {
-	blocks, err := listPorcelainBlocks(repoPath)
+	blocks, err := listPorcelainBlocks(repoPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +304,7 @@ func boundEntries(items []Meta, id string) []Meta {
 // exact-path re-add, never a broad `git worktree prune` that could drop
 // unrelated registrations.
 func HasPrunableRegistration(repoPath, path string) (bool, error) {
-	blocks, err := listPorcelainBlocks(repoPath)
+	blocks, err := listPorcelainBlocks(repoPath, nil)
 	if err != nil {
 		return false, err
 	}
@@ -318,8 +323,17 @@ type porcelainBlock struct {
 	prunable bool
 }
 
-func listPorcelainBlocks(repoPath string) ([]porcelainBlock, error) {
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain") // #nosec G204 - literal git; args built here
+func listPorcelainBlocks(repoPath string, environ []string) ([]porcelainBlock, error) {
+	gitBin := "git"
+	if path := envVal(environ, "PATH"); path != "" {
+		if abs, err := lookPathOn(path, "git"); err == nil {
+			gitBin = abs
+		}
+	}
+	cmd := exec.CommandContext(context.Background(), gitBin, "-C", repoPath, "worktree", "list", "--porcelain") //nolint:gosec // G204: literal git; args built here
+	if len(environ) > 0 {
+		cmd.Env = append([]string(nil), environ...)
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)
@@ -358,4 +372,32 @@ func parsePorcelainBlocks(output string) []porcelainBlock {
 	}
 	flush()
 	return result
+}
+
+func envVal(environ []string, key string) string {
+	prefix := key + "="
+	for i := len(environ) - 1; i >= 0; i-- {
+		if strings.HasPrefix(environ[i], prefix) {
+			return strings.TrimPrefix(environ[i], prefix)
+		}
+	}
+	return ""
+}
+
+func lookPathOn(pathList, file string) (string, error) {
+	for _, dir := range filepath.SplitList(pathList) {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, file)
+		st, err := os.Stat(candidate)
+		if err != nil || st.IsDir() {
+			continue
+		}
+		if st.Mode()&0o111 == 0 {
+			continue
+		}
+		return candidate, nil
+	}
+	return "", os.ErrNotExist
 }
