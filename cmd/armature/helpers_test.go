@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -117,10 +118,12 @@ func executeThenHandleRootError(t *testing.T, stdout, stderr *bytes.Buffer, args
 	t.Helper()
 	runTrlsMu.Lock()
 	defer runTrlsMu.Unlock()
-	root := newRootCmd()
-	root.SetOut(stdout)
-	root.SetErr(stderr)
-	return executeRoot(root, args, stdout, stderr)
+	return Run(context.Background(), Invocation{
+		Args:    args,
+		Stdout:  stdout,
+		Stderr:  stderr,
+		TempDir: t.TempDir(),
+	})
 }
 
 func assertSingleJSONObject(t *testing.T, stdout string) map[string]any {

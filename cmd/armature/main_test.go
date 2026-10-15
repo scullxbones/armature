@@ -22,7 +22,6 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/traceability"
-	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -487,9 +486,7 @@ func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	defer runTrlsMu.Unlock()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
-	root.SetOut(buf)
-	root.SetErr(errBuf)
+	root := commandFor(Invocation{Stdout: buf, Stderr: errBuf, Dir: repo, TempDir: t.TempDir()})
 	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), err
@@ -501,9 +498,7 @@ func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, strin
 	defer runTrlsMu.Unlock()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
-	root.SetOut(buf)
-	root.SetErr(errBuf)
+	root := commandFor(Invocation{Stdout: buf, Stderr: errBuf, Dir: repo, TempDir: t.TempDir()})
 	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
 	err := root.Execute()
 	return buf.String(), errBuf.String(), err
@@ -4319,18 +4314,9 @@ func TestBareArmBrokenConfigIsError_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestNonInteractiveImpliesVersionEnvelope_REQ_AOC_S2_T5(t *testing.T) {
-	runTrlsMu.Lock()
-	defer runTrlsMu.Unlock()
-	tui.SetFormat("human")
-	tui.SetNonInteractive(true)
-	t.Cleanup(func() {
-		tui.SetNonInteractive(false)
-		tui.SetFormat("")
-	})
-
-	cmd := newRootCmd()
 	stdout := new(bytes.Buffer)
-	cmd.SetOut(stdout)
+	cmd := commandFor(Invocation{Stdout: stdout, Stderr: new(bytes.Buffer), TempDir: t.TempDir()})
+	uiFrom(cmd).Apply("human", true)
 	require.NoError(t, writeVersionOutput(cmd))
 	decoded := decodeContractEnvelope(t, stdout.String(), "versions")
 	var rows []map[string]any

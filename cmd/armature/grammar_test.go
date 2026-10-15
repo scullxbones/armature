@@ -37,7 +37,7 @@ func TestGrammarConformance_REQ_NXTTN_S5_T4(t *testing.T) {
 	t.Run("TTYDetectionPolicy", func(t *testing.T) {
 		violations := checkTTYDetectionPolicy()
 		if len(violations) > 0 {
-			t.Errorf("tui.IsTerminal() calls outside allowed files:\n  %s", strings.Join(violations, "\n  "))
+			t.Errorf("raw TTY probes outside allowed files:\n  %s", strings.Join(violations, "\n  "))
 		}
 	})
 
@@ -187,7 +187,7 @@ func checkStructuredOutputFormat(root *cobra.Command) []string {
 
 func checkTTYDetectionPolicy() []string {
 	allowedFiles := map[string]bool{
-		"main.go": true,
+		"invocation.go": true,
 	}
 
 	var violations []string
@@ -230,9 +230,10 @@ func checkTTYDetectionPolicy() []string {
 			continue
 		}
 
-		if strings.Contains(string(content), "tui.IsTerminal(") {
+		src := string(content)
+		if strings.Contains(src, "tui.IsTerminal(") || strings.Contains(src, "tui.StdoutIsTerminal(") {
 			if !allowedFiles[name] {
-				violations = append(violations, name+" calls tui.IsTerminal() but is not in allowlist (main.go only)")
+				violations = append(violations, name+" probes the process TTY but is not in allowlist (invocation.go only)")
 			}
 		}
 	}

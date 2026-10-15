@@ -1,0 +1,180 @@
+package main
+
+import (
+	"context"
+	"io"
+	"os"
+
+	"github.com/scullxbones/armature/internal/tui"
+	"github.com/spf13/cobra"
+)
+
+// Env looks up invocation environment variables. Command code must not call
+// os.Getenv; main constructs an OSEnv for the process and tests pass overlays.
+type Env interface {
+	Lookup(key string) (string, bool)
+}
+
+type osEnv struct{}
+
+func (osEnv) Lookup(key string) (string, bool) {
+	return os.LookupEnv(key)
+}
+
+// OSEnv reads the process environment.
+func OSEnv() Env { return osEnv{} }
+
+type overlayEnv struct {
+	top  map[string]string
+	base Env
+}
+
+func (o overlayEnv) Lookup(key string) (string, bool) {
+	if o.top != nil {
+		if v, ok := o.top[key]; ok {
+			return v, true
+		}
+	}
+	if o.base != nil {
+		return o.base.Lookup(key)
+	}
+	return "", false
+}
+
+// OverlayEnv returns values from top when present, otherwise base.
+func OverlayEnv(base Env, top map[string]string) Env {
+	if len(top) == 0 {
+		if base == nil {
+			return OSEnv()
+		}
+		return base
+	}
+	return overlayEnv{top: top, base: base}
+}
+
+// Invocation is the full input of one arm process. Tests and main() both call
+// Run with one of these so format, env, cwd, and temp files are not process-global.
+type Invocation struct {
+	Args    []string
+	Dir     string
+	Env     Env
+	Stdout  io.Writer
+	Stderr  io.Writer
+	TTY     bool
+	TempDir string
+}
+
+type session struct {
+	inv Invocation
+	ui  *tui.Renderer
+}
+
+type sessionKey struct{}
+
+func envLookup(env Env, key string) string {
+	if env == nil {
+		return ""
+	}
+	v, ok := env.Lookup(key)
+	if !ok {
+		return ""
+	}
+	return v
+}
+
+func newSession(inv Invocation) *session {
+	inv = normalizeInvocation(inv)
+	return &session{
+		inv: inv,
+		ui:  tui.NewRenderer(inv.TTY, inv.Env.Lookup),
+	}
+}
+
+func normalizeInvocation(inv Invocation) Invocation {
+	if inv.Env == nil {
+		inv.Env = OSEnv()
+	}
+	if inv.Stdout == nil {
+		inv.Stdout = os.Stdout
+	}
+	if inv.Stderr == nil {
+		inv.Stderr = os.Stderr
+	}
+	if inv.TempDir == "" {
+		inv.TempDir = os.TempDir()
+	}
+	return inv
+}
+
+// OSInvocation is the process-shaped Invocation used by main().
+func OSInvocation(args []string, stdout, stderr io.Writer) Invocation {
+	return Invocation{
+		Args:    args,
+		Env:     OSEnv(),
+		Stdout:  stdout,
+		Stderr:  stderr,
+		TTY:     tui.StdoutIsTerminal(),
+		TempDir: os.TempDir(),
+	}
+}
+
+func attachSession(cmd *cobra.Command, sess *session) {
+	if cmd == nil || sess == nil {
+		return
+	}
+	base := cmd.Context()
+	if base == nil {
+		base = context.Background()
+	}
+	cmd.SetContext(context.WithValue(base, sessionKey{}, sess))
+}
+
+func sessionFrom(cmd *cobra.Command) *session {
+	if cmd == nil {
+		return nil
+	}
+	ctx := cmd.Context()
+	if ctx == nil {
+		return nil
+	}
+	sess, ok := ctx.Value(sessionKey{}).(*session)
+	if !ok {
+		return nil
+	}
+	return sess
+}
+
+func uiFrom(cmd *cobra.Command) *tui.Renderer {
+	if sess := sessionFrom(cmd); sess != nil {
+		return sess.ui
+	}
+	return tui.NewRenderer(false, OSEnv().Lookup)
+}
+
+func commandFor(inv Invocation) *cobra.Command {
+	inv = normalizeInvocation(inv)
+	sess := newSession(inv)
+	root := newRootCmd()
+	attachSession(root, sess)
+	root.SetOut(inv.Stdout)
+	root.SetErr(inv.Stderr)
+	return root
+}
+
+// Run is the only CLI entrypoint. main() and tests both call it.
+// A nil ctx keeps the session context attachSession already bound (that helper
+// has no context parameter, so it may call context.Background). Run never
+// assigns context.Background itself: doing so is a non-inherited context.
+//
+//nolint:contextcheck // cobra takes ctx from Command.SetContext; constructors and git helpers cannot accept Run's ctx
+func Run(ctx context.Context, inv Invocation) int {
+	root := commandFor(inv)
+	if ctx != nil {
+		if sess := sessionFrom(root); sess != nil {
+			root.SetContext(context.WithValue(ctx, sessionKey{}, sess))
+		} else {
+			root.SetContext(ctx)
+		}
+	}
+	return executeRoot(root, inv.Args, inv.Stdout, inv.Stderr)
+}
