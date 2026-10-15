@@ -7,27 +7,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func RunGitCommitterContract(t *testing.T, committer ops.GitCommitter) {
+func RunGitCommitterContract(t *testing.T, newCommitter func() ops.GitCommitter) {
+	t.Helper()
 	t.Run("CommitWorktreeOp_ReturnsNoErrorOnSuccess", func(t *testing.T) {
-		err := committer.CommitWorktreeOp("path/to/file.txt", "test commit message")
+		t.Parallel()
+		err := newCommitter().CommitWorktreeOp("path/to/file.txt", "test commit message")
 		assert.NoError(t, err)
 	})
 
 	t.Run("CommitWorktreeOp_AcceptsMultiplePaths", func(t *testing.T) {
-		err1 := committer.CommitWorktreeOp("file1.txt", "first commit")
-		err2 := committer.CommitWorktreeOp("file2.txt", "second commit")
+		t.Parallel()
+		c := newCommitter()
+		err1 := c.CommitWorktreeOp("file1.txt", "first commit")
+		err2 := c.CommitWorktreeOp("file2.txt", "second commit")
 		assert.NoError(t, err1)
 		assert.NoError(t, err2)
 	})
 
 	t.Run("CommitWorktreeOp_AcceptsVaryingMessageFormats", func(t *testing.T) {
+		t.Parallel()
+		c := newCommitter()
 		messages := []string{
 			"ops: claim T1 by abc",
 			"ops: transition T2 by def",
 			"ops: note T3 by ghi",
 		}
 		for _, msg := range messages {
-			err := committer.CommitWorktreeOp("test.log", msg)
+			err := c.CommitWorktreeOp("test.log", msg)
 			assert.NoError(t, err)
 		}
 	})
@@ -51,6 +57,5 @@ func (f *FakeCommitter) CommitWorktreeOp(relPath, message string) error {
 
 func TestFakeCommitter_SatisfiesContract(t *testing.T) {
 	t.Parallel()
-	fc := &FakeCommitter{}
-	RunGitCommitterContract(t, fc)
+	RunGitCommitterContract(t, func() ops.GitCommitter { return &FakeCommitter{} })
 }
