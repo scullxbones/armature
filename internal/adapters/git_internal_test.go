@@ -124,4 +124,66 @@ func TestLookPathOnAndEnvVal_REQ_PARCLI(t *testing.T) {
 	if envVal(env, "PATH") != dir {
 		t.Fatalf("PATH=%q", envVal(env, "PATH"))
 	}
+	if envVal(nil, "PATH") != "" {
+		t.Fatal("empty environ should miss PATH")
+	}
+	nested := t.TempDir()
+	if err := os.Mkdir(filepath.Join(nested, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "plain"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lookPathOn(nested+string(os.PathListSeparator)+dir, "plain"); err == nil {
+		t.Fatal("non-executable and directory entries must be skipped")
+	}
+	got, err = lookPathOn(":"+dir, binName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != binPath {
+		t.Fatalf("empty PATH element skipped: lookPathOn=%q want %q", got, binPath)
+	}
+}
+
+func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	if (*Client)(nil).WithEnviron([]string{"PATH=/tmp"}) != nil {
+		t.Fatal("nil client WithEnviron should stay nil")
+	}
+
+	repo := t.TempDir()
+	base := New(repo)
+	if cp := base.WithEnviron(nil); cp == nil || len(cp.environ) != 0 {
+		t.Fatalf("empty overlay should copy client without environ, got %#v", cp)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := base.WithEnviron([]string{"PATH=" + dir}).cmd("status")
+	if cmd.Path == "git" {
+		t.Fatal("PATH overlay should resolve the wrapper git binary")
+	}
+	if !strings.HasPrefix(cmd.Path, dir) {
+		t.Fatalf("expected git from %s, got %q", dir, cmd.Path)
+	}
+	foundPATH := false
+	for _, env := range cmd.Env {
+		if strings.HasPrefix(env, "PATH=") {
+			foundPATH = true
+			if env != "PATH="+dir {
+				t.Fatalf("child env PATH=%q", env)
+			}
+		}
+	}
+	if !foundPATH {
+		t.Fatal("overlay environ should replace the child env including PATH")
+	}
+
+	cmd = base.cmd("status")
+	if cmd.Path != "git" && !strings.Contains(cmd.Path, "git") {
+		t.Fatalf("process env should still find git, got %q", cmd.Path)
+	}
 }
