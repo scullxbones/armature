@@ -137,7 +137,10 @@ func sessionFrom(cmd *cobra.Command) *session {
 	if ctx == nil {
 		return nil
 	}
-	sess, _ := ctx.Value(sessionKey{}).(*session)
+	sess, ok := ctx.Value(sessionKey{}).(*session)
+	if !ok {
+		return nil
+	}
 	return sess
 }
 
@@ -159,15 +162,19 @@ func commandFor(inv Invocation) *cobra.Command {
 }
 
 // Run is the only CLI entrypoint. main() and tests both call it.
+// A nil ctx keeps the session context attachSession already bound (that helper
+// has no context parameter, so it may call context.Background). Run never
+// assigns context.Background itself: doing so is a non-inherited context.
+//
+//nolint:contextcheck // cobra takes ctx from Command.SetContext; constructors and git helpers cannot accept Run's ctx
 func Run(ctx context.Context, inv Invocation) int {
 	root := commandFor(inv)
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if sess := sessionFrom(root); sess != nil {
-		root.SetContext(context.WithValue(ctx, sessionKey{}, sess))
-	} else {
-		root.SetContext(ctx)
+	if ctx != nil {
+		if sess := sessionFrom(root); sess != nil {
+			root.SetContext(context.WithValue(ctx, sessionKey{}, sess))
+		} else {
+			root.SetContext(ctx)
+		}
 	}
 	return executeRoot(root, inv.Args, inv.Stdout, inv.Stderr)
 }
