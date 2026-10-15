@@ -332,9 +332,6 @@ func commandFor(inv Invocation) *cobra.Command {
 // Run is the only CLI entrypoint. main() and tests both call it.
 func Run(ctx context.Context, inv Invocation) int {
 	root := commandFor(inv)
-	if ctx == nil {
-		ctx = context.TODO() //nolint:contextcheck // Run is the process root; callers pass ctx or nil
-	}
 	if sess := sessionFrom(root); sess != nil {
 		root.SetContext(context.WithValue(ctx, sessionKey{}, sess))
 	} else {
