@@ -129,11 +129,11 @@ func TestContextReportShowMeasuresAOCEnvelope_REQ_NXTTN_S3_T1(t *testing.T) {
 	require.NotNil(t, issue)
 
 	var human bytes.Buffer
-	require.NoError(t, output.RenderIssue(&human, issue))
+	require.NoError(t, output.RenderIssue(&human, outputIssueFacts(issue)))
 	got, err := measureShow(state)
 	require.NoError(t, err)
 
-	row := output.MarshalIssue(issue)
+	row := output.MarshalIssue(outputIssueFacts(issue))
 	row, trunc := output.TruncateShowIssue(row)
 	var envelope bytes.Buffer
 	require.NoError(t, output.WriteShowEnvelope(&envelope, []string{issue.ID}, []output.IssueJSON{row}, trunc))
