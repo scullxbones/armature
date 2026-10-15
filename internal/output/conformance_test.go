@@ -189,14 +189,6 @@ func TestEnumerateModesSkipsGroupHelpAndFieldFlags(t *testing.T) {
 func TestEnvelopeFixtureRejectsNonConformingShapes(t *testing.T) {
 	t.Parallel()
 
-	root := &Command{
-		Name:   "arm",
-		HasRun: true,
-		Children: []*Command{
-			{Name: "list", HasRun: true},
-		},
-	}
-
 	cases := []struct {
 		name string
 		body string
@@ -220,6 +212,13 @@ func TestEnvelopeFixtureRejectsNonConformingShapes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			root := &Command{
+				Name:   "arm",
+				HasRun: true,
+				Children: []*Command{
+					{Name: "list", HasRun: true},
+				},
+			}
 			d := t.TempDir()
 			writeGolden(t, d, "_root.json", `{"count":0,"issues":[],"help":["empty"]}`)
 			writeGolden(t, d, "list.json", tc.body)

@@ -688,19 +688,21 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
-	assessment := &ConformanceAssessment{
-		SchemaVersion:       SchemaVersion,
-		BundleID:            "bundle-no-activity",
-		ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		Results: []CriterionResult{
-			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{ActivityCitation("0")}},
-		},
+	activityAssessment := func() *ConformanceAssessment {
+		return &ConformanceAssessment{
+			SchemaVersion:       SchemaVersion,
+			BundleID:            "bundle-no-activity",
+			ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Results: []CriterionResult{
+				{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{ActivityCitation("0")}},
+			},
+		}
 	}
 
 	t.Run("nil bundle", func(t *testing.T) {
 		t.Parallel()
-		_, err := Record(RecordInput{Assessment: assessment, IssueID: "task-01"})
+		_, err := Record(RecordInput{Assessment: activityAssessment(), IssueID: "task-01"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "activity")
 	})
@@ -718,7 +720,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 			},
 		}
 		bundle.BundleID = mustComputeBundleID(t, *bundle)
-		_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+		_, err := Record(RecordInput{Assessment: activityAssessment(), Bundle: bundle, IssueID: "task-01"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "activity")
 	})
