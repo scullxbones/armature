@@ -107,7 +107,7 @@ func newSourcesSyncCmd() *cobra.Command {
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}
@@ -221,7 +221,7 @@ func newSourcesLinkCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("source-id %q not found in manifest: %w", sourceID, err)
 			}
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

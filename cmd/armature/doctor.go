@@ -227,7 +227,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 		return err
 	}
 
-	workerID, logPath, err := resolveWorkerAndLog(appCtx)
+	workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 	if err != nil {
 		return err
 	}

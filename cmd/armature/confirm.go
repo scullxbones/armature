@@ -22,7 +22,7 @@ func newConfirmCmd() *cobra.Command {
 			if err := refusePlanRelease(cmd); err != nil {
 				return err
 			}
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

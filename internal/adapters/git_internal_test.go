@@ -1,6 +1,8 @@
 package adapters
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -97,5 +99,28 @@ func TestIsGitContentionError(t *testing.T) {
 	}
 	if isGitContentionError("fatal: pathspec 'foo' did not match any files") {
 		t.Fatal("pathspec miss is not contention")
+	}
+}
+
+func TestLookPathOnAndEnvVal_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gitPath := filepath.Join(dir, "git")
+	if err := os.WriteFile(gitPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := lookPathOn(dir, "git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != gitPath {
+		t.Fatalf("lookPathOn=%q want %q", got, gitPath)
+	}
+	env := []string{"FOO=bar", "PATH=" + dir, "FOO=later"}
+	if envVal(env, "FOO") != "later" {
+		t.Fatalf("envVal last-wins: %q", envVal(env, "FOO"))
+	}
+	if envVal(env, "PATH") != dir {
+		t.Fatalf("PATH=%q", envVal(env, "PATH"))
 	}
 }

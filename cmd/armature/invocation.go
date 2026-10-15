@@ -4,7 +4,11 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/claim"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -19,6 +23,10 @@ type osEnv struct{}
 
 func (osEnv) Lookup(key string) (string, bool) {
 	return os.LookupEnv(key)
+}
+
+func (osEnv) Environ() []string {
+	return os.Environ()
 }
 
 // OSEnv reads the process environment.
@@ -39,6 +47,45 @@ func (o overlayEnv) Lookup(key string) (string, bool) {
 		return o.base.Lookup(key)
 	}
 	return "", false
+}
+
+func (o overlayEnv) Environ() []string {
+	base := os.Environ()
+	if e, ok := o.base.(interface{ Environ() []string }); ok {
+		base = e.Environ()
+	}
+	return mergeEnviron(base, o.top)
+}
+
+func mergeEnviron(base []string, top map[string]string) []string {
+	if len(top) == 0 {
+		return append([]string(nil), base...)
+	}
+	skip := make(map[string]bool, len(top))
+	for k := range top {
+		skip[k] = true
+	}
+	out := make([]string, 0, len(base)+len(top))
+	for _, kv := range base {
+		name, _, _ := splitEnvKV(kv)
+		if skip[name] {
+			continue
+		}
+		out = append(out, kv)
+	}
+	for k, v := range top {
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+func splitEnvKV(kv string) (name, value string, ok bool) {
+	for i := 0; i < len(kv); i++ {
+		if kv[i] == '=' {
+			return kv[:i], kv[i+1:], true
+		}
+	}
+	return kv, "", false
 }
 
 // OverlayEnv returns values from top when present, otherwise base.
@@ -62,6 +109,8 @@ type Invocation struct {
 	Stderr  io.Writer
 	TTY     bool
 	TempDir string
+	// replayLeases overrides claim.Owners for this invocation only (tests).
+	replayLeases func([]ops.Op) map[string]claim.Lease
 }
 
 type session struct {
@@ -146,6 +195,72 @@ func uiFrom(cmd *cobra.Command) *tui.Renderer {
 		return sess.ui
 	}
 	return tui.NewRenderer(false, OSEnv().Lookup)
+}
+
+func envFrom(cmd *cobra.Command) Env {
+	if sess := sessionFrom(cmd); sess != nil && sess.inv.Env != nil {
+		return sess.inv.Env
+	}
+	return OSEnv()
+}
+
+func tempDirFrom(cmd *cobra.Command) string {
+	if sess := sessionFrom(cmd); sess != nil && sess.inv.TempDir != "" {
+		return sess.inv.TempDir
+	}
+	return os.TempDir()
+}
+
+func invocationDir(cmd *cobra.Command) string {
+	if sess := sessionFrom(cmd); sess != nil && sess.inv.Dir != "" {
+		return sess.inv.Dir
+	}
+	return ""
+}
+
+func replayLeasesFrom(cmd *cobra.Command) func([]ops.Op) map[string]claim.Lease {
+	if sess := sessionFrom(cmd); sess != nil && sess.inv.replayLeases != nil {
+		return sess.inv.replayLeases
+	}
+	return claim.Owners
+}
+
+func environFrom(cmd *cobra.Command) []string {
+	env := envFrom(cmd)
+	if e, ok := env.(interface{ Environ() []string }); ok {
+		return e.Environ()
+	}
+	return os.Environ()
+}
+
+func gitAt(cmd *cobra.Command, repoPath string) *adapters.Client {
+	return adapters.New(repoPath).WithEnviron(environFrom(cmd))
+}
+
+func gitIsolatedAt(cmd *cobra.Command, repoPath string) *adapters.Client {
+	return adapters.NewIsolated(repoPath).WithEnviron(environFrom(cmd))
+}
+
+func repoPathFromCmd(cmd *cobra.Command) string {
+	if cmd == nil || cmd.Root() == nil {
+		if dir := invocationDir(cmd); dir != "" {
+			return dir
+		}
+		return "."
+	}
+	path, err := cmd.Root().PersistentFlags().GetString("repo")
+	if err != nil || path == "" {
+		if dir := invocationDir(cmd); dir != "" {
+			return dir
+		}
+		return "."
+	}
+	if !filepath.IsAbs(path) {
+		if dir := invocationDir(cmd); dir != "" {
+			return filepath.Join(dir, path)
+		}
+	}
+	return path
 }
 
 func commandFor(inv Invocation) *cobra.Command {

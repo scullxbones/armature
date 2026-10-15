@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -137,9 +138,8 @@ func TestWorkersCommand_SlottedRowsDoNotInheritSiblingClaim_REQ_CLAIMTTL(t *test
 }
 
 func TestWorkersCommand_ReplaysOwnershipOnce_REQ_CLAIMTTL(t *testing.T) {
-	t.Cleanup(func() { replayIssueLeases = claim.Owners })
 	calls := 0
-	replayIssueLeases = func(log []ops.Op) map[string]claim.Lease {
+	replay := func(log []ops.Op) map[string]claim.Lease {
 		calls++
 		return claim.Owners(log)
 	}
@@ -158,8 +158,18 @@ func TestWorkersCommand_ReplaysOwnershipOnce_REQ_CLAIMTTL(t *testing.T) {
 		Type: ops.OpNote, TargetID: "task-02", Timestamp: now - 10, WorkerID: workerID + "~slot-b",
 	}))
 
-	_, err = runTrls(t, repo, "--format", "json", "workers")
-	require.NoError(t, err)
+	runTrlsMu.Lock()
+	defer runTrlsMu.Unlock()
+	stdout := new(bytes.Buffer)
+	root := commandFor(Invocation{
+		Stdout:       stdout,
+		Stderr:       new(bytes.Buffer),
+		Dir:          repo,
+		TempDir:      t.TempDir(),
+		replayLeases: replay,
+	})
+	root.SetArgs([]string{"--format", "json", "workers", "--repo", repo})
+	require.NoError(t, root.Execute())
 	assert.Equal(t, 1, calls, "combined log must be replayed once for the whole listing")
 }
 
