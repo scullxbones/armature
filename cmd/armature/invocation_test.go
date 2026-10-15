@@ -28,6 +28,20 @@ func TestRun_VersionHuman_REQ_PARCLI(t *testing.T) {
 	assert.NotContains(t, stdout.String(), `"versions"`)
 }
 
+func TestRun_NilContextKeepsSession_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	stdout := new(bytes.Buffer)
+	var ctx context.Context
+	code := Run(ctx, Invocation{
+		Args:    []string{"version", "--format", "human"},
+		Stdout:  stdout,
+		Stderr:  new(bytes.Buffer),
+		TempDir: t.TempDir(),
+	})
+	assert.Equal(t, 0, code)
+	assert.Contains(t, stdout.String(), "arm version")
+}
+
 func TestRun_IsolatesFormatBetweenInvocations_REQ_PARCLI(t *testing.T) {
 	t.Parallel()
 	var wg sync.WaitGroup
