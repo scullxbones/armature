@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// armHarness is the parallel-safe in-process CLI driver. Env is an overlay on
-// the process environment; it never calls t.Setenv.
 type armHarness struct {
 	t      *testing.T
 	repo   string
