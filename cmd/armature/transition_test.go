@@ -103,11 +103,14 @@ func TestNoOpAppendsNothingToOpsLog_REQ_AOC_S4_T1(t *testing.T) {
 	assert.Len(t, after, 1)
 }
 
-func runTransitionUnlocked(t *testing.T, repo string, args ...string) (string, error) {
+func runTransitionUnlocked(t *testing.T, repo string, afterIdempotencyCheck func(), args ...string) (string, error) {
 	t.Helper()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	root := testRootCmd(t)
+	if sess := sessionFrom(root); sess != nil {
+		sess.inv.afterIdempotencyCheck = afterIdempotencyCheck
+	}
 	root.SetOut(buf)
 	root.SetErr(errBuf)
 	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
@@ -146,18 +149,17 @@ func TestOverlappingIdenticalTransitionsAppendOnce_REQ_AOC_S4_T1(t *testing.T) {
 
 	var barrier sync.WaitGroup
 	barrier.Add(2)
-	testBarrierAfterIdempotencyCheck = func() {
+	afterCheck := func() {
 		barrier.Done()
 		barrier.Wait()
 	}
-	t.Cleanup(func() { testBarrierAfterIdempotencyCheck = nil })
 
 	args := []string{"transition", "--issue", issueID, "--to", "blocked", "--outcome", idempotentOutcomeWaiting}
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	for i := range 2 {
 		wg.Go(func() {
-			_, errs[i] = runTransitionUnlocked(t, repo, args...)
+			_, errs[i] = runTransitionUnlocked(t, repo, afterCheck, args...)
 		})
 	}
 	wg.Wait()

@@ -111,7 +111,8 @@ type Invocation struct {
 	TTY     bool
 	TempDir string
 	// replayLeases overrides claim.Owners for this invocation only (tests).
-	replayLeases func([]ops.Op) map[string]claim.Lease
+	replayLeases          func([]ops.Op) map[string]claim.Lease
+	afterIdempotencyCheck func()
 }
 
 type session struct {

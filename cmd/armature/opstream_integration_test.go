@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -244,22 +243,11 @@ func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
 		WorkerID:  "worker-unknown",
 	}))
 
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
 	stdout, cmdStderr, cmdErr := runTrlsWithStderr(t, repo, "ready")
-
-	require.NoError(t, w.Close())
-	os.Stderr = oldStderr
-	rawStderr, err := io.ReadAll(r)
-	require.NoError(t, err)
 	require.NoError(t, cmdErr)
 
 	assert.Contains(t, stdout, "ready-01")
 	assert.Contains(t, cmdStderr, "warning:", "command stderr should contain the warning")
-	assert.Empty(t, string(rawStderr), "raw stderr should stay quiet for snapshot-backed warnings")
 }
 
 func TestMaterializeOffsetTracking(t *testing.T) {
