@@ -298,7 +298,7 @@ func TestListEnvHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	require.Error(t, err, "overlay PATH with no git is not a process-PATH fallback")
 }
 
-func TestListEnvRefusesRelativePATH_REQ_PARCLI(t *testing.T) {
+func TestListEnvRefusesRelativePATH_REQ_PARCLI(t *testing.T) { //nolint:paralleltest // t.Chdir is process-wide
 	t.Chdir(t.TempDir())
 	repo := gittest.InitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0644))
