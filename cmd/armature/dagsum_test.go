@@ -42,10 +42,11 @@ func setupRepoWithDraftNode(t *testing.T) string {
 }
 
 func TestDAGSummaryCmd_WithDraftNodes_EmitsJSON(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithDraftNode(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
@@ -58,10 +59,11 @@ func TestDAGSummaryCmd_WithDraftNodes_EmitsJSON(t *testing.T) {
 }
 
 func TestDAGSummaryCmd_ApproveAll_WithDraftNodes(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithDraftNode(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json", "--approve-all"})
 	require.NoError(t, root.Execute())
@@ -73,6 +75,7 @@ func TestDAGSummaryCmd_ApproveAll_WithDraftNodes(t *testing.T) {
 }
 
 func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create",
@@ -92,7 +95,7 @@ func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json", "--issue", "epic-draft-01"})
 	require.NoError(t, root.Execute())
@@ -105,10 +108,11 @@ func TestDAGSummaryCmd_IssueFlag_WithDraftSubtree(t *testing.T) {
 }
 
 func TestDAGSummaryCmd_IssueFlag_UnknownID(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "json", "--issue", "nonexistent-id"})
 	require.NoError(t, root.Execute())

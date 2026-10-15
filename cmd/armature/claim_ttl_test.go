@@ -21,6 +21,7 @@ import (
 )
 
 func TestClaimTTLZeroAndNegativeRejected_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, logPath, err := resolveWorkerAndLog(&config.Context{
 		RepoPath:  repo,
@@ -64,6 +65,7 @@ func claimOpCount(t *testing.T, logPath string) int {
 }
 
 func TestRacingClaimsSameOwnerEveryCaller_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	log := []ops.Op{
 		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 90, WorkerID: "worker-a",
 			Payload: ops.Payload{Title: "T", NodeType: "task"}},

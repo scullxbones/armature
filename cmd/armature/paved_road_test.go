@@ -17,7 +17,8 @@ import (
 )
 
 func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	t.Run("everyCommandClassifiedIncludingLeaves", func(t *testing.T) {
 		var unclassified []string
@@ -158,6 +159,7 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 }
 
 func TestPavedRoadUnclassifiedLeafFails(t *testing.T) {
+	t.Parallel()
 	root := &cobra.Command{Use: "arm"}
 	root.AddCommand(&cobra.Command{Use: "mystery", Short: "unclassified leaf"})
 	applyPavedRoadMetadata(root)

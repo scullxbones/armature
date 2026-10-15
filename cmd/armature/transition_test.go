@@ -51,6 +51,7 @@ func transitionOpsForIssue(t *testing.T, repo, issueID string) []ops.Op {
 }
 
 func TestIdenticalPayloadIsNoOpExitZero_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupTransitionIdempotencyRepo(t, idempotentIssueID)
 
 	out, err := runTrls(t, repo, "transition", "--issue", idempotentIssueID, "--to", "blocked", "--outcome", idempotentOutcomeWaiting)
@@ -68,6 +69,7 @@ func TestIdenticalPayloadIsNoOpExitZero_REQ_AOC_S4_T1(t *testing.T) {
 }
 
 func TestChangedPayloadAppendsAmendment_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupTransitionIdempotencyRepo(t, idempotentAmendmentIssueID)
 
 	_, err := runTrls(t, repo, "transition", "--issue", idempotentAmendmentIssueID, "--to", "blocked", "--outcome", idempotentOutcomeWaiting)
@@ -85,6 +87,7 @@ func TestChangedPayloadAppendsAmendment_REQ_AOC_S4_T1(t *testing.T) {
 }
 
 func TestNoOpAppendsNothingToOpsLog_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupTransitionIdempotencyRepo(t, idempotentIssueID)
 
 	_, err := runTrls(t, repo, "transition", "--issue", idempotentIssueID, "--to", "blocked", "--outcome", idempotentOutcomeWaiting)
@@ -100,11 +103,14 @@ func TestNoOpAppendsNothingToOpsLog_REQ_AOC_S4_T1(t *testing.T) {
 	assert.Len(t, after, 1)
 }
 
-func runTransitionUnlocked(t *testing.T, repo string, args ...string) (string, error) {
+func runTransitionUnlocked(t *testing.T, repo string, afterIdempotencyCheck func(), args ...string) (string, error) {
 	t.Helper()
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
+	if sess := sessionFrom(root); sess != nil {
+		sess.inv.afterIdempotencyCheck = afterIdempotencyCheck
+	}
 	root.SetOut(buf)
 	root.SetErr(errBuf)
 	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
@@ -113,6 +119,7 @@ func runTransitionUnlocked(t *testing.T, repo string, args ...string) (string, e
 }
 
 func TestIdenticalDoneRetryOnMainIsNoOp_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
 	issueID := "aoc-s4-t1-done-main"
 	repo := setupTransitionIdempotencyRepo(t, issueID)
 	run(t, repo, "git", "branch", "-M", "main")
@@ -136,23 +143,23 @@ func TestIdenticalDoneRetryOnMainIsNoOp_REQ_AOC_S4_T1(t *testing.T) {
 }
 
 func TestOverlappingIdenticalTransitionsAppendOnce_REQ_AOC_S4_T1(t *testing.T) {
+	t.Parallel()
 	issueID := "aoc-s4-t1-race"
 	repo := setupTransitionIdempotencyRepo(t, issueID)
 
 	var barrier sync.WaitGroup
 	barrier.Add(2)
-	testBarrierAfterIdempotencyCheck = func() {
+	afterCheck := func() {
 		barrier.Done()
 		barrier.Wait()
 	}
-	t.Cleanup(func() { testBarrierAfterIdempotencyCheck = nil })
 
 	args := []string{"transition", "--issue", issueID, "--to", "blocked", "--outcome", idempotentOutcomeWaiting}
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	for i := range 2 {
 		wg.Go(func() {
-			_, errs[i] = runTransitionUnlocked(t, repo, args...)
+			_, errs[i] = runTransitionUnlocked(t, repo, afterCheck, args...)
 		})
 	}
 	wg.Wait()
@@ -174,6 +181,7 @@ func TestOverlappingIdenticalTransitionsAppendOnce_REQ_AOC_S4_T1(t *testing.T) {
 }
 
 func TestDoneAmendmentPreservesIntegrationBranch_REQ_LNGHZN_S11_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	wt := filepath.Join(repo, ".worktrees", "task-01")
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")

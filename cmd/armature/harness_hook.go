@@ -9,7 +9,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/harnesshook"
@@ -21,10 +20,6 @@ import (
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
 )
-
-func issueBindingFromGitDirOrEnv(gitDir string) string {
-	return issueBindingFromGitDirOrEnvLookup(gitDir, OSEnv())
-}
 
 func issueBindingFromGitDirOrEnvLookup(gitDir string, env Env) string {
 	if issueID := harnesshook.ReadIssueBindingFile(gitDir); issueID != "" {
@@ -157,10 +152,6 @@ type heartbeatRateLimitState struct {
 	LastHeartbeatTime int64 `json:"last_heartbeat_time_unix"`
 }
 
-func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
-	return readHeartbeatRateLimitStateAt(os.TempDir(), workerID, issueID)
-}
-
 func readHeartbeatRateLimitStateAt(tempDir, workerID, issueID string) time.Time {
 	root, err := os.OpenRoot(tempDir)
 	if err != nil {
@@ -176,10 +167,6 @@ func readHeartbeatRateLimitStateAt(tempDir, workerID, issueID string) time.Time 
 		return time.Time{}
 	}
 	return time.Unix(state.LastHeartbeatTime, 0)
-}
-
-func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.Time) error {
-	return writeHeartbeatRateLimitStateAt(os.TempDir(), workerID, issueID, heartbeatTime)
 }
 
 func writeHeartbeatRateLimitStateAt(tempDir, workerID, issueID string, heartbeatTime time.Time) error {
@@ -205,16 +192,8 @@ func rateLimitStateFileName(workerID, issueID string) string {
 	return fmt.Sprintf("armature-heartbeat-%s-%s.json", workerID, issueID)
 }
 
-func rateLimitStateFilePath(workerID, issueID string) string {
-	return rateLimitStateFilePathAt(os.TempDir(), workerID, issueID)
-}
-
 func rateLimitStateFilePathAt(tempDir, workerID, issueID string) string {
 	return filepath.Join(tempDir, rateLimitStateFileName(workerID, issueID))
-}
-
-func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKind harnesshook.EventKind) {
-	tryEmitHeartbeatAt(repoPath, issuesDir, worktreePath, issueID, eventKind, OSEnv(), os.TempDir(), os.Stderr)
 }
 
 func tryEmitHeartbeatAt(repoPath, issuesDir, worktreePath, issueID string, eventKind harnesshook.EventKind, env Env, tempDir string, errOut io.Writer) {
@@ -253,7 +232,7 @@ func tryEmitHeartbeatAt(repoPath, issuesDir, worktreePath, issueID string, event
 
 	var gc ops.GitCommitter
 	if worktreePath != "" {
-		gc = adapters.New(worktreePath).WithEnviron(overlayEnviron(env))
+		gc = gitWith(env, worktreePath)
 	}
 
 	if err := ops.AppendAndCommit(logPath, worktreePath, heartbeatOp, gc); err != nil {

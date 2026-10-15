@@ -20,6 +20,7 @@ import (
 )
 
 func TestHookRunUnknown(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "hook", "run", "unknown-hook")
@@ -28,6 +29,7 @@ func TestHookRunUnknown(t *testing.T) {
 }
 
 func TestHookRunMissingArg(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "hook", "run")
@@ -35,6 +37,7 @@ func TestHookRunMissingArg(t *testing.T) {
 }
 
 func TestHookRunPostMerge(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "hook", "run", "post-merge")
@@ -45,6 +48,7 @@ func TestHookRunPostMerge(t *testing.T) {
 }
 
 func TestPostMergeHookExitsZero_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := doneWithoutAssessment(t)
 
 	stdout := new(bytes.Buffer)
@@ -61,6 +65,7 @@ func TestPostMergeHookExitsZero_REQ_LNGHZN_S11_T3(t *testing.T) {
 }
 
 func TestHookRunPostCommit_NoActiveClaim(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "hook", "run", "post-commit")
@@ -68,6 +73,7 @@ func TestHookRunPostCommit_NoActiveClaim(t *testing.T) {
 }
 
 func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
@@ -79,6 +85,7 @@ func TestHookRunPostCommit_WithActiveClaim(t *testing.T) {
 }
 
 func TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -121,6 +128,7 @@ func TestHookRunPostCommit_SkipsOpsWorktree_REQ_HKDLG_T1(t *testing.T) {
 }
 
 func TestHookRunPreCommit_SingleBranch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "hook", "run", "pre-commit")
@@ -128,8 +136,9 @@ func TestHookRunPreCommit_SingleBranch(t *testing.T) {
 }
 
 func TestHookSubcommandHelp(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"hook", "--help"})
@@ -138,6 +147,7 @@ func TestHookSubcommandHelp(t *testing.T) {
 }
 
 func TestHookPostCommit_InitialCommit(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
@@ -155,6 +165,7 @@ func TestHookPostCommit_InitialCommit(t *testing.T) {
 }
 
 func TestHookPostCommit_ScopeRename(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTask(t, "task-rename-01", "src/old.go")
 
 	writeFile(t, repo, "src/old.go", "package old")
@@ -174,6 +185,7 @@ func TestHookPostCommit_ScopeRename(t *testing.T) {
 }
 
 func TestHookPostCommit_ScopeDelete(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTask(t, "task-delete-01", "src/gone.go")
 	_, err := runTrls(t, repo, "amend", "task-delete-01", "--scope", "src/gone.go", "--scope", "src/keep.go")
 	require.NoError(t, err)
@@ -195,6 +207,7 @@ func TestHookPostCommit_ScopeDelete(t *testing.T) {
 }
 
 func TestHookRunPreCommit_NoStagedFiles(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	run(t, repo, "git", "reset", "HEAD")
@@ -204,6 +217,7 @@ func TestHookRunPreCommit_NoStagedFiles(t *testing.T) {
 }
 
 func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	writeFile(t, repo, "src/main.go", "package main")
@@ -214,6 +228,7 @@ func TestHookRunPreCommit_StagedNonOpsFile(t *testing.T) {
 }
 
 func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	writeFile(t, repo, ".armature/ops/test.log", "test ops content")
@@ -225,6 +240,7 @@ func TestHookRunPreCommit_BlocksStagedOpsFile(t *testing.T) {
 }
 
 func TestHookRunPreCommit_LinkedWorktreeStagedOpsUsesInvokingIndex_REQ_HKDLG(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -286,7 +302,7 @@ func TestHookFindActiveClaimID_UsesLatestHeartbeat(t *testing.T) {
 		Config:    config.Config{DefaultTTL: 60},
 	}
 
-	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx))
+	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx, testEnv(t)))
 }
 
 func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
@@ -322,10 +338,11 @@ func TestHookFindActiveClaimID_IgnoresDoneTransitions(t *testing.T) {
 		Config:    config.Config{DefaultTTL: 60},
 	}
 
-	assert.Empty(t, hookFindActiveClaimID(ctx))
+	assert.Empty(t, hookFindActiveClaimID(ctx, testEnv(t)))
 }
 
 func TestHookRunPostCommit_HeartbeatsOwnSlotOnly_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	workerID, err := worker.GetWorkerID(repo)
@@ -359,13 +376,13 @@ func TestHookRunPostCommit_HeartbeatsOwnSlotOnly_REQ_CLAIMTTL(t *testing.T) {
 		Config:    config.Config{DefaultTTL: 60},
 	}
 
-	t.Setenv("ARM_LOG_SLOT", "slot-a")
-	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx), "slot-a must not select the sibling's newer claim")
+	setCLIEnv(t, "ARM_LOG_SLOT", "slot-a")
+	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx, testEnv(t)), "slot-a must not select the sibling's newer claim")
 
-	t.Setenv("ARM_LOG_SLOT", "slot-b")
-	assert.Equal(t, "task-02", hookFindActiveClaimID(ctx))
+	setCLIEnv(t, "ARM_LOG_SLOT", "slot-b")
+	assert.Equal(t, "task-02", hookFindActiveClaimID(ctx, testEnv(t)))
 
-	t.Setenv("ARM_LOG_SLOT", "slot-a")
+	setCLIEnv(t, "ARM_LOG_SLOT", "slot-a")
 	out, err := runTrls(t, repo, "hook", "run", "post-commit")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Heartbeat recorded for task-01")
@@ -391,6 +408,7 @@ func TestHookRunPostCommit_HeartbeatsOwnSlotOnly_REQ_CLAIMTTL(t *testing.T) {
 }
 
 func TestHookFindActiveClaimID_IgnoresForgedWorkerID_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
@@ -415,16 +433,17 @@ func TestHookFindActiveClaimID_IgnoresForgedWorkerID_REQ_CLAIMTTL(t *testing.T) 
 		Payload:   ops.Payload{TTL: 60, ClaimToken: "tok-forged"},
 	}))
 
-	t.Setenv("ARM_LOG_SLOT", "slot-a")
+	setCLIEnv(t, "ARM_LOG_SLOT", "slot-a")
 	ctx := &config.Context{
 		RepoPath:  repo,
 		IssuesDir: issuesDir,
 		Config:    config.Config{DefaultTTL: 60},
 	}
-	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx), "forged worker_id in another log must not win hook selection")
+	assert.Equal(t, "task-01", hookFindActiveClaimID(ctx, testEnv(t)), "forged worker_id in another log must not win hook selection")
 }
 
 func TestHookDetectScopeChanges_WithExistingCheckpoint(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTask(t, "task-checkpoint-scope", "src/checkpoint.go")
 
 	_, err := runTrls(t, repo, "claim", "task-checkpoint-scope", "--worktree")
@@ -486,6 +505,7 @@ func readScopeDriftOps(t *testing.T, repo string) (renames, deletes []ops.Op) {
 }
 
 func TestScopeDriftDetectionEmitsRenameOp_REQ_HKDLG_T2(t *testing.T) {
+	t.Parallel()
 	const (
 		taskID  = "task-drift-rename-01"
 		oldPath = "src/scoped.go"
@@ -525,6 +545,7 @@ func TestScopeDriftDetectionEmitsRenameOp_REQ_HKDLG_T2(t *testing.T) {
 }
 
 func TestScopeDriftDetectionEmitsDeleteOp_REQ_HKDLG_T2(t *testing.T) {
+	t.Parallel()
 	const (
 		taskID = "task-drift-delete-01"
 		path   = "src/gone.go"
@@ -563,6 +584,7 @@ func TestScopeDriftDetectionEmitsDeleteOp_REQ_HKDLG_T2(t *testing.T) {
 }
 
 func TestScopeDriftDetectionIgnoresUnscopedPaths_REQ_HKDLG_T2(t *testing.T) {
+	t.Parallel()
 	const taskID = "task-drift-unscoped-01"
 	repo := setupRepoWithScopedTask(t, taskID, "src/scoped.go")
 

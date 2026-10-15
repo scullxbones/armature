@@ -13,6 +13,7 @@ import (
 )
 
 func TestExitJSON_Format(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "json", armerrors.New("IO", "something went wrong", nil))
 
@@ -29,6 +30,7 @@ func TestExitJSON_Format(t *testing.T) {
 }
 
 func TestExitJSON_UsageError(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
 	renderCommandFailure(buf, "json", armerrors.New("USAGE", "bad flag", []string{"arm --help"}))
 
@@ -42,6 +44,7 @@ func TestExitJSON_UsageError(t *testing.T) {
 }
 
 func TestExitJSON_NotFound(t *testing.T) {
+	t.Parallel()
 	stdout := new(bytes.Buffer)
 	code := handleRootError(stdout, new(bytes.Buffer), "json", false, fmt.Errorf("issue not found"))
 	assert.Equal(t, 1, code)
@@ -56,6 +59,7 @@ func TestExitJSON_NotFound(t *testing.T) {
 }
 
 func TestPortErrorsDoNotWrapAsGeneral1(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"some unexpected problem",
 		"issue E1-S1-T1 not found",
@@ -79,10 +83,11 @@ func TestPortErrorsDoNotWrapAsGeneral1(t *testing.T) {
 }
 
 func TestMain_JSONFormatError(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"show", "--repo", repo, "--format", "json", "nonexistent-issue-xyz"})
@@ -103,10 +108,11 @@ func TestMain_JSONFormatError(t *testing.T) {
 }
 
 func TestMain_AgentFormatError(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"show", "--repo", repo, "--format", "agent", "nonexistent-issue-xyz"})
@@ -125,6 +131,7 @@ func TestMain_AgentFormatError(t *testing.T) {
 }
 
 func TestHandleRootError_Nil(t *testing.T) {
+	t.Parallel()
 	stdout := new(bytes.Buffer)
 	code := handleRootError(stdout, new(bytes.Buffer), "json", false, nil)
 	assert.Equal(t, 0, code)
@@ -132,6 +139,7 @@ func TestHandleRootError_Nil(t *testing.T) {
 }
 
 func TestHandleRootError_AdapterExitError(t *testing.T) {
+	t.Parallel()
 	stdout := new(bytes.Buffer)
 	code := handleRootError(stdout, new(bytes.Buffer), "json", false, adapterExitError{code: 42})
 	assert.Equal(t, 42, code)
@@ -139,6 +147,7 @@ func TestHandleRootError_AdapterExitError(t *testing.T) {
 }
 
 func TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	err := skipCommandFailure(fmt.Errorf("validation failed with 1 error(s) and 0 warning(s)"))
@@ -150,11 +159,13 @@ func TestHandleRootError_ProtocolExitError_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestRenderStringSlice_NonEmpty(t *testing.T) {
+	t.Parallel()
 	result := renderStringSlice([]string{"a", "b", "c"})
 	assert.Equal(t, `["a","b","c"]`, result)
 }
 
 func TestRenderStringSlice_Empty(t *testing.T) {
+	t.Parallel()
 	result := renderStringSlice([]string{})
 	assert.Equal(t, "[]", result)
 }

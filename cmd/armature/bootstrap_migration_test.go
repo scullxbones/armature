@@ -22,7 +22,7 @@ func TestMigrateDualBranchToCollapsed_NoLayout_REQ_LNGHZN_S1_T2(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	migrated, backupDir, err := migrateDualBranchToCollapsed(tmpDir)
+	migrated, backupDir, err := migrateDualBranchToCollapsed(testEnv(t), tmpDir)
 	if err != nil {
 		t.Fatalf("migration should not error when no layout exists: %v", err)
 	}
@@ -122,14 +122,11 @@ func TestUpdateGitExcludeConcurrentWritersKeepEveryPattern_REQ_LNGHZN_S9_T1(t *t
 }
 
 func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.T) {
+	t.Parallel()
 	tmpDir := gittest.InitWithOrigin(t).Dir
 
 	gitClient := adapters.New(tmpDir)
 
-	require.NoError(t, os.Setenv("GIT_AUTHOR_NAME", "Test User"))
-	require.NoError(t, os.Setenv("GIT_AUTHOR_EMAIL", "test@example.com"))
-	require.NoError(t, os.Setenv("GIT_COMMITTER_NAME", "Test User"))
-	require.NoError(t, os.Setenv("GIT_COMMITTER_EMAIL", "test@example.com"))
 	readmeFile := filepath.Join(tmpDir, "README.md")
 	if err := os.WriteFile(readmeFile, []byte("# Test Repo\n"), 0o600); err != nil {
 		t.Fatalf("failed to write README: %v", err)
@@ -180,7 +177,7 @@ func TestMigrateDualBranchToCollapsed_DirtyWorktree_REQ_LNGHZN_S1_T2(t *testing.
 		t.Fatalf("failed to modify tracked file: %v", err)
 	}
 
-	migrated, _, err := migrateDualBranchToCollapsed(tmpDir)
+	migrated, _, err := migrateDualBranchToCollapsed(testEnv(t), tmpDir)
 	if err == nil {
 		t.Errorf("expected migration to fail with dirty worktree, but it succeeded")
 	}
@@ -230,6 +227,7 @@ func setupDualBranchFixtureForSourcesDebris(t *testing.T) (repo string, armWorkt
 }
 
 func TestMigrateDualBranchToCollapsedReconcilesSourcesOnlyDebris(t *testing.T) {
+	t.Parallel()
 	repo, armWorktreePath := setupDualBranchFixtureForSourcesDebris(t)
 
 	sourcesDir := filepath.Join(armWorktreePath, config.StateDirName, "sources")
@@ -238,7 +236,7 @@ func TestMigrateDualBranchToCollapsedReconcilesSourcesOnlyDebris(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sourcesDir, "src-b.cache"), []byte("cached content b"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(sourcesDir, "manifest.json"), []byte(`{"sources":{"a":{}}}`), 0o600))
 
-	migrated, backupDir, err := migrateDualBranchToCollapsed(repo)
+	migrated, backupDir, err := migrateDualBranchToCollapsed(testEnv(t), repo)
 	require.NoError(t, err, "migration must reconcile pure sources debris instead of refusing")
 	require.True(t, migrated)
 	require.NotEmpty(t, backupDir)
@@ -258,6 +256,7 @@ func TestMigrateDualBranchToCollapsedReconcilesSourcesOnlyDebris(t *testing.T) {
 }
 
 func TestMigrateDualBranchToCollapsedRefusesWhenNonSourcesPathAlsoDirty(t *testing.T) {
+	t.Parallel()
 	repo, armWorktreePath := setupDualBranchFixtureForSourcesDebris(t)
 
 	sourcesDir := filepath.Join(armWorktreePath, config.StateDirName, "sources")
@@ -266,7 +265,7 @@ func TestMigrateDualBranchToCollapsedRefusesWhenNonSourcesPathAlsoDirty(t *testi
 	opsFile := filepath.Join(armWorktreePath, config.StateDirName, "ops", "existing-issue.json")
 	require.NoError(t, os.WriteFile(opsFile, []byte(`{"id":"existing","modified":true}`), 0o600))
 
-	migrated, backupDir, err := migrateDualBranchToCollapsed(repo)
+	migrated, backupDir, err := migrateDualBranchToCollapsed(testEnv(t), repo)
 	require.Error(t, err, "migration must still refuse when a tracked non-sources path is dirty")
 	assert.Contains(t, err.Error(), "uncommitted changes")
 	assert.False(t, migrated)
@@ -280,23 +279,25 @@ func TestMigrateDualBranchToCollapsedRefusesWhenNonSourcesPathAlsoDirty(t *testi
 }
 
 func TestMigrateDualBranchToCollapsedTreatsUntrackedNonSourcesDebrisTheSameAsBefore(t *testing.T) {
+	t.Parallel()
 	repo, armWorktreePath := setupDualBranchFixtureForSourcesDebris(t)
 
 	require.NoError(t, os.WriteFile(filepath.Join(armWorktreePath, "SCHEMA-like-scaffolding.txt"), []byte("scaffold"), 0o600))
 
-	migrated, backupDir, err := migrateDualBranchToCollapsed(repo)
+	migrated, backupDir, err := migrateDualBranchToCollapsed(testEnv(t), repo)
 	require.NoError(t, err, "an untracked non-sources path must not block migration")
 	assert.True(t, migrated)
 	assert.NotEmpty(t, backupDir)
 }
 
 func TestMigrateDualBranchToCollapsedClearsStaleArmatureModeConfig(t *testing.T) {
+	t.Parallel()
 	repo, _ := setupDualBranchFixtureForSourcesDebris(t)
 
 	gitClient := adapters.New(repo)
 	require.NoError(t, gitClient.SetGitConfig("armature.mode", "dual-branch"))
 
-	migrated, _, err := migrateDualBranchToCollapsed(repo)
+	migrated, _, err := migrateDualBranchToCollapsed(testEnv(t), repo)
 	require.NoError(t, err)
 	require.True(t, migrated)
 

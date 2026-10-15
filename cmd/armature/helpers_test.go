@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -82,7 +83,7 @@ func TestCommandFailureHumanRendering_REQ_LNGHZN_S6_T1(t *testing.T) {
 
 func TestRootSilenceErrors_REQ_LNGHZN_S6_T1(t *testing.T) {
 	t.Parallel()
-	root := newRootCmd()
+	root := testRootCmd(t)
 	assert.True(t, root.SilenceErrors, "root must SilenceErrors so cobra does not print a duplicate Error: line")
 }
 
@@ -116,13 +117,12 @@ func TestHandleRootErrorWritesAgentEnvelopeToStdout_REQ_LNGHZN_S6_T1(t *testing.
 
 func executeThenHandleRootError(t *testing.T, stdout, stderr *bytes.Buffer, args ...string) int {
 	t.Helper()
-	runTrlsMu.Lock()
-	defer runTrlsMu.Unlock()
 	return Run(context.Background(), Invocation{
 		Args:    args,
+		Env:     OverlayEnv(OSEnv(), cliEnvFor(t)),
 		Stdout:  stdout,
 		Stderr:  stderr,
-		TempDir: t.TempDir(),
+		TempDir: testTempDir(t),
 	})
 }
 
@@ -162,6 +162,7 @@ func decodeContractEnvelope(t *testing.T, stdout, payloadKey string) map[string]
 }
 
 func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -189,6 +190,7 @@ func TestValidateFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T)
 }
 
 func TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -209,6 +211,7 @@ func TestValidateAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestDoctorAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	plantVerifiedTaskUnder(t, repo, "task-orphan", "src/orphan.go", "NO-SUCH-PARENT")
 
@@ -223,6 +226,7 @@ func TestDoctorAgentFormatRendersJSONReport_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestDoctorFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	plantVerifiedTaskUnder(t, repo, "task-orphan", "src/orphan.go", "NO-SUCH-PARENT")
 
@@ -237,6 +241,7 @@ func TestDoctorFailingReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestBootstrapJSONFailureIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	writeFile(t, repo, "tracked.txt", "v1")
@@ -255,6 +260,7 @@ func TestBootstrapJSONFailureIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) 
 }
 
 func TestHookErrorsSkipCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	unknownOut := new(bytes.Buffer)
@@ -277,6 +283,7 @@ func TestHookErrorsSkipCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestHookPreRunAndArgsStayOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	argsOut := new(bytes.Buffer)
@@ -303,6 +310,7 @@ func TestHookPreRunAndArgsStayOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	logPath := filepath.Join(opsDir, "stale-worker.log")
@@ -370,6 +378,7 @@ func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T
 }
 
 func TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo, issueID := setupAmbiguousGCRepo(t)
 
 	stdout := new(bytes.Buffer)
@@ -392,6 +401,7 @@ func TestWorktreeGCReportIsNotCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestHookFlagParseErrorStaysOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -403,6 +413,7 @@ func TestHookFlagParseErrorStaysOnGitProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	flagOut := new(bytes.Buffer)
@@ -422,6 +433,7 @@ func TestHarnessHookEarlyErrorStaysOnPlatformProtocol_REQ_LNGHZN_S6_T1(t *testin
 }
 
 func TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -436,6 +448,7 @@ func TestParseErrorUsesImplicitAgentFormat_REQ_LNGHZN_S6_T1(t *testing.T) {
 }
 
 func TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -456,6 +469,7 @@ func TestPlatformProtocolSurvivesFlagBeforeSubcommand_REQ_LNGHZN_S6_T1(t *testin
 }
 
 func TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{"full": {"false"}})
 
@@ -475,6 +489,7 @@ func TestGateFailureIsNotConcatenatedCommandFailure_REQ_LNGHZN_S6_T1(t *testing.
 }
 
 func TestPreRenderedReportsAreNotConcatenatedCommandFailures_REQ_LNGHZN_S6_T1(t *testing.T) {
+	t.Parallel()
 	t.Run("sources verify", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
 		missing := filepath.Join(t.TempDir(), "gone.txt")
@@ -622,6 +637,7 @@ func asAnySlice(t *testing.T, v any) []any {
 }
 
 func TestLinkedWorktreeClaimUsesInvocationIdentity_REQ_CLAIMORD_W21(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -652,6 +668,7 @@ func TestLinkedWorktreeClaimUsesInvocationIdentity_REQ_CLAIMORD_W21(t *testing.T
 }
 
 func TestInvalidLogSlotSkipsHarnessHeartbeat_REQ_CLAIMORD_W21(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -661,9 +678,9 @@ func TestInvalidLogSlotSkipsHarnessHeartbeat_REQ_CLAIMORD_W21(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--title", "HB", "--type", "task", "--id", "task-hb")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "NOPE")
+	setCLIEnv(t, "ARM_LOG_SLOT", "NOPE")
 	issuesDir := filepath.Join(repo, ".armature")
-	tryEmitHeartbeat(repo, issuesDir, filepath.Join(repo, ".armature"), "task-hb", harnesshook.EventPreToolUse)
+	tryEmitHeartbeatAt(repo, issuesDir, filepath.Join(repo, ".armature"), "task-hb", harnesshook.EventPreToolUse, testEnv(t), t.TempDir(), io.Discard)
 
 	baseLog := filepath.Join(issuesDir, "ops", "hook-worker.log")
 	content, err := os.ReadFile(baseLog)

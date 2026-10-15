@@ -4,16 +4,22 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 // List returns the complete, non-prunable worktree inventory for repoPath.
 // Identity is read from each worktree's binding file; branch and path are
 // observations only. A failed git listing or unreadable binding fails closed.
 func List(repoPath string) ([]Meta, error) {
-	blocks, err := listPorcelainBlocks(repoPath)
+	return ListEnv(repoPath, nil)
+}
+
+// ListEnv is List with an optional child environment (PATH overlays for tests).
+func ListEnv(repoPath string, environ []string) ([]Meta, error) {
+	blocks, err := listPorcelainBlocks(repoPath, environ)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +47,7 @@ func List(repoPath string) ([]Meta, error) {
 // paths are clone-local evidence: callers must not use replicated issue paths
 // alone to infer ownership in another clone.
 func RegisteredPaths(repoPath string) ([]string, error) {
-	blocks, err := listPorcelainBlocks(repoPath)
+	blocks, err := listPorcelainBlocks(repoPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +305,7 @@ func boundEntries(items []Meta, id string) []Meta {
 // exact-path re-add, never a broad `git worktree prune` that could drop
 // unrelated registrations.
 func HasPrunableRegistration(repoPath, path string) (bool, error) {
-	blocks, err := listPorcelainBlocks(repoPath)
+	blocks, err := listPorcelainBlocks(repoPath, nil)
 	if err != nil {
 		return false, err
 	}
@@ -318,8 +324,8 @@ type porcelainBlock struct {
 	prunable bool
 }
 
-func listPorcelainBlocks(repoPath string) ([]porcelainBlock, error) {
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "worktree", "list", "--porcelain") // #nosec G204 - literal git; args built here
+func listPorcelainBlocks(repoPath string, environ []string) ([]porcelainBlock, error) {
+	cmd := adapters.CommandGit(context.Background(), environ, "-C", repoPath, "worktree", "list", "--porcelain")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list --porcelain: %w", err)

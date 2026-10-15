@@ -67,9 +67,10 @@ func TestRemoveWorktreeForIssueTracked_FailsClosedOnUnreadableInventory_REQ_LNGH
 }
 
 func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -88,6 +89,7 @@ func TestIssueWorktreeHasViolations_FailsClosedOnAmbiguousMarkers_REQ_LNGHZN_S5(
 }
 
 func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "materialize")
@@ -116,17 +118,18 @@ func TestMergedCmd_DoesNotMaterialize(t *testing.T) {
 }
 
 func TestMergedRemovesTaskWorktree(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -135,7 +138,7 @@ func TestMergedRemovesTaskWorktree(t *testing.T) {
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
@@ -145,6 +148,7 @@ func TestMergedRemovesTaskWorktree(t *testing.T) {
 }
 
 func TestMergedRemovesArmatureOwnedCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	destination := filepath.Join(t.TempDir(), "custom-merged")
 	excludePath := filepath.Join(repo, ".git", "info", "exclude")
@@ -170,6 +174,7 @@ func TestMergedRemovesArmatureOwnedCustomExclusion_REQ_LNGHZN_S9_T1(t *testing.T
 }
 
 func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		prepare func(t *testing.T, repo, worktreePath string)
@@ -196,7 +201,7 @@ func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 			repo := setupRepoWithTask(t)
 			worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-			claim := newRootCmd()
+			claim := testRootCmd(t)
 			claim.SetOut(new(bytes.Buffer))
 			claim.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 			require.NoError(t, claim.Execute())
@@ -209,7 +214,7 @@ func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 			require.NotEmpty(t, parentBefore)
 
 			tc.prepare(t, repo, worktreePath)
-			transition := newRootCmd()
+			transition := testRootCmd(t)
 			transition.SetOut(new(bytes.Buffer))
 			transition.SetArgs(enrichTestCLIArgs([]string{
 				"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
@@ -219,7 +224,7 @@ func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 			_, err := runTrls(t, repo, "materialize")
 			require.NoError(t, err)
 
-			merged := newRootCmd()
+			merged := testRootCmd(t)
 			merged.SetOut(new(bytes.Buffer))
 			landDeliveryAndAttest(t, repo, "task-01")
 			merged.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
@@ -248,6 +253,7 @@ func TestMergedPreservesDirtyWorktree_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestMergedClearsParentBranchMetadataFromRecordedClaim_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	claim, err := runTrls(t, repo, "claim", "task-01", "--worktree")
@@ -269,26 +275,27 @@ func TestMergedClearsParentBranchMetadataFromRecordedClaim_REQ_LNGHZN_S5_T9(t *t
 }
 
 func TestMergedRemovesBugWorktree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test bug", "--type", "bug", "--id", "bug-01"}))
 	require.NoError(t, cmd2.Execute())
 
 	worktreePath := filepath.Join(repo, ".worktrees", "bug-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "bug-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{
 		"transition", "--repo", repo, "--issue", "bug-01", "--to", "done",
@@ -299,7 +306,7 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 	_, err2 := runTrls(t, repo, "materialize")
 	require.NoError(t, err2)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "bug-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "bug-01"})
@@ -309,17 +316,18 @@ func TestMergedRemovesBugWorktree(t *testing.T) {
 }
 
 func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test story", "--type", "story", "--id", "story-01"}))
 	require.NoError(t, cmd2.Execute())
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Delivered", "--force"}))
@@ -328,7 +336,7 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "story-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01", "--force"})
@@ -336,26 +344,27 @@ func TestMergedHandlesStoryWithNoActiveWorktree(t *testing.T) {
 }
 
 func TestMergedRemovesStoryWorktree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test story", "--type", "story", "--id", "story-01"}))
 	require.NoError(t, cmd2.Execute())
 
 	worktreePath := filepath.Join(repo, ".worktrees", "story-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "story-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "story-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Delivered", "--force"}))
@@ -364,7 +373,7 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "story-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "story-01"})
@@ -374,26 +383,27 @@ func TestMergedRemovesStoryWorktree(t *testing.T) {
 }
 
 func TestMergedRemovesFeatureWorktree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test feature", "--type", "feature", "--id", "feature-01"}))
 	require.NoError(t, cmd2.Execute())
 
 	worktreePath := filepath.Join(repo, ".worktrees", "feature-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "feature-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Shipped", "--force"}))
@@ -402,7 +412,7 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "feature-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01", "--force"})
@@ -412,17 +422,18 @@ func TestMergedRemovesFeatureWorktree(t *testing.T) {
 }
 
 func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test feature", "--type", "feature", "--id", "feature-01"}))
 	require.NoError(t, cmd2.Execute())
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "feature-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Shipped", "--force"}))
@@ -431,7 +442,7 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "feature-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "feature-01", "--force"})
@@ -439,10 +450,11 @@ func TestMergedHandlesFeatureWithNoWorktree(t *testing.T) {
 }
 
 func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -462,7 +474,7 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
 		"--outcome", "Completed", "--force", "--skip-delivery-gate"}))
@@ -471,7 +483,7 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -487,14 +499,15 @@ func TestMergedWarnsOnPassThroughEntries(t *testing.T) {
 }
 
 func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -503,7 +516,7 @@ func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 	_, errMat2 := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat2)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -518,15 +531,16 @@ func TestMergedNoWarningWithoutPassThroughEntries(t *testing.T) {
 }
 
 func TestMergedMissingWorktreeFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -537,7 +551,7 @@ func TestMergedMissingWorktreeFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
 
 	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err := mergedCmd.Execute()
@@ -549,6 +563,7 @@ func TestMergedMissingWorktreeFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestMergedUnreadableHookLogFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	claim, err := runTrls(t, repo, "claim", "task-01", "--worktree")
@@ -571,10 +586,11 @@ func TestMergedUnreadableHookLogFailsClosed_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -591,7 +607,7 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 	err = os.WriteFile(hookLogPath, []byte("pass-through: no task binding found\n"), 0o600) //nolint:gosec // test path
 	require.NoError(t, err)
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -602,7 +618,7 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 
 	run(t, repo, "git", "worktree", "remove", "--force", worktreePath)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -615,26 +631,27 @@ func TestMergedDoesNotWarnWhenWorktreeAlreadyRemoved(t *testing.T) {
 }
 
 func TestMergedRejectsNonDoneStatus(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"}))
 	require.NoError(t, cmd2.Execute())
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
 
 	assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "in-progress"}))
 	require.NoError(t, transitionCmd.Execute())
@@ -642,7 +659,7 @@ func TestMergedRejectsNonDoneStatus(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 	err := mergedCmd.Execute()
@@ -653,17 +670,18 @@ func TestMergedRejectsNonDoneStatus(t *testing.T) {
 }
 
 func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
+	t.Parallel()
 	t.Run("happy path: op recorded and worktree removed", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
 		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-		claimCmd := newRootCmd()
+		claimCmd := testRootCmd(t)
 		claimCmd.SetOut(new(bytes.Buffer))
 		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, claimCmd.Execute())
 		assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
-		transitionCmd := newRootCmd()
+		transitionCmd := testRootCmd(t)
 		transitionCmd.SetOut(new(bytes.Buffer))
 		transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 			"--outcome", "Completed", "--force"}))
@@ -672,7 +690,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		_, errMat := runTrls(t, repo, "materialize")
 		require.NoError(t, errMat)
 
-		mergedCmd := newRootCmd()
+		mergedCmd := testRootCmd(t)
 		mergedCmd.SetOut(new(bytes.Buffer))
 		landDeliveryAndAttest(t, repo, "task-01")
 		mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
@@ -685,7 +703,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		repo := gittest.InitWithOrigin(t).Dir
 		run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-		bootstrapCmd := newRootCmd()
+		bootstrapCmd := testRootCmd(t)
 		bootstrapCmd.SetOut(new(bytes.Buffer))
 		bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 		require.NoError(t, bootstrapCmd.Execute())
@@ -693,19 +711,19 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 		_, err := runTrls(t, repo, "worker-init")
 		require.NoError(t, err)
 
-		createCmd := newRootCmd()
+		createCmd := testRootCmd(t)
 		createCmd.SetOut(new(bytes.Buffer))
 		createCmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"}))
 		require.NoError(t, createCmd.Execute())
 
 		worktreePath := filepath.Join(repo, ".worktrees", "task-01")
-		claimCmd := newRootCmd()
+		claimCmd := testRootCmd(t)
 		claimCmd.SetOut(new(bytes.Buffer))
 		claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 		require.NoError(t, claimCmd.Execute())
 		assert.DirExists(t, worktreePath, "worktree should exist after claim")
 
-		transitionCmd := newRootCmd()
+		transitionCmd := testRootCmd(t)
 		transitionCmd.SetOut(new(bytes.Buffer))
 		transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 			"--outcome", "Completed", "--force"}))
@@ -722,7 +740,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 			}
 		}()
 
-		mergedCmd := newRootCmd()
+		mergedCmd := testRootCmd(t)
 		mergedCmd.SetOut(new(bytes.Buffer))
 		mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
 		err = mergedCmd.Execute()
@@ -733,20 +751,21 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 }
 
 func TestMergedRecordsPROnRetry(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	bootstrapCmd := newRootCmd()
+	bootstrapCmd := testRootCmd(t)
 	bootstrapCmd.SetOut(new(bytes.Buffer))
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
 
-	workerCmd := newRootCmd()
+	workerCmd := testRootCmd(t)
 	workerCmd.SetOut(new(bytes.Buffer))
 	workerCmd.SetArgs([]string{"worker-init", "--repo", repo})
 	require.NoError(t, workerCmd.Execute())
 
-	createCmd := newRootCmd()
+	createCmd := testRootCmd(t)
 	createCmd.SetOut(new(bytes.Buffer))
 	createCmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"}))
 	require.NoError(t, createCmd.Execute())
@@ -754,7 +773,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -762,7 +781,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -771,7 +790,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd1 := newRootCmd()
+	mergedCmd1 := testRootCmd(t)
 	mergedCmd1.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd1.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "123"})
@@ -780,7 +799,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd2 := newRootCmd()
+	mergedCmd2 := testRootCmd(t)
 	mergedCmd2.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd2.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "456"})
@@ -797,6 +816,7 @@ func TestMergedRecordsPROnRetry(t *testing.T) {
 }
 
 func TestMergedSkipsUnboundWorktree(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	unboundWorktreePath := filepath.Join(t.TempDir(), "unbound-worktree")
 
@@ -809,7 +829,7 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 	bindingPath := filepath.Join(gitDir, "armature-issue-id")
 	assert.NoFileExists(t, bindingPath, "unbound worktree should have no armature-issue-id file")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -818,7 +838,7 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 	_, errMat6 := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat6)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -838,10 +858,11 @@ func TestMergedSkipsUnboundWorktree(t *testing.T) {
 }
 
 func TestMergedRemovesBoundWorktree(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -856,7 +877,7 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 	binding := strings.TrimSpace(string(bindingBytes))
 	assert.Equal(t, "task-01", binding, "binding should be task-01")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
 		"--outcome", "Completed", "--force", "--skip-delivery-gate"}))
@@ -865,7 +886,7 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 	_, errMat7 := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat7)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -883,20 +904,21 @@ func TestMergedRemovesBoundWorktree(t *testing.T) {
 }
 
 func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	bootstrapCmd := newRootCmd()
+	bootstrapCmd := testRootCmd(t)
 	bootstrapCmd.SetOut(new(bytes.Buffer))
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, bootstrapCmd.Execute())
 
-	workerCmd := newRootCmd()
+	workerCmd := testRootCmd(t)
 	workerCmd.SetOut(new(bytes.Buffer))
 	workerCmd.SetArgs([]string{"worker-init", "--repo", repo})
 	require.NoError(t, workerCmd.Execute())
 
-	createCmd := newRootCmd()
+	createCmd := testRootCmd(t)
 	createCmd.SetOut(new(bytes.Buffer))
 	createCmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01"}))
 	require.NoError(t, createCmd.Execute())
@@ -905,7 +927,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	require.NoError(t, err)
 
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -914,7 +936,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
 		"--outcome", "Completed", "--force", "--skip-delivery-gate"}))
@@ -923,7 +945,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd1 := newRootCmd()
+	mergedCmd1 := testRootCmd(t)
 	mergedCmd1.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd1.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--pr", "42"})
@@ -933,7 +955,7 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd2 := newRootCmd()
+	mergedCmd2 := testRootCmd(t)
 	outBuf2 := new(bytes.Buffer)
 	mergedCmd2.SetOut(outBuf2)
 	landDeliveryAndAttest(t, repo, "task-01")
@@ -943,10 +965,11 @@ func TestMergedAllowsRetryAfterWorktreeRemovalFails(t *testing.T) {
 }
 
 func TestMergedAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -967,7 +990,7 @@ func TestMergedAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing
 	_, err = git.ResolveRevision(ref)
 	require.NoError(t, err, "already-merged fixture must keep the stale delivery ref")
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
 	require.NoError(t, mergedCmd.Execute())
@@ -977,10 +1000,11 @@ func TestMergedAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing
 }
 
 func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1000,7 +1024,7 @@ func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
 		"--outcome", "Completed", "--force", "--skip-delivery-gate"}))
@@ -1009,7 +1033,7 @@ func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -1025,10 +1049,11 @@ func TestMergedFailsOnViolations_REQ_HOOKBIND_T4(t *testing.T) {
 }
 
 func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1048,7 +1073,7 @@ func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
 		"--outcome", "Completed", "--force", "--skip-delivery-gate"}))
@@ -1057,7 +1082,7 @@ func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -1071,10 +1096,11 @@ func TestMergedForceOverridesViolations_REQ_HOOKBIND_T4(t *testing.T) {
 }
 
 func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1094,7 +1120,7 @@ func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 	err = os.WriteFile(hookLogPath, []byte(hookLogContent), 0o600) //nolint:gosec // test path under temp directory
 	require.NoError(t, err)
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
 		"--outcome", "Completed", "--force", "--skip-delivery-gate"}))
@@ -1103,7 +1129,7 @@ func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 	_, errMat := runTrls(t, repo, "materialize")
 	require.NoError(t, errMat)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(outBuf)
@@ -1120,6 +1146,7 @@ func TestMergedWarnsOnPassThrough_REQ_HOOKBIND_T4(t *testing.T) {
 }
 
 func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	worktreePath := filepath.Join(t.TempDir(), "unbound-worktree")
@@ -1129,11 +1156,11 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 	require.NoError(t, err)
 	require.NoFileExists(t, filepath.Join(gitDir, "armature-issue-id"))
 
-	t.Setenv("ARMATURE_ISSUE_ID", "")
-	t.Setenv("ARMATURE_HOOK_PLATFORM", "codex")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "")
+	setCLIEnv(t, "ARMATURE_HOOK_PLATFORM", "codex")
 
 	targetPath := filepath.Join(worktreePath, "internal", "somefile.go")
-	hookCmd := newRootCmd()
+	hookCmd := testRootCmd(t)
 	hookCmd.SetIn(strings.NewReader(fmt.Sprintf(
 		`{"hook_event_name":"PreToolUse","tool_name":"apply_patch","tool_input":{"changes":[{"path":"%s"}]}}`, targetPath)))
 	hookCmd.SetOut(new(bytes.Buffer))
@@ -1145,7 +1172,7 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 	require.NoError(t, err, "hook must write the violation into the worktree's own git dir")
 	assert.Contains(t, string(logData), "violation:")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
 		"--outcome", "Completed", "--force", "--skip-delivery-gate"}))
@@ -1154,7 +1181,7 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	errBuf := new(bytes.Buffer)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	mergedCmd.SetErr(errBuf)
@@ -1167,11 +1194,12 @@ func TestHookViolationBlocksMerged_EndToEnd_REQ_HOOKBIND_T4(t *testing.T) {
 }
 
 func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1179,7 +1207,7 @@ func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
 	out := runGitOutput(t, repo, "config", "--get", "branch.task/task-01.armature-parent")
 	require.Equal(t, defaultBranch, strings.TrimSpace(out))
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -1188,7 +1216,7 @@ func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
@@ -1206,12 +1234,13 @@ func TestMergedClearsStaleParentBranchMetadata_REQ_LNGHZN_S4(t *testing.T) {
 }
 
 func TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 
 	defaultBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
 
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1221,7 +1250,7 @@ func TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9(t
 
 	run(t, worktreePath, "git", "checkout", "-b", "scratch/parked")
 
-	transitionCmd := newRootCmd()
+	transitionCmd := testRootCmd(t)
 	transitionCmd.SetOut(new(bytes.Buffer))
 	transitionCmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "done", "--skip-delivery-gate",
 		"--outcome", "Completed", "--force"}))
@@ -1230,7 +1259,7 @@ func TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9(t
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	mergedCmd := newRootCmd()
+	mergedCmd := testRootCmd(t)
 	mergedCmd.SetOut(new(bytes.Buffer))
 	landDeliveryAndAttest(t, repo, "task-01")
 	mergedCmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01"})
@@ -1243,6 +1272,7 @@ func TestMergedClearsParentBranchMetadataKeyedOnClaimedBranch_REQ_LNGHZN_S5_T9(t
 }
 
 func TestTransitionToMergedExitsTRANSITION1_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
@@ -1255,6 +1285,7 @@ func TestTransitionToMergedExitsTRANSITION1_REQ_LNGHZN_S11_T2(t *testing.T) {
 }
 
 func TestMergedRefusalNamesRecovery_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done", "--skip-delivery-gate", "--outcome", "Completed", "--force")
 	require.NoError(t, err)
@@ -1276,12 +1307,13 @@ func TestMergedRefusalNamesRecovery_REQ_LNGHZN_S11_T2(t *testing.T) {
 }
 
 func TestMergedLegacyRefusalWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	markIssueDoneLegacy(t, repo)
 
 	unsetWorkerIDConfig(t, repo)
-	t.Setenv("ARM_WORKER_ID", "")
-	t.Setenv("ARM_LOG_SLOT", "")
+	setCLIEnv(t, "ARM_WORKER_ID", "")
+	setCLIEnv(t, "ARM_LOG_SLOT", "")
 
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)

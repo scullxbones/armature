@@ -169,13 +169,13 @@ linters:
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/strictjson"
         worktree-pure:
-          list-mode: lax
+          list-mode: strict
           files:
             - "**/internal/worktree/*.go"
             - "!**/*_test.go"
-          deny:
-            - pkg: "github.com/scullxbones/armature/internal"
-              desc: "worktree classifies borrowed issue facts and must not import other internal packages"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
         harnesshook-boundary:
           list-mode: strict
           files:
@@ -222,6 +222,14 @@ linters:
       forbid:
         - pattern: '^time\.Now$'
           msg: 'use injected clock parameters instead of time.Now()'
+        - pattern: '^os\.Getenv$'
+          msg: 'use Env.Lookup from the Invocation instead of os.Getenv()'
+        - pattern: '^os\.LookupEnv$'
+          msg: 'use Env.Lookup from the Invocation instead of os.LookupEnv()'
+        - pattern: '^os\.Chdir$'
+          msg: 'use Invocation.Dir instead of os.Chdir()'
+        - pattern: '^os\.TempDir$'
+          msg: 'use Invocation.TempDir instead of os.TempDir()'
     revive:
       rules:
         - name: exported
@@ -236,6 +244,13 @@ linters:
       - linters:
           - forbidigo
         path: 'cmd/'
+        text: 'time.Now'
+      - linters:
+          - forbidigo
+        path: 'cmd/armature/invocation.go'
+      - linters:
+          - forbidigo
+        path: 'internal/tui/tty.go'
       - linters:
           - forbidigo
         path: '_test\.go$'
@@ -253,13 +268,13 @@ linters:
       - linters:
           - gosec
         text: 'G115'
-      # cmd/ integration tests invoke cobra in-process (newRootCmd().Execute()), which shares
-      # process-global state: env vars (t.Setenv), os.Args, and cobra initialization. Each test
-      # has its own t.TempDir() so on-disk state is isolated and production code has no races;
-      # the constraint is the in-process execution model, not the production code itself.
+      # cmd/armature tests call t.Parallel at the Test* level; many t.Run
+      # subtests share a repo fixture and cannot all be marked parallel.
       - linters:
           - paralleltest
+          - tparallel
         path: 'cmd/'
+      # cmd/armature tests now run via Invocation/Run with per-test env overlays.
       - linters:
           - paralleltest
           - tparallel

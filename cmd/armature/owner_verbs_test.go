@@ -12,6 +12,7 @@ import (
 )
 
 func TestLoserHeartbeatFailsNamedError_REQ_CLAIMORD_W13(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
@@ -24,6 +25,7 @@ func TestLoserHeartbeatFailsNamedError_REQ_CLAIMORD_W13(t *testing.T) {
 }
 
 func TestLoserTransitionFailsNamedError_REQ_CLAIMORD_W13(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
@@ -37,6 +39,7 @@ func TestLoserTransitionFailsNamedError_REQ_CLAIMORD_W13(t *testing.T) {
 }
 
 func TestTransitionOwnerGateBeforeIdenticalNoOp_REQ_CLAIMORD_W13(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
@@ -78,6 +81,7 @@ func TestRenderContextFailsClosedOnLocateError_REQ_CLAIMORD_W13(t *testing.T) {
 }
 
 func TestLoserRenderContextFailsWhileLive_REQ_CLAIMORD_W13(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
@@ -89,6 +93,7 @@ func TestLoserRenderContextFailsWhileLive_REQ_CLAIMORD_W13(t *testing.T) {
 }
 
 func TestRenderContextAllowsOthersAfterDone_REQ_CLAIMORD_W13(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)

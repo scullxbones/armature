@@ -11,9 +11,10 @@ import (
 )
 
 func TestContextReportCommandHumanAndJSON(t *testing.T) {
+	t.Parallel()
 	t.Run("human", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		cmd := newRootCmd()
+		cmd := testRootCmd(t)
 		cmd.SetOut(buf)
 		cmd.SetArgs([]string{"context-report", "--format", "human"})
 		require.NoError(t, cmd.Execute())
@@ -29,7 +30,7 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 
 	t.Run("json", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		cmd := newRootCmd()
+		cmd := testRootCmd(t)
 		cmd.SetOut(buf)
 		cmd.SetArgs([]string{"context-report", "--format", "json"})
 		require.NoError(t, cmd.Execute())
@@ -41,7 +42,7 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 
 	t.Run("agent", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		cmd := newRootCmd()
+		cmd := testRootCmd(t)
 		cmd.SetOut(buf)
 		cmd.SetArgs([]string{"context-report", "--format", "agent"})
 		require.NoError(t, cmd.Execute())
@@ -51,7 +52,7 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 
 	t.Run("ordinary repo", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		cmd := newRootCmd()
+		cmd := testRootCmd(t)
 		cmd.SetOut(buf)
 		cmd.SetArgs([]string{"context-report", "--repo", t.TempDir(), "--format", "human"})
 		require.NoError(t, cmd.Execute(), "embedded fixtures must not depend on --repo")
@@ -60,10 +61,11 @@ func TestContextReportCommandHumanAndJSON(t *testing.T) {
 }
 
 func TestContextReportNonTTYDefaultsToJSON_REQ_NXTTN_S3_T1(t *testing.T) {
-	t.Setenv("TERM", "dumb")
+	t.Parallel()
+	setCLIEnv(t, "TERM", "dumb")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"context-report"})
 	require.NoError(t, cmd.Execute())

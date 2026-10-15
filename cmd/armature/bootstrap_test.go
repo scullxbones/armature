@@ -121,6 +121,7 @@ func TestBootstrapDeployFlatSkillsCreatesFlatMDFiles(t *testing.T) {
 }
 
 func TestBootstrapDeploysCapturingDogfoodFindingsFromAgentsSkills(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -130,7 +131,7 @@ func TestBootstrapDeploysCapturingDogfoodFindingsFromAgentsSkills(t *testing.T) 
 	require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o755))
 	require.NoError(t, os.CopyFS(dst, os.DirFS(src)))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 	require.NoError(t, cmd.Execute())
@@ -246,11 +247,12 @@ func makeBootstrapTestFSWithPlugin(t *testing.T) fs.FS {
 }
 
 func TestBootstrapCommandRegistered(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--help"})
 
@@ -260,11 +262,12 @@ func TestBootstrapCommandRegistered(t *testing.T) {
 }
 
 func TestBootstrapCommandDefaultsToLocal(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 
@@ -275,11 +278,12 @@ func TestBootstrapCommandDefaultsToLocal(t *testing.T) {
 }
 
 func TestRunRepoSetupCreatesStructure(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -296,11 +300,12 @@ func TestRunRepoSetupCreatesStructure(t *testing.T) {
 }
 
 func TestRunRepoSetupWritesGitignore(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -316,10 +321,11 @@ func TestRunRepoSetupWritesGitignore(t *testing.T) {
 }
 
 func TestBootstrapIgnoresGateAndReviewSidecars(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	_, err := runRepoSetup(newRootCmd(), repo)
+	_, err := runRepoSetup(testRootCmd(t), repo)
 	require.NoError(t, err)
 
 	opsWT := filepath.Join(repo, ".armature")
@@ -334,10 +340,11 @@ func TestBootstrapIgnoresGateAndReviewSidecars(t *testing.T) {
 }
 
 func TestBootstrapCommitsOpsScaffoldingAndLeavesWorktreeClean(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -361,10 +368,11 @@ func TestBootstrapCommitsOpsScaffoldingAndLeavesWorktreeClean(t *testing.T) {
 }
 
 func TestBootstrapUntracksAlreadyCommittedSidecars(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -393,10 +401,11 @@ func TestBootstrapUntracksAlreadyCommittedSidecars(t *testing.T) {
 }
 
 func TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -421,10 +430,11 @@ func TestBootstrapRefusesSidecarUntrackingWithUnrelatedStagedWork(t *testing.T) 
 }
 
 func TestBootstrapKeepsHookTemplatesLocal(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -436,10 +446,11 @@ func TestBootstrapKeepsHookTemplatesLocal(t *testing.T) {
 }
 
 func TestBootstrapUntracksPreviouslyCommittedHookTemplates(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -459,10 +470,11 @@ func TestBootstrapUntracksPreviouslyCommittedHookTemplates(t *testing.T) {
 }
 
 func TestBootstrapDoesNotDowngradeSchema(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -485,10 +497,11 @@ func TestBootstrapDoesNotDowngradeSchema(t *testing.T) {
 }
 
 func TestBootstrapDoesNotDowngradeGitignore_REQ_OPSCLEAN_1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -512,7 +525,6 @@ func TestBootstrapDoesNotDowngradeGitignore_REQ_OPSCLEAN_1(t *testing.T) {
 
 func interceptGitCommit(t *testing.T) func() {
 	t.Helper()
-	origPath := os.Getenv("PATH")
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
 	wrapperDir := t.TempDir()
@@ -526,19 +538,18 @@ done
 exec %q "$@"
 `, realGit)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+origPath)
-	restore := func() {
-		require.NoError(t, os.Setenv("PATH", origPath))
+	prependPATH(t, wrapperDir)
+	return func() {
+		unsetCLIEnv(t, "PATH")
 	}
-	t.Cleanup(restore)
-	return restore
 }
 
 func TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN_1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -550,13 +561,14 @@ func TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN
 	run(t, opsWT, "git", "add", "--force", "gates")
 	run(t, opsWT, "git", "commit", "--no-verify", "-m", "chore: legacy committed sidecar")
 
-	client := adapters.New(opsWT)
 	restoreGit := interceptGitCommit(t)
+	client := gitWith(testEnv(t), opsWT)
 	err = untrackLocalOnlyPaths(client, "")
 	restoreGit()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "commit local-only untracking")
 
+	client = adapters.New(opsWT)
 	assert.True(t, client.IsTracked("gates/full-1.log") || client.IsTracked("gates"),
 		"failed cleanup must restore the sidecar to the index")
 	staged, stagedErr := client.StagedPaths()
@@ -572,10 +584,11 @@ func TestUntrackLocalOnlyPathsRestoresIndexAfterFailedCleanupCommit_REQ_OPSCLEAN
 }
 
 func TestUntrackLocalOnlyPathsFinishesStagedDeletionsOnRetry_REQ_OPSCLEAN_1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -602,11 +615,12 @@ func TestUntrackLocalOnlyPathsFinishesStagedDeletionsOnRetry_REQ_OPSCLEAN_1(t *t
 }
 
 func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -618,11 +632,12 @@ func TestRunRepoSetupWritesSchemaFile(t *testing.T) {
 }
 
 func TestRunRepoSetupInstallsHooks(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -634,11 +649,12 @@ func TestRunRepoSetupInstallsHooks(t *testing.T) {
 }
 
 func TestRunRepoSetupIdempotent(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err1 := runRepoSetup(cmd, repo)
@@ -649,11 +665,12 @@ func TestRunRepoSetupIdempotent(t *testing.T) {
 }
 
 func TestRunRepoSetupWritesConfig(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -665,6 +682,7 @@ func TestRunRepoSetupWritesConfig(t *testing.T) {
 }
 
 func TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -682,6 +700,7 @@ func TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T
 }
 
 func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -720,6 +739,7 @@ func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T
 }
 
 func TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -737,11 +757,12 @@ func TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1(t *testin
 }
 
 func TestInstallHooksExecutable(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -754,11 +775,12 @@ func TestInstallHooksExecutable(t *testing.T) {
 }
 
 func TestRunRepoSetupAlwaysCreatesDualBranchWorktree_REQ_SB_T9(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -774,6 +796,7 @@ func TestRunRepoSetupAlwaysCreatesDualBranchWorktree_REQ_SB_T9(t *testing.T) {
 }
 
 func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
+	t.Parallel()
 	src := makeBootstrapTestFSWithPlugin(t)
 
 	pluginName, err := pluginNameFromSkillsFS(src)
@@ -782,10 +805,11 @@ func TestBootstrapDeployPluginUsesPluginName(t *testing.T) {
 }
 
 func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	buf := &bytes.Buffer{}
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codxe"})
@@ -799,6 +823,7 @@ func TestBootstrapInvalidPlatformFailsBeforeRepoSetup(t *testing.T) {
 }
 
 func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -810,7 +835,7 @@ func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o755))
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -821,6 +846,7 @@ func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 }
 
 func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "config", "commit.gpgsign", "false")
@@ -842,7 +868,7 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -867,7 +893,7 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 	assert.FileExists(t, filepath.Join(cloneDir, "ops", "existing-issue.json"),
 		"a fresh clone checked out to _armature must show ops data at the root-level path, not nested under .armature/")
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(strings.Builder))
 	result2, err := runRepoSetup(cmd2, repo)
 	require.NoError(t, err)
@@ -876,6 +902,7 @@ func TestRunRepoSetupIdempotentDualBranchMode_REQ_SB_T9(t *testing.T) {
 }
 
 func TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "config", "commit.gpgsign", "false")
@@ -897,7 +924,7 @@ func TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration(t *testi
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -921,11 +948,12 @@ func TestRunRepoSetupPrintsBackupSafetyGuidanceAfterDualBranchMigration(t *testi
 }
 
 func TestRunRepoSetupFreshInitDoesNotPrintBackupSafetyGuidance(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -934,6 +962,7 @@ func TestRunRepoSetupFreshInitDoesNotPrintBackupSafetyGuidance(t *testing.T) {
 }
 
 func TestMigrateDualBranchToCollapsedRestoresUsableWorktreeAfterAddFailure_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -967,9 +996,9 @@ done
 exec "$real_git" "$@"
 `, realGit, newWorktreePath)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
-	_, _, err = migrateDualBranchToCollapsed(repo)
+	_, _, err = migrateDualBranchToCollapsed(testEnv(t), repo)
 	require.Error(t, err)
 
 	gitDir := strings.TrimSpace(runOutput(t, armWorktreePath, "rev-parse", "--git-dir"))
@@ -980,6 +1009,7 @@ exec "$real_git" "$@"
 }
 
 func TestMigrateDualBranchToCollapsedPreservesCommitOnPostCommitConfigFailure(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1025,9 +1055,9 @@ done
 exec "$real_git" "$@"
 `, realGit, repo)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
-	_, _, err = migrateDualBranchToCollapsed(repo)
+	_, _, err = migrateDualBranchToCollapsed(testEnv(t), repo)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "committed successfully")
 
@@ -1054,7 +1084,7 @@ func TestMigrateDualBranchToCollapsedIgnoresNestedRealRepo(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(armPath, ".armature", "ops"), 0o750))
 	run(t, armPath, "git", "commit", "--allow-empty", "-m", "unrelated nested repo")
 
-	migrated, _, err := migrateDualBranchToCollapsed(repo)
+	migrated, _, err := migrateDualBranchToCollapsed(testEnv(t), repo)
 	require.NoError(t, err)
 	assert.False(t, migrated, "a real nested repo at .arm/ must not be mistaken for a linked worktree")
 	assert.DirExists(t, armPath, ".arm/ must be left in place, not renamed into a backup")
@@ -1088,6 +1118,7 @@ func assertOpsWorktreeHasNoTrackedDirt(t *testing.T, opsWT string) {
 }
 
 func TestRunRepoSetupDualBranchMigrationPreservesSources_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "config", "commit.gpgsign", "false")
@@ -1113,7 +1144,7 @@ func TestRunRepoSetupDualBranchMigrationPreservesSources_REQ_LNGHZN_S1(t *testin
 
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1128,6 +1159,7 @@ func TestRunRepoSetupDualBranchMigrationPreservesSources_REQ_LNGHZN_S1(t *testin
 }
 
 func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	run(t, repo, "git", "config", "commit.gpgsign", "false")
@@ -1139,7 +1171,7 @@ func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing
 	require.NoError(t, gitClient.AddWorktree("_armature", armWorktreePath))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1152,6 +1184,7 @@ func TestRunRepoSetupConvergesEmptyArmWorktreeInOnePass_REQ_LNGHZN_S1(t *testing
 }
 
 func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1173,7 +1206,7 @@ func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
 	))
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -1190,6 +1223,7 @@ func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
 }
 
 func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1202,7 +1236,7 @@ func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 
 	outBuf := new(strings.Builder)
 	errBuf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(outBuf)
 	cmd.SetErr(errBuf)
 
@@ -1216,11 +1250,12 @@ func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 }
 
 func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
+	t.Parallel()
 	repoPath := gittest.InitWithOrigin(t).Dir
 	run(t, repoPath, "git", "commit", "--allow-empty", "-m", "init")
 
 	outBuf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(outBuf)
 
 	cmd.SetArgs([]string{"--repo", repoPath, "bootstrap"})
@@ -1235,11 +1270,12 @@ func TestBootstrapRespectsPersistentRepoFlag(t *testing.T) {
 }
 
 func TestBootstrapJSONSkippedHooksReported(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf1 := new(strings.Builder)
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(buf1)
 	cmd1.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 	require.NoError(t, cmd1.Execute())
@@ -1248,7 +1284,7 @@ func TestBootstrapJSONSkippedHooksReported(t *testing.T) {
 	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\necho mine\n"), 0o755))
 
 	buf2 := new(strings.Builder)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf2)
 	cmd2.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 	require.NoError(t, cmd2.Execute())
@@ -1265,11 +1301,12 @@ func TestBootstrapJSONSkippedHooksReported(t *testing.T) {
 }
 
 func TestBootstrapJSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 
@@ -1295,11 +1332,12 @@ func TestBootstrapJSONOutput(t *testing.T) {
 }
 
 func TestBootstrapJSONRepoSetupStatus(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf1 := new(strings.Builder)
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(buf1)
 	cmd1.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 
@@ -1317,7 +1355,7 @@ func TestBootstrapJSONRepoSetupStatus(t *testing.T) {
 	assert.Equal(t, "initialized", status1, "first bootstrap should report 'initialized'")
 
 	buf2 := new(strings.Builder)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf2)
 	cmd2.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 
@@ -1336,11 +1374,12 @@ func TestBootstrapJSONRepoSetupStatus(t *testing.T) {
 }
 
 func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1374,11 +1413,12 @@ func TestExecuteHarnessSetupSkipsUnownedConfig(t *testing.T) {
 }
 
 func TestInstallHooksSkipsUnmanagedHook(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1402,11 +1442,12 @@ echo "Running external pre-commit hook"
 }
 
 func TestInstallHooksOverwritesManagedHook(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1432,10 +1473,11 @@ echo "old"
 }
 
 func TestBootstrapRejectsUnsupportedPlatformWithoutHooks(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	buf := &bytes.Buffer{}
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codex"})
@@ -1450,11 +1492,12 @@ func TestBootstrapRejectsUnsupportedPlatformWithoutHooks(t *testing.T) {
 }
 
 func TestBootstrapNonTTYDefaultsToJSON(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
@@ -1475,10 +1518,11 @@ func TestBootstrapNonTTYDefaultsToJSON(t *testing.T) {
 }
 
 func TestBootstrapEmitsJSONOnRepoSetupError(t *testing.T) {
+	t.Parallel()
 	nonexistentPath := filepath.Join(t.TempDir(), "no-git-here", ".armature")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--repo", filepath.Dir(filepath.Dir(nonexistentPath)), "--format", "json"})
 
@@ -1508,11 +1552,12 @@ func TestBootstrapEmitsJSONOnRepoSetupError(t *testing.T) {
 }
 
 func TestBootstrapEmitsPartialJSONOnHarnessSetupError(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf1 := new(strings.Builder)
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(buf1)
 	cmd1.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 	require.NoError(t, cmd1.Execute(), "initial bootstrap should succeed")
@@ -1525,7 +1570,7 @@ func TestBootstrapEmitsPartialJSONOnHarnessSetupError(t *testing.T) {
 	})
 
 	buf2 := new(strings.Builder)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf2)
 	cmd2.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "json"})
 
@@ -1546,11 +1591,12 @@ func TestBootstrapEmitsPartialJSONOnHarnessSetupError(t *testing.T) {
 }
 
 func TestBootstrapReportsUnsupportedArtifactsInHumanFormat(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--platform", "codex", "--with-hooks", "--format", "human"})
 
@@ -1564,12 +1610,13 @@ func TestBootstrapReportsUnsupportedArtifactsInHumanFormat(t *testing.T) {
 }
 
 func TestBootstrapPersistentFormatFlagSetOnNonTTY(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
 	errBuf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
 
@@ -1585,6 +1632,7 @@ func TestBootstrapPersistentFormatFlagSetOnNonTTY(t *testing.T) {
 }
 
 func TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1597,7 +1645,7 @@ func TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9(t *testing.T) {
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1630,6 +1678,7 @@ func TestRunRepoSetupMigratesLegacySingleBranchLayout_REQ_SB_T9(t *testing.T) {
 }
 
 func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1642,7 +1691,7 @@ func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
 	buf1 := new(strings.Builder)
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(buf1)
 	_, err := runRepoSetup(cmd1, repo)
 	require.NoError(t, err)
@@ -1661,7 +1710,7 @@ func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
 	require.NotEmpty(t, backupDir, "backup directory should exist after first run")
 
 	buf2 := new(strings.Builder)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf2)
 	_, err = runRepoSetup(cmd2, repo)
 	require.NoError(t, err)
@@ -1689,6 +1738,7 @@ func TestRunRepoSetupMigrationIsIdempotent_REQ_SB_T9(t *testing.T) {
 }
 
 func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1711,7 +1761,7 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 	require.NoError(t, os.WriteFile(testLog, logContent, 0o600))
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1759,6 +1809,7 @@ func TestRunRepoSetupMigrationCopiesLegacyOpsData_P1(t *testing.T) {
 }
 
 func TestRunRepoSetupMigrationCommitsLegacyOpsData_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1781,7 +1832,7 @@ func TestRunRepoSetupMigrationCommitsLegacyOpsData_P1(t *testing.T) {
 	require.NoError(t, os.WriteFile(testLog, logContent, 0o600))
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1818,6 +1869,7 @@ func TestRunRepoSetupMigrationCommitsLegacyOpsData_P1(t *testing.T) {
 }
 
 func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1828,7 +1880,7 @@ func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
 	require.NoError(t, os.WriteFile(testFile, testContent, 0o600))
 
 	buf1 := new(strings.Builder)
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(buf1)
 	_, err := runRepoSetup(cmd1, repo)
 	require.NoError(t, err)
@@ -1840,7 +1892,7 @@ func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
 	require.NoError(t, err)
 
 	buf2 := new(strings.Builder)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf2)
 	_, err = runRepoSetup(cmd2, repo)
 	require.NoError(t, err, "second bootstrap run over an already-migrated repo should not error")
@@ -1862,6 +1914,7 @@ func TestRunRepoSetupMigrationIsIdempotent_P1(t *testing.T) {
 }
 
 func TestRunRepoSetupMigratesLegacyConfig_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1886,7 +1939,7 @@ func TestRunRepoSetupMigratesLegacyConfig_P2(t *testing.T) {
 	run(t, repo, "git", "commit", "-m", "legacy armature setup")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -1915,6 +1968,7 @@ func TestRunRepoSetupMigratesLegacyConfig_P2(t *testing.T) {
 }
 
 func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1931,7 +1985,7 @@ func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) 
 	run(t, repo, "git", "add", "unrelated.txt")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.Error(t, err, "bootstrap should refuse to run when the working tree has unrelated staged changes")
@@ -1957,6 +2011,7 @@ func TestRunRepoSetupMigration_DoesNotSweepUnrelatedStagedChanges(t *testing.T) 
 }
 
 func TestDoctorCommandRunsOnLegacyRepo_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1975,7 +2030,7 @@ func TestDoctorCommandRunsOnLegacyRepo_P2(t *testing.T) {
 
 	buf := new(strings.Builder)
 	errBuf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
 	cmd.SetArgs([]string{"--repo", repo, "doctor"})
@@ -1994,11 +2049,12 @@ func TestDoctorCommandRunsOnLegacyRepo_P2(t *testing.T) {
 }
 
 func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -2017,7 +2073,7 @@ func TestRunRepoSetupExcludesArmWorktreeFromGitTracking_P1(t *testing.T) {
 	assert.Contains(t, excludeContent, ".worktrees/", ".git/info/exclude should contain .worktrees/")
 	assert.Equal(t, 1, strings.Count(excludeContent, ".worktrees/"), "should have exactly one .worktrees/ entry")
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(strings.Builder))
 	_, err = runRepoSetup(cmd2, repo)
 	require.NoError(t, err)
@@ -2052,6 +2108,7 @@ func TestCopyRecursiveDoesNotOverwriteExistingFiles_P2(t *testing.T) {
 }
 
 func TestPushOpsRunEEmitsNoStderrOnFailure_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2069,6 +2126,7 @@ func TestPushOpsRunEEmitsNoStderrOnFailure_P2(t *testing.T) {
 }
 
 func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() == 0 {
 		t.Skip("running as root: permission bits are not enforced, cannot simulate write failure")
 	}
@@ -2088,7 +2146,7 @@ func TestRunRepoSetupWarnsButSucceedsWhenExcludeFails_P2(t *testing.T) {
 	})
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	result, err := runRepoSetup(cmd, repo)
@@ -2155,6 +2213,7 @@ func TestListMigrationBackupsIncludesCollapsedBackups_REQ_LNGHZN_S1(t *testing.T
 }
 
 func TestRunRepoSetupNotesStrandedMigrationBackups_P3(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2165,7 +2224,7 @@ func TestRunRepoSetupNotesStrandedMigrationBackups_P3(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".armature.migrated-20260703000101"), 0o750))
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -2203,6 +2262,7 @@ func TestExcludeArmWorktreeFromGitExactLineMatch_P3(t *testing.T) {
 }
 
 func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2228,7 +2288,7 @@ func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
 	run(t, repo, "git", "commit", "-m", "legacy armature setup")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -2267,11 +2327,12 @@ func TestRunRepoSetupMigrationCommitsLegacyConfig_BUGFIX(t *testing.T) {
 }
 
 func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err := runRepoSetup(cmd, repo)
@@ -2304,6 +2365,7 @@ func TestRunRepoSetupFreshBootstrap_CommitsConfigToArmatureBranch(t *testing.T) 
 }
 
 func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2323,7 +2385,7 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	require.True(t, wasTrackedBefore, ".armature should be tracked before migration")
 
 	restoreGit := interceptGitCommit(t)
-	migratedFlag, backupDir, preMigrationSHA, _, err := migrateLegacySingleBranchOps(repo)
+	migratedFlag, backupDir, preMigrationSHA, _, err := migrateLegacySingleBranchOps(testEnv(t), repo)
 	restoreGit()
 
 	require.Error(t, err, "migration should fail because git commit was intercepted")
@@ -2352,7 +2414,7 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, dirty, "working tree should be clean after rollback (no dangling staged removals)")
 
-	migratedRetry, backupDirRetry, preMigrationSHARetry, _, errRetry := migrateLegacySingleBranchOps(repo)
+	migratedRetry, backupDirRetry, preMigrationSHARetry, _, errRetry := migrateLegacySingleBranchOps(testEnv(t), repo)
 	require.NoError(t, errRetry, "retry migration (without signing failure) should succeed")
 	assert.True(t, migratedRetry, "retry migration should report success")
 	assert.NotEmpty(t, backupDirRetry, "retry migration should return a backup dir path")
@@ -2361,6 +2423,7 @@ func TestMigrateLegacySingleBranchOpsRollsBackOnCommitFailure_P1(t *testing.T) {
 }
 
 func TestRunRepoSetupMigratesTemplatesHooksReview_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2376,7 +2439,7 @@ func TestRunRepoSetupMigratesTemplatesHooksReview_P2(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "review", "notes.md"), []byte("review notes"), 0o600))
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	result, err := runRepoSetup(cmd, repo)
@@ -2399,11 +2462,12 @@ func TestRunRepoSetupMigratesTemplatesHooksReview_P2(t *testing.T) {
 }
 
 func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -2421,7 +2485,7 @@ func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
 	require.NoError(t, os.WriteFile(opsFile, []byte(`{"id":"adopted"}`), 0o600))
 
 	buf2 := new(bytes.Buffer)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf2)
 	result2, err := runRepoSetup(cmd2, repo)
 	require.NoError(t, err)
@@ -2442,6 +2506,7 @@ func TestRunRepoSetupCommitsConfigWhenNotFreshInit_P2(t *testing.T) {
 }
 
 func TestRunRepoSetupRollsBackMigrationWhenWorktreeAddFails_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2470,10 +2535,10 @@ done
 exec "$real_git" "$@"
 `, realGit, filepath.Join(repo, ".armature"))
 	require.NoError(t, os.WriteFile(wrapperPath, []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 
 	_, err = runRepoSetup(cmd, repo)
@@ -2493,10 +2558,11 @@ exec "$real_git" "$@"
 }
 
 func TestRunRepoSetupRefusesOpsWorktree_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(new(bytes.Buffer))
 	_, err := runRepoSetup(cmd1, repo)
 	require.NoError(t, err)
@@ -2506,7 +2572,7 @@ func TestRunRepoSetupRefusesOpsWorktree_P1(t *testing.T) {
 	opsContent := []byte(`{"op":"create"}`)
 	require.NoError(t, os.WriteFile(opsFile, opsContent, 0o600))
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	_, err = runRepoSetup(cmd2, armPath)
 	require.Error(t, err, "bootstrap targeting the ops worktree should be refused")
@@ -2524,6 +2590,7 @@ func TestRunRepoSetupRefusesOpsWorktree_P1(t *testing.T) {
 }
 
 func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2549,7 +2616,7 @@ func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
 		}
 	})
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	_, err := runRepoSetup(cmd, repo)
 	require.Error(t, err)
@@ -2558,6 +2625,7 @@ func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
 }
 
 func TestRunRepoSetupMigrationCommitFailureNamesBackupDir_P1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2599,9 +2667,9 @@ fi
 exec "$real_git" "$@"
 `, realGit, filepath.Join(repo, ".armature"))
 	require.NoError(t, os.WriteFile(wrapperPath, []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	_, err = runRepoSetup(cmd, repo)
 	require.Error(t, err)
@@ -2611,6 +2679,7 @@ exec "$real_git" "$@"
 }
 
 func TestRunRepoSetupMigrationBackupNameCollision_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2629,7 +2698,7 @@ func TestRunRepoSetupMigrationBackupNameCollision_P2(t *testing.T) {
 		staleDirs = append(staleDirs, name)
 	}
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err, "migration should succeed despite pre-existing backup dirs")
@@ -2646,6 +2715,7 @@ func TestRunRepoSetupMigrationBackupNameCollision_P2(t *testing.T) {
 }
 
 func TestRunRepoSetupCommittedRollbackNamesLeftoverBackup_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2675,9 +2745,9 @@ done
 exec "$real_git" "$@"
 `, realGit, filepath.Join(repo, ".armature"))
 	require.NoError(t, os.WriteFile(wrapperPath, []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	_, err = runRepoSetup(cmd, repo)
 	require.Error(t, err)
@@ -2700,6 +2770,7 @@ exec "$real_git" "$@"
 }
 
 func TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2710,7 +2781,7 @@ func TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(errBuf)
 	_, err := runRepoSetup(cmd, repo)
@@ -2722,6 +2793,7 @@ func TestRunRepoSetupWarnsOnUnreadableLegacyConfig_P3(t *testing.T) {
 }
 
 func TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2734,7 +2806,7 @@ func TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3(t *testing.T) {
 	require.NoError(t, os.WriteFile(testOpsFile, testContent, 0o600))
 
 	buf := new(strings.Builder)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	result, err := runRepoSetup(cmd, repo)
 
@@ -2761,6 +2833,7 @@ func TestBootstrap_ChainsLegacyToCollapsed_REQ_LNGHZN_S1_T3(t *testing.T) {
 }
 
 func TestBootstrapHonorsConfiguredCustomCollapsedWorktree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2776,7 +2849,7 @@ func TestBootstrapHonorsConfiguredCustomCollapsedWorktree(t *testing.T) {
 	require.NoError(t, opsGitClient.CommitWorktreeOp(".", "chore: collapsed custom worktree"))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", customWorktreePath))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err, "bootstrap should be idempotent against an existing custom collapsed worktree")
@@ -2800,7 +2873,7 @@ func TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1(t *
 	armatureSHABefore := strings.TrimSpace(runOutput(t, repo, "rev-parse", "_armature"))
 
 	backupDir := t.TempDir()
-	err := rollbackLegacyMigration(repo, backupDir, preSHA, true)
+	err := rollbackLegacyMigration(testEnv(t), repo, backupDir, preSHA, true)
 	require.Error(t, err, "rollback must refuse to reset --hard while HEAD is on _armature")
 	assert.Contains(t, err.Error(), "_armature")
 	assert.Contains(t, err.Error(), backupDir, "error must name the backup dir for manual recovery")
@@ -2810,6 +2883,7 @@ func TestRollbackLegacyMigrationRefusesResetWhenHeadOnArmature_REQ_LNGHZN_S1(t *
 }
 
 func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2833,7 +2907,7 @@ func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGH
 	require.NoError(t, os.WriteFile(filepath.Join(armWorktreePath, ".armature", "ops", "issue.json"), []byte(`{"id":"1","modified":true}`), 0o600))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", armWorktreePath))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	_, err := runRepoSetup(cmd, repo)
 	require.Error(t, err, "runRepoSetup should fail because the dual-branch worktree is dirty")
@@ -2851,6 +2925,7 @@ func TestRunRepoSetupRollsBackLegacyMigrationWhenCollapseMigrationFails_REQ_LNGH
 }
 
 func TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2866,7 +2941,7 @@ func TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1(t *
 	require.NoError(t, opsGitClient.CommitWorktreeOp(".", "chore: collapsed custom worktree"))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", customWorktreePath))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.NoError(t, err)
@@ -2878,6 +2953,7 @@ func TestBootstrapCustomCollapsedWorktreeExcludedByOwnBasename_REQ_LNGHZN_S1(t *
 }
 
 func TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2895,7 +2971,7 @@ func TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1(t *test
 	require.NoError(t, opsGitClient.CommitWorktreeOp(".armature", "chore: nested pre-collapse layout"))
 	require.NoError(t, gitClient.SetGitConfig("armature.ops-worktree-path", customWorktreePath))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	require.Error(t, err, "bootstrap should refuse a pre-collapse custom ops worktree")
@@ -2904,6 +2980,7 @@ func TestRunRepoSetupRefusesNestedUnmigratedCustomWorktree_REQ_LNGHZN_S1(t *test
 }
 
 func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ_LNGHZN_S1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2921,7 +2998,7 @@ func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ
 
 	preSHA := strings.TrimSpace(runOutput(t, customWorktreePath, "rev-parse", "HEAD"))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(strings.Builder))
 	_, err := runRepoSetup(cmd, repo)
 	swallowErr(err)
@@ -2934,6 +3011,7 @@ func TestRunRepoSetupCustomCollapsedWorktreeCorruptConfigDoesNotCorruptState_REQ
 }
 
 func TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1(t *testing.T) {
+	t.Parallel()
 	require.Contains(t, postCommitHookTemplate, "# armature:managed")
 
 	var body []string
@@ -2953,6 +3031,7 @@ func TestPostCommitTemplateDelegatesToHookRun_REQ_HKDLG_T1(t *testing.T) {
 }
 
 func TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2972,7 +3051,7 @@ func TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1(t *testing.T) {
 exec %q "$@"
 `, armBin)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
 	commitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -3002,6 +3081,7 @@ exec %q "$@"
 }
 
 func TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3(t *testing.T) {
+	t.Parallel()
 	require.Contains(t, preCommitHookTemplate, "# armature:managed")
 
 	var body []string
@@ -3026,6 +3106,7 @@ func TestPreCommitTemplateDelegatesToHookRun_REQ_HKDLG_T3(t *testing.T) {
 }
 
 func TestPreCommitRefusalReachesStderrWithRemediation_REQ_HKDLG_T3(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3038,7 +3119,7 @@ func TestPreCommitRefusalReachesStderrWithRemediation_REQ_HKDLG_T3(t *testing.T)
 exec %q "$@"
 `, armBin)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
-	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependPATH(t, wrapperDir)
 
 	probeRel := filepath.Join("leaked", ".armature", "ops", "probe.log")
 	writeFile(t, repo, probeRel, "ops must not land on a code branch\n")

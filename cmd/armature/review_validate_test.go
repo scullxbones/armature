@@ -128,6 +128,7 @@ func countAssessmentAttestedOps(t *testing.T, repo string) int {
 }
 
 func TestReviewValidateMatchesRecordValidation_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, badCitationAssessment := prepareReviewValidateFixture(t)
 
 	attestedBefore := countAssessmentAttestedOps(t, repo)
@@ -141,13 +142,13 @@ func TestReviewValidateMatchesRecordValidation_REQ_LNGHZN_S8_T1(t *testing.T) {
 	assert.NotContains(t, recordOut, "already recorded", "idempotent duplicate means validate already attested")
 	assert.Equal(t, attestedBefore+1, countAssessmentAttestedOps(t, repo), "record (not validate) must append the attestation op")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "validate", "--repo", repo, "--bundle", bundleFile, "--assessment", badCitationAssessment})
 	validateErr := cmd.Execute()
 	require.Error(t, validateErr, "validate must reject an out-of-bounds citation")
 
-	cmd = newRootCmd()
+	cmd = testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01", "--assessment", badCitationAssessment, "--bundle", bundleFile})
 	recordErr := cmd.Execute()
@@ -157,6 +158,7 @@ func TestReviewValidateMatchesRecordValidation_REQ_LNGHZN_S8_T1(t *testing.T) {
 }
 
 func TestReviewValidateSuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, badCitationAssessment := prepareReviewValidateFixture(t)
 
 	stdout := new(bytes.Buffer)
@@ -186,6 +188,7 @@ func TestReviewValidateSuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T) 
 }
 
 func TestReviewValidateSuggestsSchemaAndCriterionID_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
 
 	t.Run("invalid schema_version", func(t *testing.T) {
@@ -249,6 +252,7 @@ func TestReviewValidateSuggestsSchemaAndCriterionID_REQ_LNGHZN_S8_T1(t *testing.
 }
 
 func TestReviewValidateRejectsStructurallyInvalidBundle_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
 
 	t.Run("schema_version 99 with recomputed bundle_id", func(t *testing.T) {
@@ -381,6 +385,7 @@ func TestReviewValidateRejectsStructurallyInvalidBundle_REQ_LNGHZN_S8_T1(t *test
 }
 
 func TestReviewValidateRejectsNullCitations_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
 
 	path := mutateAssessmentJSON(t, repo, validAssessment, "assessment_null_citations.json", func(obj map[string]any) {
@@ -401,6 +406,7 @@ func TestReviewValidateRejectsNullCitations_REQ_LNGHZN_S8_T1(t *testing.T) {
 }
 
 func TestReviewValidateSuggestsSpecificDecodeErrors_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
 
 	t.Run("invalid status", func(t *testing.T) {
@@ -441,6 +447,7 @@ func TestReviewValidateSuggestsSpecificDecodeErrors_REQ_LNGHZN_S8_T1(t *testing.
 }
 
 func TestReviewValidateMalformedBundleEmitsPrepareSuggestion_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
 	repo, _, validAssessment, _ := prepareReviewValidateFixture(t)
 	malformed := filepath.Join(repo, "bundle_malformed.json")
 	require.NoError(t, os.WriteFile(malformed, []byte("{"), 0o644))
@@ -458,6 +465,7 @@ func TestReviewValidateMalformedBundleEmitsPrepareSuggestion_REQ_LNGHZN_S8_T2(t 
 }
 
 func TestReviewValidateJSONOperationalFailureOnStdout_REQ_LNGHZN_S8_T2(t *testing.T) {
+	t.Parallel()
 	repo, _, validAssessment, _ := prepareReviewValidateFixture(t)
 	missing := filepath.Join(repo, "no-such-bundle.json")
 
@@ -478,6 +486,7 @@ func TestReviewValidateJSONOperationalFailureOnStdout_REQ_LNGHZN_S8_T2(t *testin
 }
 
 func TestReviewValidateSuggestsPrepareOnBundleIntegrity_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
 
 	tampered := filepath.Join(repo, "bundle_tampered.json")
@@ -503,6 +512,7 @@ func TestReviewValidateSuggestsPrepareOnBundleIntegrity_REQ_LNGHZN_S8_T1(t *test
 }
 
 func TestReviewValidateRejectsInvalidCitationColumn_REQ_LNGHZN_S8_T1(t *testing.T) {
+	t.Parallel()
 	repo, bundleFile, validAssessment, _ := prepareReviewValidateFixture(t)
 
 	setColumn := func(t *testing.T, name string, column any) string {

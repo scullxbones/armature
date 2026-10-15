@@ -23,12 +23,13 @@ import (
 )
 
 func TestConfirmCommand_Success(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithValidDraftNode(t)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"confirm", "--repo", repo, "draft-task-01"})
 
@@ -38,6 +39,7 @@ func TestConfirmCommand_Success(t *testing.T) {
 }
 
 func TestConfirmCmd_DoesNotMaterialize(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithValidDraftNode(t)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -47,9 +49,10 @@ func TestConfirmCmd_DoesNotMaterialize(t *testing.T) {
 }
 
 func TestConfirmCommand_NotFound(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"confirm", "--repo", repo, "nonexistent-id"})
 
@@ -59,10 +62,11 @@ func TestConfirmCommand_NotFound(t *testing.T) {
 }
 
 func TestSourcesAddCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"sources", "add", "--repo", repo,
 		"--url", "/docs/spec.md", "--type", "filesystem", "--title", "Spec"})
@@ -73,10 +77,11 @@ func TestSourcesAddCommand(t *testing.T) {
 }
 
 func TestSourcesSyncCommand_EmptyManifest(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"sources", "sync", "--repo", repo})
 
@@ -86,10 +91,11 @@ func TestSourcesSyncCommand_EmptyManifest(t *testing.T) {
 }
 
 func TestSourcesVerifyCommand_EmptyManifest(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"sources", "verify", "--repo", repo})
 
@@ -99,16 +105,17 @@ func TestSourcesVerifyCommand_EmptyManifest(t *testing.T) {
 }
 
 func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd0 := newRootCmd()
+	cmd0 := testRootCmd(t)
 	cmd0.SetOut(new(bytes.Buffer))
 	cmd0.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo,
 		"--title", "Draft feature", "--type", "task", "--id", "draft-01"}))
 	require.NoError(t, cmd0.Execute())
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"dag", "summary", "--repo", repo, "--format", "agent"})
 
@@ -118,13 +125,14 @@ func TestDAGSummaryCommand_NonInteractive_PendingItems(t *testing.T) {
 }
 
 func TestReadyCommand_JSONFormat(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	plantVerifiedTask(t, repo, "ready-json-01", "cmd/armature/ready_json.go")
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"ready", "--repo", repo, "--format", "json"})
 
@@ -143,6 +151,7 @@ func TestReadyCommand_JSONFormat(t *testing.T) {
 }
 
 func TestReadyExpiredClaims_REQ_TOPTIER_S4_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "materialize")
@@ -175,9 +184,10 @@ func TestReadyExpiredClaims_REQ_TOPTIER_S4_T3(t *testing.T) {
 }
 
 func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Parent story", "--type", "story", "--id", "E7"}))
 	require.NoError(t, cmd.Execute())
@@ -185,7 +195,7 @@ func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Unrelated task", "--type", "task", "--id", "task-outside"}))
 	require.NoError(t, cmd2.Execute())
@@ -212,6 +222,7 @@ func TestReadyExpiredClaims_ParentFilterScopesExpiredClaims_REQ_TOPTIER_S4_PRFIX
 }
 
 func TestImportCommand_DryRun_CSV(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	csvFile := filepath.Join(t.TempDir(), "issues.csv")
@@ -219,7 +230,7 @@ func TestImportCommand_DryRun_CSV(t *testing.T) {
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"import", "--repo", repo, "--dry-run", csvFile})
 
@@ -229,6 +240,7 @@ func TestImportCommand_DryRun_CSV(t *testing.T) {
 }
 
 func TestWorkersCommand_WithInitializedWorker(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -240,6 +252,7 @@ func TestWorkersCommand_WithInitializedWorker(t *testing.T) {
 }
 
 func TestImportCommand_ActualImport(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -254,6 +267,7 @@ func TestImportCommand_ActualImport(t *testing.T) {
 }
 
 func TestImportCommand_WithSource(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -267,6 +281,7 @@ func TestImportCommand_WithSource(t *testing.T) {
 }
 
 func TestImportCommand_InvalidType(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -288,6 +303,7 @@ func TestImportCommand_InvalidType(t *testing.T) {
 }
 
 func TestIssueIDIngressRejectsPathSeparators_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	t.Run("create", func(t *testing.T) {
 		repo := setupRepoWithTask(t)
 		_, err := runTrls(t, repo, "create", "--id", "team/task-01", "--title", "bad", "--type", "task")
@@ -322,6 +338,7 @@ func TestIssueIDIngressRejectsPathSeparators_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestStaleReviewCommand_NoStale(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -333,6 +350,7 @@ func TestStaleReviewCommand_NoStale(t *testing.T) {
 }
 
 func TestDecomposeRevertCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -357,6 +375,7 @@ func TestDecomposeRevertCommand(t *testing.T) {
 }
 
 func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -403,9 +422,10 @@ func TestDecomposeApply_DraftConfidence_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestSourcesSyncCommand_WithFilesystemSource(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd0 := newRootCmd()
+	cmd0 := testRootCmd(t)
 	cmd0.SetOut(new(bytes.Buffer))
 	cmd0.SetArgs([]string{"worker-init", "--repo", repo})
 	require.NoError(t, cmd0.Execute())
@@ -413,14 +433,14 @@ func TestSourcesSyncCommand_WithFilesystemSource(t *testing.T) {
 	docFile := filepath.Join(repo, "spec.md")
 	require.NoError(t, os.WriteFile(docFile, []byte("# Spec"), 0644))
 
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"sources", "add", "--repo", repo,
 		"--url", docFile, "--type", "filesystem", "--title", "Spec"})
 	require.NoError(t, cmd1.Execute())
 
 	buf := new(bytes.Buffer)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf)
 	cmd2.SetArgs([]string{"sources", "sync", "--repo", repo})
 
@@ -430,6 +450,7 @@ func TestSourcesSyncCommand_WithFilesystemSource(t *testing.T) {
 }
 
 func TestSourcesVerifyCommand_AfterSync_OK(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -451,6 +472,7 @@ func TestSourcesVerifyCommand_AfterSync_OK(t *testing.T) {
 }
 
 func TestValidateCommand_JSON(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
 		"--scope", "internal/ops/*.go",
@@ -464,6 +486,7 @@ func TestValidateCommand_JSON(t *testing.T) {
 }
 
 func TestExtractFieldsFromIssue_SingleField(t *testing.T) {
+	t.Parallel()
 	issue := &materialize.Issue{
 		ID:     "task-01",
 		Title:  "Test task",
@@ -477,6 +500,7 @@ func TestExtractFieldsFromIssue_SingleField(t *testing.T) {
 }
 
 func TestExtractFieldsFromIssue_MultipleFields(t *testing.T) {
+	t.Parallel()
 	issue := &materialize.Issue{
 		ID:      "task-01",
 		Title:   "Test task",
@@ -491,6 +515,7 @@ func TestExtractFieldsFromIssue_MultipleFields(t *testing.T) {
 }
 
 func TestExtractFieldsFromIssue_UnknownField(t *testing.T) {
+	t.Parallel()
 	issue := &materialize.Issue{
 		ID:    "task-01",
 		Title: "Test task",
@@ -501,6 +526,7 @@ func TestExtractFieldsFromIssue_UnknownField(t *testing.T) {
 }
 
 func TestExtractFieldsFromIssue_MixedKnownAndUnknown(t *testing.T) {
+	t.Parallel()
 	issue := &materialize.Issue{
 		ID:     "task-01",
 		Title:  "Test task",
@@ -512,6 +538,7 @@ func TestExtractFieldsFromIssue_MixedKnownAndUnknown(t *testing.T) {
 }
 
 func TestExtractFieldsFromIssue_BlockedByAbsent(t *testing.T) {
+	t.Parallel()
 	issue := &materialize.Issue{
 		ID:    "task-01",
 		Title: "Test task",
@@ -522,6 +549,7 @@ func TestExtractFieldsFromIssue_BlockedByAbsent(t *testing.T) {
 }
 
 func TestShowCommand_WithFieldFlag_SingleField(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "show", "task-01", "--field", "status")
@@ -530,6 +558,7 @@ func TestShowCommand_WithFieldFlag_SingleField(t *testing.T) {
 }
 
 func TestShowCommand_WithFieldFlag_MultipleFields(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "show", "task-01", "--field", "status,title")
@@ -541,6 +570,7 @@ func TestShowCommand_WithFieldFlag_MultipleFields(t *testing.T) {
 }
 
 func TestShowCommand_WithFieldFlag_BlockedByAbsent(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "show", "task-01", "--field", "blocked_by")
@@ -549,6 +579,7 @@ func TestShowCommand_WithFieldFlag_BlockedByAbsent(t *testing.T) {
 }
 
 func TestListCmd_Group_ShowsStatusHeaders(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "--format", "human", "list", "--group")
@@ -559,14 +590,15 @@ func TestListCmd_Group_ShowsStatusHeaders(t *testing.T) {
 }
 
 func TestListCmd_Group_WithStatusFilter(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Second task", "--type", "task", "--id", "task-02"}))
 	require.NoError(t, cmd.Execute())
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-02", "--worktree"})
 	require.NoError(t, cmd2.Execute())
@@ -578,9 +610,10 @@ func TestListCmd_Group_WithStatusFilter(t *testing.T) {
 }
 
 func TestListCmd_Group_WithParentFilter(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Parent task", "--type", "story", "--id", "E6"}))
 	require.NoError(t, cmd.Execute())
@@ -588,7 +621,7 @@ func TestListCmd_Group_WithParentFilter(t *testing.T) {
 	_, materializeErr := runTrls(t, repo, "materialize")
 	require.NoError(t, materializeErr)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Child task", "--type", "task", "--id", "task-child", "--parent", "E6"}))
 	require.NoError(t, cmd2.Execute())
@@ -600,10 +633,11 @@ func TestListCmd_Group_WithParentFilter(t *testing.T) {
 }
 
 func TestListCmd_Group_JSONIgnoresGroupFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "list", "--group"})
 	require.NoError(t, cmd.Execute())
@@ -622,6 +656,7 @@ func TestListCmd_Group_JSONIgnoresGroupFlag(t *testing.T) {
 }
 
 func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
@@ -637,6 +672,7 @@ func TestValidateCommand_PhantomScope_PrintsInfoNotWarning(t *testing.T) {
 }
 
 func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
@@ -651,6 +687,7 @@ func TestValidateCommand_JSON_IncludesInfosField(t *testing.T) {
 }
 
 func TestValidateQuiet(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	acceptance := `[{"type":"test_passes","cmd":"make check"}]`
@@ -668,6 +705,7 @@ func TestValidateQuiet(t *testing.T) {
 }
 
 func TestImportCommand_DryRun_JSON(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	csvFile := filepath.Join(t.TempDir(), "issues.csv")
@@ -679,6 +717,7 @@ func TestImportCommand_DryRun_JSON(t *testing.T) {
 }
 
 func TestAmendCmd_PatchesType(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "amend", "--issue", "task-01", "--type", "story")
@@ -693,6 +732,7 @@ func TestAmendCmd_PatchesType(t *testing.T) {
 }
 
 func TestAmendCmd_PatchesAcceptance(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	acceptance := `[{"type":"test_passes","cmd":"make check"}]`
@@ -709,6 +749,7 @@ func TestAmendCmd_PatchesAcceptance(t *testing.T) {
 }
 
 func TestAmendCmd_NoFieldsProvided_ReturnsError(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01")
@@ -716,6 +757,7 @@ func TestAmendCmd_NoFieldsProvided_ReturnsError(t *testing.T) {
 }
 
 func TestAmendCmd_ClearContextFilesAndContextFileConflict_ReturnsError(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
@@ -746,6 +788,7 @@ func setupRepoWithSource(t *testing.T) (string, string) {
 }
 
 func TestSourceLinkCmd_HappyPath(t *testing.T) {
+	t.Parallel()
 	repo, sourceID := setupRepoWithSource(t)
 
 	out, err := runTrls(t, repo, "sources", "link", "--issue", "task-01", "--source-id", sourceID)
@@ -755,6 +798,7 @@ func TestSourceLinkCmd_HappyPath(t *testing.T) {
 }
 
 func TestSourceLinkCmd_UnknownSourceID(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "sources", "link", "--issue", "task-01", "--source-id", "00000000-0000-0000-0000-000000000000")
@@ -763,6 +807,7 @@ func TestSourceLinkCmd_UnknownSourceID(t *testing.T) {
 }
 
 func TestSourceLinkCmd_MissingIssue(t *testing.T) {
+	t.Parallel()
 	repo, sourceID := setupRepoWithSource(t)
 
 	_, err := runTrls(t, repo, "sources", "link", "--source-id", sourceID)
@@ -770,6 +815,7 @@ func TestSourceLinkCmd_MissingIssue(t *testing.T) {
 }
 
 func TestSourceLinkCmd_MissingSourceID(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "sources", "link", "--issue", "task-01")
@@ -777,6 +823,7 @@ func TestSourceLinkCmd_MissingSourceID(t *testing.T) {
 }
 
 func TestSourceLinkCmd_MakesNodeCited(t *testing.T) {
+	t.Parallel()
 	repo, sourceID := setupRepoWithSource(t)
 
 	_, err := runTrls(t, repo, "sources", "link", "--issue", "task-01", "--source-id", sourceID)
@@ -792,6 +839,7 @@ func TestSourceLinkCmd_MakesNodeCited(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_CI_HappyPath(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -806,6 +854,7 @@ func TestAcceptCitationCmd_CI_HappyPath(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_RationaleTooShort(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -819,6 +868,7 @@ func TestAcceptCitationCmd_RationaleTooShort(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_TwoWords_Rejected(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -832,6 +882,7 @@ func TestAcceptCitationCmd_TwoWords_Rejected(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_ThreeWords_Accepted(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -845,6 +896,7 @@ func TestAcceptCitationCmd_ThreeWords_Accepted(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_MissingIssue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -856,6 +908,7 @@ func TestAcceptCitationCmd_MissingIssue(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_MissingRationale(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -867,6 +920,7 @@ func TestAcceptCitationCmd_MissingRationale(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_Force_SkipsPrompt(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -881,6 +935,7 @@ func TestAcceptCitationCmd_Force_SkipsPrompt(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_NonInteractive_SkipsPrompt(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -925,6 +980,7 @@ func setupRepoWithTwoTasks(t *testing.T) string {
 }
 
 func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -940,6 +996,7 @@ func TestAcceptCitationCmd_MultiIssue_AllApplied(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_MultiIssue_ThreeIDs(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "Task three", "--type", "task", "--id", "task-03")
@@ -967,7 +1024,7 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "My Story", "--type", "story", "--id", "story-01"}))
 	require.NoError(t, cmd2.Execute())
@@ -995,6 +1052,7 @@ func setupRepoWithStoryAndTask(t *testing.T) string {
 }
 
 func TestListCmd_NoFilter_ShowsAll(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "list")
@@ -1005,6 +1063,7 @@ func TestListCmd_NoFilter_ShowsAll(t *testing.T) {
 }
 
 func TestListCmd_ParentFilter(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "--format", "human", "list", "--parent", "story-01")
@@ -1015,6 +1074,7 @@ func TestListCmd_ParentFilter(t *testing.T) {
 }
 
 func TestListCmd_TypeFilter(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "list", "--type", "story")
@@ -1025,6 +1085,7 @@ func TestListCmd_TypeFilter(t *testing.T) {
 }
 
 func TestListCmd_ParentAndTypeFilter(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "list", "--parent", "story-01", "--type", "task")
@@ -1034,6 +1095,7 @@ func TestListCmd_ParentAndTypeFilter(t *testing.T) {
 }
 
 func TestListCmd_ParentFilter_NoMatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "--format", "human", "list", "--parent", "nonexistent")
@@ -1042,10 +1104,11 @@ func TestListCmd_ParentFilter_NoMatch(t *testing.T) {
 }
 
 func TestDecomposeApplyExampleFlag(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"dag", "apply", "--example", "--repo", repo})
 
@@ -1066,6 +1129,7 @@ func TestDecomposeApplyExampleFlag(t *testing.T) {
 }
 
 func TestDecomposeApplyDryRun_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1116,10 +1180,11 @@ func TestDecomposeApplyDryRun_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestListCmd_JSONFormat(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "list", "--parent", "story-01"})
 	require.NoError(t, cmd.Execute())
@@ -1136,6 +1201,7 @@ func TestListCmd_JSONFormat(t *testing.T) {
 }
 
 func TestListCmd_StatusFilter(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -1163,6 +1229,7 @@ func TestListCmd_StatusFilter(t *testing.T) {
 }
 
 func TestListCmd_HumanShowsStatus(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "list")
@@ -1171,10 +1238,11 @@ func TestListCmd_HumanShowsStatus(t *testing.T) {
 }
 
 func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--format", "agent", "--repo", repo, "list"})
 	require.NoError(t, cmd.Execute())
@@ -1192,6 +1260,7 @@ func TestListCmd_AgentFormatEmitsJSON(t *testing.T) {
 }
 
 func TestDecomposeApplyUncitedPlan(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1215,6 +1284,7 @@ func TestDecomposeApplyUncitedPlan(t *testing.T) {
 }
 
 func TestDecomposeApplyRefusesUnknownSource(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1245,6 +1315,7 @@ func TestDecomposeApplyRefusesUnknownSource(t *testing.T) {
 }
 
 func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1284,6 +1355,7 @@ func TestDecomposeApplyGenerateIds_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1322,6 +1394,7 @@ func TestDecomposeApplyRoot_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestShowCmd(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "show", "--format", "human", "--issue", "task-01")
@@ -1333,7 +1406,7 @@ func TestShowCmd(t *testing.T) {
 	assert.Contains(t, out, "story-01")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "show", "--issue", "task-01"})
 	require.NoError(t, cmd.Execute())
@@ -1347,6 +1420,7 @@ func TestShowCmd(t *testing.T) {
 }
 
 func TestShowCmd_DisplaysAcceptance(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	acceptance := `[{"type":"test_passes","cmd":"make check"}]`
@@ -1366,6 +1440,7 @@ func TestShowCmd_DisplaysAcceptance(t *testing.T) {
 }
 
 func TestShowCmd_MissingIssue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	_, err := runTrls(t, repo, "show", "--issue", "nonexistent-99")
@@ -1373,6 +1448,7 @@ func TestShowCmd_MissingIssue(t *testing.T) {
 }
 
 func TestShowCmd_MissingFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	_, err := runTrls(t, repo, "show")
@@ -1380,6 +1456,7 @@ func TestShowCmd_MissingFlag(t *testing.T) {
 }
 
 func TestDoctorCmd_CleanRepo(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "doctor")
@@ -1392,10 +1469,11 @@ func TestDoctorCmd_CleanRepo(t *testing.T) {
 }
 
 func TestDoctorCmd_JSONFormat(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"--format", "json", "--repo", repo, "doctor"})
 	require.NoError(t, cmd.Execute())
@@ -1406,6 +1484,7 @@ func TestDoctorCmd_JSONFormat(t *testing.T) {
 }
 
 func TestDoctorCmd_BrokenParentRef(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1435,6 +1514,7 @@ func TestDoctorCmd_BrokenParentRef(t *testing.T) {
 }
 
 func TestDoctorCmd_Strict(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "doctor")
@@ -1445,6 +1525,7 @@ func TestDoctorCmd_Strict(t *testing.T) {
 }
 
 func TestDoctorStrictFlagsUnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	stray := filepath.Join(repo, ".worktrees", "stray")
 	run(t, repo, "git", "worktree", "add", "-b", "stray-branch", stray)
@@ -1456,6 +1537,7 @@ func TestDoctorStrictFlagsUnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *testin
 }
 
 func TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
 	require.NoError(t, err)
@@ -1475,10 +1557,11 @@ func TestDoctorFixReportsBoundWorktreePathDrift_REQ_LNGHZN_S5(t *testing.T) {
 }
 
 func TestDecomposeApplySchemaFlag(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"dag", "apply", "--schema", "--repo", repo})
 
@@ -1537,6 +1620,7 @@ func TestDecomposeApplySchemaFlag(t *testing.T) {
 }
 
 func TestReadyParentFilter(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	outAll, err := runTrls(t, repo, "ready")
@@ -1556,6 +1640,7 @@ func TestReadyParentFilter(t *testing.T) {
 }
 
 func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1591,6 +1676,7 @@ func TestMaterializeCommand_ExcludeWorker(t *testing.T) {
 }
 
 func TestListTerminal(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -1622,6 +1708,7 @@ func TestListTerminal(t *testing.T) {
 }
 
 func TestReadyExplain(t *testing.T) {
+	t.Parallel()
 	repo := plantBlockedReadyExplainFixture(t)
 
 	out, err := runTrls(t, repo, "ready", "--explain")
@@ -1645,6 +1732,7 @@ func TestDagApplyArtifactModesAreSchemaAndExample_REQ_AOC_S1_T3(t *testing.T) {
 }
 
 func TestDagApplyResultModesEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo, planFile := plantDagApplyEnvelopeFixture(t)
 
 	dryOut, err := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--dry-run", "--format", "json")
@@ -1678,6 +1766,7 @@ func TestDagApplyResultModesEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestDagApplyEnvelopeIgnoresForeignCreates_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo, planFile := plantDagApplyEnvelopeFixture(t)
 	_, err := runTrls(t, repo, "create",
 		"--id", "FOREIGN-001",
@@ -1710,6 +1799,7 @@ func TestDagApplyEnvelopeIgnoresForeignCreates_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestAllAgentFacingCommandsEmitEnvelope_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1779,6 +1869,7 @@ func plantDagApplyEnvelopeFixture(t *testing.T) (string, string) {
 }
 
 func TestCommandLongAndExampleFields(t *testing.T) {
+	t.Parallel()
 	type commandTest struct {
 		name string
 		cmd  *cobra.Command
@@ -1807,6 +1898,7 @@ func TestCommandLongAndExampleFields(t *testing.T) {
 }
 
 func TestCreateCommand_FeatureType(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "create", "--title", "my feature", "--type", "feature", "--id", "feature-01")
@@ -1815,6 +1907,7 @@ func TestCreateCommand_FeatureType(t *testing.T) {
 }
 
 func TestCreateCommand_FeatureTypeInErrMsg(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "my widget", "--type", "invalid-type", "--id", "widget-01")
@@ -1823,21 +1916,25 @@ func TestCreateCommand_FeatureTypeInErrMsg(t *testing.T) {
 }
 
 func TestValidParentChildTypes_EpicCanContainFeature(t *testing.T) {
+	t.Parallel()
 	assert.True(t, issuetype.IsLegalHierarchy("epic", "feature"),
 		"epic should be able to contain feature")
 }
 
 func TestValidParentChildTypes_FeatureCanContainTask(t *testing.T) {
+	t.Parallel()
 	assert.True(t, issuetype.IsLegalHierarchy("feature", "task"),
 		"feature should be able to contain task")
 }
 
 func TestValidParentChildTypes_FeatureCanContainBug(t *testing.T) {
+	t.Parallel()
 	assert.True(t, issuetype.IsLegalHierarchy("feature", "bug"),
 		"feature should be able to contain bug")
 }
 
 func TestCreateCommand_FeatureUnderEpic(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "My Epic", "--type", "epic", "--id", "epic-01")
@@ -1852,6 +1949,7 @@ func TestCreateCommand_FeatureUnderEpic(t *testing.T) {
 }
 
 func TestReparentCommand_EmptyParentMakesTopLevel(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 
 	out, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "")
@@ -1860,13 +1958,14 @@ func TestReparentCommand_EmptyParentMakesTopLevel(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_Interactive_Confirm(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
 	outBuf := new(bytes.Buffer)
 	stdin := strings.NewReader("y\n")
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(outBuf)
 	root.SetIn(stdin)
 	root.SetArgs([]string{"sources", "accept-citation", "--repo", repo,
@@ -1878,6 +1977,7 @@ func TestAcceptCitationCmd_Interactive_Confirm(t *testing.T) {
 }
 
 func TestAcceptCitationCmd_PositionalIssueID(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1892,6 +1992,7 @@ func TestAcceptCitationCmd_PositionalIssueID(t *testing.T) {
 }
 
 func TestWorkersCommand_WithCancelledTransition(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -1908,6 +2009,7 @@ func TestWorkersCommand_WithCancelledTransition(t *testing.T) {
 }
 
 func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create",
@@ -1922,7 +2024,7 @@ func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"--format", "human", "--repo", repo, "list", "--group"})
 	require.NoError(t, root.Execute())
@@ -1933,6 +2035,7 @@ func TestListCmd_Group_MultipleStatusGroups(t *testing.T) {
 }
 
 func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithStoryAndTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1948,8 +2051,9 @@ func TestTransitionCmd_DoneWithParentStory_ChecksStoryStatus(t *testing.T) {
 }
 
 func TestDecomposeContextCmd_BasicOutput(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "context"})
 	require.NoError(t, root.Execute())
@@ -1957,8 +2061,9 @@ func TestDecomposeContextCmd_BasicOutput(t *testing.T) {
 }
 
 func TestDecomposeContextCmd_JSONFormat(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "context", "--format", "json"})
 	require.NoError(t, root.Execute())
@@ -1968,8 +2073,9 @@ func TestDecomposeContextCmd_JSONFormat(t *testing.T) {
 }
 
 func TestDecomposeContextCmd_WithSources(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "context", "--format", "json", "--sources", "src-01,,src-02"})
 	require.NoError(t, root.Execute())

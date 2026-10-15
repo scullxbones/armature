@@ -26,6 +26,7 @@ func createOverlappingTask(t *testing.T, repo, id, dod string) {
 }
 
 func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -57,6 +58,7 @@ func TestValidateStrictDefault_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -74,6 +76,7 @@ func TestValidateRejectsScopedFlags_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -91,6 +94,7 @@ func TestValidateStrictFalseShowsWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -110,6 +114,7 @@ func TestValidateJSONKeepsWarningBuckets_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidate_MalformedGlobYieldsE10Envelope_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -167,6 +172,7 @@ func TestValidate_MalformedGlobYieldsE10Envelope_REQ_NOCOMMENTS(t *testing.T) {
 }
 
 func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -210,6 +216,7 @@ func TestValidateJSONIncludesSnapshotWarnings_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -233,6 +240,7 @@ func TestValidateJSONSnapshotWarningsStayOffStderr_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "amend", "--issue", "task-01",
 		"--scope", "nonexistent/file.go",
@@ -246,6 +254,7 @@ func TestValidateStrictFalsePrintsInfos_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -267,6 +276,7 @@ func TestValidateNonStrictStillFailsOnErrors_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestValidateCiRejectsStrictFalse_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "validate", "--ci", "--strict=false")
 	require.Error(t, err)
@@ -285,6 +295,7 @@ func nonEmptyLines(s string) []string {
 }
 
 func TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")

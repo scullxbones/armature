@@ -261,6 +261,9 @@ func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
+	if sess := sessionFrom(cmd); sess != nil {
+		baseCtx = context.WithValue(baseCtx, sessionKey{}, sess)
+	}
 	cmd.SetContext(context.WithValue(baseCtx, executionStateKey{}, state))
 }
 

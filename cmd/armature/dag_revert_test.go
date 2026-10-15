@@ -18,6 +18,7 @@ import (
 )
 
 func TestDagRevertPublishesCancelOps_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -39,6 +40,7 @@ func TestDagRevertPublishesCancelOps_REQ_DECOMPOSE(t *testing.T) {
 }
 
 func TestDagRevertPublishFailureKeepsLocalCommit_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -64,6 +66,7 @@ func TestDagRevertPublishFailureKeepsLocalCommit_REQ_DECOMPOSE(t *testing.T) {
 }
 
 func TestDagRevertRetryPublishesRetainedCommit_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -94,6 +97,7 @@ func TestDagRevertRetryPublishesRetainedCommit_REQ_DECOMPOSE(t *testing.T) {
 }
 
 func TestDagRevertForeignChildAfterRemoteIntegrateRefuses_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -144,6 +148,7 @@ func TestDagRevertForeignChildAfterRemoteIntegrateRefuses_REQ_DECOMPOSE(t *testi
 }
 
 func TestDagRevertCancelsAsOneCommit_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -164,6 +169,7 @@ func TestDagRevertCancelsAsOneCommit_REQ_DECOMPOSE(t *testing.T) {
 }
 
 func TestDagRevertSucceedsWhenIntroductionWouldReject_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	planFile := writePlanIssue(t, "REV-DIRTY")
 	_, err := runTrls(t, repo, "dag", "apply", "--plan", planFile)
@@ -210,6 +216,7 @@ func TestDagRevertSucceedsWhenIntroductionWouldReject_REQ_DECOMPOSE(t *testing.T
 }
 
 func TestDagRevertForeignChildRefusesApplyAndDryRun_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	repo := plantDagApplyLogSlotRepo(t)
 	planFile := writePlanIssue(t, "REV-PARENT")
 	_, err := runTrls(t, repo, "dag", "apply", "--plan", planFile)
@@ -261,12 +268,14 @@ func TestDagRevertForeignChildRefusesApplyAndDryRun_REQ_DECOMPOSE(t *testing.T) 
 }
 
 func TestDagRevertHelpPromisesForeignChildGuard(t *testing.T) {
+	t.Parallel()
 	cmd := newDecomposeRevertCmd()
 	assert.Contains(t, cmd.Long, "no new children")
 	assert.Contains(t, cmd.Long, "parent")
 }
 
 func TestAppendHighStakesOpsExemptIntroductionPublishes_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -287,6 +296,7 @@ func TestAppendHighStakesOpsExemptIntroductionPublishes_REQ_DECOMPOSE(t *testing
 }
 
 func TestDagRevertDoesNotCallRefuseIntroduction_REQ_DECOMPOSE(t *testing.T) {
+	t.Parallel()
 	decomposeSrc, err := os.ReadFile("decompose.go")
 	require.NoError(t, err)
 	src := string(decomposeSrc)

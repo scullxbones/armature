@@ -11,7 +11,8 @@ import (
 )
 
 func TestGrammarConformance_REQ_NXTTN_S5_T4(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	t.Run("HyphenatedUses", func(t *testing.T) {
 		violations := checkHyphenatedUses(root)
@@ -331,7 +332,8 @@ func testNegativeCase(t *testing.T) {
 }
 
 func TestCommandTreeStructure_REQ_NXTTN_S5_T4(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	groups := root.Groups()
 	if len(groups) == 0 {
@@ -383,7 +385,8 @@ func TestCommandTreeStructure_REQ_NXTTN_S5_T4(t *testing.T) {
 }
 
 func TestUseStringFormatting_REQ_NXTTN_S5_T4(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	walkCommandTree(root, func(cmd *cobra.Command, parent *cobra.Command) {
 		use := cmd.Use
@@ -407,7 +410,8 @@ func TestUseStringFormatting_REQ_NXTTN_S5_T4(t *testing.T) {
 }
 
 func TestFormatFlagExistence_REQ_NXTTN_S5_T4(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	if root.PersistentFlags().Lookup("format") == nil {
 		t.Error("root command missing --format persistent flag")
@@ -430,7 +434,8 @@ func TestFormatFlagExistence_REQ_NXTTN_S5_T4(t *testing.T) {
 }
 
 func TestNonInteractiveFlagExistence_REQ_NXTTN_S5_T4(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	if root.PersistentFlags().Lookup("non-interactive") == nil {
 		t.Error("root command missing --non-interactive persistent flag")
@@ -452,7 +457,8 @@ func TestNonInteractiveFlagExistence_REQ_NXTTN_S5_T4(t *testing.T) {
 }
 
 func TestPositionalArgumentPatterns_REQ_NXTTN_S5_T4(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	positionalPattern := regexp.MustCompile(`\[[a-z-]+\]`)
 
@@ -469,7 +475,8 @@ func TestPositionalArgumentPatterns_REQ_NXTTN_S5_T4(t *testing.T) {
 }
 
 func TestNoHyphenatedRootTopLevel_REQ_NXTTN_S5_T4(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	signalAllowlist := map[string]bool{
 		"context-history": true,

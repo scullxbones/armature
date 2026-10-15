@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 )
 
 func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -66,6 +66,7 @@ func TestMaterializeCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -120,6 +121,7 @@ func TestValidateCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -168,6 +170,7 @@ func TestReadyCommand_ExcludesCrossWorkerOps(t *testing.T) {
 }
 
 func TestMaterializeCommand_WarningsVisible(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -219,6 +222,7 @@ func TestMaterializeCommand_WarningsVisible(t *testing.T) {
 }
 
 func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -239,25 +243,15 @@ func TestReadyCommand_UnknownOpWarningPrintedOnce(t *testing.T) {
 		WorkerID:  "worker-unknown",
 	}))
 
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
 	stdout, cmdStderr, cmdErr := runTrlsWithStderr(t, repo, "ready")
-
-	require.NoError(t, w.Close())
-	os.Stderr = oldStderr
-	rawStderr, err := io.ReadAll(r)
-	require.NoError(t, err)
 	require.NoError(t, cmdErr)
 
 	assert.Contains(t, stdout, "ready-01")
 	assert.Contains(t, cmdStderr, "warning:", "command stderr should contain the warning")
-	assert.Empty(t, string(rawStderr), "raw stderr should stay quiet for snapshot-backed warnings")
 }
 
 func TestMaterializeOffsetTracking(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

@@ -9,10 +9,11 @@ import (
 )
 
 func TestTUICommand_NonInteractive(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"tui", "--repo", repo})
 

@@ -18,6 +18,7 @@ import (
 )
 
 func TestHandlersDoNotReloadStateDirectly_REQ_ARCHIMP_S14_T6(t *testing.T) {
+	t.Parallel()
 	scope := []string{
 		"create.go", "assign.go", "dagsum.go", "confirm.go", "list.go",
 		"context_history.go", "decompose.go", "hook.go",
@@ -134,6 +135,7 @@ func isStatePathJoin(call *ast.CallExpr) bool {
 }
 
 func TestHandlersUseSnapshotAccess_REQ_ARCHIMP_S18_T3(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	violations := []string{}
 
@@ -217,6 +219,7 @@ func isSnapshotLoadCall(call *ast.CallExpr) bool {
 }
 
 func TestNoGlobalCommandRuntime_REQ_ARCHIMP_S18_T4(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	violations := []string{}
 
@@ -279,6 +282,7 @@ func checkGlobalCommandRuntimeUsage(fset *token.FileSet, filename string, file *
 }
 
 func TestCommandRuntimeIsolation_REQ_ARCHIMP_S18_T4(t *testing.T) {
+	t.Parallel()
 	ctx1 := &config.Context{
 		RepoPath:  "/repo1",
 		IssuesDir: "/repo1/.armature",
@@ -321,7 +325,61 @@ func TestCommandRuntimeIsolation_REQ_ARCHIMP_S18_T4(t *testing.T) {
 	require.NoError(t, cmd2.RunE(cmd2, nil))
 }
 
+func TestNoProcessEnvCwdOrTempDirInProduction_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	_, thisTestFile, _, _ := runtime.Caller(0)
+	cmdDir := filepath.Dir(thisTestFile)
+	internalDir := filepath.Join(filepath.Dir(filepath.Dir(cmdDir)), "internal")
+
+	allow := map[string]bool{
+		filepath.Join(cmdDir, "invocation.go"):      true,
+		filepath.Join(internalDir, "tui", "tty.go"): true,
+	}
+	banned := []string{"os.Getenv(", "os.LookupEnv(", "os.Chdir(", "os.TempDir("}
+
+	var violations []string
+	var scan func(string)
+	scan = func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			violations = append(violations, err.Error())
+			return
+		}
+		for _, entry := range entries {
+			path := filepath.Join(dir, entry.Name())
+			if entry.IsDir() {
+				scan(path)
+				continue
+			}
+			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			if allow[path] {
+				continue
+			}
+			src, readErr := os.ReadFile(path)
+			if readErr != nil {
+				violations = append(violations, readErr.Error())
+				continue
+			}
+			body := string(src)
+			for _, needle := range banned {
+				if strings.Contains(body, needle) {
+					violations = append(violations, fmt.Sprintf("%s uses %s", path, strings.TrimSuffix(needle, "(")))
+				}
+			}
+		}
+	}
+	scan(cmdDir)
+	scan(internalDir)
+	if len(violations) > 0 {
+		t.Fatalf("production code must read Env/Dir/TempDir from Invocation, not process globals:\n  %s",
+			strings.Join(violations, "\n  "))
+	}
+}
+
 func TestStatsAndShowDeriveSpendFromCapturedOps(t *testing.T) {
+	t.Parallel()
 	_, thisTestFile, _, _ := runtime.Caller(0)
 	baseDir := filepath.Dir(thisTestFile)
 	for _, name := range []string{"stats.go", "show.go"} {

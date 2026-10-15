@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -110,7 +111,8 @@ type Invocation struct {
 	TTY     bool
 	TempDir string
 	// replayLeases overrides claim.Owners for this invocation only (tests).
-	replayLeases func([]ops.Op) map[string]claim.Lease
+	replayLeases          func([]ops.Op) map[string]claim.Lease
+	afterIdempotencyCheck func()
 }
 
 type session struct {
@@ -179,18 +181,19 @@ func attachSession(cmd *cobra.Command, sess *session) {
 }
 
 func sessionFrom(cmd *cobra.Command) *session {
-	if cmd == nil {
-		return nil
+	for c := cmd; c != nil; c = c.Parent() {
+		ctx := c.Context()
+		if ctx == nil {
+			continue
+		}
+		if sess, ok := ctx.Value(sessionKey{}).(*session); ok && sess != nil {
+			return sess
+		}
+		if c.Parent() == nil {
+			break
+		}
 	}
-	ctx := cmd.Context()
-	if ctx == nil {
-		return nil
-	}
-	sess, ok := ctx.Value(sessionKey{}).(*session)
-	if !ok {
-		return nil
-	}
-	return sess
+	return nil
 }
 
 func uiFrom(cmd *cobra.Command) *tui.Renderer {
@@ -242,6 +245,10 @@ func environFrom(cmd *cobra.Command) []string {
 
 func gitWith(env Env, repoPath string) *adapters.Client {
 	return adapters.New(repoPath).WithEnviron(overlayEnviron(env))
+}
+
+func gitCommand(environ []string, args ...string) *exec.Cmd {
+	return adapters.CommandGit(context.Background(), environ, args...)
 }
 
 func gitAt(cmd *cobra.Command, repoPath string) *adapters.Client {

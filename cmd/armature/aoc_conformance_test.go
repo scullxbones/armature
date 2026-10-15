@@ -15,7 +15,7 @@ import (
 
 func TestEveryAgentFacingCommandHasConformingFixture_REQ_AOC_S3_T3(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, output.Lint(shapeLintTree(newRootCmd()), output.DefaultGoldenDir()),
+	require.NoError(t, output.Lint(shapeLintTree(testRootCmd(t)), output.DefaultGoldenDir()),
 		"every cobra-enumerated agent-facing mode needs a conforming golden under internal/output/testdata/golden")
 }
 
@@ -23,7 +23,7 @@ func TestVersionHandlerStdoutMatchesFixture_REQ_AOC_S3_T3(t *testing.T) {
 	t.Parallel()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.SetArgs([]string{"version", "--format", "json", "--non-interactive"})
@@ -58,7 +58,7 @@ func TestCompletionHandlerStdoutMatchesShellGrammar_REQ_AOC_S3_T3(t *testing.T) 
 	t.Parallel()
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.SetArgs([]string{"completion", "bash"})

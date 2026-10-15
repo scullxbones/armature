@@ -21,6 +21,7 @@ import (
 )
 
 func TestGateRunRecordsEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -41,6 +42,7 @@ func TestGateRunRecordsEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunRecordsOutputDigest_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"echo", "hello-gate"},
@@ -60,6 +62,7 @@ func TestGateRunRecordsOutputDigest_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunDirtyTreeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -76,6 +79,7 @@ func TestGateRunDirtyTreeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunUnconfiguredRepoErrors_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "gate", "run", "full")
@@ -84,6 +88,7 @@ func TestGateRunUnconfiguredRepoErrors_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunUnknownProfileErrors(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -94,6 +99,7 @@ func TestGateRunUnknownProfileErrors(t *testing.T) {
 }
 
 func TestGateRunEmptyCommandErrors(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {},
@@ -104,6 +110,7 @@ func TestGateRunEmptyCommandErrors(t *testing.T) {
 }
 
 func TestGateRunFailedCommandRecordsEvidence(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"false"},
@@ -116,6 +123,7 @@ func TestGateRunFailedCommandRecordsEvidence(t *testing.T) {
 }
 
 func TestGateRunUsesInvokingWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"test", "-f", "wt-only"},
@@ -141,6 +149,7 @@ func TestGateRunUsesInvokingWorktree_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunDirtiedTreeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"touch", "generated-by-gate.txt"},
@@ -156,6 +165,7 @@ func TestGateRunDirtiedTreeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunUncommittedGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -173,6 +183,7 @@ func TestGateRunUncommittedGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunSkipWorktreeGatesJSONUsesHEADCommand_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"false"},
@@ -192,6 +203,7 @@ func TestGateRunSkipWorktreeGatesJSONUsesHEADCommand_REQ_LNGHZN_S10_T3(t *testin
 }
 
 func TestGateRunSkipWorktreeSourceUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -211,6 +223,7 @@ func TestGateRunSkipWorktreeSourceUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunAssumeUnchangedSourceUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -230,6 +243,7 @@ func TestGateRunAssumeUnchangedSourceUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunUntrackedGatesJSONIsUnconfigured_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesFile(t, repo, map[string][]string{
 		"full": {"true"},
@@ -241,6 +255,7 @@ func TestGateRunUntrackedGatesJSONIsUnconfigured_REQ_LNGHZN_S10_T3(t *testing.T)
 }
 
 func TestGateRunReadsInvokingWorktreeGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"false"},
@@ -264,6 +279,7 @@ func TestGateRunReadsInvokingWorktreeGatesJSON_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunHEADMoveRecordsUncommitted_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"sh", "-c", "git commit --allow-empty -m x"},
@@ -281,6 +297,7 @@ func TestGateRunHEADMoveRecordsUncommitted_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunSkipWorktreeInsideSubmoduleUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -304,6 +321,7 @@ func TestGateRunSkipWorktreeInsideSubmoduleUncitable_REQ_LNGHZN_S10_T3(t *testin
 }
 
 func TestGateRunAssumeUnchangedInsideSubmoduleUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -327,6 +345,7 @@ func TestGateRunAssumeUnchangedInsideSubmoduleUncitable_REQ_LNGHZN_S10_T3(t *tes
 }
 
 func TestGateRunDirtySubmoduleDespiteIgnore_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -350,6 +369,7 @@ func TestGateRunDirtySubmoduleDespiteIgnore_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunGITWorkTreeExportStillSeesDirtyCheckout_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -368,7 +388,7 @@ func TestGateRunGITWorkTreeExportStillSeesDirtyCheckout_REQ_LNGHZN_S10_T3(t *tes
 	out, err := untar.CombinedOutput()
 	require.NoError(t, err, "tar: %s", out)
 
-	t.Setenv("GIT_WORK_TREE", exportDir)
+	setCLIEnv(t, "GIT_WORK_TREE", exportDir)
 
 	_, err = runTrls(t, repo, "gate", "run", "full")
 	require.NoError(t, err)
@@ -379,6 +399,7 @@ func TestGateRunGITWorkTreeExportStillSeesDirtyCheckout_REQ_LNGHZN_S10_T3(t *tes
 }
 
 func TestGateRunCoreWorktreeExportStillSeesDirtyCheckout_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -408,6 +429,7 @@ func TestGateRunCoreWorktreeExportStillSeesDirtyCheckout_REQ_LNGHZN_S10_T3(t *te
 }
 
 func TestGateRunGitlinkWithoutGitUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -430,6 +452,7 @@ func TestGateRunGitlinkWithoutGitUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunSubmoduleUntrackedDespiteShowUntrackedFilesNo_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -453,6 +476,7 @@ func TestGateRunSubmoduleUntrackedDespiteShowUntrackedFilesNo_REQ_LNGHZN_S10_T3(
 }
 
 func TestGateRunUntrackedDespiteShowUntrackedFilesNo_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -469,6 +493,7 @@ func TestGateRunUntrackedDespiteShowUntrackedFilesNo_REQ_LNGHZN_S10_T3(t *testin
 }
 
 func TestGateRunInfoExcludeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -490,6 +515,7 @@ func TestGateRunInfoExcludeUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunCommittedGitignoreStillExempt_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -508,6 +534,7 @@ func TestGateRunCommittedGitignoreStillExempt_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunRejectsUnsafeProfileName_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -520,6 +547,7 @@ func TestGateRunRejectsUnsafeProfileName_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunLogMode0600_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -533,6 +561,7 @@ func TestGateRunLogMode0600_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateOutputExcerptFitsExactlyTwoChunks(t *testing.T) {
+	t.Parallel()
 	in := bytes.Repeat([]byte("x"), gateOutputChunkSize*2)
 	head, tail := gateOutputExcerpt(in)
 	assert.Equal(t, string(in), head)
@@ -540,6 +569,7 @@ func TestGateOutputExcerptFitsExactlyTwoChunks(t *testing.T) {
 }
 
 func TestGateOutputExcerptSplitsLongASCII(t *testing.T) {
+	t.Parallel()
 	in := bytes.Repeat([]byte("x"), gateOutputChunkSize*2+1)
 	head, tail := gateOutputExcerpt(in)
 	assert.Equal(t, strings.Repeat("x", gateOutputChunkSize), head)
@@ -547,6 +577,7 @@ func TestGateOutputExcerptSplitsLongASCII(t *testing.T) {
 }
 
 func TestGateOutputExcerptWalksUTF8Boundaries(t *testing.T) {
+	t.Parallel()
 	prefix := append(bytes.Repeat([]byte("a"), gateOutputChunkSize-1), []byte("世")...)
 	suffix := append([]byte("世"), bytes.Repeat([]byte("c"), gateOutputChunkSize-1)...)
 	in := append(append(prefix, bytes.Repeat([]byte("b"), 8)...), suffix...)
@@ -560,6 +591,7 @@ func TestGateOutputExcerptWalksUTF8Boundaries(t *testing.T) {
 }
 
 func TestGateRunEmptyGatesMapIsUnconfigured_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{})
 
@@ -569,6 +601,7 @@ func TestGateRunEmptyGatesMapIsUnconfigured_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunInvalidGatesJSONErrors_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "gates.json"), []byte("{"), 0o644))
 	run(t, repo, "git", "add", "gates.json")
@@ -580,6 +613,7 @@ func TestGateRunInvalidGatesJSONErrors_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunMissingExecutableRecordsExit1_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"definitely-not-a-gate-command-xyzzy"},
@@ -594,6 +628,7 @@ func TestGateRunMissingExecutableRecordsExit1_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestGateRunUntrackedGitignoreDoesNotExempt_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -610,6 +645,7 @@ func TestGateRunUntrackedGitignoreDoesNotExempt_REQ_LNGHZN_S10_T3(t *testing.T) 
 }
 
 func TestGateRunCoreExcludesFileUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	writeGatesConfig(t, repo, map[string][]string{
 		"full": {"true"},
@@ -628,15 +664,17 @@ func TestGateRunCoreExcludesFileUncitable_REQ_LNGHZN_S10_T3(t *testing.T) {
 }
 
 func TestIsAbsentAtCommitNonExitError(t *testing.T) {
+	t.Parallel()
 	assert.False(t, isAbsentAtCommit(errors.New("does not exist")))
 	assert.False(t, isAbsentAtCommit(nil))
 }
 
 func TestInvocationRepoPathDefaults(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, ".", invocationRepoPath(nil))
 	assert.Equal(t, ".", invocationRepoPath(&cobra.Command{Use: "arm"}))
 
-	root := newRootCmd()
+	root := testRootCmd(t)
 	assert.Equal(t, ".", invocationRepoPath(root))
 	require.NoError(t, root.PersistentFlags().Set("repo", "/tmp/checkout"))
 	assert.Equal(t, "/tmp/checkout", invocationRepoPath(root))

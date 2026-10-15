@@ -13,10 +13,11 @@ import (
 )
 
 func TestStaleReviewCmd_NoStaleSources(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo})
 	require.NoError(t, root.Execute())
@@ -25,6 +26,7 @@ func TestStaleReviewCmd_NoStaleSources(t *testing.T) {
 }
 
 func TestStaleReviewCmd_StaleSource_NoCacheFile(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	issuesDir := filepath.Join(repo, ".armature")
@@ -40,7 +42,7 @@ func TestStaleReviewCmd_StaleSource_NoCacheFile(t *testing.T) {
 	require.NoError(t, sources.WriteManifest(srcDir, m))
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
@@ -56,6 +58,7 @@ func TestStaleReviewCmd_StaleSource_NoCacheFile(t *testing.T) {
 }
 
 func TestStaleReviewCmd_StaleSource_FingerprintMismatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	issuesDir := filepath.Join(repo, ".armature")
@@ -74,7 +77,7 @@ func TestStaleReviewCmd_StaleSource_FingerprintMismatch(t *testing.T) {
 	require.NoError(t, sources.WriteManifest(srcDir, m))
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
@@ -90,6 +93,7 @@ func TestStaleReviewCmd_StaleSource_FingerprintMismatch(t *testing.T) {
 }
 
 func TestStaleReviewCmd_MultipleStaleSources(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	issuesDir := filepath.Join(repo, ".armature")
@@ -102,7 +106,7 @@ func TestStaleReviewCmd_MultipleStaleSources(t *testing.T) {
 	require.NoError(t, sources.WriteManifest(srcDir, m))
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
@@ -115,6 +119,7 @@ func TestStaleReviewCmd_MultipleStaleSources(t *testing.T) {
 }
 
 func TestStaleReviewCmd_StaleSource_WithCitedIssue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -148,7 +153,7 @@ func TestStaleReviewCmd_StaleSource_WithCitedIssue(t *testing.T) {
 	require.NoError(t, sources.WriteManifest(srcDir, m2))
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
@@ -165,6 +170,7 @@ func TestStaleReviewCmd_StaleSource_WithCitedIssue(t *testing.T) {
 }
 
 func TestStaleReviewCmd_StaleSource_SyncFailed(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	issuesDir := filepath.Join(repo, ".armature")
@@ -181,7 +187,7 @@ func TestStaleReviewCmd_StaleSource_SyncFailed(t *testing.T) {
 	require.NoError(t, sources.WriteManifest(srcDir, m))
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--format", "json"})
 	require.NoError(t, root.Execute())
@@ -197,6 +203,7 @@ func TestStaleReviewCmd_StaleSource_SyncFailed(t *testing.T) {
 }
 
 func TestStaleReviewCmd_CorruptManifest(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	issuesDir := filepath.Join(repo, ".armature")
@@ -208,7 +215,7 @@ func TestStaleReviewCmd_CorruptManifest(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo})

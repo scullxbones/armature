@@ -268,3 +268,49 @@ func TestReadBinding_RejectsEscapingBinding_REQ_NOCOMMENTS(t *testing.T) {
 	_, err = readFileInRoot(gitDir, filepath.Join("..", "stolen"))
 	require.Error(t, err)
 }
+
+func TestListEnvHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	repo := gittest.InitRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0644))
+	runInventoryGit(t, repo, "add", "README.md")
+	runInventoryGit(t, repo, "commit", "-q", "-m", "initial")
+
+	viaList, err := List(repo)
+	require.NoError(t, err)
+	viaEnv, err := ListEnv(repo, nil)
+	require.NoError(t, err)
+	assert.Equal(t, viaList, viaEnv)
+
+	wrapperDir := t.TempDir()
+	script := "#!/bin/sh\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	_, err = ListEnv(repo, []string{"PATH=" + wrapperDir})
+	require.Error(t, err)
+
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	mixed, err := ListEnv(repo, []string{"PATH=" + filepath.Dir(realGit) + string(os.PathListSeparator) + wrapperDir})
+	require.NoError(t, err)
+	assert.Equal(t, viaList, mixed)
+
+	_, err = ListEnv(repo, []string{"PATH=/no-such-git-wrapper"})
+	require.Error(t, err, "overlay PATH with no git is not a process-PATH fallback")
+}
+
+func TestListEnvRefusesRelativePATH_REQ_PARCLI(t *testing.T) { //nolint:paralleltest // t.Chdir is process-wide
+	t.Chdir(t.TempDir())
+	repo := gittest.InitRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0644))
+	runInventoryGit(t, repo, "add", "README.md")
+	runInventoryGit(t, repo, "commit", "-q", "-m", "initial")
+	require.NoError(t, os.Mkdir("bin", 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join("bin", "git"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	_, err := List(repo)
+	require.NoError(t, err, "nil environ uses process PATH, not the relative bin/")
+
+	_, err = ListEnv(repo, []string{"PATH=bin"})
+	require.Error(t, err)
+	require.ErrorIs(t, err, exec.ErrDot)
+}

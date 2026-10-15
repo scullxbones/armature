@@ -58,6 +58,7 @@ func setupRepoWithScopedTasksForDelete(t *testing.T) string {
 }
 
 func TestScopeDeleteCmd_RejectsEmptyPath(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasksForDelete(t)
 	_, err := runTrls(t, repo, "scope-delete", "")
 	require.Error(t, err)
@@ -65,11 +66,12 @@ func TestScopeDeleteCmd_RejectsEmptyPath(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_NoMatchWarnsAndExitsZero(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasksForDelete(t)
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"scope-delete", "src/nonexistent/path.go", "--repo", repo})
@@ -80,6 +82,7 @@ func TestScopeDeleteCmd_NoMatchWarnsAndExitsZero(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_ExactMatchOnlyAffectsMatchingIssues(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasksForDelete(t)
 
 	out, err := runTrls(t, repo, "scope-delete", "src/old/foo.go")
@@ -91,6 +94,7 @@ func TestScopeDeleteCmd_ExactMatchOnlyAffectsMatchingIssues(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_RematerializesState(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasksForDelete(t)
 
 	_, err := runTrls(t, repo, "scope-delete", "src/old/foo.go")
@@ -114,6 +118,7 @@ func TestScopeDeleteCmd_RematerializesState(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_SameTimestampForAllOps(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasksForDelete(t)
 
 	_, err := runTrls(t, repo, "scope-delete", "src/old/foo.go")
@@ -130,6 +135,7 @@ func TestScopeDeleteCmd_SameTimestampForAllOps(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_EmptyingLastTaskScopeIsRefused(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -160,6 +166,7 @@ func TestScopeDeleteCmd_EmptyingLastTaskScopeIsRefused(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasksForDelete(t)
 
 	out, err := runTrls(t, repo, "scope-delete", "--format", "human", "src/old/foo.go")
@@ -169,6 +176,7 @@ func TestScopeDeleteCmd_HumanOutput(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasksForDelete(t)
 
 	out, err := runTrls(t, repo, "scope-delete", "--format", "json", "src/old/foo.go")
@@ -181,6 +189,7 @@ func TestScopeDeleteCmd_JSONOutput(t *testing.T) {
 }
 
 func TestScopeDeleteCmd_UsesIndexForScan(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

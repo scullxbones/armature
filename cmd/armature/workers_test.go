@@ -24,6 +24,7 @@ func foldWorkerStatusFromOwners(workerID string, workerOps, allOps []ops.Op, def
 }
 
 func TestWorkersEmitsEnvelopeNotJSONL_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -97,6 +98,7 @@ func TestFoldWorkerStatusFromClaimOwnerActivity_ForeignTransitionDoesNotExtendLe
 }
 
 func TestWorkersCommand_SlottedRowsDoNotInheritSiblingClaim_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	workerID, err := worker.GetWorkerID(repo)
 	require.NoError(t, err)
@@ -138,6 +140,7 @@ func TestWorkersCommand_SlottedRowsDoNotInheritSiblingClaim_REQ_CLAIMTTL(t *test
 }
 
 func TestWorkersCommand_ReplaysOwnershipOnce_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	replay := func(log []ops.Op) map[string]claim.Lease {
 		calls++
@@ -158,8 +161,6 @@ func TestWorkersCommand_ReplaysOwnershipOnce_REQ_CLAIMTTL(t *testing.T) {
 		Type: ops.OpNote, TargetID: "task-02", Timestamp: now - 10, WorkerID: workerID + "~slot-b",
 	}))
 
-	runTrlsMu.Lock()
-	defer runTrlsMu.Unlock()
 	stdout := new(bytes.Buffer)
 	root := commandFor(Invocation{
 		Stdout:       stdout,

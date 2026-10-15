@@ -12,8 +12,9 @@ import (
 )
 
 func TestDagApplyHonorsARMLogSlot_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	t.Run("with ARM_LOG_SLOT set, dag apply writes the same slot as create", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "beta")
+		setCLIEnv(t, "ARM_LOG_SLOT", "beta")
 		repo := plantDagApplyLogSlotRepo(t)
 
 		_, err := runTrls(t, repo, "create",
@@ -33,7 +34,7 @@ func TestDagApplyHonorsARMLogSlot_REQ_NOCOMMENTS(t *testing.T) {
 	})
 
 	t.Run("with ARM_LOG_SLOT unset, dag apply writes the unslotted log like create", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "")
+		setCLIEnv(t, "ARM_LOG_SLOT", "")
 		repo := plantDagApplyLogSlotRepo(t)
 
 		_, err := runTrls(t, repo, "create",
@@ -54,8 +55,9 @@ func TestDagApplyHonorsARMLogSlot_REQ_NOCOMMENTS(t *testing.T) {
 }
 
 func TestDagRevertHonorsARMLogSlot_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	t.Run("with ARM_LOG_SLOT set, dag revert writes the same slot as create", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "beta")
+		setCLIEnv(t, "ARM_LOG_SLOT", "beta")
 		repo := plantDagApplyLogSlotRepo(t)
 
 		_, err := runTrls(t, repo, "create",
@@ -79,7 +81,7 @@ func TestDagRevertHonorsARMLogSlot_REQ_NOCOMMENTS(t *testing.T) {
 	})
 
 	t.Run("with ARM_LOG_SLOT unset, dag revert writes the unslotted log like create", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "")
+		setCLIEnv(t, "ARM_LOG_SLOT", "")
 		repo := plantDagApplyLogSlotRepo(t)
 
 		_, err := runTrls(t, repo, "create",

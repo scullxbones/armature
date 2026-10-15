@@ -12,6 +12,7 @@ import (
 )
 
 func TestAppendLowStakesOps_PushesOriginAtThreshold(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -30,6 +31,7 @@ func TestAppendLowStakesOps_PushesOriginAtThreshold(t *testing.T) {
 }
 
 func TestAppendLowStakesOps_DoesNotPushBelowThreshold(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)

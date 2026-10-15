@@ -47,6 +47,7 @@ func setupRepoWithDirtyDraftNode(t *testing.T) string {
 }
 
 func TestOverrideReleaseRecordsDeliverySHAsAfterDone_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
 	repo := doneWithoutAssessment(t)
 	issuePath := filepath.Join(getTestStateDir(t, repo), "issues", "task-01.json")
 	issue, err := materialize.LoadIssue(issuePath)
@@ -61,7 +62,7 @@ func TestOverrideReleaseRecordsDeliverySHAsAfterDone_REQ_LNGHZN_S11_T2(t *testin
 	assert.Equal(t, "verified", payload.To)
 	assert.True(t, payload.SkippedValidateGate)
 
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(new(bytes.Buffer))
 	root.SetArgs([]string{"dag", "override-release", "--repo", repo, "task-01", "--reason", "x"})
 	require.NoError(t, root.PersistentFlags().Set("repo", repo))
@@ -103,6 +104,7 @@ func TestReleaseOverridePayloadBindsDoneDelivery(t *testing.T) {
 }
 
 func TestOverrideReleaseRequiresTty_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithDirtyDraftNode(t)
 
 	orig := openControllingTTY
@@ -118,6 +120,7 @@ func TestOverrideReleaseRequiresTty_REQ_LNGHZN_S10_T12(t *testing.T) {
 }
 
 func TestOverrideReleaseRequiresReasonBeforeTTY(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithDirtyDraftNode(t)
 	ttyOpened := false
 	orig := openControllingTTY
@@ -134,6 +137,7 @@ func TestOverrideReleaseRequiresReasonBeforeTTY(t *testing.T) {
 }
 
 func TestOverrideReleaseRequiresExistingDirtyDraft(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithValidDraftNode(t)
 	orig := openControllingTTY
 	t.Cleanup(func() { openControllingTTY = orig })
@@ -151,6 +155,7 @@ func TestOverrideReleaseRequiresExistingDirtyDraft(t *testing.T) {
 }
 
 func TestOverrideReleasePropagatesSnapshotLoadError_REQ_LNGHZN_S11_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithDirtyDraftNode(t)
 	ctx := getTestContext(t, repo)
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
@@ -161,7 +166,7 @@ func TestOverrideReleasePropagatesSnapshotLoadError_REQ_LNGHZN_S11_T2(t *testing
 		}
 	})
 
-	root := newRootCmd()
+	root := testRootCmd(t)
 	require.NoError(t, root.PersistentFlags().Set("repo", repo))
 	attachExecutionState(root, ctx)
 	_, err := checkOverrideReleaseTarget(root, "draft-task-01")
@@ -171,6 +176,7 @@ func TestOverrideReleasePropagatesSnapshotLoadError_REQ_LNGHZN_S11_T2(t *testing
 }
 
 func TestOverrideReleaseAllowsWhenForeignFindingBlocksPlanRelease(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithValidDraftNode(t)
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
@@ -190,6 +196,7 @@ func TestOverrideReleaseAllowsWhenForeignFindingBlocksPlanRelease(t *testing.T) 
 }
 
 func TestCreateEmitsDraft_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -213,6 +220,7 @@ func TestCreateEmitsDraft_REQ_LNGHZN_S10_T12(t *testing.T) {
 }
 
 func TestCreateRejectsConfidenceFlag(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -235,6 +243,7 @@ func TestCreateRejectsConfidenceFlag(t *testing.T) {
 }
 
 func TestConfirmRunsPlanReleaseGate_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")

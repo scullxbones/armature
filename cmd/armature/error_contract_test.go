@@ -263,6 +263,7 @@ func TestErrorObjectNotNestedInAOCEnvelope_REQ_LNGHZN_S6_T3(t *testing.T) {
 }
 
 func TestMigratedCommandsEmitValidAgentEnvelope_REQ_LNGHZN_S6_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	registry := uniqueRegisteredCodes(t)
 
@@ -537,7 +538,7 @@ func allowedFailureCodePrefixes(t *testing.T) map[string]struct{} {
 	for _, name := range designatedDeepModules {
 		allowed[armerrors.Prefix(name)] = struct{}{}
 	}
-	root := newRootCmd()
+	root := testRootCmd(t)
 	for _, cmd := range root.Commands() {
 		fields := strings.Fields(cmd.Use)
 		if len(fields) == 0 {
