@@ -53,17 +53,18 @@ func newListCmd() *cobra.Command {
 			sort.Strings(ids)
 
 			filtered := filterParent != "" || filterType != "" || filterStatus != "" || terminal
+			listFacts := outputListFacts(index)
 			if structuredFormat(cmd) {
-				rows := output.ListRows(index, ids)
+				rows := output.ListRows(listFacts, ids)
 				var groups []output.ListGroup
 				if group {
-					groups = output.ListGroupsByStatus(index, ids)
+					groups = output.ListGroupsByStatus(listFacts, ids)
 				}
 				return output.WriteListEnvelope(cmd.OutOrStdout(), rows, groups, group, filtered)
 			}
 
 			if group {
-				for _, g := range output.ListGroupsByStatus(index, ids) {
+				for _, g := range output.ListGroupsByStatus(listFacts, ids) {
 					label := g.Status
 					if g.Status == ops.StatusDone {
 						label = "done (awaiting merge)"

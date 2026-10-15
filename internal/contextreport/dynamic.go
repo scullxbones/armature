@@ -53,7 +53,7 @@ func measureList(index materialize.Index) ([]byte, error) {
 	sort.Strings(ids)
 
 	var buf bytes.Buffer
-	if err := output.WriteListEnvelope(&buf, output.ListRows(index, ids), nil, false, false); err != nil {
+	if err := output.WriteListEnvelope(&buf, output.ListRows(outputListFacts(index), ids), nil, false, false); err != nil {
 		return nil, fmt.Errorf("render list envelope: %w", err)
 	}
 	return buf.Bytes(), nil
@@ -205,7 +205,7 @@ func measureShow(state *materialize.State) ([]byte, error) {
 	if !ok || issue == nil {
 		return nil, fmt.Errorf("fixture issue %s not found", FixtureShowIssue)
 	}
-	row := output.MarshalIssue(issue)
+	row := output.MarshalIssue(outputIssueFacts(issue))
 	row, trunc := output.TruncateShowIssue(row)
 	var buf bytes.Buffer
 	if err := output.WriteShowEnvelope(&buf, []string{issue.ID}, []output.IssueJSON{row}, trunc); err != nil {

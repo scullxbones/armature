@@ -151,7 +151,7 @@ func TestMeasureShowMatchesWriteShowEnvelope_REQ_AOC_S3_T2(t *testing.T) {
 
 	issue := state.Issues[FixtureShowIssue]
 	require.NotNil(t, issue)
-	row := output.MarshalIssue(issue)
+	row := output.MarshalIssue(outputIssueFacts(issue))
 	row, trunc := output.TruncateShowIssue(row)
 	var want bytes.Buffer
 	require.NoError(t, output.WriteShowEnvelope(&want, []string{issue.ID}, []output.IssueJSON{row}, trunc))

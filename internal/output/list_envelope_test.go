@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,8 +13,8 @@ import (
 func TestWriteListEnvelopeCompactFourFieldRows(t *testing.T) {
 	t.Parallel()
 
-	index := materialize.Index{
-		"T1": {Type: "task", Status: ops.StatusOpen, Title: "One", Parent: "S1"},
+	index := map[string]ListFacts{
+		"T1": {Type: "task", Status: ops.StatusOpen, Title: "One"},
 		"T2": {Type: "task", Status: ops.StatusDone, Title: "Two"},
 	}
 	ids := []string{"T1", "T2"}
