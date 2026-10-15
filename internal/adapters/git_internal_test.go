@@ -105,16 +105,17 @@ func TestIsGitContentionError(t *testing.T) {
 func TestLookPathOnAndEnvVal_REQ_PARCLI(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	gitPath := filepath.Join(dir, "git")
-	if err := os.WriteFile(gitPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	binName := "mybin"
+	binPath := filepath.Join(dir, binName)
+	if err := os.WriteFile(binPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got, err := lookPathOn(dir, "git")
+	got, err := lookPathOn(dir, binName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != gitPath {
-		t.Fatalf("lookPathOn=%q want %q", got, gitPath)
+	if got != binPath {
+		t.Fatalf("lookPathOn=%q want %q", got, binPath)
 	}
 	env := []string{"FOO=bar", "PATH=" + dir, "FOO=later"}
 	if envVal(env, "FOO") != "later" {
