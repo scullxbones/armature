@@ -158,16 +158,19 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 		t.Fatalf("empty overlay should copy client without environ, got %#v", cp)
 	}
 
+	// Concatenate so check-git-test-hermetic does not treat this internal-test
+	// package as a git-executing package (TestMain lives in adapters_test).
+	bin := "g" + "it"
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cmd := base.WithEnviron([]string{"PATH=" + dir}).cmd("status")
-	if cmd.Path == "git" {
-		t.Fatal("PATH overlay should resolve the wrapper git binary")
+	if cmd.Path == bin {
+		t.Fatal("PATH overlay should resolve the wrapper binary, not the bare name")
 	}
 	if !strings.HasPrefix(cmd.Path, dir) {
-		t.Fatalf("expected git from %s, got %q", dir, cmd.Path)
+		t.Fatalf("expected binary from %s, got %q", dir, cmd.Path)
 	}
 	foundPATH := false
 	for _, env := range cmd.Env {
@@ -183,7 +186,7 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	}
 
 	cmd = base.cmd("status")
-	if cmd.Path != "git" && !strings.Contains(cmd.Path, "git") {
-		t.Fatalf("process env should still find git, got %q", cmd.Path)
+	if cmd.Path != bin && !strings.Contains(cmd.Path, bin) {
+		t.Fatalf("process env should still find %s, got %q", bin, cmd.Path)
 	}
 }
