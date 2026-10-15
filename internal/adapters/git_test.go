@@ -2,6 +2,7 @@ package adapters_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1821,4 +1822,57 @@ func TestPromotionGitHelpers_REQ_LNGHZN_S11_T2(t *testing.T) {
 	require.NoError(t, c.DeleteRef("refs/armature/deliveries/task-01"))
 	_, err = c.ResolveRevision("refs/armature/deliveries/task-01")
 	require.Error(t, err)
+}
+
+func TestCommandGitRefusesRelativePATH_REQ_PARCLI(t *testing.T) {
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.Mkdir("bin", 0o755))
+	marker := filepath.Join(t.TempDir(), "ran")
+	script := "#!/bin/sh\necho ran > " + marker + "\nexit 0\n"
+	require.NoError(t, os.WriteFile(filepath.Join("bin", "git"), []byte(script), 0o755))
+
+	orig := os.Getenv("PATH")
+	t.Setenv("PATH", "bin"+string(os.PathListSeparator)+orig)
+
+	cmd := adapters.CommandGit(t.Context(), nil, "--version")
+	require.Error(t, cmd.Err)
+	require.True(t, errors.Is(cmd.Err, exec.ErrDot), cmd.Err)
+	err := cmd.Run()
+	require.Error(t, err)
+	require.True(t, errors.Is(err, exec.ErrDot), err)
+	_, statErr := os.Stat(marker)
+	require.Error(t, statErr, "process-PATH mode must not execute relative git")
+
+	t.Setenv("PATH", orig)
+	overlay := []string{"PATH=bin" + string(os.PathListSeparator) + orig}
+	cmd = adapters.CommandGit(t.Context(), overlay, "--version")
+	require.Error(t, cmd.Err)
+	require.True(t, errors.Is(cmd.Err, exec.ErrDot), cmd.Err)
+	err = cmd.Run()
+	require.Error(t, err)
+	require.True(t, errors.Is(err, exec.ErrDot), err)
+	_, statErr = os.Stat(marker)
+	require.Error(t, statErr, "overlay-PATH mode must not execute relative git")
+
+	t.Setenv("PATH", "bin"+string(os.PathListSeparator)+orig)
+	_, err = adapters.New(t.TempDir()).CurrentBranch()
+	require.Error(t, err)
+	require.True(t, errors.Is(err, exec.ErrDot), err)
+
+	_, err = adapters.New(t.TempDir()).WithEnviron(overlay).CurrentBranch()
+	require.Error(t, err)
+	require.True(t, errors.Is(err, exec.ErrDot), err)
+}
+
+func TestCommandGitAbsoluteOverlayPATH_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	real, err := exec.LookPath("git")
+	require.NoError(t, err)
+	require.True(t, filepath.IsAbs(real))
+	cmd := adapters.CommandGit(t.Context(), []string{"PATH=" + filepath.Dir(real)}, "--version")
+	require.NoError(t, cmd.Err)
+	require.Equal(t, real, cmd.Path)
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	require.Contains(t, string(out), "git version")
 }
