@@ -129,6 +129,15 @@ func TestLookPathOnAndEnvVal_REQ_PARCLI(t *testing.T) {
 	if envVal(nil, "PATH") != "" {
 		t.Fatal("empty environ should miss PATH")
 	}
+	if envValFold([]string{"Path=/win/bin", "PATH=/unix/bin"}, "PATH") != "/unix/bin" {
+		t.Fatal("fold last-wins among Path/PATH")
+	}
+	if envValFold([]string{"path=/msys"}, "PATH") != "/msys" {
+		t.Fatal("fold matches PATH key case-insensitively")
+	}
+	if envVal([]string{"Path=/win/bin"}, "PATH") != "" {
+		t.Fatal("exact PATH lookup must not match Path")
+	}
 	nested := t.TempDir()
 	if err := os.Mkdir(filepath.Join(nested, "subdir"), 0o755); err != nil {
 		t.Fatal(err)
@@ -162,5 +171,29 @@ func TestLookPathOnRejectsRelativeEntry_REQ_PARCLI(t *testing.T) { //nolint:para
 	}
 	if !errors.Is(err, exec.ErrDot) {
 		t.Fatalf("err=%v want ErrDot", err)
+	}
+}
+
+func TestLookPathOnWindowsPATHEXT_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "git.exe")
+	if err := os.WriteFile(exe, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := lookPathOnConfig(dir, "git", lookPathConfig{
+		windows: true,
+		pathext: ".COM;.EXE;.BAT",
+		listSep: os.PathListSeparator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != exe {
+		t.Fatalf("lookPathOnConfig=%q want %q (no exec bits, PATHEXT)", got, exe)
+	}
+	_, err = lookPathOnConfig(dir, "missing", lookPathConfig{windows: true, pathext: ".EXE"})
+	if err == nil {
+		t.Fatal("missing name must not resolve")
 	}
 }

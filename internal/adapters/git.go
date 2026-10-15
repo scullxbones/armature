@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -50,24 +51,28 @@ func (c *Client) cmd(args ...string) *exec.Cmd {
 	return c.cmdContext(context.Background(), args...)
 }
 
-// CommandGit builds a git command. A nil/empty environ uses the process PATH
-// via exec.Command (exec.ErrDot protected). A non-empty environ is the child
-// environment; git is resolved against that PATH, rejecting relative and empty
-// PATH entries with the same semantics as exec.LookPath.
+// CommandGit builds a git command. A nil/empty environ, or an environ whose
+// PATH matches the process PATH, uses exec.Command("git") (ErrDot protected).
+// Custom PATH resolution runs only when PATH is an explicit overlay.
 func CommandGit(ctx context.Context, environ []string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204: git plus caller-built args
 	if len(environ) == 0 {
 		return cmd
 	}
 	cmd.Env = append([]string(nil), environ...)
-	if path := envVal(environ, "PATH"); path != "" {
-		applyOverlayLookPath(cmd, path, "git")
+	path := envValFold(environ, "PATH")
+	if path == "" || path == envValFold(os.Environ(), "PATH") {
+		return cmd
 	}
+	applyOverlayLookPath(cmd, environ, path)
 	return cmd
 }
 
-func applyOverlayLookPath(cmd *exec.Cmd, pathList, file string) {
-	lp, err := lookPathOn(pathList, file)
+func applyOverlayLookPath(cmd *exec.Cmd, environ []string, pathList string) {
+	lp, err := lookPathOnConfig(pathList, "git", lookPathConfig{
+		windows: runtime.GOOS == "windows",
+		pathext: envValFold(environ, "PATHEXT"),
+	})
 	if lp != "" {
 		cmd.Path = lp
 	}
@@ -1331,35 +1336,4 @@ func (c *Client) TreeEntry(rev, path string) (mode, oid string, err error) {
 		return "", "", fmt.Errorf("git ls-tree %s -- %s: malformed output", rev, path)
 	}
 	return fields[0], fields[2], nil
-}
-
-func envVal(environ []string, key string) string {
-	prefix := key + "="
-	for i := len(environ) - 1; i >= 0; i-- {
-		if strings.HasPrefix(environ[i], prefix) {
-			return strings.TrimPrefix(environ[i], prefix)
-		}
-	}
-	return ""
-}
-
-func lookPathOn(pathList, file string) (string, error) {
-	for _, dir := range filepath.SplitList(pathList) {
-		if dir == "" {
-			dir = "."
-		}
-		candidate := filepath.Join(dir, file)
-		st, err := os.Stat(candidate)
-		if err != nil || st.IsDir() {
-			continue
-		}
-		if st.Mode()&0o111 == 0 {
-			continue
-		}
-		if !filepath.IsAbs(candidate) {
-			return candidate, &exec.Error{Name: file, Err: exec.ErrDot}
-		}
-		return candidate, nil
-	}
-	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 }

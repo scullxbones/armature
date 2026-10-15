@@ -228,16 +228,24 @@ func replayLeasesFrom(cmd *cobra.Command) func([]ops.Op) map[string]claim.Lease 
 	return claim.Owners
 }
 
-func environFrom(cmd *cobra.Command) []string {
-	env := envFrom(cmd)
-	if e, ok := env.(interface{ Environ() []string }); ok {
-		return e.Environ()
+func overlayEnviron(env Env) []string {
+	o, ok := env.(overlayEnv)
+	if !ok || len(o.top) == 0 {
+		return nil
 	}
-	return os.Environ()
+	return o.Environ()
+}
+
+func environFrom(cmd *cobra.Command) []string {
+	return overlayEnviron(envFrom(cmd))
+}
+
+func gitWith(env Env, repoPath string) *adapters.Client {
+	return adapters.New(repoPath).WithEnviron(overlayEnviron(env))
 }
 
 func gitAt(cmd *cobra.Command, repoPath string) *adapters.Client {
-	return adapters.New(repoPath).WithEnviron(environFrom(cmd))
+	return gitWith(envFrom(cmd), repoPath)
 }
 
 func gitIsolatedAt(cmd *cobra.Command, repoPath string) *adapters.Client {

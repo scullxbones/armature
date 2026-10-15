@@ -253,10 +253,7 @@ func tryEmitHeartbeatAt(repoPath, issuesDir, worktreePath, issueID string, event
 
 	var gc ops.GitCommitter
 	if worktreePath != "" {
-		gc = adapters.New(worktreePath)
-		if e, ok := env.(interface{ Environ() []string }); ok {
-			gc = adapters.New(worktreePath).WithEnviron(e.Environ())
-		}
+		gc = adapters.New(worktreePath).WithEnviron(overlayEnviron(env))
 	}
 
 	if err := ops.AppendAndCommit(logPath, worktreePath, heartbeatOp, gc); err != nil {
