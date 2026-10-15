@@ -330,6 +330,8 @@ func commandFor(inv Invocation) *cobra.Command {
 }
 
 // Run is the only CLI entrypoint. main() and tests both call it.
+//
+//nolint:contextcheck // cobra command tree and git helpers take context from cmd.Context after SetContext
 func Run(ctx context.Context, inv Invocation) int {
 	root := commandFor(inv)
 	if sess := sessionFrom(root); sess != nil {
