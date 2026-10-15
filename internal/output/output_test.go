@@ -15,15 +15,24 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/attestation"
-	"github.com/scullxbones/armature/internal/materialize"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func attestJSON(t *testing.T, atts ...attestation.AssessmentAttestation) json.RawMessage {
+	t.Helper()
+	if len(atts) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(atts)
+	require.NoError(t, err)
+	return b
+}
+
 func TestRenderIssue_HumanReadable(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	issue := IssueFacts{
 		ID:               "TASK-01",
 		Type:             "task",
 		Status:           "open",
@@ -47,7 +56,7 @@ func TestRenderIssue_HumanReadable(t *testing.T) {
 
 func TestMarshalIssue_CanonicalFields(t *testing.T) {
 	t.Parallel()
-	got := MarshalIssue(&materialize.Issue{
+	got := MarshalIssue(IssueFacts{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "open",
@@ -213,7 +222,7 @@ func TestListEntry_struct(t *testing.T) {
 
 func TestRenderIssue_WithAllFields(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	issue := IssueFacts{
 		ID:               "TASK-01",
 		Type:             "task",
 		Status:           "in-progress",
@@ -227,7 +236,7 @@ func TestRenderIssue_WithAllFields(t *testing.T) {
 		AssignedWorker:   "worker-id-456",
 		BlockedBy:        []string{"TASK-00"},
 		Blocks:           []string{"TASK-02"},
-		Notes: []materialize.Note{
+		Notes: []NoteFact{
 			{Msg: "Investigation complete", Deleted: false},
 			{Msg: "Stale note", Deleted: true},
 		},
@@ -323,7 +332,7 @@ func TestCoverageLine_FormatsBothVariants(t *testing.T) {
 
 func TestRenderIssue_MinimalIssue(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	issue := IssueFacts{
 		ID:     "EPIC-01",
 		Type:   "epic",
 		Status: "open",
@@ -370,7 +379,7 @@ func TestRenderReady_Empty(t *testing.T) {
 
 func TestMarshalIssue_WithAllFields(t *testing.T) {
 	t.Parallel()
-	got := MarshalIssue(&materialize.Issue{
+	got := MarshalIssue(IssueFacts{
 		ID:               "TASK-01",
 		Type:             "task",
 		Status:           "in-progress",
@@ -400,16 +409,16 @@ func TestMarshalIssue_WithAllFields(t *testing.T) {
 
 func TestMarshalIssue_DeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
 	t.Parallel()
-	got := MarshalIssue(&materialize.Issue{
-		ID:                 "TASK-01",
-		Type:               "task",
-		Status:             "merged",
-		Title:              "Rolled up",
-		Branch:             "task/TASK-01",
-		Base:               "aaa",
-		Tip:                "bbb",
-		PR:                 "42",
-		RollupStatusBefore: "done",
+	got := MarshalIssue(IssueFacts{
+		ID:      "TASK-01",
+		Type:    "task",
+		Status:  "merged",
+		Title:   "Rolled up",
+		Branch:  "task/TASK-01",
+		Base:    "aaa",
+		Tip:     "bbb",
+		PR:      "42",
+		Derived: true,
 	})
 	assert.Equal(t, "task/TASK-01", got.Branch)
 	assert.Equal(t, "aaa", got.Base)
@@ -420,16 +429,16 @@ func TestMarshalIssue_DeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
 
 func TestRenderIssue_DeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
-		ID:                 "TASK-01",
-		Type:               "task",
-		Status:             "merged",
-		Title:              "Rolled up",
-		Branch:             "task/TASK-01",
-		Base:               "aaa",
-		Tip:                "bbb",
-		PR:                 "42",
-		RollupStatusBefore: "open",
+	issue := IssueFacts{
+		ID:      "TASK-01",
+		Type:    "task",
+		Status:  "merged",
+		Title:   "Rolled up",
+		Branch:  "task/TASK-01",
+		Base:    "aaa",
+		Tip:     "bbb",
+		PR:      "42",
+		Derived: true,
 	}
 	var buf bytes.Buffer
 	require.NoError(t, RenderIssue(&buf, issue))
@@ -443,12 +452,12 @@ func TestRenderIssue_DeliveryAndDerived_REQ_LNGHZN_S11_T1(t *testing.T) {
 
 func TestMarshalIssue_IncludesNotes(t *testing.T) {
 	t.Parallel()
-	got := MarshalIssue(&materialize.Issue{
+	got := MarshalIssue(IssueFacts{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "open",
 		Title:  "Task with notes",
-		Notes: []materialize.Note{
+		Notes: []NoteFact{
 			{Msg: "Active note", Deleted: false},
 			{Msg: "Deleted note", Deleted: true},
 		},
@@ -513,25 +522,25 @@ func TestRenderBoard_Empty(t *testing.T) {
 
 func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	issue := IssueFacts{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "done",
 		Title:  "Task with Review",
-		AssessmentAttestations: []attestation.AssessmentAttestation{
-			{
+		AssessmentAttestations: attestJSON(t,
+			attestation.AssessmentAttestation{
 				BundleID: "sha256:0123456789abcdef",
 				Rating:   attestation.Yellow,
 				HeadSHA:  "abc1234567890def",
 			},
-			{
+			attestation.AssessmentAttestation{
 				BundleID:           "sha256:fedcba9876543210",
 				Rating:             attestation.Yellow,
 				HeadSHA:            "def4567890123abc",
 				SatisfiedCount:     1,
 				IndeterminateCount: 1,
 			},
-		},
+		),
 	}
 	var buf bytes.Buffer
 	err := RenderIssue(&buf, issue)
@@ -550,19 +559,17 @@ func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {
 
 func TestMarshalIssue_IncludesAttestations(t *testing.T) {
 	t.Parallel()
-	got := MarshalIssue(&materialize.Issue{
+	got := MarshalIssue(IssueFacts{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "done",
 		Title:  "Task with Review",
-		AssessmentAttestations: []attestation.AssessmentAttestation{
-			{
-				BundleID:       "sha256:abc123def456",
-				Rating:         attestation.Green,
-				HeadSHA:        "abc1234567890def",
-				SatisfiedCount: 2,
-			},
-		},
+		AssessmentAttestations: attestJSON(t, attestation.AssessmentAttestation{
+			BundleID:       "sha256:abc123def456",
+			Rating:         attestation.Green,
+			HeadSHA:        "abc1234567890def",
+			SatisfiedCount: 2,
+		}),
 	})
 	require.NotEmpty(t, got.AssessmentAttestations)
 	var attestations []attestation.AssessmentAttestation
@@ -573,12 +580,11 @@ func TestMarshalIssue_IncludesAttestations(t *testing.T) {
 
 func TestRenderIssue_NoAssessmentAttestations_Human(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
-		ID:                     "TASK-01",
-		Type:                   "task",
-		Status:                 "open",
-		Title:                  "Task without Review",
-		AssessmentAttestations: []attestation.AssessmentAttestation{},
+	issue := IssueFacts{
+		ID:     "TASK-01",
+		Type:   "task",
+		Status: "open",
+		Title:  "Task without Review",
 	}
 	var buf bytes.Buffer
 	err := RenderIssue(&buf, issue)
@@ -590,24 +596,24 @@ func TestRenderIssue_NoAssessmentAttestations_Human(t *testing.T) {
 
 func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 	t.Parallel()
-	issue := &materialize.Issue{
+	issue := IssueFacts{
 		ID:     "TASK-01",
 		Type:   "task",
 		Status: "done",
 		Title:  "Task with Multiple Reviews",
-		AssessmentAttestations: []attestation.AssessmentAttestation{
-			{
+		AssessmentAttestations: attestJSON(t,
+			attestation.AssessmentAttestation{
 				BundleID:          "sha256:aaaaaabbbbbbccccccdddddd",
 				Rating:            attestation.Red,
 				SatisfiedCount:    0,
 				NotSatisfiedCount: 1,
 			},
-			{
+			attestation.AssessmentAttestation{
 				BundleID:       "sha256:eeeeeeffffffffgggggghhhhh",
 				Rating:         attestation.Green,
 				SatisfiedCount: 2,
 			},
-		},
+		),
 	}
 	var buf bytes.Buffer
 	err := RenderIssue(&buf, issue)
@@ -620,7 +626,14 @@ func TestRenderIssue_LatestAttestationOnly(t *testing.T) {
 	assert.NotContains(t, output, "aaaaaabb")
 }
 
-func TestProductionOutputDoesNotImportReadyOrValidate(t *testing.T) {
+func TestFormatLatestAttestationLine_InvalidOrEmptyJSON(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "", formatLatestAttestationLine(nil))
+	assert.Equal(t, "", formatLatestAttestationLine(json.RawMessage("not-json")))
+	assert.Equal(t, "", formatLatestAttestationLine(json.RawMessage("[]")))
+}
+
+func TestProductionOutputDoesNotImportMaterializeOrAttestation(t *testing.T) {
 	t.Parallel()
 
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -631,8 +644,10 @@ func TestProductionOutputDoesNotImportReadyOrValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	banned := map[string]string{
-		`"github.com/scullxbones/armature/internal/ready"`:    "ready queue computation belongs behind output view types",
-		`"github.com/scullxbones/armature/internal/validate"`: "validate results belong behind ValidationView",
+		`"github.com/scullxbones/armature/internal/ready"`:       "ready queue computation belongs behind output view types",
+		`"github.com/scullxbones/armature/internal/validate"`:    "validate results belong behind ValidationView",
+		`"github.com/scullxbones/armature/internal/materialize"`: "output consumes IssueFacts and ListFacts, not materialized issues",
+		`"github.com/scullxbones/armature/internal/attestation"`: "assessment attestations are borrowed JSON plus rating counts",
 	}
 	fset := token.NewFileSet()
 	var violations []string
