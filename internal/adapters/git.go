@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 type Client struct {
 	repoPath   string
 	isolateEnv bool
+	environ    []string
 }
 
 const (
@@ -34,8 +36,49 @@ func NewIsolated(repoPath string) *Client {
 	return &Client{repoPath: repoPath, isolateEnv: true}
 }
 
+// WithEnviron overlays the git child environment (including PATH for LookPath).
+// A nil/empty slice leaves the process environment in place.
+func (c *Client) WithEnviron(environ []string) *Client {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	cp.environ = append([]string(nil), environ...)
+	return &cp
+}
+
 func (c *Client) cmd(args ...string) *exec.Cmd {
 	return c.cmdContext(context.Background(), args...)
+}
+
+// CommandGit builds a git command. A nil/empty environ, or an environ whose
+// PATH matches the process PATH, uses exec.Command("git") (ErrDot protected).
+// Custom PATH resolution runs only when PATH is an explicit overlay.
+func CommandGit(ctx context.Context, environ []string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204: git plus caller-built args
+	if len(environ) == 0 {
+		return cmd
+	}
+	cmd.Env = append([]string(nil), environ...)
+	path := envValFold(environ, "PATH")
+	if path == "" || path == envValFold(os.Environ(), "PATH") {
+		return cmd
+	}
+	applyOverlayLookPath(cmd, environ, path)
+	return cmd
+}
+
+func applyOverlayLookPath(cmd *exec.Cmd, environ []string, pathList string) {
+	lp, err := lookPathOnConfig(pathList, "git", lookPathConfig{
+		windows: runtime.GOOS == "windows",
+		pathext: envValFold(environ, "PATHEXT"),
+	})
+	if lp != "" {
+		cmd.Path = lp
+	}
+	if err != nil {
+		cmd.Err = err
+	}
 }
 
 // GIT_TERMINAL_PROMPT=0 prevents git from blocking on credential prompts.
@@ -59,8 +102,13 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 		}
 	}
 	prefix = append(prefix, args...)
-	cmd := exec.CommandContext(ctx, "git", prefix...) //nolint:gosec // G204: internal args, not user input
-	env := os.Environ()
+	cmd := CommandGit(ctx, c.environ, prefix...)
+	env := cmd.Env
+	if len(env) == 0 {
+		env = os.Environ()
+	} else {
+		env = append([]string(nil), env...)
+	}
 	if c.isolateEnv {
 		env = stripGitOverrideEnv(env)
 	}
@@ -393,7 +441,7 @@ func nonEmptyDir(dir string) bool {
 }
 
 func (c *Client) child(repoPath string) *Client {
-	return &Client{repoPath: repoPath, isolateEnv: c.isolateEnv}
+	return &Client{repoPath: repoPath, isolateEnv: c.isolateEnv, environ: c.environ}
 }
 
 // CheckIgnoreSource reports whether path is ignored and, if so, the

@@ -24,7 +24,7 @@ func newStaleReviewCmd() *cobra.Command {
 			nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
 			format, _ := cmd.Flags().GetString("format")
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}

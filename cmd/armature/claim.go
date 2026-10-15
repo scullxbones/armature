@@ -555,6 +555,7 @@ func createWorktreeAndBranchWithExclusion(
 	issue materialize.Issue,
 	stillOwns func() bool,
 	exclusionPattern string,
+	environ []string,
 	sourceArgs ...string,
 ) error {
 	branchName := materialize.DeriveBranchName(issue.Type, issueID)
@@ -575,14 +576,14 @@ func createWorktreeAndBranchWithExclusion(
 		if !isWorktreeOf(repoPath, sourcePath) {
 			return fmt.Errorf("validated claim source %s is no longer an existing worktree of this repository", sourcePath)
 		}
-		currentBranch, err := adapters.New(sourcePath).CurrentBranch()
+		currentBranch, err := adapters.New(sourcePath).WithEnviron(environ).CurrentBranch()
 		if err != nil {
 			return fmt.Errorf("revalidate claim source branch: %w", err)
 		}
 		if currentBranch != sourceBranch {
 			return fmt.Errorf("claim source branch changed from %s to %s", sourceBranch, currentBranch)
 		}
-		currentTip, err := adapters.New(sourcePath).ResolveRevision("HEAD")
+		currentTip, err := adapters.New(sourcePath).WithEnviron(environ).ResolveRevision("HEAD")
 		if err != nil {
 			return fmt.Errorf("revalidate claim source tip: %w", err)
 		}
@@ -597,7 +598,7 @@ func createWorktreeAndBranchWithExclusion(
 		}
 	}
 
-	gitClient := adapters.New(repoPath)
+	gitClient := adapters.New(repoPath).WithEnviron(environ)
 	var headSHA, parentBranch string
 	var headErr, parentErr error
 	if sourcePath != "" {
@@ -693,7 +694,7 @@ func createWorktreeAndBranchWithExclusion(
 			return cleanupPartialWorktree(err, "persist claimed branch metadata")
 		}
 	} else if alreadyAtDest {
-		worktreeGitClient := adapters.New(worktreePath)
+		worktreeGitClient := adapters.New(worktreePath).WithEnviron(environ)
 		if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, branchName) {
 			if err := writeClaimedBranchFileIfAbsent(worktreePath, branchName); err != nil {
 				return cleanupPartialWorktree(err, "persist claimed branch metadata")
@@ -929,14 +930,14 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath) {
 					return fmt.Errorf("--from path %s is not an existing worktree of this repository", fromWorktreePath)
 				}
-				fromBranch, err = adapters.New(fromWorktreePath).CurrentBranch()
+				fromBranch, err = gitAt(cmd, fromWorktreePath).CurrentBranch()
 				if err != nil {
 					return fmt.Errorf("resolve --from worktree branch: %w", err)
 				}
 				if fromBranch == "" || fromBranch == "HEAD" {
 					return fmt.Errorf("--from worktree %s must be on a branch", fromWorktreePath)
 				}
-				fromTip, err = adapters.New(fromWorktreePath).ResolveRevision("HEAD")
+				fromTip, err = gitAt(cmd, fromWorktreePath).ResolveRevision("HEAD")
 				if err != nil {
 					return fmt.Errorf("resolve --from worktree tip: %w", err)
 				}
@@ -1019,7 +1020,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return errors.New(provisionPlan.RefuseReason)
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}
@@ -1139,7 +1140,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 				if err := createWorktreeAndBranchWithExclusion(
 					ctx.RepoPath, worktreePath, issueID, *issue,
-					stillOwnsClaim, "", sourceArgs...,
+					stillOwnsClaim, "", environFrom(cmd), sourceArgs...,
 				); err != nil {
 					return compensateClaimIfHeldByToken(
 						cmd, store, logPath, issueID, workerID, "create worktree",
@@ -1154,7 +1155,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					)
 				}
 
-				worktreeGitClient := adapters.New(worktreePath)
+				worktreeGitClient := gitAt(cmd, worktreePath)
 				if hasTrustedBranchPointMetadata(worktreeGitClient, worktreePath, expectedBranch) {
 					if err := writeClaimedBranchFileIfAbsent(worktreePath, expectedBranch); err != nil {
 						return compensateClaimIfHeldByToken(

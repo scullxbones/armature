@@ -25,9 +25,10 @@ func newTUICmd() *cobra.Command {
 			issuesDir := appCtx.IssuesDir
 			stateDir := filepath.Join(appCtx.IssuesDir, "state", ".tui")
 
-			workerID := slottedWorkerIDBestEffort(appCtx.RepoPath)
+			env := envFrom(cmd)
+			workerID := slottedWorkerIDBestEffortEnv(appCtx.RepoPath, env)
 			if workerID == "" {
-				workerID = slottedWorkerID("default")
+				workerID = slottedWorkerIDEnv("default", env)
 			}
 
 			if !uiFrom(cmd).IsInteractive() {

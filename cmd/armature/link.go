@@ -24,7 +24,7 @@ be set directly. Links establish the DAG structure and drive ready-queue eligibi
 		RunE: func(cmd *cobra.Command, args []string) error {
 			state := mustState(cmd)
 			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

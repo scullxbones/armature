@@ -80,10 +80,7 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
-			repoPath, _ := cmd.Flags().GetString("repo")
-			if repoPath == "" {
-				repoPath = "."
-			}
+			repoPath := repoPathFromCmd(cmd)
 			ctx, err := config.ResolveContext(repoPath)
 			if err != nil {
 				if cmd.Parent() == nil && isAbsentArmatureLayout(repoPath, err) {

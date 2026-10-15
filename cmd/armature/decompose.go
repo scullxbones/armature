@@ -238,7 +238,7 @@ plan, or --schema to view the JSON schema.`,
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}
@@ -355,7 +355,7 @@ A rerun that finds nothing left to cancel still publishes the retained local tip
 				return nil
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

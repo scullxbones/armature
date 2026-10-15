@@ -1,6 +1,10 @@
 package adapters
 
 import (
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -97,5 +101,99 @@ func TestIsGitContentionError(t *testing.T) {
 	}
 	if isGitContentionError("fatal: pathspec 'foo' did not match any files") {
 		t.Fatal("pathspec miss is not contention")
+	}
+}
+
+func TestLookPathOnAndEnvVal_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	binName := "mybin"
+	binPath := filepath.Join(dir, binName)
+	if err := os.WriteFile(binPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := lookPathOn(dir, binName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != binPath {
+		t.Fatalf("lookPathOn=%q want %q", got, binPath)
+	}
+	env := []string{"FOO=bar", "PATH=" + dir, "FOO=later"}
+	if envVal(env, "FOO") != "later" {
+		t.Fatalf("envVal last-wins: %q", envVal(env, "FOO"))
+	}
+	if envVal(env, "PATH") != dir {
+		t.Fatalf("PATH=%q", envVal(env, "PATH"))
+	}
+	if envVal(nil, "PATH") != "" {
+		t.Fatal("empty environ should miss PATH")
+	}
+	if envValFold([]string{"Path=/win/bin", "PATH=/unix/bin"}, "PATH") != "/unix/bin" {
+		t.Fatal("fold last-wins among Path/PATH")
+	}
+	if envValFold([]string{"path=/msys"}, "PATH") != "/msys" {
+		t.Fatal("fold matches PATH key case-insensitively")
+	}
+	if envVal([]string{"Path=/win/bin"}, "PATH") != "" {
+		t.Fatal("exact PATH lookup must not match Path")
+	}
+	nested := t.TempDir()
+	if err := os.Mkdir(filepath.Join(nested, "subdir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "plain"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lookPathOn(nested+string(os.PathListSeparator)+dir, "plain"); err == nil {
+		t.Fatal("non-executable and directory entries must be skipped")
+	}
+	got, err = lookPathOn(string(os.PathListSeparator)+dir, binName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != binPath {
+		t.Fatalf("empty PATH element is cwd then later abs: lookPathOn=%q want %q", got, binPath)
+	}
+}
+
+func TestLookPathOnRejectsRelativeEntry_REQ_PARCLI(t *testing.T) { //nolint:paralleltest // t.Chdir is process-wide
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir("rel", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join("rel", "mybin"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := lookPathOn("rel", "mybin")
+	if got == "" {
+		t.Fatal("LookPath returns the relative path together with ErrDot")
+	}
+	if !errors.Is(err, exec.ErrDot) {
+		t.Fatalf("err=%v want ErrDot", err)
+	}
+}
+
+func TestLookPathOnWindowsPATHEXT_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "mybin.exe")
+	if err := os.WriteFile(exe, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := lookPathOnConfig(dir, "mybin", lookPathConfig{
+		windows: true,
+		pathext: ".COM;.EXE;.BAT",
+		listSep: os.PathListSeparator,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != exe {
+		t.Fatalf("lookPathOnConfig=%q want %q (no exec bits, PATHEXT)", got, exe)
+	}
+	_, err = lookPathOnConfig(dir, "missing", lookPathConfig{windows: true, pathext: ".EXE"})
+	if err == nil {
+		t.Fatal("missing name must not resolve")
 	}
 }

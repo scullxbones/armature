@@ -207,7 +207,7 @@ func runPostCommitHook(cmd *cobra.Command) {
 		return
 	}
 
-	workerID, logPath, err := resolveWorkerAndLog(appCtx)
+	workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 	if err != nil {
 		return
 	}

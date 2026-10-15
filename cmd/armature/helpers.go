@@ -91,12 +91,16 @@ func mustMarshalIndent(v any) []byte {
 }
 
 func slottedWorkerIDBestEffort(repoPath string) string {
+	return slottedWorkerIDBestEffortEnv(repoPath, OSEnv())
+}
+
+func slottedWorkerIDBestEffortEnv(repoPath string, env Env) string {
 	id, err := worker.GetWorkerID(repoPath)
 	swallowErr(err)
 	if id == "" {
 		return ""
 	}
-	return slottedWorkerID(id)
+	return slottedWorkerIDEnv(id, env)
 }
 
 type commandFailureEnvelope struct {
@@ -246,9 +250,10 @@ func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
 	if cmd != nil && cmd.Root() != nil {
 		ctx.WorkerIDFlag, _ = cmd.Root().PersistentFlags().GetString("worker-id")
 	}
-	workerID := slottedWorkerIDBestEffort(identityRepoPath(ctx))
+	env := envFrom(cmd)
+	workerID := slottedWorkerIDBestEffortEnv(identityRepoPath(ctx), env)
 	if workerID == "" {
-		workerID = slottedWorkerID("default")
+		workerID = slottedWorkerIDEnv("default", env)
 	}
 	ctx.StateDir = stateDirFor(ctx, workerID)
 	state := &executionState{ctx: ctx, tracker: initPushDeps(ctx)}
@@ -274,14 +279,7 @@ func currentCtx(cmd *cobra.Command) *config.Context {
 }
 
 func invocationRepoPath(cmd *cobra.Command) string {
-	if cmd == nil || cmd.Root() == nil {
-		return "."
-	}
-	path, err := cmd.Root().PersistentFlags().GetString("repo")
-	if err != nil || path == "" {
-		return "."
-	}
-	return path
+	return repoPathFromCmd(cmd)
 }
 
 func stateDirFor(ctx *config.Context, workerID string) string {
@@ -301,7 +299,15 @@ func identityRepoPath(ctx *config.Context) string {
 	return ctx.RepoPath
 }
 
+func resolveWorkerAndLogCmd(cmd *cobra.Command) (string, string, error) {
+	return resolveWorkerAndLogWithEnv(currentCtx(cmd), envFrom(cmd))
+}
+
 func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
+	return resolveWorkerAndLogWithEnv(ctx, OSEnv())
+}
+
+func resolveWorkerAndLogWithEnv(ctx *config.Context, env Env) (string, string, error) {
 	if ctx == nil {
 		return "", "", fmt.Errorf("worker not initialized: command context unavailable")
 	}
@@ -309,8 +315,8 @@ func resolveWorkerAndLog(ctx *config.Context) (string, string, error) {
 		RepoPath:     identityRepoPath(ctx),
 		IssuesDir:    ctx.IssuesDir,
 		FlagWorkerID: ctx.WorkerIDFlag,
-		EnvWorkerID:  os.Getenv("ARM_WORKER_ID"),
-		EnvLogSlot:   os.Getenv("ARM_LOG_SLOT"),
+		EnvWorkerID:  envLookup(env, "ARM_WORKER_ID"),
+		EnvLogSlot:   envLookup(env, "ARM_LOG_SLOT"),
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("worker not initialized: %w", err)
@@ -323,7 +329,11 @@ func opsLogPath(issuesDir, ownerID string) string {
 }
 
 func slottedWorkerID(workerID string) string {
-	id, err := slottedWorkerIDChecked(workerID)
+	return slottedWorkerIDEnv(workerID, OSEnv())
+}
+
+func slottedWorkerIDEnv(workerID string, env Env) string {
+	id, err := slottedWorkerIDCheckedEnv(workerID, env)
 	if err != nil {
 		return ""
 	}
@@ -331,7 +341,11 @@ func slottedWorkerID(workerID string) string {
 }
 
 func slottedWorkerIDChecked(workerID string) (string, error) {
-	slot := os.Getenv("ARM_LOG_SLOT")
+	return slottedWorkerIDCheckedEnv(workerID, OSEnv())
+}
+
+func slottedWorkerIDCheckedEnv(workerID string, env Env) (string, error) {
+	slot := envLookup(env, "ARM_LOG_SLOT")
 	if slot == "" {
 		return workerID, nil
 	}
@@ -363,6 +377,14 @@ func worktreeGit(ctx *config.Context) *adapters.Client {
 		return nil
 	}
 	return adapters.New(ctx.WorktreePath)
+}
+
+func worktreeGitCmd(cmd *cobra.Command) *adapters.Client {
+	ctx := currentCtx(cmd)
+	if ctx == nil || ctx.WorktreePath == "" {
+		return nil
+	}
+	return gitAt(cmd, ctx.WorktreePath)
 }
 
 func parseAcceptanceJSON(acceptanceJSON string) (json.RawMessage, error) {

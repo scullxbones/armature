@@ -102,7 +102,7 @@ func recordPublishValidateOverride(cmd *cobra.Command, state *executionState, re
 	}
 
 	ctx := state.ctx
-	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 	if err != nil {
 		return fmt.Errorf("worker not initialized: %w", err)
 	}

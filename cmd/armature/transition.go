@@ -84,7 +84,7 @@ outcome) appends as an amendment at exit 0.`,
 			state := mustState(cmd)
 			appCtx := state.ctx
 
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

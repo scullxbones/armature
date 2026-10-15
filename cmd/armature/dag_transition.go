@@ -30,7 +30,7 @@ planner cannot release a dirty plan. Demotion to draft is not gated.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			state := mustState(cmd)
 			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}

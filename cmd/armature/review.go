@@ -124,7 +124,7 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	}
 	resolvedIssueID := binding.IssueID
 	if resolvedIssueID == "" && binding.GitDir != "" {
-		resolvedIssueID = issueBindingFromGitDirOrEnv(binding.GitDir)
+		resolvedIssueID = issueBindingFromGitDirOrEnvLookup(binding.GitDir, envFrom(cmd))
 	}
 	activityLogPath := ""
 	if binding.GitDir != "" && resolvedIssueID == issueID {
@@ -354,7 +354,7 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 	}
 
 	state := mustState(cmd)
-	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 	if err != nil {
 		return err
 	}

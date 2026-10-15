@@ -300,7 +300,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 	if alreadyMerged {
 		if pr != "" && !prAlreadyRecorded {
 			state := mustState(cmd)
-			workerID, logPath, err := resolveWorkerAndLog(state.ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}
@@ -338,7 +338,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 	})
 	if result.AppendCheck || result.Promote {
 		state := mustState(cmd)
-		workerID, logPath, resolveErr := resolveWorkerAndLog(state.ctx)
+		workerID, logPath, resolveErr := resolveWorkerAndLogCmd(cmd)
 		if resolveErr != nil {
 			return resolveErr
 		}

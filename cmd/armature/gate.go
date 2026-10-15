@@ -74,7 +74,7 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 	}
 	appCtx := currentCtx(cmd)
 	checkout := invocationRepoPath(cmd)
-	git := adapters.NewIsolated(checkout)
+	git := gitIsolatedAt(cmd, checkout)
 	headSHA, err := git.ResolveRevision("HEAD")
 	if err != nil {
 		return fmt.Errorf("resolve HEAD: %w", err)
@@ -105,7 +105,7 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 		return fmt.Errorf("check working tree: %w", err)
 	}
 
-	workerID, logPath, err := resolveWorkerAndLog(appCtx)
+	workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func runGateProfile(cmd *cobra.Command, profile string) error {
 
 	var gc ops.GitCommitter
 	if appCtx.WorktreePath != "" {
-		gc = adapters.NewIsolated(appCtx.WorktreePath)
+		gc = gitIsolatedAt(cmd, appCtx.WorktreePath)
 	}
 	if err := ops.AppendGateEvidenceAndCommit(logPath, appCtx.WorktreePath, workerID, ev, gc); err != nil {
 		return fmt.Errorf("record gate evidence: %w", err)

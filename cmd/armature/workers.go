@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var replayIssueLeases = claim.Owners
-
 type WorkerStatus struct {
 	WorkerID    string `json:"worker_id"`
 	Status      string `json:"status"`
@@ -42,7 +40,7 @@ func newWorkersCmd() *cobra.Command {
 				return fmt.Errorf("enumerate workers: %w", err)
 			}
 
-			leases := replayIssueLeases(allOps)
+			leases := replayLeasesFrom(cmd)(allOps)
 			statuses := make([]WorkerStatus, 0, len(workers))
 			for workerID, workerOps := range workers {
 				s := foldWorkerStatusFromLeases(workerID, workerOps, leases, defaultTTL, now)

@@ -52,8 +52,7 @@ func runNoteAdd(cmd *cobra.Command, issueID, msg string) error {
 	}
 
 	state := mustState(cmd)
-	ctx := state.ctx
-	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 	if err != nil {
 		return err
 	}
@@ -77,8 +76,7 @@ func runNoteDelete(cmd *cobra.Command, issueID, noteID string) error {
 	}
 
 	state := mustState(cmd)
-	ctx := state.ctx
-	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 	if err != nil {
 		return err
 	}
