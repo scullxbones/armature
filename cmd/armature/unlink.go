@@ -20,7 +20,7 @@ This removes erroneous dependency links that were previously created with the li
 		RunE: func(cmd *cobra.Command, args []string) error {
 			state := mustState(cmd)
 			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

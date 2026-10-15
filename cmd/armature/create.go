@@ -41,7 +41,7 @@ func newCreateCmd() *cobra.Command {
 
 			state := mustState(cmd)
 			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

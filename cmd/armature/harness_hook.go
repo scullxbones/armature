@@ -23,10 +23,14 @@ import (
 )
 
 func issueBindingFromGitDirOrEnv(gitDir string) string {
+	return issueBindingFromGitDirOrEnvLookup(gitDir, OSEnv())
+}
+
+func issueBindingFromGitDirOrEnvLookup(gitDir string, env Env) string {
 	if issueID := harnesshook.ReadIssueBindingFile(gitDir); issueID != "" {
 		return issueID
 	}
-	return os.Getenv("ARMATURE_ISSUE_ID")
+	return envLookup(env, "ARMATURE_ISSUE_ID")
 }
 
 func logPassThrough(gitDir string, reason string) error {
@@ -154,7 +158,11 @@ type heartbeatRateLimitState struct {
 }
 
 func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
-	root, err := os.OpenRoot(os.TempDir())
+	return readHeartbeatRateLimitStateAt(os.TempDir(), workerID, issueID)
+}
+
+func readHeartbeatRateLimitStateAt(tempDir, workerID, issueID string) time.Time {
+	root, err := os.OpenRoot(tempDir)
 	if err != nil {
 		return time.Time{}
 	}
@@ -171,6 +179,10 @@ func readHeartbeatRateLimitState(workerID, issueID string) time.Time {
 }
 
 func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.Time) error {
+	return writeHeartbeatRateLimitStateAt(os.TempDir(), workerID, issueID, heartbeatTime)
+}
+
+func writeHeartbeatRateLimitStateAt(tempDir, workerID, issueID string, heartbeatTime time.Time) error {
 	state := heartbeatRateLimitState{
 		LastHeartbeatTime: heartbeatTime.Unix(),
 	}
@@ -178,7 +190,7 @@ func writeHeartbeatRateLimitState(workerID, issueID string, heartbeatTime time.T
 	if err != nil {
 		return fmt.Errorf("failed to marshal heartbeat state: %w", err)
 	}
-	root, err := os.OpenRoot(os.TempDir())
+	root, err := os.OpenRoot(tempDir)
 	if err != nil {
 		return fmt.Errorf("failed to write heartbeat state file: %w", err)
 	}
@@ -194,10 +206,18 @@ func rateLimitStateFileName(workerID, issueID string) string {
 }
 
 func rateLimitStateFilePath(workerID, issueID string) string {
-	return filepath.Join(os.TempDir(), rateLimitStateFileName(workerID, issueID))
+	return rateLimitStateFilePathAt(os.TempDir(), workerID, issueID)
+}
+
+func rateLimitStateFilePathAt(tempDir, workerID, issueID string) string {
+	return filepath.Join(tempDir, rateLimitStateFileName(workerID, issueID))
 }
 
 func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKind harnesshook.EventKind) {
+	tryEmitHeartbeatAt(repoPath, issuesDir, worktreePath, issueID, eventKind, OSEnv(), os.TempDir(), os.Stderr)
+}
+
+func tryEmitHeartbeatAt(repoPath, issuesDir, worktreePath, issueID string, eventKind harnesshook.EventKind, env Env, tempDir string, errOut io.Writer) {
 	if eventKind != harnesshook.EventPreToolUse {
 		return
 	}
@@ -207,13 +227,13 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 		return
 	}
 
-	ownerID, slotErr := slottedWorkerIDChecked(workerID)
+	ownerID, slotErr := slottedWorkerIDCheckedEnv(workerID, env)
 	if slotErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: invalid ARM_LOG_SLOT, skipping heartbeat: %v\n", slotErr)
+		fmt.Fprintf(errOut, "warning: invalid ARM_LOG_SLOT, skipping heartbeat: %v\n", slotErr)
 		return
 	}
 
-	lastHeartbeatTime := readHeartbeatRateLimitState(ownerID, issueID)
+	lastHeartbeatTime := readHeartbeatRateLimitStateAt(tempDir, ownerID, issueID)
 
 	if !claimPkg.ShouldHeartbeat(lastHeartbeatTime, time.Now()) {
 		return
@@ -234,15 +254,18 @@ func tryEmitHeartbeat(repoPath, issuesDir, worktreePath, issueID string, eventKi
 	var gc ops.GitCommitter
 	if worktreePath != "" {
 		gc = adapters.New(worktreePath)
+		if e, ok := env.(interface{ Environ() []string }); ok {
+			gc = adapters.New(worktreePath).WithEnviron(e.Environ())
+		}
 	}
 
 	if err := ops.AppendAndCommit(logPath, worktreePath, heartbeatOp, gc); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to emit heartbeat op for %s: %v\n", issueID, err)
+		fmt.Fprintf(errOut, "warning: failed to emit heartbeat op for %s: %v\n", issueID, err)
 		return
 	}
 
-	if err := writeHeartbeatRateLimitState(ownerID, issueID, time.Now()); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to update heartbeat rate-limit state for %s: %v\n", issueID, err)
+	if err := writeHeartbeatRateLimitStateAt(tempDir, ownerID, issueID, time.Now()); err != nil {
+		fmt.Fprintf(errOut, "warning: failed to update heartbeat rate-limit state for %s: %v\n", issueID, err)
 		return
 	}
 }
@@ -256,22 +279,20 @@ func newHarnessHookCmd() *cobra.Command {
 		Annotations:   output.MarkProtocolOutput(nil),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			appCtx := currentCtx(cmd)
-			rawRepo, _ := cmd.Root().PersistentFlags().GetString("repo")
-			if rawRepo == "" {
-				rawRepo = "."
-			}
+			env := envFrom(cmd)
+			rawRepo := repoPathFromCmd(cmd)
 			gitDir, err := worktree.ResolveGitDir(rawRepo)
 			if err != nil {
 				gitDir = filepath.Join(appCtx.RepoPath, ".git")
 			}
-			sessionBinding := issueBindingFromGitDirOrEnv(gitDir)
+			sessionBinding := issueBindingFromGitDirOrEnvLookup(gitDir, env)
 
 			inputData, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("failed to read hook input: %v", err), "stdin read failed")
 			}
 
-			adapter, err := harnesshook.NewAdapterForPlatform(os.Getenv("ARMATURE_HOOK_PLATFORM"))
+			adapter, err := harnesshook.NewAdapterForPlatform(envLookup(env, "ARMATURE_HOOK_PLATFORM"))
 			if err != nil {
 				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("failed to select hook adapter: %v", err), "adapter selection failed")
 			}
@@ -333,17 +354,21 @@ func newHarnessHookCmd() *cobra.Command {
 				return nil
 			}
 
-			tryEmitHeartbeat(appCtx.RepoPath, appCtx.IssuesDir, appCtx.WorktreePath, resolvedBinding.IssueID, event.Kind)
+			tryEmitHeartbeatAt(appCtx.RepoPath, appCtx.IssuesDir, appCtx.WorktreePath, resolvedBinding.IssueID, event.Kind, env, tempDirFrom(cmd), cmd.ErrOrStderr())
 
 			hook := harnesshook.NewHook(newIssuePolicyLoader(
 				appCtx.StateDir,
 				filepath.Join(appCtx.IssuesDir, "sources"),
 			))
+			root := resolvedBinding.Root
+			if root == "" {
+				root = invocationDir(cmd)
+			}
 			result, err := hook.Evaluate(cmd.Context(), harnesshook.EvaluateInput{
 				Input:    inputData,
 				Binding:  resolvedBinding.IssueID,
-				Platform: os.Getenv("ARMATURE_HOOK_PLATFORM"),
-				Root:     resolvedBinding.Root,
+				Platform: envLookup(env, "ARMATURE_HOOK_PLATFORM"),
+				Root:     root,
 			})
 			if err != nil {
 				return failOpenPassThrough(cmd.ErrOrStderr(), logGitDir, fmt.Sprintf("hook evaluation failed: %v", err), "hook evaluation failed")

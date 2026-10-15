@@ -23,7 +23,7 @@ func newScopeDeleteCmd() *cobra.Command {
 
 			state := mustState(cmd)
 			appCtx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

@@ -38,7 +38,7 @@ func newRenderContextCmd() *cobra.Command {
 			if !cmd.Flags().Changed("budget") && appCtx.Config.TokenBudget > 0 {
 				rcBudget = appCtx.Config.TokenBudget
 			}
-			workerID, _, idErr := resolveWorkerAndLog(appCtx)
+			workerID, _, idErr := resolveWorkerAndLogCmd(cmd)
 			if idErr != nil {
 				return idErr
 			}

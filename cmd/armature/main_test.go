@@ -2253,13 +2253,7 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 	require.NoError(t, err, "second dual-branch init should succeed (idempotent)")
 
 	buf := new(bytes.Buffer)
-	dotCmd := newRootCmd()
-	dotCmd.SetOut(buf)
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(repo))
-	t.Cleanup(func() { swallowErr(os.Chdir(origDir)) })
-
+	dotCmd := commandFor(Invocation{Dir: repo, Stdout: buf, Stderr: new(bytes.Buffer), TempDir: t.TempDir()})
 	dotCmd.SetArgs([]string{"bootstrap", "--repo", "."})
 	err = dotCmd.Execute()
 	require.NoError(t, err, "init with relative repo '.' should succeed (idempotent)")

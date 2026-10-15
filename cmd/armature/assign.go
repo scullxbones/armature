@@ -14,14 +14,13 @@ func newAssignCmd() *cobra.Command {
 		Short: "Assign an issue to a worker",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := currentCtx(cmd)
 			var err error
 			issueID, err = resolveIssueID(issueID, args)
 			if err != nil {
 				return err
 			}
 
-			myWorkerID, logPath, err := resolveWorkerAndLog(ctx)
+			myWorkerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}
@@ -66,7 +65,7 @@ This allows the issue to be claimed again by another worker.`,
 				return err
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

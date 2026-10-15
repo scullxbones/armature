@@ -227,7 +227,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 				if selected != "" {
 					state := mustState(cmd)
 					ctx := state.ctx
-					workerID, logPath, err := resolveWorkerAndLog(ctx)
+					workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 					if err != nil {
 						return err
 					}

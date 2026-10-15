@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/stretchr/testify/assert"
@@ -124,6 +125,33 @@ type mapEnv map[string]string
 func (m mapEnv) Lookup(key string) (string, bool) {
 	v, ok := m[key]
 	return v, ok
+}
+
+func TestSlottedWorkerIDUsesInvocationEnv_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	id := slottedWorkerIDEnv("worker-123", OverlayEnv(nil, map[string]string{"ARM_LOG_SLOT": "lane-a"}))
+	assert.Equal(t, "worker-123~lane-a", id)
+	plain := slottedWorkerIDEnv("worker-123", OverlayEnv(nil, map[string]string{"ARM_LOG_SLOT": ""}))
+	assert.Equal(t, "worker-123", plain)
+}
+
+func TestHeartbeatStateIsScopedToTempDir_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	a := t.TempDir()
+	b := t.TempDir()
+	now := time.Now().Truncate(time.Second)
+	require.NoError(t, writeHeartbeatRateLimitStateAt(a, "w", "i", now))
+	assert.True(t, readHeartbeatRateLimitStateAt(b, "w", "i").IsZero())
+	got := readHeartbeatRateLimitStateAt(a, "w", "i")
+	assert.Equal(t, now.Unix(), got.Unix())
+}
+
+func TestRepoPathJoinsInvocationDir_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	root := commandFor(Invocation{Dir: "/tmp/arm-inv-dir", Stdout: new(bytes.Buffer), Stderr: new(bytes.Buffer), TempDir: t.TempDir()})
+	assert.Equal(t, "/tmp/arm-inv-dir", repoPathFromCmd(root))
+	require.NoError(t, root.PersistentFlags().Set("repo", "."))
+	assert.Equal(t, "/tmp/arm-inv-dir", repoPathFromCmd(root))
 }
 
 func TestRendererLookupMatchesEnvInterface_REQ_PARCLI(t *testing.T) {

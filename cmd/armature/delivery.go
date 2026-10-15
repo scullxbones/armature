@@ -45,7 +45,7 @@ base must ancestor tip, and the range must be non-empty.`,
 
 			state := mustState(cmd)
 			appCtx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLog(appCtx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return err
 			}

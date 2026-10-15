@@ -15,6 +15,7 @@ import (
 type Client struct {
 	repoPath   string
 	isolateEnv bool
+	environ    []string
 }
 
 const (
@@ -32,6 +33,17 @@ func New(repoPath string) *Client {
 // core.worktree or rev-parse --show-toplevel).
 func NewIsolated(repoPath string) *Client {
 	return &Client{repoPath: repoPath, isolateEnv: true}
+}
+
+// WithEnviron overlays the git child environment (including PATH for LookPath).
+// A nil/empty slice leaves the process environment in place.
+func (c *Client) WithEnviron(environ []string) *Client {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	cp.environ = append([]string(nil), environ...)
+	return &cp
 }
 
 func (c *Client) cmd(args ...string) *exec.Cmd {
@@ -59,8 +71,17 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 		}
 	}
 	prefix = append(prefix, args...)
-	cmd := exec.CommandContext(ctx, "git", prefix...) //nolint:gosec // G204: internal args, not user input
 	env := os.Environ()
+	if len(c.environ) > 0 {
+		env = append([]string(nil), c.environ...)
+	}
+	gitBin := "git"
+	if path := envVal(env, "PATH"); path != "" {
+		if abs, err := lookPathOn(path, "git"); err == nil {
+			gitBin = abs
+		}
+	}
+	cmd := exec.CommandContext(ctx, gitBin, prefix...) //nolint:gosec // G204: internal args, not user input
 	if c.isolateEnv {
 		env = stripGitOverrideEnv(env)
 	}
@@ -393,7 +414,7 @@ func nonEmptyDir(dir string) bool {
 }
 
 func (c *Client) child(repoPath string) *Client {
-	return &Client{repoPath: repoPath, isolateEnv: c.isolateEnv}
+	return &Client{repoPath: repoPath, isolateEnv: c.isolateEnv, environ: c.environ}
 }
 
 // CheckIgnoreSource reports whether path is ignored and, if so, the
@@ -1288,4 +1309,32 @@ func (c *Client) TreeEntry(rev, path string) (mode, oid string, err error) {
 		return "", "", fmt.Errorf("git ls-tree %s -- %s: malformed output", rev, path)
 	}
 	return fields[0], fields[2], nil
+}
+
+func envVal(environ []string, key string) string {
+	prefix := key + "="
+	for i := len(environ) - 1; i >= 0; i-- {
+		if strings.HasPrefix(environ[i], prefix) {
+			return strings.TrimPrefix(environ[i], prefix)
+		}
+	}
+	return ""
+}
+
+func lookPathOn(pathList, file string) (string, error) {
+	for _, dir := range filepath.SplitList(pathList) {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, file)
+		st, err := os.Stat(candidate)
+		if err != nil || st.IsDir() {
+			continue
+		}
+		if st.Mode()&0o111 == 0 {
+			continue
+		}
+		return candidate, nil
+	}
+	return "", os.ErrNotExist
 }

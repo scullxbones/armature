@@ -88,7 +88,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 				return err
 			}
 
-			workerID, logPath, err := resolveWorkerAndLog(ctx)
+			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
 			if err != nil {
 				return fmt.Errorf("worker not initialized: %w", err)
 			}

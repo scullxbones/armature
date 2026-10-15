@@ -62,10 +62,7 @@ The command is idempotent: running it multiple times has the same effect as runn
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
-			if repoPath == "" {
-				repoPath = "."
-			}
+			repoPath := repoPathFromCmd(cmd)
 
 			absRepoPath, err := filepath.Abs(repoPath)
 			if err != nil {

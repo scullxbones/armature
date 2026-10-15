@@ -37,7 +37,7 @@ func rollbackClaim(
 }
 
 func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, sourceArgs ...string) error {
-	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", sourceArgs...)
+	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", nil, sourceArgs...)
 }
 
 func setupRepoWithEpic(t *testing.T) string {
@@ -750,7 +750,7 @@ func TestCreateWorktreeAndBranchLeavesAlreadyAtDestOnMetadataFailure(t *testing.
 	require.NoError(t, os.WriteFile(keep, []byte("package keep\n"), 0o644))
 
 	err := createWorktreeAndBranchWithExclusion(
-		repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns, "/other/",
+		repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns, "/other/", nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already records a different pattern")
