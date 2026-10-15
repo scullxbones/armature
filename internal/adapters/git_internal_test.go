@@ -177,11 +177,11 @@ func TestLookPathOnRejectsRelativeEntry_REQ_PARCLI(t *testing.T) { //nolint:para
 func TestLookPathOnWindowsPATHEXT_REQ_PARCLI(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "git.exe")
+	exe := filepath.Join(dir, "mybin.exe")
 	if err := os.WriteFile(exe, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got, err := lookPathOnConfig(dir, "git", lookPathConfig{
+	got, err := lookPathOnConfig(dir, "mybin", lookPathConfig{
 		windows: true,
 		pathext: ".COM;.EXE;.BAT",
 		listSep: os.PathListSeparator,
