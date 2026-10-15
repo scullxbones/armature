@@ -15,11 +15,12 @@ import (
 )
 
 func TestSourcesAddCommand_WarnOnRelativePath(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdoutBuf := new(bytes.Buffer)
 	stderrBuf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(stdoutBuf)
 	cmd.SetErr(stderrBuf)
 	cmd.SetArgs([]string{"sources", "add", "--repo", repo,
@@ -32,10 +33,11 @@ func TestSourcesAddCommand_WarnOnRelativePath(t *testing.T) {
 }
 
 func TestSourcesSyncCommand_ErrorOnUnreachablePath(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	addBuf := new(bytes.Buffer)
-	addCmd := newRootCmd()
+	addCmd := testRootCmd(t)
 	addCmd.SetOut(addBuf)
 	addCmd.SetErr(new(bytes.Buffer))
 	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
@@ -46,7 +48,7 @@ func TestSourcesSyncCommand_ErrorOnUnreachablePath(t *testing.T) {
 
 	syncBuf := new(bytes.Buffer)
 	syncErrBuf := new(bytes.Buffer)
-	syncCmd := newRootCmd()
+	syncCmd := testRootCmd(t)
 	syncCmd.SetOut(syncBuf)
 	syncCmd.SetErr(syncErrBuf)
 	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
@@ -57,6 +59,7 @@ func TestSourcesSyncCommand_ErrorOnUnreachablePath(t *testing.T) {
 }
 
 func TestSourcesSyncCommand_SuccessWithReachablePath(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	tmpfile := filepath.Join(t.TempDir(), "source.txt")
@@ -64,7 +67,7 @@ func TestSourcesSyncCommand_SuccessWithReachablePath(t *testing.T) {
 	require.NoError(t, err)
 
 	addBuf := new(bytes.Buffer)
-	addCmd := newRootCmd()
+	addCmd := testRootCmd(t)
 	addCmd.SetOut(addBuf)
 	addCmd.SetErr(new(bytes.Buffer))
 	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
@@ -74,7 +77,7 @@ func TestSourcesSyncCommand_SuccessWithReachablePath(t *testing.T) {
 	require.NoError(t, err)
 
 	syncBuf := new(bytes.Buffer)
-	syncCmd := newRootCmd()
+	syncCmd := testRootCmd(t)
 	syncCmd.SetOut(syncBuf)
 	syncCmd.SetErr(new(bytes.Buffer))
 	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
@@ -85,19 +88,20 @@ func TestSourcesSyncCommand_SuccessWithReachablePath(t *testing.T) {
 }
 
 func TestSourcesSyncCommand_PartialFailure(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	tmpfile := filepath.Join(t.TempDir(), "good_source.txt")
 	require.NoError(t, os.WriteFile(tmpfile, []byte("good content"), 0600))
 
-	addGood := newRootCmd()
+	addGood := testRootCmd(t)
 	addGood.SetOut(new(bytes.Buffer))
 	addGood.SetErr(new(bytes.Buffer))
 	addGood.SetArgs([]string{"sources", "add", "--repo", repo,
 		"--url", tmpfile, "--type", "filesystem"})
 	require.NoError(t, addGood.Execute())
 
-	addBad := newRootCmd()
+	addBad := testRootCmd(t)
 	addBad.SetOut(new(bytes.Buffer))
 	addBad.SetErr(new(bytes.Buffer))
 	addBad.SetArgs([]string{"sources", "add", "--repo", repo,
@@ -106,7 +110,7 @@ func TestSourcesSyncCommand_PartialFailure(t *testing.T) {
 
 	syncOut := new(bytes.Buffer)
 	syncErr := new(bytes.Buffer)
-	syncCmd := newRootCmd()
+	syncCmd := testRootCmd(t)
 	syncCmd.SetOut(syncOut)
 	syncCmd.SetErr(syncErr)
 	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
@@ -118,19 +122,20 @@ func TestSourcesSyncCommand_PartialFailure(t *testing.T) {
 }
 
 func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	tmpfile := filepath.Join(t.TempDir(), "source.txt")
 	require.NoError(t, os.WriteFile(tmpfile, []byte("initial content"), 0600))
 
-	addCmd := newRootCmd()
+	addCmd := testRootCmd(t)
 	addCmd.SetOut(new(bytes.Buffer))
 	addCmd.SetErr(new(bytes.Buffer))
 	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
 		"--url", tmpfile, "--type", "filesystem"})
 	require.NoError(t, addCmd.Execute())
 
-	syncCmd1 := newRootCmd()
+	syncCmd1 := testRootCmd(t)
 	syncOut1 := new(bytes.Buffer)
 	syncCmd1.SetOut(syncOut1)
 	syncCmd1.SetErr(new(bytes.Buffer))
@@ -138,7 +143,7 @@ func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
 	require.NoError(t, syncCmd1.Execute())
 	assert.Contains(t, syncOut1.String(), "synced")
 
-	verifyCmd1 := newRootCmd()
+	verifyCmd1 := testRootCmd(t)
 	verifyOut1 := new(bytes.Buffer)
 	verifyCmd1.SetOut(verifyOut1)
 	verifyCmd1.SetErr(new(bytes.Buffer))
@@ -149,7 +154,7 @@ func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
 
 	require.NoError(t, os.Remove(tmpfile))
 
-	syncCmd2 := newRootCmd()
+	syncCmd2 := testRootCmd(t)
 	syncOut2 := new(bytes.Buffer)
 	syncErr2 := new(bytes.Buffer)
 	syncCmd2.SetOut(syncOut2)
@@ -159,7 +164,7 @@ func TestSourcesVerifyCommand_StaleAfterSyncFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, syncErr2.String(), "fetch")
 
-	verifyCmd2 := newRootCmd()
+	verifyCmd2 := testRootCmd(t)
 	verifyOut2 := new(bytes.Buffer)
 	verifyCmd2.SetOut(verifyOut2)
 	verifyCmd2.SetErr(new(bytes.Buffer))
@@ -181,12 +186,13 @@ func gitWorktreeStatus(t *testing.T, repo string) string {
 }
 
 func TestSourcesAdd_AutoCommits_REQ_LNGHZN_B1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	tmpfile := filepath.Join(t.TempDir(), "source.txt")
 	require.NoError(t, os.WriteFile(tmpfile, []byte("auto-commit content"), 0600))
 
-	addCmd := newRootCmd()
+	addCmd := testRootCmd(t)
 	addCmd.SetOut(new(bytes.Buffer))
 	addCmd.SetErr(new(bytes.Buffer))
 	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
@@ -198,19 +204,20 @@ func TestSourcesAdd_AutoCommits_REQ_LNGHZN_B1(t *testing.T) {
 }
 
 func TestSourcesSync_AutoCommits_REQ_LNGHZN_B1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	tmpfile := filepath.Join(t.TempDir(), "source.txt")
 	require.NoError(t, os.WriteFile(tmpfile, []byte("auto-commit sync content"), 0600))
 
-	addCmd := newRootCmd()
+	addCmd := testRootCmd(t)
 	addCmd.SetOut(new(bytes.Buffer))
 	addCmd.SetErr(new(bytes.Buffer))
 	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
 		"--url", tmpfile, "--type", "filesystem"})
 	require.NoError(t, addCmd.Execute())
 
-	syncCmd := newRootCmd()
+	syncCmd := testRootCmd(t)
 	syncCmd.SetOut(new(bytes.Buffer))
 	syncCmd.SetErr(new(bytes.Buffer))
 	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
@@ -221,12 +228,13 @@ func TestSourcesSync_AutoCommits_REQ_LNGHZN_B1(t *testing.T) {
 }
 
 func TestSourcesCommandOutputParity_REQ_ARCHIMP_S18_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	tmpfile := filepath.Join(t.TempDir(), "source.txt")
 	require.NoError(t, os.WriteFile(tmpfile, []byte("parity content"), 0600))
 
-	addCmd := newRootCmd()
+	addCmd := testRootCmd(t)
 	addCmd.SetOut(new(bytes.Buffer))
 	addCmd.SetErr(new(bytes.Buffer))
 	addCmd.SetArgs([]string{"sources", "add", "--repo", repo,
@@ -234,7 +242,7 @@ func TestSourcesCommandOutputParity_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	require.NoError(t, addCmd.Execute())
 
 	syncBuf := new(bytes.Buffer)
-	syncCmd := newRootCmd()
+	syncCmd := testRootCmd(t)
 	syncCmd.SetOut(syncBuf)
 	syncCmd.SetErr(new(bytes.Buffer))
 	syncCmd.SetArgs([]string{"sources", "sync", "--repo", repo})
@@ -244,7 +252,7 @@ func TestSourcesCommandOutputParity_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	assert.Regexp(t, syncLine, syncBuf.String(), "sync output format changed")
 
 	verifyBuf := new(bytes.Buffer)
-	verifyCmd := newRootCmd()
+	verifyCmd := testRootCmd(t)
 	verifyCmd.SetOut(verifyBuf)
 	verifyCmd.SetErr(new(bytes.Buffer))
 	verifyCmd.SetArgs([]string{"sources", "verify", "--repo", repo})

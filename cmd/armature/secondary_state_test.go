@@ -8,6 +8,7 @@ import (
 )
 
 func TestSecondaryStatePaths(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

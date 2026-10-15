@@ -17,6 +17,7 @@ import (
 )
 
 func TestClaimPublishAuthClassKeepsLocalCommit_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -50,6 +51,7 @@ exit 1
 }
 
 func TestClaimPublishNonFFClass_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -107,6 +109,7 @@ func localOpsContainClaim(t *testing.T, repo, issueID string) bool {
 }
 
 func TestAppendHighStakesOp_PublishFailureKeepsLocalCommit_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -138,6 +141,7 @@ func TestAppendHighStakesOp_PublishFailureKeepsLocalCommit_REQ_OPS_PUBLISH(t *te
 }
 
 func TestClaimPublishFailureKeepsLocalClaim_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -191,6 +195,7 @@ func claimTokenFromLog(t *testing.T, repo, issueID string) (workerID, token stri
 }
 
 func TestUnpushedClaimDoesNotWinViaLocalHead_REQ_CLAIMORD_W11(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -210,6 +215,7 @@ func TestUnpushedClaimDoesNotWinViaLocalHead_REQ_CLAIMORD_W11(t *testing.T) {
 }
 
 func TestPublishedClaimWinsAfterPush_REQ_CLAIMORD_W11(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -225,6 +231,7 @@ func TestPublishedClaimWinsAfterPush_REQ_CLAIMORD_W11(t *testing.T) {
 }
 
 func TestAppendHighStakesOp_SuccessfulPushResetsTracker_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	_, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -241,6 +248,7 @@ func TestAppendHighStakesOp_SuccessfulPushResetsTracker_REQ_OPS_PUBLISH(t *testi
 }
 
 func TestAppendLowStakesOps_PublishFailureIsBestEffort_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -260,6 +268,7 @@ func TestAppendLowStakesOps_PublishFailureIsBestEffort_REQ_OPS_PUBLISH(t *testin
 }
 
 func TestPushOps_PushFailureStillPUSHOPS1_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -285,6 +294,7 @@ func TestPushOps_PushFailureStillPUSHOPS1_REQ_OPS_PUBLISH(t *testing.T) {
 }
 
 func TestPushOps_AuthClass_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -310,6 +320,7 @@ exit 1
 }
 
 func TestPushOps_NonFFClass_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -340,6 +351,7 @@ exit 1
 }
 
 func TestTransitionIdenticalRetryPublishesUnpublishedLocalOp_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -376,6 +388,7 @@ func TestTransitionIdenticalRetryPublishesUnpublishedLocalOp_REQ_OPS_PUBLISH(t *
 }
 
 func TestAppendHighStakesOpIfNoWriteStillPublishes_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	bareDir, repo, worktree := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "push-ops")
 	require.NoError(t, err)
@@ -397,6 +410,7 @@ func TestAppendHighStakesOpIfNoWriteStillPublishes_REQ_OPS_PUBLISH(t *testing.T)
 }
 
 func TestPublishArmatureBranchReturnsRebaseError_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	pushErr := errors.New("git push origin _armature: rejected (non-fast-forward)")
 	rebaseErr := errors.New("git rebase origin/_armature: conflict in ops/w1.log")
 	stub := &stubOpsPublisher{firstPushErr: pushErr, rebaseErr: rebaseErr}
@@ -412,6 +426,7 @@ func TestPublishArmatureBranchReturnsRebaseError_REQ_OPS_PUBLISH(t *testing.T) {
 }
 
 func TestPublishArmatureSequenceRevalidatesOwnerBeforeRetryPush_REQ_CLAIMORD_W13(t *testing.T) {
+	t.Parallel()
 	pushErr := errors.New("git push origin _armature: rejected (non-fast-forward)")
 	stub := &stubOpsPublisher{firstPushErr: pushErr, secondPush: errors.New("must not reach second push")}
 	err := publishArmatureSequence(stub, func() error { return claim.ErrNotClaimOwner })

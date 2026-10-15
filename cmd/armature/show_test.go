@@ -50,6 +50,7 @@ func decodeShowIssue(t *testing.T, stdout string) map[string]any {
 }
 
 func TestShowOmitsTombstonedNotes(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -84,6 +85,7 @@ func TestShowOmitsTombstonedNotes(t *testing.T) {
 }
 
 func TestShow_BlockedBy(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -151,6 +153,7 @@ func TestShow_BlockedBy(t *testing.T) {
 }
 
 func TestShow_BlockedBy_MultiJSON(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -193,6 +196,7 @@ func TestShow_BlockedBy_MultiJSON(t *testing.T) {
 }
 
 func TestShow_JSON_IncludesPriorityField(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -213,6 +217,7 @@ func TestShow_JSON_IncludesPriorityField(t *testing.T) {
 }
 
 func TestShowDisplaysRunningSpend_REQ_TOPTIER_S11_T2(t *testing.T) {
+	t.Parallel()
 	repo := initCostFixture(t)
 
 	out, err := runTrls(t, repo, "show", "--format", "human", "STORY-COST")
@@ -233,6 +238,7 @@ func TestShowDisplaysRunningSpend_REQ_TOPTIER_S11_T2(t *testing.T) {
 }
 
 func TestShowSkipsSpendLoadForJSONAndField(t *testing.T) {
+	t.Parallel()
 	repo := initCostFixture(t)
 	ctx := getTestContext(t, repo)
 	require.NoError(t, os.WriteFile(filepath.Join(ctx.IssuesDir, stats.DefaultRatesFile), []byte("{"), 0o600))
@@ -255,6 +261,7 @@ func TestShowSkipsSpendLoadForJSONAndField(t *testing.T) {
 }
 
 func TestShowHonoursStructuredFormat_REQ_AOC_S2_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	jsonOut, err := runTrls(t, repo, "show", "--format", "json", "task-01")
@@ -284,6 +291,7 @@ func TestShowHonoursStructuredFormat_REQ_AOC_S2_T3(t *testing.T) {
 }
 
 func TestShowTruncatesOutcomeWithSizeHint_REQ_AOC_S2_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -328,6 +336,7 @@ func TestShowTruncatesOutcomeWithSizeHint_REQ_AOC_S2_T3(t *testing.T) {
 }
 
 func TestShowFullFlagReturnsCompleteField_REQ_AOC_S2_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -357,6 +366,7 @@ func TestShowFullFlagReturnsCompleteField_REQ_AOC_S2_T3(t *testing.T) {
 }
 
 func TestCoordinatorShowRecoveryReadsEnvelope_REQ_AOC_S2_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "note", "--issue", "task-01", "--msg", "unrelated note")
 	require.NoError(t, err)
@@ -400,6 +410,7 @@ func TestCoordinatorShowRecoveryReadsEnvelope_REQ_AOC_S2_T3(t *testing.T) {
 }
 
 func TestShowFieldExtractionStaysScalar_REQ_AOC_S2_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "show", "--format", "json", "--field", "status", "task-01")

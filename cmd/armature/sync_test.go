@@ -54,6 +54,7 @@ func decodeSyncIssues(t *testing.T, stdout string) (help []string, rows []output
 }
 
 func TestSyncReportsLegacyDoneWithoutFailing_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	markIssueDoneLegacy(t, repo)
 
@@ -73,6 +74,7 @@ func TestSyncReportsLegacyDoneWithoutFailing_REQ_LNGHZN_S11_T3(t *testing.T) {
 }
 
 func TestSyncExitNonZeroWhenLandedDeliveryLacksAssessment_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := doneWithoutAssessment(t)
 
 	ctx := getTestContext(t, repo)
@@ -121,6 +123,7 @@ func TestSyncExitNonZeroWhenLandedDeliveryLacksAssessment_REQ_LNGHZN_S11_T3(t *t
 }
 
 func TestSyncAgentEnvelopeShape_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
@@ -139,6 +142,7 @@ func TestSyncAgentEnvelopeShape_REQ_LNGHZN_S11_T3(t *testing.T) {
 }
 
 func TestSyncDryRunWritesNothingOnReadOnlyState_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	markIssueDoneLegacy(t, repo)
 	_, err := runTrls(t, repo, "materialize")
@@ -189,14 +193,15 @@ func TestSyncDryRunWritesNothingOnReadOnlyState_REQ_LNGHZN_S11_T3(t *testing.T) 
 }
 
 func TestSyncLegacyOnlySucceedsWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	markIssueDoneLegacy(t, repo)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
 	unsetWorkerIDConfig(t, repo)
-	t.Setenv("ARM_WORKER_ID", "")
-	t.Setenv("ARM_LOG_SLOT", "")
+	setCLIEnv(t, "ARM_WORKER_ID", "")
+	setCLIEnv(t, "ARM_LOG_SLOT", "")
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -211,6 +216,7 @@ func TestSyncLegacyOnlySucceedsWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
 }
 
 func TestSyncSkipsStalePromoteAfterReopen_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := doneWithoutAssessment(t)
 	landDeliveryAndAttest(t, repo, "task-01")
 	_, err := runTrls(t, repo, "materialize")
@@ -260,6 +266,7 @@ func TestSyncSkipsStalePromoteAfterReopen_REQ_LNGHZN_S11_T3(t *testing.T) {
 }
 
 func TestSyncIntoOverrideUsedInLockedPersist_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := doneWithoutAssessment(t)
 	landDeliveryAndAttest(t, repo, "task-01")
 	_, err := runTrls(t, repo, "materialize")
@@ -305,6 +312,7 @@ func TestSyncIntoOverrideUsedInLockedPersist_REQ_LNGHZN_S11_T3(t *testing.T) {
 }
 
 func TestSyncRejectsIntegrationBranchRetarget_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := doneWithoutAssessment(t)
 	landDeliveryAndAttest(t, repo, "task-01")
 	_, err := runTrls(t, repo, "materialize")
@@ -348,6 +356,7 @@ func TestSyncRejectsIntegrationBranchRetarget_REQ_LNGHZN_S11_T3(t *testing.T) {
 }
 
 func TestSyncAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")
@@ -379,6 +388,7 @@ func TestSyncAlreadyMergedRetryDeletesDeliveryRef_REQ_LNGHZN_S11_T3(t *testing.T
 }
 
 func TestSyncTeardownSkipsLegacyMergedWorktree_REQ_LNGHZN_S11_T3(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
 	_, err := runTrls(t, repo, "claim", "task-01", "--worktree")

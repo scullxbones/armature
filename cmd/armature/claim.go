@@ -80,8 +80,8 @@ func worktreePathExists(path string) (bool, error) {
 	return false, err
 }
 
-func isWorktreeOf(repoPath, worktreePath string) bool {
-	worktrees, err := worktree.List(repoPath)
+func isWorktreeOf(repoPath, worktreePath string, environ []string) bool {
+	worktrees, err := worktree.ListEnv(repoPath, environ)
 	if err != nil {
 		return false
 	}
@@ -271,7 +271,7 @@ func sourceAdvancedOnlyByArmature(repoPath, sourcePath, oldTip, newTip string) (
 	return true, nil
 }
 
-func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
+func addWorktreeDetached(repoPath, worktreePath, baseRef string, environ []string) error {
 	addArgs := []string{"worktree", "add", "--detach", worktreePath, baseRef}
 	prunable, err := worktree.HasPrunableRegistration(repoPath, worktreePath)
 	if err != nil {
@@ -280,17 +280,15 @@ func addWorktreeDetached(repoPath, worktreePath, baseRef string) error {
 	if prunable {
 		addArgs = []string{"worktree", "add", "--force", "--detach", worktreePath, baseRef}
 	}
-	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
-	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", repoPath}, addArgs...)...)
+	cmd := gitCommand(environ, append([]string{"-C", repoPath}, addArgs...)...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree add --detach: %w\n%s", err, out)
 	}
 	return nil
 }
 
-func checkoutBranchInWorktree(worktreePath, branchName string) error {
-	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
-	verify := exec.CommandContext(context.Background(), "git", "-C", worktreePath, "rev-parse", "--verify", "refs/heads/"+branchName)
+func checkoutBranchInWorktree(worktreePath, branchName string, environ []string) error {
+	verify := gitCommand(environ, "-C", worktreePath, "rev-parse", "--verify", "refs/heads/"+branchName)
 	branchExists := verify.Run() == nil
 
 	args := []string{"-C", worktreePath, "checkout"}
@@ -299,17 +297,15 @@ func checkoutBranchInWorktree(worktreePath, branchName string) error {
 	} else {
 		args = append(args, "-b", branchName)
 	}
-	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
-	cmd := exec.CommandContext(context.Background(), "git", args...)
+	cmd := gitCommand(environ, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git checkout %s: %w\n%s", branchName, err, out)
 	}
 	return nil
 }
 
-func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
-	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branchName)
+func branchTipIfExists(repoPath, branchName string, environ []string) (string, bool, error) {
+	cmd := gitCommand(environ, "-C", repoPath, "rev-parse", "--verify", "refs/heads/"+branchName)
 	out, err := cmd.Output()
 	if err == nil {
 		return strings.TrimSpace(string(out)), true, nil
@@ -320,9 +316,8 @@ func branchTipIfExists(repoPath, branchName string) (string, bool, error) {
 	return "", false, fmt.Errorf("resolve branch %s: %w", branchName, err)
 }
 
-func branchConfigIfExists(repoPath, key string) (string, bool, error) {
-	// #nosec G204 - git binary is a fixed constant; args are built from parsed flags
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "config", "--local", "--get", key)
+func branchConfigIfExists(repoPath, key string, environ []string) (string, bool, error) {
+	cmd := gitCommand(environ, "-C", repoPath, "config", "--local", "--get", key)
 	out, err := cmd.Output()
 	if err == nil {
 		return strings.TrimSpace(string(out)), true, nil
@@ -573,7 +568,7 @@ func createWorktreeAndBranchWithExclusion(
 		if sourcePath == "" || sourceBranch == "" || sourceTip == "" {
 			return fmt.Errorf("validated claim source is incomplete")
 		}
-		if !isWorktreeOf(repoPath, sourcePath) {
+		if !isWorktreeOf(repoPath, sourcePath, environ) {
 			return fmt.Errorf("validated claim source %s is no longer an existing worktree of this repository", sourcePath)
 		}
 		currentBranch, err := adapters.New(sourcePath).WithEnviron(environ).CurrentBranch()
@@ -616,7 +611,7 @@ func createWorktreeAndBranchWithExclusion(
 	adopted := false
 	adoptedFrom := ""
 	alreadyAtDest := false
-	inventory, inventoryErr := worktree.List(repoPath)
+	inventory, inventoryErr := worktree.ListEnv(repoPath, environ)
 	if inventoryErr != nil {
 		return fmt.Errorf("inspect existing worktrees: %w", inventoryErr)
 	}
@@ -654,7 +649,7 @@ func createWorktreeAndBranchWithExclusion(
 		}
 	}
 	if !adopted && !alreadyAtDest {
-		if err := addWorktreeDetached(repoPath, worktreePath, detachRef); err != nil {
+		if err := addWorktreeDetached(repoPath, worktreePath, detachRef, environ); err != nil {
 			return fmt.Errorf("add worktree: %w", err)
 		}
 	}
@@ -676,7 +671,7 @@ func createWorktreeAndBranchWithExclusion(
 	}
 
 	if !adopted && !alreadyAtDest {
-		if err := checkoutBranchInWorktree(worktreePath, branchName); err != nil {
+		if err := checkoutBranchInWorktree(worktreePath, branchName, environ); err != nil {
 			return cleanupPartialWorktree(err, "checkout branch in worktree")
 		}
 	}
@@ -927,7 +922,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if err != nil {
 					return fmt.Errorf("resolve --from worktree path: %w", err)
 				}
-				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath) {
+				if !isWorktreeOf(ctx.RepoPath, fromWorktreePath, environFrom(cmd)) {
 					return fmt.Errorf("--from path %s is not an existing worktree of this repository", fromWorktreePath)
 				}
 				fromBranch, err = gitAt(cmd, fromWorktreePath).CurrentBranch()
@@ -968,7 +963,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				return fmt.Errorf("cannot create worktree for issue type %q: no branch mapping", issue.Type)
 			}
 			if fromWorktreePath != "" {
-				existingTip, exists, tipErr := branchTipIfExists(ctx.RepoPath, expectedBranch)
+				existingTip, exists, tipErr := branchTipIfExists(ctx.RepoPath, expectedBranch, environFrom(cmd))
 				if tipErr != nil {
 					return tipErr
 				}
@@ -977,7 +972,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 						"existing branch %s tip %s does not match --from tip %s; use a new issue branch or align it manually",
 						expectedBranch, existingTip, fromTip)
 				}
-				existingParent, exists, configErr := branchConfigIfExists(ctx.RepoPath, deliverygate.ParentBranchConfigKey(expectedBranch))
+				existingParent, exists, configErr := branchConfigIfExists(ctx.RepoPath, deliverygate.ParentBranchConfigKey(expectedBranch), environFrom(cmd))
 				if configErr != nil {
 					return configErr
 				}
@@ -1001,7 +996,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			}
 
 			if worktreeExists {
-				if !isWorktreeOf(ctx.RepoPath, worktreePath) {
+				if !isWorktreeOf(ctx.RepoPath, worktreePath, environFrom(cmd)) {
 					return fmt.Errorf("worktree at %s is not registered to this repository; it may belong to a different clone", worktreePath)
 				}
 			}

@@ -40,6 +40,7 @@ func assertNoHelpCopOut(t *testing.T, cf *armerrors.CommandFailure) {
 }
 
 func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -177,6 +178,7 @@ func TestClaimErrorsCarryNextActions_REQ_LNGHZN_S6_T2(t *testing.T) {
 }
 
 func TestClaimPublishFailureMapsToClaim1_REQ_OPS_PUBLISH(t *testing.T) {
+	t.Parallel()
 	_, repo, _ := bootstrappedRepoWithFileOrigin(t)
 	_, err := runTrls(t, repo, "create", "--type", "task", "--title", "publish fail", "--id", "task-pub")
 	require.NoError(t, err)
@@ -196,6 +198,7 @@ func TestClaimPublishFailureMapsToClaim1_REQ_OPS_PUBLISH(t *testing.T) {
 }
 
 func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -416,6 +419,7 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 }
 
 func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -499,6 +503,7 @@ func TestTransitionErrorsCarryStructuredCode_REQ_LNGHZN_S6_T2(t *testing.T) {
 }
 
 func TestReadyAndRenderContextErrorsMapped_REQ_LNGHZN_S6_T2(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	rcOut := new(bytes.Buffer)

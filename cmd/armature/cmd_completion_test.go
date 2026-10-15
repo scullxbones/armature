@@ -11,8 +11,9 @@ import (
 )
 
 func TestCompletionCommand_Bash(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"completion", "bash"})
 
@@ -24,8 +25,9 @@ func TestCompletionCommand_Bash(t *testing.T) {
 }
 
 func TestCompletionCommand_Zsh(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"completion", "zsh"})
 
@@ -36,8 +38,9 @@ func TestCompletionCommand_Zsh(t *testing.T) {
 }
 
 func TestCompletionCommand_Fish(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"completion", "fish"})
 
@@ -48,8 +51,9 @@ func TestCompletionCommand_Fish(t *testing.T) {
 }
 
 func TestCompletionCommand_PowerShell(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"completion", "powershell"})
 
@@ -60,8 +64,9 @@ func TestCompletionCommand_PowerShell(t *testing.T) {
 }
 
 func TestCompletionCommand_UnknownShell(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"completion", "unknownshell"})
 
@@ -79,8 +84,9 @@ func TestCompletionCommandIsAlwaysArtifactOutput_REQ_AOC_S1_T3(t *testing.T) {
 }
 
 func TestCompletionCommand_NoArgs(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"completion"})
 

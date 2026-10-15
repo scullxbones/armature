@@ -24,6 +24,7 @@ func newCmdInDir(dir string, args ...string) *exec.Cmd {
 }
 
 func TestReviewPrepareCommand_Success(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -71,11 +72,12 @@ func TestReviewPrepareArtifactModeIsStdoutOnly_REQ_AOC_S1_T3(t *testing.T) {
 }
 
 func TestReviewPrepareCommand_RequiresIssue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "test commit")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "prepare", "--repo", repo, "--base", "HEAD~1", "--head", "HEAD"})
 
@@ -85,9 +87,10 @@ func TestReviewPrepareCommand_RequiresIssue(t *testing.T) {
 }
 
 func TestReviewPrepareCommand_RequiresBase(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "prepare", "--repo", repo, "--issue", "task-01", "--head", "HEAD"})
 
@@ -97,9 +100,10 @@ func TestReviewPrepareCommand_RequiresBase(t *testing.T) {
 }
 
 func TestReviewPrepareCommand_RequiresHead(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "prepare", "--repo", repo, "--issue", "task-01", "--base", "HEAD~1"})
 
@@ -109,6 +113,7 @@ func TestReviewPrepareCommand_RequiresHead(t *testing.T) {
 }
 
 func TestReviewPrepareCommand_OutputFile(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -142,6 +147,7 @@ func TestReviewPrepareCommand_OutputFile(t *testing.T) {
 }
 
 func TestReviewRecordCommand_Success(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -198,6 +204,7 @@ func TestReviewRecordCommand_Success(t *testing.T) {
 }
 
 func TestReviewRecordCommand_WithCitation(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -253,6 +260,7 @@ func TestReviewRecordCommand_WithCitation(t *testing.T) {
 }
 
 func TestReviewRecordCommand_IsDuplicate(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -312,6 +320,7 @@ func TestReviewRecordCommand_IsDuplicate(t *testing.T) {
 }
 
 func TestReviewRecordCommand_BundleValidatesCitationCoordinates(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -365,7 +374,7 @@ func TestReviewRecordCommand_BundleValidatesCitationCoordinates(t *testing.T) {
 	_, err = runTrls(t, repo, "review", "record", "--issue", "task-01", "--assessment", assessmentFile)
 	require.NoError(t, err, "record without --bundle must not perform diff-index citation checking")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01",
 		"--assessment", assessmentFile, "--bundle", bundleFile})
@@ -375,6 +384,7 @@ func TestReviewRecordCommand_BundleValidatesCitationCoordinates(t *testing.T) {
 }
 
 func TestReviewRecordCommand_ContractFingerprintMismatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -422,7 +432,7 @@ func TestReviewRecordCommand_ContractFingerprintMismatch(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01", "--assessment", assessmentFile})
 
@@ -432,6 +442,7 @@ func TestReviewRecordCommand_ContractFingerprintMismatch(t *testing.T) {
 }
 
 func TestReviewRecordCommand_BundleIDMismatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -482,7 +493,7 @@ func TestReviewRecordCommand_BundleIDMismatch(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01",
 		"--assessment", assessmentFile, "--bundle", bundleFile})
@@ -492,6 +503,7 @@ func TestReviewRecordCommand_BundleIDMismatch(t *testing.T) {
 }
 
 func TestReviewRecordCommand_DeliveryFingerprintMismatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -542,7 +554,7 @@ func TestReviewRecordCommand_DeliveryFingerprintMismatch(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01",
 		"--assessment", assessmentFile, "--bundle", bundleFile})
@@ -552,6 +564,7 @@ func TestReviewRecordCommand_DeliveryFingerprintMismatch(t *testing.T) {
 }
 
 func TestReviewRecordCommand_BundleContractFingerprintMismatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -602,7 +615,7 @@ func TestReviewRecordCommand_BundleContractFingerprintMismatch(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01",
 		"--assessment", assessmentFile, "--bundle", bundleFile})
@@ -612,6 +625,7 @@ func TestReviewRecordCommand_BundleContractFingerprintMismatch(t *testing.T) {
 }
 
 func TestReviewRecordCommand_BundleIssueMismatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -664,7 +678,7 @@ func TestReviewRecordCommand_BundleIssueMismatch(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-02",
 		"--assessment", assessmentFile, "--bundle", bundleFile})
@@ -676,6 +690,7 @@ func TestReviewRecordCommand_BundleIssueMismatch(t *testing.T) {
 }
 
 func TestReviewRecordCommand_BundleIssueMatch(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -726,7 +741,7 @@ func TestReviewRecordCommand_BundleIssueMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(assessmentFile, assessmentJSON, 0o644))
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01",
 		"--assessment", assessmentFile, "--bundle", bundleFile})
@@ -735,13 +750,14 @@ func TestReviewRecordCommand_BundleIssueMatch(t *testing.T) {
 }
 
 func TestReviewRecordCommand_RequiresIssue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	assessmentFile := filepath.Join(repo, "assessment.json")
 	err := os.WriteFile(assessmentFile, []byte("{}"), 0o644)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--assessment", assessmentFile})
 
@@ -751,9 +767,10 @@ func TestReviewRecordCommand_RequiresIssue(t *testing.T) {
 }
 
 func TestReviewRecordCommand_RequiresAssessment(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01"})
 
@@ -763,6 +780,7 @@ func TestReviewRecordCommand_RequiresAssessment(t *testing.T) {
 }
 
 func TestReviewRecordCommand_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -772,7 +790,7 @@ func TestReviewRecordCommand_InvalidJSON(t *testing.T) {
 	err = os.WriteFile(assessmentFile, []byte("not valid json"), 0o644)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01", "--assessment", assessmentFile})
 
@@ -829,6 +847,7 @@ func TestReviewRecordCommand_RejectsTrailingAssessmentJSON_REQ_TOPTIER_S3(t *tes
 }
 
 func TestReviewRecordCommand_ValidationError(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -843,7 +862,7 @@ func TestReviewRecordCommand_ValidationError(t *testing.T) {
 	err = os.WriteFile(assessmentFile, data, 0o644)
 	require.NoError(t, err)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "record", "--repo", repo, "--issue", "task-01", "--assessment", assessmentFile})
 
@@ -853,6 +872,7 @@ func TestReviewRecordCommand_ValidationError(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_Success(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
@@ -866,13 +886,14 @@ func TestReviewCommitsCommand_Success(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_JSONFormat_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
 	run(t, repo, "git", "add", "impl.go")
 	run(t, repo, "git", "commit", "-m", "feat(task-01): add feature")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	cmd.SetOut(outBuf)
 	cmd.SetArgs([]string{"review", "commits", "task-01", "--repo", repo, "--format", "json"})
@@ -886,6 +907,7 @@ func TestReviewCommitsCommand_JSONFormat_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_NoCommitsFound(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "review", "commits", "task-01", "--format", "human")
@@ -894,9 +916,10 @@ func TestReviewCommitsCommand_NoCommitsFound(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_RequiresIssue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "commits", "--repo", repo})
 
@@ -906,9 +929,10 @@ func TestReviewCommitsCommand_RequiresIssue(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_PositionalAndFlagConflict(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"review", "commits", "task-01", "--issue", "task-02", "--repo", repo})
 
@@ -918,6 +942,7 @@ func TestReviewCommitsCommand_PositionalAndFlagConflict(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_PositionalAndFlagAgree(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "impl.go"), []byte("package main\n"), 0o644))
@@ -930,6 +955,7 @@ func TestReviewCommitsCommand_PositionalAndFlagAgree(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_BranchFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	run(t, repo, "git", "checkout", "-b", "task/task-01")
@@ -943,6 +969,7 @@ func TestReviewCommitsCommand_BranchFlag(t *testing.T) {
 }
 
 func TestReviewCommitsCommand_DefaultBranchResolvesFromWorktree(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	parentBranch := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
@@ -959,7 +986,7 @@ func TestReviewCommitsCommand_DefaultBranchResolvesFromWorktree(t *testing.T) {
 	assert.Contains(t, parentOut, "No commits found for issue task-01",
 		"parent repo's checked-out branch should not see the worktree-only commit")
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	outBuf := new(bytes.Buffer)
 	cmd.SetOut(outBuf)
 	cmd.SetArgs([]string{"review", "commits", "task-01", "--repo", worktreeDir, "--format", "human"})
@@ -978,6 +1005,7 @@ func runGitOutput(t *testing.T, dir string, args ...string) string {
 }
 
 func TestReviewPrepare_CoordinatorWaveScope(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "worker-init")
@@ -1048,12 +1076,13 @@ func TestReviewPrepare_CoordinatorWaveScope(t *testing.T) {
 }
 
 func TestReviewPrepareCommand_FindsActivityLogInDeliveryWorktree_REQ_EXECEV_C1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1100,12 +1129,13 @@ func TestReviewPrepareCommand_FindsActivityLogInDeliveryWorktree_REQ_EXECEV_C1(t
 }
 
 func TestReviewPrepareCommand_MismatchedBinding_NoActivityLog_REQ_EXECEV_F1(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-02")
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-02", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1147,12 +1177,13 @@ func TestReviewPrepareCommand_MismatchedBinding_NoActivityLog_REQ_EXECEV_F1(t *t
 }
 
 func TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
 	worktreeDir := filepath.Join(repo, ".worktrees", "task-01")
-	claimCmd := newRootCmd()
+	claimCmd := testRootCmd(t)
 	claimCmd.SetOut(new(bytes.Buffer))
 	claimCmd.SetArgs([]string{"claim", "--repo", repo, "task-01", "--worktree"})
 	require.NoError(t, claimCmd.Execute())
@@ -1184,7 +1215,7 @@ func TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV(t *
 	require.NoError(t, err)
 	head := strings.TrimSpace(string(headOut))
 
-	t.Setenv("ARMATURE_ISSUE_ID", "task-01")
+	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
 
 	out, err := runTrls(t, worktreeDir, "review", "prepare", "--issue", "task-01", "--base", base, "--head", head)
 	require.NoError(t, err)
@@ -1197,6 +1228,7 @@ func TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV(t *
 }
 
 func TestReviewPrepareOutputModeEmitsEnvelope_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)

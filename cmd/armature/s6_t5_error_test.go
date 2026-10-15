@@ -17,8 +17,9 @@ import (
 )
 
 func TestAgentFacingRunEReturnsCommandFailure_REQ_LNGHZN_S6_T5(t *testing.T) {
+	t.Parallel()
 	broken := setupBrokenOpsRepo(t)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	registry := uniqueRegisteredCodes(t)
 
 	var checked int
@@ -148,7 +149,7 @@ func induceAgentFacingFailure(t *testing.T, path []string, repo string) (string,
 
 func TestOperationalInvalidArgumentFilenameIsNotUsage_REQ_LNGHZN_S6_T5(t *testing.T) {
 	t.Parallel()
-	importCmd := mustFindCommand(t, newRootCmd(), "import")
+	importCmd := mustFindCommand(t, testRootCmd(t), "import")
 	pathErr := &os.PathError{Op: "open", Path: "invalid argument.csv", Err: os.ErrNotExist}
 	mapped := mapAgentFacingError(importCmd, fmt.Errorf("read file: %w", pathErr))
 	var cf *armerrors.CommandFailure
@@ -162,6 +163,7 @@ func TestOperationalInvalidArgumentFilenameIsNotUsage_REQ_LNGHZN_S6_T5(t *testin
 }
 
 func TestImportMissingFileNamedInvalidArgumentKeepsImport1_REQ_LNGHZN_S6_T5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	missing := filepath.Join(repo, "invalid argument.csv")
 	stdout := new(bytes.Buffer)
@@ -178,7 +180,7 @@ func TestCobraQuotedInvalidArgumentRemainsUsage_REQ_LNGHZN_S6_T5(t *testing.T) {
 	t.Parallel()
 	quoted := fmt.Errorf(`invalid argument "powershell" for "arm completion"`)
 	assert.True(t, isUsageError(quoted))
-	mapped := mapAgentFacingError(mustFindCommand(t, newRootCmd(), "completion"), quoted)
+	mapped := mapAgentFacingError(mustFindCommand(t, testRootCmd(t), "completion"), quoted)
 	var cf *armerrors.CommandFailure
 	require.ErrorAs(t, mapped, &cf)
 	assert.Equal(t, armerrors.CodeUSAGE, cf.Code)

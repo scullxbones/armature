@@ -8,6 +8,7 @@ import (
 )
 
 func TestLinkCmd_RejectsUnsupportedRel(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -23,6 +24,7 @@ func TestLinkCmd_RejectsUnsupportedRel(t *testing.T) {
 }
 
 func TestLinkCmd_AcceptsBlockedBy(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTwoTasks(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)

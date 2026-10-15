@@ -10,10 +10,11 @@ import (
 )
 
 func TestDAGTransitionCmd_RejectsInvalidToValue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithDraftNode(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetErr(buf)
 	root.SetArgs([]string{"dag", "transition", "--repo", repo, "--issue", "draft-task-01", "--to", "done"})
@@ -23,10 +24,11 @@ func TestDAGTransitionCmd_RejectsInvalidToValue(t *testing.T) {
 }
 
 func TestDAGTransitionCmd_AcceptsValidToValue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithValidDraftNode(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "transition", "--repo", repo, "--issue", "draft-task-01", "--to", "verified"})
 	require.NoError(t, root.Execute())
@@ -53,6 +55,7 @@ func setupRepoWithValidDraftNode(t *testing.T) string {
 }
 
 func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -84,6 +87,7 @@ func TestDagTransitionRequiresValidateGreen_REQ_LNGHZN_S10_T4(t *testing.T) {
 }
 
 func TestDagTransitionValidateFailureDistinguishesWarnings_REQ_LNGHZN_S10_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")

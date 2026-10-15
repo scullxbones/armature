@@ -45,6 +45,7 @@ func setupRepoWithScopedTasks(t *testing.T) string {
 }
 
 func TestScopeRenameCmd_RejectsEmptyOldPath(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 	_, err := runTrls(t, repo, "scope-rename", "", "src/new")
 	require.Error(t, err)
@@ -52,6 +53,7 @@ func TestScopeRenameCmd_RejectsEmptyOldPath(t *testing.T) {
 }
 
 func TestScopeRenameCmd_RejectsEmptyNewPath(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 	_, err := runTrls(t, repo, "scope-rename", "src/old", "")
 	require.Error(t, err)
@@ -59,6 +61,7 @@ func TestScopeRenameCmd_RejectsEmptyNewPath(t *testing.T) {
 }
 
 func TestScopeRenameCmd_RejectsEqualArgs(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 	_, err := runTrls(t, repo, "scope-rename", "src/old", "src/old")
 	require.Error(t, err)
@@ -66,11 +69,12 @@ func TestScopeRenameCmd_RejectsEqualArgs(t *testing.T) {
 }
 
 func TestScopeRenameCmd_NoMatchWarnsAndExitsZero(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"scope-rename", "src/nonexistent", "src/new", "--repo", repo})
@@ -81,6 +85,7 @@ func TestScopeRenameCmd_NoMatchWarnsAndExitsZero(t *testing.T) {
 }
 
 func TestScopeRenameCmd_SubstringMatchAffectsCorrectIssues(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 
 	out, err := runTrls(t, repo, "scope-rename", "src/old", "src/new")
@@ -92,6 +97,7 @@ func TestScopeRenameCmd_SubstringMatchAffectsCorrectIssues(t *testing.T) {
 }
 
 func TestScopeRenameCmd_RematerializesState(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 
 	_, err := runTrls(t, repo, "scope-rename", "src/old", "src/new")
@@ -114,6 +120,7 @@ func TestScopeRenameCmd_RematerializesState(t *testing.T) {
 }
 
 func TestScopeRenameCmd_SameTimestampForAllOps(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 
 	_, err := runTrls(t, repo, "scope-rename", "src/old", "src/new")
@@ -130,6 +137,7 @@ func TestScopeRenameCmd_SameTimestampForAllOps(t *testing.T) {
 }
 
 func TestScopeRenameCmd_RefusesBatchWhenAnyRenameIntroducesFinding(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	bootstrapRepoForTest(t, repo)
@@ -176,6 +184,7 @@ func TestScopeRenameCmd_RefusesBatchWhenAnyRenameIntroducesFinding(t *testing.T)
 }
 
 func TestScopeRenameCmd_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 
 	out, err := runTrls(t, repo, "scope-rename", "--format", "human", "src/old", "src/new")
@@ -186,6 +195,7 @@ func TestScopeRenameCmd_HumanOutput(t *testing.T) {
 }
 
 func TestScopeRenameCmd_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithScopedTasks(t)
 
 	out, err := runTrls(t, repo, "scope-rename", "--format", "json", "src/old", "src/new")
@@ -199,6 +209,7 @@ func TestScopeRenameCmd_JSONOutput(t *testing.T) {
 }
 
 func TestScopeRenameCmd_UsesIndexForScan(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 

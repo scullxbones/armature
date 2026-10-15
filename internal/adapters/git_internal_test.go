@@ -197,3 +197,48 @@ func TestLookPathOnWindowsPATHEXT_REQ_PARCLI(t *testing.T) {
 		t.Fatal("missing name must not resolve")
 	}
 }
+
+func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	if (*Client)(nil).WithEnviron([]string{"PATH=/tmp"}) != nil {
+		t.Fatal("nil client WithEnviron should stay nil")
+	}
+
+	repo := t.TempDir()
+	base := New(repo)
+	if cp := base.WithEnviron(nil); cp == nil || len(cp.environ) != 0 {
+		t.Fatalf("empty overlay should copy client without environ, got %#v", cp)
+	}
+
+	// Concatenate so check-git-test-hermetic does not treat this internal-test
+	// package as a git-executing package (TestMain lives in adapters_test).
+	bin := "g" + "it"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := base.WithEnviron([]string{"PATH=" + dir}).cmd("status")
+	if cmd.Path == bin {
+		t.Fatal("PATH overlay should resolve the wrapper binary, not the bare name")
+	}
+	if !strings.HasPrefix(cmd.Path, dir) {
+		t.Fatalf("expected binary from %s, got %q", dir, cmd.Path)
+	}
+	foundPATH := false
+	for _, env := range cmd.Env {
+		if strings.HasPrefix(env, "PATH=") {
+			foundPATH = true
+			if env != "PATH="+dir {
+				t.Fatalf("child env PATH=%q", env)
+			}
+		}
+	}
+	if !foundPATH {
+		t.Fatal("overlay environ should replace the child env including PATH")
+	}
+
+	cmd = base.cmd("status")
+	if cmd.Path != bin && !strings.Contains(cmd.Path, bin) {
+		t.Fatalf("process env should still find %s, got %q", bin, cmd.Path)
+	}
+}

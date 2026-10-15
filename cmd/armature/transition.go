@@ -231,8 +231,8 @@ outcome) appends as an amendment at exit 0.`,
 				}
 			}
 
-			if testBarrierAfterIdempotencyCheck != nil {
-				testBarrierAfterIdempotencyCheck()
+			if sess := sessionFrom(cmd); sess != nil && sess.inv.afterIdempotencyCheck != nil {
+				sess.inv.afterIdempotencyCheck()
 			}
 
 			op := ops.Op{
@@ -291,8 +291,6 @@ outcome) appends as an amendment at exit 0.`,
 	cmd.Flags().BoolVar(&skipDeliveryGate, "skip-delivery-gate", false, "skip delivery gate check when transitioning to done")
 	return cmd
 }
-
-var testBarrierAfterIdempotencyCheck func()
 
 func writeTransitionNoOp(cmd *cobra.Command, issueID, to, fieldFlag string) {
 	if writeTransitionFields(cmd, issueID, to, fieldFlag) {

@@ -10,17 +10,19 @@ import (
 )
 
 func TestNonInteractiveFlag_RegisteredOnRoot(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 	flag := root.PersistentFlags().Lookup("non-interactive")
 	require.NotNil(t, flag, "--non-interactive flag must be registered as a PersistentFlag on root")
 	assert.Equal(t, "bool", flag.Value.Type())
 }
 
 func TestNonInteractiveFlag_AutoSetByFormatAgent(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"ready", "--repo", repo, "--format", "agent"})
 	err := root.Execute()
@@ -31,10 +33,11 @@ func TestNonInteractiveFlag_AutoSetByFormatAgent(t *testing.T) {
 }
 
 func TestReadyCmd_NonInteractiveFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"ready", "--repo", repo, "--non-interactive"})
 	err := root.Execute()
@@ -45,10 +48,11 @@ func TestReadyCmd_NonInteractiveFlag(t *testing.T) {
 }
 
 func TestDAGSummaryCmd_NonInteractiveFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--non-interactive"})
 	err := root.Execute()
@@ -59,10 +63,11 @@ func TestDAGSummaryCmd_NonInteractiveFlag(t *testing.T) {
 }
 
 func TestDAGSummaryCmd_ApproveAllFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--non-interactive", "--approve-all"})
 	err := root.Execute()
@@ -70,10 +75,11 @@ func TestDAGSummaryCmd_ApproveAllFlag(t *testing.T) {
 }
 
 func TestDAGSummaryCmd_ApproveAllFlag_JSON(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"dag", "summary", "--repo", repo, "--non-interactive", "--approve-all", "--format", "json"})
 	err := root.Execute()
@@ -84,10 +90,11 @@ func TestDAGSummaryCmd_ApproveAllFlag_JSON(t *testing.T) {
 }
 
 func TestStaleReviewCmd_NonInteractiveFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--non-interactive"})
 	err := root.Execute()
@@ -98,10 +105,11 @@ func TestStaleReviewCmd_NonInteractiveFlag(t *testing.T) {
 }
 
 func TestStaleReviewCmd_NonInteractiveFlag_EmitsJSON(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"sources", "stale-review", "--repo", repo, "--non-interactive", "--format", "json"})
 	err := root.Execute()
@@ -112,10 +120,11 @@ func TestStaleReviewCmd_NonInteractiveFlag_EmitsJSON(t *testing.T) {
 }
 
 func TestTUICmd_NonInteractiveFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetArgs([]string{"tui", "--repo", repo, "--non-interactive"})
 	err := root.Execute()

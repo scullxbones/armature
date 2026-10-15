@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,8 +43,6 @@ func (f *fakePendingPushTracker) Reset() error {
 	f.count = 0
 	return nil
 }
-
-var runTrlsMu sync.Mutex
 
 func appendRawCreate(logPath, workerID, id, dod, scope string) error {
 	return appendRawCreateConfidence(logPath, workerID, id, dod, scope, "draft")
@@ -211,7 +208,7 @@ func getTestStateDir(t *testing.T, repo string) string {
 
 func bootstrapRepoForTest(t *testing.T, repo string) {
 	t.Helper()
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(new(bytes.Buffer))
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd.Execute(), "bootstrap failed")
@@ -239,6 +236,7 @@ func unsetWorkerIDConfig(t *testing.T, repo string) {
 }
 
 func TestStateDirFor(t *testing.T) {
+	t.Parallel()
 	ctx := &config.Context{IssuesDir: "/repo/.armature", WorktreePath: ""}
 	assert.Equal(t, "/repo/.armature/state/w1", stateDirFor(ctx, "w1"))
 
@@ -482,29 +480,18 @@ func dirExists(path string) bool {
 
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
 	t.Helper()
-	runTrlsMu.Lock()
-	defer runTrlsMu.Unlock()
-	buf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	root := commandFor(Invocation{Stdout: buf, Stderr: errBuf, Dir: repo, TempDir: t.TempDir()})
-	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
-	err := root.Execute()
-	return buf.String(), err
+	return newArm(t, repo, cliEnvFor(t)).Run(args...)
 }
 
 func runTrlsWithStderr(t *testing.T, repo string, args ...string) (string, string, error) {
 	t.Helper()
-	runTrlsMu.Lock()
-	defer runTrlsMu.Unlock()
-	buf := new(bytes.Buffer)
-	errBuf := new(bytes.Buffer)
-	root := commandFor(Invocation{Stdout: buf, Stderr: errBuf, Dir: repo, TempDir: t.TempDir()})
-	root.SetArgs(append(injectDoneDelivery(repo, enrichTestCLIArgs(args)), "--repo", repo))
-	err := root.Execute()
-	return buf.String(), errBuf.String(), err
+	h := newArm(t, repo, cliEnvFor(t))
+	out, err := h.Run(args...)
+	return out, h.stderr.String(), err
 }
 
 func TestVersionCommand(t *testing.T) {
+	t.Parallel()
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer), "version", "--format", "human")
 	assert.Equal(t, 0, code)
@@ -551,8 +538,9 @@ func isolatedGitTestEnv() []string {
 }
 
 func TestInitTempRepoIgnoresInheritedGITWorkTree(t *testing.T) {
+	t.Parallel()
 	other := t.TempDir()
-	t.Setenv("GIT_WORK_TREE", other)
+	setCLIEnv(t, "GIT_WORK_TREE", other)
 	repo := gittest.InitWithOrigin(t).Dir
 	if _, err := os.Stat(filepath.Join(repo, ".git")); err != nil {
 		t.Fatalf("InitRepo should initialize dir despite GIT_WORK_TREE: %v", err)
@@ -563,9 +551,10 @@ func TestInitTempRepoIgnoresInheritedGITWorkTree(t *testing.T) {
 }
 
 func TestWorkerInitCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"worker-init", "--repo", repo})
 
@@ -575,9 +564,10 @@ func TestWorkerInitCommand(t *testing.T) {
 }
 
 func TestWorkerInitCheckNotConfigured(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"worker-init", "--check", "--repo", repo})
@@ -587,15 +577,16 @@ func TestWorkerInitCheckNotConfigured(t *testing.T) {
 }
 
 func TestWorkerInitCheckConfigured(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"worker-init", "--repo", repo})
 	require.NoError(t, cmd1.Execute())
 
 	buf := new(bytes.Buffer)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf)
 	cmd2.SetArgs([]string{"worker-init", "--check", "--repo", repo})
 
@@ -605,6 +596,7 @@ func TestWorkerInitCheckConfigured(t *testing.T) {
 }
 
 func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -618,11 +610,12 @@ func TestInitCommand_WritesIssuesGitignore(t *testing.T) {
 }
 
 func TestInitCommand_Idempotent(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	for range 2 {
-		cmd := newRootCmd()
+		cmd := testRootCmd(t)
 		cmd.SetOut(new(bytes.Buffer))
 		cmd.SetArgs([]string{"bootstrap", "--repo", repo})
 		assert.NoError(t, cmd.Execute())
@@ -630,16 +623,17 @@ func TestInitCommand_Idempotent(t *testing.T) {
 }
 
 func TestMaterializeCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd1.Execute())
 
 	buf := new(bytes.Buffer)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf)
 	cmd2.SetArgs([]string{"materialize", "--repo", repo})
 
@@ -648,21 +642,22 @@ func TestMaterializeCommand(t *testing.T) {
 }
 
 func TestMaterializeCommandPassesOpsWorktree_REQ_CLAIMORD_W14(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
-	cmd1 := newRootCmd()
+	cmd1 := testRootCmd(t)
 	cmd1.SetOut(new(bytes.Buffer))
 	cmd1.SetArgs([]string{"bootstrap", "--repo", repo})
 	require.NoError(t, cmd1.Execute())
 
 	buf := new(bytes.Buffer)
-	cmdCreate := newRootCmd()
+	cmdCreate := testRootCmd(t)
 	cmdCreate.SetOut(buf)
 	cmdCreate.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Fix bug", "--type", "task", "--id", "task-14"}))
 	require.NoError(t, cmdCreate.Execute())
 
-	cmdMat := newRootCmd()
+	cmdMat := testRootCmd(t)
 	cmdMat.SetOut(new(bytes.Buffer))
 	cmdMat.SetArgs([]string{"materialize", "--repo", repo})
 	require.NoError(t, cmdMat.Execute())
@@ -673,13 +668,14 @@ func TestMaterializeCommandPassesOpsWorktree_REQ_CLAIMORD_W14(t *testing.T) {
 }
 
 func TestReadyCommand_EmptyRepo(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
 	buf := new(bytes.Buffer)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf)
 	cmd2.SetArgs([]string{"ready", "--repo", repo})
 
@@ -688,13 +684,14 @@ func TestReadyCommand_EmptyRepo(t *testing.T) {
 }
 
 func TestCreateCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
 	buf := new(bytes.Buffer)
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(buf)
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Fix bug", "--type", "task", "--id", "task-99"}))
 
@@ -866,10 +863,11 @@ func TestSetupRepoWithTaskCopiesAreIndependent(t *testing.T) {
 }
 
 func TestTransitionCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs(enrichTestCLIArgs([]string{
 		"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
@@ -881,9 +879,10 @@ func TestTransitionCommand(t *testing.T) {
 }
 
 func TestTransitionCommand_InvalidStatus(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-01", "--to", "in_progress"}))
 
 	err := cmd.Execute()
@@ -892,12 +891,13 @@ func TestTransitionCommand_InvalidStatus(t *testing.T) {
 }
 
 func TestCheckAndWarnParentStoryStatus_AllSiblingsDone(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01":  {Status: "in-progress", Type: "task", Parent: "story-01"},
 		"story-01": {Status: "in-progress", Type: "story", Children: []string{"task-01"}},
 	}
 	errBuf := new(bytes.Buffer)
-	cobraCmd := newRootCmd()
+	cobraCmd := testRootCmd(t)
 	cobraCmd.SetErr(errBuf)
 
 	err := checkAndWarnParentStoryStatus(index, "task-01", cobraCmd)
@@ -907,13 +907,14 @@ func TestCheckAndWarnParentStoryStatus_AllSiblingsDone(t *testing.T) {
 }
 
 func TestCheckAndWarnParentStoryStatus_SiblingNotDone(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01":  {Status: "in-progress", Type: "task", Parent: "story-01"},
 		"task-02":  {Status: "open", Type: "task", Parent: "story-01"},
 		"story-01": {Status: "in-progress", Type: "story", Children: []string{"task-01", "task-02"}},
 	}
 	errBuf := new(bytes.Buffer)
-	cobraCmd := newRootCmd()
+	cobraCmd := testRootCmd(t)
 	cobraCmd.SetErr(errBuf)
 
 	err := checkAndWarnParentStoryStatus(index, "task-01", cobraCmd)
@@ -922,12 +923,13 @@ func TestCheckAndWarnParentStoryStatus_SiblingNotDone(t *testing.T) {
 }
 
 func TestCheckAndWarnParentStoryStatus_ParentNotInProgress(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01":  {Status: "in-progress", Type: "task", Parent: "story-01"},
 		"story-01": {Status: "open", Type: "story", Children: []string{"task-01"}},
 	}
 	errBuf := new(bytes.Buffer)
-	cobraCmd := newRootCmd()
+	cobraCmd := testRootCmd(t)
 	cobraCmd.SetErr(errBuf)
 
 	err := checkAndWarnParentStoryStatus(index, "task-01", cobraCmd)
@@ -936,11 +938,12 @@ func TestCheckAndWarnParentStoryStatus_ParentNotInProgress(t *testing.T) {
 }
 
 func TestCheckAndWarnParentStoryStatus_NoParent(t *testing.T) {
+	t.Parallel()
 	index := materialize.Index{
 		"task-01": {Status: "in-progress", Type: "task", Parent: ""},
 	}
 	errBuf := new(bytes.Buffer)
-	cobraCmd := newRootCmd()
+	cobraCmd := testRootCmd(t)
 	cobraCmd.SetErr(errBuf)
 
 	err := checkAndWarnParentStoryStatus(index, "task-01", cobraCmd)
@@ -949,10 +952,11 @@ func TestCheckAndWarnParentStoryStatus_NoParent(t *testing.T) {
 }
 
 func TestClaimCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
 
@@ -962,6 +966,7 @@ func TestClaimCommand(t *testing.T) {
 }
 
 func TestAmendCommand_RejectsInvalidType(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -977,18 +982,19 @@ func TestAmendCommand_RejectsInvalidType(t *testing.T) {
 }
 
 func TestRenderContextCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test render", "--type", "task", "--id", "TST-001"}))
 	require.NoError(t, cmd2.Execute())
 
 	buf := new(bytes.Buffer)
-	cmd3 := newRootCmd()
+	cmd3 := testRootCmd(t)
 	cmd3.SetOut(buf)
 	cmd3.SetArgs([]string{"render-context", "--repo", repo, "--issue", "TST-001"})
 
@@ -1000,6 +1006,7 @@ func TestRenderContextCommand(t *testing.T) {
 }
 
 func TestRenderContextCommand_AtSHA(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1035,6 +1042,7 @@ func TestRenderContextCommand_AtSHA(t *testing.T) {
 }
 
 func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1060,12 +1068,13 @@ func TestRenderContextCommand_AtSHA_DualBranchUsesWorktree(t *testing.T) {
 }
 
 func TestValidateCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs(enrichTestCLIArgs([]string{"create", "--repo", repo, "--title", "Test task", "--type", "task", "--id", "task-01",
 		"--dod", "Task implementation is complete and verified",
@@ -1073,13 +1082,13 @@ func TestValidateCommand(t *testing.T) {
 		"--acceptance", `[{"type":"test_passes"}]`}))
 	require.NoError(t, cmd2.Execute())
 
-	cmd3 := newRootCmd()
+	cmd3 := testRootCmd(t)
 	cmd3.SetOut(new(bytes.Buffer))
 	cmd3.SetArgs([]string{"materialize", "--repo", repo})
 	require.NoError(t, cmd3.Execute())
 
 	buf := new(bytes.Buffer)
-	cmd4 := newRootCmd()
+	cmd4 := testRootCmd(t)
 	cmd4.SetOut(buf)
 	cmd4.SetArgs([]string{"validate", "--repo", repo})
 
@@ -1088,12 +1097,13 @@ func TestValidateCommand(t *testing.T) {
 }
 
 func TestDecomposeApplyCommand_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	bootstrapRepoForTest(t, repo)
 
-	cmd2 := newRootCmd()
+	cmd2 := testRootCmd(t)
 	cmd2.SetOut(new(bytes.Buffer))
 	cmd2.SetArgs([]string{"worker-init", "--repo", repo})
 	require.NoError(t, cmd2.Execute())
@@ -1106,7 +1116,7 @@ func TestDecomposeApplyCommand_REQ_AOC_S2_T4(t *testing.T) {
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
 	buf := new(bytes.Buffer)
-	cmd3 := newRootCmd()
+	cmd3 := testRootCmd(t)
 	cmd3.SetOut(buf)
 	cmd3.SetArgs([]string{"dag", "apply", "--repo", repo, "--plan", planFile})
 
@@ -1116,11 +1126,12 @@ func TestDecomposeApplyCommand_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestInitCommand_DualBranch(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"bootstrap", "--repo", repo, "--format", "human"})
 
@@ -1141,12 +1152,13 @@ func TestInitCommand_DualBranch(t *testing.T) {
 }
 
 func TestDecomposeContextCommand(t *testing.T) {
+	t.Parallel()
 	planData := `{"version":1,"title":"My Test Plan","issues":[{"id":"PLAN-001","title":"First issue","type":"task"}]}`
 	planFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(planFile, []byte(planData), 0644))
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"dag", "context", "--plan", planFile})
 
@@ -1156,6 +1168,7 @@ func TestDecomposeContextCommand(t *testing.T) {
 }
 
 func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1186,6 +1199,7 @@ func TestDualBranch_OpsCommittedToTrellisBranch(t *testing.T) {
 }
 
 func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1215,6 +1229,7 @@ func TestSync_TransitionsMergedBranchIssuesToMerged(t *testing.T) {
 }
 
 func TestSync_MissingIntoRef_ReturnsError_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1240,6 +1255,7 @@ func TestSync_MissingIntoRef_ReturnsError_REQ_NOCOMMENTS(t *testing.T) {
 }
 
 func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1287,6 +1303,7 @@ func TestSync_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 }
 
 func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1341,6 +1358,7 @@ func TestDecomposeRevert_DryRun_PrintsPlanWithoutWritingOps(t *testing.T) {
 }
 
 func TestStatus_ShowsInProgressIssue(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1368,6 +1386,7 @@ func TestStatus_ShowsInProgressIssue(t *testing.T) {
 }
 
 func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1399,6 +1418,7 @@ func TestStatus_DualBranch_DoneShowsAwaitingMerge(t *testing.T) {
 }
 
 func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1412,6 +1432,7 @@ func TestInit_WritesPostMergeHookTemplate(t *testing.T) {
 }
 
 func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1428,6 +1449,7 @@ func TestInit_WritesPostCommitHookTemplate(t *testing.T) {
 }
 
 func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1450,6 +1472,7 @@ func TestInit_InstallsHooksIntoGitHooks(t *testing.T) {
 }
 
 func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1466,6 +1489,7 @@ func TestInit_HooksAreInstalledInDualBranch(t *testing.T) {
 }
 
 func TestInit_HooksAreBranchAware(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1486,6 +1510,7 @@ func TestInit_HooksAreBranchAware(t *testing.T) {
 }
 
 func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1504,6 +1529,7 @@ func TestMerged_RequiresDoneState_InDualBranchMode(t *testing.T) {
 }
 
 func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1534,6 +1560,7 @@ func TestMerged_AcceptsDoneIssue_DualBranch(t *testing.T) {
 }
 
 func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1582,6 +1609,7 @@ func TestDualBranch_DoneToMergedWorkflow(t *testing.T) {
 }
 
 func TestAppCtxStateDirSet(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1611,11 +1639,13 @@ func TestAppCtxStateDirSet(t *testing.T) {
 }
 
 func TestLastOpTimestampFromLog_Empty(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, int64(0), lastOpTimestampFromLog(nil))
 	assert.Equal(t, int64(0), lastOpTimestampFromLog([]ops.Op{}))
 }
 
 func TestLastOpTimestampFromLog_ReturnsMax(t *testing.T) {
+	t.Parallel()
 	opsList := []ops.Op{
 		{Timestamp: 100},
 		{Timestamp: 500},
@@ -1625,6 +1655,7 @@ func TestLastOpTimestampFromLog_ReturnsMax(t *testing.T) {
 }
 
 func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
+	t.Parallel()
 	now := int64(1000)
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a",
@@ -1637,6 +1668,7 @@ func TestBuildWorkerStatus_ActiveWorker(t *testing.T) {
 }
 
 func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
+	t.Parallel()
 	now := int64(10000)
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
@@ -1648,6 +1680,7 @@ func TestBuildWorkerStatus_StaleWorker(t *testing.T) {
 }
 
 func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
+	t.Parallel()
 	now := int64(1000)
 	allOps := []ops.Op{
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 900, WorkerID: "worker-a"},
@@ -1658,6 +1691,7 @@ func TestBuildWorkerStatus_IdleWorker(t *testing.T) {
 }
 
 func TestBuildWorkerStatus_InactiveBeyondIdleWindow_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	now := int64(1000)
 	allOps := []ops.Op{
 		{Type: ops.OpNote, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a"},
@@ -1668,12 +1702,14 @@ func TestBuildWorkerStatus_InactiveBeyondIdleWindow_REQ_NOCOMMENTS(t *testing.T)
 }
 
 func TestBuildWorkerStatus_InactiveNoLastOp_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	status := foldWorkerStatusFromOwners("worker-a", nil, nil, 60, 1000)
 	assert.Equal(t, "inactive", status.Status)
 	assert.Equal(t, int64(0), status.LastOpTime)
 }
 
 func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
+	t.Parallel()
 	now := int64(10000)
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
@@ -1686,6 +1722,7 @@ func TestBuildWorkerStatus_TransitionedClaim_NotActive(t *testing.T) {
 }
 
 func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
+	t.Parallel()
 	now := int64(10000)
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "T-001", Timestamp: 100, WorkerID: "worker-a",
@@ -1698,6 +1735,7 @@ func TestBuildWorkerStatus_HeartbeatUpdatesLastHeartbeat(t *testing.T) {
 }
 
 func TestOwner_StaleClaimTakeoverPrefersCurrentOwner_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	all := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 100, WorkerID: "worker-a", Payload: ops.Payload{TTL: 1}},
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 200, WorkerID: "worker-b", Payload: ops.Payload{TTL: 10}},
@@ -1707,6 +1745,7 @@ func TestOwner_StaleClaimTakeoverPrefersCurrentOwner_REQ_CLAIMTTL(t *testing.T) 
 }
 
 func TestBuildWorkerStatus_SlottedWinnerDoesNotMatchUnslottedSibling_REQ_CLAIMTTL(t *testing.T) {
+	t.Parallel()
 	now := int64(1000)
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 900, WorkerID: "worker-a~slot-1", Payload: ops.Payload{TTL: 60}},
@@ -1720,6 +1759,7 @@ func TestBuildWorkerStatus_SlottedWinnerDoesNotMatchUnslottedSibling_REQ_CLAIMTT
 }
 
 func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
+	t.Parallel()
 	now := int64(1000)
 	allOps := []ops.Op{
 		{Type: ops.OpClaim, TargetID: "task-1", Timestamp: 980, WorkerID: "worker-a", Payload: ops.Payload{TTL: 60}},
@@ -1733,6 +1773,7 @@ func TestBuildWorkerStatus_LosingClaimDoesNotReportStale(t *testing.T) {
 }
 
 func TestWorkersCommand_EmptyRepo(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1740,7 +1781,7 @@ func TestWorkersCommand_EmptyRepo(t *testing.T) {
 	require.NoError(t, err)
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"workers", "--repo", repo})
 
@@ -1749,6 +1790,7 @@ func TestWorkersCommand_EmptyRepo(t *testing.T) {
 }
 
 func TestLogCommand_WithEntries(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "log")
@@ -1757,6 +1799,7 @@ func TestLogCommand_WithEntries(t *testing.T) {
 }
 
 func TestLogCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "log", "--json")
@@ -1765,6 +1808,7 @@ func TestLogCommand_JSONOutput(t *testing.T) {
 }
 
 func TestLogCommand_FilterByIssue(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "log", "--issue", "task-01")
@@ -1773,6 +1817,7 @@ func TestLogCommand_FilterByIssue(t *testing.T) {
 }
 
 func TestLogCommand_FilterBySince_RFC3339(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "log", "--since", "2020-01-01T00:00:00Z")
@@ -1781,6 +1826,7 @@ func TestLogCommand_FilterBySince_RFC3339(t *testing.T) {
 }
 
 func TestLogCommand_FilterBySince_DateOnly(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "log", "--since", "2020-01-01")
@@ -1789,6 +1835,7 @@ func TestLogCommand_FilterBySince_DateOnly(t *testing.T) {
 }
 
 func TestLogCommand_CorruptLineAfterBlankUsesPhysicalLine_REQ_NOCOMMENTS(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	ctx := getTestContext(t, repo)
 	_, logPath, err := resolveWorkerAndLog(ctx)
@@ -1810,6 +1857,7 @@ func TestLogCommand_CorruptLineAfterBlankUsesPhysicalLine_REQ_NOCOMMENTS(t *test
 }
 
 func TestAssignCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1820,6 +1868,7 @@ func TestAssignCommand(t *testing.T) {
 }
 
 func TestUnassignCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1833,6 +1882,7 @@ func TestUnassignCommand(t *testing.T) {
 }
 
 func TestHeartbeatCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1845,6 +1895,7 @@ func TestHeartbeatCommand(t *testing.T) {
 }
 
 func TestDecisionCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1858,6 +1909,7 @@ func TestDecisionCommand(t *testing.T) {
 }
 
 func TestLinkCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -1875,6 +1927,7 @@ func TestLinkCommand(t *testing.T) {
 }
 
 func TestReopenCommand(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -1900,6 +1953,7 @@ func TestReopenCommand(t *testing.T) {
 }
 
 func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1918,6 +1972,7 @@ func TestReadyCommand_DraftTask_ExcludedFromReady(t *testing.T) {
 }
 
 func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1940,6 +1995,7 @@ func TestReadyCommand_VerifiedTask_AppearsInReady(t *testing.T) {
 }
 
 func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1958,6 +2014,7 @@ func TestReadyCommand_NoConfidenceField_DefaultsToVerified(t *testing.T) {
 }
 
 func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -1991,6 +2048,7 @@ func TestDagTransitionCommand_PromotesDraftSubtree(t *testing.T) {
 }
 
 func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2004,6 +2062,7 @@ func TestDagTransitionCommand_MissingIssueFlag(t *testing.T) {
 }
 
 func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2069,6 +2128,7 @@ func TestValidateCmd_CoverageOutput_HumanFormat(t *testing.T) {
 }
 
 func TestTransitionToOpen(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2083,6 +2143,7 @@ func TestTransitionToOpen(t *testing.T) {
 }
 
 func TestTransitionToOpenRejectsInvalidAlias(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "reopened")
@@ -2091,6 +2152,7 @@ func TestTransitionToOpenRejectsInvalidAlias(t *testing.T) {
 }
 
 func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2142,6 +2204,7 @@ func TestClaimAutoAdvancesParentToInProgress(t *testing.T) {
 }
 
 func TestUnassignReleasesClaimedToOpen(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2196,6 +2259,7 @@ func TestUnassignReleasesClaimedToOpen(t *testing.T) {
 }
 
 func TestContextHistoryCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2229,6 +2293,7 @@ func TestContextHistoryCommand(t *testing.T) {
 }
 
 func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2243,6 +2308,7 @@ func TestContextHistoryCommand_IssueNotFound(t *testing.T) {
 }
 
 func TestInitDualBranchIdempotent(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2266,6 +2332,7 @@ func TestInitDualBranchIdempotent(t *testing.T) {
 }
 
 func TestLogPayloadSummary(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		op     ops.Op
 		expect string
@@ -2287,6 +2354,7 @@ func TestLogPayloadSummary(t *testing.T) {
 }
 
 func TestReadyCommand_ParentFilter(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2312,6 +2380,7 @@ func TestReadyCommand_ParentFilter(t *testing.T) {
 }
 
 func TestReadyCommand_TextFormat_WithTasks(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2329,12 +2398,14 @@ func TestReadyCommand_TextFormat_WithTasks(t *testing.T) {
 }
 
 func TestCollectDraftSubtree_ReturnsNilForUnknownRoot(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	result := collectDraftSubtree(state, "nonexistent")
 	assert.Nil(t, result)
 }
 
 func TestCollectDraftSubtree_ReturnsDraftIssuesInSubtree(t *testing.T) {
+	t.Parallel()
 	state := materialize.NewState()
 	state.Issues["root"] = &materialize.Issue{
 		ID: "root", Provenance: materialize.Provenance{Confidence: "draft"},
@@ -2384,6 +2455,7 @@ func TestWriteDAGSummaryArtifact_CreatesFile(t *testing.T) {
 }
 
 func TestHeartbeatCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2397,6 +2469,7 @@ func TestHeartbeatCommand_HumanOutput(t *testing.T) {
 }
 
 func TestHeartbeatCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2410,6 +2483,7 @@ func TestHeartbeatCommand_JSONOutput(t *testing.T) {
 }
 
 func TestPushOpsCommand_P2(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2428,6 +2502,7 @@ func TestPushOpsCommand_P2(t *testing.T) {
 }
 
 func TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin(t *testing.T) {
+	t.Parallel()
 	bareDir := gittest.InitWithOrigin(t).Origin
 
 	repo := gittest.InitRepo(t)
@@ -2447,6 +2522,7 @@ func TestPushOpsCommand_SuccessPushesArmatureBranchToOrigin(t *testing.T) {
 }
 
 func TestPushOpsCommand_PushFailureReturnsErrorAndJSON(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2460,6 +2536,7 @@ func TestPushOpsCommand_PushFailureReturnsErrorAndJSON(t *testing.T) {
 }
 
 func TestNoteCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2471,6 +2548,7 @@ func TestNoteCommand_HumanOutput(t *testing.T) {
 }
 
 func TestNoteCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2483,6 +2561,7 @@ func TestNoteCommand_JSONOutput(t *testing.T) {
 }
 
 func TestNoteDeleteCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2508,6 +2587,7 @@ func TestNoteDeleteCommand_JSONOutput(t *testing.T) {
 }
 
 func TestTransitionCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2520,6 +2600,7 @@ func TestTransitionCommand_HumanOutput(t *testing.T) {
 }
 
 func TestTransitionCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2532,6 +2613,7 @@ func TestTransitionCommand_JSONOutput(t *testing.T) {
 }
 
 func TestInitCommand_AlreadyInitialized(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -2544,11 +2626,12 @@ func TestInitCommand_AlreadyInitialized(t *testing.T) {
 }
 
 func TestLogSlot_EnvVar(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "beta")
+	setCLIEnv(t, "ARM_LOG_SLOT", "beta")
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "slotted note")
 	require.NoError(t, err)
@@ -2581,6 +2664,7 @@ func TestLogSlot_EnvVar(t *testing.T) {
 }
 
 func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	opsDir := filepath.Join(repo, ".armature", "ops")
@@ -2592,7 +2676,7 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 		}
 	}
 
-	t.Setenv("ARM_LOG_SLOT", "")
+	setCLIEnv(t, "ARM_LOG_SLOT", "")
 
 	_, err = runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2610,12 +2694,13 @@ func TestLogSlot_Empty_UsesPlainLog(t *testing.T) {
 }
 
 func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	t.Setenv("TRLS_LOG_SLOT", "legacy")
-	t.Setenv("ARM_LOG_SLOT", "")
+	setCLIEnv(t, "TRLS_LOG_SLOT", "legacy")
+	setCLIEnv(t, "ARM_LOG_SLOT", "")
 
 	_, err = runTrls(t, repo, "note", "--issue", "task-01", "--msg", "plain note")
 	require.NoError(t, err)
@@ -2629,8 +2714,9 @@ func TestLogSlot_TRLSEnvIgnored(t *testing.T) {
 }
 
 func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
-	t.Setenv("ARM_LOG_SLOT", "lane-a")
-	workerID := slottedWorkerID("worker-123")
+	t.Parallel()
+	setCLIEnv(t, "ARM_LOG_SLOT", "lane-a")
+	workerID := slottedWorkerIDEnv("worker-123", testEnv(t))
 	assert.Equal(t, "worker-123~lane-a", workerID)
 
 	ctx := &config.Context{IssuesDir: "/repo/.armature"}
@@ -2638,28 +2724,29 @@ func TestStateDir_UsesSlotWhenConfigured(t *testing.T) {
 }
 
 func TestSlottedWorkerID_REQ_LNGHZN_S3_T1(t *testing.T) {
+	t.Parallel()
 	t.Run("valid slot is appended as before", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "lane-a_2")
-		assert.Equal(t, "worker-123~lane-a_2", slottedWorkerID("worker-123"))
+		setCLIEnv(t, "ARM_LOG_SLOT", "lane-a_2")
+		assert.Equal(t, "worker-123~lane-a_2", slottedWorkerIDEnv("worker-123", testEnv(t)))
 	})
 
 	t.Run("slot containing a path separator is rejected", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "../../etc")
-		_, err := slottedWorkerIDChecked("worker-123")
+		setCLIEnv(t, "ARM_LOG_SLOT", "../../etc")
+		_, err := slottedWorkerIDCheckedEnv("worker-123", testEnv(t))
 		require.Error(t, err)
-		assert.Equal(t, "", slottedWorkerID("worker-123"))
+		assert.Equal(t, "", slottedWorkerIDEnv("worker-123", testEnv(t)))
 	})
 
 	t.Run("slot containing a slash is rejected", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "a/b")
-		_, err := slottedWorkerIDChecked("worker-123")
+		setCLIEnv(t, "ARM_LOG_SLOT", "a/b")
+		_, err := slottedWorkerIDCheckedEnv("worker-123", testEnv(t))
 		require.Error(t, err)
-		assert.Equal(t, "", slottedWorkerID("worker-123"))
+		assert.Equal(t, "", slottedWorkerIDEnv("worker-123", testEnv(t)))
 	})
 
 	t.Run("empty slot is unslotted identity", func(t *testing.T) {
-		t.Setenv("ARM_LOG_SLOT", "")
-		assert.Equal(t, "worker-123", slottedWorkerID("worker-123"))
+		setCLIEnv(t, "ARM_LOG_SLOT", "")
+		assert.Equal(t, "worker-123", slottedWorkerIDEnv("worker-123", testEnv(t)))
 	})
 }
 
@@ -2688,6 +2775,7 @@ func TestAppendLowStakesOp_ResetsTrackerWhenThresholdReachedInWorktree(t *testin
 }
 
 func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2699,19 +2787,19 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Task B", "--id", "task-b")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "one")
+	setCLIEnv(t, "ARM_LOG_SLOT", "one")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-a", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-a", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "slot one")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "two")
+	setCLIEnv(t, "ARM_LOG_SLOT", "two")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-b", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "task-b", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "slot two")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "")
+	setCLIEnv(t, "ARM_LOG_SLOT", "")
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
@@ -2734,6 +2822,7 @@ func TestLogSlot_ReplayIncludesSlottedOps(t *testing.T) {
 }
 
 func TestCreateCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2746,6 +2835,7 @@ func TestCreateCommand_HumanOutput(t *testing.T) {
 }
 
 func TestCreateCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2760,6 +2850,7 @@ func TestCreateCommand_JSONOutput(t *testing.T) {
 }
 
 func TestClaimCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2771,6 +2862,7 @@ func TestClaimCommand_HumanOutput(t *testing.T) {
 }
 
 func TestClaimCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2784,6 +2876,7 @@ func TestClaimCommand_JSONOutput(t *testing.T) {
 }
 
 func TestDecisionCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2798,6 +2891,7 @@ func TestDecisionCommand_HumanOutput(t *testing.T) {
 }
 
 func TestDecisionCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2815,6 +2909,7 @@ func TestDecisionCommand_JSONOutput(t *testing.T) {
 }
 
 func TestLinkCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2833,6 +2928,7 @@ func TestLinkCommand_HumanOutput(t *testing.T) {
 }
 
 func TestLinkCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2853,6 +2949,7 @@ func TestLinkCommand_JSONOutput(t *testing.T) {
 }
 
 func TestUnlinkCommand(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2880,6 +2977,7 @@ func TestUnlinkCommand(t *testing.T) {
 }
 
 func TestUnlinkCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -2903,6 +3001,7 @@ func TestUnlinkCommand_JSONOutput(t *testing.T) {
 }
 
 func TestAmendCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2914,6 +3013,7 @@ func TestAmendCommand_HumanOutput(t *testing.T) {
 }
 
 func TestAmendCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2927,6 +3027,7 @@ func TestAmendCommand_JSONOutput(t *testing.T) {
 }
 
 func TestAssignCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2938,6 +3039,7 @@ func TestAssignCommand_HumanOutput(t *testing.T) {
 }
 
 func TestAssignCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2951,6 +3053,7 @@ func TestAssignCommand_JSONOutput(t *testing.T) {
 }
 
 func TestUnassignCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2964,6 +3067,7 @@ func TestUnassignCommand_HumanOutput(t *testing.T) {
 }
 
 func TestUnassignCommand_JSONOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2978,6 +3082,7 @@ func TestUnassignCommand_JSONOutput(t *testing.T) {
 }
 
 func TestWorkersCommand_HumanOutput(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -2990,6 +3095,7 @@ func TestWorkersCommand_HumanOutput(t *testing.T) {
 }
 
 func TestWorkersCommand_FormatJSON_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3007,6 +3113,7 @@ func TestWorkersCommand_FormatJSON_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestWorkersCommand_LegacyJSONFlag_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3023,6 +3130,7 @@ func TestWorkersCommand_LegacyJSONFlag_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestWorkersCommand_SlottedLogs(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3032,12 +3140,12 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 	_, err = runTrls(t, repo, "create", "--type", "task", "--title", "Slot task", "--id", "slot-task")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "w")
+	setCLIEnv(t, "ARM_LOG_SLOT", "w")
 	_, err = runTrls(t, repo, "claim", "--issue", "slot-task", "--worktree")
 	require.NoError(t, err)
 	_, err = runTrls(t, repo, "transition", "--issue", "slot-task", "--to", "done", "--skip-delivery-gate", "--force", "--outcome", "via slot")
 	require.NoError(t, err)
-	t.Setenv("ARM_LOG_SLOT", "")
+	setCLIEnv(t, "ARM_LOG_SLOT", "")
 
 	out, err := runTrls(t, repo, "workers")
 	require.NoError(t, err)
@@ -3046,6 +3154,7 @@ func TestWorkersCommand_SlottedLogs(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3063,7 +3172,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(buf)
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo, "--worktree"})
@@ -3075,6 +3184,7 @@ func TestClaimCommand_ScopeOverlapExitsWithoutForce(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3094,6 +3204,7 @@ func TestClaimCommand_ScopeOverlapWithForceProceeds(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3108,7 +3219,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 	require.NoError(t, err)
 
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo, "--worktree"})
@@ -3119,6 +3230,7 @@ func TestClaimCommand_ScopeOverlapSameWorker_AutoDismissed(t *testing.T) {
 }
 
 func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3163,6 +3275,7 @@ func TestClaimCommand_SameWorkerOverlapDeduplicatesNotes(t *testing.T) {
 }
 
 func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3173,13 +3286,13 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 
 	plantOverlappingFooPair(t, repo)
 
-	t.Setenv("ARM_LOG_SLOT", "a")
+	setCLIEnv(t, "ARM_LOG_SLOT", "a")
 	_, err = runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
 	require.NoError(t, err)
 
-	t.Setenv("ARM_LOG_SLOT", "b")
+	setCLIEnv(t, "ARM_LOG_SLOT", "b")
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
 	root.SetArgs([]string{"claim", "--issue", "task-02", "--repo", repo, "--worktree"})
@@ -3189,6 +3302,7 @@ func TestClaimCommand_ScopeOverlapSameWorkerDifferentSlots_RequiresForce(t *test
 }
 
 func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3218,8 +3332,9 @@ func TestClaimCommand_LostRaceReportsClearResult(t *testing.T) {
 }
 
 func TestUnassignHelp(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"unassign", "--help"})
@@ -3232,8 +3347,9 @@ func TestUnassignHelp(t *testing.T) {
 }
 
 func TestClaimHelp(t *testing.T) {
+	t.Parallel()
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetErr(buf)
 	cmd.SetArgs([]string{"claim", "--help"})
@@ -3246,7 +3362,8 @@ func TestClaimHelp(t *testing.T) {
 }
 
 func TestCommandGroups(t *testing.T) {
-	root := newRootCmd()
+	t.Parallel()
+	root := testRootCmd(t)
 
 	requiredGroups := []string{"workflow", "dag", "sync", "admin"}
 	groupMap := make(map[string]bool)
@@ -3296,6 +3413,7 @@ func TestCommandGroups(t *testing.T) {
 }
 
 func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
@@ -3322,6 +3440,7 @@ func TestTransitionToDone_PRCheck_FailsWhenOnMainWithoutForce(t *testing.T) {
 }
 
 func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	defaultBranchOut, err := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD").Output()
@@ -3347,6 +3466,7 @@ func TestTransitionToDone_PRCheck_SucceedsWithForceOnMain(t *testing.T) {
 }
 
 func TestTransitionToDone_PRCheck_SucceedsOnFeatureBranch(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3430,7 +3550,7 @@ func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
 	run(t, repo, "git", "checkout", "-q", "-b", "feat/story-02")
 
 	errBuf := new(bytes.Buffer)
-	root := newRootCmd()
+	root := testRootCmd(t)
 	root.SetOut(new(bytes.Buffer))
 	root.SetErr(errBuf)
 	root.SetArgs(enrichTestCLIArgs([]string{"transition", "--repo", repo, "--issue", "task-04", "--to", "done", "--skip-delivery-gate", "--outcome", "completed"}))
@@ -3442,6 +3562,7 @@ func SKIP_TestTransitionToDone_NoWarningWhenTasksRemain(t *testing.T) {
 }
 
 func TestNoteCommand_PositionalArgs(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3457,6 +3578,7 @@ func TestNoteCommand_PositionalArgs(t *testing.T) {
 }
 
 func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3474,6 +3596,7 @@ func TestNoteCommand_PositionalArgs_EquivalentToFlags(t *testing.T) {
 }
 
 func TestShowCommand_MultipleIDs(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3493,6 +3616,7 @@ func TestShowCommand_MultipleIDs(t *testing.T) {
 }
 
 func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3514,6 +3638,7 @@ func TestShowCommand_MultipleIDs_JSON(t *testing.T) {
 }
 
 func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3545,6 +3670,7 @@ func TestCreateCommand_WithAcceptanceFlag(t *testing.T) {
 }
 
 func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3568,6 +3694,7 @@ func TestCreateCommand_WithContextFilesFlag(t *testing.T) {
 }
 
 func TestAmendCommand_ReplacesAndClearsContextFiles(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3606,6 +3733,7 @@ func TestAmendCommand_ReplacesAndClearsContextFiles(t *testing.T) {
 }
 
 func TestTransitionCommand_WithFieldFlag(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
@@ -3618,6 +3746,7 @@ func TestTransitionCommand_WithFieldFlag(t *testing.T) {
 }
 
 func TestCreateCommand_WithSourceFlag(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3701,6 +3830,7 @@ func TestCreateCommand_WithSourceFlag(t *testing.T) {
 }
 
 func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3724,6 +3854,7 @@ func TestTransitionToDone_UncitedIssue_PrintsWarning(t *testing.T) {
 }
 
 func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3746,6 +3877,7 @@ func TestTransitionToDone_UncitedIssue_ForceSupressesWarning(t *testing.T) {
 }
 
 func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 
@@ -3771,6 +3903,7 @@ func TestTransitionToDone_CitedIssue_NoWarning(t *testing.T) {
 }
 
 func TestSourceLinkCommand_MultiIssue(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3814,6 +3947,7 @@ func TestSourceLinkCommand_MultiIssue(t *testing.T) {
 }
 
 func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3847,6 +3981,7 @@ func TestSourceLinkCommand_SingleIssue_BackwardCompat(t *testing.T) {
 }
 
 func TestCreateCommand_InvalidType(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "Bad type", "--type", "bogustype", "--id", "bad-01")
@@ -3856,6 +3991,7 @@ func TestCreateCommand_InvalidType(t *testing.T) {
 }
 
 func TestCreateCommand_HelpIncludesFeatureType(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	out, err := runTrls(t, repo, "create", "--help")
@@ -3864,6 +4000,7 @@ func TestCreateCommand_HelpIncludesFeatureType(t *testing.T) {
 }
 
 func TestCreateCommand_BugTypeAccepted(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "Bug report", "--type", "bug", "--id", "bug-01")
@@ -3871,6 +4008,7 @@ func TestCreateCommand_BugTypeAccepted(t *testing.T) {
 }
 
 func TestCreateCommand_InvalidParentTypeCombo(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "materialize")
@@ -3887,6 +4025,7 @@ func TestCreateCommand_InvalidParentTypeCombo(t *testing.T) {
 }
 
 func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3908,6 +4047,7 @@ func TestCreateCommand_ValidParentTypeCombo(t *testing.T) {
 }
 
 func TestReparentCommand_HappyPath(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3938,6 +4078,7 @@ func TestReparentCommand_HappyPath(t *testing.T) {
 }
 
 func TestReparentCommand_InvalidCombo(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "create", "--title", "Parent task", "--type", "task", "--id", "task-parent")
@@ -3949,6 +4090,7 @@ func TestReparentCommand_InvalidCombo(t *testing.T) {
 }
 
 func TestReparentCommand_ParentNotFound(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "reparent", "--issue", "task-01", "--parent", "nonexistent-parent")
@@ -3957,6 +4099,7 @@ func TestReparentCommand_ParentNotFound(t *testing.T) {
 }
 
 func TestReparentCommand_IssueNotFound(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	_, err := runTrls(t, repo, "reparent", "--issue", "nonexistent-issue", "--parent", "task-01")
@@ -3965,6 +4108,7 @@ func TestReparentCommand_IssueNotFound(t *testing.T) {
 }
 
 func TestCreateCmd_WithParent_DoesNotMaterialize(t *testing.T) {
+	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
 	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
 	_, err := runTrls(t, repo, "bootstrap")
@@ -3992,6 +4136,7 @@ func TestCreateCmd_WithParent_DoesNotMaterialize(t *testing.T) {
 }
 
 func TestManagedExecutionCommandsAreNotRegistered(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 
 	_, err := runTrls(t, repo, "orchestrate")
@@ -4009,6 +4154,7 @@ func TestManagedExecutionCommandsAreNotRegistered(t *testing.T) {
 }
 
 func TestValidateDocExamplesCommand_NoArmatureConfig(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	writeFile := func(name, content string) {
 		path := filepath.Join(repo, name)
@@ -4022,7 +4168,7 @@ func TestValidateDocExamplesCommand_NoArmatureConfig(t *testing.T) {
 	writeFile("docs/example.md", "```json artifact_type=plan\n{}\n```\n")
 
 	buf := new(bytes.Buffer)
-	cmd := newRootCmd()
+	cmd := testRootCmd(t)
 	cmd.SetOut(buf)
 	cmd.SetArgs([]string{"validate", "doc-examples", "--repo", repo})
 
@@ -4032,7 +4178,8 @@ func TestValidateDocExamplesCommand_NoArmatureConfig(t *testing.T) {
 }
 
 func TestValidateRejectsUnexpectedArguments(t *testing.T) {
-	cmd := newRootCmd()
+	t.Parallel()
+	cmd := testRootCmd(t)
 	cmd.SetArgs([]string{"validate", "graph"})
 
 	err := cmd.Execute()
@@ -4069,7 +4216,7 @@ func TestCommand_RefusesUnmigratedLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 	assert.Contains(t, errMsg, "arm bootstrap", "error should mention arm bootstrap as fix")
 
 	buf := new(bytes.Buffer)
-	bootstrapCmd := newRootCmd()
+	bootstrapCmd := testRootCmd(t)
 	bootstrapCmd.SetOut(buf)
 	bootstrapCmd.SetErr(new(bytes.Buffer))
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
@@ -4106,7 +4253,7 @@ func TestCommand_CustomOpsWorktreeLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 	assert.Contains(t, err.Error(), "pre-collapse")
 	assert.Contains(t, err.Error(), "arm bootstrap")
 
-	bootstrapCmd := newRootCmd()
+	bootstrapCmd := testRootCmd(t)
 	bootstrapCmd.SetArgs([]string{"bootstrap", "--repo", repo})
 	err = bootstrapCmd.Execute()
 	require.Error(t, err)
@@ -4123,6 +4270,7 @@ func TestCommand_CustomOpsWorktreeLayout_REQ_LNGHZN_S1_T4(t *testing.T) {
 }
 
 func TestUnknownFlagRejectedWithValidFlagsListed_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	t.Run("unknownFlag", func(t *testing.T) {
@@ -4162,6 +4310,7 @@ func TestUnknownFlagRejectedWithValidFlagsListed_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestVersionFlagVariantsExitZero_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	want := fmt.Sprintf("arm version %s\n", Version)
 	for _, args := range [][]string{
 		{"version", "--format", "human"},
@@ -4181,6 +4330,7 @@ func TestVersionFlagVariantsExitZero_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestStructuredVersionPathsEmitEnvelope_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	paths := [][]string{
 		{"version", "--format", "json"},
 		{"version", "--format", "agent"},
@@ -4212,6 +4362,7 @@ func TestStructuredVersionPathsEmitEnvelope_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestBareArmShowsReadyQueueInRepo_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 
 	stdout := new(bytes.Buffer)
@@ -4239,6 +4390,7 @@ func TestBareArmShowsReadyQueueInRepo_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestBareArmOutsideRepoIsDefinitiveEmptyState_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	outside := t.TempDir()
 
 	stdout := new(bytes.Buffer)
@@ -4263,6 +4415,7 @@ func TestBareArmOutsideRepoIsDefinitiveEmptyState_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestBareArmBrokenConfigIsError_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	configPath := filepath.Join(repo, ".armature", "config.json")
 
@@ -4308,6 +4461,7 @@ func TestBareArmBrokenConfigIsError_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestNonInteractiveImpliesVersionEnvelope_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	stdout := new(bytes.Buffer)
 	cmd := commandFor(Invocation{Stdout: stdout, Stderr: new(bytes.Buffer), TempDir: t.TempDir()})
 	uiFrom(cmd).Apply("human", true)
@@ -4320,6 +4474,7 @@ func TestNonInteractiveImpliesVersionEnvelope_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestBareArmForwardsSnapshotWarnings_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	unknownLog := filepath.Join(opsDir, "worker-unknown.log")
@@ -4344,6 +4499,7 @@ func TestBareArmForwardsSnapshotWarnings_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestBareArmRejectsUnknownRootArgs_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	repo := setupRepoWithTask(t)
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
@@ -4355,6 +4511,7 @@ func TestBareArmRejectsUnknownRootArgs_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestBareArmNonexistentRepoIsError_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	missing := filepath.Join(t.TempDir(), "no-such-repo")
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
@@ -4369,6 +4526,7 @@ func TestBareArmNonexistentRepoIsError_REQ_AOC_S2_T5(t *testing.T) {
 }
 
 func TestShouldPrintRootHelp_REQ_AOC_S2_T5(t *testing.T) {
+	t.Parallel()
 	assert.True(t, shouldPrintRootHelp("human", false, true))
 	assert.False(t, shouldPrintRootHelp("json", false, true), "TTY + --format json must not take the help fast-path")
 	assert.False(t, shouldPrintRootHelp("agent", false, true))

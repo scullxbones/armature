@@ -14,6 +14,7 @@ import (
 )
 
 func TestContextHistoryScansFullHistoryByDefault_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	cmd := newContextHistoryCmd()
 	limit := cmd.Flags().Lookup("limit")
 	require.NotNil(t, limit)
@@ -39,6 +40,7 @@ func TestContextHistoryScansFullHistoryByDefault_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestContextHistoryExplicitLimitIsDisclosed_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo, createSHA, noteSHA := plantContextHistoryBeyondSilentCap(t)
 
 	out, err := runTrls(t, repo, "context-history", "--issue", "HIST-01", "--limit", "10", "--format", "json")
@@ -66,6 +68,7 @@ func TestContextHistoryExplicitLimitIsDisclosed_REQ_AOC_S2_T4(t *testing.T) {
 }
 
 func TestContextHistoryZeroLimitIsUnbounded_REQ_AOC_S2_T4(t *testing.T) {
+	t.Parallel()
 	repo, createSHA, noteSHA := plantContextHistoryBeyondSilentCap(t)
 
 	for _, limit := range []string{"0", "-1"} {
