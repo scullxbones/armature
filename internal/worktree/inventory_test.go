@@ -281,6 +281,14 @@ func TestEnvValAndLookPathOn_REQ_PARCLI(t *testing.T) {
 	assert.Equal(t, bin, got)
 	_, err = lookPathOn(dir, "missing")
 	assert.Error(t, err)
+	nested := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(nested, "subdir"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "plain"), []byte("x"), 0o644))
+	_, err = lookPathOn(nested+string(os.PathListSeparator)+""+string(os.PathListSeparator)+dir, "plain")
+	assert.Error(t, err)
+	got, err = lookPathOn(":"+dir, "mybin")
+	require.NoError(t, err)
+	assert.Equal(t, bin, got)
 }
 
 func TestListEnvHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
@@ -301,4 +309,10 @@ func TestListEnvHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
 	_, err = ListEnv(repo, []string{"PATH=" + wrapperDir})
 	require.Error(t, err)
+
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	mixed, err := ListEnv(repo, []string{"PATH=" + filepath.Dir(realGit) + string(os.PathListSeparator) + wrapperDir})
+	require.NoError(t, err)
+	assert.Equal(t, viaList, mixed)
 }
