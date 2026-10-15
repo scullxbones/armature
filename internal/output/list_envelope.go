@@ -3,8 +3,6 @@ package output
 import (
 	"io"
 	"sort"
-
-	"github.com/scullxbones/armature/internal/materialize"
 )
 
 const ListShowHelp = "arm show <id> for outcome, scope, and acceptance"
@@ -42,7 +40,7 @@ func listStatusRank(status string) int {
 }
 
 // ListRows builds N4 list rows for ids in the given order.
-func ListRows(index materialize.Index, ids []string) []ListIssue {
+func ListRows(index map[string]ListFacts, ids []string) []ListIssue {
 	rows := make([]ListIssue, 0, len(ids))
 	for _, id := range ids {
 		e := index[id]
@@ -56,7 +54,7 @@ func ListRows(index materialize.Index, ids []string) []ListIssue {
 	return rows
 }
 
-func ListGroupsByStatus(index materialize.Index, ids []string) []ListGroup {
+func ListGroupsByStatus(index map[string]ListFacts, ids []string) []ListGroup {
 	buckets := make(map[string][]string)
 	for _, id := range ids {
 		s := index[id].Status

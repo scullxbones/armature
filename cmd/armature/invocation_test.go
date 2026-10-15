@@ -160,3 +160,25 @@ func TestRendererLookupMatchesEnvInterface_REQ_PARCLI(t *testing.T) {
 	r.Apply("human", false)
 	assert.False(t, r.IsInteractive())
 }
+
+func TestGitAtProcessEnvSkipsOverlay_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	root := commandFor(Invocation{
+		Stdout:  new(bytes.Buffer),
+		Stderr:  new(bytes.Buffer),
+		TempDir: t.TempDir(),
+		Env:     OSEnv(),
+	})
+	assert.Nil(t, environFrom(root))
+	assert.Nil(t, overlayEnviron(OSEnv()))
+
+	root = commandFor(Invocation{
+		Stdout:  new(bytes.Buffer),
+		Stderr:  new(bytes.Buffer),
+		TempDir: t.TempDir(),
+		Env:     OverlayEnv(OSEnv(), map[string]string{"PATH": "/injected/bin"}),
+	})
+	got := environFrom(root)
+	require.NotEmpty(t, got)
+	assert.Contains(t, got, "PATH=/injected/bin")
+}

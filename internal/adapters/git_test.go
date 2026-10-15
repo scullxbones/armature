@@ -1864,6 +1864,20 @@ func TestCommandGitRefusesRelativePATH_REQ_PARCLI(t *testing.T) {
 	require.True(t, errors.Is(err, exec.ErrDot), err)
 }
 
+func TestCommandGitProcessEnvUsesPlainGit_REQ_PARCLI(t *testing.T) {
+	t.Parallel()
+	plain := exec.CommandContext(t.Context(), "git", "--version")
+	nilOverlay := adapters.CommandGit(t.Context(), nil, "--version")
+	require.Equal(t, plain.Path, nilOverlay.Path)
+	require.Equal(t, plain.Err, nilOverlay.Err)
+	require.Nil(t, nilOverlay.Env)
+
+	process := adapters.CommandGit(t.Context(), os.Environ(), "--version")
+	require.Equal(t, plain.Path, process.Path, "process environ must not run custom lookPathOn")
+	require.Equal(t, plain.Err, process.Err)
+	require.NotNil(t, process.Env)
+}
+
 func TestCommandGitAbsoluteOverlayPATH_REQ_PARCLI(t *testing.T) {
 	t.Parallel()
 	real, err := exec.LookPath("git")

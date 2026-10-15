@@ -63,7 +63,7 @@ func newShowCmd() *cobra.Command {
 				rows := make([]output.IssueJSON, 0, len(ids))
 				var trunc []output.ShowTruncation
 				for _, id := range ids {
-					row := output.MarshalIssue(snap.Issues[id])
+					row := output.MarshalIssue(outputIssueFacts(snap.Issues[id]))
 					if !full {
 						var hints []output.ShowTruncation
 						row, hints = output.TruncateShowIssue(row)
@@ -86,7 +86,7 @@ func newShowCmd() *cobra.Command {
 					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "---")
 				}
 
-				if err := output.RenderIssue(cmd.OutOrStdout(), &issue); err != nil {
+				if err := output.RenderIssue(cmd.OutOrStdout(), outputIssueFacts(&issue)); err != nil {
 					return err
 				}
 				if costReport != nil {

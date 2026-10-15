@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,10 +110,10 @@ func TestListGroupHonouredInStructuredOutput_REQ_AOC_S2_T2(t *testing.T) {
 
 	seen := map[string]bool{}
 	var groupedIDs []string
-	index := make(materialize.Index, len(issues))
+	index := make(map[string]output.ListFacts, len(issues))
 	ids := make([]string, 0, len(issues))
 	for _, row := range issues {
-		index[row.ID] = materialize.IndexEntry{Type: row.Type, Status: row.Status, Title: row.Title}
+		index[row.ID] = output.ListFacts{Type: row.Type, Status: row.Status, Title: row.Title}
 		ids = append(ids, row.ID)
 	}
 	assert.Equal(t, output.ListGroupsByStatus(index, ids), groups, "group order must match ListGroupsByStatus")

@@ -29,7 +29,7 @@ func TestMeasureListMatchesWriteListEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	sort.Strings(ids)
 
 	var want bytes.Buffer
-	require.NoError(t, output.WriteListEnvelope(&want, output.ListRows(index, ids), nil, false, false))
+	require.NoError(t, output.WriteListEnvelope(&want, output.ListRows(outputListFacts(index), ids), nil, false, false))
 	assert.Equal(t, want.Bytes(), got, "list meter must price writeListEnvelope bytes, not a pretty 7-field array")
 
 	raw := bytes.TrimSpace(got)
@@ -105,7 +105,7 @@ func TestMeasureShowMatchesWriteShowEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	got, err := measureShow(state)
 	require.NoError(t, err)
 
-	row := output.MarshalIssue(issue)
+	row := output.MarshalIssue(outputIssueFacts(issue))
 	row, trunc := output.TruncateShowIssue(row)
 	var want bytes.Buffer
 	require.NoError(t, output.WriteShowEnvelope(&want, []string{issue.ID}, []output.IssueJSON{row}, trunc))

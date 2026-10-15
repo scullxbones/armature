@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/scullxbones/armature/internal/attestation"
-	"github.com/scullxbones/armature/internal/materialize"
 )
 
 type ListEntry struct {
@@ -46,19 +43,11 @@ type IssueJSON struct {
 	Derived                bool            `json:"derived,omitempty"`
 }
 
-func MarshalIssue(issue *materialize.Issue) IssueJSON {
+func MarshalIssue(issue IssueFacts) IssueJSON {
 	noteTexts := make([]string, 0, len(issue.Notes))
 	for _, n := range issue.Notes {
 		if !n.Deleted {
 			noteTexts = append(noteTexts, n.Msg)
-		}
-	}
-
-	var attestationsJSON json.RawMessage
-	if len(issue.AssessmentAttestations) > 0 {
-		data, err := json.Marshal(issue.AssessmentAttestations)
-		if err == nil {
-			attestationsJSON = json.RawMessage(data)
 		}
 	}
 
@@ -78,7 +67,7 @@ func MarshalIssue(issue *materialize.Issue) IssueJSON {
 		Blocks:                 issue.Blocks,
 		Acceptance:             issue.Acceptance,
 		Notes:                  noteTexts,
-		AssessmentAttestations: attestationsJSON,
+		AssessmentAttestations: issue.AssessmentAttestations,
 		Branch:                 issue.Branch,
 		Base:                   issue.Base,
 		Tip:                    issue.Tip,
@@ -87,7 +76,7 @@ func MarshalIssue(issue *materialize.Issue) IssueJSON {
 		TargetSHA:              issue.TargetSHA,
 		CombinedPatchID:        issue.CombinedPatchID,
 		MatchedCommit:          issue.MatchedCommit,
-		Derived:                issue.RollupStatusBefore != "",
+		Derived:                issue.Derived,
 	}
 }
 
@@ -113,14 +102,27 @@ func truncateBundleID(bundleID string) string {
 	return id[:bundleIDDisplayHexLen]
 }
 
-func formatLatestAttestationLine(attestations []attestation.AssessmentAttestation) string {
-	if len(attestations) == 0 {
+type attestationView struct {
+	BundleID                string `json:"bundle_id"`
+	Rating                  string `json:"rating"`
+	SatisfiedCount          int    `json:"satisfied_count"`
+	PartiallySatisfiedCount int    `json:"partially_satisfied_count"`
+	NotSatisfiedCount       int    `json:"not_satisfied_count"`
+	IndeterminateCount      int    `json:"indeterminate_count"`
+}
+
+func formatLatestAttestationLine(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var attestations []attestationView
+	if err := json.Unmarshal(raw, &attestations); err != nil || len(attestations) == 0 {
 		return ""
 	}
 
 	att := attestations[len(attestations)-1]
 	bundleID := truncateBundleID(att.BundleID)
-	ratingStr := att.Rating.String()
+	ratingStr := att.Rating
 
 	var counts []string
 	if att.SatisfiedCount > 0 {
@@ -143,7 +145,7 @@ func formatLatestAttestationLine(attestations []attestation.AssessmentAttestatio
 	return fmt.Sprintf("Review:    %s (bundle %s; %s)", ratingStr, bundleID, strings.Join(counts, ", "))
 }
 
-func RenderIssue(w io.Writer, issue *materialize.Issue) error {
+func RenderIssue(w io.Writer, issue IssueFacts) error {
 	ew := &firstErrorWriter{w: w}
 
 	ew.printf("ID:        %s\n", issue.ID)
@@ -206,7 +208,7 @@ func RenderIssue(w io.Writer, issue *materialize.Issue) error {
 	if issue.MatchedCommit != "" {
 		ew.printf("Matched:   %s\n", issue.MatchedCommit)
 	}
-	if issue.RollupStatusBefore != "" {
+	if issue.Derived {
 		ew.printf("Derived:   true\n")
 	}
 	if len(issue.BlockedBy) > 0 {
@@ -220,7 +222,7 @@ func RenderIssue(w io.Writer, issue *materialize.Issue) error {
 		return ew.err
 	}
 
-	activeNotes := make([]materialize.Note, 0, len(issue.Notes))
+	activeNotes := make([]NoteFact, 0, len(issue.Notes))
 	for _, n := range issue.Notes {
 		if !n.Deleted {
 			activeNotes = append(activeNotes, n)
