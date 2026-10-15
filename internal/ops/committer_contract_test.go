@@ -9,13 +9,11 @@ import (
 
 func RunGitCommitterContract(t *testing.T, committer ops.GitCommitter) {
 	t.Run("CommitWorktreeOp_ReturnsNoErrorOnSuccess", func(t *testing.T) {
-		t.Parallel()
 		err := committer.CommitWorktreeOp("path/to/file.txt", "test commit message")
 		assert.NoError(t, err)
 	})
 
 	t.Run("CommitWorktreeOp_AcceptsMultiplePaths", func(t *testing.T) {
-		t.Parallel()
 		err1 := committer.CommitWorktreeOp("file1.txt", "first commit")
 		err2 := committer.CommitWorktreeOp("file2.txt", "second commit")
 		assert.NoError(t, err1)
@@ -23,7 +21,6 @@ func RunGitCommitterContract(t *testing.T, committer ops.GitCommitter) {
 	})
 
 	t.Run("CommitWorktreeOp_AcceptsVaryingMessageFormats", func(t *testing.T) {
-		t.Parallel()
 		messages := []string{
 			"ops: claim T1 by abc",
 			"ops: transition T2 by def",
