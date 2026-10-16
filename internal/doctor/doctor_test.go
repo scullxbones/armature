@@ -468,6 +468,35 @@ func TestRun_CorruptLineDoesNotTriggerD7(t *testing.T) {
 	_, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.Error(t, err, "corrupt log must fail the load instead of skipping into D-checks")
 	assert.Contains(t, err.Error(), "invalid JSONL line")
+	var located *ops.ParseLoadError
+	require.ErrorAs(t, err, &located)
+	assert.Equal(t, 1, located.Line)
+	assert.Contains(t, located.LogPath, "worker-clean.log")
+	assert.Equal(t, "arm doctor quarantine --log worker-clean.log --line 1", located.RepairCommand())
+}
+
+func TestRun_CorruptLineReportsFileAndLine_REQ_AGTFND(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+
+	logPath := filepath.Join(issuesDir, "ops", "worker-clean.log")
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 1, WorkerID: "worker-clean",
+		Payload: ops.Payload{Title: "ok", NodeType: "task"},
+	}))
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	_, err = f.WriteString("not json\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	_, err = doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "worker-clean.log:2:")
+	var located *ops.ParseLoadError
+	require.ErrorAs(t, err, &located)
+	assert.Equal(t, 2, located.Line)
+	assert.Equal(t, "arm doctor quarantine --log worker-clean.log --line 2", located.RepairCommand())
 }
 
 func TestRun_Integration_D2_StaleClaims(t *testing.T) {

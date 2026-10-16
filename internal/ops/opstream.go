@@ -47,62 +47,102 @@ func (s *validatedOpStream) addFile(logPath, expectedWorkerID string) *fileEntry
 }
 
 func (s *validatedOpStream) loadAll() (loadResult, error) {
-	result := loadResult{
-		PhysicalEOF: make(map[string]int64),
+	type scanned struct {
+		entry       *fileEntry
+		lines       []physicalLine
+		physicalEOF int64
 	}
+	scans := make([]scanned, 0, len(s.files))
+	quarantined := make(map[string]map[int]struct{})
 
 	for _, entry := range s.files {
-		fileItems, physicalEOF, fileWarnings, err := s.loadFile(entry)
+		lines, eof, err := readPhysicalLog(entry.LogPath)
 		if err != nil {
 			return loadResult{}, fmt.Errorf("load file %s: %w", entry.LogPath, err)
 		}
-		result.Items = append(result.Items, fileItems...)
-		result.Warnings = append(result.Warnings, fileWarnings...)
-		result.PhysicalEOF[filepath.Base(entry.LogPath)] = physicalEOF
+		scans = append(scans, scanned{entry: entry, lines: lines, physicalEOF: eof})
+		for _, rec := range lines {
+			if rec.Incomplete || len(rec.Raw) == 0 {
+				continue
+			}
+			op, err := parseLine(rec.Raw).value()
+			if err != nil {
+				continue
+			}
+			if op.Type != OpLogQuarantine {
+				continue
+			}
+			logName := op.Payload.QuarantineLog
+			if logName == "" {
+				logName = op.TargetID
+			}
+			if quarantined[logName] == nil {
+				quarantined[logName] = make(map[int]struct{})
+			}
+			quarantined[logName][op.Payload.QuarantineLine] = struct{}{}
+		}
 	}
 
+	result := loadResult{
+		PhysicalEOF: make(map[string]int64),
+	}
+	for _, scan := range scans {
+		fileItems, fileWarnings, err := foldScannedFile(scan.entry, scan.lines, quarantined)
+		if err != nil {
+			return loadResult{}, err
+		}
+		result.Items = append(result.Items, fileItems...)
+		result.Warnings = append(result.Warnings, fileWarnings...)
+		result.PhysicalEOF[filepath.Base(scan.entry.LogPath)] = scan.physicalEOF
+	}
 	return result, nil
 }
 
-func (s *validatedOpStream) loadFile(entry *fileEntry) ([]OpItem, int64, []string, error) {
+func foldScannedFile(entry *fileEntry, lines []physicalLine, quarantined map[string]map[int]struct{}) ([]OpItem, []string, error) {
 	var items []OpItem
 	var warnings []string
-	var physicalEOF int64
+	base := filepath.Base(entry.LogPath)
 
-	linesWithOffsets, err := adapters.ReadLogLinesWithOffsets(entry.LogPath, 0)
-	if err != nil {
-		return nil, 0, nil, err
-	}
-
-	for i, lineInfo := range linesWithOffsets {
-		physicalEOF = lineInfo.EndOffset
-
-		op, parseErr := parseLine(lineInfo.Line).value()
-		if parseErr != nil {
-			return nil, 0, nil, parseErr
+	for _, rec := range lines {
+		if len(rec.Raw) == 0 {
+			continue
 		}
-
+		if rec.Incomplete {
+			warnings = append(warnings, fmt.Sprintf(
+				"ignoring torn final line in %s:%d (no trailing newline)",
+				base, rec.Number,
+			))
+			continue
+		}
+		op, parseErr := parseLine(rec.Raw).value()
+		if parseErr != nil {
+			if isNewerSchemaVersion(parseErr) {
+				return nil, nil, locateParseError(entry.LogPath, rec.Number, parseErr)
+			}
+			if _, skip := quarantined[base][rec.Number]; skip {
+				continue
+			}
+			return nil, nil, locateParseError(entry.LogPath, rec.Number, parseErr)
+		}
 		if !WorkerOwnsLog(op.WorkerID, entry.ExpectedWorkerID) {
 			warnings = append(warnings, fmt.Sprintf(
 				"worker ID mismatch in %s: expected %s, got %s (target: %s)",
-				filepath.Base(entry.LogPath),
+				base,
 				entry.ExpectedWorkerID,
 				op.WorkerID,
 				op.TargetID,
 			))
 			continue
 		}
-
 		items = append(items, OpItem{
 			Op:          op,
 			LogFilename: entry.LogPath,
 			source:      entry,
-			Offset:      lineInfo.EndOffset,
-			LineNumber:  i + 1,
+			Offset:      rec.EndOffset,
+			LineNumber:  rec.Number,
 		})
 	}
-
-	return items, physicalEOF, warnings, nil
+	return items, warnings, nil
 }
 
 func LoadFromDirValidated(opsDir string) (loadResult, error) {

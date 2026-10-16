@@ -51,6 +51,7 @@ func TestIsAuditOnly_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
 	assert.True(t, IsAuditOnly(OpSourceFingerprint))
 	assert.True(t, IsAuditOnly(OpGateEvidence))
+	assert.True(t, IsAuditOnly(OpLogQuarantine))
 	assert.False(t, IsAuditOnly(OpNote))
 	assert.False(t, IsAuditOnly(OpCreate))
 }

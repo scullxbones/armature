@@ -44,11 +44,21 @@ func ReadLogFromOffset(logPath string, offset int64) ([]Op, error) {
 		return nil, err
 	}
 
-	ops := make([]Op, 0, len(lines))
-	for _, line := range lines {
-		op, err := parseLine(line).value()
+	if len(lines) > 0 {
+		complete, err := fileEndsWithNewline(logPath)
 		if err != nil {
 			return nil, err
+		}
+		if !complete {
+			lines = lines[:len(lines)-1]
+		}
+	}
+
+	ops := make([]Op, 0, len(lines))
+	for i, line := range lines {
+		op, err := parseLine(line).value()
+		if err != nil {
+			return nil, locateParseError(logPath, i+1, err)
 		}
 		ops = append(ops, op)
 	}

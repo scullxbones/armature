@@ -65,6 +65,7 @@ var opHandlers = map[string]opHandler{
 	ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
 	ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: MissingTargetUnspecified},
 	ops.OpGateEvidence:       {apply: applyNoop, missingTarget: MissingTargetUnspecified},
+	ops.OpLogQuarantine:      {apply: applyNoop, missingTarget: MissingTargetUnspecified},
 	ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: MissingTargetIgnore},
 	ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: MissingTargetIgnore},
 	ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: MissingTargetIgnore},
