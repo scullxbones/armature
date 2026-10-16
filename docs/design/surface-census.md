@@ -112,6 +112,7 @@ The following op types are defined in internal/ops/types.go and materialized by 
 | `reparent` | internal/ops/types.go:27 | engine.go | **kept-evidence** | Moves issue to new parent. Payload: parent (new parent ID, can be empty for top-level). |
 | `assessment-attested` | internal/ops/types.go:30 | engine.go | **kept-evidence** | Records code review attestation. Payload: assessment (JSON blob). Used by review record. |
 | `promotion-check` | internal/ops/types.go | engine.go | **kept-evidence** | ADR 0022 check of a done leaf. Payload: target_sha, tip, result. Deduped for the same target SHA+tip+result. |
+| `log-quarantine` | internal/ops/types.go | engine.go | **kept-evidence** | Audit-only. Records that a corrupt physical line was copied to a sidecar. Payload: quarantine_log, quarantine_line, sha. Does not rewrite the original log. |
 
 ## CLI Commands
 
@@ -186,6 +187,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `scope-rename` | main.go:239, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
 | `scope-delete` | main.go:243, scope_delete.go | Delete scope glob | **kept-evidence** | Cleanup. Removes from scope arrays. |
 | `doctor` | main.go:247, doctor.go | Diagnose DAG health | **kept-evidence** | Validator. Checks for broken refs, cycles, orphans. |
+| `doctor quarantine` | doctor.go | Copy a corrupt ops line into a sidecar and append a log-quarantine op | **kept-evidence** | Hidden subcommand of `doctor`. Suggested by a DOCTOR-1 Command Failure. Never deletes the original line. |
 | `worktree` | main.go:266, worktree.go | Manage managed worktrees | **kept-evidence** | Container for worktree reconciliation subcommands. |
 | `worktree list` | main.go:266, worktree.go | List managed worktrees with bound issue and claim status | **kept-evidence** | Subcommand of `worktree`. Flags orphans (worktree, no live claim) and ghosts (claim recording a missing worktree). |
 | `worktree gc` | main.go:266, worktree.go | Remove worktrees for merged/cancelled issues | **kept-evidence** | Subcommand of `worktree`. Supports --dry-run to preview removals. Only mutates state by removing worktrees. |
@@ -335,6 +337,8 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--fix` | doctor | bool | Reconcile expired claims (claimed->open, in-progress->blocked) by appending ops; see [recovery-state-machine.md](./recovery-state-machine.md) | **kept-evidence** |
+| `--log` | doctor quarantine | string | Ops log basename to repair | **kept-evidence** |
+| `--line` | doctor quarantine | int | 1-based physical line number of the corrupt line | **kept-evidence** |
 | `--quiet` | validate | bool | Suppress INFO lines on a failing run. Green output is already a single summary line. | **kept-evidence** |
 | `--exclude-worker` | materialize | string | Skip ops from worker ID (diagnostic) | **kept-evidence** |
 | `--global` | bootstrap | bool | Deploy to ~/.claude/ instead of .claude/ | **kept-evidence** |
@@ -441,6 +445,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `decision` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `delivery record` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. Group `delivery` is not a mode. |
 | `doctor` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `doctor quarantine` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Hidden leaf. N9 default: agent-facing envelope. |
 | `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Sole Protocol Output. `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
 | `heartbeat` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |

@@ -120,8 +120,9 @@ func newDoctorQuarantineCmd() *cobra.Command {
 	var logName string
 	var line int
 	cmd := &cobra.Command{
-		Use:   "quarantine",
-		Short: "Move a corrupt ops log line into a sidecar without deleting it",
+		Use:    "quarantine",
+		Short:  "Move a corrupt ops log line into a sidecar without deleting it",
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 			opsDir := filepath.Join(appCtx.IssuesDir, "ops")
