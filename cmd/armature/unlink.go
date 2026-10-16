@@ -77,7 +77,7 @@ func runGraphEdit(cmd *cobra.Command, opType, sourceID, dep, rel string, overrid
 				SkippedValidateGate: true,
 			},
 		}
-		if err := appendGraphEditOverride(ctx, logPath, []ops.Op{note, op}); err != nil {
+		if err := appendHighStakesOpsExemptIntroduction(state, logPath, []ops.Op{note, op}, nil); err != nil {
 			return err
 		}
 	} else {
@@ -114,10 +114,10 @@ func refuseGraphEditPreview(ctx *config.Context, op ops.Op, code, sourceID, dep 
 	if cause == "" {
 		cause = strings.Split(introErr.Error(), "\n")[0]
 	}
-	return armerrors.New(code, cause, []string{
+	return armerrors.Map(code, cause, []string{
 		"arm link --source <id> --dep <id> --rel blocked_by",
 		"arm amend --issue <id> --scope <narrower>",
-	})
+	}, introErr)
 }
 
 func graphEditCascadeCause(ctx *config.Context, op ops.Op, sourceID, dep string) string {
@@ -206,14 +206,4 @@ func confirmGraphEditOverride(cmd *cobra.Command) error {
 		return fmt.Errorf("typed confirmation does not match OVERRIDE-VALIDATE")
 	}
 	return nil
-}
-
-func appendGraphEditOverride(ctx *config.Context, logPath string, proposed []ops.Op) error {
-	if ctx == nil {
-		return fmt.Errorf("appendGraphEditOverride: command context unavailable")
-	}
-	gc := worktreeGit(ctx)
-	return withWorkerLogLock(ctx, logPath, func() error {
-		return ops.AppendOpsAndCommit(logPath, ctx.WorktreePath, proposed, gc)
-	})
 }
