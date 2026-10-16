@@ -330,11 +330,12 @@
       ]
     },
     "internal/commitref": {
-      "count": 4,
+      "count": 5,
       "names": [
         "CommitTypes",
         "IsValidReference",
         "MergeCommitPattern",
+        "SubjectHasIssueScope",
         "TypedCommitPattern"
       ]
     },
