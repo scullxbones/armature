@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json mock-ban-check test-mock-ban surface-budget-check surface-budget-ratchet test-surface-budget-check
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban surface-budget-check surface-budget-ratchet test-surface-budget-check
 
 GO ?= go
 PYTHON ?= python3
@@ -22,7 +22,8 @@ help:
 	@echo "  make check-job JOB=<id>  - Run one CI partition (check-static | check-core | mutate)"
 	@echo "  make print-check-jobs    - Dump the check-job membership table"
 	@echo "  make install-check-tools - go install pinned golangci-lint and gremlins"
-	@echo "  make check-fast          - Diff-routed fast gate: only runs steps implied by changed files (BASE= to override diff base)"
+	@echo "  make check-fast          - Diff-routed fast gate: commit subjects plus steps implied by changed files (BASE= to override diff base)"
+	@echo "  make commit-subjects-check - Fail unscoped conventional-commit subjects on origin/main..HEAD"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
 	@echo "  make test                - Run unit tests (E2E harness has a dedicated target)"
 	@echo "  make test-ci             - OS-matrix test entry: full make test on unix; go test -c on windows"
@@ -73,6 +74,7 @@ CHECK_JOB_mutate := mutate
 CHECK_TOOLS_mutate := gremlins
 
 check:
+	@scripts/check-commit-subjects.sh origin/main..HEAD
 	@set -e; \
 	for j in $(CHECK_JOBS); do \
 		echo "==> make check-job JOB=$$j"; \
@@ -273,7 +275,11 @@ test-surface-budget-check:
 test-summarize-test-json:
 	@$(PYTHON) -m unittest scripts/test_summarize_test_json.py
 
+commit-subjects-check:
+	@scripts/check-commit-subjects.sh origin/main..HEAD
+
 check-fast:
+	@scripts/check-commit-subjects.sh origin/main..HEAD
 	@scripts/check-fast.sh .
 
 test-check-fast:
