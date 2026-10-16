@@ -50,12 +50,16 @@ func splitPhysicalLog(data []byte) []physicalLine {
 	return out
 }
 
-func fileEndsWithNewline(path string) (bool, error) {
+func fileEndsWithNewline(path string) (ok bool, err error) {
 	f, err := os.Open(path) //nolint:gosec // G304: caller-supplied ops log path
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}()
 	info, err := f.Stat()
 	if err != nil {
 		return false, err

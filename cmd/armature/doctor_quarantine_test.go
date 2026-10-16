@@ -38,10 +38,11 @@ func TestDoctorCorruptLogSuggestsQuarantine_REQ_AGTFND(t *testing.T) {
 	assert.Contains(t, joined, repair)
 
 	envelope := assertSingleJSONObject(t, stdout.String())
-	errObj, _ := envelope["error"].(map[string]any)
-	require.NotNil(t, errObj)
+	errObj, ok := envelope["error"].(map[string]any)
+	require.True(t, ok)
 	assert.Equal(t, "DOCTOR-1", errObj["code"])
-	actions, _ := errObj["next_actions"].([]any)
+	actions, ok := errObj["next_actions"].([]any)
+	require.True(t, ok)
 	require.Len(t, actions, 1)
 	assert.Equal(t, repair, actions[0])
 }
