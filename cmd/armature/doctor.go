@@ -169,13 +169,13 @@ func mapDoctorLoadError(err error) error {
 	var located *ops.ParseLoadError
 	if errors.As(err, &located) {
 		if repair := located.RepairCommand(); repair != "" {
-			return armerrors.Wrap("DOCTOR-1", located.Error(), []string{repair}, err)
+			return armerrors.Map("DOCTOR-1", located.Error(), []string{repair}, err)
 		}
-		return armerrors.Wrap("DOCTOR-1", err.Error(), nil, err)
+		return armerrors.Map("DOCTOR-1", err.Error(), []string{"arm doctor quarantine --log <file> --line <n>"}, err)
 	}
 	var newer *ops.NewerSchemaVersionError
 	if errors.As(err, &newer) {
-		return armerrors.Wrap("DOCTOR-1", err.Error(), nil, err)
+		return armerrors.Map("DOCTOR-1", err.Error(), []string{"arm version"}, err)
 	}
 	return err
 }

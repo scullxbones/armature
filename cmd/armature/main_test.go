@@ -479,11 +479,11 @@ func dirExists(path string) bool {
 }
 
 func writeTempRepoFile(dir, name, body string) error {
-	return os.WriteFile(filepath.Join(dir, filepath.Base(name)), []byte(body), 0o644)
+	return os.WriteFile(filepath.Join(dir, filepath.Base(name)), []byte(body), 0o644) //nolint:gosec // G703: test-controlled temp repo file
 }
 
 func statTempPath(path string) (os.FileInfo, error) {
-	return os.Stat(filepath.Clean(path))
+	return os.Stat(filepath.Clean(path)) //nolint:gosec // G703: test-controlled path
 }
 
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
