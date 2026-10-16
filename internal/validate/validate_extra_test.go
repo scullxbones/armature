@@ -2,6 +2,8 @@ package validate
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -240,4 +242,68 @@ func TestE7PredicateAgreesAcrossCallers_REQ_NOCOMMENTS(t *testing.T) {
 			assert.Equal(t, tc.wantE7, gotTraceE7, "traceability E7: findings=%v", cov.Findings)
 		})
 	}
+}
+
+const findingsFixtureDir = "testdata/findings"
+
+func TestParseManifestMalformedEntriesStillE7_REQ_AGTFND(t *testing.T) {
+	t.Parallel()
+	const prefix = "citation check skipped: cannot parse source manifest:"
+	cases := []struct {
+		name string
+		file string
+	}{
+		{name: "non_object_entry", file: "e7-entries-non-object.json"},
+		{name: "garbage_last_synced", file: "e7-garbage-last-synced.json"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			manifest := readFindingsFixture(t, tc.file)
+			_, parseErr := parseManifestData(manifest)
+			require.Error(t, parseErr, "typed sourceEntry decode must reject %s; json.RawMessage would skip", tc.file)
+
+			result := validateState(makeState(&materialize.Issue{ID: "TSK-1", Type: "task"}), Options{ManifestData: manifest})
+			hit := requireFindingPrefix(t, result, "E7", "error", prefix)
+			assert.False(t, strings.Contains(hit.Message, "uncited node"),
+				"parse skip must stay distinct from uncited E7, got %q", hit.Message)
+		})
+	}
+}
+
+func TestMalformedGlobStillE10_REQ_AGTFND(t *testing.T) {
+	t.Parallel()
+	raw := readFindingsFixture(t, "e10-malformed-glob.json")
+	var fixture struct {
+		ID    string   `json:"id"`
+		Scope []string `json:"scope"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &fixture))
+	require.NotEmpty(t, fixture.ID)
+	require.NotEmpty(t, fixture.Scope)
+
+	result := validateState(makeState(&materialize.Issue{
+		ID: fixture.ID, Type: "task", Scope: fixture.Scope,
+	}), Options{})
+	requireFindingPrefix(t, result, "E10", "error", "invalid glob:")
+}
+
+func readFindingsFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(findingsFixtureDir, name))
+	require.NoError(t, err)
+	return data
+}
+
+func requireFindingPrefix(t *testing.T, result Result, rule, severity, prefix string) Finding {
+	t.Helper()
+	var hits []Finding
+	for _, f := range result.Findings {
+		if f.Rule == rule && strings.HasPrefix(f.Message, prefix) {
+			hits = append(hits, f)
+		}
+	}
+	require.Len(t, hits, 1, "want one %s finding with prefix %q, got %#v", rule, prefix, result.Findings)
+	assert.Equal(t, severity, hits[0].Severity)
+	return hits[0]
 }
