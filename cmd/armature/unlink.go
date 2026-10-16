@@ -77,7 +77,7 @@ func runGraphEdit(cmd *cobra.Command, opType, sourceID, dep, rel string, overrid
 				SkippedValidateGate: true,
 			},
 		}
-		if err := appendHighStakesOpsExemptIntroduction(state, logPath, []ops.Op{note, op}, nil); err != nil {
+		if err := appendHighStakesOpsExemptIntroduction(state, logPath, []ops.Op{note, op}, skipAfterIntegrate()); err != nil {
 			return err
 		}
 	} else {
