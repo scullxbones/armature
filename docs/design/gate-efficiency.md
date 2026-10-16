@@ -51,6 +51,7 @@ A routing script computes changed files against `merge-base HEAD origin/main`
 | `**/*.go` | lint + build + `go test` on changed packages **plus reverse importers** (`go list`) |
 | `skills/**`, `docs/skills/**`, `internal/skillsembed/skills/**`, `.agents/skills/**` | validate-skills, validate-doc-examples |
 | `cmd/**`, `docs/design/surface-census.md`, `docs/commands.md` | census-drift-check |
+| `internal/**/*.go`, `docs/design/surface-budget-baseline.json` | surface-budget-check |
 | docs only | adr-principles lint only |
 
 Acceptance anchors: a documentation-only remediation runs no mutation,

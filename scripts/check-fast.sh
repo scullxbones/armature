@@ -13,6 +13,8 @@
 #                                                        validate-doc-examples
 #   cmd/**, docs/design/surface-census.md,
 #   docs/commands.md                                  -> census-drift-check
+#   internal/**/*.go, docs/design/surface-budget-baseline.json
+#                                                     -> surface-budget-check
 #   docs only (none of the above)                     -> adr-principles lint
 #
 # This is the fast gate: it MUST NOT run mutation testing, full coverage, or
@@ -54,6 +56,7 @@ echo
 HAS_GO=0
 HAS_SKILLS=0
 HAS_CENSUS_SURFACE=0
+HAS_SURFACE_BUDGET=0
 
 while IFS= read -r f; do
     [[ -z "$f" ]] && continue
@@ -72,13 +75,16 @@ while IFS= read -r f; do
             HAS_CENSUS_SURFACE=1
             ;;
     esac
+    if [[ "$f" == "docs/design/surface-budget-baseline.json" ]] || [[ "$f" =~ ^internal/.+\.go$ ]]; then
+        HAS_SURFACE_BUDGET=1
+    fi
 done <<< "$CHANGED_FILES"
 
 # "docs only" per D2 means none of the three specific routed surfaces above
 # matched — not merely "path starts with docs/". A change confined to any
 # file(s) outside those three categories (README.md, CONTEXT.md, a shell
 # script, etc.) still only needs the adr-principles lint.
-HAS_NON_DOCS=$(( HAS_GO || HAS_SKILLS || HAS_CENSUS_SURFACE ))
+HAS_NON_DOCS=$(( HAS_GO || HAS_SKILLS || HAS_CENSUS_SURFACE || HAS_SURFACE_BUDGET ))
 
 RAN_ANY=0
 
@@ -165,6 +171,12 @@ if [[ $HAS_CENSUS_SURFACE -eq 1 ]]; then
     RAN_ANY=1
     echo "cmd/ or census-surface changes detected: census-drift-check"
     run_step $MAKE census-drift-check
+fi
+
+if [[ $HAS_SURFACE_BUDGET -eq 1 ]]; then
+    RAN_ANY=1
+    echo "internal/ or surface-budget baseline changes detected: surface-budget-check"
+    run_step $MAKE surface-budget-check
 fi
 
 if [[ $HAS_NON_DOCS -eq 0 ]]; then

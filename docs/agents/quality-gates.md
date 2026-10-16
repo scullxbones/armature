@@ -35,8 +35,8 @@ PR wall is the **max** of three required GitHub Actions jobs (no `needs` between
 
 | Context | Runs |
 |---|---|
-| `check-core` | coverage suite once + thresholds, validate-skills, validate-doc-examples, census-drift, git-test hermetic |
-| `check-static` | lint (pinned golangci-lint), crosscompile, census/coverage/hermetic self-tests, check-job drift test |
+| `check-core` | coverage suite once + thresholds, validate-skills, validate-doc-examples, census-drift, git-test hermetic, surface-budget |
+| `check-static` | lint (pinned golangci-lint, including mock-ban), crosscompile, census/coverage/hermetic/mock-ban/surface-budget self-tests, check-job drift test |
 | `mutate` | gremlins on `./internal` then `./cmd` (full, every PR) |
 
 CI calls `make check-job JOB=<id>` only — the membership table in the Makefile is the only step list. Expected wall is ~max of the two ~4m poles plus setup (~6m), not the former ~13m serial `check` job.
@@ -59,6 +59,7 @@ changed surfaces:
 | `**/*.go` | lint + build + `go test` on changed packages **plus reverse importers** (`go list`) |
 | `skills/**`, `docs/skills/**`, `internal/skillsembed/skills/**`, `.agents/skills/**` | `validate-skills`, `validate-doc-examples` |
 | `cmd/**`, `docs/design/surface-census.md`, `docs/commands.md` | `census-drift-check` |
+| `internal/**/*.go`, `docs/design/surface-budget-baseline.json` | `surface-budget-check` |
 | docs only | `adr-principles` lint only |
 
 The fast gate never runs mutation testing, full coverage, or crosscompile —
@@ -77,9 +78,11 @@ make check-fast      # diff-routed fast gate (see above)
 make check-job JOB=check-core  # one CI partition (also check-static, mutate)
 make test-check-jobs # drift test: ci.yml job ids vs Makefile table
 make test-check-fast # test check-fast.sh routing itself
-make lint            # golangci-lint run ./...
+make lint            # golangci-lint run ./... (includes mock-ban) plus mockery/go.mod mock-ban
 make coverage        # run unit suite once with -coverprofile, generate coverage.html
 make coverage-check  # run coverage, then fail if cmd < 83% or internal < 86%
+make surface-budget-check # fail if an internal package grew its exported identifier count
+make surface-budget-ratchet # rewrite docs/design/surface-budget-baseline.json to current counts
 make mutate          # gremlins mutation testing on ./internal then ./cmd
 make validate-skills # validate embedded skill source
 make skill           # deploy skills to .claude/skills/, .gemini/skills/, .codex/skills/
