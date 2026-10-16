@@ -77,16 +77,9 @@ func (s *validatedOpStream) loadFile(entry *fileEntry) ([]OpItem, int64, []strin
 	for i, lineInfo := range linesWithOffsets {
 		physicalEOF = lineInfo.EndOffset
 
-		op, parseErr := ParseLine(lineInfo.Line)
+		op, parseErr := parseLine(lineInfo.Line).value()
 		if parseErr != nil {
-			if isNewerSchemaVersion(parseErr) {
-				return nil, 0, nil, parseErr
-			}
-			warnings = append(warnings, fmt.Sprintf(
-				"corrupt line in %s: %v",
-				filepath.Base(entry.LogPath), parseErr,
-			))
-			continue
+			return nil, 0, nil, parseErr
 		}
 
 		if !WorkerOwnsLog(op.WorkerID, entry.ExpectedWorkerID) {

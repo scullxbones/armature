@@ -46,10 +46,9 @@ func ReadLogFromOffset(logPath string, offset int64) ([]Op, error) {
 
 	ops := make([]Op, 0, len(lines))
 	for _, line := range lines {
-		op, err := ParseLine(line)
+		op, err := parseLine(line).value()
 		if err != nil {
-			// Skip corrupt lines per spec — log warning
-			continue
+			return nil, err
 		}
 		ops = append(ops, op)
 	}

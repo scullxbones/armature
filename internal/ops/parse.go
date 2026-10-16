@@ -5,6 +5,22 @@ import (
 	"fmt"
 )
 
+type parsedLine struct {
+	op  Op
+	err error
+}
+
+func (p parsedLine) value() (Op, error) {
+	if p.err != nil {
+		return Op{}, p.err
+	}
+	return p.op, nil
+}
+
+func failParse(err error) parsedLine {
+	return parsedLine{err: err}
+}
+
 // ParseLine parses a single JSONL line in positional array format:
 // [op_type, target_id, timestamp, worker_id, payload_object, schema_version?]
 //
@@ -17,44 +33,48 @@ import (
 // than CurrentSchemaVersion is rejected. Records that omit it (legacy 5-element
 // arrays) are treated as LegacySchemaVersion.
 func ParseLine(line []byte) (Op, error) {
+	return parseLine(line).value()
+}
+
+func parseLine(line []byte) parsedLine {
 	var raw []json.RawMessage
 	if err := json.Unmarshal(line, &raw); err != nil {
-		return Op{}, fmt.Errorf("invalid JSONL line: %w", err)
+		return failParse(fmt.Errorf("invalid JSONL line: %w", err))
 	}
 	if len(raw) < 5 {
-		return Op{}, fmt.Errorf("op array must have at least 5 elements, got %d", len(raw))
+		return failParse(fmt.Errorf("op array must have at least 5 elements, got %d", len(raw)))
 	}
 
 	var op Op
 
 	if err := json.Unmarshal(raw[0], &op.Type); err != nil {
-		return Op{}, fmt.Errorf("invalid op type: %w", err)
+		return failParse(fmt.Errorf("invalid op type: %w", err))
 	}
 
 	if err := json.Unmarshal(raw[1], &op.TargetID); err != nil {
-		return Op{}, fmt.Errorf("invalid target_id: %w", err)
+		return failParse(fmt.Errorf("invalid target_id: %w", err))
 	}
 	if err := json.Unmarshal(raw[2], &op.Timestamp); err != nil {
-		return Op{}, fmt.Errorf("invalid timestamp: %w", err)
+		return failParse(fmt.Errorf("invalid timestamp: %w", err))
 	}
 	if err := json.Unmarshal(raw[3], &op.WorkerID); err != nil {
-		return Op{}, fmt.Errorf("invalid worker_id: %w", err)
+		return failParse(fmt.Errorf("invalid worker_id: %w", err))
 	}
 	if err := json.Unmarshal(raw[4], &op.Payload); err != nil {
-		return Op{}, fmt.Errorf("invalid payload: %w", err)
+		return failParse(fmt.Errorf("invalid payload: %w", err))
 	}
 
 	op.SchemaVersion = LegacySchemaVersion
 	if len(raw) >= 6 {
 		if err := json.Unmarshal(raw[5], &op.SchemaVersion); err != nil {
-			return Op{}, fmt.Errorf("invalid schema_version: %w", err)
+			return failParse(fmt.Errorf("invalid schema_version: %w", err))
 		}
 	}
 	if err := checkSchemaVersion(op.SchemaVersion); err != nil {
-		return Op{}, err
+		return failParse(err)
 	}
 
-	return op, nil
+	return parsedLine{op: op}
 }
 
 // MarshalOp serializes an Op to positional array JSONL format, always including
