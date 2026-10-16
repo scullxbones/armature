@@ -446,17 +446,17 @@ Score is frequency times cost. Cost is review churn, revert risk, or invariant m
 
 **1. Unscoped conventional commits.** Codex P1 on [PR 271](https://github.com/scullxbones/armature/pull/271), [PR 292](https://github.com/scullxbones/armature/pull/292), [PR 296](https://github.com/scullxbones/armature/pull/296), [PR 297](https://github.com/scullxbones/armature/pull/297), [PR 300](https://github.com/scullxbones/armature/pull/300), [PR 309](https://github.com/scullxbones/armature/pull/309), [PR 317](https://github.com/scullxbones/armature/pull/317). Delivery gate already uses `commitref` per issue. PR range check does not. **AF-P1.** Check `scripts/check-commit-subjects.sh` in `make check`.
 
-**2. Silent skip on parse and publish paths.** Codex P1 on [PR 305](https://github.com/scullxbones/armature/pull/305) (newer schema skipped in the stream), [PR 271](https://github.com/scullxbones/armature/pull/271) (D12 fetch discarded), [PR 290](https://github.com/scullxbones/armature/pull/290) (revert retry), [PR 309](https://github.com/scullxbones/armature/pull/309) (legacy shim drop). Overnight prompt in `bc-1e08701b-5bae-5b8c-8383-8b86876f81c1` still says no behavior change while loaders `continue`. **AF-P2.** Check `TestCorruptLineFailsReadLogFromOffset_REQ_AGTFND`.
+**2. Silent skip on parse and publish paths.** Codex P1 on [PR 305](https://github.com/scullxbones/armature/pull/305) (newer schema skipped in the stream), [PR 271](https://github.com/scullxbones/armature/pull/271) (D12 fetch discarded), [PR 290](https://github.com/scullxbones/armature/pull/290) (revert retry), [PR 309](https://github.com/scullxbones/armature/pull/309) (legacy shim drop). Codex-fix transcripts `bc-d54c59ef-89d0-5855-8fec-9969276f9a15` and `bc-f0580427-e444-5056-9bbc-cb95ad873a9a` were sent to stop skip-as-success on schema and merge-base. Overnight prompt in `bc-1e08701b-5bae-5b8c-8383-8b86876f81c1` still says no behavior change while loaders `continue`. **AF-P2.** Check `TestCorruptLineFailsReadLogFromOffset_REQ_AGTFND`.
 
 **3. Validate behavior change under a simplify PR.** Transcript `bc-48c50487-3aa9-5f54-bbae-b261a92e8774` on [PR 333](https://github.com/scullxbones/armature/pull/333) (`parseManifestData` as `RawMessage`, E7 silent). [PR 273](https://github.com/scullxbones/armature/pull/273) Codex P1 (E10 became a Command Failure). **AF-P3.** Check the E7 and E10 goldens.
 
 **4. Publish retry without revalidate, incomplete overlay.** Codex P1 on [PR 285](https://github.com/scullxbones/armature/pull/285) (two comments), [PR 279](https://github.com/scullxbones/armature/pull/279), [PR 307](https://github.com/scullxbones/armature/pull/307). Transcript `bc-2a5b580f-6771-5133-8646-abec346ca88c` had to patch #285 after the fact. **AF-P5.** Check `TestPublishRetryRevalidates_REQ_PUBLISH_VALIDATE`.
 
-**5. Worktree identity collapsed to the main checkout.** Codex P1 on [PR 282](https://github.com/scullxbones/armature/pull/282) and [PR 281](https://github.com/scullxbones/armature/pull/281). Dogfood theme `worktree-scoped-worker-id-overrides-clone-local`. PARCLI [PR 345](https://github.com/scullxbones/armature/pull/345) and [PR 346](https://github.com/scullxbones/armature/pull/346) started threading env and dir. **AF-P4.** Check `TestResolveContextKeepsInvokingWorktree_REQ_AGTFND`.
+**5. Worktree identity collapsed to the main checkout.** Codex P1 on [PR 282](https://github.com/scullxbones/armature/pull/282) and [PR 281](https://github.com/scullxbones/armature/pull/281). Dogfood theme `worktree-scoped-worker-id-overrides-clone-local`. PARCLI [PR 345](https://github.com/scullxbones/armature/pull/345) and [PR 346](https://github.com/scullxbones/armature/pull/346) started threading env and dir. Codex-fix `bc-c83cdb90-740b-5288-8921-5c5d08f27d9b` had to match the full slotted worker id, then block a forged `worker_id`. `bc-089d0675-b2b1-5468-b141-1e10c8a326fd` cloned a seed repo that baked one worker id into every fixture. **AF-P4.** Check `TestResolveContextKeepsInvokingWorktree_REQ_AGTFND`.
 
 **6. Graph edits that invent overlap, plus I6 confusion.** Project transcript `bc-495167c1-f4c1-46b6-85d9-8cbeaa2b3a3b` (two `UNLINK-1` cascades on Oct 4). Dogfood `scope-overlap-validation-gaps`. Codex P1 on [PR 283](https://github.com/scullxbones/armature/pull/283) (`arm merged` while the GitHub PR was still open). **AF-P6.** Check `TestUnlinkRefusesIntroducedOverlap_REQ_AGTFND`. Next Actions must not suggest premature `arm merged`.
 
-**Not in this stack.** Leftover `cmd/` `time.Now` (forbidigo hole). Skills split is already covered by `cmd/armature/bootstrap_test.go` after [PR 283](https://github.com/scullxbones/armature/pull/283). Comment-strip waves (`bc-c5027dc5-dc6d-5c0b-9c9a-366a7096fdac`, `bc-e44199db-a2c4-5922-99e9-14fb21bda10e`) stay overnight process, not a new linter.
+**Not in this stack.** Leftover `cmd/` `time.Now` (forbidigo hole). Skills split is already covered by `cmd/armature/bootstrap_test.go` after [PR 283](https://github.com/scullxbones/armature/pull/283). Comment-strip waves (`bc-c5027dc5-dc6d-5c0b-9c9a-366a7096fdac`, `bc-e44199db-a2c4-5922-99e9-14fb21bda10e`) stay overnight process, not a new linter. `scripts/check-git-test-hermetic.sh` matches the letters `git`, so `"g"+"it"` dodges it (`bc-500998b0-8aab-5951-8226-1c539f34aba1`, `bc-089d0675-b2b1-5468-b141-1e10c8a326fd`). Fix that checker later. Do not add a comment.
 
 ## Appendix F. Recall brief
 
@@ -464,10 +464,10 @@ Scope. All 33 JSONL files under `/cursor/stores/bot/armature-transcripts/` from 
 
 **Capsule.**
 
-- Brian steers for 0.1.0 shipped, then leftovers, with Ready PRs handed to PJ. Project thread `bc-495167c1-f4c1-46b6-85d9-8cbeaa2b3a3b`.
-- Overnight GNHF must shrink deep modules, never widen depguard, never change CLI or ops schema, and keep `make check` green. Many agent ids share that prompt.
+- Brian's GitHub voice after #270 is three replies on [PR 284](https://github.com/scullxbones/armature/pull/284). Codex and the 33 transcripts are the steering corpus. Ready PRs go to PJ (`bc-495167c1-f4c1-46b6-85d9-8cbeaa2b3a3b`).
+- Overnight GNHF must shrink deep modules, never widen depguard, never change CLI or ops schema, and keep `make check` green. [PR 333](https://github.com/scullxbones/armature/pull/333) is the measured "no behavior change" miss.
 - Comment Sicko fences to the last 24h of merged PR files. Meat comments die. Structural MUST KILLs become renames, not new comments.
-- Codex-fix agents are told exact discussion ids, no force-push, merge `origin/main` rather than rebase, and leave GitHub threads untouched.
+- Codex-fix agents get exact discussion ids, no force-push, merge `origin/main` rather than rebase, and leave GitHub threads untouched. First `make check` after a functional edit often fails lint (`lll`, `tparallel`, gosec).
 - Claim and TTL design (`bc-25734276-8d2f-502b-b594-30f3e93e94d7`, `bc-8a1b7494-6c92-572e-ae73-db8fcc29fe84`) stays design-only until Brian is convinced.
 
 **Threads.**
@@ -481,10 +481,10 @@ Scope. All 33 JSONL files under `/cursor/stores/bot/armature-transcripts/` from 
 
 **Problems.**
 
-- Unscoped commits survive review until Codex nags.
+- Unscoped commits survive review until Codex nags. Brian does not repeat that on GitHub.
 - Simplify PRs silently change parse and finding shape.
 - Publish retry and worktree identity need types, not comments.
 - Unlink overlap cascades burn human loops (`UNLINK-1`).
-- Agents still reach for `arm merged` to unblock stacks.
+- Agents still reach for `arm merged` to unblock stacks. Recovery Next Actions sometimes name the code worktree instead of the ops worktree ([PR 272](https://github.com/scullxbones/armature/pull/272)).
 
 **Next move.** Land this plan PR ready. On Brian's go, run AF-P1.
