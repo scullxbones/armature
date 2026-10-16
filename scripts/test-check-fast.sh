@@ -143,6 +143,7 @@ assert_make_target_not_ran "mutate" "go change (fast gate) must not run mutate"
 assert_make_target_not_ran "crosscompile" "go change (fast gate) must not run crosscompile"
 assert_make_target_not_ran "census-drift-check" "pkg1 change is not a census surface"
 assert_make_target_not_ran "validate-skills" "pkg1 change does not touch skills"
+assert_make_target_not_ran "surface-budget-check" "pkg1 is not under internal/"
 
 # Assert the go test invocation covers both the changed package (pkg1) and
 # its reverse importer (pkg2, which imports pkg1) — inspect the script's own
@@ -156,6 +157,36 @@ else
 fi
 
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
+
+# ----------------------------------------------------------------------------
+# Test 2b: an internal/ Go change routes to surface-budget-check.
+# ----------------------------------------------------------------------------
+echo "Test 2b: internal/ Go change routes to surface-budget-check..."
+mkdir -p "$FIXTURE/internal/pkg"
+cat > "$FIXTURE/internal/pkg/pkg.go" <<'EOF'
+package pkg
+
+func Hello() {}
+EOF
+git -C "$FIXTURE" add internal/pkg/pkg.go
+git -C "$FIXTURE" commit -q -m "add internal pkg"
+# Reset BASE to include the new package so the next edit is the routed diff.
+INTERNAL_BASE=$(git -C "$FIXTURE" rev-parse HEAD)
+printf '\nfunc Extra() {}\n' >> "$FIXTURE/internal/pkg/pkg.go"
+git -C "$FIXTURE" add internal/pkg/pkg.go
+
+rm -f "$MAKE_LOG"; touch "$MAKE_LOG"
+(
+    cd "$FIXTURE"
+    PATH="$FAKE_BIN:$PATH" MAKE="$FAKE_BIN/make" BASE="$INTERNAL_BASE" "$SCRIPT" "$FIXTURE"
+) >/dev/null
+
+assert_make_target_ran "surface-budget-check" "surface-budget-check runs for internal/ Go change"
+assert_make_target_not_ran "census-drift-check" "internal/ change is not a census surface"
+assert_make_target_not_ran "mutate" "internal/ change (fast gate) must not run mutate"
+
+git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
+git -C "$FIXTURE" clean -q -fd internal
 
 # ----------------------------------------------------------------------------
 # Test 3: a cmd/ change routes to census-drift-check.

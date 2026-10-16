@@ -28,7 +28,44 @@ linters:
     depguard:
       # Modularity map (quality-controls C7; ADR 0004 fences; ADR 0023 ratchet).
       # Widening an allow-list or removing a deny requires an ADR.
+      # mock-ban is a new deny (map extension, ADR 0023 Decision 3), not a
+      # widen of any existing fence. It implements C1 / R1.
       rules:
+        mock-ban:
+          list-mode: lax
+          files:
+            - "**/*.go"
+          deny:
+            - pkg: "github.com/stretchr/testify/mock"
+              desc: "mock frameworks are banned (R1); write a fake per port. testify/assert and testify/require stay allowed"
+            - pkg: "github.com/golang/mock"
+              desc: "gomock is banned (R1); write a fake per port"
+            - pkg: "go.uber.org/mock"
+              desc: "uber gomock is banned (R1); write a fake per port"
+            - pkg: "github.com/vektra/mockery"
+              desc: "mockery is banned (R1); do not import the generator or its output helpers"
+            - pkg: "github.com/petergtz/pegomock"
+              desc: "pegomock is banned (R1); write a fake per port"
+            - pkg: "github.com/maxbrunsfeld/counterfeiter"
+              desc: "counterfeiter is banned (R1); write a fake per port"
+            - pkg: "github.com/matryer/moq"
+              desc: "moq is banned (R1); write a fake per port"
+            - pkg: "github.com/derision-test/go-mockgen"
+              desc: "go-mockgen is banned (R1); write a fake per port"
+            - pkg: "github.com/DATA-DOG/go-sqlmock"
+              desc: "sqlmock is banned (R1); write a fake per port"
+            - pkg: "github.com/agiledragon/gomonkey"
+              desc: "gomonkey is banned (R1); write a fake per port"
+            - pkg: "github.com/prashantv/gostub"
+              desc: "gostub is banned (R1); write a fake per port"
+            - pkg: "github.com/undefinedlabs/go-mpatch"
+              desc: "go-mpatch is banned (R1); write a fake per port"
+            - pkg: "github.com/bouk/monkey"
+              desc: "bouk/monkey is banned (R1); write a fake per port"
+            - pkg: "github.com/bytedance/mockey"
+              desc: "mockey is banned (R1); write a fake per port"
+            - pkg: "github.com/gojuno/minimock"
+              desc: "minimock is banned (R1); write a fake per port"
         internal-no-cmd:
           list-mode: lax
           files:
@@ -279,6 +316,10 @@ linters:
           - paralleltest
           - tparallel
         path: 'internal/skilltranscript/golden_test\.go'
+      # CI ratchet helper: reads/writes a path the operator passes (repo root).
+      - linters:
+          - gosec
+        path: 'scripts/surfacebudget/'
 
 formatters:
   enable:

@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json mock-ban-check test-mock-ban surface-budget-check surface-budget-ratchet test-surface-budget-check
 
 GO ?= go
 PYTHON ?= python3
@@ -12,7 +12,7 @@ else
 ARM_EXE :=
 endif
 ARM_BIN := $(CURDIR)/bin/arm$(ARM_EXE)
-UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$')
+UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$' | grep -v '/scripts/surfacebudget$$')
 
 .DEFAULT_GOAL := help
 
@@ -40,6 +40,11 @@ help:
 	@echo "  make validate-graph      - arm validate --ci (story integration / CI; not part of make check)"
 	@echo "  make census-drift-check  - Verify code surfaces match docs/design/surface-census.md"
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
+	@echo "  make mock-ban-check      - Fail if go.mod lists a mock framework or mockery output is present"
+	@echo "  make test-mock-ban       - Test check-mock-ban.sh and the depguard mock-ban rule"
+	@echo "  make surface-budget-check - Fail if an internal package grew its exported identifier count"
+	@echo "  make surface-budget-ratchet - Rewrite the committed internal export baseline (shrinks, or reviewed growth)"
+	@echo "  make test-surface-budget-check - Test the surface-budget ratchet (growth fail, shrink pass, rewrite)"
 	@echo "  make git-test-hermetic-check - Fail if _test.go files use raw git init outside internal/gittest"
 	@echo "  make test-git-test-hermetic-check - Test check-git-test-hermetic.sh itself"
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
@@ -58,10 +63,10 @@ GREMLINS_VERSION      := v0.6.0
 
 CHECK_JOBS := check-static check-core mutate
 
-CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-summarize-test-json
+CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-summarize-test-json test-mock-ban test-surface-budget-check
 CHECK_TOOLS_check-static := golangci-lint
 
-CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check
+CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check surface-budget-check
 CHECK_TOOLS_check-core :=
 
 CHECK_JOB_mutate := mutate
@@ -188,6 +193,7 @@ lint: adr-principles
 		exit 1; \
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
+	@scripts/check-mock-ban.sh .
 
 adr-principles:
 	@$(PYTHON) scripts/check_adr_principles.py docs/adr
@@ -248,6 +254,21 @@ test-git-test-hermetic-check:
 
 test-coverage-check:
 	@scripts/test_coverage_check.sh .
+
+mock-ban-check:
+	@scripts/check-mock-ban.sh .
+
+test-mock-ban:
+	@scripts/test_mock_ban.sh .
+
+surface-budget-check:
+	@$(GO) run ./scripts/surfacebudget -check .
+
+surface-budget-ratchet:
+	@$(GO) run ./scripts/surfacebudget -write .
+
+test-surface-budget-check:
+	@scripts/test_surface_budget_check.sh .
 
 test-summarize-test-json:
 	@$(PYTHON) -m unittest scripts/test_summarize_test_json.py
