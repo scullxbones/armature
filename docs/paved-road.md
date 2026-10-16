@@ -122,7 +122,7 @@ Zero unclassified leaf commands is a gate.
 - `arm dag summary` — Interactive draft survey. Prefer list and dag transition.
 - `arm delivery` — Manual delivery snapshot. Bound-worktree done records it.
 - `arm delivery record` — Record a delivery range when no bound worktree can snapshot it.
-- `arm doctor quarantine` — Hidden repair for a corrupt ops line. The road does not rewrite logs; doctor reports the command.
+- `arm doctor quarantine` — Hidden repair for a corrupt ops line. Doctor reports this command.
 - `arm harness-hook` — Internal harness entrypoint. Hidden from --help groups.
 - `arm heartbeat` — The harness hook heartbeats on tool use. Manual heartbeat is for long stretches with no tools.
 - `arm hook` — Git hook management. Bootstrap --with-hooks installs them.
