@@ -316,6 +316,10 @@ linters:
           - paralleltest
           - tparallel
         path: 'internal/skilltranscript/golden_test\.go'
+      # CI ratchet helper: reads/writes a path the operator passes (repo root).
+      - linters:
+          - gosec
+        path: 'scripts/surfacebudget/'
 
 formatters:
   enable:
