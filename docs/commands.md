@@ -601,6 +601,8 @@ Add a dependency link between issues.
 - `--dep string`: Dependency issue ID.
 - `--rel string`: Relationship type (default "blocked_by").
 - `--source string`: Source issue ID.
+- `--override-validate`: Human escape hatch. Write the link despite introduced Graph Findings. Requires `--reason` and a controlling terminal. Records `skipped_validate_gate`. Never green.
+- `--reason string`: Recorded reason for `--override-validate`.
 
 ---
 
@@ -1225,6 +1227,8 @@ Remove a dependency link between issues.
 **Flags:**
 - `--source string`: Source issue ID.
 - `--dep string`: Dependency issue ID.
+- `--override-validate`: Human escape hatch. Write the unlink despite introduced Graph Findings. Requires `--reason` and a controlling terminal. Records `skipped_validate_gate`. Never green.
+- `--reason string`: Recorded reason for `--override-validate`.
 
 ---
 

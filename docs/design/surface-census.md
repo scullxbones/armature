@@ -257,7 +257,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--to` | transition | string | Target status: open, in-progress, done, merged, blocked, cancelled | **kept-evidence** |
 | `--skip-delivery-gate` | transition | bool | Bypass the delivery gate (clean tree, scope containment, commit reference) checked when transitioning to done; override is recorded in the transition op's payload | **kept-evidence** |
 | `--to` | dag transition | string | Target confidence level: draft, verified (default verified). Distinct from `transition`'s `--to` — this one stores into `targetConfidence` and is validated against the confidence enum, not the status enum (cmd/armature/dag_transition.go). Running `dag transition --to done` is now a validation error rather than silently stamping "done" into Provenance.Confidence. Promotion to verified runs full-graph strict validate first. | **kept-evidence** |
-| `--reason` | dag override-release, push-ops | string | Recorded reason for a Release Override or a publish-validate override. Required with the matching override flag. | **kept-evidence** |
+| `--reason` | dag override-release, push-ops, link, unlink | string | Recorded reason for a Release Override, a publish-validate override, or a graph-edit override. Required with the matching override flag. | **kept-evidence** |
 | `--outcome` | transition | string | Outcome summary on completion | **kept-evidence** |
 | `--branch` | transition, review commits | string | Feature branch name | **kept-evidence** |
 | `--pr` | transition, merged | string | PR number or URL | **kept-evidence** |
@@ -275,7 +275,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 |------|-----------|------|-------|--------|
 | `--dry-run` | sync, dag apply, dag revert, import, doctor, worktree gc | bool | Preview without writing ops (for `worktree gc`, preview removals without removing) | **kept-evidence** |
 | `--into` | sync | string | Override integration branch for every leaf (default: recorded per issue, else config) | **kept-evidence** |
-| `--override-validate` | push-ops | bool | Human escape hatch: publish `_armature` even when `arm validate --ci` would fail. Requires `--reason` and a controlling terminal. Records `skipped_validate_gate`. Never a green publish. Skills must not name this flag. | **kept-evidence** |
+| `--override-validate` | push-ops, link, unlink | bool | Human escape hatch: publish `_armature` even when `arm validate --ci` would fail, or write a link/unlink that introduces Graph Findings. Requires `--reason` and a controlling terminal. Records `skipped_validate_gate`. Never green. Skills must not name this flag. | **kept-evidence** |
 
 ### DAG/Decompose Flags
 
