@@ -1,6 +1,6 @@
 # Agent-friendly defaults plan
 
-This program makes the cheap Armature edit the correct one for agents. It encodes Brian's steering from [PR 270](https://github.com/scullxbones/armature/pull/270) onward as types, tests, and `make check` holds. It does not add a mock-library ban or an exported-symbol count limit. Those belong to another agent. The operator lands AF-P1 through AF-P6. Nothing merges in this program until that explicit go.
+This program makes the cheap Armature edit the correct one for agents. It encodes Brian's steering from [PR 270](https://github.com/scullxbones/armature/pull/270) onward as types, tests, and `make check` holds. It does not add a mock-library ban or an exported-symbol count limit. Those belong to another agent. The operator lands AF-P1 through AF-P7. Nothing merges in this program until that explicit go.
 
 ## How to read this
 
@@ -32,12 +32,12 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 - [ ] Spawn one owner per PR with the full lifecycle the execution playbook names.
 - [ ] Follow this dependency graph. Start dependent work only after its parent merges, or base it on the parent branch when the execution playbook stacks.
-  - [ ] `AF-P1` and `AF-P4` are independent and first. Both branch from `main`.
+  - [ ] `AF-P1`, `AF-P4`, and `AF-P7` are independent and first. All three branch from `main`.
   - [ ] `AF-P2` after `AF-P1`.
   - [ ] `AF-P3` after `AF-P1`.
   - [ ] `AF-P5` after `AF-P2`.
   - [ ] `AF-P6` after `AF-P3`.
-- [ ] Hold the file boundaries. `AF-P1` touches only commit-subject checking. `AF-P2` touches ops parse and load. `AF-P3` touches validate findings goldens. `AF-P4` touches worktree identity resolution. `AF-P5` touches publish retry validation. `AF-P6` touches `unlink` and `link` graph-edit preview. No PR widens a depguard allow-list. ADR 0023 already forbids that.
+- [ ] Hold the file boundaries. `AF-P1` touches only commit-subject checking. `AF-P2` touches ops parse and load. `AF-P3` touches validate findings goldens. `AF-P4` touches worktree identity resolution. `AF-P5` touches publish retry validation. `AF-P6` touches `unlink` and `link` graph-edit preview. `AF-P7` touches the depguard hold test and `.golangci.yml` only as a parse target. Growing an allow-list still requires an ADR in the same diff.
 - [ ] Hold the review gate. `AF-P3`, `AF-P5`, and `AF-P6` change an interaction. They wait for the operator's review in chat with screenshots and a video before merge.
 
 ### PR mechanics, for every PR
@@ -287,11 +287,12 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-c
 - [ ] Edit `cmd/armature/push_ops.go`.
 - [ ] Edit `cmd/armature/publish_validate.go`.
 - [ ] Edit `cmd/armature/helpers.go`.
+- [ ] Delete the `appendHighStakesOp` nil-callback wrapper, or inline it so no caller can pass nil.
 - [ ] Create `cmd/armature/publish_retry_validate_test.go`.
 
 **Build.**
 
-- [ ] Make `pushOpsBranchAfter` take a non-optional after-integrate callback type. A nil callback must not compile. Overlay remote `sources/manifest.json` into the candidate graph. Re-run CI validation after every rebase unless a recorded override is active.
+- [ ] Delete `appendHighStakesOp`. One publish function owns fetch, rebase, the predicate the command already computed, and the second push. Heartbeat, claim, doctor, and `push-ops` share that path. Overlay remote `sources/manifest.json` into the candidate graph. Re-run the same predicate after every rebase unless a recorded override is active. Do not add a second callback parameter that can be nil. Go cannot forbid a nil func.
 
 **You see.**
 
@@ -310,7 +311,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-c
 - [ ] Lane 5. Auth failure stays a classified publish Command Failure from [PR 272](https://github.com/scullxbones/armature/pull/272). Save `af-p5-auth.png`. Pass when the code prefix is the publish class, not `GENERAL-1`.
 - [ ] Lane 6. Local ops commit remains after failed push (I2). Save `af-p5-local-keep.png`. Pass when `git log` in the ops worktree still has the commit.
 - [ ] Lane 7. Foreign child after rebase is rechecked ([PR 290](https://github.com/scullxbones/armature/pull/290)). Save `af-p5-foreign-child.png`. Pass when revert or decompose does not publish a stale snapshot.
-- [ ] Lane 8. `requirePublishedOwner` after integrate ([PR 279](https://github.com/scullxbones/armature/pull/279)). Save `af-p5-owner.png`. Pass when a lost owner cannot heartbeat.
+- [ ] Lane 8. Heartbeat after a foreign rebase cannot publish as a lost owner ([PR 279](https://github.com/scullxbones/armature/pull/279)). Save `af-p5-owner.png`. Pass when heartbeat uses the shared publish path, not a leftover nil wrapper.
 - [ ] Lane 9. `make test-e2eharness` subset for publish if present. Save `af-p5-e2e.png`. Pass when that subset exits 0.
 - [ ] Lane 10. `make check-fast` green. Save `af-p5-check-fast.png`. Pass when exit is 0.
 
@@ -389,6 +390,57 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-c
 - [ ] Rebased onto current trunk after the verdict, patch-id unchanged.
 - [ ] The root appends it to the base-branch stack and the operator lands it bottom-up.
 
+## Hold depguard allow-lists to an ADR (AF-P7)
+
+**Depends on.** None.
+
+**Files.**
+
+- [ ] Create `scripts/check-depguard-hold.sh`.
+- [ ] Create `scripts/test_check_depguard_hold.sh`.
+- [ ] Edit `Makefile`.
+
+**Build.**
+
+- [ ] Parse `depguard` `rules` in `.golangci.yml` against `origin/main`. Fail when an existing rule's allow set grows or a deny disappears, unless the same diff adds a file under `docs/adr/`. New fences that match current imports stay allowed, per ADR 0023 decision 3. Do not add a second import graph.
+
+**You see.**
+
+- [ ] A branch that only adds `oporder` to `materialize-boundary` fails `make check-fast`. The same change plus `docs/adr/0024-*.md` passes.
+
+**Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] `scripts/test_check_depguard_hold.sh` covers grow-allow, drop-deny, new-fence, shrink-allow, and ADR-present. Run that script.
+
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `grok-4.7-xhigh-fast` at the PR head, per the boot recipe.
+
+- [ ] Lane 1. Regression lane against trunk. Run the hold script on a clean `origin/main..HEAD` with no `.golangci.yml` change at trunk and head. Save `af-p7-regression.png`. Pass when both exit 0, or trunk lacks the script and head exits 0 on a no-op diff.
+- [ ] Lane 2. Replay the [PR 347](https://github.com/scullxbones/armature/pull/347) `worktree-pure` allow of `adapters` without an ADR. Save `af-p7-pr347.png`. Pass when the script exits non-zero.
+- [ ] Lane 3. Replay [PR 280](https://github.com/scullxbones/armature/pull/280) adding `oporder` to `materialize-boundary`. Save `af-p7-pr280.png`. Pass when the script exits non-zero.
+- [ ] Lane 4. Replay [PR 288](https://github.com/scullxbones/armature/pull/288) adding `clock` to `sources-boundary`. Save `af-p7-pr288.png`. Pass when the script exits non-zero.
+- [ ] Lane 5. Replay [PR 291](https://github.com/scullxbones/armature/pull/291) adding `issueref` to `traceability-boundary`. Save `af-p7-pr291.png`. Pass when the script exits non-zero.
+- [ ] Lane 6. Same as lane 2, with a new ADR file in the diff. Save `af-p7-with-adr.png`. Pass when the script exits 0.
+- [ ] Lane 7. Shrink an allow-list with no ADR. Save `af-p7-shrink.png`. Pass when the script exits 0.
+- [ ] Lane 8. Add a new fence that is already green. Save `af-p7-new-fence.png`. Pass when the script exits 0.
+- [ ] Lane 9. `make check-fast` on this docs-and-script PR is green. Save `af-p7-check-fast.png`. Pass when exit is 0.
+- [ ] Lane 10. Confirm ADR 0023 still says lint is the map and this test is not a second graph. Save `af-p7-adr0023.png`. Pass when the ADR file is unchanged except citations.
+
+**Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] Metric. Wall time of `scripts/check-depguard-hold.sh` on a typical PR diff, at trunk and head. If trunk lacks the script, also name script runtime at head and the wait until `make check-fast` returns.
+- [ ] Probe. Interleaved runs of that script at both SHAs, or `true` at trunk if missing.
+- [ ] Baseline. Record the trunk value first.
+- [ ] Rule. Head must stay under 2s. If trunk has no script, fail head above 2s rather than inventing a ratio.
+
+**Review gate.** None. AF-P7 is not review-gated.
+
+**Merge.**
+
+- [ ] Root's clean verdict at the exact head SHA.
+- [ ] Bugbot triage done.
+- [ ] Rebased onto current trunk after the verdict, patch-id unchanged.
+- [ ] The root appends it to the base-branch stack and the operator lands it bottom-up.
+
 ## Close the program
 
 - [ ] Every box above is checked with its evidence.
@@ -456,7 +508,9 @@ Score is frequency times cost. Cost is review churn, revert risk, or invariant m
 
 **6. Graph edits that invent overlap, plus I6 confusion.** Project transcript `bc-495167c1-f4c1-46b6-85d9-8cbeaa2b3a3b` (two `UNLINK-1` cascades on Oct 4). Dogfood `scope-overlap-validation-gaps`. Codex P1 on [PR 283](https://github.com/scullxbones/armature/pull/283) (`arm merged` while the GitHub PR was still open). **AF-P6.** Check `TestUnlinkRefusesIntroducedOverlap_REQ_AGTFND`. Next Actions must not suggest premature `arm merged`.
 
-**Not in this stack.** Leftover `cmd/` `time.Now` (forbidigo hole). Skills split is already covered by `cmd/armature/bootstrap_test.go` after [PR 283](https://github.com/scullxbones/armature/pull/283). Comment-strip waves (`bc-c5027dc5-dc6d-5c0b-9c9a-366a7096fdac`, `bc-e44199db-a2c4-5922-99e9-14fb21bda10e`) stay overnight process, not a new linter. `scripts/check-git-test-hermetic.sh` matches the letters `git`, so `"g"+"it"` dodges it (`bc-500998b0-8aab-5951-8226-1c539f34aba1`, `bc-089d0675-b2b1-5468-b141-1e10c8a326fd`). Fix that checker later. Do not add a comment.
+**7. An existing depguard allow-list grows so the import compiles.** [PR 280](https://github.com/scullxbones/armature/pull/280), [PR 288](https://github.com/scullxbones/armature/pull/288), [PR 291](https://github.com/scullxbones/armature/pull/291), and [PR 347](https://github.com/scullxbones/armature/pull/347) after ADR 0023. Lint fails the import, so the agent edits the YAML. Review was the only ADR hold. **AF-P7.** Check `scripts/check-depguard-hold.sh`.
+
+**Not in this stack.** Leftover `cmd/` `time.Now` (forbidigo hole). Skills split is already covered by `cmd/armature/bootstrap_test.go` after [PR 283](https://github.com/scullxbones/armature/pull/283). Comment-strip waves (`bc-c5027dc5-dc6d-5c0b-9c9a-366a7096fdac`, `bc-e44199db-a2c4-5922-99e9-14fb21bda10e`) stay overnight process. A later diff-aware lint on added `//` lines would have failed [PR 301](https://github.com/scullxbones/armature/pull/301) and [PR 348](https://github.com/scullxbones/armature/pull/348). `scripts/check-git-test-hermetic.sh` matches the letters `git`, so `"g"+"it"` dodges it (`bc-500998b0-8aab-5951-8226-1c539f34aba1`, `bc-089d0675-b2b1-5468-b141-1e10c8a326fd`). Copied `statusDone` strings in [PR 330](https://github.com/scullxbones/armature/pull/330), [PR 333](https://github.com/scullxbones/armature/pull/333), and [PR 335](https://github.com/scullxbones/armature/pull/335) wait on a pure vocabulary package plus AF-P7. New `grep` in scripts and `*.sh` without the executable bit are lint-on-added-lines follow-ups ([PR 308](https://github.com/scullxbones/armature/pull/308), [PR 324](https://github.com/scullxbones/armature/pull/324), [PR 332](https://github.com/scullxbones/armature/pull/332)).
 
 ## Appendix F. Recall brief
 
@@ -477,7 +531,7 @@ Scope. All 33 JSONL files under `/cursor/stores/bot/armature-transcripts/` from 
 - `[merged #333]` validate simplify plus E7 regression fix. Transcript `bc-48c50487-3aa9-5f54-bbae-b261a92e8774`.
 - `[merged #340]` macOS `cmd/armature` git-spawn cost. Transcript `bc-089d0675-b2b1-5468-b141-1e10c8a326fd`.
 - `[merged #345]` PARCLI invocation env. Transcript `bc-500998b0-8aab-5951-8226-1c539f34aba1` fence.
-- `[planned, not started]` AF-P1 through AF-P6 in this file.
+- `[planned, not started]` AF-P1 through AF-P7 in this file.
 
 **Problems.**
 
@@ -487,4 +541,4 @@ Scope. All 33 JSONL files under `/cursor/stores/bot/armature-transcripts/` from 
 - Unlink overlap cascades burn human loops (`UNLINK-1`).
 - Agents still reach for `arm merged` to unblock stacks. Recovery Next Actions sometimes name the code worktree instead of the ops worktree ([PR 272](https://github.com/scullxbones/armature/pull/272)).
 
-**Next move.** Land this plan PR ready. On Brian's go, run AF-P1.
+**Next move.** Land this plan PR ready. On Brian's go, run AF-P1 and AF-P7 in parallel.
