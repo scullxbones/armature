@@ -465,12 +465,9 @@ func TestRun_CorruptLineDoesNotTriggerD7(t *testing.T) {
 	logPath := filepath.Join(issuesDir, "ops", "worker-clean.log")
 	require.NoError(t, os.WriteFile(logPath, []byte("this is not valid json\n"), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
-	require.NoError(t, err)
-
-	d7 := findCheck(t, report, "D7")
-	assert.Equal(t, doctor.SeverityOK, d7.Severity,
-		"corrupt-line warnings must not cause D7 to fire as a worker-ID mismatch")
+	_, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	require.Error(t, err, "corrupt log must fail the load instead of skipping into D-checks")
+	assert.Contains(t, err.Error(), "invalid JSONL line")
 }
 
 func TestRun_Integration_D2_StaleClaims(t *testing.T) {

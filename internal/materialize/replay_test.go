@@ -47,13 +47,25 @@ func TestMaterializationConvergesAfterInterruptedAppend_REQ_TOPTIER_S3_T2(t *tes
 			t.Parallel()
 
 			torn := append([]byte{}, encodedCreate[:interruptedAt]...)
-			actual, logBytes, opCount := replayState(t, appendCrash{
-				phase:     appendPhaseTornRecord,
-				logPrefix: torn,
-			}, create, transition)
+			if len(torn) == 0 {
+				actual, logBytes, opCount := replayState(t, appendCrash{
+					phase:     appendPhaseTornRecord,
+					logPrefix: torn,
+				}, create, transition)
+				assertAppendOnlyTail(t, torn, logBytes)
+				require.Equal(t, 2, opCount)
+				require.Equal(t, baseline, actual)
+				return
+			}
+
+			logBytes, readErr := replayTornLog(t, torn, create, transition)
 			assertAppendOnlyTail(t, torn, logBytes)
-			require.Equal(t, 2, opCount)
-			require.Equal(t, baseline, actual)
+			_, parseErr := ops.ParseLine(torn)
+			if parseErr != nil {
+				require.Error(t, readErr, "a torn JSONL prefix is a load failure, not a skipped line")
+				return
+			}
+			require.NoError(t, readErr, "a complete JSON prefix is a valid first record")
 		})
 	}
 }
@@ -107,7 +119,30 @@ func assertAppendOnlyTail(t *testing.T, torn, logBytes []byte) {
 	}
 }
 
+func replayTornLog(t *testing.T, torn []byte, recovered ...ops.Op) ([]byte, error) {
+	t.Helper()
+	logPath := writeCrashLog(t, appendCrash{phase: appendPhaseTornRecord, logPrefix: torn}, recovered...)
+	_, readErr := ops.ReadLog(logPath)
+	logBytes, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	return logBytes, readErr
+}
+
 func replayState(t *testing.T, crash appendCrash, recovered ...ops.Op) (*Issue, []byte, int) {
+	t.Helper()
+	logPath := writeCrashLog(t, crash, recovered...)
+	allOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	state, _, err := materializeAndReturn(filepath.Join(filepath.Dir(filepath.Dir(logPath)), "state"), allOps, map[string]int64{"worker-a.log": 1})
+	require.NoError(t, err)
+	issue := state.Issues["REPLAY-001"]
+	require.NotNil(t, issue)
+	logBytes, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	return issue, logBytes, len(allOps)
+}
+
+func writeCrashLog(t *testing.T, crash appendCrash, recovered ...ops.Op) string {
 	t.Helper()
 	root := t.TempDir()
 	logPath := filepath.Join(root, "ops", "worker-a.log")
@@ -121,13 +156,5 @@ func replayState(t *testing.T, crash appendCrash, recovered ...ops.Op) (*Issue, 
 	for _, op := range recovered {
 		require.NoError(t, ops.AppendOp(logPath, op))
 	}
-	allOps, err := ops.ReadLog(logPath)
-	require.NoError(t, err)
-	state, _, err := materializeAndReturn(filepath.Join(root, "state"), allOps, map[string]int64{"worker-a.log": 1})
-	require.NoError(t, err)
-	issue := state.Issues["REPLAY-001"]
-	require.NotNil(t, issue)
-	logBytes, err := os.ReadFile(logPath)
-	require.NoError(t, err)
-	return issue, logBytes, len(allOps)
+	return logPath
 }
