@@ -28,6 +28,7 @@ const (
 	OpReparent           = "reparent"
 	OpAssessmentAttested = "assessment-attested"
 	OpPromotionCheck     = "promotion-check"
+	OpLogQuarantine      = "log-quarantine"
 )
 
 // IsAuditOnly reports ops that record evidence or metadata without mutating
@@ -35,7 +36,7 @@ const (
 // profile name) and must not be treated as unknown or as an orphaned issue.
 func IsAuditOnly(opType string) bool {
 	switch opType {
-	case OpSourceFingerprint, OpGateEvidence:
+	case OpSourceFingerprint, OpGateEvidence, OpLogQuarantine:
 		return true
 	default:
 		return false
@@ -148,6 +149,8 @@ type Payload struct {
 	SourceEntryID                     string          `json:"source_entry_id,omitempty"`
 	PreferredModel                    string          `json:"preferred_model,omitempty"`
 	Assessment                        json.RawMessage `json:"assessment,omitempty"`
+	QuarantineLog                     string          `json:"quarantine_log,omitempty"`
+	QuarantineLine                    int             `json:"quarantine_line,omitempty"`
 }
 
 func payloadsEqual(a, b Payload) bool {

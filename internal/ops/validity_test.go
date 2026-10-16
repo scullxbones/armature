@@ -18,6 +18,7 @@ func TestAffectsValidity_KnownTypes(t *testing.T) {
 	assert.False(t, AffectsValidity(OpHeartbeat))
 	assert.False(t, AffectsValidity(OpNote))
 	assert.False(t, AffectsValidity(OpGateEvidence))
+	assert.False(t, AffectsValidity(OpLogQuarantine))
 	affects, classified := ClassifiedValidity("not-a-real-op")
 	assert.False(t, classified)
 	assert.False(t, affects)

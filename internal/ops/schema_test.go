@@ -53,7 +53,7 @@ func TestGenerateSchema_DocumentsTransitionTokenFields_REQ_TOPTIER_S11_T1(t *tes
 	documented := block.String()
 	assert.Contains(t, documented, "input_tokens (optional)", "transition payload must document optional input_tokens")
 	assert.Contains(t, documented, "output_tokens (optional)", "transition payload must document optional output_tokens")
-	assert.Greater(t, ScaffoldingVersion, 3, "bump ScaffoldingVersion so bootstrap republishes ops/SCHEMA")
+	assert.Greater(t, ScaffoldingVersion, 4, "bump ScaffoldingVersion so bootstrap republishes ops/SCHEMA")
 }
 
 func TestGenerateSchema_DocumentsSchemaVersion_REQ_TOPTIER_S6_T2(t *testing.T) {

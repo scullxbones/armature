@@ -364,7 +364,7 @@ func TestRegisteredOpTypes_ReturnsAllSupportedTypes(t *testing.T) {
 		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent, ops.OpAssessmentAttested,
-		ops.OpGateEvidence, ops.OpPromotionCheck,
+		ops.OpGateEvidence, ops.OpPromotionCheck, ops.OpLogQuarantine,
 	}
 
 	for _, expected := range expectedTypes {
@@ -401,7 +401,7 @@ func TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered(t *testing.T) {
 		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent,
-		ops.OpGateEvidence, ops.OpPromotionCheck,
+		ops.OpGateEvidence, ops.OpPromotionCheck, ops.OpLogQuarantine,
 	}
 	for _, opType := range standardOps {
 		assert.True(t, registeredSet[opType], "standard op type %q must be in RegisteredOpTypes", opType)
@@ -424,7 +424,7 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 			ops.OpPromotionCheck: {},
 		}
 		wantUnspecified := map[string]struct{}{
-			ops.OpCreate: {}, ops.OpSourceFingerprint: {}, ops.OpGateEvidence: {},
+			ops.OpCreate: {}, ops.OpSourceFingerprint: {}, ops.OpGateEvidence: {}, ops.OpLogQuarantine: {},
 		}
 		require.Equal(t, len(opHandlers), len(wantError)+len(wantIgnore)+len(wantUnspecified))
 		for opType, handler := range opHandlers {

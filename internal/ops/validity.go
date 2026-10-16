@@ -20,6 +20,7 @@ var classifiedValidity = map[string]bool{
 	OpAssign:             false,
 	OpSourceFingerprint:  false,
 	OpGateEvidence:       false,
+	OpLogQuarantine:      false,
 	OpAssessmentAttested: false,
 	OpPromotionCheck:     false,
 }

@@ -439,6 +439,7 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"scope-rename":            {Kind: pavedRoadKindEscape, Note: "Rewrite a scope glob across issues. Planning should not need this."},
 	"scope-delete":            {Kind: pavedRoadKindEscape, Note: "Drop a scope glob. Prefer amending the plan."},
 	"doctor":                  {Kind: pavedRoadKindPaved},
+	"doctor quarantine":       {Kind: pavedRoadKindEscape, Note: "Hidden repair for a corrupt ops line. Doctor reports this command."},
 	"completion":              {Kind: pavedRoadKindEscape, Note: "Shell completion script. Not an orchestration verb."},
 	"hook":                    {Kind: pavedRoadKindEscape, Note: "Git hook management. Bootstrap --with-hooks installs them."},
 	"hook run":                {Kind: pavedRoadKindEscape, Note: "Invoke a named git hook. Git and the harness call this, not agents."},

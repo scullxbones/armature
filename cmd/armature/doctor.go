@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
+	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
 
@@ -80,7 +83,7 @@ func newDoctorCmd() *cobra.Command {
 
 			report, err := doctor.Run(issuesDir, appCtx.StateDir, repoPath, appCtx.WorktreePath, verbose, time.Now())
 			if err != nil {
-				return err
+				return mapDoctorLoadError(err)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -109,7 +112,72 @@ func newDoctorCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&explain, "explain", false, "guided narrative and suggested remediation for non-OK checks")
 	cmd.Flags().BoolVar(&fix, "fix", false, "reconcile expired claims (claimed->open, in-progress->blocked) by appending ops")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --fix, list planned fixes without writing any ops")
+	cmd.AddCommand(newDoctorQuarantineCmd())
 	return cmd
+}
+
+func newDoctorQuarantineCmd() *cobra.Command {
+	var logName string
+	var line int
+	cmd := &cobra.Command{
+		Use:    "quarantine",
+		Short:  "Move a corrupt ops log line into a sidecar without deleting it",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appCtx := currentCtx(cmd)
+			opsDir := filepath.Join(appCtx.IssuesDir, "ops")
+			base := filepath.Base(logName)
+			if base == "." || base == string(filepath.Separator) || !strings.HasSuffix(base, ".log") {
+				return armerrors.Wrap("DOCTOR-1", "quarantine --log must be an ops *.log basename", []string{"arm doctor"}, nil)
+			}
+			logPath := filepath.Join(opsDir, base)
+			if err := ops.QuarantineLogLine(logPath, line, time.Now().Unix()); err != nil {
+				return mapDoctorLoadError(err)
+			}
+			if gc := worktreeGit(appCtx); gc != nil && appCtx.WorktreePath != "" {
+				qRel, relErr := filepath.Rel(appCtx.WorktreePath, logPath+".quarantine")
+				if relErr != nil {
+					return relErr
+				}
+				logRel, relErr := filepath.Rel(appCtx.WorktreePath, logPath)
+				if relErr != nil {
+					return relErr
+				}
+				msg := "ops: log-quarantine " + base
+				if err := gc.CommitWorktreeOp(qRel, msg); err != nil {
+					return err
+				}
+				if err := gc.CommitWorktreeOp(logRel, msg); err != nil {
+					return err
+				}
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "quarantined %s:%d\n", base, line)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&logName, "log", "", "ops log basename (worker-id.log)")
+	cmd.Flags().IntVar(&line, "line", 0, "1-based physical line number to quarantine")
+	_ = cmd.MarkFlagRequired("log")
+	_ = cmd.MarkFlagRequired("line")
+	return cmd
+}
+
+func mapDoctorLoadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var located *ops.ParseLoadError
+	if errors.As(err, &located) {
+		if repair := located.RepairCommand(); repair != "" {
+			return armerrors.Map("DOCTOR-1", located.Error(), []string{repair}, err)
+		}
+		return armerrors.Map("DOCTOR-1", err.Error(), []string{"arm doctor quarantine --log <file> --line <n>"}, err)
+	}
+	var newer *ops.NewerSchemaVersionError
+	if errors.As(err, &newer) {
+		return armerrors.Map("DOCTOR-1", err.Error(), []string{"arm version"}, err)
+	}
+	return err
 }
 
 const doctorCodesHelp = "see docs/validation-codes.md for doctor check codes"

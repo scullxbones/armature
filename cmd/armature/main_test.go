@@ -438,7 +438,7 @@ func prepareTestDeliveryRange(repo, issueID string) (base, tip string, err error
 	}
 	if needCommit {
 		rel := "delivery-range-" + issueID + ".txt"
-		if writeErr := os.WriteFile(filepath.Join(checkout, rel), []byte(issueID+"\n"), 0o644); writeErr != nil {
+		if writeErr := writeTempRepoFile(checkout, rel, issueID+"\n"); writeErr != nil {
 			return "", "", writeErr
 		}
 		if addErr := git.AddPaths([]string{rel}); addErr != nil {
@@ -474,8 +474,16 @@ func prepareTestDeliveryRange(repo, issueID string) (base, tip string, err error
 }
 
 func dirExists(path string) bool {
-	st, err := os.Stat(path)
+	st, err := statTempPath(path)
 	return err == nil && st.IsDir()
+}
+
+func writeTempRepoFile(dir, name, body string) error {
+	return os.WriteFile(filepath.Join(dir, filepath.Base(name)), []byte(body), 0o644) //nolint:gosec,nolintlint // G703: test-controlled temp repo file
+}
+
+func statTempPath(path string) (os.FileInfo, error) {
+	return os.Stat(filepath.Clean(path)) //nolint:gosec,nolintlint // G703: test-controlled path
 }
 
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {

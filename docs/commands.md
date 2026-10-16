@@ -481,10 +481,17 @@ Run repository health checks (D1-D10, D12).
   issues are no longer claimed/in-progress with an expired claim.
 - `--dry-run`: With `--fix`, list the planned fixes without writing any ops.
 
+**Subcommands:**
+- `arm doctor quarantine --log <worker.log> --line N`: copy a corrupt physical line into
+  `<worker.log>.quarantine` next to the log and append a `log-quarantine` op. The original
+  line is left in place (append-only). Re-running the same file and line is a no-op.
+  After it succeeds, a normal load skips that line.
+
 **Examples:**
 ```bash
 arm doctor --fix --dry-run   # preview planned reconciliation
 arm doctor --fix             # apply it
+arm doctor quarantine --log worker-a1.log --line 2
 ```
 
 **Doctor Checks:**

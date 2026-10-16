@@ -44,6 +44,7 @@ var schemaOpDocs = []schemaOpDoc{
 	{OpType: OpPromotionCheck, PayloadField: "target_sha, tip, result, combined_patch_id, matched_commit"},
 	{OpType: OpGateEvidence, PayloadField: "profile, command, head_sha, start, end, exit, uncommitted,"},
 	{OpType: OpGateEvidence, PayloadField: "                    output_hash, output_head, output_tail, log_path"},
+	{OpType: OpLogQuarantine, PayloadField: "quarantine_log, quarantine_line, sha"},
 }
 
 func schemaDocumentedOpTypes() []string {
@@ -66,7 +67,7 @@ func schemaDocumentedOpTypes() []string {
 // strictly newer, so an older clone run after an upgrade cannot commit a
 // downgrade and set two clones fighting over the shared _armature branch
 // (AGENTS.md I3).
-const ScaffoldingVersion = 4
+const ScaffoldingVersion = 5
 
 const scaffoldingVersionPrefix = "# scaffolding-version: "
 

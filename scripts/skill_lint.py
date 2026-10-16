@@ -59,6 +59,8 @@ MANDATORY_FLAGS = {
     "sources accept-citation": ["--rationale"],
     "sources link": ["--source-id"],
     "sources add": ["--url", "--type"],
+    "quarantine": ["--log", "--line"],
+    "doctor quarantine": ["--log", "--line"],
 }
 
 # The arm binary to invoke. Configurable via ARM_BIN so CI (and tests) can
