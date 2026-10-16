@@ -129,7 +129,13 @@ func graphEditCascadeCause(ctx *config.Context, op ops.Op, sourceID, dep string)
 	if err != nil {
 		return ""
 	}
-	state, _, _ := materialize.ReplayOpsTolerant(allOps)
+	state, skipped, firstErr := materialize.ReplayOpsTolerant(allOps)
+	if state == nil {
+		return ""
+	}
+	if skipped > 0 && firstErr != nil {
+		return ""
+	}
 	after, err := projectValidateState(state, []ops.Op{op})
 	if err != nil {
 		return ""

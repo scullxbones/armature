@@ -142,7 +142,7 @@ func TestUnlinkOverrideDoesNotClaimGreen_REQ_AGTFND(t *testing.T) {
 	require.NoError(t, tty.Close())
 	tty, err = os.Open(tty.Name())
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tty.Close() })
+	t.Cleanup(func() { bestEffortClose(tty) })
 
 	origTTY := openControllingTTY
 	openControllingTTY = func() (*os.File, error) { return tty, nil }
