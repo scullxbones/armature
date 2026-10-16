@@ -90,12 +90,22 @@ func mustMarshalIndent(v any) []byte {
 	return b
 }
 
+type invokingWorktreePath string
+type mainGitDir string
+
+func (p invokingWorktreePath) String() string { return string(p) }
+func (d mainGitDir) String() string           { return string(d) }
+
 func slottedWorkerIDBestEffort(repoPath string) string {
-	return slottedWorkerIDBestEffortEnv(repoPath, OSEnv())
+	return slottedWorkerIDFromInvoking(invokingWorktreePath(repoPath), OSEnv())
 }
 
 func slottedWorkerIDBestEffortEnv(repoPath string, env Env) string {
-	id, err := worker.GetWorkerID(repoPath)
+	return slottedWorkerIDFromInvoking(invokingWorktreePath(repoPath), env)
+}
+
+func slottedWorkerIDFromInvoking(invoking invokingWorktreePath, env Env) string {
+	id, err := worker.GetWorkerID(invoking.String())
 	swallowErr(err)
 	if id == "" {
 		return ""
@@ -251,7 +261,7 @@ func attachExecutionState(cmd *cobra.Command, ctx *config.Context) {
 		ctx.WorkerIDFlag, _ = cmd.Root().PersistentFlags().GetString("worker-id")
 	}
 	env := envFrom(cmd)
-	workerID := slottedWorkerIDBestEffortEnv(identityRepoPath(ctx), env)
+	workerID := slottedWorkerIDFromInvoking(identityRepoPath(ctx), env)
 	if workerID == "" {
 		workerID = slottedWorkerIDEnv("default", env)
 	}
@@ -292,14 +302,21 @@ func stateDirFor(ctx *config.Context, workerID string) string {
 	return filepath.Join(ctx.IssuesDir, "state", workerID)
 }
 
-func identityRepoPath(ctx *config.Context) string {
+func identityRepoPath(ctx *config.Context) invokingWorktreePath {
 	if ctx == nil {
 		return ""
 	}
 	if ctx.InvocationPath != "" {
-		return ctx.InvocationPath
+		return invokingWorktreePath(ctx.InvocationPath)
 	}
-	return ctx.RepoPath
+	return invokingWorktreePath(ctx.RepoPath)
+}
+
+func contextGitDir(ctx *config.Context) mainGitDir {
+	if ctx == nil {
+		return ""
+	}
+	return mainGitDir(ctx.RepoPath)
 }
 
 func resolveWorkerAndLogCmd(cmd *cobra.Command) (string, string, error) {
@@ -315,7 +332,7 @@ func resolveWorkerAndLogWithEnv(ctx *config.Context, env Env) (string, string, e
 		return "", "", fmt.Errorf("worker not initialized: command context unavailable")
 	}
 	ident, err := worker.ResolveIdentity(worker.IdentityInput{
-		RepoPath:     identityRepoPath(ctx),
+		RepoPath:     identityRepoPath(ctx).String(),
 		IssuesDir:    ctx.IssuesDir,
 		FlagWorkerID: ctx.WorkerIDFlag,
 		EnvWorkerID:  envLookup(env, "ARM_WORKER_ID"),
@@ -363,7 +380,7 @@ func withWorkerLogLock(ctx *config.Context, logPath string, fn func() error) err
 		return fn()
 	}
 	id := strings.TrimSuffix(filepath.Base(logPath), ".log")
-	unlock, err := worker.LockLogID(ctx.RepoPath, id)
+	unlock, err := worker.LockLogID(contextGitDir(ctx).String(), id)
 	if err != nil {
 		return err
 	}
