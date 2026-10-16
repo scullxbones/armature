@@ -287,7 +287,7 @@ func TestAppendHighStakesOpsExemptIntroductionPublishes_REQ_DECOMPOSE(t *testing
 		Type: ops.OpTransition, TargetID: "T-REV-EX", Timestamp: 100, WorkerID: "w1",
 		Payload: ops.Payload{To: ops.StatusCancelled},
 	}
-	require.NoError(t, appendHighStakesOpsExemptIntroduction(state, logPath, []ops.Op{op}, nil))
+	require.NoError(t, appendHighStakesOpsExemptIntroduction(state, logPath, []ops.Op{op}, skipAfterIntegrate()))
 
 	tracker, ok := state.tracker.(*fakePendingPushTracker)
 	require.True(t, ok)

@@ -31,7 +31,9 @@ func newHeartbeatCmd() *cobra.Command {
 			}
 			op := ops.Op{Type: ops.OpHeartbeat, TargetID: issueID, Timestamp: nowEpoch(),
 				WorkerID: workerID}
-			err = appendHighStakesOp(state, logPath, op)
+			err = appendHighStakesOp(state, logPath, op, runAfterIntegrate(func() error {
+				return requirePublishedOwner(ctx, issueID, workerID)
+			}))
 			if err != nil {
 				return err
 			}

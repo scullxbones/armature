@@ -108,12 +108,12 @@ base must ancestor tip, and the range must be non-empty.`,
 					return false, nil
 				}
 				return true, nil
-			}, func() error {
+			}, runAfterIntegrate(func() error {
 				if !leaseStatusAllowsOwnerGate(currentStatus) {
 					return nil
 				}
 				return requirePublishedOwner(appCtx, issueID, workerID)
-			})
+			}))
 			if err != nil {
 				return err
 			}

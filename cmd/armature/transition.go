@@ -156,7 +156,7 @@ outcome) appends as an amendment at exit 0.`,
 
 			if replayErr == nil && liveIssue != nil {
 				if ops.IdenticalTransition(allOps, issueID, liveIssue.Status, liveIssue.Outcome, liveIssue.Branch, liveIssue.PR, payload) {
-					if err := publishLocalArmatureTipAfter(state, recheckPublishedOwner); err != nil {
+					if err := publishLocalArmatureTipAfter(state, runAfterIntegrate(recheckPublishedOwner)); err != nil {
 						return err
 					}
 					writeTransitionNoOp(cmd, issueID, to, fieldFlag)
@@ -249,7 +249,7 @@ outcome) appends as an amendment at exit 0.`,
 					return false, nil
 				}
 				return true, nil
-			}, recheckPublishedOwner)
+			}, runAfterIntegrate(recheckPublishedOwner))
 			if err != nil {
 				return err
 			}

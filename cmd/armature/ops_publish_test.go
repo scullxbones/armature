@@ -122,7 +122,7 @@ func TestAppendHighStakesOp_PublishFailureKeepsLocalCommit_REQ_OPS_PUBLISH(t *te
 	breakOrigin(t, repo)
 
 	op := ops.Op{Type: ops.OpNote, TargetID: "T-HS-1", Timestamp: 100, WorkerID: "w1", Payload: ops.Payload{Msg: "loud publish"}}
-	err = appendHighStakesOp(state, logPath, op)
+	err = appendHighStakesOp(state, logPath, op, skipAfterIntegrate())
 	require.Error(t, err)
 	assert.True(t, isLocalArmatureTipPublishError(err), "got %v", err)
 	assert.Contains(t, err.Error(), "publish _armature")
@@ -153,7 +153,7 @@ func TestClaimPublishFailureKeepsLocalClaim_REQ_CLAIMTTL(t *testing.T) {
 
 	op, err := claim.NewClaimOp("task-01", "worker-a", 100, 60, "", "tok-a")
 	require.NoError(t, err)
-	err = appendHighStakesOp(state, logPath, op)
+	err = appendHighStakesOp(state, logPath, op, skipAfterIntegrate())
 	require.Error(t, err)
 	assert.True(t, isLocalArmatureTipPublishError(err), "got %v", err)
 
@@ -240,7 +240,7 @@ func TestAppendHighStakesOp_SuccessfulPushResetsTracker_REQ_OPS_PUBLISH(t *testi
 	logPath := filepath.Join(worktree, "ops", "high-stakes-ok.log")
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
 	op := ops.Op{Type: ops.OpNote, TargetID: "T-HS-2", Timestamp: 100, WorkerID: "w1", Payload: ops.Payload{Msg: "ok"}}
-	require.NoError(t, appendHighStakesOp(state, logPath, op))
+	require.NoError(t, appendHighStakesOp(state, logPath, op, skipAfterIntegrate()))
 
 	tracker, ok := state.tracker.(*fakePendingPushTracker)
 	require.True(t, ok)
@@ -398,11 +398,11 @@ func TestAppendHighStakesOpIfNoWriteStillPublishes_REQ_OPS_PUBLISH(t *testing.T)
 	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
 	op := ops.Op{Type: ops.OpNote, TargetID: "T-HS-NW", Timestamp: 100, WorkerID: "w1", Payload: ops.Payload{Msg: "local unpublished"}}
 	breakOrigin(t, repo)
-	require.Error(t, appendHighStakesOp(state, logPath, op))
+	require.Error(t, appendHighStakesOp(state, logPath, op, skipAfterIntegrate()))
 	assert.False(t, originArmatureContains(t, bareDir, "T-HS-NW"))
 
 	restoreOrigin(t, repo, bareDir)
-	wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) { return false, nil }, nil)
+	wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) { return false, nil }, skipAfterIntegrate())
 	require.NoError(t, err)
 	assert.False(t, wrote)
 	assert.True(t, originArmatureContains(t, bareDir, "T-HS-NW"),
@@ -415,7 +415,7 @@ func TestPublishArmatureBranchReturnsRebaseError_REQ_OPS_PUBLISH(t *testing.T) {
 	rebaseErr := errors.New("git rebase origin/_armature: conflict in ops/w1.log")
 	stub := &stubOpsPublisher{firstPushErr: pushErr, rebaseErr: rebaseErr}
 
-	err := publishArmatureSequence(stub, nil)
+	err := publishArmatureSequence(stub, skipAfterIntegrate())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, rebaseErr)
 	assert.Contains(t, err.Error(), "rebase")
@@ -429,7 +429,7 @@ func TestPublishArmatureSequenceRevalidatesOwnerBeforeRetryPush_REQ_CLAIMORD_W13
 	t.Parallel()
 	pushErr := errors.New("git push origin _armature: rejected (non-fast-forward)")
 	stub := &stubOpsPublisher{firstPushErr: pushErr, secondPush: errors.New("must not reach second push")}
-	err := publishArmatureSequence(stub, func() error { return claim.ErrNotClaimOwner })
+	err := publishArmatureSequence(stub, runAfterIntegrate(func() error { return claim.ErrNotClaimOwner }))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, claim.ErrNotClaimOwner)
 	assert.Equal(t, 1, stub.pushes, "must not push after integrated owner check fails")

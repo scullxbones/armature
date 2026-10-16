@@ -243,7 +243,7 @@ to a specific worker or a subtree of issues. Use --format json for automation.`,
 					if err != nil {
 						return err
 					}
-					if err := appendHighStakesOp(state, logPath, op); err != nil {
+					if err := appendHighStakesOp(state, logPath, op, skipAfterIntegrate()); err != nil {
 						return err
 					}
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Claimed: %s\n", selected)
