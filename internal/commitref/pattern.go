@@ -42,11 +42,11 @@ func IsValidReference(subject string, parentCount int, issueID string) bool {
 	return parentCount >= 2 && MergeCommitPattern(issueID).MatchString(subject)
 }
 
-// SubjectHasIssueScope reports whether subject is a conventional commit with
+// subjectHasIssueScope reports whether subject is a conventional commit with
 // some issue-id scope, or a two-parent merge of the documented `merge:` form.
 // A trailing GitHub squash suffix of the form ` (#123)` is ignored. Unlike
 // IsValidReference, the issue id is not fixed; this is the PR-range check.
-func SubjectHasIssueScope(subject string, parentCount int) bool {
+func subjectHasIssueScope(subject string, parentCount int) bool {
 	subject = squashPRSuffix.ReplaceAllString(subject, "")
 	typed := regexp.MustCompile(`^(` + typeAlternation() + `)\([^)]+\)!?:[ \t]+\S`)
 	if typed.MatchString(subject) {
