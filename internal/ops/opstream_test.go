@@ -167,7 +167,7 @@ func TestValidatedOpStream_NewerSchemaFailsLoud_REQ_TOPTIER_S6_T2(t *testing.T) 
 	assert.NotContains(t, err.Error(), "corrupt")
 }
 
-func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
+func TestValidatedOpStream_CorruptLineFailsLoad(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "worker-a1.log")
@@ -189,12 +189,10 @@ func TestValidatedOpStream_SkipsCorruptLines(t *testing.T) {
 	stream := newValidatedOpStream()
 	stream.addFile(logPath, "worker-a1")
 	loaded, err := stream.loadAll()
-	items, warnings := loaded.Items, loaded.Warnings
 
-	require.NoError(t, err)
-	assert.Len(t, items, 2)
-	assert.Len(t, warnings, 1)
-	assert.Contains(t, warnings[0], "corrupt")
+	require.Error(t, err)
+	assert.Empty(t, loaded.Items)
+	assert.Contains(t, err.Error(), "invalid JSONL line")
 }
 
 func TestValidatedOpStream_FileNotFound(t *testing.T) {
@@ -472,18 +470,10 @@ func TestLoadFromDirValidated_AcceptedOpsFollowedByTrailingCorrupt(t *testing.T)
 
 	got, err := LoadFromDirValidated(dir)
 
-	require.NoError(t, err)
-	assert.Len(t, got.Items, 1)
-	assert.Len(t, got.Warnings, 1)
-
-	logName := "worker-a1.log"
-	assert.Contains(t, got.PhysicalEOF, logName)
-
-	fileInfo, err := os.Stat(logPath)
-	require.NoError(t, err)
-	fileSize := fileInfo.Size()
-
-	assert.Equal(t, fileSize, got.PhysicalEOF[logName])
+	require.Error(t, err)
+	assert.Empty(t, got.Items)
+	assert.Empty(t, got.PhysicalEOF)
+	assert.Contains(t, err.Error(), "invalid JSONL line")
 }
 
 func TestExtractOps_ReturnsOpsFromItems(t *testing.T) {
