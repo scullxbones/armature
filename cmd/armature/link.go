@@ -8,7 +8,8 @@ import (
 )
 
 func newLinkCmd() *cobra.Command {
-	var sourceID, dep, rel string
+	var sourceID, dep, rel, reason string
+	var overrideValidate bool
 
 	cmd := &cobra.Command{
 		Use:   "link",
@@ -18,34 +19,27 @@ func newLinkCmd() *cobra.Command {
 Link one issue (source) to another (dependency) with a specified relationship type.
 The only supported --rel value is blocked_by (source is blocked by dependency); the
 inverse "blocks" relationship is derived automatically on the dependency and cannot
-be set directly. Links establish the DAG structure and drive ready-queue eligibility.`,
+be set directly. Links establish the DAG structure and drive ready-queue eligibility.
+
+The default path previews the post-edit Graph Finding set and refuses when the
+edit would introduce findings. A recorded human override is --override-validate
+--reason, which requires a controlling terminal and is never green.`,
 		Example: `  # Source is blocked by another issue
   $ arm link --source E6-S4-T2 --dep E6-S4-T1 --rel blocked_by`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			state := mustState(cmd)
-			ctx := state.ctx
-			workerID, logPath, err := resolveWorkerAndLogCmd(cmd)
-			if err != nil {
-				return err
-			}
 			if rel != "blocked_by" {
 				return fmt.Errorf("invalid --rel value %q: only blocked_by is supported (blocks is derived automatically)", rel)
 			}
-
-			op := ops.Op{Type: ops.OpLink, TargetID: sourceID, Timestamp: nowEpoch(),
-				WorkerID: workerID, Payload: ops.Payload{Dep: dep, Rel: rel}}
-			if err := appendOp(ctx, logPath, op); err != nil {
-				return err
-			}
-			writeCommandResult(cmd, map[string]string{"source": sourceID, "dep": dep, "rel": rel},
-				"Linked %s → %s (%s)\n", sourceID, dep, rel)
-			return nil
+			return runGraphEdit(cmd, ops.OpLink, sourceID, dep, rel, overrideValidate, reason)
 		},
 	}
 
 	cmd.Flags().StringVar(&sourceID, "source", "", "source issue ID")
 	cmd.Flags().StringVar(&dep, "dep", "", "dependency issue ID")
 	cmd.Flags().StringVar(&rel, "rel", "blocked_by", "relationship type")
+	cmd.Flags().BoolVar(&overrideValidate, "override-validate", false,
+		"Human escape hatch: write the graph edit despite introduced findings. Requires --reason and a TTY. Never green.")
+	cmd.Flags().StringVar(&reason, "reason", "", "Recorded reason for --override-validate")
 	_ = cmd.MarkFlagRequired("source")
 	_ = cmd.MarkFlagRequired("dep")
 	return cmd
