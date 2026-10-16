@@ -31,7 +31,7 @@ func newAssignCmd() *cobra.Command {
 				WorkerID:  myWorkerID,
 				Payload:   ops.Payload{AssignedTo: workerID},
 			}
-			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
+			if err := appendHighStakesOp(mustState(cmd), logPath, op, skipAfterIntegrate()); err != nil {
 				return err
 			}
 			writeCommandResult(cmd, map[string]string{"issue": issueID, "assigned_to": workerID},
@@ -88,7 +88,7 @@ This allows the issue to be claimed again by another worker.`,
 				WorkerID:  workerID,
 				Payload:   ops.Payload{AssignedTo: ""},
 			}
-			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
+			if err := appendHighStakesOp(mustState(cmd), logPath, op, skipAfterIntegrate()); err != nil {
 				return err
 			}
 

@@ -525,7 +525,7 @@ func compensateClaimIfHeldByToken(
 		WorkerID:  workerID,
 		Payload:   payload,
 	}
-	if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp); rbErr != nil {
+	if rbErr := appendHighStakesOp(mustState(cmd), logPath, rollbackOp, skipAfterIntegrate()); rbErr != nil {
 		return finish(fmt.Errorf("%s: %w; also failed to push claim release: %v (manual cleanup may be needed)", opLabel, cause, rbErr))
 	}
 	return finish(fmt.Errorf("%s: %w (claim released; retry arm claim)", opLabel, cause))
@@ -1075,7 +1075,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				}
 				return err
 			}
-			if err := appendHighStakesOp(mustState(cmd), logPath, op); err != nil {
+			if err := appendHighStakesOp(mustState(cmd), logPath, op, skipAfterIntegrate()); err != nil {
 				if cleanupErr := cleanupClaimExclusionsLocked(ctx.RepoPath, claimExclusions); cleanupErr != nil {
 					return fmt.Errorf("%w; exclusion rollback failed: %v", err, cleanupErr)
 				}

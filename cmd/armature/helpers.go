@@ -598,12 +598,34 @@ func appendMergedIfCurrent(
 	return wrote, err
 }
 
-func appendHighStakesOp(state *executionState, logPath string, op ops.Op) error {
-	_, err := appendHighStakesOpIfAfter(state, logPath, op, nil, nil)
+type afterIntegrateHook struct {
+	run func() error
+}
+
+func skipAfterIntegrate() afterIntegrateHook {
+	return afterIntegrateHook{run: func() error { return nil }}
+}
+
+func runAfterIntegrate(fn func() error) afterIntegrateHook {
+	if fn == nil {
+		panic("afterIntegrate hook is required")
+	}
+	return afterIntegrateHook{run: fn}
+}
+
+func (h afterIntegrateHook) runAfterIntegrate() error {
+	if h.run == nil {
+		panic("afterIntegrate hook is required")
+	}
+	return h.run()
+}
+
+func appendHighStakesOp(state *executionState, logPath string, op ops.Op, after afterIntegrateHook) error {
+	_, err := appendHighStakesOpIfAfter(state, logPath, op, nil, after)
 	return err
 }
 
-func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string, proposed []ops.Op, afterIntegrate func() error) error {
+func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string, proposed []ops.Op, after afterIntegrateHook) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
@@ -617,14 +639,14 @@ func appendHighStakesOpsExemptIntroduction(state *executionState, logPath string
 			return err
 		}
 	}
-	return publishLocalArmatureTipAfter(state, afterIntegrate)
+	return publishLocalArmatureTipAfter(state, after)
 }
 
-func recheckForeignChildrenAfterIntegrate(ctx *config.Context, plan *decompose.Plan) func() error {
+func recheckForeignChildrenAfterIntegrate(ctx *config.Context, plan *decompose.Plan) afterIntegrateHook {
 	if ctx == nil || plan == nil {
-		return nil
+		return skipAfterIntegrate()
 	}
-	return func() error {
+	return runAfterIntegrate(func() error {
 		snap, err := newSnapshotStore(ctx).Load(context.Background())
 		if err != nil {
 			return err
@@ -634,10 +656,10 @@ func recheckForeignChildrenAfterIntegrate(ctx *config.Context, plan *decompose.P
 			state = &materialize.State{Issues: make(map[string]*materialize.Issue)}
 		}
 		return decompose.CheckForeignChildren(plan, state)
-	}
+	})
 }
 
-func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op, proceed func() (bool, error), afterIntegrate func() error) (bool, error) {
+func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op, proceed func() (bool, error), after afterIntegrateHook) (bool, error) {
 	if state == nil || state.ctx == nil {
 		return false, fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
@@ -656,15 +678,15 @@ func appendHighStakesOpIfAfter(state *executionState, logPath string, op ops.Op,
 	if err != nil {
 		return wrote, err
 	}
-	return wrote, pushOpsBranchAfter(ctx, opsPublishGit(ctx, gc), tracker, afterIntegrate, true)
+	return wrote, pushOpsBranchAfter(ctx, opsPublishGit(ctx, gc), tracker, after, true)
 }
 
-func publishLocalArmatureTipAfter(state *executionState, afterIntegrate func() error) error {
+func publishLocalArmatureTipAfter(state *executionState, after afterIntegrateHook) error {
 	if state == nil || state.ctx == nil {
 		return fmt.Errorf("appendHighStakesOp: command context unavailable")
 	}
 	ctx := state.ctx
-	return pushOpsBranchAfter(ctx, opsPublishGit(ctx, worktreeGit(ctx)), state.tracker, afterIntegrate, true)
+	return pushOpsBranchAfter(ctx, opsPublishGit(ctx, worktreeGit(ctx)), state.tracker, after, true)
 }
 
 type opsPublishError struct {
@@ -718,7 +740,7 @@ type opsBranchPublisher interface {
 	FetchAndRebase(branch string) error
 }
 
-func publishArmatureSequence(gc opsBranchPublisher, afterIntegrate func() error) error {
+func publishArmatureSequence(gc opsBranchPublisher, after afterIntegrateHook) error {
 	err := gc.Push("_armature")
 	if err == nil {
 		return nil
@@ -726,22 +748,20 @@ func publishArmatureSequence(gc opsBranchPublisher, afterIntegrate func() error)
 	if rbErr := gc.FetchAndRebase("_armature"); rbErr != nil {
 		return rbErr
 	}
-	if afterIntegrate != nil {
-		if vErr := afterIntegrate(); vErr != nil {
-			return vErr
-		}
+	if vErr := after.runAfterIntegrate(); vErr != nil {
+		return vErr
 	}
 	return gc.Push("_armature")
 }
 
-func pushOpsBranchAfter(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker, afterIntegrate func() error, skipValidate bool) error {
+func pushOpsBranchAfter(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker, after afterIntegrateHook, skipValidate bool) error {
 	if !skipValidate && ctx != nil {
 		if err := refusePublishedGraph(ctx, gc); err != nil {
 			return newOpsPublishError(err)
 		}
 	}
 	if gc != nil {
-		if err := publishArmatureSequence(gc, afterIntegrate); err != nil {
+		if err := publishArmatureSequence(gc, after); err != nil {
 			return newOpsPublishError(err)
 		}
 	}
@@ -752,7 +772,7 @@ func pushOpsBranchAfter(ctx *config.Context, gc *adapters.Client, tracker ops.Pe
 }
 
 func pushOpsBranchAlwaysResetTracker(ctx *config.Context, gc *adapters.Client, tracker ops.PendingPushTracker) {
-	if err := pushOpsBranchAfter(ctx, gc, tracker, nil, true); err != nil && tracker != nil {
+	if err := pushOpsBranchAfter(ctx, gc, tracker, skipAfterIntegrate(), true); err != nil && tracker != nil {
 		swallowErr(tracker.Reset())
 	}
 }

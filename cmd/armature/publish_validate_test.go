@@ -143,11 +143,9 @@ func TestPlannerSkillTreatsPublishValidateFailureAsStop_REQ_PUBLISH_VALIDATE(t *
 
 func TestPublishValidateAfterIntegrateNilWhenOverride_REQ_PUBLISH_VALIDATE(t *testing.T) {
 	t.Parallel()
-	assert.Nil(t, publishValidateAfterIntegrate(nil, nil, true),
+	require.NoError(t, publishValidateAfterIntegrate(nil, nil, true).runAfterIntegrate(),
 		"recorded override must not revalidate after rebase")
-	cb := publishValidateAfterIntegrate(nil, nil, false)
-	require.NotNil(t, cb, "push-ops must revalidate after every integrate rebase")
-	err := cb()
+	err := publishValidateAfterIntegrate(nil, nil, false).runAfterIntegrate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "command context unavailable")
 }

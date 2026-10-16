@@ -243,7 +243,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 
 	state := mustState(cmd)
 	if len(actions) == 0 {
-		if err := publishLocalArmatureTipAfter(state, nil); err != nil {
+		if err := publishLocalArmatureTipAfter(state, skipAfterIntegrate()); err != nil {
 			return err
 		}
 		renderDoctorFixPlan(cmd, format, actions)
@@ -251,7 +251,7 @@ func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error
 	}
 	for _, a := range actions {
 		for _, op := range a.Ops {
-			if err := appendHighStakesOp(state, logPath, op); err != nil {
+			if err := appendHighStakesOp(state, logPath, op, skipAfterIntegrate()); err != nil {
 				return err
 			}
 		}

@@ -40,11 +40,11 @@ func refusePublishedGraph(ctx *config.Context, gc *adapters.Client) error {
 		rendered.String(), len(result.Errors), len(result.Warnings)))
 }
 
-func publishValidateAfterIntegrate(ctx *config.Context, gc *adapters.Client, skipValidate bool) func() error {
+func publishValidateAfterIntegrate(ctx *config.Context, gc *adapters.Client, skipValidate bool) afterIntegrateHook {
 	if skipValidate {
-		return nil
+		return skipAfterIntegrate()
 	}
-	return func() error { return refusePublishedGraph(ctx, gc) }
+	return runAfterIntegrate(func() error { return refusePublishedGraph(ctx, gc) })
 }
 
 func contextWithPublishedOps(ctx *config.Context, gc *adapters.Client) (*config.Context, func(), error) {
