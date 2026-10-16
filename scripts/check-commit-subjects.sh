@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fail commits on RANGE whose subjects lack an issue-id scope.
-# Keep the match rules aligned with commitref.SubjectHasIssueScope.
+# Keep the match rules aligned with commitref.subjectHasIssueScope.
 #
 # Usage: scripts/check-commit-subjects.sh [RANGE]
 #        RANGE defaults to origin/main..HEAD
