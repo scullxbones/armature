@@ -1,6 +1,6 @@
 # Conventions
 
-This document defines the naming and formatting conventions that all workers must follow when implementing tasks in this repository. Test naming is surfaced by `make trace-report` (report-only, not a `make check` dependency); commit format and branch naming are checked by review, not enforced by tooling today. These conventions are load-bearing for traceability and integration regardless of enforcement mechanism.
+This document defines the naming and formatting conventions that all workers must follow when implementing tasks in this repository. Test naming is surfaced by `make trace-report` (report-only, not a `make check` dependency). Commit subjects on `origin/main..HEAD` are checked by `scripts/check-commit-subjects.sh` (`make check` and `make check-fast`). Branch naming is checked by review. These conventions are load-bearing for traceability and integration regardless of enforcement mechanism.
 
 ## Test Naming and Traceability
 
@@ -37,6 +37,7 @@ All commits must follow the conventional commit format with an issue-ID scope:
 - `docs` — documentation-only changes
 - `style` — formatting and lint changes
 - `polish` — minor UX improvements, comments, or non-essential changes
+- `ci` — CI configuration and workflow changes
 
 **Merge commits** use a special format:
 ```
