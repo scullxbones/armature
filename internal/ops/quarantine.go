@@ -88,7 +88,7 @@ func hasQuarantineOp(lines []physicalLine, logPath string, lineNumber int) bool 
 
 func ensureQuarantineSidecar(logPath string, line []byte) error {
 	path := quarantinePath(logPath)
-	if existing, err := os.ReadFile(path); err == nil { //nolint:gosec // G304: sidecar beside the ops log
+	if existing, err := os.ReadFile(path); err == nil { //nolint:gosec
 		for _, got := range splitPhysicalLog(existing) {
 			if bytes.Equal(got.Raw, line) {
 				return nil

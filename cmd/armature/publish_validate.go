@@ -237,7 +237,7 @@ func copyDirFiles(src, dest string) error {
 		if e.IsDir() {
 			continue
 		}
-		in, err := os.ReadFile(filepath.Join(src, e.Name())) //nolint:gosec // G304: overlay names from ReadDir of local ops/sources
+		in, err := os.ReadFile(filepath.Join(src, e.Name())) //nolint:gosec
 		if err != nil {
 			return err
 		}

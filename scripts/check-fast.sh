@@ -1,27 +1,7 @@
 #!/bin/bash
-# check-fast: deterministic, diff-routed gate for iteration/remediation.
-#
-# Computes changed files against BASE (default: merge-base HEAD origin/main,
-# overridable via BASE=<ref>) and runs only the steps implied by the changed
-# surfaces, per docs/design/gate-efficiency.md D2:
-#
-#   **/*.go                                          -> lint + build + go test
-#                                                        on changed packages
-#                                                        plus reverse importers
-#   skills/**, docs/skills/**,
-#   internal/skillsembed/skills/**, .agents/skills/** -> validate-skills,
-#                                                        validate-doc-examples
-#   cmd/**, docs/design/surface-census.md,
-#   docs/commands.md                                  -> census-drift-check
-#   internal/**/*.go, docs/design/surface-budget-baseline.json
-#                                                     -> surface-budget-check
-#   docs only (none of the above)                     -> adr-principles lint
-#
-# This is the fast gate: it MUST NOT run mutation testing, full coverage, or
-# crosscompile. Those remain exclusive to `make check` (the publish gate).
-#
 # Usage: scripts/check-fast.sh [repo-root]
 #        BASE=<ref> scripts/check-fast.sh [repo-root]
+# Routing table: docs/design/gate-efficiency.md D2.
 
 set -euo pipefail
 
@@ -40,7 +20,6 @@ if [[ -z "$BASE" ]]; then
 fi
 
 CHANGED_FILES=$(git diff --name-only "$BASE" -- 2>/dev/null || true)
-# Include untracked files so uncommitted new files participate in routing.
 CHANGED_FILES=$(printf '%s\n%s\n' "$CHANGED_FILES" "$(git ls-files --others --exclude-standard)" | sed '/^$/d' | sort -u)
 
 if [[ -z "$CHANGED_FILES" ]]; then
@@ -80,10 +59,6 @@ while IFS= read -r f; do
     fi
 done <<< "$CHANGED_FILES"
 
-# "docs only" per D2 means none of the three specific routed surfaces above
-# matched — not merely "path starts with docs/". A change confined to any
-# file(s) outside those three categories (README.md, CONTEXT.md, a shell
-# script, etc.) still only needs the adr-principles lint.
 HAS_NON_DOCS=$(( HAS_GO || HAS_SKILLS || HAS_CENSUS_SURFACE || HAS_SURFACE_BUDGET ))
 
 RAN_ANY=0
@@ -105,8 +80,6 @@ if [[ $HAS_GO -eq 1 ]]; then
         done)
     fi
 
-    # Reverse importers: any package in the module whose dependency set
-    # includes a changed package's import path.
     REVERSE_PKGS=""
     if [[ -n "$CHANGED_PKGS" ]]; then
         CHANGED_IMPORT_PATHS=$(while IFS= read -r pkg; do
@@ -126,7 +99,6 @@ if [[ $HAS_GO -eq 1 ]]; then
     fi
 
     TEST_PKGS=$(printf '%s\n%s\n' "$CHANGED_PKGS" "$REVERSE_PKGS" | sed '/^$/d' | sort -u)
-    # Normalize changed package dirs to import paths for go test/lint.
     TEST_IMPORT_PATHS=$(while IFS= read -r pkg; do
         [[ -z "$pkg" ]] && continue
         if [[ "$pkg" == ./* ]]; then
@@ -139,8 +111,6 @@ if [[ $HAS_GO -eq 1 ]]; then
     if [[ -n "$TEST_IMPORT_PATHS" ]]; then
         run_step $MAKE build
 
-        # golangci-lint wants filesystem-relative dir patterns (./pkg1), not
-        # bare import paths, or it mis-resolves them relative to cwd. Convert.
         TEST_DIR_PATTERNS=$(while IFS= read -r importpath; do
             [[ -z "$importpath" ]] && continue
             dir=$($GO list -f '{{.Dir}}' "$importpath" 2>/dev/null || true)

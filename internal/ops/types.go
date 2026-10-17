@@ -77,7 +77,7 @@ type Op struct {
 	Timestamp     int64
 	WorkerID      string
 	Payload       Payload
-	SchemaVersion int // positional array index 5; 0 means "write CurrentSchemaVersion"
+	SchemaVersion int
 }
 
 type Payload struct {

@@ -8,12 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Shell operator tokens that separate distinct commands within a single
-# logical line (compound statements).
 _COMPOUND_OPS = {";", "&&", "||", "|"}
-
-# Redirection operator tokens. Each is dropped along with the single token
-# immediately following it (the redirect target).
 _REDIRECT_OPS = {">", ">>", "<"}
 
 
@@ -23,16 +18,16 @@ _REDIRECT_OPS = {">", ">>", "<"}
 # sync with the actual Cobra command definitions.
 MANDATORY_FLAGS = {
     "claim": ["--worktree"],
-    "transition": ["--to"],  # workflow transition (dag transition uses dag-transition key below)
-    "dag-transition": ["--issue"],  # dag transition subcommand
+    "transition": ["--to"],
+    "dag-transition": ["--issue"],
     "assign": ["--worker"],
     "accept-citation": ["--rationale"],
     "source-link": ["--source-id"],
     "decompose-revert": ["--plan"],
-    "dag-apply": ["--plan"],  # dag apply subcommand
-    "dag-context": [],  # no mandatory flags
-    "dag-revert": ["--plan"],  # dag revert subcommand
-    "dag-summary": [],  # no mandatory flags
+    "dag-apply": ["--plan"],
+    "dag-context": [],
+    "dag-revert": ["--plan"],
+    "dag-summary": [],
     "link": ["--source", "--dep"],
     "unlink": ["--source", "--dep"],
     "decision": ["--topic", "--choice"],
@@ -40,22 +35,19 @@ MANDATORY_FLAGS = {
     "create": ["--title"],
     "context-history": ["--issue"],
     "reparent": ["--issue", "--parent"],
-    # Subcommands / dag group (single-word for TestMandatoryFlagsMatchMarkFlagRequired)
     "apply": ["--plan"],
-    "context": [],  # no mandatory flags
+    "context": [],
     "revert": ["--plan"],
-    "summary": [],  # no mandatory flags
-    # Subcommands / dag group (multi-word for skill-lint)
+    "summary": [],
     "dag apply": ["--plan"],
-    "dag context": [],  # no mandatory flags
+    "dag context": [],
     "dag revert": ["--plan"],
-    "dag transition": ["--issue"],  # dag transition subcommand
-    # dag_transition.go's Use is "transition"; this key satisfies the drift
-    # test's first-word match without shadowing workflow "transition" (--to).
-    # Never matched at lint time: no real command chain is "transition dag".
+    "dag transition": ["--issue"],
+    # dag_transition.go Use is "transition". This key satisfies
+    # TestMandatoryFlagsMatchMarkFlagRequired's first-word match without
+    # shadowing workflow "transition" (--to). No real chain is "transition dag".
     "transition dag": ["--issue"],
-    "dag summary": [],  # no mandatory flags
-    # sources group subcommands
+    "dag summary": [],
     "sources accept-citation": ["--rationale"],
     "sources link": ["--source-id"],
     "sources add": ["--url", "--type"],
@@ -63,12 +55,8 @@ MANDATORY_FLAGS = {
     "doctor quarantine": ["--log", "--line"],
 }
 
-# The arm binary to invoke. Configurable via ARM_BIN so CI (and tests) can
-# point at a freshly built binary instead of relying on PATH.
 ARM_BIN = os.environ.get("ARM_BIN", "arm")
 
-# Root persistent flags (cmd/armature/main.go). Value-taking flags consume the
-# following token when written as `--flag value` rather than `--flag=value`.
 PERSISTENT_BOOL_FLAGS = {"--debug", "--non-interactive", "--help", "-h"}
 PERSISTENT_VALUE_FLAGS = {"--format", "--repo"}
 
@@ -162,11 +150,8 @@ def tokenize_shell_line(line):
     """Tokenize a shell line quote-awarely, keeping operators as tokens.
 
     Uses `shlex.shlex` with `punctuation_chars=True` so multi-character
-    shell operators (`;`, `&&`, `||`, `|`, `>`, `>>`, `<`) come through as
-    distinct tokens without being split apart by, or splitting apart, quoted
-    content. `commenters='#'` strips a trailing unquoted `# comment` for
-    free, quote-aware, instead of the previous naive `"#" not in quotes`
-    heuristic.
+    shell operators stay intact inside and outside quotes.
+    `commenters='#'` strips a trailing unquoted `# comment`.
 
     Returns None if the line contains unterminated quoting shlex can't
     tokenize (rather than raising), so callers can skip it.
@@ -214,8 +199,6 @@ def _find_arm_invocation(tokens):
             continue
         if tokens[i - 1] == "(" and tokens[i - 2].endswith("$"):
             command_tokens = tokens[i:]
-            # Strip trailing close-paren token(s) left over from the
-            # substitution syntax, mirroring the previous `.rstrip(")")`.
             while command_tokens and command_tokens[-1] == ")":
                 command_tokens = command_tokens[:-1]
             return command_tokens
@@ -324,8 +307,6 @@ def get_valid_subcommands():
             print(f"ERROR: Failed to get arm help: {result.stderr}", file=sys.stderr)
             return None
 
-        # Parse subcommands from help output
-        # The help output has sections like "Workflow Commands:", "DAG Commands:", etc.
         subcommands = set()
         lines = result.stdout.split("\n")
         in_command_section = False
@@ -339,12 +320,10 @@ def get_valid_subcommands():
                 if line.strip() == "":
                     continue
                 if line.startswith("  "):
-                    # This is a command line: "  command-name   description"
                     parts = line.strip().split()
                     if parts:
                         subcommands.add(parts[0])
                 elif not line.startswith(" "):
-                    # We've moved out of the command section
                     in_command_section = False
 
         return subcommands
@@ -391,25 +370,19 @@ def extract_valid_flags_from_help(help_text):
     lines = help_text.split("\n")
 
     for line in lines:
-        # Look for flag definitions: start with whitespace then -- or -
         if not line.startswith("  "):
             continue
 
-        # Remove leading whitespace
         line_stripped = line.lstrip()
 
-        # Extract flags: could be "--flag", "-f", or "-f, --flag"
         if line_stripped.startswith("--"):
-            # Format: --flag [type] description
             parts = line_stripped.split()
             if parts:
                 flag = parts[0]
-                # Remove any trailing comma
                 flag = flag.rstrip(",")
                 if flag.startswith("--"):
                     flags.add(flag)
         elif line_stripped.startswith("-") and not line_stripped.startswith("--"):
-            # Format: -f, --flag or just -f
             parts = line_stripped.split(",")
             for part in parts:
                 part = part.strip().split()[0]
@@ -480,8 +453,6 @@ def parse_command_line(tokens):
 
     for tok in tokens:
         if not started_args and not (tok.startswith("-") or tok.startswith("$")):
-            # Looks like a subcommand or positional argument. We'll treat
-            # subsequent non-flag tokens as arguments once a flag is seen.
             subcommands.append(tok)
         else:
             started_args = True
@@ -512,11 +483,9 @@ def extract_flags(args):
         if arg == "-":
             continue
         if arg.startswith("--"):
-            # Handle --flag=value format
             flag_name = arg.split("=")[0]
             flags.add(flag_name)
         elif arg.startswith("-") and not arg[1:].replace("-", "").isdigit():
-            # Handle -f format (but not negative numbers)
             flags.add(arg)
     return flags
 
@@ -591,23 +560,10 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     if not subcommands:
         return False, f"Invalid arm command syntax: {arm_command}"
 
-    # Check if first subcommand exists
     first_cmd = subcommands[0]
     if first_cmd not in valid_subcommands:
         return False, f"Unknown subcommand '{first_cmd}' in: {arm_command}"
 
-    # Check for mandatory flags. Look up by the full subcommand chain first
-    # (e.g. "sources add"), falling back to the top-level command name, so
-    # both flat commands (e.g. "transition") and nested ones (e.g.
-    # "sources add") can be covered.
-    # `subcommands` may include trailing positional/placeholder tokens (e.g.
-    # parse_command_line doesn't know which tokens are real subcommands vs.
-    # positional args, so a placeholder like "<replacement-url-or-path>"
-    # that doesn't start with "-" ends up appended to subcommands). Try
-    # progressively shorter prefixes of the chain so a longer, more specific
-    # match (e.g. "sources add") is preferred over the bare top-level
-    # command, without requiring an exact match against the full chain
-    # including trailing positional tokens.
     mandatory_key = first_cmd
     for prefix_len in range(len(subcommands), 0, -1):
         candidate = " ".join(subcommands[:prefix_len])
@@ -616,9 +572,8 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
             break
     if mandatory_key in MANDATORY_FLAGS:
         flags = extract_flags(args)
-        # Some flags (--example, --schema) make mandatory flags optional
         bypass_flags = {"--example", "--schema"}
-        if not (flags & bypass_flags):  # If no bypass flags are present
+        if not (flags & bypass_flags):
             missing_flags = []
             for mandatory_flag in MANDATORY_FLAGS[mandatory_key]:
                 if mandatory_flag not in flags:
@@ -627,8 +582,6 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
             if missing_flags:
                 return False, f"Command '{first_cmd}' missing mandatory flags: {', '.join(missing_flags)} in: {arm_command}"
 
-    # Validate flags for this subcommand chain
-    # Use the full subcommand chain as the cache key
     cache_key = " ".join(subcommands) if subcommands else ""
 
     if cache_key and cache_key not in valid_flags_cache:
@@ -638,9 +591,6 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
     if cache_key in valid_flags_cache:
         valid_flags = valid_flags_cache[cache_key]
         if not valid_flags:
-            # get_subcommand_help failed to return usable help text (e.g. the
-            # subcommand chain doesn't exist or --help failed). Don't silently
-            # skip flag validation — report it as a lint error.
             cmd_name = " ".join(subcommands)
             return False, f"Could not determine valid flags for '{cmd_name}' (help text unavailable) in: {arm_command}"
 
@@ -648,14 +598,11 @@ def validate_command(arm_command, valid_subcommands, valid_flags_cache=None):
         invalid_flags = []
 
         for flag in used_flags:
-            # Skip positional arguments and values
             if not flag.startswith("-"):
                 continue
 
-            # Handle --flag=value format
             flag_name = flag.split("=")[0]
 
-            # Global flags are always valid
             global_flags = {"--debug", "--format", "--non-interactive", "--repo", "--help", "-h"}
             if flag_name in global_flags:
                 continue
@@ -731,34 +678,28 @@ def lint_skill_file(skill_file_path, valid_subcommands, valid_flags_cache=None):
 
 def main(argv):
     """Main entry point."""
-    # Get the root directory (default to current directory)
     root_dir = argv[1] if len(argv) > 1 else "."
 
     if not os.path.isdir(root_dir):
         print(f"ERROR: {root_dir} is not a directory", file=sys.stderr)
         return 1
 
-    # Get valid subcommands
     valid_subcommands = get_valid_subcommands()
     if valid_subcommands is None:
         print("ERROR: Cannot determine valid arm subcommands", file=sys.stderr)
         return 1
 
-    # Find all shipped skill and canonical documentation files.
     skill_files = find_lint_files(root_dir)
 
     if not skill_files:
-        # No skill files found - this is OK, just skip
         return 0
 
-    # Lint each skill file (use a shared cache for performance)
     valid_flags_cache = {}
     all_errors = []
     for skill_file in skill_files:
         errors = lint_skill_file(skill_file, valid_subcommands, valid_flags_cache)
         all_errors.extend(errors)
 
-    # Report results
     if all_errors:
         for error in all_errors:
             print(f"FAIL: {error}", file=sys.stderr)

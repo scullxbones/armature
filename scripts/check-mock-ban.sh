@@ -1,13 +1,6 @@
 #!/bin/bash
-# Static mock-framework ban (quality-controls C1 / guardrail R1).
-#
-# depguard in .golangci.yml denies mock-library imports. This script catches
-# the two cases depguard does not: mockery-generated files (by header) and a
-# mock module landing in go.mod before any import exists.
-#
-# Fakes and hand-written test doubles are allowed. testify/assert and
-# testify/require are allowed; only testify/mock is banned.
-#
+# Mock-framework ban (quality-controls C1 / guardrail R1).
+# depguard covers imports. This script covers mockery headers and go.mod modules.
 # Usage: scripts/check-mock-ban.sh [repo-root]
 
 set -euo pipefail
@@ -27,9 +20,6 @@ if [[ ! -f go.mod ]]; then
     exit 1
 fi
 
-# Module paths that are mock frameworks (prefix match on the module path).
-# github.com/stretchr/testify is NOT listed: only the /mock subpackage is banned,
-# and that ban is enforced by depguard on imports.
 BANNED_MODULES=(
     github.com/golang/mock
     go.uber.org/mock

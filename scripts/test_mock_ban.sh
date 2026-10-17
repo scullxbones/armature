@@ -1,14 +1,5 @@
 #!/bin/bash
 # Fixture test for scripts/check-mock-ban.sh and the depguard mock-ban rule.
-#
-# Locks in:
-#   1. the candidate checker passes on a clean fixture
-#   2. a mockery-generated header is rejected
-#   3. a banned module in go.mod is rejected
-#   4. github.com/stretchr/testify (assert/require) is not treated as a module ban
-#   5. .golangci.yml has a mock-ban depguard rule denying testify/mock and gomock
-#
-# Wired into make check via the test-mock-ban target.
 
 set -euo pipefail
 
@@ -25,7 +16,6 @@ make_fixture() {
     local destination="$1"
     mkdir -p "$destination"
     tar -C "$REPO_ROOT" -cf - go.mod scripts/check-mock-ban.sh | tar -x -C "$destination"
-    # Tiny Go file so the mockery grep has a tree to walk.
     mkdir -p "$destination/internal/example"
     printf 'package example\n\nfunc Hello() {}\n' > "$destination/internal/example/example.go"
     chmod +x "$destination/scripts/check-mock-ban.sh"
@@ -83,7 +73,6 @@ elif ! grep -q "github.com/golang/mock" <<< "$OUTPUT"; then
 else
     echo "  PASS"
 fi
-# Restore go.mod from the original fixture snapshot.
 cp "$REPO_ROOT/go.mod" "$FIXTURE/go.mod"
 
 echo "Test 4: testify itself is not a banned module..."

@@ -110,7 +110,7 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 	}
 
 	headFile := filepath.Join(actualGitDir, "HEAD")
-	headBytes, err := os.ReadFile(headFile) //nolint:gosec // internal path
+	headBytes, err := os.ReadFile(headFile) //nolint:gosec
 	if err != nil {
 		return nil
 	}
@@ -256,8 +256,7 @@ func sourceAdvancedOnlyByArmature(repoPath, sourcePath, oldTip, newTip string) (
 	if worktree.NormalizePath(repoPath) != worktree.NormalizePath(sourcePath) {
 		return false, nil
 	}
-	// #nosec G204 - git binary is fixed; sourcePath and revisions were validated
-	// from the repository's own worktree inventory and immutable claim inputs.
+	// #nosec G204
 	cmd := exec.CommandContext(context.Background(), "git", "-C", sourcePath, "diff", "--name-only", oldTip, newTip)
 	out, err := cmd.Output()
 	if err != nil {
@@ -356,7 +355,7 @@ func writeClaimExclusionMarker(worktreePath, pattern string) error {
 		return fmt.Errorf("resolve worktree git dir: %w", err)
 	}
 	markerPath := filepath.Join(gitDir, claimExclusionMarkerName)
-	if data, readErr := os.ReadFile(markerPath); readErr == nil { //nolint:gosec // markerPath comes from Git's resolved private directory
+	if data, readErr := os.ReadFile(markerPath); readErr == nil { //nolint:gosec
 		if strings.TrimSuffix(string(data), "\n") == pattern {
 			return nil
 		}
@@ -375,7 +374,7 @@ func readClaimExclusionMarker(worktreePath string) (string, bool, error) {
 	if err != nil {
 		return "", false, fmt.Errorf("resolve worktree git dir: %w", err)
 	}
-	data, err := os.ReadFile(filepath.Join(gitDir, claimExclusionMarkerName)) //nolint:gosec // path is inside Git's resolved private directory
+	data, err := os.ReadFile(filepath.Join(gitDir, claimExclusionMarkerName)) //nolint:gosec
 	if os.IsNotExist(err) {
 		return "", false, nil
 	}
