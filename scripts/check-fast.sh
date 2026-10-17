@@ -61,15 +61,12 @@ done <<< "$CHANGED_FILES"
 
 HAS_NON_DOCS=$(( HAS_GO || HAS_SKILLS || HAS_CENSUS_SURFACE || HAS_SURFACE_BUDGET ))
 
-RAN_ANY=0
-
 run_step() {
     echo "==> $*"
     "$@"
 }
 
 if [[ $HAS_GO -eq 1 ]]; then
-    RAN_ANY=1
     echo "Go changes detected: lint + build + go test on changed packages plus reverse importers"
 
     CHANGED_GO_FILES=$(echo "$CHANGED_FILES" | grep -E '\.go$' || true)
@@ -131,32 +128,24 @@ if [[ $HAS_GO -eq 1 ]]; then
 fi
 
 if [[ $HAS_SKILLS -eq 1 ]]; then
-    RAN_ANY=1
     echo "Skills/docs-skills changes detected: validate-skills + validate-doc-examples"
     run_step $MAKE validate-skills
     run_step $MAKE validate-doc-examples
 fi
 
 if [[ $HAS_CENSUS_SURFACE -eq 1 ]]; then
-    RAN_ANY=1
     echo "cmd/ or census-surface changes detected: census-drift-check"
     run_step $MAKE census-drift-check
 fi
 
 if [[ $HAS_SURFACE_BUDGET -eq 1 ]]; then
-    RAN_ANY=1
     echo "internal/ or surface-budget baseline changes detected: surface-budget-check"
     run_step $MAKE surface-budget-check
 fi
 
 if [[ $HAS_NON_DOCS -eq 0 ]]; then
-    RAN_ANY=1
     echo "Docs-only change detected: adr-principles lint only"
     run_step $MAKE adr-principles
-fi
-
-if [[ $RAN_ANY -eq 0 ]]; then
-    echo "No routable surface matched; nothing to run."
 fi
 
 echo

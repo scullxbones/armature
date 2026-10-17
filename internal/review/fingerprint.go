@@ -10,7 +10,6 @@ import (
 	"strings"
 )
 
-// bufio.Scanner's default token limit is 64KB.
 const activityScannerBufferSize = 1 << 20
 
 const activityScannerMaxTokenSize = 4 << 20

@@ -318,6 +318,8 @@ func newRootCmd() *cobra.Command {
 	return root
 }
 
+// Cobra reports flag-parsing and Args errors from ExecuteC before the root
+// PersistentPreRunE runs.
 func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) int {
 	root.SetArgs(argv)
 	executed, err := root.ExecuteC()
