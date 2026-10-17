@@ -14,7 +14,7 @@ type physicalLine struct {
 }
 
 func readPhysicalLog(path string) ([]physicalLine, int64, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: caller-supplied ops log path
+	data, err := os.ReadFile(path) //nolint:gosec // ops log path from ListLogFiles or basename join
 	if err != nil {
 		return nil, 0, fmt.Errorf("open log %s: %w", path, err)
 	}
@@ -51,7 +51,7 @@ func splitPhysicalLog(data []byte) []physicalLine {
 }
 
 func fileEndsWithNewline(path string) (ok bool, err error) {
-	f, err := os.Open(path) //nolint:gosec // G304: caller-supplied ops log path
+	f, err := os.Open(path) //nolint:gosec // ops log path from ListLogFiles or basename join
 	if err != nil {
 		return false, err
 	}

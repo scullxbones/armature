@@ -1,14 +1,5 @@
 #!/bin/bash
-# Fixture test for the internal-package surface-budget ratchet.
-#
-# Locks in:
-#   1. check passes against a matching baseline
-#   2. adding an exported func fails (growth)
-#   3. removing an exported func still passes (shrink)
-#   4. -write rewrites the baseline down after a shrink
-#   5. a new internal package with exports fails until ratcheted
-#
-# Wired into make check via the test-surface-budget-check target.
+# Fixture test for scripts/surfacebudget.
 
 set -euo pipefail
 
@@ -89,7 +80,6 @@ echo "Test 3: shrinking exported surface still passes..."
 TREE="$WORKDIR/shrink"
 make_tree "$TREE"
 run_tool "$TREE" -write
-# Drop Hello(); Client, Client.Name, Client.Greet remain.
 cat > "$TREE/internal/pkg/pkg.go" <<'EOF'
 package pkg
 

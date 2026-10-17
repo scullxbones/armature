@@ -1,4 +1,4 @@
-// Package ops defines the op-log schema (typed, append-only events), and provides parsing, commit, push, and rate-limiting for writing and reading that log.
+// Package ops defines the op-log schema (typed, append-only events) and parsing and commit for that log.
 package ops
 
 import (
@@ -77,7 +77,7 @@ type Op struct {
 	Timestamp     int64
 	WorkerID      string
 	Payload       Payload
-	SchemaVersion int // positional array index 5; 0 means "write CurrentSchemaVersion"
+	SchemaVersion int // positional array index 5; 0 means write CurrentSchemaVersion
 }
 
 type Payload struct {

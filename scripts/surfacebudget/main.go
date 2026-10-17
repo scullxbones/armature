@@ -1,9 +1,4 @@
-// Surface-budget ratchet for internal packages (quality-controls C10).
-//
-// Counts unique exported identifiers per package under internal/ and
-// compares them to a committed baseline. Growth fails; shrinking always
-// passes. `make surface-budget-ratchet` rewrites the baseline to the
-// current counts.
+// Surface-budget check for internal packages (quality-controls C10).
 package main
 
 import (
@@ -252,8 +247,6 @@ func scanInternal(root string) (baseline, error) {
 }
 
 func isIgnoreTagged(src []byte) bool {
-	// Files whose build constraint is ignore (generator scripts sitting in
-	// a library package) are not part of the imported API.
 	for _, line := range strings.Split(string(src), "\n") {
 		trim := strings.TrimSpace(line)
 		if trim == "" {
@@ -320,7 +313,6 @@ func collectTypeMembers(expr ast.Expr, typeName string, names map[string]struct{
 		}
 		for _, f := range t.Fields.List {
 			if len(f.Names) == 0 {
-				// Embedded field: use the type's exported name.
 				if name := embeddedName(f.Type); name != "" && token.IsExported(name) && typeName != "" {
 					names[typeName+"."+name] = struct{}{}
 				}

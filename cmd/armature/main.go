@@ -318,20 +318,8 @@ func newRootCmd() *cobra.Command {
 	return root
 }
 
-// executeRoot runs root and returns the process exit code. It is the single
-// Execute seam shared by main and the CLI tests.
-//
-// Cobra reports flag-parsing and Args errors from ExecuteC *before* the root
-// PersistentPreRunE runs, so at that point nothing has classified the error and
-// no implicit --format has been resolved. Both decisions are therefore repeated
-// here against the command cobra actually resolved:
-//
-//   - a `hook` or `harness-hook` failure stays on its platform protocol rather
-//     than putting a Command Failure object on a stdout the platform owns;
-//   - the implicit agent format is applied so a non-TTY parse failure renders
-//     the promised JSON object instead of a human error line.
-//
-// Both are idempotent on the path where PersistentPreRunE already ran.
+// Cobra reports flag-parsing and Args errors from ExecuteC before the root
+// PersistentPreRunE runs.
 func executeRoot(root *cobra.Command, argv []string, stdout, stderr io.Writer) int {
 	root.SetArgs(argv)
 	executed, err := root.ExecuteC()

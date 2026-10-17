@@ -27,11 +27,8 @@ func failParse(err error) parsedLine {
 // ParseLine is intentionally permissive about op type values: it accepts any string
 // to support forward-compatibility with op types introduced in later versions of the
 // software. Unknown op types are surfaced as errors when the op is applied via
-// State.ApplyOp, not at parse time.
-//
-// schema_version (index 5) is required for fail-loud compatibility: a version newer
-// than CurrentSchemaVersion is rejected. Records that omit it (legacy 5-element
-// arrays) are treated as LegacySchemaVersion.
+// State.ApplyOp, not at parse time. A missing schema_version is LegacySchemaVersion.
+// A version newer than CurrentSchemaVersion is rejected.
 func ParseLine(line []byte) (Op, error) {
 	return parseLine(line).value()
 }
