@@ -8,9 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/ops"
 )
 
 // bufio.Scanner's default token limit is 64KB.
@@ -103,7 +100,7 @@ func ComputeBundleID(bundle ReviewBundle) (string, error) {
 			DeliveryHeadCount int
 			EarlierCount      int
 		}
-		GateEvidence []ops.GateEvidence
+		GateEvidence []gateEvidence
 	}{
 		SchemaVersion: bundle.SchemaVersion,
 		Issue:         bundle.Issue,
@@ -116,7 +113,7 @@ func ComputeBundleID(bundle ReviewBundle) (string, error) {
 	return bundleIDFromPayload(data)
 }
 
-type ActivityLogEntry struct {
+type activityLogEntry struct {
 	Timestamp     string
 	Command       string
 	ExitCode      int
@@ -201,8 +198,8 @@ func decodeActivityExitCode(raw json.RawMessage) (int, error) {
 	return n, nil
 }
 
-func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, error) {
-	content, err := adapters.ReadFile(logPath)
+func parseActivityLogFile(logPath string) (map[int]activityLogEntry, []byte, error) {
+	content, err := readLogFile(logPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read activity log: %w", err)
 	}
@@ -215,8 +212,8 @@ func parseActivityLogFile(logPath string) (map[int]ActivityLogEntry, []byte, err
 	return entries, content, nil
 }
 
-func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
-	entries := make(map[int]ActivityLogEntry)
+func parseActivityLogBytes(content []byte) (map[int]activityLogEntry, error) {
+	entries := make(map[int]activityLogEntry)
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	scanner.Buffer(make([]byte, 0, activityScannerBufferSize), activityScannerMaxTokenSize)
 
@@ -237,7 +234,7 @@ func parseActivityLogBytes(content []byte) (map[int]ActivityLogEntry, error) {
 			continue
 		}
 
-		entries[id] = ActivityLogEntry(raw)
+		entries[id] = activityLogEntry(raw)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -285,7 +282,7 @@ func ValidateActivityDigestAndLoadEntries(activity *Activity) (map[int]ActivityE
 		return make(map[int]ActivityEntryDetails), errs
 	}
 
-	content, err := adapters.ReadFile(activity.LogPath)
+	content, err := readLogFile(activity.LogPath)
 	if err != nil {
 		errs = append(errs, formatActivityLogUnreadable(activity.LogPath, err))
 		return make(map[int]ActivityEntryDetails), errs

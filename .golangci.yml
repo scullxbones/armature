@@ -198,12 +198,8 @@ linters:
             - "!**/*_test.go"
           allow:
             - "$gostd"
-            - "github.com/scullxbones/armature/internal/adapters"
             - "github.com/scullxbones/armature/internal/attestation"
-            - "github.com/scullxbones/armature/internal/commitref"
-            - "github.com/scullxbones/armature/internal/config"
             - "github.com/scullxbones/armature/internal/issuetype"
-            - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/strictjson"
         worktree-pure:
           list-mode: strict

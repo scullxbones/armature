@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/scullxbones/armature/internal/config"
 )
 
 type GitAdapter interface {
@@ -15,7 +13,7 @@ type GitAdapter interface {
 	DiffNameOnlyRange(base, head string) ([]string, error)
 }
 
-func FilterDiff(diff string, excludePrefixes []string) string {
+func filterDiff(diff string, excludePrefixes []string) string {
 	if diff == "" || len(excludePrefixes) == 0 {
 		return diff
 	}
@@ -147,14 +145,14 @@ func Prepare(
 		return nil, fmt.Errorf("failed to get changed files: %w", err)
 	}
 
-	excludePrefixes := []string{config.StateDirName + "/", ".arm/"}
+	excludePrefixes := []string{".armature/", ".arm/"}
 	changedFiles = filterExcludedPaths(changedFiles, excludePrefixes)
 
 	if len(changedFiles) == 0 {
 		return nil, fmt.Errorf("delivery contains no changed files")
 	}
 
-	filteredDiff := FilterDiff(diff, excludePrefixes)
+	filteredDiff := filterDiff(diff, excludePrefixes)
 
 	contract := Contract{
 		DefinitionOfDone: definitionOfDone,
