@@ -479,11 +479,11 @@ func dirExists(path string) bool {
 }
 
 func writeTempRepoFile(dir, name, body string) error {
-	return os.WriteFile(filepath.Join(dir, filepath.Base(name)), []byte(body), 0o644) //nolint:gosec,nolintlint
+	return os.WriteFile(filepath.Join(dir, filepath.Base(name)), []byte(body), 0o644) //nolint:gosec,nolintlint // test temp repo
 }
 
 func statTempPath(path string) (os.FileInfo, error) {
-	return os.Stat(filepath.Clean(path)) //nolint:gosec,nolintlint
+	return os.Stat(filepath.Clean(path)) //nolint:gosec,nolintlint // test path
 }
 
 func runTrls(t *testing.T, repo string, args ...string) (string, error) {
@@ -798,14 +798,14 @@ func uniquifyClonedWorker(repo string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(cfg, []byte(strings.ReplaceAll(string(data), oldID, newID)), 0o600); err != nil { //nolint:gosec
+	if err := os.WriteFile(cfg, []byte(strings.ReplaceAll(string(data), oldID, newID)), 0o600); err != nil { //nolint:gosec // test clone git config
 		return err
 	}
 	opsDir := filepath.Join(repo, ".armature", "ops")
 	oldLog := filepath.Join(opsDir, oldID+".log")
 	newLog := filepath.Join(opsDir, newID+".log")
 	if body, err := os.ReadFile(oldLog); err == nil {
-		if err := os.WriteFile(newLog, bytes.ReplaceAll(body, []byte(oldID), []byte(newID)), 0o600); err != nil { //nolint:gosec
+		if err := os.WriteFile(newLog, bytes.ReplaceAll(body, []byte(oldID), []byte(newID)), 0o600); err != nil { //nolint:gosec // test clone ops log
 			return err
 		}
 		if err := os.Remove(oldLog); err != nil {
@@ -1855,7 +1855,7 @@ func TestLogCommand_CorruptLineAfterBlankUsesPhysicalLine_REQ_NOCOMMENTS(t *test
 	require.Equal(t, byte('\n'), existing[len(existing)-1], "ops append writes a trailing newline")
 
 	existing = append(existing, []byte("\nthis is not json\n")...)
-	err = os.WriteFile(logPath, existing, 0o600) //nolint:gosec
+	err = os.WriteFile(logPath, existing, 0o600) //nolint:gosec // test worker log
 	require.NoError(t, err)
 
 	_, stderr, err := runTrlsWithStderr(t, repo, "log")

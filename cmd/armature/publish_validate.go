@@ -237,7 +237,7 @@ func copyDirFiles(src, dest string) error {
 		if e.IsDir() {
 			continue
 		}
-		in, err := os.ReadFile(filepath.Join(src, e.Name())) //nolint:gosec
+		in, err := os.ReadFile(filepath.Join(src, e.Name())) //nolint:gosec // names from ReadDir of local ops/sources
 		if err != nil {
 			return err
 		}

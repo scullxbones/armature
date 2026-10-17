@@ -510,7 +510,7 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	assert.NotEmpty(t, bundle.Activity.LogPath, "LogPath should be set")
 }
 
-//nolint:paralleltest
+//nolint:paralleltest // os.Chdir is process-wide
 func TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV(t *testing.T) {
 	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
 	headSHA := "def456def456def456def456def456def456def4"
