@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/commitref"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
@@ -135,7 +136,7 @@ func runReviewPrepare(cmd *cobra.Command, issueID, base, head, outputFile string
 	if err != nil {
 		return fmt.Errorf("prepare review bundle: %w", err)
 	}
-	if err := review.AttachGateEvidence(bundle, ctx.IssuesDir); err != nil {
+	if err := attachReviewGateEvidence(bundle, ctx.IssuesDir); err != nil {
 		return fmt.Errorf("attach gate evidence: %w", err)
 	}
 
@@ -240,7 +241,7 @@ func runReviewCommits(cmd *cobra.Command, issueID, branch string) error {
 		}
 	}
 
-	commits, err := review.ReviewCommits(git, issueID, branch)
+	commits, err := listReviewCommits(git, issueID, branch)
 	if err != nil {
 		return fmt.Errorf("failed to list commits for issue %s: %w", issueID, err)
 	}
@@ -462,4 +463,39 @@ func mapReviewError(err error) error {
 	default:
 		return armerrors.Wrap(codeReview1, msg, []string{"arm review prepare --output <bundle.json>"}, err)
 	}
+}
+
+func attachReviewGateEvidence(bundle *review.ReviewBundle, issuesDir string) error {
+	if bundle == nil {
+		return fmt.Errorf("attach gate evidence: bundle is nil")
+	}
+	if issuesDir == "" || bundle.Delivery.HeadSHA == "" {
+		return nil
+	}
+	evs, err := ops.ReadAllGateEvidence(filepath.Join(issuesDir, "ops"))
+	if err != nil {
+		return fmt.Errorf("read gate evidence: %w", err)
+	}
+	records, err := json.Marshal(evs)
+	if err != nil {
+		return fmt.Errorf("read gate evidence: %w", err)
+	}
+	return review.AttachGateEvidence(bundle, records)
+}
+
+func listReviewCommits(git *adapters.Client, issueID, branch string) ([]adapters.LogEntry, error) {
+	if branch == "" {
+		branch = "HEAD"
+	}
+	entries, err := git.LogBranch(branch, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list commits: %w", err)
+	}
+	results := []adapters.LogEntry{}
+	for _, entry := range entries {
+		if commitref.IsValidReference(entry.Subject, entry.ParentCount(), issueID) {
+			results = append(results, entry)
+		}
+	}
+	return results, nil
 }

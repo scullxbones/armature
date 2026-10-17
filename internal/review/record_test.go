@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/attestation"
-	"github.com/scullxbones/armature/internal/ops"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1005,7 +1004,7 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 	assert.Contains(t, err.Error(), "digest mismatch")
 }
 
-func gateEvidenceRecordFixture(t *testing.T, ev ops.GateEvidence) (*ReviewBundle, *ConformanceAssessment) {
+func gateEvidenceRecordFixture(t *testing.T, ev gateEvidence) (*ReviewBundle, *ConformanceAssessment) {
 	t.Helper()
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
@@ -1020,7 +1019,7 @@ func gateEvidenceRecordFixture(t *testing.T, ev ops.GateEvidence) (*ReviewBundle
 			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
-		GateEvidence: []ops.GateEvidence{ev},
+		GateEvidence: []gateEvidence{ev},
 	}
 	bundle.BundleID = mustComputeBundleID(t, *bundle)
 	assessment := &ConformanceAssessment{
@@ -1043,7 +1042,7 @@ func TestRecord_GateEvidenceHashVerified_REQ_LNGHZN_S10_T3(t *testing.T) {
 	content := []byte("gate output\n")
 	require.NoError(t, os.WriteFile(logPath, content, 0o600))
 	sum := sha256.Sum256(content)
-	ev := ops.GateEvidence{
+	ev := gateEvidence{
 		Profile:    "full",
 		Command:    []string{"true"},
 		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -1065,7 +1064,7 @@ func TestRecord_GateEvidenceTamperedLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	content := []byte("gate output\n")
 	require.NoError(t, os.WriteFile(logPath, content, 0o600))
 	sum := sha256.Sum256(content)
-	ev := ops.GateEvidence{
+	ev := gateEvidence{
 		Profile:    "full",
 		Command:    []string{"true"},
 		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -1087,7 +1086,7 @@ func TestRecord_GateEvidenceMissingHashFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "full.log")
 	require.NoError(t, os.WriteFile(logPath, []byte("gate output\n"), 0o600))
-	ev := ops.GateEvidence{
+	ev := gateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
 		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -1104,7 +1103,7 @@ func TestRecord_GateEvidenceMissingHashFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 
 func TestRecord_GateEvidenceMissingLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
-	ev := ops.GateEvidence{
+	ev := gateEvidence{
 		Profile:    "full",
 		Command:    []string{"true"},
 		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

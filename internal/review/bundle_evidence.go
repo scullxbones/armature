@@ -3,31 +3,25 @@ package review
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"path/filepath"
-
-	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/ops"
+	"os"
 )
 
-// AttachGateEvidence copies citable gate-evidence ops that match the delivery
-// head onto the bundle. Non-citable or wrong-SHA records are omitted; an
-// empty delivery head attaches nothing.
-func AttachGateEvidence(bundle *ReviewBundle, issuesDir string) error {
+func AttachGateEvidence(bundle *ReviewBundle, records []byte) error {
 	if bundle == nil {
 		return fmt.Errorf("attach gate evidence: bundle is nil")
 	}
-	if issuesDir == "" || bundle.Delivery.HeadSHA == "" {
+	if bundle.Delivery.HeadSHA == "" || len(records) == 0 || string(records) == "null" {
 		return nil
 	}
-	opsDir := filepath.Join(issuesDir, "ops")
-	evs, err := ops.ReadAllGateEvidence(opsDir)
-	if err != nil {
-		return fmt.Errorf("read gate evidence: %w", err)
+	var evs []gateEvidence
+	if err := json.Unmarshal(records, &evs); err != nil {
+		return fmt.Errorf("attach gate evidence: %w", err)
 	}
-	var kept []ops.GateEvidence
+	var kept []gateEvidence
 	for _, ev := range evs {
-		if ev.HeadSHA == bundle.Delivery.HeadSHA && ev.Citable() {
+		if ev.HeadSHA == bundle.Delivery.HeadSHA && ev.citable() {
 			kept = append(kept, ev)
 		}
 	}
@@ -43,10 +37,7 @@ func AttachGateEvidence(bundle *ReviewBundle, issuesDir string) error {
 	return nil
 }
 
-// ValidateGateEvidenceLogs re-reads each attached evidence log and checks
-// its SHA-256 against the recorded output_hash. Empty hashes and missing
-// files fail closed: record must not attest unverified evidence.
-func ValidateGateEvidenceLogs(evidence []ops.GateEvidence) error {
+func validateGateEvidenceLogs(evidence []gateEvidence) error {
 	for i, ev := range evidence {
 		if ev.OutputHash == "" {
 			return fmt.Errorf("gate evidence %d: missing output_hash", i)
@@ -54,7 +45,7 @@ func ValidateGateEvidenceLogs(evidence []ops.GateEvidence) error {
 		if ev.LogPath == "" {
 			return fmt.Errorf("gate evidence %d: missing log_path", i)
 		}
-		data, err := adapters.ReadFile(ev.LogPath)
+		data, err := readLogFile(ev.LogPath)
 		if err != nil {
 			return fmt.Errorf("gate evidence %d: read log %s: %w", i, ev.LogPath, err)
 		}
@@ -69,4 +60,8 @@ func ValidateGateEvidenceLogs(evidence []ops.GateEvidence) error {
 func sha256Sum(b []byte) []byte {
 	sum := sha256.Sum256(b)
 	return sum[:]
+}
+
+func readLogFile(path string) ([]byte, error) {
+	return os.ReadFile(path) //nolint:gosec
 }

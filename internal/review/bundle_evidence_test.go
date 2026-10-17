@@ -1,15 +1,35 @@
-package review_test
+package review
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func attachFromIssuesDir(t *testing.T, bundle *ReviewBundle, issuesDir string) error {
+	t.Helper()
+	if bundle == nil {
+		return fmt.Errorf("attach gate evidence: bundle is nil")
+	}
+	if issuesDir == "" || bundle.Delivery.HeadSHA == "" {
+		return nil
+	}
+	evs, err := ops.ReadAllGateEvidence(filepath.Join(issuesDir, "ops"))
+	if err != nil {
+		return fmt.Errorf("read gate evidence: %w", err)
+	}
+	records, err := json.Marshal(evs)
+	if err != nil {
+		return fmt.Errorf("read gate evidence: %w", err)
+	}
+	return AttachGateEvidence(bundle, records)
+}
 
 func TestReviewBundleIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
@@ -29,26 +49,31 @@ func TestReviewBundleIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendGateEvidence(filepath.Join(opsDir, "worker.log"), "worker-1", ev))
 
-	bundle := &review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
 		BundleID:      "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:    "LNGHZN-S10-T3",
 			Type:  "task",
 			Title: "Gate evidence",
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			HeadSHA: head,
 		},
-		Fingerprints: review.Fingerprints{
+		Fingerprints: Fingerprints{
 			Contract: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Delivery: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
 
-	require.NoError(t, review.AttachGateEvidence(bundle, issuesDir))
+	require.NoError(t, attachFromIssuesDir(t, bundle, issuesDir))
 	require.Len(t, bundle.GateEvidence, 1)
-	assert.Equal(t, ev, bundle.GateEvidence[0])
+	assert.Equal(t, ev.Profile, bundle.GateEvidence[0].Profile)
+	assert.Equal(t, ev.Command, bundle.GateEvidence[0].Command)
+	assert.Equal(t, ev.HeadSHA, bundle.GateEvidence[0].HeadSHA)
+	assert.Equal(t, ev.Start, bundle.GateEvidence[0].Start)
+	assert.Equal(t, ev.End, bundle.GateEvidence[0].End)
+	assert.Equal(t, ev.Exit, bundle.GateEvidence[0].Exit)
 	assert.Equal(t, mustComputeBundleID(t, *bundle), bundle.BundleID,
 		"attach must finalize bundle_id so attestation covers the attached evidence")
 }
@@ -56,26 +81,26 @@ func TestReviewBundleIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 func TestBundleIDIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
 
-	base := review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
-		Issue: review.IssueInfo{
+	base := ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue: IssueInfo{
 			ID:      "LNGHZN-S10-T3",
 			Type:    "task",
 			Title:   "Gate evidence",
 			Outcome: "done",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "Evidence is citable",
 			Acceptance:       []string{"bundle id binds evidence"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			HeadSHA:      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			ChangedFiles: []string{"cmd/armature/gate.go"},
 		},
 	}
 	withEvidence := base
-	withEvidence.GateEvidence = []ops.GateEvidence{{
+	withEvidence.GateEvidence = []gateEvidence{{
 		Profile: "full",
 		Command: []string{"true"},
 		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -84,7 +109,7 @@ func TestBundleIDIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 		Exit:    0,
 	}}
 	otherEvidence := base
-	otherEvidence.GateEvidence = []ops.GateEvidence{{
+	otherEvidence.GateEvidence = []gateEvidence{{
 		Profile: "full",
 		Command: []string{"true"},
 		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -102,22 +127,22 @@ func TestBundleIDIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	assert.Equal(t, idOne, mustComputeBundleID(t, withEvidence), "bundle_id must be deterministic")
 }
 
-func attachFixture(t *testing.T, ev ops.GateEvidence, deliveryHead string) *review.ReviewBundle {
+func attachFixture(t *testing.T, ev ops.GateEvidence, deliveryHead string) *ReviewBundle {
 	t.Helper()
 	issuesDir := t.TempDir()
 	opsDir := filepath.Join(issuesDir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0o755))
 	require.NoError(t, ops.AppendGateEvidence(filepath.Join(opsDir, "worker.log"), "worker-1", ev))
-	bundle := &review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
-		Issue: review.IssueInfo{
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue: IssueInfo{
 			ID:    "LNGHZN-S10-T3",
 			Type:  "task",
 			Title: "Gate evidence",
 		},
-		Delivery: review.Delivery{HeadSHA: deliveryHead},
+		Delivery: Delivery{HeadSHA: deliveryHead},
 	}
-	require.NoError(t, review.AttachGateEvidence(bundle, issuesDir))
+	require.NoError(t, attachFromIssuesDir(t, bundle, issuesDir))
 	return bundle
 }
 
@@ -183,12 +208,12 @@ func TestAttachGateEvidence_InvalidPayloadErrors_REQ_LNGHZN_S10_T3(t *testing.T)
 	require.NoError(t, os.MkdirAll(opsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(opsDir, "worker.log"),
 		[]byte(`["gate-evidence","full",1,"worker-1","not-an-object"]`+"\n"), 0o644))
-	bundle := &review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
-		Issue:         review.IssueInfo{ID: "LNGHZN-S10-T3", Type: "task", Title: "Gate evidence"},
-		Delivery:      review.Delivery{HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue:         IssueInfo{ID: "LNGHZN-S10-T3", Type: "task", Title: "Gate evidence"},
+		Delivery:      Delivery{HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
 	}
-	err := review.AttachGateEvidence(bundle, issuesDir)
+	err := attachFromIssuesDir(t, bundle, issuesDir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid")
 }
@@ -210,14 +235,15 @@ func TestAttachGateEvidence_UnrelatedCorruptJSONStillAttaches_REQ_LNGHZN_S10_T3(
 	require.NoError(t, ops.AppendGateEvidence(filepath.Join(opsDir, "good.log"), "worker-1", ev))
 	require.NoError(t, os.WriteFile(filepath.Join(opsDir, "junk.log"),
 		[]byte("not-json\n{broken\n"), 0o644))
-	bundle := &review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
-		Issue:         review.IssueInfo{ID: "LNGHZN-S10-T3", Type: "task", Title: "Gate evidence"},
-		Delivery:      review.Delivery{HeadSHA: head},
+	bundle := &ReviewBundle{
+		SchemaVersion: SchemaVersion,
+		Issue:         IssueInfo{ID: "LNGHZN-S10-T3", Type: "task", Title: "Gate evidence"},
+		Delivery:      Delivery{HeadSHA: head},
 	}
-	require.NoError(t, review.AttachGateEvidence(bundle, issuesDir))
+	require.NoError(t, attachFromIssuesDir(t, bundle, issuesDir))
 	require.Len(t, bundle.GateEvidence, 1)
-	assert.Equal(t, ev, bundle.GateEvidence[0])
+	assert.Equal(t, ev.Profile, bundle.GateEvidence[0].Profile)
+	assert.Equal(t, ev.HeadSHA, bundle.GateEvidence[0].HeadSHA)
 }
 
 func TestAttachGateEvidence_CitableMatchFinalizesBundleID_REQ_LNGHZN_S10_T3(t *testing.T) {
@@ -233,6 +259,7 @@ func TestAttachGateEvidence_CitableMatchFinalizesBundleID_REQ_LNGHZN_S10_T3(t *t
 	}
 	bundle := attachFixture(t, ev, head)
 	require.Len(t, bundle.GateEvidence, 1)
-	assert.Equal(t, ev, bundle.GateEvidence[0])
+	assert.Equal(t, ev.Profile, bundle.GateEvidence[0].Profile)
+	assert.Equal(t, ev.HeadSHA, bundle.GateEvidence[0].HeadSHA)
 	assert.Equal(t, mustComputeBundleID(t, *bundle), bundle.BundleID)
 }

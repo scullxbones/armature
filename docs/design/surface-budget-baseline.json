@@ -1613,7 +1613,7 @@
       ]
     },
     "internal/review": {
-      "count": 140,
+      "count": 128,
       "names": [
         "Activity",
         "Activity.DeliveryHeadCount",
@@ -1628,15 +1628,6 @@
         "ActivityEntryDetails.ExitCode",
         "ActivityEntryDetails.ExitCodeKnown",
         "ActivityEntryDetails.HeadSHA",
-        "ActivityLogEntry",
-        "ActivityLogEntry.Command",
-        "ActivityLogEntry.ExitCode",
-        "ActivityLogEntry.ExitCodeKnown",
-        "ActivityLogEntry.HeadSHA",
-        "ActivityLogEntry.OutputHash",
-        "ActivityLogEntry.OutputHead",
-        "ActivityLogEntry.OutputTail",
-        "ActivityLogEntry.Timestamp",
         "AnnotateValidateError",
         "AttachGateEvidence",
         "BuildDiffIndex",
@@ -1692,7 +1683,6 @@
         "DiffIndex.ContainsFile",
         "DiffIndex.ContainsLine",
         "FileCitation",
-        "FilterDiff",
         "FingerprintActivity",
         "FingerprintContract",
         "FingerprintDelivery",
@@ -1742,7 +1732,6 @@
         "ReviewBundle.Issue",
         "ReviewBundle.SchemaVersion",
         "ReviewBundle.Valid",
-        "ReviewCommits",
         "Satisfied",
         "SchemaVersion",
         "ValidateActivityCitations",
@@ -1751,7 +1740,6 @@
         "ValidateFix",
         "ValidateFix.Fixable",
         "ValidateFix.Suggestion",
-        "ValidateGateEvidenceLogs",
         "ValidateResult",
         "ValidateResultCoverage",
         "ValidateResultNoDiff"

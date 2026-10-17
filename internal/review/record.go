@@ -108,7 +108,7 @@ func validateRecordBundleIntegrity(input RecordInput) error {
 				"recorded bundle_id %s (bundle contents may have been altered since `arm review prepare` ran)",
 			recomputed, input.Bundle.BundleID)
 	}
-	if err := ValidateGateEvidenceLogs(input.Bundle.GateEvidence); err != nil {
+	if err := validateGateEvidenceLogs(input.Bundle.GateEvidence); err != nil {
 		return fmt.Errorf("gate evidence validation failed: %w", err)
 	}
 	return nil

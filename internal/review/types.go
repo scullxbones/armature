@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/scullxbones/armature/internal/ops"
 )
 
 const SchemaVersion = 1
@@ -272,15 +270,33 @@ type Activity struct {
 	LogPath           string `json:"log_path"`
 }
 
+type gateEvidence struct {
+	Profile     string   `json:"profile"`
+	Command     []string `json:"command"`
+	HeadSHA     string   `json:"head_sha"`
+	Start       int64    `json:"start"`
+	End         int64    `json:"end"`
+	Exit        int      `json:"exit"`
+	Uncommitted bool     `json:"uncommitted,omitempty"`
+	OutputHash  string   `json:"output_hash,omitempty"`
+	OutputHead  string   `json:"output_head,omitempty"`
+	OutputTail  string   `json:"output_tail,omitempty"`
+	LogPath     string   `json:"log_path,omitempty"`
+}
+
+func (e gateEvidence) citable() bool {
+	return !e.Uncommitted && e.Exit == 0
+}
+
 type ReviewBundle struct {
-	SchemaVersion int                `json:"schema_version"`
-	BundleID      string             `json:"bundle_id"`
-	Issue         IssueInfo          `json:"issue"`
-	Contract      Contract           `json:"contract"`
-	Delivery      Delivery           `json:"delivery"`
-	Fingerprints  Fingerprints       `json:"fingerprints"`
-	Activity      *Activity          `json:"activity,omitempty"`
-	GateEvidence  []ops.GateEvidence `json:"gate_evidence,omitempty"`
+	SchemaVersion int            `json:"schema_version"`
+	BundleID      string         `json:"bundle_id"`
+	Issue         IssueInfo      `json:"issue"`
+	Contract      Contract       `json:"contract"`
+	Delivery      Delivery       `json:"delivery"`
+	Fingerprints  Fingerprints   `json:"fingerprints"`
+	Activity      *Activity      `json:"activity,omitempty"`
+	GateEvidence  []gateEvidence `json:"gate_evidence,omitempty"`
 }
 
 func (rb ReviewBundle) Valid() error {
