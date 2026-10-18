@@ -223,6 +223,34 @@ func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	assert.Contains(t, err.Error(), "source")
 }
 
+func TestValidateSourcesAndDryRun_RejectMalformedManifestEntries(t *testing.T) {
+	t.Parallel()
+	plan := &Plan{
+		Version: 1,
+		Title:   "Malformed manifest",
+		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Cited against a malformed source")},
+	}
+	cases := []struct {
+		name     string
+		manifest []byte
+	}{
+		{name: "non_object_entry", manifest: []byte(`{"entries":{"src":42}}`)},
+		{name: "bad_last_synced", manifest: []byte(`{"entries":{"src":{"last_synced":"not-a-time"}}}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateSources(plan, tc.manifest)
+			require.Error(t, err, "validateSources must reject a malformed source entry")
+			assert.Contains(t, err.Error(), "parse source manifest")
+
+			_, dryErr := DryRunApplyPlan(plan, materialize.NewState(), ApplyOptions{ManifestData: tc.manifest})
+			require.Error(t, dryErr, "DryRunApplyPlan must reject a malformed source entry")
+			assert.Contains(t, dryErr.Error(), "parse source manifest")
+		})
+	}
+}
+
 func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

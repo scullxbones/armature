@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/clock"
@@ -66,8 +67,17 @@ func validateSources(plan *Plan, manifestData []byte) error {
 }
 
 func sourceIDsFromManifest(data []byte) (map[string]struct{}, error) {
+	type sourceEntry struct {
+		ID           string    `json:"id"`
+		URL          string    `json:"url"`
+		Title        string    `json:"title"`
+		Fingerprint  string    `json:"fingerprint"`
+		LastSynced   time.Time `json:"last_synced"`
+		ProviderType string    `json:"provider_type"`
+		SyncFailed   bool      `json:"sync_failed"`
+	}
 	var m struct {
-		Entries map[string]json.RawMessage `json:"entries"`
+		Entries map[string]sourceEntry `json:"entries"`
 	}
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
