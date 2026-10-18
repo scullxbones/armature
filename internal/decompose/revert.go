@@ -9,10 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-type DryRunRevertResult struct {
-	WouldCancel []DryRunEntry
-}
-
 // ForeignChildError is returned when revert would strand an issue that is
 // not in the plan but currently has a planned issue as its parent.
 type ForeignChildError struct {
@@ -99,15 +95,15 @@ func plannedOpenIssues(plan *Plan, state *materialize.State) []PlanIssue {
 }
 
 // DryRunRevertPlan returns what would be cancelled by CancelOps, without writing any ops.
-func DryRunRevertPlan(plan *Plan, state *materialize.State) (*DryRunRevertResult, error) {
+func DryRunRevertPlan(plan *Plan, state *materialize.State) ([]DryRunEntry, error) {
 	if err := CheckForeignChildren(plan, state); err != nil {
 		return nil, err
 	}
-	result := &DryRunRevertResult{}
+	var wouldCancel []DryRunEntry
 	for _, issue := range plannedOpenIssues(plan, state) {
-		result.WouldCancel = append(result.WouldCancel, DryRunEntry{ID: issue.ID, Title: issue.Title})
+		wouldCancel = append(wouldCancel, DryRunEntry{ID: issue.ID, Title: issue.Title})
 	}
-	return result, nil
+	return wouldCancel, nil
 }
 
 // CancelOps returns cancel transitions for still-open planned issues after

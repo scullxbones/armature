@@ -63,7 +63,7 @@ func TestPlanAllowsUnknownFields_REQ_TOPTIER_S3_T3(t *testing.T) {
 	tmpFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(tmpFile, []byte(planJSON), 0644))
 
-	plan, err := ParsePlan(tmpFile)
+	plan, err := parsePlanFile(t, tmpFile)
 	require.NoError(t, err, "expected unknown field to be accepted")
 	assert.Equal(t, "Test Plan", plan.Title)
 }
@@ -74,7 +74,7 @@ func TestParsePlanRejectsTrailingJSON_REQ_TOPTIER_S3_T3(t *testing.T) {
 	tmpFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(tmpFile, []byte(`{"version":1,"title":"plan","issues":[]} {"extra":true}`), 0o644))
 
-	_, err := ParsePlan(tmpFile)
+	_, err := parsePlanFile(t, tmpFile)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "trailing")
 }
@@ -104,7 +104,7 @@ func TestPlanValidRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	tmpFile := filepath.Join(t.TempDir(), "plan.json")
 	require.NoError(t, os.WriteFile(tmpFile, []byte(planJSON), 0644))
 
-	parsed, err := ParsePlan(tmpFile)
+	parsed, err := parsePlanFile(t, tmpFile)
 	require.NoError(t, err)
 	require.NotNil(t, parsed)
 
@@ -148,7 +148,7 @@ func TestPlanMarshalAndParseRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	tmpFile1 := filepath.Join(tmpDir, "plan1.json")
 	require.NoError(t, os.WriteFile(tmpFile1, []byte(originalJSON), 0644))
 
-	plan1, err := ParsePlan(tmpFile1)
+	plan1, err := parsePlanFile(t, tmpFile1)
 	require.NoError(t, err)
 
 	jsonData, err := json.MarshalIndent(plan1, "", "  ")
@@ -157,7 +157,7 @@ func TestPlanMarshalAndParseRoundTrip_REQ_TOPTIER_S3_T3(t *testing.T) {
 	tmpFile2 := filepath.Join(tmpDir, "plan2.json")
 	require.NoError(t, os.WriteFile(tmpFile2, jsonData, 0644))
 
-	plan2, err := ParsePlan(tmpFile2)
+	plan2, err := parsePlanFile(t, tmpFile2)
 	require.NoError(t, err)
 
 	assert.Equal(t, plan1.Version, plan2.Version)
@@ -228,7 +228,7 @@ func TestPlanStrictDecode_REQ_TOPTIER_S3_T3(t *testing.T) {
 			tmpFile := filepath.Join(t.TempDir(), "plan.json")
 			require.NoError(t, os.WriteFile(tmpFile, []byte(tc.jsonContent), 0644))
 
-			_, err := ParsePlan(tmpFile)
+			_, err := parsePlanFile(t, tmpFile)
 			if tc.expectError {
 				require.Error(t, err, "expected error for %s", tc.name)
 				assert.True(t, strings.Contains(err.Error(), tc.errorMsg) ||

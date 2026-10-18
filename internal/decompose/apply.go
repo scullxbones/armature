@@ -12,14 +12,8 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/sources"
 	"github.com/scullxbones/armature/internal/validate"
 )
-
-type DryRunResult struct {
-	WouldCreate []DryRunEntry
-	Warnings    []string
-}
 
 type DryRunEntry struct {
 	ID     string
@@ -72,7 +66,9 @@ func validateSources(plan *Plan, manifestData []byte) error {
 }
 
 func sourceIDsFromManifest(data []byte) (map[string]struct{}, error) {
-	var m sources.Manifest
+	var m struct {
+		Entries map[string]json.RawMessage `json:"entries"`
+	}
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
@@ -155,7 +151,7 @@ func attachRootToOrphans(issues []PlanIssue, root string) []PlanIssue {
 }
 
 // DryRunApplyPlan validates the plan and returns what would be created, without writing any ops.
-func DryRunApplyPlan(plan *Plan, state *materialize.State, opts ApplyOptions) (*DryRunResult, error) {
+func DryRunApplyPlan(plan *Plan, state *materialize.State, opts ApplyOptions) ([]DryRunEntry, error) {
 	if err := validateTypes(plan); err != nil {
 		return nil, err
 	}
@@ -166,15 +162,13 @@ func DryRunApplyPlan(plan *Plan, state *materialize.State, opts ApplyOptions) (*
 		return nil, err
 	}
 
-	warnings := validatePlan(plan)
-
 	transformed := preparePlan(plan, opts)
 	proposed, err := planOps(transformed, state, "dry-run", clock.System, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return &DryRunResult{Warnings: warnings, WouldCreate: entriesForCreates(proposed)}, nil
+	return entriesForCreates(proposed), nil
 }
 
 // ApplyPlan appends create ops for each issue in the plan to the op log.

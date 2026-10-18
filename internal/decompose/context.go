@@ -3,16 +3,12 @@ package decompose
 import (
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
-
-	"github.com/scullxbones/armature/internal/sources"
 )
 
 type ContextParams struct {
-	IssuesDir   string
 	Plan        *Plan
-	SourceIDs   []string
+	Sources     []SourceContent
 	Template    string
 	ExistingDAG bool
 }
@@ -36,16 +32,8 @@ func BuildContext(params ContextParams) (ContextOutput, error) {
 		PlanSchema:  defaultPlanSchema(),
 	}
 
-	if params.IssuesDir != "" && len(params.SourceIDs) > 0 {
-		sourcesDir := filepath.Join(params.IssuesDir, "sources")
-		lc := sources.NewLifecycle(sourcesDir)
-		for _, id := range params.SourceIDs {
-			data, err := lc.Content(id)
-			if err != nil || data == nil {
-				continue
-			}
-			out.Sources = append(out.Sources, SourceContent{ID: id, Content: string(data)})
-		}
+	if len(params.Sources) > 0 {
+		out.Sources = append(out.Sources, params.Sources...)
 	}
 
 	tmpl := params.Template

@@ -17,7 +17,7 @@ func TestParsePlan_ExamplesCompletedStory_REQ_TOPTIER_S8_T2(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join("..", "..", "examples", "completed-story", "plan.json")
-	plan, err := ParsePlan(path)
+	plan, err := parsePlanFile(t, path)
 	require.NoError(t, err, "examples/completed-story/plan.json must decode as arm dag apply --plan input")
 	require.Len(t, plan.Issues, 2)
 
@@ -177,7 +177,7 @@ func TestDryRunApplyPlan_ReturnsWouldCreate(t *testing.T) {
 
 	result, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.NoError(t, err)
-	assert.Len(t, result.WouldCreate, 2)
+	assert.Len(t, result, 2)
 }
 
 func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
@@ -196,8 +196,8 @@ func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
 
 	result, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.NoError(t, err)
-	assert.Len(t, result.WouldCreate, 1)
-	assert.Equal(t, "PLAN-001", result.WouldCreate[0].ID)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "PLAN-001", result[0].ID)
 }
 
 func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
