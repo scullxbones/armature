@@ -1,8 +1,6 @@
 #!/bin/bash
 # Usage: scripts/check-fast.sh [repo-root]
 #        BASE=<ref> scripts/check-fast.sh [repo-root]
-# Routing table: docs/design/gate-efficiency.md D2.
-# Does not run mutation testing, full coverage, or crosscompile.
 
 set -euo pipefail
 

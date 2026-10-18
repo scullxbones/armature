@@ -1,5 +1,4 @@
 #!/bin/bash
-# Fixture test for scripts/check-mock-ban.sh and the depguard mock-ban rule.
 
 set -euo pipefail
 

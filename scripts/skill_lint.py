@@ -12,10 +12,6 @@ _COMPOUND_OPS = {";", "&&", "||", "|"}
 _REDIRECT_OPS = {">", ">>", "<"}
 
 
-# Known mandatory flags for specific commands. Keep in sync with
-# `MarkFlagRequired` calls in cmd/armature/*.go — a Go test
-# (cmd/armature/skill_lint_flags_test.go) fails CI if this drifts out of
-# sync with the actual Cobra command definitions.
 MANDATORY_FLAGS = {
     "claim": ["--worktree"],
     "transition": ["--to"],
@@ -43,9 +39,6 @@ MANDATORY_FLAGS = {
     "dag context": [],
     "dag revert": ["--plan"],
     "dag transition": ["--issue"],
-    # dag_transition.go Use is "transition". This key satisfies
-    # TestMandatoryFlagsMatchMarkFlagRequired's first-word match without
-    # shadowing workflow "transition" (--to). No real chain is "transition dag".
     "transition dag": ["--issue"],
     "dag summary": [],
     "sources accept-citation": ["--rationale"],
@@ -148,10 +141,6 @@ def join_continued_lines(code_block):
 
 def tokenize_shell_line(line):
     """Tokenize a shell line quote-awarely, keeping operators as tokens.
-
-    Uses `shlex.shlex` with `punctuation_chars=True` so multi-character
-    shell operators stay intact inside and outside quotes.
-    `commenters='#'` strips a trailing unquoted `# comment`.
 
     Returns None if the line contains unterminated quoting shlex can't
     tokenize (rather than raising), so callers can skip it.
@@ -677,7 +666,6 @@ def lint_skill_file(skill_file_path, valid_subcommands, valid_flags_cache=None):
 
 
 def main(argv):
-    """Main entry point."""
     root_dir = argv[1] if len(argv) > 1 else "."
 
     if not os.path.isdir(root_dir):

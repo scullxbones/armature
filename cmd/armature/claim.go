@@ -256,8 +256,7 @@ func sourceAdvancedOnlyByArmature(repoPath, sourcePath, oldTip, newTip string) (
 	if worktree.NormalizePath(repoPath) != worktree.NormalizePath(sourcePath) {
 		return false, nil
 	}
-	// #nosec G204 -- git binary is fixed; sourcePath and revisions were validated
-	cmd := exec.CommandContext(context.Background(), "git", "-C", sourcePath, "diff", "--name-only", oldTip, newTip)
+	cmd := gitCommand(nil, "-C", sourcePath, "diff", "--name-only", oldTip, newTip)
 	out, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("inspect coordinator source advance: %w", err)

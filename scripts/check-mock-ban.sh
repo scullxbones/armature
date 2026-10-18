@@ -1,6 +1,4 @@
 #!/bin/bash
-# Mock-framework ban (quality-controls C1 / guardrail R1).
-# depguard covers imports. This script covers mockery headers and go.mod modules.
 # Usage: scripts/check-mock-ban.sh [repo-root]
 
 set -euo pipefail
