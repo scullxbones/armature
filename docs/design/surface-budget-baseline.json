@@ -509,7 +509,7 @@
       ]
     },
     "internal/decompose": {
-      "count": 57,
+      "count": 51,
       "names": [
         "ApplyOptions",
         "ApplyOptions.GenerateIDs",
@@ -527,9 +527,8 @@
         "ContextOutput.Sources",
         "ContextParams",
         "ContextParams.ExistingDAG",
-        "ContextParams.IssuesDir",
         "ContextParams.Plan",
-        "ContextParams.SourceIDs",
+        "ContextParams.Sources",
         "ContextParams.Template",
         "DryRunApplyPlan",
         "DryRunEntry",
@@ -537,12 +536,7 @@
         "DryRunEntry.Status",
         "DryRunEntry.Title",
         "DryRunEntry.Type",
-        "DryRunResult",
-        "DryRunResult.Warnings",
-        "DryRunResult.WouldCreate",
         "DryRunRevertPlan",
-        "DryRunRevertResult",
-        "DryRunRevertResult.WouldCancel",
         "ForeignChildError",
         "ForeignChildError.Child",
         "ForeignChildError.Error",

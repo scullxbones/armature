@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/strictjson"
 )
 
@@ -32,17 +31,13 @@ type Plan struct {
 	Issues  []PlanIssue `json:"issues"`
 }
 
-// ParsePlan parses a plan JSON file from the given path via strictjson.Decode:
-// trailing data after a valid value is rejected; unknown object fields are accepted.
-func ParsePlan(path string) (*Plan, error) {
-	data, err := adapters.ReadPlanFile(path)
-	if err != nil {
-		return nil, err
-	}
-
+// ParsePlan decodes plan JSON via strictjson.Decode: trailing data after a
+// valid value is rejected; unknown object fields are accepted. name is the
+// caller-facing path used in error text.
+func ParsePlan(name string, data []byte) (*Plan, error) {
 	var plan Plan
 	if err := strictjson.Decode(data, &plan); err != nil {
-		return nil, fmt.Errorf("parse plan file %s: %w", path, err)
+		return nil, fmt.Errorf("parse plan file %s: %w", name, err)
 	}
 
 	if plan.Version != 1 {

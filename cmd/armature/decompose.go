@@ -14,6 +14,7 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
 )
 
@@ -198,7 +199,7 @@ plan, or --schema to view the JSON schema.`,
 			appCtx := currentCtx(cmd)
 			issuesDir := appCtx.IssuesDir
 
-			plan, err := decompose.ParsePlan(planPath)
+			plan, err := loadDecompositionPlan(planPath)
 			if err != nil {
 				return err
 			}
@@ -224,17 +225,17 @@ plan, or --schema to view the JSON schema.`,
 			}
 
 			if dryRunFlag {
-				result, err := decompose.DryRunApplyPlan(plan, state, applyOpts)
+				wouldCreate, err := decompose.DryRunApplyPlan(plan, state, applyOpts)
 				if err != nil {
 					return err
 				}
 				if structuredFormat(cmd) {
-					return writeDagApplyEnvelope(cmd, applyIssueRows(result.WouldCreate, "would_create"), true)
+					return writeDagApplyEnvelope(cmd, applyIssueRows(wouldCreate, "would_create"), true)
 				}
-				for _, entry := range result.WouldCreate {
+				for _, entry := range wouldCreate {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would create: %s (%s)\n", entry.ID, entry.Title)
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issues would be created\n", len(result.WouldCreate))
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issues would be created\n", len(wouldCreate))
 				return nil
 			}
 
@@ -328,7 +329,7 @@ A rerun that finds nothing left to cancel still publishes the retained local tip
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appCtx := currentCtx(cmd)
 
-			plan, err := decompose.ParsePlan(planPath)
+			plan, err := loadDecompositionPlan(planPath)
 			if err != nil {
 				return err
 			}
@@ -344,14 +345,14 @@ A rerun that finds nothing left to cancel still publishes the retained local tip
 			}
 
 			if dryRunFlag {
-				result, err := decompose.DryRunRevertPlan(plan, state)
+				wouldCancel, err := decompose.DryRunRevertPlan(plan, state)
 				if err != nil {
 					return err
 				}
-				for _, entry := range result.WouldCancel {
+				for _, entry := range wouldCancel {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would cancel: %s (%s)\n", entry.ID, entry.Title)
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issue(s) would be cancelled\n", len(result.WouldCancel))
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: %d issue(s) would be cancelled\n", len(wouldCancel))
 				return nil
 			}
 
@@ -407,7 +408,7 @@ issues, source content, and template interpolation.`,
 			var plan *decompose.Plan
 			if planPath != "" {
 				var err error
-				plan, err = decompose.ParsePlan(planPath)
+				plan, err = loadDecompositionPlan(planPath)
 				if err != nil {
 					return err
 				}
@@ -429,9 +430,8 @@ issues, source content, and template interpolation.`,
 				issuesDir = state.ctx.IssuesDir
 			}
 			ctx, err := decompose.BuildContext(decompose.ContextParams{
-				IssuesDir:   issuesDir,
 				Plan:        plan,
-				SourceIDs:   sourceIDs,
+				Sources:     loadDecomposeSourceContent(issuesDir, sourceIDs),
 				Template:    templateFlag,
 				ExistingDAG: existingDAGFlag,
 			})
@@ -464,4 +464,28 @@ issues, source content, and template interpolation.`,
 	cmd.Flags().StringVar(&formatFlag, "format", "text", "output format: text or json")
 	cmd.Flags().BoolVar(&existingDAGFlag, "existing-dag", false, "include existing DAG issues in context")
 	return cmd
+}
+
+func loadDecompositionPlan(path string) (*decompose.Plan, error) {
+	data, err := adapters.ReadPlanFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return decompose.ParsePlan(path, data)
+}
+
+func loadDecomposeSourceContent(issuesDir string, sourceIDs []string) []decompose.SourceContent {
+	if issuesDir == "" || len(sourceIDs) == 0 {
+		return nil
+	}
+	lc := sources.NewLifecycle(filepath.Join(issuesDir, "sources"))
+	var out []decompose.SourceContent
+	for _, id := range sourceIDs {
+		data, err := lc.Content(id)
+		if err != nil || data == nil {
+			continue
+		}
+		out = append(out, decompose.SourceContent{ID: id, Content: string(data)})
+	}
+	return out
 }

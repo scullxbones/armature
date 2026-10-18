@@ -9,7 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/sources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -286,8 +285,8 @@ func TestDryRunRevertPlan_ReturnsWouldCancel(t *testing.T) {
 
 	result, err := DryRunRevertPlan(plan, state)
 	require.NoError(t, err)
-	assert.Len(t, result.WouldCancel, 2)
-	ids := []string{result.WouldCancel[0].ID, result.WouldCancel[1].ID}
+	assert.Len(t, result, 2)
+	ids := []string{result[0].ID, result[1].ID}
 	assert.Contains(t, ids, "PLAN-001")
 	assert.Contains(t, ids, "PLAN-002")
 }
@@ -309,8 +308,8 @@ func TestDryRunRevertPlan_SkipsNonOpen(t *testing.T) {
 
 	result, err := DryRunRevertPlan(plan, state)
 	require.NoError(t, err)
-	assert.Len(t, result.WouldCancel, 1)
-	assert.Equal(t, "PLAN-001", result.WouldCancel[0].ID)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "PLAN-001", result[0].ID)
 }
 
 func TestDryRunRevertPlan_DoesNotWriteOps(t *testing.T) {
@@ -345,20 +344,13 @@ func TestDecomposeContextNoSources(t *testing.T) {
 
 func TestDecomposeContextWithSources(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	sourcesDir := filepath.Join(dir, "sources")
-	content := []byte("# PRD\n\nProduct requirements.")
-	require.NoError(t, sources.WriteCache(sourcesDir, "prd", content))
-	m := sources.Manifest{}
-	m.Upsert(sources.SourceEntry{ID: "prd", ProviderType: "filesystem"})
-	require.NoError(t, sources.WriteManifest(sourcesDir, m))
-
 	plan := &Plan{Title: "My Plan", Issues: []PlanIssue{{ID: "TSK-1", Title: "Task one", Type: "task"}}}
 	ctx, err := BuildContext(ContextParams{
-		IssuesDir: dir,
-		Plan:      plan,
-		SourceIDs: []string{"prd"},
-		Template:  "Sources: {{SOURCES}}",
+		Plan: plan,
+		Sources: []SourceContent{
+			{ID: "prd", Content: "# PRD\n\nProduct requirements."},
+		},
+		Template: "Sources: {{SOURCES}}",
 	})
 	require.NoError(t, err)
 	assert.Contains(t, ctx.PromptTemplate, "PRD")

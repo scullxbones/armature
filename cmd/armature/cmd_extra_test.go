@@ -17,6 +17,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/sources"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2099,4 +2100,36 @@ func TestNewSnapshotStore_UsesContextPaths_REQ_ARCHIMP_S14_T2(t *testing.T) {
 
 	expectedIssuePath := filepath.Join(ctx.StateDir, "issues", "test-id.json")
 	assert.Equal(t, expectedIssuePath, store.IssuePath("test-id"))
+}
+
+func TestLoadDecompositionPlan_ReadsThenParses(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "plan.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"version":1,"title":"p","issues":[]}`), 0o644))
+	plan, err := loadDecompositionPlan(path)
+	require.NoError(t, err)
+	assert.Equal(t, "p", plan.Title)
+}
+
+func TestLoadDecompositionPlan_MissingFile(t *testing.T) {
+	t.Parallel()
+	_, err := loadDecompositionPlan(filepath.Join(t.TempDir(), "missing.json"))
+	require.Error(t, err)
+}
+
+func TestLoadDecomposeSourceContent_SkipsMissingAndLoadsCache(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sourcesDir := filepath.Join(dir, "sources")
+	require.NoError(t, sources.WriteCache(sourcesDir, "prd", []byte("# PRD\n")))
+	m := sources.Manifest{}
+	m.Upsert(sources.SourceEntry{ID: "prd", ProviderType: "filesystem"})
+	require.NoError(t, sources.WriteManifest(sourcesDir, m))
+
+	got := loadDecomposeSourceContent(dir, []string{"prd", "missing"})
+	require.Len(t, got, 1)
+	assert.Equal(t, "prd", got[0].ID)
+	assert.Contains(t, got[0].Content, "PRD")
+	assert.Nil(t, loadDecomposeSourceContent("", []string{"prd"}))
+	assert.Nil(t, loadDecomposeSourceContent(dir, nil))
 }

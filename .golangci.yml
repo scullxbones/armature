@@ -238,6 +238,21 @@ linters:
             - "github.com/scullxbones/armature/internal/adapters"
             - "github.com/scullxbones/armature/internal/delivery"
             - "github.com/scullxbones/armature/internal/ops"
+        decompose-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/decompose/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/google/uuid"
+            - "github.com/scullxbones/armature/internal/clock"
+            - "github.com/scullxbones/armature/internal/issueid"
+            - "github.com/scullxbones/armature/internal/issuetype"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/strictjson"
+            - "github.com/scullxbones/armature/internal/validate"
     errcheck:
       check-type-assertions: true
       check-blank: true

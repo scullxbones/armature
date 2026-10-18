@@ -17,7 +17,7 @@ func TestParsePlan_ExamplesCompletedStory_REQ_TOPTIER_S8_T2(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join("..", "..", "examples", "completed-story", "plan.json")
-	plan, err := ParsePlan(path)
+	plan, err := parsePlanFile(t, path)
 	require.NoError(t, err, "examples/completed-story/plan.json must decode as arm dag apply --plan input")
 	require.Len(t, plan.Issues, 2)
 
@@ -177,7 +177,7 @@ func TestDryRunApplyPlan_ReturnsWouldCreate(t *testing.T) {
 
 	result, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.NoError(t, err)
-	assert.Len(t, result.WouldCreate, 2)
+	assert.Len(t, result, 2)
 }
 
 func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
@@ -196,8 +196,8 @@ func TestDryRunApplyPlan_SkipsExisting(t *testing.T) {
 
 	result, err := DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.NoError(t, err)
-	assert.Len(t, result.WouldCreate, 1)
-	assert.Equal(t, "PLAN-001", result.WouldCreate[0].ID)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "PLAN-001", result[0].ID)
 }
 
 func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
@@ -221,6 +221,34 @@ func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	_, err = DryRunApplyPlan(plan, state, ApplyOptions{})
 	require.Error(t, err, "dry-run must also refuse an uncited plan")
 	assert.Contains(t, err.Error(), "source")
+}
+
+func TestValidateSourcesAndDryRun_RejectMalformedManifestEntries(t *testing.T) {
+	t.Parallel()
+	plan := &Plan{
+		Version: 1,
+		Title:   "Malformed manifest",
+		Issues:  []PlanIssue{taskPlanIssue("PLAN-001", "Cited against a malformed source")},
+	}
+	cases := []struct {
+		name     string
+		manifest []byte
+	}{
+		{name: "non_object_entry", manifest: []byte(`{"entries":{"src":42}}`)},
+		{name: "bad_last_synced", manifest: []byte(`{"entries":{"src":{"last_synced":"not-a-time"}}}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateSources(plan, tc.manifest)
+			require.Error(t, err, "validateSources must reject a malformed source entry")
+			assert.Contains(t, err.Error(), "parse source manifest")
+
+			_, dryErr := DryRunApplyPlan(plan, materialize.NewState(), ApplyOptions{ManifestData: tc.manifest})
+			require.Error(t, dryErr, "DryRunApplyPlan must reject a malformed source entry")
+			assert.Contains(t, dryErr.Error(), "parse source manifest")
+		})
+	}
 }
 
 func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
