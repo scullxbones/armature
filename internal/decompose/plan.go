@@ -32,8 +32,7 @@ type Plan struct {
 }
 
 // ParsePlan decodes plan JSON via strictjson.Decode: trailing data after a
-// valid value is rejected; unknown object fields are accepted. name is the
-// caller-facing path used in error text.
+// valid value is rejected; unknown object fields are accepted.
 func ParsePlan(name string, data []byte) (*Plan, error) {
 	var plan Plan
 	if err := strictjson.Decode(data, &plan); err != nil {

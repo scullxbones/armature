@@ -1,5 +1,4 @@
 #!/bin/bash
-# Fixture test for scripts/surfacebudget.
 
 set -euo pipefail
 

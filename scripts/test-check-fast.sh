@@ -1,5 +1,4 @@
 #!/bin/bash
-# Routing tests for scripts/check-fast.sh (docs/design/gate-efficiency.md D2).
 
 set -euo pipefail
 
