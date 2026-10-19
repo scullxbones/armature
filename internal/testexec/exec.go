@@ -44,36 +44,53 @@ exec /bin/sh "$script" "$@"
 `
 
 var (
-	prepareOnce    sync.Once
+	prepareMu      sync.Mutex
+	prepared       bool
 	trampolinePath string
 	prepareErr     error
+
+	mkdirTemp = os.MkdirTemp
+	writeFile = os.WriteFile
+	remove    = os.Remove
+	link      = os.Link
+	symlink   = os.Symlink
 )
 
 func init() {
-	if err := prepare(); err != nil {
+	abortIf(prepare())
+}
+
+func abortIf(err error) {
+	if err != nil {
 		panic("testexec: " + err.Error())
 	}
 }
 
 func prepare() error {
-	prepareOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "armature-testexec-")
-		if err != nil {
-			prepareErr = fmt.Errorf("mkdir trampoline: %w", err)
-			return
-		}
-		path := filepath.Join(dir, "trampoline")
-		if err := os.WriteFile(path, []byte(trampolineBody), 0o755); err != nil { //nolint:gosec // G306: trampoline must be executable; written once in init
-			prepareErr = fmt.Errorf("write trampoline: %w", err)
-			return
-		}
-		trampolinePath = path
-	})
-	return prepareErr
+	prepareMu.Lock()
+	defer prepareMu.Unlock()
+	if prepared {
+		return prepareErr
+	}
+	dir, err := mkdirTemp("", "armature-testexec-")
+	if err != nil {
+		prepareErr = fmt.Errorf("mkdir trampoline: %w", err)
+		prepared = true
+		return prepareErr
+	}
+	path := filepath.Join(dir, "trampoline")
+	if err := writeFile(path, []byte(trampolineBody), 0o755); err != nil { //nolint:gosec // G306: trampoline must be executable; written once before tests fork
+		prepareErr = fmt.Errorf("write trampoline: %w", err)
+		prepared = true
+		return prepareErr
+	}
+	trampolinePath = path
+	prepared = true
+	return nil
 }
 
 // Write materializes an executable at path by linking the process-wide
-// trampoline and writing content to path+".script" (mode 0644). Callers must
+// trampoline and writing content to path+".script" (mode 0600). Callers must
 // not os.WriteFile an executable in tests; use this helper instead.
 func Write(t testing.TB, path string, content []byte) {
 	t.Helper()
@@ -93,12 +110,12 @@ func Write(t testing.TB, path string, content []byte) {
 	if err := os.WriteFile(sidecar, content, 0o600); err != nil {
 		t.Fatalf("testexec.Write: sidecar %s: %v", sidecar, err)
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := remove(path); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("testexec.Write: remove %s: %v", path, err)
 	}
-	if err := os.Link(trampolinePath, path); err == nil {
-		return
-	} else if err := os.Symlink(trampolinePath, path); err != nil {
-		t.Fatalf("testexec.Write: link %s to trampoline: %v", path, err)
+	if err := link(trampolinePath, path); err != nil {
+		if err := symlink(trampolinePath, path); err != nil {
+			t.Fatalf("testexec.Write: link %s to trampoline: %v", path, err)
+		}
 	}
 }
