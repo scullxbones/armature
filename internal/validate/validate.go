@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/issuetype"
@@ -19,7 +18,7 @@ import (
 
 type Options struct {
 	Strict            bool
-	ManifestData      []byte
+	Sources           SourceSet
 	Coverage          *traceability.Coverage
 	PreExpandedScopes map[string][]string
 	Now               int64
@@ -75,8 +74,8 @@ func Validate(issues map[string]IssueFacts, opts Options) Result {
 	findings = append(findings, checkE13VerticalSliceCoupling(issues)...)
 	findings = append(findings, checkE14TaskContract(issues)...)
 
-	if len(opts.ManifestData) > 0 {
-		findings = append(findings, checkE7E8E12Citations(issues, opts.ManifestData)...)
+	if opts.Sources.Loaded() {
+		findings = append(findings, checkE7E8E12Citations(issues, opts.Sources)...)
 	}
 
 	findings = append(findings, checkW1ScopeOverlap(issues, graph, opts.Now)...)
@@ -340,11 +339,10 @@ func checkE6RequiredFields(issues map[string]IssueFacts) []Finding {
 	return findings
 }
 
-func checkE7E8E12Citations(issues map[string]IssueFacts, manifestData []byte) []Finding {
+func checkE7E8E12Citations(issues map[string]IssueFacts, sources SourceSet) []Finding {
 	var findings []Finding
 
-	manifest, err := parseManifestData(manifestData)
-	if err != nil {
+	if err := sources.ParseError(); err != nil {
 		findings = append(findings, Finding{
 			Severity: "error", Rule: "E7",
 			Message: fmt.Sprintf("citation check skipped: cannot parse source manifest: %v", err),
@@ -362,7 +360,7 @@ func checkE7E8E12Citations(issues map[string]IssueFacts, manifestData []byte) []
 			continue
 		}
 		for _, sourceID := range issue.SourceEntryIDs {
-			if _, ok := manifest[sourceID]; !ok {
+			if !sources.Contains(sourceID) {
 				findings = append(findings, Finding{
 					Severity: "error", Rule: "E8",
 					Message:  fmt.Sprintf("unknown source: %s in citation for %s", sourceID, id),
@@ -372,30 +370,6 @@ func checkE7E8E12Citations(issues map[string]IssueFacts, manifestData []byte) []
 		}
 	}
 	return findings
-}
-
-type sourceEntry struct {
-	ID           string    `json:"id"`
-	URL          string    `json:"url"`
-	Title        string    `json:"title"`
-	Fingerprint  string    `json:"fingerprint"`
-	LastSynced   time.Time `json:"last_synced"`
-	ProviderType string    `json:"provider_type"`
-	SyncFailed   bool      `json:"sync_failed"`
-}
-
-func parseManifestData(manifestData []byte) (map[string]struct{}, error) {
-	var m struct {
-		Entries map[string]sourceEntry `json:"entries"`
-	}
-	if err := json.Unmarshal(manifestData, &m); err != nil {
-		return nil, err
-	}
-	result := make(map[string]struct{}, len(m.Entries))
-	for id := range m.Entries {
-		result[id] = struct{}{}
-	}
-	return result, nil
 }
 
 const maxDoDLength = 500

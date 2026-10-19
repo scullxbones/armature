@@ -36,6 +36,12 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 - [Dogfood findings capture](docs/agents/dogfood-findings.md)
 - [Repo-local skills](docs/agents/skills.md) — `.agents/skills` is canonical; `.cursor/skills` entries are symlinks.
 
+## Enforced agent rules
+
+| Mistake class | What fails |
+|---|---|
+| Second decoder of `sources/manifest.json` (typed `sourceEntry` copies or `json.RawMessage` entries; PRs #333 and #362) | `scripts/check-source-manifest-decode.sh` (`make lint` / `make check`). Decode with `sources.Manifest.Unmarshal` or `sources.ReadManifest`, then pass `validate.KnownSources` / `validate.UnreadableSources`. |
+
 ## Canonical references
 
 - `docs/conventions.md` — test naming, commit format, branch naming conventions (required reading for workers)

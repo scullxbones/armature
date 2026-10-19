@@ -513,8 +513,8 @@
       "names": [
         "ApplyOptions",
         "ApplyOptions.GenerateIDs",
-        "ApplyOptions.ManifestData",
         "ApplyOptions.Root",
+        "ApplyOptions.Sources",
         "ApplyPlan",
         "BuildContext",
         "CancelOps",
@@ -2132,7 +2132,7 @@
       ]
     },
     "internal/validate": {
-      "count": 47,
+      "count": 53,
       "names": [
         "CIOptions",
         "CheckIntroduction",
@@ -2166,11 +2166,12 @@
         "IssueFacts.Status",
         "IssueFacts.Title",
         "IssueFacts.Type",
+        "KnownSources",
         "Options",
         "Options.Coverage",
-        "Options.ManifestData",
         "Options.Now",
         "Options.PreExpandedScopes",
+        "Options.Sources",
         "Options.Strict",
         "RenderCensusedSurfacesGo",
         "Result",
@@ -2180,6 +2181,11 @@
         "Result.Infos",
         "Result.OK",
         "Result.Warnings",
+        "SourceSet",
+        "SourceSet.Contains",
+        "SourceSet.Loaded",
+        "SourceSet.ParseError",
+        "UnreadableSources",
         "Validate"
       ]
     },

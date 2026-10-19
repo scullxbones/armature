@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban surface-budget-check surface-budget-ratchet test-surface-budget-check
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
 
 GO ?= go
 PYTHON ?= python3
@@ -43,6 +43,8 @@ help:
 	@echo "  make test-census-drift-check - Test census-drift-check.sh itself (drift detection, both directions)"
 	@echo "  make mock-ban-check      - Fail if go.mod lists a mock framework or mockery output is present"
 	@echo "  make test-mock-ban       - Test check-mock-ban.sh and the depguard mock-ban rule"
+	@echo "  make source-manifest-decode-check - Fail if a second sources/manifest.json decoder is introduced"
+	@echo "  make test-source-manifest-decode - Test check-source-manifest-decode.sh"
 	@echo "  make surface-budget-check - Fail if an internal package grew its exported identifier count"
 	@echo "  make surface-budget-ratchet - Rewrite the committed internal export baseline (shrinks, or reviewed growth)"
 	@echo "  make test-surface-budget-check - Test the surface-budget ratchet (growth fail, shrink pass, rewrite)"
@@ -64,7 +66,7 @@ GREMLINS_VERSION      := v0.6.0
 
 CHECK_JOBS := check-static check-core mutate
 
-CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-summarize-test-json test-mock-ban test-surface-budget-check
+CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-summarize-test-json test-mock-ban test-source-manifest-decode test-surface-budget-check
 CHECK_TOOLS_check-static := golangci-lint
 
 CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check surface-budget-check
@@ -196,6 +198,7 @@ lint: adr-principles
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
 	@scripts/check-mock-ban.sh .
+	@scripts/check-source-manifest-decode.sh .
 
 adr-principles:
 	@$(PYTHON) scripts/check_adr_principles.py docs/adr
@@ -262,6 +265,12 @@ mock-ban-check:
 
 test-mock-ban:
 	@scripts/test_mock_ban.sh .
+
+source-manifest-decode-check:
+	@scripts/check-source-manifest-decode.sh .
+
+test-source-manifest-decode:
+	@scripts/test_check_source_manifest_decode.sh .
 
 surface-budget-check:
 	@$(GO) run ./scripts/surfacebudget -check .

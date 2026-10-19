@@ -23,6 +23,7 @@ import (
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/sources"
 	"github.com/scullxbones/armature/internal/validate"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/spf13/cobra"
@@ -844,10 +845,25 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 		return fmt.Errorf("read manifest: %w", err)
 	}
 	return checkGraphIntroduction(state, check, validate.Options{
-		Strict:       true,
-		ManifestData: manifestData,
-		Now:          nowEpoch(),
+		Strict:  true,
+		Sources: sourceSetFromManifestBytes(manifestData),
+		Now:     nowEpoch(),
 	})
+}
+
+func sourceSetFromManifestBytes(data []byte) validate.SourceSet {
+	if len(data) == 0 {
+		return validate.SourceSet{}
+	}
+	var m sources.Manifest
+	if err := m.Unmarshal(data); err != nil {
+		return validate.UnreadableSources(err)
+	}
+	ids := make(map[string]struct{}, len(m.Entries))
+	for id := range m.Entries {
+		ids[id] = struct{}{}
+	}
+	return validate.KnownSources(ids)
 }
 
 func extractFieldsFromIssue(issue *materialize.Issue, fieldList string) []string {

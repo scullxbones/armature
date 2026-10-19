@@ -37,6 +37,26 @@ func TestManifestGetByURL(t *testing.T) {
 	}
 }
 
+func TestManifestUnmarshalRejectsMalformedEntries(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{name: "non_object_entry", raw: `{"entries":{"src":42}}`},
+		{name: "garbage_last_synced", raw: `{"entries":{"src":{"last_synced":"garbage"}}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var m Manifest
+			if err := m.Unmarshal([]byte(tc.raw)); err == nil {
+				t.Fatalf("Unmarshal(%s) succeeded; json.RawMessage would skip this", tc.name)
+			}
+		})
+	}
+}
+
 func TestManifestRoundTrip(t *testing.T) {
 	t.Parallel()
 	entry := SourceEntry{

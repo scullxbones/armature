@@ -342,3 +342,63 @@ func TestIntroductionReplaysSortedOps_REQ_LNGHZN_S10_T12(t *testing.T) {
 	require.Error(t, err, "Introduction must refuse a cycle that sorted+rolled-up validate would report")
 	assert.Contains(t, err.Error(), "cycle")
 }
+
+func TestCLIRejectsMalformedSourceManifestEntries(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{name: "non_object_entry", raw: `{"entries":{"src":42}}`},
+		{name: "garbage_last_synced", raw: `{"entries":{"src":{"last_synced":"garbage"}}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := gittest.InitWithOrigin(t).Dir
+			run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+			_, err := runTrls(t, repo, "bootstrap")
+			require.NoError(t, err)
+			_, err = runTrls(t, repo, "worker-init")
+			require.NoError(t, err)
+
+			ctx := getTestContext(t, repo)
+			srcDir := filepath.Join(ctx.IssuesDir, "sources")
+			require.NoError(t, os.MkdirAll(srcDir, 0o750))
+			require.NoError(t, os.WriteFile(filepath.Join(srcDir, "manifest.json"), []byte(tc.raw), 0o600))
+
+			out, err := runTrls(t, repo, "validate", "--format", "human")
+			require.Error(t, err)
+			combined := out + err.Error()
+			assert.Contains(t, combined, "citation check skipped: cannot parse source manifest:")
+			assert.NotContains(t, combined, "uncited node")
+
+			planFile := filepath.Join(t.TempDir(), "plan.json")
+			plan := `{"version":1,"title":"Malformed manifest","issues":[{` +
+				`"id":"PLAN-001","title":"Cited against a malformed source","type":"task",` +
+				`"source":"src","scope":"internal/PLAN-001.go",` +
+				`"dod":"Cited against a malformed source is complete and tested",` +
+				`"acceptance":[{"type":"test_passes"}]}]}`
+			require.NoError(t, os.WriteFile(planFile, []byte(plan), 0o644))
+
+			_, dryErr := runTrls(t, repo, "dag", "apply", "--plan", planFile, "--dry-run")
+			require.Error(t, dryErr)
+			assert.Contains(t, dryErr.Error(), "parse source manifest")
+
+			_, applyErr := runTrls(t, repo, "dag", "apply", "--plan", planFile)
+			require.Error(t, applyErr)
+			assert.Contains(t, applyErr.Error(), "parse source manifest")
+
+			entries, readErr := os.ReadDir(filepath.Join(ctx.IssuesDir, "ops"))
+			require.NoError(t, readErr)
+			for _, e := range entries {
+				if strings.HasSuffix(e.Name(), ".log") {
+					data, fileErr := os.ReadFile(filepath.Join(ctx.IssuesDir, "ops", e.Name()))
+					require.NoError(t, fileErr)
+					assert.NotContains(t, string(data), "source_link")
+					assert.NotContains(t, string(data), "PLAN-001")
+				}
+			}
+		})
+	}
+}
