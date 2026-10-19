@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -284,7 +285,7 @@ func TestListEnvHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 
 	wrapperDir := t.TempDir()
 	script := "#!/bin/sh\nexit 1\n"
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
 	_, err = ListEnv(repo, []string{"PATH=" + wrapperDir})
 	require.Error(t, err)
 
@@ -305,7 +306,7 @@ func TestListEnvRefusesRelativePATH_REQ_PARCLI(t *testing.T) { //nolint:parallel
 	runInventoryGit(t, repo, "add", "README.md")
 	runInventoryGit(t, repo, "commit", "-q", "-m", "initial")
 	require.NoError(t, os.Mkdir("bin", 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join("bin", "git"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	testexec.Write(t, filepath.Join("bin", "git"), []byte("#!/bin/sh\nexit 0\n"))
 
 	_, err := List(repo)
 	require.NoError(t, err, "nil environ uses process PATH, not the relative bin/")

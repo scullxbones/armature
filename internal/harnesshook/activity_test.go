@@ -205,8 +205,8 @@ func TestInitTestGitRepoIgnoresGlobalInitTemplateDir(t *testing.T) {
 	template := t.TempDir()
 	hooks := filepath.Join(template, "hooks")
 	require.NoError(t, os.MkdirAll(hooks, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-commit"), []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n"), 0o644))
 
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
 	set := exec.CommandContext(context.Background(), "git", "config", "-f", cfg, "init.templateDir", template)

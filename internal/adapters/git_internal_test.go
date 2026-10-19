@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/scullxbones/armature/internal/testexec"
 )
 
 func TestIsBenignEmptyRepoRmError(t *testing.T) {
@@ -109,9 +111,7 @@ func TestLookPathOnAndEnvVal_REQ_PARCLI(t *testing.T) {
 	dir := t.TempDir()
 	binName := "mybin"
 	binPath := filepath.Join(dir, binName)
-	if err := os.WriteFile(binPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testexec.Write(t, binPath, []byte("#!/bin/sh\nexit 0\n"))
 	got, err := lookPathOn(dir, binName)
 	if err != nil {
 		t.Fatal(err)
@@ -162,9 +162,7 @@ func TestLookPathOnRejectsRelativeEntry_REQ_PARCLI(t *testing.T) { //nolint:para
 	if err := os.Mkdir("rel", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join("rel", "mybin"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testexec.Write(t, filepath.Join("rel", "mybin"), []byte("#!/bin/sh\nexit 0\n"))
 	got, err := lookPathOn("rel", "mybin")
 	if got == "" {
 		t.Fatal("LookPath returns the relative path together with ErrDot")
@@ -214,9 +212,7 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	// package as a git-executing package (TestMain lives in adapters_test).
 	bin := "g" + "it"
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, bin), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testexec.Write(t, filepath.Join(dir, bin), []byte("#!/bin/sh\nexit 1\n"))
 	cmd := base.WithEnviron([]string{"PATH=" + dir}).cmd("status")
 	if cmd.Path == bin {
 		t.Fatal("PATH overlay should resolve the wrapper binary, not the bare name")

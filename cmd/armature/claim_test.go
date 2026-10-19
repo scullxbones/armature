@@ -24,6 +24,7 @@ import (
 	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -1825,7 +1826,7 @@ for arg in "$@"; do
 done
 exec "$real_git" "$@"
 `, realGit)
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
 	prependPATH(t, wrapperDir)
 
 	destination := filepath.Join(t.TempDir(), "child")
@@ -1994,7 +1995,7 @@ if [ "$is_list" = "1" ]; then
 fi
 exec "$real_git" "$@"
 `, realGit, countPath, parentPath, backupPath)
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
 	prependPATH(t, wrapperDir)
 
 	claim := testRootCmd(t)

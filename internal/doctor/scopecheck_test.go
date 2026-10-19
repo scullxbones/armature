@@ -29,7 +29,7 @@ func TestDoctorScopeCheck_REQ_TOPTIER_S5_T2(t *testing.T) {
 		require.NoError(t, os.MkdirAll(scopeDir, 0o755))
 
 		strayBinary := filepath.Join(tmpDir, "stray_binary")
-		require.NoError(t, os.WriteFile(strayBinary, []byte{0x7f, 'E', 'L', 'F'}, 0o755))
+		require.NoError(t, os.WriteFile(strayBinary, []byte{0x7f, 'E', 'L', 'F'}, 0o644))
 
 		now := time.Now()
 		index := materialize.Index{

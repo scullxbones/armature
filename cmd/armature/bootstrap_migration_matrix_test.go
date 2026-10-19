@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -122,7 +123,7 @@ fi
 exec "$real_git" "$@"
 `
 	content := strings.ReplaceAll(fmt.Sprintf(script, realGit, repo), "\r\n", "\n")
-	require.NoError(t, os.WriteFile(wrapperPath, []byte(content), 0o755))
+	testexec.Write(t, wrapperPath, []byte(content))
 	return wrapperDir
 }
 
@@ -147,7 +148,7 @@ done
 exec "$real_git" "$@"
 `
 	content := strings.ReplaceAll(fmt.Sprintf(script, realGit, target), "\r\n", "\n")
-	require.NoError(t, os.WriteFile(wrapperPath, []byte(content), 0o755))
+	testexec.Write(t, wrapperPath, []byte(content))
 	return wrapperDir
 }
 
