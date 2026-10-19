@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
 
 GO ?= go
 PYTHON ?= python3
@@ -50,6 +50,8 @@ help:
 	@echo "  make test-surface-budget-check - Test the surface-budget ratchet (growth fail, shrink pass, rewrite)"
 	@echo "  make git-test-hermetic-check - Fail if _test.go files use raw git init outside internal/gittest"
 	@echo "  make test-git-test-hermetic-check - Test check-git-test-hermetic.sh itself"
+	@echo "  make git-test-exec-check - Fail if _test.go writes an executable outside testexec.Write"
+	@echo "  make test-git-test-exec-check - Test check-test-executables.sh itself"
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
 	@echo "  make context-report      - Price fixture-measured main-path CLI payloads (bytes and bytes/4 tokens)"
 	@echo "  make clean               - Remove build artifacts and test outputs"
@@ -66,10 +68,10 @@ GREMLINS_VERSION      := v0.6.0
 
 CHECK_JOBS := check-static check-core mutate
 
-CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-summarize-test-json test-mock-ban test-source-manifest-decode test-surface-budget-check
+CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-git-test-exec-check test-summarize-test-json test-mock-ban test-source-manifest-decode test-surface-budget-check
 CHECK_TOOLS_check-static := golangci-lint
 
-CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check surface-budget-check
+CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check git-test-exec-check surface-budget-check
 CHECK_TOOLS_check-core :=
 
 CHECK_JOB_mutate := mutate
@@ -256,6 +258,12 @@ git-test-hermetic-check:
 
 test-git-test-hermetic-check:
 	@scripts/test_check_git_test_hermetic.sh .
+
+git-test-exec-check:
+	@scripts/check-test-executables.sh .
+
+test-git-test-exec-check:
+	@scripts/test_check_test_executables.sh .
 
 test-coverage-check:
 	@scripts/test_coverage_check.sh .

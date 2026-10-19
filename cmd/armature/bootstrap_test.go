@@ -19,6 +19,7 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -537,7 +538,7 @@ for arg in "$@"; do
 done
 exec %q "$@"
 `, realGit)
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
 	prependPATH(t, wrapperDir)
 	return func() {
 		unsetCLIEnv(t, "PATH")
@@ -689,7 +690,7 @@ func TestBootstrapRemovesObsoletePrepareCommitMsgHook_REQ_HOOKMSG_1(t *testing.T
 	hookPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
 	require.NoError(t, os.MkdirAll(filepath.Dir(hookPath), 0o750))
 	require.NoError(t, os.WriteFile(hookPath,
-		[]byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o755))
+		[]byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o644))
 
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -717,7 +718,7 @@ func TestBootstrapCommitsObsoleteHookTemplateDeletion_REQ_HOOKMSG_1(t *testing.T
 	require.NoError(t, opsGit.CommitPathsNoVerify("chore: plant legacy prepare-commit-msg template", templateRel))
 
 	hookPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
-	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\n# armature:managed\nexit 0\n"), 0o644))
 
 	_, err = runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -746,7 +747,7 @@ func TestBootstrapPreservesUserOwnedPrepareCommitMsgHook_REQ_HOOKMSG_1(t *testin
 	hookPath := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
 	require.NoError(t, os.MkdirAll(filepath.Dir(hookPath), 0o750))
 	userHook := "#!/bin/sh\n# my own hook\nexit 0\n"
-	require.NoError(t, os.WriteFile(hookPath, []byte(userHook), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(userHook), 0o644))
 
 	_, err := runTrls(t, repo, "bootstrap")
 	require.NoError(t, err)
@@ -832,7 +833,7 @@ func TestInstallHooksPreservesExistingUnmanagedHook(t *testing.T) {
 
 	userHookContent := "#!/bin/sh\n# User-managed pre-commit hook\necho 'User hook running'\n"
 	userHookPath := filepath.Join(gitHooksDir, "pre-commit")
-	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o755))
+	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o644))
 
 	buf := new(strings.Builder)
 	cmd := testRootCmd(t)
@@ -995,7 +996,7 @@ for arg in "$@"; do
 done
 exec "$real_git" "$@"
 `, realGit, newWorktreePath)
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
 	prependPATH(t, wrapperDir)
 
 	_, _, err = migrateDualBranchToCollapsed(testEnv(t), repo)
@@ -1054,7 +1055,7 @@ for arg in "$@"; do
 done
 exec "$real_git" "$@"
 `, realGit, repo)
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
 	prependPATH(t, wrapperDir)
 
 	_, _, err = migrateDualBranchToCollapsed(testEnv(t), repo)
@@ -1195,14 +1196,14 @@ func TestInstallHooksReturnsSkippedHooks(t *testing.T) {
 	require.NoError(t, os.WriteFile(
 		filepath.Join(gitHooksDir, "pre-commit"),
 		[]byte(userPreCommitHook),
-		0o755,
+		0o644,
 	))
 
 	userPostCommitHook := "#!/bin/sh\n# Another user hook\necho 'Another hook'\n"
 	require.NoError(t, os.WriteFile(
 		filepath.Join(gitHooksDir, "post-commit"),
 		[]byte(userPostCommitHook),
-		0o755,
+		0o644,
 	))
 
 	buf := new(strings.Builder)
@@ -1232,7 +1233,7 @@ func TestRunRepoSetupWarnsAboutSkippedHooks(t *testing.T) {
 
 	userHookContent := "#!/bin/sh\n# User-managed pre-commit hook\necho 'User hook running'\n"
 	userHookPath := filepath.Join(gitHooksDir, "pre-commit")
-	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o755))
+	require.NoError(t, os.WriteFile(userHookPath, []byte(userHookContent), 0o644))
 
 	outBuf := new(strings.Builder)
 	errBuf := new(strings.Builder)
@@ -1281,7 +1282,7 @@ func TestBootstrapJSONSkippedHooksReported(t *testing.T) {
 	require.NoError(t, cmd1.Execute())
 
 	hookPath := filepath.Join(repo, ".git", "hooks", "post-commit")
-	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\necho mine\n"), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte("#!/bin/sh\necho mine\n"), 0o644))
 
 	buf2 := new(strings.Builder)
 	cmd2 := testRootCmd(t)
@@ -1428,7 +1429,7 @@ func TestInstallHooksSkipsUnmanagedHook(t *testing.T) {
 # Some other pre-commit hook that's not managed by armature
 echo "Running external pre-commit hook"
 `
-	require.NoError(t, os.WriteFile(hookPath, []byte(existingContent), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(existingContent), 0o644))
 
 	issuesDir := filepath.Join(repo, ".armature")
 	var skipped []string
@@ -1458,7 +1459,7 @@ func TestInstallHooksOverwritesManagedHook(t *testing.T) {
 # Old version of armature hook
 echo "old"
 `
-	require.NoError(t, os.WriteFile(hookPath, []byte(oldContent), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(oldContent), 0o644))
 
 	issuesDir := filepath.Join(repo, ".armature")
 	var skipped2 []string
@@ -2435,7 +2436,7 @@ func TestRunRepoSetupMigratesTemplatesHooksReview_P2(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "ops", "issue.json"), []byte(`{"id":"1"}`), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "templates", "custom.md"), []byte("custom template"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "hooks", "custom-hook.sh"), []byte("#!/bin/sh\necho hi\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "hooks", "custom-hook.sh"), []byte("#!/bin/sh\necho hi\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyArmaturePath, "review", "notes.md"), []byte("review notes"), 0o600))
 
 	buf := new(bytes.Buffer)
@@ -2534,7 +2535,7 @@ for arg in "$@"; do
 done
 exec "$real_git" "$@"
 `, realGit, filepath.Join(repo, ".armature"))
-	require.NoError(t, os.WriteFile(wrapperPath, []byte(script), 0o755))
+	testexec.Write(t, wrapperPath, []byte(script))
 	prependPATH(t, wrapperDir)
 
 	buf := new(bytes.Buffer)
@@ -2666,7 +2667,7 @@ if [ "$cmd" = "commit" ] && [ "$found_target" = "$target" ]; then
 fi
 exec "$real_git" "$@"
 `, realGit, filepath.Join(repo, ".armature"))
-	require.NoError(t, os.WriteFile(wrapperPath, []byte(script), 0o755))
+	testexec.Write(t, wrapperPath, []byte(script))
 	prependPATH(t, wrapperDir)
 
 	cmd := testRootCmd(t)
@@ -2744,7 +2745,7 @@ for arg in "$@"; do
 done
 exec "$real_git" "$@"
 `, realGit, filepath.Join(repo, ".armature"))
-	require.NoError(t, os.WriteFile(wrapperPath, []byte(script), 0o755))
+	testexec.Write(t, wrapperPath, []byte(script))
 	prependPATH(t, wrapperDir)
 
 	cmd := testRootCmd(t)
@@ -3050,7 +3051,7 @@ func TestPostCommitRecordsHeartbeatForActiveClaim_REQ_HKDLG_T1(t *testing.T) {
 	script := fmt.Sprintf(`#!/bin/sh
 exec %q "$@"
 `, armBin)
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "arm"), []byte(script))
 	prependPATH(t, wrapperDir)
 
 	commitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -3118,7 +3119,7 @@ func TestPreCommitRefusalReachesStderrWithRemediation_REQ_HKDLG_T3(t *testing.T)
 	script := fmt.Sprintf(`#!/bin/sh
 exec %q "$@"
 `, armBin)
-	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "arm"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(wrapperDir, "arm"), []byte(script))
 	prependPATH(t, wrapperDir)
 
 	probeRel := filepath.Join("leaked", ".armature", "ops", "probe.log")

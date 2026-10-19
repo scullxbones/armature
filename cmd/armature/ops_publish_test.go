@@ -12,6 +12,7 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,7 +92,7 @@ func installBarePreReceive(t *testing.T, bareDir, script string) {
 	hookDir := filepath.Join(bareDir, "hooks")
 	require.NoError(t, os.MkdirAll(hookDir, 0o755))
 	hook := filepath.Join(hookDir, "pre-receive")
-	require.NoError(t, os.WriteFile(hook, []byte(script), 0o755))
+	testexec.Write(t, hook, []byte(script))
 }
 
 func localOpsContainClaim(t *testing.T, repo, issueID string) bool {

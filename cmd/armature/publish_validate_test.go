@@ -10,6 +10,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -292,5 +293,5 @@ touch %q
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 git -C %q push origin _armature
 `, marker, marker, competing)
-	require.NoError(t, os.WriteFile(filepath.Join(hooks, "pre-push"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join(hooks, "pre-push"), []byte(script))
 }

@@ -124,7 +124,7 @@ func TestGitInitMainIgnoresGlobalInitTemplateDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	hook := []byte("#!/bin/sh\necho template-hook-ran >&2\nexit 1\n")
-	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), hook, 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), hook, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg := filepath.Join(t.TempDir(), "gitconfig")

@@ -14,6 +14,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -62,7 +63,7 @@ if [ "$cmd" = "commit" ] && [ "$target" = "$repo" ]; then
 fi
 exec "$real_git" "$@"
 `
-	require.NoError(t, os.WriteFile(wrapperPath, fmt.Appendf(nil, script, realGit, repo), 0o755))
+	testexec.Write(t, wrapperPath, fmt.Appendf(nil, script, realGit, repo))
 	return wrapperDir
 }
 
@@ -1829,7 +1830,7 @@ func TestCommandGitRefusesRelativePATH_REQ_PARCLI(t *testing.T) {
 	require.NoError(t, os.Mkdir("bin", 0o755))
 	marker := filepath.Join(t.TempDir(), "ran")
 	script := "#!/bin/sh\necho ran > " + marker + "\nexit 0\n"
-	require.NoError(t, os.WriteFile(filepath.Join("bin", "git"), []byte(script), 0o755))
+	testexec.Write(t, filepath.Join("bin", "git"), []byte(script))
 
 	orig := os.Getenv("PATH")
 	t.Setenv("PATH", "bin"+string(os.PathListSeparator)+orig)

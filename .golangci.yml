@@ -329,6 +329,12 @@ linters:
           - paralleltest
           - tparallel
         path: 'cmd/'
+      # testexec owns a process-wide trampoline; error-path tests reset it and
+      # cannot run beside t.Parallel helpers in the same package.
+      - linters:
+          - paralleltest
+          - tparallel
+        path: 'internal/testexec/'
       # cmd/armature tests now run via Invocation/Run with per-test env overlays.
       - linters:
           - paralleltest

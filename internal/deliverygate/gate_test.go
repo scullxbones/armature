@@ -61,7 +61,7 @@ func TestCleanTreeCheck_IgnoredBuildArtifactsFailButArmatureStateIsExempt_REQ_LN
 	runGit(t, tmpDir, "commit", "-m", "base")
 
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "bin"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "bin", "arm"), []byte("binary"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "bin", "arm"), []byte("binary"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "coverage.out"), []byte("coverage"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".armature", "state"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".armature", "state", "index.json"), []byte("{}"), 0o644))
