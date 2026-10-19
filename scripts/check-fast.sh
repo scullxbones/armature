@@ -121,6 +121,7 @@ if [[ $HAS_GO -eq 1 ]]; then
         else
             echo "golangci-lint not found; skipping lint step (install to enforce locally)" >&2
         fi
+        run_step $MAKE source-manifest-decode-check
         echo "==> go test $TEST_IMPORT_PATHS"
         ARM_BIN="$(pwd)/bin/arm" $GO test -count=1 $TEST_IMPORT_PATHS
     fi

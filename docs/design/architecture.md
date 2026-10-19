@@ -874,6 +874,8 @@ Imported nodes with `inferred` confidence appear in `ready.json` with `requires_
 | E11 | Plan version field present and supported | `unsupported plan version: {v}` |
 | E12 | source_versions match current cache SHAs | `stale source: {id} plan={sha} cache={sha}` |
 
+`sources/manifest.json` is decoded only by `sources.Manifest.Unmarshal` / `sources.ReadManifest`. `validate` (E7/E8) and `decompose` consume a `validate.SourceSet` built at the composition root; a second decoder fails `make lint`.
+
 **Warnings (advisory, surfaced in output, errors with `--strict`):**
 
 | # | Check | Warning Message |

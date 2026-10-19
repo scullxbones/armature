@@ -104,7 +104,7 @@ func TestCIOptionsIsStrict_REQ_PUBLISH_VALIDATE(t *testing.T) {
 	opts := CIOptions(123)
 	assert.True(t, opts.Strict)
 	assert.Equal(t, int64(123), opts.Now)
-	assert.Nil(t, opts.ManifestData)
+	assert.False(t, opts.Sources.Loaded())
 }
 
 func containsWarning(r Result, substr string) bool {
@@ -1672,7 +1672,7 @@ func TestIntroductionAllowsCiteAfterE7_REQ_LNGHZN_S10_T12(t *testing.T) {
 		"entries": map[string]map[string]string{"src-1": {"id": "src-1"}},
 	})
 	require.NoError(t, err)
-	err = checkIntroduction(state, proposed, Options{Strict: true, ManifestData: manifest})
+	err = checkIntroduction(state, proposed, Options{Strict: true, Sources: sourceSetFromJSON(t, manifest)})
 	require.NoError(t, err, "cite-after remains legal: E7/E8 must not refuse Introduction")
 }
 

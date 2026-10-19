@@ -104,6 +104,7 @@ assert_make_target_not_ran "crosscompile" "docs-only must not run crosscompile"
 assert_make_target_not_ran "census-drift-check" "docs-only must not run census-drift-check"
 assert_make_target_not_ran "validate-skills" "docs-only must not run validate-skills"
 assert_make_target_not_ran "build" "docs-only must not run build (no go changes)"
+assert_make_target_not_ran "source-manifest-decode-check" "docs-only must not run source-manifest-decode-check"
 
 git -C "$FIXTURE" reset -q --hard "$BASE_SHA"
 
@@ -116,7 +117,8 @@ git -C "$FIXTURE" add pkg1/pkg1.go
 
 OUTPUT=$(run_check_fast)
 assert_make_target_ran "build" "build runs for go change"
-assert_make_target_not_ran "mutate" "go change (fast gate) must not run mutate"
+    assert_make_target_ran "source-manifest-decode-check" "source-manifest-decode-check runs for go change"
+    assert_make_target_not_ran "mutate" "go change (fast gate) must not run mutate"
 assert_make_target_not_ran "crosscompile" "go change (fast gate) must not run crosscompile"
 assert_make_target_not_ran "census-drift-check" "pkg1 change is not a census surface"
 assert_make_target_not_ran "validate-skills" "pkg1 change does not touch skills"

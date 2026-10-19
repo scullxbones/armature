@@ -142,7 +142,7 @@ func runGraphValidationOnCtx(appCtx *config.Context, opts validate.Options) (val
 		scopeGlobs[issue.ID] = issue.Scope
 	}
 
-	opts.ManifestData = manifestData
+	opts.Sources = sourceSetFromManifestBytes(manifestData)
 	opts.Coverage = cov
 	expanded, expandErr := adapters.ExpandGlobs(scopeGlobs)
 	if expandErr != nil && expanded == nil {

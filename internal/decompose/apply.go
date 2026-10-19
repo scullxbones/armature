@@ -1,11 +1,9 @@
 package decompose
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/scullxbones/armature/internal/clock"
@@ -24,15 +22,9 @@ type DryRunEntry struct {
 }
 
 type ApplyOptions struct {
-	// GenerateIDs replaces plan-specified IDs with system-generated UUIDs.
 	GenerateIDs bool
-	// Root, when non-empty, is used as the parent for any top-level plan
-	// issues (those whose Parent field is empty).
-	Root string
-	// ManifestData is the sources manifest used to resolve per-issue source
-	// IDs and to run citation checks on the Introduction door. Empty skips
-	// membership checks (unit tests); the CLI always supplies the file.
-	ManifestData []byte
+	Root        string
+	Sources     validate.SourceSet
 }
 
 func validatePlan(plan *Plan) []string {
@@ -45,48 +37,24 @@ func validatePlan(plan *Plan) []string {
 	return warnings
 }
 
-func validateSources(plan *Plan, manifestData []byte) error {
+func validateSources(plan *Plan, sources validate.SourceSet) error {
 	for _, issue := range plan.Issues {
 		if strings.TrimSpace(issue.Source) == "" {
 			return fmt.Errorf("plan issue %s (%s) is missing source; apply is source-atomic", issue.ID, issue.Title)
 		}
 	}
-	if len(manifestData) == 0 {
+	if !sources.Loaded() {
 		return nil
 	}
-	known, err := sourceIDsFromManifest(manifestData)
-	if err != nil {
+	if err := sources.ParseError(); err != nil {
 		return fmt.Errorf("parse source manifest: %w", err)
 	}
 	for _, issue := range plan.Issues {
-		if _, ok := known[issue.Source]; !ok {
+		if !sources.Contains(issue.Source) {
 			return fmt.Errorf("plan issue %s (%s) cites unknown source %s", issue.ID, issue.Title, issue.Source)
 		}
 	}
 	return nil
-}
-
-func sourceIDsFromManifest(data []byte) (map[string]struct{}, error) {
-	type sourceEntry struct {
-		ID           string    `json:"id"`
-		URL          string    `json:"url"`
-		Title        string    `json:"title"`
-		Fingerprint  string    `json:"fingerprint"`
-		LastSynced   time.Time `json:"last_synced"`
-		ProviderType string    `json:"provider_type"`
-		SyncFailed   bool      `json:"sync_failed"`
-	}
-	var m struct {
-		Entries map[string]sourceEntry `json:"entries"`
-	}
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, err
-	}
-	known := make(map[string]struct{}, len(m.Entries))
-	for id := range m.Entries {
-		known[id] = struct{}{}
-	}
-	return known, nil
 }
 
 func validateTypes(plan *Plan) error {
@@ -168,7 +136,7 @@ func DryRunApplyPlan(plan *Plan, state *materialize.State, opts ApplyOptions) ([
 	if err := validateIssueIDs(plan); err != nil {
 		return nil, err
 	}
-	if err := validateSources(plan, opts.ManifestData); err != nil {
+	if err := validateSources(plan, opts.Sources); err != nil {
 		return nil, err
 	}
 
@@ -192,7 +160,7 @@ func ApplyPlan(plan *Plan, issuesDir string, workerID string, state *materialize
 	if err := validateIssueIDs(plan); err != nil {
 		return nil, err
 	}
-	if err := validateSources(plan, opts.ManifestData); err != nil {
+	if err := validateSources(plan, opts.Sources); err != nil {
 		return nil, err
 	}
 
@@ -276,7 +244,7 @@ func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Cl
 			})
 		}
 	}
-	if err := checkGraphIntroduction(state, proposed, validate.Options{Strict: true, ManifestData: opts.ManifestData, Now: clk()}); err != nil {
+	if err := checkGraphIntroduction(state, proposed, validate.Options{Strict: true, Sources: opts.Sources, Now: clk()}); err != nil {
 		return nil, err
 	}
 	return proposed, nil

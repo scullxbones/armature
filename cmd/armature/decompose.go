@@ -219,9 +219,9 @@ plan, or --schema to view the JSON schema.`,
 				return fmt.Errorf("read manifest: %w", err)
 			}
 			applyOpts := decompose.ApplyOptions{
-				GenerateIDs:  generateIDsFlag,
-				Root:         rootFlag,
-				ManifestData: manifestData,
+				GenerateIDs: generateIDsFlag,
+				Root:        rootFlag,
+				Sources:     sourceSetFromManifestBytes(manifestData),
 			}
 
 			if dryRunFlag {

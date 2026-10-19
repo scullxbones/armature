@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/issueref"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/sources"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestValidate_WithIssuesDir_SkipsCitationsWhenNoManifest(t *testing.T) {
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
 
-	result := validateState(state, Options{ManifestData: nil})
+	result := validateState(state, Options{})
 
 	for _, e := range result.Errors {
 		if strings.Contains(e, "citation check skipped") {
@@ -54,7 +55,7 @@ func TestValidate_MalformedSourceManifest_EmitsE7ParseFinding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			state := makeState(&materialize.Issue{ID: "TSK-1", Type: "task"})
-			result := validateState(state, Options{ManifestData: []byte(tc.manifest)})
+			result := validateState(state, Options{Sources: sourceSetFromJSON(t, []byte(tc.manifest))})
 			assert.True(t, containsError(result, "citation check skipped: cannot parse source manifest:"),
 				"expected E7 parse finding, got: %v", result.Errors)
 		})
@@ -75,7 +76,7 @@ func TestValidate_WithIssuesDir_CitationErrors(t *testing.T) {
 		&materialize.Issue{ID: "TSK-1", Type: "task"},
 	)
 
-	result := validateState(state, Options{ManifestData: manifestData})
+	result := validateState(state, Options{Sources: sourceSetFromJSON(t, manifestData)})
 
 	found := false
 	for _, e := range result.Errors {
@@ -119,7 +120,7 @@ func TestValidate_CitationAccepted_SatisfiesCitationRequirement(t *testing.T) {
 			},
 		},
 	)
-	result := validateState(state, Options{ManifestData: manifestData})
+	result := validateState(state, Options{Sources: sourceSetFromJSON(t, manifestData)})
 	assert.False(t, containsError(result, "uncited node"), "expected no uncited node error for accepted citation, got: %v", result.Errors)
 }
 
@@ -135,7 +136,7 @@ func TestValidate_CitationAccepted_NoManifest_CitationCheckSkipped(t *testing.T)
 			},
 		},
 	)
-	result := validateState(state, Options{ManifestData: nil})
+	result := validateState(state, Options{})
 	assert.False(t, containsError(result, "uncited node"), "expected no citation error when manifest absent, got: %v", result.Errors)
 	assert.False(t, containsError(result, "citation check skipped"), "unexpected citation check skipped error: %v", result.Errors)
 }
@@ -159,7 +160,7 @@ func TestValidate_SourceLinkOnly_ManifestMembershipChecked(t *testing.T) {
 			},
 		},
 	)
-	result := validateState(state, Options{ManifestData: manifestData})
+	result := validateState(state, Options{Sources: sourceSetFromJSON(t, manifestData)})
 	assert.True(t, containsError(result, "unknown source"), "expected unknown source error for unregistered source link, got: %v", result.Errors)
 }
 
@@ -228,7 +229,7 @@ func TestE7PredicateAgreesAcrossCallers_REQ_NOCOMMENTS(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.wantPred, traceability.CitationSatisfied(tc.ref.SourceLinkCount, tc.ref.CitationAcceptanceCount))
 
-			result := validateState(makeState(tc.issue), Options{ManifestData: manifestData})
+			result := validateState(makeState(tc.issue), Options{Sources: sourceSetFromJSON(t, manifestData)})
 			gotValidateE7 := containsError(result, "uncited node: "+tc.issue.ID)
 			assert.Equal(t, tc.wantE7, gotValidateE7, "validate E7: errors=%v", result.Errors)
 
@@ -260,10 +261,10 @@ func TestParseManifestMalformedEntriesStillE7_REQ_AGTFND(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			manifest := readFindingsFixture(t, tc.file)
-			_, parseErr := parseManifestData(manifest)
-			require.Error(t, parseErr, "typed sourceEntry decode must reject %s; json.RawMessage would skip", tc.file)
+			var decoded sources.Manifest
+			require.Error(t, decoded.Unmarshal(manifest), "sources.Manifest.Unmarshal must reject %s; json.RawMessage would skip", tc.file)
 
-			result := validateState(makeState(&materialize.Issue{ID: "TSK-1", Type: "task"}), Options{ManifestData: manifest})
+			result := Validate(factsFromIssues(makeState(&materialize.Issue{ID: "TSK-1", Type: "task"}).Issues, 0), Options{Sources: sourceSetFromJSON(t, manifest)})
 			hit := requireFindingPrefix(t, result, "E7", "error", prefix)
 			assert.False(t, strings.Contains(hit.Message, "uncited node"),
 				"parse skip must stay distinct from uncited E7, got %q", hit.Message)

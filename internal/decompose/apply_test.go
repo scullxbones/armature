@@ -9,6 +9,8 @@ import (
 	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/sources"
+	"github.com/scullxbones/armature/internal/validate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -223,6 +225,22 @@ func TestApplyRefusesUncitedPlan_REQ_LNGHZN_S10_T12(t *testing.T) {
 	assert.Contains(t, err.Error(), "source")
 }
 
+func sourceSetFromJSON(t *testing.T, data []byte) validate.SourceSet {
+	t.Helper()
+	if len(data) == 0 {
+		return validate.SourceSet{}
+	}
+	var m sources.Manifest
+	if err := m.Unmarshal(data); err != nil {
+		return validate.UnreadableSources(err)
+	}
+	ids := make(map[string]struct{}, len(m.Entries))
+	for id := range m.Entries {
+		ids[id] = struct{}{}
+	}
+	return validate.KnownSources(ids)
+}
+
 func TestValidateSourcesAndDryRun_RejectMalformedManifestEntries(t *testing.T) {
 	t.Parallel()
 	plan := &Plan{
@@ -240,13 +258,25 @@ func TestValidateSourcesAndDryRun_RejectMalformedManifestEntries(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := validateSources(plan, tc.manifest)
+			src := sourceSetFromJSON(t, tc.manifest)
+			var decoded sources.Manifest
+			require.Error(t, decoded.Unmarshal(tc.manifest), "sources.Manifest.Unmarshal must reject a malformed source entry")
+
+			err := validateSources(plan, src)
 			require.Error(t, err, "validateSources must reject a malformed source entry")
 			assert.Contains(t, err.Error(), "parse source manifest")
 
-			_, dryErr := DryRunApplyPlan(plan, materialize.NewState(), ApplyOptions{ManifestData: tc.manifest})
+			_, dryErr := DryRunApplyPlan(plan, materialize.NewState(), ApplyOptions{Sources: src})
 			require.Error(t, dryErr, "DryRunApplyPlan must reject a malformed source entry")
 			assert.Contains(t, dryErr.Error(), "parse source manifest")
+
+			dir := t.TempDir()
+			created, applyErr := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), ApplyOptions{Sources: src}, clock.System)
+			require.Error(t, applyErr, "ApplyPlan must reject a malformed source entry")
+			assert.Contains(t, applyErr.Error(), "parse source manifest")
+			assert.Empty(t, created)
+			_, statErr := os.Stat(filepath.Join(dir, "worker-test.log"))
+			assert.True(t, os.IsNotExist(statErr), "a refused apply must not write ops")
 		})
 	}
 }
@@ -267,7 +297,7 @@ func TestApplyPlan_RefusesUnknownSourceWhenManifestProvided(t *testing.T) {
 			Source:     "00000000-0000-0000-0000-000000000001",
 		}},
 	}
-	opts := ApplyOptions{ManifestData: []byte(`{"entries":{"src-real":{"id":"src-real"}}}`)}
+	opts := ApplyOptions{Sources: sourceSetFromJSON(t, []byte(`{"entries":{"src-real":{"id":"src-real"}}}`))}
 	created, err := ApplyPlan(plan, dir, "worker-test", materialize.NewState(), opts, clock.System)
 	require.Error(t, err, "apply must refuse a source ID that is not in the manifest")
 	assert.Empty(t, created)

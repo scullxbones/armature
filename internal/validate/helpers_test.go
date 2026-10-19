@@ -3,10 +3,28 @@ package validate
 import (
 	"encoding/json"
 	"fmt"
+	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/sources"
 )
+
+func sourceSetFromJSON(t *testing.T, data []byte) SourceSet {
+	t.Helper()
+	if len(data) == 0 {
+		return SourceSet{}
+	}
+	var m sources.Manifest
+	if err := m.Unmarshal(data); err != nil {
+		return UnreadableSources(err)
+	}
+	ids := make(map[string]struct{}, len(m.Entries))
+	for id := range m.Entries {
+		ids[id] = struct{}{}
+	}
+	return KnownSources(ids)
+}
 
 func factsFromIssues(issues map[string]*materialize.Issue, now int64) map[string]IssueFacts {
 	out := make(map[string]IssueFacts, len(issues))
