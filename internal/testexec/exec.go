@@ -79,7 +79,7 @@ func prepare() error {
 		return prepareErr
 	}
 	path := filepath.Join(dir, "trampoline")
-	if err := writeFile(path, []byte(trampolineBody), 0o755); err != nil { //nolint:gosec // G306: trampoline must be executable; written once before tests fork
+	if err := writeFile(path, []byte(trampolineBody), 0o755); err != nil {
 		prepareErr = fmt.Errorf("write trampoline: %w", err)
 		prepared = true
 		return prepareErr
