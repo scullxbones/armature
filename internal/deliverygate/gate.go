@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/commitref"
+	"github.com/scullxbones/armature/internal/scopematch"
 )
 
 type CheckResult struct {
@@ -89,7 +89,7 @@ func scopeContainmentCheck(worktreePath, baseCommit, head string, scope []string
 		files = append(files, entry.Path)
 	}
 
-	isInScope, outOfScopeFile := claim.IsWithinScope(files, scope)
+	isInScope, outOfScopeFile := scopematch.IsWithinScope(files, scope)
 	if !isInScope {
 		return CheckResult{
 			Pass: false,

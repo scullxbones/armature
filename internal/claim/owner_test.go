@@ -62,7 +62,7 @@ func TestAccept_ExactTTLBoundaryTakeable_REQ_CLAIMTTL(t *testing.T) {
 	})
 	liveAt := claimedAt + int64(ttl)*60 - 1
 	assert.True(t, LeaseLive(held, liveAt))
-	_, tookLive := Accept(held, ops.Op{
+	_, tookLive := accept(held, ops.Op{
 		Type: ops.OpClaim, TargetID: "task-01", Timestamp: liveAt, WorkerID: "worker-b",
 		Payload: ops.Payload{TTL: 60, ClaimToken: "b"},
 	})
@@ -70,7 +70,7 @@ func TestAccept_ExactTTLBoundaryTakeable_REQ_CLAIMTTL(t *testing.T) {
 
 	takeAt := claimedAt + int64(ttl)*60
 	assert.False(t, LeaseLive(held, takeAt))
-	next, took := Accept(held, ops.Op{
+	next, took := accept(held, ops.Op{
 		Type: ops.OpClaim, TargetID: "task-01", Timestamp: takeAt, WorkerID: "worker-b",
 		Payload: ops.Payload{TTL: 60, ClaimToken: "b"},
 	})
@@ -105,7 +105,7 @@ func TestOwner_LegacyZeroTTLReplaysAs60_REQ_CLAIMTTL(t *testing.T) {
 	boundary := claimedAt + int64(DefaultReplayTTLMinutes)*60
 	assert.True(t, LeaseLive(lease, boundary-1))
 	assert.False(t, LeaseLive(lease, boundary))
-	_, took := Accept(lease, ops.Op{
+	_, took := accept(lease, ops.Op{
 		Type: ops.OpClaim, TargetID: "task-01", Timestamp: boundary, WorkerID: "worker-b",
 		Payload: ops.Payload{TTL: 60, ClaimToken: "b"},
 	})

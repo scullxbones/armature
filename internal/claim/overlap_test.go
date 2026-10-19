@@ -6,7 +6,6 @@ import (
 	"github.com/scullxbones/armature/internal/dag"
 	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func globOverlaps(a, b string) bool {
@@ -202,174 +201,27 @@ func TestGlobOverlapsStillMatchesIdenticalAndGlobScopes_REQ_LNGHZN_S10_T6(t *tes
 
 func TestGlobOverlaps_ParityWithValidatePackage_PR79(t *testing.T) {
 	t.Parallel()
-	for _, c := range scopematch.OverlapParityCases {
-		t.Run(c.Name, func(t *testing.T) {
+	for _, c := range overlapParityCases {
+		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, c.Want, globOverlaps(c.A, c.B), "globOverlaps(%q, %q)", c.A, c.B)
-			assert.Equal(t, c.Want, globOverlaps(c.B, c.A), "globOverlaps(%q, %q) (symmetric)", c.B, c.A)
+			assert.Equal(t, c.want, globOverlaps(c.a, c.b), "globOverlaps(%q, %q)", c.a, c.b)
+			assert.Equal(t, c.want, globOverlaps(c.b, c.a), "globOverlaps(%q, %q) (symmetric)", c.b, c.a)
 		})
 	}
 }
 
-func TestIsWithinScope_FilesWithinDeclaredScope_REQ_LNGHZN_S4_T1(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		files    []string
-		scope    []string
-		wantIsIn bool
-		wantFile string
-	}{
-		{
-			name:     "all files in single glob pattern",
-			files:    []string{"internal/claim/overlap.go", "internal/claim/overlap_test.go"},
-			scope:    []string{"internal/claim/**"},
-			wantIsIn: true,
-		},
-		{
-			name:     "all files in multiple glob patterns",
-			files:    []string{"internal/claim/overlap.go", "cmd/armature/main.go"},
-			scope:    []string{"internal/claim/**", "cmd/armature/**"},
-			wantIsIn: true,
-		},
-		{
-			name:     "single file in single exact pattern",
-			files:    []string{"internal/claim/overlap.go"},
-			scope:    []string{"internal/claim/overlap.go"},
-			wantIsIn: true,
-		},
-		{
-			name:     "file outside scope",
-			files:    []string{"internal/validate/validate.go"},
-			scope:    []string{"internal/claim/**"},
-			wantIsIn: false,
-			wantFile: "internal/validate/validate.go",
-		},
-		{
-			name:     "mixed files with one outside scope",
-			files:    []string{"internal/claim/overlap.go", "internal/validate/validate.go"},
-			scope:    []string{"internal/claim/**"},
-			wantIsIn: false,
-			wantFile: "internal/validate/validate.go",
-		},
-		{
-			name:     "empty files list within any scope",
-			files:    []string{},
-			scope:    []string{"internal/claim/**"},
-			wantIsIn: true,
-		},
-		{
-			name:     "directory glob patterns",
-			files:    []string{"internal/claim/a.go", "internal/claim/sub/b.go"},
-			scope:    []string{"internal/claim/**"},
-			wantIsIn: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			isIn, outFile := IsWithinScope(tt.files, tt.scope)
-			assert.Equal(t, tt.wantIsIn, isIn, "IsWithinScope(%v, %v) isIn", tt.files, tt.scope)
-			if !tt.wantIsIn && tt.wantFile != "" {
-				assert.Equal(t, tt.wantFile, outFile, "IsWithinScope(%v, %v) out of scope file", tt.files, tt.scope)
-			}
-		})
-	}
-}
-
-// TestIsWithinScope_CaseSensitivity_REQ_LNGHZN_S4_T1 verifies that IsWithinScope
-// respects case-sensitive matching (like glob.Match on Unix).
-func TestIsWithinScope_CaseSensitivity_REQ_LNGHZN_S4_T1(t *testing.T) {
-	t.Parallel()
-
-	// Case-sensitive matching: "internal/Claim" should not match "internal/claim/**"
-	isIn, _ := IsWithinScope([]string{"internal/Claim/overlap.go"}, []string{"internal/claim/**"})
-	assert.False(t, isIn, "case mismatch should not match on Unix")
-}
-
-func TestIsWithinScope_StripsNewFileAnnotation_REQ_LNGHZN_S4_T2(t *testing.T) {
-	t.Parallel()
-
-	isIn, outOfScope := IsWithinScope(
-		[]string{"internal/deliverygate/gate.go", "internal/deliverygate/gate_test.go"},
-		[]string{"internal/deliverygate/gate.go (new)", "internal/deliverygate/gate_test.go (new)"},
-	)
-	assert.True(t, isIn, "file should match its scope entry once the (new) annotation is stripped")
-	assert.Empty(t, outOfScope)
-}
-
-func TestIsWithinScope_PreservesFilenameWithLiteralParens_REQ_LNGHZN_S4_T1(t *testing.T) {
-	t.Parallel()
-
-	isIn, outOfScope := IsWithinScope(
-		[]string{"internal/foo/bar(baz).go"},
-		[]string{"internal/foo/bar(baz).go"},
-	)
-	assert.True(t, isIn, "filename with literal parens should match itself verbatim, not be truncated as an annotation")
-	assert.Empty(t, outOfScope)
-}
-
-func TestIsWithinScope_TrailingSlashDirectoryScope_REQ_LNGHZN_S4(t *testing.T) {
-	t.Parallel()
-
-	isIn, outOfScope := IsWithinScope(
-		[]string{"internal/foo.go"},
-		[]string{"internal/"},
-	)
-	assert.True(t, isIn, "file directly under a trailing-slash directory scope should be in scope")
-	assert.Empty(t, outOfScope)
-}
-
-func TestIsWithinScope_TrailingSlashDirectoryScopeExcludesOutsideFiles_REQ_LNGHZN_S4(t *testing.T) {
-	t.Parallel()
-
-	isIn, outOfScope := IsWithinScope(
-		[]string{"other/foo.go"},
-		[]string{"internal/"},
-	)
-	assert.False(t, isIn, "file outside the trailing-slash directory scope should not be in scope")
-	assert.Equal(t, "other/foo.go", outOfScope)
-}
-
-func TestIsWithinScope_RepoRootScopeMatchesAnyFile_REQ_LNGHZN_S4_T1(t *testing.T) {
-	t.Parallel()
-
-	isIn, outOfScope := IsWithinScope([]string{"cmd/main.go"}, []string{"."})
-	assert.True(t, isIn, `scope "." should cover any file path in the repo`)
-	assert.Empty(t, outOfScope)
-}
-
-func TestIsWithinScope_DoublestarMidPatternMatchesAnyDepth_REQ_LNGHZN_S4_T1(t *testing.T) {
-	t.Parallel()
-
-	scope := []string{"internal/**/api.go"}
-
-	isIn, outOfScope := IsWithinScope([]string{"internal/foo/api.go"}, scope)
-	assert.True(t, isIn, "internal/**/api.go should match internal/foo/api.go")
-	assert.Empty(t, outOfScope)
-
-	isIn, outOfScope = IsWithinScope([]string{"internal/foo/bar/api.go"}, scope)
-	assert.True(t, isIn, "internal/**/api.go should match internal/foo/bar/api.go")
-	assert.Empty(t, outOfScope)
-
-	isIn, outOfScope = IsWithinScope([]string{"internal/foo/other.go"}, scope)
-	assert.False(t, isIn, "internal/**/api.go should not match internal/foo/other.go")
-	assert.Equal(t, "internal/foo/other.go", outOfScope)
-}
-
-func TestScopesOverlap_MalformedPatternFailOpen_REQ_NOCOMMENTS(t *testing.T) {
-	t.Parallel()
-	_, err := scopematch.Overlaps("foo[", "foo.go")
-	require.Error(t, err, "helper must surface the malformed pattern")
-	assert.False(t, ScopesOverlap([]string{"foo["}, []string{"foo.go"}),
-		"claimTreatsMalformedScopeAsNoOverlap: claim keeps fail-open so TTL/race stay unchanged")
-	assert.False(t, ScopesOverlap([]string{"foo.go"}, []string{"foo["}))
-	assert.False(t, ScopesOverlap([]string{"*"}, []string{"["}),
-		"a valid glob matching the malformed literal must still fail open")
-	assert.False(t, ScopesOverlap([]string{"["}, []string{"*"}),
-		"fail-open must not depend on argument order")
-	assert.True(t, ScopesOverlap([]string{"src/a.go"}, []string{"src/a.go"}),
-		"valid overlapping scopes must still overlap")
+var overlapParityCases = []struct {
+	name string
+	a, b string
+	want bool
+}{
+	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
+	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
+	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
+	{"no longer overlaps via directory nesting alone", "internal/claim/sub/*.go", "internal/claim/*.go", false},
+	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
+	{"root-level files, no dir", "a.go", "b.go", false},
+	{"explicit doublestar directory glob still overlaps nested file", "internal/claim/**", "internal/claim/sub/a.go", true},
+	{"glob-vs-glob same-segment intersection", "src/auth/*.go", "src/auth/login.*", true},
+	{"glob-vs-glob distinct literal directories cannot intersect", "src/auth/*.go", "src/billing/*.go", false},
 }

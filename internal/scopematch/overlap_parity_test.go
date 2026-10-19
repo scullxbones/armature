@@ -1,14 +1,12 @@
 package scopematch
 
-// OverlapParityCase is one glob-pair row for claim/validate overlap tests.
-type OverlapParityCase struct {
-	Name string
-	A, B string
-	Want bool
+type overlapParityCase struct {
+	name string
+	a, b string
+	want bool
 }
 
-// OverlapParityCases is the single table claim and validate overlap tests run.
-var OverlapParityCases = []OverlapParityCase{
+var overlapParityCases = []overlapParityCase{
 	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
 	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
 	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},

@@ -9,6 +9,7 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,10 +39,10 @@ func TestIsClaimStale_ClaimingWorkerActivityExtends(t *testing.T) {
 
 func TestScopeOverlap(t *testing.T) {
 	t.Parallel()
-	assert.True(t, ScopesOverlap([]string{"src/auth/**"}, []string{"src/auth/login.go"}))
-	assert.False(t, ScopesOverlap([]string{"src/auth/**"}, []string{"src/api/handler.go"}))
-	assert.True(t, ScopesOverlap([]string{"src/**"}, []string{"src/auth/login.go"}))
-	assert.False(t, ScopesOverlap([]string{}, []string{"src/auth/login.go"}))
+	assert.True(t, scopematch.ScopesOverlap([]string{"src/auth/**"}, []string{"src/auth/login.go"}))
+	assert.False(t, scopematch.ScopesOverlap([]string{"src/auth/**"}, []string{"src/api/handler.go"}))
+	assert.True(t, scopematch.ScopesOverlap([]string{"src/**"}, []string{"src/auth/login.go"}))
+	assert.False(t, scopematch.ScopesOverlap([]string{}, []string{"src/auth/login.go"}))
 }
 
 func genOp() gopter.Gen {
@@ -96,11 +97,11 @@ func TestPropertyAcceptStealsOnlyWhenNotLive(t *testing.T) {
 			if first.Payload.TTL <= 0 {
 				first.Payload.TTL = 1
 			}
-			held, took := Accept(Lease{}, first)
+			held, took := accept(Lease{}, first)
 			if !took {
 				return false
 			}
-			_, stole := Accept(held, second)
+			_, stole := accept(held, second)
 			if first.WorkerID == second.WorkerID {
 				return stole
 			}

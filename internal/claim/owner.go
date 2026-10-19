@@ -91,9 +91,8 @@ func LeaseLive(l Lease, now int64) bool {
 	return !isClaimStale(l.LastActivity, l.TTLMinutes, now)
 }
 
-// Accept is the single steal-on-stale step. Same holder always replaces.
-// A foreign claim takes only when the held lease is not live at claimOp.Timestamp.
-func Accept(held Lease, claimOp ops.Op) (Lease, bool) {
+// accept is the steal-on-stale step using the op timestamp as the steal clock.
+func accept(held Lease, claimOp ops.Op) (Lease, bool) {
 	return AcceptAt(held, claimOp, claimOp.Timestamp)
 }
 
@@ -134,8 +133,8 @@ func leaseFromClaimOp(op ops.Op) Lease {
 	}
 }
 
-// Apply folds one op into a lease. Owner is a loop of Apply.
-func Apply(held Lease, op ops.Op) Lease {
+// apply folds one op into a lease using the op timestamp as the steal clock.
+func apply(held Lease, op ops.Op) Lease {
 	return ApplyAt(held, op, op.Timestamp)
 }
 
@@ -231,7 +230,7 @@ func Owners(log []ops.Op) map[string]Lease {
 		if op.TargetID == "" {
 			continue
 		}
-		heldByIssue[op.TargetID] = Apply(heldByIssue[op.TargetID], op)
+		heldByIssue[op.TargetID] = apply(heldByIssue[op.TargetID], op)
 	}
 	return heldByIssue
 }
@@ -268,11 +267,11 @@ func LostRaceClaimKeys(log []ops.Op) map[string]bool {
 	lost := map[string]bool{}
 	for _, op := range ordered {
 		if op.Type != ops.OpClaim {
-			heldByIssue[op.TargetID] = Apply(heldByIssue[op.TargetID], op)
+			heldByIssue[op.TargetID] = apply(heldByIssue[op.TargetID], op)
 			continue
 		}
 		held := heldByIssue[op.TargetID]
-		next, took := Accept(held, op)
+		next, took := accept(held, op)
 		if !took {
 			lost[ClaimOpKey(op)] = true
 		}
