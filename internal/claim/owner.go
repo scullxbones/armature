@@ -91,7 +91,6 @@ func LeaseLive(l Lease, now int64) bool {
 	return !isClaimStale(l.LastActivity, l.TTLMinutes, now)
 }
 
-// accept is the steal-on-stale step using the op timestamp as the steal clock.
 func accept(held Lease, claimOp ops.Op) (Lease, bool) {
 	return AcceptAt(held, claimOp, claimOp.Timestamp)
 }
@@ -133,7 +132,6 @@ func leaseFromClaimOp(op ops.Op) Lease {
 	}
 }
 
-// apply folds one op into a lease using the op timestamp as the steal clock.
 func apply(held Lease, op ops.Op) Lease {
 	return ApplyAt(held, op, op.Timestamp)
 }

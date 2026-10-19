@@ -1,5 +1,4 @@
 #!/bin/bash
-# Usage: scripts/check-source-manifest-decode.sh [repo-root]
 
 set -euo pipefail
 
