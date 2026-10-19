@@ -11,8 +11,8 @@ import (
 	"sort"
 
 	"github.com/scullxbones/armature/internal/attestation"
-	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/scopematch"
 )
 
 // DefaultModel is the rate-table key used when a usage record has no model.
@@ -338,7 +338,7 @@ func canJoinWave(candidate string, wave []string, issues map[string]IssueInfo) b
 	cand := issues[candidate]
 	for _, existing := range wave {
 		ex := issues[existing]
-		if claim.ScopesOverlap(cand.Scope, ex.Scope) {
+		if scopematch.ScopesOverlap(cand.Scope, ex.Scope) {
 			return false
 		}
 		if related(candidate, existing, issues) {

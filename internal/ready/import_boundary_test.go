@@ -26,6 +26,7 @@ func TestProductionReadyDoesNotImportMaterializeOrOps(t *testing.T) {
 	banned := map[string]string{
 		`"github.com/scullxbones/armature/internal/materialize"`: "ready consumes Facts, not materialized issues",
 		`"github.com/scullxbones/armature/internal/ops"`:         "status vocabulary is local to ready Facts",
+		`"github.com/scullxbones/armature/internal/claim"`:       "scope glob matching lives in scopematch; lease ownership stays in claim",
 	}
 	fset := token.NewFileSet()
 	var violations []string

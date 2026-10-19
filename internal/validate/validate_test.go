@@ -1439,13 +1439,29 @@ func TestCheckW1ScopeOverlap_MessageReportsMatchedPatternPair_PR79(t *testing.T)
 
 func TestGlobOverlaps_ParityWithClaimPackage_PR79(t *testing.T) {
 	t.Parallel()
-	for _, c := range scopematch.OverlapParityCases {
-		t.Run(c.Name, func(t *testing.T) {
+	for _, c := range overlapParityCases {
+		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, c.Want, globOverlaps(c.A, c.B), "globOverlaps(%q, %q)", c.A, c.B)
-			assert.Equal(t, c.Want, globOverlaps(c.B, c.A), "globOverlaps(%q, %q) (symmetric)", c.B, c.A)
+			assert.Equal(t, c.want, globOverlaps(c.a, c.b), "globOverlaps(%q, %q)", c.a, c.b)
+			assert.Equal(t, c.want, globOverlaps(c.b, c.a), "globOverlaps(%q, %q) (symmetric)", c.b, c.a)
 		})
 	}
+}
+
+var overlapParityCases = []struct {
+	name string
+	a, b string
+	want bool
+}{
+	{"exact match", "internal/claim/a.go", "internal/claim/a.go", true},
+	{"glob vs literal in dir", "internal/claim/*.go", "internal/claim/a.go", true},
+	{"sibling dir string-prefix, no overlap", "internal/claimx/foo.go", "internal/claim/*.go", false},
+	{"no longer overlaps via directory nesting alone", "internal/claim/sub/*.go", "internal/claim/*.go", false},
+	{"unrelated dirs", "internal/claim/a.go", "internal/validate/a.go", false},
+	{"root-level files, no dir", "a.go", "b.go", false},
+	{"explicit doublestar directory glob still overlaps nested file", "internal/claim/**", "internal/claim/sub/a.go", true},
+	{"glob-vs-glob same-segment intersection", "src/auth/*.go", "src/auth/login.*", true},
+	{"glob-vs-glob distinct literal directories cannot intersect", "src/auth/*.go", "src/billing/*.go", false},
 }
 
 func TestAffectsValidityCensus_REQ_LNGHZN_S10_T12(t *testing.T) {

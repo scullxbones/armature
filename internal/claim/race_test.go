@@ -12,7 +12,7 @@ func liveLease(worker string, claimedAt int64, ttl int) Lease {
 }
 
 func challengerBlocked(held Lease, challengerID string, now int64) bool {
-	_, took := Accept(held, ops.Op{Type: ops.OpClaim, WorkerID: challengerID, Timestamp: now})
+	_, took := accept(held, ops.Op{Type: ops.OpClaim, WorkerID: challengerID, Timestamp: now})
 	return !took
 }
 
@@ -83,7 +83,7 @@ func TestForeignLiveLeaseBlocksChallenger_REQ_MATENC_S1_T2(t *testing.T) {
 		t.Parallel()
 		held := liveLease("worker-a", 200, 60)
 		assert.True(t, challengerBlocked(held, "worker-b", 100))
-		_, took := Accept(held, ops.Op{Type: ops.OpClaim, WorkerID: "worker-b", Timestamp: 100, Payload: ops.Payload{TTL: 60}})
+		_, took := accept(held, ops.Op{Type: ops.OpClaim, WorkerID: "worker-b", Timestamp: 100, Payload: ops.Payload{TTL: 60}})
 		assert.False(t, took, "an earlier foreign timestamp does not steal a later live held lease")
 	})
 }

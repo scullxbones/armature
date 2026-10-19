@@ -87,6 +87,13 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "issuetype is a pure vocabulary package and must not import other internal packages"
+        scopematch-pure:
+          list-mode: lax
+          files:
+            - "**/internal/scopematch/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "scopematch is a pure glob-matching package and must not import other internal packages"
         issueref-pure:
           list-mode: lax
           files:
@@ -188,9 +195,9 @@ linters:
             - "!**/*_test.go"
           allow:
             - "$gostd"
-            - "github.com/scullxbones/armature/internal/claim"
             - "github.com/scullxbones/armature/internal/dag"
             - "github.com/scullxbones/armature/internal/issuetype"
+            - "github.com/scullxbones/armature/internal/scopematch"
         review-boundary:
           list-mode: strict
           files:

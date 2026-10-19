@@ -3,8 +3,8 @@ package ready
 import (
 	"testing"
 
-	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,7 +105,7 @@ func TestComputeWaves_ScopeConflictDegreeOrdering_REQ_LNGHZN_S2_T1(t *testing.T)
 				if i == j {
 					continue
 				}
-				assert.False(t, claim.ScopesOverlap(e1.Scope, e2.Scope), "Wave should not have conflicting scopes: %s and %s", e1.Issue, e2.Issue)
+				assert.False(t, scopematch.ScopesOverlap(e1.Scope, e2.Scope), "Wave should not have conflicting scopes: %s and %s", e1.Issue, e2.Issue)
 			}
 		}
 	}

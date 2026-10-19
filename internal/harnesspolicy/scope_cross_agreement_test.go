@@ -3,8 +3,8 @@ package harnesspolicy_test
 import (
 	"testing"
 
-	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
+	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,15 +37,15 @@ func TestScopeMatchers_ClaimAndHarnesspolicyAgree_REQ_LNGHZN_S4(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			claimAllows, _ := claim.IsWithinScope([]string{tc.path}, tc.scope)
+			inScope, _ := scopematch.IsWithinScope([]string{tc.path}, tc.scope)
 
 			policy := harnesspolicy.NewScopePolicyWithRoot(tc.scope, "")
 			policyResult := policy.CheckPaths([]string{tc.path})
 
-			assert.Equal(t, tc.want, claimAllows, "claim.IsWithinScope(%q, %v)", tc.path, tc.scope)
+			assert.Equal(t, tc.want, inScope, "scopematch.IsWithinScope(%q, %v)", tc.path, tc.scope)
 			assert.Equal(t, tc.want, policyResult.Allowed, "harnesspolicy.ScopePolicy.CheckPaths(%q) with scope %v", tc.path, tc.scope)
-			assert.Equal(t, claimAllows, policyResult.Allowed,
-				"claim and harnesspolicy scope matchers disagree on path %q with scope %v", tc.path, tc.scope)
+			assert.Equal(t, inScope, policyResult.Allowed,
+				"scopematch and harnesspolicy scope matchers disagree on path %q with scope %v", tc.path, tc.scope)
 		})
 	}
 }

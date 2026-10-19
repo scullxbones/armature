@@ -242,11 +242,9 @@
       ]
     },
     "internal/claim": {
-      "count": 76,
+      "count": 71,
       "names": [
-        "Accept",
         "AcceptAt",
-        "Apply",
         "ApplyAt",
         "ClaimOpKey",
         "ClaimPlan",
@@ -270,8 +268,6 @@
         "HeartbeatDebounceInterval",
         "HierarchyGraph",
         "HierarchyGraph.Descendants",
-        "IsAncestorOrDescendant",
-        "IsWithinScope",
         "IssueFacts",
         "IssueFacts.ClaimedBy",
         "IssueFacts.Scope",
@@ -316,7 +312,6 @@
         "PlanInput.TargetID",
         "PlanInput.TargetScope",
         "PlanInput.WorkerID",
-        "ScopesOverlap",
         "ShouldHeartbeat",
         "SortForReplay",
         "ValidateTTLMinutes"
@@ -1740,18 +1735,14 @@
       ]
     },
     "internal/scopematch": {
-      "count": 10,
+      "count": 6,
       "names": [
         "Allows",
         "CleanRepoPath",
         "CleanScope",
-        "OverlapParityCase",
-        "OverlapParityCase.A",
-        "OverlapParityCase.B",
-        "OverlapParityCase.Name",
-        "OverlapParityCase.Want",
-        "OverlapParityCases",
-        "Overlaps"
+        "IsWithinScope",
+        "Overlaps",
+        "ScopesOverlap"
       ]
     },
     "internal/skillsembed": {

@@ -1,10 +1,11 @@
 package ready
 
 import (
+	"slices"
 	"sort"
 
-	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/dag"
+	"github.com/scullxbones/armature/internal/scopematch"
 )
 
 // PartitionWaves partitions ready entries into scope-disjoint waves using greedy first-fit.
@@ -82,7 +83,7 @@ func sortByConflictDegree(entries []ReadyEntry) {
 		degree := 0
 		for _, other := range entries {
 			if entry.Issue != other.Issue {
-				if claim.ScopesOverlap(entry.Scope, other.Scope) {
+				if scopematch.ScopesOverlap(entry.Scope, other.Scope) {
 					degree++
 				}
 			}
@@ -112,13 +113,20 @@ func sortByConflictDegree(entries []ReadyEntry) {
 
 func canAddToWave(candidate ReadyEntry, wave []ReadyEntry, graph *dag.Graph) bool {
 	for _, existing := range wave {
-		if claim.ScopesOverlap(candidate.Scope, existing.Scope) {
+		if scopematch.ScopesOverlap(candidate.Scope, existing.Scope) {
 			return false
 		}
 
-		if claim.IsAncestorOrDescendant(graph, candidate.Issue, existing.Issue) {
+		if relatedInGraph(graph, candidate.Issue, existing.Issue) {
 			return false
 		}
 	}
 	return true
+}
+
+func relatedInGraph(graph *dag.Graph, a, b string) bool {
+	if graph == nil {
+		return false
+	}
+	return slices.Contains(graph.Descendants(a), b) || slices.Contains(graph.Descendants(b), a)
 }

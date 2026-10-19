@@ -1,6 +1,6 @@
-// Package scopematch implements the canonical scope-glob matching logic
-// shared by internal/harnesspolicy (worker-facing scope checks) and
-// internal/claim (delivery-gate scope overlap checks).
+// Package scopematch is the owner of scope-glob matching: pair overlap,
+// list overlap, and file-set containment used by Claim planning, Ready
+// waves, delivery-gate scope checks, and harness policy.
 package scopematch
 
 import (
@@ -228,6 +228,36 @@ func CleanRepoPath(path string) string {
 		return "."
 	}
 	return strings.TrimPrefix(cleaned, "/")
+}
+
+// ScopesOverlap reports whether any pair of entries from two scope lists
+// overlaps. Malformed patterns do not overlap (fail-open): a bad glob must
+// not block Ready waves, Claim planning, or cost-wave grouping.
+func ScopesOverlap(scopeA, scopeB []string) bool {
+	for _, a := range scopeA {
+		for _, b := range scopeB {
+			overlap, err := Overlaps(a, b)
+			if err == nil && overlap {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// IsWithinScope reports whether every path in files is covered by scope.
+// An empty files list is within any scope. On the first path that is out of
+// scope it returns false and that path.
+func IsWithinScope(files, scope []string) (bool, string) {
+	if len(files) == 0 {
+		return true, ""
+	}
+	for _, file := range files {
+		if !Allows(scope, file) {
+			return false, file
+		}
+	}
+	return true, ""
 }
 
 func matchSegments(pattern, segments []string) bool {
