@@ -16,7 +16,7 @@ func TestWriteRunsSidecarByAbsolutePath(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "tool")
 	Write(t, bin, []byte("#!/bin/sh\necho ok-abs\n"))
-	out, err := exec.Command(bin).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), bin).CombinedOutput()
 	require.NoError(t, err, "%s", out)
 	assert.Equal(t, "ok-abs\n", string(out))
 }
@@ -26,7 +26,7 @@ func TestWriteRunsSidecarWhenArgv0IsBasename(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "tool")
 	Write(t, bin, []byte("#!/bin/sh\necho ok-path\n"))
-	cmd := exec.Command(bin)
+	cmd := exec.CommandContext(t.Context(), bin)
 	cmd.Args[0] = "tool"
 	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	out, err := cmd.CombinedOutput()
@@ -42,7 +42,7 @@ func TestWriteParallelInstallAndExec(t *testing.T) {
 			dir := t.TempDir()
 			bin := filepath.Join(dir, "tool")
 			Write(t, bin, []byte("#!/bin/sh\nexit 0\n"))
-			out, err := exec.Command(bin).CombinedOutput()
+			out, err := exec.CommandContext(t.Context(), bin).CombinedOutput()
 			require.NoError(t, err, "%s", out)
 		})
 	}

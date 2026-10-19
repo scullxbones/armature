@@ -50,7 +50,9 @@ var (
 )
 
 func init() {
-	_ = prepare()
+	if err := prepare(); err != nil {
+		panic("testexec: " + err.Error())
+	}
 }
 
 func prepare() error {
@@ -83,12 +85,12 @@ func Write(t testing.TB, path string, content []byte) {
 	}
 	dir := filepath.Dir(path)
 	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatalf("testexec.Write: mkdir %s: %v", dir, err)
 		}
 	}
 	sidecar := path + ".script"
-	if err := os.WriteFile(sidecar, content, 0o644); err != nil {
+	if err := os.WriteFile(sidecar, content, 0o600); err != nil {
 		t.Fatalf("testexec.Write: sidecar %s: %v", sidecar, err)
 	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
