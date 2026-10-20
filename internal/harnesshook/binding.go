@@ -59,10 +59,10 @@ func firstPathFromChanges(raw any) string {
 
 // ResolveBindingFromDir walks up the directory tree starting from dir to find
 // the containing worktree's .git directory and reads the armature-issue-id file.
-// Returns a ResolvedBinding with both the issue ID and the git directory where it was found,
-// or an empty IssueID if no .git directory is found or if the armature-issue-id file doesn't exist.
-// When a git dir is found but has no armature-issue-id file, GitDir is still populated
-// (IssueID empty) so callers can distinguish "no worktree found" from "worktree found but unbound".
+// A missing binding file is unbound. Any other ReadBinding error is returned
+// to the caller. When a git dir is found but has no binding file, GitDir is
+// still populated (IssueID empty) so callers can distinguish "no worktree found"
+// from "worktree found but unbound".
 func ResolveBindingFromDir(dir string) (ResolvedBinding, error) {
 	currentDir := dir
 
@@ -89,7 +89,10 @@ func ResolveBindingFromDir(dir string) (ResolvedBinding, error) {
 			}
 
 			issueID, bindErr := worktree.ReadBinding(actualGitDir)
-			if bindErr == nil && issueID != "" {
+			if bindErr != nil {
+				return ResolvedBinding{}, bindErr
+			}
+			if issueID != "" {
 				return ResolvedBinding{
 					IssueID: issueID,
 					GitDir:  actualGitDir,

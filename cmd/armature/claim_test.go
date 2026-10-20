@@ -1612,6 +1612,24 @@ func TestCheckExistingWorktreeBindingFailsClosedOnPermissionError(t *testing.T) 
 	err = checkExistingWorktreeBinding(worktreePath, "task-01", "task/task-01")
 	require.Error(t, err, "a permission-denied binding file must fail closed, not be silently treated as unbound")
 	assert.Contains(t, err.Error(), "read existing binding")
+	assert.Contains(t, err.Error(), issueIDFile)
+}
+
+func TestCheckExistingWorktreeBinding_CorruptBindingIsError_REQ_369(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithParentAndTask(t)
+
+	worktreePath := filepath.Join(t.TempDir(), "corrupt-binding-worktree")
+	run(t, repo, "git", "worktree", "add", worktreePath, "HEAD")
+
+	gitDir, err := worktree.ResolveGitDir(worktreePath)
+	require.NoError(t, err)
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.Mkdir(path, 0o755))
+
+	err = checkExistingWorktreeBinding(worktreePath, "task-02", "task/task-02")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
 }
 
 func TestClaimCommand_NoFalsePositiveAgainstParentStory_REQ_TOPTIER_S17_T1(t *testing.T) {

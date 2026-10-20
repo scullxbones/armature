@@ -56,6 +56,28 @@ func TestIssueWorktreeHasViolations_FailsClosedOnUnreadableInventory_REQ_LNGHZN_
 	require.Error(t, err, "unreadable inventory must fail closed, not report zero violations")
 }
 
+func TestIssueWorktreeHasViolations_FailsClosedOnCorruptBinding_REQ_369(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+
+	claimCmd := testRootCmd(t)
+	claimCmd.SetOut(new(bytes.Buffer))
+	claimCmd.SetArgs([]string{"claim", "--repo", repo, "--issue", "task-01", "--worktree"})
+	require.NoError(t, claimCmd.Execute())
+
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	gitDir, err := worktree.ResolveGitDir(wt)
+	require.NoError(t, err)
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.Remove(path))
+	require.NoError(t, os.Mkdir(path, 0o755))
+
+	issue := materialize.Issue{ID: "task-01", Type: "task"}
+	_, err = issueWorktreeHasViolations(repo, issue)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
+}
+
 func TestRemoveWorktreeForIssueTracked_FailsClosedOnUnreadableInventory_REQ_LNGHZN_S5(t *testing.T) {
 	t.Parallel()
 	notARepo := t.TempDir()

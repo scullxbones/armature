@@ -39,6 +39,22 @@ func TestVerifyIssueWorktreeBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 	assert.NoError(t, VerifyIssueWorktreeBinding(tmpDir, "issue-1"))
 }
 
+func TestVerifyIssueWorktreeBinding_CorruptBindingIsError_REQ_369(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := gittest.InitRepo(t)
+	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
+	gitDir, err := worktree.ResolveGitDir(tmpDir)
+	require.NoError(t, err)
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.Mkdir(path, 0o755))
+
+	err = VerifyIssueWorktreeBinding(tmpDir, "issue-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
+	assert.NotContains(t, err.Error(), "not bound to any issue")
+}
+
 func TestVerifyIssueBranchBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 	t.Parallel()
 

@@ -78,7 +78,7 @@ func locateMergedViolationGateRead(repoPath string, issue materialize.Issue) (me
 	}
 	binding, bindErr := worktree.ReadBinding(gitDir)
 	if bindErr != nil {
-		binding = ""
+		return mergedViolationGateRead{}, false, fmt.Errorf("read worktree binding %s: %w", filepath.Join(gitDir, "armature-issue-id"), bindErr)
 	}
 	return mergedViolationGateRead{GitDir: gitDir, Binding: binding}, true, nil
 }
