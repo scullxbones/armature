@@ -6,15 +6,6 @@ import (
 	"strings"
 )
 
-// InventoryRow is one observed worktree used as PlanProvision input.
-// Path, Branch, and Binding are facts gathered by cmd/; this package
-// does not inspect git.
-type InventoryRow struct {
-	Path    string
-	Branch  string
-	Binding string
-}
-
 // ProvisionInput is the borrowed, read-only fact set for a proposed
 // Managed Worktree destination. Empty IssueID or Dest is an input error.
 // Empty ExpectedBranch is an input error when Inventory is non-empty;
@@ -23,8 +14,7 @@ type ProvisionInput struct {
 	IssueID        string
 	Dest           string
 	ExpectedBranch string
-	Inventory      []InventoryRow
-	DestExists     bool
+	Inventory      []Meta
 	InRepo         bool
 	UnderCanonical bool
 	NestedUnder    string // registered path if dest is nested, else empty
@@ -47,6 +37,68 @@ type ProvisionPlan struct {
 	Action       ProvisionAction
 	AdoptFrom    string
 	RefuseReason string
+}
+
+// PrepareProvisionInput gathers dest-location facts for PlanProvision.
+// A nil inventory is dest-only and also records nested registration.
+func PrepareProvisionInput(repoPath, dest, issueID, expectedBranch string, inventory []Meta, provenanceOK bool) (ProvisionInput, error) {
+	inRepo, underCanonical := destLocationFacts(repoPath, dest)
+	in := ProvisionInput{
+		IssueID:        issueID,
+		Dest:           dest,
+		ExpectedBranch: expectedBranch,
+		InRepo:         inRepo,
+		UnderCanonical: underCanonical,
+		ProvenanceOK:   provenanceOK,
+	}
+	if inventory == nil {
+		nestedUnder, err := nestedRegisteredWorktree(repoPath, dest)
+		if err != nil {
+			return ProvisionInput{}, err
+		}
+		in.NestedUnder = nestedUnder
+		return in, nil
+	}
+	in.Dest = NormalizePathAllowingMissing(dest)
+	rows := make([]Meta, 0, len(inventory))
+	for _, item := range inventory {
+		item.Path = NormalizePath(item.Path)
+		rows = append(rows, item)
+	}
+	in.Inventory = rows
+	return in, nil
+}
+
+func destLocationFacts(repoPath, destination string) (inRepo, underCanonical bool) {
+	repoRoot := NormalizePath(repoPath)
+	normalizedDestination := NormalizePathAllowingMissing(destination)
+	inRepo = IsUnderRoot(normalizedDestination, repoRoot)
+	underCanonical = IsUnderRoot(normalizedDestination, CanonicalRoot(repoPath))
+	return inRepo, underCanonical
+}
+
+func nestedRegisteredWorktree(repoPath, destination string) (string, error) {
+	registeredPaths, err := RegisteredPaths(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("inspect registered worktree destinations: %w", err)
+	}
+	normalizedDestination := NormalizePathAllowingMissing(destination)
+	for _, registeredPath := range registeredPaths {
+		normalizedRegisteredPath := NormalizePathAllowingMissing(registeredPath)
+		if normalizedDestination == normalizedRegisteredPath {
+			prunable, err := HasPrunableRegistration(repoPath, registeredPath)
+			if err != nil {
+				return "", fmt.Errorf("inspect registered worktree %s: %w", registeredPath, err)
+			}
+			if prunable {
+				continue
+			}
+		}
+		if IsUnderRoot(normalizedDestination, normalizedRegisteredPath) {
+			return registeredPath, nil
+		}
+	}
+	return "", nil
 }
 
 // PlanProvision decides refuse, adopt, already-at-destination, or
@@ -76,7 +128,7 @@ func PlanProvision(in ProvisionInput) (ProvisionPlan, error) {
 		}, nil
 	}
 
-	var bound []InventoryRow
+	var bound []Meta
 	for _, row := range in.Inventory {
 		if row.Binding == in.IssueID {
 			bound = append(bound, row)

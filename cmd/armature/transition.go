@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
-	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/worktree"
@@ -419,7 +417,7 @@ func worktreeIssueBinding(worktreePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return harnesshook.ReadIssueBindingFileErr(gitDir)
+	return worktree.ReadBinding(gitDir)
 }
 
 func discoverIssueBoundWorktreeIndependentOfCheckout(repoPath, issueID string) (string, bool, error) {
@@ -428,20 +426,8 @@ func discoverIssueBoundWorktreeIndependentOfCheckout(repoPath, issueID string) (
 		return "", false, fmt.Errorf("list worktrees: %w", err)
 	}
 	for _, item := range items {
-		worktreePath := item.Path
-		gitDir, err := worktree.ResolveGitDir(worktreePath)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return "", false, fmt.Errorf("resolve git dir for worktree %s: %w", worktreePath, err)
-		}
-		binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
-		if err != nil {
-			return "", false, fmt.Errorf("read issue binding for worktree %s: %w", worktreePath, err)
-		}
-		if binding == issueID {
-			return worktreePath, true, nil
+		if item.Binding == issueID {
+			return item.Path, true, nil
 		}
 	}
 	return "", false, nil

@@ -2,9 +2,11 @@ package worktree_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,8 +20,8 @@ func provisionBase() worktree.ProvisionInput {
 	}
 }
 
-func boundRow(path, branch string) worktree.InventoryRow {
-	return worktree.InventoryRow{
+func boundRow(path, branch string) worktree.Meta {
+	return worktree.Meta{
 		Path:    path,
 		Branch:  branch,
 		Binding: "ARCHIMP-S20-T5",
@@ -30,12 +32,12 @@ func heads(branch string) string {
 	return "refs/heads/" + branch
 }
 
-func snapshot(in worktree.ProvisionInput) (worktree.ProvisionInput, []worktree.InventoryRow) {
+func snapshot(in worktree.ProvisionInput) (worktree.ProvisionInput, []worktree.Meta) {
 	cloned := slices.Clone(in.Inventory)
 	return in, cloned
 }
 
-func assertInputUnchanged(t *testing.T, before worktree.ProvisionInput, inventory []worktree.InventoryRow, after worktree.ProvisionInput) {
+func assertInputUnchanged(t *testing.T, before worktree.ProvisionInput, inventory []worktree.Meta, after worktree.ProvisionInput) {
 	t.Helper()
 	assert.Equal(t, before, after, "PlanProvision must not mutate ProvisionInput fields")
 	assert.Equal(t, inventory, after.Inventory, "PlanProvision must not reorder or rewrite Inventory")
@@ -47,7 +49,7 @@ func TestPlanProvision_RefuseNested_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	in.NestedUnder = "/repo/.worktrees/ARCHIMP-S20-T4"
 	in.InRepo = true
 	in.UnderCanonical = false
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		boundRow("/z", heads(in.ExpectedBranch)),
 		boundRow("/a", heads(in.ExpectedBranch)),
 	}
@@ -69,7 +71,7 @@ func TestPlanProvision_RefuseInRepoOutsideCanonical_REQ_ARCHIMP_S20_T5(t *testin
 	in.Dest = "/repo/custom-wt"
 	in.InRepo = true
 	in.UnderCanonical = false
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		boundRow("/z", heads(in.ExpectedBranch)),
 		boundRow("/a", heads(in.ExpectedBranch)),
 	}
@@ -88,7 +90,7 @@ func TestPlanProvision_RefuseInRepoOutsideCanonical_REQ_ARCHIMP_S20_T5(t *testin
 func TestPlanProvision_RefuseAmbiguousBinding_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Parallel()
 	in := provisionBase()
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		{Path: "/unrelated", Branch: heads("other"), Binding: "OTHER"},
 		boundRow("/wt/z", heads(in.ExpectedBranch)),
 		boundRow("/wt/a", heads(in.ExpectedBranch)),
@@ -113,7 +115,7 @@ func TestPlanProvision_RefuseWrongBranch_REQ_ARCHIMP_S20_T5(t *testing.T) {
 		t.Parallel()
 		in := provisionBase()
 		in.ProvenanceOK = true
-		in.Inventory = []worktree.InventoryRow{
+		in.Inventory = []worktree.Meta{
 			boundRow("/legacy/ARCHIMP-S20-T5", "refs/heads/scratch"),
 		}
 		before, inv := snapshot(in)
@@ -131,7 +133,7 @@ func TestPlanProvision_RefuseWrongBranch_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Run("empty branch is detached", func(t *testing.T) {
 		t.Parallel()
 		in := provisionBase()
-		in.Inventory = []worktree.InventoryRow{
+		in.Inventory = []worktree.Meta{
 			boundRow("/legacy/ARCHIMP-S20-T5", ""),
 		}
 
@@ -147,7 +149,7 @@ func TestPlanProvision_RefuseWrongBranch_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Run("list porcelain detached token", func(t *testing.T) {
 		t.Parallel()
 		in := provisionBase()
-		in.Inventory = []worktree.InventoryRow{
+		in.Inventory = []worktree.Meta{
 			boundRow("/legacy/ARCHIMP-S20-T5", "detached"),
 		}
 
@@ -165,7 +167,7 @@ func TestPlanProvision_RefuseAdoptWithoutProvenance_REQ_ARCHIMP_S20_T5(t *testin
 	t.Parallel()
 	in := provisionBase()
 	in.ProvenanceOK = false
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		boundRow("/legacy/ARCHIMP-S20-T5", heads(in.ExpectedBranch)),
 	}
 	before, inv := snapshot(in)
@@ -184,8 +186,7 @@ func TestPlanProvision_Adopt_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Parallel()
 	in := provisionBase()
 	in.ProvenanceOK = true
-	in.DestExists = true
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		{Path: "/repo/.worktrees/other", Branch: heads("task/other"), Binding: "OTHER"},
 		boundRow("/legacy/ARCHIMP-S20-T5", heads(in.ExpectedBranch)),
 	}
@@ -203,7 +204,7 @@ func TestPlanProvision_AlreadyAtDest_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Parallel()
 	in := provisionBase()
 	in.ProvenanceOK = false
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		boundRow(in.Dest, "refs/heads/scratch"),
 	}
 	before, inv := snapshot(in)
@@ -220,7 +221,7 @@ func TestPlanProvision_AlreadyAtDestPathNormalize_REQ_ARCHIMP_S20_T5(t *testing.
 	t.Parallel()
 	in := provisionBase()
 	in.ProvenanceOK = false
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		boundRow("/repo/foo/../.worktrees/ARCHIMP-S20-T5", "refs/heads/scratch"),
 	}
 	before, inv := snapshot(in)
@@ -236,9 +237,8 @@ func TestPlanProvision_AlreadyAtDestPathNormalize_REQ_ARCHIMP_S20_T5(t *testing.
 func TestPlanProvision_Fresh_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Parallel()
 	in := provisionBase()
-	in.DestExists = true
 	in.ProvenanceOK = false
-	in.Inventory = []worktree.InventoryRow{
+	in.Inventory = []worktree.Meta{
 		{Path: "/repo/.worktrees/other", Branch: heads("task/other"), Binding: "OTHER"},
 		{Path: "/scratch", Branch: heads(in.ExpectedBranch), Binding: ""},
 	}
@@ -260,7 +260,7 @@ func TestPlanProvision_Fresh_REQ_ARCHIMP_S20_T5(t *testing.T) {
 func TestPlanProvision_InventoryOrderInvariant_REQ_ARCHIMP_S20_T5(t *testing.T) {
 	t.Parallel()
 	branch := heads("task/ARCHIMP-S20-T5")
-	orders := [][]worktree.InventoryRow{
+	orders := [][]worktree.Meta{
 		{
 			boundRow("/wt/z", branch),
 			{Path: "/other", Branch: heads("other"), Binding: "OTHER"},
@@ -294,7 +294,7 @@ func TestPlanProvision_InventoryOrderInvariant_REQ_ARCHIMP_S20_T5(t *testing.T) 
 		"remove the armature-issue-id binding from the ones you do not want before claiming",
 		reasons[0])
 
-	adoptOrders := [][]worktree.InventoryRow{
+	adoptOrders := [][]worktree.Meta{
 		{
 			{Path: "/other", Branch: heads("other"), Binding: "OTHER"},
 			boundRow("/legacy", branch),
@@ -326,7 +326,7 @@ func TestPlanProvision_InvalidInput_REQ_ARCHIMP_S20_T5(t *testing.T) {
 		{name: "empty Dest", in: worktree.ProvisionInput{IssueID: base.IssueID, ExpectedBranch: base.ExpectedBranch}},
 		{name: "empty ExpectedBranch with inventory", in: worktree.ProvisionInput{
 			IssueID: base.IssueID, Dest: base.Dest,
-			Inventory: []worktree.InventoryRow{boundRow("/legacy", heads(base.ExpectedBranch))},
+			Inventory: []worktree.Meta{boundRow("/legacy", heads(base.ExpectedBranch))},
 		}},
 	}
 	for _, tc := range cases {
@@ -345,4 +345,24 @@ func TestPlanProvision_InvalidInput_REQ_ARCHIMP_S20_T5(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, worktree.ProvisionFresh, plan.Action)
 	})
+}
+
+func TestPrepareProvisionInput_DestLocationAndNilInventory_REQ_ARCHIMP_S20_T5(t *testing.T) {
+	t.Parallel()
+	repo := gittest.Init(t)
+	canonical := worktree.CanonicalPath(repo, "task-1")
+	in, err := worktree.PrepareProvisionInput(repo, canonical, "task-1", "", nil, false)
+	require.NoError(t, err)
+	assert.True(t, in.InRepo)
+	assert.True(t, in.UnderCanonical)
+	assert.Empty(t, in.NestedUnder)
+	assert.Nil(t, in.Inventory)
+	assert.Equal(t, canonical, in.Dest)
+
+	custom := filepath.Join(repo, "custom-wt")
+	in, err = worktree.PrepareProvisionInput(repo, custom, "task-1", "", nil, false)
+	require.NoError(t, err)
+	assert.True(t, in.InRepo)
+	assert.False(t, in.UnderCanonical)
+	assert.Equal(t, custom, in.Dest)
 }

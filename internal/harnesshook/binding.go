@@ -57,34 +57,6 @@ func firstPathFromChanges(raw any) string {
 	return path
 }
 
-// ReadIssueBindingFile reads the issue ID bound to gitDir, preferring the
-// current armature-issue-id file and falling back to the legacy
-// armature-task-id file for worktrees claimed before the rename (commit
-// d52d78be). Returns "" if neither file exists, and also "" if either file
-// exists but cannot be read (e.g. permission denied) — callers that need to
-// distinguish "unbound" from "read failed" should use
-// ReadIssueBindingFileErr instead. This is the single shared implementation
-// behind every "read the binding for a git dir" call site
-// (ResolveBindingFromDir, cmd/armature session/merged-gate resolution).
-func ReadIssueBindingFile(gitDir string) string {
-	issueID, err := ReadIssueBindingFileErr(gitDir)
-	if err != nil {
-		return ""
-	}
-	return issueID
-}
-
-// ReadIssueBindingFileErr is the error-returning counterpart to
-// ReadIssueBindingFile. It reads the issue ID bound to gitDir the same way
-// (armature-issue-id, falling back to legacy armature-task-id), but returns a
-// non-nil error when a binding file exists and could not be read for a reason
-// other than "does not exist" (e.g. permission denied). Callers that must
-// fail closed on such errors (rather than silently treating the worktree as
-// unbound) should use this variant.
-func ReadIssueBindingFileErr(gitDir string) (string, error) {
-	return worktree.ReadBinding(gitDir)
-}
-
 // ResolveBindingFromDir walks up the directory tree starting from dir to find
 // the containing worktree's .git directory and reads the armature-issue-id file.
 // Returns a ResolvedBinding with both the issue ID and the git directory where it was found,
@@ -116,7 +88,8 @@ func ResolveBindingFromDir(dir string) (ResolvedBinding, error) {
 				}
 			}
 
-			if issueID := ReadIssueBindingFile(actualGitDir); issueID != "" {
+			issueID, bindErr := worktree.ReadBinding(actualGitDir)
+			if bindErr == nil && issueID != "" {
 				return ResolvedBinding{
 					IssueID: issueID,
 					GitDir:  actualGitDir,

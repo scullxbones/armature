@@ -738,7 +738,7 @@
       ]
     },
     "internal/harnesshook": {
-      "count": 82,
+      "count": 80,
       "names": [
         "AbsolutizePaths",
         "ActivityEntry",
@@ -804,8 +804,6 @@
         "PlatformCapabilities.Stop",
         "PlatformCapabilities.SupportedEditTools",
         "PlatformCapabilities.SupportedShellTools",
-        "ReadIssueBindingFile",
-        "ReadIssueBindingFileErr",
         "ResolveBindingFromDir",
         "ResolveBindingFromEvent",
         "ResolvedBinding",
@@ -2219,7 +2217,7 @@
       ]
     },
     "internal/worktree": {
-      "count": 69,
+      "count": 65,
       "names": [
         "Ambiguous",
         "ApplyMitigations",
@@ -2232,10 +2230,6 @@
         "CanonicalPath",
         "CanonicalRoot",
         "HasPrunableRegistration",
-        "InventoryRow",
-        "InventoryRow.Binding",
-        "InventoryRow.Branch",
-        "InventoryRow.Path",
         "IsUnderRoot",
         "IssueFacts",
         "IssueFacts.ClaimStale",
@@ -2255,13 +2249,13 @@
         "NormalizePathAllowingMissing",
         "NotFound",
         "PlanProvision",
+        "PrepareProvisionInput",
         "ProvisionAction",
         "ProvisionAdopt",
         "ProvisionAlreadyAtDest",
         "ProvisionFresh",
         "ProvisionInput",
         "ProvisionInput.Dest",
-        "ProvisionInput.DestExists",
         "ProvisionInput.ExpectedBranch",
         "ProvisionInput.InRepo",
         "ProvisionInput.Inventory",
