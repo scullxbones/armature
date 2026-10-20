@@ -216,6 +216,18 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
+        deliverygate-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/deliverygate/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/commitref"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/scopematch"
+            - "github.com/scullxbones/armature/internal/worktree"
         harnesshook-boundary:
           list-mode: strict
           files:

@@ -22,7 +22,7 @@ import (
 )
 
 func issueBindingFromGitDirOrEnvLookup(gitDir string, env Env) string {
-	if issueID := harnesshook.ReadIssueBindingFile(gitDir); issueID != "" {
+	if issueID, err := worktree.ReadBinding(gitDir); err == nil && issueID != "" {
 		return issueID
 	}
 	return envLookup(env, "ARMATURE_ISSUE_ID")

@@ -18,7 +18,6 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
-	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/issueid"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/oporder"
@@ -100,7 +99,7 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 		return nil
 	}
 
-	existingIssueID, err := harnesshook.ReadIssueBindingFileErr(actualGitDir)
+	existingIssueID, err := worktree.ReadBinding(actualGitDir)
 	if err != nil {
 		return fmt.Errorf("read existing binding: %w", err)
 	}
@@ -145,52 +144,12 @@ func canonicalWorktreePath(repoPath, issueID string) (string, error) {
 	return path, nil
 }
 
-func destLocationFacts(repoPath, destination string) (inRepo, underCanonical bool) {
-	repoRoot := worktree.NormalizePath(repoPath)
-	normalizedDestination := worktree.NormalizePathAllowingMissing(destination)
-	inRepo = worktree.IsUnderRoot(normalizedDestination, repoRoot)
-	underCanonical = worktree.IsUnderRoot(normalizedDestination, worktree.CanonicalRoot(repoPath))
-	return inRepo, underCanonical
-}
-
-func nestedRegisteredWorktree(repoPath, destination string) (string, error) {
-	registeredPaths, err := worktree.RegisteredPaths(repoPath)
-	if err != nil {
-		return "", fmt.Errorf("inspect registered worktree destinations: %w", err)
-	}
-	normalizedDestination := worktree.NormalizePathAllowingMissing(destination)
-	for _, registeredPath := range registeredPaths {
-		normalizedRegisteredPath := worktree.NormalizePathAllowingMissing(registeredPath)
-		if normalizedDestination == normalizedRegisteredPath {
-			prunable, err := worktree.HasPrunableRegistration(repoPath, registeredPath)
-			if err != nil {
-				return "", fmt.Errorf("inspect registered worktree %s: %w", registeredPath, err)
-			}
-			if prunable {
-				continue
-			}
-		}
-		if worktree.IsUnderRoot(normalizedDestination, normalizedRegisteredPath) {
-			return registeredPath, nil
-		}
-	}
-	return "", nil
-}
-
 func refuseCustomWorktreeDestination(repoPath, destination, issueID, expectedBranch string) error {
-	nestedUnder, err := nestedRegisteredWorktree(repoPath, destination)
+	in, err := worktree.PrepareProvisionInput(repoPath, destination, issueID, expectedBranch, nil, false)
 	if err != nil {
 		return err
 	}
-	inRepo, underCanonical := destLocationFacts(repoPath, destination)
-	plan, err := worktree.PlanProvision(worktree.ProvisionInput{
-		IssueID:        issueID,
-		Dest:           destination,
-		ExpectedBranch: expectedBranch,
-		NestedUnder:    nestedUnder,
-		InRepo:         inRepo,
-		UnderCanonical: underCanonical,
-	})
+	plan, err := worktree.PlanProvision(in)
 	if err != nil {
 		return err
 	}
@@ -205,21 +164,23 @@ func evaluateProvisionPlan(repoPath, dest, issueID, expectedBranch string) (work
 	if err != nil {
 		return worktree.ProvisionPlan{}, fmt.Errorf("inspect existing worktrees: %w", err)
 	}
-	return worktree.PlanProvision(provisionInputFromInventory(repoPath, dest, issueID, expectedBranch, inventory))
+	in, err := provisionInputFromInventory(repoPath, dest, issueID, expectedBranch, inventory)
+	if err != nil {
+		return worktree.ProvisionPlan{}, err
+	}
+	return worktree.PlanProvision(in)
 }
 
-func provisionInputFromInventory(repoPath, dest, issueID, expectedBranch string, inventory []worktree.Meta) worktree.ProvisionInput {
-	rows := make([]worktree.InventoryRow, 0, len(inventory))
+func provisionInputFromInventory(repoPath, dest, issueID, expectedBranch string, inventory []worktree.Meta) (worktree.ProvisionInput, error) {
+	return worktree.PrepareProvisionInput(repoPath, dest, issueID, expectedBranch, inventory, adoptProvenanceOK(inventory, dest, issueID, expectedBranch))
+}
+
+func adoptProvenanceOK(inventory []worktree.Meta, dest, issueID, expectedBranch string) bool {
 	normalizedDest := worktree.NormalizePathAllowingMissing(dest)
 	var adoptCandidate string
 	bound := 0
 	for _, item := range inventory {
 		path := worktree.NormalizePath(item.Path)
-		rows = append(rows, worktree.InventoryRow{
-			Path:    path,
-			Branch:  item.Branch,
-			Binding: item.Binding,
-		})
 		if item.Binding == issueID {
 			bound++
 			if path != normalizedDest {
@@ -227,20 +188,10 @@ func provisionInputFromInventory(repoPath, dest, issueID, expectedBranch string,
 			}
 		}
 	}
-	provenanceOK := false
 	if bound == 1 && adoptCandidate != "" {
-		provenanceOK = hasTrustedBranchPointMetadata(adapters.New(adoptCandidate), adoptCandidate, expectedBranch)
+		return hasTrustedBranchPointMetadata(adapters.New(adoptCandidate), adoptCandidate, expectedBranch)
 	}
-	inRepo, underCanonical := destLocationFacts(repoPath, dest)
-	return worktree.ProvisionInput{
-		IssueID:        issueID,
-		Dest:           normalizedDest,
-		ExpectedBranch: expectedBranch,
-		Inventory:      rows,
-		InRepo:         inRepo,
-		UnderCanonical: underCanonical,
-		ProvenanceOK:   provenanceOK,
-	}
+	return false
 }
 
 func adoptSourcePath(inventory []worktree.Meta, adoptFrom string) string {
@@ -618,7 +569,11 @@ func createWorktreeAndBranchWithExclusion(
 			return fmt.Errorf("branch %s is already checked out at %s; bind that worktree to %s before claiming", branchName, item.Path, issueID)
 		}
 	}
-	plan, err := worktree.PlanProvision(provisionInputFromInventory(repoPath, worktreePath, issueID, branchName, inventory))
+	in, err := provisionInputFromInventory(repoPath, worktreePath, issueID, branchName, inventory)
+	if err != nil {
+		return err
+	}
+	plan, err := worktree.PlanProvision(in)
 	if err != nil {
 		return err
 	}

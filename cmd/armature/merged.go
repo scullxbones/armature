@@ -12,7 +12,6 @@ import (
 	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/deliverygate"
 	armerrors "github.com/scullxbones/armature/internal/errors"
-	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/promotion"
@@ -77,7 +76,11 @@ func locateMergedViolationGateRead(repoPath string, issue materialize.Issue) (me
 	if err != nil {
 		return mergedViolationGateRead{}, false, fmt.Errorf("resolve worktree git dir for %s: %w", worktreePath, err)
 	}
-	return mergedViolationGateRead{GitDir: gitDir, Binding: harnesshook.ReadIssueBindingFile(gitDir)}, true, nil
+	binding, bindErr := worktree.ReadBinding(gitDir)
+	if bindErr != nil {
+		binding = ""
+	}
+	return mergedViolationGateRead{GitDir: gitDir, Binding: binding}, true, nil
 }
 
 func unboundWorktreeForGateReadWidening(worktrees []worktree.Meta, issue materialize.Issue) gateReadWideningPath {
@@ -185,7 +188,7 @@ func removeWorktreeAtPathTracked(repoPath string, issue materialize.Issue, selec
 	if err != nil {
 		return worktreeSkipped, fmt.Errorf("resolve selected worktree %s: %w", selected.Path, err)
 	}
-	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
+	binding, err := worktree.ReadBinding(gitDir)
 	if err != nil {
 		return worktreeSkipped, fmt.Errorf("revalidate issue binding for %s: %w", selected.Path, err)
 	}

@@ -315,3 +315,23 @@ func TestListEnvRefusesRelativePATH_REQ_PARCLI(t *testing.T) { //nolint:parallel
 	require.Error(t, err)
 	require.ErrorIs(t, err, exec.ErrDot)
 }
+
+func TestPrepareProvisionInput_DestLocationAndNilInventory_REQ_ARCHIMP_S20_T5(t *testing.T) {
+	t.Parallel()
+	repo := gittest.Init(t)
+	canonical := CanonicalPath(repo, "task-1")
+	in, err := PrepareProvisionInput(repo, canonical, "task-1", "", nil, false)
+	require.NoError(t, err)
+	assert.True(t, in.InRepo)
+	assert.True(t, in.UnderCanonical)
+	assert.Empty(t, in.NestedUnder)
+	assert.Nil(t, in.Inventory)
+	assert.Equal(t, canonical, in.Dest)
+
+	custom := filepath.Join(repo, "custom-wt")
+	in, err = PrepareProvisionInput(repo, custom, "task-1", "", nil, false)
+	require.NoError(t, err)
+	assert.True(t, in.InRepo)
+	assert.False(t, in.UnderCanonical)
+	assert.Equal(t, custom, in.Dest)
+}

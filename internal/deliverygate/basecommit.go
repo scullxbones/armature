@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worktree"
 )
@@ -40,7 +39,7 @@ func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 	if err != nil {
 		return fmt.Errorf("resolve git dir for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
 	}
-	binding, err := harnesshook.ReadIssueBindingFileErr(gitDir)
+	binding, err := worktree.ReadBinding(gitDir)
 	if err != nil {
 		return fmt.Errorf("read issue binding for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
 	}
