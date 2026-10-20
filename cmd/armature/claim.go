@@ -101,7 +101,7 @@ func checkExistingWorktreeBinding(worktreePath, issueID, expectedBranch string) 
 
 	existingIssueID, err := worktree.ReadBinding(actualGitDir)
 	if err != nil {
-		return fmt.Errorf("read existing binding: %w", err)
+		return fmt.Errorf("read existing binding %s: %w", filepath.Join(actualGitDir, "armature-issue-id"), err)
 	}
 	if existingIssueID != "" && existingIssueID != issueID {
 		return fmt.Errorf("worktree at %s is already bound to %s: use a different --worktree path",

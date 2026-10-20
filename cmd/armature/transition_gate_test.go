@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/worktree"
 )
 
 func TestTransitionDoneBlockedByGate_REQ_LNGHZN_S4_T2(t *testing.T) {
@@ -829,4 +831,46 @@ func TestDeliveryGateRunsAfterPreTransitionHooks_REQ_LNGHZN_S4_T2(t *testing.T) 
 	_, err = runTrls(t, wt, "transition", "--issue", "gate-08", "--to", "done", "--outcome", "test", "--force")
 	assert.Error(t, err, "gate must catch the dirty tree left behind by the pre-transition hook")
 	assert.Contains(t, err.Error(), "delivery gate")
+}
+
+func snapshotOpsDir(t *testing.T, repo string) map[string]string {
+	t.Helper()
+	opsDir := filepath.Join(repo, ".armature", "ops")
+	entries, err := os.ReadDir(opsDir)
+	require.NoError(t, err)
+	out := make(map[string]string, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		body, readErr := os.ReadFile(filepath.Join(opsDir, e.Name()))
+		require.NoError(t, readErr)
+		out[e.Name()] = string(body)
+	}
+	return out
+}
+
+func TestTransitionDoneCorruptBindingIsCommandFailure_REQ_369(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "claim", "--issue", "task-01", "--worktree")
+	require.NoError(t, err)
+
+	wt := filepath.Join(repo, ".worktrees", "task-01")
+	gitDir, err := worktree.ResolveGitDir(wt)
+	require.NoError(t, err)
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.Remove(path))
+	require.NoError(t, os.Mkdir(path, 0o755))
+
+	before := snapshotOpsDir(t, repo)
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"transition", "--repo", repo, "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force", "--format", "agent")
+	assert.NotEqual(t, 0, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "TRANSITION-1", cf.Code)
+	assert.Contains(t, cf.Cause, path)
+	assert.Equal(t, before, snapshotOpsDir(t, repo), "failed transition must not write ops")
 }

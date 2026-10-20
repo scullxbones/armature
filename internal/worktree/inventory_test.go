@@ -238,6 +238,41 @@ func TestReadBinding_MissingGitDirIsUnbound_REQ_NOCOMMENTS(t *testing.T) {
 	assert.Empty(t, got)
 }
 
+func TestReadBinding_MissingFileIsUnbound_REQ_369(t *testing.T) {
+	t.Parallel()
+	gitDir := t.TempDir()
+	got, err := ReadBinding(gitDir)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestReadBinding_UnreadableFileIsError_REQ_369(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: chmod 000 does not prevent root from reading files")
+	}
+	t.Parallel()
+	gitDir := t.TempDir()
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.WriteFile(path, []byte("task-01\n"), 0o644))
+	require.NoError(t, os.Chmod(path, 0o000))
+	t.Cleanup(func() {
+		_ = os.Chmod(path, 0o644) //nolint:errcheck // best-effort cleanup so TempDir removal doesn't fail
+	})
+	_, err := ReadBinding(gitDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
+}
+
+func TestReadBinding_CorruptBindingFileIsError_REQ_369(t *testing.T) {
+	t.Parallel()
+	gitDir := t.TempDir()
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.Mkdir(path, 0o755))
+	_, err := ReadBinding(gitDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
+}
+
 func TestResolveGitDir_RejectsEscapingGitEntry_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 	parent := t.TempDir()

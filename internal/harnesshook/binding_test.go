@@ -640,6 +640,52 @@ func TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding(t *testi
 	assert.Equal(t, "event_cwd", binding.ResolutionStep, "should resolve via event_cwd step")
 }
 
+func TestResolveBindingFromDir_MissingBindingIsUnbound_REQ_369(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	require.NoError(t, os.Mkdir(gitDir, 0o755))
+
+	binding, err := ResolveBindingFromDir(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "", binding.IssueID)
+	assert.Equal(t, gitDir, binding.GitDir)
+	assert.Equal(t, tmpDir, binding.Root)
+}
+
+func TestResolveBindingFromDir_UnreadableBindingIsError_REQ_369(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("running as root: chmod 000 does not prevent root from reading files")
+	}
+	t.Parallel()
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	require.NoError(t, os.Mkdir(gitDir, 0o755))
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.WriteFile(path, []byte("task-01\n"), 0o644))
+	require.NoError(t, os.Chmod(path, 0o000))
+	t.Cleanup(func() {
+		_ = os.Chmod(path, 0o644) //nolint:errcheck // best-effort cleanup so TempDir removal doesn't fail
+	})
+
+	_, err := ResolveBindingFromDir(tmpDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
+}
+
+func TestResolveBindingFromDir_CorruptBindingIsError_REQ_369(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	gitDir := filepath.Join(tmpDir, ".git")
+	require.NoError(t, os.Mkdir(gitDir, 0o755))
+	path := filepath.Join(gitDir, "armature-issue-id")
+	require.NoError(t, os.Mkdir(path, 0o755))
+
+	_, err := ResolveBindingFromDir(tmpDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
+}
+
 func TestResolveBindingFromDir_UnreadableGitFile_ReportsBestEffortLocation(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("running as root: chmod 000 does not prevent root from reading files")

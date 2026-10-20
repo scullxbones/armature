@@ -41,7 +41,7 @@ func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 	}
 	binding, err := worktree.ReadBinding(gitDir)
 	if err != nil {
-		return fmt.Errorf("read issue binding for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
+		return fmt.Errorf("read issue binding %s: %w. Use --skip-delivery-gate to bypass", filepath.Join(gitDir, "armature-issue-id"), err)
 	}
 	if binding == "" {
 		return fmt.Errorf("%s is not bound to any issue (no armature-issue-id marker found):\n"+
