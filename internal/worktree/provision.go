@@ -39,7 +39,6 @@ type ProvisionPlan struct {
 	RefuseReason string
 }
 
-// PrepareProvisionInput gathers dest-location facts for PlanProvision.
 // A nil inventory is dest-only and also records nested registration.
 func PrepareProvisionInput(repoPath, dest, issueID, expectedBranch string, inventory []Meta, provenanceOK bool) (ProvisionInput, error) {
 	inRepo, underCanonical := destLocationFacts(repoPath, dest)

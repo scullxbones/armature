@@ -90,8 +90,7 @@ func prepare() error {
 }
 
 // Write materializes an executable at path by linking the process-wide
-// trampoline and writing content to path+".script" (mode 0600). Callers must
-// not os.WriteFile an executable in tests; use this helper instead.
+// trampoline and writing content to path+".script" (mode 0600).
 func Write(t testing.TB, path string, content []byte) {
 	t.Helper()
 	if err := prepare(); err != nil {
