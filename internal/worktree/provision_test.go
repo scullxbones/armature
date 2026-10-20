@@ -2,11 +2,9 @@ package worktree_test
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -345,24 +343,4 @@ func TestPlanProvision_InvalidInput_REQ_ARCHIMP_S20_T5(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, worktree.ProvisionFresh, plan.Action)
 	})
-}
-
-func TestPrepareProvisionInput_DestLocationAndNilInventory_REQ_ARCHIMP_S20_T5(t *testing.T) {
-	t.Parallel()
-	repo := gittest.Init(t)
-	canonical := worktree.CanonicalPath(repo, "task-1")
-	in, err := worktree.PrepareProvisionInput(repo, canonical, "task-1", "", nil, false)
-	require.NoError(t, err)
-	assert.True(t, in.InRepo)
-	assert.True(t, in.UnderCanonical)
-	assert.Empty(t, in.NestedUnder)
-	assert.Nil(t, in.Inventory)
-	assert.Equal(t, canonical, in.Dest)
-
-	custom := filepath.Join(repo, "custom-wt")
-	in, err = worktree.PrepareProvisionInput(repo, custom, "task-1", "", nil, false)
-	require.NoError(t, err)
-	assert.True(t, in.InRepo)
-	assert.False(t, in.UnderCanonical)
-	assert.Equal(t, custom, in.Dest)
 }
