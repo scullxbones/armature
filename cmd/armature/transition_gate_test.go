@@ -843,7 +843,7 @@ func snapshotOpsDir(t *testing.T, repo string) map[string]string {
 		if e.IsDir() {
 			continue
 		}
-		body, readErr := os.ReadFile(filepath.Join(opsDir, e.Name())) //nolint:gosec // test-controlled ops snapshot
+		body, readErr := os.ReadFile(filepath.Join(opsDir, e.Name()))
 		require.NoError(t, readErr)
 		out[e.Name()] = string(body)
 	}
