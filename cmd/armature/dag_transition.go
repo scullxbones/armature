@@ -75,14 +75,14 @@ planner cannot release a dirty plan. Demotion to draft is not gated.`,
 }
 
 func refusePlanRelease(cmd *cobra.Command) error {
-	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true, Now: nowEpoch()})
+	report, valErr := runGraphValidation(cmd, validate.Options{Strict: true, Now: nowEpoch()})
 	if valErr != nil {
 		return valErr
 	}
-	if result.OK {
+	if report.Result.OK {
 		return nil
 	}
-	if renderErr := output.RenderValidation(cmd.OutOrStdout(), validationView(result), false); renderErr != nil {
+	if renderErr := output.RenderValidation(cmd.OutOrStdout(), validationView(report), false); renderErr != nil {
 		return fmt.Errorf("render validation: %w", renderErr)
 	}
 	// The findings were just rendered to stdout, so the refusal has already
@@ -91,5 +91,5 @@ func refusePlanRelease(cmd *cobra.Command) error {
 	return skipCommandFailure(fmt.Errorf(
 		"cannot promote to verified: validation failed with %d error(s) and %d warning(s); "+
 			"withdraw the draft (arm dag revert / arm transition --to cancelled)",
-		len(result.Errors), len(result.Warnings)))
+		len(report.Result.Errors), len(report.Result.Warnings)))
 }

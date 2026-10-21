@@ -178,7 +178,6 @@ linters:
             - "github.com/scullxbones/armature/internal/issuetype"
             - "github.com/scullxbones/armature/internal/scopematch"
             - "github.com/scullxbones/armature/internal/taskcontract"
-            - "github.com/scullxbones/armature/internal/traceability"
         context-boundary:
           list-mode: strict
           files:

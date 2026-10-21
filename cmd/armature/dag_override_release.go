@@ -81,7 +81,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			}
 			defer bestEffortClose(tty)
 
-			if renderErr := output.RenderValidation(tty, validationView(result), false); renderErr != nil {
+			if renderErr := output.RenderValidation(tty, validationView(graphValidation{Result: result}), false); renderErr != nil {
 				return fmt.Errorf("render findings: %w", renderErr)
 			}
 			if err := confirmOverrideRelease(tty, issueID); err != nil {
@@ -150,12 +150,12 @@ func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (validate.Re
 	if issue.Provenance.Confidence == "verified" {
 		return validate.Result{}, fmt.Errorf("issue %s is already verified", issueID)
 	}
-	result, valErr := runGraphValidation(cmd, validate.Options{Strict: true, Now: nowEpoch()})
+	report, valErr := runGraphValidation(cmd, validate.Options{Strict: true, Now: nowEpoch()})
 	if valErr != nil {
 		return validate.Result{}, valErr
 	}
-	if result.OK {
-		return result, fmt.Errorf("issue %s has no blocking findings; override is unnecessary", issueID)
+	if report.Result.OK {
+		return report.Result, fmt.Errorf("issue %s has no blocking findings; override is unnecessary", issueID)
 	}
-	return result, nil
+	return report.Result, nil
 }

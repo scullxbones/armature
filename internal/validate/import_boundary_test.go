@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProductionValidateDoesNotImportMaterializeOpsOrSources(t *testing.T) {
+func TestProductionValidateDoesNotImportMaterializeOpsSourcesOrTraceability(t *testing.T) {
 	t.Parallel()
 
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -24,9 +24,10 @@ func TestProductionValidateDoesNotImportMaterializeOpsOrSources(t *testing.T) {
 	require.NoError(t, err)
 
 	banned := map[string]string{
-		`"github.com/scullxbones/armature/internal/materialize"`: "validate consumes IssueFacts, not materialized issues",
-		`"github.com/scullxbones/armature/internal/ops"`:         "status vocabulary is local to validate IssueFacts",
-		`"github.com/scullxbones/armature/internal/sources"`:     "manifest membership is parsed from borrowed bytes",
+		`"github.com/scullxbones/armature/internal/materialize"`:  "validate consumes IssueFacts, not materialized issues",
+		`"github.com/scullxbones/armature/internal/ops"`:          "status vocabulary is local to validate IssueFacts",
+		`"github.com/scullxbones/armature/internal/sources"`:      "manifest membership is parsed from borrowed bytes",
+		`"github.com/scullxbones/armature/internal/traceability"`: "coverage metrics stay at the composition root; E7 is local citationSatisfied",
 	}
 	fset := token.NewFileSet()
 	var violations []string

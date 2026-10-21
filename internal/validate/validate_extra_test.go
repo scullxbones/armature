@@ -227,6 +227,7 @@ func TestE7PredicateAgreesAcrossCallers_REQ_NOCOMMENTS(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			assert.Equal(t, tc.wantPred, citationSatisfied(tc.ref.SourceLinkCount, tc.ref.CitationAcceptanceCount))
 			assert.Equal(t, tc.wantPred, traceability.CitationSatisfied(tc.ref.SourceLinkCount, tc.ref.CitationAcceptanceCount))
 
 			result := validateState(makeState(tc.issue), Options{Sources: sourceSetFromJSON(t, manifestData)})

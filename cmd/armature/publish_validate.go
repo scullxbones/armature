@@ -23,21 +23,21 @@ func refusePublishedGraph(ctx *config.Context, gc *adapters.Client) error {
 	if err != nil {
 		return err
 	}
-	result, err := runGraphValidationOnCtx(valCtx, graphValidateCIOptions())
+	report, err := runGraphValidationOnCtx(valCtx, graphValidateCIOptions())
 	if err != nil {
 		return err
 	}
-	if result.OK {
+	if report.Result.OK {
 		return nil
 	}
 	var rendered strings.Builder
-	if renderErr := output.RenderValidation(&rendered, validationView(result), false); renderErr != nil {
+	if renderErr := output.RenderValidation(&rendered, validationView(report), false); renderErr != nil {
 		return fmt.Errorf("render validation: %w", renderErr)
 	}
 	return skipCommandFailure(fmt.Errorf(
 		"%spush refused: validation failed with %d error(s) and %d warning(s) "+
 			"(same contract as arm validate --ci / make validate-graph)",
-		rendered.String(), len(result.Errors), len(result.Warnings)))
+		rendered.String(), len(report.Result.Errors), len(report.Result.Warnings)))
 }
 
 func publishValidateAfterIntegrate(ctx *config.Context, gc *adapters.Client, skipValidate bool) afterIntegrateHook {

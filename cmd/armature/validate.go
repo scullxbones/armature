@@ -58,25 +58,25 @@ Use --quiet to suppress INFO lines on a failing run.`,
 			if ci {
 				opts = graphValidateCIOptions()
 			}
-			result, err := runGraphValidation(cmd, opts)
+			report, err := runGraphValidation(cmd, opts)
 			if err != nil {
 				return err
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if isStructuredFormat(format) {
-				if err := writeValidateEnvelope(cmd.OutOrStdout(), result); err != nil {
+				if err := writeValidateEnvelope(cmd.OutOrStdout(), report); err != nil {
 					return err
 				}
-			} else if strict && result.OK {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), validationSummary(result))
-			} else if err := output.RenderValidation(cmd.OutOrStdout(), validationView(result), quiet); err != nil {
+			} else if strict && report.Result.OK {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), validationSummary(report))
+			} else if err := output.RenderValidation(cmd.OutOrStdout(), validationView(report), quiet); err != nil {
 				return fmt.Errorf("render validation: %w", err)
 			}
 
-			if !result.OK {
+			if !report.Result.OK {
 				return skipCommandFailure(fmt.Errorf("validation failed with %d error(s) and %d warning(s)",
-					len(result.Errors), len(result.Warnings)))
+					len(report.Result.Errors), len(report.Result.Warnings)))
 			}
 			return nil
 		},
@@ -95,44 +95,51 @@ func graphValidateCIOptions() validate.Options {
 	return validate.CIOptions(nowEpoch())
 }
 
-func runGraphValidation(cmd *cobra.Command, opts validate.Options) (validate.Result, error) {
-	result, err := runGraphValidationOnCtx(currentCtx(cmd), opts)
+// graphValidation is the composition-root pairing of Graph Findings with
+// borrowed coverage metrics. validate.Result does not carry Coverage.
+type graphValidation struct {
+	Result   validate.Result
+	Coverage *traceability.Coverage
+}
+
+func runGraphValidation(cmd *cobra.Command, opts validate.Options) (graphValidation, error) {
+	report, err := runGraphValidationOnCtx(currentCtx(cmd), opts)
 	if err != nil {
-		return result, err
+		return report, err
 	}
 	if !structuredFormat(cmd) {
 		var msgs []string
-		for _, f := range result.Findings {
+		for _, f := range report.Result.Findings {
 			if f.Rule == snapshotFindingRule {
 				msgs = append(msgs, f.Message)
 			}
 		}
 		emitSnapWarnings(cmd.ErrOrStderr(), msgs)
 	}
-	return result, nil
+	return report, nil
 }
 
-func runGraphValidationOnCtx(appCtx *config.Context, opts validate.Options) (validate.Result, error) {
+func runGraphValidationOnCtx(appCtx *config.Context, opts validate.Options) (graphValidation, error) {
 	store := newSnapshotStore(appCtx)
 	snap, err := store.Load(context.Background())
 	if err != nil {
-		return validate.Result{}, fmt.Errorf("load snapshot: %w", err)
+		return graphValidation{}, fmt.Errorf("load snapshot: %w", err)
 	}
 
 	manifestData, err := adapters.ReadManifestFile(filepath.Join(appCtx.IssuesDir, "sources"))
 	if err != nil {
-		return validate.Result{}, fmt.Errorf("read manifest: %w", err)
+		return graphValidation{}, fmt.Errorf("read manifest: %w", err)
 	}
 
 	coverageData, err := adapters.ReadCoverageFile(store.StatePath("traceability.json"))
 	if err != nil {
-		return validate.Result{}, fmt.Errorf("read coverage: %w", err)
+		return graphValidation{}, fmt.Errorf("read coverage: %w", err)
 	}
 	var cov *traceability.Coverage
 	if coverageData != nil {
 		cov = &traceability.Coverage{}
 		if err := json.Unmarshal(coverageData, cov); err != nil {
-			return validate.Result{}, fmt.Errorf("parse coverage: %w", err)
+			return graphValidation{}, fmt.Errorf("parse coverage: %w", err)
 		}
 	}
 
@@ -143,14 +150,16 @@ func runGraphValidationOnCtx(appCtx *config.Context, opts validate.Options) (val
 	}
 
 	opts.Sources = sourceSetFromManifestBytes(manifestData)
-	opts.Coverage = cov
 	expanded, expandErr := adapters.ExpandGlobs(scopeGlobs)
 	if expandErr != nil && expanded == nil {
 		expanded = map[string][]string{}
 	}
 	opts.PreExpandedScopes = expanded
 	result := validate.Validate(validateFacts(state.Issues, opts.Now), opts)
-	return attachSnapshotWarnings(result, snap.Warnings, opts.Strict), nil
+	return graphValidation{
+		Result:   attachSnapshotWarnings(result, snap.Warnings, opts.Strict),
+		Coverage: cov,
+	}, nil
 }
 
 const snapshotFindingRule = "snapshot"
@@ -175,25 +184,25 @@ func attachSnapshotWarnings(result validate.Result, warnings []string, strict bo
 	return result
 }
 
-func validationView(result validate.Result) output.ValidationView {
+func validationView(report graphValidation) output.ValidationView {
 	view := output.ValidationView{
-		OK:       result.OK,
-		Errors:   result.Errors,
-		Warnings: result.Warnings,
-		Infos:    result.Infos,
+		OK:       report.Result.OK,
+		Errors:   report.Result.Errors,
+		Warnings: report.Result.Warnings,
+		Infos:    report.Result.Infos,
 	}
-	if result.Coverage != nil {
+	if report.Coverage != nil {
 		view.Coverage = &output.CoverageSummary{
-			TotalNodes:        result.Coverage.TotalNodes,
-			CitedNodes:        result.Coverage.CitedNodes,
-			AcceptedRiskNodes: result.Coverage.AcceptedRiskNodes,
+			TotalNodes:        report.Coverage.TotalNodes,
+			CitedNodes:        report.Coverage.CitedNodes,
+			AcceptedRiskNodes: report.Coverage.AcceptedRiskNodes,
 		}
 	}
 	return view
 }
 
-func validationSummary(result validate.Result) string {
-	if line := output.CoverageLine(validationView(result)); line != "" {
+func validationSummary(report graphValidation) string {
+	if line := output.CoverageLine(validationView(report)); line != "" {
 		return fmt.Sprintf("OK: no issues found (%s)", line)
 	}
 	return "OK: no issues found"
@@ -206,10 +215,10 @@ type validateFindingRow struct {
 	CitedIDs []string `json:"cited_ids,omitempty"`
 }
 
-func writeValidateEnvelope(w io.Writer, result validate.Result) error {
-	rows := make([]validateFindingRow, 0, len(result.Findings))
+func writeValidateEnvelope(w io.Writer, report graphValidation) error {
+	rows := make([]validateFindingRow, 0, len(report.Result.Findings))
 	hasSnapshot := false
-	for _, f := range result.Findings {
+	for _, f := range report.Result.Findings {
 		if f.Rule == snapshotFindingRule {
 			hasSnapshot = true
 		}
@@ -227,17 +236,17 @@ func writeValidateEnvelope(w io.Writer, result validate.Result) error {
 		help = []string{"no graph findings", help[0]}
 	}
 	return writeCommandEnvelope(w, "findings", rows, help, func(env *output.Envelope) error {
-		if err := env.AddAdjunct("errors", result.Errors); err != nil {
+		if err := env.AddAdjunct("errors", report.Result.Errors); err != nil {
 			return err
 		}
-		if err := env.AddAdjunct("warnings", result.Warnings); err != nil {
+		if err := env.AddAdjunct("warnings", report.Result.Warnings); err != nil {
 			return err
 		}
-		if err := env.AddAdjunct("infos", result.Infos); err != nil {
+		if err := env.AddAdjunct("infos", report.Result.Infos); err != nil {
 			return err
 		}
-		if result.Coverage != nil {
-			return env.AddAdjunct("coverage", result.Coverage)
+		if report.Coverage != nil {
+			return env.AddAdjunct("coverage", report.Coverage)
 		}
 		return nil
 	})
