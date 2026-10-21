@@ -2127,7 +2127,7 @@
       ]
     },
     "internal/validate": {
-      "count": 53,
+      "count": 51,
       "names": [
         "CIOptions",
         "CheckIntroduction",
@@ -2163,14 +2163,12 @@
         "IssueFacts.Type",
         "KnownSources",
         "Options",
-        "Options.Coverage",
         "Options.Now",
         "Options.PreExpandedScopes",
         "Options.Sources",
         "Options.Strict",
         "RenderCensusedSurfacesGo",
         "Result",
-        "Result.Coverage",
         "Result.Errors",
         "Result.Findings",
         "Result.Infos",

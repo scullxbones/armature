@@ -14,7 +14,6 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/scopematch"
-	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -850,21 +849,6 @@ func TestW10PhantomScope_CommaJoinedEntryIsOnePath(t *testing.T) {
 
 	assert.Len(t, phantomInfos, 1)
 	assert.Contains(t, phantomInfos[0], "planned.go (new), real.go, ghost.go")
-}
-
-func TestValidateUsesCoverage(t *testing.T) {
-	t.Parallel()
-
-	coverage := &traceability.Coverage{
-		CitedNodes:  1,
-		TotalNodes:  1,
-		CoveragePct: 100,
-	}
-
-	state := makeState(&materialize.Issue{ID: "A"})
-	result := validateState(state, Options{Coverage: coverage})
-	assert.NotNil(t, result.Coverage)
-	assert.Equal(t, 1, result.Coverage.CitedNodes)
 }
 
 func TestE5TypeHierarchy_SkipsTerminalStatus(t *testing.T) {

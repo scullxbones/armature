@@ -13,13 +13,11 @@ import (
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/scopematch"
 	"github.com/scullxbones/armature/internal/taskcontract"
-	"github.com/scullxbones/armature/internal/traceability"
 )
 
 type Options struct {
 	Strict            bool
 	Sources           SourceSet
-	Coverage          *traceability.Coverage
 	PreExpandedScopes map[string][]string
 	Now               int64
 }
@@ -34,7 +32,6 @@ type Result struct {
 	Warnings []string
 	Infos    []string
 	Findings []Finding
-	Coverage *traceability.Coverage
 }
 
 type Finding struct {
@@ -109,7 +106,7 @@ func Validate(issues map[string]IssueFacts, opts Options) Result {
 		ok = ok && len(warnings) == 0
 	}
 
-	return Result{OK: ok, Errors: errors, Warnings: warnings, Infos: infos, Findings: findings, Coverage: opts.Coverage}
+	return Result{OK: ok, Errors: errors, Warnings: warnings, Infos: infos, Findings: findings}
 }
 
 // CheckIntroduction refuses a proposed write that introduces a Graph Finding
@@ -339,6 +336,14 @@ func checkE6RequiredFields(issues map[string]IssueFacts) []Finding {
 	return findings
 }
 
+// citationSatisfied is the Graph Finding E7 predicate: a node has a citation
+// record if it has at least one source link or citation acceptance. Coverage
+// metrics in internal/traceability use the same rule (CitationSatisfied);
+// TestE7PredicateAgreesAcrossCallers holds the two callers in lockstep.
+func citationSatisfied(sourceLinkCount, citationAcceptanceCount int) bool {
+	return sourceLinkCount > 0 || citationAcceptanceCount > 0
+}
+
 func checkE7E8E12Citations(issues map[string]IssueFacts, sources SourceSet) []Finding {
 	var findings []Finding
 
@@ -351,7 +356,7 @@ func checkE7E8E12Citations(issues map[string]IssueFacts, sources SourceSet) []Fi
 	}
 
 	for id, issue := range issues {
-		if !traceability.CitationSatisfied(len(issue.SourceEntryIDs), issue.CitationAcceptances) {
+		if !citationSatisfied(len(issue.SourceEntryIDs), issue.CitationAcceptances) {
 			findings = append(findings, Finding{
 				Severity: "error", Rule: "E7",
 				Message:  fmt.Sprintf("uncited node: %s", id),
