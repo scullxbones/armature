@@ -336,10 +336,6 @@ func checkE6RequiredFields(issues map[string]IssueFacts) []Finding {
 	return findings
 }
 
-// citationSatisfied is the Graph Finding E7 predicate: a node has a citation
-// record if it has at least one source link or citation acceptance. Coverage
-// metrics in internal/traceability use the same rule (CitationSatisfied);
-// TestE7PredicateAgreesAcrossCallers holds the two callers in lockstep.
 func citationSatisfied(sourceLinkCount, citationAcceptanceCount int) bool {
 	return sourceLinkCount > 0 || citationAcceptanceCount > 0
 }

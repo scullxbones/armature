@@ -95,8 +95,6 @@ func graphValidateCIOptions() validate.Options {
 	return validate.CIOptions(nowEpoch())
 }
 
-// graphValidation is the composition-root pairing of Graph Findings with
-// borrowed coverage metrics. validate.Result does not carry Coverage.
 type graphValidation struct {
 	Result   validate.Result
 	Coverage *traceability.Coverage

@@ -256,7 +256,7 @@ func TestReadBinding_UnreadableFileIsError_REQ_369(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("task-01\n"), 0o644))
 	require.NoError(t, os.Chmod(path, 0o000))
 	t.Cleanup(func() {
-		_ = os.Chmod(path, 0o644) //nolint:errcheck // best-effort cleanup so TempDir removal doesn't fail
+		require.NoError(t, os.Chmod(path, 0o644))
 	})
 	_, err := ReadBinding(gitDir)
 	require.Error(t, err)
