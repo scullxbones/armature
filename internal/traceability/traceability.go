@@ -153,8 +153,8 @@ func Compute(refs []issueref.IssueRef) Coverage {
 	}
 }
 
-// CitationSatisfied is the E7 predicate: a node has a citation
-// record if it has at least one source link or citation acceptance.
+// CitationSatisfied reports whether a node has at least one source link
+// or citation acceptance.
 func CitationSatisfied(sourceLinkCount, citationAcceptanceCount int) bool {
 	return sourceLinkCount > 0 || citationAcceptanceCount > 0
 }
