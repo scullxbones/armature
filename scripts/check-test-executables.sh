@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Fail when a _test.go writes an executable outside testexec.Write (golang/go#22315).
 
 set -euo pipefail
 
