@@ -67,7 +67,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			issueID := args[0]
 			state := mustState(cmd)
 			ctx := state.ctx
-			result, err := checkOverrideReleaseTarget(cmd, issueID)
+			report, err := checkOverrideReleaseTarget(cmd, issueID)
 			if err != nil {
 				return err
 			}
@@ -81,7 +81,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 			}
 			defer bestEffortClose(tty)
 
-			if renderErr := output.RenderValidation(tty, validationView(graphValidation{Result: result}), false); renderErr != nil {
+			if renderErr := output.RenderValidation(tty, validationView(report), false); renderErr != nil {
 				return fmt.Errorf("render findings: %w", renderErr)
 			}
 			if err := confirmOverrideRelease(tty, issueID); err != nil {
@@ -139,23 +139,23 @@ func snapIssueForOverride(cmd *cobra.Command, issueID string) (*materialize.Issu
 	return issue, nil
 }
 
-func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (validate.Result, error) {
+func checkOverrideReleaseTarget(cmd *cobra.Command, issueID string) (graphValidation, error) {
 	issue, err := snapIssueForOverride(cmd, issueID)
 	if err != nil {
-		return validate.Result{}, err
+		return graphValidation{}, err
 	}
 	if hasRecordedDelivery(issue) {
-		return validate.Result{}, nil
+		return graphValidation{}, nil
 	}
 	if issue.Provenance.Confidence == "verified" {
-		return validate.Result{}, fmt.Errorf("issue %s is already verified", issueID)
+		return graphValidation{}, fmt.Errorf("issue %s is already verified", issueID)
 	}
 	report, valErr := runGraphValidation(cmd, validate.Options{Strict: true, Now: nowEpoch()})
 	if valErr != nil {
-		return validate.Result{}, valErr
+		return graphValidation{}, valErr
 	}
 	if report.Result.OK {
-		return report.Result, fmt.Errorf("issue %s has no blocking findings; override is unnecessary", issueID)
+		return report, fmt.Errorf("issue %s has no blocking findings; override is unnecessary", issueID)
 	}
-	return report.Result, nil
+	return report, nil
 }
