@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/adapters"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -24,14 +23,6 @@ const ClaimedBranchFileName = "armature-claimed-branch"
 // addressable by branch name if the worktree is later recreated.
 func ParentBranchConfigKey(branchName string) string {
 	return "branch." + branchName + ".armature-parent"
-}
-
-func ResolveWorktreeRoot(path string) (string, error) {
-	toplevel, err := adapters.New(path).Toplevel()
-	if err != nil {
-		return "", fmt.Errorf("resolve worktree top level for %s: %w", path, err)
-	}
-	return toplevel, nil
 }
 
 func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
@@ -56,13 +47,13 @@ func VerifyIssueWorktreeBinding(worktreePath, issueID string) error {
 	return nil
 }
 
-func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy string) error {
+func VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy, mappedBranch string) error {
 	expectedBranch, recorded, err := RecordedClaimedBranch(worktreePath)
 	if err != nil {
 		return fmt.Errorf("read recorded claimed branch for %s: %w. Use --skip-delivery-gate to bypass", worktreePath, err)
 	}
 	if !recorded {
-		expectedBranch = materialize.DeriveBranchName(issueType, issueID)
+		expectedBranch = mappedBranch
 		if expectedBranch == "" {
 			if claimedBy != "" {
 				return fmt.Errorf(

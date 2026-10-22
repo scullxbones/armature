@@ -203,7 +203,7 @@ outcome) appends as an amendment at exit 0.`,
 				if gateRepoPath == "" {
 					gateRepoPath = "."
 				}
-				if resolved, resolveErr := deliverygate.ResolveWorktreeRoot(gateRepoPath); resolveErr == nil {
+				if resolved, resolveErr := adapters.New(gateRepoPath).Toplevel(); resolveErr == nil {
 					gateRepoPath = resolved
 				}
 
@@ -442,7 +442,8 @@ func runDeliveryGateCheck(worktreePath string, issueID string, issueType string,
 		return err
 	}
 
-	if err := deliverygate.VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy); err != nil {
+	mappedBranch := materialize.DeriveBranchName(issueType, issueID)
+	if err := deliverygate.VerifyIssueBranchBinding(worktreePath, issueID, issueType, claimedBy, mappedBranch); err != nil {
 		return err
 	}
 
@@ -530,7 +531,7 @@ func liveIssueType(issue *materialize.Issue) string {
 
 func boundWorktreeForDelivery(repoPath, issueID string) (string, bool, error) {
 	invoking := repoPath
-	if resolved, err := deliverygate.ResolveWorktreeRoot(invoking); err == nil {
+	if resolved, err := adapters.New(invoking).Toplevel(); err == nil {
 		invoking = resolved
 	}
 	if binding, err := worktreeIssueBinding(invoking); err == nil && binding == issueID {

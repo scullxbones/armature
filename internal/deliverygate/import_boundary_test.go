@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProductionDeliveryGateDoesNotImportHarnesshook(t *testing.T) {
+func TestProductionDeliveryGateDoesNotImportHarnesshookClaimOrMaterialize(t *testing.T) {
 	t.Parallel()
 
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -26,6 +26,7 @@ func TestProductionDeliveryGateDoesNotImportHarnesshook(t *testing.T) {
 	banned := map[string]string{
 		`"github.com/scullxbones/armature/internal/harnesshook"`: "Issue Binding reads belong to worktree.ReadBinding",
 		`"github.com/scullxbones/armature/internal/claim"`:       "delivery gate evaluates a worktree, not lease ownership",
+		`"github.com/scullxbones/armature/internal/materialize"`: "Code Branch naming is mapped at the composition root",
 	}
 	fset := token.NewFileSet()
 	var violations []string

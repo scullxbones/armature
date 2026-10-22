@@ -61,15 +61,15 @@ func TestVerifyIssueBranchBinding_REQ_LNGHZN_S4_T3(t *testing.T) {
 	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
-	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", ""))
+	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "", ""))
 
 	runGit(t, tmpDir, "checkout", "-b", "scratch")
-	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "task", "")
+	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "task", "", "task/issue-1")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "scratch")
 
 	runGit(t, tmpDir, "checkout", "-b", "task/issue-1")
-	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "task", ""))
+	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "task", "", "task/issue-1"))
 }
 
 func TestVerifyIssueBranchBinding_FailsClosedWhenClaimedAndNoRecordOrMapping_REQ_LNGHZN_S4(t *testing.T) {
@@ -78,12 +78,12 @@ func TestVerifyIssueBranchBinding_FailsClosedWhenClaimedAndNoRecordOrMapping_REQ
 	tmpDir := gittest.InitRepo(t)
 	runGit(t, tmpDir, "commit", "--allow-empty", "-m", "init")
 
-	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "worker-a")
+	err := VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "worker-a", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "issue-1")
 	assert.Contains(t, err.Error(), "worker-a")
 
-	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", ""))
+	assert.NoError(t, VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "", ""))
 }
 
 func TestRecordedBaseCommit_REQ_LNGHZN_S4_T3(t *testing.T) {
@@ -117,7 +117,7 @@ func TestVerifyIssueBranchBinding_FailsClosedWhenAmendedTypeHasNoBranchMapping_R
 
 	runGit(t, tmpDir, "checkout", "-b", "scratch")
 
-	err = VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "worker-a")
+	err = VerifyIssueBranchBinding(tmpDir, "issue-1", "epic", "worker-a", "")
 	assert.Error(t, err, "must fail closed: recorded claimed branch task/issue-1 does not match current branch scratch")
 	assert.Contains(t, err.Error(), "task/issue-1")
 	assert.Contains(t, err.Error(), "scratch")
