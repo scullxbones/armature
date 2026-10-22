@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,6 +119,27 @@ func TestOverrideReleaseRequiresTty_REQ_LNGHZN_S10_T12(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controlling terminal")
 	assert.NotContains(t, err.Error(), "skip-validate-gate")
+}
+
+func TestOverrideReleaseConfirmationPrintsCoverage_REQ_LNGHZN_S10_T12(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithDirtyDraftNode(t)
+
+	root := testRootCmd(t)
+	require.NoError(t, root.PersistentFlags().Set("repo", repo))
+	attachExecutionState(root, getTestContext(t, repo))
+	report, err := checkOverrideReleaseTarget(root, "draft-task-01")
+	require.NoError(t, err)
+
+	tty, err := os.CreateTemp(t.TempDir(), "tty")
+	require.NoError(t, err)
+	t.Cleanup(func() { bestEffortClose(tty) })
+	require.NoError(t, output.RenderValidation(tty, validationView(report), false))
+	_, err = tty.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+	out, err := io.ReadAll(tty)
+	require.NoError(t, err)
+	assert.Regexp(t, `COVERAGE: \d+/\d+ cited`, string(out), "interactive confirmation output:\n%s", out)
 }
 
 func TestOverrideReleaseRequiresReasonBeforeTTY(t *testing.T) {
