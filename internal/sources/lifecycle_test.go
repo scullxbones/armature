@@ -56,10 +56,10 @@ func (m *MockProvider) Type() string {
 }
 
 type MockRegistry struct {
-	providers map[string]Provider
+	providers map[string]provider
 }
 
-func (r *MockRegistry) ProviderForType(providerType string) (Provider, error) {
+func (r *MockRegistry) ProviderForType(providerType string) (provider, error) {
 	p, ok := r.providers[providerType]
 	if !ok {
 		return nil, errors.New("unknown provider type")
@@ -69,14 +69,14 @@ func (r *MockRegistry) ProviderForType(providerType string) (Provider, error) {
 
 func TestDefaultProviderRegistry_ProviderForType(t *testing.T) {
 	t.Parallel()
-	r := &DefaultProviderRegistry{}
+	r := &defaultProviderRegistry{}
 
 	fs, err := r.ProviderForType("filesystem")
 	if err != nil {
 		t.Fatalf("filesystem: %v", err)
 	}
-	if _, ok := fs.(*FilesystemProvider); !ok {
-		t.Fatalf("filesystem: got %T, want *FilesystemProvider", fs)
+	if _, ok := fs.(*filesystemProvider); !ok {
+		t.Fatalf("filesystem: got %T, want *filesystemProvider", fs)
 	}
 
 	for _, typ := range []string{"confluence", "sharepoint"} {
@@ -133,11 +133,11 @@ func TestLifecycleSync_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -182,11 +182,11 @@ func TestLifecycleSync_UsesInjectedClock_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("clocked content")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 	fixed := time.Date(2026, 9, 28, 17, 0, 0, 0, time.UTC)
 	lc.now = fixed.Unix
 
@@ -218,11 +218,11 @@ func TestLifecycleSyncError_REQ_ARCHIMP_S18_T2(t *testing.T) {
 
 	testErr := errors.New("fetch failed")
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{err: testErr},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -256,11 +256,11 @@ func TestLifecycleSyncAll_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	for i := 1; i <= 3; i++ {
 		id := "test-" + string(rune(48+i))
@@ -298,11 +298,11 @@ func TestLifecycleVerify_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -335,11 +335,11 @@ func TestLifecycleVerifyStale_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -386,11 +386,11 @@ func TestLifecycleIsFresh_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -527,11 +527,11 @@ func TestLifecycleVerifyChanged_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("original content")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	entry := SourceEntry{
 		ID:           "changed-1",
@@ -567,12 +567,12 @@ func TestLifecycleSyncAll_PartialFailure_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock":    &MockProvider{data: []byte("good content")},
 			"failing": &MockProvider{err: errors.New("fetch exploded")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	for id, provider := range map[string]string{"good-1": "mock", "bad-1": "failing"} {
 		if _, err := lc.Register(SourceEntry{ID: id, URL: "https://example.com/" + id, Title: id, ProviderType: provider}); err != nil {
@@ -605,11 +605,11 @@ func TestLifecycleSyncAll_AllFail_REQ_ARCHIMP_S18_T2(t *testing.T) {
 	dir := t.TempDir()
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"failing": &MockProvider{err: errors.New("fetch exploded")},
 		},
 	}
-	lc := newLifecycleWithRegistry(dir, registry)
+	lc := newLifecycle(dir, registry, "", nil)
 
 	for _, id := range []string{"bad-1", "bad-2"} {
 		if _, err := lc.Register(SourceEntry{ID: id, URL: "https://example.com/" + id, Title: id, ProviderType: "failing"}); err != nil {
@@ -692,7 +692,7 @@ func TestLifecycleRegisterWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 	worktreeDir := t.TempDir()
 	fc := &MockFileCommitter{}
 
-	lc := NewLifecycleWithCommitter(dir, &DefaultProviderRegistry{}, worktreeDir, fc)
+	lc := NewLifecycleWithCommitter(dir, worktreeDir, fc)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -724,11 +724,11 @@ func TestLifecycleSyncAllWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 	fc := &MockFileCommitter{}
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := NewLifecycleWithCommitter(dir, registry, worktreeDir, fc)
+	lc := newLifecycle(dir, registry, worktreeDir, fc)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -787,11 +787,11 @@ func TestLifecycleSyncWithAutoCommit_REQ_LNGHZN_B1(t *testing.T) {
 	fc := &MockFileCommitter{}
 
 	registry := &MockRegistry{
-		providers: map[string]Provider{
+		providers: map[string]provider{
 			"mock": &MockProvider{data: []byte("test content")},
 		},
 	}
-	lc := NewLifecycleWithCommitter(dir, registry, worktreeDir, fc)
+	lc := newLifecycle(dir, registry, worktreeDir, fc)
 
 	entry := SourceEntry{
 		ID:           "test-1",
@@ -845,7 +845,7 @@ func TestLifecycleNoAutoCommitWhenWorktreePathEmpty_REQ_LNGHZN_B1(t *testing.T) 
 	dir := t.TempDir()
 	fc := &MockFileCommitter{}
 
-	lc := NewLifecycleWithCommitter(dir, &DefaultProviderRegistry{}, "", fc)
+	lc := NewLifecycleWithCommitter(dir, "", fc)
 
 	entry := SourceEntry{
 		ID:           "test-1",

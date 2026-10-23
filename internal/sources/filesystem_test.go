@@ -9,7 +9,7 @@ import (
 
 func TestFilesystemProviderType(t *testing.T) {
 	t.Parallel()
-	p := &FilesystemProvider{}
+	p := &filesystemProvider{}
 	if got := p.Type(); got != "filesystem" {
 		t.Errorf("Type() = %q; want %q", got, "filesystem")
 	}
@@ -25,7 +25,7 @@ func TestFilesystemFetchContent(t *testing.T) {
 		t.Fatalf("setup: write temp file: %v", err)
 	}
 
-	p := &FilesystemProvider{}
+	p := &filesystemProvider{}
 	entry := SourceEntry{
 		ID:           "test-id",
 		URL:          path,
@@ -53,7 +53,7 @@ func TestFilesystemFetchFingerprint(t *testing.T) {
 		t.Fatalf("setup: write temp file: %v", err)
 	}
 
-	p := &FilesystemProvider{}
+	p := &filesystemProvider{}
 	entry := SourceEntry{
 		ID:           "test-fp",
 		URL:          path,
@@ -81,7 +81,7 @@ func TestFilesystemFetchEmptyVersionID(t *testing.T) {
 		t.Fatalf("setup: write temp file: %v", err)
 	}
 
-	p := &FilesystemProvider{}
+	p := &filesystemProvider{}
 	entry := SourceEntry{
 		ID:           "test-version",
 		URL:          path,
@@ -101,7 +101,7 @@ func TestFilesystemFetchEmptyVersionID(t *testing.T) {
 
 func TestFilesystemFetchMissingFile(t *testing.T) {
 	t.Parallel()
-	p := &FilesystemProvider{}
+	p := &filesystemProvider{}
 	entry := SourceEntry{
 		ID:           "missing",
 		URL:          "/nonexistent/path/does_not_exist.txt",
@@ -116,5 +116,5 @@ func TestFilesystemFetchMissingFile(t *testing.T) {
 
 func TestFilesystemImplementsProvider(t *testing.T) {
 	t.Parallel()
-	var _ Provider = &FilesystemProvider{}
+	var _ provider = &filesystemProvider{}
 }
