@@ -1771,15 +1771,10 @@
       ]
     },
     "internal/sources": {
-      "count": 60,
+      "count": 50,
       "names": [
-        "DefaultProviderRegistry",
-        "DefaultProviderRegistry.ProviderForType",
         "FileCommitter",
         "FileCommitter.CommitWorktreeOp",
-        "FilesystemProvider",
-        "FilesystemProvider.Fetch",
-        "FilesystemProvider.Type",
         "Fingerprint",
         "Lifecycle",
         "Lifecycle.Content",
@@ -1798,11 +1793,6 @@
         "Manifest.Upsert",
         "NewLifecycle",
         "NewLifecycleWithCommitter",
-        "Provider",
-        "Provider.Fetch",
-        "Provider.Type",
-        "ProviderRegistry",
-        "ProviderRegistry.ProviderForType",
         "ReadCache",
         "ReadManifest",
         "SourceEntry",

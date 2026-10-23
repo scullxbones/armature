@@ -339,7 +339,7 @@ compare_lists "Relationship type (accepted input)" "$CODE_RELS" "$CENSUS_INPUT_R
 echo "Checking Provider Types..."
 
 CODE_PROVIDERS=$(awk '
-    /func \(r \*DefaultProviderRegistry\) ProviderForType\(/ { in_func = 1; next }
+    /func \(r \*defaultProviderRegistry\) ProviderForType\(/ { in_func = 1; next }
     in_func && /^}/ { exit }
     in_func && /case "/ {
         if (match($0, /case "[^"]+"/)) {

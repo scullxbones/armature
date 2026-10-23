@@ -22,7 +22,7 @@ func sourcesDir(ctx *config.Context) string {
 func sourcesLifecycle(appCtx *config.Context, dir string) *sources.Lifecycle {
 	if appCtx.WorktreePath != "" {
 		gc := adapters.New(appCtx.WorktreePath)
-		return sources.NewLifecycleWithCommitter(dir, &sources.DefaultProviderRegistry{}, appCtx.WorktreePath, gc)
+		return sources.NewLifecycleWithCommitter(dir, appCtx.WorktreePath, gc)
 	}
 	return sources.NewLifecycle(dir)
 }

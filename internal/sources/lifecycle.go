@@ -12,22 +12,22 @@ import (
 
 type Lifecycle struct {
 	manifestPath  string
-	provider      ProviderRegistry
+	provider      providerRegistry
 	fileCommitter FileCommitter
 	worktreePath  string
 	now           clock.Clock
 }
 
-type ProviderRegistry interface {
-	ProviderForType(providerType string) (Provider, error)
+type providerRegistry interface {
+	ProviderForType(providerType string) (provider, error)
 }
 
-type DefaultProviderRegistry struct{}
+type defaultProviderRegistry struct{}
 
-func (r *DefaultProviderRegistry) ProviderForType(providerType string) (Provider, error) {
+func (r *defaultProviderRegistry) ProviderForType(providerType string) (provider, error) {
 	switch providerType {
 	case "filesystem":
-		return &FilesystemProvider{}, nil
+		return &filesystemProvider{}, nil
 	case "confluence":
 		return nil, fmt.Errorf("provider %q not configured: base URL and credentials are required", providerType)
 	case "sharepoint":
@@ -40,21 +40,17 @@ func (r *DefaultProviderRegistry) ProviderForType(providerType string) (Provider
 // NewLifecycle creates a new source lifecycle manager.
 // manifestPath is the directory where manifest.json and cache files are stored.
 func NewLifecycle(manifestPath string) *Lifecycle {
-	return newLifecycleWithRegistry(manifestPath, &DefaultProviderRegistry{})
-}
-
-func newLifecycleWithRegistry(manifestPath string, registry ProviderRegistry) *Lifecycle {
-	return &Lifecycle{
-		manifestPath: manifestPath,
-		provider:     registry,
-		now:          clock.System,
-	}
+	return newLifecycle(manifestPath, &defaultProviderRegistry{}, "", nil)
 }
 
 // NewLifecycleWithCommitter creates a new source lifecycle manager that auto-commits
 // manifest and cache changes to the worktree's _armature branch.
 // Pass worktreePath="" to disable auto-commit.
-func NewLifecycleWithCommitter(manifestPath string, registry ProviderRegistry, worktreePath string, fc FileCommitter) *Lifecycle {
+func NewLifecycleWithCommitter(manifestPath, worktreePath string, fc FileCommitter) *Lifecycle {
+	return newLifecycle(manifestPath, &defaultProviderRegistry{}, worktreePath, fc)
+}
+
+func newLifecycle(manifestPath string, registry providerRegistry, worktreePath string, fc FileCommitter) *Lifecycle {
 	return &Lifecycle{
 		manifestPath:  manifestPath,
 		provider:      registry,

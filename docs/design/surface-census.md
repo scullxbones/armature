@@ -398,7 +398,7 @@ compatibility with historical op-log entries written before this validation exis
 
 ## Provider Types (for sources)
 
-Enumerated in `DefaultProviderRegistry.ProviderForType` (`internal/sources/lifecycle.go`) and advertised by `arm sources add --type`:
+Enumerated in `defaultProviderRegistry.ProviderForType` (`internal/sources/lifecycle.go`) and advertised by `arm sources add --type`:
 
 | Type | Usage | Status | Notes |
 |------|-------|--------|-------|

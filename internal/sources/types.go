@@ -63,7 +63,7 @@ func (m *Manifest) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, m)
 }
 
-type Provider interface {
+type provider interface {
 	Fetch(ctx context.Context, entry SourceEntry) ([]byte, error)
 	Type() string
 }
