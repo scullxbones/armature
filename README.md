@@ -193,6 +193,55 @@ arm transition DEMO-S1-T1 --to done --outcome "Wrote hello.txt greeting for the 
 After the change lands on `main`, Armature promotes the task from `done` to
 `merged` (self-reported completion and confirmed-on-main stay distinct).
 
+### If something goes wrong
+
+Common first-hour failures (install, draft≠ready, claim worktrees). Deeper
+worktree isolation failure classes live in
+[`docs/dogfood/findings/themes/git-worktree-friction/README.md`](docs/dogfood/findings/themes/git-worktree-friction/README.md).
+Adopter positioning (paved road vs escape-hatch `create`, draft≠ready) is in
+**[Why Armature](docs/why-armature.md)**.
+
+**Bootstrap / install**
+
+- `arm bootstrap` fails with GPG / pinentry on a non-TTY agent session: disable
+  local signing for the orphan commit (`git config --local commit.gpgsign false`)
+  and retry, or use a signing agent that does not need a TTY.
+- An older `arm` earlier on `PATH` wins silently. Prefer a release asset (or a
+  pinned `go install …@vX.Y.Z`), put that directory first on `PATH`, and confirm
+  with `arm version`.
+
+**Empty `arm ready` after `create`**
+
+Birth confidence is always `draft`. `arm ready` (and `ready --explain`) skip
+drafts, so an empty queue with “nothing excluded” usually means “still draft,”
+not a broken install. Cite sources, then `arm dag transition` the subgraph to
+verified before expecting ready leaves. Prefer the paved-road plan/`dag apply`
+path above over bare `arm create`.
+
+**Claim / worktree friction**
+
+- **gopls / LSP false positives:** sibling worktrees (especially under `/tmp`
+  or `.worktrees/`) make gopls surface “undefined” / workspace-boundary noise
+  for code that `go build ./...` just compiled. Trust the build and gate; ignore
+  diagnostics whose paths are not the claim worktree you are editing.
+- **Checked-out branch / Managed Worktree failure:** git refuses a second
+  worktree for a branch already checked out elsewhere (often `main` in the
+  primary tree). Use `arm claim … --worktree` so Armature provisions
+  `.worktrees/<id>` on `task/<id>`; do not hand-add a worktree for a branch
+  that is already checked out.
+- **Wrong checkout / leak into main:** workers sometimes edit the primary tree
+  or leave the task branch empty while main looks dirty. Before trusting done,
+  confirm `git rev-parse --show-toplevel` is `.worktrees/<issue-id>` and that
+  commits landed on the claim branch.
+
+**Doctor-visible cases**
+
+Run `arm doctor --explain` for per-check remediation text. Stray checkouts
+under `.worktrees/` with no issue binding are **D9 Unrecognized Managed
+Worktree** (warning on plain `arm doctor`; error under `--strict`). Bind the
+path to its issue or remove it — see [Commands Reference](docs/commands.md)
+(doctor / D9).
+
 ## Why Armature?
 
 Comparing GitHub Issues plus prompts, markdown task lists, or other
