@@ -3,6 +3,7 @@ package contextreport
 import (
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -94,9 +95,12 @@ func TestContextReportPricesRenderContextFixture_REQ_NXTTN_S3_T1(t *testing.T) {
 
 	state, _, err := replayFixtureState()
 	require.NoError(t, err)
-	assembled, err := ctxpkg.Assemble(FixtureShowIssue, contextFacts(state), embedFileReader{})
+	files, err := fixtureWorkspaceFS()
 	require.NoError(t, err)
-	raw, err := ctxpkg.RenderAgent(assembled)
+	raw, err := ctxpkg.RenderAgent(FixtureShowIssue, contextFacts(state), ctxpkg.Options{
+		Files:        files,
+		SkipTruncate: true,
+	})
 	require.NoError(t, err)
 	assert.Equal(t, len(raw), bundle.Bytes, "bundle row is the fixture render-context artifact")
 	assert.Contains(t, raw, FixtureShowIssue)
@@ -167,9 +171,10 @@ func TestParseFixtureOpsCorrupt(t *testing.T) {
 
 func TestEmbedFileReaderRejectsEscapingPath(t *testing.T) {
 	t.Parallel()
-	_, err := embedFileReader{}.ReadFile("../ops.jsonl")
+	files, err := fixtureWorkspaceFS()
+	require.NoError(t, err)
+	_, err = fs.ReadFile(files, "../ops.jsonl")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid fixture path")
 }
 
 func TestEstimateTokensIntegerDivision(t *testing.T) {

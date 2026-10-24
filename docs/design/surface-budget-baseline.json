@@ -383,19 +383,12 @@
       ]
     },
     "internal/context": {
-      "count": 42,
+      "count": 33,
       "names": [
-        "Assemble",
-        "Context",
-        "Context.IssueID",
-        "Context.Layers",
         "DecisionFact",
         "DecisionFact.Choice",
         "DecisionFact.Rationale",
         "DecisionFact.Topic",
-        "FileReader",
-        "FileReader.ReadFile",
-        "InferRepoRoot",
         "IssueFacts",
         "IssueFacts.BlockedBy",
         "IssueFacts.Blocks",
@@ -413,20 +406,18 @@
         "IssueFacts.Status",
         "IssueFacts.Title",
         "IssueFacts.Type",
-        "Layer",
-        "Layer.Content",
-        "Layer.DropRank",
-        "Layer.Name",
         "NoteFact",
         "NoteFact.Deleted",
         "NoteFact.Msg",
         "NoteFact.Timestamp",
-        "OSFileReader",
-        "OSFileReader.ReadFile",
-        "OSFileReader.Root",
+        "Options",
+        "Options.Files",
+        "Options.Root",
+        "Options.SkipTruncate",
+        "Options.StateDir",
+        "Options.TokenBudget",
         "RenderAgent",
-        "RenderHuman",
-        "Truncate"
+        "RenderHuman"
       ]
     },
     "internal/contextreport": {

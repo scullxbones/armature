@@ -2,11 +2,11 @@ package context
 
 const bytesPerToken = 4
 
-func Truncate(ctx *Context, tokenBudget int) *Context {
+func truncate(mem *workingMemory, tokenBudget int) *workingMemory {
 	charBudget := tokenBudget * bytesPerToken
 
-	layers := make([]Layer, len(ctx.Layers))
-	copy(layers, ctx.Layers)
+	layers := make([]layer, len(mem.Layers))
+	copy(layers, mem.Layers)
 
 	totalChars := func() int {
 		n := 0
@@ -21,16 +21,16 @@ func Truncate(ctx *Context, tokenBudget int) *Context {
 		layers = append(layers[:drop], layers[drop+1:]...)
 	}
 
-	return &Context{
-		IssueID: ctx.IssueID,
+	return &workingMemory{
+		IssueID: mem.IssueID,
 		Layers:  layers,
 	}
 }
 
-func highestDropRankIndex(layers []Layer) int {
+func highestDropRankIndex(layers []layer) int {
 	maxIdx := 0
-	for i, layer := range layers[1:] {
-		if layer.DropRank > layers[maxIdx].DropRank {
+	for i, item := range layers[1:] {
+		if item.DropRank > layers[maxIdx].DropRank {
 			maxIdx = i + 1
 		}
 	}

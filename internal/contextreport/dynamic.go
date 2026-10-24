@@ -3,6 +3,7 @@ package contextreport
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"sort"
 	"time"
 
@@ -18,7 +19,7 @@ var DynamicInvocationPaths = []string{"list", "ready", "show", "render-context"}
 
 var AOCEnvelopePaths = []string{"list", "ready", "show"}
 
-func priceDynamicInvocations(state *materialize.State, index materialize.Index, reader ctxpkg.FileReader) ([]Artifact, []byte, error) {
+func priceDynamicInvocations(state *materialize.State, index materialize.Index, files fs.FS) ([]Artifact, []byte, error) {
 	listPayload, err := measureList(index)
 	if err != nil {
 		return nil, nil, err
@@ -31,7 +32,7 @@ func priceDynamicInvocations(state *materialize.State, index materialize.Index, 
 	if err != nil {
 		return nil, nil, err
 	}
-	renderPayload, bundlePayload, err := measureRenderContext(state, reader)
+	renderPayload, bundlePayload, err := measureRenderContext(state, files)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -214,18 +215,13 @@ func measureShow(state *materialize.State) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func measureRenderContext(state *materialize.State, reader ctxpkg.FileReader) (invocation, bundle []byte, err error) {
-	assembled, err := ctxpkg.Assemble(FixtureShowIssue, contextFacts(state), reader)
-	if err != nil {
-		return nil, nil, fmt.Errorf("assemble render-context: %w", err)
-	}
-
-	raw, err := ctxpkg.RenderAgent(assembled)
+func measureRenderContext(state *materialize.State, files fs.FS) (invocation, bundle []byte, err error) {
+	facts := contextFacts(state)
+	raw, err := ctxpkg.RenderAgent(FixtureShowIssue, facts, ctxpkg.Options{Files: files, SkipTruncate: true})
 	if err != nil {
 		return nil, nil, fmt.Errorf("render render-context bundle: %w", err)
 	}
-	truncated := ctxpkg.Truncate(assembled, DefaultTokenBudget)
-	agent, err := ctxpkg.RenderAgent(truncated)
+	agent, err := ctxpkg.RenderAgent(FixtureShowIssue, facts, ctxpkg.Options{Files: files, TokenBudget: DefaultTokenBudget})
 	if err != nil {
 		return nil, nil, fmt.Errorf("render render-context invocation: %w", err)
 	}

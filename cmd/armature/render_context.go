@@ -67,27 +67,25 @@ func newRenderContextCmd() *cobra.Command {
 				return err
 			}
 
-			repoRoot := ctxpkg.InferRepoRoot(appCtx.StateDir)
-			reader := &ctxpkg.OSFileReader{Root: repoRoot}
-
-			ctx, err := ctxpkg.Assemble(rcIssue, contextFacts(state), reader)
-			if err != nil {
-				return fmt.Errorf("assemble context: %w", err)
-			}
-
-			if !rcRaw {
-				ctx = ctxpkg.Truncate(ctx, rcBudget)
+			opts := ctxpkg.Options{
+				StateDir:     appCtx.StateDir,
+				TokenBudget:  rcBudget,
+				SkipTruncate: rcRaw,
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if isStructuredFormat(format) {
-				out, err := ctxpkg.RenderAgent(ctx)
+				out, err := ctxpkg.RenderAgent(rcIssue, contextFacts(state), opts)
 				if err != nil {
-					return err
+					return fmt.Errorf("assemble context: %w", err)
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), out)
 			} else {
-				_, _ = fmt.Fprint(cmd.OutOrStdout(), ctxpkg.RenderHuman(ctx))
+				out, err := ctxpkg.RenderHuman(rcIssue, contextFacts(state), opts)
+				if err != nil {
+					return fmt.Errorf("assemble context: %w", err)
+				}
+				_, _ = fmt.Fprint(cmd.OutOrStdout(), out)
 			}
 
 			return nil
