@@ -5786,3 +5786,4 @@
 ["heartbeat","CLAIMORD-W20",1792856624,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
 ["transition","CLAIMORD-W20",1792857257,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"DoD reverify on main@60f6b539: README Windows section (flock/POSIX/worker-id), concepts Worker Identity platform note, architecture Windows row fenced stale. REQ tests + e2eharness green. Code already on main via #281 @ 6d8674e33; no new delivery.","branch":"task/CLAIMORD-W20","pr":"281","skipped_delivery_gate":true},1]
 ["transition","CLAIMORD-W20",1792857282,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"281"},1]
+["transition","TOPTIER-S8-T1",1792857580,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"316"},1]
