@@ -22,7 +22,7 @@ func TestOSFileReader_JoinsRoot_REQ_ARCHIMP_S16_T1(t *testing.T) {
 	testFile := filepath.Join(subdir, "test.txt")
 	require.NoError(t, os.WriteFile(testFile, testContent, 0644))
 
-	reader := &OSFileReader{Root: subdir}
+	reader := &osFileReader{Root: subdir}
 
 	content, err := reader.ReadFile("test.txt")
 	require.NoError(t, err)
@@ -67,11 +67,11 @@ func TestAssemble_ContextFilesLayerUsesReader_REQ_ARCHIMP_S16_T2(t *testing.T) {
 		},
 	}
 
-	ctx, err := Assemble("TEST-1", factsFromState(state), reader)
+	ctx, err := assemble("TEST-1", factsFromState(state), reader)
 	require.NoError(t, err, "Assemble failed")
 	require.NotNil(t, ctx, "Assemble returned nil context")
 
-	var contextFilesLayer *Layer
+	var contextFilesLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "context_files" {
 			contextFilesLayer = &ctx.Layers[i]
@@ -101,7 +101,7 @@ func TestAssemble_MissingGraphParentIsError_REQ_NOCOMMENTS(t *testing.T) {
 		BlockedBy: []string{},
 		Blocks:    []string{},
 	}
-	_, err := Assemble("CHILD", factsFromState(state), &fakeReader{})
+	_, err := assemble("CHILD", factsFromState(state), &fakeReader{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GHOST")
 	assert.Contains(t, err.Error(), "missing")
@@ -129,7 +129,7 @@ func TestAssemble_MissingGraphSiblingIsError_REQ_NOCOMMENTS(t *testing.T) {
 		BlockedBy: []string{},
 		Blocks:    []string{},
 	}
-	_, err := Assemble("CHILD", factsFromState(state), &fakeReader{})
+	_, err := assemble("CHILD", factsFromState(state), &fakeReader{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GHOST-SIB")
 }

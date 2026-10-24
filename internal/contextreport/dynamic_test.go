@@ -56,7 +56,9 @@ func TestContextReportPricesDynamicPayloads_REQ_AOC_S3_T2(t *testing.T) {
 	assertAOCEnvelope(t, show, "issues")
 	assert.NotContains(t, string(show), "Spend-to-date:")
 
-	render, bundle, err := measureRenderContext(state, embedFileReader{})
+	files, err := fixtureWorkspaceFS()
+	require.NoError(t, err)
+	render, bundle, err := measureRenderContext(state, files)
 	require.NoError(t, err)
 	assert.Equal(t, len(render), got["render-context"].Bytes)
 	raw := bytes.TrimSpace(render)
@@ -93,7 +95,9 @@ func TestDynamicPricingIsFixtureDeterministic_REQ_AOC_S3_T2(t *testing.T) {
 	show, err := measureShow(state)
 	require.NoError(t, err)
 	payloads["show"] = show
-	render, _, err := measureRenderContext(state, embedFileReader{})
+	files, err := fixtureWorkspaceFS()
+	require.NoError(t, err)
+	render, _, err := measureRenderContext(state, files)
 	require.NoError(t, err)
 	payloads["render-context"] = render
 

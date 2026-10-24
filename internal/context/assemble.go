@@ -1,5 +1,5 @@
-// Package context assembles and renders the layered context bundle (spec, scope, citations)
-// passed to workers via render-context, with truncation to keep bundles within budget.
+// Package context is the Deep Module for Working Memory: it assembles, truncates,
+// and renders the layered context bundle passed to workers via render-context.
 package context
 
 import (
@@ -23,18 +23,18 @@ const (
 	recentNotesDisplayCap = 5
 )
 
-type Layer struct {
+type layer struct {
 	Name     string `json:"name"`
 	DropRank int    `json:"priority"`
 	Content  string `json:"content"`
 }
 
-type Context struct {
+type workingMemory struct {
 	IssueID string  `json:"issue_id"`
-	Layers  []Layer `json:"layers"`
+	Layers  []layer `json:"layers"`
 }
 
-func Assemble(issueID string, issues map[string]IssueFacts, reader FileReader) (*Context, error) {
+func assemble(issueID string, issues map[string]IssueFacts, reader fileReader) (*workingMemory, error) {
 	issue, ok := issues[issueID]
 	if !ok {
 		return nil, fmt.Errorf("issue %s not found in state", issueID)
@@ -42,7 +42,7 @@ func Assemble(issueID string, issues map[string]IssueFacts, reader FileReader) (
 
 	graph := graphFromFacts(issues)
 
-	var layers []Layer
+	var layers []layer
 
 	layers = append(layers, buildCoreSpec(issue))
 	layers = append(layers, buildContextFiles(issue, reader))
@@ -65,13 +65,13 @@ func Assemble(issueID string, issues map[string]IssueFacts, reader FileReader) (
 		return layers[i].DropRank < layers[j].DropRank
 	})
 
-	return &Context{
+	return &workingMemory{
 		IssueID: issueID,
 		Layers:  layers,
 	}, nil
 }
 
-func InferRepoRoot(stateDir string) string {
+func inferRepoRoot(stateDir string) string {
 	if root := inferRepoRootByPath(stateDir); root != "" {
 		return root
 	}
@@ -113,9 +113,9 @@ func inferRepoRootByGit(stateDir string) string {
 	return strings.TrimSpace(out.String())
 }
 
-func buildContextFiles(issue IssueFacts, reader FileReader) Layer {
+func buildContextFiles(issue IssueFacts, reader fileReader) layer {
 	if len(issue.ContextFiles) == 0 {
-		return Layer{Name: "context_files", DropRank: 2, Content: ""}
+		return layer{Name: "context_files", DropRank: 2, Content: ""}
 	}
 	var sections []string
 	for _, relPath := range issue.ContextFiles {
@@ -128,7 +128,7 @@ func buildContextFiles(issue IssueFacts, reader FileReader) Layer {
 		fence := codeBlockFence(content)
 		sections = append(sections, fmt.Sprintf("### %s\n%stext\n%s\n%s", relPath, fence, content, fence))
 	}
-	return Layer{
+	return layer{
 		Name:     "context_files",
 		DropRank: 2,
 		Content:  "## Context Files\n" + strings.Join(sections, "\n\n"),
@@ -155,7 +155,7 @@ func codeBlockFence(content string) string {
 	return strings.Repeat("`", fenceLen)
 }
 
-func buildCoreSpec(issue IssueFacts) Layer {
+func buildCoreSpec(issue IssueFacts) layer {
 	scope := strings.Join(issue.Scope, ", ")
 	if scope == "" {
 		scope = "(none)"
@@ -170,31 +170,31 @@ func buildCoreSpec(issue IssueFacts) Layer {
 	}
 	content := fmt.Sprintf("# Issue: %s\nType: %s | Scope: %s | Priority: %s\n\n## Definition of Done\n%s",
 		issue.Title, issue.Type, scope, priority, dod)
-	return Layer{Name: "core_spec", DropRank: 1, Content: content}
+	return layer{Name: "core_spec", DropRank: 1, Content: content}
 }
 
-func buildSnippets(issue IssueFacts) Layer {
+func buildSnippets(issue IssueFacts) layer {
 	if issue.Context == nil {
-		return Layer{Name: "snippets", DropRank: 3, Content: ""}
+		return layer{Name: "snippets", DropRank: 3, Content: ""}
 	}
 	var ctxMap map[string]any
 	if err := json.Unmarshal(issue.Context, &ctxMap); err != nil {
-		return Layer{Name: "snippets", DropRank: 3, Content: ""}
+		return layer{Name: "snippets", DropRank: 3, Content: ""}
 	}
 	if len(ctxMap) == 0 {
-		return Layer{Name: "snippets", DropRank: 3, Content: ""}
+		return layer{Name: "snippets", DropRank: 3, Content: ""}
 	}
 	var lines []string
 	for k, v := range ctxMap {
 		lines = append(lines, fmt.Sprintf("%s: %v", k, v))
 	}
 	sort.Strings(lines)
-	return Layer{Name: "snippets", DropRank: 3, Content: strings.Join(lines, "\n")}
+	return layer{Name: "snippets", DropRank: 3, Content: strings.Join(lines, "\n")}
 }
 
-func buildBlockerOutcomes(issue IssueFacts, issues map[string]IssueFacts) Layer {
+func buildBlockerOutcomes(issue IssueFacts, issues map[string]IssueFacts) layer {
 	if len(issue.BlockedBy) == 0 {
-		return Layer{Name: "blocker_outcomes", DropRank: 3, Content: ""}
+		return layer{Name: "blocker_outcomes", DropRank: 3, Content: ""}
 	}
 	var lines []string
 	for _, blockerID := range issue.BlockedBy {
@@ -210,11 +210,11 @@ func buildBlockerOutcomes(issue IssueFacts, issues map[string]IssueFacts) Layer 
 		lines = append(lines, fmt.Sprintf("- %s: %s", blockerID, outcome))
 	}
 	content := "## Blocking Issue Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "blocker_outcomes", DropRank: 4, Content: content}
+	return layer{Name: "blocker_outcomes", DropRank: 4, Content: content}
 }
 
-func buildParentChain(issue IssueFacts, graph *dag.Graph, issues map[string]IssueFacts) (Layer, error) {
-	empty := Layer{Name: "parent_chain", DropRank: 5, Content: ""}
+func buildParentChain(issue IssueFacts, graph *dag.Graph, issues map[string]IssueFacts) (layer, error) {
+	empty := layer{Name: "parent_chain", DropRank: 5, Content: ""}
 	if graph == nil {
 		return empty, fmt.Errorf("parent chain: issue graph is missing")
 	}
@@ -236,24 +236,24 @@ func buildParentChain(issue IssueFacts, graph *dag.Graph, issues map[string]Issu
 		return empty, nil
 	}
 	content := "## Parent Chain\n" + strings.Join(lines, "\n")
-	return Layer{Name: "parent_chain", DropRank: 5, Content: content}, nil
+	return layer{Name: "parent_chain", DropRank: 5, Content: content}, nil
 }
 
-func buildDecisions(issue IssueFacts) Layer {
+func buildDecisions(issue IssueFacts) layer {
 	if len(issue.Decisions) == 0 {
-		return Layer{Name: "decisions", DropRank: 6, Content: ""}
+		return layer{Name: "decisions", DropRank: 6, Content: ""}
 	}
 	var lines []string
 	for _, d := range issue.Decisions {
 		lines = append(lines, fmt.Sprintf("- %s: %s — %s", d.Topic, d.Choice, d.Rationale))
 	}
 	content := "## Decisions\n" + strings.Join(lines, "\n")
-	return Layer{Name: "decisions", DropRank: 6, Content: content}
+	return layer{Name: "decisions", DropRank: 6, Content: content}
 }
 
-func buildNotes(issue IssueFacts) Layer {
+func buildNotes(issue IssueFacts) layer {
 	if len(issue.Notes) == 0 {
-		return Layer{Name: "notes", DropRank: 7, Content: ""}
+		return layer{Name: "notes", DropRank: 7, Content: ""}
 	}
 	notes := make([]NoteFact, 0, len(issue.Notes))
 	for _, note := range issue.Notes {
@@ -263,7 +263,7 @@ func buildNotes(issue IssueFacts) Layer {
 		notes = append(notes, note)
 	}
 	if len(notes) == 0 {
-		return Layer{Name: "notes", DropRank: 7, Content: ""}
+		return layer{Name: "notes", DropRank: 7, Content: ""}
 	}
 	if len(notes) > recentNotesDisplayCap {
 		notes = notes[len(notes)-recentNotesDisplayCap:]
@@ -274,11 +274,11 @@ func buildNotes(issue IssueFacts) Layer {
 		lines = append(lines, fmt.Sprintf("- [%s] %s", ts, n.Msg))
 	}
 	content := "## Notes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "notes", DropRank: 7, Content: content}
+	return layer{Name: "notes", DropRank: 7, Content: content}
 }
 
-func buildSiblingOutcomes(issue IssueFacts, graph *dag.Graph, issues map[string]IssueFacts) (Layer, error) {
-	empty := Layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
+func buildSiblingOutcomes(issue IssueFacts, graph *dag.Graph, issues map[string]IssueFacts) (layer, error) {
+	empty := layer{Name: "sibling_outcomes", DropRank: 8, Content: ""}
 	if issue.Parent == "" {
 		return empty, nil
 	}
@@ -309,7 +309,7 @@ func buildSiblingOutcomes(issue IssueFacts, graph *dag.Graph, issues map[string]
 		return empty, nil
 	}
 	content := "## Sibling Outcomes\n" + strings.Join(lines, "\n")
-	return Layer{Name: "sibling_outcomes", DropRank: 8, Content: content}, nil
+	return layer{Name: "sibling_outcomes", DropRank: 8, Content: content}, nil
 }
 
 func blockerDisplay(outcome, status string) string {

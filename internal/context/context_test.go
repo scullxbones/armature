@@ -85,7 +85,7 @@ func TestAssembleContext_CoreSpec(t *testing.T) {
 		DecisionRefs:     []string{},
 	}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 	require.NotEmpty(t, ctx.Layers)
 
@@ -124,10 +124,10 @@ func TestAssembleContext_BlockerOutcomes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-A", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-A", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var blockerLayer *Layer
+	var blockerLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "blocker_outcomes" {
 			blockerLayer = &ctx.Layers[i]
@@ -163,10 +163,10 @@ func TestAssembleContext_BlockerOutcomes_ShowsStatusForInProgressBlocker(t *test
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-A", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-A", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var blockerLayer *Layer
+	var blockerLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "blocker_outcomes" {
 			blockerLayer = &ctx.Layers[i]
@@ -203,10 +203,10 @@ func TestAssembleContext_BlockerOutcomes_PreferOutcomeOverStatus(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-A", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-A", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var blockerLayer *Layer
+	var blockerLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "blocker_outcomes" {
 			blockerLayer = &ctx.Layers[i]
@@ -244,10 +244,10 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-C", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-C", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var parentLayer *Layer
+	var parentLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "parent_chain" {
 			parentLayer = &ctx.Layers[i]
@@ -260,16 +260,16 @@ func TestAssembleContext_ParentChain(t *testing.T) {
 
 func TestAssembleContext_Truncation(t *testing.T) {
 	t.Parallel()
-	ctx := &Context{
+	ctx := &workingMemory{
 		IssueID: "TST-001",
-		Layers: []Layer{
+		Layers: []layer{
 			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 100)},
 			{Name: "decisions", DropRank: 5, Content: strings.Repeat("b", 100)},
 			{Name: "notes", DropRank: 6, Content: strings.Repeat("c", 100)},
 		},
 	}
 
-	truncated := Truncate(ctx, 60)
+	truncated := truncate(ctx, 60)
 
 	assert.Len(t, truncated.Layers, 2)
 	for _, l := range truncated.Layers {
@@ -280,7 +280,7 @@ func TestAssembleContext_Truncation(t *testing.T) {
 func TestAssembleContext_UnknownIssue(t *testing.T) {
 	t.Parallel()
 	state := materialize.NewState()
-	_, err := Assemble("MISSING-001", factsFromState(state), &emptyFileReader{})
+	_, err := assemble("MISSING-001", factsFromState(state), &emptyFileReader{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "MISSING-001")
 }
@@ -299,10 +299,10 @@ func TestBuildSnippets_WithContext(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var snippetsLayer *Layer
+	var snippetsLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "snippets" {
 			snippetsLayer = &ctx.Layers[i]
@@ -333,10 +333,10 @@ func TestBuildContextFiles_RendersStableReferenceMaterial(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	ctx, err := Assemble("TST-001", factsFromState(state), &realFileReader{root: dir})
+	ctx, err := assemble("TST-001", factsFromState(state), &realFileReader{root: dir})
 	require.NoError(t, err)
 
-	var contextFilesLayer *Layer
+	var contextFilesLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "context_files" {
 			contextFilesLayer = &ctx.Layers[i]
@@ -368,7 +368,7 @@ func TestBuildContextFiles_ShowsMissingFiles(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), &realFileReader{root: dir})
+	ctx, err := assemble("TST-001", factsFromState(state), &realFileReader{root: dir})
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -398,13 +398,13 @@ func TestAssemble_ResolvesRepoRootFromNestedStateDir(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 	stateDir := filepath.Join(repoRoot, ".armature", "state", "worker-1")
-	inferredRoot := InferRepoRoot(stateDir)
-	reader := &OSFileReader{Root: inferredRoot}
+	inferredRoot := inferRepoRoot(stateDir)
+	reader := &osFileReader{Root: inferredRoot}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), reader)
+	ctx, err := assemble("TST-001", factsFromState(state), reader)
 	require.NoError(t, err)
 
-	var contextFilesLayer *Layer
+	var contextFilesLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "context_files" {
 			contextFilesLayer = &ctx.Layers[i]
@@ -429,7 +429,7 @@ func TestBuildSnippets_InvalidJSON(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -456,10 +456,10 @@ func TestBuildDecisions(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var decLayer *Layer
+	var decLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "decisions" {
 			decLayer = &ctx.Layers[i]
@@ -490,10 +490,10 @@ func TestBuildNotes_WithNotes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var notesLayer *Layer
+	var notesLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "notes" {
 			notesLayer = &ctx.Layers[i]
@@ -524,10 +524,10 @@ func TestBuildNotes_TruncatesAtFive(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var notesLayer *Layer
+	var notesLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "notes" {
 			notesLayer = &ctx.Layers[i]
@@ -559,10 +559,10 @@ func TestBuildNotes_ExcludesDeletedNotes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var notesLayer *Layer
+	var notesLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "notes" {
 			notesLayer = &ctx.Layers[i]
@@ -611,10 +611,10 @@ func TestBuildSiblingOutcomes(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-B", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-B", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var sibLayer *Layer
+	var sibLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "sibling_outcomes" {
 			sibLayer = &ctx.Layers[i]
@@ -641,7 +641,7 @@ func TestBuildSiblingOutcomes_NoParent(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-001", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-001", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
 	for _, l := range ctx.Layers {
@@ -676,10 +676,10 @@ func TestBuildBlockerOutcomes_FromState(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-X", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-X", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var blockerLayer *Layer
+	var blockerLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "blocker_outcomes" {
 			blockerLayer = &ctx.Layers[i]
@@ -716,10 +716,10 @@ func TestBuildParentChain_FromState(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-X", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-X", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var parentLayer *Layer
+	var parentLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "parent_chain" {
 			parentLayer = &ctx.Layers[i]
@@ -767,10 +767,10 @@ func TestBuildParentChain_WithGrandparent(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-X", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-X", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var parentLayer *Layer
+	var parentLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "parent_chain" {
 			parentLayer = &ctx.Layers[i]
@@ -821,10 +821,10 @@ func TestBuildSiblingOutcomes_FromState(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-X", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-X", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var sibLayer *Layer
+	var sibLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "sibling_outcomes" {
 			sibLayer = &ctx.Layers[i]
@@ -873,10 +873,10 @@ func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 		DecisionRefs: []string{},
 	}
 
-	ctx, err := Assemble("TST-X2", factsFromState(state), &emptyFileReader{})
+	ctx, err := assemble("TST-X2", factsFromState(state), &emptyFileReader{})
 	require.NoError(t, err)
 
-	var sibLayer *Layer
+	var sibLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "sibling_outcomes" {
 			sibLayer = &ctx.Layers[i]
@@ -890,14 +890,14 @@ func TestBuildSiblingOutcomes_MultipleParentAndSiblings(t *testing.T) {
 
 func TestRenderAgent(t *testing.T) {
 	t.Parallel()
-	ctx := &Context{
+	ctx := &workingMemory{
 		IssueID: "TST-001",
-		Layers: []Layer{
+		Layers: []layer{
 			{Name: "core_spec", DropRank: 1, Content: "Issue: Fix bug"},
 		},
 	}
 
-	out, err := RenderAgent(ctx)
+	out, err := marshalAgent(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, out, "TST-001")
 	assert.Contains(t, out, "core_spec")
@@ -907,15 +907,15 @@ func TestRenderAgent(t *testing.T) {
 
 func TestRenderHuman(t *testing.T) {
 	t.Parallel()
-	ctx := &Context{
+	ctx := &workingMemory{
 		IssueID: "TST-001",
-		Layers: []Layer{
+		Layers: []layer{
 			{Name: "core_spec", DropRank: 1, Content: "Issue: Fix bug"},
 			{Name: "notes", DropRank: 6, Content: "Some note"},
 		},
 	}
 
-	out := RenderHuman(ctx)
+	out := formatHuman(ctx)
 	assert.Contains(t, out, "=== core_spec ===")
 	assert.Contains(t, out, "Issue: Fix bug")
 	assert.Contains(t, out, "=== notes ===")
@@ -924,58 +924,58 @@ func TestRenderHuman(t *testing.T) {
 
 func TestTruncate_ExactlyAtBudget_NoTruncation(t *testing.T) {
 	t.Parallel()
-	ctx := &Context{
+	ctx := &workingMemory{
 		IssueID: "TST-001",
-		Layers: []Layer{
+		Layers: []layer{
 			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 60)},
 			{Name: "notes", DropRank: 6, Content: strings.Repeat("b", 40)},
 		},
 	}
 
-	result := Truncate(ctx, 25)
+	result := truncate(ctx, 25)
 	assert.Len(t, result.Layers, 2, "should not truncate when total == charBudget")
 }
 
 func TestTruncate_OneBelowBudget_NoTruncation(t *testing.T) {
 	t.Parallel()
-	ctx := &Context{
+	ctx := &workingMemory{
 		IssueID: "TST-001",
-		Layers: []Layer{
+		Layers: []layer{
 			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 59)},
 			{Name: "notes", DropRank: 6, Content: strings.Repeat("b", 40)},
 		},
 	}
 
-	result := Truncate(ctx, 25)
+	result := truncate(ctx, 25)
 	assert.Len(t, result.Layers, 2)
 }
 
 func TestTruncate_SingleLayer_NeverRemoved(t *testing.T) {
 	t.Parallel()
-	ctx := &Context{
+	ctx := &workingMemory{
 		IssueID: "TST-001",
-		Layers: []Layer{
+		Layers: []layer{
 			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 1000)},
 		},
 	}
 
-	result := Truncate(ctx, 1)
+	result := truncate(ctx, 1)
 	assert.Len(t, result.Layers, 1, "single layer must never be removed")
 	assert.Equal(t, "core_spec", result.Layers[0].Name)
 }
 
 func TestTruncate_EqualPriority_RemovesHigherIndex(t *testing.T) {
 	t.Parallel()
-	ctx := &Context{
+	ctx := &workingMemory{
 		IssueID: "TST-001",
-		Layers: []Layer{
+		Layers: []layer{
 			{Name: "core_spec", DropRank: 1, Content: strings.Repeat("a", 60)},
 			{Name: "decisions", DropRank: 5, Content: strings.Repeat("b", 60)},
 			{Name: "notes", DropRank: 5, Content: strings.Repeat("c", 60)},
 		},
 	}
 
-	result := Truncate(ctx, 30)
+	result := truncate(ctx, 30)
 	assert.Len(t, result.Layers, 2)
 	found := false
 	for _, l := range result.Layers {
@@ -993,7 +993,7 @@ func TestInferRepoRoot_FallsBackToGitInWorktreeMode(t *testing.T) {
 	stateDir := filepath.Join(repoDir, "state", "worker-abc")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	root := InferRepoRoot(stateDir)
+	root := inferRepoRoot(stateDir)
 	want := repoDir
 	if resolved, err := filepath.EvalSymlinks(repoDir); err == nil {
 		want = resolved
@@ -1008,7 +1008,7 @@ func TestInferRepoRoot_UsesArmatureDirectoryWhenPresent(t *testing.T) {
 	stateDir := filepath.Join(armatureDir, "state", "worker-abc")
 	require.NoError(t, os.MkdirAll(stateDir, 0755))
 
-	root := InferRepoRoot(stateDir)
+	root := inferRepoRoot(stateDir)
 	assert.Equal(t, repoDir, root, "inferRepoRoot must find repo root from .armature directory in path")
 }
 
@@ -1030,10 +1030,10 @@ func TestBuildContextFiles_EscapesBacktickFence(t *testing.T) {
 		Blocks:       []string{},
 		DecisionRefs: []string{},
 	}
-	ctx, err := Assemble("TST-001", factsFromState(state), &realFileReader{root: dir})
+	ctx, err := assemble("TST-001", factsFromState(state), &realFileReader{root: dir})
 	require.NoError(t, err)
 
-	var cfLayer *Layer
+	var cfLayer *layer
 	for i := range ctx.Layers {
 		if ctx.Layers[i].Name == "context_files" {
 			cfLayer = &ctx.Layers[i]
@@ -1043,4 +1043,64 @@ func TestBuildContextFiles_EscapesBacktickFence(t *testing.T) {
 	require.NotNil(t, cfLayer)
 	assert.Contains(t, cfLayer.Content, "````", "wrapper fence must be longer than content's triple-backtick fence")
 	assert.Contains(t, cfLayer.Content, "fmt.Println")
+}
+
+func TestRenderAgent_PublicAPIReadsRootAndTruncates(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "guide.md"), []byte("repo-root context"), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-001"] = &materialize.Issue{
+		ID:           "TST-001",
+		Title:        "Test",
+		Type:         "task",
+		Status:       "open",
+		ContextFiles: []string{"guide.md"},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	facts := factsFromState(state)
+
+	raw, err := RenderAgent("TST-001", facts, Options{Root: dir, SkipTruncate: true})
+	require.NoError(t, err)
+	assert.Contains(t, raw, "repo-root context")
+	assert.Contains(t, raw, "TST-001")
+
+	truncated, err := RenderAgent("TST-001", facts, Options{Root: dir, TokenBudget: 1})
+	require.NoError(t, err)
+	assembled, err := assemble("TST-001", facts, &osFileReader{Root: dir})
+	require.NoError(t, err)
+	want, err := marshalAgent(truncate(assembled, 1))
+	require.NoError(t, err)
+	assert.Equal(t, want, truncated)
+}
+
+func TestRenderHuman_PublicAPIInfersRootFromStateDir(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, ".armature", "state", "worker-1"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(repoRoot, "guide.md"), []byte("repo-root context"), 0644))
+
+	state := materialize.NewState()
+	state.Issues["TST-001"] = &materialize.Issue{
+		ID:           "TST-001",
+		Title:        "Test",
+		Type:         "task",
+		Status:       "open",
+		ContextFiles: []string{"guide.md"},
+		Children:     []string{},
+		BlockedBy:    []string{},
+		Blocks:       []string{},
+		DecisionRefs: []string{},
+	}
+	out, err := RenderHuman("TST-001", factsFromState(state), Options{
+		StateDir:     filepath.Join(repoRoot, ".armature", "state", "worker-1"),
+		SkipTruncate: true,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, out, "repo-root context")
+	assert.Contains(t, out, "=== context_files ===")
 }

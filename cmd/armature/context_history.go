@@ -59,14 +59,13 @@ func newContextHistoryCmd() *cobra.Command {
 					continue
 				}
 
-				reader := &context.OSFileReader{Root: appCtx.RepoPath}
-
-				ctx, err := context.Assemble(chIssue, contextFacts(state), reader)
+				rendered, err := context.RenderHuman(chIssue, contextFacts(state), context.Options{
+					Root:         appCtx.RepoPath,
+					SkipTruncate: true,
+				})
 				if err != nil {
 					continue
 				}
-
-				rendered := context.RenderHuman(ctx)
 				if rendered != prevRendered {
 					changes = append(changes, contextHistoryRow{
 						SHA:     entry.SHA,

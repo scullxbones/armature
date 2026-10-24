@@ -5,9 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"path"
-	"path/filepath"
-	"strings"
+	"io/fs"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -50,14 +48,12 @@ func (g fixtureGit) DiffNameOnlyRange(_, _ string) ([]string, error) {
 	return []string{g.changedFile}, nil
 }
 
-type embedFileReader struct{}
-
-func (embedFileReader) ReadFile(relPath string) ([]byte, error) {
-	rel := path.Clean(filepath.ToSlash(relPath))
-	if rel == ".." || strings.HasPrefix(rel, "../") || path.IsAbs(rel) {
-		return nil, fmt.Errorf("invalid fixture path %q", relPath)
+func fixtureWorkspaceFS() (fs.FS, error) {
+	sub, err := fs.Sub(fixtureGraph, fixtureWorkspaceDir)
+	if err != nil {
+		return nil, fmt.Errorf("embedded fixture workspace: %w", err)
 	}
-	return fixtureGraph.ReadFile(path.Join(fixtureWorkspaceDir, rel))
+	return sub, nil
 }
 
 func Collect() (Report, error) {
@@ -66,7 +62,11 @@ func Collect() (Report, error) {
 		return Report{}, err
 	}
 
-	dynamic, bundlePayload, err := priceDynamicInvocations(state, index, embedFileReader{})
+	files, err := fixtureWorkspaceFS()
+	if err != nil {
+		return Report{}, err
+	}
+	dynamic, bundlePayload, err := priceDynamicInvocations(state, index, files)
 	if err != nil {
 		return Report{}, err
 	}
