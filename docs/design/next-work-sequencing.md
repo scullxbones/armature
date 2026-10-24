@@ -10,13 +10,12 @@ Statuses below audited 2026-10-24 with `arm show`. Re-audit before dispatch.
 
 ## What to do next
 
-v0.1.0 is shipped (`TOPTIER-S6` / `TOPTIER-S6-T3` **merged**; tag `v0.1.0`). Post-cut leftovers on the docs/CLAIMORD trains are delivered on `main` (S7-T2 #324, S15-T2 #378, S16-T1/T2 #326/#379, CLAIMORD W12–W14). `arm ready` is not a dispatch order. A coordinator that picks the first ready issue will treat held docs and Tier C extensibility as equal to real next work.
+v0.1.0 is shipped (`TOPTIER-S6` / `TOPTIER-S6-T3` **merged**; tag `v0.1.0`). Post-cut leftovers on the docs/CLAIMORD trains are **merged** on ops and `main` (S7-T2 #324, S8 #316, S15-T2 #378, S16-T1/T2 #326/#379, CLAIMORD W11–W14 + W20 #277–#281). `arm ready` is not a dispatch order. A coordinator that picks the first ready issue will treat held docs and Tier C extensibility as equal to real next work.
 
-1. **`CLAIMORD-W20` ops closeout (ops pending).** Code already on `main` (PR #281). Issue is **claimed** mid-closeout; blockers `TOPTIER-S6-T3` and `TOPTIER-S15-T2` are **merged**. Finish `done` → `merged` when the closeout agent completes — do not re-implement.
-2. **`CLAIMORD-W21`** after W20. Still waits on `bug-1783480206` (behind the S12 / `TOPTIER-S18-T4` doctor cascade). W13 and W14 are already **merged**.
-3. **Hold item 22, `TOPTIER-S12`.** Leave it unless Brian needs G2. `TOPTIER-S18-T4` and item 24's T4 (doctor **D13**) wait on S12-T2 / related holders. That wait is not a reason to lift the hold. Doctor **D11** stays reserved for S12-T2. **D12** already landed (PR #198).
-4. **Do not treat these as the successor queue.** `TOPTIER-S12-T1` (held), `TOPTIER-S14` / `TOPTIER-S14-T1` (Tier C, ready), and `bug-1783480206` (waits on S18-T4).
-5. **Pick a backlog theme** from the remaining Tier B/C rows below when leftovers are closed. Do not invent a next release number until a cut task is filed.
+1. **`CLAIMORD-W21`** is next on the CLAIMORD chain, but **not ready**: still waits on `bug-1783480206` (behind the S12 / `TOPTIER-S18-T4` doctor cascade). W13, W14, and W20 are **merged**. Do not start W21 under the S12 hold.
+2. **Hold item 22, `TOPTIER-S12`.** Leave it unless Brian needs G2. `TOPTIER-S18-T4` and item 24's T4 (doctor **D13**) wait on S12-T2 / related holders. That wait is not a reason to lift the hold. Doctor **D11** stays reserved for S12-T2. **D12** already landed (PR #198).
+3. **Do not treat these as the successor queue.** `TOPTIER-S12-T1` (held), `TOPTIER-S14` / `TOPTIER-S14-T1` (Tier C, ready), and `bug-1783480206` (waits on S18-T4).
+4. **Pick a backlog theme** from the remaining Tier B/C rows below. Do not invent a next release number until a cut task is filed.
 
 ## Still open
 
@@ -33,7 +32,7 @@ v0.1.0 is shipped (`TOPTIER-S6` / `TOPTIER-S6-T3` **merged**; tag `v0.1.0`). Pos
 | 32 | The Second Substrate (foreign-repo dogfood) | Next-Ten №06 | not yet decomposed (dogfood themes from the v0.1.0 cut are optional backlog) |
 | 33 | Session handoff bundle | LH C10 | not yet decomposed |
 
-G2 sits early because the addendum called it cheap. Items 23 (authorship / `TOPTIER-S16`), 30 (README / `TOPTIER-S7`), 31 (shims), 34 (`TOPTIER-S6` **merged**), and 35 (`TOPTIER-S8` **done**) live in the v0.1.0 archive. The old late-tier G1 row (item 36, `TOPTIER-S11`) and item 27 (`LNGHZN-S10`) remain in the 2026-09-27 archive.
+G2 sits early because the addendum called it cheap. Items 23 (authorship / `TOPTIER-S16`), 30 (README / `TOPTIER-S7`), 31 (shims), 34 (`TOPTIER-S6` **merged**), and 35 (`TOPTIER-S8` **merged**) live in the v0.1.0 archive. The old late-tier G1 row (item 36, `TOPTIER-S11`) and item 27 (`LNGHZN-S10`) remain in the 2026-09-27 archive.
 
 ### Tier C
 
