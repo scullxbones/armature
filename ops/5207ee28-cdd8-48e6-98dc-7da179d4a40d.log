@@ -5781,3 +5781,4 @@
 ["transition","TOPTIER-S16-T2",1792855343,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"done","outcome":"docs/design/strategy-memo.md (Next-Ten #09) includes authorship/copyright pre-mortem tripwire (G6.2). Tip d9f45b8e5. make check green. --force for ResolveLayout main remap.","branch":"task/TOPTIER-S16-T2","base":"5fd08209d04ea94d320665e1767af2f40d8024c7","tip":"d9f45b8e5e10d60d6a03025c85a96e943d531e39","integration_branch":"main"},1]
 ["transition","TOPTIER-S15-T2",1792856445,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"378"},1]
 ["transition","TOPTIER-S16-T1",1792856479,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"326"},1]
+["transition","TOPTIER-S16-T2",1792856487,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"to":"merged","pr":"379"},1]
