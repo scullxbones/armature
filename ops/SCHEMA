@@ -1,16 +1,19 @@
 # Trellis Op Log Schema v1
-# scaffolding-version: 3
+# scaffolding-version: 5
 #
-# Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload]
+# Each line is a JSON array: [op_type, target_id, timestamp, worker_id, payload, schema_version]
 #
-# Position 0: op_type (string) - one of: create, claim, heartbeat, transition, note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign, amend, citation-accepted, scope-rename, scope-delete, reparent, assessment-attested, gate-evidence
+# Position 0: op_type (string) - one of: create, claim, heartbeat, transition, note, note-delete, link, unlink, source-link, source-fingerprint, dag-transition, decision, assign, amend, citation-accepted, scope-rename, scope-delete, reparent, assessment-attested, promotion-check, gate-evidence, log-quarantine
 # Position 1: target_id (string) - issue/node/source ID this op targets
 # Position 2: timestamp (integer) - Unix epoch seconds
 # Position 3: worker_id (string) - UUID of the worker emitting this op
 # Position 4: payload (object) - op-type-specific fields (see below)
+# Position 5: schema_version (integer) - ops schema version; writers emit 1
 #
-# Forward compatibility: new fields may be appended to the array.
-# Readers MUST ignore extra positions. Missing positions get defaults.
+# Forward compatibility: new fields may be appended to the array after schema_version.
+# Readers MUST ignore unknown trailing positions. Missing schema_version defaults to 1.
+# Readers MUST reject schema_version greater than the version they support (fail loud).
+# See docs/design/ops-schema-compatibility.md.
 #
 # Payload fields by op type:
 #   create:            title, parent, type, scope, context_files, acceptance, definition_of_done,
@@ -20,7 +23,9 @@
 #   heartbeat:         (empty object)
 #   transition:        to, outcome, branch (optional), pr (optional),
 #                        input_tokens (optional), output_tokens (optional),
-#                        skipped_delivery_gate (optional)
+#                        skipped_delivery_gate (optional),
+#                        base, tip, integration_branch (delivery snapshot),
+#                        target_sha, combined_patch_id, matched_commit (merged)
 #                        restore_claim snapshot fields (rollback only)
 #                        if_claim_token (conditional compensating rollback only)
 #   note:              msg, note_id
@@ -38,5 +43,7 @@
 #   scope-delete:      deleted_path
 #   reparent:          parent
 #   assessment-attested: assessment
+#   promotion-check:   target_sha, tip, result, combined_patch_id, matched_commit
 #   gate-evidence:     profile, command, head_sha, start, end, exit, uncommitted,
 #                     output_hash, output_head, output_tail, log_path
+#   log-quarantine:    quarantine_log, quarantine_line, sha

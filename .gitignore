@@ -1,4 +1,4 @@
-# scaffolding-version: 3
+# scaffolding-version: 5
 # Materialized state — derived from ops logs, regenerated locally by each worker.
 # Never commit. See architecture.md §2 (Directory Structure).
 state/
