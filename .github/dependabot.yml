@@ -4,7 +4,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "ci(DEPS)"
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "fix(DEPS)"
