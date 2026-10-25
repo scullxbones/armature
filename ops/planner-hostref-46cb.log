@@ -114,3 +114,4 @@
 ["link","HOSTREF-S1-T10",1792947554,"planner-hostref-46cb",{"dep":"CLAIMORD-W21","rel":"blocked_by"},1]
 ["amend","HOSTREF-S1",1792947676,"planner-hostref-46cb",{"acceptance":["Children HOSTREF-S1-T1 through HOSTREF-S1-T9 are verified","arm validate --ci exits 0","arm show prints names and current with no body"]},1]
 ["transition","HOSTREF-S1-T10",1792947676,"planner-hostref-46cb",{"to":"cancelled"},1]
+["dag-transition","HOSTREF-S1",1792947687,"planner-hostref-46cb",{"to":"verified","issue_id":"HOSTREF-S1"},1]
