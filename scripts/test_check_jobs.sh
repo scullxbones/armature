@@ -321,7 +321,136 @@ else
     fail "${JSON_RESULT:-test-os JSON artifact assertion failed}"
 fi
 
-echo "Test 6: test_check_jobs.sh is committed executable..."
+echo "Test 6: CHECK_INSTALL_TOOLS installs checksum-verified GitHub binaries, not go install golangci-lint..."
+
+if rg -n 'CHECK_INSTALL_TOOLS' "$MAKEFILE" | rg -q 'go install.*golangci'; then
+    fail "Makefile still go-installs golangci-lint on the CHECK_INSTALL_TOOLS path"
+else
+    pass "CHECK_INSTALL_TOOLS path does not go install golangci-lint"
+fi
+if ! rg -q 'install-\$\$t-release' "$MAKEFILE"; then
+    fail "check-job CHECK_INSTALL_TOOLS path must call install-<tool>-release"
+else
+    pass "check-job installs tools via install-<tool>-release"
+fi
+if ! rg -q 'install-verified-github-release.sh' "$MAKEFILE"; then
+    fail "Makefile must invoke install-verified-github-release.sh"
+else
+    pass "Makefile uses install-verified-github-release.sh"
+fi
+if ! rg -q 'checksum mismatch' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must fail on checksum mismatch"
+else
+    pass "installer mentions checksum mismatch failure"
+fi
+if rg -q 'go install github.com/golangci/golangci-lint' "$CI_YML"; then
+    fail "ci.yml go-installs golangci-lint"
+else
+    pass "ci.yml does not go install golangci-lint"
+fi
+if ! awk '/^GOLANGCI_LINT_VERSION[[:space:]]*:?=/{found=1} END{exit found?0:1}' "$MAKEFILE"; then
+    fail "GOLANGCI_LINT_VERSION missing from Makefile"
+else
+    pass "GOLANGCI_LINT_VERSION remains Makefile source of truth"
+fi
+if rg -n 'version: v2\.14' "$CI_YML"; then
+    fail "ci.yml duplicates the golangci-lint version number"
+else
+    pass "ci.yml does not duplicate GOLANGCI_LINT_VERSION"
+fi
+
+echo "Test 7: GitHub Actions are SHA-pinned with version comments, least privilege, persist-credentials: false..."
+
+SUPPLY_RESULT=$(python3 - "$REPO_ROOT" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+workflow_dir = root / ".github" / "workflows"
+sha_re = re.compile(r"^[0-9a-f]{40}$")
+uses_re = re.compile(r"^(\s*)uses:\s*(.+)$")
+problems = []
+uses_lines = []
+
+for path in sorted(workflow_dir.glob("*.yml")) + sorted(workflow_dir.glob("*.yaml")):
+    text = path.read_text()
+    rel = path.relative_to(root).as_posix()
+    lines = text.splitlines()
+    top_perm = False
+    for i, line in enumerate(lines):
+        if line.startswith("jobs:"):
+            break
+        if line == "permissions:" or line.startswith("permissions:"):
+            top_perm = True
+            window = "\n".join(lines[i:i+8])
+            if "contents: read" not in window and "contents: write" not in window:
+                problems.append(f"{rel}: top-level permissions missing contents")
+            if rel.endswith("ci.yml") and "contents: read" not in window:
+                problems.append(f"{rel}: CI top-level permissions must be contents: read")
+            if rel.endswith("release.yml") and "contents: read" not in window:
+                problems.append(f"{rel}: release.yml top-level permissions must be contents: read (escalate on the release job)")
+            break
+    if not top_perm:
+        problems.append(f"{rel}: missing top-level permissions")
+
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = uses_re.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        indent, spec = m.group(1), m.group(2).strip()
+        uses_lines.append((rel, spec))
+        if spec.startswith("./"):
+            i += 1
+            continue
+        if "@" not in spec:
+            problems.append(f"{rel}:{i+1} uses: {spec} is not pinned")
+            i += 1
+            continue
+        action, _, rest = spec.partition("@")
+        # rest may include comment
+        sha_part, _, comment = rest.partition("#")
+        sha_part = sha_part.strip()
+        comment = comment.strip()
+        if not sha_re.match(sha_part):
+            problems.append(f"{rel}:{i+1} uses: {spec} is not a 40-char SHA")
+        if not comment:
+            problems.append(f"{rel}:{i+1} uses: {spec} missing trailing # vX.Y.Z comment")
+        elif not re.search(r"v?\d+", comment):
+            problems.append(f"{rel}:{i+1} uses: {spec} comment {comment!r} is not a version")
+        # persist-credentials on checkout
+        if action == "actions/checkout":
+            j = i + 1
+            block = []
+            while j < len(lines) and (not lines[j].strip() or lines[j].startswith(indent + " ") or lines[j].startswith(indent + "\t")):
+                block.append(lines[j])
+                j += 1
+            blob = "\n".join(block)
+            if "persist-credentials:" not in blob:
+                problems.append(f"{rel}:{i+1} actions/checkout missing persist-credentials")
+            elif not re.search(r"persist-credentials:\s*false", blob):
+                problems.append(f"{rel}:{i+1} actions/checkout persist-credentials is not false")
+        i += 1
+
+if problems:
+    print("FAIL")
+    for p in problems:
+        print(p)
+    sys.exit(1)
+print("PASS")
+PY
+) && SUPPLY_STATUS=0 || SUPPLY_STATUS=$?
+
+if [[ $SUPPLY_STATUS -eq 0 ]]; then
+    pass "workflows pin actions to SHAs, set permissions, and disable checkout credentials"
+else
+    fail "${SUPPLY_RESULT:-workflow supply-chain assertions failed}"
+fi
+
+echo "Test 8: test_check_jobs.sh is committed executable..."
 mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/test_check_jobs.sh" | awk '{print $1}')
 if [[ "$mode" == "100755" ]]; then
     pass "git mode is 100755"
@@ -332,6 +461,20 @@ if [[ -x "$SCRIPT" ]]; then
     pass "executable on disk"
 else
     fail "not executable on disk"
+fi
+
+INSTALL_SCRIPT="$REPO_ROOT/scripts/install-verified-github-release.sh"
+INSTALL_TEST="$REPO_ROOT/scripts/test_install_verified_github_release.sh"
+install_mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/install-verified-github-release.sh" | awk '{print $1}')
+if [[ "$install_mode" == "100755" ]]; then
+    pass "install-verified-github-release.sh git mode is 100755"
+else
+    fail "install-verified-github-release.sh git mode is '${install_mode:-missing}', expected 100755"
+fi
+if [[ -x "$INSTALL_SCRIPT" && -x "$INSTALL_TEST" ]]; then
+    pass "install scripts executable on disk"
+else
+    fail "install scripts not executable on disk"
 fi
 
 echo ""
