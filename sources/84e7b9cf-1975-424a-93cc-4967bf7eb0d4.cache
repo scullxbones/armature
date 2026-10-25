@@ -25,7 +25,7 @@ Invariants (git-native, append-only, merge-conflict-free by construction, etc.) 
 
 ### Supported Platforms and Agentic Tools
 
-Platform matrix: linux/macOS/Windows × amd64/arm64. Compatible with Claude Code, Gemini CLI, Cursor, Windsurf, Kiro, and any tool that can invoke a subprocess and parse JSON.
+Platform matrix: linux/macOS × amd64/arm64 (Windows is **not supported**; goreleaser may still cross-compile). Compatible with Claude Code, Gemini CLI, Cursor, Windsurf, Kiro, and any tool that can invoke a subprocess and parse JSON.
 
 ### Terminology
 
@@ -83,7 +83,7 @@ Sparse checkout limits the ops worktree to essential directories (`ops/` and `st
 |---|---|
 | `arm bootstrap` | Creates `_armature` orphan branch if needed, sets up worktree, sparse checkout, `.gitignore` entry |
 | Re-initialization (worktree repair) | Re-running `arm bootstrap` is idempotent — it skips if the worktree already exists (`.git` present). For actual repair of stale/corrupt worktree state, manually remove first: `git worktree remove .armature --force`, then re-run `arm bootstrap` |
-| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes call `pushOpsBranch` immediately after the local commit (publish failure is returned to the CLI; the local commit is not rolled back). Low-stakes writes stay local until `low_stakes_push_threshold`, then `pushOpsBranchAlwaysResetTracker` |
+| Worker operation | CLI materializes from the **local** ops worktree, executes, and on writes appends/commits the worker log. Reads do not `git pull`. High-stakes writes call `pushOpsBranchAfter` immediately after the local commit (publish failure is returned to the CLI; the local commit is not rolled back). Low-stakes writes stay local until `low_stakes_push_threshold`, then `pushOpsBranchAlwaysResetTracker` |
 | Worktree corruption | Manually remove the stale worktree (`git worktree remove .armature --force`), then re-run `arm bootstrap` to recreate it from remote |
 
 ### Directory Structure (within `.armature/` worktree)
@@ -327,7 +327,7 @@ In single-repo mode (v1), `repo` is omitted (default: current repo). This is a s
 
 ### Canonical Process Flow
 
-Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** warns when this clone is behind). `arm sync` is **not** that fetch — see the `arm sync` spec below.
+Every CLI command materializes from the **local** ops worktree. There is no `cd ops-worktree && git pull` preamble. Workers who need origin's logs run an explicit fetch/rebase of `_armature` (doctor **D12** errors when this clone is behind, because a lagging clone cannot confirm a fresh DAG). `arm sync` is **not** that fetch — see the `arm sync` spec below.
 
 **Read-only commands** (`arm ready`, `arm list`, `arm show`, `arm render-context`, `arm validate`, `arm status`, `arm metrics`, `arm context-history`):
 
@@ -350,7 +350,7 @@ No `git fetch` / `git pull` of `origin/_armature` on this path.
 
 Code commits happen separately in the developer's main worktree, on their feature branch. The CLI never touches the code worktree for ops writes.
 
-### Ops publish (`pushOpsBranch` / `pushOpsBranchAlwaysResetTracker`)
+### Ops publish (`pushOpsBranchAfter` / `pushOpsBranchAlwaysResetTracker`)
 
 `cmd/armature/helpers.go` publishes `_armature` with a single git sequence:
 
@@ -360,17 +360,17 @@ Code commits happen separately in the developer's main worktree, on their featur
 
 There is no `while ! git push; do git pull --rebase; done` loop and no ~5 retry cap.
 
-**High-stakes writes** (`appendHighStakesOpIf`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`): after a successful local commit, call `pushOpsBranch`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature class=<auth|non-fast-forward|other>: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, …). Next Actions depend on the class: **auth** (HTTP 403 / permission denied / authentication failed) points at Contents: Write or SSH then `arm push-ops`, or (alternate) publishing from a write-capable environment and fetching `origin/_armature`; **non-fast-forward** (explicit non-fast-forward / fetch-first diagnostics after the one FetchAndRebase retry; not a bare `rejected` or `[remote rejected]` hook/repo-rule decline) points at `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase onto `origin/_armature` in that same ops worktree, then `arm push-ops` (never a bare `git rebase` in the code worktree; never a branch-only fetch that can leave `origin/_armature` stale); **other** keeps `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIf` `!wrote`, `doctor --fix` with no remaining actions) still publishes the local `_armature` tip: success may report no-op, but origin must contain the op; remaining git errors stay `opsPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish.
+**High-stakes writes** (`appendHighStakesOpIfAfter`: claim, transition, assign, unassign, `ready` when it claims, `doctor --fix`; `appendHighStakesOpsExemptIntroduction`: `dag revert`): after a successful local commit, call `pushOpsBranchAfter`. Remaining git errors are **returned to the CLI caller** as `opsPublishError` (`publish _armature class=<auth|non-fast-forward|other>: …`), mapped to that command’s existing Failure Code (`CLAIM-1`, `TRANSITION-1`, `DOCTOR-1`, `DAG-1`, …). Next Actions depend on the class: **auth** (HTTP 403 / permission denied / authentication failed) points at Contents: Write or SSH then `arm push-ops`, or (alternate) publishing from a write-capable environment and fetching `origin/_armature`; **non-fast-forward** (explicit non-fast-forward / fetch-first diagnostics after the one FetchAndRebase retry; not a bare `rejected` or `[remote rejected]` hook/repo-rule decline) points at `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase onto `origin/_armature` in that same ops worktree, then `arm push-ops` (never a bare `git rebase` in the code worktree; never a branch-only fetch that can leave `origin/_armature` stale); **other** keeps `arm push-ops` and `arm doctor`. The local append+commit is **not** rolled back (I2). Repeating an identical high-stakes command that did not append (transition no-op, `appendHighStakesOpIfAfter` `!wrote`, `doctor --fix` with no remaining actions, `dag revert` with empty `CancelOps`) still publishes the local `_armature` tip (`publishLocalArmatureTipAfter`): success may report no-op, but origin must contain the op; remaining git errors stay `opsPublishError`. `arm unassign` publishes the unassign op this way. If the issue was claimed, the claimed-to-open follow-up is bare `appendOp` and can stay local until another publish. `dag revert` rematerializes and re-runs `CheckForeignChildren` after integrating remote ops (`afterIntegrate`) and refuses the retry push if a foreign child is now visible.
 
 **Low-stakes writes** (`appendLowStakesOps`: notes, heartbeats, decisions, `arm create --source`): coalesce. Each commit increments the pending-push counter. At `low_stakes_push_threshold` (default 5; omitted field → 5; present `0` is D10-invalid) they call `pushOpsBranchAlwaysResetTracker` — the **same git sequence**, but git errors are swallowed so a heartbeat cannot eject a worker. `tracker.Reset()` still runs after the attempt. Below threshold they stay local-only.
 
-**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranch` / `pushOpsBranchAlwaysResetTracker` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
+**Bare `appendOp` (local-only until another publish).** `appendOp` in `helpers.go` only runs `AppendAndCommit`. It does not call `pushOpsBranchAfter` / `pushOpsBranchAlwaysResetTracker` and does not increment the pending-push counter. That includes `arm create` without `--source`, `arm link`, and the `arm unassign` claimed-to-open follow-up after the high-stakes unassign op. `arm create --source` is low-stakes, not bare `appendOp`.
 
 `arm push-ops` is the explicit Push-only command (no FetchAndRebase retry) and **does** fail the CLI (`PUSH-OPS-1`). Remaining git errors are classified with the same `opsPublishError` (`class=auth|non-fast-forward|other`) so a smoke check can distinguish credential denial from a clone race. It is also the recovery command after a loud high-stakes publish failure.
 
 Rebase is expected to succeed when it runs because each worker only modifies its own file. The publish path targets the ops branch exclusively; code pushes go through normal PR workflow and are not retried by the CLI.
 
-**Doctor D12** (PR #198) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, warn if HEAD is N>0 commits behind. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
+**Doctor D12** (PR #198; behind promoted from warning to error) is the lag probe, not a fetch-on-every-read: after `FetchTrackingRefWithoutMovingHEAD` of `origin/_armature` in the ops worktree, error if HEAD is N>0 commits behind. Warnings are ignored, so a stale clone must not be a warning. A failed fetch still evaluates lag from the existing tracking ref and reports an error that the remote could not be fetched (result may be stale). Missing worktree or missing tracking ref skips OK. Not part of `doctor --fix`. **D11** remains reserved for `TOPTIER-S12-T2` (ops-branch backup / missing upstream). Do not confuse D11 with D12.
 
 ### Incremental Materialization Algorithm
 
@@ -510,7 +510,7 @@ This gives agents awareness of potential semantic conflicts before investing a f
 
 ### Post-Claim Verification Flow
 
-After claiming, the CLI publishes `_armature` with `pushOpsBranch`. A git failure after the local claim commit is returned to the caller (`CLAIM-1`, class named in the cause, Next Actions per auth / non-fast-forward / other); the claim op is **not** rolled back. The CLI does **not** pull and re-materialize to confirm the race. Race resolution stays read-time on whatever logs this clone already has. A worker who needs origin's claims should fetch/rebase the ops worktree (D12 flags lag) and then re-read (`arm show` / `arm ready`), not assume `arm claim` did that.
+After claiming, the CLI publishes `_armature` with `pushOpsBranchAfter`. A git failure after the local claim commit is returned to the caller (`CLAIM-1`, class named in the cause, Next Actions per auth / non-fast-forward / other); the claim op is **not** rolled back. The CLI does **not** pull and re-materialize to confirm the race. Race resolution stays read-time on whatever logs this clone already has. A worker who needs origin's claims should fetch/rebase the ops worktree (D12 flags lag) and then re-read (`arm show` / `arm ready`), not assume `arm claim` did that.
 
 ---
 
@@ -874,6 +874,8 @@ Imported nodes with `inferred` confidence appear in `ready.json` with `requires_
 | E11 | Plan version field present and supported | `unsupported plan version: {v}` |
 | E12 | source_versions match current cache SHAs | `stale source: {id} plan={sha} cache={sha}` |
 
+`sources/manifest.json` is decoded only by `sources.Manifest.Unmarshal` / `sources.ReadManifest`. `validate` (E7/E8) and `decompose` consume a `validate.SourceSet` built at the composition root; a second decoder fails `make lint`.
+
 **Warnings (advisory, surfaced in output, errors with `--strict`):**
 
 | # | Check | Warning Message |
@@ -992,9 +994,12 @@ arm dag revert --plan <plan.json>
 
 Behavior:
   1. Resolves the nodes created by the plan file
-  2. For each of those nodes, emits a transition op: {"to": "cancelled"}
-  3. All cancellation ops are appended to the current worker's log
-  4. Single commit, single push
+  2. Refuses if any issue not in the plan currently has a planned issue as its parent
+  3. For each still-open planned node, emits a transition op: {"to": "cancelled"}
+  4. All cancellation ops are appended to the current worker's log in one write
+  5. Single commit, then the high-stakes publish sequence
+  6. After integrating remote ops on a publish retry, rematerialize and refuse if a foreign child is now visible
+  7. If nothing remains to cancel (including a retry after a failed first push), still publish the retained local `_armature` tip
 
 Effect:
   - All nodes created by the plan transition to 'cancelled' status
@@ -1307,7 +1312,7 @@ No cross-worktree operations occur within a single phase.
 | `transition` (with verification hooks) | ops worktree + code worktree | ops worktree |
 | `init`, `worker-init` | both | both (setup) |
 | `sources add/sync/verify` | ops worktree + external providers | ops worktree |
-| `sync` | ops worktree + code repo (merge detection) | ops worktree when it writes `merged` transitions |
+| `sync` | ops worktree + code repo (promotion.Evaluate) | ops worktree when it writes `merged` / `promotion-check` |
 
 ### Key Command Specifications
 
@@ -1318,27 +1323,30 @@ arm sync [flags]
 
 Behavior:
   1. Load a snapshot from the local ops worktree (no fetch of origin/_armature)
-  2. Detect code-branch merges for done issues (`internal/sync.DetectMerges`)
-  3. Unless --dry-run, append local `merged` transitions for those IDs
+  2. Run promotion.Evaluate for every done leaf (the same function as arm merged)
+  3. Unless --dry-run, append promotion-check ops and merged transitions on a pass
+     (then delete the delivery ref and remove the bound worktree)
 
-This is merge-detection onto `main` (or `--into`), not “pull ops then materialize.”
-It is not implicit in other commands. Catching up `_armature` is an explicit
-git fetch/rebase of the ops worktree; `arm materialize` replays local logs;
-doctor D12 only warns when this clone is behind origin/_armature.
+Default --into is each issue's recorded integration_branch, else config
+integration_branch (main). This is merge-detection onto the integration
+branch, not “pull ops then materialize.” It is not implicit in other
+commands. Catching up `_armature` is an explicit git fetch/rebase of the
+ops worktree; `arm materialize` replays local logs; doctor D12 errors when
+this clone is behind origin/_armature.
 
 Flags:
-  --into <branch>  Target branch to check merges against (default: current branch)
-  --dry-run        Print which issues would transition without writing ops
+  --into <branch>  Override integration branch for every leaf
+  --dry-run        Classify without writing ops (same exit rule)
 
-Output (examples):
-  No merged branches detected.
-  Transitioned TASK-001 to merged
-  would transition: TASK-001 -> merged
-  dry-run: 1 issue(s) would be transitioned to merged
+Output:
+  ADR 0017 envelope {count, issues[], help[]}. help[0] is a concrete arm
+  command. Blocked rows carry next_action with the issue id filled in.
 
 Exit codes:
-  0  success (or nothing to do)
-  non-zero  Command Failure (e.g. SYNC-1) when load/detect fails
+  0  no missing-assessment or check-failed leaf (legacy done is listed)
+  1  a delivery is on the target without a matching assessment, or a
+     recorded delivery cannot be checked
+  SYNC-1  snapshot/ops load or persist failure (replaces the envelope)
 ```
 
 Not a substitute for fetching `origin/_armature`. Not run at the start of `ready`/`list`/`show`.
@@ -1625,7 +1633,7 @@ Dumps internal state: materialized issue, raw log entries, git status, ops workt
 |---|---|---|
 | Worker crashes after claim, before completion | Issue stuck as claimed | Heartbeat + TTL expiry; other workers reclaim after TTL |
 | Worker crashes after append, before push | Op lost locally; shared state consistent | No mitigation needed — inherently safe, worker re-issues on restart |
-| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranch`: one `FetchAndRebase` then a second `Push`. Remaining git output matching explicit non-fast-forward / fetch-first diagnostics (`non-fast-forward`, `[rejected] … (fetch first)`, `(non-fast-forward)`, `Updates were rejected because the tip`) is class `non-fast-forward`. Bare `rejected` and other remote rejections (pre-receive hook declined, repo-rule / protected-branch) are class `other`, not a rebase-and-retry race. High-stakes fail the CLI (`opsPublishError` → command Failure Code, Next Actions `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase that ops worktree onto `origin/_armature` then `arm push-ops` for non-fast-forward, else `arm push-ops` and `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchAlwaysResetTracker`. `arm push-ops` is Push-only (no FetchAndRebase retry) and classifies remaining git errors the same way (`opsPublishError` → `PUSH-OPS-1`) |
+| Push rejected (non-fast-forward) | Temporary delay; other clones may not see the op | `pushOpsBranchAfter`: one `FetchAndRebase` then a second `Push`. Remaining git output matching explicit non-fast-forward / fetch-first diagnostics (`non-fast-forward`, `[rejected] … (fetch first)`, `(non-fast-forward)`, `Updates were rejected because the tip`) is class `non-fast-forward`. Bare `rejected` and other remote rejections (pre-receive hook declined, repo-rule / protected-branch) are class `other`, not a rebase-and-retry race. High-stakes fail the CLI (`opsPublishError` → command Failure Code, Next Actions `git -C "$(git config armature.ops-worktree-path)" fetch origin refs/heads/_armature:refs/remotes/origin/_armature` then rebase that ops worktree onto `origin/_armature` then `arm push-ops` for non-fast-forward, else `arm push-ops` and `arm doctor`); the local commit stays. Low-stakes still swallow via `pushOpsBranchAlwaysResetTracker`. `arm push-ops` is Push-only (no FetchAndRebase retry) and classifies remaining git errors the same way (`opsPublishError` → `PUSH-OPS-1`) |
 | Push denied (auth) | Origin never sees the op; looks like a clone race if unclassified | Classifier matches HTTP 403, permission denied, authentication failed, could not read Username, publickey denied → class `auth`. High-stakes and `arm push-ops` fail the CLI with Next Actions to grant Contents: Write (fine-grained PAT) or SSH then `arm push-ops`, or (alternate) publish from a write-capable environment then `git fetch origin _armature`. Do not treat this as a non-fast-forward race. Local commit stays (I2). |
 | Corrupt log line | Materialization fails on one line | Skip unparseable lines + warn (implemented in parser) |
 | Clock skew between workers | Wrong claim winner | NTP keeps skew <1s; ms timestamps make races negligible |
@@ -1804,7 +1812,7 @@ Single Go binary, `CGO_ENABLED=0`. Static compilation, zero runtime dependencies
 |---|---|
 | Linux | amd64, arm64 |
 | macOS | amd64, arm64 |
-| Windows | amd64, arm64 |
+| Windows | *stale — not a supported OS; see README “Windows is not supported”* |
 
 Binary size estimate: 8–12MB (4–6MB compressed).
 
