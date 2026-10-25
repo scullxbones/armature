@@ -41,6 +41,9 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+sboms:
+  - artifacts: archive
+
 # Do not set changelog.disable. GoReleaser ignores --release-notes when
 # disable is true and publishes an empty GitHub release body.
 release:

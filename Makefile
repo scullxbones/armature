@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs print-govulncheck-version print-tool-versions install-golangci-lint-release install-gremlins-release install-rg-release install-syft-release test-install-verified-release install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
 
 GO ?= go
 PYTHON ?= python3
@@ -21,7 +21,7 @@ help:
 	@echo "  make check               - Run publish gate serially (union of check-static, check-core, mutate)"
 	@echo "  make check-job JOB=<id>  - Run one CI partition (check-static | check-core | mutate)"
 	@echo "  make print-check-jobs    - Dump the check-job membership table"
-	@echo "  make install-check-tools - go install pinned golangci-lint and gremlins"
+	@echo "  make install-check-tools - go install pinned golangci-lint and gremlins (local-dev)"
 	@echo "  make check-fast          - Diff-routed fast gate: commit subjects plus steps implied by changed files (BASE= to override diff base)"
 	@echo "  make commit-subjects-check - Fail unscoped conventional-commit subjects on origin/main..HEAD"
 	@echo "  make test-check-fast     - Test check-fast.sh routing itself"
@@ -65,10 +65,14 @@ GOLANGCI_LINT_MODULE  := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GREMLINS_MODULE       := github.com/go-gremlins/gremlins/cmd/gremlins
 GOLANGCI_LINT_VERSION := v2.14.0
 GREMLINS_VERSION      := v0.6.0
+GOVULNCHECK_VERSION   := v1.1.4
+RIPGREP_VERSION       := 15.2.0
+SYFT_VERSION          := v1.55.0
+DEST ?=
 
 CHECK_JOBS := check-static check-core mutate
 
-CHECK_JOB_check-static := test-check-jobs lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-git-test-exec-check test-summarize-test-json test-mock-ban test-source-manifest-decode test-surface-budget-check
+CHECK_JOB_check-static := test-check-jobs test-install-verified-release lint crosscompile test-census-drift-check test-coverage-check test-git-test-hermetic-check test-git-test-exec-check test-summarize-test-json test-mock-ban test-source-manifest-decode test-surface-budget-check
 CHECK_TOOLS_check-static := golangci-lint
 
 CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check git-test-exec-check surface-budget-check
@@ -105,8 +109,8 @@ check-job:
 			*) echo "FAIL: unknown check tool $$t" >&2; exit 1 ;; \
 		esac; \
 		if [ "$(CHECK_INSTALL_TOOLS)" = "1" ]; then \
-			echo "Installing $$t@$$ver..."; \
-			$(GO) install "$$mod@$$ver"; \
+			echo "Installing $$t@$$ver from GitHub release (checksum-verified)..."; \
+			$(MAKE) install-$$t-release DEST="$$gobin"; \
 		elif ! command -v $$t >/dev/null 2>&1; then \
 			echo "$$t not found. Install with:"; \
 			echo "  go install $$mod@$$ver"; \
@@ -121,6 +125,75 @@ check-job:
 
 print-check-jobs:
 	@$(foreach j,$(CHECK_JOBS),printf 'job %s\ntargets %s\ntools %s\n' '$(j)' '$(CHECK_JOB_$(j))' '$(CHECK_TOOLS_$(j))';)
+
+print-govulncheck-version:
+	@echo $(GOVULNCHECK_VERSION)
+
+print-tool-versions:
+	@printf 'GOLANGCI_LINT_VERSION=%s\nGREMLINS_VERSION=%s\nGOVULNCHECK_VERSION=%s\nRIPGREP_VERSION=%s\nSYFT_VERSION=%s\n' \
+		'$(GOLANGCI_LINT_VERSION)' '$(GREMLINS_VERSION)' '$(GOVULNCHECK_VERSION)' '$(RIPGREP_VERSION)' '$(SYFT_VERSION)'
+
+# Resolve DEST for checksum-verified GitHub release installs (CI path).
+define resolve-dest
+	dest="$(DEST)"; \
+	if [ -z "$$dest" ]; then \
+		dest="$$($(GO) env GOBIN)"; \
+		if [ -z "$$dest" ]; then dest="$$($(GO) env GOPATH)/bin"; fi; \
+	fi
+endef
+
+install-golangci-lint-release:
+	@$(resolve-dest); \
+	scripts/install-verified-github-release.sh \
+		--repo golangci/golangci-lint \
+		--version "$(GOLANGCI_LINT_VERSION)" \
+		--tarball 'golangci-lint-{ver}-{os}-{arch}.tar.gz' \
+		--checksums 'golangci-lint-{ver}-checksums.txt' \
+		--bin golangci-lint \
+		--dest "$$dest"
+
+install-gremlins-release:
+	@$(resolve-dest); \
+	scripts/install-verified-github-release.sh \
+		--repo go-gremlins/gremlins \
+		--version "$(GREMLINS_VERSION)" \
+		--tarball 'gremlins_{ver}_{os}_{arch}.tar.gz' \
+		--checksums checksums.txt \
+		--bin gremlins \
+		--dest "$$dest"
+
+install-rg-release:
+	@$(resolve-dest); \
+	os=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+	machine=$$(uname -m); \
+	case "$$os-$$machine" in \
+		linux-x86_64) trip=x86_64-unknown-linux-musl ;; \
+		linux-aarch64) trip=aarch64-unknown-linux-musl ;; \
+		darwin-arm64) trip=aarch64-apple-darwin ;; \
+		darwin-x86_64) trip=x86_64-apple-darwin ;; \
+		*) echo "FAIL: no ripgrep GitHub asset mapping for $$os-$$machine" >&2; exit 1 ;; \
+	esac; \
+	tarball="ripgrep-$(RIPGREP_VERSION)-$$trip.tar.gz"; \
+	scripts/install-verified-github-release.sh \
+		--repo BurntSushi/ripgrep \
+		--version "$(RIPGREP_VERSION)" \
+		--tarball "$$tarball" \
+		--checksums "$$tarball.sha256" \
+		--bin rg \
+		--dest "$$dest"
+
+install-syft-release:
+	@$(resolve-dest); \
+	scripts/install-verified-github-release.sh \
+		--repo anchore/syft \
+		--version "$(SYFT_VERSION)" \
+		--tarball 'syft_{ver}_{os}_{arch}.tar.gz' \
+		--checksums 'syft_{ver}_checksums.txt' \
+		--bin syft \
+		--dest "$$dest"
+
+test-install-verified-release:
+	@scripts/test_install_verified_github_release.sh .
 
 install-check-tools:
 	@set -e; \

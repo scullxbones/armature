@@ -19,6 +19,9 @@ on:
         required: false
         default: false
 
+permissions:
+  contents: read
+
 env:
   GO_VERSION: "1.26.10"
 
@@ -33,21 +36,23 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
 
       - name: Install Make (Windows)
         if: runner.os == 'Windows'
-        run: choco install make --no-progress -y
+        run: choco install make --version=4.4.1 --no-progress -y
 
       - name: Prefer python launcher on Windows
         if: runner.os == 'Windows'
@@ -76,7 +81,7 @@ jobs:
       # Windows test-ci is compile-only (`go test -c`) and writes no JSON.
       - name: Upload go test JSON
         if: ${{ always() && (runner.os != 'Linux' || inputs.os-matrix-only) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: go-test-json-${{ matrix.os }}
           path: test-results/go-test.json
@@ -87,12 +92,19 @@ jobs:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
       # ubuntu-latest does not ship rg. git-test-hermetic-check requires it.
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Install ripgrep
+        run: |
+          dest="${HOME}/.local/bin"
+          mkdir -p "$dest"
+          echo "$dest" >> "$GITHUB_PATH"
+          make install-rg-release DEST="$dest"
       - run: make check-job JOB=check-core
         env:
           CHECK_INSTALL_TOOLS: "1"
@@ -101,12 +113,19 @@ jobs:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
       # ubuntu-latest does not ship rg. test-check-jobs uses rg -q.
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Install ripgrep
+        run: |
+          dest="${HOME}/.local/bin"
+          mkdir -p "$dest"
+          echo "$dest" >> "$GITHUB_PATH"
+          make install-rg-release DEST="$dest"
       - run: make check-job JOB=check-static
         env:
           CHECK_INSTALL_TOOLS: "1"
@@ -115,8 +134,10 @@ jobs:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: make check-job JOB=mutate
@@ -131,10 +152,12 @@ jobs:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -151,10 +174,12 @@ jobs:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -168,15 +193,39 @@ jobs:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.26.10'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Build arm binary
         run: make build
 
       - name: Run README quickstart in a scratch repo
         run: bash scripts/quickstart_check.sh
+
+  # Non-blocking until the parallel Go 1.26.10 / goldmark bump lands on main.
+  # Do not add this job name to required status checks until that PR merges.
+  govulncheck:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install and run govulncheck
+        run: |
+          ver="$(make -s print-govulncheck-version)"
+          go install "golang.org/x/vuln/cmd/govulncheck@${ver}"
+          gobin="$(go env GOBIN)"
+          if [ -z "$gobin" ]; then gobin="$(go env GOPATH)/bin"; fi
+          export PATH="${gobin}:${PATH}"
+          govulncheck ./...
