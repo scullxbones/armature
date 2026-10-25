@@ -42,7 +42,7 @@ func AppendHookLogLine(gitDir string, line string) error {
 	return err
 }
 
-// LogPassThroughScopeViolation checks paths against scopePolicy and, when any are
+// LogPassThroughScopeViolation checks paths against scope and, when any are
 // out of scope, appends a "violation:" entry to <gitDir>/armature-hook.log.
 //
 // This covers the pass-through-with-violation case described in
@@ -59,11 +59,11 @@ func AppendHookLogLine(gitDir string, line string) error {
 // Returns the underlying ScopeCheckResult so callers can inspect it further;
 // when paths is empty or all paths are in scope, no line is written and a nil
 // error is returned.
-func LogPassThroughScopeViolation(gitDir string, scopePolicy harnesspolicy.ScopePolicy, paths []string, reason string) (harnesspolicy.ScopeCheckResult, error) {
+func LogPassThroughScopeViolation(gitDir string, scope []string, root string, paths []string, reason string) (harnesspolicy.ScopeCheckResult, error) {
 	if len(paths) == 0 {
 		return harnesspolicy.ScopeCheckResult{Allowed: true}, nil
 	}
-	result := scopePolicy.CheckPaths(paths)
+	result := harnesspolicy.CheckScope(scope, root, paths)
 	if result.Allowed {
 		return result, nil
 	}

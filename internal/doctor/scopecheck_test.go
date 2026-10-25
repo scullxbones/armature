@@ -62,15 +62,13 @@ func TestDoctorScopeCheck_REQ_TOPTIER_S5_T2(t *testing.T) {
 	t.Run("OutOfScopeFileViaScopePolicyCheckPaths", func(t *testing.T) {
 		t.Parallel()
 
-		policy := harnesspolicy.NewScopePolicyWithRoot([]string{"internal/auth/"}, "/workspace/repo")
-
-		result := policy.CheckPaths([]string{"cmd/main.go"})
+		result := harnesspolicy.CheckScope([]string{"internal/auth/"}, "/workspace/repo", []string{"cmd/main.go"})
 		assert.False(t, result.Allowed)
 		require.NotEmpty(t, result.Violations)
 		assert.Equal(t, "cmd/main.go", result.Violations[0].Path)
 		assert.Contains(t, result.Message(), "outside task scope")
 
-		inScopeResult := policy.CheckPaths([]string{"internal/auth/login.go"})
+		inScopeResult := harnesspolicy.CheckScope([]string{"internal/auth/"}, "/workspace/repo", []string{"internal/auth/login.go"})
 		assert.True(t, inScopeResult.Allowed)
 		assert.Empty(t, inScopeResult.Violations)
 	})

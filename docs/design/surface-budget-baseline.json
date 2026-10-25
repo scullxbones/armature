@@ -813,10 +813,11 @@
       ]
     },
     "internal/harnesspolicy": {
-      "count": 47,
+      "count": 37,
       "names": [
         "CheckAcceptanceCriteria",
         "CheckCitations",
+        "CheckScope",
         "CitationAcceptanceFact",
         "CitationAcceptanceFact.SourceEntryID",
         "CitationCheck",
@@ -835,9 +836,7 @@
         "IssuePolicy.ID",
         "IssuePolicy.Scope",
         "IssuePolicy.Title",
-        "NewScopePolicy",
-        "NewScopePolicyWithRoot",
-        "NewVerificationService",
+        "IssuePolicy.Verify",
         "PolicyFromFacts",
         "ScopeCheckResult",
         "ScopeCheckResult.Allowed",
@@ -845,23 +844,14 @@
         "ScopeCheckResult.Message",
         "ScopeCheckResult.Scope",
         "ScopeCheckResult.Violations",
-        "ScopePolicy",
-        "ScopePolicy.CheckPaths",
         "ScopeViolation",
         "ScopeViolation.Path",
         "SourceLinkFact",
         "SourceLinkFact.SourceEntryID",
-        "VerificationRequest",
-        "VerificationRequest.Acceptance",
-        "VerificationRequest.Citations",
         "VerificationResult",
         "VerificationResult.Message",
         "VerificationResult.Name",
-        "VerificationResult.Passed",
-        "VerificationService",
-        "VerificationService.CheckAcceptanceCriteria",
-        "VerificationService.CheckCitations",
-        "VerificationService.Run"
+        "VerificationResult.Passed"
       ]
     },
     "internal/importbf": {

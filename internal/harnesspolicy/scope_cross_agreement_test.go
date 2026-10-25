@@ -39,11 +39,10 @@ func TestScopeMatchers_ClaimAndHarnesspolicyAgree_REQ_LNGHZN_S4(t *testing.T) {
 
 			inScope, _ := scopematch.IsWithinScope([]string{tc.path}, tc.scope)
 
-			policy := harnesspolicy.NewScopePolicyWithRoot(tc.scope, "")
-			policyResult := policy.CheckPaths([]string{tc.path})
+			policyResult := harnesspolicy.CheckScope(tc.scope, "", []string{tc.path})
 
 			assert.Equal(t, tc.want, inScope, "scopematch.IsWithinScope(%q, %v)", tc.path, tc.scope)
-			assert.Equal(t, tc.want, policyResult.Allowed, "harnesspolicy.ScopePolicy.CheckPaths(%q) with scope %v", tc.path, tc.scope)
+			assert.Equal(t, tc.want, policyResult.Allowed, "harnesspolicy.CheckScope(%q) with scope %v", tc.path, tc.scope)
 			assert.Equal(t, inScope, policyResult.Allowed,
 				"scopematch and harnesspolicy scope matchers disagree on path %q with scope %v", tc.path, tc.scope)
 		})

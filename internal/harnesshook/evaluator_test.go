@@ -12,10 +12,8 @@ import (
 
 func TestEvaluatorBlocksOutOfScopeEdit(t *testing.T) {
 	t.Parallel()
-	service := harnesspolicy.NewVerificationService()
 	evaluator := newEvaluator(evaluatorConfig{
-		ScopePolicy:         harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
-		VerificationService: &service,
+		policy: harnesspolicy.IssuePolicy{Scope: []string{"internal/orchestrate/"}},
 	})
 
 	decision, err := evaluator.Evaluate(context.Background(), Event{
@@ -32,7 +30,7 @@ func TestEvaluatorBlocksOutOfScopeEdit(t *testing.T) {
 func TestEvaluatorAllowsInScopeEdit(t *testing.T) {
 	t.Parallel()
 	evaluator := newEvaluator(evaluatorConfig{
-		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
+		policy: harnesspolicy.IssuePolicy{Scope: []string{"internal/orchestrate/"}},
 	})
 
 	decision, err := evaluator.Evaluate(context.Background(), Event{
@@ -48,7 +46,7 @@ func TestEvaluatorAllowsInScopeEdit(t *testing.T) {
 func TestEvaluatorBlocksGitCommit(t *testing.T) {
 	t.Parallel()
 	evaluator := newEvaluator(evaluatorConfig{
-		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
+		policy: harnesspolicy.IssuePolicy{Scope: []string{"internal/orchestrate/"}},
 	})
 
 	decision, err := evaluator.Evaluate(context.Background(), Event{
@@ -65,7 +63,7 @@ func TestEvaluatorBlocksGitCommit(t *testing.T) {
 func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
 	t.Parallel()
 	evaluator := newEvaluator(evaluatorConfig{
-		ScopePolicy: harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
+		policy: harnesspolicy.IssuePolicy{Scope: []string{"internal/orchestrate/"}},
 	})
 
 	for _, cmd := range []string{
@@ -89,11 +87,9 @@ func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
 
 func TestEvaluatorRunsStopVerification(t *testing.T) {
 	t.Parallel()
-	service := harnesspolicy.NewVerificationService()
 	evaluator := newEvaluator(evaluatorConfig{
-		ScopePolicy:         harnesspolicy.NewScopePolicy([]string{"internal/orchestrate/"}),
-		VerificationService: &service,
-		VerificationInput: harnesspolicy.VerificationRequest{
+		policy: harnesspolicy.IssuePolicy{
+			Scope:      []string{"internal/orchestrate/"},
 			Acceptance: json.RawMessage(`["go test ./... passes"]`),
 			Citations: []harnesspolicy.CitationCheck{
 				{SourceEntryID: "SRC-1", Accepted: true},
@@ -110,10 +106,8 @@ func TestEvaluatorRunsStopVerification(t *testing.T) {
 
 func TestEvaluatorBlocksStopWhenVerificationFails(t *testing.T) {
 	t.Parallel()
-	service := harnesspolicy.NewVerificationService()
 	evaluator := newEvaluator(evaluatorConfig{
-		VerificationService: &service,
-		VerificationInput: harnesspolicy.VerificationRequest{
+		policy: harnesspolicy.IssuePolicy{
 			Acceptance: json.RawMessage(`["human review only"]`),
 		},
 	})

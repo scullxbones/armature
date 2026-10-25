@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,9 +15,7 @@ func TestScopeViolationLogging_REQ_TOPTIER_S5_T2(t *testing.T) {
 	gitDir := filepath.Join(tmpDir, ".git")
 	require.NoError(t, os.MkdirAll(gitDir, 0o755))
 
-	scopePolicy := harnesspolicy.NewScopePolicyWithRoot([]string{"internal/"}, tmpDir)
-
-	result, err := LogPassThroughScopeViolation(gitDir, scopePolicy, []string{"cmd/main.go"}, "stale binding")
+	result, err := LogPassThroughScopeViolation(gitDir, []string{"internal/"}, tmpDir, []string{"cmd/main.go"}, "stale binding")
 	require.NoError(t, err)
 	assert.False(t, result.Allowed, "expected the out-of-scope path to be flagged")
 	require.NotEmpty(t, result.Violations)
@@ -36,8 +33,7 @@ func TestScopeViolationLogging_REQ_TOPTIER_S5_T2(t *testing.T) {
 	tmpDir2 := t.TempDir()
 	gitDir2 := filepath.Join(tmpDir2, ".git")
 	require.NoError(t, os.MkdirAll(gitDir2, 0o755))
-	inScopePolicy := harnesspolicy.NewScopePolicyWithRoot([]string{"internal/"}, tmpDir2)
-	result2, err := LogPassThroughScopeViolation(gitDir2, inScopePolicy, []string{"internal/foo.go"}, "stale binding")
+	result2, err := LogPassThroughScopeViolation(gitDir2, []string{"internal/"}, tmpDir2, []string{"internal/foo.go"}, "stale binding")
 	require.NoError(t, err)
 	assert.True(t, result2.Allowed)
 	_, statErr := os.Stat(filepath.Join(gitDir2, "armature-hook.log"))

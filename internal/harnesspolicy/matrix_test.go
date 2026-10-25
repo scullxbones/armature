@@ -265,9 +265,7 @@ func TestScopeMatrix_BindingStateXToolXPath_REQ_TOPTIER_S5_T1(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			policy := NewScopePolicyWithRoot(tc.scope, "/workspace/repo")
-
-			result := policy.CheckPaths(tc.paths)
+			result := CheckScope(tc.scope, "/workspace/repo", tc.paths)
 
 			if tc.expectAllow {
 				require.True(t, result.Allowed, "expected allowed for %s", tc.name)
@@ -342,9 +340,7 @@ func TestScopeMatrix_DoubleStarEdgeCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			policy := NewScopePolicyWithRoot(tc.scope, "/workspace")
-
-			result := policy.CheckPaths(tc.paths)
+			result := CheckScope(tc.scope, "/workspace", tc.paths)
 
 			if tc.expectAllow {
 				assert.True(t, result.Allowed, "expected allowed for %s", tc.name)
@@ -399,9 +395,7 @@ func TestScopeMatrix_ScopeViolationMessages_REQ_TOPTIER_S5_T1(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			policy := NewScopePolicyWithRoot(tc.scope, "/workspace")
-
-			result := policy.CheckPaths(tc.paths)
+			result := CheckScope(tc.scope, "/workspace", tc.paths)
 
 			if tc.expectedViolation {
 				assert.False(t, result.Allowed)
@@ -464,9 +458,7 @@ func TestScopeMatrix_AbsoluteVsRelativePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			policy := NewScopePolicyWithRoot(tc.scope, tc.root)
-
-			result := policy.CheckPaths([]string{tc.path})
+			result := CheckScope(tc.scope, tc.root, []string{tc.path})
 
 			if tc.expectAllow {
 				assert.True(t, result.Allowed, "expected allowed for %s", tc.name)

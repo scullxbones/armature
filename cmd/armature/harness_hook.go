@@ -12,7 +12,6 @@ import (
 	claimPkg "github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/harnesshook"
-	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
@@ -58,15 +57,9 @@ func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding h
 	if err != nil {
 		return
 	}
-	var scopePolicy harnesspolicy.ScopePolicy
-	if resolvedBinding.Root != "" {
-		scopePolicy = harnesspolicy.NewScopePolicyWithRoot(policy.Scope, resolvedBinding.Root)
-	} else {
-		scopePolicy = harnesspolicy.NewScopePolicy(policy.Scope)
-	}
 	normalizedPaths := harnesshook.AbsolutizePaths(event.Paths, event.Cwd, resolvedBinding.Root)
 	_, err = harnesshook.LogPassThroughScopeViolation(
-		logGitDir, scopePolicy, normalizedPaths, "stale binding")
+		logGitDir, policy.Scope, resolvedBinding.Root, normalizedPaths, "stale binding")
 	swallowErr(err)
 }
 
