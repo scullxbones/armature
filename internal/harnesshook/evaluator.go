@@ -8,9 +8,8 @@ import (
 )
 
 type evaluatorConfig struct {
-	ScopePolicy         harnesspolicy.ScopePolicy
-	VerificationService *harnesspolicy.VerificationService
-	VerificationInput   harnesspolicy.VerificationRequest
+	policy harnesspolicy.IssuePolicy
+	root   string
 }
 
 type defaultEvaluator struct {
@@ -42,7 +41,7 @@ func (e *defaultEvaluator) evaluatePreToolUse(event Event) Decision {
 	if len(event.Paths) == 0 {
 		return Decision{Action: DecisionAllow, Message: "no path policy applies"}
 	}
-	result := e.cfg.ScopePolicy.CheckPaths(event.Paths)
+	result := harnesspolicy.CheckScope(e.cfg.policy.Scope, e.cfg.root, event.Paths)
 	if !result.Allowed {
 		return Decision{Action: DecisionBlock, Message: result.Message()}
 	}
@@ -50,10 +49,7 @@ func (e *defaultEvaluator) evaluatePreToolUse(event Event) Decision {
 }
 
 func (e *defaultEvaluator) evaluateStop() Decision {
-	if e.cfg.VerificationService == nil {
-		return Decision{Action: DecisionAllow, Message: "no verification service configured"}
-	}
-	results := e.cfg.VerificationService.Run(e.cfg.VerificationInput)
+	results := e.cfg.policy.Verify()
 	for _, result := range results {
 		if !result.Passed {
 			return Decision{Action: DecisionBlock, Message: result.Message}

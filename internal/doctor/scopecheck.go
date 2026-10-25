@@ -118,10 +118,9 @@ func d8UnexplainedViolations(repoPath string, tasks []*materialize.Issue, dirtyP
 		if len(issue.Scope) == 0 {
 			continue
 		}
-		policy := harnesspolicy.NewScopePolicyWithRoot(issue.Scope, repoPath)
 		for taskID := range rawViolations {
 			for _, path := range rawViolations[taskID] {
-				if result := policy.CheckPaths([]string{path}); result.Allowed {
+				if result := harnesspolicy.CheckScope(issue.Scope, repoPath, []string{path}); result.Allowed {
 					explainedBy[path] = append(explainedBy[path], issue)
 				}
 			}
@@ -149,8 +148,6 @@ func findOutOfScopeArtifacts(repoPath string, scope []string, candidates []strin
 		return nil
 	}
 
-	policy := harnesspolicy.NewScopePolicyWithRoot(scope, repoPath)
-
 	var outOfScope []string
 	for _, rel := range candidates {
 		rel = filepath.ToSlash(rel)
@@ -163,7 +160,7 @@ func findOutOfScopeArtifacts(repoPath string, scope []string, candidates []strin
 			continue
 		}
 
-		result := policy.CheckPaths([]string{rel})
+		result := harnesspolicy.CheckScope(scope, repoPath, []string{rel})
 		if !result.Allowed && len(result.Violations) > 0 {
 			outOfScope = append(outOfScope, rel)
 		}

@@ -9,13 +9,12 @@ import (
 
 func TestVerificationServiceCheckAcceptanceCriteriaRejectsAllUnverifiable(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
 	acceptance := json.RawMessage(`[
 		"The UI looks good",
 		"A human reviewer approves the change"
 	]`)
 
-	result := service.CheckAcceptanceCriteria(acceptance)
+	result := checkAcceptanceCriteria(acceptance)
 
 	assert.False(t, result.Passed)
 	assert.Equal(t, CheckAcceptanceCriteria, result.Name)
@@ -24,10 +23,9 @@ func TestVerificationServiceCheckAcceptanceCriteriaRejectsAllUnverifiable(t *tes
 
 func TestVerificationServiceCheckAcceptanceCriteriaAcceptsMachineVerifiableItem(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
 	acceptance := json.RawMessage(`["The UI looks good", "go test ./... passes"]`)
 
-	result := service.CheckAcceptanceCriteria(acceptance)
+	result := checkAcceptanceCriteria(acceptance)
 
 	assert.True(t, result.Passed)
 	assert.Equal(t, CheckAcceptanceCriteria, result.Name)
@@ -35,9 +33,7 @@ func TestVerificationServiceCheckAcceptanceCriteriaAcceptsMachineVerifiableItem(
 
 func TestVerificationServiceCheckAcceptanceCriteriaRejectsMissingArray(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
-
-	result := service.CheckAcceptanceCriteria(nil)
+	result := checkAcceptanceCriteria(nil)
 
 	assert.False(t, result.Passed)
 	assert.Contains(t, result.Message, "empty or absent")
@@ -45,13 +41,12 @@ func TestVerificationServiceCheckAcceptanceCriteriaRejectsMissingArray(t *testin
 
 func TestVerificationServiceCheckCitationsRejectsUncitedSource(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
 	checks := []CitationCheck{
 		{SourceEntryID: "src-1", Accepted: true},
 		{SourceEntryID: "src-2", Accepted: false},
 	}
 
-	result := service.CheckCitations(checks)
+	result := checkCitations(checks)
 
 	assert.False(t, result.Passed)
 	assert.Equal(t, CheckCitations, result.Name)
@@ -60,12 +55,11 @@ func TestVerificationServiceCheckCitationsRejectsUncitedSource(t *testing.T) {
 
 func TestMissingAcceptanceIsNamedNotCalledUncited_REQ_CITEGATE_T1(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
 	checks := []CitationCheck{
 		{SourceEntryID: "src-2", Accepted: false},
 	}
 
-	result := service.CheckCitations(checks)
+	result := checkCitations(checks)
 
 	assert.False(t, result.Passed)
 	assert.Equal(t, CheckCitations, result.Name)
@@ -77,9 +71,7 @@ func TestMissingAcceptanceIsNamedNotCalledUncited_REQ_CITEGATE_T1(t *testing.T) 
 
 func TestVerificationServiceCheckCitationsAcceptsEmptyChecks(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
-
-	result := service.CheckCitations(nil)
+	result := checkCitations(nil)
 
 	assert.True(t, result.Passed)
 	assert.Equal(t, CheckCitations, result.Name)
@@ -87,9 +79,7 @@ func TestVerificationServiceCheckCitationsAcceptsEmptyChecks(t *testing.T) {
 
 func TestVerificationServiceCheckAcceptanceCriteria_NullJSON(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
-
-	result := service.CheckAcceptanceCriteria(json.RawMessage("null"))
+	result := checkAcceptanceCriteria(json.RawMessage("null"))
 
 	assert.False(t, result.Passed)
 	assert.Contains(t, result.Message, "empty or absent")
@@ -97,9 +87,7 @@ func TestVerificationServiceCheckAcceptanceCriteria_NullJSON(t *testing.T) {
 
 func TestVerificationServiceCheckAcceptanceCriteria_EmptyArray(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
-
-	result := service.CheckAcceptanceCriteria(json.RawMessage(`[]`))
+	result := checkAcceptanceCriteria(json.RawMessage(`[]`))
 
 	assert.False(t, result.Passed)
 	assert.Contains(t, result.Message, "empty or absent")
@@ -107,9 +95,7 @@ func TestVerificationServiceCheckAcceptanceCriteria_EmptyArray(t *testing.T) {
 
 func TestVerificationServiceCheckAcceptanceCriteria_MalformedJSON(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
-
-	result := service.CheckAcceptanceCriteria(json.RawMessage(`"not-an-array"`))
+	result := checkAcceptanceCriteria(json.RawMessage(`"not-an-array"`))
 
 	assert.False(t, result.Passed)
 	assert.Contains(t, result.Message, "not parseable")
@@ -117,15 +103,12 @@ func TestVerificationServiceCheckAcceptanceCriteria_MalformedJSON(t *testing.T) 
 
 func TestVerificationServiceRunReturnsAcceptanceAndCitationResults(t *testing.T) {
 	t.Parallel()
-	service := NewVerificationService()
-	request := VerificationRequest{
+	results := IssuePolicy{
 		Acceptance: json.RawMessage(`["go test ./... passes"]`),
 		Citations: []CitationCheck{
 			{SourceEntryID: "src-1", Accepted: true},
 		},
-	}
-
-	results := service.Run(request)
+	}.Verify()
 
 	assert.Len(t, results, 2)
 	assert.Equal(t, CheckAcceptanceCriteria, results[0].Name)

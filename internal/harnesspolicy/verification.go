@@ -25,32 +25,20 @@ type CitationCheck struct {
 	Accepted      bool
 }
 
-type VerificationRequest struct {
-	Acceptance json.RawMessage
-	Citations  []CitationCheck
-}
-
 type VerificationResult struct {
 	Name    string
 	Passed  bool
 	Message string
 }
 
-type VerificationService struct{}
-
-func NewVerificationService() VerificationService {
-	return VerificationService{}
-}
-
-func (VerificationService) Run(request VerificationRequest) []VerificationResult {
-	service := VerificationService{}
+func (p IssuePolicy) Verify() []VerificationResult {
 	return []VerificationResult{
-		service.CheckAcceptanceCriteria(request.Acceptance),
-		service.CheckCitations(request.Citations),
+		checkAcceptanceCriteria(p.Acceptance),
+		checkCitations(p.Citations),
 	}
 }
 
-func (VerificationService) CheckAcceptanceCriteria(acceptance json.RawMessage) VerificationResult {
+func checkAcceptanceCriteria(acceptance json.RawMessage) VerificationResult {
 	result := VerificationResult{Name: CheckAcceptanceCriteria}
 
 	if len(acceptance) == 0 || string(acceptance) == "null" {
@@ -83,7 +71,7 @@ func (VerificationService) CheckAcceptanceCriteria(acceptance json.RawMessage) V
 	return result
 }
 
-func (VerificationService) CheckCitations(checks []CitationCheck) VerificationResult {
+func checkCitations(checks []CitationCheck) VerificationResult {
 	result := VerificationResult{Name: CheckCitations}
 	uncited := make([]string, 0)
 	for _, check := range checks {

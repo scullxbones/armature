@@ -94,20 +94,9 @@ func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, er
 		return RunResult{}, fmt.Errorf("resolve policy: %w", err)
 	}
 
-	service := harnesspolicy.NewVerificationService()
-	var scopePolicy harnesspolicy.ScopePolicy
-	if input.Root != "" {
-		scopePolicy = harnesspolicy.NewScopePolicyWithRoot(policy.Scope, input.Root)
-	} else {
-		scopePolicy = harnesspolicy.NewScopePolicy(policy.Scope)
-	}
 	evaluator := newEvaluator(evaluatorConfig{
-		ScopePolicy:         scopePolicy,
-		VerificationService: &service,
-		VerificationInput: harnesspolicy.VerificationRequest{
-			Acceptance: policy.Acceptance,
-			Citations:  policy.Citations,
-		},
+		policy: policy,
+		root:   input.Root,
 	})
 
 	decision, err := evaluator.Evaluate(ctx, event)

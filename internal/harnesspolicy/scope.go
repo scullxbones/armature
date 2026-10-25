@@ -9,7 +9,7 @@ import (
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
-type ScopePolicy struct {
+type scopePolicy struct {
 	scope []string
 	root  string
 }
@@ -25,22 +25,24 @@ type ScopeViolation struct {
 	Path string
 }
 
-func NewScopePolicy(scope []string) ScopePolicy {
-	root, err := os.Getwd()
-	if err != nil {
-		return NewScopePolicyWithRoot(scope, "")
+// CheckScope reports whether paths fall inside scope. root relativizes
+// absolute paths to the worktree. When root is empty, the process working
+// directory is used when available so relative and absolute paths still
+// compare against the same tree.
+func CheckScope(scope []string, root string, paths []string) ScopeCheckResult {
+	if root == "" {
+		if wd, err := os.Getwd(); err == nil {
+			root = wd
+		}
 	}
-	return NewScopePolicyWithRoot(scope, root)
+	return newScopePolicy(scope, root).checkPaths(paths)
 }
 
-// NewScopePolicyWithRoot creates a ScopePolicy with an explicit root directory.
-// The root is used to normalize absolute paths for scope checking. When root is empty,
-// paths are normalized using their relative form or os.Getwd() defaults.
-func NewScopePolicyWithRoot(scope []string, root string) ScopePolicy {
-	return ScopePolicy{scope: append([]string(nil), scope...), root: root}
+func newScopePolicy(scope []string, root string) scopePolicy {
+	return scopePolicy{scope: append([]string(nil), scope...), root: root}
 }
 
-func (p ScopePolicy) CheckPaths(paths []string) ScopeCheckResult {
+func (p scopePolicy) checkPaths(paths []string) ScopeCheckResult {
 	if len(p.scope) == 0 {
 		return ScopeCheckResult{
 			Allowed:    false,
@@ -93,11 +95,11 @@ func (r ScopeCheckResult) Message() string {
 	)
 }
 
-func (p ScopePolicy) allows(path string) bool {
+func (p scopePolicy) allows(path string) bool {
 	return scopematch.Allows(p.scope, path)
 }
 
-func (p ScopePolicy) cleanPath(path string) string {
+func (p scopePolicy) cleanPath(path string) string {
 	if filepath.IsAbs(path) && p.root != "" {
 		if rel, err := filepath.Rel(p.root, path); err == nil {
 			return cleanRepoPath(rel)
