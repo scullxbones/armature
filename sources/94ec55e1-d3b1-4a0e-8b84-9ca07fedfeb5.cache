@@ -91,6 +91,8 @@ The ten open-category survivors were scored on a six-axis rubric (§Creative bel
 
 ### D3. Adopt a shim-retirement policy and delete the current legacy carve-outs
 
+**Status (2026-10-04):** **Delivered** for the v0.1.0 path, with one grandfather: load-only acceptance of unslotted base worker IDs inside `<base>~<slot>.log` (I2; history not rewritten). Retirement rule lives in `docs/design/ops-schema-compatibility.md`. Migratable shims deleted; no plugin system. Harness Compatibility Contract (Next-Ten №08) remains undecomposed as the forward seam.
+
 **What:** Three back-compat shims already live in a v0.0.1 codebase: recognition/migration of pre-marker codex and devin harness configs (`internal/harnesshook/platform_codex.go`, `platform_devin.go`), acceptance of legacy base worker IDs for slotted ops logs (`internal/ops/opstream.go:72-108`), and parsing of legacy comma-separated scope entries (`internal/validate/validate.go:477`). Write a one-paragraph deprecation policy (shims live N minor versions, migration happens in `bootstrap`/`doctor --fix`, then deletion), apply it retroactively: migrate on next bootstrap, delete the shims at the version after.
 
 **Why:** Pre-1.0 with zero external adopters is the cheapest deletion window this project will ever have. Without a stated policy, every shim is immortal — and the harness-hook file-recognition shims in particular are subtle string-matching code in the security-relevant path.
