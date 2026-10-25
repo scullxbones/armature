@@ -14,7 +14,7 @@ Encode laws that today live only as long comments in `engine.go` so sermons can 
 
 ## Task sequence (verifiable units)
 
-1. `DecodeScope` — legacy `", "` scopes at ops/load boundary
+1. `DecodeScope` — trim empty scope entries at ops/load boundary (comma-join shim retired; LH D3)
 2. `claimLostRace` + claimant-only heartbeat clocks
 3. `WorktreeRestore` / typed Compensation + `PlanCompensation` encode
 4. Shrink `applyTransition` (IfClaimToken gate, status assert, lease restore)
