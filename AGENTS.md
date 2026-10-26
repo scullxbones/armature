@@ -40,7 +40,7 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 
 | Mistake class | What fails |
 |---|---|
-| Second decoder of `sources/manifest.json` (typed `sourceEntry` copies or `json.RawMessage` entries; PRs #333 and #362) | `scripts/check-source-manifest-decode.sh` (`make lint` / `make check`). Decode with `sources.Manifest.Unmarshal` or `sources.ReadManifest`, then pass `validate.KnownSources` / `validate.UnreadableSources`. |
+| Second decoder of `sources/manifest.json` (typed `sourceEntry` copies or `json.RawMessage` entries; PRs #333 and #362) | `scripts/repoguard` (`make lint` / `make check`). Decode with `sources.Manifest.Unmarshal` or `sources.ReadManifest`, then pass `validate.KnownSources` / `validate.UnreadableSources`. |
 
 ## Canonical references
 

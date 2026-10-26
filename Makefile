@@ -12,7 +12,7 @@ else
 ARM_EXE :=
 endif
 ARM_BIN := $(CURDIR)/bin/arm$(ARM_EXE)
-UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$' | grep -v '/scripts/surfacebudget$$')
+UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$' | grep -v '/scripts/surfacebudget$$' | grep -v '/scripts/repoguard$$')
 
 .DEFAULT_GOAL := help
 
@@ -44,14 +44,14 @@ help:
 	@echo "  make mock-ban-check      - Fail if go.mod lists a mock framework or mockery output is present"
 	@echo "  make test-mock-ban       - Test check-mock-ban.sh and the depguard mock-ban rule"
 	@echo "  make source-manifest-decode-check - Fail if a second sources/manifest.json decoder is introduced"
-	@echo "  make test-source-manifest-decode - Test check-source-manifest-decode.sh"
+	@echo "  make test-source-manifest-decode - Test the typed source-manifest repo guard"
 	@echo "  make surface-budget-check - Fail if an internal package grew its exported identifier count"
 	@echo "  make surface-budget-ratchet - Rewrite the committed internal export baseline (shrinks, or reviewed growth)"
 	@echo "  make test-surface-budget-check - Test the surface-budget ratchet (growth fail, shrink pass, rewrite)"
 	@echo "  make git-test-hermetic-check - Fail if _test.go files use raw git init outside internal/gittest"
-	@echo "  make test-git-test-hermetic-check - Test check-git-test-hermetic.sh itself"
+	@echo "  make test-git-test-hermetic-check - Test the typed git-hermetic repo guard"
 	@echo "  make git-test-exec-check - Fail if _test.go writes an executable outside testexec.Write"
-	@echo "  make test-git-test-exec-check - Test check-test-executables.sh itself"
+	@echo "  make test-git-test-exec-check - Test the typed test-executables repo guard"
 	@echo "  make trace-report        - Scan test files for spec traceability patterns"
 	@echo "  make context-report      - Price fixture-measured main-path CLI payloads (bytes and bytes/4 tokens)"
 	@echo "  make clean               - Remove build artifacts and test outputs"
@@ -273,7 +273,7 @@ lint: adr-principles
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
 	@scripts/check-mock-ban.sh .
-	@scripts/check-source-manifest-decode.sh .
+	@$(GO) run ./scripts/repoguard -check source-manifest .
 
 adr-principles:
 	@$(PYTHON) scripts/check_adr_principles.py docs/adr
@@ -327,13 +327,13 @@ test-census-drift-check:
 	@scripts/test_census_drift_check.sh .
 
 git-test-hermetic-check:
-	@scripts/check-git-test-hermetic.sh .
+	@$(GO) run ./scripts/repoguard -check git-hermetic .
 
 test-git-test-hermetic-check:
 	@scripts/test_check_git_test_hermetic.sh .
 
 git-test-exec-check:
-	@scripts/check-test-executables.sh .
+	@$(GO) run ./scripts/repoguard -check test-executables .
 
 test-git-test-exec-check:
 	@scripts/test_check_test_executables.sh .
@@ -348,7 +348,7 @@ test-mock-ban:
 	@scripts/test_mock_ban.sh .
 
 source-manifest-decode-check:
-	@scripts/check-source-manifest-decode.sh .
+	@$(GO) run ./scripts/repoguard -check source-manifest .
 
 test-source-manifest-decode:
 	@scripts/test_check_source_manifest_decode.sh .

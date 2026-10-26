@@ -208,9 +208,9 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 		t.Fatalf("empty overlay should copy client without environ, got %#v", cp)
 	}
 
-	// Concatenate so check-git-test-hermetic does not treat this internal-test
-	// package as a git-executing package (TestMain lives in adapters_test).
-	bin := "g" + "it"
+	// The git binary name is an allowlisted PATH-overlay fixture
+	// (scripts/repoguard allow git-hermetic-name); TestMain lives in adapters_test.
+	bin := "git"
 	dir := t.TempDir()
 	testexec.Write(t, filepath.Join(dir, bin), []byte("#!/bin/sh\nexit 1\n"))
 	cmd := base.WithEnviron([]string{"PATH=" + dir}).cmd("status")

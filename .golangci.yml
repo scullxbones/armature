@@ -354,6 +354,9 @@ linters:
       - linters:
           - gosec
         path: 'scripts/surfacebudget/'
+      - linters:
+          - gosec
+        path: 'scripts/repoguard/'
 
 formatters:
   enable:
