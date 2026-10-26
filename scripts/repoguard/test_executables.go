@@ -50,6 +50,14 @@ func scanTestExecFile(fset *token.FileSet, pf parsedFile) []string {
 	return hits
 }
 
+type chmodEvent struct {
+	pos    token.Pos
+	kind   string
+	mode   ast.Expr
+	path   string
+	method bool
+}
+
 func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, fileNums map[string]uint64) []string {
 	nums := map[string]uint64{}
 	for k, v := range fileNums {
@@ -57,6 +65,7 @@ func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, file
 	}
 	written := map[string]bool{}
 	var hits []string
+	var chmods []chmodEvent
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		switch stmt := n.(type) {
 		case *ast.DeclStmt:
@@ -67,43 +76,74 @@ func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, file
 		case *ast.AssignStmt:
 			bindAssign(stmt, nums, map[string]string{}, pf.imports)
 		case *ast.CallExpr:
-			hits = append(hits, noteExecCall(fset, pf, stmt, nums, written)...)
+			hits = append(hits, noteExecWrite(fset, pf, stmt, nums, written)...)
+			if ev, ok := noteExecChmod(pf, stmt, nums); ok {
+				chmods = append(chmods, ev)
+			}
 		}
 		return true
 	})
+	for _, ev := range chmods {
+		if ev.method {
+			if len(written) == 0 {
+				continue
+			}
+		} else if !written[ev.path] {
+			continue
+		}
+		hits = append(hits, formatExecHit(fset, ev.pos, pf.rel, ev.kind, ev.mode))
+	}
 	return hits
 }
 
-func noteExecCall(fset *token.FileSet, pf parsedFile, call *ast.CallExpr, nums map[string]uint64, written map[string]bool) []string {
-	var hits []string
+func modeLooksExecutable(expr ast.Expr, nums map[string]uint64, imports map[string]string) bool {
+	mode, ok := evalUint(expr, nums, imports)
+	return !ok || hasUnixExec(mode)
+}
+
+func noteExecWrite(fset *token.FileSet, pf parsedFile, call *ast.CallExpr, nums map[string]uint64, written map[string]bool) []string {
+	var kind string
+	var mode ast.Expr
 	switch {
 	case sel(call.Fun, pf.imports, "os", "WriteFile") && len(call.Args) >= 3:
-		written[pathKey(call.Args[0])] = true
-		if mode, ok := evalUint(call.Args[2], nums, pf.imports); ok && hasUnixExec(mode) {
-			hits = append(hits, formatExecHit(fset, call.Pos(), pf.rel, "os.WriteFile", call.Args[2]))
-		}
+		kind, mode = "os.WriteFile", call.Args[2]
 	case sel(call.Fun, pf.imports, "os", "OpenFile") && len(call.Args) >= 3:
-		written[pathKey(call.Args[0])] = true
-		if mode, ok := evalUint(call.Args[2], nums, pf.imports); ok && hasUnixExec(mode) {
-			hits = append(hits, formatExecHit(fset, call.Pos(), pf.rel, "os.OpenFile", call.Args[2]))
-		}
-	case sel(call.Fun, pf.imports, "os", "Chmod") && len(call.Args) >= 2:
-		if mode, ok := evalUint(call.Args[1], nums, pf.imports); ok && hasUnixExec(mode) && written[pathKey(call.Args[0])] {
-			hits = append(hits, formatExecHit(fset, call.Pos(), pf.rel, "os.Chmod", call.Args[1]))
-		}
+		kind, mode = "os.OpenFile", call.Args[2]
 	default:
-		s, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || s.Sel == nil || s.Sel.Name != "Chmod" || len(call.Args) < 1 {
-			return hits
-		}
-		if sel(call.Fun, pf.imports, "os", "Chmod") {
-			return hits
-		}
-		if mode, ok := evalUint(call.Args[0], nums, pf.imports); ok && hasUnixExec(mode) && len(written) > 0 {
-			hits = append(hits, formatExecHit(fset, call.Pos(), pf.rel, "Chmod", call.Args[0]))
-		}
+		return nil
 	}
-	return hits
+	written[pathKey(call.Args[0])] = true
+	if !modeLooksExecutable(mode, nums, pf.imports) {
+		return nil
+	}
+	return []string{formatExecHit(fset, call.Pos(), pf.rel, kind, mode)}
+}
+
+func noteExecChmod(pf parsedFile, call *ast.CallExpr, nums map[string]uint64) (chmodEvent, bool) {
+	if sel(call.Fun, pf.imports, "os", "Chmod") {
+		if len(call.Args) < 2 || !modeLooksExecutable(call.Args[1], nums, pf.imports) {
+			return chmodEvent{}, false
+		}
+		return chmodEvent{
+			pos:  call.Pos(),
+			kind: "os.Chmod",
+			mode: call.Args[1],
+			path: pathKey(call.Args[0]),
+		}, true
+	}
+	s, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || s.Sel == nil || s.Sel.Name != "Chmod" || len(call.Args) < 1 {
+		return chmodEvent{}, false
+	}
+	if !modeLooksExecutable(call.Args[0], nums, pf.imports) {
+		return chmodEvent{}, false
+	}
+	return chmodEvent{
+		pos:    call.Pos(),
+		kind:   "Chmod",
+		mode:   call.Args[0],
+		method: true,
+	}, true
 }
 
 func pathKey(expr ast.Expr) string {

@@ -37,12 +37,10 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 	isoPkgs := map[string]bool{}
 
 	for _, pf := range files {
-		if underDir(pf.rel, "scripts/repoguard") {
-			continue
-		}
 		fileNums, fileStrs := collectFileConsts(pf.file, pf.imports)
 		inGittest := underDir(pf.rel, "internal/gittest")
 		nameAllow := allowed(pf.rel, allowGitHermeticName)
+		initAllow := allowed(pf.rel, allowGitHermeticInit)
 		usesGit := false
 		isolated := false
 
@@ -62,7 +60,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				if gitCallExec(x, pf.imports, fileStrs) {
 					usesGit = true
 				}
-				if !inGittest && gitCallInit(x, pf.imports, fileStrs) {
+				if !inGittest && !initAllow && gitCallInit(x, pf.imports, fileStrs) {
 					initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 				}
 			case *ast.CompositeLit:
@@ -70,12 +68,12 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				if gitArgv(args) {
 					usesGit = true
 				}
-				if !inGittest && gitArgvInit(args) {
+				if !inGittest && !initAllow && gitArgvInit(args) {
 					initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 				}
 			case *ast.BasicLit:
 				if s, ok := foldString(x, fileStrs); ok {
-					if gitInitInText(s) && !inGittest {
+					if gitInitInText(s) && !inGittest && !initAllow {
 						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 					}
 					if s == "git" && !nameAllow {
@@ -84,7 +82,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				}
 			case *ast.BinaryExpr:
 				if s, ok := foldString(x, fileStrs); ok {
-					if gitInitInText(s) && !inGittest {
+					if gitInitInText(s) && !inGittest && !initAllow {
 						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 					}
 					if s == "git" && !nameAllow {
@@ -147,9 +145,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 
 	fmt.Fprintln(stdout, "OK: git-hermetic allows:")
 	for _, a := range allowlist {
-		if a.Check == allowGitHermeticName {
-			fmt.Fprintf(stdout, "  %s (%s): %s\n", a.RelPath, a.Check, a.Reason)
-		}
+		fmt.Fprintf(stdout, "  %s (%s): %s\n", a.RelPath, a.Check, a.Reason)
 	}
 
 	if failed {

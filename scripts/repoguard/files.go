@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -114,23 +115,57 @@ func pathBase(importPath string) string {
 }
 
 func isIgnoreTagged(src []byte) bool {
+	expr := leadingBuildConstraint(src)
+	if expr == nil {
+		return false
+	}
+	withIgnore := expr.Eval(func(string) bool { return true })
+	withoutIgnore := expr.Eval(func(tag string) bool { return tag != "ignore" })
+	return withIgnore && !withoutIgnore
+}
+
+func leadingBuildConstraint(src []byte) constraint.Expr {
+	var goBuild constraint.Expr
+	var plus []constraint.Expr
 	for _, line := range strings.Split(string(src), "\n") {
 		trim := strings.TrimSpace(line)
 		if trim == "" {
 			continue
 		}
-		if strings.HasPrefix(trim, "//go:build") {
-			return strings.Contains(trim, "ignore")
-		}
-		if strings.HasPrefix(trim, "// +build") {
-			return strings.Contains(trim, "ignore")
-		}
-		if strings.HasPrefix(trim, "//") {
+		switch {
+		case constraint.IsGoBuild(trim):
+			expr, err := constraint.Parse(trim)
+			if err != nil {
+				return nil
+			}
+			goBuild = expr
+		case constraint.IsPlusBuild(trim):
+			expr, err := constraint.Parse(trim)
+			if err != nil {
+				return nil
+			}
+			plus = append(plus, expr)
+		case strings.HasPrefix(trim, "//"):
 			continue
+		default:
+			return finishBuildConstraint(goBuild, plus)
 		}
-		return false
 	}
-	return false
+	return finishBuildConstraint(goBuild, plus)
+}
+
+func finishBuildConstraint(goBuild constraint.Expr, plus []constraint.Expr) constraint.Expr {
+	if goBuild != nil {
+		return goBuild
+	}
+	if len(plus) == 0 {
+		return nil
+	}
+	acc := plus[0]
+	for _, e := range plus[1:] {
+		acc = &constraint.AndExpr{X: acc, Y: e}
+	}
+	return acc
 }
 
 func underDir(rel, dir string) bool {

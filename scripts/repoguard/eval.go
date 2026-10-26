@@ -80,6 +80,8 @@ func evalUint(expr ast.Expr, env map[string]uint64, imports map[string]string) (
 			return x | y, true
 		case token.AND:
 			return x & y, true
+		case token.AND_NOT:
+			return x &^ y, true
 		case token.XOR:
 			return x ^ y, true
 		case token.SHL:
