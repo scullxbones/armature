@@ -199,7 +199,9 @@ func funcLocals(fn *ast.FuncDecl) map[string]bool {
 	return locals
 }
 
-func scanTestExecFile(fset *token.FileSet, pf parsedFile, pkg string, funcs map[string]*fnObjs, uf *objUF) (hits []string, written map[string]bool, chmods []chmodEvent) {
+func scanTestExecFile(
+	fset *token.FileSet, pf parsedFile, pkg string, funcs map[string]*fnObjs, uf *objUF,
+) (hits []string, written map[string]bool, chmods []chmodEvent) {
 	fileNums, fileStrs := collectFileConsts(pf.file, pf.imports)
 	written = map[string]bool{}
 	for _, decl := range pf.file.Decls {
