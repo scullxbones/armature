@@ -38,7 +38,7 @@ Derived from `docs/design/deterministic-quality-guardrails.md`, adapted to Go an
 `go test -count=1 ./...` — all tests must pass.
 
 What is in place:
-- Port interfaces defined for every external dependency (`GitCommitter`, `PendingPushTracker`, `MergeChecker`, `Provider`, `Screen`). There is no `ops.Pusher` / `GitPusher` port. CLI append/commit/push goes through `appendOp`, `appendHighStakesOp`, and `appendLowStakesOps` in `cmd/armature`; dual-branch push/rebase is `adapters.Client.Push` / `FetchAndRebase` on that path.
+- Port interfaces defined for every external dependency (`GitCommitter`, `PendingPushTracker`, `Provider`, `Screen`). There is no `ops.Pusher` / `GitPusher` port. CLI append/commit/push goes through `appendOp`, `appendHighStakesOp`, and `appendLowStakesOps` in `cmd/armature`; dual-branch push/rebase is `adapters.Client.Push` / `FetchAndRebase` on that path. Leaf promotion uses `promotion.Evaluate` (not a `MergeChecker` port).
 - Test fakes defined per port in `*_test.go` files adjacent to the package under test.
 - No mock framework in `go.mod` (enforced by C1 `mock-ban`).
 
@@ -137,7 +137,6 @@ For each port interface that has both a fake (used in unit tests) and a real imp
 | Port | Fake | Real adapter |
 |---|---|---|
 | `GitCommitter` | `FakeCommitter` in `ops/committer_contract_test.go` | `adapters.Client` (git subprocess) |
-| `MergeChecker` | `FakeMergeChecker` in `sync/mergechecker_contract_test.go` | `adapters.Client.BranchMergedInto` |
 
 Contract tests for git-backed ports would run in integration scope (tagged `//go:build integration`) and require a real git repo fixture.
 
@@ -181,7 +180,7 @@ R9 (boundary contracts / breaking-change detection) does not apply: armature is 
 Following the ratchet strategy from the guardrails doc — apply to new and modified code first, then backfill:
 
 1. **C6 (clock purity)** — six localized call sites; inject `Clock` port, add a lint ban. High signal-to-effort ratio.
-2. **C8 (fake contracts)** — start with `GitCommitter` and `MergeChecker`; add integration test tag to CI.
+2. **C8 (fake contracts)** — start with `GitCommitter`; add integration test tag to CI.
 3. **C9 (traceability)** — adopt test naming convention for new stories; script check is a small CI addition.
 
 C7 is ACTIVE: `depguard` already holds the map. Remaining architecture work is shrinking fences or proving a new one green, not installing depguard. C1 mock-ban and C10 surface-budget are ACTIVE. Entropy canary remains deferred.

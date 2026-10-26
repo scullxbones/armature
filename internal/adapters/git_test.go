@@ -257,7 +257,7 @@ func TestCommitWorktreeOp_AppendMetaDirNotDirty_REQ_TOPTIER_S4_PRFIX(t *testing.
 	assert.NotContains(t, string(out), ".arm-append-meta", "ops worktree left dirty by append-meta sidecar files: %s", out)
 }
 
-func TestBranchMergedInto_Merged(t *testing.T) {
+func TestIsAncestor_Merged(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
@@ -274,15 +274,17 @@ func TestBranchMergedInto_Merged(t *testing.T) {
 	}
 	gitRun("checkout", "-b", "feature/my-work")
 	gitRun("commit", "--allow-empty", "-m", "feat: work")
+	tip, err := c.ResolveRevision("HEAD")
+	require.NoError(t, err)
 	gitRun("checkout", mainBranch)
 	gitRun("merge", "--no-ff", "feature/my-work", "-m", "Merge feature/my-work")
 
-	merged, err := c.BranchMergedInto("feature/my-work", mainBranch)
+	merged, err := c.IsAncestor(tip, mainBranch)
 	require.NoError(t, err)
 	assert.True(t, merged)
 }
 
-func TestBranchMergedInto_NotMerged(t *testing.T) {
+func TestIsAncestor_NotMerged(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
@@ -299,14 +301,16 @@ func TestBranchMergedInto_NotMerged(t *testing.T) {
 	}
 	gitRun("checkout", "-b", "feature/unmerged")
 	gitRun("commit", "--allow-empty", "-m", "wip")
+	tip, err := c.ResolveRevision("HEAD")
+	require.NoError(t, err)
 	gitRun("checkout", mainBranch)
 
-	merged, err := c.BranchMergedInto("feature/unmerged", mainBranch)
+	merged, err := c.IsAncestor(tip, mainBranch)
 	require.NoError(t, err)
 	assert.False(t, merged)
 }
 
-func TestBranchMergedInto_MergeBaseExitCodes_REQ_NOCOMMENTS(t *testing.T) {
+func TestIsAncestor_MergeBaseExitCodes_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
@@ -323,32 +327,34 @@ func TestBranchMergedInto_MergeBaseExitCodes_REQ_NOCOMMENTS(t *testing.T) {
 	}
 	gitRun("checkout", "-b", "feature/probe")
 	gitRun("commit", "--allow-empty", "-m", "wip")
+	tip, err := c.ResolveRevision("HEAD")
+	require.NoError(t, err)
 	gitRun("checkout", mainBranch)
 
 	t.Run("exit1_notMerged", func(t *testing.T) {
 		t.Parallel()
-		merged, err := c.BranchMergedInto("feature/probe", mainBranch)
+		merged, err := c.IsAncestor(tip, mainBranch)
 		require.NoError(t, err)
 		assert.False(t, merged)
 	})
 
 	t.Run("missingTarget_error", func(t *testing.T) {
 		t.Parallel()
-		merged, err := c.BranchMergedInto("feature/probe", "refs/heads/does-not-exist")
+		merged, err := c.IsAncestor(tip, "refs/heads/does-not-exist")
 		require.Error(t, err)
 		assert.False(t, merged)
 		assert.Contains(t, err.Error(), "does-not-exist")
 	})
 }
 
-func TestBranchMergedInto_NonexistentBranch(t *testing.T) {
+func TestToplevel_ReturnsWorktreeRoot(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
-	c := adapters.New(repo)
-
-	merged, err := c.BranchMergedInto("feature/ghost", "main")
-	assert.NoError(t, err)
-	assert.False(t, merged)
+	want, err := filepath.EvalSymlinks(repo)
+	require.NoError(t, err)
+	top, err := adapters.New(repo).Toplevel()
+	require.NoError(t, err)
+	assert.Equal(t, want, top)
 }
 
 func TestListFilesAtCommit(t *testing.T) {
