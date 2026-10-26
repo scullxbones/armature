@@ -204,7 +204,7 @@ Dogfood shows **local vs CI graph disagreement** and **green jobs that still mis
 
 ### Hermeticity beyond the git-fixture check (R7)
 
-`scripts/check-git-test-hermetic.sh` (wired as `make git-test-hermetic-check`) fails raw `git init` outside `internal/gittest` and requires TestMain isolation for packages that exec git. It does **not** ban network, `time.Sleep`, or real filesystem outside temp dirs.
+`scripts/repoguard -check git-hermetic` (wired as `make git-test-hermetic-check`) fails raw `git init` outside `internal/gittest`, including constant-folded `"g"+"it"` concatenations, and requires TestMain isolation for packages that exec git. Legitimate name-only mentions use the reviewable allowlist, not a syntax dodge. It does **not** ban network, `time.Sleep`, or real filesystem outside temp dirs.
 
 **Priority: medium** — git-fixture check is real; remaining R7 gaps match mtime, ambient git config, and non-git test `.armature` layouts.
 

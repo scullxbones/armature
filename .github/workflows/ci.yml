@@ -98,7 +98,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      # ubuntu-latest does not ship rg. git-test-hermetic-check requires it.
+      # ubuntu-latest does not ship rg. census/skills scripts and check-core helpers still use it.
       - name: Install ripgrep
         run: |
           dest="${HOME}/.local/bin"
