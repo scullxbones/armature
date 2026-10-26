@@ -329,6 +329,43 @@ func restoreDir() {
 `)
 }
 
+func TestTestExecutables_staleModeReassignParam_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "mode_reassign_param", `package fake
+func f(m os.FileMode) {
+	mode := os.FileMode(0o644)
+	mode = m
+	_ = os.Chmod(p, mode)
+}
+`)
+}
+
+func TestTestExecutables_staleModeReassignCall_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "mode_reassign_get", `package fake
+func get() os.FileMode { return 0o755 }
+func f() {
+	mode := os.FileMode(0o644)
+	mode = get()
+	_ = os.WriteFile(p, nil, mode)
+}
+`)
+}
+
+func TestTestExecutables_ioutilWriteFileExec_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "ioutil_755", `package fake
+func f() { _ = ioutil.WriteFile(p, nil, 0o755) }
+`)
+}
+
+func TestTestExecutables_syscallChmodNonExec(t *testing.T) {
+	t.Parallel()
+	assertExecAllowed(t, "syscall_644", `package fake
+func f() { _ = syscall.Chmod(p, 0o644) }
+`)
+}
+
 func TestTestExecutables_exemptionDoesNotMaskSneakyChmod_REQ_REPOGUARD(t *testing.T) {
 	t.Parallel()
 	root := writeTree(t, map[string]string{

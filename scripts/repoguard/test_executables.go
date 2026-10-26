@@ -38,7 +38,7 @@ func checkTestExecutables(root string, stdout, stderr io.Writer) error {
 }
 
 func scanTestExecFile(fset *token.FileSet, pf parsedFile) []string {
-	fileNums, _ := collectFileConsts(pf.file, pf.imports)
+	fileNums := collectFileUintConsts(pf.file, pf.imports)
 	var hits []string
 	for _, decl := range pf.file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
@@ -51,27 +51,107 @@ func scanTestExecFile(fset *token.FileSet, pf parsedFile) []string {
 }
 
 func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, fileNums map[string]uint64) []string {
-	nums := map[string]uint64{}
-	for k, v := range fileNums {
-		nums[k] = v
-	}
+	nums := onceAssignedNums(fn, fileNums, pf.imports)
 	var hits []string
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		switch stmt := n.(type) {
-		case *ast.DeclStmt:
-			if gen, ok := stmt.Decl.(*ast.GenDecl); ok && (gen.Tok == token.CONST || gen.Tok == token.VAR) {
-				bindValueSpecs(gen.Specs, nums, map[string]string{}, nums, map[string]string{}, pf.imports)
-			}
-		case *ast.AssignStmt:
-			bindAssign(stmt, nums, map[string]string{}, pf.imports)
-		case *ast.CallExpr:
-			if hit, ok := noteExecModeCall(fset, pf, stmt, nums); ok {
-				hits = append(hits, hit)
-			}
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if hit, ok := noteExecModeCall(fset, pf, call, nums); ok {
+			hits = append(hits, hit)
 		}
 		return true
 	})
 	return hits
+}
+
+func collectFileUintConsts(file *ast.File, imports map[string]string) map[string]uint64 {
+	nums := map[string]uint64{}
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		bindValueSpecs(gen.Specs, nums, map[string]string{}, nums, map[string]string{}, imports)
+	}
+	return nums
+}
+
+func onceAssignedNums(fn *ast.FuncDecl, fileNums map[string]uint64, imports map[string]string) map[string]uint64 {
+	counts := map[string]int{}
+	rhs := map[string]ast.Expr{}
+	note := func(name string, val ast.Expr) {
+		if name == "" || name == "_" {
+			return
+		}
+		counts[name]++
+		rhs[name] = val
+	}
+	if fn.Type != nil && fn.Type.Params != nil {
+		for _, field := range fn.Type.Params.List {
+			for _, n := range field.Names {
+				if n != nil {
+					note(n.Name, nil)
+				}
+			}
+		}
+	}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false
+		}
+		switch stmt := n.(type) {
+		case *ast.DeclStmt:
+			gen, ok := stmt.Decl.(*ast.GenDecl)
+			if !ok || (gen.Tok != token.CONST && gen.Tok != token.VAR) {
+				return true
+			}
+			for _, spec := range gen.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for i, name := range vs.Names {
+					if name == nil {
+						continue
+					}
+					var val ast.Expr
+					if i < len(vs.Values) {
+						val = vs.Values[i]
+					}
+					note(name.Name, val)
+				}
+			}
+		case *ast.AssignStmt:
+			for i, lhs := range stmt.Lhs {
+				id, ok := lhs.(*ast.Ident)
+				if !ok {
+					continue
+				}
+				var val ast.Expr
+				if i < len(stmt.Rhs) {
+					val = stmt.Rhs[i]
+				}
+				note(id.Name, val)
+			}
+		}
+		return true
+	})
+	nums := map[string]uint64{}
+	for k, v := range fileNums {
+		nums[k] = v
+	}
+	for name, n := range counts {
+		delete(nums, name)
+		if n != 1 || rhs[name] == nil {
+			continue
+		}
+		if u, ok := evalUint(rhs[name], fileNums, imports); ok {
+			nums[name] = u
+		}
+	}
+	return nums
 }
 
 func modeLooksExecutable(expr ast.Expr, nums map[string]uint64, imports map[string]string) bool {
@@ -88,19 +168,35 @@ func noteExecModeCall(fset *token.FileSet, pf parsedFile, call *ast.CallExpr, nu
 }
 
 func execModeArg(call *ast.CallExpr, imports map[string]string) (kind string, mode ast.Expr, ok bool) {
-	switch {
-	case sel(call.Fun, imports, "os", "WriteFile") && len(call.Args) >= 3:
-		return "os.WriteFile", call.Args[2], true
-	case sel(call.Fun, imports, "os", "OpenFile") && len(call.Args) >= 3:
-		return "os.OpenFile", call.Args[2], true
-	case sel(call.Fun, imports, "os", "Chmod") && len(call.Args) >= 2:
-		return "os.Chmod", call.Args[1], true
-	}
 	s, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok || s.Sel == nil || s.Sel.Name != "Chmod" || len(call.Args) < 1 {
+	if !ok || s.Sel == nil {
 		return "", nil, false
 	}
-	return "Chmod", call.Args[0], true
+	if idx, ok := pkgModeIndex(s, imports, len(call.Args)); ok {
+		return exprText(call.Fun), call.Args[idx], true
+	}
+	if s.Sel.Name == "Chmod" && len(call.Args) >= 1 {
+		return "Chmod", call.Args[0], true
+	}
+	return "", nil, false
+}
+
+func pkgModeIndex(s *ast.SelectorExpr, imports map[string]string, nargs int) (int, bool) {
+	switch s.Sel.Name {
+	case "WriteFile":
+		if isPkg(s.X, imports, "os", "io/ioutil") && nargs >= 3 {
+			return 2, true
+		}
+	case "OpenFile":
+		if isPkg(s.X, imports, "os") && nargs >= 3 {
+			return 2, true
+		}
+	case "Chmod":
+		if isPkg(s.X, imports, "os", "syscall", "golang.org/x/sys/unix") && nargs >= 2 {
+			return 1, true
+		}
+	}
+	return 0, false
 }
 
 func formatExecHit(fset *token.FileSet, pos token.Pos, rel, kind string, mode ast.Expr) string {
