@@ -345,7 +345,6 @@ linters:
           - paralleltest
           - tparallel
         path: 'internal/testexec/'
-      # cmd/armature tests now run via Invocation/Run with per-test env overlays.
       - linters:
           - paralleltest
           - tparallel

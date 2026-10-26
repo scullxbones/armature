@@ -411,7 +411,6 @@ for path in sorted(workflow_dir.glob("*.yml")) + sorted(workflow_dir.glob("*.yam
             i += 1
             continue
         action, _, rest = spec.partition("@")
-        # rest may include comment
         sha_part, _, comment = rest.partition("#")
         sha_part = sha_part.strip()
         comment = comment.strip()
@@ -421,7 +420,6 @@ for path in sorted(workflow_dir.glob("*.yml")) + sorted(workflow_dir.glob("*.yam
             problems.append(f"{rel}:{i+1} uses: {spec} missing trailing # vX.Y.Z comment")
         elif not re.search(r"v?\d+", comment):
             problems.append(f"{rel}:{i+1} uses: {spec} comment {comment!r} is not a version")
-        # persist-credentials on checkout
         if action == "actions/checkout":
             j = i + 1
             block = []
