@@ -1,12 +1,7 @@
 package main
 
-// allowGitHermeticName permits mentioning the git binary name without treating
-// the test package as git-executing. Raw git init and exec.Command("git", ...)
-// still fail. Add rows here; do not concatenate around the letters git.
 const allowGitHermeticName = "git-hermetic-name"
 
-// allowGitHermeticInit permits quoting raw git init in a fixture file. A
-// non-allowlisted file under the same directory still fails.
 const allowGitHermeticInit = "git-hermetic-init"
 
 type allowEntry struct {
@@ -15,8 +10,6 @@ type allowEntry struct {
 	Reason  string
 }
 
-// allowlist is the reviewable exception list for repo guards. Syntax tricks
-// are not exceptions.
 var allowlist = []allowEntry{
 	{
 		RelPath: "internal/adapters/git_internal_test.go",

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Fixture tests for scripts/install-verified-github-release.sh.
 set -euo pipefail
 
 REPO_ROOT="${1:-.}"

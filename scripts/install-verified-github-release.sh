@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Download a GitHub release tarball, verify sha256 against that release's
-# published checksums file, and install one named binary into DEST.
-#
-# A checksum mismatch or a missing checksums entry fails the process.
-# Does not fall back to go install or GOPROXY.
 set -euo pipefail
 
 usage() {
@@ -103,7 +98,6 @@ echo "  tarball: $TARBALL_URL"
 echo "  checksums: $CHECKSUMS_URL"
 
 curl_get() {
-    # No GOPROXY fallback. Retry is not used: a failed download must fail the job.
     curl -fsSL --retry 0 "$1" -o "$2"
 }
 

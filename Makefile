@@ -133,7 +133,6 @@ print-tool-versions:
 	@printf 'GOLANGCI_LINT_VERSION=%s\nGREMLINS_VERSION=%s\nGOVULNCHECK_VERSION=%s\nRIPGREP_VERSION=%s\nSYFT_VERSION=%s\n' \
 		'$(GOLANGCI_LINT_VERSION)' '$(GREMLINS_VERSION)' '$(GOVULNCHECK_VERSION)' '$(RIPGREP_VERSION)' '$(SYFT_VERSION)'
 
-# Resolve DEST for checksum-verified GitHub release installs (CI path).
 define resolve-dest
 	dest="$(DEST)"; \
 	if [ -z "$$dest" ]; then \
