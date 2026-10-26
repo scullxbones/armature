@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/testexec"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,9 +77,7 @@ func TestMaterialize_MkdirAllErrorPropagated(t *testing.T) {
 	readOnlyDir := filepath.Join(dir, "readonly")
 	require.NoError(t, os.Mkdir(readOnlyDir, 0555))
 	t.Cleanup(func() {
-		if err := os.Chmod(readOnlyDir, 0755); err != nil {
-			t.Fatal(err)
-		}
+		testexec.ChmodDir(t, readOnlyDir, 0755)
 	})
 
 	issuesDir := filepath.Join(dir, "issues")
@@ -101,9 +100,7 @@ func TestMaterializeAndReturn_MkdirAllErrorPropagated(t *testing.T) {
 	readOnlyDir := filepath.Join(dir, "readonly")
 	require.NoError(t, os.Mkdir(readOnlyDir, 0555))
 	t.Cleanup(func() {
-		if err := os.Chmod(readOnlyDir, 0755); err != nil {
-			t.Fatal(err)
-		}
+		testexec.ChmodDir(t, readOnlyDir, 0755)
 	})
 
 	issuesDir := filepath.Join(dir, "issues")

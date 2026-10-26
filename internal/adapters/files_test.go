@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/scullxbones/armature/internal/testexec"
 )
 
 func TestAppendLogAppend_REQ_ARCHIMP_S19_T2(t *testing.T) {
@@ -791,11 +793,9 @@ func TestRemoveIssueJSON_SurfacesUnexpectedError_REQ_TOPTIER_B1(t *testing.T) {
 	locked := filepath.Join(dir, "locked")
 	require.NoError(t, os.Mkdir(locked, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(locked, "task-01.json"), []byte(`{}`), 0600))
-	require.NoError(t, os.Chmod(locked, 0555))
+	testexec.ChmodDir(t, locked, 0555)
 	t.Cleanup(func() {
-		if err := os.Chmod(locked, 0755); err != nil {
-			t.Fatal(err)
-		}
+		testexec.ChmodDir(t, locked, 0755)
 	})
 
 	assert.Error(t, RemoveIssueJSON(locked, "task-01"))

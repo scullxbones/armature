@@ -13,6 +13,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -184,9 +185,7 @@ func TestOverrideReleasePropagatesSnapshotLoadError_REQ_LNGHZN_S11_T2(t *testing
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
 	require.NoError(t, os.Chmod(opsDir, 0o000))
 	t.Cleanup(func() {
-		if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {
-			t.Logf("restore ops dir perms: %v", chmodErr)
-		}
+		testexec.ChmodDir(t, opsDir, 0o755)
 	})
 
 	root := testRootCmd(t)

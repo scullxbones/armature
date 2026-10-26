@@ -13,6 +13,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -157,15 +158,11 @@ func TestSyncDryRunWritesNothingOnReadOnlyState_REQ_LNGHZN_S11_T3(t *testing.T) 
 	}
 	require.NoError(t, os.Chmod(filepath.Join(stateDir, "index.json"), 0o444))
 	require.NoError(t, os.Chmod(filepath.Join(stateDir, "checkpoint.json"), 0o444))
-	require.NoError(t, os.Chmod(issuesDir, 0o555))
-	require.NoError(t, os.Chmod(stateDir, 0o555))
+	testexec.ChmodDir(t, issuesDir, 0o555)
+	testexec.ChmodDir(t, stateDir, 0o555)
 	t.Cleanup(func() {
-		if chmodErr := os.Chmod(stateDir, 0o755); chmodErr != nil {
-			t.Logf("restore state dir perms: %v", chmodErr)
-		}
-		if chmodErr := os.Chmod(issuesDir, 0o755); chmodErr != nil {
-			t.Logf("restore issues dir perms: %v", chmodErr)
-		}
+		testexec.ChmodDir(t, stateDir, 0o755)
+		testexec.ChmodDir(t, issuesDir, 0o755)
 		for _, name := range []string{"index.json", "checkpoint.json"} {
 			if chmodErr := os.Chmod(filepath.Join(stateDir, name), 0o644); chmodErr != nil {
 				t.Logf("restore %s perms: %v", name, chmodErr)

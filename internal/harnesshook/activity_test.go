@@ -16,6 +16,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/clock"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -357,9 +358,9 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) { //nolint:
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
-	require.NoError(t, os.Chmod(gitDir, 0o500))
+	testexec.ChmodDir(t, gitDir, 0o500)
 	t.Cleanup(func() {
-		require.NoError(t, os.Chmod(gitDir, 0o755))
+		testexec.ChmodDir(t, gitDir, 0o755)
 	})
 
 	oldStderr := os.Stderr

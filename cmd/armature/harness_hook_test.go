@@ -19,6 +19,7 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/spf13/cobra"
@@ -811,7 +812,7 @@ func TestSnapshotErrorFailsOpen_REQ_HOOKBIND_T3(t *testing.T) {
 	err = os.Chmod(opsDir, 0o000)
 	require.NoError(t, err, "should be able to chmod ops directory")
 	t.Cleanup(func() {
-		swallowErr(os.Chmod(opsDir, 0o755))
+		testexec.ChmodDir(t, opsDir, 0o755)
 	})
 
 	var out, errOut bytes.Buffer
@@ -1060,10 +1061,9 @@ func TestHarnessHookActivityFailOpenOnError_REQ_EXECEV_T1(t *testing.T) {
 		actualGitDir = filepath.Join(worktreeDir, actualGitDir)
 	}
 
-	err = os.Chmod(actualGitDir, 0o500) //nolint:gosec // G703: test code to make directory read-only
-	require.NoError(t, err)
+	testexec.ChmodDir(t, actualGitDir, 0o500)
 	t.Cleanup(func() {
-		swallowErr(os.Chmod(actualGitDir, 0o755)) //nolint:gosec // G703: restore test git-dir mode after read-only chmod
+		testexec.ChmodDir(t, actualGitDir, 0o755)
 	})
 
 	setCLIEnv(t, "ARMATURE_ISSUE_ID", "task-01")
