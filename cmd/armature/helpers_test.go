@@ -18,6 +18,7 @@ import (
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -326,11 +327,9 @@ func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T
 	for _, e := range entries {
 		require.NoError(t, os.Chmod(filepath.Join(opsDir, e.Name()), 0o444))
 	}
-	require.NoError(t, os.Chmod(opsDir, 0o555))
+	testexec.ChmodDir(t, opsDir, 0o555)
 	t.Cleanup(func() {
-		if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {
-			t.Logf("restore ops dir perms: %v", chmodErr)
-		}
+		testexec.ChmodDir(t, opsDir, 0o755)
 		restored, readErr := os.ReadDir(opsDir)
 		if readErr != nil {
 			t.Logf("readdir ops after restore: %v", readErr)
@@ -338,11 +337,9 @@ func TestDoctorFixDoesNotConcatenateCommandFailure_REQ_LNGHZN_S6_T1(t *testing.T
 		}
 		for _, e := range restored {
 			p := filepath.Join(opsDir, e.Name())
-			mode := os.FileMode(0o644)
 			if e.IsDir() {
-				mode = 0o755
-			}
-			if chmodErr := os.Chmod(p, mode); chmodErr != nil {
+				testexec.ChmodDir(t, p, 0o755)
+			} else if chmodErr := os.Chmod(p, 0o644); chmodErr != nil {
 				t.Logf("restore perms %s: %v", p, chmodErr)
 			}
 			if !e.IsDir() {

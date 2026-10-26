@@ -1872,8 +1872,9 @@
       ]
     },
     "internal/testexec": {
-      "count": 1,
+      "count": 2,
       "names": [
+        "ChmodDir",
         "Write"
       ]
     },

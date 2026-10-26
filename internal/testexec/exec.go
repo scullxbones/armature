@@ -1,11 +1,18 @@
-// Package testexec installs test executables without ETXTBSY races (golang/go#22315).
+// Package testexec is the only allowed source of execute-bit permission
+// changes in tests.
 //
+// Write installs test executables without ETXTBSY races (golang/go#22315).
 // A process that forks while any goroutine holds a write fd to an executable
 // can fail exec of that inode with ETXTBSY: O_CLOEXEC closes the fd only at
 // exec, so the child still has it open. Rename-into-place does not close the
 // inherited fd. Tests therefore never create a new executable inode after
 // TestMain: Write hard-links a trampoline prepared in init and stores unique
 // script bodies in a non-executable sidecar.
+//
+// ChmodDir is the corresponding helper for directory modes that include an
+// execute bit (traversal). The repoguard test-executables check bans raw
+// os.Chmod / os.WriteFile / os.OpenFile / (*os.File).Chmod calls whose mode
+// has an execute bit or cannot be evaluated.
 package testexec
 
 import (
@@ -54,6 +61,8 @@ var (
 	remove    = os.Remove
 	link      = os.Link
 	symlink   = os.Symlink
+	lstat     = os.Lstat
+	chmod     = os.Chmod
 )
 
 func init() {
@@ -117,5 +126,22 @@ func Write(t testing.TB, path string, content []byte) {
 		if err := symlink(trampolinePath, path); err != nil {
 			t.Fatalf("testexec.Write: link %s to trampoline: %v", path, err)
 		}
+	}
+}
+
+// ChmodDir sets mode on dir after verifying the path is a directory.
+// Tests that need an execute bit on a directory must use this helper
+// instead of os.Chmod.
+func ChmodDir(t testing.TB, dir string, mode os.FileMode) {
+	t.Helper()
+	info, err := lstat(dir)
+	if err != nil {
+		t.Fatalf("testexec.ChmodDir: stat %s: %v", dir, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("testexec.ChmodDir: %s is not a directory", dir)
+	}
+	if err := chmod(dir, mode); err != nil {
+		t.Fatalf("testexec.ChmodDir: chmod %s: %v", dir, err)
 	}
 }

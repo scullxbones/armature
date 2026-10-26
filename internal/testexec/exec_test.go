@@ -58,6 +58,8 @@ func restoreTrampoline(t *testing.T) {
 	remove = os.Remove
 	link = os.Link
 	symlink = os.Symlink
+	lstat = os.Lstat
+	chmod = os.Chmod
 	prepareMu.Lock()
 	prepared = false
 	trampolinePath = ""
@@ -198,6 +200,61 @@ func TestWriteFailsWhenTrampolinePathEmpty(t *testing.T) {
 	rec := writeAndCapture(t, filepath.Join(t.TempDir(), "tool"), []byte("#!/bin/sh\n"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "was not prepared")
+}
+
+func chmodDirAndCapture(t *testing.T, path string, mode os.FileMode) *fatalRecorder {
+	t.Helper()
+	rec := &fatalRecorder{T: t}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ChmodDir(rec, path, mode)
+	}()
+	<-done
+	return rec
+}
+
+func TestChmodDirSetsDirectoryMode(t *testing.T) {
+	dir := t.TempDir()
+	ChmodDir(t, dir, 0o500)
+	info, err := os.Lstat(dir)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o500), info.Mode().Perm())
+	ChmodDir(t, dir, 0o755)
+	info, err = os.Lstat(dir)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+}
+
+func TestChmodDirFailsOnFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "file")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
+	rec := chmodDirAndCapture(t, path, 0o755)
+	require.True(t, rec.failed)
+	assert.Contains(t, rec.msg, "not a directory")
+}
+
+func TestChmodDirFailsWhenMissing(t *testing.T) {
+	rec := chmodDirAndCapture(t, filepath.Join(t.TempDir(), "missing"), 0o755)
+	require.True(t, rec.failed)
+	assert.Contains(t, rec.msg, "stat")
+}
+
+func TestChmodDirFailsWhenLstatErrors(t *testing.T) {
+	t.Cleanup(func() { restoreTrampoline(t) })
+	lstat = func(string) (os.FileInfo, error) { return nil, errors.New("enoent") }
+	rec := chmodDirAndCapture(t, t.TempDir(), 0o755)
+	require.True(t, rec.failed)
+	assert.Contains(t, rec.msg, "stat")
+}
+
+func TestChmodDirFailsWhenChmodErrors(t *testing.T) {
+	t.Cleanup(func() { restoreTrampoline(t) })
+	chmod = func(string, os.FileMode) error { return errors.New("eperm") }
+	rec := chmodDirAndCapture(t, t.TempDir(), 0o755)
+	require.True(t, rec.failed)
+	assert.Contains(t, rec.msg, "chmod")
 }
 
 func TestWriteParallelInstallAndExec(t *testing.T) {

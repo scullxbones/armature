@@ -15,6 +15,7 @@ import (
 	"github.com/scullxbones/armature/internal/deliverygate"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -756,11 +757,7 @@ func TestMergedRecordsOpBeforeRemovingWorktree(t *testing.T) {
 
 		opsDir := filepath.Join(repo, ".armature", "ops")
 		require.NoError(t, os.Chmod(opsDir, 0o444))
-		defer func() {
-			if chmodErr := os.Chmod(opsDir, 0o755); chmodErr != nil {
-				t.Logf("warning: failed to restore ops dir permissions: %v", chmodErr)
-			}
-		}()
+		defer testexec.ChmodDir(t, opsDir, 0o755)
 
 		mergedCmd := testRootCmd(t)
 		mergedCmd.SetOut(new(bytes.Buffer))

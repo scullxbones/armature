@@ -203,7 +203,7 @@ func TestTestExecutables_allowsNonExecAndDirChmod(t *testing.T) {
 func f() { _ = os.WriteFile(path, body, 0o644) }
 `)
 	assertExecAllowed(t, "dirchmod", `package fake
-func f() { _ = os.Chmod(opsDir, 0o755) }
+func f() { _ = os.Chmod(opsDir, 0o000) }
 `)
 	assertExecAllowed(t, "andnot644", `package fake
 func f() { _ = os.WriteFile(path, body, 0o755&^0o111) }
@@ -271,6 +271,50 @@ func chmod() { _ = os.Chmod(p, 0o755) }
 	}
 }
 
+func TestTestExecutables_unrelatedParamChmod_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "unrelated_params", `package fake
+func w(p string) { _ = os.WriteFile(p, body, 0o600) }
+func T(p string) { _ = os.Chmod(p, 0o755) }
+`)
+}
+
+func TestTestExecutables_joinPathChmod_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "join_paths", `package fake
+func w() { _ = os.WriteFile(filepath.Join(dir, "tool"), body, 0o600) }
+func T() { _ = os.Chmod(filepath.Join(dir, "tool"), 0o755) }
+`)
+}
+
+func TestTestExecutables_pkgVarFoldedVsName_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"cmd/fake/write_test.go": `package fake
+var dest = "bin/tool"
+func w() { _ = os.WriteFile(dest, body, 0o600) }
+`,
+		"cmd/fake/chmod_test.go": `package fake
+func T() { _ = os.Chmod(dest, 0o755) }
+`,
+	})
+	_, errOut, code := runCheck(t, "test-executables", root)
+	if code == 0 {
+		t.Fatal("expected fail on package-var chmod in a different file")
+	}
+	if !strings.Contains(errOut, "testexec.Write") {
+		t.Fatalf("got %s", errOut)
+	}
+}
+
+func TestTestExecutables_rawDirExecChmod_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "raw_dir_755", `package fake
+func f() { _ = os.Chmod(opsDir, 0o755) }
+`)
+}
+
 func TestTestExecutables_localIdentDoesNotCollide_REQ_REPOGUARD(t *testing.T) {
 	t.Parallel()
 	assertExecAllowed(t, "opsdir_locals", `package fake
@@ -280,7 +324,7 @@ func writeFileNotDir() {
 }
 func restoreDir() {
 	opsDir := "ops"
-	_ = os.Chmod(opsDir, 0o755)
+	_ = os.Chmod(opsDir, 0o644)
 }
 `)
 }

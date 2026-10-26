@@ -2610,8 +2610,9 @@ func TestRunRepoSetupMigrationFailureNamesBackupDir_P1(t *testing.T) {
 		}
 		for _, e := range entries {
 			if strings.HasPrefix(e.Name(), ".armature") {
-				if chmodErr := os.Chmod(filepath.Join(repo, e.Name(), "templates"), 0o750); chmodErr != nil && !os.IsNotExist(chmodErr) {
-					t.Logf("cleanup chmod: %v", chmodErr)
+				tmpl := filepath.Join(repo, e.Name(), "templates")
+				if st, statErr := os.Stat(tmpl); statErr == nil && st.IsDir() {
+					testexec.ChmodDir(t, tmpl, 0o750)
 				}
 			}
 		}
