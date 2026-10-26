@@ -37,7 +37,7 @@ implementation. This sketch does **not** adopt fetch-before-every-read; that
 path is out of scope (too invasive for materialize/list latency and depguard
 surface).
 
-Related but not this design: `arm sync` / `internal/sync` detect **code-branch
+Related but not this design: `arm sync` / `internal/promotion` detect **code-branch
 merges** and write `merged` transitions. Unrelated to publishing `_armature`.
 G2.2 in `docs/design/narrow-gaps-addendum.md` (reserved doctor **D11**,
 `TOPTIER-S12-T2`) is disaster-recovery / missing upstream, not lag counts.
@@ -171,7 +171,7 @@ Disposition (pick one at implementation tasking; sketch preference is A):
 
 Package: `github.com/scullxbones/armature/internal/opsync`
 
-Name **`opsync`**, not `sync`: `internal/sync` is merge detection.
+Name **`opsync`**, not `sync`: `arm sync` already means code-branch promotion.
 
 ### 4.1 Transport (git port)
 
@@ -325,7 +325,7 @@ internal/adapters           Push, FetchAndRebase, + FetchTracking, AheadBehind
 internal/ops                UNCHANGED append/commit; delete PendingPushTracker
 internal/ops/tracker.go     DELETE (FilePushTracker / NoTracker)
 internal/doctor             finding mapper only; no git verbs
-internal/sync               UNCHANGED (merge detect)
+internal/promotion          UNCHANGED (code-branch merge detect)
 ```
 
 ### Depguard (ADR 0004)

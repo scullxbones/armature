@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 133,
+      "count": 132,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -11,7 +11,6 @@
         "Client.AddPaths",
         "Client.AddWorktree",
         "Client.BlobExists",
-        "Client.BranchMergedInto",
         "Client.CheckIgnoreSource",
         "Client.CommitDiff",
         "Client.CommitIndexNoVerify",
@@ -1851,14 +1850,6 @@
       "count": 1,
       "names": [
         "Decode"
-      ]
-    },
-    "internal/sync": {
-      "count": 3,
-      "names": [
-        "DetectMerges",
-        "MergeChecker",
-        "MergeChecker.BranchMergedInto"
       ]
     },
     "internal/taskcontract": {
