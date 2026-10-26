@@ -168,35 +168,26 @@ func noteExecModeCall(fset *token.FileSet, pf parsedFile, call *ast.CallExpr, nu
 }
 
 func execModeArg(call *ast.CallExpr, imports map[string]string) (kind string, mode ast.Expr, ok bool) {
+	n := len(call.Args)
+	switch {
+	case sel(call.Fun, imports, "os", "WriteFile") && n >= 3:
+		return "os.WriteFile", call.Args[2], true
+	case sel(call.Fun, imports, "io/ioutil", "WriteFile") && n >= 3:
+		return "ioutil.WriteFile", call.Args[2], true
+	case sel(call.Fun, imports, "os", "OpenFile") && n >= 3:
+		return "os.OpenFile", call.Args[2], true
+	case sel(call.Fun, imports, "os", "Chmod") && n >= 2:
+		return "os.Chmod", call.Args[1], true
+	case sel(call.Fun, imports, "syscall", "Chmod") && n >= 2:
+		return "syscall.Chmod", call.Args[1], true
+	case sel(call.Fun, imports, "golang.org/x/sys/unix", "Chmod") && n >= 2:
+		return "unix.Chmod", call.Args[1], true
+	}
 	s, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok || s.Sel == nil {
+	if !ok || s.Sel == nil || s.Sel.Name != "Chmod" || n < 1 {
 		return "", nil, false
 	}
-	if idx, ok := pkgModeIndex(s, imports, len(call.Args)); ok {
-		return exprText(call.Fun), call.Args[idx], true
-	}
-	if s.Sel.Name == "Chmod" && len(call.Args) >= 1 {
-		return "Chmod", call.Args[0], true
-	}
-	return "", nil, false
-}
-
-func pkgModeIndex(s *ast.SelectorExpr, imports map[string]string, nargs int) (int, bool) {
-	switch s.Sel.Name {
-	case "WriteFile":
-		if isPkg(s.X, imports, "os", "io/ioutil") && nargs >= 3 {
-			return 2, true
-		}
-	case "OpenFile":
-		if isPkg(s.X, imports, "os") && nargs >= 3 {
-			return 2, true
-		}
-	case "Chmod":
-		if isPkg(s.X, imports, "os", "syscall", "golang.org/x/sys/unix") && nargs >= 2 {
-			return 1, true
-		}
-	}
-	return 0, false
+	return "Chmod", call.Args[0], true
 }
 
 func formatExecHit(fset *token.FileSet, pos token.Pos, rel, kind string, mode ast.Expr) string {
