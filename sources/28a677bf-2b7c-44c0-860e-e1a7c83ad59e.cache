@@ -71,7 +71,7 @@ func CurrentHostRef(refs []HostRef) (HostRef, bool) {
 
 The index stores the current URL and every live URL, so list can filter without opening each issue. The full order, including withdrawn events and roles, stays on the issue.
 
-A repeated no-op still has to publish a local op the origin does not have yet. That is the ADR 0018 rule for an unpublished local write. The command skips the append only when the materialized history already shows the no-op.
+The command skips the append only when the materialized history already shows the no-op. That skip is the [ADR 0018](../adr/0018-payload-keyed-op-idempotency.md) rule. A repeated no-op still has to publish a local op the origin does not have yet. `TestTransitionIdenticalRetryPublishesUnpublishedLocalOp_REQ_OPS_PUBLISH` in `cmd/armature/ops_publish_test.go` pins that publish rule for `arm transition`.
 
 Do not copy `applySourceLink`.
 
