@@ -1,0 +1,187 @@
+# Session stdio MCP
+
+This note does not amend the constitution and it does not change the repo. Whether MCP earns a place inside Armature is in [MCP fit recommendation](/cursor/stores/bc-9b5f1f87-d541-4e1e-ba3c-5f8ae3f033c7/docs/mcp-fit-recommendation.md). The two wordings of T1 are in [Both sides of a tighter T1](/cursor/stores/bc-9b5f1f87-d541-4e1e-ba3c-5f8ae3f033c7/docs/t1-amendment.md). The host files that launch a stdio command are in [MCP host setup](/cursor/stores/bc-9b5f1f87-d541-4e1e-ba3c-5f8ae3f033c7/docs/mcp-host-setup.md). Those notes are not repeated here.
+
+The premise under the external bridge was that the process a host holds open cannot be `arm`. Brian called that bridge excessive. This design tests the premise by exempting one process, and by leaving every other long-running job on the wrong side of the same sentence.
+
+## The sentence this design would ratify
+
+Today's bullet is `T1 — needs a long-running process.`
+
+The replacement is one bullet.
+
+`- **T1** — needs a long-running process. One exemption: `arm mcp`, a stdio session held by the one client that started it. It opens no socket, acts only on that client's requests, serves each request as one `arm` command inside itself, and exits when that client closes stdin or signals.`
+
+A new ADR would bump the constitution version. I1 is not in that diff. The words do the killing.
+
+- A janitor is not `arm mcp`, and it does work the client did not request.
+- A periodic sweep, including a heartbeat the session emits on its own, fails "acts only on that client's requests."
+- An HTTP listener fails "opens no socket." I1 still says no server.
+- A sandbox Armature keeps running is not "one `arm` command." N2 still says Armature is not an agent framework. Code mode stays in the host.
+- A parent that starts a child `arm` for each request fails "inside itself."
+
+The sentence does not say the process never starts another `arm`. Measured. Ops commits pass `git commit --no-verify`, and `git commit -h` on this machine says that flag bypasses pre-commit and commit-msg hooks. Measured. The post-commit template in `cmd/armature/bootstrap.go` runs `arm hook run post-commit`. A write can therefore start a hook process. An earlier draft said "starts no other `arm` process." That clause is false, so it is not in the sentence.
+
+## Survivor
+
+In-process. `arm mcp` is the process the host holds. It speaks MCP on that stdin and stdout. Each `tools/call` runs one `arm` command inside the same process, through `Run`, the entrypoint `main` and the tests already use. The command finishes. The session stays up until the client leaves.
+
+Self-exec lost. It is one session plus a child per call. That is the process count Brian already called excessive, moved inside the repo.
+
+### What the user writes
+
+`command` is `arm`. Args are `mcp`. Armature does not write these files and does not name the host.
+
+Claude Code, `.mcp.json`.
+
+```json
+{
+  "mcpServers": {
+    "armature": {
+      "type": "stdio",
+      "command": "arm",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Codex, `config.toml`. Set `cwd` to the checkout. The fetched Codex page has that key. This command does not read a project-root variable.
+
+```toml
+[mcp_servers.armature]
+command = "arm"
+args = ["mcp"]
+cwd = "/path/to/checkout"
+```
+
+Cursor, `.cursor/mcp.json`. The fetched page has no `cwd` key. The checkout is `${workspaceFolder}` on `--repo`.
+
+```json
+{
+  "mcpServers": {
+    "armature": {
+      "type": "stdio",
+      "command": "arm",
+      "args": ["mcp", "--repo", "${workspaceFolder}"]
+    }
+  }
+}
+```
+
+Two hosts on one worker id set `ARM_LOG_SLOT` in that host's own `env`. Different slots do not share a lock. Armature picks no slot names.
+
+### What the model calls
+
+`tools/list` returns one tool, `arm`, with one argument, `args`, a string array. The text of the result is that command's stdout, unchanged. There is no second catalog. Admission reuses the existing output classification. Agent-facing modes run. Protocol Output and Artifact Output are refused. `harness-hook` is not a tool.
+
+Code mode stays in the host. The host's code calls this one tool. `arm` does not run the model's code.
+
+### Types
+
+Sketch only. Bodies are not implemented. Package `internal/mcpsession`. Wire types stay unexported. The session struct has no field for a worker id, a `config.Context`, a listen address, or a timer that fires while the client is connected.
+
+```go
+type Call struct {
+	Args []string
+}
+
+type Result struct {
+	Stdout   []byte
+	ExitCode int
+}
+
+// Serve never calls Runner concurrently.
+type Runner func(ctx context.Context, c Call) Result
+
+type Exit int // client closed, signaled, signaled again, runner panicked, wire broken
+
+func Serve(ctx context.Context, in io.Reader, out io.Writer, sig <-chan os.Signal, version string, run Runner) Exit
+```
+
+`cmd/armature/mcp.go` owns the cobra command. It is Hidden, marked Protocol Output, and its `PersistentPreRunE` returns nil so the session itself resolves nothing. `--worker-id` on `arm mcp` is refused. A flag there would sit at the top of `ResolveIdentity` for every later call. `--repo` is one `os.Chdir` before `Serve`.
+
+```go
+func toolRunner(outer Invocation) mcpsession.Runner {
+	return func(ctx context.Context, c mcpsession.Call) mcpsession.Result {
+		// admitToolArgs refuses harness-hook, hook, mcp, and Artifact Output.
+		// Run builds a fresh root, so identity and StateDir are read again.
+		code := Run(ctx, toolInvocation(outer, c.Args, &stdout))
+		return mcpsession.Result{Stdout: stdout.Bytes(), ExitCode: code}
+	}
+}
+```
+
+`toolInvocation` sets `TTY` false and `Stdin` to an empty reader. A command cannot read the MCP stream, and a human break-glass prompt cannot open on this path.
+
+`internal/mcpsession` imports no `net` and no `os/exec`. A lint bans `time.NewTicker` there. The ban is the exemption. A ticker would be the sweep the sentence still kills.
+
+### Call path
+
+1. The host writes one request. Method `tools/call`, name `arm`, args `["ready"]`.
+2. The session decodes that into `Call{Args: ["ready"]}` and queues it. One call runs at a time.
+3. `admitToolArgs` classifies `ready` on a throwaway command tree. Agent-facing passes.
+4. `Run` builds a fresh root. `PersistentPreRunE` resolves context. `ResolveIdentity` runs in the usual order. flag, then worktree config, then `ARM_WORKER_ID`, then clone config. The command writes one document into a buffer. Any append takes `LockLogID` for that append and releases it before `Run` returns.
+5. The session writes one response. The text is the buffer. The process stays up.
+
+Stdin EOF, SIGINT, SIGTERM, or SIGHUP stops new calls, cancels the in-flight call, and waits at most 500 milliseconds. That bound is Claude Code's measured gap from SIGINT to SIGKILL. A second signal returns at once. The sketch assumes one JSON object per line. If a host still sends `Content-Length` framing, `initialize` never completes. That framing is an open question, not a constitutional clause.
+
+### Worker id and the log lock
+
+Measured at `6372c40b`. `LockLogID` is a non-blocking flock on `<git-common-dir>/armature-log-<stem>.lock`. Overlap returns `LOG-SLOT-COLLISION`. PR #282 chose that failure over a wait. The session does not hold this flock between calls, and it does not hold it for the session. Serial calls mean the session does not collide with itself. A terminal `arm` on the same stem during a call still gets `LOG-SLOT-COLLISION`. The session does not retry. A retry would turn the detector into the queue that PR refused.
+
+The session resolves no identity of its own. Each call re-reads git config, so a `worker-init` that landed between calls is visible to the next call. `ARM_WORKER_ID` and `ARM_LOG_SLOT` come from the environment the host set at spawn. They keep their current rank.
+
+Measured. `worker-init` prints `Worker ID: …` from `cmd/armature/worker_init.go`. That is not one JSON document. Admitting it as a normal tool result would break the promise. Fix that command, or keep it out of the tool, before the session ships. Do not report a successful init as a protocol error after the git config write has already happened.
+
+Measured. The harness-hook heartbeat calls `ops.AppendAndCommit` and does not call `withWorkerLogLock`. The hook call is older than the flock. PR #86 versus PR #282. No commit states an exemption. Inferred omission. This design leaves it. The session emits no heartbeats. A heartbeat timer inside `arm mcp` would be the sweep the sentence kills. `harness-hook` stays a separate process the host launches for one event.
+
+A second, blocking lock inside `AppendIf` still serializes the bytes of a hook heartbeat and a tool call. That lock is untouched.
+
+### Protocol Output
+
+Measured. N7 says the sole Protocol Output command is `harness-hook`, because its stdin and stdout are a protocol the harness defines. PR #113 refused to widen that class for artifact commands and added Artifact Output instead. Those commands are one-way documents. `arm mcp` is the same kind of command as the hook. Bidirectional, host-defined bytes, and an envelope would break the host.
+
+The contract sentence becomes `The Protocol Output commands are harness-hook and mcp.` The tree-walk test expects exactly those two names. ADR 0017 stays the historical decision. The new ADR records the inventory change. `mcp` is Hidden so `arm --help` does not invite a person to occupy stdio. Hidden does not remove it from the census.
+
+`platformProtocolRoots` gains `mcp`. A test fails when that map and the Protocol Output marks disagree.
+
+### What stays put
+
+I1 stays "no database, no server, no daemon." The ADR states a reading, and the reading is inferred, not a finding in the records. A server there means a process with a listen address another client can reach. A daemon means a process that outlives the client that started it. `arm mcp` has neither. The amendment note already says the word "server" does not settle a client-tied stdio process. Brian has to accept this reading or the exemption is only a T1 change sitting next to an I1 fight.
+
+N2 stays. Host-ref stays. No `Host` interface, no adapter registry, `arm ref-read` stores nothing, and the package does not decode `clientInfo`.
+
+## Shapes that died
+
+**Self-exec.** `arm mcp` would exec a child `arm` per `tools/call`. The child re-reads identity for free, and a panic stays in the child. It lost on depth. The parent becomes a process manager, admission has no clean home, and the T1 sentence would have to allow a launcher. A host that signals only the parent can leave the child running after the client is gone. In-process uses `Run`, which already returns bytes and an exit code.
+
+**One MCP tool per command.** Positional arity is a cobra function, not data, so the schemas would need a second list. `tools/list` would grow with the CLI. One `args` array keeps the command tree as the only list.
+
+**A frozen session identity.** Resolving `Context` once per session would pin `StateDir` and the worker stem for the life of the chat. The session type has no field that could hold them. Passing `--worker-id` from the session argv into every call is the same freeze, so that flag is refused on `arm mcp`.
+
+**A session-long flock, or parallel calls on one stem.** The flock is a collision detector. Holding it for the chat makes the user's own `arm` fail until the host disconnects. Running two calls at once makes the session collide with itself.
+
+**A third output class.** Session output would have the same admission test as Protocol Output. Two classes for one test is two ways to do one job.
+
+**The external bridge, HTTP, a janitor, a sweep, and a sandbox.** The bridge is the premise this sentence removes. The other four still die on the words above.
+
+## Tradeoffs
+
+- After `make install`, the session keeps the old binary until the host starts it again. In exchange there is one process and no exec path.
+- One tool means a host permission prompt cannot tell `ready` from `push-ops`. In exchange the tool list does not change when commands change.
+- Calls run one at a time, so a long `gate run` delays the next call. In exchange the session never collides with itself and never retries a collision.
+- A panic ends the session. In exchange the process does not keep serving after a command has blown up.
+- Commands that ignore cancel can run until the grace expires. Grandchildren of a command, such as a gate subprocess, are not a process group this design reaps. Claude Code, measured, signals the server process. On Linux that is not automatically the whole tree.
+
+## Synthesis
+
+Two candidates, same brief. Candidate 1 chose in-process. Candidate 2 chose self-exec. The cross-judge scored in-process higher on the carve-out sentence, the lock story, the public surface, and interface depth, and agreed on that base. This note follows that pick.
+
+Taken from the self-exec candidate. The `worker-init` stdout check belongs in tests, not in a runtime failure after a successful write. ADR 0017 stays historical.
+
+Rejected from it. Concurrent calls, passing the session `--worker-id` into every child, one tool per command, and a T1 sentence that stays legal by listing the four jobs it wants to kill.
+
+## Next implementation step
+
+Add `Stdin` to `Invocation`, point `review`'s `--assessment -` at the command's stdin, and ban direct `os.Stdin` and `os.Stdout` in command code. That change is safe to land before any MCP code, and the existing suite can prove it. Nothing in this note is implemented.
