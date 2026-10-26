@@ -202,13 +202,13 @@ func TestWriteFailsWhenTrampolinePathEmpty(t *testing.T) {
 	assert.Contains(t, rec.msg, "was not prepared")
 }
 
-func chmodDirAndCapture(t *testing.T, path string, mode os.FileMode) *fatalRecorder {
+func chmodDirAndCapture(t *testing.T, path string) *fatalRecorder {
 	t.Helper()
 	rec := &fatalRecorder{T: t}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ChmodDir(rec, path, mode)
+		ChmodDir(rec, path, 0o755)
 	}()
 	<-done
 	return rec
@@ -230,13 +230,13 @@ func TestChmodDirFailsOnFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file")
 	require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
-	rec := chmodDirAndCapture(t, path, 0o755)
+	rec := chmodDirAndCapture(t, path)
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "not a directory")
 }
 
 func TestChmodDirFailsWhenMissing(t *testing.T) {
-	rec := chmodDirAndCapture(t, filepath.Join(t.TempDir(), "missing"), 0o755)
+	rec := chmodDirAndCapture(t, filepath.Join(t.TempDir(), "missing"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "stat")
 }
@@ -244,7 +244,7 @@ func TestChmodDirFailsWhenMissing(t *testing.T) {
 func TestChmodDirFailsWhenLstatErrors(t *testing.T) {
 	t.Cleanup(func() { restoreTrampoline(t) })
 	lstat = func(string) (os.FileInfo, error) { return nil, errors.New("enoent") }
-	rec := chmodDirAndCapture(t, t.TempDir(), 0o755)
+	rec := chmodDirAndCapture(t, t.TempDir())
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "stat")
 }
@@ -252,7 +252,7 @@ func TestChmodDirFailsWhenLstatErrors(t *testing.T) {
 func TestChmodDirFailsWhenChmodErrors(t *testing.T) {
 	t.Cleanup(func() { restoreTrampoline(t) })
 	chmod = func(string, os.FileMode) error { return errors.New("eperm") }
-	rec := chmodDirAndCapture(t, t.TempDir(), 0o755)
+	rec := chmodDirAndCapture(t, t.TempDir())
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "chmod")
 }
