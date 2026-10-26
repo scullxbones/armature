@@ -350,9 +350,11 @@ func TestIsAncestor_MergeBaseExitCodes_REQ_NOCOMMENTS(t *testing.T) {
 func TestToplevel_ReturnsWorktreeRoot(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
+	want, err := filepath.EvalSymlinks(repo)
+	require.NoError(t, err)
 	top, err := adapters.New(repo).Toplevel()
 	require.NoError(t, err)
-	assert.Equal(t, repo, top)
+	assert.Equal(t, want, top)
 }
 
 func TestListFilesAtCommit(t *testing.T) {
