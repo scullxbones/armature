@@ -19,12 +19,45 @@ func checkTestExecutables(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
-	var hits []string
+	type pkgExec struct {
+		written map[string]bool
+		chmods  []chmodEvent
+		hits    []string
+	}
+	byPkg := map[string]*pkgExec{}
 	for _, pf := range files {
 		if underDir(pf.rel, "internal/testexec") {
 			continue
 		}
-		hits = append(hits, scanTestExecFile(fset, pf)...)
+		key := pkgKey(pf.rel, pf.pkg)
+		pe := byPkg[key]
+		if pe == nil {
+			pe = &pkgExec{written: map[string]bool{}}
+			byPkg[key] = pe
+		}
+		hits, written, chmods := scanTestExecFile(fset, pf)
+		pe.hits = append(pe.hits, hits...)
+		for path := range written {
+			pe.written[path] = true
+		}
+		pe.chmods = append(pe.chmods, chmods...)
+	}
+	var hits []string
+	for _, pe := range byPkg {
+		hits = append(hits, pe.hits...)
+		for _, ev := range pe.chmods {
+			if allowed(ev.rel, allowTestExecChmod) {
+				continue
+			}
+			if ev.method {
+				if len(pe.written) == 0 {
+					continue
+				}
+			} else if !pe.written[ev.path] {
+				continue
+			}
+			hits = append(hits, formatExecHit(fset, ev.pos, ev.rel, ev.kind, ev.mode))
+		}
 	}
 	if len(hits) > 0 {
 		fmt.Fprintln(stderr, testExecFix)
@@ -37,17 +70,22 @@ func checkTestExecutables(root string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-func scanTestExecFile(fset *token.FileSet, pf parsedFile) []string {
+func scanTestExecFile(fset *token.FileSet, pf parsedFile) (hits []string, written map[string]bool, chmods []chmodEvent) {
 	fileNums, _ := collectFileConsts(pf.file, pf.imports)
-	var hits []string
+	written = map[string]bool{}
 	for _, decl := range pf.file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Body == nil {
 			continue
 		}
-		hits = append(hits, scanTestExecFunc(fset, pf, fn, fileNums)...)
+		fnHits, fnWritten, fnChmods := scanTestExecFunc(fset, pf, fn, fileNums)
+		hits = append(hits, fnHits...)
+		for path := range fnWritten {
+			written[path] = true
+		}
+		chmods = append(chmods, fnChmods...)
 	}
-	return hits
+	return hits, written, chmods
 }
 
 type chmodEvent struct {
@@ -55,10 +93,11 @@ type chmodEvent struct {
 	kind   string
 	mode   ast.Expr
 	path   string
+	rel    string
 	method bool
 }
 
-func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, fileNums map[string]uint64) []string {
+func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, fileNums map[string]uint64) ([]string, map[string]bool, []chmodEvent) {
 	nums := map[string]uint64{}
 	for k, v := range fileNums {
 		nums[k] = v
@@ -83,17 +122,7 @@ func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, file
 		}
 		return true
 	})
-	for _, ev := range chmods {
-		if ev.method {
-			if len(written) == 0 {
-				continue
-			}
-		} else if !written[ev.path] {
-			continue
-		}
-		hits = append(hits, formatExecHit(fset, ev.pos, pf.rel, ev.kind, ev.mode))
-	}
-	return hits
+	return hits, written, chmods
 }
 
 func modeLooksExecutable(expr ast.Expr, nums map[string]uint64, imports map[string]string) bool {
@@ -129,6 +158,7 @@ func noteExecChmod(pf parsedFile, call *ast.CallExpr, nums map[string]uint64) (c
 			kind: "os.Chmod",
 			mode: call.Args[1],
 			path: pathKey(call.Args[0]),
+			rel:  pf.rel,
 		}, true
 	}
 	s, ok := call.Fun.(*ast.SelectorExpr)
@@ -142,6 +172,7 @@ func noteExecChmod(pf parsedFile, call *ast.CallExpr, nums map[string]uint64) (c
 		pos:    call.Pos(),
 		kind:   "Chmod",
 		mode:   call.Args[0],
+		rel:    pf.rel,
 		method: true,
 	}, true
 }

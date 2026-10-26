@@ -210,6 +210,34 @@ func f() { _ = os.WriteFile(path, body, 0o755&^0o111) }
 `)
 }
 
+func TestTestExecutables_crossFuncChmod_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "cross_chmod", `package fake
+func write() { _ = os.WriteFile(p, body, 0o644) }
+func chmod() { _ = os.Chmod(p, 0o755) }
+`)
+	assertExecRejected(t, "cross_method", `package fake
+func write() { _, _ = os.OpenFile(p, flag, 0o644) }
+func chmod(f *os.File) { _ = f.Chmod(0o755) }
+`)
+}
+
+func TestTestExecutables_unevaluableChmod_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "uneval_chmod", `package fake
+func write() { _ = os.WriteFile(p, body, 0o644) }
+func chmod(mode os.FileMode) { _ = os.Chmod(p, mode) }
+`)
+}
+
+func TestTestExecutables_crossFuncNonExecChmod_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecAllowed(t, "cross_644", `package fake
+func write() { _ = os.WriteFile(p, body, 0o644) }
+func chmod() { _ = os.Chmod(p, 0o644) }
+`)
+}
+
 func TestGitHermetic_repoguardNonAllowlistedInitFlagged_REQ_REPOGUARD(t *testing.T) {
 	t.Parallel()
 	root := writeTree(t, map[string]string{
