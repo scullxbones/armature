@@ -352,6 +352,29 @@ func f() {
 `)
 }
 
+func TestTestExecutables_closureReassignMode_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "closure_reassign", `package fake
+func f() {
+	mode := os.FileMode(0o644)
+	func() { mode = 0o755 }()
+	_ = os.Chmod(p, mode)
+}
+`)
+}
+
+func TestTestExecutables_addrTakenMode_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assertExecRejected(t, "addr_taken", `package fake
+func set(m *os.FileMode) { *m = 0o755 }
+func f() {
+	mode := os.FileMode(0o644)
+	set(&mode)
+	_ = os.Chmod(p, mode)
+}
+`)
+}
+
 func TestTestExecutables_ioutilWriteFileExec_REQ_REPOGUARD(t *testing.T) {
 	t.Parallel()
 	assertExecRejected(t, "ioutil_755", `package fake

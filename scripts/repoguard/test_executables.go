@@ -38,27 +38,13 @@ func checkTestExecutables(root string, stdout, stderr io.Writer) error {
 }
 
 func scanTestExecFile(fset *token.FileSet, pf parsedFile) []string {
-	fileNums := collectFileUintConsts(pf.file, pf.imports)
 	var hits []string
-	for _, decl := range pf.file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		hits = append(hits, scanTestExecFunc(fset, pf, fn, fileNums)...)
-	}
-	return hits
-}
-
-func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, fileNums map[string]uint64) []string {
-	nums := onceAssignedNums(fn, fileNums, pf.imports)
-	var hits []string
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
+	ast.Inspect(pf.file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		if hit, ok := noteExecModeCall(fset, pf, call, nums); ok {
+		if hit, ok := noteExecModeCall(fset, pf, call); ok {
 			hits = append(hits, hit)
 		}
 		return true
@@ -66,102 +52,14 @@ func scanTestExecFunc(fset *token.FileSet, pf parsedFile, fn *ast.FuncDecl, file
 	return hits
 }
 
-func collectFileUintConsts(file *ast.File, imports map[string]string) map[string]uint64 {
-	nums := map[string]uint64{}
-	for _, decl := range file.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.CONST {
-			continue
-		}
-		bindValueSpecs(gen.Specs, nums, map[string]string{}, nums, map[string]string{}, imports)
-	}
-	return nums
-}
-
-func onceAssignedNums(fn *ast.FuncDecl, fileNums map[string]uint64, imports map[string]string) map[string]uint64 {
-	counts := map[string]int{}
-	rhs := map[string]ast.Expr{}
-	note := func(name string, val ast.Expr) {
-		if name == "" || name == "_" {
-			return
-		}
-		counts[name]++
-		rhs[name] = val
-	}
-	if fn.Type != nil && fn.Type.Params != nil {
-		for _, field := range fn.Type.Params.List {
-			for _, n := range field.Names {
-				if n != nil {
-					note(n.Name, nil)
-				}
-			}
-		}
-	}
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		if _, ok := n.(*ast.FuncLit); ok {
-			return false
-		}
-		switch stmt := n.(type) {
-		case *ast.DeclStmt:
-			gen, ok := stmt.Decl.(*ast.GenDecl)
-			if !ok || (gen.Tok != token.CONST && gen.Tok != token.VAR) {
-				return true
-			}
-			for _, spec := range gen.Specs {
-				vs, ok := spec.(*ast.ValueSpec)
-				if !ok {
-					continue
-				}
-				for i, name := range vs.Names {
-					if name == nil {
-						continue
-					}
-					var val ast.Expr
-					if i < len(vs.Values) {
-						val = vs.Values[i]
-					}
-					note(name.Name, val)
-				}
-			}
-		case *ast.AssignStmt:
-			for i, lhs := range stmt.Lhs {
-				id, ok := lhs.(*ast.Ident)
-				if !ok {
-					continue
-				}
-				var val ast.Expr
-				if i < len(stmt.Rhs) {
-					val = stmt.Rhs[i]
-				}
-				note(id.Name, val)
-			}
-		}
-		return true
-	})
-	nums := map[string]uint64{}
-	for k, v := range fileNums {
-		nums[k] = v
-	}
-	for name, n := range counts {
-		delete(nums, name)
-		if n != 1 || rhs[name] == nil {
-			continue
-		}
-		if u, ok := evalUint(rhs[name], fileNums, imports); ok {
-			nums[name] = u
-		}
-	}
-	return nums
-}
-
-func modeLooksExecutable(expr ast.Expr, nums map[string]uint64, imports map[string]string) bool {
-	mode, ok := evalUint(expr, nums, imports)
+func modeLooksExecutable(expr ast.Expr, imports map[string]string) bool {
+	mode, ok := evalUint(expr, map[string]uint64{}, imports)
 	return !ok || hasUnixExec(mode)
 }
 
-func noteExecModeCall(fset *token.FileSet, pf parsedFile, call *ast.CallExpr, nums map[string]uint64) (string, bool) {
+func noteExecModeCall(fset *token.FileSet, pf parsedFile, call *ast.CallExpr) (string, bool) {
 	kind, mode, ok := execModeArg(call, pf.imports)
-	if !ok || !modeLooksExecutable(mode, nums, pf.imports) {
+	if !ok || !modeLooksExecutable(mode, pf.imports) {
 		return "", false
 	}
 	return formatExecHit(fset, call.Pos(), pf.rel, kind, mode), true
