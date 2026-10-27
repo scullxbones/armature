@@ -27,25 +27,6 @@ func issueBindingFromGitDirOrEnvLookup(gitDir string, env Env) string {
 	return envLookup(env, "ARMATURE_ISSUE_ID")
 }
 
-func logPassThrough(gitDir string, reason string) error {
-	return harnesshook.AppendHookLogLine(gitDir, "pass-through: "+harnesshook.SanitizeLogField(reason))
-}
-
-func logDecision(gitDir string, issueID string, resolutionStep string, eventKind string, tool string, decision string, blockReason string) error {
-	entry := fmt.Sprintf("decision: issue_id=%s resolution_step=%s event=%s tool=%s decision=%s",
-		harnesshook.SanitizeLogField(issueID), harnesshook.SanitizeLogField(resolutionStep),
-		harnesshook.SanitizeLogField(eventKind), harnesshook.SanitizeLogField(tool),
-		harnesshook.SanitizeLogField(decision))
-	if blockReason != "" {
-		entry += fmt.Sprintf(" block_reason=%s", harnesshook.SanitizeLogField(blockReason))
-	}
-	return harnesshook.AppendHookLogLine(gitDir, entry)
-}
-
-func logViolation(gitDir string, reason string) error {
-	return harnesshook.AppendHookLogLine(gitDir, "violation: "+harnesshook.SanitizeLogField(reason))
-}
-
 func logStalePassThroughScopeViolation(appCtx *config.Context, resolvedBinding harnesshook.ResolvedBinding, event harnesshook.Event, logGitDir string) {
 	if len(event.Paths) == 0 {
 		return
@@ -121,7 +102,7 @@ func resolvePathForComparison(path string) string {
 
 func failOpenPassThrough(w io.Writer, gitDir, userMsg, logReason string) error {
 	fmt.Fprintf(w, "error: %s\n", userMsg)
-	swallowErr(logPassThrough(gitDir, logReason))
+	swallowErr(harnesshook.LogPassThrough(gitDir, logReason))
 	return nil
 }
 
@@ -272,14 +253,7 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 
 			filePath := harnesshook.FirstPathFromToolInput(event.ToolInput)
-			eventInfo := &harnesshook.DecodedEventInfo{
-				Kind:     event.Kind,
-				FilePath: filePath,
-				Cwd:      event.Cwd,
-				Tool:     event.Tool,
-			}
-
-			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(eventInfo, sessionBinding, gitDir, adapter.Capabilities().SupportedShellTools)
+			resolvedBinding, err := harnesshook.ResolveBindingFromEvent(event, sessionBinding, gitDir, adapter.Capabilities().SupportedShellTools)
 			if err != nil {
 				return failOpenPassThrough(cmd.ErrOrStderr(), gitDir, fmt.Sprintf("binding resolution failed: %v", err), "binding resolution failed")
 			}
@@ -291,7 +265,7 @@ func newHarnessHookCmd() *cobra.Command {
 			if pathResolved {
 				if !isKnownWorktreeGitDir(rawRepo, logGitDir) {
 					fmt.Fprintf(cmd.ErrOrStderr(), "error: path-resolved git dir %q is not a known worktree of %q; falling back to session binding\n", logGitDir, rawRepo)
-					swallowErr(logViolation(gitDir, fmt.Sprintf("path-resolved git dir %q rejected as untrusted", logGitDir)))
+					swallowErr(harnesshook.LogViolation(gitDir, fmt.Sprintf("path-resolved git dir %q rejected as untrusted", logGitDir)))
 					resolvedBinding = harnesshook.ResolvedBinding{
 						IssueID:        sessionBinding,
 						GitDir:         gitDir,
@@ -303,9 +277,9 @@ func newHarnessHookCmd() *cobra.Command {
 
 			if resolvedBinding.IssueID == "" {
 				if isFileWriteEvent(event.Kind, filePath) {
-					swallowErr(logViolation(logGitDir, "file write with no resolved binding"))
+					swallowErr(harnesshook.LogViolation(logGitDir, "file write with no resolved binding"))
 				} else {
-					swallowErr(logPassThrough(logGitDir, "no issue binding found"))
+					swallowErr(harnesshook.LogPassThrough(logGitDir, "no issue binding found"))
 				}
 				return nil
 			}
@@ -319,7 +293,7 @@ func newHarnessHookCmd() *cobra.Command {
 
 			if hasNoLiveClaim(snap, resolvedBinding.IssueID, time.Now().Unix()) {
 				logStalePassThroughScopeViolation(appCtx, resolvedBinding, event, logGitDir)
-				swallowErr(logPassThrough(logGitDir, "stale issue binding"))
+				swallowErr(harnesshook.LogPassThrough(logGitDir, "stale issue binding"))
 				return nil
 			}
 
@@ -344,7 +318,7 @@ func newHarnessHookCmd() *cobra.Command {
 			}
 
 			blockReason := result.Decision.Message
-			swallowErr(logDecision(
+			swallowErr(harnesshook.LogDecision(
 				logGitDir, resolvedBinding.IssueID, resolvedBinding.ResolutionStep,
 				string(event.Kind), event.Tool, string(result.Decision.Action), blockReason))
 

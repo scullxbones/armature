@@ -3,6 +3,7 @@ package harnesshook
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,4 +39,23 @@ func TestScopeViolationLogging_REQ_TOPTIER_S5_T2(t *testing.T) {
 	assert.True(t, result2.Allowed)
 	_, statErr := os.Stat(filepath.Join(gitDir2, "armature-hook.log"))
 	assert.True(t, os.IsNotExist(statErr), "expected no log file to be written when the path is in scope")
+}
+
+func TestLogDecisionAndPassThrough_StripNewlines(t *testing.T) {
+	t.Parallel()
+	gitDir := t.TempDir()
+
+	require.NoError(t, LogPassThrough(gitDir, "stale\nissue binding"))
+	require.NoError(t, LogViolation(gitDir, "file write\rwith no resolved binding"))
+	require.NoError(t, LogDecision(gitDir, "TASK-1\n", "session", "pre-tool-use", "Edit", "block", "out of\nscope"))
+
+	data, err := os.ReadFile(filepath.Join(gitDir, "armature-hook.log"))
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	require.Len(t, lines, 3)
+	assert.Contains(t, lines[0], "pass-through: stale issue binding")
+	assert.NotContains(t, lines[0], "\nissue")
+	assert.Contains(t, lines[1], "violation: file write with no resolved binding")
+	assert.Contains(t, lines[2], "decision: issue_id=TASK-1  resolution_step=session")
+	assert.Contains(t, lines[2], "block_reason=out of scope")
 }

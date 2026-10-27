@@ -330,7 +330,7 @@ func TestLogPassThrough(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	err := logPassThrough(gitDir, "test reason")
+	err := harnesshook.LogPassThrough(gitDir, "test reason")
 
 	require.NoError(t, err)
 	logPath := filepath.Join(gitDir, "armature-hook.log")
@@ -345,9 +345,9 @@ func TestLogPassThrough_Append(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	err := logPassThrough(gitDir, "first reason")
+	err := harnesshook.LogPassThrough(gitDir, "first reason")
 	require.NoError(t, err)
-	err = logPassThrough(gitDir, "second reason")
+	err = harnesshook.LogPassThrough(gitDir, "second reason")
 	require.NoError(t, err)
 
 	logPath := filepath.Join(gitDir, "armature-hook.log")
