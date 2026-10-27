@@ -9,13 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
-type DecodedEventInfo struct {
-	Kind     EventKind
-	FilePath string
-	Cwd      string // Current working directory from the hook event payload (for step 2 of resolution chain)
-	Tool     string // Tool name from the event payload (e.g. "Bash"); used to detect shell events
-}
-
 // ResolvedBinding carries the resolved issue ID, git directory, the resolution step,
 // and (for path-resolved bindings) the worktree root directory.
 type ResolvedBinding struct {
@@ -150,21 +143,21 @@ func absolutizeFilePath(filePath, cwd string) (string, bool) {
 // When steps 1-2 locate a worktree git dir but it has no binding, that git dir is returned
 // (IssueID empty, ResolutionStep empty) so callers can log a violation against the correct
 // worktree rather than the session's git dir.
-func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessionGitDir string, supportedShellTools []string) (ResolvedBinding, error) {
+func ResolveBindingFromEvent(event Event, sessionBinding, sessionGitDir string, supportedShellTools []string) (ResolvedBinding, error) {
 	sessionFallback := ResolvedBinding{
 		IssueID:        sessionBinding,
 		GitDir:         sessionGitDir,
 		ResolutionStep: "session",
 	}
 
-	if eventInfo.Kind == EventStop || isShellTool(eventInfo.Tool, supportedShellTools) {
+	if event.Kind == EventStop || isShellTool(event.Tool, supportedShellTools) {
 		return sessionFallback, nil
 	}
 
-	if eventInfo.Kind == EventPreToolUse || eventInfo.Kind == EventPostToolUse {
+	if event.Kind == EventPreToolUse || event.Kind == EventPostToolUse {
 		var unboundGitDir, unboundRoot string
 
-		if abs, ok := absolutizeFilePath(eventInfo.FilePath, eventInfo.Cwd); ok {
+		if abs, ok := absolutizeFilePath(FirstPathFromToolInput(event.ToolInput), event.Cwd); ok {
 			pathBinding, err := resolveBindingFromFilePath(abs)
 			if err != nil {
 				return ResolvedBinding{}, err
@@ -179,8 +172,8 @@ func ResolveBindingFromEvent(eventInfo *DecodedEventInfo, sessionBinding, sessio
 			}
 		}
 
-		if eventInfo.Cwd != "" && filepath.IsAbs(eventInfo.Cwd) {
-			cwdBinding, err := ResolveBindingFromDir(eventInfo.Cwd)
+		if event.Cwd != "" && filepath.IsAbs(event.Cwd) {
+			cwdBinding, err := ResolveBindingFromDir(event.Cwd)
 			if err != nil {
 				return ResolvedBinding{}, err
 			}

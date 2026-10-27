@@ -10,24 +10,19 @@ import (
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 )
 
-// SanitizeLogField strips newlines and carriage returns from a value before it
+// sanitizeLogField strips newlines and carriage returns from a value before it
 // is interpolated into a single-line log entry, preventing log injection where
 // a crafted tool name, decision message, reason, or violation path could forge
-// or mask a violation/decision line. Shared by cmd/armature's hook loggers and
-// this package's pass-through-violation logger so both write points apply the
-// same hardening.
-func SanitizeLogField(s string) string {
+// or mask a violation/decision line.
+func sanitizeLogField(s string) string {
 	s = strings.ReplaceAll(s, "\r", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
 	return s
 }
 
-// AppendHookLogLine appends a single line to <gitDir>/armature-hook.log, prefixed
-// with an RFC3339 UTC timestamp, matching the format used by cmd/armature's
-// decision/pass-through/violation loggers. Exported so pass-through-with-violation
-// logging (LogPassThroughScopeViolation) can be exercised directly, and reused,
-// from outside this package.
-func AppendHookLogLine(gitDir string, line string) error {
+// appendHookLogLine appends a single line to <gitDir>/armature-hook.log, prefixed
+// with an RFC3339 UTC timestamp.
+func appendHookLogLine(gitDir string, line string) error {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	// #nosec G304 - logPath is derived from a caller-supplied trusted git directory
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -69,8 +64,30 @@ func LogPassThroughScopeViolation(gitDir string, scope []string, root string, pa
 	}
 	violationPaths := make([]string, 0, len(result.Violations))
 	for _, v := range result.Violations {
-		violationPaths = append(violationPaths, SanitizeLogField(v.Path))
+		violationPaths = append(violationPaths, sanitizeLogField(v.Path))
 	}
-	line := fmt.Sprintf("violation: out-of-scope path(s) on pass-through (%s): %s", SanitizeLogField(reason), strings.Join(violationPaths, ", "))
-	return result, AppendHookLogLine(gitDir, line)
+	line := fmt.Sprintf("violation: out-of-scope path(s) on pass-through (%s): %s", sanitizeLogField(reason), strings.Join(violationPaths, ", "))
+	return result, appendHookLogLine(gitDir, line)
+}
+
+// LogPassThrough appends a pass-through: line to <gitDir>/armature-hook.log.
+func LogPassThrough(gitDir string, reason string) error {
+	return appendHookLogLine(gitDir, "pass-through: "+sanitizeLogField(reason))
+}
+
+// LogViolation appends a violation: line to <gitDir>/armature-hook.log.
+func LogViolation(gitDir string, reason string) error {
+	return appendHookLogLine(gitDir, "violation: "+sanitizeLogField(reason))
+}
+
+// LogDecision appends a decision: line to <gitDir>/armature-hook.log.
+func LogDecision(gitDir string, issueID string, resolutionStep string, eventKind string, tool string, decision string, blockReason string) error {
+	entry := fmt.Sprintf("decision: issue_id=%s resolution_step=%s event=%s tool=%s decision=%s",
+		sanitizeLogField(issueID), sanitizeLogField(resolutionStep),
+		sanitizeLogField(eventKind), sanitizeLogField(tool),
+		sanitizeLogField(decision))
+	if blockReason != "" {
+		entry += fmt.Sprintf(" block_reason=%s", sanitizeLogField(blockReason))
+	}
+	return appendHookLogLine(gitDir, entry)
 }

@@ -9,6 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func bindingEvent(kind EventKind, tool, filePath, cwd string) Event {
+	ev := Event{Kind: kind, Tool: tool, Cwd: cwd}
+	if filePath != "" {
+		ev.ToolInput = map[string]any{"file_path": filePath}
+	}
+	return ev
+}
+
 func TestFilePathWalkUpResolvesWorktreeBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -161,12 +169,9 @@ func TestResolveBindingFromEvent_PreToolUse_WithFilePath(t *testing.T) {
 	err = os.WriteFile(issueIDFile, []byte("task-from-path"), 0o644)
 	require.NoError(t, err)
 
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		FilePath: filePath,
-	}
+	event := bindingEvent(EventPreToolUse, "", filePath, "")
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "task-from-path", binding.IssueID)
@@ -175,13 +180,10 @@ func TestResolveBindingFromEvent_PreToolUse_WithFilePath(t *testing.T) {
 
 func TestResolveBindingFromEvent_PreToolUse_NoFilePath_FallsBackToSession(t *testing.T) {
 	t.Parallel()
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		FilePath: "",
-	}
+	event := bindingEvent(EventPreToolUse, "", "", "")
 	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "session-binding", binding.IssueID)
@@ -204,13 +206,10 @@ func TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2(t *testing.T) {
 	err = os.WriteFile(issueIDFile, []byte("task-from-path"), 0o644)
 	require.NoError(t, err)
 
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventStop,
-		FilePath: filePath,
-	}
+	event := bindingEvent(EventStop, "", filePath, "")
 	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "session-binding", binding.IssueID)
@@ -219,14 +218,10 @@ func TestStopEventUsesSessionBinding_REQ_HOOKBIND_T2(t *testing.T) {
 
 func TestResolveBindingFromEvent_Bash_UsesSessionBinding(t *testing.T) {
 	t.Parallel()
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		Tool:     "Bash",
-		FilePath: "/some/path/file.go",
-	}
+	event := bindingEvent(EventPreToolUse, "Bash", "/some/path/file.go", "")
 	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "session-binding", binding.IssueID)
@@ -250,17 +245,13 @@ func TestResolveBindingFromEvent_DevinExec_UsesSessionBinding(t *testing.T) {
 	issueIDFile := filepath.Join(worktreeGitDir, "armature-issue-id")
 	require.NoError(t, os.WriteFile(issueIDFile, []byte("worktree-binding"), 0o644))
 
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		Tool:     "exec",
-		FilePath: filePath,
-	}
+	event := bindingEvent(EventPreToolUse, "exec", filePath, "")
 	sessionGitDir := "/session/git/dir"
 
 	devinAdapter := newDevinAdapter()
 	devinShellTools := devinAdapter.Capabilities().SupportedShellTools
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, devinShellTools)
+	binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, devinShellTools)
 
 	require.NoError(t, err)
 	assert.Equal(t, "session-binding", binding.IssueID, "exec tool should skip path-based resolution and use session binding")
@@ -292,13 +283,9 @@ func TestResolveBindingFromEvent_CodexShell_UsesSessionBinding(t *testing.T) {
 	sessionGitDir := "/session/git/dir"
 
 	for _, tool := range []string{"shell", "local_shell"} {
-		eventInfo := &DecodedEventInfo{
-			Kind:     EventPreToolUse,
-			Tool:     tool,
-			FilePath: filePath,
-		}
+		event := bindingEvent(EventPreToolUse, tool, filePath, "")
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, codexShellTools)
+		binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, codexShellTools)
 
 		require.NoError(t, err)
 		assert.Equal(t, "session-binding", binding.IssueID, "%s tool should skip path-based resolution and use session binding", tool)
@@ -308,13 +295,10 @@ func TestResolveBindingFromEvent_CodexShell_UsesSessionBinding(t *testing.T) {
 
 func TestResolveBindingFromEvent_EmptySessionBinding(t *testing.T) {
 	t.Parallel()
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventStop,
-		FilePath: "",
-	}
+	event := bindingEvent(EventStop, "", "", "")
 	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "", sessionGitDir, []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "", sessionGitDir, []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "", binding.IssueID)
@@ -339,13 +323,9 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-file-path"), 0o644)
 		require.NoError(t, err)
 
-		eventInfo := &DecodedEventInfo{
-			Kind:     EventPreToolUse,
-			FilePath: filePath,
-			Cwd:      "",
-		}
+		event := bindingEvent(EventPreToolUse, "", filePath, "")
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+		binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 		require.NoError(t, err)
 		assert.Equal(t, "from-file-path", binding.IssueID)
@@ -367,13 +347,9 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-event-cwd"), 0o644)
 		require.NoError(t, err)
 
-		eventInfo := &DecodedEventInfo{
-			Kind:     EventPreToolUse,
-			FilePath: "",
-			Cwd:      cwdDir,
-		}
+		event := bindingEvent(EventPreToolUse, "", "", cwdDir)
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+		binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 		require.NoError(t, err)
 		assert.Equal(t, "from-event-cwd", binding.IssueID)
@@ -406,13 +382,9 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(cwdIssueIDFile, []byte("from-event-cwd"), 0o644)
 		require.NoError(t, err)
 
-		eventInfo := &DecodedEventInfo{
-			Kind:     EventPreToolUse,
-			FilePath: filePath,
-			Cwd:      cwdDir,
-		}
+		event := bindingEvent(EventPreToolUse, "", filePath, cwdDir)
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+		binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 		require.NoError(t, err)
 		assert.Equal(t, "from-file-path", binding.IssueID, "file_path should take precedence over event cwd")
@@ -421,14 +393,10 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 
 	t.Run("Step3_SessionBindingFallback", func(t *testing.T) {
 		t.Parallel()
-		eventInfo := &DecodedEventInfo{
-			Kind:     EventPreToolUse,
-			FilePath: "",
-			Cwd:      "",
-		}
+		event := bindingEvent(EventPreToolUse, "", "", "")
 		sessionGitDir := "/session/git/dir"
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, []string{"Bash"})
+		binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, []string{"Bash"})
 
 		require.NoError(t, err)
 		assert.Equal(t, "session-binding", binding.IssueID)
@@ -454,15 +422,10 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-path"), 0o644)
 		require.NoError(t, err)
 
-		eventInfo := &DecodedEventInfo{
-			Kind:     EventPreToolUse,
-			Tool:     "Bash",
-			FilePath: filePath,
-			Cwd:      cwdDir,
-		}
+		event := bindingEvent(EventPreToolUse, "Bash", filePath, cwdDir)
 		sessionGitDir := "/session/git/dir"
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, []string{"Bash"})
+		binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, []string{"Bash"})
 
 		require.NoError(t, err)
 		assert.Equal(t, "session-binding", binding.IssueID, "bash events should use session binding only")
@@ -488,14 +451,10 @@ func TestBindingResolutionChain_REQ_HOOKBIND_T2(t *testing.T) {
 		err = os.WriteFile(issueIDFile, []byte("from-path"), 0o644)
 		require.NoError(t, err)
 
-		eventInfo := &DecodedEventInfo{
-			Kind:     EventStop,
-			FilePath: filePath,
-			Cwd:      cwdDir,
-		}
+		event := bindingEvent(EventStop, "", filePath, cwdDir)
 		sessionGitDir := "/session/git/dir"
 
-		binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, []string{"Bash"})
+		binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, []string{"Bash"})
 
 		require.NoError(t, err)
 		assert.Equal(t, "session-binding", binding.IssueID, "stop events should use session binding only")
@@ -513,13 +472,9 @@ func TestResolveBindingFromEvent_RelativeFilePath_JoinsWithEventCwd(t *testing.T
 	require.NoError(t, os.MkdirAll(fileDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "armature-issue-id"), []byte("task-relative"), 0o644))
 
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		FilePath: filepath.Join("some", "path", "file.go"),
-		Cwd:      worktreeDir,
-	}
+	event := bindingEvent(EventPreToolUse, "", filepath.Join("some", "path", "file.go"), worktreeDir)
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "task-relative", binding.IssueID)
@@ -528,13 +483,10 @@ func TestResolveBindingFromEvent_RelativeFilePath_JoinsWithEventCwd(t *testing.T
 
 func TestResolveBindingFromEvent_RelativeFilePath_NoCwdFallsBackToSession(t *testing.T) {
 	t.Parallel()
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		FilePath: "some/relative/file.go",
-	}
+	event := bindingEvent(EventPreToolUse, "", "some/relative/file.go", "")
 	sessionGitDir := "/session/git/dir"
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", sessionGitDir, []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", sessionGitDir, []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "session-binding", binding.IssueID)
@@ -550,12 +502,9 @@ func TestResolveBindingFromEvent_UnboundWorktree_ReturnsWorktreeGitDir(t *testin
 	require.NoError(t, os.MkdirAll(gitDir, 0o755))
 	require.NoError(t, os.MkdirAll(fileDir, 0o755))
 
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		FilePath: filePath,
-	}
+	event := bindingEvent(EventPreToolUse, "", filePath, "")
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "", binding.IssueID)
@@ -625,14 +574,9 @@ func TestResolveBindingFromEvent_EventCwdAtWorktreeRoot_ResolvesBinding(t *testi
 	err = os.WriteFile(issueIDFile, []byte("issue-at-root"), 0o644)
 	require.NoError(t, err)
 
-	eventInfo := &DecodedEventInfo{
-		Kind:     EventPreToolUse,
-		FilePath: "",
-		Cwd:      worktreeRoot,
-		Tool:     "Edit",
-	}
+	event := bindingEvent(EventPreToolUse, "Edit", "", worktreeRoot)
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "issue-at-root", binding.IssueID, "should find binding at event cwd worktree root")
@@ -713,12 +657,9 @@ func TestResolveBindingFromEvent_UnboundWorktreeViaCwdOnly_ReturnsWorktreeGitDir
 	gitDir := filepath.Join(tmpDir, ".git")
 	require.NoError(t, os.MkdirAll(gitDir, 0o755))
 
-	eventInfo := &DecodedEventInfo{
-		Kind: EventPreToolUse,
-		Cwd:  tmpDir,
-	}
+	event := bindingEvent(EventPreToolUse, "", "", tmpDir)
 
-	binding, err := ResolveBindingFromEvent(eventInfo, "session-binding", "/session/git/dir", []string{"Bash"})
+	binding, err := ResolveBindingFromEvent(event, "session-binding", "/session/git/dir", []string{"Bash"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "", binding.IssueID)
