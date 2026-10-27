@@ -20,8 +20,6 @@ func sanitizeLogField(s string) string {
 	return s
 }
 
-// appendHookLogLine appends a single line to <gitDir>/armature-hook.log, prefixed
-// with an RFC3339 UTC timestamp.
 func appendHookLogLine(gitDir string, line string) error {
 	logPath := filepath.Join(gitDir, "armature-hook.log")
 	// #nosec G304 - logPath is derived from a caller-supplied trusted git directory

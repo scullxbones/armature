@@ -8,11 +8,6 @@
 // inherited fd. Tests therefore never create a new executable inode after
 // TestMain: Write hard-links a trampoline prepared in init and stores unique
 // script bodies in a non-executable sidecar.
-//
-// ChmodDir is the corresponding helper for directory modes that include an
-// execute bit (traversal). The repoguard test-executables check bans raw
-// os.Chmod / os.WriteFile / os.OpenFile / (*os.File).Chmod calls whose mode
-// has an execute bit or cannot be evaluated.
 package testexec
 
 import (
@@ -129,9 +124,6 @@ func Write(t testing.TB, path string, content []byte) {
 	}
 }
 
-// ChmodDir sets mode on dir after verifying the path is a directory.
-// Tests that need an execute bit on a directory must use this helper
-// instead of os.Chmod.
 func ChmodDir(t testing.TB, dir string, mode os.FileMode) {
 	t.Helper()
 	info, err := lstat(dir)
