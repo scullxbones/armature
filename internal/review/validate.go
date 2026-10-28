@@ -13,7 +13,7 @@ var criterionIDPattern = regexp.MustCompile(`^definition_of_done$|^acceptance\[\
 
 var criterionIDAcceptanceIndex = regexp.MustCompile(`(?i)acceptance[^\d]*(\d+)`)
 
-func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string {
+func validateResult(assessment *ConformanceAssessment, idx *diffIndex) []string {
 	var errs []string
 
 	if assessment.BundleID == "" {
@@ -31,15 +31,15 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 			}
 
 			if citation.Line() == 0 {
-				if !idx.ContainsFile(citation.Path()) {
+				if !idx.containsFile(citation.Path()) {
 					errs = append(errs, fmt.Sprintf(
 						"criterion result %s: citation references %s which is not in diff (suggestion: remove the citation or cite a path present in the delivery diff)",
 						result.ID, citation.Path()))
 				}
 			} else {
-				if !idx.ContainsLine(citation.Path(), citation.Line()) {
+				if !idx.containsLine(citation.Path(), citation.Line()) {
 					msg := fmt.Sprintf("criterion result %s: citation references %s:%d which is not in diff", result.ID, citation.Path(), citation.Line())
-					if idx.ContainsFile(citation.Path()) {
+					if idx.containsFile(citation.Path()) {
 						msg += fmt.Sprintf(" (suggestion: downgrade citation to path-level; omit line %d and cite %s only)", citation.Line(), citation.Path())
 					} else {
 						msg += " (suggestion: remove the citation or cite a path present in the delivery diff)"
@@ -53,7 +53,7 @@ func ValidateResult(assessment *ConformanceAssessment, idx *DiffIndex) []string 
 	return errs
 }
 
-func ValidateResultNoDiff(assessment *ConformanceAssessment) []string {
+func validateResultNoDiff(assessment *ConformanceAssessment) []string {
 	var errs []string
 
 	if assessment.BundleID == "" {
@@ -92,7 +92,7 @@ func suggestCriterionID(id string) string {
 // enforcement gate that appends ops. Every failure line includes an auto-fix
 // suggestion.
 func ValidateAssessment(input RecordInput) error {
-	_, err := Record(input)
+	_, err := record(input)
 	return AnnotateValidateError(err)
 }
 
@@ -255,13 +255,13 @@ func firstQuoted(s string) string {
 	return rest[:end]
 }
 
-// NewAttestation records delivery BaseSHA/HeadSHA and, when activity is present,
+// newAttestation records delivery BaseSHA/HeadSHA and, when activity is present,
 // carries activity.Digest into the attestation per ADR-0008.
-func NewAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *Activity) *attestation.AssessmentAttestation {
-	rating := DeriveRating(assessment.Results)
-	satisfied, partiallySatisfied, notSatisfied, indeterminate := CountCriteria(assessment.Results)
+func newAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *Activity) *attestation.AssessmentAttestation {
+	rating := deriveRating(assessment.Results)
+	satisfied, partiallySatisfied, notSatisfied, indeterminate := countCriteria(assessment.Results)
 
-	resultFingerprint := FingerprintResult(*assessment)
+	resultFingerprint := fingerprintResult(*assessment)
 
 	att := &attestation.AssessmentAttestation{
 		SchemaVersion:           SchemaVersion,
@@ -285,14 +285,14 @@ func NewAttestation(assessment *ConformanceAssessment, delivery Delivery, activi
 	return att
 }
 
-func IsDuplicate(a, b *attestation.AssessmentAttestation) bool {
+func isDuplicate(a, b *attestation.AssessmentAttestation) bool {
 	if a == nil || b == nil {
 		return false
 	}
 	return a.ResultFingerprint == b.ResultFingerprint
 }
 
-func ValidateResultCoverage(assessment *ConformanceAssessment, contract Contract) []string {
+func validateResultCoverage(assessment *ConformanceAssessment, contract Contract) []string {
 	var errs []string
 
 	expectedIDs := make(map[string]bool)
@@ -341,7 +341,7 @@ func hasActivityCitations(assessment *ConformanceAssessment) bool {
 // ValidateActivityCitations enforces ADR-0008 on activity citations: upgrade-only
 // (activity cannot satisfy implementation criteria alone), HEAD-anchored entries,
 // and harness-recorded exit status. Empty return means valid.
-func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]ActivityEntryDetails, deliveryHeadSHA string) []string {
+func validateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]activityEntryDetails, deliveryHeadSHA string) []string {
 	var errs []string
 	if activity == nil {
 		return errs
@@ -372,7 +372,7 @@ func ValidateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 	return append(errs, activityOnlyUpgradeErrors(assessment, activityOnlyByID)...)
 }
 
-func activityCitationErrors(result CriterionResult, rawID string, entries map[int]ActivityEntryDetails, deliveryHeadSHA string) (errs []string, skipPath bool) {
+func activityCitationErrors(result CriterionResult, rawID string, entries map[int]activityEntryDetails, deliveryHeadSHA string) (errs []string, skipPath bool) {
 	entryID, err := strconv.Atoi(rawID)
 	if err != nil {
 		return []string{fmt.Sprintf(

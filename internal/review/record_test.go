@@ -22,6 +22,24 @@ func mustComputeBundleID(t *testing.T, bundle ReviewBundle) string {
 	return id
 }
 
+func activityLogLineJSON(t *testing.T, opts map[string]any) string {
+	t.Helper()
+	line := map[string]any{
+		"timestamp":       "2026-01-15T10:30:45Z",
+		"command":         "make build",
+		"exit_code":       0,
+		"exit_code_known": true,
+		"head_sha":        "abc123",
+		"output_hash":     "def456",
+	}
+	for k, v := range opts {
+		line[k] = v
+	}
+	data, err := json.Marshal(line)
+	require.NoError(t, err)
+	return string(data)
+}
+
 func errsContain(errs []string, substr string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, substr) {
@@ -65,7 +83,7 @@ func TestRecordAssessmentDecision_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.NotNil(t, result.Attestation)
@@ -119,7 +137,7 @@ func TestRecord_WithBundle_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, bundle.BundleID, result.Attestation.BundleID)
@@ -166,7 +184,7 @@ func TestRecord_BundleIntegrityTampered_REQ_EXECEV(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "integrity")
@@ -182,7 +200,7 @@ func TestRecord_WithIssueData_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	assessment := &ConformanceAssessment{
 		SchemaVersion: SchemaVersion,
 		BundleID:      "bundle-123",
-		ContractFingerprint: FingerprintContract(Contract{
+		ContractFingerprint: fingerprintContract(Contract{
 			DefinitionOfDone: "Implementation complete",
 			Scope:            []string{"impl.go"},
 			Acceptance:       acceptanceCriteria,
@@ -206,7 +224,7 @@ func TestRecord_WithIssueData_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, attestation.Green, result.Attestation.Rating)
@@ -219,7 +237,7 @@ func TestRecord_AssessmentNil_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "assessment is required")
@@ -246,7 +264,7 @@ func TestRecord_IssueIDEmpty_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "issue ID is required")
@@ -266,7 +284,7 @@ func TestRecord_AssessmentInvalid_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "validation failed")
@@ -302,7 +320,7 @@ func TestRecord_BundleIssueMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "bundle was prepared for issue task-02")
@@ -339,7 +357,7 @@ func TestRecord_BundleIDMismatch_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "bundle_id")
@@ -374,7 +392,7 @@ func TestRecord_ContractFingerprintMismatch_RejectsWithoutBundle_REQ_ARCHIMP_S18
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "contract fingerprint")
@@ -395,7 +413,7 @@ func TestRecord_CoverageMissingCriterion_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
 		BundleID:            "bundle-123",
-		ContractFingerprint: FingerprintContract(contract),
+		ContractFingerprint: fingerprintContract(contract),
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
 			citedSatisfied("definition_of_done", "Done"),
@@ -414,7 +432,7 @@ func TestRecord_CoverageMissingCriterion_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "coverage")
@@ -436,7 +454,7 @@ func TestRecord_ValidCoverage_REQ_ARCHIMP_S18_T1(t *testing.T) {
 	assessment := &ConformanceAssessment{
 		SchemaVersion:       SchemaVersion,
 		BundleID:            "bundle-123",
-		ContractFingerprint: FingerprintContract(contract),
+		ContractFingerprint: fingerprintContract(contract),
 		DeliveryFingerprint: "sha256:bbbb",
 		Results: []CriterionResult{
 			citedSatisfied("definition_of_done", "Implementation is complete."),
@@ -457,7 +475,7 @@ func TestRecord_ValidCoverage_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, 3, result.Attestation.SatisfiedCount)
@@ -514,7 +532,7 @@ func TestRecord_WithDiffIndexValidation_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 }
@@ -564,7 +582,7 @@ func TestRecord_InvalidCitationCoordinates_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result, err := Record(input)
+	result, err := record(input)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "citation")
@@ -587,7 +605,7 @@ func TestRecordWithDuplicateCheck_Duplicate_REQ_ARCHIMP_S18_T1(t *testing.T) {
 		IssueID:    "task-01",
 	}
 
-	result1, err := Record(input)
+	result1, err := record(input)
 	require.NoError(t, err)
 
 	existingAtts := []attestation.AssessmentAttestation{*result1.Attestation}
@@ -615,7 +633,7 @@ func TestRecordWithDuplicateCheck_NotDuplicate_REQ_ARCHIMP_S18_T1(t *testing.T) 
 		IssueID:    "task-01",
 	}
 
-	result1, err := Record(input)
+	result1, err := record(input)
 	require.NoError(t, err)
 
 	differentAtt := *result1.Attestation
@@ -653,7 +671,7 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 	logContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make build","exit_code":0,` +
 		`"exit_code_known":true,"head_sha":"head","output_hash":"h1"}` + "\n")
 	require.NoError(t, os.WriteFile(logPath, logContent, 0o600))
-	digest := FingerprintActivity(logContent)
+	digest := fingerprintActivity(logContent)
 
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
@@ -679,7 +697,7 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 		},
 	}
 
-	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	result, err := record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 	require.NoError(t, err)
 	assert.Equal(t, digest, result.Attestation.ActivityDigest, "attestation must carry the bundle's activity digest")
 }
@@ -701,7 +719,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 
 	t.Run("nil bundle", func(t *testing.T) {
 		t.Parallel()
-		_, err := Record(RecordInput{Assessment: activityAssessment(), IssueID: "task-01"})
+		_, err := record(RecordInput{Assessment: activityAssessment(), IssueID: "task-01"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "activity")
 	})
@@ -719,7 +737,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 			},
 		}
 		bundle.BundleID = mustComputeBundleID(t, *bundle)
-		_, err := Record(RecordInput{Assessment: activityAssessment(), Bundle: bundle, IssueID: "task-01"})
+		_, err := record(RecordInput{Assessment: activityAssessment(), Bundle: bundle, IssueID: "task-01"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "activity")
 	})
@@ -738,18 +756,18 @@ func TestRecord_AlwaysResetsInboundActivityEntryDetails_REQ_EXECEV(t *testing.T)
 				ID: "acceptance[0]", Status: Satisfied, Rationale: "ok",
 				Citations: []Citation{func() Citation {
 					c := FileCitation("f.go", 1, 0)
-					c.SetActivityEntryDetails("fabricated: exit_code=0 all tests passed")
+					c.setActivityEntryDetails("fabricated: exit_code=0 all tests passed")
 					return c
 				}()},
 			},
 		},
 	}
 
-	result, err := Record(RecordInput{Assessment: assessment, IssueID: "task-01"})
+	result, err := record(RecordInput{Assessment: assessment, IssueID: "task-01"})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Empty(t, assessment.Results[0].Citations[0].ActivityEntryDetails(),
-		"inbound ActivityEntryDetails must be reset, not passed through")
+	assert.Empty(t, assessment.Results[0].Citations[0].activityEntryDetails,
+		"inbound activity entry details must be reset, not passed through")
 }
 
 func TestCitationValid_RejectsMutualExclusivity_REQ_EXECEV(t *testing.T) {
@@ -830,7 +848,7 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	logContent := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make test","exit_code":0,` +
 		`"exit_code_known":true,"head_sha":"head","output_hash":"h1"}` + "\n")
 	require.NoError(t, os.WriteFile(logPath, logContent, 0o600))
-	digest := FingerprintActivity(logContent)
+	digest := fingerprintActivity(logContent)
 
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
@@ -875,7 +893,7 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 		},
 	}
 
-	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-02"})
+	result, err := record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-02"})
 	require.NoError(t, err, "Record should succeed with valid activity citations")
 	require.NotNil(t, result)
 	require.NotNil(t, result.Attestation)
@@ -884,10 +902,10 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 	assert.False(t, result.IsDuplicate)
 
 	activityCitation := &assessment.Results[1].Citations[0]
-	assert.NotEmpty(t, activityCitation.ActivityEntryDetails(), "activity entry details must be populated from the log")
-	assert.Contains(t, activityCitation.ActivityEntryDetails(), "entry 0")
-	assert.Contains(t, activityCitation.ActivityEntryDetails(), "make test")
-	assert.Contains(t, activityCitation.ActivityEntryDetails(), "exit_code=0")
+	assert.NotEmpty(t, activityCitation.activityEntryDetails, "activity entry details must be populated from the log")
+	assert.Contains(t, activityCitation.activityEntryDetails, "entry 0")
+	assert.Contains(t, activityCitation.activityEntryDetails, "make test")
+	assert.Contains(t, activityCitation.activityEntryDetails, "exit_code=0")
 }
 
 func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
@@ -900,14 +918,14 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 		original := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make test","exit_code":0,` +
 			`"exit_code_known":true,"head_sha":"head"}` + "\n")
 		require.NoError(t, os.WriteFile(logPath, original, 0o600))
-		recordedDigest := FingerprintActivity(original)
+		recordedDigest := fingerprintActivity(original)
 
 		tampered := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"rm -rf /","exit_code":0,` +
 			`"exit_code_known":true,"head_sha":"head"}` + "\n")
 		require.NoError(t, os.WriteFile(logPath, tampered, 0o600))
 
 		activity := &Activity{Digest: recordedDigest, EntryCount: 1, LogPath: logPath}
-		entries, errs := ValidateActivityDigestAndLoadEntries(activity)
+		entries, errs := validateActivityDigestAndLoadEntries(activity)
 		require.NotEmpty(t, errs, "digest mismatch must be reported regardless of whether citations exist")
 		assert.True(t, errsContain(errs, "digest mismatch"))
 
@@ -921,7 +939,7 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 			EntryCount: 1,
 			LogPath:    t.TempDir() + "/does-not-exist.log",
 		}
-		entries, errs := ValidateActivityDigestAndLoadEntries(activity)
+		entries, errs := validateActivityDigestAndLoadEntries(activity)
 		require.NotEmpty(t, errs)
 		assert.True(t, errsContain(errs, "missing or unreadable"))
 		assert.Empty(t, entries)
@@ -929,7 +947,7 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 
 	t.Run("nil activity returns no entries and no errors", func(t *testing.T) {
 		t.Parallel()
-		entries, errs := ValidateActivityDigestAndLoadEntries(nil)
+		entries, errs := validateActivityDigestAndLoadEntries(nil)
 		assert.Empty(t, errs)
 		assert.Empty(t, entries)
 	})
@@ -943,7 +961,7 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 	original := []byte(`{"timestamp":"2026-01-15T10:30:45Z","command":"make test","exit_code":0,` +
 		`"exit_code_known":true,"head_sha":"head"}` + "\n")
 	require.NoError(t, os.WriteFile(logPath, original, 0o600))
-	recordedDigest := FingerprintActivity(original)
+	recordedDigest := fingerprintActivity(original)
 
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
@@ -989,7 +1007,7 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 		},
 	}
 
-	result, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-03"})
+	result, err := record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-03"})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, recordedDigest, result.Attestation.ActivityDigest)
@@ -998,7 +1016,7 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 		`"exit_code_known":true,"head_sha":"head"}` + "\n")
 	require.NoError(t, os.WriteFile(logPath, tampered, 0o600))
 
-	_, err = Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-03"})
+	_, err = record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-03"})
 	require.Error(t, err, "Record must reject a digest mismatch even when no activity citations are present, "+
 		"since the attestation stamps activity.Digest unconditionally")
 	assert.Contains(t, err.Error(), "digest mismatch")
@@ -1053,7 +1071,7 @@ func TestRecord_GateEvidenceHashVerified_REQ_LNGHZN_S10_T3(t *testing.T) {
 		LogPath:    logPath,
 	}
 	bundle, assessment := gateEvidenceRecordFixture(t, ev)
-	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	_, err := record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 	require.NoError(t, err)
 }
 
@@ -1076,7 +1094,7 @@ func TestRecord_GateEvidenceTamperedLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	}
 	bundle, assessment := gateEvidenceRecordFixture(t, ev)
 	require.NoError(t, os.WriteFile(logPath, []byte("tampered\n"), 0o600))
-	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	_, err := record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gate")
 }
@@ -1096,7 +1114,7 @@ func TestRecord_GateEvidenceMissingHashFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 		LogPath: logPath,
 	}
 	bundle, assessment := gateEvidenceRecordFixture(t, ev)
-	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	_, err := record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "output_hash")
 }
@@ -1114,7 +1132,7 @@ func TestRecord_GateEvidenceMissingLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 		LogPath:    filepath.Join(t.TempDir(), "missing.log"),
 	}
 	bundle, assessment := gateEvidenceRecordFixture(t, ev)
-	_, err := Record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
+	_, err := record(RecordInput{Assessment: assessment, Bundle: bundle, IssueID: "task-01"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gate")
 }
@@ -1143,7 +1161,7 @@ func disagreementAssessment(bundleID, rationale string, status CriterionStatus) 
 
 func recordDisagreementAttestation(t *testing.T, bundleID, rationale string, status CriterionStatus) attestation.AssessmentAttestation {
 	t.Helper()
-	result, err := Record(RecordInput{
+	result, err := record(RecordInput{
 		Assessment: disagreementAssessment(bundleID, rationale, status),
 		IssueID:    "task-01",
 	})
@@ -1311,7 +1329,7 @@ func TestReviewRecord_ConformanceRatingNeverOverwritten_REQ_TOPTIER_S13_T1(t *te
 	result, err := RecordWithDuplicateCheck(input, []attestation.AssessmentAttestation{prior})
 	require.NoError(t, err)
 	require.NotNil(t, result.Attestation)
-	assert.Equal(t, DeriveRating(assessment.Results), result.Attestation.Rating)
+	assert.Equal(t, deriveRating(assessment.Results), result.Attestation.Rating)
 	assert.Equal(t, attestation.Green, result.Attestation.Rating)
 	assert.Equal(t, attestation.Red, result.Attestation.EffectiveRating)
 	assert.NotEqual(t, result.Attestation.Rating, result.Attestation.EffectiveRating)

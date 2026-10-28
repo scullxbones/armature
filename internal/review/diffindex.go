@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type DiffIndex struct {
+type diffIndex struct {
 	fileLines map[string]map[int]bool
 }
 
@@ -18,13 +18,13 @@ var (
 	hunkHeaderRegex    = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 )
 
-func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
-	idx := &DiffIndex{
+func buildDiffIndex(unifiedDiff string) *diffIndex {
+	idx := &diffIndex{
 		fileLines: make(map[string]map[int]bool),
 	}
 
 	if unifiedDiff == "" {
-		return idx, nil
+		return idx
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(unifiedDiff))
@@ -100,16 +100,16 @@ func BuildDiffIndex(unifiedDiff string) (*DiffIndex, error) {
 		}
 	}
 
-	return idx, nil
+	return idx
 }
 
-func (d *DiffIndex) ensureFile(path string) {
+func (d *diffIndex) ensureFile(path string) {
 	if _, exists := d.fileLines[path]; !exists {
 		d.fileLines[path] = make(map[int]bool)
 	}
 }
 
-func (d *DiffIndex) ContainsLine(file string, line int) bool {
+func (d *diffIndex) containsLine(file string, line int) bool {
 	fileLines, exists := d.fileLines[file]
 	if !exists {
 		return false
@@ -117,7 +117,7 @@ func (d *DiffIndex) ContainsLine(file string, line int) bool {
 	return fileLines[line]
 }
 
-func (d *DiffIndex) ContainsFile(file string) bool {
+func (d *diffIndex) containsFile(file string) bool {
 	_, exists := d.fileLines[file]
 	return exists
 }

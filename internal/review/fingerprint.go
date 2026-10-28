@@ -23,25 +23,25 @@ func fingerprintJSON(v any, what string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func FingerprintContract(contract Contract) string {
+func fingerprintContract(contract Contract) string {
 	return fingerprintJSON(contract, "contract")
 }
 
-func FingerprintDelivery(delivery Delivery) string {
+func fingerprintDelivery(delivery Delivery) string {
 	return fingerprintJSON(delivery, "delivery")
 }
 
-func FingerprintResult(assessment ConformanceAssessment) string {
+func fingerprintResult(assessment ConformanceAssessment) string {
 	return fingerprintJSON(assessment, "assessment")
 }
 
-// BundleIDError is returned when ComputeBundleID cannot hash a bundle.
+// bundleIDError is returned when ComputeBundleID cannot hash a bundle.
 // Callers treat it as a normal validation/prepare failure, not a crash.
-type BundleIDError struct {
+type bundleIDError struct {
 	Err error
 }
 
-func (e *BundleIDError) Error() string {
+func (e *bundleIDError) Error() string {
 	if e == nil {
 		return "compute bundle id"
 	}
@@ -51,7 +51,7 @@ func (e *BundleIDError) Error() string {
 	return fmt.Sprintf("compute bundle id: %v", e.Err)
 }
 
-func (e *BundleIDError) Unwrap() error {
+func (e *bundleIDError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
@@ -61,7 +61,7 @@ func (e *BundleIDError) Unwrap() error {
 func bundleIDFromPayload(data any) (string, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		return "", &BundleIDError{Err: fmt.Errorf("marshal bundle data: %w", err)}
+		return "", &bundleIDError{Err: fmt.Errorf("marshal bundle data: %w", err)}
 	}
 	hash := sha256.Sum256(jsonData)
 	return fmt.Sprintf("sha256:%s", hex.EncodeToString(hash[:])), nil
@@ -261,12 +261,12 @@ func formatActivityLogUnreadable(logPath string, err error) string {
 		logPath, err)
 }
 
-func FingerprintActivity(logContent []byte) string {
+func fingerprintActivity(logContent []byte) string {
 	hash := sha256.Sum256(logContent)
 	return hex.EncodeToString(hash[:])
 }
 
-type ActivityEntryDetails struct {
+type activityEntryDetails struct {
 	EntryID       int
 	Command       string
 	ExitCode      int
@@ -274,20 +274,20 @@ type ActivityEntryDetails struct {
 	HeadSHA       string
 }
 
-func ValidateActivityDigestAndLoadEntries(activity *Activity) (map[int]ActivityEntryDetails, []string) {
+func validateActivityDigestAndLoadEntries(activity *Activity) (map[int]activityEntryDetails, []string) {
 	var errs []string
 
 	if activity == nil {
-		return make(map[int]ActivityEntryDetails), errs
+		return make(map[int]activityEntryDetails), errs
 	}
 
 	content, err := readLogFile(activity.LogPath)
 	if err != nil {
 		errs = append(errs, formatActivityLogUnreadable(activity.LogPath, err))
-		return make(map[int]ActivityEntryDetails), errs
+		return make(map[int]activityEntryDetails), errs
 	}
 
-	actualDigest := FingerprintActivity(content)
+	actualDigest := fingerprintActivity(content)
 	if actualDigest != activity.Digest {
 		errs = append(errs, formatActivityDigestMismatch(activity.LogPath, activity.Digest, actualDigest))
 	}
@@ -297,9 +297,9 @@ func ValidateActivityDigestAndLoadEntries(activity *Activity) (map[int]ActivityE
 		errs = append(errs, err.Error())
 	}
 
-	result := make(map[int]ActivityEntryDetails)
+	result := make(map[int]activityEntryDetails)
 	for id, entry := range entries {
-		result[id] = ActivityEntryDetails{
+		result[id] = activityEntryDetails{
 			EntryID:       id,
 			Command:       entry.Command,
 			ExitCode:      entry.ExitCode,
@@ -311,7 +311,7 @@ func ValidateActivityDigestAndLoadEntries(activity *Activity) (map[int]ActivityE
 	return result, errs
 }
 
-func FormatActivityEntryDetails(details ActivityEntryDetails) string {
+func formatActivityEntryDetails(details activityEntryDetails) string {
 	if !details.ExitCodeKnown {
 		return fmt.Sprintf("entry %d: command=%q exit_code=unknown", details.EntryID, details.Command)
 	}

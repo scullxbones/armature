@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -335,11 +337,14 @@ func TestReviewBundleErrorRemediation_REQ_LNGHZN_S6_T2(t *testing.T) {
 	assert.NotContains(t, emptyResultsActions, "--output")
 
 	coverageMiss := filepath.Join(repo, "coverage-miss-assessment.json")
-	coverageFP := review.FingerprintContract(review.Contract{
+	coverageContract, err := json.Marshal(review.Contract{
 		DefinitionOfDone: "Task implementation is complete and verified",
 		Scope:            []string{"cmd/armature/task_01.go"},
 		Acceptance:       []string{},
 	})
+	require.NoError(t, err)
+	coverageSum := sha256.Sum256(coverageContract)
+	coverageFP := hex.EncodeToString(coverageSum[:])
 	require.NoError(t, os.WriteFile(coverageMiss, []byte(fmt.Sprintf(`{
 		"schema_version":1,
 		"bundle_id":"bundle",

@@ -26,7 +26,7 @@ type RecordResult struct {
 	IsDuplicate bool
 }
 
-func Record(input RecordInput) (*RecordResult, error) {
+func record(input RecordInput) (*RecordResult, error) {
 	if input.Assessment == nil {
 		return nil, fmt.Errorf("assessment is required")
 	}
@@ -45,7 +45,7 @@ func Record(input RecordInput) (*RecordResult, error) {
 	if hasActivityCitations(input.Assessment) && (input.Bundle == nil || input.Bundle.Activity == nil) {
 		return nil, fmt.Errorf("assessment cites activity log entries but no bundle activity section is available to validate against")
 	}
-	if err := joinValidationErrors("assessment validation errors:", ValidateResultNoDiff(input.Assessment)); err != nil {
+	if err := joinValidationErrors("assessment validation errors:", validateResultNoDiff(input.Assessment)); err != nil {
 		return nil, err
 	}
 	if err := validateRecordBundleAgainstAssessment(input); err != nil {
@@ -61,7 +61,7 @@ func Record(input RecordInput) (*RecordResult, error) {
 		delivery = input.Bundle.Delivery
 		activityForAttestation = input.Bundle.Activity
 	}
-	attestation := NewAttestation(input.Assessment, delivery, activityForAttestation)
+	attestation := newAttestation(input.Assessment, delivery, activityForAttestation)
 
 	if err := validateRecordIssueContract(input); err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func joinValidationErrors(prefix string, errs []string) error {
 func clearAssessmentActivityDetails(assessment *ConformanceAssessment) {
 	for i := range assessment.Results {
 		for j := range assessment.Results[i].Citations {
-			assessment.Results[i].Citations[j].ClearActivityEntryDetails()
+			assessment.Results[i].Citations[j].clearActivityEntryDetails()
 		}
 	}
 }
@@ -134,22 +134,19 @@ func validateRecordBundleAgainstAssessment(input RecordInput) error {
 		return fmt.Errorf("assessment contract_fingerprint %s does not match bundle contract_fingerprint %s",
 			input.Assessment.ContractFingerprint, input.Bundle.Fingerprints.Contract)
 	}
-	idx, err := BuildDiffIndex(input.Bundle.Delivery.Diff)
-	if err != nil {
-		return fmt.Errorf("build diff index: %w", err)
-	}
-	return joinValidationErrors("assessment citation validation errors:", ValidateResult(input.Assessment, idx))
+	idx := buildDiffIndex(input.Bundle.Delivery.Diff)
+	return joinValidationErrors("assessment citation validation errors:", validateResult(input.Assessment, idx))
 }
 
 func attachValidatedActivityDetails(input RecordInput) error {
 	if input.Bundle == nil || input.Bundle.Activity == nil {
 		return nil
 	}
-	activityEntryMap, digestErrs := ValidateActivityDigestAndLoadEntries(input.Bundle.Activity)
+	activityEntryMap, digestErrs := validateActivityDigestAndLoadEntries(input.Bundle.Activity)
 	if err := joinValidationErrors("activity log validation errors:", digestErrs); err != nil {
 		return err
 	}
-	citationErrs := ValidateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap, input.Bundle.Delivery.HeadSHA)
+	citationErrs := validateActivityCitations(input.Assessment, input.Bundle.Activity, activityEntryMap, input.Bundle.Delivery.HeadSHA)
 	if err := joinValidationErrors("activity citation validation errors:", citationErrs); err != nil {
 		return err
 	}
@@ -164,7 +161,7 @@ func attachValidatedActivityDetails(input RecordInput) error {
 				continue
 			}
 			if details, ok := activityEntryMap[entryID]; ok {
-				citation.SetActivityEntryDetails(FormatActivityEntryDetails(details))
+				citation.setActivityEntryDetails(formatActivityEntryDetails(details))
 			}
 		}
 	}
@@ -184,22 +181,22 @@ func validateRecordIssueContract(input RecordInput) error {
 		Scope:            input.Issue.Scope,
 		Acceptance:       criteria,
 	}
-	issueContractFP := FingerprintContract(contract)
+	issueContractFP := fingerprintContract(contract)
 	if input.Assessment.ContractFingerprint != issueContractFP {
 		return fmt.Errorf("assessment contract fingerprint %s does not match issue contract fingerprint %s",
 			input.Assessment.ContractFingerprint, issueContractFP)
 	}
-	return joinValidationErrors("assessment coverage validation errors:", ValidateResultCoverage(input.Assessment, contract))
+	return joinValidationErrors("assessment coverage validation errors:", validateResultCoverage(input.Assessment, contract))
 }
 
 func RecordWithDuplicateCheck(input RecordInput, existingAttestations []attestation.AssessmentAttestation) (*RecordResult, error) {
-	result, err := Record(input)
+	result, err := record(input)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, existingAtt := range existingAttestations {
-		if IsDuplicate(result.Attestation, &existingAtt) {
+		if isDuplicate(result.Attestation, &existingAtt) {
 			result.IsDuplicate = true
 			return result, nil
 		}

@@ -103,7 +103,7 @@ func attachActivitySection(activityLogPath, headSHA string) (*Activity, error) {
 		}
 	}
 
-	digest := FingerprintActivity(logContent)
+	digest := fingerprintActivity(logContent)
 
 	logAbsPath := activityLogPath
 	if abs, err := filepath.Abs(activityLogPath); err == nil {
@@ -167,8 +167,8 @@ func Prepare(
 		Diff:         filteredDiff,
 	}
 
-	contractFP := FingerprintContract(contract)
-	deliveryFP := FingerprintDelivery(delivery)
+	contractFP := fingerprintContract(contract)
+	deliveryFP := fingerprintDelivery(delivery)
 
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,

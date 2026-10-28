@@ -2,7 +2,7 @@ package review
 
 import "github.com/scullxbones/armature/internal/attestation"
 
-func DeriveRating(results []CriterionResult) attestation.Rating {
+func deriveRating(results []CriterionResult) attestation.Rating {
 	if len(results) == 0 {
 		return attestation.Green
 	}
@@ -28,7 +28,7 @@ func DeriveRating(results []CriterionResult) attestation.Rating {
 	return attestation.Green
 }
 
-func CountCriteria(results []CriterionResult) (int, int, int, int) {
+func countCriteria(results []CriterionResult) (int, int, int, int) {
 	var satisfied, partiallySatisfied, notSatisfied, indeterminate int
 
 	for _, result := range results {

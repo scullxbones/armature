@@ -12,7 +12,7 @@ func TestComputeBundleID_UnsupportedPayloadReturnsTypedError_REQ_NOCOMMENTS(t *t
 
 	_, err := bundleIDFromPayload(make(chan int))
 	require.Error(t, err)
-	var typed *BundleIDError
+	var typed *bundleIDError
 	require.ErrorAs(t, err, &typed)
 	assert.Contains(t, typed.Error(), "marshal bundle data")
 	assert.Contains(t, typed.Unwrap().Error(), "unsupported type")
