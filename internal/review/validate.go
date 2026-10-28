@@ -87,10 +87,8 @@ func suggestCriterionID(id string) string {
 	return `use "definition_of_done" or "acceptance[N]" (N is a 0-based integer)`
 }
 
-// ValidateAssessment runs the same checks Record performs. It does not persist
-// an attestation; arm review validate uses this so record remains the sole
-// enforcement gate that appends ops. Every failure line includes an auto-fix
-// suggestion.
+// ValidateAssessment runs the same checks as RecordWithDuplicateCheck without
+// persisting an attestation. Every failure line includes an auto-fix suggestion.
 func ValidateAssessment(input RecordInput) error {
 	_, err := record(input)
 	return AnnotateValidateError(err)
@@ -338,7 +336,7 @@ func hasActivityCitations(assessment *ConformanceAssessment) bool {
 	return false
 }
 
-// ValidateActivityCitations enforces ADR-0008 on activity citations: upgrade-only
+// validateActivityCitations enforces ADR-0008 on activity citations: upgrade-only
 // (activity cannot satisfy implementation criteria alone), HEAD-anchored entries,
 // and harness-recorded exit status. Empty return means valid.
 func validateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]activityEntryDetails, deliveryHeadSHA string) []string {

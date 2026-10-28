@@ -35,8 +35,6 @@ func fingerprintResult(assessment ConformanceAssessment) string {
 	return fingerprintJSON(assessment, "assessment")
 }
 
-// bundleIDError is returned when ComputeBundleID cannot hash a bundle.
-// Callers treat it as a normal validation/prepare failure, not a crash.
 type bundleIDError struct {
 	Err error
 }
