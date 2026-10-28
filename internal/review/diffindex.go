@@ -18,13 +18,13 @@ var (
 	hunkHeaderRegex    = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 )
 
-func buildDiffIndex(unifiedDiff string) (*diffIndex, error) {
+func buildDiffIndex(unifiedDiff string) *diffIndex {
 	idx := &diffIndex{
 		fileLines: make(map[string]map[int]bool),
 	}
 
 	if unifiedDiff == "" {
-		return idx, nil
+		return idx
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(unifiedDiff))
@@ -100,7 +100,7 @@ func buildDiffIndex(unifiedDiff string) (*diffIndex, error) {
 		}
 	}
 
-	return idx, nil
+	return idx
 }
 
 func (d *diffIndex) ensureFile(path string) {

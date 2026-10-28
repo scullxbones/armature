@@ -134,10 +134,7 @@ func validateRecordBundleAgainstAssessment(input RecordInput) error {
 		return fmt.Errorf("assessment contract_fingerprint %s does not match bundle contract_fingerprint %s",
 			input.Assessment.ContractFingerprint, input.Bundle.Fingerprints.Contract)
 	}
-	idx, err := buildDiffIndex(input.Bundle.Delivery.Diff)
-	if err != nil {
-		return fmt.Errorf("build diff index: %w", err)
-	}
+	idx := buildDiffIndex(input.Bundle.Delivery.Diff)
 	return joinValidationErrors("assessment citation validation errors:", validateResult(input.Assessment, idx))
 }
 

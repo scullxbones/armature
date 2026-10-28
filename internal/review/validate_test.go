@@ -43,8 +43,7 @@ func TestValidateResult_Valid(t *testing.T) {
  line 13
 `
 
-	idx, err := buildDiffIndex(diff)
-	require.NoError(t, err)
+	idx := buildDiffIndex(diff)
 
 	errs := validateResult(assessment, idx)
 	assert.Len(t, errs, 0, "Expected no validation errors")
@@ -66,8 +65,7 @@ func TestValidateResult_InvalidBundleID(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	idx, err := buildDiffIndex("")
-	require.NoError(t, err)
+	idx := buildDiffIndex("")
 
 	errs := validateResult(assessment, idx)
 	assert.True(t, len(errs) > 0, "Expected validation errors for empty bundle ID")
@@ -102,8 +100,7 @@ func TestValidateResult_InvalidCitation(t *testing.T) {
  line 3
 `
 
-	idx, err := buildDiffIndex(diff)
-	require.NoError(t, err)
+	idx := buildDiffIndex(diff)
 
 	errs := validateResult(assessment, idx)
 	assert.True(t, len(errs) > 0, "Expected validation errors for invalid citation")
@@ -138,8 +135,7 @@ func TestValidateResult_SuggestsCitationDowngrade_REQ_LNGHZN_S8_T1(t *testing.T)
  line 3
 `
 
-	idx, err := buildDiffIndex(diff)
-	require.NoError(t, err)
+	idx := buildDiffIndex(diff)
 
 	errs := validateResult(assessment, idx)
 	require.NotEmpty(t, errs)
@@ -162,8 +158,7 @@ func TestValidateResult_InvalidCriterionResult(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	idx, err := buildDiffIndex("")
-	require.NoError(t, err)
+	idx := buildDiffIndex("")
 
 	errs := validateResult(assessment, idx)
 	assert.True(t, len(errs) > 0, "Expected validation errors for invalid criterion result")
@@ -204,8 +199,7 @@ func TestValidateResult_MultipleCitations(t *testing.T) {
  line 6
 `
 
-	idx, err := buildDiffIndex(diff)
-	require.NoError(t, err)
+	idx := buildDiffIndex(diff)
 
 	errs := validateResult(assessment, idx)
 	assert.Len(t, errs, 0, "Expected no validation errors for multiple citations")
@@ -592,8 +586,7 @@ func TestValidateResult_NoCitations_NotSatisfied(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	idx, err := buildDiffIndex("")
-	require.NoError(t, err)
+	idx := buildDiffIndex("")
 
 	errs := validateResult(assessment, idx)
 	assert.Len(t, errs, 0, "Expected no validation errors for NotSatisfied with MissingEvidence")
@@ -769,8 +762,7 @@ func TestValidateResult_PathOnlyCitation_FileInDiff(t *testing.T) {
  extra line
 `
 
-	idx, err := buildDiffIndex(diff)
-	require.NoError(t, err)
+	idx := buildDiffIndex(diff)
 
 	errs := validateResult(assessment, idx)
 	assert.Len(t, errs, 0, "Expected no validation errors for path-only citation with file in diff")
@@ -804,8 +796,7 @@ func TestValidateResult_PathOnlyCitation_FileNotInDiff(t *testing.T) {
  line 2
 `
 
-	idx, err := buildDiffIndex(diff)
-	require.NoError(t, err)
+	idx := buildDiffIndex(diff)
 
 	errs := validateResult(assessment, idx)
 	assert.True(t, len(errs) > 0, "Expected validation errors for path-only citation with file not in diff")
