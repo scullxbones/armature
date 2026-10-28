@@ -1,155 +1,154 @@
-package review_test
+package review
 
 import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/attestation"
-	"github.com/scullxbones/armature/internal/review"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDeriveRating_AllSatisfied_Green(t *testing.T) {
 	t.Parallel()
-	results := []review.CriterionResult{
+	results := []CriterionResult{
 		{
 			ID:        "definition_of_done",
-			Status:    review.Satisfied,
+			Status:    Satisfied,
 			Rationale: "completed",
 		},
 		{
 			ID:        "acceptance[0]",
-			Status:    review.Satisfied,
+			Status:    Satisfied,
 			Rationale: "verified",
 		},
 		{
 			ID:        "acceptance[1]",
-			Status:    review.Satisfied,
+			Status:    Satisfied,
 			Rationale: "validated",
 		},
 	}
 
-	rating := review.DeriveRating(results)
+	rating := deriveRating(results)
 	assert.Equal(t, attestation.Green, rating)
 }
 
 func TestDeriveRating_PartiallySatisfied_Yellow(t *testing.T) {
 	t.Parallel()
-	results := []review.CriterionResult{
+	results := []CriterionResult{
 		{
 			ID:        "definition_of_done",
-			Status:    review.Satisfied,
+			Status:    Satisfied,
 			Rationale: "mostly done",
 		},
 		{
 			ID:              "acceptance[0]",
-			Status:          review.PartiallySatisfied,
+			Status:          PartiallySatisfied,
 			Rationale:       "partial",
 			MissingEvidence: "feature X incomplete",
 		},
 	}
 
-	rating := review.DeriveRating(results)
+	rating := deriveRating(results)
 	assert.Equal(t, attestation.Yellow, rating)
 }
 
 func TestDeriveRating_Indeterminate_Yellow(t *testing.T) {
 	t.Parallel()
-	results := []review.CriterionResult{
+	results := []CriterionResult{
 		{
 			ID:        "definition_of_done",
-			Status:    review.Satisfied,
+			Status:    Satisfied,
 			Rationale: "verified",
 		},
 		{
 			ID:              "acceptance[0]",
-			Status:          review.Indeterminate,
+			Status:          Indeterminate,
 			Rationale:       "ambiguous",
 			MissingEvidence: "unclear requirement",
 		},
 	}
 
-	rating := review.DeriveRating(results)
+	rating := deriveRating(results)
 	assert.Equal(t, attestation.Yellow, rating)
 }
 
 func TestDeriveRating_NotSatisfied_Red(t *testing.T) {
 	t.Parallel()
-	results := []review.CriterionResult{
+	results := []CriterionResult{
 		{
 			ID:        "definition_of_done",
-			Status:    review.Satisfied,
+			Status:    Satisfied,
 			Rationale: "done",
 		},
 		{
 			ID:              "acceptance[0]",
-			Status:          review.NotSatisfied,
+			Status:          NotSatisfied,
 			Rationale:       "missing",
 			MissingEvidence: "not implemented",
 		},
 	}
 
-	rating := review.DeriveRating(results)
+	rating := deriveRating(results)
 	assert.Equal(t, attestation.Red, rating)
 }
 
 func TestDeriveRating_Mixed_YellowAndRed_Red(t *testing.T) {
 	t.Parallel()
 
-	results := []review.CriterionResult{
+	results := []CriterionResult{
 		{
 			ID:              "acceptance[0]",
-			Status:          review.PartiallySatisfied,
+			Status:          PartiallySatisfied,
 			Rationale:       "partial",
 			MissingEvidence: "feature X incomplete",
 		},
 		{
 			ID:              "acceptance[1]",
-			Status:          review.NotSatisfied,
+			Status:          NotSatisfied,
 			Rationale:       "missing",
 			MissingEvidence: "not implemented",
 		},
 	}
 
-	rating := review.DeriveRating(results)
+	rating := deriveRating(results)
 	assert.Equal(t, attestation.Red, rating)
 }
 
 func TestDeriveRating_Empty_Green(t *testing.T) {
 	t.Parallel()
 
-	results := []review.CriterionResult{}
+	results := []CriterionResult{}
 
-	rating := review.DeriveRating(results)
+	rating := deriveRating(results)
 	assert.Equal(t, attestation.Green, rating)
 }
 
 func TestDeriveRating_SingleIndeterminate_Yellow(t *testing.T) {
 	t.Parallel()
-	results := []review.CriterionResult{
+	results := []CriterionResult{
 		{
 			ID:              "definition_of_done",
-			Status:          review.Indeterminate,
+			Status:          Indeterminate,
 			Rationale:       "unclear",
 			MissingEvidence: "ambiguous requirement",
 		},
 	}
 
-	rating := review.DeriveRating(results)
+	rating := deriveRating(results)
 	assert.Equal(t, attestation.Yellow, rating)
 }
 
 func TestCountCriteria(t *testing.T) {
 	t.Parallel()
-	results := []review.CriterionResult{
-		{ID: "def", Status: review.Satisfied, Rationale: "ok"},
-		{ID: "acc[0]", Status: review.Satisfied, Rationale: "ok"},
-		{ID: "acc[1]", Status: review.PartiallySatisfied, Rationale: "partial", MissingEvidence: "X"},
-		{ID: "acc[2]", Status: review.NotSatisfied, Rationale: "no", MissingEvidence: "Y"},
-		{ID: "acc[3]", Status: review.Indeterminate, Rationale: "unclear", MissingEvidence: "Z"},
+	results := []CriterionResult{
+		{ID: "def", Status: Satisfied, Rationale: "ok"},
+		{ID: "acc[0]", Status: Satisfied, Rationale: "ok"},
+		{ID: "acc[1]", Status: PartiallySatisfied, Rationale: "partial", MissingEvidence: "X"},
+		{ID: "acc[2]", Status: NotSatisfied, Rationale: "no", MissingEvidence: "Y"},
+		{ID: "acc[3]", Status: Indeterminate, Rationale: "unclear", MissingEvidence: "Z"},
 	}
 
-	sat, partial, notSat, indet := review.CountCriteria(results)
+	sat, partial, notSat, indet := countCriteria(results)
 
 	assert.Equal(t, 2, sat)
 	assert.Equal(t, 1, partial)

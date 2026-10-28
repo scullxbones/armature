@@ -1,4 +1,4 @@
-package review_test
+package review
 
 import (
 	"encoding/json"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
-	"github.com/scullxbones/armature/internal/review"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,8 +15,8 @@ import (
 
 func TestCriterionStatus_JSONRoundTrip(t *testing.T) {
 	t.Parallel()
-	statuses := []review.CriterionStatus{
-		review.Satisfied, review.PartiallySatisfied, review.NotSatisfied, review.Indeterminate,
+	statuses := []CriterionStatus{
+		Satisfied, PartiallySatisfied, NotSatisfied, Indeterminate,
 	}
 	for _, status := range statuses {
 		t.Run(status.String(), func(t *testing.T) {
@@ -26,7 +25,7 @@ func TestCriterionStatus_JSONRoundTrip(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, `"`+status.String()+`"`, string(data))
-			var decoded review.CriterionStatus
+			var decoded CriterionStatus
 			require.NoError(t, json.Unmarshal(data, &decoded))
 			assert.Equal(t, status, decoded)
 		})
@@ -37,23 +36,23 @@ func TestCriterionStatus_UnmarshalJSON_SkillOutput(t *testing.T) {
 	t.Parallel()
 	input := `{"status":"satisfied"}`
 	var result struct {
-		Status review.CriterionStatus `json:"status"`
+		Status CriterionStatus `json:"status"`
 	}
 	err := json.Unmarshal([]byte(input), &result)
 	require.NoError(t, err)
-	assert.Equal(t, review.Satisfied, result.Status)
+	assert.Equal(t, Satisfied, result.Status)
 }
 
 func TestCriterionStatus_String(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		status   review.CriterionStatus
+		status   CriterionStatus
 		expected string
 	}{
-		{review.Satisfied, "satisfied"},
-		{review.PartiallySatisfied, "partially_satisfied"},
-		{review.NotSatisfied, "not_satisfied"},
-		{review.Indeterminate, "indeterminate"},
+		{Satisfied, "satisfied"},
+		{PartiallySatisfied, "partially_satisfied"},
+		{NotSatisfied, "not_satisfied"},
+		{Indeterminate, "indeterminate"},
 	}
 
 	for _, tt := range tests {
@@ -68,13 +67,13 @@ func TestParseCriterionStatus(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		input    string
-		expected review.CriterionStatus
+		expected CriterionStatus
 		wantErr  bool
 	}{
-		{"satisfied", review.Satisfied, false},
-		{"partially_satisfied", review.PartiallySatisfied, false},
-		{"not_satisfied", review.NotSatisfied, false},
-		{"indeterminate", review.Indeterminate, false},
+		{"satisfied", Satisfied, false},
+		{"partially_satisfied", PartiallySatisfied, false},
+		{"not_satisfied", NotSatisfied, false},
+		{"indeterminate", Indeterminate, false},
 		{"invalid", 0, true},
 		{"", 0, true},
 	}
@@ -82,7 +81,7 @@ func TestParseCriterionStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			t.Parallel()
-			status, err := review.ParseCriterionStatus(tt.input)
+			status, err := parseCriterionStatus(tt.input)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -97,35 +96,35 @@ func TestCriterionResult_Valid(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
-		result  review.CriterionResult
+		result  CriterionResult
 		wantErr bool
 	}{
 		{
 			name: "satisfied without citations or missing_evidence",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:        "acceptance[1]",
-				Status:    review.Satisfied,
+				Status:    Satisfied,
 				Rationale: "make check is green per the outcome text",
 			},
 			wantErr: true,
 		},
 		{
 			name: "valid satisfied with citations",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:        "definition_of_done",
-				Status:    review.Satisfied,
+				Status:    Satisfied,
 				Rationale: "all requirements met",
-				Citations: []review.Citation{
-					review.FileCitation("internal/review/types.go", 10, 0),
+				Citations: []Citation{
+					FileCitation("internal/review/types.go", 10, 0),
 				},
 			},
 			wantErr: false,
 		},
 		{
 			name: "satisfied with missing_evidence and no citations",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:              "acceptance[1]",
-				Status:          review.Satisfied,
+				Status:          Satisfied,
 				Rationale:       "gate claim with no remaining citable evidence yet",
 				MissingEvidence: "dropped activity citation; no remaining evidence",
 			},
@@ -133,11 +132,11 @@ func TestCriterionResult_Valid(t *testing.T) {
 		},
 		{
 			name: "valid with citations",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:     "acceptance[0]",
-				Status: review.PartiallySatisfied,
-				Citations: []review.Citation{
-					review.FileCitation("internal/review/types.go", 10, 0),
+				Status: PartiallySatisfied,
+				Citations: []Citation{
+					FileCitation("internal/review/types.go", 10, 0),
 				},
 				Rationale: "some requirements met",
 			},
@@ -145,36 +144,36 @@ func TestCriterionResult_Valid(t *testing.T) {
 		},
 		{
 			name: "missing ID",
-			result: review.CriterionResult{
-				Status:    review.Satisfied,
+			result: CriterionResult{
+				Status:    Satisfied,
 				Rationale: "test",
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing rationale",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:     "definition_of_done",
-				Status: review.Satisfied,
+				Status: Satisfied,
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing evidence text when no citations",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:        "definition_of_done",
-				Status:    review.NotSatisfied,
+				Status:    NotSatisfied,
 				Rationale: "not satisfied",
 			},
 			wantErr: true,
 		},
 		{
 			name: "valid not satisfied with citations",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:     "definition_of_done",
-				Status: review.NotSatisfied,
-				Citations: []review.Citation{
-					review.FileCitation("file.go", 1, 0),
+				Status: NotSatisfied,
+				Citations: []Citation{
+					FileCitation("file.go", 1, 0),
 				},
 				Rationale: "not satisfied",
 			},
@@ -182,9 +181,9 @@ func TestCriterionResult_Valid(t *testing.T) {
 		},
 		{
 			name: "valid not satisfied with missing evidence text",
-			result: review.CriterionResult{
+			result: CriterionResult{
 				ID:              "definition_of_done",
-				Status:          review.NotSatisfied,
+				Status:          NotSatisfied,
 				Rationale:       "not satisfied",
 				MissingEvidence: "feature X not implemented",
 			},
@@ -209,30 +208,30 @@ func TestReviewBundle_Valid(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
-		bundle  review.ReviewBundle
+		bundle  ReviewBundle
 		wantErr bool
 	}{
 		{
 			name: "valid bundle",
-			bundle: review.ReviewBundle{
+			bundle: ReviewBundle{
 				SchemaVersion: 1,
 				BundleID:      "sha256:abc123",
-				Issue: review.IssueInfo{
+				Issue: IssueInfo{
 					ID:      "TASK-1",
 					Type:    "task",
 					Title:   "Test Task",
 					Outcome: "completed successfully",
 				},
-				Contract: review.Contract{
+				Contract: Contract{
 					DefinitionOfDone: "all tests pass",
 					Acceptance:       []string{"feature works", "documented"},
 				},
-				Delivery: review.Delivery{
+				Delivery: Delivery{
 					BaseSHA:      "abc123",
 					HeadSHA:      "def456",
 					ChangedFiles: []string{"file.go"},
 				},
-				Fingerprints: review.Fingerprints{
+				Fingerprints: Fingerprints{
 					Contract: "sha256:contract123",
 					Delivery: "sha256:delivery123",
 				},
@@ -241,17 +240,17 @@ func TestReviewBundle_Valid(t *testing.T) {
 		},
 		{
 			name: "invalid schema version",
-			bundle: review.ReviewBundle{
+			bundle: ReviewBundle{
 				SchemaVersion: 999,
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing issue ID",
-			bundle: review.ReviewBundle{
+			bundle: ReviewBundle{
 				SchemaVersion: 1,
 				BundleID:      "sha256:abc123",
-				Issue: review.IssueInfo{
+				Issue: IssueInfo{
 					Type: "task",
 				},
 			},
@@ -259,15 +258,15 @@ func TestReviewBundle_Valid(t *testing.T) {
 		},
 		{
 			name: "missing issue title",
-			bundle: review.ReviewBundle{
+			bundle: ReviewBundle{
 				SchemaVersion: 1,
 				BundleID:      "sha256:abc123",
-				Issue: review.IssueInfo{
+				Issue: IssueInfo{
 					ID:    "TASK-1",
 					Type:  "task",
 					Title: "",
 				},
-				Fingerprints: review.Fingerprints{
+				Fingerprints: Fingerprints{
 					Contract: "sha256:contract123",
 					Delivery: "sha256:delivery123",
 				},
@@ -293,7 +292,7 @@ func TestCriterionResult_MissingStatus(t *testing.T) {
 	t.Parallel()
 
 	input := `{"id":"definition_of_done","rationale":"test"}`
-	var result review.CriterionResult
+	var result CriterionResult
 	err := json.Unmarshal([]byte(input), &result)
 	assert.Error(t, err, "expected error when status key is missing")
 	assert.Contains(t, err.Error(), "missing required field")
@@ -311,7 +310,7 @@ func TestDecodeReviewBundle_RejectsSchemaGaps_REQ_LNGHZN_S8_T1(t *testing.T) {
 			require.True(t, ok)
 			issue["type"] = "nonsense"
 		})
-		_, err := review.DecodeReviewBundle(data)
+		_, err := DecodeReviewBundle(data)
 		require.Error(t, err)
 		assert.Contains(t, strings.ToLower(err.Error()), "type")
 	})
@@ -323,7 +322,7 @@ func TestDecodeReviewBundle_RejectsSchemaGaps_REQ_LNGHZN_S8_T1(t *testing.T) {
 			require.True(t, ok)
 			delivery["head_sha"] = "not-a-git-sha"
 		})
-		_, err := review.DecodeReviewBundle(data)
+		_, err := DecodeReviewBundle(data)
 		require.Error(t, err)
 		assert.Contains(t, strings.ToLower(err.Error()), "sha")
 	})
@@ -335,7 +334,7 @@ func TestDecodeReviewBundle_RejectsSchemaGaps_REQ_LNGHZN_S8_T1(t *testing.T) {
 			require.True(t, ok)
 			delete(delivery, "changed_files")
 		})
-		_, err := review.DecodeReviewBundle(data)
+		_, err := DecodeReviewBundle(data)
 		require.Error(t, err)
 		assert.Contains(t, strings.ToLower(err.Error()), "changed_files")
 	})
@@ -347,7 +346,7 @@ func TestDecodeReviewBundle_RejectsSchemaGaps_REQ_LNGHZN_S8_T1(t *testing.T) {
 			require.True(t, ok)
 			issue["title"] = ""
 		})
-		_, err := review.DecodeReviewBundle(data)
+		_, err := DecodeReviewBundle(data)
 		require.Error(t, err)
 		assert.Contains(t, strings.ToLower(err.Error()), "title")
 	})
@@ -359,7 +358,7 @@ func TestDecodeReviewBundle_RejectsSchemaGaps_REQ_LNGHZN_S8_T1(t *testing.T) {
 			require.True(t, ok)
 			delete(issue, "title")
 		})
-		_, err := review.DecodeReviewBundle(data)
+		_, err := DecodeReviewBundle(data)
 		require.Error(t, err)
 		assert.Contains(t, strings.ToLower(err.Error()), "title")
 	})
@@ -382,11 +381,11 @@ func TestDecodeConformanceAssessment_RejectsNullCitations_REQ_LNGHZN_S8_T1(t *te
     }
   ]
 }`
-	_, err := review.DecodeConformanceAssessment([]byte(valid))
+	_, err := DecodeConformanceAssessment([]byte(valid))
 	require.NoError(t, err)
 
 	nullCitations := strings.Replace(valid, `"citations": [{"path": "impl.go", "line": 1}]`, `"citations": null`, 1)
-	_, err = review.DecodeConformanceAssessment([]byte(nullCitations))
+	_, err = DecodeConformanceAssessment([]byte(nullCitations))
 	require.Error(t, err)
 	assert.Contains(t, strings.ToLower(err.Error()), "citations")
 }
@@ -409,17 +408,17 @@ func TestDecodeConformanceAssessment_RejectsInvalidCitationColumn_REQ_LNGHZN_S8_
   ]
 }`
 
-	_, err := review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, "")))
+	_, err := DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, "")))
 	require.NoError(t, err, "omitted column must remain valid")
 
-	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": 1`)))
+	_, err = DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": 1`)))
 	require.NoError(t, err, "column >= 1 must remain valid")
 
-	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": 0`)))
+	_, err = DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": 0`)))
 	require.Error(t, err, "explicit column 0 must be rejected")
 	assert.Contains(t, strings.ToLower(err.Error()), "column")
 
-	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": -1`)))
+	_, err = DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "column": -1`)))
 	require.Error(t, err, "negative column must be rejected")
 	assert.Contains(t, strings.ToLower(err.Error()), "column")
 }
@@ -442,45 +441,45 @@ func TestDecodeConformanceAssessment_RejectsNullCitationLine_REQ_LNGHZN_S8_T1(t 
   ]
 }`
 
-	_, err := review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "line": 1`)))
+	_, err := DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "line": 1`)))
 	require.NoError(t, err, "integer line must remain valid")
 
-	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, ``)))
+	_, err = DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, ``)))
 	require.NoError(t, err, "omitted line must remain valid")
 
-	_, err = review.DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "line": null`)))
+	_, err = DecodeConformanceAssessment([]byte(fmt.Sprintf(valid, `, "line": null`)))
 	require.Error(t, err, "explicit line null must be rejected")
 	assert.Contains(t, strings.ToLower(err.Error()), "line")
 	assert.NotContains(t, strings.ToLower(err.Error()), "column")
 }
 
-func validDecodeBundle() review.ReviewBundle {
-	return review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
+func validDecodeBundle() ReviewBundle {
+	return ReviewBundle{
+		SchemaVersion: SchemaVersion,
 		BundleID:      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Decode contract",
 			Outcome: "done",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "tests pass",
 			Acceptance:       []string{"works"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			HeadSHA:      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			ChangedFiles: []string{"impl.go"},
 		},
-		Fingerprints: review.Fingerprints{
+		Fingerprints: Fingerprints{
 			Contract: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			Delivery: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 		},
 	}
 }
 
-func mustMarshalBundleJSON(t *testing.T, bundle review.ReviewBundle) []byte {
+func mustMarshalBundleJSON(t *testing.T, bundle ReviewBundle) []byte {
 	t.Helper()
 	data, err := json.Marshal(bundle)
 	require.NoError(t, err)
@@ -501,29 +500,29 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
-		assess  review.ConformanceAssessment
+		assess  ConformanceAssessment
 		wantErr bool
 	}{
 		{
 			name: "valid assessment",
-			assess: review.ConformanceAssessment{
+			assess: ConformanceAssessment{
 				SchemaVersion: 1,
 				BundleID:      "sha256:abc123",
-				Results: []review.CriterionResult{
+				Results: []CriterionResult{
 					{
 						ID:        "definition_of_done",
-						Status:    review.Satisfied,
+						Status:    Satisfied,
 						Rationale: "implemented correctly",
-						Citations: []review.Citation{
-							review.FileCitation("internal/review/types.go", 10, 0),
+						Citations: []Citation{
+							FileCitation("internal/review/types.go", 10, 0),
 						},
 					},
 					{
 						ID:        "acceptance[0]",
-						Status:    review.Satisfied,
+						Status:    Satisfied,
 						Rationale: "working as designed",
-						Citations: []review.Citation{
-							review.FileCitation("internal/review/types.go", 20, 0),
+						Citations: []Citation{
+							FileCitation("internal/review/types.go", 20, 0),
 						},
 					},
 				},
@@ -534,17 +533,17 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 		},
 		{
 			name: "invalid schema version",
-			assess: review.ConformanceAssessment{
+			assess: ConformanceAssessment{
 				SchemaVersion: 999,
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing results",
-			assess: review.ConformanceAssessment{
+			assess: ConformanceAssessment{
 				SchemaVersion:       1,
 				BundleID:            "sha256:abc123",
-				Results:             []review.CriterionResult{},
+				Results:             []CriterionResult{},
 				ContractFingerprint: "sha256:contract123",
 				DeliveryFingerprint: "sha256:delivery123",
 			},
@@ -568,7 +567,7 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	activity := review.Activity{
+	activity := Activity{
 		Digest:            "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -579,7 +578,7 @@ func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 	data, err := json.Marshal(activity)
 	require.NoError(t, err)
 
-	var decoded review.Activity
+	var decoded Activity
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
 	assert.Equal(t, activity.Digest, decoded.Digest)
@@ -592,29 +591,29 @@ func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 func TestReviewBundle_WithActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	bundle := review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
+	bundle := ReviewBundle{
+		SchemaVersion: SchemaVersion,
 		BundleID:      "sha256:bundle123",
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "EXECEV-T2",
 			Type:    "task",
 			Title:   "Test task",
 			Outcome: "done",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "All tests pass",
 			Acceptance:       []string{"Feature works"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "abc123",
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"file.go"},
 		},
-		Fingerprints: review.Fingerprints{
+		Fingerprints: Fingerprints{
 			Contract: "fp_contract",
 			Delivery: "fp_delivery",
 		},
-		Activity: &review.Activity{
+		Activity: &Activity{
 			Digest:            "fp_activity",
 			EntryCount:        3,
 			DeliveryHeadCount: 2,
@@ -626,7 +625,7 @@ func TestReviewBundle_WithActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 	data, err := json.Marshal(bundle)
 	require.NoError(t, err)
 
-	var decoded review.ReviewBundle
+	var decoded ReviewBundle
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
 	assert.Equal(t, bundle.SchemaVersion, decoded.SchemaVersion)
@@ -643,23 +642,23 @@ func TestReviewBundle_WithActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 func TestReviewBundle_WithoutActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	bundle := review.ReviewBundle{
-		SchemaVersion: review.SchemaVersion,
+	bundle := ReviewBundle{
+		SchemaVersion: SchemaVersion,
 		BundleID:      "sha256:bundle123",
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "EXECEV-T2",
 			Type:    "task",
 			Title:   "Test task",
 			Outcome: "done",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "All tests pass",
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA: "abc123",
 			HeadSHA: "def456",
 		},
-		Fingerprints: review.Fingerprints{
+		Fingerprints: Fingerprints{
 			Contract: "fp_contract",
 			Delivery: "fp_delivery",
 		},
@@ -672,7 +671,7 @@ func TestReviewBundle_WithoutActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) 
 
 	assert.NotContains(t, string(data), "activity")
 
-	var decoded review.ReviewBundle
+	var decoded ReviewBundle
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
 	assert.Nil(t, decoded.Activity)
@@ -682,7 +681,7 @@ func TestAssessmentAttestation_WithActivityDigest_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
 	att := attestation.AssessmentAttestation{
-		SchemaVersion:           review.SchemaVersion,
+		SchemaVersion:           SchemaVersion,
 		BundleID:                "sha256:bundle123",
 		ContractFingerprint:     "fp_contract",
 		DeliveryFingerprint:     "fp_delivery",
@@ -710,7 +709,7 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 	t.Parallel()
 
 	att := attestation.AssessmentAttestation{
-		SchemaVersion:           review.SchemaVersion,
+		SchemaVersion:           SchemaVersion,
 		BundleID:                "sha256:bundle123",
 		ContractFingerprint:     "fp_contract",
 		DeliveryFingerprint:     "fp_delivery",
@@ -772,7 +771,7 @@ func TestAssessmentOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 	assert.Equal(t, "fp_result", legacy.ResultFingerprint)
 
 	withoutCounts := attestation.AssessmentAttestation{
-		SchemaVersion:       review.SchemaVersion,
+		SchemaVersion:       SchemaVersion,
 		BundleID:            "sha256:bundle123",
 		ContractFingerprint: "fp_contract",
 		DeliveryFingerprint: "fp_delivery",
@@ -792,7 +791,7 @@ func TestAssessmentAttestation_DisagreementFieldsRoundTrip_REQ_TOPTIER_S13_T1(t 
 	t.Parallel()
 
 	att := attestation.AssessmentAttestation{
-		SchemaVersion:         review.SchemaVersion,
+		SchemaVersion:         SchemaVersion,
 		BundleID:              "sha256:bundle-new",
 		ContractFingerprint:   "fp_contract",
 		DeliveryFingerprint:   "fp_delivery",
@@ -869,7 +868,7 @@ func TestAssessmentAttestation_WithoutActivityDigest_REQ_EXECEV_T2(t *testing.T)
 	t.Parallel()
 
 	att := attestation.AssessmentAttestation{
-		SchemaVersion:           review.SchemaVersion,
+		SchemaVersion:           SchemaVersion,
 		BundleID:                "sha256:bundle123",
 		ContractFingerprint:     "fp_contract",
 		DeliveryFingerprint:     "fp_delivery",
@@ -907,7 +906,7 @@ func TestCitationJSONRoundTripMatchesFixtures_REQ_NOCOMMENTS(t *testing.T) {
 	for _, raw := range fixtures {
 		t.Run(raw, func(t *testing.T) {
 			t.Parallel()
-			var c review.Citation
+			var c Citation
 			require.NoError(t, json.Unmarshal([]byte(raw), &c))
 			got, err := json.Marshal(c)
 			require.NoError(t, err)
@@ -915,12 +914,12 @@ func TestCitationJSONRoundTripMatchesFixtures_REQ_NOCOMMENTS(t *testing.T) {
 		})
 	}
 
-	file := review.FileCitation("impl.go", 1, 0)
+	file := FileCitation("impl.go", 1, 0)
 	got, err := json.Marshal(file)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"path":"impl.go","line":1}`, string(got))
 
-	act := review.ActivityCitation("0")
+	act := ActivityCitation("0")
 	got, err = json.Marshal(act)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"activity_entry_id":"0"}`, string(got))

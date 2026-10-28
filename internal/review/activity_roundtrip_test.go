@@ -1,4 +1,4 @@
-package review_test
+package review
 
 import (
 	"fmt"
@@ -8,21 +8,20 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/harnesshook"
-	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func loadActivityEntries(t *testing.T, logPath string) map[int]review.ActivityEntryDetails {
+func loadActivityEntries(t *testing.T, logPath string) map[int]activityEntryDetails {
 	t.Helper()
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
-	activity := &review.Activity{
-		Digest:     review.FingerprintActivity(content),
+	activity := &Activity{
+		Digest:     fingerprintActivity(content),
 		EntryCount: strings.Count(string(content), "\n"),
 		LogPath:    logPath,
 	}
-	entries, errs := review.ValidateActivityDigestAndLoadEntries(activity)
+	entries, errs := validateActivityDigestAndLoadEntries(activity)
 	require.Empty(t, errs)
 	return entries
 }
@@ -54,7 +53,7 @@ func TestActivityWriterParserRoundTrip_REQ_EXECEV(t *testing.T) {
 	assert.Equal(t, 7, details.ExitCode)
 	assert.True(t, details.ExitCodeKnown)
 
-	formatted := review.FormatActivityEntryDetails(details)
+	formatted := formatActivityEntryDetails(details)
 	assert.Contains(t, formatted, fmt.Sprintf("%q", command))
 	assert.Contains(t, formatted, "exit_code=7")
 }
@@ -74,7 +73,7 @@ func TestActivityWriterParserRoundTrip_UnknownExitCode_REQ_EXECEV(t *testing.T) 
 
 	details := entries[0]
 	assert.False(t, details.ExitCodeKnown, "exit code must be recorded as unknown, not coerced to 0/success")
-	assert.Contains(t, review.FormatActivityEntryDetails(details), "exit_code=unknown")
+	assert.Contains(t, formatActivityEntryDetails(details), "exit_code=unknown")
 }
 
 func TestActivityWriterParserRoundTrip_MultipleEntriesHeadSHA_REQ_EXECEV(t *testing.T) {

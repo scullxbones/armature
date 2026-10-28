@@ -1,9 +1,8 @@
-package review_test
+package review
 
 import (
 	"testing"
 
-	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,17 +22,17 @@ func TestBuildDiffIndex_SimpleFile(t *testing.T) {
  extra line
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 	require.NotNil(t, idx)
 
-	assert.True(t, idx.ContainsLine("internal/review/test.go", 7))
+	assert.True(t, idx.containsLine("internal/review/test.go", 7))
 
-	assert.False(t, idx.ContainsLine("internal/review/test.go", 5))
+	assert.False(t, idx.containsLine("internal/review/test.go", 5))
 
-	assert.False(t, idx.ContainsLine("internal/review/test.go", 6))
+	assert.False(t, idx.containsLine("internal/review/test.go", 6))
 
-	assert.True(t, idx.ContainsFile("internal/review/test.go"))
+	assert.True(t, idx.containsFile("internal/review/test.go"))
 }
 
 func TestBuildDiffIndex_MultipleFiles(t *testing.T) {
@@ -54,15 +53,15 @@ func TestBuildDiffIndex_MultipleFiles(t *testing.T) {
  another line
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("file1.go"))
-	assert.True(t, idx.ContainsFile("file2.go"))
+	assert.True(t, idx.containsFile("file1.go"))
+	assert.True(t, idx.containsFile("file2.go"))
 
-	assert.True(t, idx.ContainsLine("file1.go", 1))
+	assert.True(t, idx.containsLine("file1.go", 1))
 
-	assert.True(t, idx.ContainsLine("file2.go", 11))
+	assert.True(t, idx.containsLine("file2.go", 11))
 }
 
 func TestBuildDiffIndex_MultipleHunks(t *testing.T) {
@@ -81,12 +80,12 @@ func TestBuildDiffIndex_MultipleHunks(t *testing.T) {
  another line
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsLine("multi.go", 2))
-	assert.True(t, idx.ContainsLine("multi.go", 12))
-	assert.False(t, idx.ContainsLine("multi.go", 3))
+	assert.True(t, idx.containsLine("multi.go", 2))
+	assert.True(t, idx.containsLine("multi.go", 12))
+	assert.False(t, idx.containsLine("multi.go", 3))
 }
 
 func TestBuildDiffIndex_DeletedLines(t *testing.T) {
@@ -101,19 +100,19 @@ func TestBuildDiffIndex_DeletedLines(t *testing.T) {
  line 5
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.False(t, idx.ContainsLine("deleted.go", 1))
-	assert.False(t, idx.ContainsLine("deleted.go", 2))
-	assert.False(t, idx.ContainsLine("deleted.go", 3))
+	assert.False(t, idx.containsLine("deleted.go", 1))
+	assert.False(t, idx.containsLine("deleted.go", 2))
+	assert.False(t, idx.containsLine("deleted.go", 3))
 }
 
 func TestBuildDiffIndex_EmptyDiff(t *testing.T) {
 	t.Parallel()
 	diff := ""
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 	require.NotNil(t, idx)
 }
@@ -125,7 +124,7 @@ func TestBuildDiffIndex_InvalidFormat(t *testing.T) {
 +new line
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 
 	require.NoError(t, err)
 	require.NotNil(t, idx)
@@ -141,12 +140,12 @@ func TestBuildDiffIndex_RenamedFile(t *testing.T) {
  line 2
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsLine("new_name.go", 1))
+	assert.True(t, idx.containsLine("new_name.go", 1))
 
-	assert.False(t, idx.ContainsLine("old_name.go", 1))
+	assert.False(t, idx.containsLine("old_name.go", 1))
 }
 
 func TestBuildDiffIndex_BinaryFile(t *testing.T) {
@@ -159,14 +158,14 @@ func TestBuildDiffIndex_BinaryFile(t *testing.T) {
 +added
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("image.png"))
+	assert.True(t, idx.containsFile("image.png"))
 
-	assert.False(t, idx.ContainsLine("image.png", 1))
+	assert.False(t, idx.containsLine("image.png", 1))
 
-	assert.True(t, idx.ContainsLine("text.go", 2))
+	assert.True(t, idx.containsLine("text.go", 2))
 }
 
 func TestBuildDiffIndex_BinaryOnlyDelivery(t *testing.T) {
@@ -174,12 +173,12 @@ func TestBuildDiffIndex_BinaryOnlyDelivery(t *testing.T) {
 	diff := `Binary files a/logo.svg and b/logo.svg differ
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("logo.svg"))
+	assert.True(t, idx.containsFile("logo.svg"))
 
-	assert.False(t, idx.ContainsLine("logo.svg", 1))
+	assert.False(t, idx.containsLine("logo.svg", 1))
 }
 
 func TestBuildDiffIndex_MixedBinaryAndText(t *testing.T) {
@@ -195,17 +194,17 @@ Binary files a/data.bin and b/data.bin differ
  func main() {
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("image.png"))
-	assert.True(t, idx.ContainsFile("data.bin"))
-	assert.True(t, idx.ContainsFile("main.go"))
+	assert.True(t, idx.containsFile("image.png"))
+	assert.True(t, idx.containsFile("data.bin"))
+	assert.True(t, idx.containsFile("main.go"))
 
-	assert.False(t, idx.ContainsLine("image.png", 1))
-	assert.False(t, idx.ContainsLine("data.bin", 1))
+	assert.False(t, idx.containsLine("image.png", 1))
+	assert.False(t, idx.containsLine("data.bin", 1))
 
-	assert.True(t, idx.ContainsLine("main.go", 2))
+	assert.True(t, idx.containsLine("main.go", 2))
 }
 
 func TestContainsLine_NonexistentFile(t *testing.T) {
@@ -217,10 +216,10 @@ func TestContainsLine_NonexistentFile(t *testing.T) {
  line
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.False(t, idx.ContainsLine("nonexistent.go", 1))
+	assert.False(t, idx.containsLine("nonexistent.go", 1))
 }
 
 func TestDiffIndexContainsFile(t *testing.T) {
@@ -240,22 +239,22 @@ func TestDiffIndexContainsFile(t *testing.T) {
  more context
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("file1.go"))
-	assert.True(t, idx.ContainsFile("file2.go"))
+	assert.True(t, idx.containsFile("file1.go"))
+	assert.True(t, idx.containsFile("file2.go"))
 
-	assert.False(t, idx.ContainsFile("file3.go"))
-	assert.False(t, idx.ContainsFile("nonexistent.go"))
+	assert.False(t, idx.containsFile("file3.go"))
+	assert.False(t, idx.containsFile("nonexistent.go"))
 }
 
 func TestDiffIndexContainsFile_EmptyDiff(t *testing.T) {
 	t.Parallel()
-	idx, err := review.BuildDiffIndex("")
+	idx, err := buildDiffIndex("")
 	require.NoError(t, err)
 
-	assert.False(t, idx.ContainsFile("any_file.go"))
+	assert.False(t, idx.containsFile("any_file.go"))
 }
 
 func TestBuildDiffIndex_DeletedFile(t *testing.T) {
@@ -271,10 +270,10 @@ func TestBuildDiffIndex_DeletedFile(t *testing.T) {
 -line 5
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("deleted_file.go"))
+	assert.True(t, idx.containsFile("deleted_file.go"))
 }
 
 func TestBuildDiffIndex_BinaryFileDeleted(t *testing.T) {
@@ -285,10 +284,10 @@ func TestBuildDiffIndex_BinaryFileDeleted(t *testing.T) {
 +++ /dev/null
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("image.png"))
+	assert.True(t, idx.containsFile("image.png"))
 }
 
 func TestBuildDiffIndex_MixedAdditionAndDeletion(t *testing.T) {
@@ -307,14 +306,14 @@ func TestBuildDiffIndex_MixedAdditionAndDeletion(t *testing.T) {
 +new line 2
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("deleted.go"))
-	assert.True(t, idx.ContainsFile("new.go"))
+	assert.True(t, idx.containsFile("deleted.go"))
+	assert.True(t, idx.containsFile("new.go"))
 
-	assert.True(t, idx.ContainsLine("new.go", 1))
-	assert.True(t, idx.ContainsLine("new.go", 2))
+	assert.True(t, idx.containsLine("new.go", 1))
+	assert.True(t, idx.containsLine("new.go", 2))
 }
 
 func TestBuildDiffIndex_DeletedFileWithContext(t *testing.T) {
@@ -335,8 +334,8 @@ func TestBuildDiffIndex_DeletedFileWithContext(t *testing.T) {
 -
 `
 
-	idx, err := review.BuildDiffIndex(diff)
+	idx, err := buildDiffIndex(diff)
 	require.NoError(t, err)
 
-	assert.True(t, idx.ContainsFile("partial.go"))
+	assert.True(t, idx.containsFile("partial.go"))
 }

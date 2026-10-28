@@ -25,9 +25,7 @@ func mustComputeBundleID(t *testing.T, bundle review.ReviewBundle) string {
 func TestReviewValidate_BundleIDErrorSurfacesAsFailure_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 
-	err := review.AnnotateValidateError(&review.BundleIDError{
-		Err: fmt.Errorf("marshal bundle data: json: unsupported type: chan int"),
-	})
+	err := review.AnnotateValidateError(fmt.Errorf("compute bundle id: marshal bundle data: json: unsupported type: chan int"))
 	failures := parseReviewValidateFailures(err)
 	require.NotEmpty(t, failures)
 	joined := strings.ToLower(failures[0].Message)

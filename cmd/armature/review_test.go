@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -1124,7 +1126,8 @@ func TestReviewPrepareCommand_FindsActivityLogInDeliveryWorktree_REQ_EXECEV_C1(t
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &bundle))
 
 	require.NotNil(t, bundle.Activity, "activity section must be attached from the worktree's own git dir")
-	assert.Equal(t, review.FingerprintActivity(realContent), bundle.Activity.Digest,
+	realDigest := sha256.Sum256(realContent)
+	assert.Equal(t, hex.EncodeToString(realDigest[:]), bundle.Activity.Digest,
 		"activity digest must come from the worktree's own log, not the parent repo's decoy log")
 }
 
@@ -1224,7 +1227,8 @@ func TestReviewPrepareCommand_EnvBoundSession_AttachesActivityLog_REQ_EXECEV(t *
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(out)), &bundle))
 
 	require.NotNil(t, bundle.Activity, "activity section must be attached for an env-bound session whose ARMATURE_ISSUE_ID matches the prepared issue")
-	assert.Equal(t, review.FingerprintActivity(activityContent), bundle.Activity.Digest)
+	activityDigest := sha256.Sum256(activityContent)
+	assert.Equal(t, hex.EncodeToString(activityDigest[:]), bundle.Activity.Digest)
 }
 
 func TestReviewPrepareOutputModeEmitsEnvelope_REQ_AOC_S2_T4(t *testing.T) {

@@ -1,23 +1,14 @@
-package review_test
+package review
 
 import (
 	"testing"
 
-	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func mustComputeBundleID(t *testing.T, bundle review.ReviewBundle) string {
-	t.Helper()
-	id, err := review.ComputeBundleID(bundle)
-	require.NoError(t, err)
-	return id
-}
 
 func TestFingerprintContract_Deterministic(t *testing.T) {
 	t.Parallel()
-	contract := review.Contract{
+	contract := Contract{
 		DefinitionOfDone: "All tests pass and docs updated",
 		Acceptance: []string{
 			"Feature implemented correctly",
@@ -25,8 +16,8 @@ func TestFingerprintContract_Deterministic(t *testing.T) {
 		},
 	}
 
-	fp1 := review.FingerprintContract(contract)
-	fp2 := review.FingerprintContract(contract)
+	fp1 := fingerprintContract(contract)
+	fp2 := fingerprintContract(contract)
 
 	assert.Equal(t, fp1, fp2)
 
@@ -37,25 +28,25 @@ func TestFingerprintContract_Deterministic(t *testing.T) {
 
 func TestFingerprintContract_Different(t *testing.T) {
 	t.Parallel()
-	contract1 := review.Contract{
+	contract1 := Contract{
 		DefinitionOfDone: "All tests pass",
 		Acceptance:       []string{"Feature works"},
 	}
 
-	contract2 := review.Contract{
+	contract2 := Contract{
 		DefinitionOfDone: "All tests pass",
 		Acceptance:       []string{"Feature works", "Documented"},
 	}
 
-	fp1 := review.FingerprintContract(contract1)
-	fp2 := review.FingerprintContract(contract2)
+	fp1 := fingerprintContract(contract1)
+	fp2 := fingerprintContract(contract2)
 
 	assert.NotEqual(t, fp1, fp2)
 }
 
 func TestFingerprintContract_OrderMatters(t *testing.T) {
 	t.Parallel()
-	contract1 := review.Contract{
+	contract1 := Contract{
 		DefinitionOfDone: "Definition",
 		Acceptance: []string{
 			"Acceptance 1",
@@ -63,7 +54,7 @@ func TestFingerprintContract_OrderMatters(t *testing.T) {
 		},
 	}
 
-	contract2 := review.Contract{
+	contract2 := Contract{
 		DefinitionOfDone: "Definition",
 		Acceptance: []string{
 			"Acceptance 2",
@@ -71,22 +62,22 @@ func TestFingerprintContract_OrderMatters(t *testing.T) {
 		},
 	}
 
-	fp1 := review.FingerprintContract(contract1)
-	fp2 := review.FingerprintContract(contract2)
+	fp1 := fingerprintContract(contract1)
+	fp2 := fingerprintContract(contract2)
 
 	assert.NotEqual(t, fp1, fp2)
 }
 
 func TestFingerprintDelivery_Deterministic(t *testing.T) {
 	t.Parallel()
-	delivery := review.Delivery{
+	delivery := Delivery{
 		BaseSHA:      "abc123def456",
 		HeadSHA:      "fedcba654321",
 		ChangedFiles: []string{"file1.go", "file2.go"},
 	}
 
-	fp1 := review.FingerprintDelivery(delivery)
-	fp2 := review.FingerprintDelivery(delivery)
+	fp1 := fingerprintDelivery(delivery)
+	fp2 := fingerprintDelivery(delivery)
 
 	assert.Equal(t, fp1, fp2)
 
@@ -95,41 +86,41 @@ func TestFingerprintDelivery_Deterministic(t *testing.T) {
 
 func TestFingerprintDelivery_Different(t *testing.T) {
 	t.Parallel()
-	delivery1 := review.Delivery{
+	delivery1 := Delivery{
 		BaseSHA:      "abc123",
 		HeadSHA:      "def456",
 		ChangedFiles: []string{"file.go"},
 	}
 
-	delivery2 := review.Delivery{
+	delivery2 := Delivery{
 		BaseSHA:      "abc123",
 		HeadSHA:      "def457",
 		ChangedFiles: []string{"file.go"},
 	}
 
-	fp1 := review.FingerprintDelivery(delivery1)
-	fp2 := review.FingerprintDelivery(delivery2)
+	fp1 := fingerprintDelivery(delivery1)
+	fp2 := fingerprintDelivery(delivery2)
 
 	assert.NotEqual(t, fp1, fp2)
 }
 
 func TestFingerprintResult_Deterministic(t *testing.T) {
 	t.Parallel()
-	result := review.ConformanceAssessment{
+	result := ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:abc123",
-		Results: []review.CriterionResult{
+		Results: []CriterionResult{
 			{
 				ID:        "definition_of_done",
-				Status:    review.Satisfied,
+				Status:    Satisfied,
 				Rationale: "Complete",
 			},
 			{
 				ID:        "acceptance[0]",
-				Status:    review.PartiallySatisfied,
+				Status:    PartiallySatisfied,
 				Rationale: "Partial",
-				Citations: []review.Citation{
-					review.FileCitation("main.go", 42, 0),
+				Citations: []Citation{
+					FileCitation("main.go", 42, 0),
 				},
 			},
 		},
@@ -137,8 +128,8 @@ func TestFingerprintResult_Deterministic(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	fp1 := review.FingerprintResult(result)
-	fp2 := review.FingerprintResult(result)
+	fp1 := fingerprintResult(result)
+	fp2 := fingerprintResult(result)
 
 	assert.Equal(t, fp1, fp2)
 	assert.NotEmpty(t, fp1)
@@ -146,13 +137,13 @@ func TestFingerprintResult_Deterministic(t *testing.T) {
 
 func TestFingerprintResult_Different(t *testing.T) {
 	t.Parallel()
-	result1 := review.ConformanceAssessment{
+	result1 := ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:abc123",
-		Results: []review.CriterionResult{
+		Results: []CriterionResult{
 			{
 				ID:        "definition_of_done",
-				Status:    review.Satisfied,
+				Status:    Satisfied,
 				Rationale: "Complete",
 			},
 		},
@@ -160,13 +151,13 @@ func TestFingerprintResult_Different(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	result2 := review.ConformanceAssessment{
+	result2 := ConformanceAssessment{
 		SchemaVersion: 1,
 		BundleID:      "sha256:abc123",
-		Results: []review.CriterionResult{
+		Results: []CriterionResult{
 			{
 				ID:              "definition_of_done",
-				Status:          review.PartiallySatisfied,
+				Status:          PartiallySatisfied,
 				Rationale:       "Partial",
 				MissingEvidence: "Not complete",
 			},
@@ -175,27 +166,27 @@ func TestFingerprintResult_Different(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	fp1 := review.FingerprintResult(result1)
-	fp2 := review.FingerprintResult(result2)
+	fp1 := fingerprintResult(result1)
+	fp2 := fingerprintResult(result2)
 
 	assert.NotEqual(t, fp1, fp2)
 }
 
 func TestBundleID_Deterministic(t *testing.T) {
 	t.Parallel()
-	bundle := review.ReviewBundle{
+	bundle := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Test Task",
 			Outcome: "Completed",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "All tests pass",
 			Acceptance:       []string{"Feature works"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "abc123",
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
@@ -213,35 +204,35 @@ func TestBundleID_Deterministic(t *testing.T) {
 
 func TestBundleID_Different(t *testing.T) {
 	t.Parallel()
-	bundle1 := review.ReviewBundle{
+	bundle1 := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Test Task",
 			Outcome: "Completed",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "Definition 1",
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA: "abc123",
 			HeadSHA: "def456",
 		},
 	}
 
-	bundle2 := review.ReviewBundle{
+	bundle2 := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Test Task",
 			Outcome: "Completed",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "Definition 2",
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA: "abc123",
 			HeadSHA: "def456",
 		},
@@ -255,11 +246,11 @@ func TestBundleID_Different(t *testing.T) {
 
 func TestFingerprintFormat(t *testing.T) {
 	t.Parallel()
-	contract := review.Contract{
+	contract := Contract{
 		DefinitionOfDone: "Test",
 	}
 
-	fp := review.FingerprintContract(contract)
+	fp := fingerprintContract(contract)
 
 	assert.Len(t, fp, 64)
 
@@ -271,16 +262,16 @@ func TestFingerprintFormat(t *testing.T) {
 
 func TestBundleIDFormat(t *testing.T) {
 	t.Parallel()
-	bundle := review.ReviewBundle{
+	bundle := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:   "TASK-1",
 			Type: "task",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "Test",
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA: "abc",
 			HeadSHA: "def",
 		},
@@ -300,8 +291,8 @@ func TestFingerprintActivity_Deterministic_REQ_EXECEV_T2(t *testing.T) {
 	logContent := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123 output_hash=def456
 2026-01-15T10:30:46Z activity: command="make test" exit_code=0 head_sha=abc123 output_hash=ghi789`)
 
-	fp1 := review.FingerprintActivity(logContent)
-	fp2 := review.FingerprintActivity(logContent)
+	fp1 := fingerprintActivity(logContent)
+	fp2 := fingerprintActivity(logContent)
 
 	assert.Equal(t, fp1, fp2)
 
@@ -316,8 +307,8 @@ func TestFingerprintActivity_Different_REQ_EXECEV_T2(t *testing.T) {
 	logContent1 := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=0 head_sha=abc123 output_hash=def456`)
 	logContent2 := []byte(`2026-01-15T10:30:45Z activity: command="make build" exit_code=1 head_sha=abc123 output_hash=def456`)
 
-	fp1 := review.FingerprintActivity(logContent1)
-	fp2 := review.FingerprintActivity(logContent2)
+	fp1 := fingerprintActivity(logContent1)
+	fp2 := fingerprintActivity(logContent2)
 
 	assert.NotEqual(t, fp1, fp2)
 }
@@ -327,7 +318,7 @@ func TestFingerprintActivity_Empty_REQ_EXECEV_T2(t *testing.T) {
 
 	logContent := []byte("")
 
-	fp := review.FingerprintActivity(logContent)
+	fp := fingerprintActivity(logContent)
 
 	assert.NotEmpty(t, fp)
 	assert.Len(t, fp, 64)
@@ -336,24 +327,24 @@ func TestFingerprintActivity_Empty_REQ_EXECEV_T2(t *testing.T) {
 func TestBundleID_LogPath_Excluded(t *testing.T) {
 	t.Parallel()
 
-	bundle1 := review.ReviewBundle{
+	bundle1 := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Test Task",
 			Outcome: "Completed",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "All tests pass",
 			Acceptance:       []string{"Feature works"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "abc123",
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &review.Activity{
+		Activity: &Activity{
 			Digest:            "sha256:activity1",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
@@ -362,24 +353,24 @@ func TestBundleID_LogPath_Excluded(t *testing.T) {
 		},
 	}
 
-	bundle2 := review.ReviewBundle{
+	bundle2 := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Test Task",
 			Outcome: "Completed",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "All tests pass",
 			Acceptance:       []string{"Feature works"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "abc123",
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &review.Activity{
+		Activity: &Activity{
 			Digest:            "sha256:activity1",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
@@ -397,24 +388,24 @@ func TestBundleID_LogPath_Excluded(t *testing.T) {
 func TestBundleID_Activity_Digest_Included(t *testing.T) {
 	t.Parallel()
 
-	bundle1 := review.ReviewBundle{
+	bundle1 := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Test Task",
 			Outcome: "Completed",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "All tests pass",
 			Acceptance:       []string{"Feature works"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "abc123",
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &review.Activity{
+		Activity: &Activity{
 			Digest:            "sha256:activity1",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
@@ -423,24 +414,24 @@ func TestBundleID_Activity_Digest_Included(t *testing.T) {
 		},
 	}
 
-	bundle2 := review.ReviewBundle{
+	bundle2 := ReviewBundle{
 		SchemaVersion: 1,
-		Issue: review.IssueInfo{
+		Issue: IssueInfo{
 			ID:      "TASK-1",
 			Type:    "task",
 			Title:   "Test Task",
 			Outcome: "Completed",
 		},
-		Contract: review.Contract{
+		Contract: Contract{
 			DefinitionOfDone: "All tests pass",
 			Acceptance:       []string{"Feature works"},
 		},
-		Delivery: review.Delivery{
+		Delivery: Delivery{
 			BaseSHA:      "abc123",
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &review.Activity{
+		Activity: &Activity{
 			Digest:            "sha256:activity2",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,

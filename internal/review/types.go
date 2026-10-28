@@ -48,7 +48,7 @@ func (cs *CriterionStatus) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
 	}
-	v, err := ParseCriterionStatus(s)
+	v, err := parseCriterionStatus(s)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (cs *CriterionStatus) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func ParseCriterionStatus(s string) (CriterionStatus, error) {
+func parseCriterionStatus(s string) (CriterionStatus, error) {
 	switch strings.ToLower(s) {
 	case "satisfied":
 		return Satisfied, nil
@@ -98,20 +98,19 @@ func ActivityCitation(entryID string) Citation {
 	return Citation{activityEntryID: entryID}
 }
 
-func (c Citation) Path() string                 { return c.path }
-func (c Citation) Line() int                    { return c.line }
-func (c Citation) Column() int                  { return c.column }
-func (c Citation) ActivityEntryID() string      { return c.activityEntryID }
-func (c Citation) ActivityEntryDetails() string { return c.activityEntryDetails }
+func (c Citation) Path() string            { return c.path }
+func (c Citation) Line() int               { return c.line }
+func (c Citation) Column() int             { return c.column }
+func (c Citation) ActivityEntryID() string { return c.activityEntryID }
 
-func (c *Citation) ClearActivityEntryDetails() {
+func (c *Citation) clearActivityEntryDetails() {
 	if c == nil {
 		return
 	}
 	c.activityEntryDetails = ""
 }
 
-func (c *Citation) SetActivityEntryDetails(s string) {
+func (c *Citation) setActivityEntryDetails(s string) {
 	if c == nil {
 		return
 	}
@@ -129,7 +128,7 @@ func (c Citation) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON rejects schema-invalid citation coordinates. JSON null unmarshals
-// into int as a no-op (leaving 0), which ValidateResult treats as an omitted
+// into int as a no-op (leaving 0), which citation validation treats as an omitted
 // path-level coordinate; the published assessment schema allows an integer or
 // omission, not null. An explicit column below 1 is also rejected. Omitted
 // line/column remain valid.
