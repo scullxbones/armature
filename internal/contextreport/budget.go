@@ -273,7 +273,7 @@ func datedTrimPlanHeading(line, path string) bool {
 		strings.HasPrefix(name, path+"(")
 }
 
-// make check does not call this. Reviewers use it when a raise is proposed.
+// make check does not call raisedBudgets. Reviewers use it when a raise is proposed.
 // A raise is allowed only in a commit that touches the budgets file alone.
 func raisedBudgets(previous, current budgetFile) []string {
 	prev := make(map[string]int, len(previous.Artifacts))
