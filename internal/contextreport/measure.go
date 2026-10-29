@@ -56,6 +56,7 @@ func fixtureWorkspaceFS() (fs.FS, error) {
 	return sub, nil
 }
 
+// Collect prices the embedded fixture graph's main-path CLI payloads.
 func Collect() (Report, error) {
 	state, index, err := replayFixtureState()
 	if err != nil {
@@ -75,11 +76,11 @@ func Collect() (Report, error) {
 		return Report{}, err
 	}
 
-	artifacts := make([]Artifact, 0, len(dynamic)+2)
+	artifacts := make([]artifact, 0, len(dynamic)+2)
 	artifacts = append(artifacts, dynamic...)
 	artifacts = append(artifacts,
-		price("review", ClassInvocation, reviewPayload),
-		price("render-context.bundle", ClassBundle, bundlePayload),
+		price("review", classInvocation, reviewPayload),
+		price("render-context.bundle", classBundle, bundlePayload),
 	)
 	return finalize(artifacts), nil
 }
@@ -126,9 +127,9 @@ func parseFixtureOps(name string, data []byte) ([]ops.Op, error) {
 }
 
 func measureReview(state *materialize.State) ([]byte, error) {
-	issue, ok := state.Issues[FixtureShowIssue]
+	issue, ok := state.Issues[fixtureShowIssue]
 	if !ok || issue == nil {
-		return nil, fmt.Errorf("fixture issue %s not found", FixtureShowIssue)
+		return nil, fmt.Errorf("fixture issue %s not found", fixtureShowIssue)
 	}
 	diff, err := fixtureGraph.ReadFile(fixtureDiffName)
 	if err != nil {

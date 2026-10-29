@@ -8,17 +8,17 @@ import (
 	"strings"
 )
 
-// BytesPerToken is the token_budget convention: character budget = tokens * 4.
-const BytesPerToken = 4
+// bytesPerToken is the token_budget convention: character budget = tokens * 4.
+const bytesPerToken = 4
 
-// DefaultTokenBudget matches render-context's built-in --budget default.
-const DefaultTokenBudget = 4000
+// defaultTokenBudget matches render-context's built-in --budget default.
+const defaultTokenBudget = 4000
 
-const FixtureShowIssue = "FX-WORK"
+const fixtureShowIssue = "FX-WORK"
 
-// EstimationMethod is documented in both human and JSON output so a reader
+// estimationMethod is documented in both human and JSON output so a reader
 // does not have to look up how estimated_tokens was computed.
-const EstimationMethod = "estimated tokens = bytes/4 (integer division), " +
+const estimationMethod = "estimated tokens = bytes/4 (integer division), " +
 	"matching the token_budget convention used by render-context " +
 	"(character budget = tokens * 4). " +
 	"Primary rows are json/agent stdout for list, ready, show, " +
@@ -30,11 +30,11 @@ const EstimationMethod = "estimated tokens = bytes/4 (integer division), " +
 	"internal/contextreport/testdata/."
 
 const (
-	ClassInvocation = "invocation"
-	ClassBundle     = "bundle"
+	classInvocation = "invocation"
+	classBundle     = "bundle"
 )
 
-type Artifact struct {
+type artifact struct {
 	Path            string `json:"path"`
 	Class           string `json:"class"`
 	Bytes           int    `json:"bytes"`
@@ -43,28 +43,28 @@ type Artifact struct {
 
 type Report struct {
 	EstimationMethod     string     `json:"estimation_method"`
-	Artifacts            []Artifact `json:"artifacts"`
+	Artifacts            []artifact `json:"artifacts"`
 	TotalBytes           int        `json:"total_bytes"`
 	TotalEstimatedTokens int        `json:"total_estimated_tokens"`
 }
 
-func EstimateTokens(byteCount int) int {
-	return byteCount / BytesPerToken
+func estimateTokens(byteCount int) int {
+	return byteCount / bytesPerToken
 }
 
-func price(path, class string, payload []byte) Artifact {
+func price(path, class string, payload []byte) artifact {
 	n := len(payload)
-	return Artifact{
+	return artifact{
 		Path:            path,
 		Class:           class,
 		Bytes:           n,
-		EstimatedTokens: EstimateTokens(n),
+		EstimatedTokens: estimateTokens(n),
 	}
 }
 
-func finalize(artifacts []Artifact) Report {
+func finalize(artifacts []artifact) Report {
 	report := Report{
-		EstimationMethod: EstimationMethod,
+		EstimationMethod: estimationMethod,
 		Artifacts:        artifacts,
 	}
 	for _, a := range artifacts {

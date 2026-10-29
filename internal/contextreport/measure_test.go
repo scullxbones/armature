@@ -91,7 +91,7 @@ func TestMeasureReadyMatchesWriteReadyEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	var claims []output.ExpiredClaim
 	require.NoError(t, json.Unmarshal(decoded["expired_claims"], &claims))
 	require.NotEmpty(t, claims)
-	assert.Equal(t, FixtureShowIssue, claims[0].ID)
+	assert.Equal(t, fixtureShowIssue, claims[0].ID)
 }
 
 func TestMeasureShowMatchesWriteShowEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
@@ -99,7 +99,7 @@ func TestMeasureShowMatchesWriteShowEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 
 	state, _, err := replayFixtureState()
 	require.NoError(t, err)
-	issue := state.Issues[FixtureShowIssue]
+	issue := state.Issues[fixtureShowIssue]
 	require.NotNil(t, issue)
 
 	got, err := measureShow(state)
@@ -128,5 +128,5 @@ func TestMeasureShowMatchesWriteShowEnvelope_REQ_NXTTN_S3_T5(t *testing.T) {
 	var rows []map[string]any
 	require.NoError(t, json.Unmarshal(decoded["issues"], &rows))
 	require.Len(t, rows, 1)
-	assert.Equal(t, FixtureShowIssue, rows[0]["id"])
+	assert.Equal(t, fixtureShowIssue, rows[0]["id"])
 }

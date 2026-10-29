@@ -20,18 +20,18 @@ func TestContextReportPricesDynamicPayloads_REQ_AOC_S3_T2(t *testing.T) {
 	report, err := Collect()
 	require.NoError(t, err)
 
-	got := map[string]Artifact{}
+	got := map[string]artifact{}
 	for _, a := range report.Artifacts {
 		got[a.Path] = a
 	}
-	for _, path := range DynamicInvocationPaths {
+	for _, path := range dynamicInvocationPaths {
 		art, ok := got[path]
 		require.True(t, ok, "dynamic command %q must be priced", path)
-		assert.Equal(t, ClassInvocation, art.Class, path)
+		assert.Equal(t, classInvocation, art.Class, path)
 		assert.Greater(t, art.Bytes, 0, "command %q should have structured stdout", path)
-		assert.Equal(t, art.Bytes/BytesPerToken, art.EstimatedTokens, "bytes/4 for %q", path)
+		assert.Equal(t, art.Bytes/bytesPerToken, art.EstimatedTokens, "bytes/4 for %q", path)
 	}
-	for _, path := range AOCEnvelopePaths {
+	for _, path := range aocEnvelopePaths {
 		require.Contains(t, got, path)
 	}
 
@@ -63,7 +63,7 @@ func TestContextReportPricesDynamicPayloads_REQ_AOC_S3_T2(t *testing.T) {
 	assert.Equal(t, len(render), got["render-context"].Bytes)
 	raw := bytes.TrimSpace(render)
 	require.True(t, json.Valid(raw), "render-context json/agent is structured JSON")
-	assert.Contains(t, string(raw), FixtureShowIssue)
+	assert.Contains(t, string(raw), fixtureShowIssue)
 	assert.Greater(t, len(bundle), 0)
 
 	assert.Contains(t, report.EstimationMethod, "bytes/4")
@@ -101,7 +101,7 @@ func TestDynamicPricingIsFixtureDeterministic_REQ_AOC_S3_T2(t *testing.T) {
 	require.NoError(t, err)
 	payloads["render-context"] = render
 
-	for _, path := range DynamicInvocationPaths {
+	for _, path := range dynamicInvocationPaths {
 		out := filepath.Join(goldenDir, path+".json")
 		if os.Getenv("WRITE_DYNAMIC_GOLDENS") == "1" {
 			require.NoError(t, os.MkdirAll(goldenDir, 0o755))
@@ -122,17 +122,17 @@ func TestDynamicBudgetsEnforcePromisedCaps_REQ_AOC_S3_T2(t *testing.T) {
 	report, err := Collect()
 	require.NoError(t, err)
 
-	budgets, err := LoadBudgets(filepath.Join(root, filepath.FromSlash(BudgetsRelPath)))
+	budgets, err := loadBudgets(filepath.Join(root, filepath.FromSlash(budgetsRelPath)))
 	require.NoError(t, err)
-	require.NoError(t, Enforce(report, budgets))
-	require.NoError(t, ExplicitTargets(report, budgets),
+	require.NoError(t, enforce(report, budgets))
+	require.NoError(t, explicitTargets(report, budgets),
 		"dynamic rows must name a promise, not seed at measured size")
 
-	byPath := map[string]Budget{}
+	byPath := map[string]budget{}
 	for _, row := range budgets.Artifacts {
 		byPath[row.Path] = row
 	}
-	for _, path := range DynamicInvocationPaths {
+	for _, path := range dynamicInvocationPaths {
 		row, ok := byPath[path]
 		require.True(t, ok, "budget row for dynamic path %q", path)
 		art := artifactByPath(t, report, path)
@@ -153,7 +153,7 @@ func TestMeasureShowMatchesWriteShowEnvelope_REQ_AOC_S3_T2(t *testing.T) {
 	got, err := measureShow(state)
 	require.NoError(t, err)
 
-	issue := state.Issues[FixtureShowIssue]
+	issue := state.Issues[fixtureShowIssue]
 	require.NotNil(t, issue)
 	row := output.MarshalIssue(outputIssueFacts(issue))
 	row, trunc := output.TruncateShowIssue(row)

@@ -13,13 +13,13 @@ import (
 	"github.com/scullxbones/armature/internal/ready"
 )
 
-// DynamicInvocationPaths includes render-context as live RenderAgent JSON;
+// dynamicInvocationPaths includes render-context as live RenderAgent JSON;
 // wrapping it would change the CLI contract.
-var DynamicInvocationPaths = []string{"list", "ready", "show", "render-context"}
+var dynamicInvocationPaths = []string{"list", "ready", "show", "render-context"}
 
-var AOCEnvelopePaths = []string{"list", "ready", "show"}
+var aocEnvelopePaths = []string{"list", "ready", "show"}
 
-func priceDynamicInvocations(state *materialize.State, index materialize.Index, files fs.FS) ([]Artifact, []byte, error) {
+func priceDynamicInvocations(state *materialize.State, index materialize.Index, files fs.FS) ([]artifact, []byte, error) {
 	listPayload, err := measureList(index)
 	if err != nil {
 		return nil, nil, err
@@ -37,11 +37,11 @@ func priceDynamicInvocations(state *materialize.State, index materialize.Index, 
 		return nil, nil, err
 	}
 
-	artifacts := []Artifact{
-		price("list", ClassInvocation, listPayload),
-		price("ready", ClassInvocation, readyPayload),
-		price("show", ClassInvocation, showPayload),
-		price("render-context", ClassInvocation, renderPayload),
+	artifacts := []artifact{
+		price("list", classInvocation, listPayload),
+		price("ready", classInvocation, readyPayload),
+		price("show", classInvocation, showPayload),
+		price("render-context", classInvocation, renderPayload),
 	}
 	return artifacts, bundlePayload, nil
 }
@@ -202,9 +202,9 @@ func measureReady(index materialize.Index, state *materialize.State, now time.Ti
 }
 
 func measureShow(state *materialize.State) ([]byte, error) {
-	issue, ok := state.Issues[FixtureShowIssue]
+	issue, ok := state.Issues[fixtureShowIssue]
 	if !ok || issue == nil {
-		return nil, fmt.Errorf("fixture issue %s not found", FixtureShowIssue)
+		return nil, fmt.Errorf("fixture issue %s not found", fixtureShowIssue)
 	}
 	row := output.MarshalIssue(outputIssueFacts(issue))
 	row, trunc := output.TruncateShowIssue(row)
@@ -217,11 +217,11 @@ func measureShow(state *materialize.State) ([]byte, error) {
 
 func measureRenderContext(state *materialize.State, files fs.FS) (invocation, bundle []byte, err error) {
 	facts := contextFacts(state)
-	raw, err := ctxpkg.RenderAgent(FixtureShowIssue, facts, ctxpkg.Options{Files: files, SkipTruncate: true})
+	raw, err := ctxpkg.RenderAgent(fixtureShowIssue, facts, ctxpkg.Options{Files: files, SkipTruncate: true})
 	if err != nil {
 		return nil, nil, fmt.Errorf("render render-context bundle: %w", err)
 	}
-	agent, err := ctxpkg.RenderAgent(FixtureShowIssue, facts, ctxpkg.Options{Files: files, TokenBudget: DefaultTokenBudget})
+	agent, err := ctxpkg.RenderAgent(fixtureShowIssue, facts, ctxpkg.Options{Files: files, TokenBudget: defaultTokenBudget})
 	if err != nil {
 		return nil, nil, fmt.Errorf("render render-context invocation: %w", err)
 	}

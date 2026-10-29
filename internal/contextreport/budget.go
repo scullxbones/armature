@@ -9,40 +9,40 @@ import (
 	"time"
 )
 
-const BudgetsRelPath = "internal/contextreport/budgets.json"
+const budgetsRelPath = "internal/contextreport/budgets.json"
 
-var runtimeClassOrder = []string{ClassInvocation, ClassBundle}
+var runtimeClassOrder = []string{classInvocation, classBundle}
 
-// Budget is one runtime artifact's enforceable cap and named customer promise.
+// budget is one runtime artifact's enforceable cap and named customer promise.
 // MaxBytes is what make check enforces. TargetBytes is the promise, not today's size.
-type Budget struct {
+type budget struct {
 	Path        string `json:"path"`
 	Class       string `json:"class"`
 	MaxBytes    int    `json:"max_bytes"`
 	TargetBytes int    `json:"target_bytes"`
 }
 
-type BudgetFile struct {
-	Artifacts []Budget `json:"artifacts"`
+type budgetFile struct {
+	Artifacts []budget `json:"artifacts"`
 }
 
-type Violation struct {
+type violation struct {
 	Path     string
 	Class    string
 	Bytes    int
 	MaxBytes int
 }
 
-// GateError is a failed budget comparison. Over-budget rows are the hard fail.
+// gateError is a failed budget comparison. Over-budget rows are the hard fail.
 // Missing, extra, and class-mismatch rows keep the file aligned with Collect.
-type GateError struct {
-	OverBudget    []Violation
+type gateError struct {
+	OverBudget    []violation
 	Missing       []string
 	Unknown       []string
 	ClassMismatch []string
 }
 
-func (e *GateError) Error() string {
+func (e *gateError) Error() string {
 	if e == nil {
 		return ""
 	}
@@ -50,7 +50,7 @@ func (e *GateError) Error() string {
 	b.WriteString("context budget gate failed")
 	if len(e.OverBudget) > 0 {
 		b.WriteString("\nover budget (grouped by class):")
-		for _, class := range e.OverBudgetClasses() {
+		for _, class := range e.overBudgetClasses() {
 			fmt.Fprintf(&b, "\n  %s:", class)
 			for _, v := range e.OverBudget {
 				if v.Class != class {
@@ -66,7 +66,7 @@ func (e *GateError) Error() string {
 	return b.String()
 }
 
-func (e *GateError) OverBudgetClasses() []string {
+func (e *gateError) overBudgetClasses() []string {
 	if e == nil {
 		return nil
 	}
@@ -109,58 +109,58 @@ func writePathList(b *strings.Builder, title string, paths []string) {
 	}
 }
 
-func (e *GateError) failed() bool {
+func (e *gateError) failed() bool {
 	return e != nil && (len(e.OverBudget) > 0 ||
 		len(e.Missing) > 0 ||
 		len(e.Unknown) > 0 ||
 		len(e.ClassMismatch) > 0)
 }
 
-func LoadBudgets(path string) (BudgetFile, error) {
+func loadBudgets(path string) (budgetFile, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // path is the checked-in budgets file or a test fixture
 	if err != nil {
-		return BudgetFile{}, fmt.Errorf("read context budgets %s: %w", path, err)
+		return budgetFile{}, fmt.Errorf("read context budgets %s: %w", path, err)
 	}
-	return ParseBudgets(data)
+	return parseBudgets(data)
 }
 
-func ParseBudgets(data []byte) (BudgetFile, error) {
-	var file BudgetFile
+func parseBudgets(data []byte) (budgetFile, error) {
+	var file budgetFile
 	if err := json.Unmarshal(data, &file); err != nil {
-		return BudgetFile{}, fmt.Errorf("parse context budgets: %w", err)
+		return budgetFile{}, fmt.Errorf("parse context budgets: %w", err)
 	}
 	seen := map[string]struct{}{}
 	for i, row := range file.Artifacts {
 		if strings.TrimSpace(row.Path) == "" {
-			return BudgetFile{}, fmt.Errorf("context budgets: artifact %d has empty path", i)
+			return budgetFile{}, fmt.Errorf("context budgets: artifact %d has empty path", i)
 		}
 		if strings.TrimSpace(row.Class) == "" {
-			return BudgetFile{}, fmt.Errorf("context budgets: %s has empty class", row.Path)
+			return budgetFile{}, fmt.Errorf("context budgets: %s has empty class", row.Path)
 		}
 		if row.MaxBytes < 0 {
-			return BudgetFile{}, fmt.Errorf("context budgets: %s max_bytes must be >= 0", row.Path)
+			return budgetFile{}, fmt.Errorf("context budgets: %s max_bytes must be >= 0", row.Path)
 		}
 		if row.TargetBytes <= 0 {
-			return BudgetFile{}, fmt.Errorf("context budgets: %s target_bytes must be > 0", row.Path)
+			return budgetFile{}, fmt.Errorf("context budgets: %s target_bytes must be > 0", row.Path)
 		}
 		if _, dup := seen[row.Path]; dup {
-			return BudgetFile{}, fmt.Errorf("context budgets: duplicate path %s", row.Path)
+			return budgetFile{}, fmt.Errorf("context budgets: duplicate path %s", row.Path)
 		}
 		seen[row.Path] = struct{}{}
 	}
 	return file, nil
 }
 
-// Enforce fails when any measured artifact exceeds its max_bytes cap, lacks a
+// enforce fails when any measured artifact exceeds its max_bytes cap, lacks a
 // budget, has a class that disagrees with the budget row, or when leftover
 // budget paths do not correspond to a measured artifact.
-func Enforce(report Report, budgets BudgetFile) error {
-	byPath := make(map[string]Budget, len(budgets.Artifacts))
+func enforce(report Report, budgets budgetFile) error {
+	byPath := make(map[string]budget, len(budgets.Artifacts))
 	for _, row := range budgets.Artifacts {
 		byPath[row.Path] = row
 	}
 
-	gate := &GateError{}
+	gate := &gateError{}
 	seen := map[string]struct{}{}
 	for _, art := range report.Artifacts {
 		seen[art.Path] = struct{}{}
@@ -174,7 +174,7 @@ func Enforce(report Report, budgets BudgetFile) error {
 				fmt.Sprintf("%s: measured %s, budget %s", art.Path, art.Class, row.Class))
 		}
 		if art.Bytes > row.MaxBytes {
-			gate.OverBudget = append(gate.OverBudget, Violation{
+			gate.OverBudget = append(gate.OverBudget, violation{
 				Path:     art.Path,
 				Class:    art.Class,
 				Bytes:    art.Bytes,
@@ -212,11 +212,11 @@ func runtimeClassIndex(class string) int {
 	return len(runtimeClassOrder)
 }
 
-// ExplicitTargets fails when a budget row has no named promise, or when the
+// explicitTargets fails when a budget row has no named promise, or when the
 // row is a silent seed at today's measured size (max and target both equal
 // measured bytes). That seed-at-measured-only shape is not a customer cap.
-func ExplicitTargets(report Report, budgets BudgetFile) error {
-	byPath := make(map[string]Budget, len(budgets.Artifacts))
+func explicitTargets(report Report, budgets budgetFile) error {
+	byPath := make(map[string]budget, len(budgets.Artifacts))
 	for _, row := range budgets.Artifacts {
 		byPath[row.Path] = row
 	}
@@ -241,11 +241,11 @@ func ExplicitTargets(report Report, budgets BudgetFile) error {
 		strings.Join(seeded, ", "))
 }
 
-// HasDatedTrimPlan reports whether doc contains a markdown heading that names
+// hasDatedTrimPlan reports whether doc contains a markdown heading that names
 // path with an ISO date: "### YYYY-MM-DD <path> ...". Fenced code examples do
 // not count. A table row, the phrase "trim plan", or an unrelated date
 // elsewhere in the file is not a plan for that artifact.
-func HasDatedTrimPlan(doc, path string) bool {
+func hasDatedTrimPlan(doc, path string) bool {
 	if path == "" {
 		return false
 	}
@@ -287,10 +287,10 @@ func datedTrimPlanHeading(line, path string) bool {
 		strings.HasPrefix(name, path+"(")
 }
 
-// RaisedBudgets returns paths whose max_bytes grew relative to previous.
+// raisedBudgets returns paths whose max_bytes grew relative to previous.
 // make check does not call this. Reviewers use it when a raise is proposed.
 // A raise is allowed only in a commit that touches the budgets file alone.
-func RaisedBudgets(previous, current BudgetFile) []string {
+func raisedBudgets(previous, current budgetFile) []string {
 	prev := make(map[string]int, len(previous.Artifacts))
 	for _, row := range previous.Artifacts {
 		prev[row.Path] = row.MaxBytes
