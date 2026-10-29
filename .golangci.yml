@@ -187,6 +187,19 @@ linters:
             - "$gostd"
             - "github.com/charmbracelet/glamour"
             - "github.com/scullxbones/armature/internal/dag"
+        contextreport-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/contextreport/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/context"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/output"
+            - "github.com/scullxbones/armature/internal/ready"
+            - "github.com/scullxbones/armature/internal/review"
         ready-boundary:
           list-mode: strict
           files:

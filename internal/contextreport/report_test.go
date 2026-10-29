@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func artifactByPath(t *testing.T, report Report, path string) Artifact {
+func artifactByPath(t *testing.T, report Report, path string) artifact {
 	t.Helper()
 	for _, a := range report.Artifacts {
 		if a.Path == path {
@@ -21,7 +21,7 @@ func artifactByPath(t *testing.T, report Report, path string) Artifact {
 		}
 	}
 	t.Fatalf("artifact %q not found in %+v", path, report.Artifacts)
-	return Artifact{}
+	return artifact{}
 }
 
 func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
@@ -31,9 +31,9 @@ func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	want := []string{"list", "ready", "show", "render-context", "review"}
-	got := map[string]Artifact{}
+	got := map[string]artifact{}
 	for _, a := range report.Artifacts {
-		if a.Class != ClassInvocation {
+		if a.Class != classInvocation {
 			continue
 		}
 		got[a.Path] = a
@@ -43,10 +43,10 @@ func TestContextReportPricesMainPathCLI_REQ_NXTTN_S3_T1(t *testing.T) {
 		art, ok := got[name]
 		require.True(t, ok, "main-path command %q must be priced", name)
 		assert.Greater(t, art.Bytes, 0, "command %q should have structured stdout", name)
-		assert.Equal(t, art.Bytes/BytesPerToken, art.EstimatedTokens, "bytes/4 for %q", name)
+		assert.Equal(t, art.Bytes/bytesPerToken, art.EstimatedTokens, "bytes/4 for %q", name)
 	}
 
-	assert.Equal(t, EstimationMethod, report.EstimationMethod)
+	assert.Equal(t, estimationMethod, report.EstimationMethod)
 	assert.Contains(t, report.EstimationMethod, "bytes/4")
 	assert.Contains(t, report.EstimationMethod, "token_budget")
 	assert.Contains(t, report.EstimationMethod, "testdata")
@@ -89,25 +89,25 @@ func TestContextReportPricesRenderContextFixture_REQ_NXTTN_S3_T1(t *testing.T) {
 	require.NoError(t, err)
 
 	bundle := artifactByPath(t, report, "render-context.bundle")
-	assert.Equal(t, ClassBundle, bundle.Class)
+	assert.Equal(t, classBundle, bundle.Class)
 	assert.Greater(t, bundle.Bytes, 0)
-	assert.Equal(t, bundle.Bytes/BytesPerToken, bundle.EstimatedTokens)
+	assert.Equal(t, bundle.Bytes/bytesPerToken, bundle.EstimatedTokens)
 
 	state, _, err := replayFixtureState()
 	require.NoError(t, err)
 	files, err := fixtureWorkspaceFS()
 	require.NoError(t, err)
-	raw, err := ctxpkg.RenderAgent(FixtureShowIssue, contextFacts(state), ctxpkg.Options{
+	raw, err := ctxpkg.RenderAgent(fixtureShowIssue, contextFacts(state), ctxpkg.Options{
 		Files:        files,
 		SkipTruncate: true,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, len(raw), bundle.Bytes, "bundle row is the fixture render-context artifact")
-	assert.Contains(t, raw, FixtureShowIssue)
+	assert.Contains(t, raw, fixtureShowIssue)
 	assert.Contains(t, raw, "hello.go")
 
 	invocation := artifactByPath(t, report, "render-context")
-	assert.Equal(t, ClassInvocation, invocation.Class)
+	assert.Equal(t, classInvocation, invocation.Class)
 	assert.Greater(t, invocation.Bytes, 0)
 }
 
@@ -129,7 +129,7 @@ func TestContextReportShowMeasuresAOCEnvelope_REQ_NXTTN_S3_T1(t *testing.T) {
 
 	state, _, err := replayFixtureState()
 	require.NoError(t, err)
-	issue := state.Issues[FixtureShowIssue]
+	issue := state.Issues[fixtureShowIssue]
 	require.NotNil(t, issue)
 
 	var human bytes.Buffer
@@ -179,14 +179,14 @@ func TestEmbedFileReaderRejectsEscapingPath(t *testing.T) {
 
 func TestEstimateTokensIntegerDivision(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, 0, EstimateTokens(3))
-	assert.Equal(t, 1, EstimateTokens(4))
-	assert.Equal(t, 1, EstimateTokens(5))
+	assert.Equal(t, 0, estimateTokens(3))
+	assert.Equal(t, 1, estimateTokens(4))
+	assert.Equal(t, 1, estimateTokens(5))
 }
 
 func TestRenderHumanIncludesTotals(t *testing.T) {
 	t.Parallel()
-	report := finalize([]Artifact{price("list", ClassInvocation, []byte("abcd"))})
+	report := finalize([]artifact{price("list", classInvocation, []byte("abcd"))})
 	human := RenderHuman(report)
 	assert.Contains(t, human, "list")
 	assert.Contains(t, human, "TOTAL")

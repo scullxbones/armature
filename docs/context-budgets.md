@@ -48,11 +48,11 @@ When measured size is still above the promise, keep `max_bytes` high enough that
 
 A budget may only shrink in ordinary commits. Smaller `max_bytes` is always allowed.
 
-Raising `max_bytes` is a reviewable exception. The raise must be a dedicated commit that touches only `internal/contextreport/budgets.json`. `make check` does not enforce that commit shape. Reviewers do. `RaisedBudgets` lists paths whose `max_bytes` grew so a reviewer can see the exception.
+Raising `max_bytes` is a reviewable exception. The raise must be a dedicated commit that touches only `internal/contextreport/budgets.json`. `make check` does not enforce that commit shape. Reviewers do. Same-package tests list paths whose `max_bytes` grew so a reviewer can see the exception.
 
 ## How the gate fails
 
-`Enforce` compares `Collect` (fixture-measured bytes) to the checked-in file. `make check` runs the unit suite once via `coverage`. `TestCheckedInContextBudgetsHold` loads the real repo and the budgets file. If any artifact is over `max_bytes`, that test fails, so `make check` fails.
+The in-package budget gate compares `Collect` (fixture-measured bytes) to the checked-in file. `make check` runs the unit suite once via `coverage`. `TestCheckedInContextBudgetsHold` loads the real repo and the budgets file. If any artifact is over `max_bytes`, that test fails, so `make check` fails.
 
 The error groups over-budget rows by class:
 
