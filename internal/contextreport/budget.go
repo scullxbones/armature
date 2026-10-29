@@ -13,8 +13,6 @@ const budgetsRelPath = "internal/contextreport/budgets.json"
 
 var runtimeClassOrder = []string{classInvocation, classBundle}
 
-// budget is one runtime artifact's enforceable cap and named customer promise.
-// MaxBytes is what make check enforces. TargetBytes is the promise, not today's size.
 type budget struct {
 	Path        string `json:"path"`
 	Class       string `json:"class"`
@@ -33,8 +31,6 @@ type violation struct {
 	MaxBytes int
 }
 
-// gateError is a failed budget comparison. Over-budget rows are the hard fail.
-// Missing, extra, and class-mismatch rows keep the file aligned with Collect.
 type gateError struct {
 	OverBudget    []violation
 	Missing       []string
@@ -151,9 +147,6 @@ func parseBudgets(data []byte) (budgetFile, error) {
 	return file, nil
 }
 
-// enforce fails when any measured artifact exceeds its max_bytes cap, lacks a
-// budget, has a class that disagrees with the budget row, or when leftover
-// budget paths do not correspond to a measured artifact.
 func enforce(report Report, budgets budgetFile) error {
 	byPath := make(map[string]budget, len(budgets.Artifacts))
 	for _, row := range budgets.Artifacts {
@@ -212,9 +205,6 @@ func runtimeClassIndex(class string) int {
 	return len(runtimeClassOrder)
 }
 
-// explicitTargets fails when a budget row has no named promise, or when the
-// row is a silent seed at today's measured size (max and target both equal
-// measured bytes). That seed-at-measured-only shape is not a customer cap.
 func explicitTargets(report Report, budgets budgetFile) error {
 	byPath := make(map[string]budget, len(budgets.Artifacts))
 	for _, row := range budgets.Artifacts {
@@ -241,10 +231,6 @@ func explicitTargets(report Report, budgets budgetFile) error {
 		strings.Join(seeded, ", "))
 }
 
-// hasDatedTrimPlan reports whether doc contains a markdown heading that names
-// path with an ISO date: "### YYYY-MM-DD <path> ...". Fenced code examples do
-// not count. A table row, the phrase "trim plan", or an unrelated date
-// elsewhere in the file is not a plan for that artifact.
 func hasDatedTrimPlan(doc, path string) bool {
 	if path == "" {
 		return false
@@ -287,8 +273,7 @@ func datedTrimPlanHeading(line, path string) bool {
 		strings.HasPrefix(name, path+"(")
 }
 
-// raisedBudgets returns paths whose max_bytes grew relative to previous.
-// make check does not call this. Reviewers use it when a raise is proposed.
+// make check does not call raisedBudgets. Reviewers use it when a raise is proposed.
 // A raise is allowed only in a commit that touches the budgets file alone.
 func raisedBudgets(previous, current budgetFile) []string {
 	prev := make(map[string]int, len(previous.Artifacts))

@@ -16,8 +16,6 @@ const defaultTokenBudget = 4000
 
 const fixtureShowIssue = "FX-WORK"
 
-// estimationMethod is documented in both human and JSON output so a reader
-// does not have to look up how estimated_tokens was computed.
 const estimationMethod = "estimated tokens = bytes/4 (integer division), " +
 	"matching the token_budget convention used by render-context " +
 	"(character budget = tokens * 4). " +
