@@ -1,4 +1,4 @@
-package doctor_test
+package doctor
 
 import (
 	"os"
@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,24 +15,24 @@ import (
 func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) {
 	t.Parallel()
 
-	want, err := doctor.RenderCheckIDsDoc()
+	want, err := RenderCheckIDsDoc()
 	require.NoError(t, err)
 
 	root := repoRoot(t)
 	if os.Getenv("UPDATE_CHECK_IDS_DOC") == "1" {
-		require.NoError(t, doctor.WriteCheckIDsDoc(root),
+		require.NoError(t, WriteCheckIDsDoc(root),
 			"UPDATE_CHECK_IDS_DOC=1 must rewrite %s from LiveCheckIDs + OpenReservations",
-			doctor.CheckIDsDocRelPath)
+			CheckIDsDocRelPath)
 	}
 
-	got, err := os.ReadFile(filepath.Join(root, doctor.CheckIDsDocRelPath))
-	require.NoError(t, err, "committed registry doc must exist at %s; regenerate with go generate ./internal/doctor", doctor.CheckIDsDocRelPath)
+	got, err := os.ReadFile(filepath.Join(root, CheckIDsDocRelPath))
+	require.NoError(t, err, "committed registry doc must exist at %s; regenerate with go generate ./internal/doctor", CheckIDsDocRelPath)
 	require.Equal(t, want, string(got),
 		"docs/design/doctor-check-ids.md drifted; regenerate with go generate ./internal/doctor")
 
 	liveFromDoc := parseLiveCheckIDs(t, string(got))
-	assert.Equal(t, doctor.LiveCheckIDs(), liveFromDoc,
-		"live table must list doctor.LiveCheckIDs() in Run order")
+	assert.Equal(t, LiveCheckIDs(), liveFromDoc,
+		"live table must list LiveCheckIDs() in Run order")
 
 	reserved := parseReservedRows(t, string(got))
 	require.NotEmpty(t, reserved, "open-reservation table must not be empty")
@@ -56,15 +55,15 @@ func TestWriteCheckIDsDocRewritesRegistry_REQ_TOPTIER_S18_T3(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	stalePath := filepath.Join(root, doctor.CheckIDsDocRelPath)
-	require.NoError(t, doctor.WriteCheckIDsDoc(root), "WriteCheckIDsDoc must create CheckIDsDocRelPath")
+	stalePath := filepath.Join(root, CheckIDsDocRelPath)
+	require.NoError(t, WriteCheckIDsDoc(root), "WriteCheckIDsDoc must create CheckIDsDocRelPath")
 	require.NoError(t, os.WriteFile(stalePath, []byte("STALE HAND-COPIED REGISTRY\n"), 0o644))
 
-	require.NoError(t, doctor.WriteCheckIDsDoc(root))
+	require.NoError(t, WriteCheckIDsDoc(root))
 
 	got, err := os.ReadFile(stalePath)
 	require.NoError(t, err)
-	want, err := doctor.RenderCheckIDsDoc()
+	want, err := RenderCheckIDsDoc()
 	require.NoError(t, err)
 	assert.Equal(t, want, string(got), "WriteCheckIDsDoc must rewrite CheckIDsDocRelPath from RenderCheckIDsDoc")
 	assert.NotContains(t, string(got), "STALE HAND-COPIED")
@@ -75,14 +74,14 @@ func TestWriteCheckIDsDocReportsWriteError_REQ_TOPTIER_S18_T3(t *testing.T) {
 
 	blocked := filepath.Join(t.TempDir(), "not-a-dir")
 	require.NoError(t, os.WriteFile(blocked, []byte("file"), 0o644))
-	err := doctor.WriteCheckIDsDoc(blocked)
+	err := WriteCheckIDsDoc(blocked)
 	require.Error(t, err)
 }
 
 func TestCheckIDsDocDocumentsRegenCommand_REQ_TOPTIER_S18_T3(t *testing.T) {
 	t.Parallel()
 
-	doc, err := doctor.RenderCheckIDsDoc()
+	doc, err := RenderCheckIDsDoc()
 	require.NoError(t, err)
 	assert.Contains(t, doc, "`go generate ./internal/doctor`",
 		"registry must name the executable regeneration command")
@@ -101,7 +100,7 @@ func TestCheckIDsDocGoGenerateDirective_REQ_TOPTIER_S18_T3(t *testing.T) {
 func TestOpenReservationsIncludesS12T2D11_REQ_TOPTIER_S18_T3(t *testing.T) {
 	t.Parallel()
 
-	res := doctor.OpenReservations()
+	res := OpenReservations()
 	require.NotEmpty(t, res)
 	found := false
 	for _, r := range res {
@@ -112,9 +111,9 @@ func TestOpenReservationsIncludesS12T2D11_REQ_TOPTIER_S18_T3(t *testing.T) {
 	}
 	assert.True(t, found, "OpenReservations must include TOPTIER-S12-T2 planned D11")
 
-	first := doctor.OpenReservations()
+	first := OpenReservations()
 	first[0].ID = "D999"
-	second := doctor.OpenReservations()
+	second := OpenReservations()
 	assert.Equal(t, "D11", second[0].ID, "OpenReservations must return a copy")
 }
 

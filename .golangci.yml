@@ -268,6 +268,22 @@ linters:
             - "github.com/scullxbones/armature/internal/adapters"
             - "github.com/scullxbones/armature/internal/delivery"
             - "github.com/scullxbones/armature/internal/ops"
+        doctor-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/doctor/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/config"
+            - "github.com/scullxbones/armature/internal/dag"
+            - "github.com/scullxbones/armature/internal/harnesspolicy"
+            - "github.com/scullxbones/armature/internal/materialize"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/ready"
+            - "github.com/scullxbones/armature/internal/redact"
+            - "github.com/scullxbones/armature/internal/worktree"
         decompose-boundary:
           list-mode: strict
           files:

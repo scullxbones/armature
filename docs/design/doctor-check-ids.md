@@ -15,7 +15,7 @@ remediation — see [validation-codes.md](../validation-codes.md) and
 ## Live checks
 
 Generated from `doctor.LiveCheckIDs()`.
-`RunChecks` still omits D7 (worker-ID mismatches need the validated ops
+The in-package indexed helper still omits D7 (worker-ID mismatches need the validated ops
 stream) and D12 (ops-worktree lag needs the ops worktree); that is
 documented, not changed.
 D12 is an error when HEAD is N>0 commits behind `origin/_armature` after a

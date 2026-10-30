@@ -1,4 +1,4 @@
-package doctor_test
+package doctor
 
 import (
 	"os"

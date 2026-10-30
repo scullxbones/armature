@@ -55,7 +55,7 @@ func renderCheckIDsDoc(live []string, reservations []CheckReservation) (string, 
 	b.WriteString("[commands.md](../commands.md).\n\n")
 	b.WriteString("## Live checks\n\n")
 	b.WriteString("Generated from `doctor.LiveCheckIDs()`.\n")
-	b.WriteString("`RunChecks` still omits D7 (worker-ID mismatches need the validated ops\n")
+	b.WriteString("The in-package indexed helper still omits D7 (worker-ID mismatches need the validated ops\n")
 	b.WriteString("stream) and D12 (ops-worktree lag needs the ops worktree); that is\n")
 	b.WriteString("documented, not changed.\n")
 	b.WriteString("D12 is an error when HEAD is N>0 commits behind `origin/_armature` after a\n")

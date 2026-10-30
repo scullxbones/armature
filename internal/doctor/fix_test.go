@@ -1,4 +1,4 @@
-package doctor_test
+package doctor
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +40,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %v: %s", args, out)
 }
 
-func applyFixActions(t *testing.T, logPath string, actions []doctor.FixAction) {
+func applyFixActions(t *testing.T, logPath string, actions []FixAction) {
 	t.Helper()
 	for _, a := range actions {
 		for _, op := range a.Ops {
@@ -88,10 +87,10 @@ func TestPlanFixes_UsesCanonicalMarkerInventory_REQ_LNGHZN_S5_T2(t *testing.T) {
 			Payload: ops.Payload{TTL: 240, WorktreePath: worktreePath}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "a canonical binding-bound worktree must satisfy doctor --fix")
 }
 
@@ -116,10 +115,10 @@ func TestPlanFixes_LiveRecordedLegacyWorktreeIsNotFlagged_REQ_LNGHZN_S5(t *testi
 			Payload: ops.Payload{TTL: 240, WorktreePath: legacyPath}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "a live binding-bound worktree at the recorded legacy path must not be repaired")
 }
 
@@ -146,10 +145,10 @@ func TestPlanFixes_AmbiguousBindingDoesNotReleaseLiveClaim_REQ_LNGHZN_S5_T6(t *t
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	require.Len(t, actions, 1, "an ambiguous binding must be reported without releasing the live claim")
 	assert.Empty(t, actions[0].Ops, "the advisory must not append a release op")
 	assert.Contains(t, actions[0].Reason, "ambiguous worktree binding")
@@ -175,10 +174,10 @@ func TestPlanFixes_LegacyMarkerWorktreeWithoutRecordedPathSuppressesFix_REQ_LNGH
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "a live binding-bound legacy worktree must suppress remediation even without a recorded WorktreePath")
 }
 
@@ -197,10 +196,10 @@ func TestPlanFixes_ReleasesExpiredClaim(t *testing.T) {
 			Payload: ops.Payload{TTL: 60}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	actions := PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 	assert.Equal(t, "stale-claim-01", actions[0].IssueID)
 	require.Len(t, actions[0].Ops, 2)
@@ -226,10 +225,10 @@ func TestPlanFixes_BlocksStarvedInProgress(t *testing.T) {
 			Payload: ops.Payload{To: ops.StatusInProgress}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	actions := PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 	assert.Equal(t, "starved-01", actions[0].IssueID)
 	assert.Equal(t, ops.StatusBlocked, actions[0].Ops[0].Payload.To)
@@ -253,10 +252,10 @@ func TestPlanFixes_InProgressTransitionCountsAsActivity(t *testing.T) {
 			Payload: ops.Payload{To: ops.StatusInProgress}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	actions := PlanFixes(allIssues, "fixer-01", now, "")
 	assert.Empty(t, actions, "a claim just transitioned to in-progress must not be treated as claim-expired")
 }
 
@@ -283,10 +282,10 @@ func TestPlanFixes_ThirdPartyNoteDoesNotResetClaimExpiry(t *testing.T) {
 			Payload: ops.Payload{Msg: "checking in, unrelated to worker-01's claim"}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	actions := PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1, "the claim must still be recognized as expired despite the coordinator's unrelated note")
 	assert.Equal(t, "third-party-note-01", actions[0].IssueID)
 	assert.Equal(t, ops.StatusBlocked, actions[0].Ops[0].Payload.To)
@@ -307,18 +306,18 @@ func TestPlanFixes_DryRunListsWithoutWriting(t *testing.T) {
 			Payload: ops.Payload{TTL: 60}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	actions := PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 
 	items, err := ops.LoadFromDirValidated(filepath.Join(issuesDir, "ops"))
 	require.NoError(t, err)
 	assert.Len(t, items.Items, 2, "dry run must not append any ops")
 
-	_, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues2, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
-	actions2 := doctor.PlanFixes(allIssues2, "fixer-01", now, "")
+	actions2 := PlanFixes(allIssues2, "fixer-01", now, "")
 	require.Len(t, actions2, 1)
 	assert.Equal(t, actions[0].IssueID, actions2[0].IssueID)
 }
@@ -340,17 +339,17 @@ func TestPlanFixes_IdempotentAfterApply(t *testing.T) {
 
 	fixerLogPath := filepath.Join(issuesDir, "ops", "fixer-01.log")
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, "")
+	actions := PlanFixes(allIssues, "fixer-01", now, "")
 	require.Len(t, actions, 1)
 	applyFixActions(t, fixerLogPath, actions)
 
-	index, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
+	index, allIssues2, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 	require.Equal(t, ops.StatusOpen, index["idempotent-01"].Status)
 
-	actions2 := doctor.PlanFixes(allIssues2, "fixer-01", now, "")
+	actions2 := PlanFixes(allIssues2, "fixer-01", now, "")
 	assert.Empty(t, actions2, "second PlanFixes run must find nothing left to fix")
 
 	applyFixActions(t, fixerLogPath, actions2)
@@ -375,10 +374,10 @@ func TestPlanFixes_ReleasesClaimWithMissingWorktree(t *testing.T) {
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	require.Len(t, actions, 1)
 	assert.Equal(t, "missing-wt-01", actions[0].IssueID)
 	assert.Equal(t, ops.StatusOpen, actions[0].Ops[0].Payload.To)
@@ -400,10 +399,10 @@ func TestPlanFixes_LiveWorktreeIsNotFlagged(t *testing.T) {
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "a claim with a live registered worktree branch must not be flagged")
 }
 
@@ -424,10 +423,10 @@ func TestPlanFixes_LiveFixBranchForBugIsNotFlagged_REQ_TOPTIER_S4_PRFIX(t *testi
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "a bug claim with a live fix/ worktree branch must not be flagged as missing")
 }
 
@@ -448,10 +447,10 @@ func TestPlanFixes_LiveFeatBranchForFeatureIsNotFlagged_REQ_TOPTIER_S4_PRFIX(t *
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "a feature claim with a live feat/ worktree branch must not be flagged as missing")
 }
 
@@ -472,10 +471,10 @@ func TestPlanFixes_GitFailure_SkipsMissingWorktreeCheckEntirely(t *testing.T) {
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, notAGitRepo)
+	actions := PlanFixes(allIssues, "fixer-01", now, notAGitRepo)
 	assert.Empty(t, actions, "a git failure while checking worktree liveness must not be treated as 'every claim's worktree is gone'")
 }
 
@@ -496,10 +495,10 @@ func TestPlanFixes_MissingWorktreeSkipsOtherWorkersClaims(t *testing.T) {
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	assert.Empty(t, actions, "missing-worktree remediation must not touch another worker's claim")
 }
 
@@ -529,17 +528,17 @@ func TestDoctorFix_REQ_TOPTIER_S4_T2(t *testing.T) {
 			Payload: ops.Payload{TTL: 240}},
 	}))
 
-	_, allIssues, err := doctor.LoadState(issuesDir, stateDir)
+	_, allIssues, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 
-	actions := doctor.PlanFixes(allIssues, "fixer-01", now, repoDir)
+	actions := PlanFixes(allIssues, "fixer-01", now, repoDir)
 	require.Len(t, actions, 2)
 	applyFixActions(t, fixerLogPath, actions)
 
-	index, allIssues2, err := doctor.LoadState(issuesDir, stateDir)
+	index, allIssues2, err := LoadState(issuesDir, stateDir)
 	require.NoError(t, err)
 	assert.Equal(t, ops.StatusOpen, index["req-expired-01"].Status)
 	assert.Equal(t, ops.StatusOpen, index["req-missing-wt-01"].Status)
 
-	assert.Empty(t, doctor.PlanFixes(allIssues2, "fixer-01", now, repoDir))
+	assert.Empty(t, PlanFixes(allIssues2, "fixer-01", now, repoDir))
 }

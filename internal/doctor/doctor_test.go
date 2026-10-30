@@ -1,4 +1,4 @@
-package doctor_test
+package doctor
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -26,9 +25,9 @@ func TestRun_CleanRepo(t *testing.T) {
 			"task-01":  {Status: "open", Type: "task", Parent: "story-01"},
 			"story-01": {Status: "open", Type: "story"},
 		}
-		report := doctor.RunChecks(index, nil, nil, "", time.Now())
+		report := runChecks(index, nil, "", time.Now())
 		d4 := findCheck(t, report, "D4")
-		assert.Equal(t, doctor.SeverityOK, d4.Severity)
+		assert.Equal(t, SeverityOK, d4.Severity)
 	})
 
 	t.Run("D4_BrokenParent", func(t *testing.T) {
@@ -36,9 +35,9 @@ func TestRun_CleanRepo(t *testing.T) {
 		index := materialize.Index{
 			"task-01": {Status: "open", Type: "task", Parent: "nonexistent"},
 		}
-		report := doctor.RunChecks(index, nil, nil, "", time.Now())
+		report := runChecks(index, nil, "", time.Now())
 		d4 := findCheck(t, report, "D4")
-		assert.Equal(t, doctor.SeverityError, d4.Severity)
+		assert.Equal(t, SeverityError, d4.Severity)
 		assert.Contains(t, d4.Items[0], "task-01")
 	})
 
@@ -48,9 +47,9 @@ func TestRun_CleanRepo(t *testing.T) {
 			"task-01": {Status: "open", BlockedBy: []string{"task-02"}},
 			"task-02": {Status: "open"},
 		}
-		report := doctor.RunChecks(index, nil, nil, "", time.Now())
+		report := runChecks(index, nil, "", time.Now())
 		d5 := findCheck(t, report, "D5")
-		assert.Equal(t, doctor.SeverityOK, d5.Severity)
+		assert.Equal(t, SeverityOK, d5.Severity)
 	})
 
 	t.Run("D5_Cycle", func(t *testing.T) {
@@ -59,9 +58,9 @@ func TestRun_CleanRepo(t *testing.T) {
 			"task-01": {Status: "open", BlockedBy: []string{"task-02"}},
 			"task-02": {Status: "open", BlockedBy: []string{"task-01"}},
 		}
-		report := doctor.RunChecks(index, nil, nil, "", time.Now())
+		report := runChecks(index, nil, "", time.Now())
 		d5 := findCheck(t, report, "D5")
-		assert.Equal(t, doctor.SeverityError, d5.Severity)
+		assert.Equal(t, SeverityError, d5.Severity)
 	})
 
 	t.Run("D6_UncitedIssues", func(t *testing.T) {
@@ -72,9 +71,9 @@ func TestRun_CleanRepo(t *testing.T) {
 		allIssues := map[string]*materialize.Issue{
 			"task-01": {ID: "task-01", Status: "open"},
 		}
-		report := doctor.RunChecks(index, allIssues, nil, "", time.Now())
+		report := runChecks(index, allIssues, "", time.Now())
 		d6 := findCheck(t, report, "D6")
-		assert.Equal(t, doctor.SeverityWarning, d6.Severity)
+		assert.Equal(t, SeverityWarning, d6.Severity)
 		assert.Contains(t, d6.Items, "task-01")
 	})
 
@@ -90,17 +89,17 @@ func TestRun_CleanRepo(t *testing.T) {
 				SourceLinks: []materialize.SourceLink{{SourceEntryID: "src-1"}},
 			},
 		}
-		report := doctor.RunChecks(index, allIssues, nil, "", time.Now())
+		report := runChecks(index, allIssues, "", time.Now())
 		d6 := findCheck(t, report, "D6")
-		assert.Equal(t, doctor.SeverityOK, d6.Severity)
+		assert.Equal(t, SeverityOK, d6.Severity)
 	})
 }
 
 func TestReport_HasErrors(t *testing.T) {
 	t.Parallel()
-	r := doctor.Report{
-		Checks: []doctor.Finding{
-			{Check: "D4", Severity: doctor.SeverityError, Message: "broken"},
+	r := Report{
+		Checks: []Finding{
+			{Check: "D4", Severity: SeverityError, Message: "broken"},
 		},
 	}
 	assert.True(t, r.HasErrors())
@@ -108,9 +107,9 @@ func TestReport_HasErrors(t *testing.T) {
 
 func TestReport_HasWarnings(t *testing.T) {
 	t.Parallel()
-	r := doctor.Report{
-		Checks: []doctor.Finding{
-			{Check: "D6", Severity: doctor.SeverityWarning, Message: "uncited"},
+	r := Report{
+		Checks: []Finding{
+			{Check: "D6", Severity: SeverityWarning, Message: "uncited"},
 		},
 	}
 	assert.True(t, r.HasWarnings())
@@ -138,9 +137,9 @@ func TestRunChecks_D2_StaleClaims_InjectedTime(t *testing.T) {
 	}
 
 	farFuture := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
-	report := doctor.RunChecks(index, allIssues, nil, "", farFuture)
+	report := runChecks(index, allIssues, "", farFuture)
 	d2 := findCheck(t, report, "D2")
-	assert.Equal(t, doctor.SeverityWarning, d2.Severity)
+	assert.Equal(t, SeverityWarning, d2.Severity)
 	assert.Contains(t, d2.Items, "claimed-task")
 }
 
@@ -149,17 +148,17 @@ func TestEvaluateD9UnrecognizedWorktrees_REQ_LNGHZN_S5_T8(t *testing.T) {
 
 	t.Run("clean_when_none", func(t *testing.T) {
 		t.Parallel()
-		f := doctor.EvaluateD9UnrecognizedWorktrees(nil)
+		f := evaluateD9UnrecognizedWorktrees(nil)
 		assert.Equal(t, "D9", f.Check)
-		assert.Equal(t, doctor.SeverityOK, f.Severity)
+		assert.Equal(t, SeverityOK, f.Severity)
 		assert.Empty(t, f.Items)
 	})
 
 	t.Run("warns_and_lists_paths", func(t *testing.T) {
 		t.Parallel()
-		f := doctor.EvaluateD9UnrecognizedWorktrees([]string{"/repo/.worktrees/b", "/repo/.worktrees/a"})
+		f := evaluateD9UnrecognizedWorktrees([]string{"/repo/.worktrees/b", "/repo/.worktrees/a"})
 		assert.Equal(t, "D9", f.Check)
-		assert.Equal(t, doctor.SeverityWarning, f.Severity)
+		assert.Equal(t, SeverityWarning, f.Severity)
 
 		assert.Equal(t, []string{"/repo/.worktrees/a", "/repo/.worktrees/b"}, f.Items)
 	})
@@ -186,10 +185,10 @@ func TestRunChecks_D9_SkippedWhenIssueDetailsOmitted_REQ_LNGHZN_S5_T8(t *testing
 	index := materialize.Index{
 		"T-001": {Status: "in-progress", Type: "task"},
 	}
-	report := doctor.RunChecks(index, nil, nil, repoDir, time.Now())
+	report := runChecks(index, nil, repoDir, time.Now())
 
 	d9 := findCheck(t, report, "D9")
-	assert.Equal(t, doctor.SeverityOK, d9.Severity, "D9 must be skipped when issue details were omitted")
+	assert.Equal(t, SeverityOK, d9.Severity, "D9 must be skipped when issue details were omitted")
 	assert.Empty(t, d9.Items)
 }
 
@@ -215,11 +214,11 @@ func TestRun_Integration_D9_UnrecognizedManagedWorktree_REQ_LNGHZN_S5_T8(t *test
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "config.json"), []byte(`{}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "worker-01.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), repoDir, "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), repoDir, "", false, time.Now())
 	require.NoError(t, err)
 
 	d9 := findCheck(t, report, "D9")
-	assert.Equal(t, doctor.SeverityWarning, d9.Severity, "unrecognized managed worktree must be a health problem")
+	assert.Equal(t, SeverityWarning, d9.Severity, "unrecognized managed worktree must be a health problem")
 	require.NotEmpty(t, d9.Items)
 	assert.Contains(t, strings.Join(d9.Items, "\n"), "stray")
 
@@ -237,11 +236,11 @@ func TestRun_IncludesConfigHealth_REQ_LNGHZN_S7_T2(t *testing.T) {
 	))
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d10 := findCheck(t, report, "D10")
-	assert.Equal(t, doctor.SeverityError, d10.Severity)
+	assert.Equal(t, SeverityError, d10.Severity)
 	require.NotEmpty(t, d10.Items)
 	assert.Contains(t, strings.Join(d10.Items, "\n"), "token_budegt")
 }
@@ -257,14 +256,14 @@ func TestRunChecks_IncludesConfigHealth_REQ_LNGHZN_S7_T2(t *testing.T) {
 		0o644,
 	))
 
-	report := doctor.RunChecks(nil, nil, nil, repoDir, time.Now())
+	report := runChecks(nil, nil, repoDir, time.Now())
 	d10 := findCheck(t, report, "D10")
-	assert.Equal(t, doctor.SeverityError, d10.Severity)
+	assert.Equal(t, SeverityError, d10.Severity)
 	require.NotEmpty(t, d10.Items)
 	assert.Contains(t, strings.Join(d10.Items, "\n"), "token_budegt")
 }
 
-func findCheck(t *testing.T, report doctor.Report, checkID string) doctor.Finding {
+func findCheck(t *testing.T, report Report, checkID string) Finding {
 	t.Helper()
 	for _, f := range report.Checks {
 		if f.Check == checkID {
@@ -272,7 +271,7 @@ func findCheck(t *testing.T, report doctor.Report, checkID string) doctor.Findin
 		}
 	}
 	require.Fail(t, "check not found", checkID)
-	return doctor.Finding{}
+	return Finding{}
 }
 
 func initIssuesDir(t *testing.T) string {
@@ -297,11 +296,11 @@ func TestRun_Integration_EmptyRepo(t *testing.T) {
 	workerLog := filepath.Join(issuesDir, "ops", "test-worker.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	for _, f := range report.Checks {
-		assert.NotEqual(t, doctor.SeverityError, f.Severity, "check %s should not error on empty repo", f.Check)
+		assert.NotEqual(t, SeverityError, f.Severity, "check %s should not error on empty repo", f.Check)
 	}
 }
 
@@ -310,15 +309,15 @@ func TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	runIDs := make([]string, 0, len(report.Checks))
 	for _, f := range report.Checks {
 		runIDs = append(runIDs, f.Check)
 	}
-	assert.Equal(t, doctor.LiveCheckIDs(), runIDs, "LiveCheckIDs must match the live Run path in order")
-	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}, doctor.LiveCheckIDs())
+	assert.Equal(t, LiveCheckIDs(), runIDs, "LiveCheckIDs must match the live Run path in order")
+	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}, LiveCheckIDs())
 }
 
 func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testing.T) {
@@ -335,11 +334,11 @@ func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testi
 		Exit:    0,
 	}))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
-	assert.Equal(t, doctor.SeverityOK, d3.Severity,
+	assert.Equal(t, SeverityOK, d3.Severity,
 		"gate-evidence targeting a profile name must not be reported as an orphaned issue")
 	assert.NotContains(t, d3.Items, "full")
 }
@@ -358,11 +357,11 @@ func TestRun_Integration_D3_OrphanedOps(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, op))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
-	assert.Equal(t, doctor.SeverityError, d3.Severity)
+	assert.Equal(t, SeverityError, d3.Severity)
 	assert.Contains(t, d3.Items, "ghost-issue-01")
 }
 
@@ -387,11 +386,11 @@ func TestRun_Integration_D3_SkipsDeletedNoteOnlyIssues(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOps(logPath, []ops.Op{noteOp, deleteOp}))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
-	assert.Equal(t, doctor.SeverityOK, d3.Severity,
+	assert.Equal(t, SeverityOK, d3.Severity,
 		"a note that was created and fully deleted against a bogus target should not orphan D3")
 	assert.NotContains(t, d3.Items, "list")
 }
@@ -410,11 +409,11 @@ func TestRun_Integration_D3_UndeletedNoteStillOrphans(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, noteOp))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
-	assert.Equal(t, doctor.SeverityError, d3.Severity)
+	assert.Equal(t, SeverityError, d3.Severity)
 	assert.Contains(t, d3.Items, "ghost-issue-02")
 }
 
@@ -442,11 +441,11 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(mismatchWorkerLog, mismatchOp))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
-	assert.Equal(t, doctor.SeverityOK, d3.Severity,
+	assert.Equal(t, SeverityOK, d3.Severity,
 		"D3 should be OK because mismatched ops are excluded from D3 check")
 	assert.NotContains(t, d3.Items, "mismatched-issue-01",
 		"Worker-ID mismatched ops should not appear in D3 orphaned list")
@@ -454,7 +453,7 @@ func TestRun_ValidatedOpsExcludesMismatches(t *testing.T) {
 	assert.NotContains(t, d3.Items, "valid-issue-01")
 
 	d7 := findCheck(t, report, "D7")
-	assert.Equal(t, doctor.SeverityWarning, d7.Severity, "D7 should warn about worker-ID mismatches")
+	assert.Equal(t, SeverityWarning, d7.Severity, "D7 should warn about worker-ID mismatches")
 	assert.Len(t, d7.Items, 1, "should report one mismatch warning")
 }
 
@@ -465,7 +464,7 @@ func TestRun_CorruptLineDoesNotTriggerD7(t *testing.T) {
 	logPath := filepath.Join(issuesDir, "ops", "worker-clean.log")
 	require.NoError(t, os.WriteFile(logPath, []byte("this is not valid json\n"), 0o644))
 
-	_, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	_, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.Error(t, err, "corrupt log must fail the load instead of skipping into D-checks")
 	assert.Contains(t, err.Error(), "invalid JSONL line")
 	var located *ops.ParseLoadError
@@ -490,7 +489,7 @@ func TestRun_CorruptLineReportsFileAndLine_REQ_AGTFND(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	_, err = doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	_, err = Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "worker-clean.log:2:")
 	var located *ops.ParseLoadError
@@ -516,11 +515,11 @@ func TestRun_Integration_D2_StaleClaims(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOps(logPath, []ops.Op{createOp, claimOp}))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d2 := findCheck(t, report, "D2")
-	assert.Equal(t, doctor.SeverityWarning, d2.Severity)
+	assert.Equal(t, SeverityWarning, d2.Severity)
 	assert.Contains(t, d2.Items, "stale-01")
 }
 
@@ -538,11 +537,11 @@ func TestRun_Integration_D3_Verbose_ShowsFileAndLine(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, op))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
-	assert.Equal(t, doctor.SeverityError, d3.Severity)
+	assert.Equal(t, SeverityError, d3.Severity)
 
 	assert.Contains(t, d3.Items, "ghost-verbose-01")
 
@@ -558,7 +557,7 @@ func TestRun_Integration_Verbose_CleanRepo_NoExtraOutput(t *testing.T) {
 	workerLog := filepath.Join(issuesDir, "ops", "worker-clean.log")
 	require.NoError(t, os.WriteFile(workerLog, []byte(""), 0644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
 	require.NoError(t, err)
 
 	for _, f := range report.Checks {
@@ -581,11 +580,11 @@ func TestDoctorRunUsesStateDir(t *testing.T) {
 	indexPath := filepath.Join(stateDir, "index.json")
 	require.NoError(t, materialize.WriteIndex(indexPath, index))
 
-	report, err := doctor.Run(issuesDir, stateDir, "", "", false, time.Now())
+	report, err := Run(issuesDir, stateDir, "", "", false, time.Now())
 	require.NoError(t, err)
 
 	d4 := findCheck(t, report, "D4")
-	assert.Equal(t, doctor.SeverityOK, d4.Severity)
+	assert.Equal(t, SeverityOK, d4.Severity)
 }
 
 func TestRunChecks_D1_GitDivergence(t *testing.T) {
@@ -604,9 +603,9 @@ func TestRunChecks_D1_GitDivergence(t *testing.T) {
 	index := materialize.Index{
 		"task-open-1": {Status: "in-progress", Type: "task"},
 	}
-	report := doctor.RunChecks(index, nil, nil, repoDir, time.Now())
+	report := runChecks(index, nil, repoDir, time.Now())
 	d1 := findCheck(t, report, "D1")
-	assert.Equal(t, doctor.SeverityWarning, d1.Severity, "D1 should warn when commit references non-done issue")
+	assert.Equal(t, SeverityWarning, d1.Severity, "D1 should warn when commit references non-done issue")
 	assert.Contains(t, d1.Items[0], "task-open-1")
 }
 
@@ -626,9 +625,9 @@ func TestRunChecks_D1_DoneIssue_NoWarning(t *testing.T) {
 	index := materialize.Index{
 		"task-done-1": {Status: "done", Type: "task"},
 	}
-	report := doctor.RunChecks(index, nil, nil, repoDir, time.Now())
+	report := runChecks(index, nil, repoDir, time.Now())
 	d1 := findCheck(t, report, "D1")
-	assert.Equal(t, doctor.SeverityOK, d1.Severity, "D1 should be OK when commit references done issue")
+	assert.Equal(t, SeverityOK, d1.Severity, "D1 should be OK when commit references done issue")
 }
 
 func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
@@ -664,11 +663,11 @@ func TestRun_PhysicalLineUsedForD3Verbose(t *testing.T) {
 	}
 	require.NoError(t, ops.AppendOp(logPath, acceptedOp3))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", true, time.Now())
 	require.NoError(t, err)
 
 	d3 := findCheck(t, report, "D3")
-	assert.Equal(t, doctor.SeverityError, d3.Severity, "should have orphaned ops")
+	assert.Equal(t, SeverityError, d3.Severity, "should have orphaned ops")
 	assert.Contains(t, d3.Items, "orphan-1", "orphan-1 should be in items")
 	assert.Contains(t, d3.Items, "orphan-3", "orphan-3 should be in items")
 

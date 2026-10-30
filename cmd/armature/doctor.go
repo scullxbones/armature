@@ -347,15 +347,10 @@ func doctorFixConfigHealth(appCtx *config.Context) error {
 	if appCtx == nil {
 		return nil
 	}
-	health := doctor.CheckD10ConfigHealth(filepath.Join(appCtx.IssuesDir, "config.json"))
-	if health.Severity != doctor.SeverityError {
-		return nil
+	if err := doctor.UnhealthyConfig(appCtx.IssuesDir); err != nil {
+		return skipCommandFailure(err)
 	}
-	msg := health.Message
-	if len(health.Items) > 0 {
-		msg = msg + ": " + strings.Join(health.Items, "; ")
-	}
-	return skipCommandFailure(fmt.Errorf("doctor: %s: %s", health.Check, msg))
+	return nil
 }
 
 func countBySeverity(r doctor.Report, s doctor.Severity) int {
