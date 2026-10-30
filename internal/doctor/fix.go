@@ -2,7 +2,9 @@ package doctor
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/materialize"
@@ -17,6 +19,20 @@ type FixAction struct {
 	IssueID string   `json:"issue_id"`
 	Reason  string   `json:"reason"`
 	Ops     []ops.Op `json:"ops"`
+}
+
+// UnhealthyConfig is the D10 fail-closed gate for `arm doctor --fix`.
+// A missing config file is healthy (same as the live D10 check).
+func UnhealthyConfig(issuesDir string) error {
+	health := checkD10ConfigHealth(filepath.Join(issuesDir, "config.json"))
+	if health.Severity != SeverityError {
+		return nil
+	}
+	msg := health.Message
+	if len(health.Items) > 0 {
+		msg = msg + ": " + strings.Join(health.Items, "; ")
+	}
+	return fmt.Errorf("doctor: %s: %s", health.Check, msg)
 }
 
 func LoadState(issuesDir, stateDir string) (materialize.Index, map[string]*materialize.Issue, error) {

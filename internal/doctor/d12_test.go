@@ -1,4 +1,4 @@
-package doctor_test
+package doctor
 
 import (
 	"encoding/json"
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,26 +24,26 @@ func TestEvaluateD12OpsWorktreeLag(t *testing.T) {
 		name     string
 		behind   int
 		fetchErr error
-		severity doctor.Severity
+		severity Severity
 		message  string
 		items    []string
 	}{
 		{
 			name:     "behind=0 ok",
-			severity: doctor.SeverityOK,
+			severity: SeverityOK,
 			message:  "Ops worktree is not behind origin/_armature",
 		},
 		{
 			name:     "behind>0 error",
 			behind:   3,
-			severity: doctor.SeverityError,
+			severity: SeverityError,
 			message:  "Ops worktree is 3 commit(s) behind origin/_armature",
 			items:    []string{"3"},
 		},
 		{
 			name:     "fetch fail + behind=0 error",
 			fetchErr: fetchErr,
-			severity: doctor.SeverityError,
+			severity: SeverityError,
 			message:  "Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): " + fetchErr.Error(),
 			items:    []string{fetchErr.Error()},
 		},
@@ -52,7 +51,7 @@ func TestEvaluateD12OpsWorktreeLag(t *testing.T) {
 			name:     "fetch fail + behind>0 error",
 			behind:   3,
 			fetchErr: fetchErr,
-			severity: doctor.SeverityError,
+			severity: SeverityError,
 			message:  "Could not fetch origin/_armature; ops worktree appears 3 commit(s) behind (result may be stale): " + fetchErr.Error(),
 			items:    []string{"3", fetchErr.Error()},
 		},
@@ -61,7 +60,7 @@ func TestEvaluateD12OpsWorktreeLag(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := doctor.EvaluateD12OpsWorktreeLag(tc.behind, tc.fetchErr)
+			got := evaluateD12OpsWorktreeLag(tc.behind, tc.fetchErr)
 			assert.Equal(t, "D12", got.Check)
 			assert.Equal(t, tc.severity, got.Severity)
 			assert.Equal(t, tc.message, got.Message)
@@ -169,9 +168,9 @@ func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 					"fatal: unable to access '%s': %s",
 				tc.url, tc.phrase,
 			)
-			assertFindingOmitsSecret := func(t *testing.T, f doctor.Finding) {
+			assertFindingOmitsSecret := func(t *testing.T, f Finding) {
 				t.Helper()
-				assert.Equal(t, doctor.SeverityError, f.Severity)
+				assert.Equal(t, SeverityError, f.Severity)
 				assert.Contains(t, f.Message, "Could not fetch origin/_armature")
 				assert.Contains(t, f.Message, "may be stale")
 				assert.Contains(t, f.Message, tc.keep)
@@ -193,11 +192,11 @@ func TestEvaluateD12OpsWorktreeLag_RedactsFetchErrorCredentials(t *testing.T) {
 				assert.NotContains(t, human.String(), tc.secret)
 			}
 
-			staleOK := doctor.EvaluateD12OpsWorktreeLag(0, fetchErr)
+			staleOK := evaluateD12OpsWorktreeLag(0, fetchErr)
 			assert.Contains(t, staleOK.Message, "appears not behind")
 			assertFindingOmitsSecret(t, staleOK)
 
-			staleBehind := doctor.EvaluateD12OpsWorktreeLag(3, fetchErr)
+			staleBehind := evaluateD12OpsWorktreeLag(3, fetchErr)
 			assert.Contains(t, staleBehind.Message, "3 commit(s) behind")
 			assertFindingOmitsSecret(t, staleBehind)
 		})
@@ -209,10 +208,10 @@ func TestRun_D12_SkipWhenWorktreeMissing(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
 	require.NoError(t, err)
 	d12 := findCheck(t, report, "D12")
-	assert.Equal(t, doctor.SeverityOK, d12.Severity)
+	assert.Equal(t, SeverityOK, d12.Severity)
 	assert.Equal(t, "Ops worktree lag not checked", d12.Message)
 }
 
@@ -224,10 +223,10 @@ func TestRun_D12_SkipWhenOriginRefMissing(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
 	require.NoError(t, err)
 	d12 := findCheck(t, report, "D12")
-	assert.Equal(t, doctor.SeverityOK, d12.Severity)
+	assert.Equal(t, SeverityOK, d12.Severity)
 	assert.Equal(t, "Ops worktree lag not checked", d12.Message)
 }
 
@@ -237,10 +236,10 @@ func TestRun_D12_OKWhenInSync(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
 	require.NoError(t, err)
 	d12 := findCheck(t, report, "D12")
-	assert.Equal(t, doctor.SeverityOK, d12.Severity)
+	assert.Equal(t, SeverityOK, d12.Severity)
 	assert.Equal(t, "Ops worktree is not behind origin/_armature", d12.Message)
 }
 
@@ -253,10 +252,10 @@ func TestRun_D12_ErrorWhenBehindOrigin(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
 	require.NoError(t, err)
 	d12 := findCheck(t, report, "D12")
-	assert.Equal(t, doctor.SeverityError, d12.Severity)
+	assert.Equal(t, SeverityError, d12.Severity)
 	assert.Contains(t, d12.Message, "behind origin/_armature")
 	assert.NotContains(t, d12.Message, "Could not fetch")
 	require.Equal(t, []string{"1"}, d12.Items)
@@ -271,10 +270,10 @@ func TestRun_D12_ErrorWhenFetchFailsNotBehind(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
 	require.NoError(t, err)
 	d12 := findCheck(t, report, "D12")
-	assert.Equal(t, doctor.SeverityError, d12.Severity)
+	assert.Equal(t, SeverityError, d12.Severity)
 	assert.Contains(t, d12.Message, "Could not fetch origin/_armature")
 	assert.Contains(t, d12.Message, "may be stale")
 	require.NotEmpty(t, d12.Items)
@@ -292,10 +291,10 @@ func TestRun_D12_ErrorWhenFetchFailsBehind(t *testing.T) {
 	issuesDir := initIssuesDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
 
-	report, err := doctor.Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
 	require.NoError(t, err)
 	d12 := findCheck(t, report, "D12")
-	assert.Equal(t, doctor.SeverityError, d12.Severity)
+	assert.Equal(t, SeverityError, d12.Severity)
 	assert.Contains(t, d12.Message, "Could not fetch origin/_armature")
 	assert.Contains(t, d12.Message, "may be stale")
 	assert.Contains(t, d12.Message, "behind")

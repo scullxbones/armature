@@ -61,12 +61,12 @@ func (r Report) HasWarnings() bool {
 
 var issueIDPattern = regexp.MustCompile(`\b([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+)\b`)
 
-func RunChecks(index materialize.Index, allIssues map[string]*materialize.Issue, opsTargetIDs []string, repoPath string, now time.Time) Report {
+func runChecks(index materialize.Index, allIssues map[string]*materialize.Issue, repoPath string, now time.Time) Report {
 	configPath := ""
 	if repoPath != "" {
 		configPath = filepath.Join(repoPath, ".armature", "config.json")
 	}
-	return Report{Checks: indexedChecks(index, allIssues, opsTargetIDs, repoPath, now, nil, nil, configPath)}
+	return Report{Checks: indexedChecks(index, allIssues, nil, repoPath, now, nil, nil, configPath)}
 }
 
 var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}
@@ -130,9 +130,9 @@ func indexedChecks(
 	}
 	checks = append(checks, afterD6...)
 	return append(checks,
-		CheckD8ScopeViolations(index, allIssues, repoPath, now),
+		checkD8ScopeViolations(index, allIssues, repoPath, now),
 		checkD9UnrecognizedWorktrees(repoPath, allIssues, now),
-		CheckD10ConfigHealth(configPath),
+		checkD10ConfigHealth(configPath),
 	)
 }
 
@@ -550,10 +550,10 @@ func checkD9UnrecognizedWorktrees(repoPath string, allIssues map[string]*materia
 		return Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
 	}
 	result := worktree.Reconcile(worktrees, worktreeFacts(allIssues, now), worktree.CanonicalRoot(repoPath))
-	return EvaluateD9UnrecognizedWorktrees(result.Unrecognized)
+	return evaluateD9UnrecognizedWorktrees(result.Unrecognized)
 }
 
-func EvaluateD9UnrecognizedWorktrees(unrecognized []string) Finding {
+func evaluateD9UnrecognizedWorktrees(unrecognized []string) Finding {
 	f := Finding{Check: "D9", Severity: SeverityOK, Message: "No unrecognized managed worktrees"}
 	if len(unrecognized) > 0 {
 		items := append([]string(nil), unrecognized...)
@@ -580,10 +580,10 @@ func checkD12OpsWorktreeLag(worktreePath string) Finding {
 	if err != nil {
 		return skip
 	}
-	return EvaluateD12OpsWorktreeLag(behind, fetchErr)
+	return evaluateD12OpsWorktreeLag(behind, fetchErr)
 }
 
-func EvaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
+func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 	f := Finding{Check: "D12", Severity: SeverityOK, Message: "Ops worktree is not behind origin/_armature"}
 	if behind > 0 {
 		f.Severity = SeverityError

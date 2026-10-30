@@ -16,7 +16,7 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// CheckD8ScopeViolations reports out-of-scope artifacts among git-dirty paths
+// checkD8ScopeViolations reports out-of-scope artifacts among git-dirty paths
 // for active or recently completed tasks. Candidates come from
 // findOutOfScopeArtifacts, which reads `git status --porcelain` (untracked or
 // uncommitted-modified paths). A porcelain probe error is a D8 error, not a
@@ -25,7 +25,7 @@ import (
 // directories are treated as general hygiene. A dirty path covered by another
 // active or recently completed task's scope is not reported as a violation of a
 // different task.
-func CheckD8ScopeViolations(index materialize.Index, allIssues map[string]*materialize.Issue, repoPath string, now time.Time) Finding {
+func checkD8ScopeViolations(index materialize.Index, allIssues map[string]*materialize.Issue, repoPath string, now time.Time) Finding {
 	f := Finding{
 		Check:    "D8",
 		Severity: SeverityOK,

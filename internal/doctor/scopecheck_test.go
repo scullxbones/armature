@@ -1,4 +1,4 @@
-package doctor_test
+package doctor
 
 import (
 	"os"
@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/harnesspolicy"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/stretchr/testify/assert"
@@ -46,8 +45,8 @@ func TestDoctorScopeCheck_REQ_TOPTIER_S5_T2(t *testing.T) {
 			},
 		}
 
-		finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-		assert.Equal(t, doctor.SeverityError, finding.Severity)
+		finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+		assert.Equal(t, SeverityError, finding.Severity)
 		assert.Equal(t, "D8", finding.Check)
 		require.NotEmpty(t, finding.Items)
 		found := false
@@ -101,8 +100,8 @@ func TestDoctorScopeCheck_REQ_TOPTIER_S5_T2(t *testing.T) {
 			},
 		}
 
-		finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-		assert.Equal(t, doctor.SeverityError, finding.Severity)
+		finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+		assert.Equal(t, SeverityError, finding.Severity)
 		require.NotEmpty(t, finding.Items)
 		found := false
 		for _, item := range finding.Items {
@@ -125,8 +124,8 @@ func TestCheckD8ScopeViolations_NoActiveTasks_REQ_TOPTIER_S5_T2(t *testing.T) {
 	err := os.WriteFile(untracked, []byte("content"), 0o644)
 	require.NoError(t, err)
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, time.Now())
-	assert.Equal(t, doctor.SeverityOK, finding.Severity)
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, time.Now())
+	assert.Equal(t, SeverityOK, finding.Severity)
 }
 
 func TestCheckD8ScopeViolations_NoOutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testing.T) {
@@ -155,8 +154,8 @@ func TestCheckD8ScopeViolations_NoOutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testi
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, time.Now())
-	assert.Equal(t, doctor.SeverityOK, finding.Severity)
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, time.Now())
+	assert.Equal(t, SeverityOK, finding.Severity)
 }
 
 func TestCheckD8ScopeViolations_OutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testing.T) {
@@ -194,8 +193,8 @@ func TestCheckD8ScopeViolations_OutOfScopeArtifacts_REQ_TOPTIER_S5_T2(t *testing
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-	assert.Equal(t, doctor.SeverityError, finding.Severity)
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, SeverityError, finding.Severity)
 	assert.Equal(t, "D8", finding.Check)
 	require.NotEmpty(t, finding.Items)
 	assert.Contains(t, finding.Items, "TASK-001: cmd/main.go")
@@ -230,8 +229,8 @@ func TestCheckD8ScopeViolations_CommittedOutOfScopeFile_REQ_TOPTIER_S5_T2(t *tes
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-	assert.Equal(t, doctor.SeverityOK, finding.Severity, "committed out-of-scope files must not be flagged: %v", finding.Items)
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, SeverityOK, finding.Severity, "committed out-of-scope files must not be flagged: %v", finding.Items)
 	assert.Empty(t, finding.Items)
 }
 
@@ -266,8 +265,8 @@ func TestCheckD8ScopeViolations_IgnoresGeneralHygiene_REQ_TOPTIER_S5_T2(t *testi
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-	assert.Equal(t, doctor.SeverityOK, finding.Severity)
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, SeverityOK, finding.Severity)
 }
 
 func TestCheckD8ScopeViolations_DoesNotCrossAttributeBetweenActiveTasks_REQ_TOPTIER_S5_T2(t *testing.T) {
@@ -305,11 +304,11 @@ func TestCheckD8ScopeViolations_DoesNotCrossAttributeBetweenActiveTasks_REQ_TOPT
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
 	for _, item := range finding.Items {
 		assert.NotEqual(t, "TASK-B: internal/a/foo.go", item, "TASK-A's in-scope file must not be cross-attributed to TASK-B: %v", finding.Items)
 	}
-	assert.Equal(t, doctor.SeverityOK, finding.Severity,
+	assert.Equal(t, SeverityOK, finding.Severity,
 		"no genuine out-of-scope artifact exists; TASK-A's file is explained by TASK-A's own scope: %v", finding.Items)
 }
 
@@ -340,8 +339,8 @@ func TestCheckD8ScopeViolations_RecentlyCompleted_REQ_TOPTIER_S5_T2(t *testing.T
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-	assert.Equal(t, doctor.SeverityError, finding.Severity, "in-grace-period out-of-scope artifact should be flagged")
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, SeverityError, finding.Severity, "in-grace-period out-of-scope artifact should be flagged")
 	assert.Equal(t, "D8", finding.Check)
 	assert.Contains(t, finding.Items, "TASK-001: stray.bin")
 }
@@ -373,8 +372,8 @@ func TestCheckD8ScopeViolations_RecentlyCompleted_OutsideGracePeriod_REQ_TOPTIER
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-	assert.Equal(t, doctor.SeverityOK, finding.Severity, "out-of-grace-period task should not be checked")
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, SeverityOK, finding.Severity, "out-of-grace-period task should not be checked")
 }
 
 func TestCheckD8ScopeViolations_GitDirtyProbeFailure(t *testing.T) {
@@ -394,9 +393,9 @@ func TestCheckD8ScopeViolations_GitDirtyProbeFailure(t *testing.T) {
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, notGit, now)
+	finding := checkD8ScopeViolations(index, allIssues, notGit, now)
 	assert.Equal(t, "D8", finding.Check)
-	assert.Equal(t, doctor.SeverityError, finding.Severity)
+	assert.Equal(t, SeverityError, finding.Severity)
 	assert.Equal(t, "Could not list git-dirty paths", finding.Message)
 	require.NotEmpty(t, finding.Items)
 	assert.Contains(t, finding.Items[0], "git status --porcelain")
@@ -419,7 +418,7 @@ func TestCheckD8ScopeViolations_EmptyDirtySetIsOK(t *testing.T) {
 		},
 	}
 
-	finding := doctor.CheckD8ScopeViolations(index, allIssues, tmpDir, now)
-	assert.Equal(t, doctor.SeverityOK, finding.Severity, "empty dirty set must not be treated as a probe failure: %v", finding.Items)
+	finding := checkD8ScopeViolations(index, allIssues, tmpDir, now)
+	assert.Equal(t, SeverityOK, finding.Severity, "empty dirty set must not be treated as a probe failure: %v", finding.Items)
 	assert.Empty(t, finding.Items)
 }

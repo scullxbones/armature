@@ -564,17 +564,13 @@
       ]
     },
     "internal/doctor": {
-      "count": 35,
+      "count": 31,
       "names": [
-        "CheckD10ConfigHealth",
-        "CheckD8ScopeViolations",
         "CheckIDsDocRelPath",
         "CheckReservation",
         "CheckReservation.ID",
         "CheckReservation.Issue",
         "CheckReservation.Planned",
-        "EvaluateD12OpsWorktreeLag",
-        "EvaluateD9UnrecognizedWorktrees",
         "Finding",
         "Finding.Check",
         "Finding.Items",
@@ -595,11 +591,11 @@
         "Report.HasErrors",
         "Report.HasWarnings",
         "Run",
-        "RunChecks",
         "Severity",
         "SeverityError",
         "SeverityOK",
         "SeverityWarning",
+        "UnhealthyConfig",
         "WriteCheckIDsDoc"
       ]
     },
