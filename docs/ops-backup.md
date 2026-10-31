@@ -66,9 +66,12 @@ From a clone that can see the current published tip:
 # Refresh the remote tip (best-effort)
 git fetch origin _armature
 
-# Write a self-contained bundle you can store offline or in object storage
+# Point a local refs/heads/_armature at that tip so the bundle advertises the
+# same name restore will fetch (bundle create takes rev-list args, not push
+# refspecs — do not leave the tip only as refs/remotes/origin/_armature).
+git update-ref refs/heads/_armature refs/remotes/origin/_armature
 git bundle create "/path/to/backups/armature-ops-$(date -u +%Y%m%dT%H%MZ).bundle" \
-  origin/_armature
+  refs/heads/_armature
 
 # Optional integrity check
 git bundle verify "/path/to/backups/armature-ops-….bundle"
@@ -78,8 +81,8 @@ Restore into a clone (or a throwaway remote) when the forge tip is gone or wrong
 
 ```bash
 git fetch /path/to/backups/armature-ops-….bundle refs/heads/_armature:refs/remotes/backup/_armature
-# Inspect, then push the recovered tip to origin only when you intend to rewrite
-# the shared coordination tip. Prefer force-push protection on origin/_armature.
+# Inspect the recovered tip, then publish it under the rules in "After restore"
+# (I2: never overwrite a live shared origin/_armature tip).
 ```
 
 Schedule the bundle however you already schedule backups (cron, CI artifact,
@@ -91,12 +94,11 @@ Keep a forge or bare repo that only mirrors `_armature`:
 
 ```bash
 git remote add ops-backup git@example.com:org/armature-ops-mirror.git
-git push ops-backup origin/_armature:refs/heads/_armature
+git push ops-backup refs/remotes/origin/_armature:refs/heads/_armature
 ```
 
 After high-stakes publishes (or on a timer), push again. On disaster, fetch from
-`ops-backup` and restore `origin/_armature` from that tip the same way you would
-from a bundle.
+`ops-backup` and restore under the same publish rules as a bundle restore.
 
 Protect `origin/_armature` against force-push on the primary forge when the host
 allows branch rules separate from PR requirements. Local worktrees may still
@@ -107,15 +109,30 @@ copy.
 
 ## After restore
 
-1. Confirm `git ls-remote origin refs/heads/_armature` points at the tip you
-   intended.
-2. In each active clone: `git -C .arm fetch origin _armature` (or your ops
-   worktree path) and fast-forward or reset only with operator intent.
-3. Run `arm validate --ci` and `arm doctor`. Expect D12-style lag warnings until
+Recovery must stay inside I2's append-only invariant: do **not** overwrite a
+live shared `origin/_armature` tip. Publish the recovered tip only as follows:
+
+1. Confirm what origin currently has:
+   `git ls-remote origin refs/heads/_armature`.
+2. Load the recovered tip (from the bundle or second remote) into a local ref
+   you can inspect, e.g. `refs/remotes/backup/_armature`.
+3. **Publish path (missing tip or fast-forward only):**
+   - If `origin/_armature` is **missing**, push the recovered tip as a fresh
+     branch: `git push origin refs/remotes/backup/_armature:refs/heads/_armature`.
+   - If `origin/_armature` still exists and the recovered tip is a **fast-forward**
+     of that tip, push that fast-forward the same way.
+4. **Diverged tip (not a fast-forward):** do **not** push to
+   `refs/heads/_armature`. Push the recovered history aside and escalate:
+   `git push origin refs/remotes/backup/_armature:refs/heads/_armature-recovered`.
+   Stop. Operators decide how to reconcile; Armature will not invent a merge
+   across divergent orphan histories for you. There is no automated backup and
+   no product command that overwrites the shared tip.
+5. In each active clone: `git -C .arm fetch origin _armature` (or your ops
+   worktree path) and fast-forward local ops tracking to the published tip once
+   origin is healthy again.
+6. Run `arm validate --ci` and `arm doctor`. Expect D12-style lag warnings until
    every clone catches up; do not treat green D12 as proof the tip was never
-   rewritten.
-4. Re-publish only from the recovered tip. Do not invent merge commits across
-   divergent orphan histories unless you have a written recovery plan.
+   damaged.
 
 ---
 
