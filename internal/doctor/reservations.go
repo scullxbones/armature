@@ -9,7 +9,7 @@ import (
 // CheckReservation is a git-tracked claim on a doctor check ID that is not yet
 // emitted by Run. Planners allocate against LiveCheckIDs plus these rows so a
 // held story cannot collide with a live ID. S12 is authorized for the
-// CLAIMORD-W21 cascade: TOPTIER-S12-T2 reserves D11.
+// CLAIMORD-W21 cascade: TOPTIER-S12-T2 reserves D11; TOPTIER-S18-T4 reserves D14.
 type CheckReservation struct {
 	ID      string
 	Issue   string
@@ -26,6 +26,11 @@ var openReservations = []CheckReservation{
 		ID:      "D13",
 		Issue:   "LNGHZN-S11-T4",
 		Planned: "Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run.",
+	},
+	{
+		ID:      "D14",
+		Issue:   "TOPTIER-S18-T4",
+		Planned: "Warn when a done issue has a merged parent; exclude merged-under-cancelled (ORCRUN). Remove this row when the check is wired into Run.",
 	},
 }
 
