@@ -228,6 +228,17 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
+        worker-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/worker/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/google/uuid"
+            - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/claim"
+            - "github.com/scullxbones/armature/internal/filelock"
         deliverygate-boundary:
           list-mode: strict
           files:

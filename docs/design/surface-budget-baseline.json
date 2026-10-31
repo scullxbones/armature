@@ -2064,10 +2064,9 @@
       ]
     },
     "internal/worker": {
-      "count": 27,
+      "count": 23,
       "names": [
         "CheckWorkerID",
-        "EnableWorktreeConfig",
         "GetWorkerID",
         "Identity",
         "Identity.ID",
@@ -2082,17 +2081,14 @@
         "IdentityInput.RepoPath",
         "IdentityInput.WorktreeGitConfigID",
         "Init",
-        "InitWorker",
         "InitWorkerInput",
         "InitWorkerInput.ID",
         "InitWorkerInput.IssuesDir",
         "InitWorkerInput.RepoPath",
         "InitWorkerInput.Reuse",
         "LockLogID",
-        "MaxWorkerIDLen",
         "ResolveIdentity",
-        "ValidateLogSlot",
-        "ValidateWorkerID"
+        "ValidateLogSlot"
       ]
     },
     "internal/worktree": {

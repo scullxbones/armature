@@ -1422,7 +1422,7 @@ func runRepoSetup(cmd *cobra.Command, repoPath string) (RepoSetupResult, error) 
 	}
 
 	if ok, _ := worker.CheckWorkerID(repoPath); !ok {
-		if _, err := worker.InitWorker(repoPath); err != nil {
+		if _, err := worker.Init(worker.InitWorkerInput{RepoPath: repoPath}); err != nil {
 			return RepoSetupResult{}, fmt.Errorf("init worker: %w", err)
 		}
 	}

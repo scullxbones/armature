@@ -143,7 +143,7 @@ Stdout (pretty JSON): `{ "repo_setup": { "status": "initialized" | "already_init
 "$ARM" --repo "$TARGET" worker-init --check || "$ARM" --repo "$TARGET" worker-init
 ```
 
-Stdout: `Worker ID: <uuid>`. Durable handle: `git -C "$TARGET" config --get armature.worker-id`. Bootstrap already calls `InitWorker` when unset. **Without `--check`, `worker-init` always writes a new UUID** (overwrites). Use `--check` unless you intend to rotate identity.
+Stdout: `Worker ID: <uuid>`. Durable handle: `git -C "$TARGET" config --get armature.worker-id`. Bootstrap already calls `Init` when unset. **Without `--check`, `worker-init` always writes a new UUID** (overwrites). Use `--check` unless you intend to rotate identity.
 
 **create** (tasks must satisfy E6 or the write is refused as a Graph Finding):
 
