@@ -16,15 +16,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// checkD8ScopeViolations reports out-of-scope artifacts among git-dirty paths
-// for active or recently completed tasks. Candidates come from
-// findOutOfScopeArtifacts, which reads `git status --porcelain` (untracked or
-// uncommitted-modified paths). A porcelain probe error is a D8 error, not a
-// clean tree. It does not walk the filesystem. Committed files
-// outside a task's scope are not flagged. Root-level config files and non-code
-// directories are treated as general hygiene. A dirty path covered by another
-// active or recently completed task's scope is not reported as a violation of a
-// different task.
 func checkD8ScopeViolations(index materialize.Index, allIssues map[string]*materialize.Issue, repoPath string, now time.Time) Finding {
 	f := Finding{
 		Check:    "D8",

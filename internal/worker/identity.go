@@ -68,7 +68,6 @@ func CheckWorkerID(repoPath string) (bool, string) {
 	return true, id
 }
 
-// validateWorkerID enforces filename-safe ids. Never silently coerce.
 func validateWorkerID(id string) error {
 	if !workerIDPattern.MatchString(id) || reservedDOSNames[id] {
 		return claim.ErrWorkerIDInvalid
