@@ -37,7 +37,7 @@ func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) 
 	reserved := parseReservedRows(t, string(got))
 	require.NotEmpty(t, reserved, "open-reservation table must not be empty")
 	assert.Contains(t, reserved, reservedRow{id: "D11", issue: "TOPTIER-S12-T2"},
-		"TOPTIER-S12-T2 must reserve planned D11 (S12 remains held; do not implement T2 here)")
+		"TOPTIER-S12-T2 must reserve planned D11 (S12 authorized for CLAIMORD-W21 cascade)")
 
 	liveSet := make(map[string]struct{}, len(liveFromDoc))
 	for _, id := range liveFromDoc {

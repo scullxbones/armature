@@ -8,8 +8,8 @@ import (
 
 // CheckReservation is a git-tracked claim on a doctor check ID that is not yet
 // emitted by Run. Planners allocate against LiveCheckIDs plus these rows so a
-// held story cannot collide with a live ID. S12 remains held: TOPTIER-S12-T2
-// reserves D11 only and does not implement the check.
+// held story cannot collide with a live ID. S12 is authorized for the
+// CLAIMORD-W21 cascade: TOPTIER-S12-T2 reserves D11.
 type CheckReservation struct {
 	ID      string
 	Issue   string
@@ -20,7 +20,7 @@ var openReservations = []CheckReservation{
 	{
 		ID:      "D11",
 		Issue:   "TOPTIER-S12-T2",
-		Planned: "Ops-branch backup / disaster-recovery doctor check (narrow-gaps G2.2). S12 remains held; this row reserves D11 only.",
+		Planned: "Ops-branch backup / disaster-recovery doctor check (narrow-gaps G2.2). S12 is authorized for the CLAIMORD-W21 cascade; reserves D11 for S12-T2.",
 	},
 	{
 		ID:      "D13",
