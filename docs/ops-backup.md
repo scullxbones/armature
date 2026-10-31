@@ -24,9 +24,11 @@ and transitions only after that branch is published. Armature does **not**:
 - Detect or recover from a deleted, corrupted, or force-pushed ops tip
 - Promise that local `.arm/` / ops worktree history alone is a complete backup
 
-Doctor **D12** warns about lag behind a healthy `origin/_armature`. It does not
-cover missing upstream, corruption, or rewritten history. That is the D11
-reservation. Until D11 ships, nothing in `arm doctor` names this class of loss.
+Doctor **D12** is an error when the ops worktree lags behind a healthy
+`origin/_armature` (plain `arm doctor` exits 1; see `docs/commands.md` § D12).
+It does not cover missing upstream, corruption, or rewritten history. That is
+the D11 reservation. Until D11 ships, nothing in `arm doctor` names this class
+of loss.
 
 ---
 
@@ -56,7 +58,10 @@ growth; they assume the branch still exists.
 
 ## Manual stopgap recipe (G2.3)
 
-Use one or both. Neither is automated by Armature.
+Use one or both. Neither is automated by Armature. Every push, mirror, or
+bundle of the published tip is preceded by
+`git fetch origin +refs/heads/_armature:refs/remotes/origin/_armature` and
+reads that tracking ref — never a short-form fetch / bare `FETCH_HEAD`.
 
 ### A. Periodic git bundle of `_armature`
 
@@ -101,15 +106,25 @@ human checklist). Armature does not schedule it.
 
 ### B. Second remote
 
-Keep a forge or bare repo that only mirrors `_armature`:
+Keep a forge or bare repo that only mirrors `_armature`. Every mirror push
+refreshes `refs/remotes/origin/_armature` first (same catch-up refspec as recipe
+A); otherwise a stale tracking tip is what gets mirrored.
 
 ```bash
 git remote add ops-backup git@example.com:org/armature-ops-mirror.git
+git fetch origin +refs/heads/_armature:refs/remotes/origin/_armature
 git push ops-backup refs/remotes/origin/_armature:refs/heads/_armature
 ```
 
-After high-stakes publishes (or on a timer), push again. On disaster, fetch from
-`ops-backup` and restore under the same publish rules as a bundle restore.
+After high-stakes publishes (or on a timer), refresh then push again:
+
+```bash
+git fetch origin +refs/heads/_armature:refs/remotes/origin/_armature
+git push ops-backup refs/remotes/origin/_armature:refs/heads/_armature
+```
+
+On disaster, fetch from `ops-backup` and restore under the same publish rules as
+a bundle restore.
 
 Protect `origin/_armature` against force-push on the primary forge when the host
 allows branch rules separate from PR requirements. Local worktrees may still
@@ -148,9 +163,9 @@ live shared `origin/_armature` tip. Publish the recovered tip only as follows:
    `FetchTrackingRefWithoutMovingHEAD` in `internal/adapters/git.go`). Then
    fast-forward local ops against `refs/remotes/origin/_armature` — never a
    short-form `fetch origin _armature` / bare `FETCH_HEAD`.
-6. Run `arm validate --ci` and `arm doctor`. Expect D12-style lag warnings until
-   every clone catches up; do not treat green D12 as proof the tip was never
-   damaged.
+6. Run `arm validate --ci` and `arm doctor`. Expect D12 lag errors (plain
+   `arm doctor` exits 1) until every clone catches up; do not treat green D12 as
+   proof the tip was never damaged.
 
 ---
 
