@@ -5795,3 +5795,4 @@
 ["note","bug-1783480206",1793475883,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Grooming 2026-10-31: remaining trls sites are tui/app/model.go, worker/identity.go, orphan .claude/worktrees/agent-a9118b4f. doctor.go and exitcodes already clean. Title still mentions doctor (title not amendable).","note_id":"note-1793475883624865153"},1]
 ["claim","TOPTIER-S12-T1",1793478544,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"ttl":60,"worktree_path":"/home/brian/development/armature-wt-s12-t1","claim_token":"24d16372bb32ef894f802be8d0d1731c"},1]
 ["heartbeat","TOPTIER-S12-T1",1793479482,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{},1]
+["note","TOPTIER-S12-T1",1793479678,"5207ee28-cdd8-48e6-98dc-7da179d4a40d",{"msg":"Recovered deleted worktree at armature-wt-s12-t1; writing docs/ops-backup.md (G2.1/G2.3). Prior claim path was registered but directory missing.","note_id":"note-1793479678406156821"},1]
