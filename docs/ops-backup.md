@@ -130,17 +130,24 @@ live shared `origin/_armature` tip. Publish the recovered tip only as follows:
 3. **Publish path (missing tip or fast-forward only):**
    - If `origin/_armature` is **missing**, push the recovered tip as a fresh
      branch: `git push origin refs/remotes/backup/_armature:refs/heads/_armature`.
-   - If `origin/_armature` still exists and the recovered tip is a **fast-forward**
-     of that tip, push that fast-forward the same way.
-4. **Diverged tip (not a fast-forward):** do **not** push to
-   `refs/heads/_armature`. Push the recovered history aside and escalate:
+   - If `origin/_armature` still exists, refresh the tracking tip with
+     `git fetch origin +refs/heads/_armature:refs/remotes/origin/_armature`, then
+     push only when `refs/remotes/backup/_armature` is a **fast-forward** of
+     `refs/remotes/origin/_armature`.
+4. **Diverged tip (not a fast-forward of `refs/remotes/origin/_armature`):** do
+   **not** push to `refs/heads/_armature`. Push the recovered history aside and
+   escalate:
    `git push origin refs/remotes/backup/_armature:refs/heads/_armature-recovered`.
    Stop. Operators decide how to reconcile; Armature will not invent a merge
    across divergent orphan histories for you. There is no automated backup and
    no product command that overwrites the shared tip.
-5. In each active clone: `git -C .arm fetch origin _armature` (or your ops
-   worktree path) and fast-forward local ops tracking to the published tip once
-   origin is healthy again.
+5. In each active clone (including `--single-branch` checkouts whose
+   `remote.origin.fetch` excludes `_armature`): refresh the tracking tip with
+   `git -C .arm fetch origin +refs/heads/_armature:refs/remotes/origin/_armature`
+   (or your ops worktree path; same pattern as
+   `FetchTrackingRefWithoutMovingHEAD` in `internal/adapters/git.go`). Then
+   fast-forward local ops against `refs/remotes/origin/_armature` — never a
+   short-form `fetch origin _armature` / bare `FETCH_HEAD`.
 6. Run `arm validate --ci` and `arm doctor`. Expect D12-style lag warnings until
    every clone catches up; do not treat green D12 as proof the tip was never
    damaged.
