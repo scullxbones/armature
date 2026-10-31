@@ -12,10 +12,11 @@ Statuses below audited 2026-10-24 with `arm show`. Re-audit before dispatch.
 
 v0.1.0 is shipped (`TOPTIER-S6` / `TOPTIER-S6-T3` **merged**; tag `v0.1.0`). Post-cut leftovers on the docs/CLAIMORD trains are **merged** on ops and `main` (S7-T2 #324, S8 #316, S15-T2 #378, S16-T1/T2 #326/#379, CLAIMORD W11–W14 + W20 #277–#281). `arm ready` is not a dispatch order. A coordinator that picks the first ready issue will treat held docs and Tier C extensibility as equal to real next work.
 
-1. **`CLAIMORD-W21`** is next on the CLAIMORD chain, but **not ready**: still waits on `bug-1783480206` (behind the S12 / `TOPTIER-S18-T4` doctor cascade). W13, W14, and W20 are **merged**. Do not start W21 under the S12 hold.
+1. **`CLAIMORD-W21`** is next on the CLAIMORD chain, but **not ready**: still waits on `bug-1783480206` (behind the S12 / `TOPTIER-S18-T4` doctor cascade). W13, W14, and W20 are **merged**. Do not start W21 under the S12 hold. This garden does not lift the S12 hold.
 2. **Hold item 22, `TOPTIER-S12`.** Leave it unless Brian needs G2. `TOPTIER-S18-T4` and item 24's T4 (doctor **D13**) wait on S12-T2 / related holders. That wait is not a reason to lift the hold. Doctor **D11** stays reserved for S12-T2. **D12** already landed (PR #198).
 3. **Do not treat these as the successor queue.** `TOPTIER-S12-T1` (held), `TOPTIER-S14` / `TOPTIER-S14-T1` (Tier C, ready), and `bug-1783480206` (waits on S18-T4).
-4. **Pick a backlog theme** from the remaining Tier B/C rows below. Do not invent a next release number until a cut task is filed.
+4. **Preferred backlog theme today: item 28a, `HOSTREF-S1`** (host-ref / GitHub Issues join). Ready children include `HOSTREF-S1-T1` and `HOSTREF-S1-T3`. Parent epic IDs `HOSTREF` and `MCPSTDIO` are absent; the stories are roots today. Bidirectional GitHub Issues sync remains a non-goal under tripwire **T3**. Item **28b** (`MCPSTDIO-S1`) follows after the host-ref CLI tasks it names; [ADR 0024](../adr/0024-arm-mcp-stdio-session-is-not-t1.md) amends **T1** so a harness-spawned `arm mcp` stdio session that lives only as long as the parent's stdio pipes and exits on EOF is not a long-running process.
+5. **Other Tier B/C themes** remain available when host-ref is not the pick. Do not invent a next release number until a cut task is filed.
 
 ## Still open
 
@@ -28,6 +29,8 @@ v0.1.0 is shipped (`TOPTIER-S6` / `TOPTIER-S6-T3` **merged**; tag `v0.1.0`). Pos
 | 25 | Redesign transition hooks | LH D2 | not yet decomposed |
 | 26 | Event stream (`arm events --follow`) | LH F3 | not yet decomposed |
 | 28 | The Harness Compatibility Contract | Next-Ten №08 | not yet decomposed |
+| 28a | Host-ref / GitHub Issues join | `docs/design/host-ref.md` | `HOSTREF-S1` (story root; no `HOSTREF` epic). Name ordered GitHub issue URLs, show current without fetch, print title/body once. Bidirectional Issues sync remains a non-goal under tripwire **T3**. Ready entry points: `HOSTREF-S1-T1`, `HOSTREF-S1-T3` |
+| 28b | Session stdio MCP (`arm mcp`) | session-stdio design (source `7c9ac726-…`) | `MCPSTDIO-S1` (story root; no `MCPSTDIO` epic). `blocked_by` `HOSTREF-S1-T5`, `HOSTREF-S1-T6`, and `HOSTREF-S1-T9`. One invoked stdio session with one tool `arm`; [ADR 0024](../adr/0024-arm-mcp-stdio-session-is-not-t1.md) amends **T1** so a harness-spawned `arm mcp` stdio session that lives only as long as the parent's stdio pipes and exits on EOF is not a long-running process (no listening socket or port, no detaching or daemonizing, no surviving the parent, no background work after EOF) |
 | 29 | Model-tier dispatch policy | LH C8 | not yet decomposed |
 | 32 | The Second Substrate (foreign-repo dogfood) | Next-Ten №06 | not yet decomposed (dogfood themes from the v0.1.0 cut are optional backlog) |
 | 33 | Session handoff bundle | LH C10 | not yet decomposed |
