@@ -50,6 +50,7 @@ reserved for `TOPTIER-S12-T2`.
 |----|-------|--------|
 | `D11` | `TOPTIER-S12-T2` | Ops-branch backup / disaster-recovery doctor check (narrow-gaps G2.2). S12 is authorized for the CLAIMORD-W21 cascade; reserves D11 for S12-T2. |
 | `D13` | `LNGHZN-S11-T4` | Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run. |
+| `D14` | `TOPTIER-S18-T4` | Warn when a done issue has a merged parent; exclude merged-under-cancelled (ORCRUN). Remove this row when the check is wired into Run. |
 
 ## Allocating a new ID
 
