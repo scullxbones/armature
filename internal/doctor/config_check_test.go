@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDoctorConfigCheckD9_REQ_LNGHZN_S7_T2(t *testing.T) {
+func TestDoctorConfigCheckD10_REQ_LNGHZN_S7_T2(t *testing.T) {
 	t.Parallel()
 
 	t.Run("unknown_field_is_error_naming_key", func(t *testing.T) {
