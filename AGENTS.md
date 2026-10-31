@@ -19,7 +19,7 @@ Go project. Build with `make`, not raw `go build`. Writing python tools is a las
 
 **Non-goals:** not a CI system (N1); not an agent framework (N2); not a chat bus (N3); not a merge authority (N4); not a human-first PM suite (N5).
 
-**Tripwires** — dies on contact, cite don't re-argue: needs a long-running process (T1); rewrites history (T2); syncs bidirectionally with a mutable remote (T3).
+**Tripwires** — dies on contact, cite don't re-argue: needs a long-running process (T1; amended by ADR 0024); rewrites history (T2); syncs bidirectionally with a mutable remote (T3).
 
 ## First-time setup
 

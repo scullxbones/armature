@@ -14,7 +14,7 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0006](0006-eliminate-single-branch-mode.md) | Eliminate Single-Branch Mode | Accepted |
 | [0007](0007-path-based-issue-binding-resolution.md) | Path-Based Issue Binding Resolution in the Harness Hook | Accepted |
 | [0008](0008-execution-evidence-in-semantic-review.md) | Admit Harness-Recorded Execution Evidence Into Semantic Review, Upgrade-Only | Accepted (amended by ADR-0022) |
-| [0009](0009-ratify-the-armature-constitution.md) | Ratify the Armature Constitution | Accepted |
+| [0009](0009-ratify-the-armature-constitution.md) | Ratify the Armature Constitution | Accepted (amended by ADR-0024) |
 | [0010](0010-park-not-purge-subtractive-release.md) | Parked Surfaces Are Deleted Outright, Not Soft-Deprecated | Accepted |
 | [0011](0011-cli-groups-mirror-deep-modules.md) | CLI Command Groups Are Discovered From Deep Module Boundaries | Accepted |
 | [0012](0012-context-files-intent-lifecycle-and-cli-semantics.md) | Context Files Intent, Lifecycle, and CLI Semantics | Accepted |
@@ -28,3 +28,4 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0020](0020-agent-error-contract.md) | Agent-grade error contract | Accepted |
 | [0022](0022-promotion-is-a-recorded-delivery.md) | Promotion Is a Recorded Delivery on the Target | Accepted (amends ADR-0005 and ADR-0008) |
 | [0023](0023-depguard-allow-list-widens-are-adr-class.md) | Widening a Depguard Fence Is ADR-Class | Accepted (amends ADR-0004) |
+| [0024](0024-arm-mcp-stdio-session-is-not-t1.md) | An `arm mcp` Stdio Session Is Not a T1 Long-Running Process | Accepted (amends ADR-0009) |

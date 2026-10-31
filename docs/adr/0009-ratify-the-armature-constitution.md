@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted — amended by ADR-0024 (`arm mcp` stdio session is not a T1 long-running process)
 
 ## Principles touched
 
