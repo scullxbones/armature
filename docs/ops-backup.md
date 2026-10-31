@@ -63,15 +63,26 @@ Use one or both. Neither is automated by Armature.
 From a clone that can see the current published tip:
 
 ```bash
-# Refresh the remote tip (best-effort)
-git fetch origin _armature
+# Refresh the remote tip with an explicit destination refspec so
+# refs/remotes/origin/_armature updates even when remote.origin.fetch
+# excludes _armature (same pattern as internal/adapters/git.go for
+# single-branch clones).
+git fetch origin +refs/heads/_armature:refs/remotes/origin/_armature
 
-# Point a local refs/heads/_armature at that tip so the bundle advertises the
-# same name restore will fetch (bundle create takes rev-list args, not push
-# refspecs — do not leave the tip only as refs/remotes/origin/_armature).
-git update-ref refs/heads/_armature refs/remotes/origin/_armature
-git bundle create "/path/to/backups/armature-ops-$(date -u +%Y%m%dT%H%MZ).bundle" \
+# Do NOT update-ref the live refs/heads/_armature (that rewinds unpublished
+# ops commits in an Armature checkout). Point a temporary ref at the tip,
+# then advertise refs/heads/_armature via a throwaway bare so list-heads
+# matches the restore fetch below (bundle create takes rev-list args, not
+# push refspecs — a remotes/ tracking name alone will not restore).
+git update-ref refs/bundle-backup/_armature refs/remotes/origin/_armature
+_tmp=$(mktemp -d /tmp/armature-ops-bundle-XXXXXX)
+git init --bare "$_tmp"
+git push "$_tmp" refs/bundle-backup/_armature:refs/heads/_armature
+git --git-dir="$_tmp" bundle create \
+  "/path/to/backups/armature-ops-$(date -u +%Y%m%dT%H%MZ).bundle" \
   refs/heads/_armature
+rm -rf "$_tmp"
+git update-ref -d refs/bundle-backup/_armature
 
 # Optional integrity check
 git bundle verify "/path/to/backups/armature-ops-….bundle"
