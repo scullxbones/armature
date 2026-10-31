@@ -27,13 +27,13 @@ func TestGenerateAndStoreWorkerID(t *testing.T) {
 	t.Parallel()
 	repo := initTempRepo(t)
 
-	id, err := InitWorker(repo)
+	ident, err := Init(InitWorkerInput{RepoPath: repo})
 	require.NoError(t, err)
-	assert.Len(t, id, 36)
+	assert.Len(t, ident.ID, 36)
 
 	got, err := GetWorkerID(repo)
 	require.NoError(t, err)
-	assert.Equal(t, id, got)
+	assert.Equal(t, ident.ID, got)
 }
 
 func TestGetWorkerID_NotSet(t *testing.T) {
@@ -51,7 +51,7 @@ func TestCheckWorkerID(t *testing.T) {
 	ok, _ := CheckWorkerID(repo)
 	assert.False(t, ok)
 
-	_, err := InitWorker(repo)
+	_, err := Init(InitWorkerInput{RepoPath: repo})
 	require.NoError(t, err)
 
 	ok, id := CheckWorkerID(repo)

@@ -16,7 +16,7 @@ import (
 func TestInvalidWorkerIDRejectedNamedError_REQ_CLAIMORD_W21(t *testing.T) {
 	t.Parallel()
 	for _, id := range []string{"ABC", "con", strings.Repeat("a", 65), "../x"} {
-		err := ValidateWorkerID(id)
+		err := validateWorkerID(id)
 		require.Error(t, err, id)
 		assert.ErrorIs(t, err, claim.ErrWorkerIDInvalid)
 		assert.Equal(t, "WORKER-ID-INVALID", err.Error())
@@ -120,7 +120,7 @@ func TestWorkerInitEnablesWorktreeConfigAndMovesCoreKeys_REQ_CLAIMORD_W21(t *tes
 	repo := initTempRepo(t)
 	gc := adapters.New(repo)
 	require.NoError(t, gc.SetGitConfig("core.worktree", repo))
-	require.NoError(t, EnableWorktreeConfig(repo))
+	require.NoError(t, enableWorktreeConfig(repo))
 	ext, err := gc.ReadGitConfig("extensions.worktreeConfig")
 	require.NoError(t, err)
 	assert.Equal(t, "true", ext)

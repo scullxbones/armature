@@ -16,9 +16,6 @@ import (
 
 const gitConfigKey = "armature.worker-id"
 
-// MaxWorkerIDLen is the filename cap (APFS case-insensitive + git).
-const MaxWorkerIDLen = 64
-
 var workerIDPattern = regexp.MustCompile(`^[a-z0-9_-]{1,64}$`)
 
 var reservedDOSNames = map[string]bool{
@@ -53,15 +50,6 @@ type InitWorkerInput struct {
 	Reuse     bool
 }
 
-// InitWorker generates a new worker UUID and stores it in git config.
-func InitWorker(repoPath string) (string, error) {
-	id, err := Init(InitWorkerInput{RepoPath: repoPath})
-	if err != nil {
-		return "", err
-	}
-	return id.ID, nil
-}
-
 // GetWorkerID reads the worker UUID from git config (worktree, then clone).
 func GetWorkerID(repoPath string) (string, error) {
 	ident, err := ResolveIdentity(IdentityInput{RepoPath: repoPath})
@@ -80,8 +68,8 @@ func CheckWorkerID(repoPath string) (bool, string) {
 	return true, id
 }
 
-// ValidateWorkerID enforces filename-safe ids. Never silently coerce.
-func ValidateWorkerID(id string) error {
+// validateWorkerID enforces filename-safe ids. Never silently coerce.
+func validateWorkerID(id string) error {
 	if !workerIDPattern.MatchString(id) || reservedDOSNames[id] {
 		return claim.ErrWorkerIDInvalid
 	}
@@ -131,7 +119,7 @@ func ResolveIdentity(in IdentityInput) (Identity, error) {
 	default:
 		return Identity{}, claim.ErrWorkerIDMissing
 	}
-	if err := ValidateWorkerID(id); err != nil {
+	if err := validateWorkerID(id); err != nil {
 		return Identity{}, err
 	}
 	stem := id
@@ -148,10 +136,10 @@ func ResolveIdentity(in IdentityInput) (Identity, error) {
 	return Identity{ID: stem, LogPath: filepath.Join(opsDir, stem+".log"), Source: source}, nil
 }
 
-// EnableWorktreeConfig turns on extensions.worktreeConfig in the shared repo
+// enableWorktreeConfig turns on extensions.worktreeConfig in the shared repo
 // config and moves core.bare / core.worktree into the main worktree config
 // as git requires.
-func EnableWorktreeConfig(repoPath string) error {
+func enableWorktreeConfig(repoPath string) error {
 	gc := adapters.New(repoPath)
 	if err := gc.SetGitConfig("extensions.worktreeConfig", "true"); err != nil {
 		return err
@@ -176,14 +164,14 @@ func Init(in InitWorkerInput) (Identity, error) {
 	if in.RepoPath == "" {
 		return Identity{}, fmt.Errorf("worker-init: repo path is required")
 	}
-	if err := EnableWorktreeConfig(in.RepoPath); err != nil {
+	if err := enableWorktreeConfig(in.RepoPath); err != nil {
 		return Identity{}, err
 	}
 	id := strings.TrimSpace(in.ID)
 	if id == "" {
 		id = uuid.New().String()
 	}
-	if err := ValidateWorkerID(id); err != nil {
+	if err := validateWorkerID(id); err != nil {
 		return Identity{}, err
 	}
 	if !in.Reuse {
