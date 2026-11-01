@@ -1,13 +1,13 @@
 # Product doctor health check
 
-`arm doctor` is the user-facing D1–D10, D12 health report for a **bootstrapped** repo: git/ops divergence, stale claims, orphaned ops, parent refs, cycles, uncited issues, worker-id mismatches, scope artifacts, unmanaged worktrees, config.json, ops-worktree lag. Exit 0 means no error-severity checks (warnings still print). D12 is an **error** when the ops worktree is behind `origin/_armature` after a successful fetch (plain doctor exits 1); fetch failure is also an error. This is distinct from the verification skill's isolation Doctor.
+`arm doctor` is the user-facing health report for a **bootstrapped** repo. Live checks, in `doctor.Run` order, are D1–D10 and D12: git/ops divergence, stale claims, orphaned ops, parent refs, cycles, uncited issues, worker-id mismatches, scope artifacts, unmanaged worktrees, config.json, ops-worktree lag. D11 is reserved for TOPTIER-S12-T2 and is not emitted. Exit 0 means no error-severity checks (warnings still print). D12 is an **error** when the ops worktree is behind `origin/_armature` after a successful fetch (plain doctor exits 1); fetch failure is also an error. This is distinct from the verification skill's isolation Doctor.
 
 ## Sub-features
 
-- Default report: JSON `{checks:[{check,severity,message,items?,verbose_items?}]}` under `--format agent|json` (`verbose_items` appears only on D3 under `--verbose`)
-- `--strict`: warnings become failing
-- `--verbose`: extra **D3** context only (adds a `verbose_items` field with `file:line` locations). It does **not** change D6 — D6 already lists uncited issue ids in `items` on every run. The flag's own help text claims otherwise; the output does not.
-- `--fix`: append ops to release expired `claimed` → `open` and expire `in-progress` → `blocked`. A third path also releases a claim whose worktree/branch has gone missing (`releaseMissingWorktreeClaim`, `internal/doctor/fix.go:219`), which is not TTL-driven. That missing-worktree repair runs only for claims owned by the invoking worker (`issue.ClaimedBy != workerID` is skipped in `PlanFixes`); another clone's live worktree is not visible locally, so a coordinator must not expect `doctor --fix` to release another worker's claim.
+- Default report: one envelope `{count, checks, help}` under `--format agent|json`. Each check is `{check, severity, message, items?, verbose_items?}`. `verbose_items` appears only on D3 under `--verbose`.
+- `--strict`: warnings become failing. Stderr is `doctor --strict: N warning(s) promoted to errors`. The envelope stays on stdout.
+- `--verbose`: extra **D3** context only (adds `verbose_items` with `file:line` locations; `Run` builds that map only when verbose). It does **not** change D6 — D6 already lists uncited issue ids in `items` on every run. The flag's own help text claims otherwise; the output does not.
+- `--fix`: append ops to release expired `claimed` → `open` and expire `in-progress` → `blocked`. A third path also releases a claim whose worktree/branch has gone missing (`releaseMissingWorktreeClaim` in `internal/doctor/fix.go`), which is not TTL-driven. That missing-worktree repair runs only for claims owned by the invoking worker (`issue.ClaimedBy != workerID` is skipped in `PlanFixes`); another clone's live worktree is not visible locally, so a coordinator must not expect `doctor --fix` to release another worker's claim.
 - `--dry-run` (only with `--fix`): print the plan, write no ops
 
 ## How to get to it (user POV)
@@ -18,7 +18,7 @@ After bootstrap:
 arm --repo "$TARGET" --format agent --non-interactive doctor
 ```
 
-Human prints `✓ D1: ...` lines. Unbootstrapped repos fail with `GENERAL-1` / `armature.ops-worktree-path must be set`.
+Human prints `✓ D1: ...` lines. Unbootstrapped repos fail with `DOCTOR-1` / `armature.ops-worktree-path must be set` and `next_actions` `arm bootstrap`, `arm worker-init`.
 
 ## Driving it with arm-verify.sh
 
@@ -32,24 +32,24 @@ Raw equivalent:
 
 ```bash
 "$ARM" --repo "$TARGET" --format agent --non-interactive doctor
-# second read: same command; checks D1–D10 present
+# second read: checks are exactly D1–D10, D12 in that order
 test -f "$TARGET/.armature/config.json"
 ```
 
 The drive first seeds a deterministic warning by creating an **uncited** issue (`TASK-VERIFY-DOCTOR`), which D6 reports at warning severity. Without it a pristine repo has nothing for `--strict` to promote, so a `--strict` that silently ignored the flag would still exit 0.
 
-Proof: default `doctor` exits 0 and reports `D6` at `warning` severity; the same state under `--strict` exits nonzero (`doctor --strict: N warning(s) promoted to errors`); stdout is a `checks` array containing D1–D10. Evidence: `evidence/<run-id>/drive/00-create-uncited/`, `01-doctor/` and `02-doctor-strict/`.
+Proof: default `doctor` exits 0, `count` is 11, and `checks[].check` is exactly `D1`…`D10`,`D12` with `D6` at `warning`; the same state under `--strict` exits nonzero (`doctor --strict: N warning(s) promoted to errors`) and still carries that check list. Evidence: `evidence/<run-id>/drive/00-create-uncited/`, `01-doctor/` and `02-doctor-strict/`.
 
 To prove `--fix --dry-run` skips writes: capture `wc -c` of `.armature/ops/*.log` (or `arm log --json` line count) before and after; sizes must match. Empty plan prints JSON `null`.
 
-D6 is unchanged by `--verbose` (byte-identical `items`); that is a negative check, not a verbose proof. The flag is consumed only on D3 (`internal/doctor/doctor.go:132-147`). Seed an orphaned op (target ID absent from the issue index) and compare that finding:
+D6 is unchanged by `--verbose` (byte-identical `items`); that is a negative check, not a verbose proof. The flag is consumed only on D3 (`Run` fills the location map only when verbose). Seed an orphaned op (target ID absent from the issue index) and compare that finding:
 
 ```bash
 "$ARM" --repo "$TARGET" --format agent --non-interactive doctor           | jq -c '.checks[]|select(.check=="D3")'
 "$ARM" --repo "$TARGET" --format agent --non-interactive doctor --verbose | jq -c '.checks[]|select(.check=="D3")'
 ```
 
-Default D3 lists orphan ids in `items` and omits `verbose_items`. `--verbose` adds `verbose_items` with `file:line` locations. If `--verbose` were ignored, D6 would still match and this D3 pair would not.
+Default D3 lists orphan ids in `items` and omits `verbose_items`. `--verbose` adds `verbose_items` with `file:line` locations. If `--verbose` were ignored, D6 would still match and this D3 pair would not. D11 must not appear in `checks`.
 
 ## Gotchas
 

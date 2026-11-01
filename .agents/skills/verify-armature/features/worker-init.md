@@ -1,6 +1,6 @@
 # Register worker identity
 
-`arm worker-init` stores a UUID in local git config `armature.worker-id`. Every later write (create, claim, ops log name) is attributed to that id. `--check` is the read-only form used at the start of a session.
+`arm worker-init` stores a UUID in worktree git config `armature.worker-id` (`.git/config.worktree`, after `extensions.worktreeConfig=true`). Every later write (create, claim, ops log name) is attributed to that id. `--check` is the read-only form used at the start of a session. `git -C "$TARGET" config --get armature.worker-id` still prints it. `git -C "$TARGET" config --unset` without `--worktree` does not (exit 5) and leaves `--check` green.
 
 ## Sub-features
 
@@ -30,8 +30,8 @@ Preconditions: launch succeeded; target is bootstrapped (helper bootstraps if `.
 Raw equivalent:
 
 ```bash
-git -C "$TARGET" config --unset armature.worker-id     # temp repo only
-"$ARM" --repo "$TARGET" worker-init --check            # must fail when unset
+git -C "$TARGET" config --worktree --unset armature.worker-id   # temp repo only
+"$ARM" --repo "$TARGET" worker-init --check                     # must fail when unset
 "$ARM" --repo "$TARGET" worker-init                    # creates the uuid
 "$ARM" --repo "$TARGET" worker-init --check
 git -C "$TARGET" config --get armature.worker-id
@@ -42,7 +42,8 @@ Proof: `--check` exits nonzero while unset; unflagged `worker-init` writes the i
 
 ## Gotchas
 
-- Unflagged `arm worker-init` **always generates a new UUID** and overwrites `armature.worker-id`. Never "just run worker-init again" to confirm.
+- Unflagged `arm worker-init` **always generates a new UUID** and overwrites the worktree-scoped `armature.worker-id`. Never "just run worker-init again" to confirm.
+- Clearing the id in a verify repo requires `git -C "$TARGET" config --worktree --unset armature.worker-id`. A plain `--unset` misses `.git/config.worktree`.
 - The documented session idiom is `--check || worker-init`, not bare `worker-init`.
 - Output is not agent JSON. Parse the `Worker ID: ` prefix or read git config.
 - If you overwrite the id after writing ops, later materialize/D7 can see worker-id mismatches against existing log filenames.

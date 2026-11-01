@@ -8,8 +8,8 @@
 - `--type` epic|story|feature|task|bug (default task)
 - Task E6 fields required at write time: `--scope`, `--acceptance` (JSON array), `--dod`
 - Optional `--source <uuid-or-url>` to source-link in the same write
-- `arm list` filters: `--status`, `--parent`, `--type`; `--group` is human-only
-- `arm show <id>` summary; `--field a,b` prints those fields; structured body needs `--format json`
+- `arm list` filters: `--status`, `--parent`, `--type`, `--terminal`; `--group` adds a `groups` adjunct on the structured envelope
+- `arm show <id>` summary; `--field a,b` prints those fields one per line; `--format json` and `--format agent` both emit `{count, issues, help}` with the issue at `issues[0]`
 
 ## How to get to it (user POV)
 
@@ -24,7 +24,7 @@ arm --repo "$TARGET" --format agent --non-interactive list
 arm --repo "$TARGET" --format json --non-interactive show TASK-VERIFY-CREATE
 ```
 
-Create stdout: `{"id":"TASK-VERIFY-CREATE","status":"created"}`. List stdout: JSON array including that id with `status: open`.
+Create stdout: `{"id":"TASK-VERIFY-CREATE","status":"created"}`. List stdout: `{count, issues, help}` including that id with `status: open`. A create that omits E6 fields exits `CREATE-1` and does not appear in `issues`.
 
 ## Driving it with arm-verify.sh
 
@@ -45,9 +45,9 @@ Evidence: `evidence/<run-id>/drive/01-create/` through `06-ops/`.
 
 ## Gotchas
 
-- Missing E6 fields → `cannot introduce Graph Finding ... missing required field` (`GENERAL-1`); nothing is written.
+- Missing E6 fields → `CREATE-1` / `cannot introduce Graph Finding ... missing required field`; nothing is written. `GENERAL-1` is retired.
 - Two open tasks with the same scope glob → scope-overlap Graph Finding; the second create is refused.
 - Uncited create still lists; `arm validate` then errors `uncited node`; product doctor D6 warns; you cannot `dag transition` to verified until `--source` / `sources link`.
-- `arm show --format agent` stays human. Use `--format json` for the object.
-- `arm list` is a JSON array, not `{count, issues, help[]}`.
+- `arm show --format agent` is the same envelope as `--format json`. Human text is `--format human` (the default).
+- `arm list` rows are `{id, type, status, title}` inside `issues`. There is no `claimed_by` on the list row.
 - Birth confidence is always `draft`; the issue will **not** appear in `arm ready` until promoted (see ready-claim).
