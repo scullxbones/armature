@@ -2891,8 +2891,11 @@ func TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G(t *testing.
 	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	leaseRoot := filepath.Join(gitDir, "armature-run-leases", "origin-run")
 	require.NoError(t, os.MkdirAll(leaseRoot, 0o750))
+	// Keep/sweep .tmp names must be CreateTemp-shaped (.<16hex>-*.tmp) so
+	// age-window assertions exercise leaseTempName + the age continue, not
+	// an accidental non-match. Foreign .other.tmp is the intentional miss.
 	agedTmp := filepath.Join(leaseRoot, ".deadbeefcafebabe-123456.tmp")
-	freshTmp := filepath.Join(leaseRoot, ".livecafe01234567-654321.tmp")
+	freshTmp := filepath.Join(leaseRoot, ".0123456789abcdef-654321.tmp")
 	foreignAged := filepath.Join(leaseRoot, ".other.tmp")
 	require.NoError(t, os.WriteFile(agedTmp, []byte("pid=1\n"), 0o600))
 	require.NoError(t, os.WriteFile(freshTmp, []byte("pid=1\n"), 0o600))
