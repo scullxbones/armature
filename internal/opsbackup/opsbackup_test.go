@@ -387,6 +387,52 @@ func TestRestorePlan_FastForwardAncestor_REQ_TOPTIER_S12_T1(t *testing.T) {
 	assert.Equal(t, opsbackup.DispositionFastForward, plan.Disposition)
 }
 
+// TestRestorePlan_RecoveredStrictAncestorOfOrigin_Diverge_REQ_TOPTIER_S12_T1
+// locks the ancestor decision: an older bundle tip that is a strict ancestor
+// of current origin/_armature is diverge→_armature-recovered (exit via
+// ErrDiverge). I2 forbids rewinding the shared tip; publish aside only.
+func TestRestorePlan_RecoveredStrictAncestorOfOrigin_Diverge_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	repo, origin, olderTip := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "older.bundle")
+	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	require.NoError(t, err)
+
+	// Advance origin past the bundled tip so recovered is a strict ancestor.
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "newer than bundle")
+	gittest.Git(t, repo, "push", "origin", "_armature")
+	newerTip := gitOut(t, origin, "rev-parse", "refs/heads/_armature")
+	require.NotEqual(t, olderTip, newerTip)
+
+	plan, err := opsbackup.PlanRestore(c, bundle)
+	require.ErrorIs(t, err, opsbackup.ErrDiverge)
+	assert.Equal(t, opsbackup.DispositionDivergeAside, plan.Disposition)
+	assert.Equal(t, opsbackup.AsideRef, plan.AsideRef)
+	assert.Equal(t, olderTip, plan.Recovered)
+	assert.Equal(t, newerTip, gitOut(t, origin, "rev-parse", "refs/heads/_armature"),
+		"shared origin tip must remain advanced (aside only)")
+}
+
+func TestPlanRestore_FetchOkOriginResolveFails_NotMissing_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	repo, _, _ := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
+	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	require.NoError(t, err)
+
+	// Codex PRRT_kwDORnVQE86ybIUQ: fetch succeeds, ResolveRevision on the
+	// per-run origin tip fails → fail closed, never successful missing.
+	g := resolveFailGit{inner: c, failRev: "refs/remotes/origin/_armature-run", err: fmt.Errorf("resolve origin tip boom")}
+	plan, err := opsbackup.PlanRestore(g, bundle)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolve origin tip")
+	assert.Empty(t, plan.Recovered, "fail-closed must not emit a successful plan")
+	assert.Empty(t, plan.Bundle)
+	assert.NotContains(t, strings.ToLower(err.Error()), "missing")
+}
+
 func TestSnapshot_RequiresOutput(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)

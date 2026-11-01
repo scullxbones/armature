@@ -179,15 +179,65 @@ func Verify(g Git, bundlePath string) error {
 	return nil
 }
 
+// originEvidence is typed positive evidence about origin/_armature after the
+// per-run fetch+resolve probe. Classification never treats a probe error as a
+// successful disposition: Missing requires ErrRemoteRefMissing-class fetch
+// evidence; Tip requires a resolved SHA after a successful fetch.
+type originEvidence struct {
+	Missing bool
+	Tip     string
+}
+
+// probeOriginTip refreshes origin/_armature into runRef and returns typed
+// evidence. Fetch-reported absence → Missing. Any other fetch or resolve
+// failure fails closed (no disposition).
+func probeOriginTip(g Git, runRef string) (originEvidence, error) {
+	if err := g.FetchBranchToRef(OpsBranch, runRef); err != nil {
+		if isRemoteRefMissing(err) {
+			return originEvidence{Missing: true}, nil
+		}
+		return originEvidence{}, fmt.Errorf("ops-backup restore-plan: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
+	}
+	tip, err := g.ResolveRevision(runRef)
+	if err != nil {
+		return originEvidence{}, fmt.Errorf("ops-backup restore-plan: resolve origin tip: %w", err)
+	}
+	if tip == "" {
+		return originEvidence{}, fmt.Errorf("ops-backup restore-plan: resolve origin tip: empty SHA")
+	}
+	return originEvidence{Tip: tip}, nil
+}
+
+// classifyRestore picks an I2 disposition from positive origin evidence and a
+// recovered tip. recoveredOlderThanOrigin (strict ancestor of current origin)
+// is DispositionDivergeAside: I2 forbids rewinding the shared tip.
+func classifyRestore(origin originEvidence, recovered string, isFF bool) (Disposition, string) {
+	if origin.Missing {
+		return DispositionMissing, ""
+	}
+	if origin.Tip == recovered || isFF {
+		return DispositionFastForward, ""
+	}
+	return DispositionDivergeAside, AsideRef
+}
+
 // PlanRestore loads a bundle into a per-run scratch ref under runScratchNS and
 // compares against a per-run origin tip under runTrackingNS. Concurrent
 // restore-plan / snapshot invocations never share a mutable staging tip, and
 // leftover legacy refs/remotes/backup/_armature does not block child creation.
-// An absent advertised remote branch is the documented `missing` disposition
-// (not fail-closed). Unreachable origin and other fetch failures stay
-// fail-closed. On diverge it still returns the plan with
-// DispositionDivergeAside and ErrDiverge. Printed fields are durable only
-// (recovered SHA, bundle path, optional aside publish name).
+//
+// Disposition audit (success only on positive evidence):
+//   - missing: fetch reported origin/_armature absent (isRemoteRefMissing)
+//   - fast-forward: origin tip resolved and equals recovered, or is an ancestor
+//   - diverge→_armature-recovered: origin tip resolved and is not an ancestor of
+//     recovered — including when recovered is a strict ancestor of origin (I2:
+//     do not rewind the shared tip; publish aside only)
+//
+// Fetch ok + resolve fail, unreachable origin, bundle/ancestry errors, and
+// other git failures stay fail-closed (mapped error, no success disposition).
+// On diverge it still returns the plan with DispositionDivergeAside and
+// ErrDiverge. Printed fields are durable only (recovered SHA, bundle path,
+// optional aside publish name).
 func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
@@ -203,13 +253,9 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	defer func() {
 		_ = g.DeleteRef(originRun) //nolint:errcheck // best-effort per-run staging cleanup
 	}()
-	originAbsent := false
-	if err := g.FetchBranchToRef(OpsBranch, originRun); err != nil {
-		if isRemoteRefMissing(err) {
-			originAbsent = true
-		} else {
-			return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
-		}
+	origin, err := probeOriginTip(g, originRun)
+	if err != nil {
+		return RestorePlan{}, err
 	}
 	scratch, err := uniqueRunRef(runScratchNS)
 	if err != nil {
@@ -229,30 +275,19 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 		Recovered: recovered,
 		Bundle:    bundlePath,
 	}
-	if originAbsent {
-		plan.Disposition = DispositionMissing
-		return plan, nil
+	isFF := false
+	if !origin.Missing && origin.Tip != recovered {
+		ff, ancErr := g.IsAncestor(origin.Tip, recovered)
+		if ancErr != nil {
+			return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: ancestry: %w", ancErr)
+		}
+		isFF = ff
 	}
-	originTip, originErr := g.ResolveRevision(originRun)
-	if originErr != nil {
-		plan.Disposition = DispositionMissing
-		return plan, nil
+	plan.Disposition, plan.AsideRef = classifyRestore(origin, recovered, isFF)
+	if plan.Disposition == DispositionDivergeAside {
+		return plan, ErrDiverge
 	}
-	if originTip == recovered {
-		plan.Disposition = DispositionFastForward
-		return plan, nil
-	}
-	ff, err := g.IsAncestor(originTip, recovered)
-	if err != nil {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: ancestry: %w", err)
-	}
-	if ff {
-		plan.Disposition = DispositionFastForward
-		return plan, nil
-	}
-	plan.Disposition = DispositionDivergeAside
-	plan.AsideRef = AsideRef
-	return plan, ErrDiverge
+	return plan, nil
 }
 
 func uniqueRunRef(ns string) (string, error) {

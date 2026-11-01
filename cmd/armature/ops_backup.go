@@ -27,9 +27,11 @@ restorable (fetch into a throwaway bare — not header-only list-heads).
 restore-plan loads the bundle into a per-run scratch ref under a sibling
 namespace and prints an I2-safe publish disposition (missing | fast-forward |
 diverge→_armature-recovered). Output names only durable things (recovered SHA,
-bundle path, optional aside publish name). An absent origin/_armature is
-missing; unreachable origin stays fail-closed. It does not apply the publish.
-Diverge exits non-zero.`,
+bundle path, optional aside publish name). missing requires fetch-reported
+absence of origin/_armature; other fetch/resolve errors stay fail-closed.
+A recovered tip that is a strict ancestor of current origin/_armature is
+diverge (I2: no shared-tip rewind). It does not apply the publish. Diverge
+exits non-zero.`,
 		SilenceErrors: true,
 	}
 	cmd.AddCommand(newOpsBackupSnapshotCmd())

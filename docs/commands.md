@@ -778,12 +778,16 @@ What `arm ops-backup` does guarantee when it exits 0:
   `missing | fast-forward | diverge→_armature-recovered`. Printed fields are
   durable only (recovered SHA, bundle path, optional aside publish name) —
   no print-then-delete scratch ref. An absent `origin/_armature` is
-  `missing`; unreachable origin stays fail-closed. It does not apply the
-  publish (`--apply` is not in v1). Structured json/agent output for all
-  three verbs is exactly one N2 envelope `{count, <payload>[], help[]}` per
-  invocation (diverge included: plan help carries escalation; exit 1 via
-  ADR 0020 §7 — no second error envelope). Leftover per-run refs or temp
-  dirs from a crashed prior run never break the next.
+  `missing` only when fetch reports the branch absent; every other
+  fetch/resolve/ancestry failure stays fail-closed. A recovered tip that is
+  a strict ancestor of current `origin/_armature` is
+  `diverge→_armature-recovered` (exit 1) — I2 forbids rewinding the shared
+  tip. It does not apply the publish (`--apply` is not in v1). Structured
+  json/agent output for all three verbs is exactly one N2 envelope
+  `{count, <payload>[], help[]}` per invocation (diverge included: plan
+  help carries escalation; exit 1 via ADR 0020 §7 — no second error
+  envelope). Leftover per-run refs or temp dirs from a crashed prior run
+  never break the next.
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 
