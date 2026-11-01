@@ -1221,6 +1221,40 @@ func (c *Client) CommitterUnix(sha string) (int64, error) {
 	return n, nil
 }
 
+// CommitterUnixRange returns committer unix timestamps for every commit in
+// rangeSpec (e.g. "origin/_armature..HEAD") in one git process. Empty ranges
+// yield an empty slice, not an error. Order matches `git log` (newest first);
+// callers that need a minimum should scan the slice.
+func (c *Client) CommitterUnixRange(rangeSpec string) ([]int64, error) {
+	rangeSpec = strings.TrimSpace(rangeSpec)
+	if rangeSpec == "" {
+		return nil, fmt.Errorf("git log committer range: range is required")
+	}
+	cmd := c.cmd("log", "--format=%ct", rangeSpec)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git log committer range %s: %w", rangeSpec, err)
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []int64{}, nil
+	}
+	lines := strings.Split(raw, "\n")
+	outUnix := make([]int64, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		n, convErr := strconv.ParseInt(line, 10, 64)
+		if convErr != nil {
+			return nil, fmt.Errorf("parse committer unix in range %s: %q: %w", rangeSpec, line, convErr)
+		}
+		outUnix = append(outUnix, n)
+	}
+	return outUnix, nil
+}
+
 // IsAncestor reports whether anc is an ancestor of desc (inclusive).
 func (c *Client) IsAncestor(anc, desc string) (bool, error) {
 	cmd := c.cmd("merge-base", "--is-ancestor", anc, desc)

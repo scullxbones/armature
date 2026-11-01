@@ -28,13 +28,13 @@ const (
 // d11Git is the adapter surface D11 probes need. *adapters.Client satisfies it.
 // Kept local (not shared with opsbackup) so S12-T1G can keep moving without a
 // shared-package churn: D11 needs ahead/age classification beyond tip evidence.
-// Age uses the same full remote..HEAD set as RevListCount (not first-parent).
+// Age uses the same full remote..HEAD set as RevListCount (not first-parent),
+// collected in one CommitterUnixRange git process (not per-SHA CommitterUnix).
 type d11Git interface {
 	FetchBranchToRef(branch, dstRef string) error
 	ResolveRevision(rev string) (string, error)
 	RevListCount(rangeSpec string) (int, error)
-	RevListReverse(rev string) ([]string, error)
-	CommitterUnix(sha string) (int64, error)
+	CommitterUnixRange(rangeSpec string) ([]int64, error)
 	DeleteRef(ref string) error
 }
 
@@ -172,34 +172,28 @@ func observeD11OpsRemote(g d11Git, now time.Time, staleAfter time.Duration) d11O
 		return d11Observation{outcome: d11Healthy}
 	}
 
-	// Full range (not --first-parent): a recent merge of an old side branch
-	// must still age from the oldest unpublished committer timestamp.
-	localOnly, err := g.RevListReverse(rangeSpec)
+	// Full range (not --first-parent), one git process: a recent merge of an
+	// old side branch must still age from the oldest unpublished committer.
+	unixes, err := g.CommitterUnixRange(rangeSpec)
 	if err != nil {
 		return d11Observation{
 			outcome: d11CouldNotVerify,
 			detail:  redact.Secrets(err.Error()),
 		}
 	}
-	if len(localOnly) == 0 {
+	if len(unixes) == 0 {
 		return d11Observation{
 			outcome: d11CouldNotVerify,
-			detail:  fmt.Sprintf("rev-list --count reported %d local-only commit(s) but rev-list was empty", ahead),
+			detail:  fmt.Sprintf("rev-list --count reported %d local-only commit(s) but committer range was empty", ahead),
 		}
 	}
-	if len(localOnly) != ahead {
+	if len(unixes) != ahead {
 		return d11Observation{
 			outcome: d11CouldNotVerify,
-			detail:  fmt.Sprintf("rev-list --count reported %d local-only commit(s) but listed %d", ahead, len(localOnly)),
+			detail:  fmt.Sprintf("rev-list --count reported %d local-only commit(s) but committer range listed %d", ahead, len(unixes)),
 		}
 	}
-	oldestUnix, err := oldestCommitterUnix(g, localOnly)
-	if err != nil {
-		return d11Observation{
-			outcome: d11CouldNotVerify,
-			detail:  redact.Secrets(err.Error()),
-		}
-	}
+	oldestUnix := oldestUnixTimestamp(unixes)
 	age := now.Sub(time.Unix(oldestUnix, 0))
 	if age < 0 {
 		age = 0
@@ -216,27 +210,16 @@ func observeD11OpsRemote(g d11Git, now time.Time, staleAfter time.Duration) d11O
 	return obs
 }
 
-// oldestCommitterUnix returns the minimum committer unix among shas. D11 ages
-// unpublished local-only ops from this value so side-branch commits merged onto
-// _armature are not masked by a recent merge commit on first-parent.
-func oldestCommitterUnix(g d11Git, shas []string) (int64, error) {
-	if len(shas) == 0 {
-		return 0, fmt.Errorf("no commits to age")
-	}
-	oldest, err := g.CommitterUnix(shas[0])
-	if err != nil {
-		return 0, err
-	}
-	for _, sha := range shas[1:] {
-		unix, err := g.CommitterUnix(sha)
-		if err != nil {
-			return 0, err
-		}
+// oldestUnixTimestamp returns the minimum value in unixes. Caller must pass a
+// non-empty slice (observeD11OpsRemote fail-closes on empty / count mismatch).
+func oldestUnixTimestamp(unixes []int64) int64 {
+	oldest := unixes[0]
+	for _, unix := range unixes[1:] {
 		if unix < oldest {
 			oldest = unix
 		}
 	}
-	return oldest, nil
+	return oldest
 }
 
 func evaluateD11OpsRemote(obs d11Observation, configFallbackWarn string) Finding {
@@ -267,7 +250,13 @@ func evaluateD11OpsRemote(obs d11Observation, configFallbackWarn string) Finding
 		f.Message = "Could not verify ops remote tracking tip: " + detail
 		f.Items = []string{detail}
 	default:
-		// healthy / empty → OK
+		// healthy: in-sync vs fresh unpublished are different checks.
+		if obs.localOnlyCount > 0 {
+			f.Message = fmt.Sprintf(
+				"origin/_armature reachable; %d unpublished local commit(s) within stale threshold",
+				obs.localOnlyCount,
+			)
+		}
 	}
 	warn := strings.TrimSpace(configFallbackWarn)
 	if warn == "" {

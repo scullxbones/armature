@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 139,
+      "count": 140,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -21,6 +21,7 @@
         "Client.CommitWithMessage",
         "Client.CommitWorktreeOp",
         "Client.CommitterUnix",
+        "Client.CommitterUnixRange",
         "Client.CommonGitDir",
         "Client.CreateOrphanBranch",
         "Client.CurrentBranch",

@@ -649,7 +649,7 @@ arm doctor --format json
 
 **Trigger:** Missing `origin/_armature`; local-only `_armature` commits at least `local_only_ops_stale_hours` old (default 24h when omitted); fetch/resolve/rev-list/age probe failure; or configured `local_only_ops_stale_hours` that fails overflow-checked duration conversion. Unreadable config that would supply the stale window surfaces a warning that D11 fell back to the 24h default (D10 also errors on the same file). Conversion overflow is an error finding — never a silent 24h default.
 
-**Message:** `Ops branch has no verified remote tracking tip (origin/_armature missing)` / `Local-only ops on _armature are stale (...)` / `Could not verify ops remote tracking tip: ...` / `Invalid local_only_ops_stale_hours: ...` / config-fallback warning when applicable.
+**Message:** `Ops remote tracking tip is verified` (in sync) / `origin/_armature reachable; N unpublished local commit(s) within stale threshold` / `Ops branch has no verified remote tracking tip (origin/_armature missing)` / `Local-only ops on _armature are stale (...)` / `Could not verify ops remote tracking tip: ...` / `Invalid local_only_ops_stale_hours: ...` / config-fallback warning when applicable.
 
 **Items:** Remediation `arm push-ops` on missing/stale; probe/conversion detail on errors.
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,23 +13,22 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // fakeD11Git injects typed probe outcomes for fail-closed D11 tables.
 type fakeD11Git struct {
-	fetchErr          error
-	tip               string
-	resolveErr        error
-	ahead             int
-	revListErr        error
-	localOnly         []string
-	revListReverseErr error
-	committerUnix     int64
-	committerBySHA    map[string]int64
-	committerUnixErr  error
-	deleted           []string
+	fetchErr            error
+	tip                 string
+	resolveErr          error
+	ahead               int
+	revListErr          error
+	committerUnixes     []int64
+	committerRangeErr   error
+	committerRangeCalls int
+	deleted             []string
 }
 
 func (g *fakeD11Git) FetchBranchToRef(string, string) error { return g.fetchErr }
@@ -50,25 +50,14 @@ func (g *fakeD11Git) RevListCount(string) (int, error) {
 	return g.ahead, nil
 }
 
-func (g *fakeD11Git) RevListReverse(string) ([]string, error) {
-	if g.revListReverseErr != nil {
-		return nil, g.revListReverseErr
+func (g *fakeD11Git) CommitterUnixRange(string) ([]int64, error) {
+	g.committerRangeCalls++
+	if g.committerRangeErr != nil {
+		return nil, g.committerRangeErr
 	}
-	out := make([]string, len(g.localOnly))
-	copy(out, g.localOnly)
+	out := make([]int64, len(g.committerUnixes))
+	copy(out, g.committerUnixes)
 	return out, nil
-}
-
-func (g *fakeD11Git) CommitterUnix(sha string) (int64, error) {
-	if g.committerUnixErr != nil {
-		return 0, g.committerUnixErr
-	}
-	if g.committerBySHA != nil {
-		if unix, ok := g.committerBySHA[sha]; ok {
-			return unix, nil
-		}
-	}
-	return g.committerUnix, nil
 }
 
 func (g *fakeD11Git) DeleteRef(ref string) error {
@@ -107,30 +96,21 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "healthy_fresh_local_only",
 			g: &fakeD11Git{
-				tip:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead: 2,
-				localOnly: []string{
-					"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-					"cccccccccccccfreshcccccccccccccccccccccc",
-				},
-				committerUnix: freshUnix,
+				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:           2,
+				committerUnixes: []int64{freshUnix, freshUnix},
 			},
 			wantOut:  d11Healthy,
 			wantSev:  SeverityOK,
 			wantExit: 0,
-			contains: "verified",
+			contains: "within stale threshold",
 		},
 		{
 			name: "stale_local_only",
 			g: &fakeD11Git{
-				tip:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead: 3,
-				localOnly: []string{
-					"cccccccccccccccccccccccccccccccccccccccc",
-					"dddddddddddddddddddddddddddddddddddddddd",
-					"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-				},
-				committerUnix: staleUnix,
+				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:           3,
+				committerUnixes: []int64{staleUnix, staleUnix, staleUnix},
 			},
 			wantOut:   d11Stale,
 			wantSev:   SeverityWarning,
@@ -141,10 +121,9 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "stale_threshold_override_short",
 			g: &fakeD11Git{
-				tip:           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead:         1,
-				localOnly:     []string{"dddddddddddddddddddddddddddddddddddddddd"},
-				committerUnix: now.Add(-2 * time.Hour).Unix(),
+				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:           1,
+				committerUnixes: []int64{now.Add(-2 * time.Hour).Unix()},
 			},
 			staleAfter: time.Hour,
 			wantOut:    d11Stale,
@@ -208,11 +187,23 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 			contains: "Could not verify",
 		},
 		{
-			name: "rev_list_reverse_fails",
+			name: "committer_range_fails",
 			g: &fakeD11Git{
 				tip:               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				ahead:             2,
-				revListReverseErr: errors.New("rev-list reverse boom"),
+				committerRangeErr: errors.New("committer range boom"),
+			},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+		{
+			name: "count_mismatch_fail_closed",
+			g: &fakeD11Git{
+				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:           3,
+				committerUnixes: []int64{freshUnix, freshUnix},
 			},
 			wantOut:  d11CouldNotVerify,
 			wantSev:  SeverityError,
@@ -224,16 +215,9 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 			// Count includes the old side-branch tip; first-parent would only
 			// see the recent merge. Full-range oldest must still be stale.
 			g: &fakeD11Git{
-				tip:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead: 2,
-				localOnly: []string{
-					"oldsidebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-					"mergemccccccccccccccccccccccccccccccccccc",
-				},
-				committerBySHA: map[string]int64{
-					"oldsidebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": staleUnix,
-					"mergemccccccccccccccccccccccccccccccccccc": freshUnix,
-				},
+				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:           2,
+				committerUnixes: []int64{freshUnix, staleUnix},
 			},
 			wantOut:   d11Stale,
 			wantSev:   SeverityWarning,
@@ -244,10 +228,9 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "committer_time_fails",
 			g: &fakeD11Git{
-				tip:              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead:            1,
-				localOnly:        []string{"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
-				committerUnixErr: errors.New("committer boom"),
+				tip:               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:             1,
+				committerRangeErr: errors.New("committer boom"),
 			},
 			wantOut:  d11CouldNotVerify,
 			wantSev:  SeverityError,
@@ -298,10 +281,20 @@ func TestEvaluateD11OpsRemote(t *testing.T) {
 		exit     int
 	}{
 		{
-			name:     "verified ok",
+			name:     "verified ok in sync",
 			obs:      d11Observation{outcome: d11Healthy},
 			severity: SeverityOK,
 			contains: "verified",
+			exit:     0,
+		},
+		{
+			name: "fresh local-only names threshold check",
+			obs: d11Observation{
+				outcome:        d11Healthy,
+				localOnlyCount: 2,
+			},
+			severity: SeverityOK,
+			contains: "within stale threshold",
 			exit:     0,
 		},
 		{
@@ -446,6 +439,100 @@ func TestDoctorD11_AgesMergedSideBranchNotJustFirstParent_REQ_TOPTIER_S12_T2(t *
 	require.Equal(t, []string{d11RemediationHint}, d11.Items)
 }
 
+// TestDoctorD11_AgeGitInvocationsBounded_REQ_TOPTIER_S12_T2 proves D11 ages
+// unpublished commits with a constant number of git processes (one batched
+// CommitterUnixRange), not one git log -1 per SHA. Codex P2 repro shape:
+// commit-tree chain with a backdated first commit, then count execs.
+func TestDoctorD11_AgeGitInvocationsBounded_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	countFor := func(n int) (calls int, obs d11Observation) {
+		t.Helper()
+		worktree, _ := opsWorktreeWithOrigin(t)
+		chainUnpublishedCommits(t, worktree, n, time.Now().Add(-30*time.Hour))
+
+		counterPath := filepath.Join(t.TempDir(), "git-calls")
+		require.NoError(t, os.WriteFile(counterPath, nil, 0o644))
+		env := countingGitEnviron(t, counterPath)
+		gc := adapters.New(worktree).WithEnviron(env)
+
+		obs = observeD11OpsRemote(gc, time.Now(), defaultLocalOnlyOpsStaleAfter)
+		raw, err := os.ReadFile(counterPath)
+		require.NoError(t, err)
+		return len(raw), obs
+	}
+
+	smallCalls, smallObs := countFor(40)
+	largeCalls, largeObs := countFor(200)
+	assert.Equal(t, d11Stale, smallObs.outcome, smallObs.detail)
+	assert.Equal(t, d11Stale, largeObs.outcome, largeObs.detail)
+	assert.Equal(t, 40, smallObs.localOnlyCount)
+	assert.Equal(t, 200, largeObs.localOnlyCount)
+	assert.Equal(t, smallCalls, largeCalls,
+		"git exec count must be independent of unpublished commit count (got %d for 40, %d for 200)",
+		smallCalls, largeCalls)
+	// fetch + rev-parse tip + rev-list --count + log --format=%ct + delete-ref
+	assert.LessOrEqual(t, largeCalls, 8, "D11 probe must stay a small constant git budget")
+	assert.GreaterOrEqual(t, largeCalls, 4)
+}
+
+func countingGitEnviron(t *testing.T, counterPath string) []string {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	require.True(t, filepath.IsAbs(realGit))
+
+	wrapperDir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\nprintf x >> %q\nexec %q \"$@\"\n", counterPath, realGit)
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
+
+	env := append([]string{}, os.Environ()...)
+	pathSet := false
+	overlay := wrapperDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	for i, e := range env {
+		if strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "Path=") {
+			env[i] = "PATH=" + overlay
+			pathSet = true
+			break
+		}
+	}
+	if !pathSet {
+		env = append(env, "PATH="+overlay)
+	}
+	return env
+}
+
+// chainUnpublishedCommits appends n empty commits via commit-tree (fast),
+// backdating the first committer timestamp to staleWhen. Origin tip stays put.
+func chainUnpublishedCommits(t *testing.T, worktree string, n int, staleWhen time.Time) {
+	t.Helper()
+	require.Greater(t, n, 0)
+	tree := gitOut(t, worktree, "write-tree")
+	parent := gitOut(t, worktree, "rev-parse", "HEAD")
+	for i := 0; i < n; i++ {
+		env := map[string]string{}
+		if i == 0 {
+			stamp := staleWhen.Format(time.RFC3339)
+			env["GIT_AUTHOR_DATE"] = stamp
+			env["GIT_COMMITTER_DATE"] = stamp
+		}
+		parent = gitOutEnv(t, worktree, env, "commit-tree", tree, "-p", parent, "-m", fmt.Sprintf("unpublished-%d", i))
+	}
+	runGit(t, worktree, "reset", "--hard", parent)
+}
+
+func gitOutEnv(t *testing.T, dir string, env map[string]string, args ...string) string {
+	t.Helper()
+	cmd := adapters.NonInteractiveGitCommand(dir, args...)
+	cmd.Env = append(os.Environ(), cmd.Env...)
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+	return strings.TrimSpace(string(out))
+}
+
 func TestDoctorD11_ConfigStaleHoursOverride_REQ_TOPTIER_S12_T2(t *testing.T) {
 	t.Parallel()
 
@@ -522,7 +609,8 @@ func TestRun_D11_FreshLocalOnlyUnderThresholdOK(t *testing.T) {
 
 	d11 := findCheck(t, report, "D11")
 	assert.Equal(t, SeverityOK, d11.Severity)
-	assert.Contains(t, d11.Message, "verified")
+	assert.Contains(t, d11.Message, "within stale threshold")
+	assert.NotContains(t, d11.Message, "tracking tip is verified")
 }
 
 func TestDoctorD11_DoesNotMutateSharedTracking_REQ_TOPTIER_S12_T2(t *testing.T) {
