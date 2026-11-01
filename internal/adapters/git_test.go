@@ -2340,7 +2340,7 @@ func TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T
 
 	// Concurrent live nonce: lease with this process's pid + staging refs.
 	liveNonce := "livecafe01234567"
-	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--absolute-git-dir"))
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	leasePath := filepath.Join(gitDir, "armature-run-leases", "armature-tmp", liveNonce)
 	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
 	require.NoError(t, os.WriteFile(leasePath, []byte(fmt.Sprintf("pid=%d\nstarted=%d\n", os.Getpid(), time.Now().Unix())), 0o600))
@@ -2401,7 +2401,7 @@ func TestBundleCreate_SweepsStaleWorkDir_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
 	c := adapters.New(repo)
 
-	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--absolute-git-dir"))
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	stale := filepath.Join(gitDir, "armature-tmp-work", "deadbeefcafebabe")
 	require.NoError(t, os.MkdirAll(filepath.Join(stale, "bare.git"), 0o750))
 
@@ -2421,7 +2421,7 @@ func TestBeginPerRunRef_SweepsMaxAgeLease_REQ_TOPTIER_S12_T1G(t *testing.T) {
 
 	aged := "refs/remotes/origin/_armature-run/agedbeefcafebabe"
 	gittest.Git(t, repo, "update-ref", aged, tip)
-	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--absolute-git-dir"))
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", "agedbeefcafebabe")
 	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
 	// Live pid but ancient started → max-age reclaim.
@@ -2453,7 +2453,7 @@ func TestBundleVerify_SweepsDeadPidWorkLease_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	bundle := filepath.Join(t.TempDir(), "ok.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
 
-	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--absolute-git-dir"))
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	deadNonce := "deadpid00cafebabe"
 	deadDir := filepath.Join(gitDir, "armature-tmp-work", deadNonce)
 	require.NoError(t, os.MkdirAll(filepath.Join(deadDir, "bare.git"), 0o750))
@@ -2485,7 +2485,7 @@ func TestBeginPerRunRef_MalformedLeaseSwept_REQ_TOPTIER_S12_T1G(t *testing.T) {
 
 	stale := "refs/remotes/origin/_armature-run/malformed00cafe"
 	gittest.Git(t, repo, "update-ref", stale, tip)
-	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--absolute-git-dir"))
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", "malformed00cafe")
 	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
 	require.NoError(t, os.WriteFile(leasePath, []byte("not-a-lease\n"), 0o600))
@@ -2507,7 +2507,7 @@ func TestBundleCreate_WorkDirMkdirFail_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
 	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
 	c := adapters.New(repo)
-	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--absolute-git-dir"))
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	// Make armature-tmp-work a file so MkdirAll of a child fails.
 	workRoot := filepath.Join(gitDir, "armature-tmp-work")
 	require.NoError(t, os.WriteFile(workRoot, []byte("not-a-dir"), 0o600))
@@ -2515,4 +2515,139 @@ func TestBundleCreate_WorkDirMkdirFail_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	err := c.BundleCreateAdvertised(filepath.Join(t.TempDir(), "x.bundle"), tip, "refs/heads/_armature")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "temp bare")
+}
+
+// TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G: leases live
+// in the common git directory so a sweep from worktree B cannot delete
+// worktree A's live staging refs (for-each-ref sees shared refs).
+func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+
+	wt := filepath.Join(t.TempDir(), "linked-wt")
+	gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
+	t.Cleanup(func() {
+		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
+	})
+
+	mainClient := adapters.New(repo)
+	wtClient := adapters.New(wt)
+
+	mainCommon, err := mainClient.CommonGitDir()
+	require.NoError(t, err)
+	wtCommon, err := wtClient.CommonGitDir()
+	require.NoError(t, err)
+	require.Equal(t, mainCommon, wtCommon, "linked worktrees must share a common git dir")
+
+	// Worktree-private absolute-git-dir differs from common — the pre-fix bug.
+	wtAbs := strings.TrimSpace(runGitOutput(t, wt, "rev-parse", "--absolute-git-dir"))
+	require.NotEqual(t, wtAbs, mainCommon, "worktree private git dir must differ from common")
+
+	liveRef, releaseLive, err := mainClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer releaseLive()
+	require.NoError(t, mainClient.UpdateRef(liveRef, tip))
+
+	// Peer worktree starts a run (sweeps) while main's lease is live.
+	peerRef, releasePeer, err := wtClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer releasePeer()
+	require.NoError(t, wtClient.UpdateRef(peerRef, tip))
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", liveRef),
+		"live nonce from main worktree must survive peer worktree sweep")
+	assert.Equal(t, tip, runGitOutput(t, wt, "rev-parse", peerRef))
+	assert.NotEqual(t, liveRef, peerRef)
+
+	// Lease file must sit under the common dir (not the worktree-private git dir).
+	nonce := strings.TrimPrefix(liveRef, "refs/remotes/origin/_armature-run/")
+	leaseUnderCommon := filepath.Join(mainCommon, "armature-run-leases", "origin-run", nonce)
+	_, err = os.Stat(leaseUnderCommon)
+	require.NoError(t, err, "lease must be under common git dir")
+	leaseUnderPrivate := filepath.Join(wtAbs, "armature-run-leases", "origin-run", nonce)
+	_, err = os.Stat(leaseUnderPrivate)
+	assert.True(t, os.IsNotExist(err), "lease must not live under worktree-private git dir")
+}
+
+// TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G: end-to-end
+// class proof — overlapping snapshot from two linked worktrees both succeed.
+func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	// Defined in adapters_test so we can drive real adapters without importing opsbackup
+	// (opsbackup_test already covers same-clone overlap; this covers worktree visibility).
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	wt := filepath.Join(t.TempDir(), "ops-wt")
+	gittest.Git(t, repo, "worktree", "add", "-b", "ops-wt-branch", wt, "HEAD")
+	t.Cleanup(func() {
+		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
+	})
+
+	mainClient := adapters.New(repo)
+	wtClient := adapters.New(wt)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	refs := make([]string, 2)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ref, release, e := mainClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+		if e != nil {
+			errs[0] = e
+			return
+		}
+		defer release()
+		refs[0] = ref
+		if e = mainClient.FetchBranchToRef("_armature", ref); e != nil {
+			errs[0] = e
+			return
+		}
+		got, e := mainClient.ResolveRevision(ref)
+		if e != nil {
+			errs[0] = e
+			return
+		}
+		if got != tip {
+			errs[0] = fmt.Errorf("main tip %s want %s", got, tip)
+		}
+		// Hold briefly so peer sweep overlaps the live lease.
+		time.Sleep(50 * time.Millisecond)
+	}()
+	go func() {
+		defer wg.Done()
+		time.Sleep(10 * time.Millisecond)
+		ref, release, e := wtClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+		if e != nil {
+			errs[1] = e
+			return
+		}
+		defer release()
+		refs[1] = ref
+		if e = wtClient.FetchBranchToRef("_armature", ref); e != nil {
+			errs[1] = e
+			return
+		}
+		got, e := wtClient.ResolveRevision(ref)
+		if e != nil {
+			errs[1] = e
+			return
+		}
+		if got != tip {
+			errs[1] = fmt.Errorf("wt tip %s want %s", got, tip)
+		}
+	}()
+	wg.Wait()
+	require.NoError(t, errs[0], "main worktree run")
+	require.NoError(t, errs[1], "linked worktree run")
+	assert.NotEqual(t, refs[0], refs[1])
 }

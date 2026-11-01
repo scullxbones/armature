@@ -13,14 +13,16 @@ import (
 )
 
 const (
-	// runLeaseDir is under $GIT_DIR. Holds live-pid leases for per-run
-	// ops-backup artifacts so a later process can sweep kill -9 leftovers
-	// without deleting a concurrent run's nonce.
+	// runLeaseDir is under the common git directory (rev-parse
+	// --git-common-dir), not a worktree-private git dir. Linked worktrees
+	// share staging refs; leases must be equally visible so one worktree's
+	// sweep cannot treat another's live nonce as stale.
 	runLeaseDir = "armature-run-leases"
 
-	// armatureWorkDir is under $GIT_DIR. Throwaway bare repos for bundle
-	// create/verify live here (not os.TempDir) so crash leftovers are
-	// colocated with leases and swept on the next run.
+	// armatureWorkDir is under the common git directory. Throwaway bare
+	// repos for bundle create/verify live here (not os.TempDir / not a
+	// worktree-private git dir) so crash leftovers are colocated with
+	// leases and swept on the next run from any linked worktree.
 	armatureWorkDir = "armature-tmp-work"
 
 	leaseKindArmatureTmp = "armature-tmp"
@@ -86,12 +88,13 @@ func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error)
 	return prefix, release, nil
 }
 
-// beginArmatureWorkDir allocates $GIT_DIR/armature-tmp-work/<nonce> for throwaway
-// bare repos (bundle create/verify). Sweeps stale peers first. Lease is written
-// before mkdir so a concurrent sweep cannot reclaim this nonce mid-create.
+// beginArmatureWorkDir allocates <common-git-dir>/armature-tmp-work/<nonce> for
+// throwaway bare repos (bundle create/verify). Sweeps stale peers first. Lease
+// is written before mkdir so a concurrent sweep cannot reclaim this nonce
+// mid-create.
 func (c *Client) beginArmatureWorkDir() (dir string, release func(), err error) {
 	c.sweepStaleWorkDirs()
-	gitDir, err := c.gitDirPath()
+	common, err := c.CommonGitDir()
 	if err != nil {
 		return "", nil, err
 	}
@@ -102,7 +105,7 @@ func (c *Client) beginArmatureWorkDir() (dir string, release func(), err error) 
 	if err := c.writeRunLease(leaseKindWork, nonce); err != nil {
 		return "", nil, err
 	}
-	dir = filepath.Join(gitDir, armatureWorkDir, nonce)
+	dir = filepath.Join(common, armatureWorkDir, nonce)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		_ = c.removeRunLease(leaseKindWork, nonce) //nolint:errcheck // best-effort
 		return "", nil, fmt.Errorf("armature work dir: %w", err)
@@ -128,24 +131,12 @@ func leaseKindForRefNS(ns string) string {
 	}
 }
 
-func (c *Client) gitDirPath() (string, error) {
-	out, err := c.cmd("rev-parse", "--absolute-git-dir").Output()
-	if err != nil {
-		return "", fmt.Errorf("git rev-parse --absolute-git-dir: %w\n%s", err, out)
-	}
-	p := strings.TrimSpace(string(out))
-	if p == "" {
-		return "", fmt.Errorf("git rev-parse --absolute-git-dir: empty")
-	}
-	return p, nil
-}
-
 func (c *Client) leasePath(kind, nonce string) (string, error) {
-	gitDir, err := c.gitDirPath()
+	common, err := c.CommonGitDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(gitDir, runLeaseDir, kind, nonce), nil
+	return filepath.Join(common, runLeaseDir, kind, nonce), nil
 }
 
 func (c *Client) writeRunLease(kind, nonce string) error {
@@ -174,7 +165,7 @@ func (c *Client) leaseIsLive(kind, nonce string) bool {
 	if err != nil {
 		return false
 	}
-	raw, err := os.ReadFile(path) //nolint:gosec // G304: path under $GIT_DIR from our nonce
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: path under common git dir from our nonce
 	if err != nil {
 		return false
 	}
@@ -230,9 +221,9 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 		}
 		nonces[nonce] = struct{}{}
 	}
-	// Also consider lease files with no remaining refs.
-	if gitDir, gerr := c.gitDirPath(); gerr == nil {
-		leaseRoot := filepath.Join(gitDir, runLeaseDir, kind)
+	// Also consider lease files with no remaining refs (common git dir).
+	if common, gerr := c.CommonGitDir(); gerr == nil {
+		leaseRoot := filepath.Join(common, runLeaseDir, kind)
 		entries, readErr := os.ReadDir(leaseRoot)
 		if readErr == nil {
 			for _, e := range entries {
@@ -265,11 +256,11 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 }
 
 func (c *Client) sweepStaleWorkDirs() {
-	gitDir, err := c.gitDirPath()
+	common, err := c.CommonGitDir()
 	if err != nil {
 		return
 	}
-	root := filepath.Join(gitDir, armatureWorkDir)
+	root := filepath.Join(common, armatureWorkDir)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -289,7 +280,7 @@ func (c *Client) sweepStaleWorkDirs() {
 		_ = c.removeRunLease(leaseKindWork, nonce)   //nolint:errcheck // best-effort
 	}
 	// Orphan leases with no dir.
-	leaseRoot := filepath.Join(gitDir, runLeaseDir, leaseKindWork)
+	leaseRoot := filepath.Join(common, runLeaseDir, leaseKindWork)
 	leaseEntries, readErr := os.ReadDir(leaseRoot)
 	if readErr != nil {
 		return

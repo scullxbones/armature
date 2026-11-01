@@ -812,9 +812,10 @@ What `arm ops-backup` does guarantee when it exits 0:
   (diverge included: plan help carries escalation; exit 1 via ADR 0020 §7 —
   no second error envelope). Crash leftovers under managed per-run namespaces
   (`refs/armature-tmp/`, `refs/remotes/origin/_armature-run/`,
-  `$GIT_DIR/armature-tmp-work/`, aged `.armature-ops-backup-*.bundle` temps)
-  are swept at the next run start without deleting a live concurrent nonce
-  (pid lease).
+  `<common-git-dir>/armature-tmp-work/`, aged `.armature-ops-backup-*.bundle`
+  temps) are swept at the next run start without deleting a live concurrent
+  nonce (pid lease in the common git directory, visible across linked
+  worktrees).
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 
