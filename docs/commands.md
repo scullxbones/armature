@@ -767,10 +767,13 @@ What `arm ops-backup` does guarantee when it exits 0:
   `FetchTrackingRefWithoutMovingHEAD`, then wrote a bundle that advertises
   restorable `refs/heads/_armature`. Refresh failure is fail-closed (no
   bundle). Live `refs/heads/_armature` is never rewound.
-- `verify` confirms that advertisement is present and the bundle is readable.
+- `verify` confirms that advertisement is present and the object pack is
+  restorable (fetch into a throwaway bare — not header-only `list-heads`).
 - `restore-plan` loads into a scratch tracking ref and prints
-  `missing | fast-forward | diverge→_armature-recovered`. It does not apply
-  the publish (`--apply` is not in v1).
+  `missing | fast-forward | diverge→_armature-recovered`. An absent
+  `origin/_armature` is `missing`; unreachable origin stays fail-closed. It
+  does not apply the publish (`--apply` is not in v1). Structured json/agent
+  output for all three verbs is the N2 envelope `{count, <payload>[], help[]}`.
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 

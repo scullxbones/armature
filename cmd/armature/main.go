@@ -91,6 +91,11 @@ func newRootCmd() *cobra.Command {
 					cmd.SetContext(context.WithValue(baseCtx, homeEmptyReasonKey{}, err.Error()))
 					return nil
 				}
+				// ops-backup is disaster recovery: verify/restore-plan/snapshot
+				// must run on a fresh clone without armature.ops-worktree-path.
+				if isOpsBackupCommand(cmd) && isAbsentArmatureLayout(repoPath, err) {
+					return nil
+				}
 				return platformProtocolError(cmd, err)
 			}
 

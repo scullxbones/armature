@@ -1,1 +1,1 @@
-{"count":1,"results":[{"id":"AOC-S3-T3"}],"help":["arm show <id> for outcome, scope, and acceptance"]}
+{"count":1,"snapshots":[{"status":"ok","tip":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","bundle":"/tmp/armature-ops.bundle"}],"help":["arm ops-backup verify <bundle> confirms the tip is restorable"]}

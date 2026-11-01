@@ -1919,10 +1919,27 @@ func TestBundleCreateAdvertised_ListHeads_FetchForce_REQ_TOPTIER_S12_T1(t *testi
 	heads, err := c.BundleListHeads(bundle)
 	require.NoError(t, err)
 	assert.Contains(t, heads, "refs/heads/_armature")
+	require.NoError(t, c.BundleVerifyRestorable(bundle, "refs/heads/_armature"))
 
 	require.NoError(t, c.FetchBundleForce(bundle, "refs/heads/_armature", "refs/remotes/backup/_armature"))
 	got := runGitOutput(t, repo, "rev-parse", "refs/remotes/backup/_armature")
 	assert.Equal(t, tip, got)
+}
+
+func TestFetchTrackingRef_AbsentRemoteRef_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	gittest.Git(t, fx.Origin, "update-ref", "-d", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	err := c.FetchTrackingRefWithoutMovingHEAD("_armature")
+	require.Error(t, err)
+	assert.True(t, adapters.IsRemoteRefMissing(err), "deleted origin branch must be ErrRemoteRefMissing, got %v", err)
 }
 
 func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
@@ -1933,4 +1950,5 @@ func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
 	_, listErr := c.BundleListHeads("")
 	require.Error(t, listErr)
 	require.Error(t, c.FetchBundleForce("", "refs/heads/_armature", "refs/remotes/backup/_armature"))
+	require.Error(t, c.BundleVerifyRestorable("", "refs/heads/_armature"))
 }

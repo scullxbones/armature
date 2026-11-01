@@ -1,1 +1,1 @@
-{"count":1,"results":[{"id":"AOC-S3-T3"}],"help":["arm show <id> for outcome, scope, and acceptance"]}
+{"count":1,"verifications":[{"status":"ok","bundle":"/tmp/armature-ops.bundle","advertises":"refs/heads/_armature"}],"help":["arm ops-backup restore-plan --from <bundle> prints the I2 disposition"]}

@@ -744,6 +744,30 @@ func (c *Client) FetchAndRebase(branch string) error {
 	return nil
 }
 
+// ErrRemoteRefMissing reports that origin was reachable but the requested
+// branch/ref is not advertised. Distinct from transport/unreachable failures.
+var ErrRemoteRefMissing = errors.New("couldn't find remote ref")
+
+// IsRemoteRefMissing reports whether err (or its chain/text) is an absent
+// advertised remote ref rather than an unreachable origin / other fetch failure.
+func IsRemoteRefMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrRemoteRefMissing) {
+		return true
+	}
+	return remoteRefMissingText(err.Error())
+}
+
+func remoteRefMissingText(s string) bool {
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, "couldn't find remote ref") ||
+		strings.Contains(lower, "does not exist in remote") ||
+		strings.Contains(lower, "no such ref") ||
+		(strings.Contains(lower, "remote ref") && strings.Contains(lower, "not found"))
+}
+
 // FetchTrackingRefWithoutMovingHEAD updates refs/remotes/origin/<branch> from origin without
 // moving the local branch.
 func (c *Client) FetchTrackingRefWithoutMovingHEAD(branch string) error {
@@ -751,7 +775,11 @@ func (c *Client) FetchTrackingRefWithoutMovingHEAD(branch string) error {
 	defer cancel()
 	cmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
+		wrapped := fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
+		if remoteRefMissingText(string(out)) || remoteRefMissingText(err.Error()) {
+			return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
+		}
+		return wrapped
 	}
 	return nil
 }
@@ -1392,6 +1420,54 @@ func (c *Client) BundleListHeads(bundlePath string) ([]string, error) {
 		refs = append(refs, fields[1])
 	}
 	return refs, nil
+}
+
+// BundleVerifyRestorable confirms a bundle advertises wantRef and that its
+// object pack is fetchable. list-heads / `git bundle verify` only read the
+// header — a truncated pack can still look green there when the working repo
+// already has the objects — so this fetches into a throwaway bare repo.
+func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
+	bundlePath = strings.TrimSpace(bundlePath)
+	wantRef = strings.TrimSpace(wantRef)
+	if bundlePath == "" || wantRef == "" {
+		return fmt.Errorf("bundle verify: path and advertise ref are required")
+	}
+	refs, err := c.BundleListHeads(bundlePath)
+	if err != nil {
+		return err
+	}
+	found := false
+	for _, ref := range refs {
+		if ref == wantRef {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("bundle verify: bundle does not advertise %s (got %v)", wantRef, refs)
+	}
+
+	abs, err := filepath.Abs(bundlePath)
+	if err != nil {
+		return fmt.Errorf("bundle verify: abs: %w", err)
+	}
+	bareParent, err := os.MkdirTemp("", "armature-ops-backup-verify-")
+	if err != nil {
+		return fmt.Errorf("bundle verify: temp bare: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
+	}()
+	bare := filepath.Join(bareParent, "bare.git")
+	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
+		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
+	}
+	bareClient := New(bare).WithEnviron(c.environ)
+	spec := "+" + wantRef + ":" + wantRef
+	if out, fetchErr := bareClient.cmd("fetch", abs, spec).CombinedOutput(); fetchErr != nil {
+		return fmt.Errorf("git fetch bundle into verify bare %s: %w\n%s", spec, fetchErr, out)
+	}
+	return nil
 }
 
 // FetchBundleForce force-updates dstRef from srcRef inside a git bundle.

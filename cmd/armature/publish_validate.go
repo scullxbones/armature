@@ -215,12 +215,15 @@ func remoteOpsRefMissing(err error) bool {
 	if err == nil {
 		return false
 	}
+	// Class: reachable origin without the advertised ops tip, plus legacy
+	// resolve failures that mean the same for publish-validate.
+	if adapters.IsRemoteRefMissing(err) {
+		return true
+	}
 	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "couldn't find remote ref") ||
-		strings.Contains(s, "invalid upstream") ||
+	return strings.Contains(s, "invalid upstream") ||
 		strings.Contains(s, "unknown revision") ||
 		strings.Contains(s, "needed a single revision") ||
-		strings.Contains(s, "no such ref") ||
 		strings.Contains(s, "does not exist") ||
 		strings.Contains(s, "not a valid object")
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -22,10 +21,12 @@ FetchTrackingRefWithoutMovingHEAD, fail-closes on refresh failure, never
 rewinds live refs/heads/_armature, and writes a git bundle that advertises
 refs/heads/_armature.
 
-verify checks that a bundle is readable and advertises that tip name.
+verify checks that a bundle advertises that tip and that its object pack is
+restorable (fetch into a throwaway bare — not header-only list-heads).
 
 restore-plan loads the bundle into a scratch tracking ref and prints an
 I2-safe publish disposition (missing | fast-forward | diverge→_armature-recovered).
+An absent origin/_armature is missing; unreachable origin stays fail-closed.
 It does not apply the publish. Diverge exits non-zero.`,
 		SilenceErrors: true,
 	}
@@ -35,12 +36,20 @@ It does not apply the publish. Diverge exits non-zero.`,
 	return cmd
 }
 
+func isOpsBackupCommand(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Name() == "ops-backup" {
+			return true
+		}
+	}
+	return false
+}
+
 func opsBackupGit(cmd *cobra.Command) *adapters.Client {
-	// Use the code checkout (common git dir), not the ops worktree path: tip
-	// refresh updates shared refs/remotes/origin/_armature and must not depend
-	// on a linked worktree being present for disaster-recovery verbs.
-	state := mustState(cmd)
-	if state.ctx != nil && state.ctx.RepoPath != "" {
+	// Disaster-recovery verbs must work from a fresh clone without an ops
+	// worktree / armature layout. Prefer the resolved code checkout when
+	// present; otherwise use --repo / cwd.
+	if state, err := stateFromCmd(cmd); err == nil && state.ctx != nil && state.ctx.RepoPath != "" {
 		return adapters.New(state.ctx.RepoPath)
 	}
 	repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
@@ -48,6 +57,25 @@ func opsBackupGit(cmd *cobra.Command) *adapters.Client {
 		repoPath = "."
 	}
 	return adapters.New(repoPath)
+}
+
+type opsBackupSnapshotRow struct {
+	Status string `json:"status"`
+	Tip    string `json:"tip"`
+	Bundle string `json:"bundle"`
+}
+
+type opsBackupVerifyRow struct {
+	Status     string `json:"status"`
+	Bundle     string `json:"bundle"`
+	Advertises string `json:"advertises"`
+}
+
+type opsBackupPlanRow struct {
+	Disposition string `json:"disposition"`
+	Recovered   string `json:"recovered"`
+	Scratch     string `json:"scratch"`
+	AsideRef    string `json:"aside_ref,omitempty"`
 }
 
 func newOpsBackupSnapshotCmd() *cobra.Command {
@@ -63,14 +91,11 @@ func newOpsBackupSnapshotCmd() *cobra.Command {
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if isStructuredFormat(format) {
-				payload := map[string]string{
-					"status": "ok",
-					"tip":    res.Tip,
-					"bundle": res.Bundle,
-				}
-				enc := json.NewEncoder(cmd.OutOrStdout())
-				enc.SetEscapeHTML(false)
-				return enc.Encode(payload)
+				return writeCommandEnvelope(cmd.OutOrStdout(), "snapshots", []opsBackupSnapshotRow{{
+					Status: "ok",
+					Tip:    res.Tip,
+					Bundle: res.Bundle,
+				}}, []string{"arm ops-backup verify <bundle> confirms the tip is restorable"}, nil)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "snapshot ok tip=%s bundle=%s\n", res.Tip, res.Bundle)
 			return nil
@@ -93,8 +118,11 @@ func newOpsBackupVerifyCmd() *cobra.Command {
 			}
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 			if isStructuredFormat(format) {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), `{"status":"ok","bundle":%q,"advertises":%q}`+"\n", args[0], opsbackup.AdvertisedRef)
-				return nil
+				return writeCommandEnvelope(cmd.OutOrStdout(), "verifications", []opsBackupVerifyRow{{
+					Status:     "ok",
+					Bundle:     args[0],
+					Advertises: opsbackup.AdvertisedRef,
+				}}, []string{"arm ops-backup restore-plan --from <bundle> prints the I2 disposition"}, nil)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "verify ok advertises %s\n", opsbackup.AdvertisedRef)
 			return nil
@@ -112,32 +140,35 @@ func newOpsBackupRestorePlanCmd() *cobra.Command {
 			gc := opsBackupGit(cmd)
 			plan, err := opsbackup.PlanRestore(gc, from)
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
-			writePlan := func() {
+			writePlan := func() error {
 				if isStructuredFormat(format) {
-					payload := map[string]any{
-						"disposition": plan.Disposition.String(),
-						"recovered":   plan.Recovered,
-						"scratch":     plan.Scratch,
+					row := opsBackupPlanRow{
+						Disposition: plan.Disposition.String(),
+						Recovered:   plan.Recovered,
+						Scratch:     plan.Scratch,
+						AsideRef:    plan.AsideRef,
 					}
-					if plan.AsideRef != "" {
-						payload["aside_ref"] = plan.AsideRef
+					help := []string{"arm ops-backup restore-plan does not apply the publish"}
+					if plan.Disposition == opsbackup.DispositionDivergeAside {
+						help = []string{
+							"push recovered tip only to refs/heads/_armature-recovered",
+							"escalate; do not force-push origin/_armature",
+						}
 					}
-					enc := json.NewEncoder(cmd.OutOrStdout())
-					enc.SetEscapeHTML(false)
-					if encErr := enc.Encode(payload); encErr != nil {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "ops-backup: encode plan: %v\n", encErr)
-					}
-					return
+					return writeCommandEnvelope(cmd.OutOrStdout(), "plans", []opsBackupPlanRow{row}, help, nil)
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", plan.Disposition.String())
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "recovered=%s scratch=%s\n", plan.Recovered, plan.Scratch)
 				if plan.AsideRef != "" {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "aside_ref=%s\n", plan.AsideRef)
 				}
+				return nil
 			}
 			if err != nil {
 				if errors.Is(err, opsbackup.ErrDiverge) {
-					writePlan()
+					if writeErr := writePlan(); writeErr != nil {
+						return writeErr
+					}
 					return armerrors.Map("OPS-BACKUP-2", err.Error(), []string{
 						"push recovered tip only to refs/heads/_armature-recovered",
 						"escalate; do not force-push origin/_armature",
@@ -145,8 +176,7 @@ func newOpsBackupRestorePlanCmd() *cobra.Command {
 				}
 				return armerrors.Map("OPS-BACKUP-1", err.Error(), []string{"arm ops-backup restore-plan --from <bundle>"}, err)
 			}
-			writePlan()
-			return nil
+			return writePlan()
 		},
 	}
 	cmd.Flags().StringVar(&from, "from", "", "bundle path to plan restore from")

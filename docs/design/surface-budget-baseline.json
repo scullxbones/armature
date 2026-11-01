@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 135,
+      "count": 138,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -13,6 +13,7 @@
         "Client.BlobExists",
         "Client.BundleCreateAdvertised",
         "Client.BundleListHeads",
+        "Client.BundleVerifyRestorable",
         "Client.CheckIgnoreSource",
         "Client.CommitDiff",
         "Client.CommitIndexNoVerify",
@@ -79,6 +80,7 @@
         "DirtyEntry.OldPath",
         "DirtyEntry.Path",
         "DirtyEntry.Untracked",
+        "ErrRemoteRefMissing",
         "ExecuteHook",
         "ExpandGlobs",
         "GitConfig",
@@ -93,6 +95,7 @@
         "HookResult",
         "HookResult.Allowed",
         "HookResult.Message",
+        "IsRemoteRefMissing",
         "LineWithOffset",
         "LineWithOffset.EndOffset",
         "LineWithOffset.Line",
@@ -1251,7 +1254,7 @@
         "ErrDiverge",
         "Git",
         "Git.BundleCreateAdvertised",
-        "Git.BundleListHeads",
+        "Git.BundleVerifyRestorable",
         "Git.FetchBundleForce",
         "Git.FetchTrackingRefWithoutMovingHEAD",
         "Git.IsAncestor",

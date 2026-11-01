@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -58,7 +59,7 @@ type Git interface {
 	ResolveRevision(rev string) (string, error)
 	IsAncestor(anc, desc string) (bool, error)
 	BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error
-	BundleListHeads(bundlePath string) ([]string, error)
+	BundleVerifyRestorable(bundlePath, wantRef string) error
 	FetchBundleForce(bundlePath, srcRef, dstRef string) error
 }
 
@@ -87,7 +88,8 @@ var ErrDiverge = errors.New("ops-backup: recovered tip diverges from origin/_arm
 // Snapshot refreshes origin/_armature via the same +refspec as
 // FetchTrackingRefWithoutMovingHEAD, then writes a bundle that advertises
 // refs/heads/_armature. Failed refresh aborts before creating the output.
-// Live refs/heads/_armature is never moved.
+// Live refs/heads/_armature is never moved. On bundle failure a pre-existing
+// --output path is left untouched (temp file + rename).
 func Snapshot(g Git, req SnapshotRequest) (SnapshotResult, error) {
 	out := strings.TrimSpace(req.OutputPath)
 	if out == "" {
@@ -100,36 +102,65 @@ func Snapshot(g Git, req SnapshotRequest) (SnapshotResult, error) {
 	if err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: resolve %s: %w", TrackingRef, err)
 	}
-	if err := g.BundleCreateAdvertised(out, tip, AdvertisedRef); err != nil {
-		if remErr := os.Remove(out); remErr != nil && !errors.Is(remErr, os.ErrNotExist) {
-			return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: bundle: %w (cleanup: %v)", err, remErr)
-		}
+
+	tmp, cleanup, err := snapshotTempPath(out)
+	if err != nil {
+		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: temp output: %w", err)
+	}
+	defer cleanup()
+
+	if err := g.BundleCreateAdvertised(tmp, tip, AdvertisedRef); err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: bundle: %w", err)
+	}
+	if err := os.Rename(tmp, out); err != nil {
+		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: finalize bundle: %w", err)
 	}
 	return SnapshotResult{Tip: tip, Bundle: out}, nil
 }
 
-// Verify confirms a bundle is readable and advertises AdvertisedRef.
+func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) {
+	dir := filepath.Dir(finalPath)
+	if dir == "" || dir == "." {
+		dir = "."
+	}
+	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
+		return "", func() {}, mkErr
+	}
+	f, err := os.CreateTemp(dir, ".armature-ops-backup-*.bundle")
+	if err != nil {
+		return "", func() {}, err
+	}
+	tmp = f.Name()
+	_ = f.Close() //nolint:errcheck // content written by git bundle create
+	cleaned := false
+	cleanup = func() {
+		if cleaned {
+			return
+		}
+		cleaned = true
+		_ = os.Remove(tmp) //nolint:errcheck // best-effort; rename success leaves tmp gone
+	}
+	return tmp, cleanup, nil
+}
+
+// Verify confirms a bundle advertises AdvertisedRef and that its object pack
+// is restorable (fetch into a throwaway bare — not header-only list-heads).
 func Verify(g Git, bundlePath string) error {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
 		return fmt.Errorf("ops-backup verify: bundle path is required")
 	}
-	refs, err := g.BundleListHeads(bundlePath)
-	if err != nil {
+	if err := g.BundleVerifyRestorable(bundlePath, AdvertisedRef); err != nil {
 		return fmt.Errorf("ops-backup verify: %w", err)
 	}
-	for _, ref := range refs {
-		if ref == AdvertisedRef {
-			return nil
-		}
-	}
-	return fmt.Errorf("ops-backup verify: bundle does not advertise %s (got %v)", AdvertisedRef, refs)
+	return nil
 }
 
 // PlanRestore loads a bundle into ScratchRef and returns an I2-safe publish plan.
-// It refreshes origin/_armature first (fail-closed). On diverge it still returns
-// the plan with DispositionDivergeAside and ErrDiverge.
+// It refreshes origin/_armature first. An absent advertised remote branch is the
+// documented `missing` disposition (not fail-closed). Unreachable origin and
+// other fetch failures stay fail-closed. On diverge it still returns the plan
+// with DispositionDivergeAside and ErrDiverge.
 func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
@@ -138,8 +169,15 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	if err := Verify(g, bundlePath); err != nil {
 		return RestorePlan{}, err
 	}
+	originAbsent := false
 	if err := g.FetchTrackingRefWithoutMovingHEAD(OpsBranch); err != nil {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
+		if isRemoteRefMissing(err) {
+			// Reachable origin, deleted/absent refs/heads/_armature → missing.
+			// Do not trust a stale local tracking tip for disposition.
+			originAbsent = true
+		} else {
+			return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
+		}
 	}
 	if err := g.FetchBundleForce(bundlePath, AdvertisedRef, ScratchRef); err != nil {
 		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: load bundle: %w", err)
@@ -151,6 +189,10 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	plan := RestorePlan{
 		Recovered: recovered,
 		Scratch:   ScratchRef,
+	}
+	if originAbsent {
+		plan.Disposition = DispositionMissing
+		return plan, nil
 	}
 	originTip, originErr := g.ResolveRevision(TrackingRef)
 	if originErr != nil {
@@ -172,4 +214,18 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	plan.Disposition = DispositionDivergeAside
 	plan.AsideRef = AsideRef
 	return plan, ErrDiverge
+}
+
+// isRemoteRefMissing mirrors adapters.IsRemoteRefMissing without importing the
+// adapter package (opsbackup stays on the Git port). Same class: reachable
+// origin that does not advertise the branch, not transport failure.
+func isRemoteRefMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "couldn't find remote ref") ||
+		strings.Contains(lower, "does not exist in remote") ||
+		strings.Contains(lower, "no such ref") ||
+		(strings.Contains(lower, "remote ref") && strings.Contains(lower, "not found"))
 }
