@@ -1241,7 +1241,7 @@
       ]
     },
     "internal/opsbackup": {
-      "count": 33,
+      "count": 34,
       "names": [
         "AdvertisedRef",
         "AsideBranch",
@@ -1255,6 +1255,7 @@
         "Git",
         "Git.BundleCreateAdvertised",
         "Git.BundleVerifyRestorable",
+        "Git.DeleteRef",
         "Git.FetchBundleForce",
         "Git.FetchTrackingRefWithoutMovingHEAD",
         "Git.IsAncestor",

@@ -1343,8 +1343,9 @@ func (c *Client) TreeEntry(rev, path string) (mode, oid string, err error) {
 }
 
 // BundleCreateAdvertised writes a git bundle at outputPath that advertises
-// advertiseRef at tipSHA. Objects are staged through a throwaway bare repo so
-// the working repository's live advertiseRef is never moved.
+// advertiseRef at tipSHA. Objects are pushed by tip SHA into a throwaway bare
+// repo so the working repository never grows a shared staging ref (concurrent
+// snapshots cannot cross-wire tips or delete mid-push).
 func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
 	outputPath = strings.TrimSpace(outputPath)
 	tipSHA = strings.TrimSpace(tipSHA)
@@ -1372,16 +1373,10 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
 	}
 
-	const tempRef = "refs/bundle-backup/_armature"
-	if err := c.UpdateRef(tempRef, tipSHA); err != nil {
-		return err
-	}
-	defer func() {
-		_ = c.DeleteRef(tempRef) //nolint:errcheck // best-effort temp ref cleanup
-	}()
-
-	if out, pushErr := c.cmd("push", bare, tempRef+":"+advertiseRef).CombinedOutput(); pushErr != nil {
-		return fmt.Errorf("git push bare %s:%s: %w\n%s", tempRef, advertiseRef, pushErr, out)
+	// Push tip SHA directly — no lock-free fixed refs/bundle-backup/_armature.
+	spec := tipSHA + ":" + advertiseRef
+	if out, pushErr := c.cmd("push", bare, spec).CombinedOutput(); pushErr != nil {
+		return fmt.Errorf("git push bare %s: %w\n%s", spec, pushErr, out)
 	}
 
 	bareClient := New(bare).WithEnviron(c.environ)

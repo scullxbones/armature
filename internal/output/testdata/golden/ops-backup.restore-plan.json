@@ -1,1 +1,1 @@
-{"count":1,"plans":[{"disposition":"fast-forward","recovered":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scratch":"refs/remotes/backup/_armature"}],"help":["arm ops-backup restore-plan does not apply the publish"]}
+{"count":1,"plans":[{"disposition":"fast-forward","recovered":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scratch":"refs/remotes/backup/_armature/0123456789abcdef"}],"help":["arm ops-backup restore-plan does not apply the publish"]}

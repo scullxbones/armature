@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -43,6 +45,10 @@ func (g refreshFailGit) FetchBundleForce(bundlePath, srcRef, dstRef string) erro
 	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
 }
 
+func (g refreshFailGit) DeleteRef(ref string) error {
+	return g.inner.DeleteRef(ref)
+}
+
 type bundleFailGit struct {
 	inner *adapters.Client
 	err   error
@@ -72,6 +78,10 @@ func (g bundleFailGit) FetchBundleForce(bundlePath, srcRef, dstRef string) error
 	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
 }
 
+func (g bundleFailGit) DeleteRef(ref string) error {
+	return g.inner.DeleteRef(ref)
+}
+
 type resolveFailGit struct {
 	inner     *adapters.Client
 	failRev   string
@@ -89,7 +99,7 @@ func (g resolveFailGit) FetchTrackingRefWithoutMovingHEAD(branch string) error {
 }
 
 func (g resolveFailGit) ResolveRevision(rev string) (string, error) {
-	if g.failRev != "" && rev == g.failRev {
+	if g.failRev != "" && (rev == g.failRev || strings.HasPrefix(rev, g.failRev+"/")) {
 		return "", g.err
 	}
 	return g.inner.ResolveRevision(rev)
@@ -115,6 +125,10 @@ func (g resolveFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error
 
 func (g resolveFailGit) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
 	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
+}
+
+func (g resolveFailGit) DeleteRef(ref string) error {
+	return g.inner.DeleteRef(ref)
 }
 
 type fetchBundleFailGit struct {
@@ -144,6 +158,10 @@ func (g fetchBundleFailGit) BundleVerifyRestorable(bundlePath, wantRef string) e
 
 func (g fetchBundleFailGit) FetchBundleForce(string, string, string) error {
 	return g.err
+}
+
+func (g fetchBundleFailGit) DeleteRef(ref string) error {
+	return g.inner.DeleteRef(ref)
 }
 
 func gitOut(t *testing.T, dir string, args ...string) string {
@@ -466,4 +484,187 @@ func TestPlanRestore_AncestryFail(t *testing.T) {
 	_, err = opsbackup.PlanRestore(g, newerBundle)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ancestry")
+}
+
+// tipInjectGit lets concurrent Snapshot calls report distinct tips while using
+// the real BundleCreateAdvertised path on one clone (staging-ref race class).
+type tipInjectGit struct {
+	inner *adapters.Client
+	tips  []string
+	n     atomic.Uint64
+}
+
+func (g *tipInjectGit) FetchTrackingRefWithoutMovingHEAD(string) error { return nil }
+
+func (g *tipInjectGit) ResolveRevision(rev string) (string, error) {
+	if rev == opsbackup.TrackingRef {
+		i := g.n.Add(1) - 1
+		return g.tips[i%uint64(len(g.tips))], nil
+	}
+	return g.inner.ResolveRevision(rev)
+}
+
+func (g *tipInjectGit) IsAncestor(anc, desc string) (bool, error) {
+	return g.inner.IsAncestor(anc, desc)
+}
+
+func (g *tipInjectGit) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
+	return g.inner.BundleCreateAdvertised(outputPath, tipSHA, advertiseRef)
+}
+
+func (g *tipInjectGit) BundleVerifyRestorable(bundlePath, wantRef string) error {
+	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
+}
+
+func (g *tipInjectGit) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
+	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
+}
+
+func (g *tipInjectGit) DeleteRef(ref string) error {
+	return g.inner.DeleteRef(ref)
+}
+
+func listRefs(t *testing.T, repo, pattern string) []string {
+	t.Helper()
+	cmd := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", pattern)
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "for-each-ref %s: %s", pattern, out)
+	var refs []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			refs = append(refs, line)
+		}
+	}
+	return refs
+}
+
+func bundleTip(t *testing.T, repo, bundle, wantRef string) string {
+	t.Helper()
+	cmd := adapters.NonInteractiveGitCommand(repo, "bundle", "list-heads", bundle)
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "bundle list-heads: %s", out)
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) >= 2 && fields[1] == wantRef {
+			return fields[0]
+		}
+	}
+	t.Fatalf("bundle %s does not advertise %s\n%s", bundle, wantRef, out)
+	return ""
+}
+
+func TestSnapshot_ConcurrentDistinctTips_NoCrossWire_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	repo, _, tipA := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "tip B")
+	tipB := gitOut(t, repo, "rev-parse", "HEAD")
+	require.NotEqual(t, tipA, tipB)
+
+	g := &tipInjectGit{inner: c, tips: []string{tipA, tipB}}
+	dir := t.TempDir()
+	outA := filepath.Join(dir, "a.bundle")
+	outB := filepath.Join(dir, "b.bundle")
+
+	var (
+		wg   sync.WaitGroup
+		resA opsbackup.SnapshotResult
+		resB opsbackup.SnapshotResult
+		errA error
+		errB error
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		resA, errA = opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: outA})
+	}()
+	go func() {
+		defer wg.Done()
+		resB, errB = opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: outB})
+	}()
+	wg.Wait()
+	require.NoError(t, errA)
+	require.NoError(t, errB)
+	require.True(t, (resA.Tip == tipA && resB.Tip == tipB) || (resA.Tip == tipB && resB.Tip == tipA),
+		"expected distinct tips %s/%s, got %s/%s", tipA, tipB, resA.Tip, resB.Tip)
+	require.NotEqual(t, resA.Tip, resB.Tip)
+
+	assert.Equal(t, resA.Tip, bundleTip(t, repo, outA, opsbackup.AdvertisedRef), "bundle A must match reported tip")
+	assert.Equal(t, resB.Tip, bundleTip(t, repo, outB, opsbackup.AdvertisedRef), "bundle B must match reported tip")
+	assert.Empty(t, listRefs(t, repo, "refs/bundle-backup"), "no stray bundle-backup staging refs")
+}
+
+func TestVerify_ConcurrentDistinctBundles_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	repo, _, tipA := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "tip B")
+	tipB := gitOut(t, repo, "rev-parse", "HEAD")
+
+	dir := t.TempDir()
+	bundleA := filepath.Join(dir, "a.bundle")
+	bundleB := filepath.Join(dir, "b.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundleA, tipA, opsbackup.AdvertisedRef))
+	require.NoError(t, c.BundleCreateAdvertised(bundleB, tipB, opsbackup.AdvertisedRef))
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errs[0] = opsbackup.Verify(c, bundleA)
+	}()
+	go func() {
+		defer wg.Done()
+		errs[1] = opsbackup.Verify(c, bundleB)
+	}()
+	wg.Wait()
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+}
+
+func TestRestorePlan_ConcurrentDistinctBundles_NoCrossWire_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	repo, _, tipA := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	// tipB is a local fast-forward of origin (still at tipA) so both plans succeed.
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "tip B")
+	tipB := gitOut(t, repo, "rev-parse", "HEAD")
+	require.NotEqual(t, tipA, tipB)
+
+	dir := t.TempDir()
+	bundleA := filepath.Join(dir, "a.bundle")
+	bundleB := filepath.Join(dir, "b.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundleA, tipA, opsbackup.AdvertisedRef))
+	require.NoError(t, c.BundleCreateAdvertised(bundleB, tipB, opsbackup.AdvertisedRef))
+
+	var (
+		wg    sync.WaitGroup
+		planA opsbackup.RestorePlan
+		planB opsbackup.RestorePlan
+		errA  error
+		errB  error
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		planA, errA = opsbackup.PlanRestore(c, bundleA)
+	}()
+	go func() {
+		defer wg.Done()
+		planB, errB = opsbackup.PlanRestore(c, bundleB)
+	}()
+	wg.Wait()
+	require.NoError(t, errA)
+	require.NoError(t, errB)
+	assert.Equal(t, tipA, planA.Recovered)
+	assert.Equal(t, tipB, planB.Recovered)
+	assert.Equal(t, opsbackup.DispositionFastForward, planA.Disposition)
+	assert.Equal(t, opsbackup.DispositionFastForward, planB.Disposition)
+	assert.NotEqual(t, planA.Scratch, planB.Scratch, "scratch staging must be per-run")
+	assert.True(t, strings.HasPrefix(planA.Scratch, opsbackup.ScratchRef+"/"))
+	assert.True(t, strings.HasPrefix(planB.Scratch, opsbackup.ScratchRef+"/"))
+	assert.Empty(t, listRefs(t, repo, opsbackup.ScratchRef), "per-run scratch refs cleaned up")
+	assert.Empty(t, listRefs(t, repo, "refs/bundle-backup"), "no stray bundle-backup staging refs")
 }

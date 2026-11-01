@@ -4,6 +4,8 @@
 package opsbackup
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -20,7 +22,8 @@ const (
 	LiveRef = "refs/heads/_armature"
 	// AdvertisedRef is the tip name written into the bundle header for restore.
 	AdvertisedRef = "refs/heads/_armature"
-	// ScratchRef is the force-updated tracking ref restore-plan loads into.
+	// ScratchRef is the namespace prefix for per-run restore-plan staging refs
+	// (refs/remotes/backup/_armature/<nonce>). Never used as a shared tip.
 	ScratchRef = "refs/remotes/backup/_armature"
 	// AsideBranch is the I2-safe publish target when tips diverge.
 	AsideBranch = "_armature-recovered"
@@ -61,6 +64,7 @@ type Git interface {
 	BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error
 	BundleVerifyRestorable(bundlePath, wantRef string) error
 	FetchBundleForce(bundlePath, srcRef, dstRef string) error
+	DeleteRef(ref string) error
 }
 
 // SnapshotRequest is the input for Snapshot.
@@ -156,11 +160,12 @@ func Verify(g Git, bundlePath string) error {
 	return nil
 }
 
-// PlanRestore loads a bundle into ScratchRef and returns an I2-safe publish plan.
-// It refreshes origin/_armature first. An absent advertised remote branch is the
-// documented `missing` disposition (not fail-closed). Unreachable origin and
-// other fetch failures stay fail-closed. On diverge it still returns the plan
-// with DispositionDivergeAside and ErrDiverge.
+// PlanRestore loads a bundle into a per-run scratch ref under ScratchRef/ and
+// returns an I2-safe publish plan. Concurrent restore-plan invocations never
+// share a mutable staging tip. It refreshes origin/_armature first. An absent
+// advertised remote branch is the documented `missing` disposition (not
+// fail-closed). Unreachable origin and other fetch failures stay fail-closed.
+// On diverge it still returns the plan with DispositionDivergeAside and ErrDiverge.
 func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
@@ -179,16 +184,23 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 			return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
 		}
 	}
-	if err := g.FetchBundleForce(bundlePath, AdvertisedRef, ScratchRef); err != nil {
+	scratch, err := uniqueScratchRef()
+	if err != nil {
+		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: scratch ref: %w", err)
+	}
+	defer func() {
+		_ = g.DeleteRef(scratch) //nolint:errcheck // best-effort per-run staging cleanup
+	}()
+	if err := g.FetchBundleForce(bundlePath, AdvertisedRef, scratch); err != nil {
 		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: load bundle: %w", err)
 	}
-	recovered, err := g.ResolveRevision(ScratchRef)
+	recovered, err := g.ResolveRevision(scratch)
 	if err != nil {
 		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: resolve scratch: %w", err)
 	}
 	plan := RestorePlan{
 		Recovered: recovered,
-		Scratch:   ScratchRef,
+		Scratch:   scratch,
 	}
 	if originAbsent {
 		plan.Disposition = DispositionMissing
@@ -214,6 +226,14 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	plan.Disposition = DispositionDivergeAside
 	plan.AsideRef = AsideRef
 	return plan, ErrDiverge
+}
+
+func uniqueScratchRef() (string, error) {
+	var nonce [8]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return "", err
+	}
+	return ScratchRef + "/" + hex.EncodeToString(nonce[:]), nil
 }
 
 // isRemoteRefMissing mirrors adapters.IsRemoteRefMissing without importing the
