@@ -89,11 +89,24 @@ func loadLocalOnlyOpsStaleAfter(configPath string) d11StaleLoad {
 	if strings.TrimSpace(configPath) == "" {
 		return def
 	}
-	cfg, err := config.LoadConfig(configPath)
+	// Same read + ValidatePresentFields path as D10 (checkD10ConfigHealth).
+	data, err := readRepoConfigFile(configPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, errNotRepoConfigJSON) {
 			return def
 		}
+		detail := redact.Secrets(err.Error())
+		def.fallbackWarn = "could not load local_only_ops_stale_hours; using default 24h: " + detail
+		return def
+	}
+	// Present 0 / negative / overflow must fail here too — never omit→24h.
+	for _, p := range config.ValidatePresentFields(data) {
+		if strings.Contains(p, "local_only_ops_stale_hours") {
+			return d11StaleLoad{convertErr: redact.Secrets(p)}
+		}
+	}
+	cfg, err := config.StrictDecode(data)
+	if err != nil {
 		detail := redact.Secrets(err.Error())
 		def.fallbackWarn = "could not load local_only_ops_stale_hours; using default 24h: " + detail
 		return def

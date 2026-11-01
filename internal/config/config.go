@@ -89,18 +89,18 @@ type Config struct {
 	IntegrationBranch      string                `json:"integration_branch,omitempty"`
 }
 
-// LocalOnlyOpsStaleAfter returns the D11 / G2.2 staleness window. Omitted
-// (zero) falls back to DefaultLocalOnlyOpsStaleHours (24h). Negative values
-// and hour counts that overflow time.Duration return an error — never a
-// wrapped/negative duration. A present 0 is rejected by ValidatePresentFields
-// / doctor D10; overflow is also a D10 finding via the same durationFromCount.
+// LocalOnlyOpsStaleAfter returns the D11 / G2.2 staleness window for a decoded
+// Config whose local_only_ops_stale_hours was omitted (struct zero → 24h) or
+// already range-validated. Callers that have the raw JSON must run
+// ValidatePresentFields first (D10 and D11 share that path) so a present 0 /
+// negative / overflow never reaches the omit→24h branch.
 func (c Config) LocalOnlyOpsStaleAfter() (time.Duration, error) {
 	hours := int64(c.LocalOnlyOpsStaleHours)
 	if hours == 0 {
 		hours = int64(DefaultLocalOnlyOpsStaleHours)
 	}
 	if hours < 0 {
-		return 0, fmt.Errorf("local_only_ops_stale_hours %d is negative", hours)
+		return 0, fmt.Errorf("local_only_ops_stale_hours %d is out of range (must be > 0)", hours)
 	}
 	return durationFromCount(hours, time.Hour)
 }

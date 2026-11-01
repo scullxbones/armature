@@ -520,8 +520,21 @@ func TestLoadLocalOnlyOpsStaleAfter(t *testing.T) {
 	fallback := loadLocalOnlyOpsStaleAfter(bad)
 	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, fallback.after)
 	assert.Contains(t, fallback.fallbackWarn, "using default 24h")
-	assert.Contains(t, fallback.fallbackWarn, "parse config")
+	assert.NotEmpty(t, fallback.fallbackWarn)
 	assert.Empty(t, fallback.convertErr)
+
+	// Present 0: D10 rejects; D11 must use the same ValidatePresentFields path
+	// and must not omit→24h.
+	zeroPath := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(zeroPath, []byte(`{"local_only_ops_stale_hours":0}`), 0o644))
+	zero := loadLocalOnlyOpsStaleAfter(zeroPath)
+	assert.Zero(t, zero.after)
+	assert.Empty(t, zero.fallbackWarn)
+	assert.Contains(t, zero.convertErr, "local_only_ops_stale_hours")
+	assert.Contains(t, zero.convertErr, "must be > 0")
+	d11Zero := checkD11OpsRemote(t.TempDir(), zeroPath, time.Now())
+	assert.Equal(t, SeverityError, d11Zero.Severity)
+	assert.Contains(t, d11Zero.Message, "Invalid local_only_ops_stale_hours")
 
 	// Overflow must not silently fall back to 24h (review example 2562048).
 	overflowHours := int(math.MaxInt64/int64(time.Hour)) + 1

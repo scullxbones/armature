@@ -146,8 +146,19 @@ func TestDurationConfigFields_D10AndConsumerAgree_REQ_TOPTIER_S12_T2(t *testing.
 			name:    "local_only_ops_stale_hours",
 			jsonKey: "local_only_ops_stale_hours",
 			unit:    time.Hour,
+			// Same path D11 uses: ValidatePresentFields then LocalOnlyOpsStaleAfter.
 			consumer: func(n int) (time.Duration, error) {
-				return (Config{LocalOnlyOpsStaleHours: n}).LocalOnlyOpsStaleAfter()
+				raw := []byte(fmt.Sprintf(`{"local_only_ops_stale_hours":%d}`, n))
+				for _, p := range ValidatePresentFields(raw) {
+					if strings.Contains(p, "local_only_ops_stale_hours") {
+						return 0, fmt.Errorf("%s", p)
+					}
+				}
+				cfg, err := StrictDecode(raw)
+				if err != nil {
+					return 0, err
+				}
+				return cfg.LocalOnlyOpsStaleAfter()
 			},
 			d10RejectSubstring: "local_only_ops_stale_hours",
 		},
@@ -209,22 +220,16 @@ func TestDurationConfigFields_D10AndConsumerAgree_REQ_TOPTIER_S12_T2(t *testing.
 					return
 				}
 				require.NotEmpty(t, problems, "D10 must reject")
-				// Present 0: D10 rejects; consumers treat struct-zero as omit→builtin
-				// (hours) or a representable zero duration (minutes via durationFromCount).
-				if n == 0 {
-					switch field.jsonKey {
-					case "local_only_ops_stale_hours":
-						got, err = (Config{}).LocalOnlyOpsStaleAfter()
-						require.NoError(t, err)
-						assert.Equal(t, time.Duration(DefaultLocalOnlyOpsStaleHours)*time.Hour, got)
-					case "default_ttl":
-						got, err = durationFromCount(0, time.Minute)
-						require.NoError(t, err)
-						assert.Equal(t, time.Duration(0), got)
-					}
+				// Present 0 for default_ttl: durationFromCount(0) is representable,
+				// but D10 still rejects. Hours consumer uses ValidatePresentFields
+				// (same as D11) so present 0 errors in lockstep with D10.
+				if field.jsonKey == "default_ttl" && n == 0 {
+					got, err = durationFromCount(0, time.Minute)
+					require.NoError(t, err)
+					assert.Equal(t, time.Duration(0), got)
 					return
 				}
-				require.Error(t, err, "consumer must reject value D10 rejects")
+				require.Error(t, err, "consumer must reject value D10 rejects (incl. present 0)")
 			})
 		}
 	}
