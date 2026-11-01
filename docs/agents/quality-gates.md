@@ -36,15 +36,15 @@ PR wall is the **max** of three required GitHub Actions jobs (no `needs` between
 | Context | Runs |
 |---|---|
 | `check-core` | coverage suite once + thresholds, validate-skills, validate-doc-examples, census-drift, git-test hermetic, surface-budget |
-| `check-static` | lint (pinned golangci-lint, including mock-ban and typed source-manifest decode ownership via `scripts/repoguard`), crosscompile, census/coverage/hermetic/mock-ban/source-manifest-decode/surface-budget self-tests, check-job drift test |
+| `check-static` | **owns commit-subjects** (PR `head.sha` + `fetch-depth: 0` + `origin/main` fetch), then lint / crosscompile / check-job drift and the rest of the static partition |
 | `mutate` | gremlins on `./internal` then `./cmd` (full, every PR) |
-| `check-git-2-34` | checksum-pinned Git **2.34.0** source build on PATH, then full `make check` (proves S12 restore/fetch and the rest on the documented floor) |
+| `check-git-2-34` | checksum-pinned Git **2.34.0** on PATH, then `make check-git-floor` (CHECK_JOBS only — proves S12 on the floor; no commit-subjects) |
 
 Every CI job runs `scripts/assert-git-min.sh` so runner images cannot silently fall below Git 2.34. The product runtime check (`adapters.RequireMinGit` / `MinGitVersion`) matches that floor.
 
-CI calls `make check-job JOB=<id>` only for the three required contexts — the membership table in the Makefile is the only step list. `check-git-2-34` runs `make check` directly after installing the pinned git. Expected wall is ~max of the two ~4m poles plus setup (~6m), not the former ~13m serial `check` job; the exact-2.34 leg is an additional supply-chain proof.
+Lean **(b)** class: version-pinned / partitioned legs run `make check-job` (or `make check-git-floor`); **commit-subjects runs in exactly one CI job** (`check-static`) that already has the correct range (PR tip, not the synthetic merge SHA). Bare `make check` is local/publish-gate only. `scripts/check-commit-subjects.sh` fails loud on empty or merge-only ranges (never pass while checking nothing). Expected wall is ~max of the two ~4m poles plus setup (~6m); the exact-2.34 leg is an additional supply-chain proof.
 
-**`origin/main` class rule:** targets that need `origin/main` (`make check` via `check-commit-subjects`, `make commit-subjects-check`, `make check-fast`) may run in CI only when that ref is present — either `git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main` or `fetch-depth: 0` on checkout — still with `persist-credentials: false`. Partitioned `check-job` legs do not depend on `origin/main`. `scripts/test_check_jobs.sh` enforces the mapping.
+**`origin/main` class rule:** targets that need `origin/main` (`make check` via `check-commit-subjects`, `make commit-subjects-check`, `make check-fast`) may run in CI only when that ref is present — either `git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main` or `fetch-depth: 0` on checkout — still with `persist-credentials: false`. Partitioned `check-job` / `check-git-floor` legs do not depend on `origin/main`. `scripts/test_check_jobs.sh` enforces the mapping.
 
 Keep `e2eharness`, `validate-graph`, and the `test-os` matrix as they are. Ubuntu `test-os` skips `make test-ci` on pull_request/push (check-core already ran the suite) and still runs it when this workflow is called with `os-matrix-only` (tag releases skip check-core). macos and windows keep their matrix tests. Unix `make test-ci` prints per-package elapsed times (slowest first), the top 20 slowest tests, and a warning when a package exceeds 75% of `TEST_TIMEOUT`; the same report goes to `$GITHUB_STEP_SUMMARY` and the raw `go test -json` stream is uploaded as a 14-day artifact. Windows `test-ci` stays compile-only (`go test -c`). Default ruleset must require the three new context names (copy the same string form already stored for `e2eharness`) and must drop `check`.
 

@@ -127,11 +127,17 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Lean (b): this is the ONE CI job that owns commit-subjects. Pin the PR
+      # tip (not the synthetic merge SHA) so origin/main..HEAD lists real commits.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: Fetch origin/main for commit-subjects
+        run: git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -142,6 +148,8 @@ jobs:
           mkdir -p "$dest"
           echo "$dest" >> "$GITHUB_PATH"
           make install-rg-release DEST="$dest"
+      - name: Check commit subjects on PR tip range
+        run: make commit-subjects-check
       - run: make check-job JOB=check-static
         env:
           CHECK_INSTALL_TOOLS: "1"
@@ -164,9 +172,11 @@ jobs:
         env:
           CHECK_INSTALL_TOOLS: "1"
 
-  # Exact Git floor (2.34.0) from a checksum-pinned source build. Proves
-  # make check — including S12 ops-backup restore/fetch — on the documented
-  # minimum, not only on newer runner images.
+  # Exact Git floor (2.34.0) from a checksum-pinned source build. Proves the
+  # full CHECK_JOBS suite (incl. S12 ops-backup) on the documented minimum.
+  # Uses make check-git-floor — same partitions as other CI jobs — not bare
+  # make check: PR merge SHAs have unscoped subjects, so check-commit-subjects
+  # would exit before the suite. Partitions do not need origin/main.
   check-git-2-34:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
@@ -216,20 +226,12 @@ jobs:
           echo "$dest" >> "$GITHUB_PATH"
           make install-rg-release DEST="$dest"
 
-      # make check → check-commit-subjects needs origin/main. Shallow PR
-      # checkouts lack that ref; fetch it (least-privilege, no credentials).
-      # Class rule: every CI job whose make target needs origin/main must
-      # fetch it (or use fetch-depth: 0). Enforced by test-check-jobs.
-      - name: Fetch origin/main for check-commit-subjects
-        run: git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main
-
-      - name: make check on Git ${{ env.GIT_MIN_VERSION }}
+      - name: Full check suite on Git ${{ env.GIT_MIN_VERSION }}
         env:
           CHECK_INSTALL_TOOLS: "1"
         run: |
           git --version
-          git rev-parse --verify --quiet origin/main
-          make check
+          make check-git-floor
 
   # Integration door (D7): whole-graph arm validate --ci. Not part of the
   # per-task publish gate — that gate must stay worker-local. This job is the

@@ -130,8 +130,12 @@ if got != want:
     sys.exit(1)
 
 for jid, (body, make_runs) in fanout.items():
-    if make_runs != [f"make check-job JOB={jid}"]:
-        print(f"FAIL: job {jid} make steps {make_runs!r} want exactly ['make check-job JOB={jid}']")
+    # Lean (b): check-static alone may also run commit-subjects-check (exactly once).
+    want_runs = [f"make check-job JOB={jid}"]
+    if jid == "check-static":
+        want_runs = ["make commit-subjects-check", f"make check-job JOB={jid}"]
+    if make_runs != want_runs:
+        print(f"FAIL: job {jid} make steps {make_runs!r} want exactly {want_runs!r}")
         sys.exit(1)
     for raw in body:
         stripped = raw.strip()
@@ -519,12 +523,19 @@ for needle in (
     "install-git-from-source.sh",
     "GIT_MIN_VERSION",
     "GIT_MIN_TARBALL_SHA256",
-    "make check",
-    "main:refs/remotes/origin/main",
+    "make check-git-floor",
 ):
-    if needle not in body and needle not in text:
-        print(f"FAIL: check-git-2-34 / workflow missing {needle}")
+    if needle not in body:
+        print(f"FAIL: check-git-2-34 missing {needle}")
         sys.exit(1)
+# Lean (b): version-pinned leg must NOT run bare make check / commit-subjects.
+cleaned = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("#"))
+if re.search(r"(^|[\s;|&])make check(?!-)($|[\s;|&])", cleaned, re.M):
+    print("FAIL: check-git-2-34 must not run bare make check (use check-git-floor)")
+    sys.exit(1)
+if "commit-subjects-check" in cleaned or "check-commit-subjects" in cleaned:
+    print("FAIL: check-git-2-34 must not own commit-subjects (lean b)")
+    sys.exit(1)
 if "0ce6222bfd31938b29360150286b51c77c643fa97740b1d35b6d1ceef8b0ecd7" not in text:
     print("FAIL: workflow must pin git-2.34.0.tar.gz sha256")
     sys.exit(1)
@@ -647,7 +658,7 @@ if current is not None:
     jobs[current] = "\n".join(buf)
 
 # Targets that read origin/main (see Makefile check / commit-subjects-check / check-fast).
-# Do not match make check-job or make check-fast when looking for bare make check.
+# Do not match make check-job / check-git-floor when looking for bare make check.
 need_re = re.compile(
     r"(^|[\s;|&])make (?:check-fast|commit-subjects-check|check)(?!-)($|[\s;|&])",
     re.MULTILINE,
@@ -655,10 +666,14 @@ need_re = re.compile(
 fetch_ok_re = re.compile(
     r"main:refs/remotes/origin/main|fetch-depth:\s*0\b",
 )
+subjects_re = re.compile(
+    r"(^|[\s;|&])make commit-subjects-check($|[\s;|&])",
+    re.MULTILINE,
+)
 
 needed_by = []
+subjects_owners = []
 for jid, body in jobs.items():
-    # Strip full-line comments before matching make targets.
     cleaned = "\n".join(
         ln for ln in body.splitlines() if not ln.lstrip().startswith("#")
     )
@@ -670,18 +685,89 @@ for jid, body in jobs.items():
                 "but neither fetches main:refs/remotes/origin/main nor sets fetch-depth: 0"
             )
             sys.exit(1)
+    if subjects_re.search(cleaned):
+        subjects_owners.append(jid)
 
-if "check-git-2-34" not in needed_by:
-    print("FAIL: check-git-2-34 must run make check (needs origin/main class)")
+if "check-git-2-34" in needed_by:
+    print("FAIL: check-git-2-34 must not depend on origin/main (lean b: check-git-floor only)")
     sys.exit(1)
-print("PASS: origin/main fetch mapped for " + ",".join(needed_by))
+if subjects_owners != ["check-static"]:
+    print(f"FAIL: exactly one job must own commit-subjects-check (want ['check-static'], got {subjects_owners})")
+    sys.exit(1)
+static = jobs.get("check-static", "")
+if "pull_request.head.sha" not in static:
+    print("FAIL: check-static must pin github.event.pull_request.head.sha for commit-subjects range")
+    sys.exit(1)
+if "fetch-depth: 0" not in static and "fetch-depth:0" not in static:
+    print("FAIL: check-static must use fetch-depth: 0 for commit-subjects history")
+    sys.exit(1)
+print("PASS: origin/main mapped for " + ",".join(needed_by) + "; commit-subjects owner=check-static")
 PY
 ) && ORIGIN_MAIN_STATUS=0 || ORIGIN_MAIN_STATUS=$?
 
 if [[ $ORIGIN_MAIN_STATUS -eq 0 ]]; then
-    pass "CI jobs needing origin/main fetch that ref (${ORIGIN_MAIN_RESULT#PASS: })"
+    pass "CI origin/main + single commit-subjects owner (${ORIGIN_MAIN_RESULT#PASS: })"
 else
     fail "${ORIGIN_MAIN_RESULT:-origin/main fetch mapping failed}"
+fi
+
+echo "Test 11: check-commit-subjects fails loud on empty and merge-only ranges..."
+
+CCS_DEMO=$(mktemp -d)
+cleanup_ccs() { rm -rf "$CCS_DEMO"; }
+(
+    set -e
+    cd "$CCS_DEMO"
+    git init -q -b main
+    git config user.email "ccs@example.com"
+    git config user.name "ccs"
+    # Isolated fixture: no global hooks / templates.
+    git commit -q --allow-empty -m "feat(GIT234-MIN): base on main"
+    git branch -M main
+    git update-ref refs/remotes/origin/main HEAD
+
+    # Empty range: HEAD == origin/main
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-commit-subjects.sh" origin/main..HEAD 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: empty range exited 0: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'empty|refusing to pass while checking nothing'; then
+        echo "FAIL: empty range missing loud message: $out"
+        exit 1
+    fi
+
+    # Merge-only range: point origin/main at the side tip so origin/main..HEAD
+    # is only the merge commit (both parents are reachable from the side tip).
+    git checkout -q -b side
+    git commit -q --allow-empty -m "feat(GIT234-MIN): side tip"
+    side=$(git rev-parse HEAD)
+    git checkout -q main
+    git merge -q --no-ff -m "Merge ${side} into main" side
+    git update-ref refs/remotes/origin/main "$side"
+
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-commit-subjects.sh" origin/main..HEAD 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: merge-only range exited 0: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'only merge commits|merge-only'; then
+        echo "FAIL: merge-only range missing loud message: $out"
+        exit 1
+    fi
+) && CCS_STATUS=0 || CCS_STATUS=$?
+cleanup_ccs
+
+if [[ $CCS_STATUS -eq 0 ]]; then
+    pass "check-commit-subjects fails on empty and merge-only ranges"
+else
+    fail "check-commit-subjects empty/merge-only demo failed"
 fi
 
 echo ""
