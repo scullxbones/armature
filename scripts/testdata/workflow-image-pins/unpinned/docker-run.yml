@@ -1,0 +1,13 @@
+name: t
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          docker run --rm \
+            --entrypoint sh \
+            -v "$PWD:/src:ro" \
+            -w /src \
+            alpine:3.22 \
+            -c 'echo hi'

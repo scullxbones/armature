@@ -1,0 +1,10 @@
+name: t
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+    steps:
+      - run: echo hi

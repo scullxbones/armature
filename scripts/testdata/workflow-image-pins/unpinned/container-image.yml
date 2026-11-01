@@ -1,0 +1,9 @@
+name: t
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.22
+    steps:
+      - run: echo hi

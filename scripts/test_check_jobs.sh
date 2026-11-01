@@ -940,35 +940,39 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
+    # YAML-parser image pin lint + fixture selftest (unpinned fail / pinned pass).
     bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
 
-    # Unpinned docker run must fail the image-pin lint.
-    badwf=$(mktemp -d)
-    mkdir -p "$badwf/.github/workflows"
-    cat >"$badwf/.github/workflows/ci.yml" <<'YAML'
-name: bad
-on: push
-permissions:
-  contents: read
-jobs:
-  x:
-    runs-on: ubuntu-latest
-    steps:
-      - run: docker run --rm bash:3.2 echo hi
-YAML
-    set +e
-    pinout=$(bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$badwf" 2>&1)
-    pinst=$?
-    set -e
-    rm -rf "$badwf"
-    if [[ $pinst -eq 0 ]]; then
-        echo "FAIL: unpinned docker run did not fail image-pin lint: $pinout"
-        exit 1
-    fi
-    if ! printf '%s\n' "$pinout" | rg -q 'sha256|missing'; then
-        echo "FAIL: unpinned lint output unclear: $pinout"
-        exit 1
-    fi
+    # Each unpinned form fixture must fail when checked as a solo workflow tree.
+    for form in container-string container-image services-image uses-docker \
+        docker-run docker-pull docker-create podman-run; do
+        badwf=$(mktemp -d)
+        mkdir -p "$badwf/.github/workflows"
+        cp "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/${form}.yml" \
+            "$badwf/.github/workflows/ci.yml"
+        set +e
+        pinout=$(go run -C "$REPO_ROOT" ./scripts/workflowimagepins "$badwf" 2>&1)
+        pinst=$?
+        set -e
+        rm -rf "$badwf"
+        if [[ $pinst -eq 0 ]]; then
+            echo "FAIL: unpinned form $form did not fail YAML image-pin lint: $pinout"
+            exit 1
+        fi
+        goodwf=$(mktemp -d)
+        mkdir -p "$goodwf/.github/workflows"
+        cp "$REPO_ROOT/scripts/testdata/workflow-image-pins/pinned/${form}.yml" \
+            "$goodwf/.github/workflows/ci.yml"
+        set +e
+        pinout=$(go run -C "$REPO_ROOT" ./scripts/workflowimagepins "$goodwf" 2>&1)
+        pinst=$?
+        set -e
+        rm -rf "$goodwf"
+        if [[ $pinst -ne 0 ]]; then
+            echo "FAIL: pinned twin $form failed YAML image-pin lint: $pinout"
+            exit 1
+        fi
+    done
 
     # Makefile write-baseline failure must stop make (not ignored via ';').
     if ! rg -q 'check-test-porcelain\.sh --write-baseline .* \|\| \{' "$MAKEFILE"; then
