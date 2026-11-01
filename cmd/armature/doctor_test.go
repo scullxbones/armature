@@ -197,8 +197,8 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	_, fallback := doctorCheckGuidance("D14")
 	assert.Equal(t, []string{promotion.FallbackGuidance}, fallback)
 
-	// Done under merged parent with rollup-eligible children: typed Options
-	// (reopen ancestor OR cancel subject) — not empty→doctor.
+	// Done under merged parent with rollup-eligible children: reopen only —
+	// never cancel done (single Alternative renders without Option labels).
 	allMerged := promotion.Graph{
 		"P": {Status: "merged", Children: []string{"R"}},
 		"R": {Status: "done", Parent: "P", Children: []string{"C"}},
@@ -208,14 +208,12 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> P"},
 	}, allMerged, promotion.PlanOpts{})
 	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> P", sug[0])
-	assert.Equal(t, "Option A:", sug[1])
-	assert.Equal(t, "arm reopen --issue P", sug[2])
-	assert.Equal(t, "Option B:", sug[3])
-	assert.Equal(t, "arm transition --issue R --to cancelled --force", sug[4])
+	assert.Equal(t, "arm reopen --issue P", sug[1])
+	assert.NotContains(t, sug, "Option B:")
+	assert.NotContains(t, sug, "arm transition --issue R --to cancelled --force")
 	assert.NotContains(t, expl, "children are merged")
 
-	// Open leaf under merged ancestor → Options reopen E / cancel O then R;
-	// more-steps claim the open child after reopen — never claim under merged.
+	// Done R under merged with open child: reopen only for R's finding.
 	repair := promotion.Graph{
 		"E": {Status: "merged", Children: []string{"R"}},
 		"R": {Status: "done", Parent: "E", Children: []string{"O"}},
@@ -226,14 +224,20 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	}, repair, promotion.PlanOpts{})
 	assert.Contains(t, expl, promotion.TreeRepairGuidance)
 	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> E", sug[0])
-	assert.Equal(t, "Option A:", sug[1])
-	assert.Equal(t, "arm reopen --issue E", sug[2])
-	assert.Equal(t, "Option B:", sug[3])
-	assert.Equal(t, "arm transition --issue O --to cancelled --force", sug[4])
-	assert.Equal(t, "arm transition --issue R --to cancelled --force", sug[5])
-	assert.Contains(t, sug, promotion.MoreStepsFollowGuidance)
+	assert.Equal(t, "arm reopen --issue E", sug[1])
+	assert.NotContains(t, sug, "Option B:")
+	assert.NotContains(t, sug, "arm transition --issue R --to cancelled --force")
 	assert.Contains(t, sug, "arm claim --issue O --worktree")
 	assert.NotContains(t, sug, "arm claim --issue R")
+
+	// Open O under merged: Option A reopen + Option B cancel O.
+	_, sugO := doctorCheckGuidanceFor(doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"O under merged E (open)"},
+	}, repair, promotion.PlanOpts{})
+	assert.Equal(t, "Option A:", sugO[1])
+	assert.Equal(t, "arm reopen --issue E", sugO[2])
+	assert.Equal(t, "Option B:", sugO[3])
+	assert.Equal(t, "arm transition --issue O --to cancelled --force", sugO[4])
 }
 
 func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {

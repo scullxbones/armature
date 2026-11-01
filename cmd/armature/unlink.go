@@ -191,7 +191,7 @@ func confirmGraphEditOverride(cmd *cobra.Command) error {
 	if nonInteractive {
 		return fmt.Errorf("graph edit override requires a controlling terminal")
 	}
-	tty, err := openControllingTTY()
+	tty, err := openControllingTTY(cmd)
 	if err != nil {
 		return fmt.Errorf("graph edit override requires a controlling terminal")
 	}

@@ -920,7 +920,10 @@ it creates a new task worktree from the parent worktree's current branch and tip
 
 			// Product gate: refuse creating open/claimed work under a merged
 			// ancestor (--force does not skip; same invariant doctor reports).
-			graph := promotionGraphFromStore(store, store.Index())
+			graph, graphErr := promotionGraphFromStore(store, store.Index())
+			if graphErr != nil {
+				return fmt.Errorf("promotion graph: %w", graphErr)
+			}
 			if promotion.WouldViolateTreeConsistency(issueID, graph) {
 				viewer, _, viewerErr := resolveWorkerAndLogCmd(cmd)
 				if viewerErr != nil {

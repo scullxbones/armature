@@ -48,13 +48,15 @@ func ParseTarget(s string) (Target, error) {
 		return TargetLocal, nil
 	}
 	t := Target(s)
-	if !slices.Contains(allKnownTargets, t) {
+	if !slices.Contains(allKnownTargets(), t) {
 		return "", fmt.Errorf("unknown target %q: allowed values are %q, %q", s, TargetLocal, TargetGlobal)
 	}
 	return t, nil
 }
 
-var allKnownTargets = []Target{TargetLocal, TargetGlobal} //nolint:gochecknoglobals //immutable target table
+func allKnownTargets() []Target {
+	return []Target{TargetLocal, TargetGlobal}
+}
 
 // ArtifactKind is a harness artifact cell in a plan row.
 type ArtifactKind string
@@ -101,25 +103,27 @@ type PlanRequest struct {
 // ParsePlatform maps a CLI platform flag onto the known set.
 func ParsePlatform(s string) (Platform, error) {
 	p := Platform(s)
-	if !slices.Contains(allKnownPlatforms, p) {
+	if !slices.Contains(allKnownPlatforms(), p) {
 		return "", fmt.Errorf("unknown platform: %s", s)
 	}
 	return p, nil
 }
 
-//nolint:gochecknoglobals //immutable platform table
-var allKnownPlatforms = []Platform{
-	PlatformClaude, PlatformCodex, PlatformAntigravity, PlatformDevin,
+func allKnownPlatforms() []Platform {
+	return []Platform{
+		PlatformClaude, PlatformCodex, PlatformAntigravity, PlatformDevin,
+	}
 }
 
 type platformArtifacts struct {
 	skills, pluginMetadata, harnessHookConfig bool
 }
 
-//nolint:gochecknoglobals //immutable artifact map
-var verifiedArtifacts = map[Platform]platformArtifacts{
-	PlatformClaude: {skills: true, pluginMetadata: true, harnessHookConfig: true},
-	PlatformCodex:  {harnessHookConfig: true},
+func verifiedArtifacts() map[Platform]platformArtifacts {
+	return map[Platform]platformArtifacts{
+		PlatformClaude: {skills: true, pluginMetadata: true, harnessHookConfig: true},
+		PlatformCodex:  {harnessHookConfig: true},
+	}
 }
 
 func installOrUnsupported(verified bool) ActionKind {
@@ -133,8 +137,8 @@ func installOrUnsupported(verified bool) ActionKind {
 // A platform is included if it has verified skills or plugin_metadata support.
 func DefaultPlatforms() []Platform {
 	var result []Platform
-	for _, p := range allKnownPlatforms {
-		a := verifiedArtifacts[p]
+	for _, p := range allKnownPlatforms() {
+		a := verifiedArtifacts()[p]
 		if a.skills || a.pluginMetadata {
 			result = append(result, p)
 		}
@@ -164,7 +168,7 @@ func BuildPlan(req PlanRequest) (Plan, error) {
 
 	var rows []PlatformRow
 	for _, p := range platforms {
-		a := verifiedArtifacts[p]
+		a := verifiedArtifacts()[p]
 		row := PlatformRow{
 			Platform:       p,
 			Skills:         installOrUnsupported(a.skills),

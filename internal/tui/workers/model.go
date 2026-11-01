@@ -43,7 +43,7 @@ func (m *Model) SetState(state *materialize.State) {
 }
 
 func (m *Model) HelpBar() string {
-	return tui.Muted.Render("j/k move  q quit  ? help")
+	return tui.Muted().Render("j/k move  q quit  ? help")
 }
 
 func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
@@ -74,14 +74,14 @@ func (m *Model) View() string {
 	workerStart := make([]int, len(m.workers))
 	for i, w := range m.workers {
 		workerStart[i] = len(lines)
-		workerRow := fmt.Sprintf("👷 %s", tui.Info.Render(w.ID))
+		workerRow := fmt.Sprintf("👷 %s", tui.Info().Render(w.ID))
 		if i == m.cursor {
 			workerRow = lipgloss.NewStyle().Background(lipgloss.Color("39")).
 				Foreground(lipgloss.Color("0")).Width(m.width).Render(workerRow)
 		}
 		lines = append(lines, workerRow)
 		for _, issue := range w.Issues {
-			lines = append(lines, fmt.Sprintf("  • %s: %s", tui.Muted.Render(issue.ID), issue.Title))
+			lines = append(lines, fmt.Sprintf("  • %s: %s", tui.Muted().Render(issue.ID), issue.Title))
 		}
 		lines = append(lines, "")
 	}

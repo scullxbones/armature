@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
@@ -110,6 +111,13 @@ type Invocation struct {
 	Stderr  io.Writer
 	TTY     bool
 	TempDir string
+
+	// OpenControllingTTY overrides /dev/tty open for interactive confirmations.
+	// Nil uses the default opener. Tests inject a fake; product leaves nil.
+	OpenControllingTTY func() (*os.File, error)
+	// GitNetworkTimeout overrides adapters.Client network deadline for this
+	// invocation. Zero keeps the adapter default. Tests shrink it; product leaves 0.
+	GitNetworkTimeout time.Duration
 
 	replayLeases          func([]ops.Op) map[string]claim.Lease
 	afterIdempotencyCheck func()
@@ -245,6 +253,23 @@ func environFrom(cmd *cobra.Command) []string {
 
 func gitWith(env Env, repoPath string) *adapters.Client {
 	return adapters.New(repoPath).WithEnviron(overlayEnviron(env))
+}
+
+func openControllingTTY(cmd *cobra.Command) (*os.File, error) {
+	if sess := sessionFrom(cmd); sess != nil && sess.inv.OpenControllingTTY != nil {
+		return sess.inv.OpenControllingTTY()
+	}
+	return os.OpenFile("/dev/tty", os.O_RDWR, 0)
+}
+
+func applyInvocationGitOpts(cmd *cobra.Command, c *adapters.Client) *adapters.Client {
+	if c == nil {
+		return nil
+	}
+	if sess := sessionFrom(cmd); sess != nil && sess.inv.GitNetworkTimeout > 0 {
+		return c.WithNetworkTimeout(sess.inv.GitNetworkTimeout)
+	}
+	return c
 }
 
 func gitCommand(environ []string, args ...string) *exec.Cmd {

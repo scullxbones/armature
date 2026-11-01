@@ -3,7 +3,7 @@ package issuetype
 
 // IsValid returns true if t is a known issue type.
 func IsValid(t string) bool {
-	return validTypes[t]
+	return validTypes()[t]
 }
 
 // IsLegalHierarchy returns true if child type is legal under parent type.
@@ -16,25 +16,25 @@ func IsValid(t string) bool {
 //	task    → (nothing)
 //	bug     → (nothing)
 func IsLegalHierarchy(parent, child string) bool {
-	if _, ok := validTypes[parent]; !ok {
+	if _, ok := validTypes()[parent]; !ok {
 		return false
 	}
-	if _, ok := validTypes[child]; !ok {
+	if _, ok := validTypes()[child]; !ok {
 		return false
 	}
-	allowed, ok := hierarchy[parent]
+	allowed, ok := hierarchy()[parent]
 	return ok && allowed[child]
 }
 
 // IsReadyEligible returns true if the type can appear in the ready queue.
 // Ready-eligible types are task, feature, story, and bug — types that can be actively worked on.
 func IsReadyEligible(t string) bool {
-	return readyEligible[t]
+	return readyEligible()[t]
 }
 
 // RequiredFields returns the canonical required field names for typ.
 func RequiredFields(typ string) []string {
-	fields := requiredFields[typ]
+	fields := requiredFields()[typ]
 	if len(fields) == 0 {
 		return nil
 	}
@@ -44,38 +44,44 @@ func RequiredFields(typ string) []string {
 // All returns all valid issue types in declaration order (epic, story, feature, task, bug).
 // Returns a defensive copy so callers cannot mutate the canonical list.
 func All() []string {
-	return append([]string(nil), allTypes...)
+	return append([]string(nil), allTypes()...)
 }
 
-//nolint:gochecknoglobals //immutable issue-type vocabulary
-var validTypes = map[string]bool{
-	"epic":    true,
-	"story":   true,
-	"feature": true,
-	"task":    true,
-	"bug":     true,
+func validTypes() map[string]bool {
+	return map[string]bool{
+		"epic":    true,
+		"story":   true,
+		"feature": true,
+		"task":    true,
+		"bug":     true,
+	}
 }
 
-var allTypes = []string{"epic", "story", "feature", "task", "bug"} //nolint:gochecknoglobals //immutable issue-type list
-
-//nolint:gochecknoglobals //immutable type hierarchy
-var hierarchy = map[string]map[string]bool{
-	"epic":    {"story": true, "feature": true, "task": true, "bug": true},
-	"story":   {"feature": true, "task": true, "bug": true},
-	"feature": {"task": true, "bug": true},
-	"task":    {},
-	"bug":     {},
+func allTypes() []string {
+	return []string{"epic", "story", "feature", "task", "bug"}
 }
 
-//nolint:gochecknoglobals //immutable ready-eligible set
-var readyEligible = map[string]bool{
-	"task":    true,
-	"feature": true,
-	"story":   true,
-	"bug":     true,
+func hierarchy() map[string]map[string]bool {
+	return map[string]map[string]bool{
+		"epic":    {"story": true, "feature": true, "task": true, "bug": true},
+		"story":   {"feature": true, "task": true, "bug": true},
+		"feature": {"task": true, "bug": true},
+		"task":    {},
+		"bug":     {},
+	}
 }
 
-//nolint:gochecknoglobals //immutable required-fields map
-var requiredFields = map[string][]string{
-	"task": {"scope", "acceptance", "definition_of_done"},
+func readyEligible() map[string]bool {
+	return map[string]bool{
+		"task":    true,
+		"feature": true,
+		"story":   true,
+		"bug":     true,
+	}
+}
+
+func requiredFields() map[string][]string {
+	return map[string][]string{
+		"task": {"scope", "acceptance", "definition_of_done"},
+	}
 }

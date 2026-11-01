@@ -350,6 +350,20 @@ func TestDoctorD14_WarnsOnDoneUnderMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Equal(t, "task-01 -> story-01", f.Items[0])
 }
 
+func TestDoctorD14_WarnsOnDoneUnderMergedAncestor_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	// E merged → S done → T done: T's direct parent is not merged, but ancestor E is.
+	index := materialize.Index{
+		"E": {Status: "merged", Type: "epic"},
+		"S": {Status: "done", Type: "story", Parent: "E"},
+		"T": {Status: "done", Type: "task", Parent: "S"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	require.Equal(t, SeverityWarning, f.Severity)
+	assert.Contains(t, f.Items, "S -> E")
+	assert.Contains(t, f.Items, "T -> E", "D14 must walk all ancestors, not only the direct parent")
+}
+
 func TestDoctorD14_SkipsMergedUnderCancelled_ORCRUN_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 

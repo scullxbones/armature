@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -283,9 +282,7 @@ func TestOpsBackup_StructuredStdoutExactlyOneJSON_REQ_TOPTIER_S12_T1(t *testing.
 // process group so snapshot / restore-plan return a fail-closed error envelope
 // within timeout+WaitDelay slack (not hang the CLI).
 func TestOpsBackup_StalledHTTPRemote_FailClosedEnvelope_REQ_TOPTIER_S12_T1G(t *testing.T) {
-	// Mutates shared gitNetworkTimeout — not parallel.
-	restoreTimeout := adapters.SetGitNetworkTimeoutForTest(200 * time.Millisecond)
-	defer restoreTimeout()
+	t.Parallel()
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -332,10 +329,18 @@ func TestOpsBackup_StalledHTTPRemote_FailClosedEnvelope_REQ_TOPTIER_S12_T1G(t *t
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			stdout := new(bytes.Buffer)
 			stderr := new(bytes.Buffer)
 			start := time.Now()
-			code := executeThenHandleRootError(t, stdout, stderr, tc.args...)
+			code := Run(t.Context(), Invocation{
+				Args:              tc.args,
+				Env:               OverlayEnv(OSEnv(), cliEnvFor(t)),
+				Stdout:            stdout,
+				Stderr:            stderr,
+				TempDir:           testTempDir(t),
+				GitNetworkTimeout: 200 * time.Millisecond,
+			})
 			elapsed := time.Since(start)
 			assert.Equal(t, 1, code, "stderr=%s stdout=%s", stderr.String(), stdout.String())
 			assert.Less(t, elapsed, slack, "%s must fail-closed near network timeout, got %v", tc.name, elapsed)

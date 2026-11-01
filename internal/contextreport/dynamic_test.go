@@ -24,14 +24,14 @@ func TestContextReportPricesDynamicPayloads_REQ_AOC_S3_T2(t *testing.T) {
 	for _, a := range report.Artifacts {
 		got[a.Path] = a
 	}
-	for _, path := range dynamicInvocationPaths {
+	for _, path := range dynamicInvocationPaths() {
 		art, ok := got[path]
 		require.True(t, ok, "dynamic command %q must be priced", path)
 		assert.Equal(t, classInvocation, art.Class, path)
 		assert.Greater(t, art.Bytes, 0, "command %q should have structured stdout", path)
 		assert.Equal(t, art.Bytes/bytesPerToken, art.EstimatedTokens, "bytes/4 for %q", path)
 	}
-	for _, path := range aocEnvelopePaths {
+	for _, path := range aocEnvelopePaths() {
 		require.Contains(t, got, path)
 	}
 
@@ -101,7 +101,7 @@ func TestDynamicPricingIsFixtureDeterministic_REQ_AOC_S3_T2(t *testing.T) {
 	require.NoError(t, err)
 	payloads["render-context"] = render
 
-	for _, path := range dynamicInvocationPaths {
+	for _, path := range dynamicInvocationPaths() {
 		out := filepath.Join(goldenDir, path+".json")
 		if os.Getenv("WRITE_DYNAMIC_GOLDENS") == "1" {
 			require.NoError(t, os.MkdirAll(goldenDir, 0o755))
@@ -132,7 +132,7 @@ func TestDynamicBudgetsEnforcePromisedCaps_REQ_AOC_S3_T2(t *testing.T) {
 	for _, row := range budgets.Artifacts {
 		byPath[row.Path] = row
 	}
-	for _, path := range dynamicInvocationPaths {
+	for _, path := range dynamicInvocationPaths() {
 		row, ok := byPath[path]
 		require.True(t, ok, "budget row for dynamic path %q", path)
 		art := artifactByPath(t, report, path)

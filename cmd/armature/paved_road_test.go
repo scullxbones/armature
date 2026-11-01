@@ -35,7 +35,7 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 				unclassified = append(unclassified, "leaf:"+pathLabel(path))
 			}
 		})
-		for path := range pavedRoadCommands {
+		for path := range pavedRoadCommands() {
 			if path == "" {
 				continue
 			}
@@ -48,7 +48,7 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 	})
 
 	t.Run("pipelineStepsArePavedAndPresent", func(t *testing.T) {
-		for _, step := range pavedRoadPipeline {
+		for _, step := range pavedRoadPipeline() {
 			require.NotEmpty(t, step.Commands, "step %s must map to commands", step.ID)
 			for _, path := range step.Commands {
 				cmd := findPavedRoadCommand(root, path)
@@ -103,7 +103,7 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 		require.Contains(t, got, "--skip-delivery-gate")
 		require.Contains(t, got, "`arm sources accept-citation`")
 		require.Contains(t, got, "`arm help`")
-		for _, step := range pavedRoadPipeline {
+		for _, step := range pavedRoadPipeline() {
 			require.Contains(t, got, step.Title)
 			for _, path := range step.Commands {
 				require.Contains(t, got, "`arm "+path+"`")
@@ -130,7 +130,7 @@ func TestPavedRoadHelpClassification_REQ_NXTTN_S4_T1(t *testing.T) {
 
 	t.Run("defaultsAuditCoversForceAndSkipFlags", func(t *testing.T) {
 		listed := map[string]bool{}
-		for _, d := range pavedRoadDefaultsAudit {
+		for _, d := range pavedRoadDefaultsAudit() {
 			if d.Flag != "--force" && !strings.HasPrefix(d.Flag, "--skip-") {
 				continue
 			}
@@ -207,7 +207,7 @@ func generatePavedRoadDoc(root *cobra.Command) string {
 	b.WriteString("There is no separate escape-hatch group.\n\n")
 
 	b.WriteString("## Pipeline\n\n")
-	for i, step := range pavedRoadPipeline {
+	for i, step := range pavedRoadPipeline() {
 		fmt.Fprintf(&b, "### %d. %s\n\n%s\n\n", i+1, step.Title, step.Description)
 		for _, path := range step.Commands {
 			fmt.Fprintf(&b, "- `arm %s`\n", path)
@@ -251,7 +251,7 @@ func generatePavedRoadDoc(root *cobra.Command) string {
 	}
 	b.WriteString("\n### Escape hatch\n\n")
 	for _, path := range escape {
-		note := pavedRoadCommands[path].Note
+		note := pavedRoadCommands()[path].Note
 		if note == "" {
 			fmt.Fprintf(&b, "- `arm %s`\n", path)
 			continue
@@ -273,7 +273,7 @@ func generatePavedRoadDoc(root *cobra.Command) string {
 	b.WriteString("Skip and force flags stay listed here. They are not the paved-road invocation.\n\n")
 	b.WriteString("| Flag | Command | Why it exists |\n")
 	b.WriteString("| --- | --- | --- |\n")
-	for _, d := range pavedRoadDefaultsAudit {
+	for _, d := range pavedRoadDefaultsAudit() {
 		cmds := make([]string, 0, len(d.Commands))
 		for _, c := range d.Commands {
 			cmds = append(cmds, "`arm "+c+"`")
@@ -285,7 +285,7 @@ func generatePavedRoadDoc(root *cobra.Command) string {
 }
 
 func pavedRoadStepFor(path string) string {
-	for _, step := range pavedRoadPipeline {
+	for _, step := range pavedRoadPipeline() {
 		for _, c := range step.Commands {
 			if c == path {
 				return step.Title

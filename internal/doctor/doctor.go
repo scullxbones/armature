@@ -69,12 +69,13 @@ func runChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	return Report{Checks: indexedChecks(index, allIssues, nil, repoPath, now, nil, nil, configPath)}
 }
 
-//nolint:gochecknoglobals // immutable doctor check registry
-var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}
+func liveCheckIDs() []string {
+	return []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}
+}
 
 func LiveCheckIDs() []string {
-	out := make([]string, len(liveCheckIDs))
-	copy(out, liveCheckIDs)
+	out := make([]string, len(liveCheckIDs()))
+	copy(out, liveCheckIDs())
 	return out
 }
 
@@ -632,14 +633,25 @@ func checkD14DoneUnderMerged(index materialize.Index) Finding {
 		if entry.Status != "done" || entry.Parent == "" || entry.Parent == id {
 			continue // empty/self-parent: D4; do not double-report
 		}
-		parent, ok := index[entry.Parent]
-		if !ok {
-			continue // missing parent: D4
+		// Walk ALL ancestors: warn when any ancestor is merged. Stop at
+		// cancelled (ORCRUN leftover) or missing parent (D4).
+		anc := entry.Parent
+		seen := map[string]bool{}
+		for anc != "" && !seen[anc] {
+			seen[anc] = true
+			parent, ok := index[anc]
+			if !ok {
+				break
+			}
+			if parent.Status == "cancelled" {
+				break
+			}
+			if parent.Status == "merged" {
+				stuck = append(stuck, fmt.Sprintf("%s -> %s", id, anc))
+				break
+			}
+			anc = parent.Parent
 		}
-		if parent.Status != "merged" {
-			continue
-		}
-		stuck = append(stuck, fmt.Sprintf("%s -> %s", id, entry.Parent))
 	}
 
 	if len(stuck) > 0 {

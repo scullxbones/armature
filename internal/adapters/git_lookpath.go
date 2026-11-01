@@ -53,7 +53,7 @@ func lookPathOn(pathList, file string) (string, error) {
 }
 
 func lookPathOnConfig(pathList, file string, cfg lookPathConfig) (string, error) {
-	exts := unixExts
+	exts := unixExts()
 	if cfg.windows {
 		exts = splitPATHEXT(cfg.pathext)
 	}
@@ -78,7 +78,9 @@ func lookPathOnConfig(pathList, file string, cfg lookPathConfig) (string, error)
 	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 }
 
-var unixExts = []string{""} //nolint:gochecknoglobals //immutable lookpath extension list
+func unixExts() []string {
+	return []string{""}
+}
 
 func splitPATHEXT(pathext string) []string {
 	if pathext == "" {

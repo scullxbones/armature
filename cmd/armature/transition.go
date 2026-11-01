@@ -67,9 +67,9 @@ outcome) appends as an amendment at exit 0.`,
 				return fmt.Errorf(`required flag(s) "to" not set`)
 			}
 
-			if !ops.ValidTransitionTargets[to] {
+			if !ops.ValidTransitionTargets()[to] {
 				valid := []string{}
-				for s := range ops.ValidTransitionTargets {
+				for s := range ops.ValidTransitionTargets() {
 					valid = append(valid, s)
 				}
 				sort.Strings(valid)

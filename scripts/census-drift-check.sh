@@ -45,7 +45,7 @@ compare_lists() {
 echo "Checking Issue Types..."
 
 # Extract from code
-CODE_TYPES=$(sed -n '/^var validTypes = map/,/^}/p' "$REPO_ROOT/internal/issuetype/issuetype.go" | \
+CODE_TYPES=$(sed -n '/^func validTypes() map/,/^}/p' "$REPO_ROOT/internal/issuetype/issuetype.go" | \
     grep -E '[:=].*true' | sed 's/.*"\([^"]*\)".*/\1/')
 
 # Extract from census: first column of Issue Types table

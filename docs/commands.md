@@ -535,17 +535,21 @@ worktree or missing `origin/_armature` (lag not computable) skips OK. D12 is
 not part of `doctor --fix`.
 
 **D14 — Done under merged parent.** Warns when an issue is still `done` while
-its parent is already `merged` (stuck `done → merged` promotion). Merged
-children under a cancelled parent (ORCRUN leftover) are not reported. `--explain`
-uses the same tree-walk remediations as MERGED-1 / sync. A remediation counts
-only if running it repairs the finding: pending work under a merged ancestor
-gets a **complete** tree-repair set first (`arm reopen` ancestor **or**
-cancel/reparent this node — never `arm claim`). Further descendant promotion
-steps are listed after `more steps follow…`. Done leaves in a healthy tree get
-`arm delivery record` (filled SHAs when knowable, plus `arm review record`
-assessment step; else a **legacy** `<sha>` template). All-cancelled children do
-not roll up (needs ≥1 merged child) — cancel/reopen the parent. All-merged
-children are owned by materialize rollup. D14 is not part of `doctor --fix`.
+any ancestor is already `merged` (stuck `done → merged` promotion), and when
+open/claimed/in-progress work sits under a merged ancestor. Merged children
+under a cancelled parent (ORCRUN leftover) are not reported. `--explain` uses
+the same tree-walk remediations as MERGED-1 / sync. A remediation counts only
+if running it repairs the finding: pending work under a merged ancestor gets a
+**complete** tree-repair set first — **Option A** reopens the full merged-ancestor
+chain; **Option B** (open/claimed/in-progress subjects only) cancels that open
+work (**never** cancels a `done` node; done subjects get reopen-only and promote
+via more-steps). Never `arm claim` under merged. Further descendant promotion steps are listed after
+`more steps follow…` and are Decide-checked against each Option's resulting
+graph. Done leaves in a healthy tree get `arm delivery record` (filled SHAs when
+knowable, plus `arm review record` assessment step; else a **legacy** `<sha>`
+template). All-cancelled children do not roll up (needs ≥1 merged child) —
+cancel/reopen the parent when not under a merged ancestor. All-merged children
+are owned by materialize rollup. D14 is not part of `doctor --fix`.
 
 ---
 
@@ -710,15 +714,17 @@ typed `promotion.RemediationsPlan` (same model as doctor `--explain` suggested):
 mutually exclusive **Option A:… / Option B:…** alternatives (ordered steps each),
 then optional `more steps follow…` promotion steps. Never a flat reopen-then-cancel
 sequence. Pending nodes under a merged ancestor → Options reopen the full merged
-ancestor chain **or** cancel every open descendant (expired foreign: `arm doctor --fix`
-then cancel); live foreign leases hide Option B and print holder/TTL guidance once.
-More-steps promote open descendants after reopen — never re-print claim on a still-claimed
-node under a merged ancestor. Done leaves with
-known Base/Tip get filled `arm delivery record …` plus **required-input**
-`arm review record … --assessment <assessment.json>` with a concrete how-to
-(prepare → author per schema → validate); only missing provenance uses a legacy
-`<sha>` template. All-cancelled-only children → Options cancel **or** reopen the
-parent (rollup will not promote). Healthy open leaves get
+ancestor chain **or** cancel every open/claimed/in-progress descendant (never a
+`done` node; expired foreign: `arm doctor --fix` then cancel open targets);
+live foreign leases hide Option B and print holder/TTL guidance once.
+More-steps promote after an Option and are Decide-checked against that Option's
+resulting graph — never re-print claim on a still-claimed node under a merged
+ancestor. Done leaves with known Base/Tip get filled `arm delivery record …`
+plus **required-input** `arm review record … --assessment <assessment.json>
+--bundle <bundle.json>` with a concrete how-to (prepare → author per schema →
+validate); only missing provenance uses a legacy `<sha>` template.
+All-cancelled-only children (no merged ancestor) → Options cancel **or** reopen
+the parent (rollup will not promote). Healthy open leaves get
 `arm claim --issue … --worktree`. Never `arm merged` on a non-leaf, and never a
 `;`-joined argv in one entry. An issue that is already `merged` is an intentional
 no-op/retry that tears down leftover delivery artifacts and prints

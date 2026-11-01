@@ -245,7 +245,11 @@ func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *clas
 	var graph promotion.Graph
 	store := newSnapshotStore(ctx)
 	if index, indexErr := store.ReadIndex(); indexErr == nil {
-		graph = promotionGraphFromStore(store, index)
+		var graphErr error
+		graph, graphErr = promotionGraphFromStore(store, index)
+		if graphErr != nil {
+			return graphErr
+		}
 	}
 	viewer := ""
 	if wid, _, werr := resolveWorkerAndLog(ctx); werr == nil {

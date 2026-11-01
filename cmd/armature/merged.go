@@ -334,7 +334,10 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 	if integration == "" {
 		integration = ctx.Config.IntegrationBranchOrDefault()
 	}
-	graph := promotionGraphFromStore(store, index)
+	graph, graphErr := promotionGraphFromStore(store, index)
+	if graphErr != nil {
+		return fmt.Errorf("promotion graph: %w", graphErr)
+	}
 	viewer, _, viewerErr := resolveWorkerAndLogCmd(cmd)
 	if viewerErr != nil {
 		viewer = ""

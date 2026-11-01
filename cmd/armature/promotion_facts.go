@@ -1,7 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"strings"
+	"sync"
+
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/scullxbones/armature/internal/snapshot"
 )
@@ -72,16 +77,54 @@ func nodeFromMaterializeIssue(issue *materialize.Issue) promotion.Node {
 	}
 }
 
+// promotionGraphCache lazily builds and memoizes an enriched promotion graph
+// for one store+index pair. Fail-closed: any ReadIssue error aborts the build.
+type promotionGraphCache struct {
+	store *snapshot.Store
+	index materialize.Index
+
+	once  sync.Once
+	graph promotion.Graph
+	err   error
+}
+
+func newPromotionGraphCache(store *snapshot.Store, index materialize.Index) *promotionGraphCache {
+	return &promotionGraphCache{store: store, index: index}
+}
+
+func (c *promotionGraphCache) Graph() (promotion.Graph, error) {
+	if c == nil {
+		return nil, fmt.Errorf("promotion graph: nil cache")
+	}
+	c.once.Do(func() {
+		c.graph, c.err = buildPromotionGraphFromStore(c.store, c.index)
+	})
+	return c.graph, c.err
+}
+
 // promotionGraphFromStore enriches the index graph with Base/Tip + lease clocks
 // via ReadIssue only — no rematerialize / checkpoint write (safe for arm merged).
-func promotionGraphFromStore(store *snapshot.Store, index materialize.Index) promotion.Graph {
+// Fail-closed on ReadIssue error. Prefer newPromotionGraphCache when the same
+// graph may be requested more than once in a command.
+func promotionGraphFromStore(store *snapshot.Store, index materialize.Index) (promotion.Graph, error) {
+	return buildPromotionGraphFromStore(store, index)
+}
+
+func buildPromotionGraphFromStore(store *snapshot.Store, index materialize.Index) (promotion.Graph, error) {
 	g := promotionGraphFromIndex(index)
 	if store == nil {
-		return g
+		return g, nil
 	}
 	for id, node := range g {
+		// Lazy: only ReadIssue when delivery clocks / lease facts matter.
+		if !needsPromotionEnrichment(node) {
+			continue
+		}
 		issue, err := store.ReadIssue(id)
-		if err != nil || issue == nil {
+		if err != nil {
+			return nil, fmt.Errorf("promotion graph: read issue %s: %w", id, err)
+		}
+		if issue == nil {
 			continue
 		}
 		enriched := nodeFromMaterializeIssue(issue)
@@ -93,5 +136,14 @@ func promotionGraphFromStore(store *snapshot.Store, index materialize.Index) pro
 		}
 		g[id] = enriched
 	}
-	return g
+	return g, nil
+}
+
+func needsPromotionEnrichment(node promotion.Node) bool {
+	switch node.Status {
+	case ops.StatusDone, ops.StatusClaimed, ops.StatusInProgress, ops.StatusBlocked:
+		return true
+	default:
+		return strings.TrimSpace(node.ClaimedBy) != ""
+	}
 }

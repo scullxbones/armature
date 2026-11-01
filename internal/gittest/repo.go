@@ -18,12 +18,15 @@ type Fixture struct {
 	Origin string
 }
 
-var (
-	seedOnce     sync.Once
-	seedErr      error
+type seedCache struct {
+	once         sync.Once
+	err          error
 	worktreeSeed string
 	originSeed   string
-)
+}
+
+// seeds holds process-wide disposable git fixture trees (copied per test).
+var seeds = &seedCache{} //nolint:gochecknoglobals // process-wide fixture seed trees; never reassigned
 
 func Init(t *testing.T) string {
 	t.Helper()
@@ -34,7 +37,7 @@ func Init(t *testing.T) string {
 		t.Fatalf("ensureSeeds: %v", err)
 	}
 	dir := t.TempDir()
-	if err := copyTree(worktreeSeed, dir); err != nil {
+	if err := copyTree(seeds.worktreeSeed, dir); err != nil {
 		t.Fatalf("copy worktree seed: %v", err)
 	}
 	return dir
@@ -53,7 +56,7 @@ func InitWithOrigin(t *testing.T) Fixture {
 	if err := os.MkdirAll(origin, 0o750); err != nil {
 		t.Fatalf("mkdir origin: %v", err)
 	}
-	if err := copyTree(originSeed, origin); err != nil {
+	if err := copyTree(seeds.originSeed, origin); err != nil {
 		t.Fatalf("copy origin seed: %v", err)
 	}
 	if err := appendOriginRemote(dir, origin); err != nil {
@@ -117,7 +120,7 @@ func NewFixture() (Fixture, error) {
 	if err != nil {
 		return Fixture{}, fmt.Errorf("mkdir worktree: %w", err)
 	}
-	if err := copyTree(worktreeSeed, dir); err != nil {
+	if err := copyTree(seeds.worktreeSeed, dir); err != nil {
 		return Fixture{}, fmt.Errorf("copy worktree seed: %w", err)
 	}
 	originParent, err := os.MkdirTemp("", "gittest-origin-")
@@ -128,7 +131,7 @@ func NewFixture() (Fixture, error) {
 	if err := os.MkdirAll(origin, 0o750); err != nil {
 		return Fixture{}, fmt.Errorf("mkdir origin: %w", err)
 	}
-	if err := copyTree(originSeed, origin); err != nil {
+	if err := copyTree(seeds.originSeed, origin); err != nil {
 		return Fixture{}, fmt.Errorf("copy origin seed: %w", err)
 	}
 	if err := appendOriginRemote(dir, origin); err != nil {
@@ -160,10 +163,10 @@ func gitCombined(dir string, args ...string) (string, error) {
 }
 
 func ensureSeeds() error {
-	seedOnce.Do(func() {
-		seedErr = buildSeeds()
+	seeds.once.Do(func() {
+		seeds.err = buildSeeds()
 	})
-	return seedErr
+	return seeds.err
 }
 
 func buildSeeds() error {
@@ -190,8 +193,8 @@ func buildSeeds() error {
 	if err := configureRepoDir(origin); err != nil {
 		return fmt.Errorf("configure origin seed: %w", err)
 	}
-	worktreeSeed = worktree
-	originSeed = origin
+	seeds.worktreeSeed = worktree
+	seeds.originSeed = origin
 	return nil
 }
 

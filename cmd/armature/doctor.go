@@ -96,7 +96,11 @@ func newDoctorCmd() *cobra.Command {
 			if indexErr != nil {
 				return mapDoctorLoadError(indexErr)
 			}
-			graph := promotionGraphFromStore(store, index)
+			graphCache := newPromotionGraphCache(store, index)
+			graph, graphErr := graphCache.Graph()
+			if graphErr != nil {
+				return mapDoctorLoadError(graphErr)
+			}
 			enrichD14TreeConsistency(&report, graph)
 
 			var explainGraph promotion.Graph

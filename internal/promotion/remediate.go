@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/ops"
 )
@@ -82,30 +83,15 @@ func RemediationsPlan(id string, g Graph) Plan {
 	return RemediationsPlanOpts(id, g, PlanOpts{})
 }
 
-// RemediationsPlanFor is RemediationsPlan with the calling worker's ID.
-func RemediationsPlanFor(id string, g Graph, viewer string) Plan {
-	return RemediationsPlanOpts(id, g, PlanOpts{Viewer: viewer})
-}
-
 // RemediationsPlanOpts builds then filters a Plan. Every printed command argv
 // (Options + MoreSteps) must pass opts.Decide before it is returned — same
-// refusals as claim/transition when Decide is the CLI predicate.
+// refusals as claim/transition when Decide is the CLI predicate. MoreSteps are
+// Decide-checked against each Option's resulting graph.
 func RemediationsPlanOpts(id string, g Graph, opts PlanOpts) Plan {
-	produce := buildRemediationsPlan
-	if opts.Producer != nil {
-		produce = opts.Producer
-	}
-	p := produce(id, g, opts)
+	p := buildRemediationsPlan(id, g, opts)
 	p = filterDecideRefused(g, p, opts)
 	p = filterFinishedWorkDestroyingAlternatives(g, p)
 	return p
-}
-
-// RemediationsForIssue is Plan.RenderNextActions for callers that need []string
-// (doctor suggested, MERGED-1 next_actions, sync). Prefer RemediationsPlanFor
-// when the calling worker ID is known.
-func RemediationsForIssue(id string, g Graph) []string {
-	return RemediationsPlan(id, g).RenderNextActions()
 }
 
 func buildRemediationsPlan(id string, g Graph, opts PlanOpts) Plan {
@@ -142,23 +128,26 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, opts Pl
 		Guidance:     []string{TreeRepairGuidance},
 	}
 
-	// Option B is a SEQUENCE that must clear every open descendant + self.
-	// Built via Decide (RequireOwner / owner gate) — not a looksForeignLive
-	// short-circuit that would hide RequireOwner from disable-mutation kill.
-	// Live foreign: Decide refuses cancel → drop Option B + holder/TTL guidance.
-	// Expired foreign: doctor --fix then cancel every open descendant.
-	cancelTargets := append(openDescendantsUnder(id, g), id)
-	if alt, ok := buildCancelSequence(cancelTargets, g, opts); ok {
-		p.Alternatives = append(p.Alternatives, alt)
-	} else {
-		var foreignLive []string
-		for _, tid := range cancelTargets {
-			if looksForeignLive(g[tid], viewer, opts.Now) {
-				foreignLive = append(foreignLive, tid)
+	// Option B cancels open/claimed/in-progress work only — NEVER a done node
+	// (finished work with base+tip must be reopened/promoted, not cancelled).
+	// Offered only when THIS subject is itself open/claimed/in-progress so the
+	// cancel sequence clears this finding; done subjects get reopen-only (open
+	// descendants appear as their own D14 items with their own Option B).
+	cancelTargets := cancelTargetsFor(id, g)
+	switch node.Status {
+	case ops.StatusOpen, ops.StatusClaimed, ops.StatusInProgress:
+		if alt, ok := buildCancelSequence(cancelTargets, g, opts); ok {
+			p.Alternatives = append(p.Alternatives, alt)
+		} else {
+			var foreignLive []string
+			for _, tid := range cancelTargets {
+				if looksForeignLive(g[tid], viewer, opts.Now) {
+					foreignLive = append(foreignLive, tid)
+				}
 			}
-		}
-		if len(foreignLive) > 0 {
-			p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreignLive, g, opts.Now)...)
+			if len(foreignLive) > 0 {
+				p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreignLive, g, opts.Now)...)
+			}
 		}
 	}
 
@@ -232,10 +221,7 @@ func looksForeignLive(node Node, viewer string, now int64) bool {
 	if holder == "" || (viewer != "" && holder == viewer) {
 		return false
 	}
-	if leaseExpired(node, now) {
-		return false
-	}
-	return true
+	return claim.LeaseLive(leaseFromNode(node), now)
 }
 
 // looksForeignExpired reports a foreign claimed/in-progress lease past TTL.
@@ -250,18 +236,15 @@ func looksForeignExpired(node Node, viewer string, now int64) bool {
 	if holder == "" || (viewer != "" && holder == viewer) {
 		return false
 	}
-	return leaseExpired(node, now)
+	return !claim.LeaseLive(leaseFromNode(node), now)
 }
 
-func leaseExpired(node Node, now int64) bool {
-	if now <= 0 || node.LastActivity <= 0 {
-		return false
-	}
-	ttl := node.TTLMinutes
-	if ttl <= 0 {
-		ttl = 60
-	}
-	return now >= node.LastActivity+int64(ttl)*60
+func leaseFromNode(node Node) claim.Lease {
+	return claim.LeaseFromClocks(
+		node.Status, node.ClaimedBy, node.ClaimToken,
+		node.ClaimedAt, node.LastActivity, 0,
+		node.TTLMinutes, "",
+	)
 }
 
 func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
@@ -298,9 +281,11 @@ func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
 }
 
 // filterDecideRefused drops Alternatives / MoreSteps that fail opts.Decide as a
-// SEQUENCE: each step is checked against the graph after prior steps' effects.
-// Per-argv checks on the original graph are insufficient (doctor --fix then
-// cancel; reopen then claim).
+// SEQUENCE: each Alternative step is checked against the graph after prior
+// steps' effects. MoreSteps are Decide-checked against EACH remaining Option's
+// resulting graph and kept when at least one Option's post-graph accepts them
+// (typically Option A reopen). Per-argv checks on the original graph alone are
+// insufficient (doctor --fix then cancel; reopen then claim).
 func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 	decide := opts.Decide
 	if decide == nil {
@@ -315,31 +300,46 @@ func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 		}
 		p.Alternatives = kept
 	}
-	if len(p.MoreSteps) > 0 {
-		cur := graphAfterPrintedReopens(g, p)
-		var kept []Step
-		for _, step := range p.MoreSteps {
-			if step.Kind == StepCommand || step.Kind == StepRequiredInput {
-				// CLAIM-1 must not re-print claim on a still-claimed/in-progress
-				// node under a merged ancestor (live or expired). Open leaves
-				// remain as more-steps-after-reopen. Re-run claim after Option A.
-				if strings.Contains(step.Argv, "arm claim ") {
-					if issue := IssueFlag(step.Argv); issue != "" && WouldViolateTreeConsistency(issue, g) {
-						switch g[issue].Status {
-						case ops.StatusClaimed, ops.StatusInProgress:
-							continue
-						}
-					}
-				}
-				if err := decide(step.Argv, cur); err != nil {
+	if len(p.MoreSteps) == 0 {
+		return p
+	}
+	optionGraphs := make([]Graph, 0, len(p.Alternatives)+1)
+	if len(p.Alternatives) == 0 {
+		optionGraphs = append(optionGraphs, cloneGraph(g))
+	} else {
+		for _, alt := range p.Alternatives {
+			optionGraphs = append(optionGraphs, graphAfterAlternative(g, alt, opts))
+		}
+	}
+	var kept []Step
+	for _, step := range p.MoreSteps {
+		if step.Kind != StepCommand && step.Kind != StepRequiredInput {
+			kept = append(kept, step)
+			continue
+		}
+		// CLAIM-1 must not re-print claim on a still-claimed/in-progress
+		// node under a merged ancestor (live or expired). Open leaves
+		// remain as more-steps-after-reopen.
+		if strings.Contains(step.Argv, "arm claim ") {
+			if issue := IssueFlag(step.Argv); issue != "" && WouldViolateTreeConsistency(issue, g) {
+				switch g[issue].Status {
+				case ops.StatusClaimed, ops.StatusInProgress:
 					continue
 				}
-				cur = applyArgvEffect(cur, step.Argv, opts)
 			}
+		}
+		okAny := false
+		for _, og := range optionGraphs {
+			if err := decide(step.Argv, og); err == nil {
+				okAny = true
+				break
+			}
+		}
+		if okAny {
 			kept = append(kept, step)
 		}
-		p.MoreSteps = kept
 	}
+	p.MoreSteps = kept
 	return p
 }
 
@@ -369,7 +369,7 @@ func applyArgvEffect(g Graph, argv string, opts PlanOpts) Graph {
 			default:
 				continue
 			}
-			if !leaseExpired(n, opts.Now) {
+			if claim.LeaseLive(leaseFromNode(n), opts.Now) {
 				continue
 			}
 			if n.Status == ops.StatusInProgress {
@@ -405,19 +405,29 @@ func applyArgvEffect(g Graph, argv string, opts PlanOpts) Graph {
 	return after
 }
 
-// graphAfterPrintedReopens applies arm reopen steps from Alternatives so
-// MoreSteps are Decide-checked in the post-repair graph (Option A path).
-func graphAfterPrintedReopens(g Graph, p Plan) Graph {
+// graphAfterAlternative applies an Option's runnable argv effects in order.
+func graphAfterAlternative(g Graph, alt Alternative, opts PlanOpts) Graph {
 	after := cloneGraph(g)
-	for _, alt := range p.Alternatives {
-		for _, cmd := range alt.RunnableCommands() {
-			if !strings.Contains(cmd, "arm reopen ") {
-				continue
-			}
-			after = applyArgvEffect(after, cmd, PlanOpts{})
-		}
+	for _, cmd := range alt.RunnableCommands() {
+		after = applyArgvEffect(after, cmd, opts)
 	}
 	return after
+}
+
+// cancelTargetsFor lists nodes Option B may cancel: open/claimed/in-progress
+// descendants of id, plus id itself only when id is open/claimed/in-progress.
+// Done/merged/cancelled are NEVER cancel targets (finished work is preserved).
+func cancelTargetsFor(id string, g Graph) []string {
+	targets := openDescendantsUnder(id, g)
+	n, ok := g[id]
+	if !ok {
+		return targets
+	}
+	switch n.Status {
+	case ops.StatusOpen, ops.StatusClaimed, ops.StatusInProgress:
+		targets = append(targets, id)
+	}
+	return targets
 }
 
 // openDescendantsUnder lists open/claimed/in-progress descendants of id

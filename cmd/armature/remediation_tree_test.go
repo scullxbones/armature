@@ -184,10 +184,20 @@ func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 		id := promotion.FindingID(item)
 		t.Run("repair_"+id, func(t *testing.T) {
 			t.Parallel()
-			plan := promotion.RemediationsPlan(id, loadPromotionGraph(t, setupMixedD14Tree(t)))
+			g0 := loadPromotionGraph(t, setupMixedD14Tree(t))
+			plan := promotion.RemediationsPlan(id, g0)
 			require.NotEmpty(t, plan.Alternatives, "D14 item %s must have alternatives", item)
-			require.GreaterOrEqual(t, len(plan.Alternatives), 2,
-				"D14 repair must expose ≥2 Options; dropping either must fail harness")
+			switch g0[id].Status {
+			case "open", "claimed", "in-progress":
+				require.GreaterOrEqual(t, len(plan.Alternatives), 2,
+					"open-under-merged must expose ≥2 Options (reopen + cancel)")
+			default:
+				require.Len(t, plan.Alternatives, 1,
+					"done-under-merged must expose reopen only — never cancel done")
+				for _, cmd := range plan.Alternatives[0].RunnableCommands() {
+					assert.NotContains(t, cmd, "--to cancelled")
+				}
+			}
 
 			for i, alt := range plan.Alternatives {
 				t.Run(fmt.Sprintf("option_%c", 'A'+i), func(t *testing.T) {
@@ -223,7 +233,7 @@ func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 		})
 	}
 
-	// MERGED-1 on R: next_actions from same Plan model (Options, no claim under merged).
+	// MERGED-1 on R: done subject → reopen only (never cancel done).
 	mergedOut := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, mergedOut, new(bytes.Buffer),
 		"merged", "--repo", repo, "--issue", "R", "--force", "--format", "agent")
@@ -231,15 +241,10 @@ func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 	cf := agentFailureFromStdout(t, mergedOut.String())
 	assert.Equal(t, codeMerged1, cf.Code)
 	require.NotEmpty(t, cf.NextActions)
-	assert.Equal(t, "Option A:", cf.NextActions[0])
-	assert.Equal(t, "arm reopen --issue E", cf.NextActions[1])
-	assert.Equal(t, "Option B:", cf.NextActions[2])
-	assert.Equal(t, "arm transition --issue RC2 --to cancelled --force", cf.NextActions[3])
-	assert.Equal(t, "arm transition --issue R --to cancelled --force", cf.NextActions[4])
-	// Repair Options must not claim under merged; more-steps may name claim after reopen.
-	for i := 0; i <= 4; i++ {
-		assert.NotEqual(t, "arm claim --issue RC2 --worktree", cf.NextActions[i])
-	}
+	assert.Equal(t, "arm reopen --issue E", cf.NextActions[0])
+	assert.NotContains(t, cf.NextActions, "Option B:")
+	assert.NotContains(t, cf.NextActions, "arm transition --issue R --to cancelled --force",
+		"never cancel done R")
 	for _, action := range cf.NextActions {
 		if promotion.IsRunnableArmCommand(action) {
 			assert.NotContains(t, action, "; ")
@@ -321,8 +326,8 @@ func TestRepairHarnessRejectsMutations_REQ_TOPTIER_S18_T4(t *testing.T) {
 		assert.Equal(t, codeClaim1, cf.Code)
 		assert.Contains(t, cf.Cause, "merged ancestor")
 		require.NotEmpty(t, cf.NextActions)
-		assert.Contains(t, cf.NextActions, "Option A:")
 		assert.Contains(t, cf.NextActions, "arm reopen --issue E")
+		assert.NotContains(t, cf.NextActions, "arm transition --issue R --to cancelled --force")
 
 		after := loadPromotionGraph(t, repo)
 		assert.Equal(t, ops.StatusDone, after["R"].Status, "refused claim must leave R done")
@@ -339,11 +344,12 @@ func TestNestedMergedAncestorChainCLI_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Contains(t, d14.items, "D -> M2")
 
 	plan := promotion.RemediationsPlan("D", loadPromotionGraph(t, repo))
-	require.Len(t, plan.Alternatives, 2)
+	require.Len(t, plan.Alternatives, 1, "done under nested merged: reopen only")
 	assert.Equal(t, []string{
 		"arm reopen --issue M1",
 		"arm reopen --issue M2",
 	}, plan.Alternatives[0].RunnableCommands())
+	assert.NotContains(t, plan.RenderNextActions(), "--to cancelled")
 
 	// Option A (full chain) clears D14 without leaving M2 open under M1.
 	r := setupNestedMergedAncestorTree(t)
@@ -401,12 +407,10 @@ func TestAllCancelledP2UnderG2_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Contains(t, d14.items, "P2 -> G2")
 
 	plan := promotion.RemediationsPlan("P2", loadPromotionGraph(t, repo))
-	require.Len(t, plan.Alternatives, 2)
+	require.Len(t, plan.Alternatives, 1, "done under merged: reopen only — never cancel done P2")
 	acts := plan.RenderNextActions()
-	assert.Equal(t, "Option A:", acts[0])
-	assert.Equal(t, "arm reopen --issue G2", acts[1])
-	assert.Equal(t, "Option B:", acts[2])
-	assert.Equal(t, "arm transition --issue P2 --to cancelled --force", acts[3])
+	assert.Equal(t, "arm reopen --issue G2", acts[0])
+	assert.NotContains(t, acts, "arm transition --issue P2 --to cancelled --force")
 
 	for i, alt := range plan.Alternatives {
 		r := setupMixedD14Tree(t)
@@ -484,7 +488,9 @@ func loadPromotionGraph(t *testing.T, repo string) promotion.Graph {
 	index, err := store.ReadIndex()
 	require.NoError(t, err)
 	require.NotEmpty(t, index, "expected materialized index at %s", store.IndexPath())
-	return promotionGraphFromStore(store, index)
+	g, err := promotionGraphFromStore(store, index)
+	require.NoError(t, err)
+	return g
 }
 
 // applyAlternative runs one Plan alternative on a fresh fixture (harness adds
@@ -629,29 +635,19 @@ func produceAssessmentFromHowTo(t *testing.T, repo, issueID, base, tip, howTo st
 	return assessmentPath, bundlePath
 }
 
-// TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4 passes a
-// Producer into RemediationsPlanOpts (parallel-safe; no package-global hook).
+// TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4 proves open
+// under-merged exposes ≥2 Options and arm merged on a D14 non-leaf fails
+// (Producer injection removed — no package/test seams).
 func TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	repo := setupMixedD14Tree(t)
 	g := loadPromotionGraph(t, repo)
-	baseline := promotion.RemediationsPlanOpts("R", g, planOptsForRemediation(getTestContext(t, repo), ""))
-	require.GreaterOrEqual(t, len(baseline.Alternatives), 2, "product path exposes ≥2 Options")
-
-	opts := planOptsForRemediation(getTestContext(t, repo), "")
-	opts.Producer = func(id string, graph promotion.Graph, o promotion.PlanOpts) promotion.Plan {
-		// Producer nil on inner opts — no recursion.
-		full := promotion.RemediationsPlanOpts(id, graph, promotion.PlanOpts{
-			Viewer: o.Viewer, Now: o.Now, Decide: o.Decide,
-		})
-		if len(full.Alternatives) >= 2 {
-			full.Alternatives = full.Alternatives[:1]
-		}
-		return full
-	}
-	plan := promotion.RemediationsPlanOpts("R", g, opts)
-	assert.Less(t, len(plan.Alternatives), 2, "Producer pass-in must shrink product Plan")
-	assert.NotContains(t, plan.RenderNextActions(), "Option B:")
+	// Done R: reopen only. Open RC2: ≥2 Options.
+	rPlan := promotion.RemediationsPlanOpts("R", g, planOptsForRemediation(getTestContext(t, repo), ""))
+	require.Len(t, rPlan.Alternatives, 1, "done R reopen only")
+	rc2 := promotion.RemediationsPlanOpts("RC2", g, planOptsForRemediation(getTestContext(t, repo), ""))
+	require.GreaterOrEqual(t, len(rc2.Alternatives), 2, "open RC2 exposes reopen + cancel")
+	assert.Contains(t, rc2.RenderNextActions(), "Option B:")
 
 	d14 := doctorD14Explain(t, repo)
 	assert.Contains(t, d14.items, "R -> E")

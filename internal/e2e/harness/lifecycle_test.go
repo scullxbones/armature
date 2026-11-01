@@ -167,20 +167,22 @@ func materializedField(t *testing.T, h *harness.Harness, issueID, field string) 
 	return strings.TrimSpace(out)
 }
 
-var buildArmBinaryOnce struct {
-	sync.Once
+type armBinaryBuild struct {
+	once sync.Once
 	path string
 	err  error
 }
 
+var armBinary = &armBinaryBuild{} //nolint:gochecknoglobals // process-wide arm binary for e2e; never reassigned
+
 func buildArmBinary(t *testing.T) string {
 	t.Helper()
 
-	buildArmBinaryOnce.Do(func() {
+	armBinary.once.Do(func() {
 		cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
 		rootOutput, err := cmd.Output()
 		if err != nil {
-			buildArmBinaryOnce.err = fmt.Errorf("failed to find repo root: %w", err)
+			armBinary.err = fmt.Errorf("failed to find repo root: %w", err)
 			return
 		}
 
@@ -191,20 +193,20 @@ func buildArmBinary(t *testing.T) string {
 		buildCmd.Dir = repoRoot
 		buildOut, err := buildCmd.CombinedOutput()
 		if err != nil {
-			buildArmBinaryOnce.err = fmt.Errorf("failed to build arm binary: %s: %w", buildOut, err)
+			armBinary.err = fmt.Errorf("failed to build arm binary: %s: %w", buildOut, err)
 			return
 		}
 
 		if _, statErr := os.Stat(binPath); statErr != nil {
-			buildArmBinaryOnce.err = fmt.Errorf("built arm binary not found at %s: %w", binPath, statErr)
+			armBinary.err = fmt.Errorf("built arm binary not found at %s: %w", binPath, statErr)
 			return
 		}
 
-		buildArmBinaryOnce.path = binPath
+		armBinary.path = binPath
 	})
 
-	require.NoError(t, buildArmBinaryOnce.err)
-	return buildArmBinaryOnce.path
+	require.NoError(t, armBinary.err)
+	return armBinary.path
 }
 
 func gitRunInDir(t *testing.T, dir string, args ...string) {

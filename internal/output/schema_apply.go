@@ -8,14 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sync"
-)
-
-//nolint:gochecknoglobals // cached JSON-schema load state
-var (
-	schemaOnce sync.Once
-	schemaRoot string
-	schemaErr  error
 )
 
 func validateAgainstCitedSchema(name string, body []byte) error {
@@ -47,28 +39,23 @@ func loadCitedSchema(name string) (map[string]any, error) {
 }
 
 func docsSchemaDir() (string, error) {
-	schemaOnce.Do(func() {
-		_, file, _, ok := runtime.Caller(0)
-		if !ok {
-			schemaErr = fmt.Errorf("cannot locate cited JSON Schema files")
-			return
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("cannot locate cited JSON Schema files")
+	}
+	dir := filepath.Dir(file)
+	for range 8 {
+		candidate := filepath.Join(dir, "docs", "schemas")
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			return candidate, nil
 		}
-		dir := filepath.Dir(file)
-		for range 8 {
-			candidate := filepath.Join(dir, "docs", "schemas")
-			if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-				schemaRoot = candidate
-				return
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-			dir = parent
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
 		}
-		schemaErr = fmt.Errorf("docs/schemas not found from %s", file)
-	})
-	return schemaRoot, schemaErr
+		dir = parent
+	}
+	return "", fmt.Errorf("docs/schemas not found from %s", file)
 }
 
 func applyJSONSchema(schema map[string]any, instance any, path string) error {

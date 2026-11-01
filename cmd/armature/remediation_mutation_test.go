@@ -105,8 +105,8 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 	}
 	assert.Equal(t, 1, count, "live-lease guidance must appear once per doctor run")
 
-	// Foreign-expired: claim OS --ttl 1, wait past expiry, then every printed
-	// Option sequence must clear D14 (Option B = doctor --fix + cancel all).
+	// Foreign-expired: claim OS --ttl 1, wait past expiry. Done P2 is reopen-only;
+	// Option B (doctor --fix + cancel) lives on open OS's plan.
 	expBase, expWorker := setupForeignExpiredMergedFixture(t)
 	expOpts := planOptsForRemediation(getTestContext(t, expBase), expWorker)
 	expG := loadPromotionGraph(t, expBase)
@@ -126,23 +126,27 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 	assert.Contains(t, claimCF.NextActions, "arm reopen --issue G2")
 
 	p2Plan := promotion.RemediationsPlanOpts("P2", expG, expOpts)
-	require.GreaterOrEqual(t, len(p2Plan.Alternatives), 2, "expired foreign must offer Option B")
-	require.NotEmpty(t, p2Plan.Alternatives[1].RunnableCommands())
-	assert.Equal(t, "arm doctor --fix", p2Plan.Alternatives[1].RunnableCommands()[0])
-	assert.Contains(t, p2Plan.Alternatives[1].RunnableCommands(),
+	require.Len(t, p2Plan.Alternatives, 1, "done P2: reopen only — never cancel done")
+	assert.Equal(t, []string{"arm reopen --issue G2"}, p2Plan.Alternatives[0].RunnableCommands())
+
+	osPlan = promotion.RemediationsPlanOpts("OS", expG, expOpts)
+	require.GreaterOrEqual(t, len(osPlan.Alternatives), 2, "expired foreign open OS must offer Option B")
+	require.NotEmpty(t, osPlan.Alternatives[1].RunnableCommands())
+	assert.Equal(t, "arm doctor --fix", osPlan.Alternatives[1].RunnableCommands()[0])
+	assert.Contains(t, osPlan.Alternatives[1].RunnableCommands(),
 		"arm transition --issue OS --to cancelled --force")
 
-	// Fresh expired fixtures per Option (clone breaks ops worktree abs paths).
-	for i := range p2Plan.Alternatives {
+	// Fresh expired fixtures per Option on OS (open subject).
+	for i := range osPlan.Alternatives {
 		fresh, fw := setupForeignExpiredMergedFixture(t)
 		before := loadPromotionGraph(t, fresh)
-		plan := promotion.RemediationsPlanOpts("P2", before,
+		plan := promotion.RemediationsPlanOpts("OS", before,
 			planOptsForRemediation(getTestContext(t, fresh), fw))
 		require.GreaterOrEqual(t, len(plan.Alternatives), 2)
 		require.NoError(t, applyAlternative(t, fresh, plan.Alternatives[i]), "expired option %c", 'A'+i)
 		after := loadPromotionGraph(t, fresh)
-		assert.Empty(t, filterViolations(promotion.TreeConsistencyViolations(after), subjectSubtree("P2", before)),
-			"expired option %c must clear P2/OS under-merged", 'A'+i)
+		assert.Empty(t, filterViolations(promotion.TreeConsistencyViolations(after), subjectSubtree("OS", before)),
+			"expired option %c must clear OS under-merged", 'A'+i)
 	}
 }
 

@@ -8,13 +8,15 @@ import (
 )
 
 // CommitTypes enumerates the conventional-commit types in docs/conventions.md.
-var CommitTypes = []string{"feat", "fix", "refactor", "test", "docs", "style", "polish", "ci"} //nolint:gochecknoglobals //immutable commit-type vocabulary
+func CommitTypes() []string {
+	return []string{"feat", "fix", "refactor", "test", "docs", "style", "polish", "ci"}
+}
 
 var squashPRSuffix = regexp.MustCompile(` \(#\d+\)$`)
 
 func typeAlternation() string {
-	quoted := make([]string, len(CommitTypes))
-	for i, typ := range CommitTypes {
+	quoted := make([]string, len(CommitTypes()))
+	for i, typ := range CommitTypes() {
 		quoted[i] = regexp.QuoteMeta(typ)
 	}
 	return strings.Join(quoted, "|")

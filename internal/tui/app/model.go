@@ -130,10 +130,10 @@ func (m Model) NavBar() string {
 	for i, name := range tabs {
 		label := fmt.Sprintf("[%d] %s", i+1, name)
 		if ScreenID(i) == ScreenValidate && m.validateErrors > 0 {
-			label += tui.Critical.Render(fmt.Sprintf(" ⚠%d", m.validateErrors))
+			label += tui.Critical().Render(fmt.Sprintf(" ⚠%d", m.validateErrors))
 		}
 		if ScreenID(i) == ScreenSources && m.staleSources > 0 {
-			label += tui.Advisory.Render(fmt.Sprintf(" ⚠%d", m.staleSources))
+			label += tui.Advisory().Render(fmt.Sprintf(" ⚠%d", m.staleSources))
 		}
 		if ScreenID(i) == m.current {
 			label = lipgloss.NewStyle().Background(lipgloss.Color("39")).
@@ -141,9 +141,9 @@ func (m Model) NavBar() string {
 		}
 		parts = append(parts, label)
 	}
-	indicator := tui.Info.Render("↺ live")
+	indicator := tui.Info().Render("↺ live")
 	if !m.liveMode {
-		indicator = tui.Advisory.Render("↺ poll")
+		indicator = tui.Advisory().Render("↺ poll")
 	}
 	left := strings.Join(parts, "  ")
 	right := "trls tui · " + m.workerID + " · " + indicator

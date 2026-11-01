@@ -31,14 +31,16 @@ func newHookCmd() *cobra.Command {
 // `arm hook`, and the harness drives `arm harness-hook`. ADR 0020 §6 keeps both
 // on the platform/git protocol on the wire — non-zero exit plus a stderr
 // reason — even though they are Command Failures conceptually.
-var platformProtocolRoots = map[string]bool{ //nolint:gochecknoglobals // immutable protocol root set
-	"hook":         true,
-	"harness-hook": true,
+func platformProtocolRoots() map[string]bool {
+	return map[string]bool{
+		"hook":         true,
+		"harness-hook": true,
+	}
 }
 
 func staysOnPlatformProtocol(cmd *cobra.Command) bool {
 	for c := cmd; c != nil; c = c.Parent() {
-		if platformProtocolRoots[c.Name()] {
+		if platformProtocolRoots()[c.Name()] {
 			return true
 		}
 	}
@@ -65,7 +67,7 @@ func argvNamesPlatformProtocol(argv []string) bool {
 		if arg == "--" {
 			return false
 		}
-		if platformProtocolRoots[arg] {
+		if platformProtocolRoots()[arg] {
 			return true
 		}
 	}

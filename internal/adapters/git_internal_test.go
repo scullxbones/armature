@@ -324,11 +324,9 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	}
 }
 
-func TestNetworkCmdHonorsTimeout_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates gitNetworkTimeout
-	// Shrink shared deadline; restore after. Not parallel — mutates package var.
-	prev := gitNetworkTimeout
-	gitNetworkTimeout = 100 * time.Millisecond
-	defer func() { gitNetworkTimeout = prev }()
+func TestNetworkCmdHonorsTimeout_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	timeout := 100 * time.Millisecond
 
 	wrapperDir := t.TempDir()
 	// Child sleeper under a process group: Cancel must kill the group, not leave
@@ -348,7 +346,7 @@ done
 exit 0
 `))
 	repo := t.TempDir()
-	c := New(repo).WithEnviron([]string{"PATH=" + wrapperDir})
+	c := New(repo).WithEnviron([]string{"PATH=" + wrapperDir}).WithNetworkTimeout(timeout)
 	start := time.Now()
 	cmd, cancel := c.networkCmd("ls-remote", "--refs", "origin", "refs/heads/_armature")
 	defer cancel()
@@ -359,7 +357,7 @@ exit 0
 	}
 	// timeout + WaitDelay slack
 	if elapsed > 3*time.Second {
-		t.Fatalf("networkCmd took %v; want fail-closed near %v (+ WaitDelay)", elapsed, gitNetworkTimeout)
+		t.Fatalf("networkCmd took %v; want fail-closed near %v (+ WaitDelay)", elapsed, timeout)
 	}
 }
 

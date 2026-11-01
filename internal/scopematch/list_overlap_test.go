@@ -32,7 +32,7 @@ func TestScopesOverlap_MalformedPatternFailOpen_REQ_NOCOMMENTS(t *testing.T) {
 
 func TestOverlapParityCases_REQ_PR79(t *testing.T) {
 	t.Parallel()
-	for _, c := range overlapParityCases {
+	for _, c := range overlapParityCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, c.want, mustOverlaps(t, c.a, c.b), "Overlaps(%q, %q)", c.a, c.b)

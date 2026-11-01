@@ -39,33 +39,16 @@ func (r *fatalRecorder) FailNow() {
 	runtime.Goexit()
 }
 
-func writeAndCapture(t *testing.T, path string, content []byte) *fatalRecorder {
+func writeAndCapture(t *testing.T, tr *trampoline, path string, content []byte) *fatalRecorder {
 	t.Helper()
 	rec := &fatalRecorder{T: t}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		Write(rec, path, content)
+		writeWith(rec, tr, path, content)
 	}()
 	<-done
 	return rec
-}
-
-func restoreTrampoline(t *testing.T) {
-	t.Helper()
-	mkdirTemp = os.MkdirTemp
-	writeFile = os.WriteFile
-	remove = os.Remove
-	link = os.Link
-	symlink = os.Symlink
-	lstat = os.Lstat
-	chmod = os.Chmod
-	prepareMu.Lock()
-	prepared = false
-	trampolinePath = ""
-	prepareErr = nil
-	prepareMu.Unlock()
-	require.NoError(t, prepare())
 }
 
 func TestAbortIfPanicsOnError(t *testing.T) {
@@ -116,7 +99,7 @@ func TestWriteFailsWhenParentIsFile(t *testing.T) {
 	dir := t.TempDir()
 	parent := filepath.Join(dir, "blocked")
 	require.NoError(t, os.WriteFile(parent, []byte("x"), 0o600))
-	rec := writeAndCapture(t, filepath.Join(parent, "tool"), []byte("#!/bin/sh\nexit 0\n"))
+	rec := writeAndCapture(t, processTrampoline, filepath.Join(parent, "tool"), []byte("#!/bin/sh\nexit 0\n"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "mkdir")
 }
@@ -125,7 +108,7 @@ func TestWriteFailsWhenSidecarPathIsDir(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "tool")
 	require.NoError(t, os.Mkdir(bin+".script", 0o750))
-	rec := writeAndCapture(t, bin, []byte("#!/bin/sh\nexit 0\n"))
+	rec := writeAndCapture(t, processTrampoline, bin, []byte("#!/bin/sh\nexit 0\n"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "sidecar")
 }
@@ -135,80 +118,76 @@ func TestWriteFailsWhenDestIsNonemptyDir(t *testing.T) {
 	bin := filepath.Join(dir, "tool")
 	require.NoError(t, os.Mkdir(bin, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "inside"), []byte("x"), 0o600))
-	rec := writeAndCapture(t, bin, []byte("#!/bin/sh\nexit 0\n"))
+	rec := writeAndCapture(t, processTrampoline, bin, []byte("#!/bin/sh\nexit 0\n"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "remove")
 }
 
 func TestWriteUsesSymlinkWhenLinkFails(t *testing.T) {
-	t.Cleanup(func() { restoreTrampoline(t) })
-	link = func(string, string) error { return errors.New("cross-device") }
+	deps := realDeps()
+	deps.link = func(string, string) error { return errors.New("cross-device") }
+	tr := newTrampoline(deps)
+	require.NoError(t, tr.prepare())
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "tool")
-	Write(t, bin, []byte("#!/bin/sh\necho via-symlink\n"))
+	writeWith(t, tr, bin, []byte("#!/bin/sh\necho via-symlink\n"))
 	out, err := exec.CommandContext(t.Context(), bin).CombinedOutput()
 	require.NoError(t, err, "%s", out)
 	assert.Equal(t, "via-symlink\n", string(out))
 }
 
 func TestWriteFailsWhenLinkAndSymlinkFail(t *testing.T) {
-	t.Cleanup(func() { restoreTrampoline(t) })
-	link = func(string, string) error { return errors.New("no link") }
-	symlink = func(string, string) error { return errors.New("no symlink") }
+	deps := realDeps()
+	deps.link = func(string, string) error { return errors.New("no link") }
+	deps.symlink = func(string, string) error { return errors.New("no symlink") }
+	tr := newTrampoline(deps)
+	require.NoError(t, tr.prepare())
 	dir := t.TempDir()
-	rec := writeAndCapture(t, filepath.Join(dir, "tool"), []byte("#!/bin/sh\nexit 0\n"))
+	rec := writeAndCapture(t, tr, filepath.Join(dir, "tool"), []byte("#!/bin/sh\nexit 0\n"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "link")
 }
 
 func TestPrepareMkdirTempError(t *testing.T) {
-	t.Cleanup(func() { restoreTrampoline(t) })
-	prepareMu.Lock()
-	prepared = false
-	trampolinePath = ""
-	prepareErr = nil
-	prepareMu.Unlock()
-	mkdirTemp = func(string, string) (string, error) { return "", errors.New("no tmp") }
-	err := prepare()
+	deps := realDeps()
+	deps.mkdirTemp = func(string, string) (string, error) { return "", errors.New("no tmp") }
+	tr := newTrampoline(deps)
+	err := tr.prepare()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mkdir trampoline")
-	rec := writeAndCapture(t, filepath.Join(t.TempDir(), "tool"), []byte("#!/bin/sh\n"))
+	rec := writeAndCapture(t, tr, filepath.Join(t.TempDir(), "tool"), []byte("#!/bin/sh\n"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "mkdir trampoline")
 }
 
 func TestPrepareWriteFileError(t *testing.T) {
-	t.Cleanup(func() { restoreTrampoline(t) })
-	prepareMu.Lock()
-	prepared = false
-	trampolinePath = ""
-	prepareErr = nil
-	prepareMu.Unlock()
-	writeFile = func(string, []byte, os.FileMode) error { return errors.New("rofs") }
-	err := prepare()
+	deps := realDeps()
+	deps.writeFile = func(string, []byte, os.FileMode) error { return errors.New("rofs") }
+	tr := newTrampoline(deps)
+	err := tr.prepare()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "write trampoline")
 }
 
 func TestWriteFailsWhenTrampolinePathEmpty(t *testing.T) {
-	t.Cleanup(func() { restoreTrampoline(t) })
-	prepareMu.Lock()
-	prepared = true
-	prepareErr = nil
-	trampolinePath = ""
-	prepareMu.Unlock()
-	rec := writeAndCapture(t, filepath.Join(t.TempDir(), "tool"), []byte("#!/bin/sh\n"))
+	tr := newTrampoline(realDeps())
+	tr.mu.Lock()
+	tr.ready = true
+	tr.prepErr = nil
+	tr.path = ""
+	tr.mu.Unlock()
+	rec := writeAndCapture(t, tr, filepath.Join(t.TempDir(), "tool"), []byte("#!/bin/sh\n"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "was not prepared")
 }
 
-func chmodDirAndCapture(t *testing.T, path string) *fatalRecorder {
+func chmodDirAndCapture(t *testing.T, deps fsDeps, path string) *fatalRecorder {
 	t.Helper()
 	rec := &fatalRecorder{T: t}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ChmodDir(rec, path, 0o755)
+		chmodDirWith(rec, deps, path, 0o755)
 	}()
 	<-done
 	return rec
@@ -230,29 +209,29 @@ func TestChmodDirFailsOnFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file")
 	require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
-	rec := chmodDirAndCapture(t, path)
+	rec := chmodDirAndCapture(t, realDeps(), path)
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "not a directory")
 }
 
 func TestChmodDirFailsWhenMissing(t *testing.T) {
-	rec := chmodDirAndCapture(t, filepath.Join(t.TempDir(), "missing"))
+	rec := chmodDirAndCapture(t, realDeps(), filepath.Join(t.TempDir(), "missing"))
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "stat")
 }
 
 func TestChmodDirFailsWhenLstatErrors(t *testing.T) {
-	t.Cleanup(func() { restoreTrampoline(t) })
-	lstat = func(string) (os.FileInfo, error) { return nil, errors.New("enoent") }
-	rec := chmodDirAndCapture(t, t.TempDir())
+	deps := realDeps()
+	deps.lstat = func(string) (os.FileInfo, error) { return nil, errors.New("enoent") }
+	rec := chmodDirAndCapture(t, deps, t.TempDir())
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "stat")
 }
 
 func TestChmodDirFailsWhenChmodErrors(t *testing.T) {
-	t.Cleanup(func() { restoreTrampoline(t) })
-	chmod = func(string, os.FileMode) error { return errors.New("eperm") }
-	rec := chmodDirAndCapture(t, t.TempDir())
+	deps := realDeps()
+	deps.chmod = func(string, os.FileMode) error { return errors.New("eperm") }
+	rec := chmodDirAndCapture(t, deps, t.TempDir())
 	require.True(t, rec.failed)
 	assert.Contains(t, rec.msg, "chmod")
 }

@@ -38,7 +38,7 @@ func TestUnmappedRemoved_REQ_LNGHZN_S6_T5(t *testing.T) {
 	if strings.Contains(string(src), "func Unmapped") {
 		t.Error("Unmapped must be deleted; GENERAL-1 wrap is retired")
 	}
-	if _, registered := registeredCodes[CodeGeneral1]; registered {
+	if registry.has(CodeGeneral1) {
 		t.Error("GENERAL-1 must not remain in the live registry after wrap deletion")
 	}
 }

@@ -15,13 +15,14 @@ type CheckReservation struct {
 	Planned string
 }
 
-//nolint:gochecknoglobals //immutable reservation table
-var openReservations = []CheckReservation{
-	{
-		ID:      "D13",
-		Issue:   "LNGHZN-S11-T4",
-		Planned: "Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run.",
-	},
+func openReservations() []CheckReservation {
+	return []CheckReservation{
+		{
+			ID:      "D13",
+			Issue:   "LNGHZN-S11-T4",
+			Planned: "Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run.",
+		},
+	}
 }
 
 var checkIDPattern = regexp.MustCompile(`^D[1-9][0-9]*$`)
@@ -29,8 +30,8 @@ var checkIDPattern = regexp.MustCompile(`^D[1-9][0-9]*$`)
 // OpenReservations returns git-tracked doctor check-ID reservations for open
 // tasks. The returned slice is a copy.
 func OpenReservations() []CheckReservation {
-	out := make([]CheckReservation, len(openReservations))
-	copy(out, openReservations)
+	out := make([]CheckReservation, len(openReservations()))
+	copy(out, openReservations())
 	return out
 }
 

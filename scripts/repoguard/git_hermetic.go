@@ -10,16 +10,25 @@ import (
 )
 
 var (
-	gitInitWord    = regexp.MustCompile(`\bgit(?:\s+-[Cc]\s+\S+)+\s+init\b`)
-	gitInitSimple  = regexp.MustCompile(`\bgit\s+init\b`)
-	gitInitFlags   = map[string]bool{"--bare": true, "-b": true, "-q": true}
-	gittestHelpers = map[string]bool{
+	gitInitWord   = regexp.MustCompile(`\bgit(?:\s+-[Cc]\s+\S+)+\s+init\b`)
+	gitInitSimple = regexp.MustCompile(`\bgit\s+init\b`)
+)
+
+func gitInitFlags() map[string]bool {
+	return map[string]bool{"--bare": true, "-b": true, "-q": true}
+}
+
+func gittestHelpers() map[string]bool {
+	return map[string]bool{
 		"Init": true, "InitRepo": true, "InitWithOrigin": true, "Git": true, "Main": true, "IsolateGit": true,
 	}
-	gitIdentHelpers = map[string]bool{
+}
+
+func gitIdentHelpers() map[string]bool {
+	return map[string]bool{
 		"GitInitMain": true, "GitInitBareMain": true, "NonInteractiveGitCommand": true, "IsolateGit": true,
 	}
-)
+}
 
 func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 	if err := requireGoMod(root); err != nil {
@@ -90,14 +99,14 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 					}
 				}
 			case *ast.Ident:
-				if gitIdentHelpers[x.Name] {
+				if gitIdentHelpers()[x.Name] {
 					usesGit = true
 				}
 			case *ast.SelectorExpr:
-				if x.Sel != nil && isPkg(x.X, pf.imports, "github.com/scullxbones/armature/internal/gittest") && gittestHelpers[x.Sel.Name] {
+				if x.Sel != nil && isPkg(x.X, pf.imports, "github.com/scullxbones/armature/internal/gittest") && gittestHelpers()[x.Sel.Name] {
 					usesGit = true
 				}
-				if x.Sel != nil && gitIdentHelpers[x.Sel.Name] {
+				if x.Sel != nil && gitIdentHelpers()[x.Sel.Name] {
 					usesGit = true
 				}
 			}
@@ -144,7 +153,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 	}
 
 	fmt.Fprintln(stdout, "OK: git-hermetic allows:")
-	for _, a := range allowlist {
+	for _, a := range allowlist() {
 		fmt.Fprintf(stdout, "  %s (%s): %s\n", a.RelPath, a.Check, a.Reason)
 	}
 
@@ -199,7 +208,7 @@ func gitArgvInit(args []string) bool {
 		return true
 	}
 	for i := 0; i+1 < len(args); i++ {
-		if args[i] == "init" && gitInitFlags[args[i+1]] {
+		if args[i] == "init" && gitInitFlags()[args[i+1]] {
 			return true
 		}
 	}

@@ -158,13 +158,14 @@ func allBlockersMerged(blockers []string, facts map[string]Facts) bool {
 	return true
 }
 
-//nolint:gochecknoglobals //immutable priority order
-var priorityOrder = map[string]int{
-	"critical": 0,
-	"high":     1,
-	"medium":   2,
-	"low":      3,
-	"":         4,
+func priorityOrder() map[string]int {
+	return map[string]int{
+		"critical": 0,
+		"high":     1,
+		"medium":   2,
+		"low":      3,
+		"":         4,
+	}
 }
 
 func assignmentTier(issueID, workerID string, facts map[string]Facts) int {
@@ -188,8 +189,8 @@ func sortReady(entries []ReadyEntry, facts map[string]Facts, graph *dag.Graph, w
 		if ai != aj {
 			return ai < aj
 		}
-		pi := priorityOrder[entries[i].Priority]
-		pj := priorityOrder[entries[j].Priority]
+		pi := priorityOrder()[entries[i].Priority]
+		pj := priorityOrder()[entries[j].Priority]
 		if pi != pj {
 			return pi < pj
 		}

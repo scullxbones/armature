@@ -809,38 +809,45 @@ func gitPATHOverlay(t *testing.T, wrapperDir string) []string {
 // log.diffMerges values that rewrite bare `-m` output without a pin; with
 // `--diff-merges=separate` the flag alone already overrides them (see
 // TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE).
-var adversarialGitConfigs = []struct {
+func adversarialGitConfigs() []struct {
 	name   string
 	config [][2]string
-}{
-	{name: "log.showRoot=false", config: [][2]string{{"log.showRoot", "false"}}},
-	{name: "core.quotePath=true", config: [][2]string{{"core.quotePath", "true"}}},
-	{name: "color.ui=always", config: [][2]string{{"color.ui", "always"}}},
-	{name: "log.decorate=short", config: [][2]string{{"log.decorate", "short"}}},
-	{name: "diff.renames=false", config: [][2]string{{"diff.renames", "false"}}},
-	{name: "diff.noprefix=true", config: [][2]string{{"diff.noprefix", "true"}}},
-	{name: "diff.relative=true", config: [][2]string{{"diff.relative", "true"}}},
-	{name: "log.diffMerges=combined", config: [][2]string{{"log.diffMerges", "combined"}}},
-	{name: "log.diffMerges=dense-combined", config: [][2]string{{"log.diffMerges", "dense-combined"}}},
-	{name: "log.diffMerges=first-parent", config: [][2]string{{"log.diffMerges", "first-parent"}}},
-	{name: "log.diffMerges=remerge", config: [][2]string{{"log.diffMerges", "remerge"}}},
-	{name: "log.diffMerges=off", config: [][2]string{{"log.diffMerges", "off"}}},
-	{name: "all hostile", config: [][2]string{
-		{"log.showRoot", "false"},
-		{"core.quotePath", "true"},
-		{"color.ui", "always"},
-		{"log.decorate", "short"},
-		{"diff.renames", "false"},
-		{"diff.noprefix", "true"},
-		{"diff.relative", "true"},
-		{"log.diffMerges", "combined"},
-	}},
+} {
+	return []struct {
+		name   string
+		config [][2]string
+	}{
+		{name: "log.showRoot=false", config: [][2]string{{"log.showRoot", "false"}}},
+		{name: "core.quotePath=true", config: [][2]string{{"core.quotePath", "true"}}},
+		{name: "color.ui=always", config: [][2]string{{"color.ui", "always"}}},
+		{name: "log.decorate=short", config: [][2]string{{"log.decorate", "short"}}},
+		{name: "diff.renames=false", config: [][2]string{{"diff.renames", "false"}}},
+		{name: "diff.noprefix=true", config: [][2]string{{"diff.noprefix", "true"}}},
+		{name: "diff.relative=true", config: [][2]string{{"diff.relative", "true"}}},
+		{name: "log.diffMerges=combined", config: [][2]string{{"log.diffMerges", "combined"}}},
+		{name: "log.diffMerges=dense-combined", config: [][2]string{{"log.diffMerges", "dense-combined"}}},
+		{name: "log.diffMerges=first-parent", config: [][2]string{{"log.diffMerges", "first-parent"}}},
+		{name: "log.diffMerges=remerge", config: [][2]string{{"log.diffMerges", "remerge"}}},
+		{name: "log.diffMerges=off", config: [][2]string{{"log.diffMerges", "off"}}},
+		{name: "all hostile", config: [][2]string{
+			{"log.showRoot", "false"},
+			{"core.quotePath", "true"},
+			{"color.ui", "always"},
+			{"log.decorate", "short"},
+			{"diff.renames", "false"},
+			{"diff.noprefix", "true"},
+			{"diff.relative", "true"},
+			{"log.diffMerges", "combined"},
+		}},
+	}
 }
 
 // hostileLogDiffMergesModes is the prove-don't-assume matrix for whether
 // `--diff-merges=separate` alone makes the log.diffMerges -c pin unnecessary.
-var hostileLogDiffMergesModes = []string{
-	"combined", "dense-combined", "first-parent", "remerge", "off",
+func hostileLogDiffMergesModes() []string {
+	return []string{
+		"combined", "dense-combined", "first-parent", "remerge", "off",
+	}
 }
 
 func applyAdversarialGitConfig(t *testing.T, repo string, pairs [][2]string) {
@@ -922,7 +929,7 @@ func seedCommitWalkFixture(t *testing.T) (repo string, baseline []adapters.Commi
 
 func TestCommitWalkReverse_AdversarialUserConfigMatrix_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	for _, tc := range adversarialGitConfigs {
+	for _, tc := range adversarialGitConfigs() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo, baseline := seedCommitWalkFixture(t)
@@ -955,7 +962,7 @@ func TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE(t *testing.T) 
 		"-c", "diff.noprefix=false",
 		"-c", "diff.relative=false",
 	}
-	for _, mode := range hostileLogDiffMergesModes {
+	for _, mode := range hostileLogDiffMergesModes() {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			gittest.SkipUnlessConfigValuesSupported(t, [][2]string{{"log.diffMerges", mode}})
@@ -985,7 +992,7 @@ func TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE(t *testing.T) 
 
 func TestShowFilesBatch_MatchesShowFileAtCommit_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	for _, tc := range adversarialGitConfigs {
+	for _, tc := range adversarialGitConfigs() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			repo := initTestRepo(t)
@@ -2618,9 +2625,8 @@ exec "$real_git" "$@"
 	assert.Contains(t, logged, "--no-tags")
 }
 
-func TestRestoreEvidence_StalledRemoteTimesOut_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates shared network timeout
-	restoreTimeout := adapters.SetGitNetworkTimeoutForTest(100 * time.Millisecond)
-	defer restoreTimeout()
+func TestRestoreEvidence_StalledRemoteTimesOut_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
 
 	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
@@ -2630,7 +2636,7 @@ func TestRestoreEvidence_StalledRemoteTimesOut_REQ_TOPTIER_S12_T1G(t *testing.T)
 	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
 	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
 
-	c := adapters.New(repo)
+	c := adapters.New(repo).WithNetworkTimeout(100 * time.Millisecond)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
 
@@ -2664,9 +2670,8 @@ exec "$real_git" "$@"
 
 // TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G: addressing
 // origin by name honors remote.origin.proxy; passing a URL would bypass it.
-func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates shared network timeout
-	restoreTimeout := adapters.SetGitNetworkTimeoutForTest(500 * time.Millisecond)
-	defer restoreTimeout()
+func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
 
 	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
@@ -2698,7 +2703,7 @@ func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.
 	gittest.Git(t, repo, "remote", "set-url", "origin", "http://proxied.invalid/o.git")
 	gittest.Git(t, repo, "config", "remote.origin.proxy", proxyURL)
 
-	c := adapters.New(repo)
+	c := adapters.New(repo).WithNetworkTimeout(500 * time.Millisecond)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
 

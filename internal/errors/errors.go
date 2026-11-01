@@ -5,6 +5,7 @@ package errors
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/scullxbones/armature/internal/exitcodes"
 )
@@ -17,7 +18,31 @@ const (
 	CodeIO       = "IO"
 )
 
-var registeredCodes = map[string]struct{}{} //nolint:gochecknoglobals //registry filled at init
+// codeRegistry is a sync-safe Failure Code set filled only via Register (init
+// and cmd package init). Duplicate codes panic; retired codes stay reserved.
+type codeRegistry struct {
+	mu    sync.Mutex
+	codes map[string]struct{}
+}
+
+func (r *codeRegistry) register(code string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.codes[code]; exists {
+		panic("duplicate failure code: " + code)
+	}
+	r.codes[code] = struct{}{}
+}
+
+func (r *codeRegistry) has(code string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.codes[code]
+	return ok
+}
+
+// registry is the process-wide Failure Code set. Register is the only writer.
+var registry = &codeRegistry{codes: map[string]struct{}{}} //nolint:gochecknoglobals // process-wide failure-code registry; Register-only writes at init
 
 func init() {
 	Register(CodeUSAGE)
@@ -27,10 +52,7 @@ func init() {
 // Register records a Failure Code. Duplicate codes panic; retired codes stay
 // reserved and must never be reused.
 func Register(code string) {
-	if _, exists := registeredCodes[code]; exists {
-		panic("duplicate failure code: " + code)
-	}
-	registeredCodes[code] = struct{}{}
+	registry.register(code)
 }
 
 // Prefix returns the Failure Code prefix for a deep-module basename or a

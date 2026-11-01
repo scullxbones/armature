@@ -14,15 +14,16 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-//nolint:gochecknoglobals //immutable schema map
-var artifactSchemas = map[string]string{
-	"plan":                   "plan.schema.json",
-	"review_bundle":          "review-bundle.schema.json",
-	"review-bundle":          "review-bundle.schema.json",
-	"conformance_assessment": "conformance-assessment.schema.json",
-	"conformance-assessment": "conformance-assessment.schema.json",
-	"activity_index":         "activity-index.schema.json",
-	"activity-index":         "activity-index.schema.json",
+func artifactSchemas() map[string]string {
+	return map[string]string{
+		"plan":                   "plan.schema.json",
+		"review_bundle":          "review-bundle.schema.json",
+		"review-bundle":          "review-bundle.schema.json",
+		"conformance_assessment": "conformance-assessment.schema.json",
+		"conformance-assessment": "conformance-assessment.schema.json",
+		"activity_index":         "activity-index.schema.json",
+		"activity-index":         "activity-index.schema.json",
+	}
 }
 
 var artifactFence = regexp.MustCompile("(?s)```json[ \\t]+artifact_type=([A-Za-z0-9_-]+)[ \\t]*\\n(.*?)```")
@@ -48,7 +49,7 @@ func Validate(repo string) error {
 	}
 	var failures []error
 	for _, ex := range examples {
-		schemaName, ok := artifactSchemas[ex.artifactType]
+		schemaName, ok := artifactSchemas()[ex.artifactType]
 		if !ok {
 			failures = append(failures, ex.errorf("Unknown artifact type: %s", ex.artifactType))
 			continue
@@ -109,8 +110,8 @@ func relativePath(repo, path string) string {
 }
 
 func loadSchemas(dir string) (map[string]*jsonschema.Schema, error) {
-	validators := make(map[string]*jsonschema.Schema, len(artifactSchemas))
-	for _, name := range artifactSchemas {
+	validators := make(map[string]*jsonschema.Schema, len(artifactSchemas()))
+	for _, name := range artifactSchemas() {
 		if _, loaded := validators[name]; loaded {
 			continue
 		}

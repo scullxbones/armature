@@ -19,32 +19,45 @@ import (
 )
 
 // Owner/lease gates the printed remediation path uses (real code — no injected
-// Decide/Producer). Each has a named product test; TestDisableMutationsFailNamedTests
-// proves a source disable-mutation fails that test (includes locate.go RequireOwner).
-var remediationPrintGates = []struct {
+// Decide/Producer). Product tests below exercise the print path; TestDisableMutationsFailNamedTests
+// proves a source disable-mutation fails a focused package-local test (cheaper
+// than re-running ./cmd/armature thrice).
+func remediationPrintGates() []struct {
 	Name     string
 	Source   string
 	Needle   string
+	Package  string
 	TestName string
-}{
-	{
-		Name:     "RequireOwner",
-		Source:   "internal/oporder/locate.go",
-		Needle:   `workerID == "" || lease.Holder != workerID || lease.Token == ""`,
-		TestName: "TestPrintedRemediation_RequireOwnerBlocksForeignCancel_REQ_TOPTIER_S18_T4",
-	},
-	{
-		Name:     "ForeignLiveLeaseBlocks",
-		Source:   "internal/claim/owner.go",
-		Needle:   "return LeaseLive(held, at)",
-		TestName: "TestPrintedRemediation_ForeignLiveLeaseBlocksClaim_REQ_TOPTIER_S18_T4",
-	},
-	{
-		Name:     "WouldViolateTreeConsistency",
-		Source:   "internal/promotion/remediate.go",
-		Needle:   "return nearestMergedAncestor(id, g) != \"\"",
-		TestName: "TestPrintedRemediation_TreeConsistencyBlocksClaimUnderMerged_REQ_TOPTIER_S18_T4",
-	},
+} {
+	return []struct {
+		Name     string
+		Source   string
+		Needle   string
+		Package  string
+		TestName string
+	}{
+		{
+			Name:     "RequireOwner",
+			Source:   "internal/oporder/locate.go",
+			Needle:   `workerID == "" || lease.Holder != workerID || lease.Token == ""`,
+			Package:  "./internal/oporder/",
+			TestName: "TestRequireOwner_LoserNamedError",
+		},
+		{
+			Name:     "ForeignLiveLeaseBlocks",
+			Source:   "internal/claim/owner.go",
+			Needle:   "return LeaseLive(held, at)",
+			Package:  "./internal/claim/",
+			TestName: "TestForeignLiveLeaseBlocksChallenger_REQ_MATENC_S1_T2",
+		},
+		{
+			Name:     "WouldViolateTreeConsistency",
+			Source:   "internal/promotion/remediate.go",
+			Needle:   "return nearestMergedAncestor(id, g) != \"\"",
+			Package:  "./internal/promotion/",
+			TestName: "TestTreeConsistencyInvariant_REQ_TOPTIER_S18_T4",
+		},
+	}
 }
 
 // TestPrintedRemediation_RequireOwnerBlocksForeignCancel_REQ_TOPTIER_S18_T4
@@ -141,7 +154,7 @@ func TestDisableMutationsFailNamedTests_REQ_TOPTIER_S18_T4(t *testing.T) {
 	require.True(t, ok)
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
 
-	for _, gate := range remediationPrintGates {
+	for _, gate := range remediationPrintGates() {
 		t.Run(gate.Name, func(t *testing.T) {
 			t.Parallel()
 			srcPath := filepath.Join(repoRoot, gate.Source)
@@ -164,10 +177,10 @@ func TestDisableMutationsFailNamedTests_REQ_TOPTIER_S18_T4(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(overlayPath, overlay, 0o644))
 
-			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			t.Cleanup(cancel)
-			cmd := exec.CommandContext(ctx, "go", "test", "./cmd/armature/",
-				"-count=1", "-timeout", "170s",
+			cmd := exec.CommandContext(ctx, "go", "test", gate.Package,
+				"-count=1", "-vet=off", "-timeout", "80s",
 				"-overlay", overlayPath,
 				"-run", "^"+gate.TestName+"$")
 			cmd.Dir = repoRoot
@@ -230,48 +243,4 @@ func gateDisabled(name, src string) bool {
 	default:
 		return false
 	}
-}
-
-// TestReintroducedMutableHookFailsGochecknoglobals_REQ_TOPTIER_S18_T4 proves
-// gochecknoglobals is enabled in .golangci.yml: a package-level mutable func
-// hook fails golangci-lint (same class as reintroduced RequireOwnerForTest hook).
-func TestReintroducedMutableHookFailsGochecknoglobals_REQ_TOPTIER_S18_T4(t *testing.T) {
-	if testing.Short() {
-		t.Skip("golangci-lint subprocess proof")
-	}
-	t.Parallel()
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
-
-	cfg, err := os.ReadFile(filepath.Join(repoRoot, ".golangci.yml"))
-	require.NoError(t, err)
-	require.Contains(t, string(cfg), "- gochecknoglobals",
-		".golangci.yml must enable gochecknoglobals")
-
-	// Probe package must live inside the module for typecheck.
-	pkgDir := filepath.Join(repoRoot, "cmd", "armature", "testdata", "gochecknoglobals_hookprobe")
-	require.NoError(t, os.MkdirAll(pkgDir, 0o755))
-	t.Cleanup(func() {
-		if remErr := os.RemoveAll(pkgDir); remErr != nil {
-			t.Logf("cleanup RemoveAll: %v", remErr)
-		}
-	})
-	src := "package gochecknoglobals_hookprobe\n\nvar requireOwnerHook func(string) error\n"
-	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "hook.go"), []byte(src), 0o644))
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	t.Cleanup(cancel)
-	cmd := exec.CommandContext(ctx, "golangci-lint", "run",
-		"--enable-only=gochecknoglobals",
-		"--max-issues-per-linter=0", "--max-same-issues=0",
-		"./cmd/armature/testdata/gochecknoglobals_hookprobe/...")
-	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), "XDG_CACHE_HOME=/tmp/golangci-lint-cache")
-	out, err := cmd.CombinedOutput()
-	joined := string(out)
-	require.Error(t, err, "reintroduced mutable hook must fail golangci-lint; out=\n%s", joined)
-	assert.Contains(t, joined, "gochecknoglobals",
-		"expected gochecknoglobals hit for requireOwnerHook; out=\n%s", joined)
-	assert.Contains(t, joined, "requireOwnerHook")
 }

@@ -126,7 +126,7 @@ func TestFailureCodePrefixMatchesModuleOrUse_REQ_LNGHZN_S6_T3(t *testing.T) {
 	for _, code := range registeredFailureCodes(t) {
 		assert.Truef(t, validFailureCodeShape(code),
 			"registered code %q must be PREFIX or PREFIX-N with no zero-padded suffix", code)
-		if _, reserved := reservedFailureCodes[code]; reserved {
+		if reservedFailureCodes.has(code) {
 			continue
 		}
 		prefix := failureCodePrefix(code)
@@ -136,7 +136,7 @@ func TestFailureCodePrefixMatchesModuleOrUse_REQ_LNGHZN_S6_T3(t *testing.T) {
 	for _, row := range parseErrorContractLedger(t) {
 		assert.Truef(t, validFailureCodeShape(row.Code),
 			"ledger code %q must be PREFIX or PREFIX-N with no zero-padded suffix", row.Code)
-		if _, reserved := reservedFailureCodes[row.Code]; reserved {
+		if reservedFailureCodes.has(row.Code) {
 			continue
 		}
 		prefix := failureCodePrefix(row.Code)
@@ -147,7 +147,7 @@ func TestFailureCodePrefixMatchesModuleOrUse_REQ_LNGHZN_S6_T3(t *testing.T) {
 		if row.Retired {
 			continue
 		}
-		if _, reserved := reservedFailureCodePrefixes[prefix]; reserved {
+		if _, reserved := reservedFailureCodePrefixes()[prefix]; reserved {
 			continue
 		}
 		assert.Equalf(t, armerrors.Prefix(row.ModuleOrUse), prefix,
@@ -184,9 +184,9 @@ func TestGeneralExemptionLimitedToGeneral1_REQ_LNGHZN_S6_T3(t *testing.T) {
 	t.Parallel()
 	_, live := uniqueRegisteredCodes(t)["GENERAL-1"]
 	assert.False(t, live, "GENERAL-1 must not remain in the live registry after wrap deletion")
-	_, exemptGeneral2 := reservedFailureCodes["GENERAL-2"]
+	exemptGeneral2 := reservedFailureCodes.has("GENERAL-2")
 	assert.False(t, exemptGeneral2, "GENERAL-2 must not ride along on a GENERAL exemption")
-	_, exemptGeneral := reservedFailureCodePrefixes["GENERAL"]
+	_, exemptGeneral := reservedFailureCodePrefixes()["GENERAL"]
 	assert.False(t, exemptGeneral, "GENERAL must not be reserved as a whole prefix family")
 }
 
@@ -482,20 +482,38 @@ func resolveStringArg(expr ast.Expr, consts map[string]string) (string, bool) {
 	}
 }
 
-var reservedFailureCodePrefixes = map[string]struct{}{
-	"USAGE": {},
-	"IO":    {},
+func reservedFailureCodePrefixes() map[string]struct{} {
+	return map[string]struct{}{
+		"USAGE": {},
+		"IO":    {},
+	}
 }
 
-var reservedFailureCodes = map[string]struct{}{}
+// reservedFailureCodes is filled during ledger census in tests (mutable registry).
+type failureCodeSet struct {
+	codes map[string]struct{}
+}
+
+func (s *failureCodeSet) has(code string) bool {
+	_, ok := s.codes[code]
+	return ok
+}
+
+func (s *failureCodeSet) add(code string) {
+	s.codes[code] = struct{}{}
+}
+
+var reservedFailureCodes = &failureCodeSet{codes: map[string]struct{}{}} //nolint:gochecknoglobals // test census accumulator; tests never reassign the pointer
 
 func ledgerRowNeedsCurrentPrefixCheck(row ledgerRow) bool {
 	return !row.Retired
 }
 
 // ADR 0004 designated deep modules. Not every internal/ directory.
-var designatedDeepModules = []string{
-	"ops", "claim", "traceability", "materialize", "sources", "validate", "output",
+func designatedDeepModules() []string {
+	return []string{
+		"ops", "claim", "traceability", "materialize", "sources", "validate", "output",
+	}
 }
 
 func validFailureCodeShape(code string) bool {
@@ -531,11 +549,11 @@ func errorObjectHasExactContractKeys(errObj map[string]any) bool {
 
 func allowedFailureCodePrefixes(t *testing.T) map[string]struct{} {
 	t.Helper()
-	allowed := make(map[string]struct{}, len(reservedFailureCodePrefixes)+len(designatedDeepModules))
-	for prefix := range reservedFailureCodePrefixes {
+	allowed := make(map[string]struct{}, len(reservedFailureCodePrefixes())+len(designatedDeepModules()))
+	for prefix := range reservedFailureCodePrefixes() {
 		allowed[prefix] = struct{}{}
 	}
-	for _, name := range designatedDeepModules {
+	for _, name := range designatedDeepModules() {
 		allowed[armerrors.Prefix(name)] = struct{}{}
 	}
 	root := testRootCmd(t)

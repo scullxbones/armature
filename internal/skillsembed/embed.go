@@ -9,5 +9,7 @@ import (
 //go:embed skills plugin.json
 var skillsFS embed.FS
 
-// SkillsFS is the embedded filesystem containing all bundled skills and plugin configuration.
-var SkillsFS fs.FS = skillsFS //nolint:gochecknoglobals //embed.FS skills root
+// SkillsFS returns the embedded filesystem containing all bundled skills and plugin configuration.
+func SkillsFS() fs.FS {
+	return skillsFS
+}

@@ -712,7 +712,7 @@ git -C .armature rebase origin/_armature
 
 **Severity:** Warning. Plain `arm doctor` still exits 0; `--strict` promotes. Not part of `doctor --fix`.
 
-**Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check). `--explain` remediations share `promotion.RemediationsForIssue` with MERGED-1 / sync.
+**Context:** Catches stuck `done → merged` promotions after any ancestor story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check). `--explain` remediations share `promotion.RemediationsPlanOpts` (CLI Decide) with MERGED-1 / sync.
 
 **Fix:** Remediations are a typed set of **alternatives** (Option A / Option B),
 each with ordered steps — never a flat sequence that reopens then force-cancels.

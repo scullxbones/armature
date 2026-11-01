@@ -296,6 +296,8 @@ lint: adr-principles
 	@scripts/check-bash32-scripts.sh .
 	@scripts/check-mock-ban.sh .
 	@$(GO) run ./scripts/repoguard -check source-manifest .
+	@$(GO) run ./scripts/repoguard -check gochecknoglobals-probe .
+	@$(GO) run ./scripts/repoguard -check golangci-in-tests .
 
 adr-principles:
 	@$(PYTHON) scripts/check_adr_principles.py docs/adr

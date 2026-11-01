@@ -280,6 +280,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/claim"
             - "github.com/scullxbones/armature/internal/delivery"
             - "github.com/scullxbones/armature/internal/ops"
         doctor-boundary:
@@ -349,22 +350,6 @@ linters:
       line-length: 160
   exclusions:
     rules:
-      # Test fixtures / harness shared state — not product remediation hooks.
-      - linters:
-          - gochecknoglobals
-        path: '_test\.go$'
-      # Tooling tables (repoguard), not product runtime.
-      - linters:
-          - gochecknoglobals
-        path: 'scripts/'
-      # Process-wide trampoline seams (documented; tests reset under lock).
-      - linters:
-          - gochecknoglobals
-        path: 'internal/testexec/'
-      # Test isolation harness (seed once, env overlay).
-      - linters:
-          - gochecknoglobals
-        path: 'internal/gittest/'
       - linters:
           - forbidigo
         path: 'cmd/'

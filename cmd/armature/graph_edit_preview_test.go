@@ -144,11 +144,9 @@ func TestUnlinkOverrideDoesNotClaimGreen_REQ_AGTFND(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { bestEffortClose(tty) })
 
-	origTTY := openControllingTTY
-	openControllingTTY = func() (*os.File, error) { return tty, nil }
-	t.Cleanup(func() { openControllingTTY = origTTY })
-
-	root := testRootCmd(t)
+	root := testRootCmdWith(t, Invocation{
+		OpenControllingTTY: func() (*os.File, error) { return tty, nil },
+	})
 	require.NoError(t, root.PersistentFlags().Set("non-interactive", "false"))
 	require.NoError(t, root.PersistentFlags().Set("format", "human"))
 	unlinkCmd, _, findErr := root.Find([]string{"unlink"})

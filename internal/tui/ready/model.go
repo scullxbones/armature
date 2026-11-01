@@ -75,9 +75,9 @@ func (m Model) View() string {
 		}
 		line := fmt.Sprintf("%s  %s  (%s)", e.Issue, e.Title, priority)
 		if i == m.cursor {
-			sb.WriteString(tui.Info.Render("> "+line) + "\n")
+			sb.WriteString(tui.Info().Render("> "+line) + "\n")
 		} else {
-			sb.WriteString(tui.Muted.Render("  "+line) + "\n")
+			sb.WriteString(tui.Muted().Render("  "+line) + "\n")
 		}
 	}
 

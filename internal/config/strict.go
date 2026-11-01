@@ -11,20 +11,23 @@ import (
 	"time"
 )
 
-//nolint:gochecknoglobals //immutable config vocabulary
-var validProjectTypes = map[string]struct{}{
-	"go":      {},
-	"node":    {},
-	"python":  {},
-	"rust":    {},
-	"make":    {},
-	"unknown": {},
+func validProjectTypes() map[string]struct{} {
+	return map[string]struct{}{
+		"go":      {},
+		"node":    {},
+		"python":  {},
+		"rust":    {},
+		"make":    {},
+		"unknown": {},
+	}
 }
 
 // retiredConfigKeys were removed from Config (ADR 0006 deleted mode) but still
 // appear in pre-SB-ELIM config.json files. Strip them before DisallowUnknownFields
 // so LoadConfig preserves custom TTL/budget/hooks instead of rejecting the file.
-var retiredConfigKeys = []string{"mode"} //nolint:gochecknoglobals //immutable retired-key list
+func retiredConfigKeys() []string {
+	return []string{"mode"}
+}
 
 // StrictDecode decodes exactly one JSON object, rejecting unknown fields,
 // a non-object document (including JSON null), and any trailing JSON value.
@@ -70,7 +73,7 @@ func stripRetiredConfigKeys(raw json.RawMessage) (json.RawMessage, error) {
 		return nil, err
 	}
 	changed := false
-	for _, key := range retiredConfigKeys {
+	for _, key := range retiredConfigKeys() {
 		if _, ok := obj[key]; ok {
 			delete(obj, key)
 			changed = true
@@ -107,7 +110,7 @@ func ValidatePresentFields(data []byte) []string {
 
 	var problems []string
 	if _, ok := raw["project_type"]; ok {
-		if _, valid := validProjectTypes[cfg.ProjectType]; !valid {
+		if _, valid := validProjectTypes()[cfg.ProjectType]; !valid {
 			problems = append(problems, fmt.Sprintf("project_type %q is out of range", cfg.ProjectType))
 		}
 	}

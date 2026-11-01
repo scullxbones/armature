@@ -62,14 +62,15 @@ const (
 	StatusCancelled  = "cancelled"
 )
 
-//nolint:gochecknoglobals //immutable transition table
-var ValidTransitionTargets = map[string]bool{
-	StatusOpen:       true,
-	StatusInProgress: true,
-	StatusDone:       true,
-	StatusMerged:     true,
-	StatusBlocked:    true,
-	StatusCancelled:  true,
+func ValidTransitionTargets() map[string]bool {
+	return map[string]bool{
+		StatusOpen:       true,
+		StatusInProgress: true,
+		StatusDone:       true,
+		StatusMerged:     true,
+		StatusBlocked:    true,
+		StatusCancelled:  true,
+	}
 }
 
 type Op struct {

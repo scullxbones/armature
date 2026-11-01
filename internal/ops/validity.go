@@ -1,42 +1,43 @@
 package ops
 
-//nolint:gochecknoglobals //immutable validity table
-var classifiedValidity = map[string]bool{
-	OpCreate:             true,
-	OpAmend:              true,
-	OpLink:               true,
-	OpUnlink:             true,
-	OpReparent:           true,
-	OpSourceLink:         true,
-	OpDecision:           true,
-	OpTransition:         true,
-	OpDAGTransition:      true,
-	OpScopeRename:        true,
-	OpScopeDelete:        true,
-	OpCitationAccepted:   true,
-	OpClaim:              false,
-	OpHeartbeat:          false,
-	OpNote:               false,
-	OpNoteDelete:         false,
-	OpAssign:             false,
-	OpSourceFingerprint:  false,
-	OpGateEvidence:       false,
-	OpLogQuarantine:      false,
-	OpAssessmentAttested: false,
-	OpPromotionCheck:     false,
+func classifiedValidity() map[string]bool {
+	return map[string]bool{
+		OpCreate:             true,
+		OpAmend:              true,
+		OpLink:               true,
+		OpUnlink:             true,
+		OpReparent:           true,
+		OpSourceLink:         true,
+		OpDecision:           true,
+		OpTransition:         true,
+		OpDAGTransition:      true,
+		OpScopeRename:        true,
+		OpScopeDelete:        true,
+		OpCitationAccepted:   true,
+		OpClaim:              false,
+		OpHeartbeat:          false,
+		OpNote:               false,
+		OpNoteDelete:         false,
+		OpAssign:             false,
+		OpSourceFingerprint:  false,
+		OpGateEvidence:       false,
+		OpLogQuarantine:      false,
+		OpAssessmentAttested: false,
+		OpPromotionCheck:     false,
+	}
 }
 
 // AffectsValidity reports whether appending this op type can change what
 // arm validate reports. Unclassified types fail closed (treated as
 // validity-affecting).
 func AffectsValidity(opType string) bool {
-	affects, classified := classifiedValidity[opType]
+	affects, classified := classifiedValidity()[opType]
 	return affects || !classified
 }
 
 // ClassifiedValidity reports the census entry for opType. classified is
 // false when the type is missing from the map.
 func ClassifiedValidity(opType string) (affects bool, classified bool) {
-	affects, classified = classifiedValidity[opType]
+	affects, classified = classifiedValidity()[opType]
 	return affects, classified
 }

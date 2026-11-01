@@ -41,19 +41,25 @@ const isolatedConfigBody = isolationMarker + `[user]
 	program = /bin/false
 `
 
-var gitOverrideEnvKeys = []string{
-	"GIT_DIR",
-	"GIT_WORK_TREE",
-	"GIT_INDEX_FILE",
-	"GIT_COMMON_DIR",
-	"GIT_OBJECT_DIRECTORY",
-	"GIT_CONFIG",
-	"GIT_CONFIG_COUNT",
-	"GIT_CONFIG_PARAMETERS",
-	"GIT_TEMPLATE_DIR",
+func gitOverrideEnvKeys() []string {
+	return []string{
+		"GIT_DIR",
+		"GIT_WORK_TREE",
+		"GIT_INDEX_FILE",
+		"GIT_COMMON_DIR",
+		"GIT_OBJECT_DIRECTORY",
+		"GIT_CONFIG",
+		"GIT_CONFIG_COUNT",
+		"GIT_CONFIG_PARAMETERS",
+		"GIT_TEMPLATE_DIR",
+	}
 }
 
-var isolatedGlobalConfig string
+type isolationConfig struct {
+	path string
+}
+
+var isolationCfg = &isolationConfig{} //nolint:gochecknoglobals // process-wide isolated git config path; never reassigned
 
 func IsolateGit() error {
 	cfgPath, err := isolationConfigPath()
@@ -87,7 +93,7 @@ func IsolateGit() error {
 	if err := os.Setenv("GIT_COMMITTER_EMAIL", isolatedAuthorEmail); err != nil {
 		return fmt.Errorf("set GIT_COMMITTER_EMAIL: %w", err)
 	}
-	for _, key := range gitOverrideEnvKeys {
+	for _, key := range gitOverrideEnvKeys() {
 		if err := os.Unsetenv(key); err != nil {
 			return fmt.Errorf("unset %s: %w", key, err)
 		}
@@ -115,8 +121,8 @@ func unsetPrefixedEnv(prefix string) error {
 }
 
 func isolationConfigPath() (string, error) {
-	if isolatedGlobalConfig != "" {
-		return isolatedGlobalConfig, nil
+	if isolationCfg.path != "" {
+		return isolationCfg.path, nil
 	}
 	dir, err := os.MkdirTemp("", "armature-gittest-config-")
 	if err != nil {
@@ -126,7 +132,7 @@ func isolationConfigPath() (string, error) {
 	if err := os.WriteFile(path, []byte(isolatedConfigBody), 0o600); err != nil {
 		return "", fmt.Errorf("write git test config: %w", err)
 	}
-	isolatedGlobalConfig = path
+	isolationCfg.path = path
 	return path, nil
 }
 

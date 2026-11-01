@@ -11,7 +11,9 @@ import (
 
 const budgetsRelPath = "internal/contextreport/budgets.json"
 
-var runtimeClassOrder = []string{classInvocation, classBundle} //nolint:gochecknoglobals //immutable class order
+func runtimeClassOrder() []string {
+	return []string{classInvocation, classBundle}
+}
 
 type budget struct {
 	Path        string `json:"path"`
@@ -71,7 +73,7 @@ func (e *gateError) overBudgetClasses() []string {
 		seen[v.Class] = struct{}{}
 	}
 	var classes []string
-	for _, class := range runtimeClassOrder {
+	for _, class := range runtimeClassOrder() {
 		if _, ok := seen[class]; ok {
 			classes = append(classes, class)
 		}
@@ -87,7 +89,7 @@ func (e *gateError) overBudgetClasses() []string {
 }
 
 func knownRuntimeClass(class string) bool {
-	for _, c := range runtimeClassOrder {
+	for _, c := range runtimeClassOrder() {
 		if c == class {
 			return true
 		}
@@ -197,12 +199,12 @@ func enforce(report Report, budgets budgetFile) error {
 }
 
 func runtimeClassIndex(class string) int {
-	for i, c := range runtimeClassOrder {
+	for i, c := range runtimeClassOrder() {
 		if c == class {
 			return i
 		}
 	}
-	return len(runtimeClassOrder)
+	return len(runtimeClassOrder())
 }
 
 func explicitTargets(report Report, budgets budgetFile) error {

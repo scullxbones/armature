@@ -426,8 +426,8 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 		wantUnspecified := map[string]struct{}{
 			ops.OpCreate: {}, ops.OpSourceFingerprint: {}, ops.OpGateEvidence: {}, ops.OpLogQuarantine: {},
 		}
-		require.Equal(t, len(opHandlers), len(wantError)+len(wantIgnore)+len(wantUnspecified))
-		for opType, handler := range opHandlers {
+		require.Equal(t, len(opHandlers()), len(wantError)+len(wantIgnore)+len(wantUnspecified))
+		for opType, handler := range opHandlers() {
 			switch {
 			case mapHas(wantError, opType):
 				assert.Equal(t, MissingTargetError, handler.missingTarget, opType)
@@ -443,7 +443,7 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 
 	t.Run("assign missing-target stays success", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, MissingTargetIgnore, opHandlers[ops.OpAssign].missingTarget)
+		assert.Equal(t, MissingTargetIgnore, opHandlers()[ops.OpAssign].missingTarget)
 		err := NewState().ApplyOp(ops.Op{
 			Type: ops.OpAssign, TargetID: "unknown-01", Timestamp: 200, WorkerID: "w1",
 			Payload: ops.Payload{AssignedTo: "worker-x"},

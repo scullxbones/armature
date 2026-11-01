@@ -15,10 +15,6 @@ type PlanOpts struct {
 	// graph g (same refusals as claim/transition). Required in production
 	// print paths; when nil, only WouldViolateTreeConsistency gates claims.
 	Decide func(argv string, g Graph) error
-
-	// Producer, when non-nil, replaces buildRemediationsPlan for this call only
-	// (parallel-safe; no package-global test hook).
-	Producer func(id string, g Graph, opts PlanOpts) Plan
 }
 
 // IssueFlag returns the --issue value from an arm argv, or empty.

@@ -219,14 +219,15 @@ not a legacy placeholder):
   3. Author ConformanceAssessment JSON per that schema (schema_version, bundle_id,
      contract/delivery fingerprints from the bundle, criterion results with citations).
   4. arm review validate --assessment assessment.json --bundle bundle.json
-  5. arm review record --issue <id> --assessment assessment.json [--bundle bundle.json]
+  5. arm review record --issue <id> --assessment assessment.json --bundle bundle.json
 
 If the assessment is a duplicate of an existing one (same bundle ID), the command
 is idempotent and returns success without writing a duplicate operation.
 
-When --bundle is provided, the command additionally validates that all assessment
-citation coordinates reference lines present in the delivery diff, and that the
-assessment contract fingerprint matches the bundle contract fingerprint.`,
+--bundle is required in help/how-to (same as remediation argv). When provided,
+the command validates that all assessment citation coordinates reference lines
+present in the delivery diff, and that the assessment contract fingerprint
+matches the bundle contract fingerprint.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return mapReviewError(runReviewRecord(cmd, issueID, assessmentFile, bundleFile))
 		},
@@ -234,7 +235,7 @@ assessment contract fingerprint matches the bundle contract fingerprint.`,
 
 	cmd.Flags().StringVar(&issueID, "issue", "", "issue ID (required)")
 	cmd.Flags().StringVar(&assessmentFile, "assessment", "", "assessment file path or '-' for stdin (required)")
-	cmd.Flags().StringVar(&bundleFile, "bundle", "", "review bundle file path (optional; enables diff-index citation validation)")
+	cmd.Flags().StringVar(&bundleFile, "bundle", "", "review bundle file path (required)")
 
 	return cmd
 }

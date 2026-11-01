@@ -83,6 +83,7 @@
         "Client.UnsetGitConfig",
         "Client.UpdateRef",
         "Client.WithEnviron",
+        "Client.WithNetworkTimeout",
         "CommandGit",
         "CommitWalkEntry",
         "CommitWalkEntry.ChangedFiles",
@@ -156,7 +157,6 @@
         "RequireMinGit",
         "RunProcess",
         "RunProcessWithEnv",
-        "SetGitNetworkTimeoutForTest",
         "SimulatePendingMarker",
         "Stat",
         "StatFile",
@@ -1509,7 +1509,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 111,
+      "count": 108,
       "names": [
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1589,12 +1589,9 @@
         "PlanOpts",
         "PlanOpts.Decide",
         "PlanOpts.Now",
-        "PlanOpts.Producer",
         "PlanOpts.Viewer",
         "RecoveryArgv",
-        "RemediationsForIssue",
         "RemediationsPlan",
-        "RemediationsPlanFor",
         "RemediationsPlanOpts",
         "RenderGroupedNextActions",
         "Result",
