@@ -321,7 +321,8 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {
 			return err
 		}
-		printMerged(cmd, issueID, pr)
+		// Intended no-op / retry path: tear down leftovers, do not claim a new promotion.
+		printAlreadyMerged(cmd, issueID, pr)
 		return nil
 	}
 
@@ -371,7 +372,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 					if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *live, cmd.ErrOrStderr()); err != nil {
 						return err
 					}
-					printMerged(cmd, issueID, pr)
+					printAlreadyMerged(cmd, issueID, pr)
 					return nil
 				}
 				freshOps, readErr := readAllOpsFromDir(filepath.Join(ctx.IssuesDir, "ops"))
@@ -412,6 +413,14 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 
 func printMerged(cmd *cobra.Command, issueID, pr string) {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
+	if pr != "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+}
+
+func printAlreadyMerged(cmd *cobra.Command, issueID, pr string) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s is already merged", issueID)
 	if pr != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
 	}

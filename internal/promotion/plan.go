@@ -49,9 +49,10 @@ type Result struct {
 }
 
 type Error struct {
-	IssueID string
-	Kind    string
-	Msg     string
+	IssueID  string
+	Kind     string
+	Msg      string
+	Children []string // KindNotLeaf: children to promote before the parent rolls up
 }
 
 func (e *Error) Error() string {
@@ -65,7 +66,25 @@ func (e *Error) RecoveryArgv() string {
 	if e == nil {
 		return "arm doctor"
 	}
+	if e.Kind == KindNotLeaf {
+		return NotLeafRecovery(e.Children)
+	}
 	return RecoveryArgv(e.IssueID, e.Kind)
+}
+
+// NotLeafRecovery points at children. Never recommends arm merged on the
+// non-leaf itself — promotion.Evaluate rejects that shape as not-leaf.
+func NotLeafRecovery(children []string) string {
+	if len(children) == 0 {
+		return "arm doctor"
+	}
+	sorted := append([]string(nil), children...)
+	slices.Sort(sorted)
+	parts := make([]string, 0, len(sorted))
+	for _, c := range sorted {
+		parts = append(parts, "arm merged --issue "+c)
+	}
+	return strings.Join(parts, "; ")
 }
 
 func RecoveryArgv(issueID, kind string) string {
@@ -74,8 +93,11 @@ func RecoveryArgv(issueID, kind string) string {
 		return "arm review record --issue " + issueID + " --assessment <assessment.json>"
 	case KindLegacy, KindEmptyDiff:
 		return delivery.RecordArgv(issueID)
-	case KindNotOnTarget, KindNotLeaf:
+	case KindNotOnTarget:
 		return "arm merged --issue " + issueID
+	case KindNotLeaf:
+		// Without children, fail closed — never self-referential arm merged.
+		return "arm doctor"
 	default:
 		return "arm doctor"
 	}
@@ -90,9 +112,16 @@ func Evaluate(git *adapters.Client, in Input) Result {
 		return res
 	}
 	if len(in.Issue.Children) > 0 {
+		children := append([]string(nil), in.Issue.Children...)
+		slices.Sort(children)
 		res.Kind = KindNotLeaf
-		res.Recovery = RecoveryArgv(id, KindNotLeaf)
-		res.Err = &Error{IssueID: id, Kind: KindNotLeaf, Msg: "issue " + id + " is not a leaf; parents roll up when children are merged"}
+		res.Recovery = NotLeafRecovery(children)
+		res.Err = &Error{
+			IssueID:  id,
+			Kind:     KindNotLeaf,
+			Msg:      "issue " + id + " is not a leaf; parents roll up when children are merged",
+			Children: children,
+		}
 		return res
 	}
 

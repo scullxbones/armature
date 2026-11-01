@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -161,7 +164,59 @@ func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing
 	assert.Contains(t, d12, "origin/_armature")
 
 	_, d14 := doctorCheckGuidance("D14")
-	assert.Equal(t, "arm merged --issue <issue-id>", d14)
+	assert.Equal(t, d14SuggestedFallback, d14,
+		"shape-agnostic D14 must not blindly recommend arm merged")
+	assert.NotContains(t, d14, "arm merged --issue <issue-id>")
+}
+
+func TestDoctorCheckGuidance_D14LeafVsNonLeaf_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	index := materialize.Index{
+		"P":  {Status: "merged", Type: "epic", Children: []string{"R", "L"}},
+		"R":  {Status: "done", Type: "story", Parent: "P", Children: []string{"RC"}},
+		"RC": {Status: "done", Type: "task", Parent: "R"},
+		"L":  {Status: "done", Type: "task", Parent: "P"},
+	}
+
+	leafFinding := doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning,
+		Items: []string{"L -> P"},
+	}
+	_, leafSug := doctorCheckGuidanceFor(leafFinding, index)
+	assert.Equal(t, "arm merged --issue L", leafSug)
+	assert.NotContains(t, leafSug, "children first")
+
+	nonLeafFinding := doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning,
+		Items: []string{"R -> P"},
+	}
+	_, nonLeafSug := doctorCheckGuidanceFor(nonLeafFinding, index)
+	assert.Contains(t, nonLeafSug, "arm merged --issue RC")
+	assert.Contains(t, nonLeafSug, "promote unmerged children first")
+	assertNoExactArmMergedIssue(t, nonLeafSug, "R")
+
+	mixedFinding := doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning,
+		Items: []string{"L -> P", "R -> P"},
+	}
+	_, mixedSug := doctorCheckGuidanceFor(mixedFinding, index)
+	assert.Contains(t, mixedSug, "arm merged --issue L")
+	assert.Contains(t, mixedSug, "arm merged --issue RC")
+	assertNoExactArmMergedIssue(t, mixedSug, "R")
+}
+
+func assertNoExactArmMergedIssue(t *testing.T, suggested, issueID string) {
+	t.Helper()
+	needle := "arm merged --issue " + issueID
+	for _, part := range strings.Split(suggested, ";") {
+		part = strings.TrimSpace(part)
+		if after, ok := strings.CutPrefix(part, "promote unmerged children first: "); ok {
+			part = after
+		}
+		assert.NotEqual(t, needle, part,
+			"must not recommend %q in %q", needle, suggested)
+	}
 }
 
 func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -174,6 +229,65 @@ func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.
 			"%s must have dedicated --explain guidance (not the default fallback)", id)
 		assert.NotEmpty(t, sug, "%s suggested remediation must be non-empty", id)
 	}
+}
+
+func TestDoctorExplain_D14NonLeafPointsAtChildren_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithParentAndTask(t) // story-01 + task-01
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+
+	// Grandparent epic P (merged) → story-01 (done, non-leaf) → task-01 (done leaf).
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpCreate, TargetID: "epic-P", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{Title: "Parent epic", NodeType: "epic"},
+	}))
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpReparent, TargetID: "story-01", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{Parent: "epic-P"},
+	}))
+	for _, id := range []string{"task-01", "story-01"} {
+		require.NoError(t, appendOp(ctx, logPath, ops.Op{
+			Type: ops.OpTransition, TargetID: id, Timestamp: nowEpoch(), WorkerID: workerID,
+			Payload: ops.Payload{To: ops.StatusDone, Outcome: "fixture done for D14 explain shape test"},
+		}))
+	}
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpTransition, TargetID: "epic-P", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{To: ops.StatusMerged},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	stdout := new(bytes.Buffer)
+	_ = executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"doctor", "--repo", repo, "--explain", "--format", "human")
+	out := stdout.String()
+	assert.Contains(t, out, "D14")
+	assert.Contains(t, out, "story-01 -> epic-P")
+	assert.Contains(t, out, "arm merged --issue task-01")
+	var d14Suggested string
+	inD14 := false
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "D14:") {
+			inD14 = true
+			continue
+		}
+		if inD14 {
+			if after, ok := strings.CutPrefix(strings.TrimSpace(line), "Suggested: "); ok {
+				d14Suggested = after
+				break
+			}
+			if strings.HasPrefix(strings.TrimSpace(line), "✓") || strings.HasPrefix(strings.TrimSpace(line), "⚠") || strings.HasPrefix(strings.TrimSpace(line), "✗") {
+				if !strings.Contains(line, "D14") {
+					break
+				}
+			}
+		}
+	}
+	require.NotEmpty(t, d14Suggested, "D14 --explain must emit Suggested; out=%s", out)
+	assertNoExactArmMergedIssue(t, d14Suggested, "story-01")
 }
 
 func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {

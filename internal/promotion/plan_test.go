@@ -350,14 +350,17 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		t.Parallel()
 		_, git, _ := deliveryRepo(t)
 		in := doneInput("task-parent", "a", "b", nil)
-		in.Issue.Children = []string{"child"}
+		in.Issue.Children = []string{"child-b", "child-a"}
 		res := Evaluate(git, in)
 		assert.False(t, res.Promote)
 		assert.Equal(t, KindNotLeaf, res.Kind)
 		var pe *Error
 		require.ErrorAs(t, res.Err, &pe)
-		assert.Equal(t, "arm merged --issue task-parent", pe.RecoveryArgv())
+		assert.Equal(t, "arm merged --issue child-a; arm merged --issue child-b", pe.RecoveryArgv(),
+			"not-leaf recovery must point at children, never arm merged on the non-leaf")
+		assert.NotContains(t, pe.RecoveryArgv(), "arm merged --issue task-parent")
 		assert.Contains(t, pe.Error(), "not a leaf")
+		assert.Equal(t, []string{"child-a", "child-b"}, pe.Children)
 	})
 
 	t.Run("legacy without snapshot", func(t *testing.T) {
@@ -618,6 +621,10 @@ func TestPromotionErrorNilAndDefaultRecovery(t *testing.T) {
 	e = &Error{IssueID: "x", Kind: KindNotOnTarget, Msg: "nope"}
 	assert.Equal(t, "nope", e.Error())
 	assert.Equal(t, "arm merged --issue x", e.RecoveryArgv())
+	assert.Equal(t, "arm doctor", RecoveryArgv("x", KindNotLeaf),
+		"KindNotLeaf without children must not self-recommend arm merged")
 	assert.Equal(t, "arm doctor", RecoveryArgv("x", "other"))
+	assert.Equal(t, "arm merged --issue c1; arm merged --issue c2", NotLeafRecovery([]string{"c2", "c1"}))
+	assert.Equal(t, "arm doctor", NotLeafRecovery(nil))
 	assert.Equal(t, "promotion check for x failed", checkMessage("x", "other"))
 }

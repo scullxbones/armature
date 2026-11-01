@@ -246,7 +246,7 @@ func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *clas
 		item.Result = promotion.Result{
 			IssueID:  live.ID,
 			Kind:     promotion.KindNotLeaf,
-			Recovery: promotion.RecoveryArgv(live.ID, promotion.KindNotLeaf),
+			Recovery: promotion.NotLeafRecovery(live.Children),
 		}
 		return nil
 	}

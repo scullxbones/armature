@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
 	armerrors "github.com/scullxbones/armature/internal/errors"
+	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/spf13/cobra"
 )
@@ -86,14 +88,24 @@ func newDoctorCmd() *cobra.Command {
 				return mapDoctorLoadError(err)
 			}
 
+			var explainIndex materialize.Index
+			if explain {
+				// Run already rematerialized; load index for shape-aware remediations
+				// (e.g. D14 leaf vs non-leaf). Fail closed if explain cannot classify.
+				explainIndex, err = materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
+				if err != nil {
+					return mapDoctorLoadError(err)
+				}
+			}
+
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if isStructuredFormat(format) {
-				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain); err != nil {
+				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain, explainIndex); err != nil {
 					return err
 				}
 			} else {
-				renderDoctorHuman(cmd, report, verbose, explain)
+				renderDoctorHuman(cmd, report, verbose, explain, explainIndex)
 			}
 
 			// Doctor report is not a Command Failure (ADR 0020 §7).
@@ -192,7 +204,7 @@ type doctorCheckRow struct {
 	Suggested    string          `json:"suggested,omitempty"`
 }
 
-func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool) error {
+func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, index materialize.Index) error {
 	rows := make([]doctorCheckRow, 0, len(report.Checks))
 	for _, f := range report.Checks {
 		row := doctorCheckRow{
@@ -203,7 +215,7 @@ func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool) error 
 			VerboseItems: f.VerboseItems,
 		}
 		if explain && f.Severity != doctor.SeverityOK {
-			row.Explanation, row.Suggested = doctorCheckGuidance(f.Check)
+			row.Explanation, row.Suggested = doctorCheckGuidanceFor(f, index)
 		}
 		rows = append(rows, row)
 	}
@@ -217,7 +229,7 @@ func doctorHelp(report doctor.Report) []string {
 	return []string{doctorCodesHelp}
 }
 
-func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool) {
+func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool, index materialize.Index) {
 	for _, f := range report.Checks {
 		icon := "✓"
 		switch f.Severity {
@@ -228,7 +240,7 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", icon, f.Check, f.Message)
 		if explain && f.Severity != doctor.SeverityOK {
-			explanation, suggested := doctorCheckGuidance(f.Check)
+			explanation, suggested := doctorCheckGuidanceFor(f, index)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Explanation: %s\n", explanation)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", suggested)
 		}
@@ -242,8 +254,13 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 	}
 }
 
+// doctorCheckGuidance is the shape-agnostic coverage entry point (empty finding).
 func doctorCheckGuidance(check string) (explanation, suggested string) {
-	switch check {
+	return doctorCheckGuidanceFor(doctor.Finding{Check: check}, nil)
+}
+
+func doctorCheckGuidanceFor(f doctor.Finding, index materialize.Index) (explanation, suggested string) {
+	switch f.Check {
 	case "D1":
 		return "Git commits reference issue IDs that are not done or merged, so history and the issue graph have drifted.",
 			"arm transition <issue-id> --to done"
@@ -283,12 +300,90 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 				"the lag number may be stale. Warnings are ignored; behind is an error.",
 			"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"
 	case "D14":
-		return "An issue is still done while its parent is already merged — a stuck done→merged promotion. Merged-under-cancelled parents are not this check.",
-			"arm merged --issue <issue-id>"
+		return d14Guidance(f, index)
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
 			"see docs/validation-codes.md"
 	}
+}
+
+const (
+	d14Explanation = "An issue is still done while its parent is already merged — a stuck " +
+		"done→merged promotion. Merged-under-cancelled parents are not this check."
+	// Shape-agnostic fallback never recommends arm merged on an unclassified item.
+	d14SuggestedFallback = "promote unmerged children first; reserve arm merged --issue <leaf-id> for leaves only"
+)
+
+// d14Guidance keeps the broad D14 warning but only recommends arm merged for
+// leaves. Non-leaves point at unmerged children — promotion.Evaluate rejects
+// arm merged on parents as not-leaf.
+func d14Guidance(f doctor.Finding, index materialize.Index) (explanation, suggested string) {
+	explanation = d14Explanation
+	if len(f.Items) == 0 || index == nil {
+		return explanation, d14SuggestedFallback
+	}
+
+	var leafIDs []string
+	var childCmds []string
+	seenChild := map[string]bool{}
+	for _, item := range f.Items {
+		id, _, ok := strings.Cut(item, " -> ")
+		if !ok || id == "" {
+			id = item
+		}
+		entry, ok := index[id]
+		if !ok || len(entry.Children) == 0 {
+			leafIDs = append(leafIDs, id)
+			continue
+		}
+		for _, childID := range entry.Children {
+			childEntry, childOK := index[childID]
+			if childOK && childEntry.Status == "merged" {
+				continue // already merged — not a recovery target
+			}
+			if seenChild[childID] {
+				continue
+			}
+			seenChild[childID] = true
+			childCmds = append(childCmds, "arm merged --issue "+childID)
+		}
+	}
+
+	sort.Strings(leafIDs)
+	sort.Strings(childCmds)
+
+	var parts []string
+	if len(childCmds) > 0 {
+		parts = append(parts, "promote unmerged children first: "+strings.Join(childCmds, "; "))
+	} else if hasNonLeafD14Item(f, index) {
+		// Non-leaf whose children are already merged — rollup/reopen, not arm merged on parent.
+		parts = append(parts, "children are merged; reopen or investigate the non-leaf rollup — do not run arm merged on the non-leaf")
+	}
+	if len(leafIDs) > 0 {
+		leafCmds := make([]string, 0, len(leafIDs))
+		for _, id := range leafIDs {
+			leafCmds = append(leafCmds, "arm merged --issue "+id)
+		}
+		parts = append(parts, strings.Join(leafCmds, "; "))
+	}
+	if len(parts) == 0 {
+		return explanation, d14SuggestedFallback
+	}
+	return explanation, strings.Join(parts, "; ")
+}
+
+func hasNonLeafD14Item(f doctor.Finding, index materialize.Index) bool {
+	for _, item := range f.Items {
+		id, _, ok := strings.Cut(item, " -> ")
+		if !ok || id == "" {
+			id = item
+		}
+		entry, ok := index[id]
+		if ok && len(entry.Children) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error {

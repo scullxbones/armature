@@ -1507,12 +1507,13 @@
       ]
     },
     "internal/promotion": {
-      "count": 44,
+      "count": 46,
       "names": [
         "AssessmentFact",
         "AssessmentFact.BaseSHA",
         "AssessmentFact.HeadSHA",
         "Error",
+        "Error.Children",
         "Error.Error",
         "Error.IssueID",
         "Error.Kind",
@@ -1540,6 +1541,7 @@
         "KindNotLeaf",
         "KindNotOnTarget",
         "KindPromote",
+        "NotLeafRecovery",
         "RecoveryArgv",
         "Result",
         "Result.AppendCheck",

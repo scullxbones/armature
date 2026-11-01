@@ -712,13 +712,17 @@ git -C .armature rebase origin/_armature
 
 **Severity:** Warning. Plain `arm doctor` still exits 0; `--strict` promotes. Not part of `doctor --fix`.
 
-**Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion.
+**Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check), but remediation is shape-aware: `arm merged` only succeeds on leaves (`promotion.Evaluate` rejects non-leaves as `not-leaf`).
 
-**Fix:** Promote the stuck leaf with the normal merged path when content is on main, or reopen/investigate if the parent rollup was premature:
+**Fix:** For **leaves**, promote with the normal merged path when content is on main, or reopen/investigate if the parent rollup was premature. For **non-leaves**, promote unmerged children first; the parent rolls up when children are merged — do not run `arm merged` on the non-leaf:
 ```bash
-arm merged --issue <issue-id>
+# leaf item:
+arm merged --issue <leaf-id>
 # or, if the leaf should not stay done:
-arm reopen --issue <issue-id>
+arm reopen --issue <leaf-id>
+
+# non-leaf item:
+arm merged --issue <unmerged-child-id>   # repeat per unmerged child
 ```
 
 ---

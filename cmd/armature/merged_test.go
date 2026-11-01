@@ -13,8 +13,10 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/deliverygate"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/scullxbones/armature/internal/worktree"
 	"github.com/stretchr/testify/assert"
@@ -1347,4 +1349,104 @@ func TestMergedLegacyRefusalWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
 	assert.NotContains(t, cf.Cause, "worker not initialized")
 	require.NotEmpty(t, cf.NextActions)
 	assert.Contains(t, cf.NextActions[0], "arm delivery record --issue task-01")
+}
+
+// setupNonLeafDoneWithDoneChild builds PJ's repro: done non-leaf R with done child RC.
+func setupNonLeafDoneWithDoneChild(t *testing.T) string {
+	t.Helper()
+	repo := setupRepoWithParentAndTask(t) // story-01 parent, task-01 child
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	for _, id := range []string{"task-01", "story-01"} {
+		require.NoError(t, appendOp(ctx, logPath, ops.Op{
+			Type:      ops.OpTransition,
+			TargetID:  id,
+			Timestamp: nowEpoch(),
+			WorkerID:  workerID,
+			Payload:   ops.Payload{To: ops.StatusDone, Outcome: "fixture done for non-leaf merged recovery"},
+		}))
+	}
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	return repo
+}
+
+func TestMergedNonLeafNextActionsPointAtChildren_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupNonLeafDoneWithDoneChild(t)
+
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"merged", "--repo", repo, "--issue", "story-01", "--force", "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	assert.Equal(t, "MERGED-1", cf.Code)
+	assert.Contains(t, cf.Cause, "not a leaf")
+	require.NotEmpty(t, cf.NextActions)
+	for _, action := range cf.NextActions {
+		assert.NotContains(t, action, "arm merged --issue story-01",
+			"next_actions must not re-recommend the command that just failed")
+		assert.Contains(t, action, "arm merged --issue task-01")
+	}
+
+	// Run each suggested recovery against the fixture; it must not fail the same way (not-leaf).
+	for _, action := range cf.NextActions {
+		for _, part := range strings.Split(action, ";") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			args := strings.Fields(part)
+			require.GreaterOrEqual(t, len(args), 2)
+			require.Equal(t, "arm", args[0])
+			cliArgs := append([]string{}, args[1:]...)
+			cliArgs = append(cliArgs, "--repo", repo, "--force", "--format", "agent")
+			recOut := new(bytes.Buffer)
+			recCode := executeThenHandleRootError(t, recOut, new(bytes.Buffer), cliArgs...)
+			if recCode == 0 {
+				continue
+			}
+			recCF := agentFailureFromStdout(t, recOut.String())
+			assert.NotContains(t, recCF.Cause, "not a leaf",
+				"suggested %q must not fail as not-leaf; got %s", part, recCF.Cause)
+		}
+	}
+}
+
+func TestMergedAlreadyMergedSaysAlreadyMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force", "--skip-delivery-gate")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	markIssueMergedForTest(t, repo, "task-01")
+
+	out := new(bytes.Buffer)
+	cmd := testRootCmd(t)
+	cmd.SetOut(out)
+	cmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, out.String(), "task-01 is already merged")
+	assert.NotContains(t, out.String(), "Marked task-01 as merged",
+		"already-merged no-op must say already merged, not claim a new promotion")
+}
+
+func TestRemediationNextActionsNeverSelfReferential_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	// Adversarial audit: every promotion.Error recovery for KindNotLeaf must
+	// omit arm merged on the failing issue; other kinds must not loop the same
+	// failing argv back as the only next action when the kind is structural.
+	repo := setupNonLeafDoneWithDoneChild(t)
+	stdout := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"merged", "--repo", repo, "--issue", "story-01", "--force", "--format", "agent")
+	require.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, stdout.String())
+	require.Equal(t, codeMerged1, cf.Code)
+	joined := strings.Join(cf.NextActions, " | ")
+	assert.NotContains(t, joined, "arm merged --issue story-01")
+	assert.NotEqual(t, armerrors.CodeUSAGE, cf.Code)
 }

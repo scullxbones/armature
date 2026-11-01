@@ -536,9 +536,10 @@ not part of `doctor --fix`.
 
 **D14 — Done under merged parent.** Warns when an issue is still `done` while
 its parent is already `merged` (stuck `done → merged` promotion). Merged
-children under a cancelled parent (ORCRUN leftover) are not reported. Remediate
-with `arm merged --issue <id>` when delivery is on main, or `arm reopen --issue
-<id>` if the leaf should not stay done. D14 is not part of `doctor --fix`.
+children under a cancelled parent (ORCRUN leftover) are not reported. `--explain`
+is shape-aware: leaves get `arm merged --issue <id>` (or `arm reopen`); non-leaves
+point at unmerged children first — `arm merged` on a non-leaf fails as `not-leaf`.
+D14 is not part of `doctor --fix`.
 
 ---
 
@@ -697,6 +698,12 @@ patch-id, and matched commit, then deletes `refs/armature/deliveries/<id>` and
 removes the worktree. Otherwise the leaf stays `done` and a `promotion-check`
 op is appended. `--pr` may be stored and is not evidence. `--force` remains the
 hook-log override only; it does not waive the git check or the assessment.
+
+Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` point at
+`arm merged --issue <child>` for each child — never at the non-leaf that just
+failed. An issue that is already `merged` is an intentional no-op/retry that
+tears down leftover delivery artifacts and prints `<id> is already merged`
+(exit 0), not a second “Marked … as merged” promotion claim.
 
 A refusal is `MERGED-1` with `next_actions[0]` naming the recovery command and
 the issue id. `arm transition --to merged` is refused (`TRANSITION-1`,
