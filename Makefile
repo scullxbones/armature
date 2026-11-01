@@ -309,6 +309,7 @@ lint: adr-principles
 	@$(GO) run ./scripts/repoguard -check source-manifest .
 	@$(GO) run ./scripts/repoguard -check gochecknoglobals-probe .
 	@$(GO) run ./scripts/repoguard -check golangci-in-tests .
+	@$(GO) run ./scripts/repoguard -check object-id .
 
 adr-principles:
 	@$(PYTHON) scripts/check_adr_principles.py docs/adr

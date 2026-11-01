@@ -90,6 +90,13 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "issuetype is a pure vocabulary package and must not import other internal packages"
+        gitoid-pure:
+          list-mode: lax
+          files:
+            - "**/internal/gitoid/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "gitoid is a pure object-id helper and must not import other internal packages"
         scopematch-pure:
           list-mode: lax
           files:
@@ -221,6 +228,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/attestation"
+            - "github.com/scullxbones/armature/internal/gitoid"
             - "github.com/scullxbones/armature/internal/issuetype"
             - "github.com/scullxbones/armature/internal/strictjson"
         worktree-pure:
@@ -262,6 +270,7 @@ linters:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
             - "github.com/scullxbones/armature/internal/clock"
+            - "github.com/scullxbones/armature/internal/gitoid"
             - "github.com/scullxbones/armature/internal/harnesspolicy"
             - "github.com/scullxbones/armature/internal/worktree"
         harnesspolicy-boundary:

@@ -2,14 +2,11 @@ package review
 
 import (
 	"fmt"
-	"regexp"
 
+	"github.com/scullxbones/armature/internal/gitoid"
 	"github.com/scullxbones/armature/internal/issuetype"
 	"github.com/scullxbones/armature/internal/strictjson"
 )
-
-// gitSHAPattern is the published review-bundle schema pattern for delivery SHAs.
-var gitSHAPattern = regexp.MustCompile(`^[a-f0-9]{40}$`)
 
 func DecodeReviewBundle(data []byte) (ReviewBundle, error) {
 	var bundle ReviewBundle
@@ -32,10 +29,10 @@ func validateDecodedBundleContract(rb ReviewBundle) error {
 	if rb.Delivery.ChangedFiles == nil {
 		return fmt.Errorf("review bundle: missing delivery.changed_files")
 	}
-	if !gitSHAPattern.MatchString(rb.Delivery.BaseSHA) {
+	if !gitoid.Valid(rb.Delivery.BaseSHA) {
 		return fmt.Errorf("review bundle: malformed delivery.base_sha")
 	}
-	if !gitSHAPattern.MatchString(rb.Delivery.HeadSHA) {
+	if !gitoid.Valid(rb.Delivery.HeadSHA) {
 		return fmt.Errorf("review bundle: malformed delivery.head_sha")
 	}
 	return nil

@@ -73,13 +73,13 @@
       "properties": {
         "base_sha": {
           "type": "string",
-          "description": "Parent commit SHA",
-          "pattern": "^[a-f0-9]{40}$"
+          "description": "Parent commit SHA (40-hex sha1 or 64-hex sha256 object id)",
+          "pattern": "^[a-f0-9]{40}$|^[a-f0-9]{64}$"
         },
         "head_sha": {
           "type": "string",
-          "description": "Delivery commit SHA",
-          "pattern": "^[a-f0-9]{40}$"
+          "description": "Delivery commit SHA (40-hex sha1 or 64-hex sha256 object id)",
+          "pattern": "^[a-f0-9]{40}$|^[a-f0-9]{64}$"
         },
         "changed_files": {
           "type": "array",

@@ -29,3 +29,4 @@ new ADR that supersedes or amends the old one, not editing history. Use
 | [0022](0022-promotion-is-a-recorded-delivery.md) | Promotion Is a Recorded Delivery on the Target | Accepted (amends ADR-0005 and ADR-0008) |
 | [0023](0023-depguard-allow-list-widens-are-adr-class.md) | Widening a Depguard Fence Is ADR-Class | Accepted (amends ADR-0004) |
 | [0024](0024-arm-mcp-stdio-session-is-not-t1.md) | An `arm mcp` Stdio Session Is Not a T1 Long-Running Process | Accepted (amends ADR-0009) |
+| [0025](0025-gitoid-shared-object-id-helper.md) | Shared `gitoid` Helper for SHA-1 and SHA-256 Object IDs | Accepted (amends ADR-0023 / ADR-0004 fences) |

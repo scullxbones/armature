@@ -606,7 +606,7 @@ func TestGochecknoglobalsProbe_missingEnableFails(t *testing.T) {
 func TestRealRepoPassesGuards(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	for _, check := range []string{"source-manifest", "test-executables", "git-hermetic", "gochecknoglobals-probe", "golangci-in-tests"} {
+	for _, check := range []string{"source-manifest", "test-executables", "git-hermetic", "gochecknoglobals-probe", "golangci-in-tests", "object-id"} {
 		out, errOut, code := runCheck(t, check, root)
 		if code != 0 {
 			t.Fatalf("%s failed on real repo:\n%s\n%s", check, out, errOut)
@@ -619,6 +619,52 @@ func TestRealRepoPassesGuards(t *testing.T) {
 				t.Fatalf("must list the repoguard fixture allow, got %s", out)
 			}
 		}
+		if check == "object-id" && !strings.Contains(out, "OK: object-id") {
+			t.Fatalf("missing object-id OK line: %s", out)
+		}
+	}
+}
+
+func TestObjectID_FortyOnlyPatternFails_REQ_PV70(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+import "regexp"
+var pat = regexp.MustCompile(` + "`^[a-f0-9]{40}$`" + `)
+`,
+		"docs/schemas/review-bundle.schema.json": `{
+  "properties": {
+    "delivery": {
+      "properties": {
+        "base_sha": { "pattern": "^[a-f0-9]{40}$" }
+      }
+    }
+  }
+}
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on 40-hex-only patterns, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "gitoid") {
+		t.Fatalf("fix must name gitoid, got %s", errOut)
+	}
+}
+
+func TestObjectID_BothWidthsPass_REQ_PV70(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const Pattern = ` + "`^[a-f0-9]{40}$|^[a-f0-9]{64}$`" + `
+`,
+		"docs/schemas/ok.schema.json": `{"properties":{"sha":{"pattern":"^[a-f0-9]{40}$|^[a-f0-9]{64}$"}}}`,
+	})
+	out, errOut, code := runCheck(t, "object-id", root)
+	if code != 0 {
+		t.Fatalf("expected pass, stdout=%s stderr=%s", out, errOut)
 	}
 }
 

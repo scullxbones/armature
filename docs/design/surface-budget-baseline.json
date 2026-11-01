@@ -707,6 +707,15 @@
         "Unlock"
       ]
     },
+    "internal/gitoid": {
+      "count": 4,
+      "names": [
+        "LenSHA1",
+        "LenSHA256",
+        "PatternLower",
+        "Valid"
+      ]
+    },
     "internal/gittest": {
       "count": 15,
       "names": [

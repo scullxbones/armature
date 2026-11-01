@@ -41,6 +41,7 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 | Mistake class | What fails |
 |---|---|
 | Second decoder of `sources/manifest.json` (typed `sourceEntry` copies or `json.RawMessage` entries; PRs #333 and #362) | `scripts/repoguard` (`make lint` / `make check`). Decode with `sources.Manifest.Unmarshal` or `sources.ReadManifest`, then pass `validate.KnownSources` / `validate.UnreadableSources`. |
+| Hard-coded 40-hex-only git object-id pattern (misses SHA-256 64-hex; ADR 0025 / PV-70) | `scripts/repoguard -check object-id` (`make lint` / `make check`). Use `internal/gitoid.Valid` (equals `gitoid.PatternLower`: lowercase 40\|64 hex). |
 
 ## Canonical references
 
