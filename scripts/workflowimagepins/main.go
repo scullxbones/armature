@@ -39,14 +39,17 @@ const (
 	kindRef    = "ref"
 )
 
-// Short exempt list for scripts that must mention engine names.
-var scriptExempt = map[string]bool{
-	"scripts/run-container-image.sh":       true,
-	"scripts/ci-path-shadow-engines.sh":    true,
-	"scripts/ci-path-shadow-selfcheck.sh":  true,
-	"scripts/check-workflow-image-pins.sh": true,
-	"scripts/check-no-engine-bin-env.sh":   true,
-	"scripts/test_check_jobs.sh":           true, // asserts engine-token policy
+// scriptExempt returns the short exempt list for scripts that must mention
+// engine names (function, not a package global — gochecknoglobals).
+func scriptExempt() map[string]bool {
+	return map[string]bool{
+		"scripts/run-container-image.sh":       true,
+		"scripts/ci-path-shadow-engines.sh":    true,
+		"scripts/ci-path-shadow-selfcheck.sh":  true,
+		"scripts/check-workflow-image-pins.sh": true,
+		"scripts/check-no-engine-bin-env.sh":   true,
+		"scripts/test_check_jobs.sh":           true, // asserts engine-token policy
+	}
 }
 
 type finding struct {
@@ -284,7 +287,7 @@ func scanTree(root string, allowed map[string]bool) ([]finding, error) {
 			rel = path
 		}
 		rel = filepath.ToSlash(rel)
-		if scriptExempt[rel] || sameFile(path, wrapperAbs) || strings.HasPrefix(rel, "scripts/workflowimagepins/") {
+		if scriptExempt()[rel] || sameFile(path, wrapperAbs) || strings.HasPrefix(rel, "scripts/workflowimagepins/") {
 			return nil
 		}
 		out = append(out, tokenFindingsInFile(path, rel)...)
