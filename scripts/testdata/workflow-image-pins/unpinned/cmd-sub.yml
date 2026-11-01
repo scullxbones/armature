@@ -4,4 +4,4 @@ jobs:
   x:
     runs-on: ubuntu-latest
     steps:
-      - run: docker run --rm --label app=arm alpine:3.22 echo hi
+      - run: x=$(docker run alpine:3)

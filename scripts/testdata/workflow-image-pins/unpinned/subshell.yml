@@ -4,4 +4,4 @@ jobs:
   x:
     runs-on: ubuntu-latest
     steps:
-      - run: docker pull alpine:3.22
+      - run: (docker run alpine:3)

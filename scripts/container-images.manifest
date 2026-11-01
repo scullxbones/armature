@@ -1,0 +1,7 @@
+# Sole container-image inventory for workflows/actions/make.
+# Format: <key><TAB><name>@sha256:<64-hex>
+# Workflows and composite actions must reach docker/podman only via
+# scripts/run-container-image.sh (or `make container-run KEY=...`) using a key
+# from this file. Declarative container:/services:/uses: docker:// / FROM
+# refs must match a digest value listed here exactly.
+bash-3.2.57	bash:3.2.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a

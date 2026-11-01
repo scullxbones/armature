@@ -4,4 +4,4 @@ jobs:
   x:
     runs-on: ubuntu-latest
     steps:
-      - run: docker image pull alpine:3.22
+      - run: docker compose run svc

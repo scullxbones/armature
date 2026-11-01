@@ -935,6 +935,39 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
     rm -f "$baseline"
 
+    # Non-repo root: no-baseline and --write-baseline must fail closed.
+    nonrepo=$(mktemp -d)
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" "$nonrepo" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: no-baseline on non-repo exited 0: $out"
+        exit 1
+    fi
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" --write-baseline "$nonrepo" "$nonrepo/base" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: --write-baseline on non-repo exited 0: $out"
+        exit 1
+    fi
+    rm -rf "$nonrepo"
+
+    # 0-byte baseline file must fail on check.
+    zero=$(mktemp)
+    : >"$zero"
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$zero" 2>&1)
+    st=$?
+    set -e
+    rm -f "$zero"
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: 0-byte baseline check exited 0: $out"
+        exit 1
+    fi
+
     # Host Bash 4+: fixtures must exit 0 (dual self-check; 3.2 failure is CI).
     bash "$REPO_ROOT/scripts/prove-bash32-mutations.sh" >/dev/null
 
@@ -946,73 +979,61 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         fi
     done
 
-    # Digest-pinned bash:3.2.57 + pinned apk git.
-    if ! rg -q 'bash:3\.2\.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a' "$CI_YML"; then
-        echo "FAIL: ci.yml missing bash:3.2.57@sha256 digest pin"
+    # Manifest-keyed bash:3.2.57 + apk sha256 + sole wrapper (no raw docker in ci.yml).
+    MANIFEST="$REPO_ROOT/scripts/container-images.manifest"
+    if ! rg -q 'bash-3\.2\.57[[:space:]]+bash:3\.2\.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a' "$MANIFEST"; then
+        echo "FAIL: container-images.manifest missing bash-3.2.57 digest"
+        exit 1
+    fi
+    if ! rg -q 'run-container-image\.sh bash-3\.2\.57' "$CI_YML"; then
+        echo "FAIL: ci.yml must invoke run-container-image.sh bash-3.2.57"
+        exit 1
+    fi
+    if rg -nE '(^|[[:space:]])(docker|podman|buildx)([[:space:]]|$)' "$CI_YML" | rg -v '^\s*#' | rg -q .; then
+        echo "FAIL: ci.yml still contains raw docker|podman|buildx token"
         exit 1
     fi
     if ! rg -q 'ALPINE_GIT_APK_SHA256: 42f4573799ffce0c7dd4954d2247eb882eb87360dc18637930624484ecfd1c90' "$CI_YML"; then
         echo "FAIL: ci.yml missing Alpine git apk sha256 pin"
         exit 1
     fi
+    if ! rg -q 'apk add --no-network' "$CI_YML"; then
+        echo "FAIL: ci.yml missing apk add --no-network"
+        exit 1
+    fi
     if ! rg -q 'check-bash32:' "$CI_YML"; then
         echo "FAIL: ci.yml missing check-bash32 job"
         exit 1
     fi
-    # workflowimagepins must be in UNIT_PACKAGES (not excluded).
-    if go list ./scripts/workflowimagepins >/dev/null 2>&1; then
-        if ! make -C "$REPO_ROOT" -s print-check-jobs >/dev/null; then
-            :
-        fi
-        pkgs=$(cd "$REPO_ROOT" && make -s -p 2>/dev/null | rg '^UNIT_PACKAGES' | head -1 || true)
-        # Direct evaluation:
-        up=$(cd "$REPO_ROOT" && GOCACHE="${GOCACHE:-${TMPDIR:-/tmp}/armature-gocache}" GOFLAGS="${GOFLAGS:---buildvcs=false}" go list ./... | rg 'workflowimagepins' || true)
-        if [[ -z "$up" ]]; then
-            echo "FAIL: scripts/workflowimagepins not listable"
-            exit 1
-        fi
-        # Confirm Makefile no longer excludes it from UNIT_PACKAGES.
-        if rg -q "grep -v '/scripts/workflowimagepins" "$MAKEFILE"; then
-            echo "FAIL: Makefile still excludes workflowimagepins from UNIT_PACKAGES"
-            exit 1
-        fi
+    up=$(cd "$REPO_ROOT" && GOCACHE="${GOCACHE:-${TMPDIR:-/tmp}/armature-gocache}" GOFLAGS="${GOFLAGS:--buildvcs=false}" go list ./... | rg 'workflowimagepins' || true)
+    if [[ -z "$up" ]]; then
+        echo "FAIL: scripts/workflowimagepins not listable"
+        exit 1
+    fi
+    if rg -q "grep -v '/scripts/workflowimagepins" "$MAKEFILE"; then
+        echo "FAIL: Makefile still excludes workflowimagepins from UNIT_PACKAGES"
+        exit 1
     fi
 
-    # YAML-parser image pin lint + fixture selftest (unpinned fail / pinned pass).
+    # Holistic image-pin lint + fixture selftest (unpinned fail / pinned pass).
+    bash "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$REPO_ROOT" >/dev/null
     bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
 
-    # Each unpinned form fixture must fail; pinned twin must pass.
-    for form in container-string container-image services-image uses-docker \
-        uses-docker-empty docker-run docker-pull docker-create podman-run \
-        docker-container-run docker-image-pull sh-c-docker-run docker-global-flags \
-        docker-label docker-mount bare-digest; do
-        badwf=$(mktemp -d)
-        mkdir -p "$badwf/.github/workflows"
-        cp "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/${form}.yml" \
-            "$badwf/.github/workflows/ci.yml"
-        set +e
-        pinout=$(go run -C "$REPO_ROOT" ./scripts/workflowimagepins "$badwf" 2>&1)
-        pinst=$?
-        set -e
-        rm -rf "$badwf"
-        if [[ $pinst -eq 0 ]]; then
-            echo "FAIL: unpinned form $form did not fail YAML image-pin lint: $pinout"
+    # PJ repro forms must fail via Go selftest fixtures (cmd-sub, subshell, -c, compose, FROM).
+    for form in cmd-sub subshell docker-context compose-run bare-digest uses-docker-empty; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/${form}.yml" ]]; then
+            echo "FAIL: missing unpinned PJ/form fixture $form"
             exit 1
         fi
-        goodwf=$(mktemp -d)
-        mkdir -p "$goodwf/.github/workflows"
-        cp "$REPO_ROOT/scripts/testdata/workflow-image-pins/pinned/${form}.yml" \
-            "$goodwf/.github/workflows/ci.yml"
-        set +e
-        pinout=$(go run -C "$REPO_ROOT" ./scripts/workflowimagepins "$goodwf" 2>&1)
-        pinst=$?
-        set -e
-        rm -rf "$goodwf"
-        if [[ $pinst -ne 0 ]]; then
-            echo "FAIL: pinned twin $form failed YAML image-pin lint: $pinout"
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/pinned/${form}.yml" ]]; then
+            echo "FAIL: missing pinned twin $form"
             exit 1
         fi
     done
+    if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned-dirs/dockerfile-from/Dockerfile" ]]; then
+        echo "FAIL: missing dockerfile-from unpinned fixture"
+        exit 1
+    fi
 
     # Makefile write-baseline failure must stop make (not ignored via ';').
     if ! rg -q 'check-test-porcelain\.sh --write-baseline .* \|\| \{' "$MAKEFILE"; then
@@ -1024,7 +1045,6 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     printf '%s\n' '#!/usr/bin/env bash' 'echo forced-baseline-failure >&2' 'exit 1' \
         >"$mkdemo/scripts/check-test-porcelain.sh"
     chmod +x "$mkdemo/scripts/check-test-porcelain.sh"
-    # Minimal recipe mirroring make test's fail-closed write-baseline line.
     cat >"$mkdemo/Makefile" <<'EOF'
 test:
 	@tmp=$$(mktemp); \
@@ -1047,12 +1067,12 @@ EOF
         exit 1
     fi
 
-    echo "PASS: content-hash + digest pin + baseline fail-closed"
+    echo "PASS: content-hash + manifest image pin + baseline fail-closed"
 ) && PORC_STATUS=0 || PORC_STATUS=$?
 cleanup_porc
 
 if [[ $PORC_STATUS -eq 0 ]]; then
-    pass "content-hash porcelain + bash:3.2.57 pin + baseline fail-closed"
+    pass "content-hash porcelain + manifest image pin + baseline fail-closed"
 else
     fail "porcelain / bash32 pin / baseline fail-closed demo failed"
 fi

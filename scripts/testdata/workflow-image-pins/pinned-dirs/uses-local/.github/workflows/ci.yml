@@ -4,4 +4,4 @@ jobs:
   x:
     runs-on: ubuntu-latest
     steps:
-      - run: docker create --name c alpine:3.22
+      - uses: ./actions/demo

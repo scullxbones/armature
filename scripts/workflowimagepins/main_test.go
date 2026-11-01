@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -15,44 +16,49 @@ func TestSelftestFixtures_REQ_PORC_BASH32(t *testing.T) {
 	require.NoError(t, runSelftest(root, ioDiscard{}, ioDiscard{}))
 }
 
-func TestPinnedRequiresNameDigest_REQ_PORC_BASH32(t *testing.T) {
-	t.Parallel()
-	assert.False(t, pinned(""))
-	assert.False(t, pinned("alpine:3.22"))
-	assert.False(t, pinned("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
-	assert.True(t, pinned("alpine:3.22@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
-}
-
-func TestShellForms_REQ_PORC_BASH32(t *testing.T) {
-	t.Parallel()
-	cases := map[string]string{
-		"docker container run": `docker container run --rm alpine:3.22 echo hi`,
-		"docker image pull":    `docker image pull alpine:3.22`,
-		"sh -c nested":         `sh -c "docker run --rm alpine:3.22 echo hi"`,
-		"global flags":         `docker --log-level debug run --rm alpine:3.22 echo hi`,
-		"label then image":     `docker run --rm --label app=arm alpine:3.22 echo hi`,
-		"mount not image":      `docker run --rm --mount type=bind,src=/tmp,dst=/tmp alpine:3.22 echo hi`,
-	}
-	for name, line := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			imgs := imagesInShell(line)
-			require.NotEmpty(t, imgs, line)
-			assert.Equal(t, "alpine:3.22", imgs[0], imgs)
-		})
-	}
-}
-
-func TestCollectEmptyDockerUses_REQ_PORC_BASH32(t *testing.T) {
+func TestPJReprosFail_REQ_PORC_BASH32(t *testing.T) {
 	t.Parallel()
 	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
-	path := filepath.Join(root, "scripts/testdata/workflow-image-pins/unpinned/uses-docker-empty.yml")
-	refs, err := collectFile(path, "uses-docker-empty.yml")
+	base := filepath.Join(root, "scripts/testdata/workflow-image-pins/unpinned")
+	for _, name := range []string{
+		"cmd-sub.yml",
+		"subshell.yml",
+		"docker-context.yml",
+		"compose-run.yml",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			n, err := checkYAMLFixture(base, name, true)
+			require.NoError(t, err)
+			assert.Greater(t, n, 0, name)
+		})
+	}
+	t.Run("dockerfile-from", func(t *testing.T) {
+		t.Parallel()
+		n, err := checkDirFixture(filepath.Join(root, "scripts/testdata/workflow-image-pins/unpinned-dirs/dockerfile-from"), true)
+		require.NoError(t, err)
+		assert.Greater(t, n, 0)
+	})
+}
+
+func TestManifestRequired_REQ_PORC_BASH32(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "scripts"), 0o755))
+	// Empty manifest file present but no entries.
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "scripts/container-images.manifest"), []byte("# none\n"), 0o644))
+	_, err := checkRepo(tmp)
+	require.Error(t, err)
+}
+
+func TestWrapperAllowlisted_REQ_PORC_BASH32(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	require.NoError(t, seedFixtureRepo(tmp))
+	findings, err := checkRepo(tmp)
 	require.NoError(t, err)
-	require.NotEmpty(t, refs)
-	assert.Equal(t, "", refs[0].Ref)
-	assert.False(t, pinned(refs[0].Ref))
+	assert.Empty(t, findings)
 }
 
 type ioDiscard struct{}

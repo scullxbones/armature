@@ -21,6 +21,8 @@ scripts/quickstart_check.sh
 scripts/ci-bash32.sh
 scripts/prove-bash32-mutations.sh
 scripts/check-workflow-image-pins.sh
+scripts/check-porcelain-failclosed.sh
+scripts/run-container-image.sh
 "
 
 # Build the token list without writing a single source line that is itself a hit.

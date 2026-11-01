@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job check-git-floor print-check-jobs print-govulncheck-version print-tool-versions install-golangci-lint-release install-gremlins-release install-rg-release install-syft-release test-install-verified-release install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job check-git-floor print-check-jobs print-govulncheck-version print-tool-versions install-golangci-lint-release install-gremlins-release install-rg-release install-syft-release test-install-verified-release install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check container-run
 
 GO ?= go
 PYTHON ?= python3
@@ -35,6 +35,7 @@ help:
 	@echo "  make coverage-check      - Run coverage then fail if cmd < 83% or internal < 86%"
 	@echo "  make test-coverage-check - Test coverage-check.sh threshold logic itself (pass/fail fixtures)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
+	@echo "  make container-run       - Run a manifest-keyed image (KEY=... ARGS='run flags' CMD='...')"
 	@echo "  make mutate              - Run mutation testing on core packages"
 	@echo "  make embed-examples      - Check that embedded skill examples match current CLI output (fails if drift detected)"
 	@echo "  make validate-skills     - Validate embedded and .agents/skills plus canonical CLI documentation"
@@ -285,6 +286,13 @@ coverage: build
 coverage-check: coverage
 	@scripts/coverage-check.sh . coverage.out
 
+# Sole make entrypoint for container images. KEY must exist in
+# scripts/container-images.manifest; refuses non-manifest keys.
+# Example: make container-run KEY=bash-3.2.57 ARGS='--rm' CMD='bash --version'
+container-run:
+	@test -n "$(KEY)" || { echo "FAIL: KEY= required (manifest key)"; exit 2; }
+	@scripts/run-container-image.sh "$(KEY)" $(ARGS) -- $(CMD)
+
 lint: adr-principles
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "golangci-lint not found. Install with:"; \
@@ -294,6 +302,7 @@ lint: adr-principles
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
 	@scripts/check-bash32-scripts.sh .
+	@scripts/check-porcelain-failclosed.sh .
 	@scripts/check-workflow-image-pins.sh .
 	@scripts/check-mock-ban.sh .
 	@$(GO) run ./scripts/repoguard -check source-manifest .

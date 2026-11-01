@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prove Bash 4+ constructs fail under Bash 3.2 and succeed under Bash 4.2+.
 # - Fixture scripts under scripts/testdata/bash32-mutations/
-# - Real-script mutation: inject tokens into a copy of check-fast.sh
+# - Real-script mutation: run only the injected snippet under set -euo
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -81,10 +81,8 @@ if [ "$count" -lt 3 ]; then
   exit 1
 fi
 
-# Real-script mutation: inject Bash-4 tokens into a copy of check-fast.sh.
-# Under 3.2, execution of the mutated copy must fail.
-# Build token names by concatenation so this prover itself stays Bash-3.2-safe
-# under scripts/check-bash32-scripts.sh regex pre-check.
+# Token names via concatenation so this prover stays Bash-3.2-safe under
+# scripts/check-bash32-scripts.sh regex pre-check.
 _tok_ra='read'
 _tok_ra="${_tok_ra}array"
 _tok_mf='map'
@@ -94,62 +92,62 @@ _tok_cp="${_tok_cp}proc"
 
 mut_dir="$(mktemp -d "${TMPDIR:-/tmp}/armature-bash32-realscript.XXXXXX")"
 trap 'rm -rf "$mut_dir"; cleanup' EXIT
-cp "$ROOT/scripts/check-fast.sh" "$mut_dir/check-fast.sh"
-# Append a line that is valid on Bash 4+ but not on 3.2.
-printf '\n# mutated for bash32 proof\n%s -t _arm_bash32_mut < <(echo x)\n' "$_tok_ra" >>"$mut_dir/check-fast.sh"
+
+# Control: unmutated snippet under set -euo must exit 0 on every bash.
+printf 'echo control_ok\n' >"$mut_dir/control.sh"
 set +e
-bash -n "$mut_dir/check-fast.sh" >"$OUT" 2>"$ERR"
+bash -c 'set -euo pipefail; source "$1"' _ "$mut_dir/control.sh" >"$OUT" 2>"$ERR"
 st=$?
 set -e
-if [ "$expect_fail" -eq 1 ]; then
-  if [ "$st" -eq 0 ]; then
-    # bash -n on 3.2 may not always reject the injected builtin (runtime).
-    # Force runtime: source the mutated tail under set -e.
-    set +e
-    bash -c 'set -euo pipefail; source "$1"' _ "$mut_dir/check-fast.sh" >"$OUT" 2>"$ERR"
-    st=$?
-    set -e
-  fi
-  if [ "$st" -eq 0 ]; then
-    echo "FAIL: mutated check-fast.sh did not fail under Bash 3.2" >&2
-    fail=1
-  else
-    echo "OK: mutated check-fast.sh fails under Bash 3.2 (exit $st)"
-  fi
+if [ "$st" -ne 0 ]; then
+  echo "FAIL: unmutated control snippet exited $st" >&2
+  cat "$ERR" >&2 || true
+  fail=1
 else
-  # On Bash 4+, the mutated script should at least parse (`bash -n`).
-  if [ "$st" -ne 0 ]; then
-    echo "FAIL: mutated check-fast.sh failed bash -n on Bash ${major}.${minor}" >&2
-    cat "$ERR" >&2 || true
-    fail=1
-  else
-    echo "OK: mutated check-fast.sh parses under Bash ${major}.${minor}+"
-  fi
+  echo "OK: unmutated control snippet exits 0"
 fi
 
-# Also prove sibling-token injections fail under 3.2 when expected.
-for tok_name in "$_tok_mf" "$_tok_cp"; do
-  cp "$ROOT/scripts/check-fast.sh" "$mut_dir/check-fast-${tok_name}.sh"
-  if [ "$tok_name" = "$_tok_mf" ]; then
-    printf '\n%s -t _m < <(echo a)\n' "$_tok_mf" >>"$mut_dir/check-fast-${tok_name}.sh"
-  else
-    printf '\n%s _c { echo a; }\n' "$_tok_cp" >>"$mut_dir/check-fast-${tok_name}.sh"
-  fi
+# Injected snippet only (derived from mutating check-fast.sh constructs).
+run_injected() {
+  local tok="$1"
+  local snippet="$2"
+  local expect_pat="$3"
+  printf '%s\n' "$snippet" >"$mut_dir/inj-${tok}.sh"
   set +e
-  bash -c 'set -euo pipefail; source "$1"' _ "$mut_dir/check-fast-${tok_name}.sh" >"$OUT" 2>"$ERR"
+  bash -c 'set -euo pipefail; source "$1"' _ "$mut_dir/inj-${tok}.sh" >"$OUT" 2>"$ERR"
   st=$?
   set -e
   if [ "$expect_fail" -eq 1 ]; then
     if [ "$st" -eq 0 ]; then
-      echo "FAIL: mutated check-fast.sh ($tok_name) did not fail under Bash 3.2" >&2
+      echo "FAIL: injected $tok snippet did not fail under Bash 3.2" >&2
       fail=1
-    else
-      echo "OK: mutated check-fast.sh ($tok_name) fails under Bash 3.2 (exit $st)"
+      return
     fi
+    if ! grep -q "$expect_pat" "$ERR"; then
+      echo "FAIL: injected $tok missing expected error /$expect_pat/ in stderr:" >&2
+      cat "$ERR" >&2 || true
+      fail=1
+      return
+    fi
+    echo "OK: injected $tok fails under Bash 3.2 with /$expect_pat/ (exit $st)"
+  else
+    if [ "$st" -ne 0 ]; then
+      echo "FAIL: injected $tok exited $st on Bash ${major}.${minor}+" >&2
+      cat "$ERR" >&2 || true
+      fail=1
+      return
+    fi
+    echo "OK: injected $tok succeeds under Bash ${major}.${minor}+"
   fi
-done
+}
+
+run_injected "$_tok_ra" "${_tok_ra} -t _arm_bash32_mut < <(echo x)" "$_tok_ra"
+
+# Sibling tokens: always assert (fail under 3.2, succeed under 4+).
+run_injected "$_tok_mf" "${_tok_mf} -t _m < <(echo a)" "$_tok_mf"
+run_injected "$_tok_cp" "${_tok_cp} _c { echo a; }" "$_tok_cp"
 
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi
-echo "OK: mutation fixtures + real-script mutations match expected outcome under $ver"
+echo "OK: mutation fixtures + injected-snippet mutations match expected outcome under $ver"
