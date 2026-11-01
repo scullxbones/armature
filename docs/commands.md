@@ -739,6 +739,69 @@ the command exits non-zero; origin is not updated.
 
 ---
 
+## ops-backup
+
+Durable tip copy for the published `_armature` orphan branch. This is the
+supported recovery surface for ops durability (narrow-gaps G2.1 / G2.3 as a
+tested CLI lever). Doctor **D11** (S12-T2) should name these verbs in
+`next_actions`; do not maintain parallel bash cookbooks.
+
+### Ops durability guarantees (G2.1)
+
+What Armature does **not** guarantee today without this lever (and still does
+not automate on a schedule):
+
+- The forge will retain `refs/heads/_armature`. The branch is unprotected; a
+  delete, corruption, or force-push can remove or rewrite the shared tip.
+- Green doctor **D12** (lag) is not proof the tip was never damaged. D12 is a
+  catch-up probe after a tracking fetch, not a backup.
+- `arm push-ops` success is publish success, not backup success.
+- Divergent orphan histories are never merged by product code (I2 / T2). A
+  diverge disposition names aside ref `_armature-recovered` and exits
+  non-zero; a human or agent must escalate.
+
+What `arm ops-backup` does guarantee when it exits 0:
+
+- `snapshot` refreshed `refs/remotes/origin/_armature` with the same
+  `+refs/heads/_armature:refs/remotes/origin/_armature` refspec as
+  `FetchTrackingRefWithoutMovingHEAD`, then wrote a bundle that advertises
+  restorable `refs/heads/_armature`. Refresh failure is fail-closed (no
+  bundle). Live `refs/heads/_armature` is never rewound.
+- `verify` confirms that advertisement is present and the bundle is readable.
+- `restore-plan` loads into a scratch tracking ref and prints
+  `missing | fast-forward | diverge→_armature-recovered`. It does not apply
+  the publish (`--apply` is not in v1).
+
+Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
+
+**Synopsis:**
+`arm ops-backup snapshot|verify|restore-plan`
+
+### ops-backup snapshot
+
+**Synopsis:**
+`arm ops-backup snapshot --output <bundle>`
+
+**Flags:**
+- `--output string`: Bundle output path (required).
+
+### ops-backup verify
+
+**Synopsis:**
+`arm ops-backup verify <bundle>`
+
+### ops-backup restore-plan
+
+**Synopsis:**
+`arm ops-backup restore-plan --from <bundle>`
+
+Prints disposition and exits non-zero on diverge (`OPS-BACKUP-2`).
+
+**Flags:**
+- `--from string`: Bundle path (required).
+
+---
+
 ## ready
 
 Show tasks ready to be claimed. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare array, never `null`, and never a second JSON value on stderr.
