@@ -11,6 +11,7 @@ import (
 	"sync"
 )
 
+//nolint:gochecknoglobals // cached JSON-schema load state
 var (
 	schemaOnce sync.Once
 	schemaRoot string

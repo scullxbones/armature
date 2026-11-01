@@ -15,9 +15,9 @@ import (
 
 // dynamicInvocationPaths includes render-context as live RenderAgent JSON;
 // wrapping it would change the CLI contract.
-var dynamicInvocationPaths = []string{"list", "ready", "show", "render-context"}
+var dynamicInvocationPaths = []string{"list", "ready", "show", "render-context"} //nolint:gochecknoglobals //immutable path list
 
-var aocEnvelopePaths = []string{"list", "ready", "show"}
+var aocEnvelopePaths = []string{"list", "ready", "show"} //nolint:gochecknoglobals //immutable path list
 
 func priceDynamicInvocations(state *materialize.State, index materialize.Index, files fs.FS) ([]artifact, []byte, error) {
 	listPayload, err := measureList(index)

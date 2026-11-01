@@ -11,7 +11,7 @@ import (
 
 const budgetsRelPath = "internal/contextreport/budgets.json"
 
-var runtimeClassOrder = []string{classInvocation, classBundle}
+var runtimeClassOrder = []string{classInvocation, classBundle} //nolint:gochecknoglobals //immutable class order
 
 type budget struct {
 	Path        string `json:"path"`

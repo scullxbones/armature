@@ -50,6 +50,7 @@ func (e missingTargetError) Error() string {
 	}
 }
 
+//nolint:gochecknoglobals //immutable op handler table
 var opHandlers = map[string]opHandler{
 	ops.OpCreate:             {apply: (*State).applyCreate, missingTarget: MissingTargetUnspecified},
 	ops.OpClaim:              {apply: (*State).applyClaim, missingTarget: MissingTargetError},

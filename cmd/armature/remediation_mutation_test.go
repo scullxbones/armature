@@ -3,12 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,87 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMutation_ForeignLiveLeaseBlocksAlwaysFalse_Fails_REQ_TOPTIER_S18_T4
-// proves print path calls claim.ForeignLiveLeaseBlocks via Decide on a healthy
-// (non-merged) tree: injecting a Decide that skips it must leak claim on a
-// foreign live child into MoreSteps (RED). No package-global hooks.
-func TestMutation_ForeignLiveLeaseBlocksAlwaysFalse_Fails_REQ_TOPTIER_S18_T4(t *testing.T) {
-	t.Parallel()
-	now := time.Now().Unix()
-	g := promotion.Graph{
-		"P": {Status: ops.StatusDone, Children: []string{"C"}},
-		"C": {
-			Status: ops.StatusClaimed, Parent: "P", ClaimedBy: "other",
-			ClaimToken: "tok", ClaimedAt: now - 30, LastActivity: now - 30, TTLMinutes: 60,
-		},
-	}
-	baseDecide := remediationDecide(nil, "me", now)
-	opts := promotion.PlanOpts{Viewer: "me", Now: now, Decide: baseDecide}
-	good := promotion.RemediationsPlanOpts("P", g, opts)
-	for _, line := range good.RenderNextActions() {
-		assert.NotEqual(t, "arm claim --issue C --worktree", promotion.RunnableArgv(line),
-			"product Decide must omit foreign live claim")
-	}
-
-	broken := opts
-	broken.Decide = func(argv string, graph promotion.Graph) error {
-		if strings.Contains(argv, "arm claim ") {
-			issue := promotion.IssueFlag(argv)
-			if issue != "" && promotion.WouldViolateTreeConsistency(issue, graph) {
-				return fmt.Errorf("tree consistency")
-			}
-			return nil // Broken: skip ForeignLiveLeaseBlocks.
-		}
-		return baseDecide(argv, graph)
-	}
-	plan := promotion.RemediationsPlanOpts("P", g, broken)
-	leaked := false
-	for _, line := range plan.RenderNextActions() {
-		if promotion.RunnableArgv(line) == "arm claim --issue C --worktree" {
-			leaked = true
-		}
-	}
-	assert.True(t, leaked,
-		"mutation ForeignLiveLeaseBlocks=false (via Decide) must leak claim C (RED proof)")
-}
-
-// TestMutation_RequireOwnerOff_Fails_REQ_TOPTIER_S18_T4 proves cancel Decide
-// consults RequireOwner: a Producer that invents cancel-other plus a Decide that
-// skips the owner gate must print that cancel (RED). Live Option B stays hidden
-// in the product path (looksForeignLive); this RED is pass-in only — no hooks.
-func TestMutation_RequireOwnerOff_Fails_REQ_TOPTIER_S18_T4(t *testing.T) {
-	t.Parallel()
-	repo, workerID := setupOwnedForeignMergedFixture(t)
-	g := loadPromotionGraph(t, repo)
-	base := planOptsForRemediation(getTestContext(t, repo), workerID)
-	opts := base
-	opts.Decide = func(argv string, graph promotion.Graph) error {
-		if strings.Contains(argv, "--to cancelled") {
-			return nil // Broken: RequireOwner always OK.
-		}
-		return base.Decide(argv, graph)
-	}
-	opts.Producer = func(id string, graph promotion.Graph, o promotion.PlanOpts) promotion.Plan {
-		return promotion.Plan{
-			Alternatives: []promotion.Alternative{
-				{Steps: []promotion.Step{{Argv: "arm reopen --issue G2", Kind: promotion.StepCommand}}},
-				{Steps: []promotion.Step{{
-					Argv: "arm transition --issue OS --to cancelled --force",
-					Kind: promotion.StepCommand,
-				}}},
-			},
-			Guidance: []string{promotion.TreeRepairGuidance},
-		}
-	}
-	plan := promotion.RemediationsPlanOpts("OS", g, opts)
-	joined := strings.Join(plan.RenderNextActions(), "\n")
-	assert.Contains(t, joined, "arm transition --issue OS --to cancelled --force",
-		"mutation RequireOwner=off (via Decide) must print cancel-other (RED proof)")
-}
-
 // TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4 proves argv
 // filtering requires Decide: nil Decide + DefaultDecideOnlyTree leaks foreign
-// live claim on a healthy tree (no merged ancestor).
+// live claim on a healthy tree (no merged ancestor). Gate kill proofs for
+// RequireOwner / ForeignLiveLeaseBlocks / tree consistency live in
+// remediation_gates_test.go (real path; no injected Decide/Producer).
 func TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	now := time.Now().Unix()
@@ -121,55 +39,6 @@ func TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4(t *testing.T)
 	}
 	assert.True(t, leaked,
 		"mutation drop Decide from print path must leak claim C (RED proof)")
-}
-
-// TestNoMutablePackageFuncHooks_REQ_TOPTIER_S18_T4 fails when claim/oporder/
-// promotion declare package-level mutable func vars used as test injection hooks
-// (races under t.Parallel). Mutations must inject via PlanOpts.Decide / Producer.
-func TestNoMutablePackageFuncHooks_REQ_TOPTIER_S18_T4(t *testing.T) {
-	t.Parallel()
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", ".."))
-	pkgs := []string{
-		filepath.Join(repoRoot, "internal", "claim"),
-		filepath.Join(repoRoot, "internal", "oporder"),
-		filepath.Join(repoRoot, "internal", "promotion"),
-	}
-	fset := token.NewFileSet()
-	var offenders []string
-	for _, dir := range pkgs {
-		entries, err := filepath.Glob(filepath.Join(dir, "*.go"))
-		require.NoError(t, err)
-		for _, path := range entries {
-			if strings.HasSuffix(path, "_test.go") {
-				continue
-			}
-			file, err := parser.ParseFile(fset, path, nil, 0)
-			require.NoError(t, err)
-			for _, decl := range file.Decls {
-				gen, ok := decl.(*ast.GenDecl)
-				if !ok || gen.Tok.String() != "var" {
-					continue
-				}
-				for _, spec := range gen.Specs {
-					vs, ok := spec.(*ast.ValueSpec)
-					if !ok {
-						continue
-					}
-					if _, isFunc := vs.Type.(*ast.FuncType); !isFunc {
-						continue
-					}
-					for _, name := range vs.Names {
-						offenders = append(offenders,
-							fmt.Sprintf("%s: package-level mutable func var %s", filepath.Base(path), name.Name))
-					}
-				}
-			}
-		}
-	}
-	assert.Empty(t, offenders,
-		"package-level mutable func vars are forbidden as test hooks in claim/oporder/promotion")
 }
 
 // TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4

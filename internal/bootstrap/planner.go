@@ -54,7 +54,7 @@ func ParseTarget(s string) (Target, error) {
 	return t, nil
 }
 
-var allKnownTargets = []Target{TargetLocal, TargetGlobal}
+var allKnownTargets = []Target{TargetLocal, TargetGlobal} //nolint:gochecknoglobals //immutable target table
 
 // ArtifactKind is a harness artifact cell in a plan row.
 type ArtifactKind string
@@ -107,6 +107,7 @@ func ParsePlatform(s string) (Platform, error) {
 	return p, nil
 }
 
+//nolint:gochecknoglobals //immutable platform table
 var allKnownPlatforms = []Platform{
 	PlatformClaude, PlatformCodex, PlatformAntigravity, PlatformDevin,
 }
@@ -115,6 +116,7 @@ type platformArtifacts struct {
 	skills, pluginMetadata, harnessHookConfig bool
 }
 
+//nolint:gochecknoglobals //immutable artifact map
 var verifiedArtifacts = map[Platform]platformArtifacts{
 	PlatformClaude: {skills: true, pluginMetadata: true, harnessHookConfig: true},
 	PlatformCodex:  {harnessHookConfig: true},

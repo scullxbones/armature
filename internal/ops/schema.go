@@ -13,6 +13,7 @@ type schemaOpDoc struct {
 	PayloadField string
 }
 
+//nolint:gochecknoglobals //immutable op schema docs
 var schemaOpDocs = []schemaOpDoc{
 	{OpType: OpCreate, PayloadField: "title, parent, type, scope, context_files, acceptance, definition_of_done,"},
 	{OpType: OpCreate, PayloadField: "                    clear_context_files, context, source_citation, priority,"},

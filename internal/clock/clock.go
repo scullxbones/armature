@@ -8,6 +8,6 @@ import "time"
 type Clock func() int64
 
 // System is a Clock that returns the current wall-clock time as a Unix timestamp in seconds.
-var System Clock = func() int64 {
+var System Clock = func() int64 { //nolint:gochecknoglobals // default clock injection point
 	return time.Now().Unix()
 }

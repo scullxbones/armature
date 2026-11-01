@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+//nolint:gochecknoglobals //injectable TTY opener seam
 var openControllingTTY = func() (*os.File, error) {
 	return os.OpenFile("/dev/tty", os.O_RDWR, 0)
 }

@@ -11,6 +11,7 @@ const (
 	CheckCitations          = "citations"
 )
 
+//nolint:gochecknoglobals //immutable keyword list
 var verifiableKeywords = []string{
 	"passes",
 	"green",

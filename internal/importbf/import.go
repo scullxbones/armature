@@ -23,7 +23,7 @@ type Provenance struct {
 	Confidence string `json:"confidence"`
 }
 
-var defaultProvenance = Provenance{Method: "imported", Confidence: "inferred"}
+var defaultProvenance = Provenance{Method: "imported", Confidence: "inferred"} //nolint:gochecknoglobals //immutable default provenance
 
 func ParseCSV(data []byte) ([]ImportedIssue, error) {
 	r := csv.NewReader(bytes.NewReader(data))

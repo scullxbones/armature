@@ -19,6 +19,7 @@ const gitConfigKey = "armature.worker-id"
 
 var workerIDPattern = regexp.MustCompile(`^[a-z0-9_-]{1,64}$`)
 
+//nolint:gochecknoglobals //immutable DOS name set
 var reservedDOSNames = map[string]bool{
 	"con": true, "prn": true, "aux": true, "nul": true,
 	"com1": true, "com2": true, "com3": true, "com4": true, "com5": true,

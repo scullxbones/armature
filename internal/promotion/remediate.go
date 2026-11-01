@@ -143,20 +143,23 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, opts Pl
 	}
 
 	// Option B is a SEQUENCE that must clear every open descendant + self.
-	// Live foreign leases: drop Option B; print honest holder/TTL guidance.
-	// Expired foreign: prepend arm doctor --fix (releases expired → open),
-	// then cancel every open descendant including those released leases.
+	// Built via Decide (RequireOwner / owner gate) — not a looksForeignLive
+	// short-circuit that would hide RequireOwner from disable-mutation kill.
+	// Live foreign: Decide refuses cancel → drop Option B + holder/TTL guidance.
+	// Expired foreign: doctor --fix then cancel every open descendant.
 	cancelTargets := append(openDescendantsUnder(id, g), id)
-	var foreignLive []string
-	for _, tid := range cancelTargets {
-		if looksForeignLive(g[tid], viewer, opts.Now) {
-			foreignLive = append(foreignLive, tid)
-		}
-	}
-	if len(foreignLive) > 0 {
-		p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreignLive, g, opts.Now)...)
-	} else if alt, ok := buildCancelSequence(cancelTargets, g, opts); ok {
+	if alt, ok := buildCancelSequence(cancelTargets, g, opts); ok {
 		p.Alternatives = append(p.Alternatives, alt)
+	} else {
+		var foreignLive []string
+		for _, tid := range cancelTargets {
+			if looksForeignLive(g[tid], viewer, opts.Now) {
+				foreignLive = append(foreignLive, tid)
+			}
+		}
+		if len(foreignLive) > 0 {
+			p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreignLive, g, opts.Now)...)
+		}
 	}
 
 	more := healthyDescendantOrLeafSteps(id, node, g)
@@ -167,23 +170,33 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, opts Pl
 }
 
 // buildCancelSequence returns Option B covering every cancelTargets entry.
-// Incomplete sequences (any target still Decide-refused after simulated prior
-// steps) are not offered — agents must not see exit-0 no-op cancels that leave
-// D14/CLAIM-1 findings.
+// Decide (CLI RequireOwner / ForeignLiveLeaseBlocks twin) is the gate: a
+// disable-mutation of RequireOwner must make cancel-other printable so the
+// real-path product test fails. Incomplete sequences are not offered.
 func buildCancelSequence(cancelTargets []string, g Graph, opts PlanOpts) (Alternative, bool) {
 	if len(cancelTargets) == 0 {
 		return Alternative{}, false
 	}
-	sim := cloneGraph(g)
-	var steps []Step
-	needsFix := false
+	if alt, ok := tryCancelSequence(cancelTargets, g, opts, false); ok {
+		return alt, true
+	}
+	hasExpired := false
 	for _, tid := range cancelTargets {
-		if looksForeignExpired(sim[tid], opts.Viewer, opts.Now) {
-			needsFix = true
+		if looksForeignExpired(g[tid], opts.Viewer, opts.Now) {
+			hasExpired = true
 			break
 		}
 	}
-	if needsFix {
+	if !hasExpired {
+		return Alternative{}, false
+	}
+	return tryCancelSequence(cancelTargets, g, opts, true)
+}
+
+func tryCancelSequence(cancelTargets []string, g Graph, opts PlanOpts, withFix bool) (Alternative, bool) {
+	sim := cloneGraph(g)
+	var steps []Step
+	if withFix {
 		fixArgv := "arm doctor --fix"
 		steps = append(steps, Step{Argv: fixArgv, Kind: StepCommand})
 		sim = applyArgvEffect(sim, fixArgv, opts)
@@ -194,6 +207,9 @@ func buildCancelSequence(cancelTargets []string, g Graph, opts PlanOpts) (Altern
 			if err := opts.Decide(argv, sim); err != nil {
 				return Alternative{}, false
 			}
+		} else if looksForeignLive(sim[tid], opts.Viewer, opts.Now) {
+			// No Decide: refuse inventing cancel-other on live foreign.
+			return Alternative{}, false
 		}
 		steps = append(steps, Step{Argv: argv, Kind: StepCommand})
 		sim = applyArgvEffect(sim, argv, opts)

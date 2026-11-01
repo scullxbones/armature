@@ -8,7 +8,7 @@ import (
 )
 
 // CommitTypes enumerates the conventional-commit types in docs/conventions.md.
-var CommitTypes = []string{"feat", "fix", "refactor", "test", "docs", "style", "polish", "ci"}
+var CommitTypes = []string{"feat", "fix", "refactor", "test", "docs", "style", "polish", "ci"} //nolint:gochecknoglobals //immutable commit-type vocabulary
 
 var squashPRSuffix = regexp.MustCompile(` \(#\d+\)$`)
 

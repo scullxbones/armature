@@ -1,5 +1,6 @@
 package ops
 
+//nolint:gochecknoglobals //immutable validity table
 var classifiedValidity = map[string]bool{
 	OpCreate:             true,
 	OpAmend:              true,

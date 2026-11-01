@@ -17,7 +17,7 @@ const (
 	CodeIO       = "IO"
 )
 
-var registeredCodes = map[string]struct{}{}
+var registeredCodes = map[string]struct{}{} //nolint:gochecknoglobals //registry filled at init
 
 func init() {
 	Register(CodeUSAGE)

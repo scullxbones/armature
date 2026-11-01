@@ -191,6 +191,7 @@ func (r validateFixRule) match(msg string) bool {
 	return false
 }
 
+//nolint:gochecknoglobals //immutable fix-rule table
 var validateFixRules = []validateFixRule{
 	{any: []string{"review bundle:"}, text: fixPrepareBundle},
 	{any: []string{"unsupported schema version"}, fixable: true, text: "set schema_version to %d", schema: true},

@@ -47,6 +47,7 @@ func All() []string {
 	return append([]string(nil), allTypes...)
 }
 
+//nolint:gochecknoglobals //immutable issue-type vocabulary
 var validTypes = map[string]bool{
 	"epic":    true,
 	"story":   true,
@@ -55,8 +56,9 @@ var validTypes = map[string]bool{
 	"bug":     true,
 }
 
-var allTypes = []string{"epic", "story", "feature", "task", "bug"}
+var allTypes = []string{"epic", "story", "feature", "task", "bug"} //nolint:gochecknoglobals //immutable issue-type list
 
+//nolint:gochecknoglobals //immutable type hierarchy
 var hierarchy = map[string]map[string]bool{
 	"epic":    {"story": true, "feature": true, "task": true, "bug": true},
 	"story":   {"feature": true, "task": true, "bug": true},
@@ -65,6 +67,7 @@ var hierarchy = map[string]map[string]bool{
 	"bug":     {},
 }
 
+//nolint:gochecknoglobals //immutable ready-eligible set
 var readyEligible = map[string]bool{
 	"task":    true,
 	"feature": true,
@@ -72,6 +75,7 @@ var readyEligible = map[string]bool{
 	"bug":     true,
 }
 
+//nolint:gochecknoglobals //immutable required-fields map
 var requiredFields = map[string][]string{
 	"task": {"scope", "acceptance", "definition_of_done"},
 }

@@ -158,6 +158,7 @@ func allBlockersMerged(blockers []string, facts map[string]Facts) bool {
 	return true
 }
 
+//nolint:gochecknoglobals //immutable priority order
 var priorityOrder = map[string]int{
 	"critical": 0,
 	"high":     1,

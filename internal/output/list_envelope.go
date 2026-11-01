@@ -7,6 +7,7 @@ import (
 
 const ListShowHelp = "arm show <id> for outcome, scope, and acceptance"
 
+//nolint:gochecknoglobals //immutable rank table
 var listStatusRankEarlierFirst = map[string]int{
 	"in-progress": 0,
 	"claimed":     1,

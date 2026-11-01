@@ -14,7 +14,7 @@ import (
 // --diff-merges=separate without older-git shims. Callers that need a
 // higher feature gate (for example log.diffMerges=remerge, Git ≥2.36)
 // should use Version.AtLeast.
-var MinGitVersion = Version{Major: 2, Minor: 34, Patch: 0}
+var MinGitVersion = Version{Major: 2, Minor: 34, Patch: 0} //nolint:gochecknoglobals //immutable minimum Git version
 
 // Version is a parsed Git X.Y.Z triple. Extra dotted segments after patch
 // (for example Apple Git or Windows builds) are ignored for comparison.

@@ -14,6 +14,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
+//nolint:gochecknoglobals //immutable schema map
 var artifactSchemas = map[string]string{
 	"plan":                   "plan.schema.json",
 	"review_bundle":          "review-bundle.schema.json",

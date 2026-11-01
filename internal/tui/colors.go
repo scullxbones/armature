@@ -2,6 +2,7 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
+//nolint:gochecknoglobals // immutable TUI color palette
 var (
 	Critical = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000"))
 	Warning  = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)

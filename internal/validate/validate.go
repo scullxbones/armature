@@ -179,6 +179,7 @@ const (
 	writePathDoesNotIntroduceE13 writePathDoesNotIntroduceFinding = "E13"
 )
 
+//nolint:gochecknoglobals //immutable validate path set
 var writePathDoesNotIntroduce = map[writePathDoesNotIntroduceFinding]struct{}{
 	writePathDoesNotIntroduceE7:  {},
 	writePathDoesNotIntroduceE8:  {},
@@ -756,7 +757,7 @@ func checkW6ComplexityMismatch(issues map[string]IssueFacts) []Finding {
 	return findings
 }
 
-var vagueWords = []string{"properly", "correctly", "good", "well", "appropriate", "suitable"}
+var vagueWords = []string{"properly", "correctly", "good", "well", "appropriate", "suitable"} //nolint:gochecknoglobals //immutable vague-word list
 
 func checkW7VagueDoD(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
@@ -877,7 +878,7 @@ func isGlobPattern(s string) bool {
 
 const minOutcomeLength = 20
 
-var vagueOutcomes = []string{"done", "completed", "finished", "ok", "fixed"}
+var vagueOutcomes = []string{"done", "completed", "finished", "ok", "fixed"} //nolint:gochecknoglobals //immutable vague-outcome list
 
 func checkW11VagueOutcomes(issues map[string]IssueFacts) []Finding {
 	var findings []Finding

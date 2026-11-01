@@ -408,7 +408,7 @@ func isArmatureManagedHook(content string) bool {
 			strings.Contains(content, "\n# Armature "))
 }
 
-var obsoleteHooks = []string{"prepare-commit-msg"}
+var obsoleteHooks = []string{"prepare-commit-msg"} //nolint:gochecknoglobals //immutable bootstrap table
 
 func removeObsoleteHooks(gitHooksDir, hooksDir string) error {
 	for _, hook := range obsoleteHooks {

@@ -15,6 +15,7 @@ type CheckReservation struct {
 	Planned string
 }
 
+//nolint:gochecknoglobals //immutable reservation table
 var openReservations = []CheckReservation{
 	{
 		ID:      "D13",

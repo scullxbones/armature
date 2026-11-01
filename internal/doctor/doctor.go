@@ -69,6 +69,7 @@ func runChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	return Report{Checks: indexedChecks(index, allIssues, nil, repoPath, now, nil, nil, configPath)}
 }
 
+//nolint:gochecknoglobals // immutable doctor check registry
 var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}
 
 func LiveCheckIDs() []string {

@@ -14,7 +14,7 @@ import (
 )
 
 // Version is set at build time via -ldflags.
-var Version = "dev"
+var Version = "dev" //nolint:gochecknoglobals //ldflags-overridable build version
 
 func applyTTYDetectionPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
 	sess := ensureSession(cmd)
@@ -385,6 +385,7 @@ type pavedRoadDefault struct {
 	Reason   string
 }
 
+//nolint:gochecknoglobals //immutable paved-road registry
 var pavedRoadCommands = map[string]pavedRoadClass{
 	"":     {Kind: pavedRoadKindPaved},
 	"help": {Kind: pavedRoadKindPaved},
@@ -468,6 +469,7 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"worktree gc":             {Kind: pavedRoadKindEscape, Note: "Remove worktrees after merged/cancelled. Sync/merged teardown is the road."},
 }
 
+//nolint:gochecknoglobals //immutable paved-road pipeline
 var pavedRoadPipeline = []pavedRoadStep{
 	{
 		ID:          "bootstrap",
@@ -507,6 +509,7 @@ var pavedRoadPipeline = []pavedRoadStep{
 	},
 }
 
+//nolint:gochecknoglobals //immutable paved-road defaults
 var pavedRoadDefaultsAudit = []pavedRoadDefault{
 	{
 		Flag:     "--skip-delivery-gate",

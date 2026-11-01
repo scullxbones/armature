@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+//nolint:gochecknoglobals //immutable config vocabulary
 var validProjectTypes = map[string]struct{}{
 	"go":      {},
 	"node":    {},
@@ -23,7 +24,7 @@ var validProjectTypes = map[string]struct{}{
 // retiredConfigKeys were removed from Config (ADR 0006 deleted mode) but still
 // appear in pre-SB-ELIM config.json files. Strip them before DisallowUnknownFields
 // so LoadConfig preserves custom TTL/budget/hooks instead of rejecting the file.
-var retiredConfigKeys = []string{"mode"}
+var retiredConfigKeys = []string{"mode"} //nolint:gochecknoglobals //immutable retired-key list
 
 // StrictDecode decodes exactly one JSON object, rejecting unknown fields,
 // a non-object document (including JSON null), and any trailing JSON value.

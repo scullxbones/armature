@@ -16,6 +16,7 @@ const (
 	syncHelpEmpty = "arm list --status done"
 )
 
+//nolint:gochecknoglobals //immutable rank table
 var syncKindRank = map[string]int{
 	"missing-assessment": 0,
 	"check-failed":       1,

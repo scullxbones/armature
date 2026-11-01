@@ -24,6 +24,9 @@ linters:
     - misspell
     - unconvert
     - nolintlint
+    # Catches package-level mutable vars (incl. test-injection func hooks).
+    # claim/oporder/promotion stay fully covered — reintroduced hooks fail make lint.
+    - gochecknoglobals
   settings:
     depguard:
       # Modularity map (quality-controls C7; ADR 0004 fences; ADR 0023 ratchet).
@@ -346,6 +349,22 @@ linters:
       line-length: 160
   exclusions:
     rules:
+      # Test fixtures / harness shared state — not product remediation hooks.
+      - linters:
+          - gochecknoglobals
+        path: '_test\.go$'
+      # Tooling tables (repoguard), not product runtime.
+      - linters:
+          - gochecknoglobals
+        path: 'scripts/'
+      # Process-wide trampoline seams (documented; tests reset under lock).
+      - linters:
+          - gochecknoglobals
+        path: 'internal/testexec/'
+      # Test isolation harness (seed once, env overlay).
+      - linters:
+          - gochecknoglobals
+        path: 'internal/gittest/'
       - linters:
           - forbidigo
         path: 'cmd/'

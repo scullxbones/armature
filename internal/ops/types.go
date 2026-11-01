@@ -62,6 +62,7 @@ const (
 	StatusCancelled  = "cancelled"
 )
 
+//nolint:gochecknoglobals //immutable transition table
 var ValidTransitionTargets = map[string]bool{
 	StatusOpen:       true,
 	StatusInProgress: true,

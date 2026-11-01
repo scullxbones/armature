@@ -42,7 +42,7 @@ const (
 
 // gitNetworkTimeout is the deadline for network git calls on the ops-backup
 // path. Tests may shrink it; production code must leave the default.
-var gitNetworkTimeout = defaultGitNetworkTimeout
+var gitNetworkTimeout = defaultGitNetworkTimeout //nolint:gochecknoglobals //test-overridable network timeout seam
 
 // SetGitNetworkTimeoutForTest shrinks (or restores) the shared ops-backup
 // network deadline. Tests only — production code must leave the default.
@@ -151,6 +151,7 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	return cmd
 }
 
+//nolint:gochecknoglobals //immutable env prefix list
 var gitOverrideEnvPrefixes = []string{
 	"GIT_DIR=",
 	"GIT_WORK_TREE=",
