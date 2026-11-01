@@ -175,6 +175,16 @@ func TestSeedWorktreeIdentity_KeepUnlessProvenCopy_Table_REQ_GIT234_MIN(t *testi
 	})
 }
 
+// canonicalPath EvalSymlinks+Cleans both sides of path equality asserts so
+// macOS /var vs /private/var (and other symlink TempDir roots) matches git
+// porcelain realpaths. Use on every new path equality in this PR's tests.
+func canonicalPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err, "canonicalPath(%q)", path)
+	return filepath.Clean(resolved)
+}
+
 func TestMainWorktreePath_UsesPorcelainFirstEntry_REQ_GIT234_MIN(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
@@ -187,7 +197,7 @@ func TestMainWorktreePath_UsesPorcelainFirstEntry_REQ_GIT234_MIN(t *testing.T) {
 	require.NoError(t, err)
 	mainFromWT, err := mainWorktreePath(wt)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Clean(mainFromRepo), filepath.Clean(mainFromWT),
+	assert.Equal(t, canonicalPath(t, mainFromRepo), canonicalPath(t, mainFromWT),
 		"linked and main must agree on porcelain first entry")
-	assert.Equal(t, filepath.Clean(repo), filepath.Clean(mainFromRepo))
+	assert.Equal(t, canonicalPath(t, repo), canonicalPath(t, mainFromRepo))
 }
