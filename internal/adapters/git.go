@@ -1330,9 +1330,10 @@ type BlobResult struct {
 const commitWalkFormat = "%H%x09%ct%x09%P"
 
 // commitWalkConfigPins force walk output independent of user git config.
-// Unknown keys (e.g. log.diffMerges on Git <2.32) are ignored by git -c.
-// log.diffMerges=separate matches `log -m` (per-parent blocks); other values
-// (combined/first-parent/remerge/off) would change or suppress merge diffs.
+// log.diffMerges=separate matches `--diff-merges=separate` (per-parent
+// blocks). The CLI flag alone already overrides hostile log.diffMerges
+// (combined/dense-combined/remerge/off/…); the -c pin stays as belt-and-
+// suspenders. diff.renames=true matches DiffNameOnlyRange rename detection.
 var commitWalkConfigPins = []string{
 	"-c", "log.diffMerges=separate",
 	"-c", "log.showRoot=true",
@@ -1340,6 +1341,7 @@ var commitWalkConfigPins = []string{
 	"-c", "color.ui=never",
 	"-c", "color.diff=never",
 	"-c", "log.decorate=false",
+	"-c", "diff.renames=true",
 	"-c", "diff.noprefix=false",
 	"-c", "diff.relative=false",
 }
@@ -1349,15 +1351,16 @@ var commitWalkConfigPins = []string{
 // so callers can replace per-SHA CommitterUnix, FirstParent, DiffNameOnlyRange,
 // and ListFilesAtCommit loops.
 //
-// Flags stay within documented min Git 2.25 (architecture.md): `-m` for
-// per-parent merge diffs (not `--diff-merges=*`, Git 2.31+), `--root` so
-// log.showRoot=false still emits the root commit, `-z` so core.quotePath
-// cannot C-quote non-ASCII paths. `-m` repeats merge SHAs once per parent;
+// Walk target is Git 2.34+: `--diff-merges=separate` (Git 2.31+) for
+// per-parent merge diffs, `--root` so log.showRoot=false still emits the
+// root commit, `-z` so core.quotePath cannot C-quote non-ASCII paths.
+// `--diff-merges=separate` repeats merge SHAs once per parent;
 // parseCommitWalkOutput keeps the first block (first-parent diff).
 // Walk-affecting config is pinned via commitWalkConfigPins so user
-// log.diffMerges / quotePath / color / decorate / noprefix / relative cannot
-// change the machine-readable output (hash algorithm is still repo-native:
-// SHA-1 40-hex or SHA-256 64-hex OIDs).
+// log.diffMerges / showRoot / quotePath / color / decorate / renames /
+// noprefix / relative cannot change the machine-readable output (hash
+// algorithm is still repo-native: SHA-1 40-hex or SHA-256 64-hex OIDs).
+// Documented install min in architecture.md is unchanged by this helper.
 func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 	rev = strings.TrimSpace(rev)
 	if rev == "" {
@@ -1369,7 +1372,7 @@ func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 		"log",
 		"-z",
 		"--reverse",
-		"-m",
+		"--diff-merges=separate",
 		"--root",
 		"--name-only",
 		"--format="+commitWalkFormat,

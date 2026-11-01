@@ -199,8 +199,9 @@ func TestLookPathOnWindowsPATHEXT_REQ_PARCLI(t *testing.T) {
 
 func TestParseCommitWalkOutput_KeepsFirstParentMergeBlock_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	// Synthetic `git log -z -m --name-only --format=%H%x09%ct%x09%P` shape:
-	// merge SHA repeated once per parent; first path field has a leading LF.
+	// Synthetic `git log -z --diff-merges=separate --name-only
+	// --format=%H%x09%ct%x09%P` shape: merge SHA repeated once per parent;
+	// first path field has a leading LF.
 	const merge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const p1 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	const p2 = "cccccccccccccccccccccccccccccccccccccccc"
