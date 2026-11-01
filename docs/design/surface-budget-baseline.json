@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 132,
+      "count": 139,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -11,6 +11,9 @@
         "Client.AddPaths",
         "Client.AddWorktree",
         "Client.BlobExists",
+        "Client.BundleCreateAdvertised",
+        "Client.BundleListHeads",
+        "Client.BundleVerifyRestorable",
         "Client.CheckIgnoreSource",
         "Client.CommitDiff",
         "Client.CommitIndexNoVerify",
@@ -31,6 +34,8 @@
         "Client.DirtyEntries",
         "Client.DirtyEntriesIncludingSubmodules",
         "Client.FetchAndRebase",
+        "Client.FetchBranchToRef",
+        "Client.FetchBundleForce",
         "Client.FetchTrackingRefWithoutMovingHEAD",
         "Client.FirstParent",
         "Client.FirstParentAfter",
@@ -76,6 +81,7 @@
         "DirtyEntry.OldPath",
         "DirtyEntry.Path",
         "DirtyEntry.Untracked",
+        "ErrRemoteRefMissing",
         "ExecuteHook",
         "ExpandGlobs",
         "GitConfig",
@@ -90,6 +96,7 @@
         "HookResult",
         "HookResult.Allowed",
         "HookResult.Message",
+        "IsRemoteRefMissing",
         "LineWithOffset",
         "LineWithOffset.EndOffset",
         "LineWithOffset.Line",
@@ -1231,6 +1238,44 @@
         "WorktreeRestore.Path",
         "WorktreeSet",
         "WorktreeUnchanged"
+      ]
+    },
+    "internal/opsbackup": {
+      "count": 33,
+      "names": [
+        "AdvertisedRef",
+        "AsideBranch",
+        "AsideRef",
+        "Disposition",
+        "Disposition.String",
+        "DispositionDivergeAside",
+        "DispositionFastForward",
+        "DispositionMissing",
+        "ErrDiverge",
+        "Git",
+        "Git.BundleCreateAdvertised",
+        "Git.BundleVerifyRestorable",
+        "Git.DeleteRef",
+        "Git.FetchBranchToRef",
+        "Git.FetchBundleForce",
+        "Git.IsAncestor",
+        "Git.ResolveRevision",
+        "LiveRef",
+        "OpsBranch",
+        "PlanRestore",
+        "RestorePlan",
+        "RestorePlan.AsideRef",
+        "RestorePlan.Bundle",
+        "RestorePlan.Disposition",
+        "RestorePlan.Recovered",
+        "Snapshot",
+        "SnapshotRequest",
+        "SnapshotRequest.OutputPath",
+        "SnapshotResult",
+        "SnapshotResult.Bundle",
+        "SnapshotResult.Tip",
+        "TrackingRef",
+        "Verify"
       ]
     },
     "internal/output": {

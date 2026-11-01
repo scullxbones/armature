@@ -1,0 +1,1 @@
+{"count":1,"verifications":[{"status":"ok","bundle":"/tmp/armature-ops.bundle","advertises":"refs/heads/_armature"}],"help":["arm ops-backup restore-plan --from <bundle> prints the I2 disposition"]}

@@ -739,6 +739,86 @@ the command exits non-zero; origin is not updated.
 
 ---
 
+## ops-backup
+
+Durable tip copy for the published `_armature` orphan branch. This is the
+supported recovery surface for ops durability (narrow-gaps G2.1 / G2.3 as a
+tested CLI lever). Doctor **D11** (S12-T2) should name these verbs in
+`next_actions`; do not maintain parallel bash cookbooks.
+
+### Ops durability guarantees (G2.1)
+
+What Armature does **not** guarantee today without this lever (and still does
+not automate on a schedule):
+
+- The forge will retain `refs/heads/_armature`. The branch is unprotected; a
+  delete, corruption, or force-push can remove or rewrite the shared tip.
+- Green doctor **D12** (lag) is not proof the tip was never damaged. D12 is a
+  catch-up probe after a tracking fetch, not a backup.
+- `arm push-ops` success is publish success, not backup success.
+- Divergent orphan histories are never merged by product code (I2 / T2). A
+  diverge disposition names aside ref `_armature-recovered` and exits
+  non-zero; a human or agent must escalate.
+
+What `arm ops-backup` does guarantee when it exits 0:
+
+- `snapshot` refreshed the published tip with
+  `FetchBranchToRef` (`git fetch --refmap= origin +refs/heads/_armature:<dst>`
+  so the remote's configured refspec cannot also touch the shared tip), into
+  a **per-run** destination under `refs/remotes/origin/_armature-run/<nonce>`
+  (never writes `refs/remotes/origin/_armature`), then wrote a bundle that
+  advertises restorable `refs/heads/_armature`. Refresh failure is fail-closed
+  (no bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
+  runs on one clone all succeed even while the origin tip keeps moving.
+- `verify` confirms that advertisement is present and the object pack is
+  restorable (fetch into a throwaway bare — not header-only `list-heads`).
+- `restore-plan` loads into a per-run scratch under
+  `refs/remotes/backup/_armature-run/<nonce>` (sibling of any legacy
+  `refs/remotes/backup/_armature` tip) and prints
+  `missing | fast-forward | diverge→_armature-recovered`. Printed fields are
+  durable only (recovered SHA, bundle path, optional aside publish name) —
+  no print-then-delete scratch ref. An absent `origin/_armature` is
+  `missing` only when fetch reports the branch absent; every other
+  fetch/resolve/ancestry failure stays fail-closed. A recovered tip that is
+  a strict ancestor of current `origin/_armature` is
+  `diverge→_armature-recovered` (exit 1) — I2 forbids rewinding the shared
+  tip. It does not apply the publish (`--apply` is not in v1). Structured
+  json/agent output for all three verbs is exactly one N2 envelope
+  `{count, <payload>[], help[]}` per invocation (diverge included: plan
+  help carries escalation; exit 1 via ADR 0020 §7 — no second error
+  envelope). Leftover per-run refs or temp dirs from a crashed prior run
+  never break the next.
+
+Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
+
+**Synopsis:**
+`arm ops-backup snapshot|verify|restore-plan`
+
+### ops-backup snapshot
+
+**Synopsis:**
+`arm ops-backup snapshot --output <bundle>`
+
+**Flags:**
+- `--output string`: Bundle output path (required).
+
+### ops-backup verify
+
+**Synopsis:**
+`arm ops-backup verify <bundle>`
+
+### ops-backup restore-plan
+
+**Synopsis:**
+`arm ops-backup restore-plan --from <bundle>`
+
+Prints disposition and exits non-zero on diverge (plan envelope + ADR 0020 §7 protocol exit; no second error envelope).
+
+**Flags:**
+- `--from string`: Bundle path (required).
+
+---
+
 ## ready
 
 Show tasks ready to be claimed. Structured output (`--format json`, `--format agent`, and the non-TTY default) is one Agent Output Contract envelope object on stdout: `{count, issues, help}`. It is never a bare array, never `null`, and never a second JSON value on stderr.

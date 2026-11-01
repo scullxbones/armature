@@ -46,6 +46,10 @@ MANDATORY_FLAGS = {
     "sources add": ["--url", "--type"],
     "quarantine": ["--log", "--line"],
     "doctor quarantine": ["--log", "--line"],
+    "snapshot": ["--output"],
+    "ops-backup snapshot": ["--output"],
+    "restore-plan": ["--from"],
+    "ops-backup restore-plan": ["--from"],
 }
 
 ARM_BIN = os.environ.get("ARM_BIN", "arm")

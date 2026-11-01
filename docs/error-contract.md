@@ -70,6 +70,8 @@ stay on the platform/git protocol.
 | `MATERIALIZE-1` | materialize | `arm materialize` could not complete. | LNGHZN-S6-T5 | |
 | `MERGED-1` | merged | `arm merged` could not complete, including an ADR 0022 promotion refusal (delivery not on the target, missing matching assessment, legacy done with no snapshot, or the git check cannot run). `next_actions[0]` is the recovery argv with the issue id filled in. | LNGHZN-S6-T5 | |
 | `NOTE-1` | note | `arm note` could not complete. | LNGHZN-S6-T5 | |
+| `OPS-BACKUP-1` | ops-backup | `arm ops-backup` snapshot, verify, or restore-plan could not complete (including fail-closed tip refresh). | TOPTIER-S12-T1 | |
+| `OPS-BACKUP-2` | ops-backup | Reserved. `restore-plan` diverge emits the plan envelope (disposition + escalation help) and exits non-zero via ADR 0020 §7 (`skipCommandFailure`); it does not emit this Command Failure on the wire. | TOPTIER-S12-T1 | |
 | `PUSH-OPS-1` | push-ops | `arm push-ops` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-2` | push-ops | `arm push-ops` refused to publish because the graph failed `arm validate --ci` / `make validate-graph` after integrating `origin/_armature`. | PUBLISH-VALIDATE | |
 | `REOPEN-1` | reopen | `arm reopen` could not complete. | LNGHZN-S6-T5 | |

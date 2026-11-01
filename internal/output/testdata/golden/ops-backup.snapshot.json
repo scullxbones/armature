@@ -1,0 +1,1 @@
+{"count":1,"snapshots":[{"status":"ok","tip":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","bundle":"/tmp/armature-ops.bundle"}],"help":["arm ops-backup verify <bundle> confirms the tip is restorable"]}

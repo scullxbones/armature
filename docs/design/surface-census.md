@@ -154,6 +154,10 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 |---------|---------|---------|--------|-------|
 | `sync` | main.go, sync.go | Classify done leaves and promote | **kept-evidence** | ADR 0022 writer for every done leaf (`promotion.Evaluate`). Prints an ADR 0017 envelope. `--into` defaults to recorded integration branch. |
 | `push-ops` | main.go, push_ops.go | Push pending ops to _armature branch | **kept-evidence** | Publishes ops to VCS. Rebases onto origin/_armature, then runs the same fail-closed `arm validate --ci` / `make validate-graph` contract, then pushes. `--override-validate --reason` is a TTY-recorded escape hatch and is never green. |
+| `ops-backup` | main.go, ops_backup.go | Ops tip snapshot / verify / restore-plan group | **kept-evidence** | Container for durable `_armature` tip copy (TOPTIER-S12-T1). Not a doctor mutation surface. |
+| `ops-backup snapshot` | ops_backup.go | Fail-closed bundle of published tip | **kept-evidence** | Per-run `FetchBranchToRef` into `refs/remotes/origin/_armature-run/<nonce>`; never rewinds live `refs/heads/_armature`; bundle advertises `refs/heads/_armature`. |
+| `ops-backup verify` | ops_backup.go | Verify bundle tip advertisement | **kept-evidence** | Requires advertised `refs/heads/_armature` and a fetchable object pack (throwaway bare). |
+| `ops-backup restore-plan` | ops_backup.go | I2-safe publish disposition (no --apply) | **kept-evidence** | Sibling per-run scratch `refs/remotes/backup/_armature-run/<nonce>`; prints durable SHA/bundle only; absent remote ref → missing; non-zero on diverge. |
 | `merged` | main.go, merged.go | Promote one done leaf | **kept-evidence** | ADR 0022 writer for one issue. Stores target SHA, combined patch-id, matched commit. `--pr` is not evidence. |
 | `delivery` | main.go, delivery.go | Delivery snapshot group | **kept-evidence** | Container for manual delivery recording (ADR 0022). Bound-worktree done writes the snapshot automatically. |
 | `delivery record` | delivery.go | Record delivery range and mark done | **kept-evidence** | Writes `refs/armature/deliveries/<id>` and a done transition with base/tip/integration_branch when no bound worktree can snapshot. |
@@ -291,7 +295,8 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--root` | dag apply | string | Override inferred root | **kept-evidence** |
 | `--sources` | dag context | string | Comma-separated source IDs to include | **kept-evidence** |
 | `--template` | dag context | string | Prompt template with placeholders | **kept-evidence** |
-| `--output` | dag context, review prepare | string | Output file (default: stdout) | **kept-evidence** |
+| `--output` | dag context, review prepare, ops-backup snapshot | string | Output file (default: stdout for dag/review; required bundle path for ops-backup snapshot) | **kept-evidence** |
+| `--from` | ops-backup restore-plan | string | Bundle path to plan restore from | **kept-evidence** |
 | `--format` | dag context | string | Command-local output format override (text or json; decompose.go:383). All other commands listed here read the inherited root persistent `--format` flag (see Universal/Root Flags above) rather than defining their own — they do not appear in this row. | **kept-evidence** |
 | `--existing-dag` | dag context | bool | Include existing DAG in context | **kept-evidence** |
 | `--approve-all` | dag summary | bool | Approve all pending draft items in non-interactive mode | **kept-evidence** |
@@ -458,6 +463,9 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `merged` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `note` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `push-ops` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `ops-backup snapshot` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `ops-backup verify` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `ops-backup restore-plan` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `render-context` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `reopen` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
@@ -497,9 +505,9 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - **Confidence States**: 3 (all kept-evidence)
 - **Issue Fields**: 40 (36 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 19 (all kept-evidence)
-- **CLI Commands**: 54 (all kept-evidence, 4 groups)
+- **CLI Commands**: 58 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
-- **Command output modes**: 64 (59 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
+- **Command output modes**: 67 (62 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 
