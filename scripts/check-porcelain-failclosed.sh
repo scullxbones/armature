@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Guard: only scripts/porcelain-git.sh may invoke git status / git hash-object.
-# Bans direct calls anywhere under scripts/ (any depth), including:
-#   - git -C … status|hash-object
-#   - git -c key=val … status|hash-object (config globals before subcmd)
-#   - "$GIT" status / $g status (var-held command)
-#   - line continuations and silencers (|| true, || :, 2>/dev/null, set +e, …)
+# Guard: only scripts/porcelain-git.sh may invoke porcelain git subcommands.
+#
+# CLASS: Outside the helper, any (flattened) line with word-bounded `git` and
+# later word-bounded `status`|`hash-object` MUST fail — any flags / -c / -C /
+# --no-pager / punctuation between. Token end: ([^A-Za-z0-9_-]|$).
+# Also bans var-held command forms ("$GIT" … / $g …).
+# False positives → narrow per-line allowlist + written reason (never loosen).
+#
 # Selftest fixtures live under scripts/testdata/porcelain-bypass/.
 set -euo pipefail
 ROOT="${1:-.}"
@@ -13,10 +15,28 @@ cd "$ROOT"
 HELPER="scripts/porcelain-git.sh"
 fail=0
 
-# Direct `git` with optional -C / repeated -c globals, then status|hash-object.
-DIRECT_RE='(^|\$\(|`|[[:space:]]|;|&)git([[:space:]]+(-C[[:space:]]+[^[:space:]]+|-c[[:space:]]+[^[:space:]]+))*[[:space:]]+(status|hash-object)([[:space:]]|$)'
+# Build class regex without embedding both tokens on one source line.
+_gw='gi'
+_gw="${_gw}t"
+_st='sta'
+_st="${_st}tus"
+_ho='hash-obj'
+_ho="${_ho}ect"
+_tok_end='([^A-Za-z0-9_-]|$)'
+_tok_start='(^|[^A-Za-z0-9_-])'
+# git + delimiter + optional junk ending in delimiter + status|hash-object + end
+CLASS_RE="${_tok_start}${_gw}([^A-Za-z0-9_-](.*[^A-Za-z0-9_-])?)(${_st}|${_ho})${_tok_end}"
 # Var-held command: "$GIT" status / $g status / ${GIT} hash-object
-VAR_RE='(^|\$\(|`|[[:space:]]|;|&)(\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|"\$\{?[A-Za-z_][A-Za-z0-9_]*\}?")[[:space:]]+(status|hash-object)([[:space:]]|$)'
+VAR_RE="${_tok_start}(\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?|\"\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?\")[[:space:]]+(${_st}|${_ho})${_tok_end}"
+
+# Per-line allowlist: exact "file:linenumber" → reason (never broaden the regex).
+allow_line() {
+  local key="$1"
+  case "$key" in
+    # none yet — add "path:N) return 0 ;;  # reason" entries here only
+    *) return 1 ;;
+  esac
+}
 
 flatten() {
   awk '{
@@ -27,9 +47,9 @@ flatten() {
 
 scan_file() {
   local f="$1"
-  local flat hits
+  local flat hits line_no key kept=""
   flat="$(flatten "$f")"
-  hits="$(printf '%s\n' "$flat" | grep -nE "$DIRECT_RE|$VAR_RE" \
+  hits="$(printf '%s\n' "$flat" | grep -nE "$CLASS_RE|$VAR_RE" \
     | grep -vE '^[[:digit:]]+:[[:space:]]*#' || true)"
   if [ -z "$hits" ]; then
     return 0
@@ -37,24 +57,52 @@ scan_file() {
   if [ "$f" = "$HELPER" ]; then
     return 0
   fi
-  echo "FAIL: $f invokes git status/hash-object outside $HELPER:" >&2
-  printf '%s\n' "$hits" | sed 's/^/  /' >&2
+  while IFS= read -r hit || [ -n "$hit" ]; do
+    [ -z "$hit" ] && continue
+    line_no="${hit%%:*}"
+    key="$f:$line_no"
+    if allow_line "$key"; then
+      continue
+    fi
+    kept="${kept}${hit}"$'\n'
+  done <<EOF
+$hits
+EOF
+  if [ -z "$kept" ]; then
+    return 0
+  fi
+  echo "FAIL: $f invokes porcelain ${_st}/${_ho} outside $HELPER:" >&2
+  printf '%s' "$kept" | sed 's/^/  /' >&2
   fail=1
 }
 
 scan_silencers() {
   local f="$1"
-  local flat hits
+  local flat hits kept="" hit line_no key
   if [ "$f" = "$HELPER" ]; then
     return 0
   fi
   flat="$(flatten "$f")"
-  hits="$(printf '%s\n' "$flat" | grep -nE "$DIRECT_RE|$VAR_RE" \
+  hits="$(printf '%s\n' "$flat" | grep -nE "$CLASS_RE|$VAR_RE" \
     | grep -vE '^[[:digit:]]+:[[:space:]]*#' \
     | grep -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' || true)"
-  if [ -n "$hits" ]; then
-    echo "FAIL: $f silences git status/hash-object:" >&2
-    printf '%s\n' "$hits" | sed 's/^/  /' >&2
+  if [ -z "$hits" ]; then
+    return 0
+  fi
+  while IFS= read -r hit || [ -n "$hit" ]; do
+    [ -z "$hit" ] && continue
+    line_no="${hit%%:*}"
+    key="$f:$line_no"
+    if allow_line "$key"; then
+      continue
+    fi
+    kept="${kept}${hit}"$'\n'
+  done <<EOF
+$hits
+EOF
+  if [ -n "$kept" ]; then
+    echo "FAIL: $f silences porcelain ${_st}/${_ho}:" >&2
+    printf '%s' "$kept" | sed 's/^/  /' >&2
     fail=1
   fi
 }
@@ -72,4 +120,4 @@ if [ "$fail" -ne 0 ]; then
 fi
 echo "OK: scripts/ porcelain git confined to $HELPER"
 
-bash "$ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh" "$ROOT" "$(cd "$(dirname "$0")" && pwd)"
+bash "$ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh" "$ROOT"

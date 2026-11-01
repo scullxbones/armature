@@ -1057,7 +1057,9 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: Makefile lint missing check-no-engine-bin-env.sh"
         exit 1
     fi
-    for bypass in git-c-status.sh var-git-status.sh alias-git-status.sh; do
+    for bypass in git-c-status.sh var-git-status.sh alias-git-status.sh \
+        cmdsub-status-or-true.sh status-semicolon.sh status-pipe-cat.sh \
+        func-git-status.sh no-pager-status-or-true.sh; do
         if [[ ! -f "$REPO_ROOT/scripts/testdata/porcelain-bypass/$bypass" ]]; then
             echo "FAIL: missing porcelain bypass fixture $bypass"
             exit 1
