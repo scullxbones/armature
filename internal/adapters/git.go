@@ -1313,3 +1313,103 @@ func (c *Client) TreeEntry(rev, path string) (mode, oid string, err error) {
 	}
 	return fields[0], fields[2], nil
 }
+
+// BundleCreateAdvertised writes a git bundle at outputPath that advertises
+// advertiseRef at tipSHA. Objects are staged through a throwaway bare repo so
+// the working repository's live advertiseRef is never moved.
+func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
+	outputPath = strings.TrimSpace(outputPath)
+	tipSHA = strings.TrimSpace(tipSHA)
+	advertiseRef = strings.TrimSpace(advertiseRef)
+	if outputPath == "" || tipSHA == "" || advertiseRef == "" {
+		return fmt.Errorf("bundle create: output, tip, and advertise ref are required")
+	}
+	absOut, err := filepath.Abs(outputPath)
+	if err != nil {
+		return fmt.Errorf("bundle create: abs output: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(absOut), 0o750); err != nil {
+		return fmt.Errorf("bundle create: mkdir: %w", err)
+	}
+
+	bareParent, err := os.MkdirTemp("", "armature-ops-backup-bare-")
+	if err != nil {
+		return fmt.Errorf("bundle create: temp bare: %w", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
+	}()
+	bare := filepath.Join(bareParent, "bare.git")
+	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
+		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
+	}
+
+	const tempRef = "refs/bundle-backup/_armature"
+	if err := c.UpdateRef(tempRef, tipSHA); err != nil {
+		return err
+	}
+	defer func() {
+		_ = c.DeleteRef(tempRef) //nolint:errcheck // best-effort temp ref cleanup
+	}()
+
+	if out, pushErr := c.cmd("push", bare, tempRef+":"+advertiseRef).CombinedOutput(); pushErr != nil {
+		return fmt.Errorf("git push bare %s:%s: %w\n%s", tempRef, advertiseRef, pushErr, out)
+	}
+
+	bareClient := New(bare).WithEnviron(c.environ)
+	if out, bundleErr := bareClient.cmd("bundle", "create", absOut, advertiseRef).CombinedOutput(); bundleErr != nil {
+		return fmt.Errorf("git bundle create: %w\n%s", bundleErr, out)
+	}
+	return nil
+}
+
+// BundleListHeads returns ref names advertised by a git bundle (first column of
+// git bundle list-heads).
+func (c *Client) BundleListHeads(bundlePath string) ([]string, error) {
+	bundlePath = strings.TrimSpace(bundlePath)
+	if bundlePath == "" {
+		return nil, fmt.Errorf("bundle list-heads: path required")
+	}
+	abs, err := filepath.Abs(bundlePath)
+	if err != nil {
+		return nil, fmt.Errorf("bundle list-heads: abs: %w", err)
+	}
+	out, err := c.cmd("bundle", "list-heads", abs).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("git bundle list-heads: %w\n%s", err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	refs := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		refs = append(refs, fields[1])
+	}
+	return refs, nil
+}
+
+// FetchBundleForce force-updates dstRef from srcRef inside a git bundle.
+func (c *Client) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
+	bundlePath = strings.TrimSpace(bundlePath)
+	srcRef = strings.TrimSpace(srcRef)
+	dstRef = strings.TrimSpace(dstRef)
+	if bundlePath == "" || srcRef == "" || dstRef == "" {
+		return fmt.Errorf("fetch bundle: path, src, and dst refs are required")
+	}
+	abs, err := filepath.Abs(bundlePath)
+	if err != nil {
+		return fmt.Errorf("fetch bundle: abs: %w", err)
+	}
+	spec := "+" + srcRef + ":" + dstRef
+	out, err := c.cmd("fetch", abs, spec).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git fetch bundle %s: %w\n%s", spec, err, out)
+	}
+	return nil
+}

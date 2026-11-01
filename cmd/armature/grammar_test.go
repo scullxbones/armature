@@ -51,6 +51,7 @@ func checkHyphenatedUses(root *cobra.Command) []string {
 	signalCommands := map[string]bool{
 		"context-history": true,
 		"push-ops":        true,
+		"ops-backup":      true,
 		"scope-delete":    true,
 		"scope-rename":    true,
 		"harness-hook":    true,
@@ -69,6 +70,9 @@ func checkHyphenatedUses(root *cobra.Command) []string {
 		},
 		"dag": {
 			"override-release": true,
+		},
+		"ops-backup": {
+			"restore-plan": true,
 		},
 	}
 
@@ -481,6 +485,7 @@ func TestNoHyphenatedRootTopLevel_REQ_NXTTN_S5_T4(t *testing.T) {
 	signalAllowlist := map[string]bool{
 		"context-history": true,
 		"push-ops":        true,
+		"ops-backup":      true,
 		"scope-delete":    true,
 		"scope-rename":    true,
 		"harness-hook":    true,

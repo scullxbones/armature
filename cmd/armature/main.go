@@ -211,6 +211,10 @@ func newRootCmd() *cobra.Command {
 	pushOpsCmd.GroupID = "sync"
 	root.AddCommand(pushOpsCmd)
 
+	opsBackupCmd := newOpsBackupCmd()
+	opsBackupCmd.GroupID = "sync"
+	root.AddCommand(opsBackupCmd)
+
 	mergedCmd := newMergedCmd()
 	mergedCmd.GroupID = "sync"
 	root.AddCommand(mergedCmd)
@@ -401,11 +405,15 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"link":                 {Kind: pavedRoadKindPaved},
 	"unlink":               {Kind: pavedRoadKindEscape, Note: "Remove a dependency. The road adds blocked_by edges; it does not routinely delete them."},
 
-	"sync":        {Kind: pavedRoadKindPaved},
-	"push-ops":    {Kind: pavedRoadKindPaved, Note: "--override-validate is a human escape hatch; never a green publish."},
-	"merged":      {Kind: pavedRoadKindEscape, Note: "Promote one done leaf when its recorded delivery is on the target. Prefer sync after the PR lands."},
-	"materialize": {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
-	"import":      {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},
+	"sync":                    {Kind: pavedRoadKindPaved},
+	"push-ops":                {Kind: pavedRoadKindPaved, Note: "--override-validate is a human escape hatch; never a green publish."},
+	"ops-backup":              {Kind: pavedRoadKindEscape, Note: "Durable tip snapshot/restore-plan for disaster recovery. Not the daily dispatch loop."},
+	"ops-backup snapshot":     {Kind: pavedRoadKindEscape, Note: "Fail-closed bundle of origin/_armature. Recovery tooling, not wave dispatch."},
+	"ops-backup verify":       {Kind: pavedRoadKindEscape, Note: "Confirm a bundle advertises a restorable tip."},
+	"ops-backup restore-plan": {Kind: pavedRoadKindEscape, Note: "Print I2 disposition only; diverge is aside+_armature-recovered."},
+	"merged":                  {Kind: pavedRoadKindEscape, Note: "Promote one done leaf when delivery is on the target. Prefer sync after the PR lands."},
+	"materialize":             {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
+	"import":                  {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},
 
 	"create":                  {Kind: pavedRoadKindEscape, Note: "Mint one issue by flags. Prefer dag apply."},
 	"reparent":                {Kind: pavedRoadKindEscape, Note: "Move an issue in the hierarchy after the fact."},

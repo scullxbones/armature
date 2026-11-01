@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 132,
+      "count": 135,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -11,6 +11,8 @@
         "Client.AddPaths",
         "Client.AddWorktree",
         "Client.BlobExists",
+        "Client.BundleCreateAdvertised",
+        "Client.BundleListHeads",
         "Client.CheckIgnoreSource",
         "Client.CommitDiff",
         "Client.CommitIndexNoVerify",
@@ -31,6 +33,7 @@
         "Client.DirtyEntries",
         "Client.DirtyEntriesIncludingSubmodules",
         "Client.FetchAndRebase",
+        "Client.FetchBundleForce",
         "Client.FetchTrackingRefWithoutMovingHEAD",
         "Client.FirstParent",
         "Client.FirstParentAfter",
@@ -1232,6 +1235,44 @@
         "WorktreeRestore.Path",
         "WorktreeSet",
         "WorktreeUnchanged"
+      ]
+    },
+    "internal/opsbackup": {
+      "count": 33,
+      "names": [
+        "AdvertisedRef",
+        "AsideBranch",
+        "AsideRef",
+        "Disposition",
+        "Disposition.String",
+        "DispositionDivergeAside",
+        "DispositionFastForward",
+        "DispositionMissing",
+        "ErrDiverge",
+        "Git",
+        "Git.BundleCreateAdvertised",
+        "Git.BundleListHeads",
+        "Git.FetchBundleForce",
+        "Git.FetchTrackingRefWithoutMovingHEAD",
+        "Git.IsAncestor",
+        "Git.ResolveRevision",
+        "LiveRef",
+        "OpsBranch",
+        "PlanRestore",
+        "RestorePlan",
+        "RestorePlan.AsideRef",
+        "RestorePlan.Disposition",
+        "RestorePlan.Recovered",
+        "RestorePlan.Scratch",
+        "ScratchRef",
+        "Snapshot",
+        "SnapshotRequest",
+        "SnapshotRequest.OutputPath",
+        "SnapshotResult",
+        "SnapshotResult.Bundle",
+        "SnapshotResult.Tip",
+        "TrackingRef",
+        "Verify"
       ]
     },
     "internal/output": {

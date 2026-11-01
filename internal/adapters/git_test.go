@@ -1897,3 +1897,40 @@ func TestCommandGitAbsoluteOverlayPATH_REQ_PARCLI(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(out), "git version")
 }
+
+func TestBundleCreateAdvertised_ListHeads_FetchForce_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "local unpublished")
+	liveBefore := runGitOutput(t, repo, "rev-parse", "refs/heads/_armature")
+	tip := runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature")
+
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "ops.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+	liveAfter := runGitOutput(t, repo, "rev-parse", "refs/heads/_armature")
+	assert.Equal(t, liveBefore, liveAfter)
+
+	heads, err := c.BundleListHeads(bundle)
+	require.NoError(t, err)
+	assert.Contains(t, heads, "refs/heads/_armature")
+
+	require.NoError(t, c.FetchBundleForce(bundle, "refs/heads/_armature", "refs/remotes/backup/_armature"))
+	got := runGitOutput(t, repo, "rev-parse", "refs/remotes/backup/_armature")
+	assert.Equal(t, tip, got)
+}
+
+func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	c := adapters.New(repo)
+	require.Error(t, c.BundleCreateAdvertised("", "abc", "refs/heads/_armature"))
+	_, listErr := c.BundleListHeads("")
+	require.Error(t, listErr)
+	require.Error(t, c.FetchBundleForce("", "refs/heads/_armature", "refs/remotes/backup/_armature"))
+}
