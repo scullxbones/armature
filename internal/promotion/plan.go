@@ -90,7 +90,7 @@ func (e *Error) RecoveryArgv() string {
 func RecoveryArgv(issueID, kind string) string {
 	switch kind {
 	case KindMissingAssessment:
-		return "arm review record --issue " + issueID + " --assessment <assessment.json>"
+		return "arm review record --issue " + issueID + " --assessment <assessment.json> --bundle <bundle.json>"
 	case KindLegacy, KindEmptyDiff:
 		return delivery.RecordArgv(issueID)
 	case KindNotOnTarget:

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -314,9 +313,9 @@ func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph) (explanatio
 const d14Explanation = "An issue is still done while its parent is already merged — a stuck " +
 	"done→merged promotion. Merged-under-cancelled parents are not this check."
 
-// d14Guidance keeps the broad D14 warning and uses the shared tree-walk
-// remediations (same truth as MERGED-1 / sync). suggested is one command (or
-// one guidance sentence) per entry — never a "; "-joined argv list.
+// d14Guidance keeps the broad D14 warning and uses the shared typed Plan
+// (same truth as MERGED-1 / sync). suggested preserves model order:
+// options → steps → more-steps — never alpha-sorted, never a "; "-joined argv.
 func d14Guidance(f doctor.Finding, graph promotion.Graph) (explanation string, suggested []string) {
 	explanation = d14Explanation
 	if len(f.Items) == 0 || graph == nil {
@@ -331,15 +330,11 @@ func d14Guidance(f doctor.Finding, graph promotion.Graph) (explanation string, s
 		if !ok || id == "" {
 			id = item
 		}
-		acts := promotion.RemediationsForIssue(id, graph)
-		for _, cmd := range acts {
-			// Tree-repair prose only when reopen targets a merged ancestor
-			// (not all-cancelled stranded-parent reopen of a done non-leaf).
-			if target, ok := strings.CutPrefix(cmd, "arm reopen --issue "); ok {
-				if n, ok := graph[target]; ok && n.Status == ops.StatusMerged {
-					needsTreeRepair = true
-				}
-			}
+		plan := promotion.RemediationsPlan(id, graph)
+		if len(plan.Guidance) > 0 {
+			needsTreeRepair = true
+		}
+		for _, cmd := range plan.RenderNextActions() {
 			if seenCmd[cmd] {
 				continue
 			}
@@ -347,7 +342,6 @@ func d14Guidance(f doctor.Finding, graph promotion.Graph) (explanation string, s
 			cmds = append(cmds, cmd)
 		}
 	}
-	sort.Strings(cmds)
 	if needsTreeRepair {
 		explanation = d14Explanation + " " + promotion.TreeRepairGuidance
 	}

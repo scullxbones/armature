@@ -173,7 +173,16 @@ func newReviewRecordCmd() *cobra.Command {
 		Long: `Record a conformance assessment for an issue by reading a ConformanceAssessment
 from a JSON file and writing an assessment-attested operation.
 
-The assessment file should contain a valid ConformanceAssessment JSON object.
+How to produce assessment.json (required input when delivery base/tip are known —
+not a legacy placeholder):
+
+  1. arm review prepare --issue <id> --base <sha> --head <sha> --output bundle.json
+  2. Author ConformanceAssessment JSON per docs/schemas/conformance-assessment.schema.json
+     using schema_version, bundle_id, and contract/delivery fingerprints from the bundle,
+     plus criterion results with citations.
+  3. arm review validate --assessment assessment.json --bundle bundle.json
+  4. arm review record --issue <id> --assessment assessment.json [--bundle bundle.json]
+
 If the assessment is a duplicate of an existing one (same bundle ID), the command
 is idempotent and returns success without writing a duplicate operation.
 

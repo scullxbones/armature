@@ -104,7 +104,7 @@ func TestSyncExitNonZeroWhenLandedDeliveryLacksAssessment_REQ_LNGHZN_S11_T3(t *t
 	assert.Equal(t, "task-01", rows[0].ID)
 	assert.Equal(t, "missing-assessment", rows[0].Kind)
 	assert.Equal(t, "done", rows[0].Status)
-	assert.Equal(t, "arm review record --issue task-01 --assessment <assessment.json>", rows[0].NextAction)
+	assert.Equal(t, "arm review record --issue task-01 --assessment <assessment.json> --bundle <bundle.json>", rows[0].NextAction)
 	assert.Equal(t, rows[0].NextAction, help[0])
 
 	status, showErr := runTrls(t, repo, "show", "task-01", "--field", "status")

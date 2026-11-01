@@ -714,28 +714,35 @@ git -C .armature rebase origin/_armature
 
 **Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check). `--explain` remediations share `promotion.RemediationsForIssue` with MERGED-1 / sync.
 
-**Fix:** Remediations count only if running them repairs the finding (never
-`arm merged` on a non-leaf):
+**Fix:** Remediations are a typed set of **alternatives** (Option A / Option B),
+each with ordered steps — never a flat sequence that reopens then force-cancels.
+Running either Option must clear the finding and obey the tree-consistency
+invariant (no open/claimed work under a merged ancestor; done/merged untouched
+unless that Option explicitly cancels/reopens; merged never un-merged). Shared
+with MERGED-1 / sync via `promotion.RemediationsPlan`.
 ```bash
-# complete tree repair for done/open work under a merged ancestor (do not claim):
-arm reopen --issue <merged-ancestor-id>
-# OR cancel/reparent this node:
-arm transition --issue <id> --to cancelled --force
+# Options for done/open work under a merged ancestor (do not claim under merged):
+Option A: arm reopen --issue <merged-ancestor-id>
+Option B: arm transition --issue <id> --to cancelled --force
 
-# after tree repair, more steps may follow to promote remaining done leaves:
-arm delivery record --issue <leaf-id> --base <sha> --tip <sha>   # legacy template if unknown
-arm review record --issue <leaf-id> --assessment <assessment.json>  # when SHAs knowable
+# more steps follow after tree repair to promote remaining descendants:
+arm delivery record --issue <leaf-id> --base <sha> --tip <sha>
+# required input (full provenance — not legacy):
+#   arm review prepare --issue <leaf-id> --base <sha> --head <sha> --output bundle.json
+#   author ConformanceAssessment per docs/schemas/conformance-assessment.schema.json
+#   arm review validate --assessment assessment.json --bundle bundle.json
+arm review record --issue <leaf-id> --assessment <assessment.json> --bundle <bundle.json>
 
 # all-cancelled children only (rollup will not promote — needs ≥1 merged child):
-arm transition --issue <parent-id> --to cancelled --force
-# OR reopen the parent to continue work:
-arm reopen --issue <parent-id>
+Option A: arm transition --issue <parent-id> --to cancelled --force
+Option B: arm reopen --issue <parent-id>
 
 # open leaf with no merged ancestor (--worktree required; omit value for canonical path):
 arm claim --issue <open-id> --worktree
 ```
-`<sha>` / `<assessment.json>` placeholders are **legacy** templates (same honesty
-as promotion kind `legacy`) — substitute real values; inventing SHAs fails DELIVERY-1.
+Legacy `<sha>` templates apply only when delivery provenance is missing (same
+honesty as promotion kind `legacy`). With known Base/Tip, assessment.json is
+**required input** with the prepare/validate how-to above — not labeled legacy.
 All-merged children under a non-leaf are promoted by materialize rollup.
 
 ---

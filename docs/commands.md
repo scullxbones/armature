@@ -705,12 +705,16 @@ removes the worktree. Otherwise the leaf stays `done` and a `promotion-check`
 op is appended. `--pr` may be stored and is not evidence. `--force` remains the
 hook-log override only; it does not waive the git check or the assessment.
 
-Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` is one command
-per entry from `promotion.RemediationsForIssue`. Pending nodes under a merged
-ancestor get complete tree repair first (reopen ancestor or cancel this node);
-descendant promotion steps follow a `more steps follow…` marker. Done leaves get
-`arm delivery record …` (filled SHAs + review-record assessment when knowable;
-else legacy `<sha>` template). All-cancelled-only children → cancel/reopen the
+Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` comes from the
+typed `promotion.RemediationsPlan` (same model as doctor `--explain` suggested):
+mutually exclusive **Option A:… / Option B:…** alternatives (ordered steps each),
+then optional `more steps follow…` promotion steps. Never a flat reopen-then-cancel
+sequence. Pending nodes under a merged ancestor → Options reopen ancestor **or**
+cancel this node; more-steps promote descendants after reopen. Done leaves with
+known Base/Tip get filled `arm delivery record …` plus **required-input**
+`arm review record … --assessment <assessment.json>` with a concrete how-to
+(prepare → author per schema → validate); only missing provenance uses a legacy
+`<sha>` template. All-cancelled-only children → Options cancel **or** reopen the
 parent (rollup will not promote). Healthy open leaves get
 `arm claim --issue … --worktree`. Never `arm merged` on a non-leaf, and never a
 `;`-joined argv in one entry. An issue that is already `merged` is an intentional
@@ -1034,7 +1038,12 @@ Structured output (`--format json`, `--format agent`) is `{count, assessments, h
 
 **Example:**
 ```bash
-arm review record --issue TASK-001 --assessment assessment.json
+# Produce assessment.json when delivery SHAs are known (required input, not legacy):
+arm review prepare --issue TASK-001 --base abc123 --head def456 --output bundle.json
+# Author ConformanceAssessment per docs/schemas/conformance-assessment.schema.json
+# (bundle_id + fingerprints from bundle; criterion results with citations).
+arm review validate --assessment assessment.json --bundle bundle.json
+arm review record --issue TASK-001 --assessment assessment.json --bundle bundle.json
 ```
 
 ---
@@ -1290,7 +1299,7 @@ Classify every done leaf with the same promotion check as `arm merged`. A pass a
 **Output:** an ADR 0017 envelope even when the exit code is non-zero:
 
 ```json
-{"count":1,"issues":[{"id":"TASK-001","type":"task","status":"done","title":"Landed without assessment","kind":"missing-assessment","next_action":"arm review record --issue TASK-001 --assessment <assessment.json>"}],"help":["arm review record --issue TASK-001 --assessment <assessment.json>"]}
+{"count":1,"issues":[{"id":"TASK-001","type":"task","status":"done","title":"Landed without assessment","kind":"missing-assessment","next_action":"arm review record --issue TASK-001 --assessment <assessment.json> --bundle <bundle.json>"}],"help":["arm review record --issue TASK-001 --assessment <assessment.json> --bundle <bundle.json>"]}
 ```
 
 `help[0]` is the most actionable `arm` command with the issue id filled in. Each blocked row carries that row's command in `next_action`.
