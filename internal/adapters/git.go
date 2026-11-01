@@ -1518,22 +1518,117 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	return nil
 }
 
-// FetchBundleForce force-updates dstRef from srcRef inside a git bundle.
-func (c *Client) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
+// RestoreEvidence loads the published ops tip and a bundle tip into a throwaway
+// bare repo and reports ancestry. Concurrent restore-plan callers never write
+// or read each other's working-clone staging refs (the prior FetchBundleForce
+// class: `bad object refs/remotes/.../_armature-run/<other>` under overlap).
+//
+// Origin absence is structural: `git ls-remote --refs origin refs/heads/<branch>`
+// with empty stdout → missing. Unreachable origin / other ls-remote failures
+// return err (fail-closed) — empty is never inferred from transport errors.
+func (c *Client) RestoreEvidence(
+	bundlePath, advertiseRef, opsBranch string,
+) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error) {
 	bundlePath = strings.TrimSpace(bundlePath)
-	srcRef = strings.TrimSpace(srcRef)
-	dstRef = strings.TrimSpace(dstRef)
-	if bundlePath == "" || srcRef == "" || dstRef == "" {
-		return fmt.Errorf("fetch bundle: path, src, and dst refs are required")
+	advertiseRef = strings.TrimSpace(advertiseRef)
+	opsBranch = strings.TrimSpace(opsBranch)
+	if bundlePath == "" || advertiseRef == "" || opsBranch == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: bundle, advertise ref, and branch are required")
 	}
-	abs, err := filepath.Abs(bundlePath)
+	remoteRef := "refs/heads/" + opsBranch
+	_, exists, lsErr := c.lsRemoteRef("origin", remoteRef)
+	if lsErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: ls-remote origin %s failed (fail-closed): %w", remoteRef, lsErr)
+	}
+
+	absBundle, absErr := filepath.Abs(bundlePath)
+	if absErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: abs bundle: %w", absErr)
+	}
+
+	bareParent, tmpErr := os.MkdirTemp("", "armature-ops-backup-restore-")
+	if tmpErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: temp bare: %w", tmpErr)
+	}
+	defer func() {
+		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
+	}()
+	bare := filepath.Join(bareParent, "bare.git")
+	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
+		return false, "", "", false, false, fmt.Errorf("git init --bare: %w\n%s", initErr, out)
+	}
+	bareClient := New(bare).WithEnviron(c.environ)
+
+	spec := "+" + advertiseRef + ":" + advertiseRef
+	if out, fetchErr := bareClient.cmd("fetch", absBundle, spec).CombinedOutput(); fetchErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
+	}
+	recovered, err = bareClient.ResolveRevision(advertiseRef)
 	if err != nil {
-		return fmt.Errorf("fetch bundle: abs: %w", err)
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: %w", err)
 	}
-	spec := "+" + srcRef + ":" + dstRef
-	out, err := c.cmd("fetch", abs, spec).CombinedOutput()
+	if recovered == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: empty SHA")
+	}
+	if !exists {
+		return true, "", recovered, false, false, nil
+	}
+
+	originURL, urlErr := c.remoteURL("origin")
+	if urlErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: origin URL: %w", urlErr)
+	}
+	originDst := "refs/heads/origin-tip"
+	originSpec := "+" + remoteRef + ":" + originDst
+	if out, fetchErr := bareClient.cmd("fetch", "--refmap=", originURL, originSpec).CombinedOutput(); fetchErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: fetch origin %s failed (fail-closed): %w\n%s", remoteRef, fetchErr, out)
+	}
+	originTip, err = bareClient.ResolveRevision(originDst)
 	if err != nil {
-		return fmt.Errorf("git fetch bundle %s: %w\n%s", spec, err, out)
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: %w", err)
 	}
-	return nil
+	if originTip == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: empty SHA")
+	}
+
+	originAncOfRecovered, err = bareClient.IsAncestor(originTip, recovered)
+	if err != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: ancestry: %w", err)
+	}
+	recoveredAncOfOrigin, err = bareClient.IsAncestor(recovered, originTip)
+	if err != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: ancestry: %w", err)
+	}
+	return false, originTip, recovered, originAncOfRecovered, recoveredAncOfOrigin, nil
+}
+
+// lsRemoteRef reports whether remote advertises ref. Exit 0 + empty stdout means
+// reachable remote, ref absent. Non-zero exit (unreachable, auth, …) is an error.
+func (c *Client) lsRemoteRef(remote, ref string) (sha string, exists bool, err error) {
+	out, runErr := c.cmd("ls-remote", "--refs", remote, ref).CombinedOutput()
+	if runErr != nil {
+		return "", false, fmt.Errorf("git ls-remote %s %s: %w\n%s", remote, ref, runErr, out)
+	}
+	line := strings.TrimSpace(string(out))
+	if line == "" {
+		return "", false, nil
+	}
+	first, _, _ := strings.Cut(line, "\n")
+	fields := strings.Fields(strings.TrimSpace(first))
+	if len(fields) < 2 {
+		return "", false, fmt.Errorf("git ls-remote %s %s: malformed output %q", remote, ref, line)
+	}
+	return fields[0], true, nil
+}
+
+func (c *Client) remoteURL(name string) (string, error) {
+	out, err := c.cmd("remote", "get-url", name).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git remote get-url %s: %w\n%s", name, err, out)
+	}
+	url := strings.TrimSpace(string(out))
+	if url == "" {
+		return "", fmt.Errorf("git remote get-url %s: empty URL", name)
+	}
+	return url, nil
 }

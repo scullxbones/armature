@@ -30,10 +30,6 @@ func (g refreshFailGit) ResolveRevision(rev string) (string, error) {
 	return g.inner.ResolveRevision(rev)
 }
 
-func (g refreshFailGit) IsAncestor(anc, desc string) (bool, error) {
-	return g.inner.IsAncestor(anc, desc)
-}
-
 func (g refreshFailGit) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
 	return g.inner.BundleCreateAdvertised(outputPath, tipSHA, advertiseRef)
 }
@@ -42,12 +38,12 @@ func (g refreshFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g refreshFailGit) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
-	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
-}
-
 func (g refreshFailGit) DeleteRef(ref string) error {
 	return g.inner.DeleteRef(ref)
+}
+
+func (g refreshFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
+	return g.inner.RestoreEvidence(bundlePath, advertiseRef, opsBranch)
 }
 
 type bundleFailGit struct {
@@ -63,10 +59,6 @@ func (g bundleFailGit) ResolveRevision(rev string) (string, error) {
 	return g.inner.ResolveRevision(rev)
 }
 
-func (g bundleFailGit) IsAncestor(anc, desc string) (bool, error) {
-	return g.inner.IsAncestor(anc, desc)
-}
-
 func (g bundleFailGit) BundleCreateAdvertised(string, string, string) error {
 	return g.err
 }
@@ -75,12 +67,12 @@ func (g bundleFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error 
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g bundleFailGit) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
-	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
-}
-
 func (g bundleFailGit) DeleteRef(ref string) error {
 	return g.inner.DeleteRef(ref)
+}
+
+func (g bundleFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
+	return g.inner.RestoreEvidence(bundlePath, advertiseRef, opsBranch)
 }
 
 type resolveFailGit struct {
@@ -89,7 +81,6 @@ type resolveFailGit struct {
 	err       error
 	fetchErr  error
 	bundleErr error
-	ancErr    error
 }
 
 func (g resolveFailGit) FetchBranchToRef(branch, dstRef string) error {
@@ -106,13 +97,6 @@ func (g resolveFailGit) ResolveRevision(rev string) (string, error) {
 	return g.inner.ResolveRevision(rev)
 }
 
-func (g resolveFailGit) IsAncestor(anc, desc string) (bool, error) {
-	if g.ancErr != nil {
-		return false, g.ancErr
-	}
-	return g.inner.IsAncestor(anc, desc)
-}
-
 func (g resolveFailGit) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
 	if g.bundleErr != nil {
 		return g.bundleErr
@@ -124,45 +108,41 @@ func (g resolveFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g resolveFailGit) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
-	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
-}
-
 func (g resolveFailGit) DeleteRef(ref string) error {
 	return g.inner.DeleteRef(ref)
 }
 
-type fetchBundleFailGit struct {
+func (g resolveFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
+	return g.inner.RestoreEvidence(bundlePath, advertiseRef, opsBranch)
+}
+
+type restoreEvidenceFailGit struct {
 	inner *adapters.Client
 	err   error
 }
 
-func (g fetchBundleFailGit) FetchBranchToRef(branch, dstRef string) error {
+func (g restoreEvidenceFailGit) FetchBranchToRef(branch, dstRef string) error {
 	return g.inner.FetchBranchToRef(branch, dstRef)
 }
 
-func (g fetchBundleFailGit) ResolveRevision(rev string) (string, error) {
+func (g restoreEvidenceFailGit) ResolveRevision(rev string) (string, error) {
 	return g.inner.ResolveRevision(rev)
 }
 
-func (g fetchBundleFailGit) IsAncestor(anc, desc string) (bool, error) {
-	return g.inner.IsAncestor(anc, desc)
-}
-
-func (g fetchBundleFailGit) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
+func (g restoreEvidenceFailGit) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
 	return g.inner.BundleCreateAdvertised(outputPath, tipSHA, advertiseRef)
 }
 
-func (g fetchBundleFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error {
+func (g restoreEvidenceFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g fetchBundleFailGit) FetchBundleForce(string, string, string) error {
-	return g.err
+func (g restoreEvidenceFailGit) DeleteRef(ref string) error {
+	return g.inner.DeleteRef(ref)
 }
 
-func (g fetchBundleFailGit) DeleteRef(ref string) error {
-	return g.inner.DeleteRef(ref)
+func (g restoreEvidenceFailGit) RestoreEvidence(string, string, string) (bool, string, string, bool, bool, error) {
+	return false, "", "", false, false, g.err
 }
 
 func gitOut(t *testing.T, dir string, args ...string) string {
@@ -387,11 +367,11 @@ func TestRestorePlan_FastForwardAncestor_REQ_TOPTIER_S12_T1(t *testing.T) {
 	assert.Equal(t, opsbackup.DispositionFastForward, plan.Disposition)
 }
 
-// TestRestorePlan_RecoveredStrictAncestorOfOrigin_Diverge_REQ_TOPTIER_S12_T1
+// TestRestorePlan_RecoveredStrictAncestorOfOrigin_AlreadyContained_REQ_TOPTIER_S12_T1G
 // locks the ancestor decision: an older bundle tip that is a strict ancestor
-// of current origin/_armature is diverge→_armature-recovered (exit via
-// ErrDiverge). I2 forbids rewinding the shared tip; publish aside only.
-func TestRestorePlan_RecoveredStrictAncestorOfOrigin_Diverge_REQ_TOPTIER_S12_T1(t *testing.T) {
+// of current origin/_armature is already-contained (exit 0, no aside). The tip
+// is already in published history — no recovery branch.
+func TestRestorePlan_RecoveredStrictAncestorOfOrigin_AlreadyContained_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 	repo, origin, olderTip := setupOpsOrigin(t)
 	c := adapters.New(repo)
@@ -406,15 +386,16 @@ func TestRestorePlan_RecoveredStrictAncestorOfOrigin_Diverge_REQ_TOPTIER_S12_T1(
 	require.NotEqual(t, olderTip, newerTip)
 
 	plan, err := opsbackup.PlanRestore(c, bundle)
-	require.ErrorIs(t, err, opsbackup.ErrDiverge)
-	assert.Equal(t, opsbackup.DispositionDivergeAside, plan.Disposition)
-	assert.Equal(t, opsbackup.AsideRef, plan.AsideRef)
+	require.NoError(t, err)
+	assert.Equal(t, opsbackup.DispositionAlreadyContained, plan.Disposition)
+	assert.Equal(t, "already-contained", plan.Disposition.String())
+	assert.Empty(t, plan.AsideRef)
 	assert.Equal(t, olderTip, plan.Recovered)
 	assert.Equal(t, newerTip, gitOut(t, origin, "rev-parse", "refs/heads/_armature"),
-		"shared origin tip must remain advanced (aside only)")
+		"shared origin tip must remain advanced (no rewind)")
 }
 
-func TestPlanRestore_FetchOkOriginResolveFails_NotMissing_REQ_TOPTIER_S12_T1(t *testing.T) {
+func TestPlanRestore_RestoreEvidenceOriginResolveFails_NotMissing_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
@@ -422,9 +403,7 @@ func TestPlanRestore_FetchOkOriginResolveFails_NotMissing_REQ_TOPTIER_S12_T1(t *
 	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
 	require.NoError(t, err)
 
-	// Codex PRRT_kwDORnVQE86ybIUQ: fetch succeeds, ResolveRevision on the
-	// per-run origin tip fails → fail closed, never successful missing.
-	g := resolveFailGit{inner: c, failRev: "refs/remotes/origin/_armature-run", err: fmt.Errorf("resolve origin tip boom")}
+	g := restoreEvidenceFailGit{inner: c, err: fmt.Errorf("resolve origin tip boom")}
 	plan, err := opsbackup.PlanRestore(g, bundle)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve origin tip")
@@ -480,7 +459,7 @@ func TestDispositionString_Unknown(t *testing.T) {
 	assert.Equal(t, "disposition(99)", opsbackup.Disposition(99).String())
 }
 
-func TestPlanRestore_RefreshFail_REQ_TOPTIER_S12_T1(t *testing.T) {
+func TestPlanRestore_RestoreEvidenceFailClosed_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
@@ -488,13 +467,13 @@ func TestPlanRestore_RefreshFail_REQ_TOPTIER_S12_T1(t *testing.T) {
 	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
 	require.NoError(t, err)
 
-	g := refreshFailGit{inner: c, err: fmt.Errorf("simulated restore refresh failure")}
+	g := restoreEvidenceFailGit{inner: c, err: fmt.Errorf("ls-remote origin refs/heads/_armature failed (fail-closed): simulated")}
 	_, err = opsbackup.PlanRestore(g, bundle)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "fail-closed")
 }
 
-func TestPlanRestore_FetchBundleFail(t *testing.T) {
+func TestPlanRestore_RestoreEvidenceLoadBundleFail(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
@@ -502,24 +481,10 @@ func TestPlanRestore_FetchBundleFail(t *testing.T) {
 	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
 	require.NoError(t, err)
 
-	g := fetchBundleFailGit{inner: c, err: fmt.Errorf("simulated fetch bundle failure")}
+	g := restoreEvidenceFailGit{inner: c, err: fmt.Errorf("load bundle: simulated")}
 	_, err = opsbackup.PlanRestore(g, bundle)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load bundle")
-}
-
-func TestPlanRestore_RecoveredResolveFail(t *testing.T) {
-	t.Parallel()
-	repo, _, _ := setupOpsOrigin(t)
-	c := adapters.New(repo)
-	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
-	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
-	require.NoError(t, err)
-
-	g := resolveFailGit{inner: c, failRev: "refs/remotes/backup/_armature-run", err: fmt.Errorf("scratch boom")}
-	_, err = opsbackup.PlanRestore(g, bundle)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "resolve recovered tip")
 }
 
 func TestPlanRestore_AncestryFail(t *testing.T) {
@@ -534,7 +499,7 @@ func TestPlanRestore_AncestryFail(t *testing.T) {
 	newerBundle := filepath.Join(t.TempDir(), "newer.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(newerBundle, gitOut(t, repo, "rev-parse", "HEAD"), opsbackup.AdvertisedRef))
 
-	g := resolveFailGit{inner: c, ancErr: fmt.Errorf("ancestry boom")}
+	g := restoreEvidenceFailGit{inner: c, err: fmt.Errorf("ancestry boom")}
 	_, err = opsbackup.PlanRestore(g, newerBundle)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ancestry")
@@ -558,10 +523,6 @@ func (g *tipInjectGit) ResolveRevision(rev string) (string, error) {
 	return g.inner.ResolveRevision(rev)
 }
 
-func (g *tipInjectGit) IsAncestor(anc, desc string) (bool, error) {
-	return g.inner.IsAncestor(anc, desc)
-}
-
 func (g *tipInjectGit) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error {
 	return g.inner.BundleCreateAdvertised(outputPath, tipSHA, advertiseRef)
 }
@@ -570,12 +531,12 @@ func (g *tipInjectGit) BundleVerifyRestorable(bundlePath, wantRef string) error 
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g *tipInjectGit) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
-	return g.inner.FetchBundleForce(bundlePath, srcRef, dstRef)
-}
-
 func (g *tipInjectGit) DeleteRef(ref string) error {
 	return g.inner.DeleteRef(ref)
+}
+
+func (g *tipInjectGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
+	return g.inner.RestoreEvidence(bundlePath, advertiseRef, opsBranch)
 }
 
 func listRefs(t *testing.T, repo, pattern string) []string {
@@ -677,6 +638,48 @@ func TestVerify_ConcurrentDistinctBundles_REQ_TOPTIER_S12_T1(t *testing.T) {
 	wg.Wait()
 	require.NoError(t, errs[0])
 	require.NoError(t, errs[1])
+}
+
+// TestRestorePlan_OverlappingSameBundle_NoCrossRead_REQ_TOPTIER_S12_T1G proves
+// the isolation class: many concurrent restore-plan runs on one clone must not
+// fail with `bad object refs/remotes/.../_armature-run/<other>`.
+func TestRestorePlan_OverlappingSameBundle_NoCrossRead_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	repo, _, tip := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "seed.bundle")
+	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	require.NoError(t, err)
+
+	const n = 32
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			plan, e := opsbackup.PlanRestore(c, bundle)
+			if e != nil {
+				errs[i] = e
+				return
+			}
+			if plan.Recovered != tip {
+				errs[i] = fmt.Errorf("unexpected recovered tip %s", plan.Recovered)
+			}
+			if plan.Disposition != opsbackup.DispositionFastForward {
+				errs[i] = fmt.Errorf("unexpected disposition %s", plan.Disposition)
+			}
+		}(i)
+	}
+	wg.Wait()
+	for i, e := range errs {
+		if e != nil {
+			require.NotContains(t, e.Error(), "bad object", "slot %d: cross-read of foreign run ref", i)
+		}
+		require.NoErrorf(t, e, "overlapping restore-plan slot %d", i)
+	}
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/backup/_armature-run"))
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"))
 }
 
 func TestRestorePlan_ConcurrentDistinctBundles_NoCrossWire_REQ_TOPTIER_S12_T1(t *testing.T) {

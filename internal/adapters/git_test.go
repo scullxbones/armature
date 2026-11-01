@@ -1924,7 +1924,7 @@ func TestCommandGitAbsoluteOverlayPATH_REQ_PARCLI(t *testing.T) {
 	require.Contains(t, string(out), "git version")
 }
 
-func TestBundleCreateAdvertised_ListHeads_FetchForce_REQ_TOPTIER_S12_T1(t *testing.T) {
+func TestBundleCreateAdvertised_ListHeads_RestoreEvidence_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
@@ -1947,9 +1947,63 @@ func TestBundleCreateAdvertised_ListHeads_FetchForce_REQ_TOPTIER_S12_T1(t *testi
 	assert.Contains(t, heads, "refs/heads/_armature")
 	require.NoError(t, c.BundleVerifyRestorable(bundle, "refs/heads/_armature"))
 
-	require.NoError(t, c.FetchBundleForce(bundle, "refs/heads/_armature", "refs/remotes/backup/_armature-run/test"))
-	got := runGitOutput(t, repo, "rev-parse", "refs/remotes/backup/_armature-run/test")
-	assert.Equal(t, tip, got)
+	missing, originTip, recovered, originAnc, recoveredAnc, evErr := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, evErr)
+	assert.False(t, missing)
+	assert.Equal(t, tip, originTip)
+	assert.Equal(t, tip, recovered)
+	assert.True(t, originAnc)
+	assert.True(t, recoveredAnc)
+	for _, ns := range []string{"refs/remotes/backup/_armature-run", "refs/remotes/origin/_armature-run"} {
+		out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", ns).CombinedOutput()
+		require.NoError(t, refErr)
+		assert.Empty(t, strings.TrimSpace(string(out)), "RestoreEvidence must not stage %s into the working clone", ns)
+	}
+}
+
+func TestRestoreEvidence_MissingContainedUnreachable_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	older := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	olderBundle := filepath.Join(t.TempDir(), "older.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(olderBundle, older, "refs/heads/_armature"))
+
+	// Advance origin past the bundled tip → recovered is a strict ancestor.
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "newer")
+	gittest.Git(t, repo, "push", "origin", "_armature")
+	newer := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	missing, originTip, recovered, originAnc, recoveredAnc, err := c.RestoreEvidence(olderBundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+	assert.False(t, missing)
+	assert.Equal(t, newer, originTip)
+	assert.Equal(t, older, recovered)
+	assert.False(t, originAnc)
+	assert.True(t, recoveredAnc)
+
+	// Structural missing: delete remote branch; ls-remote empty → missing.
+	gittest.Git(t, fx.Origin, "update-ref", "-d", "refs/heads/_armature")
+	missing, originTip, recovered, originAnc, recoveredAnc, err = c.RestoreEvidence(olderBundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+	assert.True(t, missing)
+	assert.Empty(t, originTip)
+	assert.Equal(t, older, recovered)
+	assert.False(t, originAnc)
+	assert.False(t, recoveredAnc)
+
+	// Unreachable origin: fail-closed, never empty-as-missing.
+	gittest.Git(t, repo, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "no-such-origin.git"))
+	_, _, _, _, _, err = c.RestoreEvidence(olderBundle, "refs/heads/_armature", "_armature")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fail-closed")
+	assert.False(t, adapters.IsRemoteRefMissing(err))
 }
 
 func TestFetchTrackingRef_AbsentRemoteRef_REQ_TOPTIER_S12_T1(t *testing.T) {
@@ -1975,7 +2029,8 @@ func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
 	require.Error(t, c.BundleCreateAdvertised("", "abc", "refs/heads/_armature"))
 	_, listErr := c.BundleListHeads("")
 	require.Error(t, listErr)
-	require.Error(t, c.FetchBundleForce("", "refs/heads/_armature", "refs/remotes/backup/_armature-run/test"))
+	_, _, _, _, _, restoreErr := c.RestoreEvidence("", "refs/heads/_armature", "_armature")
+	require.Error(t, restoreErr)
 	require.Error(t, c.BundleVerifyRestorable("", "refs/heads/_armature"))
 	require.Error(t, c.FetchBranchToRef("", "refs/remotes/origin/_armature-run/x"))
 	require.Error(t, c.FetchBranchToRef("_armature", ""))

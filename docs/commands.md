@@ -789,22 +789,23 @@ What `arm ops-backup` does guarantee when it exits 0:
   runs on one clone all succeed even while the origin tip keeps moving.
 - `verify` confirms that advertisement is present and the object pack is
   restorable (fetch into a throwaway bare — not header-only `list-heads`).
-- `restore-plan` loads into a per-run scratch under
-  `refs/remotes/backup/_armature-run/<nonce>` (sibling of any legacy
-  `refs/remotes/backup/_armature` tip) and prints
-  `missing | fast-forward | diverge→_armature-recovered`. Printed fields are
-  durable only (recovered SHA, bundle path, optional aside publish name) —
-  no print-then-delete scratch ref. An absent `origin/_armature` is
-  `missing` only when fetch reports the branch absent; every other
-  fetch/resolve/ancestry failure stays fail-closed. A recovered tip that is
-  a strict ancestor of current `origin/_armature` is
-  `diverge→_armature-recovered` (exit 1) — I2 forbids rewinding the shared
-  tip. It does not apply the publish (`--apply` is not in v1). Structured
-  json/agent output for all three verbs is exactly one N2 envelope
-  `{count, <payload>[], help[]}` per invocation (diverge included: plan
-  help carries escalation; exit 1 via ADR 0020 §7 — no second error
-  envelope). Leftover per-run refs or temp dirs from a crashed prior run
-  never break the next.
+- `restore-plan` compares the bundle tip to `origin/_armature` inside a
+  throwaway bare (never stages `_armature-run/<nonce>` into the working
+  clone, so overlapping runs cannot cross-read each other's refs) and prints
+  `missing | fast-forward | already-contained | diverge→_armature-recovered`.
+  Printed fields are durable only (recovered SHA, bundle path, optional aside
+  publish name). An absent `origin/_armature` is `missing` only when
+  `git ls-remote --refs` reports the branch absent (structural); unreachable
+  origin and every other ls-remote/fetch/resolve/ancestry failure stay
+  fail-closed. A recovered tip that is a strict ancestor of current
+  `origin/_armature` is `already-contained` (exit 0, no aside — tip already
+  in published history). Unrelated tips are
+  `diverge→_armature-recovered` (exit 1). It does not apply the publish
+  (`--apply` is not in v1). Structured json/agent output for all three verbs
+  is exactly one N2 envelope `{count, <payload>[], help[]}` per invocation
+  (diverge included: plan help carries escalation; exit 1 via ADR 0020 §7 —
+  no second error envelope). Leftover per-run snapshot refs or temp dirs
+  from a crashed prior run never break the next.
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 
