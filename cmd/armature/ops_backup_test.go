@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -142,4 +143,135 @@ func TestOpsBackupVerify_BadBundle_REQ_TOPTIER_S12_T1(t *testing.T) {
 	err := root.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "OPS-BACKUP-1")
+}
+
+func assertExactlyOneJSONValue(t *testing.T, stdout string) {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader([]byte(stdout)))
+	var first any
+	require.NoError(t, dec.Decode(&first), "stdout must decode as JSON, got %q", stdout)
+	require.False(t, dec.More(), "stdout must be exactly one JSON value")
+	var extra any
+	err := dec.Decode(&extra)
+	require.ErrorIs(t, err, io.EOF, "expected EOF after one JSON value, got extra %v err=%v", extra, err)
+}
+
+func TestOpsBackup_StructuredStdoutExactlyOneJSON_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	repo := setupOpsBackupRepo(t)
+	dir := t.TempDir()
+	okBundle := filepath.Join(dir, "ok.bundle")
+	divergeBundle := filepath.Join(dir, "diverge.bundle")
+
+	// Seed an ok tip bundle, then rewrite origin to an unrelated tip so
+	// restore-plan --from divergeBundle yields diverge→_armature-recovered.
+	{
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"ops-backup", "snapshot", "--output", divergeBundle, "--repo", repo, "--format", "json", "--non-interactive")
+		require.Equal(t, 0, code, stdout.String())
+		gittest.Git(t, repo, "checkout", "--orphan", "unrelated-ops")
+		gittest.Git(t, repo, "commit", "--allow-empty", "-m", "unrelated tip")
+		gittest.Git(t, repo, "push", "--force", "origin", "HEAD:refs/heads/_armature")
+		gittest.Git(t, repo, "checkout", "main")
+	}
+
+	type want struct {
+		exit       int
+		payloadKey string // empty → expect error envelope
+		substr     string
+	}
+	cases := []struct {
+		name string
+		args []string
+		want want
+	}{
+		{
+			name: "snapshot_ok_json",
+			args: []string{"ops-backup", "snapshot", "--output", okBundle, "--repo", repo, "--format", "json", "--non-interactive"},
+			want: want{exit: 0, payloadKey: "snapshots", substr: `"status"`},
+		},
+		{
+			name: "snapshot_ok_agent",
+			args: []string{"ops-backup", "snapshot", "--output", filepath.Join(dir, "ok-agent.bundle"), "--repo", repo, "--format", "agent", "--non-interactive"},
+			want: want{exit: 0, payloadKey: "snapshots", substr: `"status"`},
+		},
+		{
+			name: "snapshot_refresh_fail",
+			args: func() []string {
+				bare := gittest.InitRepo(t)
+				gittest.Git(t, bare, "commit", "--allow-empty", "-m", "init")
+				return []string{"ops-backup", "snapshot", "--output", filepath.Join(dir, "fail.bundle"), "--repo", bare, "--format", "json", "--non-interactive"}
+			}(),
+			want: want{exit: 1, substr: `"OPS-BACKUP-1"`},
+		},
+		{
+			name: "verify_ok_json",
+			args: []string{"ops-backup", "verify", okBundle, "--repo", repo, "--format", "json", "--non-interactive"},
+			want: want{exit: 0, payloadKey: "verifications", substr: `"ok"`},
+		},
+		{
+			name: "verify_ok_agent",
+			args: []string{"ops-backup", "verify", okBundle, "--repo", repo, "--format", "agent", "--non-interactive"},
+			want: want{exit: 0, payloadKey: "verifications", substr: `"ok"`},
+		},
+		{
+			name: "verify_bad_bundle",
+			args: func() []string {
+				bad := filepath.Join(dir, "not-a-bundle")
+				require.NoError(t, os.WriteFile(bad, []byte("nope"), 0o644))
+				return []string{"ops-backup", "verify", bad, "--repo", repo, "--format", "json", "--non-interactive"}
+			}(),
+			want: want{exit: 1, substr: `"OPS-BACKUP-1"`},
+		},
+		{
+			name: "restore_plan_ff_json",
+			args: []string{"ops-backup", "restore-plan", "--from", okBundle, "--repo", repo, "--format", "json", "--non-interactive"},
+			want: want{exit: 0, payloadKey: "plans", substr: "fast-forward"},
+		},
+		{
+			name: "restore_plan_diverge_json",
+			args: []string{"ops-backup", "restore-plan", "--from", divergeBundle, "--repo", repo, "--format", "json", "--non-interactive"},
+			want: want{exit: 1, payloadKey: "plans", substr: "diverge→_armature-recovered"},
+		},
+		{
+			name: "restore_plan_diverge_agent",
+			args: []string{"ops-backup", "restore-plan", "--from", divergeBundle, "--repo", repo, "--format", "agent", "--non-interactive"},
+			want: want{exit: 1, payloadKey: "plans", substr: "diverge→_armature-recovered"},
+		},
+		{
+			name: "restore_plan_bad_bundle",
+			args: func() []string {
+				bad := filepath.Join(dir, "plan-bad.bundle")
+				require.NoError(t, os.WriteFile(bad, []byte("nope"), 0o644))
+				return []string{"ops-backup", "restore-plan", "--from", bad, "--repo", repo, "--format", "json", "--non-interactive"}
+			}(),
+			want: want{exit: 1, substr: `"OPS-BACKUP-1"`},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout := new(bytes.Buffer)
+			stderr := new(bytes.Buffer)
+			code := executeThenHandleRootError(t, stdout, stderr, tc.args...)
+			assert.Equal(t, tc.want.exit, code, "stderr=%s stdout=%s", stderr.String(), stdout.String())
+			assertExactlyOneJSONValue(t, stdout.String())
+			assert.Contains(t, stdout.String(), tc.want.substr)
+			if tc.want.payloadKey != "" {
+				var env map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(stdout.Bytes(), &env))
+				require.Contains(t, env, tc.want.payloadKey)
+				require.Contains(t, env, "help")
+				require.NotContains(t, env, "error", "protocol report must not be a Command Failure envelope")
+				if tc.want.exit != 0 {
+					assert.Contains(t, string(env["help"]), "_armature-recovered")
+				}
+			} else {
+				var env map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(stdout.Bytes(), &env))
+				require.Contains(t, env, "error")
+			}
+		})
+	}
 }

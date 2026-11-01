@@ -762,14 +762,14 @@ not automate on a schedule):
 
 What `arm ops-backup` does guarantee when it exits 0:
 
-- `snapshot` refreshed the published tip with the same
-  `+refs/heads/_armature:<dst>` force-fetch class as
-  `FetchTrackingRefWithoutMovingHEAD`, into a **per-run** destination under
-  `refs/remotes/origin/_armature-run/<nonce>` (never the shared
-  `refs/remotes/origin/_armature` tip), then wrote a bundle that advertises
-  restorable `refs/heads/_armature`. Refresh failure is fail-closed (no
-  bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
-  runs on one clone all succeed.
+- `snapshot` refreshed the published tip with
+  `FetchBranchToRef` (`git fetch --refmap= origin +refs/heads/_armature:<dst>`
+  so the remote's configured refspec cannot also touch the shared tip), into
+  a **per-run** destination under `refs/remotes/origin/_armature-run/<nonce>`
+  (never writes `refs/remotes/origin/_armature`), then wrote a bundle that
+  advertises restorable `refs/heads/_armature`. Refresh failure is fail-closed
+  (no bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
+  runs on one clone all succeed even while the origin tip keeps moving.
 - `verify` confirms that advertisement is present and the object pack is
   restorable (fetch into a throwaway bare — not header-only `list-heads`).
 - `restore-plan` loads into a per-run scratch under
@@ -780,8 +780,10 @@ What `arm ops-backup` does guarantee when it exits 0:
   no print-then-delete scratch ref. An absent `origin/_armature` is
   `missing`; unreachable origin stays fail-closed. It does not apply the
   publish (`--apply` is not in v1). Structured json/agent output for all
-  three verbs is the N2 envelope `{count, <payload>[], help[]}`. Leftover
-  per-run refs or temp dirs from a crashed prior run never break the next.
+  three verbs is exactly one N2 envelope `{count, <payload>[], help[]}` per
+  invocation (diverge included: plan help carries escalation; exit 1 via
+  ADR 0020 §7 — no second error envelope). Leftover per-run refs or temp
+  dirs from a crashed prior run never break the next.
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 
@@ -806,7 +808,7 @@ Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 **Synopsis:**
 `arm ops-backup restore-plan --from <bundle>`
 
-Prints disposition and exits non-zero on diverge (`OPS-BACKUP-2`).
+Prints disposition and exits non-zero on diverge (plan envelope + ADR 0020 §7 protocol exit; no second error envelope).
 
 **Flags:**
 - `--from string`: Bundle path (required).

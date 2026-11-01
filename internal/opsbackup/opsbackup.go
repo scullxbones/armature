@@ -17,8 +17,10 @@ const (
 	// OpsBranch is the unprotected orphan coordination branch.
 	OpsBranch = "_armature"
 	// TrackingRef is the conventional published tip name
-	// (refs/remotes/origin/_armature). Ops-backup never stages into it:
-	// snapshot and restore-plan fetch into per-run refs under runTrackingNS.
+	// (refs/remotes/origin/_armature). Ops-backup never writes it: snapshot and
+	// restore-plan fetch into per-run refs under runTrackingNS via
+	// FetchBranchToRef (empty --refmap= so the remote's configured refspec
+	// cannot also update this shared tip under concurrency).
 	TrackingRef = "refs/remotes/origin/_armature"
 	// LiveRef is the local ops branch. Snapshot must never rewind it.
 	LiveRef = "refs/heads/_armature"

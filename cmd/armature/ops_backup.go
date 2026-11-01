@@ -168,13 +168,13 @@ func newOpsBackupRestorePlanCmd() *cobra.Command {
 			}
 			if err != nil {
 				if errors.Is(err, opsbackup.ErrDiverge) {
+					// Plan envelope (disposition + escalation help) is the
+					// protocol payload; exit non-zero without a second
+					// Command Failure envelope (ADR 0020 §7 / skipCommandFailure).
 					if writeErr := writePlan(); writeErr != nil {
 						return writeErr
 					}
-					return armerrors.Map("OPS-BACKUP-2", err.Error(), []string{
-						"push recovered tip only to refs/heads/_armature-recovered",
-						"escalate; do not force-push origin/_armature",
-					}, err)
+					return skipCommandFailure(err)
 				}
 				return armerrors.Map("OPS-BACKUP-1", err.Error(), []string{"arm ops-backup restore-plan --from <bundle>"}, err)
 			}

@@ -1966,11 +1966,19 @@ func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
 
 	c := adapters.New(repo)
+	// Delete the tracking tip created by push -u so we can prove the per-run
+	// fetch does not recreate refs/remotes/origin/_armature via remote refspec.
+	gittest.Git(t, repo, "update-ref", "-d", "refs/remotes/origin/_armature")
 	dst := "refs/remotes/origin/_armature-run/proof"
 	require.NoError(t, c.FetchBranchToRef("_armature", dst))
 	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", dst))
-	// Shared tracking tip must not be required / rewritten by the per-run helper.
-	before := runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature")
+	_, trackErr := adapters.NonInteractiveGitCommand(repo, "rev-parse", "refs/remotes/origin/_armature").CombinedOutput()
+	require.Error(t, trackErr, "per-run fetch must not create shared refs/remotes/origin/_armature")
+
+	// Intentional tracking refresh still works (FetchTrackingRefWithoutMovingHEAD).
+	require.NoError(t, c.FetchTrackingRefWithoutMovingHEAD("_armature"))
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature"))
+	before := tip
 	require.NoError(t, c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proof2"))
 	assert.Equal(t, before, runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature"))
 }

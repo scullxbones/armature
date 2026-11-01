@@ -1,6 +1,7 @@
 package opsbackup_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -810,4 +811,143 @@ func TestOpsBackup_ParallelAllVerbsOverlap_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	for i, e := range errs {
 		require.NoErrorf(t, e, "parallel verb slot %d", i)
 	}
+}
+
+func TestOpsBackup_ParallelMovingTip_NoSharedTrackingLock_REQ_TOPTIER_S12_T1(t *testing.T) {
+	t.Parallel()
+	repo, origin, tip0 := setupOpsOrigin(t)
+	c := adapters.New(repo)
+
+	// Prove the shared tracking tip stays absent: delete the push -u tip and
+	// require FetchBranchToRef (--refmap=) never recreates it under load.
+	gittest.Git(t, repo, "update-ref", "-d", "refs/remotes/origin/_armature")
+
+	dir := t.TempDir()
+	seed := filepath.Join(dir, "seed.bundle")
+	seedRes, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: seed})
+	require.NoError(t, err)
+	require.Equal(t, tip0, seedRes.Tip)
+
+	gitQuiet := func(cwd string, args ...string) (string, error) {
+		out, cmdErr := adapters.NonInteractiveGitCommand(cwd, args...).CombinedOutput()
+		if cmdErr != nil {
+			return "", fmt.Errorf("git %v: %w\n%s", args, cmdErr, out)
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+	bundleTipQuiet := func(bundle string) (string, error) {
+		out, cmdErr := adapters.NonInteractiveGitCommand(repo, "bundle", "list-heads", bundle).CombinedOutput()
+		if cmdErr != nil {
+			return "", fmt.Errorf("bundle list-heads: %w\n%s", cmdErr, out)
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			fields := strings.Fields(strings.TrimSpace(line))
+			if len(fields) >= 2 && fields[1] == opsbackup.AdvertisedRef {
+				return fields[0], nil
+			}
+		}
+		return "", fmt.Errorf("bundle %s does not advertise %s", bundle, opsbackup.AdvertisedRef)
+	}
+
+	stop := make(chan struct{})
+	var moverErr error
+	var moverWg sync.WaitGroup
+	moverWg.Add(1)
+	go func() {
+		defer moverWg.Done()
+		parent := tip0
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			tree, treeErr := gitQuiet(origin, "rev-parse", parent+"^{tree}")
+			if treeErr != nil {
+				moverErr = treeErr
+				return
+			}
+			next, commitErr := gitQuiet(origin, "commit-tree", tree, "-p", parent, "-m", fmt.Sprintf("moving tip %d", i))
+			if commitErr != nil {
+				moverErr = commitErr
+				return
+			}
+			if _, updErr := gitQuiet(origin, "update-ref", "refs/heads/_armature", next); updErr != nil {
+				moverErr = updErr
+				return
+			}
+			parent = next
+		}
+	}()
+
+	const workers = 12
+	var wg sync.WaitGroup
+	errs := make([]error, workers)
+	reportedTips := make([]string, workers)
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			switch i % 3 {
+			case 0:
+				out := filepath.Join(dir, fmt.Sprintf("snap-%d.bundle", i))
+				res, snapErr := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+				if snapErr != nil {
+					errs[i] = snapErr
+					return
+				}
+				reportedTips[i] = res.Tip
+				got, tipErr := bundleTipQuiet(out)
+				if tipErr != nil {
+					errs[i] = tipErr
+					return
+				}
+				if got != res.Tip {
+					errs[i] = fmt.Errorf("bundle tip %s != reported %s", got, res.Tip)
+				}
+			case 1:
+				if vErr := opsbackup.Verify(c, seed); vErr != nil {
+					errs[i] = vErr
+				}
+			default:
+				plan, pErr := opsbackup.PlanRestore(c, seed)
+				if pErr != nil && !errors.Is(pErr, opsbackup.ErrDiverge) {
+					errs[i] = pErr
+					return
+				}
+				if plan.Recovered == "" {
+					errs[i] = fmt.Errorf("restore-plan returned empty recovered tip")
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(stop)
+	moverWg.Wait()
+	require.NoError(t, moverErr, "origin tip mover failed")
+
+	for i, e := range errs {
+		if e != nil {
+			require.NotContains(t, e.Error(), "cannot lock ref", "slot %d: %v", i, e)
+		}
+		require.NoErrorf(t, e, "parallel moving-tip verb slot %d", i)
+	}
+	finalTip := gitOut(t, origin, "rev-parse", "refs/heads/_armature")
+	oc := adapters.New(origin)
+	for i, tip := range reportedTips {
+		if tip == "" {
+			continue
+		}
+		if tip == finalTip || tip == tip0 {
+			continue
+		}
+		anc, ancErr := oc.IsAncestor(tip, finalTip)
+		require.NoError(t, ancErr)
+		require.Truef(t, anc, "snapshot slot %d tip %s must be on the moving origin/_armature history (final=%s)", i, tip, finalTip)
+	}
+
+	_, trackErr := adapters.NonInteractiveGitCommand(repo, "rev-parse", "refs/remotes/origin/_armature").CombinedOutput()
+	require.Error(t, trackErr, "refs/remotes/origin/_armature must stay absent before/after")
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"), "per-run tracking cleaned up")
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/backup/_armature-run"), "per-run scratch cleaned up")
 }

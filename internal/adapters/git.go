@@ -777,6 +777,12 @@ func (c *Client) FetchTrackingRefWithoutMovingHEAD(branch string) error {
 // FetchBranchToRef force-fetches origin refs/heads/<branch> into dstRef without
 // moving HEAD. dstRef is the full destination ref (caller-chosen) so concurrent
 // ops-backup runs can avoid sharing refs/remotes/origin/_armature.
+//
+// Empty --refmap= disables the remote's configured refspec: without it,
+// `git fetch origin +refs/heads/_armature:<per-run>` also updates
+// refs/remotes/origin/_armature and races under concurrency ("cannot lock ref").
+// The explicit refspec still writes dstRef (including when dstRef is the
+// conventional tracking tip via FetchTrackingRefWithoutMovingHEAD).
 func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	branch = strings.TrimSpace(branch)
 	dstRef = strings.TrimSpace(dstRef)
@@ -786,7 +792,7 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	spec := "+refs/heads/" + branch + ":" + dstRef
-	cmd := c.cmdContext(fetchCtx, "fetch", "origin", spec)
+	cmd := c.cmdContext(fetchCtx, "fetch", "--refmap=", "origin", spec)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		wrapped := fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
 		if remoteRefMissingText(string(out)) || remoteRefMissingText(err.Error()) {
