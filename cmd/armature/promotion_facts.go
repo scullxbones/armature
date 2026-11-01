@@ -22,3 +22,28 @@ func promotionIssueFacts(issue materialize.Issue) promotion.IssueFacts {
 	}
 	return f
 }
+
+func promotionGraphFromIndex(index materialize.Index) promotion.Graph {
+	g := make(promotion.Graph, len(index))
+	for id, entry := range index {
+		g[id] = promotion.Node{
+			Status:   entry.Status,
+			Children: append([]string(nil), entry.Children...),
+		}
+	}
+	return g
+}
+
+func promotionGraphFromIssues(issues map[string]*materialize.Issue) promotion.Graph {
+	g := make(promotion.Graph, len(issues))
+	for id, issue := range issues {
+		if issue == nil {
+			continue
+		}
+		g[id] = promotion.Node{
+			Status:   issue.Status,
+			Children: append([]string(nil), issue.Children...),
+		}
+	}
+	return g
+}

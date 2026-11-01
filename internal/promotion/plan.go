@@ -27,11 +27,13 @@ const (
 
 // Input is the borrowed snapshot Evaluate needs. PriorOps is the source of
 // attestations, post-delivery overrides, and promotion-check dedup.
+// Graph supplies descendant status/children for not-leaf remediations.
 type Input struct {
 	Issue       IssueFacts
 	PriorOps    []ops.Op
 	Integration string
 	PR          string
+	Graph       Graph
 }
 
 type Result struct {
@@ -49,10 +51,10 @@ type Result struct {
 }
 
 type Error struct {
-	IssueID  string
-	Kind     string
-	Msg      string
-	Children []string // KindNotLeaf: children to promote before the parent rolls up
+	IssueID string
+	Kind    string
+	Msg     string
+	Graph   Graph // KindNotLeaf: tree for RemediationsForIssue
 }
 
 func (e *Error) Error() string {
@@ -62,29 +64,28 @@ func (e *Error) Error() string {
 	return e.Msg
 }
 
-func (e *Error) RecoveryArgv() string {
+// RecoveryActions returns one command per next_actions entry. Never joins
+// with "; " — callers must pass the slice through to the failure envelope.
+func (e *Error) RecoveryActions() []string {
 	if e == nil {
-		return "arm doctor"
+		return []string{"arm doctor"}
 	}
 	if e.Kind == KindNotLeaf {
-		return NotLeafRecovery(e.Children)
+		acts := RemediationsForIssue(e.IssueID, e.Graph)
+		if len(acts) == 0 {
+			if e.IssueID != "" {
+				return []string{ChildrenMergedReopenArgv(e.IssueID)}
+			}
+			return []string{"arm doctor"}
+		}
+		return acts
 	}
-	return RecoveryArgv(e.IssueID, e.Kind)
+	return []string{RecoveryArgv(e.IssueID, e.Kind)}
 }
 
-// NotLeafRecovery points at children. Never recommends arm merged on the
-// non-leaf itself — promotion.Evaluate rejects that shape as not-leaf.
-func NotLeafRecovery(children []string) string {
-	if len(children) == 0 {
-		return "arm doctor"
-	}
-	sorted := append([]string(nil), children...)
-	slices.Sort(sorted)
-	parts := make([]string, 0, len(sorted))
-	for _, c := range sorted {
-		parts = append(parts, "arm merged --issue "+c)
-	}
-	return strings.Join(parts, "; ")
+// RecoveryArgv is the first recovery action (sync singular next_action).
+func (e *Error) RecoveryArgv() string {
+	return FirstRemediation(e.RecoveryActions())
 }
 
 func RecoveryArgv(issueID, kind string) string {
@@ -96,7 +97,7 @@ func RecoveryArgv(issueID, kind string) string {
 	case KindNotOnTarget:
 		return "arm merged --issue " + issueID
 	case KindNotLeaf:
-		// Without children, fail closed — never self-referential arm merged.
+		// Without a graph, fail closed — never self-referential arm merged.
 		return "arm doctor"
 	default:
 		return "arm doctor"
@@ -112,15 +113,18 @@ func Evaluate(git *adapters.Client, in Input) Result {
 		return res
 	}
 	if len(in.Issue.Children) > 0 {
-		children := append([]string(nil), in.Issue.Children...)
-		slices.Sort(children)
 		res.Kind = KindNotLeaf
-		res.Recovery = NotLeafRecovery(children)
+		acts := RemediationsForIssue(id, in.Graph)
+		if len(acts) == 0 {
+			res.Recovery = ChildrenMergedReopenArgv(id)
+		} else {
+			res.Recovery = FirstRemediation(acts)
+		}
 		res.Err = &Error{
-			IssueID:  id,
-			Kind:     KindNotLeaf,
-			Msg:      "issue " + id + " is not a leaf; parents roll up when children are merged",
-			Children: children,
+			IssueID: id,
+			Kind:    KindNotLeaf,
+			Msg:     "issue " + id + " is not a leaf; parents roll up when children are merged",
+			Graph:   in.Graph,
 		}
 		return res
 	}

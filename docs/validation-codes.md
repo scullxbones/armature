@@ -712,17 +712,18 @@ git -C .armature rebase origin/_armature
 
 **Severity:** Warning. Plain `arm doctor` still exits 0; `--strict` promotes. Not part of `doctor --fix`.
 
-**Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check), but remediation is shape-aware: `arm merged` only succeeds on leaves (`promotion.Evaluate` rejects non-leaves as `not-leaf`).
+**Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check). `--explain` remediations share `promotion.RemediationsForIssue` with MERGED-1 / sync.
 
-**Fix:** For **leaves**, promote with the normal merged path when content is on main, or reopen/investigate if the parent rollup was premature. For **non-leaves**, promote unmerged children first; the parent rolls up when children are merged — do not run `arm merged` on the non-leaf:
+**Fix:** Tree-walk pending descendants (never `arm merged` on a non-leaf):
 ```bash
-# leaf item:
-arm merged --issue <leaf-id>
-# or, if the leaf should not stay done:
-arm reopen --issue <leaf-id>
+# done unmerged leaf (same truth as sync legacy):
+arm delivery record --issue <leaf-id> --base <sha> --tip <sha>
 
-# non-leaf item:
-arm merged --issue <unmerged-child-id>   # repeat per unmerged child
+# open / unfinished leaf:
+arm claim --issue <open-id>
+
+# non-leaf whose children are all merged:
+arm reopen --issue <non-leaf-id>
 ```
 
 ---

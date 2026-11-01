@@ -334,11 +334,13 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 	if integration == "" {
 		integration = ctx.Config.IntegrationBranchOrDefault()
 	}
+	graph := promotionGraphFromIndex(index)
 	result := promotion.Evaluate(git, promotion.Input{
 		Issue:       promotionIssueFacts(*issue),
 		PriorOps:    allOps,
 		Integration: integration,
 		PR:          pr,
+		Graph:       graph,
 	})
 	if result.AppendCheck || result.Promote {
 		state := mustState(cmd)
@@ -388,11 +390,12 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 					PriorOps:    freshOps,
 					Integration: integration,
 					PR:          pr,
+					Graph:       graph,
 				})
 				if fresh.Err != nil {
 					return fresh.Err
 				}
-				return &promotion.Error{IssueID: issueID, Kind: fresh.Kind, Msg: "promotion check did not pass for " + issueID}
+				return &promotion.Error{IssueID: issueID, Kind: fresh.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph}
 			}
 		}
 	}
@@ -400,7 +403,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		if result.Err != nil {
 			return result.Err
 		}
-		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID}
+		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph}
 	}
 
 	if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {
@@ -445,7 +448,7 @@ func mapMergedError(err error) error {
 	}
 	var promo *promotion.Error
 	if errors.As(err, &promo) {
-		return armerrors.Map(codeMerged1, promo.Error(), []string{promo.RecoveryArgv()}, err)
+		return armerrors.Map(codeMerged1, promo.Error(), promo.RecoveryActions(), err)
 	}
 	msg := err.Error()
 	switch {

@@ -16,6 +16,7 @@ import (
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/spf13/cobra"
 )
 
@@ -92,7 +93,7 @@ func newDoctorCmd() *cobra.Command {
 			if explain {
 				// Run already rematerialized; load index for shape-aware remediations
 				// (e.g. D14 leaf vs non-leaf). Fail closed if explain cannot classify.
-				explainIndex, err = materialize.LoadIndex(filepath.Join(appCtx.StateDir, "index.json"))
+				explainIndex, err = newSnapshotStore(appCtx).ReadIndex()
 				if err != nil {
 					return mapDoctorLoadError(err)
 				}
@@ -201,7 +202,7 @@ type doctorCheckRow struct {
 	Items        []string        `json:"items,omitempty"`
 	VerboseItems []string        `json:"verbose_items,omitempty"`
 	Explanation  string          `json:"explanation,omitempty"`
-	Suggested    string          `json:"suggested,omitempty"`
+	Suggested    []string        `json:"suggested,omitempty"`
 }
 
 func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, index materialize.Index) error {
@@ -242,7 +243,9 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 		if explain && f.Severity != doctor.SeverityOK {
 			explanation, suggested := doctorCheckGuidanceFor(f, index)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Explanation: %s\n", explanation)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", suggested)
+			for _, s := range suggested {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", s)
+			}
 		}
 		items := f.Items
 		if verbose && len(f.VerboseItems) > 0 {
@@ -255,124 +258,75 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 }
 
 // doctorCheckGuidance is the shape-agnostic coverage entry point (empty finding).
-func doctorCheckGuidance(check string) (explanation, suggested string) {
+func doctorCheckGuidance(check string) (explanation string, suggested []string) {
 	return doctorCheckGuidanceFor(doctor.Finding{Check: check}, nil)
 }
 
-func doctorCheckGuidanceFor(f doctor.Finding, index materialize.Index) (explanation, suggested string) {
+func doctorCheckGuidanceFor(f doctor.Finding, index materialize.Index) (explanation string, suggested []string) {
 	switch f.Check {
 	case "D1":
 		return "Git commits reference issue IDs that are not done or merged, so history and the issue graph have drifted.",
-			"arm transition <issue-id> --to done"
+			[]string{"arm transition <issue-id> --to done"}
 	case "D2":
 		return "A worker's claim TTL expired without a heartbeat, which can block other workers from taking the issue.",
-			"arm doctor --fix"
+			[]string{"arm doctor --fix"}
 	case "D3":
 		return "Ops reference issue IDs that are not in the materialized graph, usually after a revert or a truncated log.",
-			"arm log --json"
+			[]string{"arm log --json"}
 	case "D4":
 		return "A child issue names a missing parent, or an issue names itself as its parent (self-parent). D5 only walks blocked_by cycles.",
-			"arm reparent --issue <child-id> --parent <parent-id>"
+			[]string{"arm reparent --issue <child-id> --parent <parent-id>"}
 	case "D5":
 		return "A blocked_by cycle makes every issue in the loop permanently unready.",
-			"arm unlink --source <issue-id> --dep <issue-id>"
+			[]string{"arm unlink --source <issue-id> --dep <issue-id>"}
 	case "D6":
 		return "Uncited issues have no documented origin, so they cannot be promoted until they cite a source or accept citation risk.",
-			"arm sources link <issue-id> --source-id <source-uuid>"
+			[]string{"arm sources link <issue-id> --source-id <source-uuid>"}
 	case "D7":
 		return "Ops were excluded because the log file name does not match the worker ID recorded in the op.",
-			"mv .armature/ops/<expected>.log .armature/ops/<got>.log"
+			[]string{"mv .armature/ops/<expected>.log .armature/ops/<got>.log"}
 	case "D8":
 		return "Dirty or untracked paths sit outside the active task's declared scope.",
-			"arm scope-rename or remove the stray path"
+			[]string{"arm scope-rename or remove the stray path"}
 	case "D9":
 		return "A checkout lives under .worktrees/ with no issue binding, so it is an unmanaged stray worktree.",
-			"arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>"
+			[]string{"arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>"}
 	case "D10":
 		return "config.json failed a strict decode or a present field is out of range.",
-			"edit .armature/config.json and re-run arm doctor"
+			[]string{"edit .armature/config.json and re-run arm doctor"}
 	case "D11":
 		return "origin/_armature is missing, local-only ops are stale past local_only_ops_stale_hours, or the ops remote tip could not be verified.",
-			"arm push-ops"
+			[]string{"arm push-ops"}
 	case "D12":
 		return "The ops worktree is behind origin/_armature so the DAG cannot " +
 				"be confirmed fresh, or origin/_armature could not be fetched so " +
 				"the lag number may be stale. Warnings are ignored; behind is an error.",
-			"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"
+			[]string{"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"}
 	case "D14":
 		return d14Guidance(f, index)
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
-			"see docs/validation-codes.md"
+			[]string{"see docs/validation-codes.md"}
 	}
 }
 
-const (
-	d14Explanation = "An issue is still done while its parent is already merged — a stuck " +
-		"done→merged promotion. Merged-under-cancelled parents are not this check."
-	// Shape-agnostic fallback never recommends arm merged on an unclassified item.
-	d14SuggestedFallback = "promote unmerged children first; reserve arm merged --issue <leaf-id> for leaves only"
-)
+const d14Explanation = "An issue is still done while its parent is already merged — a stuck " +
+	"done→merged promotion. Merged-under-cancelled parents are not this check."
 
-// d14Guidance keeps the broad D14 warning but only recommends arm merged for
-// leaves. Non-leaves point at unmerged children — promotion.Evaluate rejects
-// arm merged on parents as not-leaf.
-func d14Guidance(f doctor.Finding, index materialize.Index) (explanation, suggested string) {
+// d14Guidance keeps the broad D14 warning and uses the shared tree-walk
+// remediations (same truth as MERGED-1 / sync). suggested is one command (or
+// one guidance sentence) — never a "; "-joined argv list.
+func d14Guidance(f doctor.Finding, index materialize.Index) (explanation string, suggested []string) {
 	explanation = d14Explanation
 	if len(f.Items) == 0 || index == nil {
-		return explanation, d14SuggestedFallback
+		return explanation, []string{promotion.FallbackGuidance}
 	}
 
-	var leafIDs []string
-	var childCmds []string
-	seenChild := map[string]bool{}
-	for _, item := range f.Items {
-		id, _, ok := strings.Cut(item, " -> ")
-		if !ok || id == "" {
-			id = item
-		}
-		entry, ok := index[id]
-		if !ok || len(entry.Children) == 0 {
-			leafIDs = append(leafIDs, id)
-			continue
-		}
-		for _, childID := range entry.Children {
-			childEntry, childOK := index[childID]
-			if childOK && childEntry.Status == "merged" {
-				continue // already merged — not a recovery target
-			}
-			if seenChild[childID] {
-				continue
-			}
-			seenChild[childID] = true
-			childCmds = append(childCmds, "arm merged --issue "+childID)
-		}
-	}
-
-	sort.Strings(leafIDs)
-	sort.Strings(childCmds)
-
-	var parts []string
-	if len(childCmds) > 0 {
-		parts = append(parts, "promote unmerged children first: "+strings.Join(childCmds, "; "))
-	} else if hasNonLeafD14Item(f, index) {
-		// Non-leaf whose children are already merged — rollup/reopen, not arm merged on parent.
-		parts = append(parts, "children are merged; reopen or investigate the non-leaf rollup — do not run arm merged on the non-leaf")
-	}
-	if len(leafIDs) > 0 {
-		leafCmds := make([]string, 0, len(leafIDs))
-		for _, id := range leafIDs {
-			leafCmds = append(leafCmds, "arm merged --issue "+id)
-		}
-		parts = append(parts, strings.Join(leafCmds, "; "))
-	}
-	if len(parts) == 0 {
-		return explanation, d14SuggestedFallback
-	}
-	return explanation, strings.Join(parts, "; ")
-}
-
-func hasNonLeafD14Item(f doctor.Finding, index materialize.Index) bool {
+	graph := promotionGraphFromIndex(index)
+	seenCmd := map[string]bool{}
+	var cmds []string
+	var sawNonLeaf bool
+	var sawNonLeafAllMerged bool
 	for _, item := range f.Items {
 		id, _, ok := strings.Cut(item, " -> ")
 		if !ok || id == "" {
@@ -380,10 +334,29 @@ func hasNonLeafD14Item(f doctor.Finding, index materialize.Index) bool {
 		}
 		entry, ok := index[id]
 		if ok && len(entry.Children) > 0 {
-			return true
+			sawNonLeaf = true
+		}
+		acts := promotion.RemediationsForIssue(id, graph)
+		if len(acts) == 0 && ok && len(entry.Children) > 0 {
+			sawNonLeafAllMerged = true
+			continue
+		}
+		for _, cmd := range acts {
+			if seenCmd[cmd] {
+				continue
+			}
+			seenCmd[cmd] = true
+			cmds = append(cmds, cmd)
 		}
 	}
-	return false
+	sort.Strings(cmds)
+	if len(cmds) > 0 {
+		return explanation, cmds
+	}
+	if sawNonLeafAllMerged || sawNonLeaf {
+		return explanation, []string{promotion.ChildrenMergedGuidance}
+	}
+	return explanation, []string{promotion.FallbackGuidance}
 }
 
 func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error {
