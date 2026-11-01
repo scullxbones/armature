@@ -510,8 +510,9 @@ binding the worktree to its issue or removing the stray checkout.
 **D10 — Config health.** `.armature/config.json` must decode strictly (unknown
 fields rejected by name) and every present field must be in range. A missing
 file fails open. Malformed JSON, unknown keys, a zero `low_stakes_push_threshold`,
-an empty hook/gate executable, or a `default_ttl` that would overflow claim
-staleness arithmetic are errors, so `arm doctor` exits non-zero.
+an empty hook/gate executable, a `default_ttl` that would overflow claim
+staleness arithmetic, or a `local_only_ops_stale_hours` that overflows duration
+conversion are errors, so `arm doctor` exits non-zero.
 
 **D11 — Ops remote tracking (G2.2).** When the ops worktree exists, `arm doctor`
 fetches `_armature` into a per-run throwaway ref (does not rewrite shared

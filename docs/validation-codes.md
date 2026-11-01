@@ -631,7 +631,7 @@ arm doctor --format json
 
 **Check:** `.armature/config.json` must decode strictly (unknown fields rejected) and every present field must be in range.
 
-**Trigger:** Malformed JSON, unknown keys, or out-of-range present fields (including a present `0` for `default_ttl`, `token_budget`, `low_stakes_push_threshold`, or `local_only_ops_stale_hours`).
+**Trigger:** Malformed JSON, unknown keys, or out-of-range present fields (including a present `0` for `default_ttl`, `token_budget`, `low_stakes_push_threshold`, or `local_only_ops_stale_hours`, and duration overflow for `default_ttl` / `local_only_ops_stale_hours`).
 
 **Message:** `Config.json failed strict decode or range validation` (or `Config.json could not be read`)
 
@@ -647,13 +647,13 @@ arm doctor --format json
 
 **Check:** Verifies `origin/_armature` with a fresh per-run fetch into a throwaway run ref (does not rewrite shared `refs/remotes/origin/_armature`), then classifies missing remote tip, stale unpublished local-only ops, healthy tip, or could-not-verify.
 
-**Trigger:** Missing `origin/_armature`; local-only `_armature` commits at least `local_only_ops_stale_hours` old (default 24h when omitted); or fetch/resolve/rev-list/age probe failure. Unreadable config that would supply the stale window surfaces a warning that D11 fell back to the 24h default (D10 also errors on the same file).
+**Trigger:** Missing `origin/_armature`; local-only `_armature` commits at least `local_only_ops_stale_hours` old (default 24h when omitted); fetch/resolve/rev-list/age probe failure; or configured `local_only_ops_stale_hours` that fails overflow-checked duration conversion. Unreadable config that would supply the stale window surfaces a warning that D11 fell back to the 24h default (D10 also errors on the same file). Conversion overflow is an error finding — never a silent 24h default.
 
-**Message:** `Ops branch has no verified remote tracking tip (origin/_armature missing)` / `Local-only ops on _armature are stale (...)` / `Could not verify ops remote tracking tip: ...` / config-fallback warning when applicable.
+**Message:** `Ops branch has no verified remote tracking tip (origin/_armature missing)` / `Local-only ops on _armature are stale (...)` / `Could not verify ops remote tracking tip: ...` / `Invalid local_only_ops_stale_hours: ...` / config-fallback warning when applicable.
 
-**Items:** Remediation `arm push-ops` on missing/stale; probe detail on could-not-verify.
+**Items:** Remediation `arm push-ops` on missing/stale; probe/conversion detail on errors.
 
-**Severity:** Warning for missing/stale (and config-fallback); error for could-not-verify. Missing ops worktree skips OK. Not part of `doctor --fix`.
+**Severity:** Warning for missing/stale (and config-fallback); error for could-not-verify and duration conversion failure. Missing ops worktree skips OK. Not part of `doctor --fix`.
 
 **Context:** D11 is disaster-recovery / unpublished-ops coverage. Do not confuse with D12 (read-time lag behind a reachable tip). `ops-backup snapshot|restore-plan` only cover the published tip and do not preserve unpublished local-only commits.
 

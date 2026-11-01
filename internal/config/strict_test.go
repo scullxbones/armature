@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -103,8 +104,130 @@ func TestValidatePresentFieldsRejectsZeroLocalOnlyOpsStaleHours(t *testing.T) {
 func TestLocalOnlyOpsStaleAfterDefaultAndOverride(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 24*time.Hour, (Config{}).LocalOnlyOpsStaleAfter())
-	assert.Equal(t, 6*time.Hour, (Config{LocalOnlyOpsStaleHours: 6}).LocalOnlyOpsStaleAfter())
+	got, err := (Config{}).LocalOnlyOpsStaleAfter()
+	require.NoError(t, err)
+	assert.Equal(t, 24*time.Hour, got)
+	got, err = (Config{LocalOnlyOpsStaleHours: 6}).LocalOnlyOpsStaleAfter()
+	require.NoError(t, err)
+	assert.Equal(t, 6*time.Hour, got)
+}
+
+func TestDurationConfigFields_D10AndConsumerAgree_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	type fieldCase struct {
+		name    string
+		jsonKey string
+		unit    time.Duration
+		// consumer converts a Config with the field set (no omit-default).
+		consumer func(n int) (time.Duration, error)
+		// d10RejectSubstring is required in ValidatePresentFields output when rejecting.
+		d10RejectSubstring string
+	}
+
+	maxSafeMinutes := math.MaxInt64 / int64(time.Minute)
+	// Idle window also bounds default_ttl; keep the consumer/D10 pair aligned.
+	if doubled := int64(math.MaxInt64 / (2 * 60)); doubled < maxSafeMinutes {
+		maxSafeMinutes = doubled
+	}
+	maxSafeHours := math.MaxInt64 / int64(time.Hour)
+
+	fields := []fieldCase{
+		{
+			name:    "default_ttl_minutes",
+			jsonKey: "default_ttl",
+			unit:    time.Minute,
+			consumer: func(n int) (time.Duration, error) {
+				return durationFromCount(int64(TTLMinutes(n)), time.Minute)
+			},
+			d10RejectSubstring: "default_ttl",
+		},
+		{
+			name:    "local_only_ops_stale_hours",
+			jsonKey: "local_only_ops_stale_hours",
+			unit:    time.Hour,
+			consumer: func(n int) (time.Duration, error) {
+				return (Config{LocalOnlyOpsStaleHours: n}).LocalOnlyOpsStaleAfter()
+			},
+			d10RejectSubstring: "local_only_ops_stale_hours",
+		},
+	}
+
+	for _, field := range fields {
+		maxSafe := maxSafeHours
+		if field.unit == time.Minute {
+			maxSafe = maxSafeMinutes
+		}
+		if maxSafe > int64(math.MaxInt) {
+			// Platform int cannot express overflow cases; still cover 0/neg/normal.
+			maxSafe = int64(math.MaxInt)
+		}
+		overflow := maxSafe + 1
+		if overflow < maxSafe {
+			overflow = math.MaxInt64 // saturated
+		}
+		if field.unit == time.Hour {
+			// Review example: 2562048 hours overflows on 64-bit Duration.
+			overflow = maxSafeHours + 1
+		}
+
+		cases := []struct {
+			name          string
+			n             int64
+			wantD10Reject bool
+			wantConsumer  bool // true = consumer must succeed
+			wantDuration  time.Duration
+		}{
+			{name: "zero", n: 0, wantD10Reject: true, wantConsumer: false},
+			{name: "negative", n: -1, wantD10Reject: true, wantConsumer: false},
+			{name: "normal", n: 6, wantD10Reject: false, wantConsumer: true, wantDuration: 6 * field.unit},
+			{name: "max_safe", n: maxSafe, wantD10Reject: false, wantConsumer: true, wantDuration: time.Duration(maxSafe) * field.unit},
+			{name: "overflow", n: overflow, wantD10Reject: true, wantConsumer: false},
+		}
+
+		for _, tc := range cases {
+			t.Run(field.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				if tc.n > int64(math.MaxInt) || tc.n < int64(math.MinInt) {
+					t.Skip("value not representable as int on this platform")
+				}
+				n := int(tc.n)
+				raw := fmt.Sprintf(`{%q:%d}`, field.jsonKey, n)
+				problems := ValidatePresentFields([]byte(raw))
+				if tc.wantD10Reject {
+					require.NotEmpty(t, problems, "D10 must reject %s", raw)
+					assert.Contains(t, strings.Join(problems, "\n"), field.d10RejectSubstring)
+				} else {
+					assert.Empty(t, problems, "D10 must accept %s: %v", raw, problems)
+				}
+
+				got, err := field.consumer(n)
+				if tc.wantConsumer {
+					require.NoError(t, err, "consumer must accept value D10 accepts")
+					assert.Equal(t, tc.wantDuration, got)
+					assert.Empty(t, problems, "D10 and consumer must agree on acceptance")
+					return
+				}
+				require.NotEmpty(t, problems, "D10 must reject")
+				// Present 0: D10 rejects; consumers treat struct-zero as omit→builtin
+				// (hours) or a representable zero duration (minutes via durationFromCount).
+				if n == 0 {
+					switch field.jsonKey {
+					case "local_only_ops_stale_hours":
+						got, err = (Config{}).LocalOnlyOpsStaleAfter()
+						require.NoError(t, err)
+						assert.Equal(t, time.Duration(DefaultLocalOnlyOpsStaleHours)*time.Hour, got)
+					case "default_ttl":
+						got, err = durationFromCount(0, time.Minute)
+						require.NoError(t, err)
+						assert.Equal(t, time.Duration(0), got)
+					}
+					return
+				}
+				require.Error(t, err, "consumer must reject value D10 rejects")
+			})
+		}
+	}
 }
 
 func TestValidatePresentFieldsRejectsEmptyHookExecutable(t *testing.T) {

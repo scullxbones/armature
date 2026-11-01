@@ -3,6 +3,7 @@ package doctor
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -505,12 +506,14 @@ func TestLoadLocalOnlyOpsStaleAfter(t *testing.T) {
 	missing := loadLocalOnlyOpsStaleAfter(filepath.Join(t.TempDir(), "missing.json"))
 	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, missing.after)
 	assert.Empty(t, missing.fallbackWarn, "missing config fails open without a fallback warning")
+	assert.Empty(t, missing.convertErr)
 
 	path := filepath.Join(t.TempDir(), "config.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"local_only_ops_stale_hours":6}`), 0o644))
 	got := loadLocalOnlyOpsStaleAfter(path)
 	assert.Equal(t, 6*time.Hour, got.after)
 	assert.Empty(t, got.fallbackWarn)
+	assert.Empty(t, got.convertErr)
 
 	bad := filepath.Join(t.TempDir(), "config.json")
 	require.NoError(t, os.WriteFile(bad, []byte(`{not-json`), 0o644))
@@ -518,6 +521,21 @@ func TestLoadLocalOnlyOpsStaleAfter(t *testing.T) {
 	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, fallback.after)
 	assert.Contains(t, fallback.fallbackWarn, "using default 24h")
 	assert.Contains(t, fallback.fallbackWarn, "parse config")
+	assert.Empty(t, fallback.convertErr)
+
+	// Overflow must not silently fall back to 24h (review example 2562048).
+	overflowHours := int(math.MaxInt64/int64(time.Hour)) + 1
+	overflowPath := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(overflowPath, []byte(fmt.Sprintf(`{"local_only_ops_stale_hours":%d}`, overflowHours)), 0o644))
+	overflow := loadLocalOnlyOpsStaleAfter(overflowPath)
+	assert.Zero(t, overflow.after, "overflow must not produce a usable threshold")
+	assert.Empty(t, overflow.fallbackWarn, "overflow is not a silent 24h fallback")
+	assert.NotEmpty(t, overflow.convertErr)
+
+	d11 := checkD11OpsRemote(t.TempDir(), overflowPath, time.Now())
+	assert.Equal(t, SeverityError, d11.Severity)
+	assert.Contains(t, d11.Message, "Invalid local_only_ops_stale_hours")
+	assert.Equal(t, 1, d11DoctorExit(d11, false))
 }
 
 func runGitEnv(t *testing.T, dir string, env map[string]string, args ...string) {

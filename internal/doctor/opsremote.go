@@ -65,6 +65,15 @@ func checkD11OpsRemote(worktreePath, configPath string, now time.Time) Finding {
 
 	gc := adapters.New(worktreePath)
 	stale := loadLocalOnlyOpsStaleAfter(configPath)
+	if stale.convertErr != "" {
+		detail := stale.convertErr
+		return Finding{
+			Check:    "D11",
+			Severity: SeverityError,
+			Message:  "Invalid local_only_ops_stale_hours: " + detail,
+			Items:    []string{detail},
+		}
+	}
 	obs := observeD11OpsRemote(gc, now, stale.after)
 	return evaluateD11OpsRemote(obs, stale.fallbackWarn)
 }
@@ -72,6 +81,7 @@ func checkD11OpsRemote(worktreePath, configPath string, now time.Time) Finding {
 type d11StaleLoad struct {
 	after        time.Duration
 	fallbackWarn string // non-empty when unreadable config forced the 24h default
+	convertErr   string // non-empty when configured hours fail duration conversion
 }
 
 func loadLocalOnlyOpsStaleAfter(configPath string) d11StaleLoad {
@@ -88,7 +98,11 @@ func loadLocalOnlyOpsStaleAfter(configPath string) d11StaleLoad {
 		def.fallbackWarn = "could not load local_only_ops_stale_hours; using default 24h: " + detail
 		return def
 	}
-	return d11StaleLoad{after: cfg.LocalOnlyOpsStaleAfter()}
+	after, err := cfg.LocalOnlyOpsStaleAfter()
+	if err != nil {
+		return d11StaleLoad{convertErr: redact.Secrets(err.Error())}
+	}
+	return d11StaleLoad{after: after}
 }
 
 // observeD11OpsRemote classifies origin/_armature from fresh per-run evidence
@@ -96,10 +110,10 @@ func loadLocalOnlyOpsStaleAfter(configPath string) d11StaleLoad {
 // healthy or stale. Every other fetch/resolve/rev-list/age failure →
 // could-not-verify. Never refreshes shared refs/remotes/origin/_armature
 // (per-run FetchBranchToRef with empty --refmap=, same class as ops-backup).
+// staleAfter must be a positive, overflow-checked duration from
+// loadLocalOnlyOpsStaleAfter / Config.LocalOnlyOpsStaleAfter — never clamped
+// back to 24h here.
 func observeD11OpsRemote(g d11Git, now time.Time, staleAfter time.Duration) d11Observation {
-	if staleAfter <= 0 {
-		staleAfter = defaultLocalOnlyOpsStaleAfter
-	}
 	runRef, err := uniqueD11RunRef()
 	if err != nil {
 		return d11Observation{outcome: d11CouldNotVerify, detail: err.Error()}
