@@ -156,7 +156,7 @@ Usage: arm-verify.sh <command> [args]
 
   launch              Build ./bin/arm and create an isolated temp git repo
   doctor              Read-only: is this verification instance worth driving?
-  drive <feature>     Drive one mapped feature (bootstrap|worker-init|create-list|doctor|ready-claim)
+  drive <feature>     Drive one mapped feature (bootstrap|worker-init|create-list|doctor|ready-claim|ops-backup)
   cleanup             Tear down only the temp repo/worktrees this run created
   run <feature>       launch → doctor → drive <feature> → cleanup (evidence kept)
 
@@ -444,13 +444,16 @@ cmd_launch() {
   [ -x "$SOURCE_ROOT/bin/arm" ] || die "make build did not produce $SOURCE_ROOT/bin/arm"
   ARM_BIN="$SOURCE_ROOT/bin/arm"
 
-  local ver_out
+  local ver_out ver_human
   ver_out=$("$ARM_BIN" version)
-  case "$ver_out" in
-    "arm version "*) ;;
-    *) die "arm version did not print expected prefix: $ver_out" ;;
-  esac
-  "$ARM_BIN" version >/dev/null
+  ver_human=$("$ARM_BIN" version --format human)
+  if ! jq -e --arg v "$EXPECTED_VERSION" \
+    '.count == 1 and .versions[0].version == $v and (.help | index("arm version reports the build identity of this binary") != null)' \
+    <<<"$ver_out" >/dev/null; then
+    die "arm version envelope did not report $EXPECTED_VERSION: $ver_out"
+  fi
+  [ "$ver_human" = "arm version $EXPECTED_VERSION" ] ||
+    die "arm version --format human: got '$ver_human' want 'arm version $EXPECTED_VERSION'"
 
   RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
   STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -494,12 +497,13 @@ cmd_doctor() {
   load_run
   unset ARM_LOG_SLOT || true
   mkdir -p "$EVIDENCE_DIR/doctor"
-  local src target bin expected actual
+  local src target bin expected actual human
   src=$(abs_path "$SOURCE_ROOT")
   target=$(abs_path "$TARGET_REPO")
   bin=$(abs_path "$ARM_BIN")
   expected=$EXPECTED_VERSION
   actual=$("$ARM_BIN" version)
+  human=$("$ARM_BIN" version --format human)
   local fail=0
   local report="$EVIDENCE_DIR/doctor/verification.txt"
 
@@ -510,6 +514,7 @@ cmd_doctor() {
     printf 'arm_bin=%s\n' "$bin"
     printf 'expected_version=%s\n' "$expected"
     printf 'arm_version=%s\n' "$actual"
+    printf 'arm_version_human=%s\n' "$human"
   } >"$report"
 
   if [ ! -x "$bin" ]; then
@@ -520,13 +525,18 @@ cmd_doctor() {
     printf 'FAIL: ARM_BIN is not the binary we built at %s/bin/arm (got %s)\n' "$src" "$bin" | tee -a "$report" >&2
     fail=1
   fi
-  case "$actual" in
-    "arm version $expected") printf 'PASS: version matches build (%s)\n' "$expected" >>"$report" ;;
-    *)
-      printf 'FAIL: version mismatch: got %s want arm version %s\n' "$actual" "$expected" | tee -a "$report" >&2
-      fail=1
-      ;;
-  esac
+  if jq -e --arg v "$expected" '.count == 1 and .versions[0].version == $v' <<<"$actual" >/dev/null; then
+    printf 'PASS: version envelope matches build (%s)\n' "$expected" >>"$report"
+  else
+    printf 'FAIL: version envelope mismatch: got %s want versions[0].version=%s\n' "$actual" "$expected" | tee -a "$report" >&2
+    fail=1
+  fi
+  if [ "$human" = "arm version $expected" ]; then
+    printf 'PASS: --format human version matches build (%s)\n' "$expected" >>"$report"
+  else
+    printf 'FAIL: human version mismatch: got %s want arm version %s\n' "$human" "$expected" | tee -a "$report" >&2
+    fail=1
+  fi
   if [ "$target" = "$src" ]; then
     printf 'FAIL: --repo points at the source checkout (%s). Drive a temp repo.\n' "$src" | tee -a "$report" >&2
     fail=1
@@ -562,6 +572,14 @@ cmd_doctor() {
     printf 'product arm doctor: exit 0 (bootstrapped repo health)\n' >>"$report"
   else
     printf 'product arm doctor: exit %s (expected before bootstrap; see product-doctor.stdout.txt)\n' "$pec" >>"$report"
+    # Unbootstrapped layout is DOCTOR-1, not retired GENERAL-1. A bootstrapped
+    # repo can also fail doctor (D12, --strict); only assert the code when
+    # ops-worktree-path cannot exist yet.
+    if [ ! -d "$TARGET_REPO/.armature" ]; then
+      jq_assert "$EVIDENCE_DIR/doctor/product-doctor.stdout.txt" \
+        '.error.code == "DOCTOR-1" and .error.exit_code == 1 and (.error.cause | contains("armature.ops-worktree-path must be set")) and (.error.next_actions | index("arm bootstrap") != null)' \
+        "unbootstrapped arm doctor was not DOCTOR-1 for a missing ops worktree"
+    fi
   fi
 
   if [ "$fail" -ne 0 ]; then
@@ -627,7 +645,8 @@ cmd_drive() {
     create-list) drive_create_list ;;
     doctor) drive_doctor ;;
     ready-claim) drive_ready_claim ;;
-    *) die "unknown feature: $feature (bootstrap|worker-init|create-list|doctor|ready-claim)" ;;
+    ops-backup) drive_ops_backup ;;
+    *) die "unknown feature: $feature (bootstrap|worker-init|create-list|doctor|ready-claim|ops-backup)" ;;
   esac
   printf 'drove %s; evidence at %s\n' "$feature" "$EVIDENCE_DIR"
 }
@@ -672,8 +691,8 @@ drive_bootstrap() {
     "bootstrap did not install claude plugin metadata"
   # Hooks are documented as skipped without --with-hooks, which this drive omits.
   jq_assert "$first" \
-    'any(.harness_setup[]; .artifact == "harness_hook_config" and .status == "skipped")' \
-    "bootstrap did not report harness_hook_config as skipped"
+    'any(.harness_setup[]; .artifact == "harness_hook_config" and .status == "skipped" and .action == "skip")' \
+    "bootstrap did not report harness_hook_config as skipped/skip"
   [ -d "$TARGET_REPO/.claude/skills" ] || die ".claude/skills was not deployed"
   ls "$TARGET_REPO/.claude/skills/" >/dev/null 2>&1 || die ".claude/skills is unreadable"
   [ -n "$(ls -A "$TARGET_REPO/.claude/skills")" ] || die ".claude/skills was deployed empty"
@@ -724,6 +743,13 @@ drive_bootstrap() {
   boot_worker=$(awk '$1 == "armature.worker-id" { print $2; exit }' "$EVIDENCE_DIR/drive/05-git-config/stdout.txt")
   [ "$boot_worker" = "$first_worker" ] ||
     die "the idempotent bootstrap changed armature.worker-id: $first_worker -> ${boot_worker:-unset}"
+  local hook
+  for hook in pre-commit post-commit post-merge; do
+    [ -x "$TARGET_REPO/.git/hooks/$hook" ] || die "bootstrap did not install executable hook $hook"
+  done
+  if [ -e "$TARGET_REPO/.git/hooks/prepare-commit-msg" ]; then
+    die "bootstrap left prepare-commit-msg installed"
+  fi
   printf 'bootstrap proof ok\n'
 }
 
@@ -732,7 +758,8 @@ drive_worker_init() {
   # Bootstrap already writes armature.worker-id, so driving --check alone would
   # certify a regressed unflagged worker-init. Clear the identity first and walk
   # the documented `worker-init --check || worker-init` session idiom.
-  capture drive/01-config-unset git -C "$TARGET_REPO" config --unset armature.worker-id || true
+  capture drive/01-config-unset git -C "$TARGET_REPO" config --worktree --unset armature.worker-id
+  assert_exit_0 drive/01-config-unset
   capture drive/02-check-unset arm worker-init --check || true
   assert_exit_nonzero drive/02-check-unset
   capture drive/03-worker-init arm worker-init
@@ -781,6 +808,14 @@ drive_create_list() {
   # both worker fields would agree with the replacement.
   capture drive/00-worker-id-before git -C "$TARGET_REPO" config --get armature.worker-id
   assert_exit_0 drive/00-worker-id-before
+  capture drive/00c-create-missing-e6 arm create \
+    --id TASK-VERIFY-BARE \
+    --title "Missing E6" \
+    --type task || true
+  assert_exit_nonzero drive/00c-create-missing-e6
+  jq_assert "$EVIDENCE_DIR/drive/00c-create-missing-e6/stdout.txt" \
+    '.error.code == "CREATE-1" and .error.exit_code == 1 and (.error.cause | contains("cannot introduce Graph Finding")) and (.error.cause | contains("missing required field"))' \
+    "create without E6 fields was not CREATE-1"
   capture drive/01-create arm create \
     --id TASK-VERIFY-CREATE \
     --title "Verification create+list" \
@@ -810,7 +845,7 @@ drive_create_list() {
   capture drive/04b-ready arm ready
   assert_exit_0 drive/04b-ready
   jq_assert "$EVIDENCE_DIR/drive/04b-ready/stdout.txt" \
-    '(. // []) | map(select(.issue == "TASK-VERIFY-CREATE")) | length == 0' \
+    '.count == (.issues | length) and ((.issues // []) | map(select(.id == "TASK-VERIFY-CREATE")) | length == 0)' \
     "draft TASK-VERIFY-CREATE reached the ready queue; materialized confidence is not draft"
   capture drive/05-log "$ARM_BIN" --repo "$TARGET_REPO" log --json
   mkdir -p "$EVIDENCE_DIR/drive/06-ops"
@@ -825,19 +860,19 @@ drive_create_list() {
   # Assert the list projection itself, not just presence of the id: list is its
   # own output path and the structured show assertion cannot certify it.
   jq_assert "$EVIDENCE_DIR/drive/02-list/stdout.txt" \
-    'any(.[]; .id == "TASK-VERIFY-CREATE" and .status == "open" and .type == "task" and .title == "Verification create+list")' \
-    "list has no TASK-VERIFY-CREATE entry with the expected status/type/title"
+    '.count == (.issues | length) and any(.issues[]; .id == "TASK-VERIFY-CREATE" and .status == "open" and .type == "task" and .title == "Verification create+list") and all(.issues[]; .id != "TASK-VERIFY-BARE")' \
+    "list envelope has no TASK-VERIFY-CREATE row with the expected status/type/title, or it kept the refused id"
   # The E6 fields matter as much as the identity ones: a task materialized
   # without scope, definition_of_done or acceptance fails validation and cannot
   # enter the ready flow, and nothing else in this drive would notice.
   jq_assert "$EVIDENCE_DIR/drive/03-show/stdout.txt" \
-    '.id == "TASK-VERIFY-CREATE" and .status == "open" and .title == "Verification create+list"
-     and .type == "task" and .scope == ["verify-create.txt"]
-     and .definition_of_done == "Issue is listed and showable"
-     and (.acceptance | length) == 1
-     and .acceptance[0].type == "test_passes"
-     and .acceptance[0].description == "list and show return the created id"' \
-    "show returned unexpected id/status/title/type/scope/definition_of_done/acceptance"
+    '.count == 1 and .issues[0].id == "TASK-VERIFY-CREATE" and .issues[0].status == "open" and .issues[0].title == "Verification create+list"
+     and .issues[0].type == "task" and .issues[0].scope == ["verify-create.txt"]
+     and .issues[0].definition_of_done == "Issue is listed and showable"
+     and (.issues[0].acceptance | length) == 1
+     and .issues[0].acceptance[0].type == "test_passes"
+     and .issues[0].acceptance[0].description == "list and show return the created id"' \
+    "show envelope returned unexpected id/status/title/type/scope/definition_of_done/acceptance"
   assert_exit_0 drive/05-log
   [ -f "$EVIDENCE_DIR/drive/06-ops/ops.log" ] || die "no ops log captured under drive/06-ops"
   # On disk each op is the positional array [op_type, target_id, ...] documented
@@ -885,11 +920,11 @@ drive_doctor() {
   capture drive/01-doctor arm doctor
   assert_exit_0 drive/01-doctor
   capture drive/02-doctor-strict arm doctor --strict || true
-  local code severities
-  for code in D1 D2 D3 D4 D5 D6 D7 D8 D9 D10; do
-    jq_assert "$EVIDENCE_DIR/drive/01-doctor/stdout.txt" \
-      "any(.checks[]; .check == \"$code\")" "doctor report is missing check $code"
-  done
+  local severities live_checks
+  live_checks='["D1","D2","D3","D4","D5","D6","D7","D8","D9","D10","D12"]'
+  jq_assert "$EVIDENCE_DIR/drive/01-doctor/stdout.txt" \
+    ".count == 11 and [.checks[].check] == $live_checks" \
+    "doctor checks are not D1-D10,D12 in Run order"
   # features/doctor.md maps --strict as "warnings become failing", so prove both
   # halves: the default run reports the warning and still exits 0, the strict run
   # over the same state exits nonzero.
@@ -900,10 +935,9 @@ drive_doctor() {
   # so require the strict run to still be a full D1-D10 report carrying the
   # seeded warning, plus the documented promotion diagnostic.
   assert_exit_nonzero drive/02-doctor-strict
-  for code in D1 D2 D3 D4 D5 D6 D7 D8 D9 D10; do
-    jq_assert "$EVIDENCE_DIR/drive/02-doctor-strict/stdout.txt" \
-      "any(.checks[]; .check == \"$code\")" "strict doctor report is missing check $code"
-  done
+  jq_assert "$EVIDENCE_DIR/drive/02-doctor-strict/stdout.txt" \
+    ".count == 11 and [.checks[].check] == $live_checks" \
+    "strict doctor checks are not D1-D10,D12 in Run order"
   jq_assert "$EVIDENCE_DIR/drive/02-doctor-strict/stdout.txt" \
     'any(.checks[]; .check == "D6" and .severity == "warning")' \
     "strict doctor did not carry the seeded uncited-issue warning"
@@ -916,7 +950,7 @@ drive_doctor() {
   severities=$(jq -r '[.checks[] | "\(.check)=\(.severity)"] | sort | join(" ")' \
     "$EVIDENCE_DIR/drive/01-doctor/stdout.txt")
   printf 'doctor proof ok; severities: %s\n' "$severities"
-  printf 'proof: product arm doctor JSON report with D1-D10\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
+  printf 'proof: product arm doctor envelope with D1-D10 and D12\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
 drive_ready_claim() {
@@ -945,9 +979,15 @@ drive_ready_claim() {
   esac
   seed_err=$(cat "$EVIDENCE_DIR/drive/00-seed-commit/stderr.txt")
   case "$seed_err" in
-    *'push-ops: push failed'*) ;;
-    *) die "seed commit stderr did not capture post-commit push-ops failure (built arm not on PATH?); see $EVIDENCE_DIR/drive/00-seed-commit/stderr.txt" ;;
+    *'push-ops: push failed'*)
+      die "seed commit still printed push-ops failure; post-commit with no claim must stay quiet: $seed_err"
+      ;;
+    *'not found'* | *'No such file'*)
+      die "seed commit hook could not run the built arm (PATH); see $EVIDENCE_DIR/drive/00-seed-commit/stderr.txt"
+      ;;
   esac
+  grep -q 'arm hook run post-commit' "$TARGET_REPO/.git/hooks/post-commit" ||
+    die "post-commit hook does not delegate to arm hook run post-commit"
   # Absolute URL: the filesystem provider resolves a relative source URL
   # against the process cwd, not --repo, so a relative README.md would cite
   # the caller's checkout (or fail) instead of this isolated target repo.
@@ -979,6 +1019,15 @@ drive_ready_claim() {
   # against its own replacement.
   capture drive/05b-worker-id-before git -C "$TARGET_REPO" config --get armature.worker-id
   assert_exit_0 drive/05b-worker-id-before
+  # claim is high-stakes: it publishes _armature. With no origin, push then
+  # fetch fail and the command exits CLAIM-1 before the worktree exists.
+  local origin="$TARGET_REPO/origin.git"
+  capture drive/05c-init-origin git init -q --bare "$origin"
+  assert_exit_0 drive/05c-init-origin
+  capture drive/05d-remote git -C "$TARGET_REPO" remote add origin "$origin"
+  assert_exit_0 drive/05d-remote
+  capture drive/05e-push git -C "$TARGET_REPO" push origin _armature
+  assert_exit_0 drive/05e-push
   capture drive/06-claim arm claim --issue TASK-VERIFY-READY --worktree
   assert_exit_0 drive/06-claim
   capture drive/07-show arm_json show TASK-VERIFY-READY
@@ -997,8 +1046,8 @@ drive_ready_claim() {
   # Assert the ready projection itself: claim reads materialized state, so a
   # corrupt agent-facing ready entry would otherwise go uncaught.
   jq_assert "$EVIDENCE_DIR/drive/05-ready/stdout.txt" \
-    'any(.[]; .issue == "TASK-VERIFY-READY" and .type == "task" and .title == "Verification ready+claim" and .scope == ["ready.go"])' \
-    "ready queue has no TASK-VERIFY-READY entry with the expected type/title/scope"
+    '(.expired_claims | type == "array") and any(.issues[]; .id == "TASK-VERIFY-READY" and .type == "task" and .title == "Verification ready+claim" and .scope == ["ready.go"])' \
+    "ready envelope has no TASK-VERIFY-READY issue with the expected type/title/scope"
   # ttl too: an omitted or 0 ttl (never expires) is broken claim-expiry
   # semantics that every other assertion here would miss. 60 is the documented
   # default for a fresh bootstrap, which this drive uses.
@@ -1019,13 +1068,13 @@ drive_ready_claim() {
   [ -n "$claimed_by" ] || die "claim reported an empty claimed_by"
   [ "$claimed_by" = "$worker_id" ] || die "claim attributed to $claimed_by, expected $worker_id"
   jq_assert "$EVIDENCE_DIR/drive/07-show/stdout.txt" \
-    '.status == "claimed"' "issue status is not claimed after claim"
+    '.issues[0].status == "claimed"' "issue status is not claimed after claim"
   # The materialized snapshot is a different read path from the op stream, so
   # assert the claimant there too; a replay that drops or corrupts the claim
   # payload would otherwise pass on status alone. (The snapshot carries no ttl
   # field, so ttl is asserted on the response and both log reads instead.)
   jq_assert "$EVIDENCE_DIR/drive/07-show/stdout.txt" \
-    ".claimed_by == \"$worker_id\"" \
+    ".issues[0].claimed_by == \"$worker_id\"" \
     "materialized issue is not attributed to the configured worker $worker_id"
   [ -d "$TARGET_REPO/.worktrees/TASK-VERIFY-READY" ] || die "managed worktree directory missing"
 
@@ -1061,6 +1110,70 @@ drive_ready_claim() {
     "arm log --json shows no claim op for TASK-VERIFY-READY by $worker_id with ttl=60"
   printf 'ready-claim proof ok\n'
   printf 'proof: ready queue then claim --worktree; status=claimed; .worktrees/TASK-VERIFY-READY on task/; claim op in the ops log\n' \
+    >"$EVIDENCE_DIR/drive/SUMMARY.txt"
+}
+
+jq_assert_args() {
+  # jq_assert_args <file> <message> -- <jq args and filter>
+  local file=$1 message=$2
+  shift 2
+  [ "${1:-}" = "--" ] || die "jq_assert_args: expected -- before jq args"
+  shift
+  # shellcheck disable=SC2068
+  jq -e "$@" "$file" >/dev/null 2>&1 || die "$message (see $file)"
+}
+
+drive_ops_backup() {
+  require_bootstrapped
+  local origin="$TARGET_REPO/origin.git"
+  local bundle="$TARGET_REPO/ops-tip.bundle"
+  capture drive/01-init-origin git init -q --bare "$origin"
+  assert_exit_0 drive/01-init-origin
+  capture drive/02-remote git -C "$TARGET_REPO" remote add origin "$origin"
+  assert_exit_0 drive/02-remote
+  capture drive/03-push git -C "$TARGET_REPO" push origin _armature
+  assert_exit_0 drive/03-push
+  local origin_tip local_tip after_tip leftover
+  origin_tip=$(git --git-dir="$origin" rev-parse refs/heads/_armature)
+  local_tip=$(git -C "$TARGET_REPO" rev-parse refs/heads/_armature)
+  [ "$origin_tip" = "$local_tip" ] || die "pushed _armature ($origin_tip) != local ($local_tip)"
+  # git push updates refs/remotes/origin/_armature via the fetch refspec.
+  # Drop that tracking ref so the snapshot proof can require the command
+  # itself not to recreate the shared tip.
+  capture drive/03b-drop-tracking git -C "$TARGET_REPO" update-ref -d refs/remotes/origin/_armature
+  assert_exit_0 drive/03b-drop-tracking
+  capture drive/04-snapshot arm ops-backup snapshot --output "$bundle"
+  assert_exit_0 drive/04-snapshot
+  [ -f "$bundle" ] || die "snapshot reported success but did not write $bundle"
+  jq_assert_args "$EVIDENCE_DIR/drive/04-snapshot/stdout.txt" \
+    "snapshot envelope did not report the origin tip at the requested bundle" \
+    -- --arg bundle "$bundle" --arg tip "$origin_tip" \
+    '.count == 1 and .snapshots[0].status == "ok" and .snapshots[0].bundle == $bundle and .snapshots[0].tip == $tip and (.help | length) > 0'
+  after_tip=$(git -C "$TARGET_REPO" rev-parse refs/heads/_armature)
+  [ "$after_tip" = "$local_tip" ] || die "snapshot rewound refs/heads/_armature: $local_tip -> $after_tip"
+  if git -C "$TARGET_REPO" rev-parse --verify --quiet refs/remotes/origin/_armature >/dev/null; then
+    die "snapshot wrote shared refs/remotes/origin/_armature"
+  fi
+  capture drive/05-verify arm ops-backup verify "$bundle"
+  assert_exit_0 drive/05-verify
+  jq_assert_args "$EVIDENCE_DIR/drive/05-verify/stdout.txt" \
+    "verify envelope did not advertise refs/heads/_armature" \
+    -- --arg bundle "$bundle" \
+    '.count == 1 and .verifications[0].status == "ok" and .verifications[0].bundle == $bundle and .verifications[0].advertises == "refs/heads/_armature"'
+  capture drive/06-restore-plan arm ops-backup restore-plan --from "$bundle"
+  assert_exit_0 drive/06-restore-plan
+  jq_assert_args "$EVIDENCE_DIR/drive/06-restore-plan/stdout.txt" \
+    "restore-plan did not report fast-forward of the origin tip" \
+    -- --arg bundle "$bundle" --arg tip "$origin_tip" \
+    '.count == 1 and .plans[0].disposition == "fast-forward" and .plans[0].recovered == $tip and .plans[0].bundle == $bundle and (.plans[0] | has("aside_ref") | not)'
+  capture drive/07-leftover-refs git -C "$TARGET_REPO" for-each-ref refs/remotes/origin/_armature-run refs/remotes/backup/_armature-run
+  assert_exit_0 drive/07-leftover-refs
+  leftover=$(tr -d '\r\n' <"$EVIDENCE_DIR/drive/07-leftover-refs/stdout.txt")
+  [ -z "$leftover" ] || die "ops-backup left per-run refs: $leftover"
+  after_tip=$(git -C "$TARGET_REPO" rev-parse refs/heads/_armature)
+  [ "$after_tip" = "$local_tip" ] || die "restore-plan moved refs/heads/_armature: $local_tip -> $after_tip"
+  printf 'ops-backup proof ok\n'
+  printf 'proof: snapshot+verify+restore-plan fast-forward; live _armature tip unchanged; per-run refs removed\n' \
     >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 

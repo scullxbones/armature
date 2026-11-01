@@ -8,14 +8,14 @@ Agent index for driving the `arm` CLI. User-visible paths only. Operating proced
 - `make build` has produced `<source>/bin/arm`.
 - `--repo` is an isolated temp git repo created by `scripts/arm-verify.sh launch` (`/tmp/arm-verify-target.*`), never the source checkout.
 - `ARM_LOG_SLOT` unset unless the case is parallel writers on one clone.
-- Commands use `--format agent --non-interactive` except `arm show` (use `--format json`) and `arm worker-init` (human `Worker ID:` line).
+- Commands use `--format agent --non-interactive`. `arm show` accepts `--format json` or `agent` (same `{count, issues, help}` envelope). `arm worker-init` prints a human `Worker ID:` line. `arm sources add` prints a human `added source` line.
 - Do not pass `bootstrap --global`. Do not start `arm tui` / `arm dag summary` unless the case is the TUI itself.
 
 ## Driving conventions
 
 1. Prefer `make test-e2eharness` in the **source** tree for the composed lifecycle (claim race, coordinator recovery, happy-path merge). It already uses temp origins/clones.
 2. Prefer `scripts/arm-verify.sh drive <feature>` for a single mapped path against the isolated repo from `launch`.
-3. Stable handles: issue ids you pass (`TASK-VERIFY-CREATE`), worker UUID from `git config armature.worker-id`, ops file `.armature/ops/<worker-uuid>.log`, worktree `.worktrees/<issue-id>`.
+3. Stable handles: issue ids you pass (`TASK-VERIFY-CREATE`), worker UUID from `git config --get armature.worker-id` (worktree-scoped; unset with `git config --worktree --unset`), ops file `.armature/ops/<worker-uuid>.log`, worktree `.worktrees/<issue-id>`.
 4. Every drive: capture the mutating command, then a second read (`list` / `show --format json` / `log --json` / git worktree / `.armature` files).
 
 ## Proof / skip reporting
@@ -36,3 +36,4 @@ Do not report "passed" from helper unit tests or by reading Go source without ru
 | Create and list an issue | [create-list.md](create-list.md) | `arm create` then `arm list` / `arm show` |
 | Product doctor health check | [doctor.md](doctor.md) | `arm doctor` |
 | Ready queue and claim | [ready-claim.md](ready-claim.md) | `arm ready` then `arm claim --worktree` |
+| Ops-branch backup | [ops-backup.md](ops-backup.md) | `arm ops-backup snapshot`, `verify`, `restore-plan` |

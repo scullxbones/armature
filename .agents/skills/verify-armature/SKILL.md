@@ -1,6 +1,6 @@
 ---
 name: verify-armature
-description: Drive and verify the Armature `arm` CLI (git-native work orchestration, no server) from this checkout. Use when proving arm bootstrap, worker-init, create/list, doctor, ready/claim, or any isolated CLI behavior against a throwaway git repo.
+description: Drive and verify the Armature `arm` CLI (git-native work orchestration, no server) from this checkout. Use when proving arm bootstrap, worker-init, create/list, doctor, ready/claim, ops-backup, or any isolated CLI behavior against a throwaway git repo.
 ---
 
 # Verify Armature (`arm` CLI)
@@ -20,10 +20,14 @@ From the source checkout (the armature git root):
 ```bash
 make build
 test -x ./bin/arm
-./bin/arm version    # expect: arm version <git describe --tags --always --dirty>; exit 0
+./bin/arm version --format human
+# arm version <git describe --tags --always --dirty>
+./bin/arm version
+# non-TTY, or --format agent|json:
+# {"count":1,"versions":[{"version":"<same describe>"}],"help":["arm version reports the build identity of this binary"]}
 ```
 
-`make build` writes `./bin/arm` with `-ldflags "-X main.Version=$(git describe --tags --always --dirty)"`. Ready = the file is executable and `arm version` exits 0.
+`make build` writes `./bin/arm` with `-ldflags "-X main.Version=$(git describe --tags --always --dirty)"`. Ready = the file is executable and both version shapes exit 0. A non-TTY `arm version` with the default format is the envelope (`writeVersionOutput` treats non-interactive as structured unless `--format human` was set explicitly). On a TTY, default format stays the `arm version …` line.
 
 **Isolated target repo** (never the source tree):
 
@@ -74,15 +78,15 @@ Checks (all read-only):
 | Check | Pass |
 | --- | --- |
 | Binary we built | `ARM_BIN` is `<source>/bin/arm` and executable — not some other `arm` on `PATH` |
-| Version | `$ARM_BIN version` equals `arm version $(git -C <source> describe --tags --always --dirty)` |
+| Version | non-TTY `$ARM_BIN version` envelope `versions[0].version` equals `git -C <source> describe --tags --always --dirty`; `$ARM_BIN version --format human` prints `arm version <that>` |
 | Isolated `--repo` | realpath(target) ≠ realpath(source); target matches `/tmp/arm-verify-target.*` |
 | Git | target is a git repo |
 
 The helper also **invokes** product `arm doctor --repo "$TARGET" --format agent --non-interactive` and records stdout/exit. Interpret that separately:
 
-- Unbootstrapped repo: exit 1, stdout `{"error":{"code":"GENERAL-1","cause":"armature.ops-worktree-path must be set: ...","next_actions":[],"exit_code":1}}`. Expected before the bootstrap feature.
-- Bootstrapped empty repo: exit 0, JSON `{ "checks": [ { "check":"D1", "severity":"ok", ... }, ... D10 ] }`.
-- Product `arm doctor --strict` promotes D* warnings to errors. A D6 warning on uncited issues still exits 0 without `--strict`.
+- Unbootstrapped repo: exit 1, stdout one Command Failure `{"error":{"code":"DOCTOR-1","cause":"armature.ops-worktree-path must be set: ...","next_actions":["arm bootstrap","arm worker-init"],"exit_code":1}}`. `GENERAL-1` is retired. Expected before the bootstrap feature.
+- Bootstrapped repo: exit 0 when no check is `error`. Stdout is one envelope `{count, checks, help}` whose `checks` are exactly D1–D10 then D12 (D11 is reserved for TOPTIER-S12-T2 and is not emitted).
+- Product `arm doctor --strict` promotes warnings to a nonzero exit. A D6 warning on uncited issues still exits 0 without `--strict`. The report stays on stdout; stderr is `doctor --strict: N warning(s) promoted to errors`.
 
 Do not treat a green product doctor as proof that `--repo` is isolated. The table above is the isolation proof.
 
@@ -102,12 +106,14 @@ For a **single user path** mid-task, use the isolated repo + CLI. Global flags o
 --repo <target> --format agent --non-interactive
 ```
 
-`--format json` and `--format agent` are the same envelope **when the command implements structured output**. Exceptions you will hit:
+`--format json` and `--format agent` are the same structured shape **when the command implements it**. What you will hit:
 
-- `arm show` is human unless `--format json` (agent does **not** switch `show` to JSON).
-- `arm worker-init` always prints `Worker ID: <uuid>` (not JSON).
-- Empty `arm ready` prints `null` (JSON null), not `[]` and not `{count, issues, help[]}`.
-- Failures: one JSON object on stdout `{"error":{"code":"...","cause":"...","next_actions":[...],"exit_code":N}}` (see `docs/error-contract.md`). Graph Findings (`arm validate`) and product doctor reports are **not** that envelope.
+- `arm show`, `arm list`, `arm ready`, `arm worktree list`, `arm doctor`, and `arm ops-backup` print one Agent Output Contract envelope `{count, <payload>, help, ...adjuncts}`. `show`/`list`/`ready` use payload key `issues`. `doctor` uses `checks`. `worktree list` uses `worktrees` plus a `bound` adjunct. `ops-backup` uses `snapshots`, `verifications`, or `plans`.
+- `arm show` is human only at the default `--format human`. `--format agent` is the envelope, same as `--format json`. `--field` stays one value per line and is not an envelope.
+- `arm worker-init` always prints `Worker ID: <uuid>` (not JSON). `arm sources add` prints `added source <uuid> (<url>)` (not JSON).
+- Empty `arm ready` is `{count:0, issues:[], help:[...]}` (exit 0). It is not `null` and not a bare array. Expired claims are an `expired_claims` adjunct on that stdout object, not a second JSON value on stderr.
+- `arm create`, `arm claim`, and `arm dag transition` still print their own small objects (not the envelope).
+- Failures: one JSON object on stdout `{"error":{"code":"<COMMAND>-1","cause":"...","next_actions":[...],"exit_code":N}}`. The code is the top-level command prefix (`CREATE-1`, `DOCTOR-1`, `OPS-BACKUP-1`), not retired `GENERAL-1`. Graph Findings (`arm validate`) and a doctor report are **not** that envelope. `doctor --strict` and `ops-backup restore-plan` on diverge print their protocol payload and exit nonzero without a second error envelope.
 
 Helper:
 
@@ -117,6 +123,7 @@ Helper:
 .agents/skills/verify-armature/scripts/arm-verify.sh drive worker-init
 .agents/skills/verify-armature/scripts/arm-verify.sh drive doctor
 .agents/skills/verify-armature/scripts/arm-verify.sh drive ready-claim
+.agents/skills/verify-armature/scripts/arm-verify.sh drive ops-backup
 ```
 
 One-shot (launch → doctor → drive → cleanup, evidence kept):
@@ -143,7 +150,7 @@ Stdout (pretty JSON): `{ "repo_setup": { "status": "initialized" | "already_init
 "$ARM" --repo "$TARGET" worker-init --check || "$ARM" --repo "$TARGET" worker-init
 ```
 
-Stdout: `Worker ID: <uuid>`. Durable handle: `git -C "$TARGET" config --get armature.worker-id`. Bootstrap already calls `Init` when unset. **Without `--check`, `worker-init` always writes a new UUID** (overwrites). Use `--check` unless you intend to rotate identity.
+Stdout: `Worker ID: <uuid>`. Durable handle: `git -C "$TARGET" config --get armature.worker-id` (worktree file `.git/config.worktree` once `extensions.worktreeConfig` is on). Bootstrap already calls `Init` when unset. **Without `--check`, `worker-init` always writes a new UUID** (overwrites). Use `--check` unless you intend to rotate identity. To clear it inside a temp repo, `git config --worktree --unset armature.worker-id`.
 
 **create** (tasks must satisfy E6 or the write is refused as a Graph Finding):
 
@@ -157,7 +164,7 @@ Stdout: `Worker ID: <uuid>`. Durable handle: `git -C "$TARGET" config --get arma
   --acceptance '[{"type":"test_passes"}]'
 ```
 
-Success stdout: `{"id":"TASK-VERIFY-CREATE","status":"created"}`. Missing scope/acceptance/definition_of_done → `GENERAL-1` / `cannot introduce Graph Finding ... missing required field`. Overlapping scope with another non-terminal task is also refused. `--source <uuid-or-url>` is optional at create; without it the issue is uncited (`arm validate` errors, product doctor D6 warns, `arm dag transition` cannot promote).
+Success stdout: `{"id":"TASK-VERIFY-CREATE","status":"created"}`. Missing scope/acceptance/definition_of_done → `CREATE-1` whose `cause` contains `cannot introduce Graph Finding` and `missing required field`; nothing is written. Overlapping scope with another non-terminal task is also refused. `--source <uuid-or-url>` is optional at create; without it the issue is uncited (`arm validate` errors, product doctor D6 warns, `arm dag transition` cannot promote).
 
 **list**:
 
@@ -165,16 +172,16 @@ Success stdout: `{"id":"TASK-VERIFY-CREATE","status":"created"}`. Missing scope/
 "$ARM" --repo "$TARGET" --format agent --non-interactive list
 ```
 
-Stdout: a JSON **array** of `{id, type, status, title, claimed_by?}`. Not the ADR-0017 `{count, issues, help[]}` envelope (that contract is accepted; list has not fully migrated).
+Stdout: `{count, issues, help}`. Each `issues[]` row is `{id, type, status, title}` only (no `claimed_by`). `count` equals `len(issues)`.
 
-**show** (use json, not agent):
+**show** (`--format json` and `--format agent` are the same envelope):
 
 ```bash
 "$ARM" --repo "$TARGET" --format json --non-interactive show TASK-VERIFY-CREATE
 "$ARM" --repo "$TARGET" show --issue TASK-VERIFY-CREATE --field status,title,type
 ```
 
-JSON object includes `id`, `title`, `type`, `status`, `scope`, `definition_of_done`, `acceptance`, `claimed_by` when set. `--field` prints one value per line (human), useful as the second read.
+The issue object is `issues[0]` and includes `id`, `title`, `type`, `status`, `scope`, `definition_of_done`, `acceptance`, and `claimed_by` when set. `--field` prints one value per line (human), useful as the second read.
 
 **product doctor**:
 
@@ -182,7 +189,7 @@ JSON object includes `id`, `title`, `type`, `status`, `scope`, `definition_of_do
 "$ARM" --repo "$TARGET" --format agent --non-interactive doctor
 ```
 
-Stdout: `{ "checks": [ { "check":"D1"|"D2"|...|"D10", "severity":"ok"|"warning"|"error", "message":"...", "items"? } ] }`. `--fix --dry-run` prints planned claim-liveness remediations without writing ops (observed `null` when there is nothing to fix; ops log byte size must not grow). `--fix` without dry-run **does** append ops.
+Stdout: `{count, checks, help}`. Each `checks[]` row is `{check, severity, message, items?, verbose_items?}`. Live `check` ids, in order, are D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D12. `--fix --dry-run` prints planned claim-liveness remediations without writing ops (JSON `null` when the plan slice is empty; ops log byte size must not grow). `--fix` without dry-run **does** append ops.
 
 **ready / claim**:
 
@@ -192,12 +199,27 @@ Draft issues (`confidence=draft` at birth) are excluded from the ready queue. Pr
 "$ARM" --repo "$TARGET" --format agent --non-interactive dag transition --issue TASK-VERIFY-READY
 # {"issue":"TASK-VERIFY-READY","promoted_to":"verified"}
 "$ARM" --repo "$TARGET" --format agent --non-interactive ready
-# [{"issue":"TASK-VERIFY-READY","type":"task","title":"...","scope":["ready.go"]}]
+# {"count":1,"issues":[{"id":"TASK-VERIFY-READY","type":"task","title":"...","scope":["ready.go"]}],"help":[...]}
 "$ARM" --repo "$TARGET" --format agent --non-interactive claim --issue TASK-VERIFY-READY --worktree
 # {"claimed_by":"<uuid>","issue":"TASK-VERIFY-READY","ttl":60}
 ```
 
-`--worktree` is required. Valueless `--worktree` provisions `$TARGET/.worktrees/<id>` on branch `task/<id>`. Confirm with `git -C "$TARGET" worktree list` and `"$ARM" --repo "$TARGET" --format agent --non-interactive worktree list` (`{"bound":["TASK-VERIFY-READY"], ...}`).
+`claim` publishes `_armature`. Point `origin` at a local bare repo and `git push origin _armature` before claiming. With no origin the command exits `CLAIM-1` (`publish _armature class=other`) and does not provision a worktree.
+
+`--worktree` is required. Valueless `--worktree` provisions `$TARGET/.worktrees/<id>` on branch `task/<id>`. Confirm with `git -C "$TARGET" worktree list` and `"$ARM" --repo "$TARGET" --format agent --non-interactive worktree list` (envelope `{count, worktrees, help, bound:[...], ...}`; `bound` includes `TASK-VERIFY-READY`).
+
+**ops-backup** (published `_armature` tip; needs a local `origin` that has `refs/heads/_armature`; does not require a prior `arm doctor`):
+
+```bash
+"$ARM" --repo "$TARGET" --format agent --non-interactive ops-backup snapshot --output "$BUNDLE"
+# {"count":1,"snapshots":[{"status":"ok","tip":"<sha>","bundle":"<path>"}],"help":[...]}
+"$ARM" --repo "$TARGET" --format agent --non-interactive ops-backup verify "$BUNDLE"
+# {"count":1,"verifications":[{"status":"ok","bundle":"<path>","advertises":"refs/heads/_armature"}],"help":[...]}
+"$ARM" --repo "$TARGET" --format agent --non-interactive ops-backup restore-plan --from "$BUNDLE"
+# {"count":1,"plans":[{"disposition":"fast-forward","recovered":"<sha>","bundle":"<path>"}],"help":[...]}
+```
+
+`restore-plan` does not publish. `disposition` `diverge→_armature-recovered` exits 1 with the plan envelope and no second error object. Refresh/verify failures are `OPS-BACKUP-1`.
 
 `dag transition` requires a strict-green `arm validate` of the graph (cited source, no E6, no scope overlap). Seed a filesystem source first:
 
@@ -289,7 +311,7 @@ Executable helper (this is the harness named in the feature files):
 .agents/skills/verify-armature/scripts/arm-verify.sh cleanup
 ```
 
-Or `.../arm-verify.sh run create-list` for the full loop. Feature names: `bootstrap`, `worker-init`, `create-list`, `doctor`, `ready-claim`.
+Or `.../arm-verify.sh run create-list` for the full loop. Feature names: `bootstrap`, `worker-init`, `create-list`, `doctor`, `ready-claim`, `ops-backup`.
 
 The script is bash, `chmod +x`. It records evidence itself. Do not reverse-engineer flags — they match this file.
 
@@ -297,11 +319,12 @@ The script is bash, `chmod +x`. It records evidence itself. Do not reverse-engin
 
 - Runtime for the **binary** is Go-built `arm` + git. **Building** this checkout uses `make build` (GNU make + Go). Installing to PATH writes `~/.local/bin/arm`; verification uses `./bin/arm`.
 - `arm bootstrap` already registers `armature.worker-id` when missing. `arm worker-init` without `--check` **rotates** that id.
-- `arm show --format agent` is human text; use `--format json` for the issue object.
-- `arm list` / `arm ready` structured output is a raw JSON array (ready empty → `null`), not the `{count, payload, help[]}` agent envelope.
-- Task `create` is gated on E6 fields (`scope`, `acceptance`, `definition_of_done`). Citation is required to **promote**, not to create.
+- `arm show --format agent` is the `{count, issues, help}` envelope, same as `--format json`. Human text is the default format. The issue body is `issues[0]`.
+- `arm list` / `arm ready` structured output is that same envelope (ready empty → `count: 0`, `issues: []`). List rows are `{id, type, status, title}`. Ready rows use `id`, not `issue`.
+- Task `create` is gated on E6 fields (`scope`, `acceptance`, `definition_of_done`). A refused create is `CREATE-1`, not `GENERAL-1`. Citation is required to **promote**, not to create.
 - `claim --worktree` is mandatory; it provisions `.worktrees/<id>` on `task/<id>`.
-- Product `arm doctor` is D1–D10 on a **bootstrapped** repo. Unbootstrapped → `GENERAL-1` ops-worktree-path. Do not conflate with this skill's Doctor section.
+- Product `arm doctor` emits D1–D10 and D12 on a **bootstrapped** repo. D11 is reserved and not live. Unbootstrapped → `DOCTOR-1` ops-worktree-path. Do not conflate with this skill's Doctor section.
+- `arm ops-backup snapshot|verify|restore-plan` is the published-tip backup lever. It is not a doctor check.
 - Repo-local skills live under `.agents/skills/`. This skill is `.agents/skills/verify-armature/`. Embedded workflow skills in `internal/skillsembed/skills/` are a different product.
 - Secondary TUIs: `arm tui`, `arm dag summary`, and interactive `arm ready`. Drive with `--non-interactive`.
 - Isolation is a disposable git repo + `--repo` (and `ARM_LOG_SLOT` only for parallel same-clone writers). No ports.
