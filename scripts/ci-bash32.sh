@@ -10,10 +10,10 @@ cd "$ROOT"
 ver="$(bash --version | head -n 1)"
 echo "bash: $ver"
 case "$ver" in
-  *"version 3.2"*)
+  *"version 3.2.57"*)
     ;;
   *)
-    echo "FAIL: expected Bash 3.2.x on PATH, got: $ver" >&2
+    echo "FAIL: expected Bash 3.2.57 on PATH (pinned image), got: $ver" >&2
     exit 1
     ;;
 esac

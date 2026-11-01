@@ -844,7 +844,7 @@ else
     fail "depth=50 vs unshallow origin/main range demo failed"
 fi
 
-echo "Test 13: check-test-porcelain content-hash baseline; rewrite dirty tracked fails; Bash 3.2 CI..."
+echo "Test 13: content-hash porcelain; bash:3.2.57 digest pin; baseline fail-closed..."
 
 PORC_DEMO=$(mktemp -d)
 cleanup_porc() { rm -rf "$PORC_DEMO"; }
@@ -880,11 +880,9 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: rewrite failure missing path/hash signal: $out"
         exit 1
     fi
-    # Restore dirty-v1 so baseline matches again.
     printf 'dirty-v1\n' > tracked.txt
     bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" >/dev/null
 
-    # Leaked file vs clean-enough baseline that includes dirty tracked.
     printf 'x\n' > leaked-file.txt
     set +e
     out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
@@ -900,7 +898,6 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
-    # Leaked directory
     mkdir -p leaked-dir
     printf 'y\n' > leaked-dir/inner.txt
     set +e
@@ -916,55 +913,106 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: leaked dir missing from porcelain output: $out"
         exit 1
     fi
-
     rm -f "$baseline"
 
-    # Regex pre-check still green on make-invoked scripts.
-    bash "$REPO_ROOT/scripts/check-bash32-scripts.sh" "$REPO_ROOT" >/dev/null
+    # Host Bash 4+: fixtures must exit 0 (dual self-check; 3.2 failure is CI).
+    bash "$REPO_ROOT/scripts/prove-bash32-mutations.sh" >/dev/null
 
-    # CI pins real Bash 3.2 via docker bash:3.2 + mutation fixtures.
-    if ! rg -q 'bash:3\.2' "$CI_YML"; then
-        echo "FAIL: ci.yml missing bash:3.2 image pin"
+    for mut in readarray coproc v-test; do
+        f="$REPO_ROOT/scripts/testdata/bash32-mutations/${mut}.sh"
+        if ! rg -q 'set -euo pipefail' "$f"; then
+            echo "FAIL: $mut fixture missing set -euo pipefail"
+            exit 1
+        fi
+    done
+
+    # Digest-pinned bash:3.2.57 + pinned apk git.
+    if ! rg -q 'bash:3\.2\.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a' "$CI_YML"; then
+        echo "FAIL: ci.yml missing bash:3.2.57@sha256 digest pin"
+        exit 1
+    fi
+    if ! rg -q 'git=2\.49\.1-r0' "$CI_YML"; then
+        echo "FAIL: ci.yml missing pinned apk git=2.49.1-r0"
         exit 1
     fi
     if ! rg -q 'check-bash32:' "$CI_YML"; then
         echo "FAIL: ci.yml missing check-bash32 job"
         exit 1
     fi
-    if ! rg -q 'scripts/ci-bash32\.sh' "$CI_YML"; then
-        echo "FAIL: ci.yml missing ci-bash32.sh entrypoint"
+
+    bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
+
+    # Unpinned docker run must fail the image-pin lint.
+    badwf=$(mktemp -d)
+    mkdir -p "$badwf/.github/workflows"
+    cat >"$badwf/.github/workflows/ci.yml" <<'YAML'
+name: bad
+on: push
+permissions:
+  contents: read
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - run: docker run --rm bash:3.2 echo hi
+YAML
+    set +e
+    pinout=$(bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$badwf" 2>&1)
+    pinst=$?
+    set -e
+    rm -rf "$badwf"
+    if [[ $pinst -eq 0 ]]; then
+        echo "FAIL: unpinned docker run did not fail image-pin lint: $pinout"
         exit 1
     fi
-    for mut in readarray coproc v-test; do
-        if [[ ! -f "$REPO_ROOT/scripts/testdata/bash32-mutations/${mut}.sh" ]]; then
-            echo "FAIL: missing bash32 mutation fixture $mut"
-            exit 1
-        fi
-    done
-    # Host bash may be 5.x — mutations must *succeed* here and *fail* in the
-    # bash:3.2 job. Assert fixtures are present and contain the tokens.
-    if ! rg -q 'readarray' "$REPO_ROOT/scripts/testdata/bash32-mutations/readarray.sh"; then
-        echo "FAIL: readarray fixture missing token"
-        exit 1
-    fi
-    if ! rg -q 'coproc' "$REPO_ROOT/scripts/testdata/bash32-mutations/coproc.sh"; then
-        echo "FAIL: coproc fixture missing token"
-        exit 1
-    fi
-    if ! rg -q '\[\[ -v' "$REPO_ROOT/scripts/testdata/bash32-mutations/v-test.sh"; then
-        echo "FAIL: [[ -v ]] fixture missing token"
+    if ! printf '%s\n' "$pinout" | rg -q 'sha256|missing'; then
+        echo "FAIL: unpinned lint output unclear: $pinout"
         exit 1
     fi
 
-    echo "PASS: content-hash porcelain rewrite fails; bash:3.2 CI wired"
+    # Makefile write-baseline failure must stop make (not ignored via ';').
+    if ! rg -q 'check-test-porcelain\.sh --write-baseline .* \|\| \{' "$MAKEFILE"; then
+        echo "FAIL: Makefile write-baseline missing || fail-closed"
+        exit 1
+    fi
+    mkdemo=$(mktemp -d)
+    mkdir -p "$mkdemo/scripts"
+    printf '%s\n' '#!/usr/bin/env bash' 'echo forced-baseline-failure >&2' 'exit 1' \
+        >"$mkdemo/scripts/check-test-porcelain.sh"
+    chmod +x "$mkdemo/scripts/check-test-porcelain.sh"
+    # Minimal recipe mirroring make test's fail-closed write-baseline line.
+    cat >"$mkdemo/Makefile" <<'EOF'
+test:
+	@tmp=$$(mktemp); \
+	pre=$$(mktemp); \
+	scripts/check-test-porcelain.sh --write-baseline . "$$pre" || { rm -f "$$pre" "$$tmp"; exit 1; }; \
+	echo SHOULD_NOT_REACH; \
+	exit 0
+EOF
+    set +e
+    mkout=$(make -C "$mkdemo" test 2>&1)
+    mkst=$?
+    set -e
+    rm -rf "$mkdemo"
+    if [[ $mkst -eq 0 ]]; then
+        echo "FAIL: forced write-baseline failure did not stop make: $mkout"
+        exit 1
+    fi
+    if printf '%s\n' "$mkout" | rg -q 'SHOULD_NOT_REACH'; then
+        echo "FAIL: make continued after write-baseline failure: $mkout"
+        exit 1
+    fi
+
+    echo "PASS: content-hash + digest pin + baseline fail-closed"
 ) && PORC_STATUS=0 || PORC_STATUS=$?
 cleanup_porc
 
 if [[ $PORC_STATUS -eq 0 ]]; then
-    pass "content-hash porcelain + bash:3.2 CI wiring"
+    pass "content-hash porcelain + bash:3.2.57 pin + baseline fail-closed"
 else
-    fail "porcelain content-hash / bash32 CI demo failed"
+    fail "porcelain / bash32 pin / baseline fail-closed demo failed"
 fi
+
 
 echo ""
 if [[ $FAILURES -eq 0 ]]; then

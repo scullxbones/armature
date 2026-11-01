@@ -96,9 +96,10 @@ jobs:
           retention-days: 14
           if-no-files-found: ${{ runner.os == 'Windows' && 'ignore' || 'warn' }}
 
-  # Real Bash 3.2: run cross-OS make scripts inside the pinned bash:3.2
-  # image. Regex pre-check (scripts/check-bash32-scripts.sh) stays advisory
-  # in make lint; this job is the fail-closed proof (bash -n + mutations).
+  # Real Bash 3.2.57: run cross-OS make scripts inside the digest-pinned
+  # bash:3.2.57 image. Regex pre-check stays advisory in make lint; this job
+  # is the fail-closed proof (bash -n + mutations). Host Bash 4+ must make
+  # each mutation fixture exit 0; Bash 3.2 must make each exit non-zero.
   check-bash32:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
@@ -110,14 +111,22 @@ jobs:
           persist-credentials: false
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
-      - name: Run cross-OS scripts under bash:3.2
+      - name: Mutation fixtures must succeed under host Bash 4+
+        run: bash scripts/prove-bash32-mutations.sh
+      - name: Run cross-OS scripts under pinned bash:3.2.57
+        # Image digest: library/bash 3.2.57 / 3.2-alpine3.22 index (resolved 2026-11-01).
+        # apk git=2.49.1-r0 is Alpine v3.22 main, verified post-install.
         run: |
           docker run --rm \
             --entrypoint sh \
             -v "$PWD:/src:ro" \
             -w /src \
-            bash:3.2 \
-            -c 'apk add --no-cache git >/dev/null && bash scripts/ci-bash32.sh /src'
+            bash:3.2.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a \
+            -c 'apk add --no-cache git=2.49.1-r0 >/dev/null \
+              && got=$(git --version) \
+              && echo "apk git: $got" \
+              && echo "$got" | grep -F "git version 2.49.1" >/dev/null \
+              && bash scripts/ci-bash32.sh /src'
 
   check-core:
     if: ${{ !inputs.os-matrix-only }}

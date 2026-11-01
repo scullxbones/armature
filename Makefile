@@ -235,7 +235,7 @@ TEST_JSON_OUT ?=
 test: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
 	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
-	scripts/check-test-porcelain.sh --write-baseline . "$$pre"; \
+	scripts/check-test-porcelain.sh --write-baseline . "$$pre" || { rm -f "$$pre" "$$tmp"; exit 1; }; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -timeout $(TEST_TIMEOUT) $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	if [ -n "$(TEST_JSON_OUT)" ]; then \
 		mkdir -p "$$(dirname "$(TEST_JSON_OUT)")"; \
@@ -270,7 +270,7 @@ test-e2eharness: build
 coverage: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
 	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
-	scripts/check-test-porcelain.sh --write-baseline . "$$pre"; \
+	scripts/check-test-porcelain.sh --write-baseline . "$$pre" || { rm -f "$$pre" "$$tmp"; exit 1; }; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
@@ -294,6 +294,7 @@ lint: adr-principles
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
 	@scripts/check-bash32-scripts.sh .
+	@scripts/check-workflow-image-pins.sh .
 	@scripts/check-mock-ban.sh .
 	@$(GO) run ./scripts/repoguard -check source-manifest .
 	@$(GO) run ./scripts/repoguard -check gochecknoglobals-probe .

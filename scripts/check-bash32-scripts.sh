@@ -20,6 +20,7 @@ scripts/install-verified-github-release.sh
 scripts/quickstart_check.sh
 scripts/ci-bash32.sh
 scripts/prove-bash32-mutations.sh
+scripts/check-workflow-image-pins.sh
 "
 
 # Build the token list without writing a single source line that is itself a hit.

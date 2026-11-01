@@ -39,7 +39,7 @@ PR wall is the **max** of three required GitHub Actions jobs (no `needs` between
 | `check-static` | **owns commit-subjects on `pull_request` only** (PR `head.sha` + `fetch-depth: 0` + `origin/main` fetch); skipped on `push` to main (tip == `origin/main` after fetch → empty range). Then lint / crosscompile / check-job drift and the rest of the static partition |
 | `mutate` | gremlins on `./internal` then `./cmd` (full, every PR) |
 | `check-git-2-34` | checksum-pinned Git **2.34.0** on PATH, then `make check-git-floor` (CHECK_JOBS only — proves S12 on the floor; no commit-subjects) |
-| `check-bash32` | pinned `bash:3.2` container runs `scripts/ci-bash32.sh` (`bash -n` on cross-OS make scripts + `readarray` / `coproc` / `[[ -v ]]` mutation fixtures must fail). Regex pre-check in `make lint` is advisory only |
+| `check-bash32` | digest-pinned `bash:3.2.57@sha256:…` runs `scripts/ci-bash32.sh` (`bash -n` + mutations). Host Bash 4+ requires fixtures exit 0; Bash 3.2.57 requires non-zero (`set -euo pipefail` on fixtures). `apk add git=2.49.1-r0` verified. Regex pre-check + `check-workflow-image-pins.sh` in `make lint` |
 
 Every CI job runs `scripts/assert-git-min.sh` so runner images cannot silently fall below Git 2.34. The product runtime check (`adapters.RequireMinGit` / `MinGitVersion`) matches that floor.
 
