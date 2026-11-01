@@ -645,7 +645,7 @@ arm doctor --format json
 
 ### D11: Ops Remote Tracking (G2.2)
 
-**Check:** Verifies `origin/_armature` with a fresh per-run fetch into a throwaway run ref (does not rewrite shared `refs/remotes/origin/_armature`), then classifies missing remote tip, stale unpublished local-only ops, healthy tip, or could-not-verify.
+**Check:** Verifies `origin/_armature` with a fresh per-run fetch into a throwaway run ref (does not rewrite shared `refs/remotes/origin/_armature`), then classifies missing remote tip, stale unpublished local-only ops, healthy tip, or could-not-verify. Staleness ages from the oldest committer timestamp among **all** commits in `origin/_armature..HEAD` (same full set as the ahead count — not first-parent only), so a recent merge of an old unpublished side branch still warns.
 
 **Trigger:** Missing `origin/_armature`; local-only `_armature` commits at least `local_only_ops_stale_hours` old (default 24h when omitted); fetch/resolve/rev-list/age probe failure; or configured `local_only_ops_stale_hours` that fails overflow-checked duration conversion. Unreadable config that would supply the stale window surfaces a warning that D11 fell back to the 24h default (D10 also errors on the same file). Conversion overflow is an error finding — never a silent 24h default.
 

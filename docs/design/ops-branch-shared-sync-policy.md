@@ -39,7 +39,7 @@ surface).
 
 Related but not this design: `arm sync` / `internal/promotion` detect **code-branch
 merges** and write `merged` transitions. Unrelated to publishing `_armature`.
-G2.2 in `docs/design/narrow-gaps-addendum.md` (reserved doctor **D11**,
+G2.2 in `docs/design/narrow-gaps-addendum.md` (doctor **D11**, live for
 `TOPTIER-S12-T2`) is disaster-recovery / missing upstream, not lag counts.
 
 ### Failure modes this sketch owns
@@ -383,7 +383,7 @@ arm ready   → (no opsync)
 | **Succeed high-stakes on publish error (status quo)** | The bug. Other clones race the unpublished claim. |
 | **New Failure Code family `OPSYNC-1` plus `arm opsync`** | No user-facing group. Collides conceptually with `arm sync`. Port mapping stays on the verb that ran. |
 | **Coalesce-N as the headline** | That *is* Candidate A with an extra type. Coalesce may later be `Config.CoalesceLow` default 1. |
-| **Reuse reserved D11** | D11 is G2.2 backup / missing upstream (`TOPTIER-S12-T2`). Lag is a different finding. Allocate **D12**. |
+| **Reuse D11** | D11 is G2.2 backup / missing upstream (`TOPTIER-S12-T2`, now live). Lag is a different finding. Allocate **D12**. |
 | **Commit last-attempt JSON to `_armature`** | Cross-clone noise, extra push, and I3 file-ownership questions. Diagnostic is clone-local. |
 | **Push from the post-commit hook only** | Hook is `|| true` and stderr-discarded. Agents never see it. Cannot be the high-stakes contract. |
 

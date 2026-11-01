@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -137,6 +138,86 @@ func TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2(t *testing.T) 
 	}
 	assert.Contains(t, body, "checks D1–D12",
 		"validation-codes intro must name the full live doctor range including D11")
+}
+
+// TestDocsDoNotReserveLiveCheckIDs_REQ_TOPTIER_S12_T2 fails when non-archive
+// docs/ prose places "reserved" next to a live doctor check ID (e.g. calling
+// live D11 reserved). Archive/ and historical "no longer reserved" phrasing
+// are allowed.
+func TestDocsDoNotReserveLiveCheckIDs_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	live := LiveCheckIDs()
+	require.NotEmpty(t, live)
+	idRes := make([]*regexp.Regexp, 0, len(live))
+	for _, id := range live {
+		// Word-boundary so D1 does not match inside D13.
+		idRes = append(idRes, regexp.MustCompile(`(?i)\b`+regexp.QuoteMeta(id)+`\b`))
+	}
+	reservedRE := regexp.MustCompile(`(?i)reserved`)
+
+	root := filepath.Join(repoRoot(t), "docs")
+	var mdPaths []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if rel == "archive" || strings.HasPrefix(rel, "archive"+string(filepath.Separator)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(path), ".md") {
+			mdPaths = append(mdPaths, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	var offenders []string
+	for _, path := range mdPaths {
+		rel, err := filepath.Rel(root, path)
+		require.NoError(t, err)
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		for i, line := range strings.Split(string(raw), "\n") {
+			lower := strings.ToLower(line)
+			if !reservedRE.MatchString(line) {
+				continue
+			}
+			// Explicitly historical / negated wording is fine.
+			if strings.Contains(lower, "no longer reserved") ||
+				strings.Contains(lower, "not reserved") ||
+				strings.Contains(lower, "was reserved") ||
+				strings.Contains(lower, "formerly reserved") {
+				continue
+			}
+			resIdx := reservedRE.FindStringIndex(line)
+			if resIdx == nil {
+				continue
+			}
+			for _, idRE := range idRes {
+				loc := idRE.FindStringIndex(line)
+				if loc == nil {
+					continue
+				}
+				gap := loc[0] - resIdx[0]
+				if gap < 0 {
+					gap = -gap
+				}
+				if gap > 48 {
+					continue
+				}
+				offenders = append(offenders, fmt.Sprintf("%s:%d: %s", filepath.ToSlash(rel), i+1, strings.TrimSpace(line)))
+			}
+		}
+	}
+	assert.Empty(t, offenders, "docs/ (excl archive) must not call a live check ID reserved:\n%s", strings.Join(offenders, "\n"))
 }
 
 func repoRoot(t *testing.T) string {

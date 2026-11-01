@@ -518,9 +518,11 @@ conversion are errors, so `arm doctor` exits non-zero.
 fetches `_armature` into a per-run throwaway ref (does not rewrite shared
 `origin/_armature` tracking). Missing remote tip or local-only ops older than
 `local_only_ops_stale_hours` (default 24h) are warnings; probe failures are
-errors. Remediation is `arm push-ops`. Unreadable config that would supply the
-stale window warns that D11 fell back to 24h (D10 also errors). Missing
-worktree skips OK. D11 is not part of `doctor --fix`.
+errors. Staleness ages from the oldest committer among **all** commits in
+`origin/_armature..HEAD` (not first-parent only). Remediation is `arm push-ops`
+(in the finding `items`). Unreadable config that would supply the stale window
+warns that D11 fell back to 24h (D10 also errors). Missing worktree skips OK.
+D11 is not part of `doctor --fix`.
 
 **D12 — Ops worktree lag.** When the ops worktree exists, `arm doctor` fetches
 `origin/_armature` in that worktree without moving HEAD. If HEAD is N>0 commits
@@ -756,9 +758,9 @@ the command exits non-zero; origin is not updated.
 Durable tip copy for the published `_armature` orphan branch. This is the
 supported recovery surface for ops durability (narrow-gaps G2.1 / G2.3 as a
 tested CLI lever). Doctor **D11** (G2.2) warns on a missing or stale
-`origin/_armature` tip; its remediation / `next_actions` name
-`arm push-ops` (publishes local HEAD). `snapshot` / `restore-plan` do not
-preserve unpublished local-only commits — they only cover the published tip.
+`origin/_armature` tip; its remediation lands in the finding's `items`
+(e.g. `arm push-ops`, which publishes local HEAD). `snapshot` / `restore-plan`
+do not preserve unpublished local-only commits — they only cover the published tip.
 Do not maintain parallel bash cookbooks.
 
 ### Ops durability guarantees (G2.1)

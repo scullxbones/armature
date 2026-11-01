@@ -18,16 +18,17 @@ import (
 
 // fakeD11Git injects typed probe outcomes for fail-closed D11 tables.
 type fakeD11Git struct {
-	fetchErr         error
-	tip              string
-	resolveErr       error
-	ahead            int
-	revListErr       error
-	localOnly        []string
-	firstParentErr   error
-	committerUnix    int64
-	committerUnixErr error
-	deleted          []string
+	fetchErr          error
+	tip               string
+	resolveErr        error
+	ahead             int
+	revListErr        error
+	localOnly         []string
+	revListReverseErr error
+	committerUnix     int64
+	committerBySHA    map[string]int64
+	committerUnixErr  error
+	deleted           []string
 }
 
 func (g *fakeD11Git) FetchBranchToRef(string, string) error { return g.fetchErr }
@@ -49,18 +50,23 @@ func (g *fakeD11Git) RevListCount(string) (int, error) {
 	return g.ahead, nil
 }
 
-func (g *fakeD11Git) FirstParentAfter(string, string) ([]string, error) {
-	if g.firstParentErr != nil {
-		return nil, g.firstParentErr
+func (g *fakeD11Git) RevListReverse(string) ([]string, error) {
+	if g.revListReverseErr != nil {
+		return nil, g.revListReverseErr
 	}
 	out := make([]string, len(g.localOnly))
 	copy(out, g.localOnly)
 	return out, nil
 }
 
-func (g *fakeD11Git) CommitterUnix(string) (int64, error) {
+func (g *fakeD11Git) CommitterUnix(sha string) (int64, error) {
 	if g.committerUnixErr != nil {
 		return 0, g.committerUnixErr
+	}
+	if g.committerBySHA != nil {
+		if unix, ok := g.committerBySHA[sha]; ok {
+			return unix, nil
+		}
 	}
 	return g.committerUnix, nil
 }
@@ -101,9 +107,12 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "healthy_fresh_local_only",
 			g: &fakeD11Git{
-				tip:           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead:         2,
-				localOnly:     []string{"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+				tip:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead: 2,
+				localOnly: []string{
+					"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+					"cccccccccccccfreshcccccccccccccccccccccc",
+				},
 				committerUnix: freshUnix,
 			},
 			wantOut:  d11Healthy,
@@ -114,9 +123,13 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "stale_local_only",
 			g: &fakeD11Git{
-				tip:           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead:         3,
-				localOnly:     []string{"cccccccccccccccccccccccccccccccccccccccc"},
+				tip:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead: 3,
+				localOnly: []string{
+					"cccccccccccccccccccccccccccccccccccccccc",
+					"dddddddddddddddddddddddddddddddddddddddd",
+					"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+				},
 				committerUnix: staleUnix,
 			},
 			wantOut:   d11Stale,
@@ -195,16 +208,38 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 			contains: "Could not verify",
 		},
 		{
-			name: "first_parent_fails",
+			name: "rev_list_reverse_fails",
 			g: &fakeD11Git{
-				tip:            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				ahead:          2,
-				firstParentErr: errors.New("first-parent boom"),
+				tip:               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:             2,
+				revListReverseErr: errors.New("rev-list reverse boom"),
 			},
 			wantOut:  d11CouldNotVerify,
 			wantSev:  SeverityError,
 			wantExit: 1,
 			contains: "Could not verify",
+		},
+		{
+			name: "merged_side_branch_ages_from_oldest_not_merge",
+			// Count includes the old side-branch tip; first-parent would only
+			// see the recent merge. Full-range oldest must still be stale.
+			g: &fakeD11Git{
+				tip:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead: 2,
+				localOnly: []string{
+					"oldsidebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+					"mergemccccccccccccccccccccccccccccccccccc",
+				},
+				committerBySHA: map[string]int64{
+					"oldsidebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": staleUnix,
+					"mergemccccccccccccccccccccccccccccccccccc": freshUnix,
+				},
+			},
+			wantOut:   d11Stale,
+			wantSev:   SeverityWarning,
+			wantExit:  0,
+			contains:  "Local-only ops",
+			itemsHint: true,
 		},
 		{
 			name: "committer_time_fails",
@@ -383,6 +418,32 @@ func TestDoctorD11_WarnsOnStaleLocalOnlyOps_REQ_TOPTIER_S12_T2(t *testing.T) {
 	require.Equal(t, []string{d11RemediationHint}, d11.Items)
 	assert.Equal(t, 0, d11DoctorExit(d11, false))
 	assert.NotContains(t, d11.Message, "docs/ops-backup.md")
+}
+
+func TestDoctorD11_AgesMergedSideBranchNotJustFirstParent_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	// Codex P2 repro: side branch committer backdated 30h, --no-ff merge onto
+	// _armature with a fresh merge commit while origin stays at the merge base.
+	// First-parent age would be healthy; full remote..HEAD oldest must warn.
+	worktree, _ := opsWorktreeWithOrigin(t)
+	base := gitOut(t, worktree, "rev-parse", "HEAD")
+
+	staleWhen := time.Now().Add(-30 * time.Hour)
+	runGit(t, worktree, "checkout", "-b", "side-old")
+	runGitEnv(t, worktree, map[string]string{
+		"GIT_AUTHOR_DATE":    staleWhen.Format(time.RFC3339),
+		"GIT_COMMITTER_DATE": staleWhen.Format(time.RFC3339),
+	}, "commit", "--allow-empty", "-m", "old unpublished side branch")
+
+	runGit(t, worktree, "checkout", "_armature")
+	runGit(t, worktree, "merge", "--no-ff", "-m", "recent merge of old side", "side-old")
+	require.NotEqual(t, base, gitOut(t, worktree, "rev-parse", "HEAD"))
+
+	d11 := checkD11OpsRemote(worktree, "", time.Now())
+	assert.Equal(t, SeverityWarning, d11.Severity, d11.Message)
+	assert.Contains(t, d11.Message, "Local-only ops")
+	require.Equal(t, []string{d11RemediationHint}, d11.Items)
 }
 
 func TestDoctorD11_ConfigStaleHoursOverride_REQ_TOPTIER_S12_T2(t *testing.T) {
