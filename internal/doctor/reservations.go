@@ -8,8 +8,7 @@ import (
 
 // CheckReservation is a git-tracked claim on a doctor check ID that is not yet
 // emitted by Run. Planners allocate against LiveCheckIDs plus these rows so a
-// held story cannot collide with a live ID. S12 is authorized for the
-// CLAIMORD-W21 cascade: TOPTIER-S12-T2 reserves D11; TOPTIER-S18-T4 reserves D14.
+// held story cannot collide with a live ID.
 type CheckReservation struct {
 	ID      string
 	Issue   string

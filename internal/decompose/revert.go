@@ -9,9 +9,6 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// foreignChildError is returned when revert would strand an issue that is
-// not in the plan but currently has a planned issue as its parent.
-// Callers outside this package see only the error string.
 type foreignChildError struct {
 	Child  string
 	Parent string
