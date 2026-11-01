@@ -635,6 +635,32 @@ func TestRevListCount_ReportsErrorOnMissingRev(t *testing.T) {
 	assert.Contains(t, err.Error(), "git rev-list --count")
 }
 
+func TestCommitterUnixRange_MatchesPerSHA_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	base := runGitOutput(t, repo, "rev-parse", "HEAD")
+	runGitDir(t, repo, "commit", "--allow-empty", "-m", "one")
+	runGitDir(t, repo, "commit", "--allow-empty", "-m", "two")
+	c := adapters.New(repo)
+
+	rangeSpec := base + "..HEAD"
+	batched, err := c.CommitterUnixRange(rangeSpec)
+	require.NoError(t, err)
+	require.Len(t, batched, 2)
+
+	shas := strings.Split(strings.TrimSpace(runGitOutput(t, repo, "rev-list", rangeSpec)), "\n")
+	require.Len(t, shas, 2)
+	for i, sha := range shas {
+		got, shaErr := c.CommitterUnix(sha)
+		require.NoError(t, shaErr)
+		assert.Equal(t, got, batched[i], "batched range must match per-SHA committer for %s", sha)
+	}
+
+	empty, err := c.CommitterUnixRange(base + ".." + base)
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+}
+
 func runGitDir(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), "git", args...)

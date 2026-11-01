@@ -22,19 +22,50 @@ const GatesFileName = "gates.json"
 // a bare number of minutes so existing config files load unchanged.
 type TTLMinutes int
 
-// Duration returns the TTL as a time.Duration.
+// Duration returns the TTL as a time.Duration. Overflow/negative counts yield 0;
+// D10 rejects those values via durationFromCount before they are relied on.
 func (m TTLMinutes) Duration() time.Duration {
-	return time.Duration(m) * time.Minute
+	d, err := durationFromCount(int64(m), time.Minute)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
-// Seconds returns the TTL as whole seconds.
+// Seconds returns the TTL as whole seconds. Overflow/negative counts yield 0;
+// same bounds as Duration (via durationFromCount).
 func (m TTLMinutes) Seconds() int64 {
-	return int64(m) * 60
+	d, err := durationFromCount(int64(m), time.Minute)
+	if err != nil {
+		return 0
+	}
+	return int64(d / time.Second)
 }
 
 func (m TTLMinutes) overflowsConversions() bool {
+	if _, err := durationFromCount(int64(m), time.Minute); err != nil {
+		return true
+	}
+	// Idle classification uses 2 × TTL seconds (arm workers).
 	n := int64(m)
-	return n > math.MaxInt64/int64(time.Minute) || n > math.MaxInt64/(2*60) || n > math.MaxInt64/60
+	return n > math.MaxInt64/(2*60)
+}
+
+// durationFromCount is the single overflow-checked conversion from an integer
+// count × unit into time.Duration. D10 and every duration-ish config consumer
+// use this helper so bounds stay one source of truth. Negative counts and
+// products that would overflow int64 return an error — never a wrapped value.
+func durationFromCount(n int64, unit time.Duration) (time.Duration, error) {
+	if n < 0 {
+		return 0, fmt.Errorf("duration count %d is negative", n)
+	}
+	if unit <= 0 {
+		return 0, fmt.Errorf("duration unit must be positive")
+	}
+	if n > 0 && n > math.MaxInt64/int64(unit) {
+		return 0, fmt.Errorf("duration count %d overflows at unit %s", n, unit)
+	}
+	return time.Duration(n) * unit, nil
 }
 
 // PendingOps is a count of pending low-stakes ops. JSON
@@ -42,8 +73,9 @@ func (m TTLMinutes) overflowsConversions() bool {
 type PendingOps int
 
 const (
-	DefaultTTLMinutes     TTLMinutes = 60
-	DefaultPendingOpCount PendingOps = 5
+	DefaultTTLMinutes             TTLMinutes = 60
+	DefaultPendingOpCount         PendingOps = 5
+	DefaultLocalOnlyOpsStaleHours int        = 24
 )
 
 type Config struct {
@@ -51,9 +83,26 @@ type Config struct {
 	DefaultTTL             TTLMinutes            `json:"default_ttl"`
 	TokenBudget            int                   `json:"token_budget"`
 	LowStakesPushThreshold PendingOps            `json:"low_stakes_push_threshold"`
+	LocalOnlyOpsStaleHours int                   `json:"local_only_ops_stale_hours,omitempty"`
 	Hooks                  []HookConfig          `json:"hooks"`
 	Gates                  map[string]GateConfig `json:"gates,omitempty"`
 	IntegrationBranch      string                `json:"integration_branch,omitempty"`
+}
+
+// LocalOnlyOpsStaleAfter returns the D11 / G2.2 staleness window for a decoded
+// Config whose local_only_ops_stale_hours was omitted (struct zero → 24h) or
+// already range-validated. Callers that have the raw JSON must run
+// ValidatePresentFields first (D10 and D11 share that path) so a present 0 /
+// negative / overflow never reaches the omit→24h branch.
+func (c Config) LocalOnlyOpsStaleAfter() (time.Duration, error) {
+	hours := int64(c.LocalOnlyOpsStaleHours)
+	if hours == 0 {
+		hours = int64(DefaultLocalOnlyOpsStaleHours)
+	}
+	if hours < 0 {
+		return 0, fmt.Errorf("local_only_ops_stale_hours %d is out of range (must be > 0)", hours)
+	}
+	return durationFromCount(hours, time.Hour)
 }
 
 const DefaultIntegrationBranch = "main"

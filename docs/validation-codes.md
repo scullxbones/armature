@@ -1,6 +1,6 @@
 # Validation & Doctor Codes Reference
 
-This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D10, D12).
+This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D12).
 
 ## Validation Codes (arm validate)
 
@@ -579,6 +579,91 @@ arm doctor --format json
 
 ---
 
+### D7: Worker-ID Mismatches
+
+**Check:** Surfaces ops-load warnings where a log line's worker ID does not match the owning log file.
+
+**Trigger:** Validated ops stream reports worker-ID mismatch warnings.
+
+**Message:** `Worker-ID mismatched ops detected`
+
+**Items:** The mismatch warning strings from ops load.
+
+**Severity:** Warning.
+
+**Fix:** Quarantine or correct the mismatched log lines (`arm doctor quarantine`), then re-run `arm doctor`.
+
+---
+
+### D8: Out-of-Scope Artifacts
+
+**Check:** For claimed / in-progress / recently completed tasks with scope, reports git-dirty paths outside that scope.
+
+**Trigger:** Active or recently-completed scoped tasks leave unexplained dirty paths in the checkout.
+
+**Message:** `Out-of-scope artifacts detected for active or recently-completed tasks`
+
+**Items:** `<task-id>: <path-or-reason>`
+
+**Severity:** Error (or error when dirty paths cannot be listed).
+
+**Fix:** Move or remove the out-of-scope artifact, or amend the task scope to include the intended path.
+
+---
+
+### D9: Unrecognized Managed Worktrees
+
+**Check:** Lists checkouts under the managed `.worktrees/` root that have no issue binding.
+
+**Trigger:** A managed worktree path exists without a matching issue worktree binding.
+
+**Message:** `Managed worktrees with no issue binding`
+
+**Items:** Unrecognized worktree paths.
+
+**Severity:** Warning. Plain `arm doctor` exits 0; `--strict` promotes to error.
+
+**Fix:** Bind the worktree to its issue or remove the stray checkout.
+
+---
+
+### D10: Config Health
+
+**Check:** `.armature/config.json` must decode strictly (unknown fields rejected) and every present field must be in range.
+
+**Trigger:** Malformed JSON, unknown keys, or out-of-range present fields (including a present `0` for `default_ttl`, `token_budget`, `low_stakes_push_threshold`, or `local_only_ops_stale_hours`, and duration overflow for `default_ttl` / `local_only_ops_stale_hours`).
+
+**Message:** `Config.json failed strict decode or range validation` (or `Config.json could not be read`)
+
+**Items:** Named validation problems.
+
+**Severity:** Error. A missing file fails open (OK).
+
+**Fix:** Correct `.armature/config.json` (omit optional fields to use builtins; do not write present zeros for ranged integers).
+
+---
+
+### D11: Ops Remote Tracking (G2.2)
+
+**Check:** Verifies `origin/_armature` with a fresh per-run fetch into a throwaway run ref (does not rewrite shared `refs/remotes/origin/_armature`), then classifies missing remote tip, stale unpublished local-only ops, healthy tip, or could-not-verify. Staleness ages from the oldest committer timestamp among **all** commits in `origin/_armature..HEAD` (same full set as the ahead count — not first-parent only), so a recent merge of an old unpublished side branch still warns.
+
+**Trigger:** Missing `origin/_armature`; local-only `_armature` commits at least `local_only_ops_stale_hours` old (default 24h when omitted); fetch/resolve/rev-list/age probe failure; or configured `local_only_ops_stale_hours` that fails overflow-checked duration conversion. Unreadable config that would supply the stale window surfaces a warning that D11 fell back to the 24h default (D10 also errors on the same file). Conversion overflow is an error finding — never a silent 24h default.
+
+**Message:** `Ops remote tracking tip is verified` (in sync) / `origin/_armature reachable; N unpublished local commit(s) within stale threshold` / `Ops branch has no verified remote tracking tip (origin/_armature missing)` / `Local-only ops on _armature are stale (...)` / `Could not verify ops remote tracking tip: ...` / `Invalid local_only_ops_stale_hours: ...` / config-fallback warning when applicable.
+
+**Items:** Remediation `arm push-ops` on missing/stale; probe/conversion detail on errors.
+
+**Severity:** Warning for missing/stale (and config-fallback); error for could-not-verify and duration conversion failure. Missing ops worktree skips OK. Not part of `doctor --fix`.
+
+**Context:** D11 is disaster-recovery / unpublished-ops coverage. Do not confuse with D12 (read-time lag behind a reachable tip). `ops-backup snapshot|restore-plan` only cover the published tip and do not preserve unpublished local-only commits.
+
+**Fix:**
+```bash
+arm push-ops
+```
+
+---
+
 ### D12: Ops Worktree Lag
 
 **Check:** After a best-effort fetch of `origin/_armature` in the ops worktree (HEAD is not moved), reports whether this clone is behind that tracking ref.
@@ -657,6 +742,11 @@ arm doctor [flags]
 | D4 | Doctor | Error | Broken parent refs |
 | D5 | Doctor | Error | Dependency cycles |
 | D6 | Doctor | Warning | Uncited issues |
+| D7 | Doctor | Warning | Worker-ID mismatched ops |
+| D8 | Doctor | Error | Out-of-scope artifacts |
+| D9 | Doctor | Warning | Unrecognized managed worktrees |
+| D10 | Doctor | Error | Config.json strict decode / range |
+| D11 | Doctor | Warning | Ops remote missing / stale local-only ops (error if unverifiable) |
 | D12 | Doctor | Error | Ops worktree behind origin/_armature, or fetch failed |
 
 ---

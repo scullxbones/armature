@@ -69,7 +69,7 @@ func runChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	return Report{Checks: indexedChecks(index, allIssues, nil, repoPath, now, nil, nil, configPath)}
 }
 
-var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D12"}
+var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12"}
 
 func LiveCheckIDs() []string {
 	out := make([]string, len(liveCheckIDs))
@@ -106,6 +106,7 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 	checks := indexedChecks(index, allIssues, opsTargetIDs, repoPath, now, verboseD3Context,
 		[]Finding{checkD7WorkerIDMismatches(filterMismatchWarnings(warnings))},
 		filepath.Join(issuesDir, "config.json"))
+	checks = append(checks, checkD11OpsRemote(worktreePath, filepath.Join(issuesDir, "config.json"), now))
 	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
 	return Report{Checks: checks}, nil
 }

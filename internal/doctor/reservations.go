@@ -17,11 +17,6 @@ type CheckReservation struct {
 
 var openReservations = []CheckReservation{
 	{
-		ID:      "D11",
-		Issue:   "TOPTIER-S12-T2",
-		Planned: "Ops-branch backup / disaster-recovery doctor check (narrow-gaps G2.2). S12 is authorized for the CLAIMORD-W21 cascade; reserves D11 for S12-T2.",
-	},
-	{
 		ID:      "D13",
 		Issue:   "LNGHZN-S11-T4",
 		Planned: "Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run.",

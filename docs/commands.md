@@ -463,7 +463,7 @@ arm delivery record --issue TASK-001 --base abc123 --tip def456
 
 ## doctor
 
-Run repository health checks (D1-D10, D12).
+Run repository health checks (D1-D12).
 
 **Synopsis:**
 `arm doctor [flags]`
@@ -495,7 +495,7 @@ arm doctor quarantine --log worker-a1.log --line 2
 ```
 
 **Doctor Checks:**
-See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D6), their triggers, and remediation steps.
+See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D12), their triggers, and remediation steps.
 
 **D9 — Unrecognized managed worktrees.** A worktree living under the managed
 `.worktrees/` root that carries no issue binding is reported as a health problem
@@ -510,8 +510,19 @@ binding the worktree to its issue or removing the stray checkout.
 **D10 — Config health.** `.armature/config.json` must decode strictly (unknown
 fields rejected by name) and every present field must be in range. A missing
 file fails open. Malformed JSON, unknown keys, a zero `low_stakes_push_threshold`,
-an empty hook/gate executable, or a `default_ttl` that would overflow claim
-staleness arithmetic are errors, so `arm doctor` exits non-zero.
+an empty hook/gate executable, a `default_ttl` that would overflow claim
+staleness arithmetic, or a `local_only_ops_stale_hours` that overflows duration
+conversion are errors, so `arm doctor` exits non-zero.
+
+**D11 — Ops remote tracking (G2.2).** When the ops worktree exists, `arm doctor`
+fetches `_armature` into a per-run throwaway ref (does not rewrite shared
+`origin/_armature` tracking). Missing remote tip or local-only ops older than
+`local_only_ops_stale_hours` (default 24h) are warnings; probe failures are
+errors. Staleness ages from the oldest committer among **all** commits in
+`origin/_armature..HEAD` (not first-parent only). Remediation is `arm push-ops`
+(in the finding `items`). Unreadable config that would supply the stale window
+warns that D11 fell back to 24h (D10 also errors). Missing worktree skips OK.
+D11 is not part of `doctor --fix`.
 
 **D12 — Ops worktree lag.** When the ops worktree exists, `arm doctor` fetches
 `origin/_armature` in that worktree without moving HEAD. If HEAD is N>0 commits
@@ -721,7 +732,10 @@ arm note TASK-001 --msg "Started implementation after architectural review."
 
 ## push-ops
 
-Push the `_armature` ops branch to origin.
+Push the `_armature` ops branch to origin. This is the command that publishes
+**local HEAD** (including unpublished local-only ops commits). Doctor **D11**
+points missing / stale-local-only findings here — not at `ops-backup
+snapshot|restore-plan`, which only cover the already-published tip.
 
 **Synopsis:**
 `arm push-ops [flags]`
@@ -743,8 +757,11 @@ the command exits non-zero; origin is not updated.
 
 Durable tip copy for the published `_armature` orphan branch. This is the
 supported recovery surface for ops durability (narrow-gaps G2.1 / G2.3 as a
-tested CLI lever). Doctor **D11** (S12-T2) should name these verbs in
-`next_actions`; do not maintain parallel bash cookbooks.
+tested CLI lever). Doctor **D11** (G2.2) warns on a missing or stale
+`origin/_armature` tip; its remediation lands in the finding's `items`
+(e.g. `arm push-ops`, which publishes local HEAD). `snapshot` / `restore-plan`
+do not preserve unpublished local-only commits — they only cover the published tip.
+Do not maintain parallel bash cookbooks.
 
 ### Ops durability guarantees (G2.1)
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"time"
 )
 
 var validProjectTypes = map[string]struct{}{
@@ -128,6 +129,16 @@ func ValidatePresentFields(data []byte) []string {
 	if _, ok := raw["low_stakes_push_threshold"]; ok {
 		if cfg.LowStakesPushThreshold <= 0 {
 			problems = append(problems, fmt.Sprintf("low_stakes_push_threshold %d is out of range (must be > 0)", cfg.LowStakesPushThreshold))
+		}
+	}
+	if _, ok := raw["local_only_ops_stale_hours"]; ok {
+		switch {
+		case cfg.LocalOnlyOpsStaleHours <= 0:
+			problems = append(problems, fmt.Sprintf("local_only_ops_stale_hours %d is out of range (must be > 0)", cfg.LocalOnlyOpsStaleHours))
+		default:
+			if _, err := durationFromCount(int64(cfg.LocalOnlyOpsStaleHours), time.Hour); err != nil {
+				problems = append(problems, fmt.Sprintf("local_only_ops_stale_hours %d is out of range (must not overflow duration)", cfg.LocalOnlyOpsStaleHours))
+			}
 		}
 	}
 	if _, ok := raw["hooks"]; ok {

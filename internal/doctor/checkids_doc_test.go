@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,8 +37,9 @@ func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) 
 
 	reserved := parseReservedRows(t, string(got))
 	require.NotEmpty(t, reserved, "open-reservation table must not be empty")
-	assert.Contains(t, reserved, reservedRow{id: "D11", issue: "TOPTIER-S12-T2"},
-		"TOPTIER-S12-T2 must reserve planned D11 (S12 authorized for CLAIMORD-W21 cascade)")
+	assert.NotContains(t, reserved, reservedRow{id: "D11", issue: "TOPTIER-S12-T2"},
+		"D11 is live for TOPTIER-S12-T2; reservation must be removed")
+	assert.Contains(t, liveFromDoc, "D11", "D11 must be listed as a live check ID")
 
 	liveSet := make(map[string]struct{}, len(liveFromDoc))
 	for _, id := range liveFromDoc {
@@ -97,24 +99,125 @@ func TestCheckIDsDocGoGenerateDirective_REQ_TOPTIER_S18_T3(t *testing.T) {
 	assert.Contains(t, string(src), "//go:generate go run generate_checkids_doc.go")
 }
 
-func TestOpenReservationsIncludesS12T2D11_REQ_TOPTIER_S18_T3(t *testing.T) {
+func TestOpenReservationsExcludesLiveD11_REQ_TOPTIER_S12_T2(t *testing.T) {
 	t.Parallel()
 
 	res := OpenReservations()
 	require.NotEmpty(t, res)
-	found := false
 	for _, r := range res {
-		if r.ID == "D11" && r.Issue == "TOPTIER-S12-T2" {
-			found = true
-			assert.NotEmpty(t, r.Planned)
-		}
+		assert.NotEqual(t, "D11", r.ID, "D11 must not remain reserved once live")
 	}
-	assert.True(t, found, "OpenReservations must include TOPTIER-S12-T2 planned D11")
 
 	first := OpenReservations()
+	orig := first[0].ID
 	first[0].ID = "D999"
 	second := OpenReservations()
-	assert.Equal(t, "D11", second[0].ID, "OpenReservations must return a copy")
+	assert.Equal(t, orig, second[0].ID, "OpenReservations must return a copy")
+}
+
+// TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2 derives the live
+// doctor code list from LiveCheckIDs() and fails when docs/validation-codes.md
+// is missing any of those codes (heading or quick-reference row).
+func TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(repoRoot(t), "docs", "validation-codes.md")
+	doc, err := os.ReadFile(path)
+	require.NoError(t, err, "docs/validation-codes.md must exist")
+
+	body := string(doc)
+	live := LiveCheckIDs()
+	require.NotEmpty(t, live)
+	for _, id := range live {
+		heading := regexp.MustCompile(`(?m)^### ` + regexp.QuoteMeta(id) + `:`)
+		tableRow := regexp.MustCompile(`(?m)^\| ` + regexp.QuoteMeta(id) + ` \|`)
+		assert.True(t, heading.MatchString(body),
+			"docs/validation-codes.md missing ### %s: section (registry LiveCheckIDs)", id)
+		assert.True(t, tableRow.MatchString(body),
+			"docs/validation-codes.md missing quick-reference row for %s (registry LiveCheckIDs)", id)
+	}
+	assert.Contains(t, body, "checks D1–D12",
+		"validation-codes intro must name the full live doctor range including D11")
+}
+
+// TestDocsDoNotReserveLiveCheckIDs_REQ_TOPTIER_S12_T2 fails when non-archive
+// docs/ prose places "reserved" next to a live doctor check ID (e.g. calling
+// live D11 reserved). Archive/ and historical "no longer reserved" phrasing
+// are allowed.
+func TestDocsDoNotReserveLiveCheckIDs_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	live := LiveCheckIDs()
+	require.NotEmpty(t, live)
+	idRes := make([]*regexp.Regexp, 0, len(live))
+	for _, id := range live {
+		// Word-boundary so D1 does not match inside D13.
+		idRes = append(idRes, regexp.MustCompile(`(?i)\b`+regexp.QuoteMeta(id)+`\b`))
+	}
+	reservedRE := regexp.MustCompile(`(?i)reserved`)
+
+	root := filepath.Join(repoRoot(t), "docs")
+	var mdPaths []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if rel == "archive" || strings.HasPrefix(rel, "archive"+string(filepath.Separator)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(path), ".md") {
+			mdPaths = append(mdPaths, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	var offenders []string
+	for _, path := range mdPaths {
+		rel, err := filepath.Rel(root, path)
+		require.NoError(t, err)
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		for i, line := range strings.Split(string(raw), "\n") {
+			lower := strings.ToLower(line)
+			if !reservedRE.MatchString(line) {
+				continue
+			}
+			// Explicitly historical / negated wording is fine.
+			if strings.Contains(lower, "no longer reserved") ||
+				strings.Contains(lower, "not reserved") ||
+				strings.Contains(lower, "was reserved") ||
+				strings.Contains(lower, "formerly reserved") {
+				continue
+			}
+			resIdx := reservedRE.FindStringIndex(line)
+			if resIdx == nil {
+				continue
+			}
+			for _, idRE := range idRes {
+				loc := idRE.FindStringIndex(line)
+				if loc == nil {
+					continue
+				}
+				gap := loc[0] - resIdx[0]
+				if gap < 0 {
+					gap = -gap
+				}
+				if gap > 48 {
+					continue
+				}
+				offenders = append(offenders, fmt.Sprintf("%s:%d: %s", filepath.ToSlash(rel), i+1, strings.TrimSpace(line)))
+			}
+		}
+	}
+	assert.Empty(t, offenders, "docs/ (excl archive) must not call a live check ID reserved:\n%s", strings.Join(offenders, "\n"))
 }
 
 func repoRoot(t *testing.T) string {

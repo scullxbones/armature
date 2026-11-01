@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 139,
+      "count": 140,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -21,6 +21,7 @@
         "Client.CommitWithMessage",
         "Client.CommitWorktreeOp",
         "Client.CommitterUnix",
+        "Client.CommitterUnixRange",
         "Client.CommonGitDir",
         "Client.CreateOrphanBranch",
         "Client.CurrentBranch",
@@ -340,7 +341,7 @@
       ]
     },
     "internal/config": {
-      "count": 44,
+      "count": 47,
       "names": [
         "Config",
         "Config.DefaultTTL",
@@ -348,6 +349,8 @@
         "Config.Hooks",
         "Config.IntegrationBranch",
         "Config.IntegrationBranchOrDefault",
+        "Config.LocalOnlyOpsStaleAfter",
+        "Config.LocalOnlyOpsStaleHours",
         "Config.LowStakesPushThreshold",
         "Config.ProjectType",
         "Config.TokenBudget",
@@ -361,6 +364,7 @@
         "Context.WorktreePath",
         "DefaultConfig",
         "DefaultIntegrationBranch",
+        "DefaultLocalOnlyOpsStaleHours",
         "DefaultPendingOpCount",
         "DefaultTTLMinutes",
         "DetectProjectType",

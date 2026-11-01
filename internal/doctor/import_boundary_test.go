@@ -61,6 +61,7 @@ func TestDoctorExportSurfaceHidesCheckEvaluators(t *testing.T) {
 		"CheckD8ScopeViolations":          "D8 is wired through Run",
 		"CheckD10ConfigHealth":            "UnhealthyConfig is the --fix D10 gate",
 		"EvaluateD9UnrecognizedWorktrees": "D9 is wired through Run",
+		"EvaluateD11OpsRemote":            "D11 is wired through Run",
 		"EvaluateD12OpsWorktreeLag":       "D12 is wired through Run",
 	}
 

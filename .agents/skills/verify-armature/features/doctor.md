@@ -1,6 +1,6 @@
 # Product doctor health check
 
-`arm doctor` is the user-facing health report for a **bootstrapped** repo. Live checks, in `doctor.Run` order, are D1–D10 and D12: git/ops divergence, stale claims, orphaned ops, parent refs, cycles, uncited issues, worker-id mismatches, scope artifacts, unmanaged worktrees, config.json, ops-worktree lag. D11 is reserved for TOPTIER-S12-T2 and is not emitted. Exit 0 means no error-severity checks (warnings still print). D12 is an **error** when the ops worktree is behind `origin/_armature` after a successful fetch (plain doctor exits 1); fetch failure is also an error. This is distinct from the verification skill's isolation Doctor.
+`arm doctor` is the user-facing D1–D12 health report for a **bootstrapped** repo: git/ops divergence, stale claims, orphaned ops, parent refs, cycles, uncited issues, worker-id mismatches, scope artifacts, unmanaged worktrees, config.json, ops remote tracking (D11), ops-worktree lag (D12). Exit 0 means no error-severity checks (warnings still print). D11 warns on missing/stale `origin/_armature` local-only ops; probe failures are errors. D12 is an **error** when the ops worktree is behind `origin/_armature` after a successful fetch (plain doctor exits 1); fetch failure is also an error. This is distinct from the verification skill's isolation Doctor.
 
 ## Sub-features
 
@@ -32,13 +32,13 @@ Raw equivalent:
 
 ```bash
 "$ARM" --repo "$TARGET" --format agent --non-interactive doctor
-# second read: checks are exactly D1–D10, D12 in that order
+# second read: checks are exactly D1–D12 in Run order
 test -f "$TARGET/.armature/config.json"
 ```
 
 The drive first seeds a deterministic warning by creating an **uncited** issue (`TASK-VERIFY-DOCTOR`), which D6 reports at warning severity. Without it a pristine repo has nothing for `--strict` to promote, so a `--strict` that silently ignored the flag would still exit 0.
 
-Proof: default `doctor` exits 0, `count` is 11, and `checks[].check` is exactly `D1`…`D10`,`D12` with `D6` at `warning`; the same state under `--strict` exits nonzero (`doctor --strict: N warning(s) promoted to errors`) and still carries that check list. Evidence: `evidence/<run-id>/drive/00-create-uncited/`, `01-doctor/` and `02-doctor-strict/`.
+Proof: default `doctor` exits 0, `count` is 12, and `checks[].check` is exactly `D1`…`D12` with `D6` at `warning`; the same state under `--strict` exits nonzero (`doctor --strict: N warning(s) promoted to errors`) and still carries that check list. Evidence: `evidence/<run-id>/drive/00-create-uncited/`, `01-doctor/` and `02-doctor-strict/`.
 
 To prove `--fix --dry-run` skips writes: capture `wc -c` of `.armature/ops/*.log` (or `arm log --json` line count) before and after; sizes must match. Empty plan prints JSON `null`.
 
@@ -49,13 +49,12 @@ D6 is unchanged by `--verbose` (byte-identical `items`); that is a negative chec
 "$ARM" --repo "$TARGET" --format agent --non-interactive doctor --verbose | jq -c '.checks[]|select(.check=="D3")'
 ```
 
-Default D3 lists orphan ids in `items` and omits `verbose_items`. `--verbose` adds `verbose_items` with `file:line` locations. If `--verbose` were ignored, D6 would still match and this D3 pair would not. D11 must not appear in `checks`.
+Default D3 lists orphan ids in `items` and omits `verbose_items`. `--verbose` adds `verbose_items` with `file:line` locations. If `--verbose` were ignored, D6 would still match and this D3 pair would not.
 
 ## Gotchas
 
 - Unbootstrapped `--repo` is a Command Failure, not a doctor report. Bootstrap first.
 - D6 uncited issues are **warnings** (exit 0) unless `--strict`.
 - `--fix` is not read-only. Always try `--fix --dry-run` and observe the ops log before `--fix`.
-- Product doctor succeeding does not prove isolation; still require the skill Doctor (`arm-verify.sh doctor`).
-- D9 unmanaged `.worktrees/` entries are warnings; `--strict` fails on them. `arm worktree list` reports the same anomaly with exit 0 by design.
-- D12 behind `origin/_armature` is an error, not a warning. Isolated verify targets often have no `origin/_armature`; that skip is still OK (lag not checked). If the drive seeds a remote ops branch and leaves the worktree behind, default `doctor` exits nonzero.
+- Isolated verify targets often have no `origin/_armature`; D11 may warn on missing remote tip, and D12 skip is still OK (lag not checked). If the drive seeds a remote ops branch and leaves the worktree behind, default `doctor` exits nonzero.
+- D12 behind `origin/_armature` is an error, not a warning.
