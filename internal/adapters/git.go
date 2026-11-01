@@ -771,9 +771,22 @@ func remoteRefMissingText(s string) bool {
 // FetchTrackingRefWithoutMovingHEAD updates refs/remotes/origin/<branch> from origin without
 // moving the local branch.
 func (c *Client) FetchTrackingRefWithoutMovingHEAD(branch string) error {
+	return c.FetchBranchToRef(branch, "refs/remotes/origin/"+branch)
+}
+
+// FetchBranchToRef force-fetches origin refs/heads/<branch> into dstRef without
+// moving HEAD. dstRef is the full destination ref (caller-chosen) so concurrent
+// ops-backup runs can avoid sharing refs/remotes/origin/_armature.
+func (c *Client) FetchBranchToRef(branch, dstRef string) error {
+	branch = strings.TrimSpace(branch)
+	dstRef = strings.TrimSpace(dstRef)
+	if branch == "" || dstRef == "" {
+		return fmt.Errorf("fetch branch to ref: branch and destination ref are required")
+	}
 	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
+	spec := "+refs/heads/" + branch + ":" + dstRef
+	cmd := c.cmdContext(fetchCtx, "fetch", "origin", spec)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		wrapped := fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
 		if remoteRefMissingText(string(out)) || remoteRefMissingText(err.Error()) {

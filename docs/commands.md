@@ -762,18 +762,26 @@ not automate on a schedule):
 
 What `arm ops-backup` does guarantee when it exits 0:
 
-- `snapshot` refreshed `refs/remotes/origin/_armature` with the same
-  `+refs/heads/_armature:refs/remotes/origin/_armature` refspec as
-  `FetchTrackingRefWithoutMovingHEAD`, then wrote a bundle that advertises
+- `snapshot` refreshed the published tip with the same
+  `+refs/heads/_armature:<dst>` force-fetch class as
+  `FetchTrackingRefWithoutMovingHEAD`, into a **per-run** destination under
+  `refs/remotes/origin/_armature-run/<nonce>` (never the shared
+  `refs/remotes/origin/_armature` tip), then wrote a bundle that advertises
   restorable `refs/heads/_armature`. Refresh failure is fail-closed (no
-  bundle). Live `refs/heads/_armature` is never rewound.
+  bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
+  runs on one clone all succeed.
 - `verify` confirms that advertisement is present and the object pack is
   restorable (fetch into a throwaway bare — not header-only `list-heads`).
-- `restore-plan` loads into a scratch tracking ref and prints
-  `missing | fast-forward | diverge→_armature-recovered`. An absent
-  `origin/_armature` is `missing`; unreachable origin stays fail-closed. It
-  does not apply the publish (`--apply` is not in v1). Structured json/agent
-  output for all three verbs is the N2 envelope `{count, <payload>[], help[]}`.
+- `restore-plan` loads into a per-run scratch under
+  `refs/remotes/backup/_armature-run/<nonce>` (sibling of any legacy
+  `refs/remotes/backup/_armature` tip) and prints
+  `missing | fast-forward | diverge→_armature-recovered`. Printed fields are
+  durable only (recovered SHA, bundle path, optional aside publish name) —
+  no print-then-delete scratch ref. An absent `origin/_armature` is
+  `missing`; unreachable origin stays fail-closed. It does not apply the
+  publish (`--apply` is not in v1). Structured json/agent output for all
+  three verbs is the N2 envelope `{count, <payload>[], help[]}`. Leftover
+  per-run refs or temp dirs from a crashed prior run never break the next.
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 

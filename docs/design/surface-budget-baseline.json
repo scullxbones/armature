@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 138,
+      "count": 139,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -34,6 +34,7 @@
         "Client.DirtyEntries",
         "Client.DirtyEntriesIncludingSubmodules",
         "Client.FetchAndRebase",
+        "Client.FetchBranchToRef",
         "Client.FetchBundleForce",
         "Client.FetchTrackingRefWithoutMovingHEAD",
         "Client.FirstParent",
@@ -1241,7 +1242,7 @@
       ]
     },
     "internal/opsbackup": {
-      "count": 34,
+      "count": 33,
       "names": [
         "AdvertisedRef",
         "AsideBranch",
@@ -1256,8 +1257,8 @@
         "Git.BundleCreateAdvertised",
         "Git.BundleVerifyRestorable",
         "Git.DeleteRef",
+        "Git.FetchBranchToRef",
         "Git.FetchBundleForce",
-        "Git.FetchTrackingRefWithoutMovingHEAD",
         "Git.IsAncestor",
         "Git.ResolveRevision",
         "LiveRef",
@@ -1265,10 +1266,9 @@
         "PlanRestore",
         "RestorePlan",
         "RestorePlan.AsideRef",
+        "RestorePlan.Bundle",
         "RestorePlan.Disposition",
         "RestorePlan.Recovered",
-        "RestorePlan.Scratch",
-        "ScratchRef",
         "Snapshot",
         "SnapshotRequest",
         "SnapshotRequest.OutputPath",

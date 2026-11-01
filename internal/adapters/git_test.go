@@ -1921,8 +1921,8 @@ func TestBundleCreateAdvertised_ListHeads_FetchForce_REQ_TOPTIER_S12_T1(t *testi
 	assert.Contains(t, heads, "refs/heads/_armature")
 	require.NoError(t, c.BundleVerifyRestorable(bundle, "refs/heads/_armature"))
 
-	require.NoError(t, c.FetchBundleForce(bundle, "refs/heads/_armature", "refs/remotes/backup/_armature"))
-	got := runGitOutput(t, repo, "rev-parse", "refs/remotes/backup/_armature")
+	require.NoError(t, c.FetchBundleForce(bundle, "refs/heads/_armature", "refs/remotes/backup/_armature-run/test"))
+	got := runGitOutput(t, repo, "rev-parse", "refs/remotes/backup/_armature-run/test")
 	assert.Equal(t, tip, got)
 }
 
@@ -1949,6 +1949,28 @@ func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
 	require.Error(t, c.BundleCreateAdvertised("", "abc", "refs/heads/_armature"))
 	_, listErr := c.BundleListHeads("")
 	require.Error(t, listErr)
-	require.Error(t, c.FetchBundleForce("", "refs/heads/_armature", "refs/remotes/backup/_armature"))
+	require.Error(t, c.FetchBundleForce("", "refs/heads/_armature", "refs/remotes/backup/_armature-run/test"))
 	require.Error(t, c.BundleVerifyRestorable("", "refs/heads/_armature"))
+	require.Error(t, c.FetchBranchToRef("", "refs/remotes/origin/_armature-run/x"))
+	require.Error(t, c.FetchBranchToRef("_armature", ""))
+}
+
+func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	dst := "refs/remotes/origin/_armature-run/proof"
+	require.NoError(t, c.FetchBranchToRef("_armature", dst))
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", dst))
+	// Shared tracking tip must not be required / rewritten by the per-run helper.
+	before := runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature")
+	require.NoError(t, c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proof2"))
+	assert.Equal(t, before, runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature"))
 }

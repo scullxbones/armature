@@ -21,7 +21,7 @@ type refreshFailGit struct {
 	err   error
 }
 
-func (g refreshFailGit) FetchTrackingRefWithoutMovingHEAD(string) error {
+func (g refreshFailGit) FetchBranchToRef(string, string) error {
 	return g.err
 }
 
@@ -54,8 +54,8 @@ type bundleFailGit struct {
 	err   error
 }
 
-func (g bundleFailGit) FetchTrackingRefWithoutMovingHEAD(branch string) error {
-	return g.inner.FetchTrackingRefWithoutMovingHEAD(branch)
+func (g bundleFailGit) FetchBranchToRef(branch, dstRef string) error {
+	return g.inner.FetchBranchToRef(branch, dstRef)
 }
 
 func (g bundleFailGit) ResolveRevision(rev string) (string, error) {
@@ -91,11 +91,11 @@ type resolveFailGit struct {
 	ancErr    error
 }
 
-func (g resolveFailGit) FetchTrackingRefWithoutMovingHEAD(branch string) error {
+func (g resolveFailGit) FetchBranchToRef(branch, dstRef string) error {
 	if g.fetchErr != nil {
 		return g.fetchErr
 	}
-	return g.inner.FetchTrackingRefWithoutMovingHEAD(branch)
+	return g.inner.FetchBranchToRef(branch, dstRef)
 }
 
 func (g resolveFailGit) ResolveRevision(rev string) (string, error) {
@@ -136,8 +136,8 @@ type fetchBundleFailGit struct {
 	err   error
 }
 
-func (g fetchBundleFailGit) FetchTrackingRefWithoutMovingHEAD(branch string) error {
-	return g.inner.FetchTrackingRefWithoutMovingHEAD(branch)
+func (g fetchBundleFailGit) FetchBranchToRef(branch, dstRef string) error {
+	return g.inner.FetchBranchToRef(branch, dstRef)
 }
 
 func (g fetchBundleFailGit) ResolveRevision(rev string) (string, error) {
@@ -234,6 +234,9 @@ func TestSnapshot_DoesNotMoveLiveArmature_REQ_TOPTIER_S12_T1(t *testing.T) {
 
 	afterLive := gitOut(t, repo, "rev-parse", "refs/heads/_armature")
 	assert.Equal(t, beforeLive, afterLive, "live refs/heads/_armature must be untouched")
+	assert.Equal(t, beforeTracking, gitOut(t, repo, "rev-parse", "refs/remotes/origin/_armature"),
+		"shared tracking tip must not be rewritten by snapshot")
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"), "per-run tracking cleaned up")
 }
 
 func TestSnapshot_BundleAdvertisesRestorableTip_REQ_TOPTIER_S12_T1(t *testing.T) {
@@ -271,6 +274,7 @@ func TestRestorePlan_DivergeAside_REQ_TOPTIER_S12_T1(t *testing.T) {
 	require.ErrorIs(t, err, opsbackup.ErrDiverge)
 	assert.Equal(t, opsbackup.DispositionDivergeAside, plan.Disposition)
 	assert.Equal(t, opsbackup.AsideRef, plan.AsideRef)
+	assert.Equal(t, bundle, plan.Bundle)
 	assert.Equal(t, "diverge→_armature-recovered", plan.Disposition.String())
 
 	originTip := gitOut(t, origin, "rev-parse", "refs/heads/_armature")
@@ -294,6 +298,7 @@ func TestRestorePlan_AbsentRemoteRef_RealAdapter_REQ_TOPTIER_S12_T1(t *testing.T
 	assert.Equal(t, opsbackup.DispositionMissing, plan.Disposition)
 	assert.Equal(t, "missing", plan.Disposition.String())
 	assert.NotEmpty(t, plan.Recovered)
+	assert.Equal(t, bundle, plan.Bundle)
 }
 
 func TestRestorePlan_UnreachableOrigin_FailClosed_REQ_TOPTIER_S12_T1(t *testing.T) {
@@ -357,6 +362,7 @@ func TestRestorePlan_FastForward_REQ_TOPTIER_S12_T1(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, opsbackup.DispositionFastForward, plan.Disposition)
 	assert.Equal(t, tip, plan.Recovered)
+	assert.Equal(t, bundle, plan.Bundle)
 	assert.Equal(t, "fast-forward", plan.Disposition.String())
 }
 
@@ -392,7 +398,8 @@ func TestSnapshot_ResolveTrackingFail(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
-	g := resolveFailGit{inner: c, failRev: opsbackup.TrackingRef, err: fmt.Errorf("resolve boom")}
+	// Fail resolve of any per-run tracking destination under the sibling NS.
+	g := resolveFailGit{inner: c, failRev: "refs/remotes/origin/_armature-run", err: fmt.Errorf("resolve boom")}
 	_, err := opsbackup.Snapshot(g, opsbackup.SnapshotRequest{OutputPath: filepath.Join(t.TempDir(), "x.bundle")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve")
@@ -454,7 +461,7 @@ func TestPlanRestore_FetchBundleFail(t *testing.T) {
 	assert.Contains(t, err.Error(), "load bundle")
 }
 
-func TestPlanRestore_ScratchResolveFail(t *testing.T) {
+func TestPlanRestore_RecoveredResolveFail(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)
 	c := adapters.New(repo)
@@ -462,10 +469,10 @@ func TestPlanRestore_ScratchResolveFail(t *testing.T) {
 	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
 	require.NoError(t, err)
 
-	g := resolveFailGit{inner: c, failRev: opsbackup.ScratchRef, err: fmt.Errorf("scratch boom")}
+	g := resolveFailGit{inner: c, failRev: "refs/remotes/backup/_armature-run", err: fmt.Errorf("scratch boom")}
 	_, err = opsbackup.PlanRestore(g, bundle)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "resolve scratch")
+	assert.Contains(t, err.Error(), "resolve recovered tip")
 }
 
 func TestPlanRestore_AncestryFail(t *testing.T) {
@@ -494,10 +501,10 @@ type tipInjectGit struct {
 	n     atomic.Uint64
 }
 
-func (g *tipInjectGit) FetchTrackingRefWithoutMovingHEAD(string) error { return nil }
+func (g *tipInjectGit) FetchBranchToRef(string, string) error { return nil }
 
 func (g *tipInjectGit) ResolveRevision(rev string) (string, error) {
-	if rev == opsbackup.TrackingRef {
+	if strings.HasPrefix(rev, "refs/remotes/origin/_armature-run/") {
 		i := g.n.Add(1) - 1
 		return g.tips[i%uint64(len(g.tips))], nil
 	}
@@ -593,6 +600,7 @@ func TestSnapshot_ConcurrentDistinctTips_NoCrossWire_REQ_TOPTIER_S12_T1(t *testi
 	assert.Equal(t, resA.Tip, bundleTip(t, repo, outA, opsbackup.AdvertisedRef), "bundle A must match reported tip")
 	assert.Equal(t, resB.Tip, bundleTip(t, repo, outB, opsbackup.AdvertisedRef), "bundle B must match reported tip")
 	assert.Empty(t, listRefs(t, repo, "refs/bundle-backup"), "no stray bundle-backup staging refs")
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"), "per-run tracking cleaned up")
 }
 
 func TestVerify_ConcurrentDistinctBundles_REQ_TOPTIER_S12_T1(t *testing.T) {
@@ -662,9 +670,144 @@ func TestRestorePlan_ConcurrentDistinctBundles_NoCrossWire_REQ_TOPTIER_S12_T1(t 
 	assert.Equal(t, tipB, planB.Recovered)
 	assert.Equal(t, opsbackup.DispositionFastForward, planA.Disposition)
 	assert.Equal(t, opsbackup.DispositionFastForward, planB.Disposition)
-	assert.NotEqual(t, planA.Scratch, planB.Scratch, "scratch staging must be per-run")
-	assert.True(t, strings.HasPrefix(planA.Scratch, opsbackup.ScratchRef+"/"))
-	assert.True(t, strings.HasPrefix(planB.Scratch, opsbackup.ScratchRef+"/"))
-	assert.Empty(t, listRefs(t, repo, opsbackup.ScratchRef), "per-run scratch refs cleaned up")
+	assert.Equal(t, bundleA, planA.Bundle)
+	assert.Equal(t, bundleB, planB.Bundle)
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/backup/_armature-run"), "per-run scratch cleaned up")
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"), "per-run tracking cleaned up")
 	assert.Empty(t, listRefs(t, repo, "refs/bundle-backup"), "no stray bundle-backup staging refs")
+}
+
+// TestRestorePlan_LegacyScratchParentStillWorks_REQ_TOPTIER_S12_T1F proves the
+// Codex class: a leftover direct refs/remotes/backup/_armature must not block
+// sibling-namespace per-run refs.
+func TestRestorePlan_LegacyScratchParentStillWorks_REQ_TOPTIER_S12_T1F(t *testing.T) {
+	t.Parallel()
+	repo, _, tip := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
+	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	require.NoError(t, err)
+
+	// Pre-create the legacy fixed tip that nested children cannot coexist with.
+	gittest.Git(t, repo, "update-ref", "refs/remotes/backup/_armature", tip)
+	require.Equal(t, tip, gitOut(t, repo, "rev-parse", "refs/remotes/backup/_armature"))
+
+	plan, err := opsbackup.PlanRestore(c, bundle)
+	require.NoError(t, err)
+	assert.Equal(t, opsbackup.DispositionFastForward, plan.Disposition)
+	assert.Equal(t, tip, plan.Recovered)
+	assert.Equal(t, tip, gitOut(t, repo, "rev-parse", "refs/remotes/backup/_armature"),
+		"legacy parent tip must remain untouched")
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/backup/_armature-run"))
+}
+
+// TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F leaves stale
+// per-run refs and temp dirs (crash simulation); the next invocation succeeds.
+func TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F(t *testing.T) {
+	t.Parallel()
+	repo, _, tip := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
+	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	require.NoError(t, err)
+
+	staleTrack := "refs/remotes/origin/_armature-run/deadbeefcafebabe"
+	staleScratch := "refs/remotes/backup/_armature-run/deadbeefcafebabe"
+	gittest.Git(t, repo, "update-ref", staleTrack, tip)
+	gittest.Git(t, repo, "update-ref", staleScratch, tip)
+	staleBare := filepath.Join(os.TempDir(), "armature-ops-backup-bare-stale-t1f")
+	staleVerify := filepath.Join(os.TempDir(), "armature-ops-backup-verify-stale-t1f")
+	require.NoError(t, os.MkdirAll(filepath.Join(staleBare, "bare.git"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(staleVerify, "bare.git"), 0o750))
+	t.Cleanup(func() {
+		_ = os.RemoveAll(staleBare)   //nolint:errcheck // best-effort crash-sim leftover cleanup
+		_ = os.RemoveAll(staleVerify) //nolint:errcheck // best-effort crash-sim leftover cleanup
+	})
+
+	out := filepath.Join(t.TempDir(), "after-crash.bundle")
+	res, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+	require.NoError(t, err)
+	assert.Equal(t, tip, res.Tip)
+	require.NoError(t, opsbackup.Verify(c, out))
+	plan, err := opsbackup.PlanRestore(c, out)
+	require.NoError(t, err)
+	assert.Equal(t, tip, plan.Recovered)
+
+	// Stale leftovers remain (we do not sweep foreign nonces) but do not block.
+	assert.Equal(t, tip, gitOut(t, repo, "rev-parse", staleTrack))
+	assert.Equal(t, tip, gitOut(t, repo, "rev-parse", staleScratch))
+}
+
+// TestRestorePlan_DurableOutputResolvesAfterExit_REQ_TOPTIER_S12_T1F: every
+// printed path/SHA still resolves after PlanRestore returns (no scratch ref).
+func TestRestorePlan_DurableOutputResolvesAfterExit_REQ_TOPTIER_S12_T1F(t *testing.T) {
+	t.Parallel()
+	repo, _, tip := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "armature-ops.bundle")
+	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: bundle})
+	require.NoError(t, err)
+
+	plan, err := opsbackup.PlanRestore(c, bundle)
+	require.NoError(t, err)
+	assert.Equal(t, tip, plan.Recovered)
+	assert.Equal(t, bundle, plan.Bundle)
+	assert.Empty(t, plan.AsideRef)
+
+	_, err = os.Stat(plan.Bundle)
+	require.NoError(t, err, "bundle path must exist after exit")
+	require.Equal(t, tip, gitOut(t, repo, "rev-parse", "--verify", plan.Recovered+"^{commit}"),
+		"recovered SHA must resolve after exit")
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/backup/_armature-run"))
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"))
+}
+
+func TestOpsBackup_ParallelAllVerbsOverlap_REQ_TOPTIER_S12_T1F(t *testing.T) {
+	t.Parallel()
+	repo, _, tip := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	dir := t.TempDir()
+	seed := filepath.Join(dir, "seed.bundle")
+	_, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: seed})
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 6)
+	wg.Add(6)
+	go func() {
+		defer wg.Done()
+		_, errs[0] = opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: filepath.Join(dir, "s1.bundle")})
+	}()
+	go func() {
+		defer wg.Done()
+		_, errs[1] = opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: filepath.Join(dir, "s2.bundle")})
+	}()
+	go func() {
+		defer wg.Done()
+		errs[2] = opsbackup.Verify(c, seed)
+	}()
+	go func() {
+		defer wg.Done()
+		errs[3] = opsbackup.Verify(c, seed)
+	}()
+	go func() {
+		defer wg.Done()
+		var plan opsbackup.RestorePlan
+		plan, errs[4] = opsbackup.PlanRestore(c, seed)
+		if errs[4] == nil && plan.Recovered != tip {
+			errs[4] = fmt.Errorf("unexpected recovered tip %s", plan.Recovered)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		var plan opsbackup.RestorePlan
+		plan, errs[5] = opsbackup.PlanRestore(c, seed)
+		if errs[5] == nil && plan.Recovered != tip {
+			errs[5] = fmt.Errorf("unexpected recovered tip %s", plan.Recovered)
+		}
+	}()
+	wg.Wait()
+	for i, e := range errs {
+		require.NoErrorf(t, e, "parallel verb slot %d", i)
+	}
 }

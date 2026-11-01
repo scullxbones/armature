@@ -16,18 +16,20 @@ func newOpsBackupCmd() *cobra.Command {
 		Short: "Snapshot, verify, and plan restore of the published _armature tip",
 		Long: `Durable tip copy for the unprotected orphan ops branch.
 
-snapshot refreshes refs/remotes/origin/_armature with the same +refspec as
-FetchTrackingRefWithoutMovingHEAD, fail-closes on refresh failure, never
-rewinds live refs/heads/_armature, and writes a git bundle that advertises
-refs/heads/_armature.
+snapshot refreshes the published tip into a per-run tracking ref (never the
+shared refs/remotes/origin/_armature tip), fail-closes on refresh failure,
+never rewinds live refs/heads/_armature, and writes a git bundle that
+advertises refs/heads/_armature.
 
 verify checks that a bundle advertises that tip and that its object pack is
 restorable (fetch into a throwaway bare — not header-only list-heads).
 
-restore-plan loads the bundle into a scratch tracking ref and prints an
-I2-safe publish disposition (missing | fast-forward | diverge→_armature-recovered).
-An absent origin/_armature is missing; unreachable origin stays fail-closed.
-It does not apply the publish. Diverge exits non-zero.`,
+restore-plan loads the bundle into a per-run scratch ref under a sibling
+namespace and prints an I2-safe publish disposition (missing | fast-forward |
+diverge→_armature-recovered). Output names only durable things (recovered SHA,
+bundle path, optional aside publish name). An absent origin/_armature is
+missing; unreachable origin stays fail-closed. It does not apply the publish.
+Diverge exits non-zero.`,
 		SilenceErrors: true,
 	}
 	cmd.AddCommand(newOpsBackupSnapshotCmd())
@@ -74,7 +76,7 @@ type opsBackupVerifyRow struct {
 type opsBackupPlanRow struct {
 	Disposition string `json:"disposition"`
 	Recovered   string `json:"recovered"`
-	Scratch     string `json:"scratch"`
+	Bundle      string `json:"bundle"`
 	AsideRef    string `json:"aside_ref,omitempty"`
 }
 
@@ -145,7 +147,7 @@ func newOpsBackupRestorePlanCmd() *cobra.Command {
 					row := opsBackupPlanRow{
 						Disposition: plan.Disposition.String(),
 						Recovered:   plan.Recovered,
-						Scratch:     plan.Scratch,
+						Bundle:      plan.Bundle,
 						AsideRef:    plan.AsideRef,
 					}
 					help := []string{"arm ops-backup restore-plan does not apply the publish"}
@@ -158,7 +160,7 @@ func newOpsBackupRestorePlanCmd() *cobra.Command {
 					return writeCommandEnvelope(cmd.OutOrStdout(), "plans", []opsBackupPlanRow{row}, help, nil)
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", plan.Disposition.String())
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "recovered=%s scratch=%s\n", plan.Recovered, plan.Scratch)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "recovered=%s bundle=%s\n", plan.Recovered, plan.Bundle)
 				if plan.AsideRef != "" {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "aside_ref=%s\n", plan.AsideRef)
 				}
