@@ -2879,7 +2879,8 @@ func snapshotRefsAndTags(t *testing.T, repo string) map[string]string {
 
 // TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G: crash mid
 // atomic lease write leaves .<nonce>-*.tmp drafts that leaseNonceName skips;
-// aged temps must still be reclaimed.
+// aged temps must still be reclaimed. Foreign aged *.tmp (not CreateTemp
+// shape) must survive — leaseTempName is .<16hex>-*.tmp only (S12-T1H).
 func TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
@@ -2890,12 +2891,18 @@ func TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G(t *testing.
 	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
 	leaseRoot := filepath.Join(gitDir, "armature-run-leases", "origin-run")
 	require.NoError(t, os.MkdirAll(leaseRoot, 0o750))
+	// Keep/sweep .tmp names must be CreateTemp-shaped (.<16hex>-*.tmp) so
+	// age-window assertions exercise leaseTempName + the age continue, not
+	// an accidental non-match. Foreign .other.tmp is the intentional miss.
 	agedTmp := filepath.Join(leaseRoot, ".deadbeefcafebabe-123456.tmp")
-	freshTmp := filepath.Join(leaseRoot, ".livecafe01234567-654321.tmp")
+	freshTmp := filepath.Join(leaseRoot, ".0123456789abcdef-654321.tmp")
+	foreignAged := filepath.Join(leaseRoot, ".other.tmp")
 	require.NoError(t, os.WriteFile(agedTmp, []byte("pid=1\n"), 0o600))
 	require.NoError(t, os.WriteFile(freshTmp, []byte("pid=1\n"), 0o600))
+	require.NoError(t, os.WriteFile(foreignAged, []byte("not-ours\n"), 0o600))
 	aged := time.Now().Add(-2 * time.Hour)
 	require.NoError(t, os.Chtimes(agedTmp, aged, aged))
+	require.NoError(t, os.Chtimes(foreignAged, aged, aged))
 
 	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
 	require.NoError(t, err)
@@ -2906,5 +2913,10 @@ func TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G(t *testing.
 	assert.True(t, os.IsNotExist(err), "aged .tmp lease draft must be swept")
 	_, err = os.Stat(freshTmp)
 	require.NoError(t, err, "fresh .tmp lease draft (live write) must be kept")
-	t.Cleanup(func() { _ = os.Remove(freshTmp) }) //nolint:errcheck // best-effort
+	_, err = os.Stat(foreignAged)
+	require.NoError(t, err, "foreign aged .other.tmp must survive leaseTempName tighten")
+	t.Cleanup(func() {
+		_ = os.Remove(freshTmp)    //nolint:errcheck // best-effort
+		_ = os.Remove(foreignAged) //nolint:errcheck // best-effort
+	})
 }
