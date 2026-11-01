@@ -728,13 +728,17 @@ Option A:
 arm reopen --issue <merged-ancestor-id>
 # …then each nearer merged ancestor…
 Option B:
-# only when every cancel target is open/unowned OR held by the calling worker.
+# SEQUENCE covering every open descendant + self (not a partial cancel list).
 # Foreign live lease: Option B is NOT offered (claim --force is scope-overlap
-# only; AcceptAt ignores force). Print honest guidance instead:
+# only; AcceptAt ignores force). Print honest guidance once per doctor run:
 #   live <status> lease on <id> held by <worker> — owner must release
 #   (cancel, or wait TTL then arm doctor --fix); left-behind .worktrees/<id>
 #   may remain; prefer Option A if the holder is unavailable.
-arm transition --issue <id> --to cancelled --force
+# Expired foreign: prepend doctor --fix (releases expired → open), then cancel
+# every open descendant including those released leases.
+arm doctor --fix
+arm transition --issue <open-or-owned-id> --to cancelled --force
+# …then each remaining open descendant, then self…
 
 # more steps follow after tree repair to promote remaining descendants:
 arm delivery record --issue <leaf-id> --base <sha> --tip <sha>

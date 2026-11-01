@@ -142,33 +142,21 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, opts Pl
 		Guidance:     []string{TreeRepairGuidance},
 	}
 
-	// Option B: cancel open descendants then self — only when every cancel
-	// target passes Decide (CLI owner/TTL gate). Live foreign leases: drop
-	// Option B; print honest holder guidance (+ real TTL expiry when known).
+	// Option B is a SEQUENCE that must clear every open descendant + self.
+	// Live foreign leases: drop Option B; print honest holder/TTL guidance.
+	// Expired foreign: prepend arm doctor --fix (releases expired → open),
+	// then cancel every open descendant including those released leases.
 	cancelTargets := append(openDescendantsUnder(id, g), id)
 	var foreignLive []string
-	var cancelSteps []Step
 	for _, tid := range cancelTargets {
-		argv := "arm transition --issue " + tid + " --to cancelled --force"
-		if opts.Decide != nil {
-			if err := opts.Decide(argv, g); err != nil {
-				if looksForeignLive(g[tid], viewer, opts.Now) {
-					foreignLive = append(foreignLive, tid)
-				}
-				// Expired foreign / other refuse: omit from Option B rather than
-				// print a CLI-refused cancel (Decide already matched transition).
-				continue
-			}
-		} else if looksForeignLive(g[tid], viewer, opts.Now) {
+		if looksForeignLive(g[tid], viewer, opts.Now) {
 			foreignLive = append(foreignLive, tid)
-			continue
 		}
-		cancelSteps = append(cancelSteps, Step{Argv: argv, Kind: StepCommand})
 	}
 	if len(foreignLive) > 0 {
 		p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreignLive, g, opts.Now)...)
-	} else if len(cancelSteps) > 0 {
-		p.Alternatives = append(p.Alternatives, Alternative{Steps: cancelSteps})
+	} else if alt, ok := buildCancelSequence(cancelTargets, g, opts); ok {
+		p.Alternatives = append(p.Alternatives, alt)
 	}
 
 	more := healthyDescendantOrLeafSteps(id, node, g)
@@ -176,6 +164,44 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, opts Pl
 		p.MoreSteps = more
 	}
 	return p
+}
+
+// buildCancelSequence returns Option B covering every cancelTargets entry.
+// Incomplete sequences (any target still Decide-refused after simulated prior
+// steps) are not offered — agents must not see exit-0 no-op cancels that leave
+// D14/CLAIM-1 findings.
+func buildCancelSequence(cancelTargets []string, g Graph, opts PlanOpts) (Alternative, bool) {
+	if len(cancelTargets) == 0 {
+		return Alternative{}, false
+	}
+	sim := cloneGraph(g)
+	var steps []Step
+	needsFix := false
+	for _, tid := range cancelTargets {
+		if looksForeignExpired(sim[tid], opts.Viewer, opts.Now) {
+			needsFix = true
+			break
+		}
+	}
+	if needsFix {
+		fixArgv := "arm doctor --fix"
+		steps = append(steps, Step{Argv: fixArgv, Kind: StepCommand})
+		sim = applyArgvEffect(sim, fixArgv, opts)
+	}
+	for _, tid := range cancelTargets {
+		argv := "arm transition --issue " + tid + " --to cancelled --force"
+		if opts.Decide != nil {
+			if err := opts.Decide(argv, sim); err != nil {
+				return Alternative{}, false
+			}
+		}
+		steps = append(steps, Step{Argv: argv, Kind: StepCommand})
+		sim = applyArgvEffect(sim, argv, opts)
+	}
+	if len(steps) == 0 {
+		return Alternative{}, false
+	}
+	return Alternative{Steps: steps}, true
 }
 
 // looksForeignLive is a graph-side hint for guidance when Decide is absent;
@@ -190,16 +216,36 @@ func looksForeignLive(node Node, viewer string, now int64) bool {
 	if holder == "" || (viewer != "" && holder == viewer) {
 		return false
 	}
-	if now > 0 && node.LastActivity > 0 {
-		ttl := node.TTLMinutes
-		if ttl <= 0 {
-			ttl = 60
-		}
-		if now >= node.LastActivity+int64(ttl)*60 {
-			return false // expired
-		}
+	if leaseExpired(node, now) {
+		return false
 	}
 	return true
+}
+
+// looksForeignExpired reports a foreign claimed/in-progress lease past TTL.
+// Option B prepends arm doctor --fix for these so cancel can cover them.
+func looksForeignExpired(node Node, viewer string, now int64) bool {
+	switch node.Status {
+	case ops.StatusClaimed, ops.StatusInProgress:
+	default:
+		return false
+	}
+	holder := strings.TrimSpace(node.ClaimedBy)
+	if holder == "" || (viewer != "" && holder == viewer) {
+		return false
+	}
+	return leaseExpired(node, now)
+}
+
+func leaseExpired(node Node, now int64) bool {
+	if now <= 0 || node.LastActivity <= 0 {
+		return false
+	}
+	ttl := node.TTLMinutes
+	if ttl <= 0 {
+		ttl = 60
+	}
+	return now >= node.LastActivity+int64(ttl)*60
 }
 
 func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
@@ -235,8 +281,10 @@ func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
 	return out
 }
 
-// filterDecideRefused drops Alternatives / MoreSteps whose command argv fails
-// opts.Decide. MoreSteps are checked on the post-reopen graph (after Option A).
+// filterDecideRefused drops Alternatives / MoreSteps that fail opts.Decide as a
+// SEQUENCE: each step is checked against the graph after prior steps' effects.
+// Per-argv checks on the original graph are insufficient (doctor --fix then
+// cancel; reopen then claim).
 func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 	decide := opts.Decide
 	if decide == nil {
@@ -245,30 +293,32 @@ func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 	if len(p.Alternatives) > 0 {
 		var kept []Alternative
 		for _, alt := range p.Alternatives {
-			ok := true
-			for _, step := range alt.Steps {
-				if step.Kind != StepCommand && step.Kind != StepRequiredInput {
-					continue
-				}
-				if err := decide(step.Argv, g); err != nil {
-					ok = false
-					break
-				}
-			}
-			if ok {
+			if alternativeSequenceOK(g, alt, decide, opts) {
 				kept = append(kept, alt)
 			}
 		}
 		p.Alternatives = kept
 	}
 	if len(p.MoreSteps) > 0 {
-		after := graphAfterPrintedReopens(g, p)
+		cur := graphAfterPrintedReopens(g, p)
 		var kept []Step
 		for _, step := range p.MoreSteps {
 			if step.Kind == StepCommand || step.Kind == StepRequiredInput {
-				if err := decide(step.Argv, after); err != nil {
+				// CLAIM-1 must not re-print claim on a still-claimed/in-progress
+				// node under a merged ancestor (live or expired). Open leaves
+				// remain as more-steps-after-reopen. Re-run claim after Option A.
+				if strings.Contains(step.Argv, "arm claim ") {
+					if issue := IssueFlag(step.Argv); issue != "" && WouldViolateTreeConsistency(issue, g) {
+						switch g[issue].Status {
+						case ops.StatusClaimed, ops.StatusInProgress:
+							continue
+						}
+					}
+				}
+				if err := decide(step.Argv, cur); err != nil {
 					continue
 				}
+				cur = applyArgvEffect(cur, step.Argv, opts)
 			}
 			kept = append(kept, step)
 		}
@@ -277,8 +327,70 @@ func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 	return p
 }
 
+func alternativeSequenceOK(g Graph, alt Alternative, decide func(string, Graph) error, opts PlanOpts) bool {
+	cur := cloneGraph(g)
+	for _, step := range alt.Steps {
+		if step.Kind != StepCommand && step.Kind != StepRequiredInput {
+			continue
+		}
+		if err := decide(step.Argv, cur); err != nil {
+			return false
+		}
+		cur = applyArgvEffect(cur, step.Argv, opts)
+	}
+	return true
+}
+
+// applyArgvEffect models reopen / cancel / claim / doctor --fix effects so
+// sequence Decide sees the post-step graph (no shared mutable test hooks).
+func applyArgvEffect(g Graph, argv string, opts PlanOpts) Graph {
+	after := cloneGraph(g)
+	argv = strings.TrimSpace(argv)
+	if strings.Contains(argv, "arm doctor --fix") {
+		for id, n := range after {
+			switch n.Status {
+			case ops.StatusClaimed, ops.StatusInProgress:
+			default:
+				continue
+			}
+			if !leaseExpired(n, opts.Now) {
+				continue
+			}
+			if n.Status == ops.StatusInProgress {
+				n.Status = ops.StatusBlocked
+			} else {
+				n.Status = ops.StatusOpen
+			}
+			n.ClaimedBy = ""
+			n.ClaimToken = ""
+			after[id] = n
+		}
+		return after
+	}
+	issue := IssueFlag(argv)
+	if issue == "" {
+		return after
+	}
+	n := after[issue]
+	switch {
+	case strings.Contains(argv, "arm reopen "):
+		n.Status = ops.StatusOpen
+		n.ClaimedBy = ""
+		n.ClaimToken = ""
+	case strings.Contains(argv, "--to cancelled"):
+		n.Status = ops.StatusCancelled
+		n.ClaimedBy = ""
+		n.ClaimToken = ""
+	case strings.Contains(argv, "arm claim "):
+		n.Status = ops.StatusClaimed
+		n.ClaimedBy = opts.Viewer
+	}
+	after[issue] = n
+	return after
+}
+
 // graphAfterPrintedReopens applies arm reopen steps from Alternatives so
-// MoreSteps are Decide-checked in the post-repair graph.
+// MoreSteps are Decide-checked in the post-repair graph (Option A path).
 func graphAfterPrintedReopens(g Graph, p Plan) Graph {
 	after := cloneGraph(g)
 	for _, alt := range p.Alternatives {
@@ -286,15 +398,7 @@ func graphAfterPrintedReopens(g Graph, p Plan) Graph {
 			if !strings.Contains(cmd, "arm reopen ") {
 				continue
 			}
-			issue := IssueFlag(cmd)
-			if issue == "" {
-				continue
-			}
-			n := after[issue]
-			n.Status = ops.StatusOpen
-			n.ClaimedBy = ""
-			n.ClaimToken = ""
-			after[issue] = n
+			after = applyArgvEffect(after, cmd, PlanOpts{})
 		}
 	}
 	return after
@@ -799,32 +903,13 @@ func FinishedWorkDestroyed(before, after Graph, explicitlyTouched map[string]boo
 	return out
 }
 
-// applyReopenCancelEffects applies only reopen/cancel argv effects for the
-// FinishedWorkDestroyed product check. Not an option validator — Decide owns
+// applyReopenCancelEffects applies reopen/cancel/doctor --fix argv effects for
+// the FinishedWorkDestroyed product check. Not an option validator — Decide owns
 // that — and never invents claim-takeover success.
 func applyReopenCancelEffects(g Graph, alt Alternative) Graph {
 	after := cloneGraph(g)
 	for _, cmd := range alt.RunnableCommands() {
-		fields := strings.Fields(cmd)
-		var issue string
-		for i := 0; i+1 < len(fields); i++ {
-			if fields[i] == "--issue" {
-				issue = fields[i+1]
-			}
-		}
-		if issue == "" {
-			continue
-		}
-		n := after[issue]
-		switch {
-		case strings.Contains(cmd, "arm reopen "):
-			n.Status = ops.StatusOpen
-			n.ClaimedBy = ""
-		case strings.Contains(cmd, "--to cancelled"):
-			n.Status = ops.StatusCancelled
-			n.ClaimedBy = ""
-		}
-		after[issue] = n
+		after = applyArgvEffect(after, cmd, PlanOpts{})
 	}
 	return after
 }

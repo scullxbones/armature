@@ -454,26 +454,13 @@ func OwnerOf(located []LocatedOp, issueID string) claim.Lease {
 	return held
 }
 
-// requireOwnerHook, when non-nil, replaces RequireOwner (mutation RED proofs).
-var requireOwnerHook func(located []LocatedOp, issueID, workerID string) error
-
 // RequireOwner fails unless workerID holds the published lease (token set).
 func RequireOwner(located []LocatedOp, issueID, workerID string) error {
-	if requireOwnerHook != nil {
-		return requireOwnerHook(located, issueID, workerID)
-	}
 	lease := OwnerOf(Published(located), issueID)
 	if workerID == "" || lease.Holder != workerID || lease.Token == "" {
 		return claim.ErrNotClaimOwner
 	}
 	return nil
-}
-
-// ReplaceRequireOwnerForTest swaps RequireOwner; restore after.
-func ReplaceRequireOwnerForTest(fn func([]LocatedOp, string, string) error) (restore func()) {
-	prev := requireOwnerHook
-	requireOwnerHook = fn
-	return func() { requireOwnerHook = prev }
 }
 
 // Published returns located ops whose introducing content is on the published tip.

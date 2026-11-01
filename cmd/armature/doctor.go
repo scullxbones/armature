@@ -368,7 +368,8 @@ func enrichD14TreeConsistency(report *doctor.Report, graph promotion.Graph) {
 
 // d14Guidance keeps the broad D14 warning and uses the shared typed Plan
 // (same truth as MERGED-1 / sync). Per finding: header → Option A/B → ordered
-// steps — never cross-item dedup, never alpha-sort, never "; "-joined argv.
+// steps — never alpha-sort, never "; "-joined argv. Live-lease guidance is
+// emitted once per doctor run (not repeated for OS + parent P2).
 func d14Guidance(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpts) (explanation string, suggested []string) {
 	explanation = d14Explanation
 	if len(f.Items) == 0 || graph == nil {
@@ -377,13 +378,29 @@ func d14Guidance(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpt
 
 	var cmds []string
 	var needsTreeRepair bool
+	seenLiveGuidance := map[string]bool{}
 	for _, item := range f.Items {
 		id := promotion.FindingID(item)
 		plan := promotion.RemediationsPlanOpts(id, graph, opts)
 		if len(plan.Guidance) > 0 {
 			needsTreeRepair = true
 		}
-		// No seenCmd: each finding keeps its full typed plan (grouping intact).
+		var guidance []string
+		for _, g := range plan.Guidance {
+			g = strings.TrimSpace(g)
+			if g == "" {
+				continue
+			}
+			if promotion.IsGuidanceRemediation(g) && strings.Contains(g, " lease on ") {
+				if seenLiveGuidance[g] {
+					continue
+				}
+				seenLiveGuidance[g] = true
+			}
+			guidance = append(guidance, g)
+		}
+		plan.Guidance = guidance
+		// No seenCmd for Options/MoreSteps: each finding keeps its typed plan.
 		cmds = append(cmds, promotion.RenderGroupedNextActions(item, plan)...)
 	}
 	if needsTreeRepair {

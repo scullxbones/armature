@@ -110,17 +110,10 @@ func AcceptAt(held Lease, claimOp ops.Op, at int64) (Lease, bool) {
 	return next, true
 }
 
-// foreignLiveLeaseBlocksHook, when non-nil, replaces ForeignLiveLeaseBlocks
-// (mutation RED proofs / tests only). Production leaves it nil.
-var foreignLiveLeaseBlocksHook func(held Lease, challengerID string, at int64) bool
-
 // ForeignLiveLeaseBlocks reports whether a foreign live lease blocks challengerID
 // from claiming at time at. Exported so remediation print paths use the same
 // predicate AcceptAt uses (--force does not override).
 func ForeignLiveLeaseBlocks(held Lease, challengerID string, at int64) bool {
-	if foreignLiveLeaseBlocksHook != nil {
-		return foreignLiveLeaseBlocksHook(held, challengerID, at)
-	}
 	if held.Status != ops.StatusClaimed && held.Status != ops.StatusInProgress {
 		return false
 	}
@@ -128,13 +121,6 @@ func ForeignLiveLeaseBlocks(held Lease, challengerID string, at int64) bool {
 		return false
 	}
 	return LeaseLive(held, at)
-}
-
-// ReplaceForeignLiveLeaseBlocksForTest swaps the live-lease predicate; restore after.
-func ReplaceForeignLiveLeaseBlocksForTest(fn func(Lease, string, int64) bool) (restore func()) {
-	prev := foreignLiveLeaseBlocksHook
-	foreignLiveLeaseBlocksHook = fn
-	return func() { foreignLiveLeaseBlocksHook = prev }
 }
 
 func leaseFromClaimOp(op ops.Op) Lease {

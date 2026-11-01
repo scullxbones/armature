@@ -335,12 +335,18 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		integration = ctx.Config.IntegrationBranchOrDefault()
 	}
 	graph := promotionGraphFromStore(store, index)
+	viewer, _, viewerErr := resolveWorkerAndLogCmd(cmd)
+	if viewerErr != nil {
+		viewer = ""
+	}
+	planOpts := planOptsForRemediation(ctx, viewer)
 	result := promotion.Evaluate(git, promotion.Input{
 		Issue:       promotionIssueFacts(*issue),
 		PriorOps:    allOps,
 		Integration: integration,
 		PR:          pr,
 		Graph:       graph,
+		Opts:        planOpts,
 	})
 	if result.AppendCheck || result.Promote {
 		state := mustState(cmd)
@@ -391,11 +397,12 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 					Integration: integration,
 					PR:          pr,
 					Graph:       graph,
+					Opts:        planOpts,
 				})
 				if fresh.Err != nil {
 					return fresh.Err
 				}
-				return &promotion.Error{IssueID: issueID, Kind: fresh.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph}
+				return &promotion.Error{IssueID: issueID, Kind: fresh.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph, Opts: planOpts}
 			}
 		}
 	}
@@ -403,7 +410,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		if result.Err != nil {
 			return result.Err
 		}
-		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph}
+		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph, Opts: planOpts}
 	}
 
 	if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {

@@ -28,12 +28,14 @@ const (
 // Input is the borrowed snapshot Evaluate needs. PriorOps is the source of
 // attestations, post-delivery overrides, and promotion-check dedup.
 // Graph supplies descendant status/children for not-leaf remediations.
+// Opts carries the CLI Decide predicate so MERGED-1 next_actions match doctor/claim.
 type Input struct {
 	Issue       IssueFacts
 	PriorOps    []ops.Op
 	Integration string
 	PR          string
 	Graph       Graph
+	Opts        PlanOpts
 }
 
 type Result struct {
@@ -54,9 +56,10 @@ type Error struct {
 	IssueID string
 	Kind    string
 	Msg     string
-	Graph   Graph  // KindNotLeaf: tree for RemediationsForIssue
-	Base    string // KindMissingAssessment: delivery base when known
-	Tip     string // KindMissingAssessment: delivery tip when known
+	Graph   Graph    // KindNotLeaf: tree for RemediationsPlanOpts
+	Opts    PlanOpts // CLI Decide — same predicate as doctor/claim print paths
+	Base    string   // KindMissingAssessment: delivery base when known
+	Tip     string   // KindMissingAssessment: delivery tip when known
 }
 
 func (e *Error) Error() string {
@@ -73,10 +76,10 @@ func (e *Error) RecoveryActions() []string {
 		return []string{"arm doctor"}
 	}
 	if e.Kind == KindNotLeaf {
-		acts := RemediationsForIssue(e.IssueID, e.Graph)
+		acts := RemediationsPlanOpts(e.IssueID, e.Graph, e.Opts).RenderNextActions()
 		if len(acts) == 0 {
 			// Rollup-eligible (≥1 merged child): materialize owns promotion.
-			// All-cancelled is handled inside RemediationsForIssue (cancel/reopen).
+			// All-cancelled is handled inside RemediationsPlanOpts (cancel/reopen).
 			return []string{"arm doctor"}
 		}
 		return acts
@@ -118,13 +121,14 @@ func Evaluate(git *adapters.Client, in Input) Result {
 	}
 	if len(in.Issue.Children) > 0 {
 		res.Kind = KindNotLeaf
-		acts := RemediationsForIssue(id, in.Graph)
+		acts := RemediationsPlanOpts(id, in.Graph, in.Opts).RenderNextActions()
 		res.Recovery = FirstRemediation(acts)
 		res.Err = &Error{
 			IssueID: id,
 			Kind:    KindNotLeaf,
 			Msg:     "issue " + id + " is not a leaf; parents roll up when children are merged",
 			Graph:   in.Graph,
+			Opts:    in.Opts,
 		}
 		return res
 	}

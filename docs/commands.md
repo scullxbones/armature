@@ -709,8 +709,11 @@ Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` comes from the
 typed `promotion.RemediationsPlan` (same model as doctor `--explain` suggested):
 mutually exclusive **Option A:… / Option B:…** alternatives (ordered steps each),
 then optional `more steps follow…` promotion steps. Never a flat reopen-then-cancel
-sequence. Pending nodes under a merged ancestor → Options reopen ancestor **or**
-cancel this node; more-steps promote descendants after reopen. Done leaves with
+sequence. Pending nodes under a merged ancestor → Options reopen the full merged
+ancestor chain **or** cancel every open descendant (expired foreign: `arm doctor --fix`
+then cancel); live foreign leases hide Option B and print holder/TTL guidance once.
+More-steps promote open descendants after reopen — never re-print claim on a still-claimed
+node under a merged ancestor. Done leaves with
 known Base/Tip get filled `arm delivery record …` plus **required-input**
 `arm review record … --assessment <assessment.json>` with a concrete how-to
 (prepare → author per schema → validate); only missing provenance uses a legacy

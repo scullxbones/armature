@@ -192,8 +192,8 @@ func TestRemediationsPlan_ForeignLeaseNoInventedTakeover_REQ_TOPTIER_S18_T4(t *t
 	require.Len(t, leafPlan.Alternatives, 1)
 	assert.Empty(t, leafPlan.MoreSteps, "foreign leaf must not print arm claim in MoreSteps")
 
-	// Expired foreign: Option B re-enabled for cancel targets Decide allows (R done);
-	// C cancel still refused (not owner) so omitted from Option B steps.
+	// Expired foreign: Option B is a full sequence — doctor --fix releases the
+	// expired lease, then cancel covers EVERY open descendant including C.
 	expired := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
@@ -204,11 +204,12 @@ func TestRemediationsPlan_ForeignLeaseNoInventedTakeover_REQ_TOPTIER_S18_T4(t *t
 	}
 	expPlan := RemediationsPlanOpts("R", expired, opts)
 	require.GreaterOrEqual(t, len(expPlan.Alternatives), 2, "expired foreign must re-enable Option B")
-	for _, step := range expPlan.Alternatives[1].Steps {
-		assert.NotEqual(t, "arm transition --issue C --to cancelled --force", step.Argv,
-			"expired foreign cancel still NOT-CLAIM-OWNER — omit from Option B")
-	}
-	assert.Contains(t, expPlan.Alternatives[1].RunnableCommands(), "arm transition --issue R --to cancelled --force")
+	assert.Equal(t, []string{
+		"arm doctor --fix",
+		"arm transition --issue C --to cancelled --force",
+		"arm transition --issue R --to cancelled --force",
+	}, expPlan.Alternatives[1].RunnableCommands(),
+		"Option B must cover expired foreign via doctor --fix then cancel all")
 
 	// Owned claim: viewer matches holder → Option B cancel offered.
 	owned := Graph{
