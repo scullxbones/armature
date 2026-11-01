@@ -1365,13 +1365,18 @@ func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 	return entries, nil
 }
 
-// ShowFilesBatch returns blob contents for each rev:path in one
-// `git cat-file --batch` process (Git 2.25+). Missing paths yield OK=false.
-func (c *Client) ShowFilesBatch(refs []BlobRef) ([]BlobResult, error) {
-	out := make([]BlobResult, len(refs))
-	if len(refs) == 0 {
-		return out, nil
-	}
+// FilesBatchSession is one `git cat-file --batch` process. Read one BlobRef at
+// a time so callers can discard each snapshot before requesting the next
+// (LocateOps must stay O(history) memory, not O(history×log-size)).
+type FilesBatchSession struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	reader *bufio.Reader
+	closed bool
+}
+
+// BeginFilesBatch starts a Git 2.25+ `cat-file --batch` session.
+func (c *Client) BeginFilesBatch() (*FilesBatchSession, error) {
 	cmd := c.cmd("cat-file", "--batch")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -1386,34 +1391,66 @@ func (c *Client) ShowFilesBatch(refs []BlobRef) ([]BlobResult, error) {
 		_ = stdin.Close() //nolint:errcheck // best-effort abort before start
 		return nil, fmt.Errorf("git cat-file --batch start: %w", err)
 	}
-	writeErr := make(chan error, 1)
-	go func() {
-		defer stdin.Close() //nolint:errcheck // writer side
-		for _, ref := range refs {
-			line := ref.Rev + ":" + ref.Path + "\n"
-			if _, werr := io.WriteString(stdin, line); werr != nil {
-				writeErr <- werr
-				return
-			}
-		}
-		writeErr <- nil
-	}()
-	reader := bufio.NewReader(stdout)
-	for i := range refs {
-		res, rerr := readCatFileBatchItem(reader)
+	return &FilesBatchSession{
+		cmd:    cmd,
+		stdin:  stdin,
+		reader: bufio.NewReader(stdout),
+	}, nil
+}
+
+// Read requests one rev:path and returns its blob. The returned Content is not
+// retained by the session; callers should drop it before the next Read.
+func (s *FilesBatchSession) Read(ref BlobRef) (BlobResult, error) {
+	if s == nil || s.closed {
+		return BlobResult{}, fmt.Errorf("git cat-file --batch: session closed")
+	}
+	line := ref.Rev + ":" + ref.Path + "\n"
+	if _, err := io.WriteString(s.stdin, line); err != nil {
+		return BlobResult{}, fmt.Errorf("git cat-file --batch write %s:%s: %w", ref.Rev, ref.Path, err)
+	}
+	res, err := readCatFileBatchItem(s.reader)
+	if err != nil {
+		return BlobResult{}, fmt.Errorf("git cat-file --batch read %s:%s: %w", ref.Rev, ref.Path, err)
+	}
+	return res, nil
+}
+
+// Close ends the batch session. Safe to call multiple times.
+func (s *FilesBatchSession) Close() error {
+	if s == nil || s.closed {
+		return nil
+	}
+	s.closed = true
+	_ = s.stdin.Close() //nolint:errcheck // closing writer signals EOF to cat-file
+	if err := s.cmd.Wait(); err != nil {
+		return fmt.Errorf("git cat-file --batch: %w", err)
+	}
+	return nil
+}
+
+// ShowFilesBatch returns blob contents for each rev:path in one
+// `git cat-file --batch` process (Git 2.25+). Missing paths yield OK=false.
+// Prefer BeginFilesBatch/Read when snapshots must not all be retained.
+func (c *Client) ShowFilesBatch(refs []BlobRef) ([]BlobResult, error) {
+	out := make([]BlobResult, len(refs))
+	if len(refs) == 0 {
+		return out, nil
+	}
+	sess, err := c.BeginFilesBatch()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sess.Close() }() //nolint:errcheck // results already read
+	for i, ref := range refs {
+		res, rerr := sess.Read(ref)
 		if rerr != nil {
-			_ = cmd.Process.Kill() //nolint:errcheck // drain failed batch
-			_ = cmd.Wait()         //nolint:errcheck
-			return nil, fmt.Errorf("git cat-file --batch item %d (%s:%s): %w", i, refs[i].Rev, refs[i].Path, rerr)
+			_ = sess.Close() //nolint:errcheck
+			return nil, rerr
 		}
 		out[i] = res
 	}
-	if werr := <-writeErr; werr != nil {
-		_ = cmd.Wait() //nolint:errcheck
-		return nil, fmt.Errorf("git cat-file --batch write: %w", werr)
-	}
-	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("git cat-file --batch: %w", err)
+	if err := sess.Close(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

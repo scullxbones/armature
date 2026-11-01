@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 167,
+      "count": 171,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -17,6 +17,7 @@
         "Client",
         "Client.AddPaths",
         "Client.AddWorktree",
+        "Client.BeginFilesBatch",
         "Client.BeginPerRunRef",
         "Client.BlobExists",
         "Client.BundleCreateAdvertised",
@@ -101,6 +102,9 @@
         "ErrRemoteRefMissing",
         "ExecuteHook",
         "ExpandGlobs",
+        "FilesBatchSession",
+        "FilesBatchSession.Close",
+        "FilesBatchSession.Read",
         "GitConfig",
         "GitInitBareMain",
         "GitInitMain",

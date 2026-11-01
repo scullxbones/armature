@@ -170,6 +170,66 @@ func TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE(t *testing.
 	assert.GreaterOrEqual(t, largeCalls, 4)
 }
 
+type countingBlobReader struct {
+	reads int
+	blobs map[string][]byte
+}
+
+func (c *countingBlobReader) Read(ref adapters.BlobRef) (adapters.BlobResult, error) {
+	c.reads++
+	key := ref.Rev + "\x00" + ref.Path
+	b, ok := c.blobs[key]
+	if !ok {
+		return adapters.BlobResult{OK: false}, nil
+	}
+	out := append([]byte(nil), b...)
+	return adapters.BlobResult{Content: out, OK: true}, nil
+}
+
+// TestStreamLocateFromWalk_BlobReadsLinear_REQ_OPORDER_LOCATE proves append-only
+// history does not re-fetch every parent snapshot: line-count cache keeps
+// cat-file reads O(op-changing commits), not ~2×, and never retains all versions.
+func TestStreamLocateFromWalk_BlobReadsLinear_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	const n = 40
+	const path = "ops/worker-a.log"
+	walk := make([]adapters.CommitWalkEntry, 0, n)
+	blobs := map[string][]byte{}
+	var body []byte
+	var prev string
+	for i := 0; i < n; i++ {
+		sha := fmt.Sprintf("%040d", i+1)
+		op := ops.Op{
+			Type: ops.OpCreate, TargetID: fmt.Sprintf("task-%02d", i), Timestamp: int64(100 + i),
+			WorkerID: "worker-a", Payload: ops.Payload{Title: "T", NodeType: "task"},
+		}
+		line, err := ops.MarshalOp(op)
+		require.NoError(t, err)
+		body = append(body, line...)
+		body = append(body, '\n')
+		blobs[sha+"\x00"+path] = append([]byte(nil), body...)
+		e := adapters.CommitWalkEntry{
+			SHA:           sha,
+			CommitterUnix: int64(1000 + i),
+			FirstParent:   prev,
+			ChangedFiles:  []string{path},
+		}
+		walk = append(walk, e)
+		prev = sha
+	}
+	reader := &countingBlobReader{blobs: blobs}
+	pub := map[string]struct{}{}
+	for _, e := range walk {
+		pub[e.SHA] = struct{}{}
+	}
+	located, err := streamLocateFromWalk(reader, walk, "", true, []string{"ops"}, pub, walk[n-1].SHA, "", nil)
+	require.NoError(t, err)
+	require.Len(t, located, n)
+	// First commit: neu only. Each later commit: neu only (parent line count cached).
+	assert.Equal(t, n, reader.reads,
+		"append-only walk must Read once per op-changing commit (got %d for %d commits)", reader.reads, n)
+}
+
 // TestLocateOps_AdversarialGitConfigMatrix_REQ_OPORDER_LOCATE runs LocateOps
 // under hostile local git config (showRoot/quotePath/color/decorate/renames/
 // noprefix/relative) and still recovers root + non-ASCII ops paths.
