@@ -9,8 +9,7 @@ import (
 	"github.com/scullxbones/armature/internal/validate"
 )
 
-// IssueFacts projects materialized issues into the validate seam. Plan apply,
-// the CLI, and the validate screen share this projection.
+// IssueFacts projects materialized issues into the validate seam.
 func IssueFacts(issues map[string]*materialize.Issue, now int64) map[string]validate.IssueFacts {
 	out := make(map[string]validate.IssueFacts, len(issues))
 	for id, issue := range issues {
