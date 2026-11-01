@@ -114,7 +114,10 @@ Restore into a clone (or a throwaway remote) when the forge tip is gone or wrong
 ```bash
 set -euo pipefail
 _bundle="/path/to/backups/armature-ops-….bundle"
-if ! git fetch "$_bundle" refs/heads/_armature:refs/remotes/backup/_armature; then
+# Force (+) updates local scratch refs/remotes/backup/_armature only — never a
+# shared tip. Without +, a divergent leftover from an earlier restore attempt
+# makes fetch reject as non-fast-forward and abort before publish.
+if ! git fetch "$_bundle" +refs/heads/_armature:refs/remotes/backup/_armature; then
   echo "ops-backup restore: failed to load $_bundle into refs/remotes/backup/_armature" >&2
   exit 1
 fi
@@ -140,7 +143,10 @@ One-time setup (add the remote, then refresh + mirror):
 
 ```bash
 set -euo pipefail
-git remote add ops-backup git@example.com:org/armature-ops-mirror.git
+# Idempotent remote add: re-runs must not fail when ops-backup already exists.
+if ! git remote get-url ops-backup >/dev/null 2>&1; then
+  git remote add ops-backup git@example.com:org/armature-ops-mirror.git
+fi
 if ! git fetch origin +refs/heads/_armature:refs/remotes/origin/_armature; then
   echo "ops-backup B: refresh of refs/remotes/origin/_armature failed; not mirroring (tip may be stale)" >&2
   exit 1
@@ -182,17 +188,27 @@ copy.
 Recovery must stay inside I2's append-only invariant: do **not** overwrite a
 live shared `origin/_armature` tip. Publish the recovered tip only as follows:
 
-1. Confirm what origin currently has:
-   `git ls-remote origin refs/heads/_armature`.
+1. Confirm what origin currently has with
+   `git ls-remote origin refs/heads/_armature`. Treat a non-zero exit as
+   unreachable (do not confuse empty stdout with a missing tip).
 2. Load the recovered tip (from the bundle or second remote) into a local ref
    you can inspect, e.g. `refs/remotes/backup/_armature` (use the restore block
-   above).
+   above; the `+` force-updates that scratch ref only).
 3. **Publish path (missing tip or fast-forward only):**
 
 ```bash
 set -euo pipefail
+# Check ls-remote exit status separately from empty output. A failed
+# ls-remote (unreachable origin) prints nothing on stdout; under
+# `if [ -z "$(…)" ]` that looks like a missing tip and would publish
+# into a black hole. Fail closed when origin cannot be queried.
+_ls_out=
+if ! _ls_out=$(git ls-remote origin refs/heads/_armature); then
+  echo "ops-backup publish: origin unreachable (ls-remote failed); not publishing" >&2
+  exit 1
+fi
 # Missing tip: publish recovered history as a fresh shared branch.
-if [ -z "$(git ls-remote origin refs/heads/_armature)" ]; then
+if [ -z "$_ls_out" ]; then
   git push origin refs/remotes/backup/_armature:refs/heads/_armature
   exit 0
 fi
