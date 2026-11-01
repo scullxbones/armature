@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 154,
+      "count": 160,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -20,6 +20,7 @@
         "Client.CommitDiff",
         "Client.CommitIndexNoVerify",
         "Client.CommitPathsNoVerify",
+        "Client.CommitWalkReverse",
         "Client.CommitWithMessage",
         "Client.CommitWorktreeOp",
         "Client.CommitterUnix",
@@ -75,6 +76,11 @@
         "Client.UpdateRef",
         "Client.WithEnviron",
         "CommandGit",
+        "CommitWalkEntry",
+        "CommitWalkEntry.ChangedFiles",
+        "CommitWalkEntry.CommitterUnix",
+        "CommitWalkEntry.FirstParent",
+        "CommitWalkEntry.SHA",
         "DetectGitVersion",
         "DiffStatusEntry",
         "DiffStatusEntry.OldPath",

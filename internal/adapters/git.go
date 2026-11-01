@@ -1298,6 +1298,115 @@ func (c *Client) CommitterUnixRange(rangeSpec string) ([]int64, error) {
 	return outUnix, nil
 }
 
+// CommitWalkEntry is one commit from CommitWalkReverse: identity, committer
+// time, first parent (empty for roots), and paths changed vs that parent
+// (full tree for roots). Matches DiffNameOnlyRange(firstParent, sha) /
+// ListFilesAtCommit for roots.
+type CommitWalkEntry struct {
+	SHA           string
+	CommitterUnix int64
+	FirstParent   string
+	ChangedFiles  []string
+}
+
+// CommitWalkReverse returns every commit reachable from rev, oldest first, in
+// one git process. FirstParent and ChangedFiles use first-parent merge diffs
+// (--diff-merges=first-parent) so callers can replace per-SHA CommitterUnix,
+// FirstParent, DiffNameOnlyRange, and ListFilesAtCommit loops.
+func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
+	rev = strings.TrimSpace(rev)
+	if rev == "" {
+		return nil, fmt.Errorf("git log commit walk: rev is required")
+	}
+	// Leading %x00 makes each commit header unambiguous even when the prior
+	// commit listed changed paths (empty commits omit the blank name-only line).
+	cmd := c.cmd(
+		"log",
+		"--reverse",
+		"--diff-merges=first-parent",
+		"--name-only",
+		"--format=%x00%H%x00%ct%x00%P",
+		rev,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git log commit walk %s: %w", rev, err)
+	}
+	entries, parseErr := parseCommitWalkOutput(out)
+	if parseErr != nil {
+		return nil, fmt.Errorf("parse commit walk %s: %w", rev, parseErr)
+	}
+	return entries, nil
+}
+
+func parseCommitWalkOutput(out []byte) ([]CommitWalkEntry, error) {
+	if len(out) == 0 {
+		return []CommitWalkEntry{}, nil
+	}
+	var entries []CommitWalkEntry
+	i := 0
+	for i < len(out) {
+		if out[i] != 0 {
+			return nil, fmt.Errorf("expected NUL commit header at offset %d", i)
+		}
+		i++
+		headerEnd := i
+		for headerEnd < len(out) && out[headerEnd] != '\n' {
+			headerEnd++
+		}
+		header := string(out[i:headerEnd])
+		parts := strings.Split(header, "\x00")
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("commit header %q: want sha, ct, parents", header)
+		}
+		sha := parts[0]
+		ct, convErr := strconv.ParseInt(parts[1], 10, 64)
+		if convErr != nil {
+			return nil, fmt.Errorf("committer unix for %s: %w", sha, convErr)
+		}
+		firstParent := ""
+		if parents := strings.Fields(parts[2]); len(parents) > 0 {
+			firstParent = parents[0]
+		}
+		i = headerEnd
+		if i < len(out) && out[i] == '\n' {
+			i++
+		}
+		var files []string
+		switch {
+		case i >= len(out) || out[i] == 0:
+			// Empty commit: next header (or EOF) follows immediately.
+		case out[i] == '\n':
+			i++ // blank line git inserts before name-only paths
+			for i < len(out) && out[i] != 0 {
+				lineEnd := i
+				for lineEnd < len(out) && out[lineEnd] != '\n' && out[lineEnd] != 0 {
+					lineEnd++
+				}
+				if lineEnd > i {
+					files = append(files, string(out[i:lineEnd]))
+				}
+				i = lineEnd
+				if i < len(out) && out[i] == '\n' {
+					i++
+				}
+			}
+		default:
+			return nil, fmt.Errorf("after commit %s: unexpected %q", sha, out[i:min(i+16, len(out))])
+		}
+		if files == nil {
+			files = []string{}
+		}
+		entries = append(entries, CommitWalkEntry{
+			SHA:           sha,
+			CommitterUnix: ct,
+			FirstParent:   firstParent,
+			ChangedFiles:  files,
+		})
+	}
+	return entries, nil
+}
+
 // IsAncestor reports whether anc is an ancestor of desc (inclusive).
 func (c *Client) IsAncestor(anc, desc string) (bool, error) {
 	cmd := c.cmd("merge-base", "--is-ancestor", anc, desc)

@@ -664,6 +664,62 @@ func TestCommitterUnixRange_MatchesPerSHA_REQ_TOPTIER_S12_T2(t *testing.T) {
 	assert.Empty(t, empty)
 }
 
+func TestCommitWalkReverse_MatchesPerSHAHelpers_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	trunk := runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "root.txt"), []byte("r\n"), 0o644))
+	runGitDir(t, repo, "add", "root.txt")
+	runGitDir(t, repo, "commit", "-m", "root file")
+
+	runGitDir(t, repo, "checkout", "-b", "side")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "side.txt"), []byte("s\n"), 0o644))
+	runGitDir(t, repo, "add", "side.txt")
+	runGitDir(t, repo, "commit", "-m", "side")
+
+	runGitDir(t, repo, "checkout", trunk)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "main.txt"), []byte("m\n"), 0o644))
+	runGitDir(t, repo, "add", "main.txt")
+	runGitDir(t, repo, "commit", "-m", "main file")
+	runGitDir(t, repo, "merge", "--no-ff", "-m", "merge side", "side")
+	runGitDir(t, repo, "commit", "--allow-empty", "-m", "empty after merge")
+
+	c := adapters.New(repo)
+	walk, err := c.CommitWalkReverse("HEAD")
+	require.NoError(t, err)
+
+	revSHAs := strings.Split(strings.TrimSpace(runGitOutput(t, repo, "rev-list", "--reverse", "HEAD")), "\n")
+	require.Equal(t, revSHAs, walkSHAs(walk), "walk order must match rev-list --reverse")
+
+	for _, e := range walk {
+		ct, ctErr := c.CommitterUnix(e.SHA)
+		require.NoError(t, ctErr)
+		assert.Equal(t, ct, e.CommitterUnix, "committer for %s", e.SHA)
+
+		parent, ok, pErr := c.FirstParent(e.SHA)
+		require.NoError(t, pErr)
+		assert.Equal(t, ok, e.FirstParent != "", "has-parent for %s", e.SHA)
+		assert.Equal(t, parent, e.FirstParent, "first parent for %s", e.SHA)
+
+		var wantFiles []string
+		if !ok {
+			wantFiles, err = c.ListFilesAtCommit(e.SHA)
+		} else {
+			wantFiles, err = c.DiffNameOnlyRange(parent, e.SHA)
+		}
+		require.NoError(t, err)
+		assert.Equal(t, wantFiles, e.ChangedFiles, "changed files for %s", e.SHA)
+	}
+}
+
+func walkSHAs(walk []adapters.CommitWalkEntry) []string {
+	out := make([]string, len(walk))
+	for i, e := range walk {
+		out[i] = e.SHA
+	}
+	return out
+}
+
 func runGitDir(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.CommandContext(context.Background(), "git", args...)

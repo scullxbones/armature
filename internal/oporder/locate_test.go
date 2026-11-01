@@ -1,13 +1,18 @@
 package oporder
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -113,6 +118,79 @@ func writeOpLog(t *testing.T, repo, rel string, log []ops.Op) {
 		body = append(body, '\n')
 	}
 	require.NoError(t, os.WriteFile(path, body, 0o644))
+}
+
+// TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE proves
+// locateByCommitWalk uses a flat git-process budget (CommitWalkReverse +
+// ancestor rev-lists), not one CommitterUnix / FirstParent / DiffNameOnlyRange
+// / IsAncestor per SHA.
+func TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	countFor := func(nEmpty int) (calls int, located []LocatedOp) {
+		t.Helper()
+		fx := gittest.InitWithOrigin(t)
+		dir := fx.Dir
+		writeOpLog(t, dir, "ops/worker-a.log", []ops.Op{
+			{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 90, WorkerID: "worker-a",
+				Payload: ops.Payload{Title: "T", NodeType: "task"}},
+		})
+		gittest.Git(t, dir, "add", "ops/worker-a.log")
+		gittest.Git(t, dir, "commit", "-m", "seed op")
+		gittest.Git(t, dir, "branch", "-M", "_armature")
+		gittest.Git(t, dir, "push", "-u", "origin", "HEAD:refs/heads/_armature")
+		for i := 0; i < nEmpty; i++ {
+			gittest.Git(t, dir, "commit", "--allow-empty", "-m", fmt.Sprintf("empty-%d", i))
+		}
+
+		counterPath := filepath.Join(t.TempDir(), "git-calls")
+		require.NoError(t, os.WriteFile(counterPath, nil, 0o644))
+		gc := adapters.New(dir).WithEnviron(countingGitEnviron(t, counterPath))
+		out, err := locateByCommitWalk(gc, LocateInput{
+			OpsWorktree:  dir,
+			PublishedRef: "origin/_armature",
+			Cutover:      headSHA(t, dir), // forces cutover ancestor-set path
+		})
+		require.NoError(t, err)
+		raw, readErr := os.ReadFile(counterPath)
+		require.NoError(t, readErr)
+		return len(raw), out
+	}
+
+	smallCalls, smallLoc := countFor(40)
+	largeCalls, largeLoc := countFor(200)
+	require.NotEmpty(t, smallLoc)
+	require.NotEmpty(t, largeLoc)
+	assert.Equal(t, smallCalls, largeCalls,
+		"git exec count must be independent of empty-commit count (got %d for 40, %d for 200)",
+		smallCalls, largeCalls)
+	// CommitWalkReverse + resolve published tip + published rev-list + cutover rev-list
+	assert.LessOrEqual(t, largeCalls, 8, "locate walk must stay a small constant git budget")
+	assert.GreaterOrEqual(t, largeCalls, 3)
+}
+
+func countingGitEnviron(t *testing.T, counterPath string) []string {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	require.True(t, filepath.IsAbs(realGit))
+
+	wrapperDir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\nprintf x >> %q\nexec %q \"$@\"\n", counterPath, realGit)
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
+
+	env := append([]string{}, os.Environ()...)
+	pathSet := false
+	overlay := wrapperDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	for i, e := range env {
+		if strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "Path=") {
+			env[i] = "PATH=" + overlay
+			pathSet = true
+			break
+		}
+	}
+	if !pathSet {
+		env = append(env, "PATH="+overlay)
+	}
+	return env
 }
 
 func unpublished(located []LocatedOp) []LocatedOp {
