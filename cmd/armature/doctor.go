@@ -333,9 +333,12 @@ func d14Guidance(f doctor.Finding, graph promotion.Graph) (explanation string, s
 		}
 		acts := promotion.RemediationsForIssue(id, graph)
 		for _, cmd := range acts {
-			if strings.HasPrefix(cmd, "arm reopen --issue ") ||
-				(strings.HasPrefix(cmd, "arm transition --issue ") && strings.Contains(cmd, "--to cancelled")) {
-				needsTreeRepair = true
+			// Tree-repair prose only when reopen targets a merged ancestor
+			// (not all-cancelled stranded-parent reopen of a done non-leaf).
+			if target, ok := strings.CutPrefix(cmd, "arm reopen --issue "); ok {
+				if n, ok := graph[target]; ok && n.Status == ops.StatusMerged {
+					needsTreeRepair = true
+				}
 			}
 			if seenCmd[cmd] {
 				continue

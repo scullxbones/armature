@@ -1508,7 +1508,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 60,
+      "count": 64,
       "names": [
         "AssessmentFact",
         "AssessmentFact.BaseSHA",
@@ -1532,6 +1532,8 @@
         "Input.PR",
         "Input.PriorOps",
         "IsDeliveryRecordTemplate",
+        "IsGuidanceRemediation",
+        "IsLegacyTemplateRemediation",
         "IsRunnableArmCommand",
         "IssueFacts",
         "IssueFacts.AssessmentAttestations",
@@ -1549,6 +1551,8 @@
         "KindNotLeaf",
         "KindNotOnTarget",
         "KindPromote",
+        "LegacyTemplateGuidance",
+        "MoreStepsFollowGuidance",
         "Node",
         "Node.Base",
         "Node.Children",

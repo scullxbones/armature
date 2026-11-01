@@ -187,8 +187,8 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	_, fallback := doctorCheckGuidance("D14")
 	assert.Equal(t, []string{promotion.FallbackGuidance}, fallback)
 
-	// All-merged descendants under a done non-leaf: rollup owns promotion;
-	// explain falls back (no dead "reopen children-merged" argv).
+	// Done under merged parent with rollup-eligible children: complete tree repair
+	// for the D14 subject (reopen ancestor or cancel it) — not empty→doctor.
 	allMerged := promotion.Graph{
 		"P": {Status: "merged", Children: []string{"R"}},
 		"R": {Status: "done", Parent: "P", Children: []string{"C"}},
@@ -197,7 +197,8 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	expl, sug := doctorCheckGuidanceFor(doctor.Finding{
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> P"},
 	}, allMerged)
-	assert.Equal(t, []string{promotion.FallbackGuidance}, sug)
+	assert.Contains(t, sug, "arm reopen --issue P")
+	assert.Contains(t, sug, "arm transition --issue R --to cancelled --force")
 	assert.NotContains(t, expl, "children are merged")
 
 	// Open leaf under merged ancestor → tree repair (reopen OR cancel), never claim.
@@ -211,7 +212,9 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	}, repair)
 	assert.Contains(t, expl, promotion.TreeRepairGuidance)
 	assert.Contains(t, sug, "arm reopen --issue E")
+	assert.Contains(t, sug, "arm transition --issue R --to cancelled --force")
 	assert.Contains(t, sug, "arm transition --issue O --to cancelled --force")
+	assert.Contains(t, sug, promotion.MoreStepsFollowGuidance)
 	assert.NotContains(t, sug, "arm claim --issue O")
 }
 

@@ -714,22 +714,29 @@ git -C .armature rebase origin/_armature
 
 **Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check). `--explain` remediations share `promotion.RemediationsForIssue` with MERGED-1 / sync.
 
-**Fix:** Tree-walk pending descendants (never `arm merged` on a non-leaf):
+**Fix:** Remediations count only if running them repairs the finding (never
+`arm merged` on a non-leaf):
 ```bash
-# done unmerged leaf — fill real SHAs when knowable; else keep <sha> template
-# (legacy done with no claim/delivery provenance; placeholders fail DELIVERY-1):
-arm delivery record --issue <leaf-id> --base <sha> --tip <sha>
-
-# open leaf under a merged ancestor (inconsistent tree — do not claim):
+# complete tree repair for done/open work under a merged ancestor (do not claim):
 arm reopen --issue <merged-ancestor-id>
-# OR cancel/reparent the open child:
-arm transition --issue <open-id> --to cancelled --force
+# OR cancel/reparent this node:
+arm transition --issue <id> --to cancelled --force
+
+# after tree repair, more steps may follow to promote remaining done leaves:
+arm delivery record --issue <leaf-id> --base <sha> --tip <sha>   # legacy template if unknown
+arm review record --issue <leaf-id> --assessment <assessment.json>  # when SHAs knowable
+
+# all-cancelled children only (rollup will not promote — needs ≥1 merged child):
+arm transition --issue <parent-id> --to cancelled --force
+# OR reopen the parent to continue work:
+arm reopen --issue <parent-id>
 
 # open leaf with no merged ancestor (--worktree required; omit value for canonical path):
 arm claim --issue <open-id> --worktree
 ```
-All-merged children under a non-leaf are promoted by materialize rollup; there is
-no reopen argv for that shape.
+`<sha>` / `<assessment.json>` placeholders are **legacy** templates (same honesty
+as promotion kind `legacy`) — substitute real values; inventing SHAs fails DELIVERY-1.
+All-merged children under a non-leaf are promoted by materialize rollup.
 
 ---
 

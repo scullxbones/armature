@@ -537,13 +537,15 @@ not part of `doctor --fix`.
 **D14 — Done under merged parent.** Warns when an issue is still `done` while
 its parent is already `merged` (stuck `done → merged` promotion). Merged
 children under a cancelled parent (ORCRUN leftover) are not reported. `--explain`
-uses the same tree-walk remediations as MERGED-1 / sync: done leaves →
-`arm delivery record` (filled SHAs when knowable; else `<sha>` template for
-legacy/no provenance); open leaves under a merged ancestor → tree repair
-(`arm reopen` ancestor or cancel/reparent the open child — never `arm claim`);
-healthy open leaves → `arm claim --worktree`; recurse past nested non-leaves.
-All-merged children are owned by materialize rollup (no reopen argv). D14 is
-not part of `doctor --fix`.
+uses the same tree-walk remediations as MERGED-1 / sync. A remediation counts
+only if running it repairs the finding: pending work under a merged ancestor
+gets a **complete** tree-repair set first (`arm reopen` ancestor **or**
+cancel/reparent this node — never `arm claim`). Further descendant promotion
+steps are listed after `more steps follow…`. Done leaves in a healthy tree get
+`arm delivery record` (filled SHAs when knowable, plus `arm review record`
+assessment step; else a **legacy** `<sha>` template). All-cancelled children do
+not roll up (needs ≥1 merged child) — cancel/reopen the parent. All-merged
+children are owned by materialize rollup. D14 is not part of `doctor --fix`.
 
 ---
 
@@ -704,13 +706,15 @@ op is appended. `--pr` may be stored and is not evidence. `--force` remains the
 hook-log override only; it does not waive the git check or the assessment.
 
 Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` is one command
-per pending descendant from the shared tree walk (`promotion.RemediationsForIssue`):
-done leaves get `arm delivery record …` (filled SHAs when knowable; else template),
-open leaves under a merged ancestor get reopen/cancel repair (never claim),
-healthy open leaves get `arm claim --issue … --worktree`, merged children are
-skipped, nested non-leaves recurse. Never `arm merged` on a non-leaf, and never
-a `;`-joined argv in one entry. An issue that is already `merged` is an
-intentional no-op/retry that tears down leftover delivery artifacts and prints
+per entry from `promotion.RemediationsForIssue`. Pending nodes under a merged
+ancestor get complete tree repair first (reopen ancestor or cancel this node);
+descendant promotion steps follow a `more steps follow…` marker. Done leaves get
+`arm delivery record …` (filled SHAs + review-record assessment when knowable;
+else legacy `<sha>` template). All-cancelled-only children → cancel/reopen the
+parent (rollup will not promote). Healthy open leaves get
+`arm claim --issue … --worktree`. Never `arm merged` on a non-leaf, and never a
+`;`-joined argv in one entry. An issue that is already `merged` is an intentional
+no-op/retry that tears down leftover delivery artifacts and prints
 `<id> is already merged` (exit 0), not a second “Marked … as merged” promotion claim.
 
 A refusal is `MERGED-1` with `next_actions` naming recovery commands and

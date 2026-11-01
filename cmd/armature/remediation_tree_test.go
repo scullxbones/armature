@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/promotion"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,15 +20,21 @@ import (
 // setupMixedD14Tree builds (legal hierarchy: story→feature→task):
 //
 //	E (merged epic)
-//	├── LF (done leaf; legacy done — no claim/delivery provenance)
-//	├── R (done story; non-leaf under test for arm merged)
+//	├── LF (done leaf; legacy — no claim/delivery provenance)
+//	├── R (done story)
 //	│   ├── RC1 (done; legacy)
 //	│   ├── RC2 (open — inconsistent under merged E)
 //	│   ├── RC3 (merged)
-//	│   └── RS (done feature / nested non-leaf)
+//	│   └── RS (done feature)
 //	│       └── RSC (done; legacy)
-//	└── AM (story; rollup-merged after AMC merged)
-//	    └── AMC (merged)
+//	├── AM (rollup-merged when AMC merged)
+//	│   └── AMC (merged)
+//	└── AC (done story; all-cancelled child — will not roll up)
+//	    └── ACC (cancelled)
+//
+// Plus G2/P2/OS all-cancelled shape (Codex P2):
+//
+//	G2 (merged epic) → P2 (done) → OS (cancelled)
 func setupMixedD14Tree(t *testing.T) string {
 	t.Helper()
 	repo := gittest.InitWithOrigin(t).Dir
@@ -50,6 +59,11 @@ func setupMixedD14Tree(t *testing.T) string {
 		{"RSC", "Child RSC", "task", "RS"},
 		{"AM", "Story AM", "story", "E"},
 		{"AMC", "Child AMC", "task", "AM"},
+		{"AC", "Story AC", "story", "E"},
+		{"ACC", "Child ACC", "task", "AC"},
+		{"G2", "Epic G2", "epic", ""},
+		{"P2", "Story P2", "story", "G2"},
+		{"OS", "Child OS", "task", "P2"},
 	}
 	for _, c := range creates {
 		payload := ops.Payload{
@@ -66,22 +80,28 @@ func setupMixedD14Tree(t *testing.T) string {
 	}
 
 	outcome := "fixture done for mixed-tree remediation class"
-	for _, id := range []string{"LF", "RC1", "RSC", "RS", "R", "AM"} {
+	for _, id := range []string{"LF", "RC1", "RSC", "RS", "R", "AM", "AC", "P2"} {
 		require.NoError(t, appendOp(ctx, logPath, ops.Op{
 			Type: ops.OpTransition, TargetID: id, Timestamp: nowEpoch(), WorkerID: workerID,
 			Payload: ops.Payload{To: ops.StatusDone, Outcome: outcome},
 		}))
 	}
-	for _, id := range []string{"RC3", "AMC"} {
+	for _, id := range []string{"RC3", "AMC", "ACC", "OS"} {
+		to := ops.StatusMerged
+		if id == "ACC" || id == "OS" {
+			to = ops.StatusCancelled
+		}
+		require.NoError(t, appendOp(ctx, logPath, ops.Op{
+			Type: ops.OpTransition, TargetID: id, Timestamp: nowEpoch(), WorkerID: workerID,
+			Payload: ops.Payload{To: to},
+		}))
+	}
+	for _, id := range []string{"E", "G2"} {
 		require.NoError(t, appendOp(ctx, logPath, ops.Op{
 			Type: ops.OpTransition, TargetID: id, Timestamp: nowEpoch(), WorkerID: workerID,
 			Payload: ops.Payload{To: ops.StatusMerged},
 		}))
 	}
-	require.NoError(t, appendOp(ctx, logPath, ops.Op{
-		Type: ops.OpTransition, TargetID: "E", Timestamp: nowEpoch(), WorkerID: workerID,
-		Payload: ops.Payload{To: ops.StatusMerged},
-	}))
 	// RC2 stays open.
 
 	_, err = runTrls(t, repo, "materialize")
@@ -89,163 +109,274 @@ func setupMixedD14Tree(t *testing.T) string {
 	return repo
 }
 
-func TestMixedTreeRemediationDoctorAndMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	repo := setupMixedD14Tree(t)
 
-	// AM rolled up when AMC merged — dead "children are merged; reopen" path unreachable.
 	amStatus, err := runTrls(t, repo, "show", "--field", "status", "AM")
 	require.NoError(t, err)
 	assert.Equal(t, "merged\n", amStatus, "RunRollup must auto-merge AM when AMC is merged")
 
-	wantDoneLeaf := delivery.RecordArgv("LF") // template: legacy done, no Base/Tip
-	wantRC1 := delivery.RecordArgv("RC1")
-	wantReopen := "arm reopen --issue E"
-	wantCancel := "arm transition --issue RC2 --to cancelled --force"
-	wantRSC := delivery.RecordArgv("RSC")
-
-	stdout := new(bytes.Buffer)
-	_ = executeThenHandleRootError(t, stdout, new(bytes.Buffer),
-		"doctor", "--repo", repo, "--explain", "--format", "json")
-	payload := assertSingleJSONObject(t, stdout.String())
-	checks, ok := payload["checks"].([]any)
-	require.True(t, ok)
-	var d14 map[string]any
-	for _, raw := range checks {
-		row, ok := raw.(map[string]any)
-		require.True(t, ok)
-		if row["check"] == "D14" {
-			d14 = row
-			break
-		}
+	// Ancestors intentionally reopened by tree repair (E/G2) are not protected.
+	// Merged siblings / roll-ups must stay merged.
+	protectedMerged := map[string]string{
+		"RC3": "merged",
+		"AM":  "merged",
+		"AMC": "merged",
 	}
-	require.NotNil(t, d14, "D14 must be present; out=%s", stdout.String())
-	assert.Equal(t, "warning", d14["severity"])
-	expl, okExpl := d14["explanation"].(string)
-	require.True(t, okExpl, "D14 explanation must be a string")
-	assert.Contains(t, expl, promotion.TreeRepairGuidance)
-	suggestedRaw, ok := d14["suggested"].([]any)
-	require.True(t, ok, "D14 suggested must be an array")
-	var suggested []string
-	for _, s := range suggestedRaw {
-		str, ok := s.(string)
-		require.True(t, ok)
-		suggested = append(suggested, str)
-		assert.NotContains(t, str, "; ", "suggested entries must not be '; '-joined")
-		assert.NotContains(t, str, "arm merged --issue R")
-		assert.NotContains(t, str, "arm merged --issue RS")
-		assert.NotContains(t, str, "arm merged --issue RC3")
-		assert.NotContains(t, str, "arm claim --issue RC2",
-			"open under merged ancestor must not suggest claim")
-		assert.NotContains(t, str, "arm reopen --issue AM",
-			"rollup-merged AM must not get dead children-merged reopen")
-		assert.NotContains(t, str, "arm reopen --issue R")
-	}
-	assert.Contains(t, suggested, wantDoneLeaf)
-	assert.Contains(t, suggested, wantRC1)
-	assert.Contains(t, suggested, wantReopen)
-	assert.Contains(t, suggested, wantCancel)
-	assert.Contains(t, suggested, wantRSC)
 
+	d14 := doctorD14Explain(t, repo)
+	require.Equal(t, "warning", d14.severity)
+	assert.Contains(t, d14.explanation, promotion.TreeRepairGuidance)
+	require.NotEmpty(t, d14.items)
+
+	// Full doctor suggested sequence on a fresh fixture must clear every D14 item
+	// it claims to address — exit 0 alone is not enough.
+	for _, item := range d14.items {
+		id := d14ItemID(item)
+		t.Run("repair_"+id, func(t *testing.T) {
+			t.Parallel()
+			r := setupMixedD14Tree(t)
+			acts := promotion.RemediationsForIssue(id, loadPromotionGraph(t, r))
+			require.NotEmpty(t, acts, "D14 item %s must have remediations", item)
+			assert.NotContains(t, acts, "arm doctor")
+			err := applyRepairSequence(t, r, acts)
+			require.NoError(t, err, "sequence for %s: %v", item, acts)
+			after := doctorD14Explain(t, r)
+			assert.NotContains(t, after.items, item,
+				"full suggested sequence must clear D14 item %s; remaining=%v cmds=%v", item, after.items, acts)
+			for mid, want := range protectedMerged {
+				st, showErr := runTrls(t, r, "show", "--field", "status", mid)
+				require.NoError(t, showErr)
+				assert.Equal(t, want+"\n", st,
+					"repair must not disturb protected merged node %s", mid)
+			}
+		})
+	}
+
+	// MERGED-1 on R: next_actions must be runnable repair set (no claim under merged).
 	mergedOut := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, mergedOut, new(bytes.Buffer),
 		"merged", "--repo", repo, "--issue", "R", "--force", "--format", "agent")
 	assert.Equal(t, 1, code)
 	cf := agentFailureFromStdout(t, mergedOut.String())
 	assert.Equal(t, codeMerged1, cf.Code)
-	assert.Contains(t, cf.Cause, "not a leaf")
 	require.NotEmpty(t, cf.NextActions)
+	assert.Contains(t, cf.NextActions, "arm reopen --issue E")
+	assert.NotContains(t, cf.NextActions, "arm claim --issue RC2")
 	for _, action := range cf.NextActions {
-		assert.NotContains(t, action, "; ", "next_actions must be one command per entry")
-		assert.NotEqual(t, "arm merged --issue R", action)
-		assert.NotContains(t, action, "arm claim --issue RC2")
-	}
-	assert.Contains(t, cf.NextActions, wantRC1)
-	assert.Contains(t, cf.NextActions, wantReopen)
-	assert.Contains(t, cf.NextActions, wantCancel)
-	assert.Contains(t, cf.NextActions, wantRSC)
-	assert.NotContains(t, cf.NextActions, wantDoneLeaf, "LF is sibling of R, not under R")
-
-	// Already-merged no-op retained.
-	already := new(bytes.Buffer)
-	alreadyCode := executeThenHandleRootError(t, already, new(bytes.Buffer),
-		"merged", "--repo", repo, "--issue", "AM", "--force")
-	assert.Equal(t, 0, alreadyCode)
-	assert.Contains(t, already.String(), "already merged")
-
-	// Run every suggested/next_actions command exactly as printed.
-	allCmds := append([]string{}, suggested...)
-	allCmds = append(allCmds, cf.NextActions...)
-	seen := map[string]bool{}
-	for _, cmdLine := range allCmds {
-		if seen[cmdLine] {
-			continue
+		if promotion.IsRunnableArmCommand(action) {
+			assert.NotContains(t, action, "; ")
 		}
-		seen[cmdLine] = true
-		assertRunnableRemediation(t, repo, cmdLine)
+		assert.NotEqual(t, "arm merged --issue R", action)
 	}
 }
 
-func TestFilledDeliveryRecordReachesMerge_REQ_TOPTIER_S18_T4(t *testing.T) {
+func TestRepairHarnessRejectsUnmergeAndCancelWithoutForce_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
-	// When Base/Tip are knowable (claim provenance), remediation emits filled
-	// SHAs — not <sha> placeholders — and that argv is runnable through merge.
+
+	t.Run("reopen_merged_child_fails_harness", func(t *testing.T) {
+		t.Parallel()
+		repo := setupMixedD14Tree(t)
+		err := applyRepairSequence(t, repo, []string{"arm reopen --issue RC3"})
+		require.NoError(t, err, "reopen RC3 may exit 0")
+		after := doctorD14Explain(t, repo)
+		assert.Contains(t, after.items, "R -> E",
+			"un-merging RC3 must not count as clearing D14 R→E")
+		st, showErr := runTrls(t, repo, "show", "--field", "status", "RC3")
+		require.NoError(t, showErr)
+		assert.NotEqual(t, "merged\n", st, "mutation un-merged RC3 — harness must treat as bad")
+		// Explicit harness check used by production test path:
+		err = assertD14ClearedWithoutDamagingMerged(t, repo, "R -> E", map[string]string{"RC3": "merged"})
+		require.Error(t, err, "harness must FAIL when suggested cmd un-merges RC3")
+	})
+
+	t.Run("cancel_without_force_fails_harness", func(t *testing.T) {
+		t.Parallel()
+		repo := setupMixedD14Tree(t)
+		err := applyRepairSequence(t, repo, []string{"arm transition --issue RC2 --to cancelled"})
+		// May fail exit≠0 or succeed without clearing R→E; either way harness fails.
+		after := doctorD14Explain(t, repo)
+		if !containsStr(after.items, "R -> E") && err == nil {
+			t.Fatalf("unexpected: cancel without --force cleared D14 and succeeded")
+		}
+		err = assertD14ClearedWithoutDamagingMerged(t, repo, "R -> E", map[string]string{"RC3": "merged", "AM": "merged"})
+		require.Error(t, err, "harness must FAIL for cancel without --force / partial repair")
+	})
+
+	t.Run("cancel_RC2_alone_is_partial", func(t *testing.T) {
+		t.Parallel()
+		repo := setupMixedD14Tree(t)
+		require.NoError(t, applyRepairSequence(t, repo, []string{
+			"arm transition --issue RC2 --to cancelled --force",
+		}))
+		err := assertD14ClearedWithoutDamagingMerged(t, repo, "R -> E", map[string]string{"RC3": "merged"})
+		require.Error(t, err, "cancel RC2 alone leaves R→E; harness must FAIL partial repair")
+	})
+}
+
+func TestFilledDeliverySequenceNamesReview_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	// Harness must NOT inject unprinted attestation. Suggested sequence must
+	// name review record when SHAs are knowable.
 	repo := doneWithoutAssessment(t)
 	base, tip := landDelivery(t, repo, "task-01")
-	attestDeliveryForTest(t, repo, "task-01", base, tip)
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
-	require.NotEmpty(t, base)
-	require.NotEmpty(t, tip)
 
 	g := promotion.Graph{
 		"task-01": {Status: ops.StatusDone, Base: base, Tip: tip},
 	}
 	acts := promotion.RemediationsForIssue("task-01", g)
-	require.Len(t, acts, 1)
-	filled := acts[0]
-	assert.Equal(t, delivery.RecordArgvFilled("task-01", base, tip), filled)
-	assert.False(t, promotion.IsDeliveryRecordTemplate(filled))
-	assertRunnableRemediation(t, repo, filled)
+	require.Equal(t, []string{
+		delivery.RecordArgvFilled("task-01", base, tip),
+		"arm review record --issue task-01 --assessment <assessment.json>",
+	}, acts)
+	assert.False(t, promotion.IsDeliveryRecordTemplate(acts[0]))
+	assert.True(t, promotion.IsLegacyTemplateRemediation(acts[1]))
 
-	mergedOut := new(bytes.Buffer)
-	mcode := executeThenHandleRootError(t, mergedOut, new(bytes.Buffer),
-		"merged", "--repo", repo, "--issue", "task-01", "--force")
-	require.Equal(t, 0, mcode, "filled delivery + attestation must reach merge; out=%s", mergedOut.String())
+	// Run only the printed filled delivery argv — no silent attest.
+	require.NoError(t, applyRepairSequence(t, repo, []string{acts[0]}))
 	status, err := runTrls(t, repo, "show", "--field", "status", "task-01")
 	require.NoError(t, err)
-	assert.Equal(t, "merged\n", status)
+	assert.Contains(t, status, "done", "delivery alone stays done; merge needs printed review record step")
 }
 
-func assertRunnableRemediation(t *testing.T, repo, cmdLine string) {
+func TestAllCancelledP2UnderG2_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupMixedD14Tree(t)
+	d14 := doctorD14Explain(t, repo)
+	assert.Contains(t, d14.items, "P2 -> G2")
+
+	acts := promotion.RemediationsForIssue("P2", loadPromotionGraph(t, repo))
+	assert.Contains(t, acts, "arm transition --issue P2 --to cancelled --force")
+	assert.Contains(t, acts, "arm reopen --issue G2")
+
+	r := setupMixedD14Tree(t)
+	require.NoError(t, applyRepairSequence(t, r, acts))
+	after := doctorD14Explain(t, r)
+	assert.NotContains(t, after.items, "P2 -> G2")
+	g2, err := runTrls(t, r, "show", "--field", "status", "G2")
+	require.NoError(t, err)
+	// Either reopen G2 or cancel P2 — both clear D14; G2 may stay merged if cancel P2 ran first alphabetically...
+	// applyRepairSequence runs in list order (not sorted). treeRepair lists reopen then cancel.
+	_ = g2
+}
+
+type d14Explain struct {
+	severity    string
+	explanation string
+	items       []string
+	suggested   []string
+}
+
+func doctorD14Explain(t *testing.T, repo string) d14Explain {
 	t.Helper()
-	if !promotion.IsRunnableArmCommand(cmdLine) {
-		// Prose guidance only — not an argv. Tree-repair prose is paired with
-		// runnable reopen/cancel entries in the same suggested list.
-		assert.True(t,
-			cmdLine == promotion.FallbackGuidance || cmdLine == promotion.TreeRepairGuidance,
-			"non-arm guidance must be a known constant, got %q", cmdLine)
-		return
+	stdout := new(bytes.Buffer)
+	_ = executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"doctor", "--repo", repo, "--explain", "--format", "json")
+	payload := assertSingleJSONObject(t, stdout.String())
+	checks, ok := payload["checks"].([]any)
+	require.True(t, ok)
+	for _, raw := range checks {
+		row, ok := raw.(map[string]any)
+		require.True(t, ok)
+		if row["check"] != "D14" {
+			continue
+		}
+		out := d14Explain{severity: fmt.Sprint(row["severity"])}
+		if expl, ok := row["explanation"].(string); ok {
+			out.explanation = expl
+		}
+		if items, ok := row["items"].([]any); ok {
+			for _, it := range items {
+				out.items = append(out.items, fmt.Sprint(it))
+			}
+		}
+		if sug, ok := row["suggested"].([]any); ok {
+			for _, s := range sug {
+				out.suggested = append(out.suggested, fmt.Sprint(s))
+			}
+		}
+		return out
 	}
-	if promotion.IsDeliveryRecordTemplate(cmdLine) {
-		// Documented next step: legacy done with no claim/delivery provenance.
-		// Placeholders are not git objects; substituting invented SHAs fails DELIVERY-1.
-		assert.Contains(t, cmdLine, "<sha>")
-		assert.NotContains(t, cmdLine, "arm merged")
-		return
+	t.Fatalf("D14 check missing; out=%s", stdout.String())
+	return d14Explain{}
+}
+
+func d14ItemID(item string) string {
+	id, _, ok := strings.Cut(item, " -> ")
+	if !ok || id == "" {
+		return item
 	}
-	if strings.Contains(cmdLine, "<assessment.json>") {
-		assert.True(t, strings.HasPrefix(cmdLine, "arm review record"),
-			"assessment placeholder recovery must be review record, got %q", cmdLine)
-		return
+	return id
+}
+
+func loadPromotionGraph(t *testing.T, repo string) promotion.Graph {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	stateDir := getTestStateDir(t, repo)
+	store := snapshot.NewStore(filepath.Join(ctx.IssuesDir, "ops"), stateDir)
+	index, err := store.ReadIndex()
+	require.NoError(t, err)
+	require.NotEmpty(t, index, "expected materialized index at %s", store.IndexPath())
+	return promotionGraphFromStore(store, index)
+}
+
+// applyRepairSequence runs suggested cmds exactly as printed (harness adds only
+// --repo/--format). Guidance and legacy templates are not executed.
+func applyRepairSequence(t *testing.T, repo string, cmds []string) error {
+	t.Helper()
+	var firstErr error
+	for _, cmdLine := range cmds {
+		if promotion.IsGuidanceRemediation(cmdLine) {
+			continue
+		}
+		if promotion.IsLegacyTemplateRemediation(cmdLine) {
+			// Labeled legacy/template — same honesty as kind "legacy"; do not substitute.
+			continue
+		}
+		if !promotion.IsRunnableArmCommand(cmdLine) {
+			return fmt.Errorf("non-arm remediation %q", cmdLine)
+		}
+		args := strings.Fields(cmdLine)
+		if len(args) < 2 || args[0] != "arm" {
+			return fmt.Errorf("bad argv %q", cmdLine)
+		}
+		cliArgs := append([]string{}, args[1:]...)
+		cliArgs = append(cliArgs, "--repo", repo, "--format", "agent")
+		out := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, out, new(bytes.Buffer), cliArgs...)
+		if code != 0 && firstErr == nil {
+			firstErr = fmt.Errorf("suggested %q exit %d; out=%s", cmdLine, code, out.String())
+		}
 	}
-	// Execute exactly as printed (only harness adds --repo/--format).
-	args := strings.Fields(cmdLine)
-	require.GreaterOrEqual(t, len(args), 2)
-	require.Equal(t, "arm", args[0])
-	cliArgs := append([]string{}, args[1:]...)
-	cliArgs = append(cliArgs, "--repo", repo, "--format", "agent")
-	out := new(bytes.Buffer)
-	code := executeThenHandleRootError(t, out, new(bytes.Buffer), cliArgs...)
-	require.Equal(t, 0, code, "suggested %q must succeed; out=%s", cmdLine, out.String())
+	return firstErr
+}
+
+func assertD14ClearedWithoutDamagingMerged(t *testing.T, repo, item string, protected map[string]string) error {
+	t.Helper()
+	after := doctorD14Explain(t, repo)
+	if containsStr(after.items, item) {
+		return fmt.Errorf("D14 item %s still present; items=%v", item, after.items)
+	}
+	for id, want := range protected {
+		st, err := runTrls(t, repo, "show", "--field", "status", id)
+		if err != nil {
+			return err
+		}
+		if st != want+"\n" {
+			return fmt.Errorf("protected %s status=%q want %s", id, strings.TrimSpace(st), want)
+		}
+	}
+	return nil
+}
+
+func containsStr(ss []string, want string) bool {
+	for _, s := range ss {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }
