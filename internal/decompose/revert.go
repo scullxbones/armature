@@ -9,14 +9,15 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// ForeignChildError is returned when revert would strand an issue that is
+// foreignChildError is returned when revert would strand an issue that is
 // not in the plan but currently has a planned issue as its parent.
-type ForeignChildError struct {
+// Callers outside this package see only the error string.
+type foreignChildError struct {
 	Child  string
 	Parent string
 }
 
-func (e *ForeignChildError) Error() string {
+func (e *foreignChildError) Error() string {
 	if e == nil {
 		return "cannot revert: a child not in the plan is attached to a planned issue"
 	}
@@ -76,7 +77,7 @@ func CheckForeignChildren(plan *Plan, state *materialize.State) error {
 		}
 		return found[i].child < found[j].child
 	})
-	return &ForeignChildError{Child: found[0].child, Parent: found[0].parent}
+	return &foreignChildError{Child: found[0].child, Parent: found[0].parent}
 }
 
 func plannedOpenIssues(plan *Plan, state *materialize.State) []PlanIssue {

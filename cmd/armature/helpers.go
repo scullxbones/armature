@@ -844,7 +844,7 @@ func refuseIntroduction(ctx *config.Context, proposed []ops.Op) error {
 	if err != nil {
 		return fmt.Errorf("read manifest: %w", err)
 	}
-	return checkGraphIntroduction(state, check, validate.Options{
+	return decompose.CheckGraphIntroduction(state, check, validate.Options{
 		Strict:  true,
 		Sources: sourceSetFromManifestBytes(manifestData),
 		Now:     nowEpoch(),

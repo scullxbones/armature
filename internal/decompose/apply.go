@@ -244,7 +244,7 @@ func planOps(plan *Plan, state *materialize.State, workerID string, clk clock.Cl
 			})
 		}
 	}
-	if err := checkGraphIntroduction(state, proposed, validate.Options{Strict: true, Sources: opts.Sources, Now: clk()}); err != nil {
+	if err := CheckGraphIntroduction(state, proposed, validate.Options{Strict: true, Sources: opts.Sources, Now: clk()}); err != nil {
 		return nil, err
 	}
 	return proposed, nil

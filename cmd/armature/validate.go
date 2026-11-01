@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/traceability"
 	"github.com/scullxbones/armature/internal/validate"
@@ -153,7 +154,7 @@ func runGraphValidationOnCtx(appCtx *config.Context, opts validate.Options) (gra
 		expanded = map[string][]string{}
 	}
 	opts.PreExpandedScopes = expanded
-	result := validate.Validate(validateFacts(state.Issues, opts.Now), opts)
+	result := validate.Validate(decompose.IssueFacts(state.Issues, opts.Now), opts)
 	return graphValidation{
 		Result:   attachSnapshotWarnings(result, snap.Warnings, opts.Strict),
 		Coverage: cov,

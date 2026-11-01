@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/scullxbones/armature/internal/config"
+	"github.com/scullxbones/armature/internal/decompose"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -136,11 +137,11 @@ func graphEditCascadeCause(ctx *config.Context, op ops.Op, sourceID, dep string)
 	if skipped > 0 && firstErr != nil {
 		return ""
 	}
-	after, err := projectValidateState(state, []ops.Op{op})
+	after, err := decompose.ProjectState(state, []ops.Op{op})
 	if err != nil {
 		return ""
 	}
-	result := validate.Validate(validateFacts(after.Issues, nowEpoch()), validate.Options{Strict: true, Now: nowEpoch()})
+	result := validate.Validate(decompose.IssueFacts(after.Issues, nowEpoch()), validate.Options{Strict: true, Now: nowEpoch()})
 	var chosen *validate.Finding
 	for i := range result.Findings {
 		f := &result.Findings[i]

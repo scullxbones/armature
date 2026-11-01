@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/scullxbones/armature/internal/clock"
+	"github.com/scullxbones/armature/internal/decompose"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/tui"
 	"github.com/scullxbones/armature/internal/validate"
@@ -40,7 +41,7 @@ func (m *Model) SetSize(width, height int) {
 func (m *Model) SetState(state *materialize.State) {
 	m.state = state
 	if state != nil {
-		m.results = validate.Validate(validateFacts(state.Issues, m.now()), validate.Options{Now: m.now()})
+		m.results = validate.Validate(decompose.IssueFacts(state.Issues, m.now()), validate.Options{Now: m.now()})
 	}
 }
 
