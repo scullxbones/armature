@@ -463,7 +463,7 @@ arm delivery record --issue TASK-001 --base abc123 --tip def456
 
 ## doctor
 
-Run repository health checks (D1-D12).
+Run repository health checks (D1-D12 and D14).
 
 **Synopsis:**
 `arm doctor [flags]`
@@ -495,7 +495,7 @@ arm doctor quarantine --log worker-a1.log --line 2
 ```
 
 **Doctor Checks:**
-See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D12), their triggers, and remediation steps.
+See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D12 and D14), their triggers, and remediation steps.
 
 **D9 — Unrecognized managed worktrees.** A worktree living under the managed
 `.worktrees/` root that carries no issue binding is reported as a health problem
@@ -533,6 +533,12 @@ existing local tracking ref when it can, as an error: the remote could not be
 fetched and the result may be stale, with the fetch error text. Missing
 worktree or missing `origin/_armature` (lag not computable) skips OK. D12 is
 not part of `doctor --fix`.
+
+**D14 — Done under merged parent.** Warns when an issue is still `done` while
+its parent is already `merged` (stuck `done → merged` promotion). Merged
+children under a cancelled parent (ORCRUN leftover) are not reported. Remediate
+with `arm merged --issue <id>` when delivery is on main, or `arm reopen --issue
+<id>` if the leaf should not stay done. D14 is not part of `doctor --fix`.
 
 ---
 

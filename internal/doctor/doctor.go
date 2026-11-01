@@ -69,7 +69,7 @@ func runChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	return Report{Checks: indexedChecks(index, allIssues, nil, repoPath, now, nil, nil, configPath)}
 }
 
-var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12"}
+var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}
 
 func LiveCheckIDs() []string {
 	out := make([]string, len(liveCheckIDs))
@@ -108,6 +108,7 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 		filepath.Join(issuesDir, "config.json"))
 	checks = append(checks, checkD11OpsRemote(worktreePath, filepath.Join(issuesDir, "config.json"), now))
 	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
+	checks = append(checks, checkD14DoneUnderMerged(index))
 	return Report{Checks: checks}, nil
 }
 
@@ -601,6 +602,37 @@ func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): %s", detail)
 			f.Items = []string{detail}
 		}
+	}
+	return f
+}
+
+// checkD14DoneUnderMerged warns when an issue is still done while its parent is
+// already merged. Merged children under a cancelled parent (ORCRUN) are not
+// reported — that shape is an intentional cancel-of-parent leftover, not a
+// stuck done→merged promotion.
+func checkD14DoneUnderMerged(index materialize.Index) Finding {
+	f := Finding{Check: "D14", Severity: SeverityOK, Message: "No done issues under a merged parent"}
+
+	var stuck []string
+	for id, entry := range index {
+		if entry.Status != "done" || entry.Parent == "" {
+			continue
+		}
+		parent, ok := index[entry.Parent]
+		if !ok {
+			continue
+		}
+		if parent.Status != "merged" {
+			continue
+		}
+		stuck = append(stuck, fmt.Sprintf("%s -> %s", id, entry.Parent))
+	}
+
+	if len(stuck) > 0 {
+		sort.Strings(stuck)
+		f.Severity = SeverityWarning
+		f.Message = "Done issues whose parent is already merged"
+		f.Items = stuck
 	}
 	return f
 }

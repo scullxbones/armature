@@ -26,7 +26,7 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Run repo health checks (D1-D12); --fix reconciles expired claims",
+		Short: "Run repo health checks (D1-D12, D14); --fix reconciles expired claims",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			rootErr := cmd.Root().PersistentPreRunE(cmd, args)
 			if rootErr == nil {

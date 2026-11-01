@@ -21,11 +21,6 @@ var openReservations = []CheckReservation{
 		Issue:   "LNGHZN-S11-T4",
 		Planned: "Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run.",
 	},
-	{
-		ID:      "D14",
-		Issue:   "TOPTIER-S18-T4",
-		Planned: "Warn when a done issue has a merged parent; exclude merged-under-cancelled (ORCRUN). Remove this row when the check is wired into Run.",
-	},
 }
 
 var checkIDPattern = regexp.MustCompile(`^D[1-9][0-9]*$`)

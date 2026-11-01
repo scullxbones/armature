@@ -1,6 +1,6 @@
 # Validation & Doctor Codes Reference
 
-This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D12).
+This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D12 and D14).
 
 ## Runtime Git floor
 
@@ -700,6 +700,29 @@ git -C .armature rebase origin/_armature
 
 ---
 
+### D14: Done Under Merged Parent
+
+**Check:** Walks the materialized index for issues whose status is still `done` while their parent’s status is already `merged`.
+
+**Trigger:** An issue with `status == done`, a non-empty `parent`, and that parent present in the index with `status == merged`.
+
+**Message:** `Done issues whose parent is already merged` / `No done issues under a merged parent`.
+
+**Items:** `child -> parent` pairs, sorted.
+
+**Severity:** Warning. Plain `arm doctor` still exits 0; `--strict` promotes. Not part of `doctor --fix`.
+
+**Context:** Catches stuck `done → merged` promotions after a parent story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion.
+
+**Fix:** Promote the stuck leaf with the normal merged path when content is on main, or reopen/investigate if the parent rollup was premature:
+```bash
+arm merged --issue <issue-id>
+# or, if the leaf should not stay done:
+arm reopen --issue <issue-id>
+```
+
+---
+
 ## Integration with Commands
 
 ### validate command flags
@@ -762,6 +785,7 @@ arm doctor [flags]
 | D10 | Doctor | Error | Config.json strict decode / range |
 | D11 | Doctor | Warning | Ops remote missing / stale local-only ops (error if unverifiable) |
 | D12 | Doctor | Error | Ops worktree behind origin/_armature, or fetch failed |
+| D14 | Doctor | Warning | Done issue whose parent is already merged (not merged-under-cancelled) |
 
 ---
 

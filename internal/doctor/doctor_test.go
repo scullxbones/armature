@@ -317,7 +317,64 @@ func TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0(t *testing.T) {
 		runIDs = append(runIDs, f.Check)
 	}
 	assert.Equal(t, LiveCheckIDs(), runIDs, "LiveCheckIDs must match the live Run path in order")
-	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12"}, LiveCheckIDs())
+	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}, LiveCheckIDs())
+}
+
+func TestDoctorD14_WarnsOnDoneUnderMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	index := materialize.Index{
+		"story-01": {Status: "merged", Type: "story"},
+		"task-01":  {Status: "done", Type: "task", Parent: "story-01"},
+		"task-02":  {Status: "merged", Type: "task", Parent: "story-01"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, "D14", f.Check)
+	assert.Equal(t, SeverityWarning, f.Severity)
+	assert.Equal(t, "Done issues whose parent is already merged", f.Message)
+	require.Len(t, f.Items, 1)
+	assert.Equal(t, "task-01 -> story-01", f.Items[0])
+}
+
+func TestDoctorD14_SkipsMergedUnderCancelled_ORCRUN_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	index := materialize.Index{
+		"ORCRUN":     {Status: "cancelled", Type: "epic"},
+		"ORCRUN-S1":  {Status: "merged", Type: "story", Parent: "ORCRUN"},
+		"story-orph": {Status: "merged", Type: "story", Parent: "ORCRUN"},
+		"healthy":    {Status: "merged", Type: "story"},
+		"child":      {Status: "merged", Type: "task", Parent: "healthy"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, f.Severity, "merged-under-cancelled must not become a D14 finding")
+	assert.Empty(t, f.Items)
+	assert.Equal(t, "No done issues under a merged parent", f.Message)
+}
+
+func TestDoctorD14_OKWhenDoneParentNotMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	index := materialize.Index{
+		"story-01": {Status: "in-progress", Type: "story"},
+		"task-01":  {Status: "done", Type: "task", Parent: "story-01"},
+		"story-02": {Status: "cancelled", Type: "story"},
+		"task-02":  {Status: "done", Type: "task", Parent: "story-02"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, f.Severity)
+	assert.Empty(t, f.Items)
+}
+
+func TestDoctorD14_EmittedByRun_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0644))
+
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	require.NoError(t, err)
+	d14 := findCheck(t, report, "D14")
+	assert.Equal(t, SeverityOK, d14.Severity, "empty repo must not warn D14")
 }
 
 func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testing.T) {

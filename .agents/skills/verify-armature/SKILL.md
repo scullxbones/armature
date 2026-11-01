@@ -85,7 +85,7 @@ Checks (all read-only):
 The helper also **invokes** product `arm doctor --repo "$TARGET" --format agent --non-interactive` and records stdout/exit. Interpret that separately:
 
 - Unbootstrapped repo: exit 1, stdout one Command Failure `{"error":{"code":"DOCTOR-1","cause":"armature.ops-worktree-path must be set: ...","next_actions":["arm bootstrap","arm worker-init"],"exit_code":1}}`. `GENERAL-1` is retired. Expected before the bootstrap feature.
-- Bootstrapped repo: exit 0 when no check is `error`. Stdout is one envelope `{count, checks, help}` whose `checks` are exactly D1–D12 in Run order (including live D11 ops remote tracking).
+- Bootstrapped repo: exit 0 when no check is `error`. Stdout is one envelope `{count, checks, help}` whose `checks` are exactly D1–D12 then D14 in Run order (including live D11 ops remote tracking and D14 done-under-merged).
 - Product `arm doctor --strict` promotes warnings to a nonzero exit. A D6 warning on uncited issues still exits 0 without `--strict`. The report stays on stdout; stderr is `doctor --strict: N warning(s) promoted to errors`.
 
 Do not treat a green product doctor as proof that `--repo` is isolated. The table above is the isolation proof.
@@ -323,7 +323,7 @@ The script is bash, `chmod +x`. It records evidence itself. Do not reverse-engin
 - `arm list` / `arm ready` structured output is that same envelope (ready empty → `count: 0`, `issues: []`). List rows are `{id, type, status, title}`. Ready rows use `id`, not `issue`.
 - Task `create` is gated on E6 fields (`scope`, `acceptance`, `definition_of_done`). A refused create is `CREATE-1`, not `GENERAL-1`. Citation is required to **promote**, not to create.
 - `claim --worktree` is mandatory; it provisions `.worktrees/<id>` on `task/<id>`.
-- Product `arm doctor` emits D1–D12 on a **bootstrapped** repo (D11 ops remote tracking is live). Unbootstrapped → `DOCTOR-1` ops-worktree-path. Do not conflate with this skill's Doctor section.
+- Product `arm doctor` emits D1–D12 and D14 on a **bootstrapped** repo (D11 ops remote tracking and D14 done-under-merged are live). Unbootstrapped → `DOCTOR-1` ops-worktree-path. Do not conflate with this skill's Doctor section.
 - `arm ops-backup snapshot|verify|restore-plan` is the published-tip backup lever. It is not a doctor check.
 - Repo-local skills live under `.agents/skills/`. This skill is `.agents/skills/verify-armature/`. Embedded workflow skills in `internal/skillsembed/skills/` are a different product.
 - Secondary TUIs: `arm tui`, `arm dag summary`, and interactive `arm ready`. Drive with `--non-interactive`.
