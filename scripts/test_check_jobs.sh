@@ -705,7 +705,14 @@ if "fetch-depth: 0" not in static and "fetch-depth:0" not in static:
 if "github.event_name == 'pull_request'" not in static and 'github.event_name == "pull_request"' not in static:
     print("FAIL: check-static commit-subjects/fetch must be gated to pull_request (skip empty range on main push)")
     sys.exit(1)
-print("PASS: origin/main mapped for " + ",".join(needed_by) + "; commit-subjects owner=check-static (PR-only)")
+# Shallow main fetch + full tip history widens origin/main..HEAD past the branch point.
+if re.search(r"git fetch[^\n]*--depth(?:=\d+|\s+\d+)[^\n]*main:refs/remotes/origin/main", static):
+    print("FAIL: check-static must fetch origin/main without --depth (checkout already fetch-depth: 0)")
+    sys.exit(1)
+if "main:refs/remotes/origin/main" not in static:
+    print("FAIL: check-static must fetch main:refs/remotes/origin/main for commit-subjects")
+    sys.exit(1)
+print("PASS: origin/main mapped for " + ",".join(needed_by) + "; commit-subjects owner=check-static (PR-only; unshallow main)")
 PY
 ) && ORIGIN_MAIN_STATUS=0 || ORIGIN_MAIN_STATUS=$?
 

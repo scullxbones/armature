@@ -140,9 +140,12 @@ jobs:
       # github.sha == the new tip and fetching origin/main makes
       # origin/main..HEAD empty — the empty-range check would fail every
       # main push. Subjects were already gated on the PR (lean b owner).
+      # No --depth: checkout already used fetch-depth:0; a shallow main fetch
+      # can leave origin/main short of the real branch point so
+      # origin/main..HEAD includes pre-branch unscoped commits.
       - name: Fetch origin/main for commit-subjects
         if: github.event_name == 'pull_request'
-        run: git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
