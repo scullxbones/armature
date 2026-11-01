@@ -234,6 +234,8 @@ TEST_JSON_OUT ?=
 
 test: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
+	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
+	git status --porcelain --untracked-files=all > "$$pre"; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -timeout $(TEST_TIMEOUT) $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	if [ -n "$(TEST_JSON_OUT)" ]; then \
 		mkdir -p "$$(dirname "$(TEST_JSON_OUT)")"; \
@@ -241,9 +243,11 @@ test: build
 	fi; \
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
-	if [ $$status -ne 0 ]; then exit $$status; fi; \
-	if [ $$summary -ne 0 ]; then exit $$summary; fi; \
-	scripts/check-test-porcelain.sh .
+	if [ $$status -ne 0 ]; then rm -f "$$pre"; exit $$status; fi; \
+	if [ $$summary -ne 0 ]; then rm -f "$$pre"; exit $$summary; fi; \
+	scripts/check-test-porcelain.sh . "$$pre"; porcelain=$$?; \
+	rm -f "$$pre"; \
+	exit $$porcelain
 
 test-ci: build
 ifeq ($(GOOS_NATIVE),windows)
@@ -265,12 +269,16 @@ test-e2eharness: build
 
 coverage: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
+	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
+	git status --porcelain --untracked-files=all > "$$pre"; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
-	if [ $$status -ne 0 ]; then exit $$status; fi; \
-	if [ $$summary -ne 0 ]; then exit $$summary; fi; \
-	scripts/check-test-porcelain.sh .
+	if [ $$status -ne 0 ]; then rm -f "$$pre"; exit $$status; fi; \
+	if [ $$summary -ne 0 ]; then rm -f "$$pre"; exit $$summary; fi; \
+	scripts/check-test-porcelain.sh . "$$pre"; porcelain=$$?; \
+	rm -f "$$pre"; \
+	if [ $$porcelain -ne 0 ]; then exit $$porcelain; fi
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
@@ -285,6 +293,7 @@ lint: adr-principles
 		exit 1; \
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
+	@scripts/check-bash32-scripts.sh .
 	@scripts/check-mock-ban.sh .
 	@$(GO) run ./scripts/repoguard -check source-manifest .
 

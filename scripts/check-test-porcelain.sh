@@ -1,23 +1,41 @@
 #!/usr/bin/env bash
-# Fail if go-test left materialize state-dir artifacts untracked in the repo.
-# Scoped to known leak names so unrelated WIP does not trip the gate.
+# Fail if the test suite dirtied the git working tree.
+# Usage: check-test-porcelain.sh [repo_root] [baseline_porcelain_file]
+#   With baseline: fail on any porcelain line not present before the suite
+#   (allows pre-existing WIP). Without baseline: fail on any porcelain.
+# Bash 3.2 compatible (macOS /bin/bash) — no mapfile / readarray / declare -A.
 set -euo pipefail
 ROOT="${1:-.}"
+BASELINE="${2:-}"
 cd "$ROOT"
-# shellcheck disable=SC2016
-mapfile -t dirty < <(git status --porcelain --untracked-files=all | awk '
-  $1 ~ /^\?\?/ {
-    path=$2
-    n=split(path, parts, "/")
-    base=parts[n]
-    if (base == "checkpoint.json" || base == "index.json" || base == "ready.json" || base == "traceability.json" || base == "issues") {
-      print path
-    }
-  }
-')
-if ((${#dirty[@]})); then
-  echo "FAIL: go test left state-dir files in the working tree (explicit StateDir/TempDir required):" >&2
-  printf '  %s\n' "${dirty[@]}" >&2
+
+current="$(git status --porcelain --untracked-files=all || true)"
+
+if [ -n "$BASELINE" ]; then
+  if [ ! -f "$BASELINE" ]; then
+    echo "FAIL: porcelain baseline file missing: $BASELINE" >&2
+    exit 1
+  fi
+  new_dirt="$(
+    printf '%s\n' "$current" | while IFS= read -r line || [ -n "$line" ]; do
+      [ -z "$line" ] && continue
+      if ! grep -Fxq -- "$line" "$BASELINE"; then
+        printf '%s\n' "$line"
+      fi
+    done
+  )"
+  if [ -n "$new_dirt" ]; then
+    echo "FAIL: go test left new dirt in git status --porcelain (explicit TempDir/root required):" >&2
+    printf '%s\n' "$new_dirt" | sed 's/^/  /' >&2
+    exit 1
+  fi
+  echo "OK: git status --porcelain unchanged vs pre-test baseline"
+  exit 0
+fi
+
+if [ -n "$current" ]; then
+  echo "FAIL: go test left dirt in git status --porcelain (explicit TempDir/root required):" >&2
+  printf '%s\n' "$current" | sed 's/^/  /' >&2
   exit 1
 fi
-echo "OK: no state-dir cwd leaks in git status --porcelain"
+echo "OK: git status --porcelain empty after tests"

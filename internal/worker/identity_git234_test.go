@@ -78,7 +78,6 @@ func TestReplaceProvenGitCopiedID_Table_REQ_GIT234_MIN(t *testing.T) {
 		{name: "empty_existing_never_replace_via_helper", existing: "", mainID: "main-worker", mainErr: nil, want: false},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.want, replaceProvenGitCopiedID(tc.existing, tc.mainID, tc.mainErr))
@@ -163,7 +162,11 @@ func TestSeedWorktreeIdentity_KeepUnlessProvenCopy_Table_REQ_GIT234_MIN(t *testi
 		mainCfg := filepath.Join(repo, ".git", "config.worktree")
 		require.NoError(t, adapters.New(repo).SetGitConfigWorktree(gitConfigKey, "main-temp"))
 		require.NoError(t, os.Chmod(mainCfg, 0o000))
-		t.Cleanup(func() { _ = os.Chmod(mainCfg, 0o600) })
+		t.Cleanup(func() {
+			if chmodErr := os.Chmod(mainCfg, 0o600); chmodErr != nil {
+				t.Errorf("restore main config.worktree mode: %v", chmodErr)
+			}
+		})
 
 		require.NoError(t, SeedWorktreeIdentity(wt, "override-worker"))
 		got, err := adapters.New(wt).ReadGitConfigWorktree(gitConfigKey)
