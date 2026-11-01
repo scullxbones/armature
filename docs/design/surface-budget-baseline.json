@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 153,
+      "count": 154,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -148,6 +148,7 @@
         "Version.Major",
         "Version.Minor",
         "Version.Patch",
+        "Version.PreRelease",
         "Version.String",
         "WriteCacheFile",
         "WriteCheckpointJSON",

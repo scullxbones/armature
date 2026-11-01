@@ -4,14 +4,17 @@ This document describes all diagnostic codes emitted by `arm validate` (errors E
 
 ## Runtime Git floor
 
-Armature requires **Git 2.34+**. Before resolving a repo, `arm` runs
+Armature requires **Git 2.34+** (release; prereleases such as `2.34.0-rc1`
+are below the floor). Before resolving a repo, `arm` runs
 `adapters.RequireMinGit` and refuses with an `IO` Command Failure when the
 installed `git --version` is below `2.34.0`. The cause always names the
 installed and required versions (for example
-`installed git 2.33.0 is below the required minimum git 2.34.0`). Graph
-Findings and doctor checks are not emitted for this case — the process exits
-before validate/doctor run. See `docs/getting-started.md`, README
-prerequisites, and `docs/design/architecture.md` (Git Dependency).
+`installed git 2.33.0 is below the required minimum git 2.34.0`). Next
+actions point at upgrading Git and `docs/getting-started.md`. Commands that
+override the root pre-run (`worker-init`, `bootstrap`) still enforce the same
+floor. Graph Findings and doctor checks are not emitted for this case — the
+process exits before validate/doctor run. See README prerequisites and
+`docs/design/architecture.md` (Git Dependency).
 
 ## Validation Codes (arm validate)
 

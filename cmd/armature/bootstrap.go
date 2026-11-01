@@ -59,7 +59,8 @@ Use --platform to restrict bootstrap to specific platforms (can be repeated); de
 The command is idempotent: running it multiple times has the same effect as running it once.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			applyTTYDetectionPolicy(cmd.Root())
-			return nil
+			// Override skips the root hook; still enforce the Git floor here.
+			return requireMinGitPreRun(cmd)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repoPath := repoPathFromCmd(cmd)

@@ -14,9 +14,12 @@ func newWorkerInitCmd() *cobra.Command {
 	var repoPath, explicitID string
 
 	cmd := &cobra.Command{
-		Use:               "worker-init",
-		Short:             "Generate or check worker identity",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+		Use:   "worker-init",
+		Short: "Generate or check worker identity",
+		// Override skips the root hook; still enforce the Git floor here.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return requireMinGitPreRun(cmd)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repoPath == "" {
 				repoPath = "."

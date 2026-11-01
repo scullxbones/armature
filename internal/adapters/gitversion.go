@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // MinGitVersion is the documented and enforced Git floor. Armature requires
@@ -17,18 +18,27 @@ var MinGitVersion = Version{Major: 2, Minor: 34, Patch: 0}
 
 // Version is a parsed Git X.Y.Z triple. Extra dotted segments after patch
 // (for example Apple Git or Windows builds) are ignored for comparison.
+// A prerelease marker on the same X.Y.Z (for example 2.34.0-rc1) is strictly
+// below the matching release.
 type Version struct {
-	Major int
-	Minor int
-	Patch int
+	Major      int
+	Minor      int
+	Patch      int
+	PreRelease bool
 }
 
-// String renders the X.Y.Z form used in docs and error messages.
+// String renders the X.Y.Z form used in docs and error messages. Prereleases
+// append "-pre" so the floor message distinguishes them from the release.
 func (v Version) String() string {
-	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+	s := fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+	if v.PreRelease {
+		return s + "-pre"
+	}
+	return s
 }
 
-// AtLeast reports whether v is greater than or equal to want.
+// AtLeast reports whether v is greater than or equal to want. A prerelease of
+// the same X.Y.Z is below the release (2.34.0-rc1 < 2.34.0).
 func (v Version) AtLeast(want Version) bool {
 	if v.Major != want.Major {
 		return v.Major > want.Major
@@ -36,12 +46,18 @@ func (v Version) AtLeast(want Version) bool {
 	if v.Minor != want.Minor {
 		return v.Minor > want.Minor
 	}
-	return v.Patch >= want.Patch
+	if v.Patch != want.Patch {
+		return v.Patch > want.Patch
+	}
+	if v.PreRelease && !want.PreRelease {
+		return false
+	}
+	return true
 }
 
 // ParseGitVersionOutput parses `git --version` stdout (for example
 // "git version 2.34.0", "git version 2.43.0 (Apple Git-155)",
-// "git version 2.34.0.windows.1").
+// "git version 2.34.0.windows.1", "git version 2.34.0-rc1").
 func ParseGitVersionOutput(out string) (Version, error) {
 	line := strings.TrimSpace(out)
 	if i := strings.IndexByte(line, '\n'); i >= 0 {
@@ -72,22 +88,27 @@ func ParseGitVersionOutput(out string) (Version, error) {
 		return Version{}, fmt.Errorf("unrecognized git version %q", rest)
 	}
 	patch := 0
+	pre := false
 	if len(parts) >= 3 {
 		patchPart := parts[2]
-		if j := strings.IndexFunc(patchPart, func(r rune) bool {
-			return r < '0' || r > '9'
-		}); j >= 0 {
-			patchPart = patchPart[:j]
+		digits := 0
+		for digits < len(patchPart) && unicode.IsDigit(rune(patchPart[digits])) {
+			digits++
 		}
-		if patchPart == "" {
+		if digits == 0 {
 			return Version{}, fmt.Errorf("unrecognized git version %q", rest)
 		}
-		patch, err = strconv.Atoi(patchPart)
+		patch, err = strconv.Atoi(patchPart[:digits])
 		if err != nil {
 			return Version{}, fmt.Errorf("unrecognized git version %q", rest)
 		}
+		// "0-rc1" / "0rc1" → prerelease of this X.Y.Z.
+		// "0" with later dotted segments like "windows.1" is a release build.
+		if digits < len(patchPart) {
+			pre = true
+		}
 	}
-	return Version{Major: major, Minor: minor, Patch: patch}, nil
+	return Version{Major: major, Minor: minor, Patch: patch, PreRelease: pre}, nil
 }
 
 // DetectGitVersion runs `git --version` under environ (nil = process env)

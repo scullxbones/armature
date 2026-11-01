@@ -1119,6 +1119,14 @@ it creates a new task worktree from the parent worktree's current branch and tip
 						)
 					}
 				}
+				// Rebind skips createWorktreeAndBranchWithExclusion; still seed
+				// so a Git-2.34 worktree that never got config.worktree works.
+				if err := worker.SeedWorktreeIdentity(ctx.RepoPath, worktreePath); err != nil {
+					return compensateClaimIfHeldByToken(
+						cmd, store, logPath, issueID, workerID, "seed worktree worker identity",
+						err, prior, claimToken, true, claimExclusions,
+					)
+				}
 			}
 			if parentID := issue.Parent; parentID != "" {
 				if parentEntry, ok := index[parentID]; ok && parentEntry.Status == ops.StatusOpen {

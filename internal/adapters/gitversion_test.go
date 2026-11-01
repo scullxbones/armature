@@ -27,22 +27,52 @@ func TestParseGitVersionOutput_Boundary_REQ_GIT234_MIN(t *testing.T) {
 	minOK, err := adapters.ParseGitVersionOutput("git version 2.34.0")
 	require.NoError(t, err)
 	assert.Equal(t, adapters.Version{Major: 2, Minor: 34, Patch: 0}, minOK)
+	assert.False(t, minOK.PreRelease)
 	assert.True(t, minOK.AtLeast(adapters.MinGitVersion))
 	require.NoError(t, adapters.CheckMinGitVersion(minOK))
 
 	apple, err := adapters.ParseGitVersionOutput("git version 2.43.0 (Apple Git-155)\n")
 	require.NoError(t, err)
 	assert.Equal(t, adapters.Version{Major: 2, Minor: 43, Patch: 0}, apple)
+	assert.False(t, apple.PreRelease)
 	assert.True(t, apple.AtLeast(adapters.MinGitVersion))
 
 	windows, err := adapters.ParseGitVersionOutput("git version 2.34.0.windows.1")
 	require.NoError(t, err)
 	assert.Equal(t, adapters.Version{Major: 2, Minor: 34, Patch: 0}, windows)
+	assert.False(t, windows.PreRelease, "windows dotted suffix is not a prerelease")
 	require.NoError(t, adapters.CheckMinGitVersion(windows))
 
 	remergeFloor := adapters.Version{Major: 2, Minor: 36, Patch: 0}
 	assert.False(t, minOK.AtLeast(remergeFloor), "2.34 must not claim remerge (≥2.36)")
 	assert.True(t, adapters.Version{Major: 2, Minor: 36, Patch: 0}.AtLeast(remergeFloor))
+}
+
+func TestParseGitVersionOutput_PrereleaseBelowRelease_REQ_GIT234_MIN(t *testing.T) {
+	t.Parallel()
+
+	rc, err := adapters.ParseGitVersionOutput("git version 2.34.0-rc1")
+	require.NoError(t, err)
+	assert.Equal(t, 2, rc.Major)
+	assert.Equal(t, 34, rc.Minor)
+	assert.Equal(t, 0, rc.Patch)
+	assert.True(t, rc.PreRelease)
+	assert.Equal(t, "2.34.0-pre", rc.String())
+	assert.False(t, rc.AtLeast(adapters.MinGitVersion), "2.34.0-rc1 must be below 2.34.0")
+	require.Error(t, adapters.CheckMinGitVersion(rc))
+	assert.Contains(t, adapters.CheckMinGitVersion(rc).Error(), "2.34.0-pre")
+	assert.Contains(t, adapters.CheckMinGitVersion(rc).Error(), "2.34.0")
+
+	rcDot, err := adapters.ParseGitVersionOutput("git version 2.34.0-rc.1")
+	require.NoError(t, err)
+	assert.True(t, rcDot.PreRelease)
+	assert.False(t, rcDot.AtLeast(adapters.MinGitVersion))
+
+	// A newer prerelease than the floor still clears the floor.
+	newerRC, err := adapters.ParseGitVersionOutput("git version 2.35.0-rc1")
+	require.NoError(t, err)
+	assert.True(t, newerRC.PreRelease)
+	assert.True(t, newerRC.AtLeast(adapters.MinGitVersion), "2.35.0-rc1 is above 2.34.0 release")
 }
 
 func TestParseGitVersionOutput_RejectsGarbage_REQ_GIT234_MIN(t *testing.T) {

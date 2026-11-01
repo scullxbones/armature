@@ -81,9 +81,12 @@ if [[ ! -d "$SRC" ]]; then
 fi
 
 mkdir -p "$PREFIX"
-echo "Building git $VERSION into $PREFIX (jobs=$JOBS) ..."
-make -C "$SRC" -j"$JOBS" prefix="$PREFIX" NO_GETTEXT=1 NO_TCLTK=1 all
-make -C "$SRC" prefix="$PREFIX" NO_GETTEXT=1 NO_TCLTK=1 install
+# Pin the C dialect: modern GCC defaults (C23) reject Git 2.34's thread_local
+# usage in index-pack.c. gnu17 is the class fix for every from-source build.
+GIT_CFLAGS="${CFLAGS:--O2 -std=gnu17}"
+echo "Building git $VERSION into $PREFIX (jobs=$JOBS, CFLAGS=$GIT_CFLAGS) ..."
+make -C "$SRC" -j"$JOBS" prefix="$PREFIX" NO_GETTEXT=1 NO_TCLTK=1 CFLAGS="$GIT_CFLAGS" all
+make -C "$SRC" prefix="$PREFIX" NO_GETTEXT=1 NO_TCLTK=1 CFLAGS="$GIT_CFLAGS" install
 
 INSTALLED="$PREFIX/bin/git"
 if [[ ! -x "$INSTALLED" ]]; then
@@ -93,11 +96,8 @@ fi
 
 raw="$("$INSTALLED" --version)"
 echo "Installed: $raw"
-case "$raw" in
-  "git version ${VERSION}"|"git version ${VERSION}."*)
-    ;;
-  *)
-    echo "FAIL: installed git version does not start with ${VERSION}: $raw" >&2
-    exit 1
-    ;;
-esac
+if [[ "$raw" != "git version ${VERSION}" ]]; then
+  echo "FAIL: installed git --version must be exactly 'git version ${VERSION}' (got: $raw)" >&2
+  exit 1
+fi
+echo "OK: git --version matches pinned ${VERSION}"
