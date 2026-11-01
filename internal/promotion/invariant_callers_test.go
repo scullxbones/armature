@@ -15,7 +15,7 @@ import (
 
 // TestInvariantHelpersHaveNonTestCallers_REQ_TOPTIER_S18_T4 fails the build when
 // TreeConsistencyViolations or FinishedWorkDestroyed only appear in tests —
-// product must enforce both (doctor / claim / ValidateAlternatives).
+// product must enforce both (doctor / claim / filterFinishedWorkDestroyingAlternatives).
 func TestInvariantHelpersHaveNonTestCallers_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	_, thisFile, _, ok := runtime.Caller(0)

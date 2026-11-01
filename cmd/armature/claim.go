@@ -922,7 +922,11 @@ it creates a new task worktree from the parent worktree's current branch and tip
 			// ancestor (--force does not skip; same invariant doctor reports).
 			graph := promotionGraphFromStore(store, store.Index())
 			if promotion.WouldViolateTreeConsistency(issueID, graph) {
-				acts := promotion.RemediationsPlan(issueID, graph).RenderNextActions()
+				viewer, _, viewerErr := resolveWorkerAndLogCmd(cmd)
+				if viewerErr != nil {
+					viewer = ""
+				}
+				acts := promotion.RemediationsPlanFor(issueID, graph, viewer).RenderNextActions()
 				if len(acts) == 0 {
 					acts = []string{promotion.TreeRepairGuidance, "arm doctor"}
 				}

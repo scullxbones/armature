@@ -73,27 +73,45 @@ const (
 )
 
 // planProducer is the seam RemediationsPlan calls. Tests may replace it to
-// mutate the real producer path (not a local Plan copy).
+// mutate the real producer path (not a local Plan copy) so doctor/merged see it.
 var planProducer = buildRemediationsPlan
 
-// RemediationsPlan walks the issue tree under id and returns a typed Plan.
+// ReplacePlanProducerForTest wraps the plan producer; call restore when done.
+// Used by harnesses that must inject a drop into the product path.
+// wrap receives the previous producer so tests can delegate then mutate.
+func ReplacePlanProducerForTest(wrap func(prev func(string, Graph, PlanOpts) Plan) func(string, Graph, PlanOpts) Plan) (restore func()) {
+	prev := planProducer
+	planProducer = wrap(prev)
+	return func() { planProducer = prev }
+}
+
+// RemediationsPlan walks the issue tree under id and returns a typed Plan
+// (viewer unknown — every ClaimedBy holder is treated as foreign).
 func RemediationsPlan(id string, g Graph) Plan {
-	p := planProducer(id, g)
-	// Product call sites for FinishedWorkDestroyed + TreeConsistencyViolations:
-	// every shipped Plan is simulated against the invariant helpers.
-	if err := validateAlternatives(g, p); err != nil {
-		p.Guidance = append(append([]string(nil), p.Guidance...), "plan validation: "+err.Error())
-	}
+	return RemediationsPlanFor(id, g, "")
+}
+
+// RemediationsPlanFor is RemediationsPlan with the calling worker's ID so
+// Option B cancel matches transition's owner gate.
+func RemediationsPlanFor(id string, g Graph, viewer string) Plan {
+	opts := PlanOpts{Viewer: viewer}
+	p := planProducer(id, g, opts)
+	// Gate-check every printed command (same predicates as CLI). Drop any
+	// alternative that would suggest a gate-refused step — no separate simulation.
+	p = filterGateRefusedAlternatives(g, p, opts.Viewer)
+	// Finished-work preservation (product caller of FinishedWorkDestroyed).
+	p = filterFinishedWorkDestroyingAlternatives(g, p)
 	return p
 }
 
 // RemediationsForIssue is Plan.RenderNextActions for callers that need []string
-// (doctor suggested, MERGED-1 next_actions, sync). Prefer RemediationsPlan.
+// (doctor suggested, MERGED-1 next_actions, sync). Prefer RemediationsPlanFor
+// when the calling worker ID is known.
 func RemediationsForIssue(id string, g Graph) []string {
 	return RemediationsPlan(id, g).RenderNextActions()
 }
 
-func buildRemediationsPlan(id string, g Graph) Plan {
+func buildRemediationsPlan(id string, g Graph, opts PlanOpts) Plan {
 	if id == "" || g == nil {
 		return Plan{}
 	}
@@ -107,12 +125,12 @@ func buildRemediationsPlan(id string, g Graph) Plan {
 	}
 
 	if chain := mergedAncestorChain(id, g); len(chain) > 0 {
-		return treeRepairPlan(id, chain, node, g)
+		return treeRepairPlan(id, chain, node, g, opts.Viewer)
 	}
 	return healthyPlan(id, node, g)
 }
 
-func treeRepairPlan(id string, mergedChain []string, node Node, g Graph) Plan {
+func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, viewer string) Plan {
 	// Option A: reopen the FULL merged-ancestor chain rootward-first so nested
 	// M1→M2→item never leaves M2 open under still-merged M1.
 	var reopenSteps []Step
@@ -121,18 +139,35 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph) Plan {
 	}
 	reopen := Alternative{Steps: reopenSteps}
 
-	// Option B cancels open/claimed/in-progress descendants then this node.
-	// Claimed/in-progress by another worker: steal first (owner gate); --force
-	// on transition does not skip ownership.
-	var cancelSteps []Step
-	for _, openID := range openDescendantsUnder(id, g) {
-		cancelSteps = append(cancelSteps, ownerAwareCancelSteps(openID, g[openID])...)
-	}
-	cancelSteps = append(cancelSteps, ownerAwareCancelSteps(id, node)...)
 	p := Plan{
-		Alternatives: []Alternative{reopen, {Steps: cancelSteps}},
+		Alternatives: []Alternative{reopen},
 		Guidance:     []string{TreeRepairGuidance},
 	}
+
+	// Option B: cancel open descendants then self — only when every cancel
+	// target passes cmdGate for this viewer. Foreign live leases: no invented
+	// takeover (claim --force is scope-overlap only); drop cancel-other-worker
+	// option and print honest holder/TTL guidance + left-behind worktree note.
+	cancelTargets := append(openDescendantsUnder(id, g), id)
+	var foreign []string
+	for _, tid := range cancelTargets {
+		if foreignLiveLeaseBlocks(g[tid], viewer) {
+			foreign = append(foreign, tid)
+		}
+	}
+	if len(foreign) > 0 {
+		p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreign, g)...)
+	} else {
+		var cancelSteps []Step
+		for _, tid := range cancelTargets {
+			cancelSteps = append(cancelSteps, Step{
+				Argv: "arm transition --issue " + tid + " --to cancelled --force",
+				Kind: StepCommand,
+			})
+		}
+		p.Alternatives = append(p.Alternatives, Alternative{Steps: cancelSteps})
+	}
+
 	more := healthyDescendantOrLeafSteps(id, node, g)
 	if len(more) > 0 {
 		p.MoreSteps = more
@@ -140,23 +175,49 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph) Plan {
 	return p
 }
 
-// ownerAwareCancelSteps emits steal-then-cancel when claimed/in-progress by a
-// known holder; otherwise a plain cancel --force.
-func ownerAwareCancelSteps(id string, node Node) []Step {
-	switch node.Status {
-	case ops.StatusClaimed, ops.StatusInProgress:
-		if holder := strings.TrimSpace(node.ClaimedBy); holder != "" {
-			return []Step{
-				{
-					Argv: "arm claim --issue " + id + " --force --worktree",
-					Kind: StepCommand,
-					Help: "steal claim from " + holder + " before cancel (transition --force does not skip owner gate)",
-				},
-				{Argv: "arm transition --issue " + id + " --to cancelled --force", Kind: StepCommand},
+func foreignLeaseGuidance(ids []string, g Graph) []string {
+	var out []string
+	for _, id := range ids {
+		n := g[id]
+		holder := strings.TrimSpace(n.ClaimedBy)
+		if holder == "" {
+			holder = "another worker"
+		}
+		out = append(out, fmt.Sprintf(
+			"live %s lease on %s held by %s — owner must release "+
+				"(arm transition --issue %s --to cancelled, or wait for TTL expiry then arm doctor --fix) "+
+				"then rerun arm doctor; arm claim --force only overrides scope overlap, not foreign live leases. "+
+				"Left-behind worktree may remain at .worktrees/%s. Prefer Option A (reopen) if the holder is unavailable",
+			n.Status, id, holder, id, id,
+		))
+	}
+	return out
+}
+
+// filterGateRefusedAlternatives drops any Alternative whose StepCommand fails
+// cmdGate — printed Options never suggest a CLI-refused command.
+func filterGateRefusedAlternatives(g Graph, p Plan, viewer string) Plan {
+	if len(p.Alternatives) == 0 {
+		return p
+	}
+	var kept []Alternative
+	for _, alt := range p.Alternatives {
+		ok := true
+		for _, step := range alt.Steps {
+			if step.Kind != StepCommand && step.Kind != StepRequiredInput {
+				continue
+			}
+			if err := cmdGate(step.Argv, g, viewer); err != nil {
+				ok = false
+				break
 			}
 		}
+		if ok {
+			kept = append(kept, alt)
+		}
 	}
-	return []Step{{Argv: "arm transition --issue " + id + " --to cancelled --force", Kind: StepCommand}}
+	p.Alternatives = kept
+	return p
 }
 
 // openDescendantsUnder lists open/claimed/in-progress descendants of id
@@ -317,7 +378,8 @@ func AssessmentHowTo(issueID, base, tip string) string {
 }
 
 // missingAssessmentActions is the shared recovery list for MERGED-1 /
-// sync missing-assessment (same how-to as doctor required-input).
+// sync missing-assessment (same how-to as doctor required-input). AssessmentHowTo
+// appears once — on the required-input Help — never doubled as a separate guidance step.
 func missingAssessmentActions(issueID, base, tip string) []string {
 	base = strings.TrimSpace(base)
 	tip = strings.TrimSpace(tip)
@@ -327,19 +389,11 @@ func missingAssessmentActions(issueID, base, tip string) []string {
 	if tip == "" {
 		tip = "<sha>"
 	}
-	steps := []Step{
-		{Argv: AssessmentHowTo(issueID, base, tip), Kind: StepGuidance},
-		{
-			Argv: "arm review record --issue " + issueID + " --assessment <assessment.json> --bundle <bundle.json>",
-			Kind: StepRequiredInput,
-			Help: AssessmentHowTo(issueID, base, tip),
-		},
-	}
-	var out []string
-	for _, step := range steps {
-		out = append(out, renderStep(step)...)
-	}
-	return out
+	return renderStep(Step{
+		Argv: "arm review record --issue " + issueID + " --assessment <assessment.json> --bundle <bundle.json>",
+		Kind: StepRequiredInput,
+		Help: AssessmentHowTo(issueID, base, tip),
+	})
 }
 
 func onlyCancelledDescendants(id string, g Graph) bool {
@@ -434,6 +488,13 @@ func (p Plan) RenderNextActions() []string {
 		for _, step := range p.Alternatives[0].Steps {
 			out = append(out, renderStep(step)...)
 		}
+	}
+	for _, g := range p.Guidance {
+		g = strings.TrimSpace(g)
+		if g == "" || g == TreeRepairGuidance {
+			continue // TreeRepairGuidance is folded into doctor explanation
+		}
+		out = append(out, g)
 	}
 	if len(p.MoreSteps) > 0 {
 		if len(p.Alternatives) >= 2 {
@@ -585,7 +646,13 @@ func IsGuidanceRemediation(cmd string) bool {
 	if strings.HasPrefix(cmd, "produce assessment.json:") {
 		return true
 	}
-	if strings.HasPrefix(cmd, "steal claim from ") {
+	if strings.HasPrefix(cmd, "live ") && strings.Contains(cmd, " lease on ") && strings.Contains(cmd, " held by ") {
+		return true
+	}
+	if strings.HasPrefix(cmd, "live claim held by ") {
+		return true
+	}
+	if strings.HasPrefix(cmd, "in-progress live lease held by ") {
 		return true
 	}
 	switch cmd {
@@ -652,8 +719,10 @@ func FinishedWorkDestroyed(before, after Graph, explicitlyTouched map[string]boo
 	return out
 }
 
-// simulateAlternative applies reopen/cancel/claim steps to a graph copy.
-func simulateAlternative(g Graph, alt Alternative) Graph {
+// applyReopenCancelEffects applies only reopen/cancel argv effects for the
+// FinishedWorkDestroyed product check. Not an option validator — cmdGate owns
+// that — and never invents claim-takeover success.
+func applyReopenCancelEffects(g Graph, alt Alternative) Graph {
 	after := cloneGraph(g)
 	for _, cmd := range alt.RunnableCommands() {
 		fields := strings.Fields(cmd)
@@ -674,38 +743,29 @@ func simulateAlternative(g Graph, alt Alternative) Graph {
 		case strings.Contains(cmd, "--to cancelled"):
 			n.Status = ops.StatusCancelled
 			n.ClaimedBy = ""
-		case strings.Contains(cmd, "arm claim "):
-			n.Status = ops.StatusClaimed
 		}
 		after[issue] = n
 	}
 	return after
 }
 
-// validateAlternatives simulates each alternative and runs the invariant
-// helpers (FinishedWorkDestroyed + TreeConsistencyViolations) so both have
-// non-test product callers.
-func validateAlternatives(g Graph, p Plan) error {
-	var errs []string
-	for i, alt := range p.Alternatives {
-		after := simulateAlternative(g, alt)
-		touched := alt.ExplicitlyTouchedIDs()
-		if d := FinishedWorkDestroyed(g, after, touched); len(d) > 0 {
-			errs = append(errs, fmt.Sprintf("option %c destroys finished work: %s", 'A'+i, strings.Join(d, "; ")))
-		}
-		// After a complete alternative, no open/claimed under merged may remain
-		// among explicitly touched IDs and their former merged ancestors.
-		for _, v := range TreeConsistencyViolations(after) {
-			id, _, _ := strings.Cut(v, " ")
-			if touched[id] {
-				errs = append(errs, fmt.Sprintf("option %c leaves inconsistency: %s", 'A'+i, v))
-			}
-		}
+// filterFinishedWorkDestroyingAlternatives drops Alternatives that would disturb
+// done/merged nodes they do not explicitly touch — product caller of
+// FinishedWorkDestroyed (paired with cmdGate; no claim-takeover simulation).
+func filterFinishedWorkDestroyingAlternatives(g Graph, p Plan) Plan {
+	if len(p.Alternatives) == 0 {
+		return p
 	}
-	if len(errs) == 0 {
-		return nil
+	var kept []Alternative
+	for _, alt := range p.Alternatives {
+		after := applyReopenCancelEffects(g, alt)
+		if d := FinishedWorkDestroyed(g, after, alt.ExplicitlyTouchedIDs()); len(d) > 0 {
+			continue
+		}
+		kept = append(kept, alt)
 	}
-	return fmt.Errorf("%s", strings.Join(errs, "; "))
+	p.Alternatives = kept
+	return p
 }
 
 func cloneGraph(g Graph) Graph {

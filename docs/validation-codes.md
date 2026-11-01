@@ -728,8 +728,12 @@ Option A:
 arm reopen --issue <merged-ancestor-id>
 # …then each nearer merged ancestor…
 Option B:
-# claimed/in-progress by another worker: steal first (--force on transition does not skip owner)
-arm claim --issue <claimed-id> --force --worktree
+# only when every cancel target is open/unowned OR held by the calling worker.
+# Foreign live lease: Option B is NOT offered (claim --force is scope-overlap
+# only; AcceptAt ignores force). Print honest guidance instead:
+#   live <status> lease on <id> held by <worker> — owner must release
+#   (cancel, or wait TTL then arm doctor --fix); left-behind .worktrees/<id>
+#   may remain; prefer Option A if the holder is unavailable.
 arm transition --issue <id> --to cancelled --force
 
 # more steps follow after tree repair to promote remaining descendants:

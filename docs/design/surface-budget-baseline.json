@@ -1508,7 +1508,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 96,
+      "count": 100,
       "names": [
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1577,10 +1577,14 @@
         "Plan.Guidance",
         "Plan.MoreSteps",
         "Plan.RenderNextActions",
+        "PlanOpts",
+        "PlanOpts.Viewer",
         "RecoveryArgv",
         "RemediationsForIssue",
         "RemediationsPlan",
+        "RemediationsPlanFor",
         "RenderGroupedNextActions",
+        "ReplacePlanProducerForTest",
         "Result",
         "Result.AppendCheck",
         "Result.CheckPayload",

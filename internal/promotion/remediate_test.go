@@ -93,38 +93,75 @@ func TestRemediationsPlan_NestedMergedAncestorChain_REQ_TOPTIER_S18_T4(t *testin
 	assert.Equal(t, []string{"arm transition --issue D --to cancelled --force"},
 		plan.Alternatives[1].RunnableCommands())
 
-	require.NoError(t, validateAlternatives(g, plan))
-
-	nearestOnly := Plan{Alternatives: []Alternative{{
-		Steps: []Step{{Argv: "arm reopen --issue M2", Kind: StepCommand}},
-	}}}
-	err := validateAlternatives(g, nearestOnly)
-	require.Error(t, err, "nearest-only reopen must leave M2 open under M1")
-	assert.Contains(t, err.Error(), "inconsistency")
+	// CmdGate + construction: full chain is offered; nearest-only is not a product Option.
+	assert.Equal(t, []string{"M1", "M2"}, mergedAncestorChain("D", g))
+	nearestOnly := Alternative{Steps: []Step{{Argv: "arm reopen --issue M2", Kind: StepCommand}}}
+	afterNearest := applyReopenCancelEffects(g, nearestOnly)
+	viol := TreeConsistencyViolations(afterNearest)
+	require.NotEmpty(t, viol, "nearest-only reopen must leave M2 open under M1")
+	assert.Contains(t, strings.Join(viol, ";"), "M2 under merged M1")
 
 	rendered := plan.RenderNextActions()
 	assertOptionOwnLines(t, rendered, 'A', "arm reopen --issue M1", "arm reopen --issue M2")
 }
 
-func TestRemediationsPlan_OwnerAwareCancel_REQ_TOPTIER_S18_T4(t *testing.T) {
+func TestRemediationsPlan_ForeignLeaseNoInventedTakeover_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	g := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
 		"C": {Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "worker-other"},
 	}
+	// Empty viewer → every holder is foreign: drop Option B; honest guidance only.
 	plan := RemediationsPlan("R", g)
-	require.Len(t, plan.Alternatives, 2)
+	require.Len(t, plan.Alternatives, 1, "foreign live lease must drop cancel-other-worker Option B")
+	assert.Equal(t, []string{"arm reopen --issue E"}, plan.Alternatives[0].RunnableCommands())
+	rendered := plan.RenderNextActions()
+	assert.NotContains(t, rendered, "Option B:")
+	for _, line := range rendered {
+		if cmd := RunnableArgv(line); cmd != "" {
+			assert.NotContains(t, cmd, "arm claim --issue C --force", "no invented takeover argv")
+			assert.NotContains(t, cmd, "arm unassign ")
+			assert.NotEqual(t, "arm transition --issue C --to cancelled --force", cmd,
+				"must not print gate-refused cancel-other as a runnable step")
+		}
+	}
+	joined := strings.Join(plan.Guidance, "\n")
+	assert.Contains(t, joined, "live claimed lease on C held by worker-other")
+	assert.Contains(t, joined, "arm claim --force only overrides scope overlap")
+	assert.Contains(t, joined, ".worktrees/C")
+	assert.Contains(t, joined, "Prefer Option A")
+
+	// in-progress foreign live lease: same — guidance only.
+	ip := Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
+		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
+		"C": {Status: ops.StatusInProgress, Parent: "R", ClaimedBy: "worker-other"},
+	}
+	ipPlan := RemediationsPlanFor("R", ip, "me")
+	require.Len(t, ipPlan.Alternatives, 1)
+	ipJoined := strings.Join(ipPlan.Guidance, "\n")
+	assert.Contains(t, ipJoined, "live in-progress lease on C held by worker-other")
+	assert.Contains(t, ipJoined, "arm doctor --fix")
+	for _, line := range ipPlan.RenderNextActions() {
+		if cmd := RunnableArgv(line); cmd != "" {
+			assert.False(t, strings.Contains(cmd, "arm claim") && strings.Contains(cmd, "--force"),
+				"no invented claim --force takeover: %s", cmd)
+		}
+	}
+
+	// Owned claim: viewer matches holder → Option B cancel offered.
+	owned := Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
+		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
+		"C": {Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "me"},
+	}
+	ownedPlan := RemediationsPlanFor("R", owned, "me")
+	require.Len(t, ownedPlan.Alternatives, 2)
 	assert.Equal(t, []string{
-		"arm claim --issue C --force --worktree",
 		"arm transition --issue C --to cancelled --force",
 		"arm transition --issue R --to cancelled --force",
-	}, plan.Alternatives[1].RunnableCommands(),
-		"Option B must steal claim before cancel; --force on transition does not skip owner")
-
-	rendered := plan.RenderNextActions()
-	assert.Contains(t, rendered, "steal claim from worker-other before cancel (transition --force does not skip owner gate)")
-	assert.Contains(t, rendered, "arm claim --issue C --force --worktree")
+	}, ownedPlan.Alternatives[1].RunnableCommands())
 
 	// Open (unowned) keeps plain cancel.
 	open := Graph{
@@ -134,6 +171,24 @@ func TestRemediationsPlan_OwnerAwareCancel_REQ_TOPTIER_S18_T4(t *testing.T) {
 	openPlan := RemediationsPlan("O", open)
 	assert.Equal(t, []string{"arm transition --issue O --to cancelled --force"},
 		openPlan.Alternatives[1].RunnableCommands())
+}
+
+func TestCmdGate_MatchesClaimTransitionPredicates_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	g := Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"C", "O"}},
+		"C": {Status: ops.StatusClaimed, Parent: "E", ClaimedBy: "other"},
+		"O": {Status: ops.StatusOpen, Parent: "E"},
+	}
+	assert.Error(t, cmdGate("arm claim --issue O --worktree", g, "me"),
+		"claim under merged must refuse even with --force absent")
+	assert.Error(t, cmdGate("arm claim --issue C --force --worktree", g, "me"),
+		"foreign live lease blocks claim; --force is scope-overlap only")
+	assert.Error(t, cmdGate("arm transition --issue C --to cancelled --force", g, "me"),
+		"NOT-CLAIM-OWNER")
+	assert.NoError(t, cmdGate("arm transition --issue C --to cancelled --force", g, "other"),
+		"owner may cancel")
+	assert.NoError(t, cmdGate("arm reopen --issue E", g, "me"))
 }
 
 func TestRemediationsPlan_FilledDeliveryRequiredInput_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -161,6 +216,17 @@ func TestRemediationsPlan_FilledDeliveryRequiredInput_REQ_TOPTIER_S18_T4(t *test
 	assert.Equal(t, "arm review record --issue L --assessment <assessment.json> --bundle <bundle.json>", got[2])
 	assert.False(t, IsLegacyTemplateRemediation(got[2]))
 	assert.True(t, IsRequiredInputRemediation(got[2]))
+}
+
+func TestMissingAssessmentActions_AssessmentHowToOnce_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	acts := missingAssessmentActions("FL", "base1", "tip1")
+	joined := strings.Join(acts, "\n")
+	assert.Equal(t, 1, strings.Count(joined, "arm review prepare --issue FL"),
+		"prepare/schema/validate how-to must appear once, not doubled")
+	assert.Equal(t, 1, strings.Count(joined, "arm review schema --output"))
+	assert.Equal(t, 1, strings.Count(joined, "arm review validate --assessment"))
+	assert.Contains(t, acts, "arm review record --issue FL --assessment <assessment.json> --bundle <bundle.json>")
 }
 
 func TestRemediationsPlan_AllMergedChildrenEmpty_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -282,15 +348,16 @@ func TestDropEitherAlternativeMutatesProducer_REQ_TOPTIER_S18_T4(t *testing.T) {
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E"},
 	}
-	prev := planProducer
-	planProducer = func(id string, graph Graph) Plan {
-		p := buildRemediationsPlan(id, graph)
-		if len(p.Alternatives) >= 2 {
-			p.Alternatives = p.Alternatives[:1]
+	restore := ReplacePlanProducerForTest(func(prev func(string, Graph, PlanOpts) Plan) func(string, Graph, PlanOpts) Plan {
+		return func(id string, graph Graph, opts PlanOpts) Plan {
+			p := prev(id, graph, opts)
+			if len(p.Alternatives) >= 2 {
+				p.Alternatives = p.Alternatives[:1]
+			}
+			return p
 		}
-		return p
-	}
-	t.Cleanup(func() { planProducer = prev })
+	})
+	t.Cleanup(restore)
 
 	plan := RemediationsPlan("R", g)
 	assert.Less(t, len(plan.Alternatives), 2,

@@ -309,18 +309,6 @@ func TestRepairHarnessRejectsMutations_REQ_TOPTIER_S18_T4(t *testing.T) {
 		require.Error(t, err, "harness must FAIL for cancel without --force / partial repair")
 	})
 
-	t.Run("drop_either_alternative_fails", func(t *testing.T) {
-		t.Parallel()
-		plan := promotion.RemediationsPlan("R", loadPromotionGraph(t, setupMixedD14Tree(t)))
-		require.GreaterOrEqual(t, len(plan.Alternatives), 2,
-			"product path must expose ≥2 Options; producer-mutation proof lives in promotion package")
-		// Harness gate: a shipped Plan with either Option dropped fails this bar.
-		incomplete := plan
-		incomplete.Alternatives = plan.Alternatives[:1]
-		assert.Less(t, len(incomplete.Alternatives), 2)
-		assert.NotEqual(t, plan.RenderNextActions(), incomplete.RenderNextActions())
-	})
-
 	t.Run("suggest_claim_under_merged_fails_invariant", func(t *testing.T) {
 		t.Parallel()
 		repo := setupMixedD14Tree(t)
@@ -639,6 +627,180 @@ func produceAssessmentFromHowTo(t *testing.T, repo, issueID, base, tip, howTo st
 		"--assessment", assessmentPath, "--bundle", bundlePath)
 	require.NoError(t, err, "printed how-to requires validate before record")
 	return assessmentPath, bundlePath
+}
+
+// TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4 injects a drop
+// into the product planProducer (not a local Plan copy) and asserts doctor /
+// arm merged observe the incomplete Options. Not parallel — mutates package state.
+func TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+	type producer = func(string, promotion.Graph, promotion.PlanOpts) promotion.Plan
+	restore := promotion.ReplacePlanProducerForTest(func(prev producer) producer {
+		return func(id string, g promotion.Graph, opts promotion.PlanOpts) promotion.Plan {
+			p := prev(id, g, opts)
+			if len(p.Alternatives) >= 2 {
+				p.Alternatives = p.Alternatives[:1]
+			}
+			return p
+		}
+	})
+	t.Cleanup(restore)
+
+	repo := setupMixedD14Tree(t)
+	plan := promotion.RemediationsPlan("R", loadPromotionGraph(t, repo))
+	assert.Less(t, len(plan.Alternatives), 2,
+		"injected drop must shrink product Plan Alternatives")
+	d14 := doctorD14Explain(t, repo)
+	assert.NotContains(t, d14.suggested, "Option B:",
+		"doctor --explain must reflect the mutated producer (not a local Plan copy)")
+	assert.Contains(t, d14.items, "R -> E", "D14 finding remains; incomplete remediations do not clear it")
+
+	out := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, out, new(bytes.Buffer),
+		"merged", "--issue", "R", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code, "arm merged on incomplete-remediation tree must fail")
+	assert.NotContains(t, out.String(), "Option B:")
+}
+
+// TestOwnedAndForeignLeaseUnderMergedCLI_REQ_TOPTIER_S18_T4 covers the PJ class:
+// own lease + foreign live lease under a merged ancestor; every printed Option's
+// steps clear the finding or the Option is correctly not offered (no invented takeover).
+func TestOwnedAndForeignLeaseUnderMergedCLI_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo, workerID := setupOwnedForeignMergedFixture(t)
+	other := "other-worker-foreign"
+
+	g := loadPromotionGraph(t, repo)
+	assert.Equal(t, ops.StatusClaimed, g["OS"].Status)
+	assert.Equal(t, other, g["OS"].ClaimedBy)
+	assert.Equal(t, ops.StatusClaimed, g["OWN"].Status)
+	assert.Equal(t, workerID, g["OWN"].ClaimedBy)
+
+	assertNoInventedTakeoverArgv := func(t *testing.T, lines []string) {
+		t.Helper()
+		for _, line := range lines {
+			cmd := promotion.RunnableArgv(line)
+			if cmd == "" {
+				continue
+			}
+			assert.NotContains(t, cmd, "arm claim --issue OS --force", "no invented takeover argv: %s", cmd)
+			assert.NotEqual(t, "arm transition --issue OS --to cancelled --force", cmd,
+				"must not print gate-refused cancel-other as runnable step")
+			assert.NotContains(t, cmd, "arm unassign ")
+		}
+	}
+
+	// Claim under merged refuses; next_actions must not invent claim --force takeover.
+	out := new(bytes.Buffer)
+	code := executeThenHandleRootError(t, out, new(bytes.Buffer),
+		"claim", "--issue", "OS", "--force", "--worktree", "--repo", repo, "--format", "agent")
+	assert.Equal(t, 1, code)
+	cf := agentFailureFromStdout(t, out.String())
+	assert.Equal(t, codeClaim1, cf.Code)
+	assertNoInventedTakeoverArgv(t, cf.NextActions)
+	assert.Contains(t, cf.NextActions, "arm reopen --issue G2")
+	assert.True(t, containsSubstring(cf.NextActions, "live claimed lease on OS held by "+other))
+	assert.True(t, containsSubstring(cf.NextActions, ".worktrees/OS"))
+
+	// Doctor --explain: foreign OS → no Option B cancel-other; OWN subject → cancel owned OK.
+	d14 := doctorD14Explain(t, repo)
+	assertNoInventedTakeoverArgv(t, d14.suggested)
+	assert.True(t, containsSubstring(d14.suggested, "live claimed lease on OS held by "+other))
+	assert.True(t, containsSubstring(d14.suggested, ".worktrees/OS"))
+
+	osPlan := promotion.RemediationsPlanFor("OS", g, workerID)
+	require.Len(t, osPlan.Alternatives, 1, "foreign lease drops Option B")
+	assert.Equal(t, []string{"arm reopen --issue G2"}, osPlan.Alternatives[0].RunnableCommands())
+
+	ownPlan := promotion.RemediationsPlanFor("OWN", g, workerID)
+	require.Len(t, ownPlan.Alternatives, 2, "owned lease keeps Option B cancel")
+	assert.Equal(t, []string{"arm transition --issue OWN --to cancelled --force"},
+		ownPlan.Alternatives[1].RunnableCommands())
+
+	// Run every printed Option's steps on a fresh fixture whose viewer matches the plan.
+	for i := range ownPlan.Alternatives {
+		fresh, freshWorker := setupOwnedForeignMergedFixture(t)
+		before := loadPromotionGraph(t, fresh)
+		plan := promotion.RemediationsPlanFor("OWN", before, freshWorker)
+		require.Len(t, plan.Alternatives, 2)
+		alt := plan.Alternatives[i]
+		require.NoError(t, applyAlternative(t, fresh, alt), "option %c", 'A'+i)
+		after := loadPromotionGraph(t, fresh)
+		assert.Empty(t, filterViolations(promotion.TreeConsistencyViolations(after), subjectSubtree("OWN", before)),
+			"option %c must clear OWN tree inconsistency", 'A'+i)
+		assert.Empty(t, promotion.FinishedWorkDestroyed(before, after, alt.ExplicitlyTouchedIDs()))
+	}
+
+	// Foreign Option A (reopen) clears OS inconsistency; Option B correctly not offered.
+	freshOS, freshOSWorker := setupOwnedForeignMergedFixture(t)
+	osFresh := promotion.RemediationsPlanFor("OS", loadPromotionGraph(t, freshOS), freshOSWorker)
+	require.Len(t, osFresh.Alternatives, 1)
+	require.NoError(t, applyAlternative(t, freshOS, osFresh.Alternatives[0]))
+	afterOS := loadPromotionGraph(t, freshOS)
+	assert.Empty(t, filterViolations(promotion.TreeConsistencyViolations(afterOS), subjectSubtree("OS", g)))
+}
+
+func containsSubstring(ss []string, sub string) bool {
+	for _, s := range ss {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// setupOwnedForeignMergedFixture builds G2(merged)→P2(done)→{OS foreign claimed, OWN self claimed}.
+func setupOwnedForeignMergedFixture(t *testing.T) (repo, workerID string) {
+	t.Helper()
+	repo = gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+	ctx := getTestContext(t, repo)
+	var logPath string
+	var err error
+	workerID, logPath, err = resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+
+	for _, c := range []struct {
+		id, title, typ, parent string
+	}{
+		{"G2", "Epic G2", "epic", ""},
+		{"P2", "Story P2", "story", "G2"},
+		{"OS", "Foreign OS", "task", "P2"},
+		{"OWN", "Owned leaf", "task", "P2"},
+	} {
+		require.NoError(t, appendOp(ctx, logPath, ops.Op{
+			Type: ops.OpCreate, TargetID: c.id, Timestamp: nowEpoch(), WorkerID: workerID,
+			Payload: ops.Payload{
+				Title: c.title, NodeType: c.typ, Parent: c.parent,
+				DefinitionOfDone: c.title + " is complete and tested",
+				Acceptance:       json.RawMessage(testAcceptance),
+				Confidence:       "verified",
+				Scope:            []string{"cmd/armature/" + strings.ToLower(c.id) + ".go"},
+			},
+		}))
+	}
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpTransition, TargetID: "P2", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{To: ops.StatusDone, Outcome: "fixture done parent under merged for owned/foreign lease class"},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+
+	// Claim while G2 is still open so leases publish; then merge G2 (product gate
+	// refuses claim under merged). Real arm claim — raw AppendOp is not published.
+	_, err = runTrls(t, repo, "claim", "--issue", "OWN", "--worktree")
+	require.NoError(t, err)
+	other := "other-worker-foreign"
+	_, err = runTrls(t, repo, "claim", "--issue", "OS", "--worktree", "--worker-id", other)
+	require.NoError(t, err)
+
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpTransition, TargetID: "G2", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{To: ops.StatusMerged},
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	return repo, workerID
 }
 
 func subjectSubtree(id string, g promotion.Graph) map[string]bool {
