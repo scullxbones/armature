@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
@@ -20,6 +21,10 @@ import (
 type refreshFailGit struct {
 	inner *adapters.Client
 	err   error
+}
+
+func (g refreshFailGit) BeginPerRunRef(ns string) (string, func(), error) {
+	return g.inner.BeginPerRunRef(ns)
 }
 
 func (g refreshFailGit) FetchBranchToRef(string, string) error {
@@ -38,10 +43,6 @@ func (g refreshFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g refreshFailGit) DeleteRef(ref string) error {
-	return g.inner.DeleteRef(ref)
-}
-
 func (g refreshFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
 	return g.inner.RestoreEvidence(bundlePath, advertiseRef, opsBranch)
 }
@@ -49,6 +50,10 @@ func (g refreshFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch stri
 type bundleFailGit struct {
 	inner *adapters.Client
 	err   error
+}
+
+func (g bundleFailGit) BeginPerRunRef(ns string) (string, func(), error) {
+	return g.inner.BeginPerRunRef(ns)
 }
 
 func (g bundleFailGit) FetchBranchToRef(branch, dstRef string) error {
@@ -67,10 +72,6 @@ func (g bundleFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error 
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g bundleFailGit) DeleteRef(ref string) error {
-	return g.inner.DeleteRef(ref)
-}
-
 func (g bundleFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
 	return g.inner.RestoreEvidence(bundlePath, advertiseRef, opsBranch)
 }
@@ -81,6 +82,10 @@ type resolveFailGit struct {
 	err       error
 	fetchErr  error
 	bundleErr error
+}
+
+func (g resolveFailGit) BeginPerRunRef(ns string) (string, func(), error) {
+	return g.inner.BeginPerRunRef(ns)
 }
 
 func (g resolveFailGit) FetchBranchToRef(branch, dstRef string) error {
@@ -108,10 +113,6 @@ func (g resolveFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
 }
 
-func (g resolveFailGit) DeleteRef(ref string) error {
-	return g.inner.DeleteRef(ref)
-}
-
 func (g resolveFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
 	return g.inner.RestoreEvidence(bundlePath, advertiseRef, opsBranch)
 }
@@ -119,6 +120,10 @@ func (g resolveFailGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch stri
 type restoreEvidenceFailGit struct {
 	inner *adapters.Client
 	err   error
+}
+
+func (g restoreEvidenceFailGit) BeginPerRunRef(ns string) (string, func(), error) {
+	return g.inner.BeginPerRunRef(ns)
 }
 
 func (g restoreEvidenceFailGit) FetchBranchToRef(branch, dstRef string) error {
@@ -135,10 +140,6 @@ func (g restoreEvidenceFailGit) BundleCreateAdvertised(outputPath, tipSHA, adver
 
 func (g restoreEvidenceFailGit) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
-}
-
-func (g restoreEvidenceFailGit) DeleteRef(ref string) error {
-	return g.inner.DeleteRef(ref)
 }
 
 func (g restoreEvidenceFailGit) RestoreEvidence(string, string, string) (bool, string, string, bool, bool, error) {
@@ -513,6 +514,10 @@ type tipInjectGit struct {
 	n     atomic.Uint64
 }
 
+func (g *tipInjectGit) BeginPerRunRef(ns string) (string, func(), error) {
+	return g.inner.BeginPerRunRef(ns)
+}
+
 func (g *tipInjectGit) FetchBranchToRef(string, string) error { return nil }
 
 func (g *tipInjectGit) ResolveRevision(rev string) (string, error) {
@@ -529,10 +534,6 @@ func (g *tipInjectGit) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef s
 
 func (g *tipInjectGit) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	return g.inner.BundleVerifyRestorable(bundlePath, wantRef)
-}
-
-func (g *tipInjectGit) DeleteRef(ref string) error {
-	return g.inner.DeleteRef(ref)
 }
 
 func (g *tipInjectGit) RestoreEvidence(bundlePath, advertiseRef, opsBranch string) (bool, string, string, bool, bool, error) {
@@ -752,7 +753,8 @@ func TestRestorePlan_LegacyScratchParentStillWorks_REQ_TOPTIER_S12_T1F(t *testin
 }
 
 // TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F leaves stale
-// per-run refs and temp dirs (crash simulation); the next invocation succeeds.
+// per-run refs (crash / kill -9 simulation); the next invocation succeeds and
+// sweeps leaseless leftovers under managed namespaces.
 func TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	t.Parallel()
 	repo, _, tip := setupOpsOrigin(t)
@@ -763,16 +765,12 @@ func TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F(t *testin
 
 	staleTrack := "refs/remotes/origin/_armature-run/deadbeefcafebabe"
 	staleScratch := "refs/remotes/backup/_armature-run/deadbeefcafebabe"
+	staleTmpBundle := "refs/armature-tmp/deadbeefcafebabe/bundle"
+	staleTmpOrigin := "refs/armature-tmp/deadbeefcafebabe/origin"
 	gittest.Git(t, repo, "update-ref", staleTrack, tip)
 	gittest.Git(t, repo, "update-ref", staleScratch, tip)
-	staleBare := filepath.Join(os.TempDir(), "armature-ops-backup-bare-stale-t1f")
-	staleVerify := filepath.Join(os.TempDir(), "armature-ops-backup-verify-stale-t1f")
-	require.NoError(t, os.MkdirAll(filepath.Join(staleBare, "bare.git"), 0o750))
-	require.NoError(t, os.MkdirAll(filepath.Join(staleVerify, "bare.git"), 0o750))
-	t.Cleanup(func() {
-		_ = os.RemoveAll(staleBare)   //nolint:errcheck // best-effort crash-sim leftover cleanup
-		_ = os.RemoveAll(staleVerify) //nolint:errcheck // best-effort crash-sim leftover cleanup
-	})
+	gittest.Git(t, repo, "update-ref", staleTmpBundle, tip)
+	gittest.Git(t, repo, "update-ref", staleTmpOrigin, tip)
 
 	out := filepath.Join(t.TempDir(), "after-crash.bundle")
 	res, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
@@ -783,8 +781,10 @@ func TestOpsBackup_CrashLeftoversDoNotBreakNextRun_REQ_TOPTIER_S12_T1F(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, tip, plan.Recovered)
 
-	// Stale leftovers remain (we do not sweep foreign nonces) but do not block.
-	assert.Equal(t, tip, gitOut(t, repo, "rev-parse", staleTrack))
+	// Managed namespaces are swept (leaseless = crash leftover).
+	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"))
+	assert.Empty(t, listRefs(t, repo, "refs/armature-tmp"))
+	// Foreign legacy namespace is out of scope for the sweep.
 	assert.Equal(t, tip, gitOut(t, repo, "rev-parse", staleScratch))
 }
 
@@ -999,4 +999,28 @@ func TestOpsBackup_ParallelMovingTip_NoSharedTrackingLock_REQ_TOPTIER_S12_T1(t *
 	require.Error(t, trackErr, "refs/remotes/origin/_armature must stay absent before/after")
 	assert.Empty(t, listRefs(t, repo, "refs/remotes/origin/_armature-run"), "per-run tracking cleaned up")
 	assert.Empty(t, listRefs(t, repo, "refs/remotes/backup/_armature-run"), "per-run scratch cleaned up")
+}
+
+func TestSweepAgedOutputTemps_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stale := filepath.Join(dir, ".armature-ops-backup-stale.bundle")
+	require.NoError(t, os.WriteFile(stale, []byte("x"), 0o600))
+	// Force mtime into the past beyond the 1h ceiling.
+	past := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(stale, past, past))
+	fresh := filepath.Join(dir, ".armature-ops-backup-fresh.bundle")
+	require.NoError(t, os.WriteFile(fresh, []byte("y"), 0o600))
+
+	// Exercise via Snapshot temp path creation (calls sweepAgedOutputTemps).
+	repo, _, tip := setupOpsOrigin(t)
+	c := adapters.New(repo)
+	out := filepath.Join(dir, "final.bundle")
+	res, err := opsbackup.Snapshot(c, opsbackup.SnapshotRequest{OutputPath: out})
+	require.NoError(t, err)
+	assert.Equal(t, tip, res.Tip)
+	_, err = os.Stat(stale)
+	assert.True(t, os.IsNotExist(err), "aged temp must be swept")
+	_, err = os.Stat(fresh)
+	assert.NoError(t, err, "fresh temp must be kept")
 }

@@ -4,13 +4,13 @@
 package opsbackup
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/clock"
 )
 
 const (
@@ -18,11 +18,11 @@ const (
 	OpsBranch = "_armature"
 	// TrackingRef is the conventional published tip name
 	// (refs/remotes/origin/_armature). Ops-backup never writes it: snapshot
-	// fetches into per-run refs under runTrackingNS via FetchBranchToRef
-	// (empty --refmap= so the remote's configured refspec cannot also update
-	// this shared tip under concurrency). restore-plan stages only under
-	// refs/armature-tmp/<run-id>/ inside the clone (cleaned up; never
-	// refs/remotes/origin/*).
+	// fetches into per-run refs under runTrackingNS via BeginPerRunRef +
+	// FetchBranchToRef (empty --refmap= so the remote's configured refspec
+	// cannot also update this shared tip under concurrency). restore-plan
+	// stages only under refs/armature-tmp/<run-id>/ inside the clone (lease +
+	// crash-safe sweep; never refs/remotes/origin/*).
 	TrackingRef = "refs/remotes/origin/_armature"
 	// LiveRef is the local ops branch. Snapshot must never rewind it.
 	LiveRef = "refs/heads/_armature"
@@ -72,13 +72,13 @@ func (d Disposition) String() string {
 
 // Git is the adapter surface opsbackup needs. *adapters.Client satisfies it.
 type Git interface {
+	BeginPerRunRef(ns string) (ref string, release func(), err error)
 	FetchBranchToRef(branch, dstRef string) error
 	ResolveRevision(rev string) (string, error)
 	BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error
 	BundleVerifyRestorable(bundlePath, wantRef string) error
-	DeleteRef(ref string) error
 	// RestoreEvidence compares origin+bundle tips via clone-local network ops
-	// and refs/armature-tmp/<run-id>/ staging (cleaned up on return).
+	// and refs/armature-tmp/<run-id>/ staging (lease + crash-safe sweep).
 	RestoreEvidence(
 		bundlePath, advertiseRef, opsBranch string,
 	) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error)
@@ -118,13 +118,11 @@ func Snapshot(g Git, req SnapshotRequest) (SnapshotResult, error) {
 	if out == "" {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: --output is required")
 	}
-	runRef, err := uniqueRunRef(runTrackingNS)
+	runRef, releaseRun, err := g.BeginPerRunRef(runTrackingNS)
 	if err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: run tracking ref: %w", err)
 	}
-	defer func() {
-		_ = g.DeleteRef(runRef) //nolint:errcheck // best-effort per-run staging cleanup
-	}()
+	defer releaseRun()
 	if err := g.FetchBranchToRef(OpsBranch, runRef); err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
 	}
@@ -156,6 +154,8 @@ func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) 
 	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
 		return "", func() {}, mkErr
 	}
+	// Reclaim crash leftovers next to --output before creating a new temp.
+	sweepAgedOutputTemps(dir)
 	f, err := os.CreateTemp(dir, ".armature-ops-backup-*.bundle")
 	if err != nil {
 		return "", func() {}, err
@@ -171,6 +171,25 @@ func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) 
 		_ = os.Remove(tmp) //nolint:errcheck // best-effort; rename success leaves tmp gone
 	}
 	return tmp, cleanup, nil
+}
+
+// sweepAgedOutputTemps reclaims crash leftovers next to --output. Age ceiling
+// matches adapters.runLeaseMaxAgeSec (1h). Concurrent live temps are seconds old.
+func sweepAgedOutputTemps(dir string) {
+	matches, err := filepath.Glob(filepath.Join(dir, ".armature-ops-backup-*.bundle"))
+	if err != nil {
+		return
+	}
+	now := clock.System()
+	for _, p := range matches {
+		info, statErr := os.Stat(p)
+		if statErr != nil {
+			continue
+		}
+		if now-info.ModTime().Unix() > 3600 {
+			_ = os.Remove(p) //nolint:errcheck // best-effort crash leftover sweep
+		}
+	}
 }
 
 // Verify confirms a bundle advertises AdvertisedRef and that its object pack
@@ -242,12 +261,4 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 		return plan, ErrDiverge
 	}
 	return plan, nil
-}
-
-func uniqueRunRef(ns string) (string, error) {
-	var nonce [8]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
-		return "", err
-	}
-	return ns + "/" + hex.EncodeToString(nonce[:]), nil
 }

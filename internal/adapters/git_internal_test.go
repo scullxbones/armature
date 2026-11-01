@@ -278,3 +278,44 @@ exit 0
 		t.Fatalf("networkCmd took %v; want fail-closed near %v (+ WaitDelay)", elapsed, gitNetworkTimeout)
 	}
 }
+
+func TestParseRunLeaseAndPidAlive_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	pid, started, ok := parseRunLease("pid=123\nstarted=99\n")
+	if !ok || pid != 123 || started != 99 {
+		t.Fatalf("parseRunLease got pid=%d started=%d ok=%v", pid, started, ok)
+	}
+	if _, _, ok := parseRunLease("pid=nope\n"); ok {
+		t.Fatal("expected invalid pid to fail")
+	}
+	if _, _, ok := parseRunLease("pid=1\nstarted=nope\n"); ok {
+		t.Fatal("expected bad started to fail")
+	}
+	if _, _, ok := parseRunLease(""); ok {
+		t.Fatal("expected empty lease to fail")
+	}
+	if pidAlive(0) || pidAlive(-1) {
+		t.Fatal("pidAlive must reject non-positive pids")
+	}
+	if !pidAlive(os.Getpid()) {
+		t.Fatal("pidAlive must see current process")
+	}
+	if leaseKindForRefNS(armatureTmpNS) != leaseKindArmatureTmp {
+		t.Fatal("expected exact armature-tmp lease kind")
+	}
+	if leaseKindForRefNS(armatureTmpNS+"/x") != leaseKindArmatureTmp {
+		t.Fatal("expected armature-tmp lease kind")
+	}
+	if leaseKindForRefNS("refs/remotes/origin/_armature-run") != leaseKindOriginRun {
+		t.Fatal("expected origin-run lease kind")
+	}
+}
+
+func TestParseRunLeaseStartedRequired_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	// pid alone is enough for ok (started defaults 0); max-age only applies when started>0.
+	pid, started, ok := parseRunLease("pid=7\n")
+	if !ok || pid != 7 || started != 0 {
+		t.Fatalf("got pid=%d started=%d ok=%v", pid, started, ok)
+	}
+}

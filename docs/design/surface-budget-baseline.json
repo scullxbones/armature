@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 140,
+      "count": 141,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -10,6 +10,7 @@
         "Client",
         "Client.AddPaths",
         "Client.AddWorktree",
+        "Client.BeginPerRunRef",
         "Client.BlobExists",
         "Client.BundleCreateAdvertised",
         "Client.BundleListHeads",
@@ -1259,9 +1260,9 @@
         "DispositionMissing",
         "ErrDiverge",
         "Git",
+        "Git.BeginPerRunRef",
         "Git.BundleCreateAdvertised",
         "Git.BundleVerifyRestorable",
-        "Git.DeleteRef",
         "Git.FetchBranchToRef",
         "Git.ResolveRevision",
         "Git.RestoreEvidence",

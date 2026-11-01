@@ -780,20 +780,24 @@ not automate on a schedule):
 What `arm ops-backup` does guarantee when it exits 0:
 
 - `snapshot` refreshed the published tip with
-  `FetchBranchToRef` (`git fetch --refmap= origin +refs/heads/_armature:<dst>`
-  so the remote's configured refspec cannot also touch the shared tip), into
-  a **per-run** destination under `refs/remotes/origin/_armature-run/<nonce>`
-  (never writes `refs/remotes/origin/_armature`), then wrote a bundle that
-  advertises restorable `refs/heads/_armature`. Refresh failure is fail-closed
-  (no bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
+  `FetchBranchToRef` (`git -c remote.origin.url=<first> fetch --refmap= origin
+  +refs/heads/_armature:<dst>` — named remote so `remote.origin.*` applies;
+  empty `--refmap=` so the remote's configured refspec cannot also touch the
+  shared tip), into a **per-run** destination under
+  `refs/remotes/origin/_armature-run/<nonce>` (live-pid lease; never writes
+  `refs/remotes/origin/_armature`), then wrote a bundle that advertises
+  restorable `refs/heads/_armature`. Refresh failure is fail-closed (no
+  bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
   runs on one clone all succeed even while the origin tip keeps moving.
 - `verify` confirms that advertisement is present and the object pack is
   restorable (fetch into a throwaway bare — not header-only `list-heads`).
 - `restore-plan` compares the bundle tip to `origin/_armature` with network
-  git inside the user's clone (clone transport/config applies natively) and
-  per-call `refs/armature-tmp/<run-id>/` staging (cleaned up; never
-  `refs/remotes/origin/*` or user branches), so overlapping runs cannot
-  cross-read each other's refs. Prints
+  git inside the user's clone (clone transport/config applies natively —
+  network probes address the named `origin` remote with the first URL pinned
+  via `-c remote.origin.url=…` so `remote.origin.*` such as `proxy` /
+  `tagOpt` apply) and per-call `refs/armature-tmp/<run-id>/` staging (live-pid
+  lease; never `refs/remotes/origin/*` or user branches), so overlapping runs
+  cannot cross-read each other's refs. Prints
   `missing | fast-forward | already-contained | diverge→_armature-recovered`.
   Printed fields are durable only (recovered SHA, bundle path, optional aside
   publish name). An absent `origin/_armature` is `missing` only when
@@ -806,8 +810,11 @@ What `arm ops-backup` does guarantee when it exits 0:
   (`--apply` is not in v1). Structured json/agent output for all three verbs
   is exactly one N2 envelope `{count, <payload>[], help[]}` per invocation
   (diverge included: plan help carries escalation; exit 1 via ADR 0020 §7 —
-  no second error envelope). Leftover per-run snapshot refs or temp dirs
-  from a crashed prior run never break the next.
+  no second error envelope). Crash leftovers under managed per-run namespaces
+  (`refs/armature-tmp/`, `refs/remotes/origin/_armature-run/`,
+  `$GIT_DIR/armature-tmp-work/`, aged `.armature-ops-backup-*.bundle` temps)
+  are swept at the next run start without deleting a live concurrent nonce
+  (pid lease).
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 

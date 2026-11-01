@@ -2,8 +2,6 @@ package adapters
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -821,7 +819,9 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 		return fmt.Errorf("fetch branch to ref: %w", err)
 	}
 	spec := "+refs/heads/" + branch + ":" + dstRef
-	cmd, cancel := c.networkCmd("fetch", "--no-write-fetch-head", "--refmap=", remoteURL, spec)
+	// Address remote by name so remote.origin.* (proxy, tagOpt, …) applies;
+	// pin first URL via -c so multi-valued remotes stay consistent across probes.
+	cmd, cancel := c.networkCmdPinnedRemote("origin", remoteURL, "fetch", "--no-write-fetch-head", "--refmap=", "origin", spec)
 	defer cancel()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		wrapped := fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
@@ -842,6 +842,18 @@ func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.CancelFunc) {
 	cmd := c.cmdContext(ctx, args...)
 	configureNetworkCmd(cmd)
 	return cmd, cancel
+}
+
+// networkCmdPinnedRemote addresses a named remote (so remote.<name>.* applies)
+// while pinning the resolved first URL with -c remote.<name>.url=<url>. Git's
+// -c appends for multi-valued keys; fetch/ls-remote by name still select the
+// first configured URL (same as firstRemoteURL). The pin keeps the resolved
+// URL on argv for audit and matches the multi-valued class contract.
+func (c *Client) networkCmdPinnedRemote(name, url string, args ...string) (*exec.Cmd, context.CancelFunc) {
+	pinned := make([]string, 0, len(args)+2)
+	pinned = append(pinned, "-c", "remote."+name+".url="+url)
+	pinned = append(pinned, args...)
+	return c.networkCmd(pinned...)
 }
 
 func (c *Client) RevListCount(rangeSpec string) (int, error) {
@@ -1455,14 +1467,12 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 		return fmt.Errorf("bundle create: mkdir: %w", err)
 	}
 
-	bareParent, err := os.MkdirTemp("", "armature-ops-backup-bare-")
+	workDir, releaseWork, err := c.beginArmatureWorkDir()
 	if err != nil {
 		return fmt.Errorf("bundle create: temp bare: %w", err)
 	}
-	defer func() {
-		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
-	}()
-	bare := filepath.Join(bareParent, "bare.git")
+	defer releaseWork()
+	bare := filepath.Join(workDir, "bare.git")
 	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
 		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
 	}
@@ -1540,14 +1550,12 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	if err != nil {
 		return fmt.Errorf("bundle verify: abs: %w", err)
 	}
-	bareParent, err := os.MkdirTemp("", "armature-ops-backup-verify-")
+	workDir, releaseWork, err := c.beginArmatureWorkDir()
 	if err != nil {
 		return fmt.Errorf("bundle verify: temp bare: %w", err)
 	}
-	defer func() {
-		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
-	}()
-	bare := filepath.Join(bareParent, "bare.git")
+	defer releaseWork()
+	bare := filepath.Join(workDir, "bare.git")
 	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
 		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
 	}
@@ -1564,11 +1572,13 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 // so git resolves scopes, worktree config, includes, insteadOf, and helpers
 // natively — no regex-copied localTransportConfig. Isolation is per-call refs
 // under refs/armature-tmp/<run-id>/ (never refs/remotes/origin/* or user
-// branches); cleaned up on return.
+// branches). Staging uses a live-pid lease; crash leftovers are swept at the
+// next run start without touching concurrent live nonces.
 //
 // Origin absence is structural: ls-remote empty stdout → missing. Unreachable
-// origin / other failures return err (fail-closed). Both network probes use the
-// same first remote.origin.url (multi-valued: first wins) via networkCmd.
+// origin / other failures return err (fail-closed). Network probes address the
+// named origin remote (so remote.origin.* applies) and pin the first
+// remote.origin.url via -c (multi-valued: first wins).
 func (c *Client) RestoreEvidence(
 	bundlePath, advertiseRef, opsBranch string,
 ) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error) {
@@ -1580,16 +1590,13 @@ func (c *Client) RestoreEvidence(
 	}
 	remoteRef := "refs/heads/" + opsBranch
 
-	tmpNS, tmpErr := uniqueArmatureTmpNS()
+	tmpNS, releaseTmp, tmpErr := c.beginArmatureTmpNS()
 	if tmpErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: temp ref ns: %w", tmpErr)
 	}
+	defer releaseTmp()
 	bundleTmp := tmpNS + "/bundle"
 	originTmp := tmpNS + "/origin"
-	defer func() {
-		_ = c.DeleteRef(bundleTmp) //nolint:errcheck // best-effort temp ref cleanup
-		_ = c.DeleteRef(originTmp) //nolint:errcheck // best-effort temp ref cleanup
-	}()
 
 	// One resolution for every network op in this call (ls-remote + fetch).
 	remoteURL, urlErr := c.firstRemoteURL("origin")
@@ -1597,7 +1604,7 @@ func (c *Client) RestoreEvidence(
 		return false, "", "", false, false, fmt.Errorf("restore evidence: origin URL: %w", urlErr)
 	}
 
-	_, exists, lsErr := c.lsRemoteRef(remoteURL, remoteRef)
+	_, exists, lsErr := c.lsRemoteRef("origin", remoteURL, remoteRef)
 	if lsErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: ls-remote origin %s failed (fail-closed): %w", remoteRef, lsErr)
 	}
@@ -1622,7 +1629,7 @@ func (c *Client) RestoreEvidence(
 	}
 
 	originSpec := "+" + remoteRef + ":" + originTmp
-	cmd, cancel := c.networkCmd("fetch", "--no-write-fetch-head", "--refmap=", remoteURL, originSpec)
+	cmd, cancel := c.networkCmdPinnedRemote("origin", remoteURL, "fetch", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
 	defer cancel()
 	if out, fetchErr := cmd.CombinedOutput(); fetchErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: fetch origin %s failed (fail-closed): %w\n%s", remoteRef, fetchErr, out)
@@ -1646,16 +1653,17 @@ func (c *Client) RestoreEvidence(
 	return false, originTip, recovered, originAncOfRecovered, recoveredAncOfOrigin, nil
 }
 
-// lsRemoteRef reports whether remote advertises ref. Exit 0 + empty stdout means
-// reachable remote, ref absent. Non-zero exit (unreachable, auth, …) is an error.
-// remote may be a remote name or a URL (callers that share one resolved URL
-// across probes must pass that same value here).
-func (c *Client) lsRemoteRef(remote, ref string) (sha string, exists bool, err error) {
-	cmd, cancel := c.networkCmd("ls-remote", "--refs", remote, ref)
+// lsRemoteRef reports whether the named remote advertises ref. Exit 0 + empty
+// stdout means reachable remote, ref absent. Non-zero exit (unreachable, auth,
+// …) is an error. url is the firstRemoteURL pin passed via -c so multi-valued
+// remotes stay consistent; the remote operand is always the name so
+// remote.<name>.* applies.
+func (c *Client) lsRemoteRef(name, url, ref string) (sha string, exists bool, err error) {
+	cmd, cancel := c.networkCmdPinnedRemote(name, url, "ls-remote", "--refs", name, ref)
 	defer cancel()
 	out, runErr := cmd.CombinedOutput()
 	if runErr != nil {
-		return "", false, fmt.Errorf("git ls-remote %s %s: %w\n%s", remote, ref, runErr, out)
+		return "", false, fmt.Errorf("git ls-remote %s %s: %w\n%s", name, ref, runErr, out)
 	}
 	line := strings.TrimSpace(string(out))
 	if line == "" {
@@ -1664,7 +1672,7 @@ func (c *Client) lsRemoteRef(remote, ref string) (sha string, exists bool, err e
 	first, _, _ := strings.Cut(line, "\n")
 	fields := strings.Fields(strings.TrimSpace(first))
 	if len(fields) < 2 {
-		return "", false, fmt.Errorf("git ls-remote %s %s: malformed output %q", remote, ref, line)
+		return "", false, fmt.Errorf("git ls-remote %s %s: malformed output %q", name, ref, line)
 	}
 	return fields[0], true, nil
 }
@@ -1684,12 +1692,4 @@ func (c *Client) firstRemoteURL(name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("git config remote.%s.url: empty URL", name)
-}
-
-func uniqueArmatureTmpNS() (string, error) {
-	var nonce [8]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
-		return "", err
-	}
-	return armatureTmpNS + "/" + hex.EncodeToString(nonce[:]), nil
 }

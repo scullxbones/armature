@@ -26,7 +26,12 @@ type fakeGit struct {
 	restoreOriginAnc    bool
 	restoreRecoveredAnc bool
 	restoreEvidenceErr  error
-	deleted             []string
+	released            []string
+}
+
+func (g *fakeGit) BeginPerRunRef(ns string) (string, func(), error) {
+	ref := strings.TrimRight(ns, "/") + "/fakeref"
+	return ref, func() { g.released = append(g.released, ref) }, nil
 }
 
 func (g *fakeGit) FetchBranchToRef(string, string) error {
@@ -53,16 +58,24 @@ func (g *fakeGit) BundleVerifyRestorable(string, string) error {
 	return g.bundleVerifyErr
 }
 
-func (g *fakeGit) DeleteRef(ref string) error {
-	g.deleted = append(g.deleted, ref)
-	return nil
-}
-
 func (g *fakeGit) RestoreEvidence(string, string, string) (bool, string, string, bool, bool, error) {
 	if g.restoreEvidenceErr != nil {
 		return false, "", "", false, false, g.restoreEvidenceErr
 	}
 	return g.restoreMissing, g.restoreOriginTip, g.restoreRecovered, g.restoreOriginAnc, g.restoreRecoveredAnc, nil
+}
+
+type beginFailGit struct{ fakeGit }
+
+func (g *beginFailGit) BeginPerRunRef(string) (string, func(), error) {
+	return "", nil, errors.New("lease boom")
+}
+
+func TestSnapshot_BeginPerRunRefFails_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	_, err := opsbackup.Snapshot(&beginFailGit{}, opsbackup.SnapshotRequest{OutputPath: t.TempDir() + "/out.bundle"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "run tracking ref")
 }
 
 func TestSnapshot_FakeGitTable_REQ_TOPTIER_S12_T1(t *testing.T) {
