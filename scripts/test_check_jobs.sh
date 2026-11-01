@@ -520,6 +520,7 @@ for needle in (
     "GIT_MIN_VERSION",
     "GIT_MIN_TARBALL_SHA256",
     "make check",
+    "main:refs/remotes/origin/main",
 ):
     if needle not in body and needle not in text:
         print(f"FAIL: check-git-2-34 / workflow missing {needle}")
@@ -553,6 +554,135 @@ for s in assert-git-min.sh install-git-from-source.sh; do
         fail "scripts/$s not executable on disk"
     fi
 done
+
+echo "Test 10a: assert-git-min rejects prereleases and accepts windows/Apple suffixes..."
+
+ASSERT_GIT_MIN="$REPO_ROOT/scripts/assert-git-min.sh"
+AGM_DIR=$(mktemp -d)
+write_fake_git() {
+    local ver=$1
+    cat >"$AGM_DIR/git" <<EOF
+#!/bin/sh
+echo 'git version ${ver}'
+EOF
+    chmod +x "$AGM_DIR/git"
+}
+run_assert_git_min() {
+    env PATH="$AGM_DIR:$PATH" bash "$ASSERT_GIT_MIN"
+}
+
+write_fake_git "2.34.0"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept 2.34.0 (got: $out)"
+else
+    pass "assert-git-min accepts 2.34.0"
+fi
+
+write_fake_git "2.34.0-rc1"
+if out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must reject 2.34.0-rc1 (got: $out)"
+else
+    pass "assert-git-min rejects 2.34.0-rc1"
+fi
+
+write_fake_git "2.35.0-rc1"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept 2.35.0-rc1 above floor (got: $out)"
+else
+    pass "assert-git-min accepts 2.35.0-rc1 above floor"
+fi
+
+write_fake_git "2.34.0.windows.1"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept 2.34.0.windows.1 (got: $out)"
+else
+    pass "assert-git-min accepts 2.34.0.windows.1"
+fi
+
+write_fake_git "2.43.0 (Apple Git-155)"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept Apple Git suffix (got: $out)"
+else
+    pass "assert-git-min accepts Apple Git suffix"
+fi
+
+write_fake_git "2.33.0"
+if out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must reject 2.33.0 (got: $out)"
+else
+    pass "assert-git-min rejects 2.33.0"
+fi
+rm -rf "$AGM_DIR"
+
+echo "Test 10: CI jobs whose make targets need origin/main must fetch that ref..."
+
+ORIGIN_MAIN_RESULT=$(python3 - "$CI_YML" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+lines = text.splitlines()
+jobs = {}
+current = None
+buf = []
+in_jobs = False
+for line in lines:
+    if not in_jobs:
+        if line == "jobs:" or line.startswith("jobs:"):
+            in_jobs = True
+        continue
+    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
+        break
+    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+    if m:
+        if current is not None:
+            jobs[current] = "\n".join(buf)
+        current = m.group(1)
+        buf = []
+        continue
+    if current is not None:
+        buf.append(line)
+if current is not None:
+    jobs[current] = "\n".join(buf)
+
+# Targets that read origin/main (see Makefile check / commit-subjects-check / check-fast).
+# Do not match make check-job or make check-fast when looking for bare make check.
+need_re = re.compile(
+    r"(^|[\s;|&])make (?:check-fast|commit-subjects-check|check)(?!-)($|[\s;|&])",
+    re.MULTILINE,
+)
+fetch_ok_re = re.compile(
+    r"main:refs/remotes/origin/main|fetch-depth:\s*0\b",
+)
+
+needed_by = []
+for jid, body in jobs.items():
+    # Strip full-line comments before matching make targets.
+    cleaned = "\n".join(
+        ln for ln in body.splitlines() if not ln.lstrip().startswith("#")
+    )
+    if need_re.search(cleaned):
+        needed_by.append(jid)
+        if not fetch_ok_re.search(cleaned):
+            print(
+                f"FAIL: job {jid} runs a make target that needs origin/main "
+                "but neither fetches main:refs/remotes/origin/main nor sets fetch-depth: 0"
+            )
+            sys.exit(1)
+
+if "check-git-2-34" not in needed_by:
+    print("FAIL: check-git-2-34 must run make check (needs origin/main class)")
+    sys.exit(1)
+print("PASS: origin/main fetch mapped for " + ",".join(needed_by))
+PY
+) && ORIGIN_MAIN_STATUS=0 || ORIGIN_MAIN_STATUS=$?
+
+if [[ $ORIGIN_MAIN_STATUS -eq 0 ]]; then
+    pass "CI jobs needing origin/main fetch that ref (${ORIGIN_MAIN_RESULT#PASS: })"
+else
+    fail "${ORIGIN_MAIN_RESULT:-origin/main fetch mapping failed}"
+fi
 
 echo ""
 if [[ $FAILURES -eq 0 ]]; then

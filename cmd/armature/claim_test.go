@@ -25,6 +25,7 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/testexec"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -38,7 +39,11 @@ func rollbackClaim(
 }
 
 func createWorktreeAndBranch(repoPath, worktreePath, issueID string, issue materialize.Issue, stillOwns func() bool, sourceArgs ...string) error {
-	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, issue, stillOwns, "", nil, sourceArgs...)
+	workerID := "test-worker"
+	if ident, err := worker.ResolveIdentity(worker.IdentityInput{RepoPath: repoPath}); err == nil && ident.ID != "" {
+		workerID = ident.ID
+	}
+	return createWorktreeAndBranchWithExclusion(repoPath, worktreePath, issueID, workerID, issue, stillOwns, "", nil, sourceArgs...)
 }
 
 func setupRepoWithEpic(t *testing.T) string {
@@ -769,7 +774,7 @@ func TestCreateWorktreeAndBranchLeavesAlreadyAtDestOnMetadataFailure(t *testing.
 	require.NoError(t, os.WriteFile(keep, []byte("package keep\n"), 0o644))
 
 	err := createWorktreeAndBranchWithExclusion(
-		repo, canonicalPath, "task-01", materialize.Issue{Type: "task"}, alwaysOwns, "/other/", nil,
+		repo, canonicalPath, "task-01", "test-worker", materialize.Issue{Type: "task"}, alwaysOwns, "/other/", nil,
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already records a different pattern")

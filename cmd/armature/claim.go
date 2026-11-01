@@ -496,7 +496,7 @@ func recoverSpacedOptionalWorktreeArg(worktreePath, issueID string, args []strin
 }
 
 func createWorktreeAndBranchWithExclusion(
-	repoPath, worktreePath, issueID string,
+	repoPath, worktreePath, issueID, workerID string,
 	issue materialize.Issue,
 	stillOwns func() bool,
 	exclusionPattern string,
@@ -656,9 +656,8 @@ func createWorktreeAndBranchWithExclusion(
 		return cleanupPartialWorktree(err, "persist claim exclusion metadata")
 	}
 	// Git 2.34 does not copy config.worktree on worktree add; seed the
-	// claiming worker's id so transition/heartbeat from the task worktree
-	// resolve the same identity as the invoking checkout.
-	if err := worker.SeedWorktreeIdentity(repoPath, worktreePath); err != nil {
+	// effective claim owner (same ID as the claim op, including overrides).
+	if err := worker.SeedWorktreeIdentity(worktreePath, workerID); err != nil {
 		return cleanupPartialWorktree(err, "seed worktree worker identity")
 	}
 	return nil
@@ -1094,7 +1093,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					sourceArgs = []string{fromWorktreePath, fromBranch, fromTip}
 				}
 				if err := createWorktreeAndBranchWithExclusion(
-					ctx.RepoPath, worktreePath, issueID, *issue,
+					ctx.RepoPath, worktreePath, issueID, workerID, *issue,
 					stillOwnsClaim, "", environFrom(cmd), sourceArgs...,
 				); err != nil {
 					return compensateClaimIfHeldByToken(
@@ -1120,8 +1119,8 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					}
 				}
 				// Rebind skips createWorktreeAndBranchWithExclusion; still seed
-				// so a Git-2.34 worktree that never got config.worktree works.
-				if err := worker.SeedWorktreeIdentity(ctx.RepoPath, worktreePath); err != nil {
+				// the effective claim owner onto a Git-2.34 worktree.
+				if err := worker.SeedWorktreeIdentity(worktreePath, workerID); err != nil {
 					return compensateClaimIfHeldByToken(
 						cmd, store, logPath, issueID, workerID, "seed worktree worker identity",
 						err, prior, claimToken, true, claimExclusions,

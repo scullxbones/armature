@@ -216,11 +216,19 @@ jobs:
           echo "$dest" >> "$GITHUB_PATH"
           make install-rg-release DEST="$dest"
 
+      # make check → check-commit-subjects needs origin/main. Shallow PR
+      # checkouts lack that ref; fetch it (least-privilege, no credentials).
+      # Class rule: every CI job whose make target needs origin/main must
+      # fetch it (or use fetch-depth: 0). Enforced by test-check-jobs.
+      - name: Fetch origin/main for check-commit-subjects
+        run: git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main
+
       - name: make check on Git ${{ env.GIT_MIN_VERSION }}
         env:
           CHECK_INSTALL_TOOLS: "1"
         run: |
           git --version
+          git rev-parse --verify --quiet origin/main
           make check
 
   # Integration door (D7): whole-graph arm validate --ci. Not part of the
