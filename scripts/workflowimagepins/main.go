@@ -1,16 +1,20 @@
-// workflowimagepins fails closed when GitHub workflow files reference
-// container images without an @sha256:<64-hex> digest pin.
+// workflowimagepins fails closed when GitHub workflow/action files reference
+// container images without a name@sha256:<64-hex> digest pin.
 //
 // Images collected via YAML parse (gopkg.in/yaml.v3), not line grep:
 //   - jobs.*.container (string or mapping .image)
 //   - jobs.*.services.*.image
-//   - steps[].uses starting with docker://
-//   - image args to docker|podman run|pull|create inside steps[].run
+//   - steps[].uses starting with docker:// (empty docker:// is unpinned)
+//   - image args to docker|podman [global-flags] [container|image] run|pull|create
+//   - nested sh/bash -c "docker …" strings
+//
+// Also scans .github/actions/**/action.yml.
 package main
 
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,14 +23,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var (
-	digestPin  = regexp.MustCompile(`@sha256:[0-9a-f]{64}$`)
-	bareDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-)
+// name@sha256:hex — bare sha256: digest alone is NOT enough.
+var digestPin = regexp.MustCompile(`^[^@\s]+@sha256:[0-9a-f]{64}$`)
 
 type imageRef struct {
 	File string
-	Path string // YAML path / locator
+	Path string
 	Ref  string
 }
 
@@ -79,51 +81,73 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if len(bad) > 0 {
-		fmt.Fprintln(stderr, "FAIL: workflow images must be digest-pinned (@sha256:…):")
+		fmt.Fprintln(stderr, "FAIL: workflow images must be name@sha256:<digest> pinned:")
 		for _, r := range bad {
 			fmt.Fprintf(stderr, "  %s (%s): %q\n", r.File, r.Path, r.Ref)
 		}
 		return 1
 	}
-	fmt.Fprintln(stdout, "OK: workflow docker/container images are @sha256-pinned")
+	fmt.Fprintln(stdout, "OK: workflow/action images are name@sha256-pinned")
 	return 0
 }
 
 func pinned(ref string) bool {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return true
-	}
-	if bareDigest.MatchString(ref) {
-		return true
+		// Empty uses: docker://  → unpinned.
+		return false
 	}
 	return digestPin.MatchString(ref)
 }
 
 func collectRepo(root string) ([]imageRef, error) {
-	dir := filepath.Join(root, ".github", "workflows")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+	var out []imageRef
+	wfDir := filepath.Join(root, ".github", "workflows")
+	if entries, err := os.ReadDir(wfDir); err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || (!strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml")) {
+				continue
+			}
+			rel := filepath.ToSlash(filepath.Join(".github", "workflows", name))
+			refs, err := collectFile(filepath.Join(wfDir, name), rel)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", rel, err)
+			}
+			out = append(out, refs...)
 		}
+	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
-	var out []imageRef
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() {
-			continue
-		}
-		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
-			continue
-		}
-		rel := filepath.ToSlash(filepath.Join(".github", "workflows", name))
-		refs, err := collectFile(filepath.Join(dir, name), rel)
+
+	actionsRoot := filepath.Join(root, ".github", "actions")
+	if err := filepath.WalkDir(actionsRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", rel, err)
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		base := strings.ToLower(d.Name())
+		if base != "action.yml" && base != "action.yaml" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			rel = path
+		}
+		rel = filepath.ToSlash(rel)
+		refs, err := collectActionFile(path, rel)
+		if err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
 		}
 		out = append(out, refs...)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -137,10 +161,22 @@ func collectFile(absPath, rel string) ([]imageRef, error) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("yaml parse: %w", err)
 	}
-	return collectDoc(rel, doc), nil
+	return collectWorkflowDoc(rel, doc), nil
 }
 
-func collectDoc(rel string, doc map[string]any) []imageRef {
+func collectActionFile(absPath, rel string) ([]imageRef, error) {
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, err
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("yaml parse: %w", err)
+	}
+	return collectActionDoc(rel, doc), nil
+}
+
+func collectWorkflowDoc(rel string, doc map[string]any) []imageRef {
 	var out []imageRef
 	jobsRaw, ok := doc["jobs"]
 	if !ok {
@@ -156,50 +192,69 @@ func collectDoc(rel string, doc map[string]any) []imageRef {
 			continue
 		}
 		base := "jobs." + jobName
-
 		if c, ok := job["container"]; ok {
 			out = append(out, containerRefs(rel, base+".container", c)...)
 		}
 		if servicesRaw, ok := job["services"]; ok {
-			services, ok := servicesRaw.(map[string]any)
-			if !ok {
-				continue
-			}
-			for svcName, rawSvc := range services {
-				svc, ok := rawSvc.(map[string]any)
-				if !ok {
-					continue
-				}
-				if img, ok := svc["image"].(string); ok && strings.TrimSpace(img) != "" {
-					out = append(out, imageRef{
-						File: rel,
-						Path: base + ".services." + svcName + ".image",
-						Ref:  img,
-					})
+			if services, ok := servicesRaw.(map[string]any); ok {
+				for svcName, rawSvc := range services {
+					svc, ok := rawSvc.(map[string]any)
+					if !ok {
+						continue
+					}
+					if img, ok := svc["image"].(string); ok {
+						out = append(out, imageRef{
+							File: rel,
+							Path: base + ".services." + svcName + ".image",
+							Ref:  strings.TrimSpace(img),
+						})
+					}
 				}
 			}
 		}
-		steps := jobSteps(job)
-		for i, step := range steps {
-			spath := fmt.Sprintf("%s.steps[%d]", base, i)
-			if uses, ok := step["uses"].(string); ok {
-				uses = strings.TrimSpace(uses)
-				if strings.HasPrefix(uses, "docker://") {
-					out = append(out, imageRef{
-						File: rel,
-						Path: spath + ".uses",
-						Ref:  strings.TrimPrefix(uses, "docker://"),
-					})
-				}
+		out = append(out, collectSteps(rel, base, jobSteps(job))...)
+	}
+	return out
+}
+
+func collectActionDoc(rel string, doc map[string]any) []imageRef {
+	var out []imageRef
+	if runs, ok := doc["runs"].(map[string]any); ok {
+		if using, ok := runs["using"].(string); ok && using == "docker" {
+			if img, ok := runs["image"].(string); ok {
+				out = append(out, imageRef{
+					File: rel,
+					Path: "runs.image",
+					Ref:  strings.TrimSpace(img),
+				})
 			}
-			if runScript, ok := stepRun(step); ok {
-				for _, img := range imagesInShell(runScript) {
-					out = append(out, imageRef{
-						File: rel,
-						Path: spath + ".run",
-						Ref:  img,
-					})
-				}
+		}
+		out = append(out, collectSteps(rel, "runs", jobSteps(runs))...)
+	}
+	return out
+}
+
+func collectSteps(rel, base string, steps []map[string]any) []imageRef {
+	var out []imageRef
+	for i, step := range steps {
+		spath := fmt.Sprintf("%s.steps[%d]", base, i)
+		if uses, ok := step["uses"].(string); ok {
+			uses = strings.TrimSpace(uses)
+			if strings.HasPrefix(uses, "docker://") {
+				out = append(out, imageRef{
+					File: rel,
+					Path: spath + ".uses",
+					Ref:  strings.TrimPrefix(uses, "docker://"),
+				})
+			}
+		}
+		if runScript, ok := stepRun(step); ok {
+			for _, img := range imagesInShell(runScript) {
+				out = append(out, imageRef{
+					File: rel,
+					Path: spath + ".run",
+					Ref:  img,
+				})
 			}
 		}
 	}
@@ -209,13 +264,10 @@ func collectDoc(rel string, doc map[string]any) []imageRef {
 func containerRefs(rel, path string, c any) []imageRef {
 	switch v := c.(type) {
 	case string:
-		if strings.TrimSpace(v) == "" {
-			return nil
-		}
-		return []imageRef{{File: rel, Path: path, Ref: v}}
+		return []imageRef{{File: rel, Path: path, Ref: strings.TrimSpace(v)}}
 	case map[string]any:
-		if img, ok := v["image"].(string); ok && strings.TrimSpace(img) != "" {
-			return []imageRef{{File: rel, Path: path + ".image", Ref: img}}
+		if img, ok := v["image"].(string); ok {
+			return []imageRef{{File: rel, Path: path + ".image", Ref: strings.TrimSpace(img)}}
 		}
 	}
 	return nil
@@ -244,116 +296,6 @@ func stepRun(step map[string]any) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	switch v := raw.(type) {
-	case string:
-		return v, true
-	default:
-		return "", false
-	}
-}
-
-// imagesInShell extracts image refs from docker|podman run|pull|create invocations.
-func imagesInShell(script string) []string {
-	var out []string
-	// Flatten line continuations so flags/image on following lines are visible.
-	flat := flattenContinuations(script)
-	for _, line := range strings.Split(flat, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		// Allow leading env assignments: FOO=bar docker run ...
-		tokens := shellTokens(line)
-		for i := 0; i < len(tokens); i++ {
-			cmd := tokens[i]
-			if cmd != "docker" && cmd != "podman" {
-				continue
-			}
-			if i+1 >= len(tokens) {
-				continue
-			}
-			sub := tokens[i+1]
-			if sub != "run" && sub != "pull" && sub != "create" {
-				continue
-			}
-			if img, ok := imageAfterDockerFlags(tokens[i+2:]); ok {
-				out = append(out, img)
-			}
-		}
-	}
-	return out
-}
-
-func flattenContinuations(s string) string {
-	lines := strings.Split(s, "\n")
-	var b strings.Builder
-	for i := 0; i < len(lines); i++ {
-		line := lines[i]
-		for strings.HasSuffix(strings.TrimRight(line, " \t"), "\\") {
-			line = strings.TrimRight(line, " \t")
-			line = strings.TrimSuffix(line, "\\") + " "
-			i++
-			if i >= len(lines) {
-				break
-			}
-			line += lines[i]
-		}
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-func shellTokens(line string) []string {
-	// Strip shell operators to avoid treating them as images; keep simple split.
-	line = strings.ReplaceAll(line, "&&", " ")
-	line = strings.ReplaceAll(line, "||", " ")
-	line = strings.ReplaceAll(line, ";", " ")
-	line = strings.ReplaceAll(line, "|", " ")
-	fields := strings.Fields(line)
-	var out []string
-	for _, f := range fields {
-		if strings.Contains(f, "=") && !strings.HasPrefix(f, "-") && !strings.Contains(f, "://") && !strings.Contains(f, "/") {
-			// FOO=bar — skip assignment token
-			if !strings.Contains(f, ":") {
-				continue
-			}
-		}
-		out = append(out, f)
-	}
-	return out
-}
-
-func imageAfterDockerFlags(tokens []string) (string, bool) {
-	flagsWithArg := map[string]bool{
-		"-v": true, "--volume": true,
-		"-w": true, "--workdir": true,
-		"-e": true, "--env": true,
-		"-u": true, "--user": true,
-		"--name": true, "--entrypoint": true,
-		"--network": true, "--platform": true,
-		"-p": true, "--publish": true,
-		"-t":    false, // -t often alone; --tag takes arg for some commands
-		"--tag": true,
-		"-f":    true, "--file": true,
-	}
-	i := 0
-	for i < len(tokens) {
-		t := tokens[i]
-		if strings.HasPrefix(t, "-") {
-			if strings.Contains(t, "=") {
-				i++
-				continue
-			}
-			if flagsWithArg[t] {
-				i += 2
-				continue
-			}
-			// boolean / unknown short flags
-			i++
-			continue
-		}
-		return t, true
-	}
-	return "", false
+	s, ok := raw.(string)
+	return s, ok
 }

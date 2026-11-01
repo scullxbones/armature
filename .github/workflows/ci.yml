@@ -115,14 +115,20 @@ jobs:
         run: bash scripts/prove-bash32-mutations.sh
       - name: Run cross-OS scripts under pinned bash:3.2.57
         # Image digest: library/bash 3.2.57 / 3.2-alpine3.22 index (resolved 2026-11-01).
-        # apk git=2.49.1-r0 is Alpine v3.22 main, verified post-install.
+        # Alpine v3.22 git-2.49.1-r0.apk verified by sha256 before apk add.
+        env:
+          ALPINE_GIT_APK_URL: https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/git-2.49.1-r0.apk
+          ALPINE_GIT_APK_SHA256: 42f4573799ffce0c7dd4954d2247eb882eb87360dc18637930624484ecfd1c90
         run: |
+          curl -fsSL -o /tmp/git-2.49.1-r0.apk "$ALPINE_GIT_APK_URL"
+          echo "${ALPINE_GIT_APK_SHA256}  /tmp/git-2.49.1-r0.apk" | sha256sum -c -
           docker run --rm \
             --entrypoint sh \
             -v "$PWD:/src:ro" \
+            -v /tmp/git-2.49.1-r0.apk:/tmp/git.apk:ro \
             -w /src \
             bash:3.2.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a \
-            -c 'apk add --no-cache git=2.49.1-r0 >/dev/null \
+            -c 'apk add --allow-untrusted /tmp/git.apk >/dev/null \
               && got=$(git --version) \
               && echo "apk git: $got" \
               && echo "$got" | grep -F "git version 2.49.1" >/dev/null \

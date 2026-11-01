@@ -8,13 +8,11 @@
 #   check-test-porcelain.sh [repo_root]   # refuse any dirt (no baseline)
 #
 # Baseline format (v2): one line per dirty/untracked path:
-#   <porcelain_line><TAB><content_hash>
-# Content hash covers file bytes (or a deterministic tree digest for dirs),
-# so rewriting an already-modified tracked file fails even when the porcelain
-# status line is unchanged.
+#   <status><TAB><path><TAB><content_hash>
+# Paths come from `git status --porcelain -z` (NUL-separated), so spaces,
+# quotes, and non-ASCII names round-trip safely.
 #
-# Bash 3.2 compatible (macOS /bin/bash) — no mapfile / readarray / declare -A /
-# coproc / [[ -v ]].
+# Bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
 
 MODE="check"
@@ -27,31 +25,12 @@ ROOT="${1:-.}"
 BASELINE="${2:-}"
 cd "$ROOT"
 
-# Extract the path from a porcelain line (handles "XY path" and "R  old -> new").
-porcelain_path() {
-  local line="$1"
-  local rest
-  # Drop the two-char status and the following space.
-  rest="${line#?? }"
-  case "$rest" in
-    *" -> "*)
-      printf '%s\n' "${rest##* -> }"
-      ;;
-    *)
-      printf '%s\n' "$rest"
-      ;;
-  esac
-}
-
-# Content digest for a path. Directories: hash of sorted "filehash path" lines.
 path_digest() {
   local path="$1"
-  # Trim a trailing slash from porcelain dir entries (e.g. "?? dir/").
   case "$path" in
     */) path="${path%/}" ;;
   esac
   if [ -d "$path" ]; then
-    # shellcheck disable=SC2016
     find "$path" \( -type f -o -type l \) -print 2>/dev/null \
       | LC_ALL=C sort \
       | while IFS= read -r f || [ -n "$f" ]; do
@@ -67,20 +46,29 @@ path_digest() {
   fi
 }
 
-# Emit baseline lines for the current dirty/untracked tree (sorted).
+# Emit sorted baseline lines from porcelain -z.
 emit_baseline() {
-  local current line path dig
-  current="$(git status --porcelain --untracked-files=all || true)"
-  if [ -z "$current" ]; then
-    return 0
-  fi
-  printf '%s\n' "$current" | while IFS= read -r line || [ -n "$line" ]; do
-    [ -z "$line" ] && continue
-    path="$(porcelain_path "$line")"
+  local entry status path dig skip_next
+  skip_next=0
+  # Process substitution is Bash 3.2-safe.
+  while IFS= read -r -d '' entry || [ -n "$entry" ]; do
+    if [ "$skip_next" -eq 1 ]; then
+      # Rename/copy origin path record (no XY prefix).
+      skip_next=0
+      continue
+    fi
+    [ -z "$entry" ] && continue
+    status="${entry:0:2}"
+    path="${entry:3}"
+    case "$status" in
+      R*|C*)
+        skip_next=1
+        ;;
+    esac
     dig="$(path_digest "$path")"
-    # TAB separates porcelain status line from content hash.
-    printf '%s\t%s\n' "$line" "$dig"
-  done | LC_ALL=C sort
+    printf '%s\t%s\t%s\n' "$status" "$path" "$dig"
+  done < <(git status --porcelain -z --untracked-files=all 2>/dev/null || true) \
+    | LC_ALL=C sort
 }
 
 if [ "$MODE" = "write" ]; then
@@ -97,7 +85,7 @@ current_fp="$(emit_baseline)"
 if [ -z "$BASELINE" ]; then
   if [ -n "$current_fp" ]; then
     echo "FAIL: go test left dirt in git status --porcelain (explicit TempDir/root required):" >&2
-    printf '%s\n' "$current_fp" | sed 's/\t.*//' | sed 's/^/  /' >&2
+    printf '%s\n' "$current_fp" | sed 's/\t[^	]*$//' | sed 's/^/  /' >&2
     exit 1
   fi
   echo "OK: git status --porcelain empty after tests"

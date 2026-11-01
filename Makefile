@@ -12,7 +12,7 @@ else
 ARM_EXE :=
 endif
 ARM_BIN := $(CURDIR)/bin/arm$(ARM_EXE)
-UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$' | grep -v '/scripts/surfacebudget$$' | grep -v '/scripts/repoguard$$' | grep -v '/scripts/workflowimagepins$$')
+UNIT_PACKAGES := $(shell GOCACHE=$${GOCACHE:-$${TMPDIR:-/tmp}/armature-gocache} GOFLAGS=$${GOFLAGS:--buildvcs=false} $(GO) list ./... | grep -v '/internal/e2e/harness$$' | grep -v '/scripts/surfacebudget$$' | grep -v '/scripts/repoguard$$')
 
 .DEFAULT_GOAL := help
 

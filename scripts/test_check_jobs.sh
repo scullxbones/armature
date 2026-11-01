@@ -883,6 +883,26 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     printf 'dirty-v1\n' > tracked.txt
     bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" >/dev/null
 
+    # -z path fixtures: spaces, quotes, non-ASCII must round-trip in baseline.
+    printf 'x\n' > "spa ce.txt"
+    printf 'y\n' > $'quot"ed.txt'
+    printf 'z\n' > $'unicodé.txt'
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: special-name leaks did not fail check-test-porcelain: $out"
+        exit 1
+    fi
+    for needle in 'spa ce.txt' 'quot"ed.txt' 'unicodé.txt'; do
+        if ! printf '%s\n' "$out" | rg -F -q "$needle"; then
+            echo "FAIL: special path missing from porcelain output ($needle): $out"
+            exit 1
+        fi
+    done
+    rm -f "spa ce.txt" $'quot"ed.txt' $'unicodé.txt'
+
     printf 'x\n' > leaked-file.txt
     set +e
     out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
@@ -931,21 +951,41 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: ci.yml missing bash:3.2.57@sha256 digest pin"
         exit 1
     fi
-    if ! rg -q 'git=2\.49\.1-r0' "$CI_YML"; then
-        echo "FAIL: ci.yml missing pinned apk git=2.49.1-r0"
+    if ! rg -q 'ALPINE_GIT_APK_SHA256: 42f4573799ffce0c7dd4954d2247eb882eb87360dc18637930624484ecfd1c90' "$CI_YML"; then
+        echo "FAIL: ci.yml missing Alpine git apk sha256 pin"
         exit 1
     fi
     if ! rg -q 'check-bash32:' "$CI_YML"; then
         echo "FAIL: ci.yml missing check-bash32 job"
         exit 1
     fi
+    # workflowimagepins must be in UNIT_PACKAGES (not excluded).
+    if go list ./scripts/workflowimagepins >/dev/null 2>&1; then
+        if ! make -C "$REPO_ROOT" -s print-check-jobs >/dev/null; then
+            :
+        fi
+        pkgs=$(cd "$REPO_ROOT" && make -s -p 2>/dev/null | rg '^UNIT_PACKAGES' | head -1 || true)
+        # Direct evaluation:
+        up=$(cd "$REPO_ROOT" && GOCACHE="${GOCACHE:-${TMPDIR:-/tmp}/armature-gocache}" GOFLAGS="${GOFLAGS:---buildvcs=false}" go list ./... | rg 'workflowimagepins' || true)
+        if [[ -z "$up" ]]; then
+            echo "FAIL: scripts/workflowimagepins not listable"
+            exit 1
+        fi
+        # Confirm Makefile no longer excludes it from UNIT_PACKAGES.
+        if rg -q "grep -v '/scripts/workflowimagepins" "$MAKEFILE"; then
+            echo "FAIL: Makefile still excludes workflowimagepins from UNIT_PACKAGES"
+            exit 1
+        fi
+    fi
 
     # YAML-parser image pin lint + fixture selftest (unpinned fail / pinned pass).
     bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
 
-    # Each unpinned form fixture must fail when checked as a solo workflow tree.
+    # Each unpinned form fixture must fail; pinned twin must pass.
     for form in container-string container-image services-image uses-docker \
-        docker-run docker-pull docker-create podman-run; do
+        uses-docker-empty docker-run docker-pull docker-create podman-run \
+        docker-container-run docker-image-pull sh-c-docker-run docker-global-flags \
+        docker-label docker-mount bare-digest; do
         badwf=$(mktemp -d)
         mkdir -p "$badwf/.github/workflows"
         cp "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/${form}.yml" \

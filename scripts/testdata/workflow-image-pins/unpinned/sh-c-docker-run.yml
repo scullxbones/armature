@@ -1,0 +1,7 @@
+name: t
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sh -c "docker run --rm alpine:3.22 echo hi"

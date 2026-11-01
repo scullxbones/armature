@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,40 +15,44 @@ func TestSelftestFixtures_REQ_PORC_BASH32(t *testing.T) {
 	require.NoError(t, runSelftest(root, ioDiscard{}, ioDiscard{}))
 }
 
-func TestCollectForms_REQ_PORC_BASH32(t *testing.T) {
+func TestPinnedRequiresNameDigest_REQ_PORC_BASH32(t *testing.T) {
+	t.Parallel()
+	assert.False(t, pinned(""))
+	assert.False(t, pinned("alpine:3.22"))
+	assert.False(t, pinned("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+	assert.True(t, pinned("alpine:3.22@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"))
+}
+
+func TestShellForms_REQ_PORC_BASH32(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"docker container run": `docker container run --rm alpine:3.22 echo hi`,
+		"docker image pull":    `docker image pull alpine:3.22`,
+		"sh -c nested":         `sh -c "docker run --rm alpine:3.22 echo hi"`,
+		"global flags":         `docker --log-level debug run --rm alpine:3.22 echo hi`,
+		"label then image":     `docker run --rm --label app=arm alpine:3.22 echo hi`,
+		"mount not image":      `docker run --rm --mount type=bind,src=/tmp,dst=/tmp alpine:3.22 echo hi`,
+	}
+	for name, line := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			imgs := imagesInShell(line)
+			require.NotEmpty(t, imgs, line)
+			assert.Equal(t, "alpine:3.22", imgs[0], imgs)
+		})
+	}
+}
+
+func TestCollectEmptyDockerUses_REQ_PORC_BASH32(t *testing.T) {
 	t.Parallel()
 	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
-	base := filepath.Join(root, "scripts", "testdata", "workflow-image-pins", "unpinned")
-	cases := []struct {
-		file string
-		path string
-	}{
-		{"container-string.yml", "jobs.x.container"},
-		{"container-image.yml", "jobs.x.container.image"},
-		{"services-image.yml", "jobs.x.services.db.image"},
-		{"uses-docker.yml", "jobs.x.steps[0].uses"},
-		{"docker-run.yml", "jobs.x.steps[0].run"},
-		{"docker-pull.yml", "jobs.x.steps[0].run"},
-		{"docker-create.yml", "jobs.x.steps[0].run"},
-		{"podman-run.yml", "jobs.x.steps[0].run"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.file, func(t *testing.T) {
-			t.Parallel()
-			refs, err := collectFile(filepath.Join(base, tc.file), "unpinned/"+tc.file)
-			require.NoError(t, err)
-			require.NotEmpty(t, refs)
-			found := false
-			for _, r := range refs {
-				if r.Path == tc.path {
-					found = true
-					require.False(t, pinned(r.Ref), "expected unpinned ref")
-				}
-			}
-			require.True(t, found, "missing path %s in %#v", tc.path, refs)
-		})
-	}
+	path := filepath.Join(root, "scripts/testdata/workflow-image-pins/unpinned/uses-docker-empty.yml")
+	refs, err := collectFile(path, "uses-docker-empty.yml")
+	require.NoError(t, err)
+	require.NotEmpty(t, refs)
+	assert.Equal(t, "", refs[0].Ref)
+	assert.False(t, pinned(refs[0].Ref))
 }
 
 type ioDiscard struct{}
