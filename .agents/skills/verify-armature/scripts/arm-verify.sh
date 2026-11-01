@@ -921,10 +921,10 @@ drive_doctor() {
   assert_exit_0 drive/01-doctor
   capture drive/02-doctor-strict arm doctor --strict || true
   local severities live_checks
-  live_checks='["D1","D2","D3","D4","D5","D6","D7","D8","D9","D10","D12"]'
+  live_checks='["D1","D2","D3","D4","D5","D6","D7","D8","D9","D10","D11","D12"]'
   jq_assert "$EVIDENCE_DIR/drive/01-doctor/stdout.txt" \
-    ".count == 11 and [.checks[].check] == $live_checks" \
-    "doctor checks are not D1-D10,D12 in Run order"
+    ".count == 12 and [.checks[].check] == $live_checks" \
+    "doctor checks are not D1-D12 in Run order"
   # features/doctor.md maps --strict as "warnings become failing", so prove both
   # halves: the default run reports the warning and still exits 0, the strict run
   # over the same state exits nonzero.
@@ -932,12 +932,12 @@ drive_doctor() {
     'any(.checks[]; .check == "D6" and .severity == "warning")' \
     "default doctor did not report the seeded uncited-issue warning as D6"
   # A bare nonzero exit would also be satisfied by an unknown flag or a crash,
-  # so require the strict run to still be a full D1-D10 report carrying the
+  # so require the strict run to still be a full D1-D12 report carrying the
   # seeded warning, plus the documented promotion diagnostic.
   assert_exit_nonzero drive/02-doctor-strict
   jq_assert "$EVIDENCE_DIR/drive/02-doctor-strict/stdout.txt" \
-    ".count == 11 and [.checks[].check] == $live_checks" \
-    "strict doctor checks are not D1-D10,D12 in Run order"
+    ".count == 12 and [.checks[].check] == $live_checks" \
+    "strict doctor checks are not D1-D12 in Run order"
   jq_assert "$EVIDENCE_DIR/drive/02-doctor-strict/stdout.txt" \
     'any(.checks[]; .check == "D6" and .severity == "warning")' \
     "strict doctor did not carry the seeded uncited-issue warning"
@@ -950,7 +950,7 @@ drive_doctor() {
   severities=$(jq -r '[.checks[] | "\(.check)=\(.severity)"] | sort | join(" ")' \
     "$EVIDENCE_DIR/drive/01-doctor/stdout.txt")
   printf 'doctor proof ok; severities: %s\n' "$severities"
-  printf 'proof: product arm doctor envelope with D1-D10 and D12\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
+  printf 'proof: product arm doctor envelope with D1-D12\n' >"$EVIDENCE_DIR/drive/SUMMARY.txt"
 }
 
 drive_ready_claim() {

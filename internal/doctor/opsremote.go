@@ -3,6 +3,7 @@ package doctor
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -63,19 +64,31 @@ func checkD11OpsRemote(worktreePath, configPath string, now time.Time) Finding {
 	}
 
 	gc := adapters.New(worktreePath)
-	obs := observeD11OpsRemote(gc, now, loadLocalOnlyOpsStaleAfter(configPath))
-	return evaluateD11OpsRemote(obs)
+	stale := loadLocalOnlyOpsStaleAfter(configPath)
+	obs := observeD11OpsRemote(gc, now, stale.after)
+	return evaluateD11OpsRemote(obs, stale.fallbackWarn)
 }
 
-func loadLocalOnlyOpsStaleAfter(configPath string) time.Duration {
+type d11StaleLoad struct {
+	after        time.Duration
+	fallbackWarn string // non-empty when unreadable config forced the 24h default
+}
+
+func loadLocalOnlyOpsStaleAfter(configPath string) d11StaleLoad {
+	def := d11StaleLoad{after: defaultLocalOnlyOpsStaleAfter}
 	if strings.TrimSpace(configPath) == "" {
-		return defaultLocalOnlyOpsStaleAfter
+		return def
 	}
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		return defaultLocalOnlyOpsStaleAfter
+		if errors.Is(err, os.ErrNotExist) {
+			return def
+		}
+		detail := redact.Secrets(err.Error())
+		def.fallbackWarn = "could not load local_only_ops_stale_hours; using default 24h: " + detail
+		return def
 	}
-	return cfg.LocalOnlyOpsStaleAfter()
+	return d11StaleLoad{after: cfg.LocalOnlyOpsStaleAfter()}
 }
 
 // observeD11OpsRemote classifies origin/_armature from fresh per-run evidence
@@ -166,7 +179,7 @@ func observeD11OpsRemote(g d11Git, now time.Time, staleAfter time.Duration) d11O
 	return obs
 }
 
-func evaluateD11OpsRemote(obs d11Observation) Finding {
+func evaluateD11OpsRemote(obs d11Observation, configFallbackWarn string) Finding {
 	f := Finding{
 		Check:    "D11",
 		Severity: SeverityOK,
@@ -195,6 +208,18 @@ func evaluateD11OpsRemote(obs d11Observation) Finding {
 		f.Items = []string{detail}
 	default:
 		// healthy / empty → OK
+	}
+	warn := strings.TrimSpace(configFallbackWarn)
+	if warn == "" {
+		return f
+	}
+	// Fail-closed visibility: never silently apply the 24h default when config
+	// existed but could not be loaded. D10 also errors on the same file.
+	if f.Severity == SeverityOK {
+		f.Severity = SeverityWarning
+		f.Message = warn
+	} else {
+		f.Items = append([]string{warn}, f.Items...)
 	}
 	return f
 }

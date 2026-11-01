@@ -232,7 +232,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 			require.NotEmpty(t, tc.g.deleted, "per-run ref must be cleaned up")
 			assert.True(t, strings.HasPrefix(tc.g.deleted[0], d11RunNS+"/"))
 
-			got := evaluateD11OpsRemote(obs)
+			got := evaluateD11OpsRemote(obs, "")
 			assert.Equal(t, "D11", got.Check)
 			assert.Equal(t, tc.wantSev, got.Severity)
 			assert.Contains(t, got.Message, tc.contains)
@@ -301,7 +301,7 @@ func TestEvaluateD11OpsRemote(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := evaluateD11OpsRemote(tc.obs)
+			got := evaluateD11OpsRemote(tc.obs, "")
 			assert.Equal(t, "D11", got.Check)
 			assert.Equal(t, tc.severity, got.Severity)
 			assert.Contains(t, got.Message, tc.contains)
@@ -316,6 +316,23 @@ func TestEvaluateD11OpsRemote(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEvaluateD11OpsRemote_ConfigFallbackWarn_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	warn := "could not load local_only_ops_stale_hours; using default 24h: parse boom"
+
+	healthy := evaluateD11OpsRemote(d11Observation{outcome: d11Healthy}, warn)
+	assert.Equal(t, SeverityWarning, healthy.Severity)
+	assert.Contains(t, healthy.Message, "using default 24h")
+
+	missing := evaluateD11OpsRemote(d11Observation{outcome: d11Missing}, warn)
+	assert.Equal(t, SeverityWarning, missing.Severity)
+	assert.Contains(t, missing.Message, "no verified remote tracking tip")
+	require.GreaterOrEqual(t, len(missing.Items), 2)
+	assert.Contains(t, missing.Items[0], "using default 24h")
+	assert.Equal(t, d11RemediationHint, missing.Items[1])
 }
 
 func TestDoctorD11_WarnsOnMissingRemoteTracking_REQ_TOPTIER_S12_T2(t *testing.T) {
@@ -484,12 +501,23 @@ func TestDoctorD11_UnreachableOriginCouldNotVerify_REQ_TOPTIER_S12_T2(t *testing
 func TestLoadLocalOnlyOpsStaleAfter(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, loadLocalOnlyOpsStaleAfter(""))
-	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, loadLocalOnlyOpsStaleAfter(filepath.Join(t.TempDir(), "missing.json")))
+	assert.Equal(t, d11StaleLoad{after: defaultLocalOnlyOpsStaleAfter}, loadLocalOnlyOpsStaleAfter(""))
+	missing := loadLocalOnlyOpsStaleAfter(filepath.Join(t.TempDir(), "missing.json"))
+	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, missing.after)
+	assert.Empty(t, missing.fallbackWarn, "missing config fails open without a fallback warning")
 
 	path := filepath.Join(t.TempDir(), "config.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"local_only_ops_stale_hours":6}`), 0o644))
-	assert.Equal(t, 6*time.Hour, loadLocalOnlyOpsStaleAfter(path))
+	got := loadLocalOnlyOpsStaleAfter(path)
+	assert.Equal(t, 6*time.Hour, got.after)
+	assert.Empty(t, got.fallbackWarn)
+
+	bad := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(bad, []byte(`{not-json`), 0o644))
+	fallback := loadLocalOnlyOpsStaleAfter(bad)
+	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, fallback.after)
+	assert.Contains(t, fallback.fallbackWarn, "using default 24h")
+	assert.Contains(t, fallback.fallbackWarn, "parse config")
 }
 
 func runGitEnv(t *testing.T, dir string, env map[string]string, args ...string) {

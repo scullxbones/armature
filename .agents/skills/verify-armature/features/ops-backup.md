@@ -1,6 +1,6 @@
 # Ops-branch backup
 
-`arm ops-backup` is the user-facing copy of the published `_armature` tip: `snapshot` writes a git bundle, `verify` checks that bundle is restorable, and `restore-plan` prints an I2-safe disposition without publishing. It is a disaster-recovery command. It is not doctor D11 (that id is reserved and not live) and it does not start a daemon.
+`arm ops-backup` is the user-facing copy of the published `_armature` tip: `snapshot` writes a git bundle, `verify` checks that bundle is restorable, and `restore-plan` prints an I2-safe disposition without publishing. It is a disaster-recovery command. It is not doctor D11 (ops remote tracking / unpublished local-only staleness) and it does not start a daemon.
 
 ## Sub-features
 

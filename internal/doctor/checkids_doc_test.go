@@ -114,6 +114,31 @@ func TestOpenReservationsExcludesLiveD11_REQ_TOPTIER_S12_T2(t *testing.T) {
 	assert.Equal(t, orig, second[0].ID, "OpenReservations must return a copy")
 }
 
+// TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2 derives the live
+// doctor code list from LiveCheckIDs() and fails when docs/validation-codes.md
+// is missing any of those codes (heading or quick-reference row).
+func TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(repoRoot(t), "docs", "validation-codes.md")
+	doc, err := os.ReadFile(path)
+	require.NoError(t, err, "docs/validation-codes.md must exist")
+
+	body := string(doc)
+	live := LiveCheckIDs()
+	require.NotEmpty(t, live)
+	for _, id := range live {
+		heading := regexp.MustCompile(`(?m)^### ` + regexp.QuoteMeta(id) + `:`)
+		tableRow := regexp.MustCompile(`(?m)^\| ` + regexp.QuoteMeta(id) + ` \|`)
+		assert.True(t, heading.MatchString(body),
+			"docs/validation-codes.md missing ### %s: section (registry LiveCheckIDs)", id)
+		assert.True(t, tableRow.MatchString(body),
+			"docs/validation-codes.md missing quick-reference row for %s (registry LiveCheckIDs)", id)
+	}
+	assert.Contains(t, body, "checks D1–D12",
+		"validation-codes intro must name the full live doctor range including D11")
+}
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
