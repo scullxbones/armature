@@ -43,7 +43,7 @@ stay on the platform/git protocol.
 | --- | --- | --- | --- | --- |
 | `GENERAL-1` | reserved | Expand-step wrap for an unmapped port error. Retired once remaining agent-facing `RunE` sites mapped to specific prefixes. Empty `next_actions` was allowed while it lived. | LNGHZN-S6-T1 | unused |
 | `USAGE` | reserved | Invalid invocation (missing required flag, extra args, cobra usage). Exit 2. `--help` is an allowed Next Action. | LNGHZN-S6-T1 | |
-| `IO` | reserved | I/O failure at the CLI port, or a port error with no command context. Empty `next_actions` allowed. | LNGHZN-S6-T1 | |
+| `IO` | reserved | I/O failure at the CLI port, or a port error with no command context (including installed git below the required minimum 2.34.0). Empty `next_actions` allowed. | LNGHZN-S6-T1 | |
 | `CLAIM-1` | claim | `arm claim` could not complete (unknown issue, worktree/git miss, already claimed). | LNGHZN-S6-T2 | |
 | `TRACEABILITY-1` | traceability | `arm review` could not complete (unknown issue, bundle path/JSON, assessment parse). | LNGHZN-S6-T2 | |
 | `READY-1` | ready | `arm ready` could not complete (ops/state load). | LNGHZN-S6-T2 | |

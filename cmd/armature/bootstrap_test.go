@@ -74,10 +74,51 @@ func TestMain(m *testing.M) {
 		os.Exit(code)
 	}
 	code = m.Run()
+	if leak := packageCwdStateDirLeak(); leak != "" {
+		fmt.Fprintf(os.Stderr, "TestMain: tests left state-dir files in package cwd (explicit StateDir/TempDir required): %s\n", leak)
+		if code == 0 {
+			code = 1
+		}
+	}
+	if porcelain := stateDirPorcelainDirty(); porcelain != "" {
+		fmt.Fprintf(os.Stderr, "TestMain: git status --porcelain dirty for state-dir cwd leak:\n%s\n", porcelain)
+		if code == 0 {
+			code = 1
+		}
+	}
 	if err := os.RemoveAll(wrapperDir); err != nil {
 		fmt.Fprintf(os.Stderr, "TestMain: cleanup: %v\n", err)
 	}
 	os.Exit(code)
+}
+
+// packageCwdStateDirNames are materialize outputs that land in the package
+// directory when a test calls snapshot.Store.Load with an empty StateDir
+// (relative paths resolve to cwd under `go test ./cmd/armature/`).
+var packageCwdStateDirNames = []string{
+	"checkpoint.json", "index.json", "ready.json", "traceability.json", "issues",
+}
+
+// packageCwdStateDirLeak names state-dir files present in the package cwd.
+func packageCwdStateDirLeak() string {
+	var found []string
+	for _, name := range packageCwdStateDirNames {
+		if _, err := os.Stat(name); err == nil {
+			found = append(found, name)
+		}
+	}
+	return strings.Join(found, ", ")
+}
+
+// stateDirPorcelainDirty returns git porcelain lines for package-cwd state-dir
+// leaks. Scoped so unrelated WIP edits do not trip the guard.
+func stateDirPorcelainDirty() string {
+	args := append([]string{"status", "--porcelain", "--"}, packageCwdStateDirNames...)
+	out, err := exec.CommandContext(context.Background(), "git", args...).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestBootstrapDeploySkillsDeploysFiles(t *testing.T) {

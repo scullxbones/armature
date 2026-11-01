@@ -23,6 +23,7 @@ import (
 	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -495,7 +496,7 @@ func recoverSpacedOptionalWorktreeArg(worktreePath, issueID string, args []strin
 }
 
 func createWorktreeAndBranchWithExclusion(
-	repoPath, worktreePath, issueID string,
+	repoPath, worktreePath, issueID, workerID string,
 	issue materialize.Issue,
 	stillOwns func() bool,
 	exclusionPattern string,
@@ -653,6 +654,11 @@ func createWorktreeAndBranchWithExclusion(
 	}
 	if err := writeClaimExclusionMarker(worktreePath, exclusionPattern); err != nil {
 		return cleanupPartialWorktree(err, "persist claim exclusion metadata")
+	}
+	// Git 2.34 does not copy config.worktree on worktree add; seed the
+	// effective claim owner (same ID as the claim op, including overrides).
+	if err := worker.SeedWorktreeIdentity(worktreePath, workerID); err != nil {
+		return cleanupPartialWorktree(err, "seed worktree worker identity")
 	}
 	return nil
 }
@@ -1087,7 +1093,7 @@ it creates a new task worktree from the parent worktree's current branch and tip
 					sourceArgs = []string{fromWorktreePath, fromBranch, fromTip}
 				}
 				if err := createWorktreeAndBranchWithExclusion(
-					ctx.RepoPath, worktreePath, issueID, *issue,
+					ctx.RepoPath, worktreePath, issueID, workerID, *issue,
 					stillOwnsClaim, "", environFrom(cmd), sourceArgs...,
 				); err != nil {
 					return compensateClaimIfHeldByToken(
@@ -1111,6 +1117,14 @@ it creates a new task worktree from the parent worktree's current branch and tip
 							err, prior, claimToken, true, claimExclusions,
 						)
 					}
+				}
+				// Rebind skips createWorktreeAndBranchWithExclusion; still seed
+				// the effective claim owner onto a Git-2.34 worktree.
+				if err := worker.SeedWorktreeIdentity(worktreePath, workerID); err != nil {
+					return compensateClaimIfHeldByToken(
+						cmd, store, logPath, issueID, workerID, "seed worktree worker identity",
+						err, prior, claimToken, true, claimExclusions,
+					)
 				}
 			}
 			if parentID := issue.Parent; parentID != "" {

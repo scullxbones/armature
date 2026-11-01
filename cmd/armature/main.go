@@ -80,6 +80,13 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
+			// Git floor is a port precondition (docs + adapters.MinGitVersion).
+			// Fail closed before any repo resolve so every command sees the same
+			// IO cause naming installed + required versions.
+			if err := requireMinGitPreRun(cmd); err != nil {
+				return err
+			}
+
 			repoPath := repoPathFromCmd(cmd)
 			ctx, err := config.ResolveContext(repoPath)
 			if err != nil {

@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job print-check-jobs print-govulncheck-version print-tool-versions install-golangci-lint-release install-gremlins-release install-rg-release install-syft-release test-install-verified-release install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check lint adr-principles clean mutate check check-job check-git-floor print-check-jobs print-govulncheck-version print-tool-versions install-golangci-lint-release install-gremlins-release install-rg-release install-syft-release test-install-verified-release install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check
 
 GO ?= go
 PYTHON ?= python3
@@ -20,6 +20,7 @@ help:
 	@echo "Armature Go build targets:"
 	@echo "  make check               - Run publish gate serially (union of check-static, check-core, mutate)"
 	@echo "  make check-job JOB=<id>  - Run one CI partition (check-static | check-core | mutate)"
+	@echo "  make check-git-floor     - Full CHECK_JOBS suite without commit-subjects (CI exact-Git-floor leg)"
 	@echo "  make print-check-jobs    - Dump the check-job membership table"
 	@echo "  make install-check-tools - go install pinned golangci-lint and gremlins (local-dev)"
 	@echo "  make check-fast          - Diff-routed fast gate: commit subjects plus steps implied by changed files (BASE= to override diff base)"
@@ -83,6 +84,17 @@ CHECK_TOOLS_mutate := gremlins
 
 check:
 	@scripts/check-commit-subjects.sh origin/main..HEAD
+	@set -e; \
+	for j in $(CHECK_JOBS); do \
+		echo "==> make check-job JOB=$$j"; \
+		$(MAKE) check-job JOB=$$j; \
+	done
+
+# Full CHECK_JOBS suite without check-commit-subjects. CI's check-git-2-34 leg
+# uses this under PATH git 2.34.0: pull_request checkouts are merge SHAs whose
+# subjects are unscoped, so bare `make check` dies before S12. Partitioned
+# check-job targets do not need origin/main (class rule in quality-gates.md).
+check-git-floor:
 	@set -e; \
 	for j in $(CHECK_JOBS); do \
 		echo "==> make check-job JOB=$$j"; \
@@ -222,6 +234,8 @@ TEST_JSON_OUT ?=
 
 test: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
+	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
+	git status --porcelain --untracked-files=all > "$$pre"; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -timeout $(TEST_TIMEOUT) $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	if [ -n "$(TEST_JSON_OUT)" ]; then \
 		mkdir -p "$$(dirname "$(TEST_JSON_OUT)")"; \
@@ -229,8 +243,11 @@ test: build
 	fi; \
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
-	if [ $$status -ne 0 ]; then exit $$status; fi; \
-	exit $$summary
+	if [ $$status -ne 0 ]; then rm -f "$$pre"; exit $$status; fi; \
+	if [ $$summary -ne 0 ]; then rm -f "$$pre"; exit $$summary; fi; \
+	scripts/check-test-porcelain.sh . "$$pre"; porcelain=$$?; \
+	rm -f "$$pre"; \
+	exit $$porcelain
 
 test-ci: build
 ifeq ($(GOOS_NATIVE),windows)
@@ -252,11 +269,16 @@ test-e2eharness: build
 
 coverage: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
+	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
+	git status --porcelain --untracked-files=all > "$$pre"; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
-	if [ $$status -ne 0 ]; then exit $$status; fi; \
-	if [ $$summary -ne 0 ]; then exit $$summary; fi
+	if [ $$status -ne 0 ]; then rm -f "$$pre"; exit $$status; fi; \
+	if [ $$summary -ne 0 ]; then rm -f "$$pre"; exit $$summary; fi; \
+	scripts/check-test-porcelain.sh . "$$pre"; porcelain=$$?; \
+	rm -f "$$pre"; \
+	if [ $$porcelain -ne 0 ]; then exit $$porcelain; fi
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 
@@ -271,6 +293,7 @@ lint: adr-principles
 		exit 1; \
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
+	@scripts/check-bash32-scripts.sh .
 	@scripts/check-mock-ban.sh .
 	@$(GO) run ./scripts/repoguard -check source-manifest .
 

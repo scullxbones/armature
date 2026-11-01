@@ -20,7 +20,7 @@ Distributed as a single Go binary (`arm`). Open source.
 
 Invariants (git-native, append-only, merge-conflict-free by construction, etc.) are defined in `CONSTITUTION.md` — this section only covers implementation constraints not promoted to invariant status:
 
-- **Single binary:** One compiled Go binary, zero runtime dependencies beyond `git` (v2.25+ for sparse checkout).
+- **Single binary:** One compiled Go binary, zero runtime dependencies beyond `git` (v2.34+; sparse checkout and `--diff-merges=separate`).
 - **Zero external deps:** Core operations (claim, transition, render-context, materialize) never make network calls beyond `git push/pull`. Only `sources add` and `sources sync` contact external providers.
 
 ### Supported Platforms and Agentic Tools
@@ -1818,7 +1818,7 @@ Binary size estimate: 8–12MB (4–6MB compressed).
 
 ### Git Dependency
 
-Minimum git version: 2.25+ (required for sparse checkout support, released January 2020). The CLI shells out via `os/exec` rather than using a pure-Go git library — shelling out is more debuggable and avoids a large dependency.
+Minimum git version: 2.34+ (November 2021; sparse checkout plus `--diff-merges=separate` for merge walks). The CLI enforces this floor at startup (`adapters.MinGitVersion` / `RequireMinGit`) and shells out via `os/exec` rather than using a pure-Go git library — shelling out is more debuggable and avoids a large dependency.
 
 ### Skill Distribution
 

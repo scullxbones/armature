@@ -337,7 +337,7 @@ The `arm` binary must start in under 5ms. Incremental materialization must proce
 
 ### 8.2 Distribution
 
-Single static Go binary compiled with `CGO_ENABLED=0`. Zero runtime dependencies beyond git (v2.25+ for sparse checkout support, released January 2020). Platform matrix: linux/macOS/Windows across amd64/arm64. Binary size target: 8–12MB uncompressed (4–6MB compressed). Distribution via GitHub releases with per-platform binaries, and as an Agent Skills-compliant skill folder with the binary at `scripts/arm`.
+Single static Go binary compiled with `CGO_ENABLED=0`. Zero runtime dependencies beyond git (v2.34+; sparse checkout and `--diff-merges=separate`). Platform matrix: linux/macOS/Windows across amd64/arm64. Binary size target: 8–12MB uncompressed (4–6MB compressed). Distribution via GitHub releases with per-platform binaries, and as an Agent Skills-compliant skill folder with the binary at `scripts/arm`.
 
 ### 8.3 Context Efficiency
 

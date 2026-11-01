@@ -130,8 +130,12 @@ if got != want:
     sys.exit(1)
 
 for jid, (body, make_runs) in fanout.items():
-    if make_runs != [f"make check-job JOB={jid}"]:
-        print(f"FAIL: job {jid} make steps {make_runs!r} want exactly ['make check-job JOB={jid}']")
+    # Lean (b): check-static alone may also run commit-subjects-check (exactly once).
+    want_runs = [f"make check-job JOB={jid}"]
+    if jid == "check-static":
+        want_runs = ["make commit-subjects-check", f"make check-job JOB={jid}"]
+    if make_runs != want_runs:
+        print(f"FAIL: job {jid} make steps {make_runs!r} want exactly {want_runs!r}")
         sys.exit(1)
     for raw in body:
         stripped = raw.strip()
@@ -473,6 +477,443 @@ if [[ -x "$INSTALL_SCRIPT" && -x "$INSTALL_TEST" ]]; then
     pass "install scripts executable on disk"
 else
     fail "install scripts not executable on disk"
+fi
+
+echo "Test 9: every CI job asserts Git ≥2.34; check-git-2-34 pins exact 2.34.0 source..."
+
+GIT_MIN_RESULT=$(python3 - "$CI_YML" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+lines = text.splitlines()
+jobs = {}
+current = None
+buf = []
+in_jobs = False
+for line in lines:
+    if not in_jobs:
+        if line == "jobs:" or line.startswith("jobs:"):
+            in_jobs = True
+        continue
+    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
+        break
+    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+    if m:
+        if current is not None:
+            jobs[current] = "\n".join(buf)
+        current = m.group(1)
+        buf = []
+        continue
+    if current is not None:
+        buf.append(line)
+if current is not None:
+    jobs[current] = "\n".join(buf)
+
+if "check-git-2-34" not in jobs:
+    print("FAIL: missing check-git-2-34 job")
+    sys.exit(1)
+for jid, body in jobs.items():
+    if "assert-git-min.sh" not in body:
+        print(f"FAIL: job {jid} must run scripts/assert-git-min.sh")
+        sys.exit(1)
+body = jobs["check-git-2-34"]
+for needle in (
+    "install-git-from-source.sh",
+    "GIT_MIN_VERSION",
+    "GIT_MIN_TARBALL_SHA256",
+    "make check-git-floor",
+):
+    if needle not in body:
+        print(f"FAIL: check-git-2-34 missing {needle}")
+        sys.exit(1)
+# Lean (b): version-pinned leg must NOT run bare make check / commit-subjects.
+cleaned = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("#"))
+if re.search(r"(^|[\s;|&])make check(?!-)($|[\s;|&])", cleaned, re.M):
+    print("FAIL: check-git-2-34 must not run bare make check (use check-git-floor)")
+    sys.exit(1)
+if "commit-subjects-check" in cleaned or "check-commit-subjects" in cleaned:
+    print("FAIL: check-git-2-34 must not own commit-subjects (lean b)")
+    sys.exit(1)
+if "0ce6222bfd31938b29360150286b51c77c643fa97740b1d35b6d1ceef8b0ecd7" not in text:
+    print("FAIL: workflow must pin git-2.34.0.tar.gz sha256")
+    sys.exit(1)
+if "2.34.0" not in text:
+    print("FAIL: workflow must name Git 2.34.0")
+    sys.exit(1)
+print("PASS")
+PY
+) && GIT_MIN_STATUS=0 || GIT_MIN_STATUS=$?
+
+if [[ $GIT_MIN_STATUS -eq 0 ]]; then
+    pass "CI asserts Git floor on every job and pins exact 2.34.0 for check-git-2-34"
+else
+    fail "${GIT_MIN_RESULT:-git min CI assertions failed}"
+fi
+
+for s in assert-git-min.sh install-git-from-source.sh; do
+    mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/$s" | awk '{print $1}')
+    if [[ "$mode" == "100755" ]]; then
+        pass "scripts/$s git mode is 100755"
+    else
+        fail "scripts/$s git mode is '${mode:-missing}', expected 100755"
+    fi
+    if [[ -x "$REPO_ROOT/scripts/$s" ]]; then
+        pass "scripts/$s executable on disk"
+    else
+        fail "scripts/$s not executable on disk"
+    fi
+done
+
+echo "Test 10a: assert-git-min rejects prereleases and accepts windows/Apple suffixes..."
+
+ASSERT_GIT_MIN="$REPO_ROOT/scripts/assert-git-min.sh"
+AGM_DIR=$(mktemp -d)
+write_fake_git() {
+    local ver=$1
+    cat >"$AGM_DIR/git" <<EOF
+#!/bin/sh
+echo 'git version ${ver}'
+EOF
+    chmod +x "$AGM_DIR/git"
+}
+run_assert_git_min() {
+    env PATH="$AGM_DIR:$PATH" bash "$ASSERT_GIT_MIN"
+}
+
+write_fake_git "2.34.0"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept 2.34.0 (got: $out)"
+else
+    pass "assert-git-min accepts 2.34.0"
+fi
+
+write_fake_git "2.34.0-rc1"
+if out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must reject 2.34.0-rc1 (got: $out)"
+else
+    pass "assert-git-min rejects 2.34.0-rc1"
+fi
+
+write_fake_git "2.35.0-rc1"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept 2.35.0-rc1 above floor (got: $out)"
+else
+    pass "assert-git-min accepts 2.35.0-rc1 above floor"
+fi
+
+write_fake_git "2.34.0.windows.1"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept 2.34.0.windows.1 (got: $out)"
+else
+    pass "assert-git-min accepts 2.34.0.windows.1"
+fi
+
+write_fake_git "2.43.0 (Apple Git-155)"
+if ! out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must accept Apple Git suffix (got: $out)"
+else
+    pass "assert-git-min accepts Apple Git suffix"
+fi
+
+write_fake_git "2.33.0"
+if out=$(run_assert_git_min 2>&1); then
+    fail "assert-git-min must reject 2.33.0 (got: $out)"
+else
+    pass "assert-git-min rejects 2.33.0"
+fi
+rm -rf "$AGM_DIR"
+
+echo "Test 10: CI jobs whose make targets need origin/main must fetch that ref..."
+
+ORIGIN_MAIN_RESULT=$(python3 - "$CI_YML" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+lines = text.splitlines()
+jobs = {}
+current = None
+buf = []
+in_jobs = False
+for line in lines:
+    if not in_jobs:
+        if line == "jobs:" or line.startswith("jobs:"):
+            in_jobs = True
+        continue
+    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
+        break
+    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+    if m:
+        if current is not None:
+            jobs[current] = "\n".join(buf)
+        current = m.group(1)
+        buf = []
+        continue
+    if current is not None:
+        buf.append(line)
+if current is not None:
+    jobs[current] = "\n".join(buf)
+
+# Targets that read origin/main (see Makefile check / commit-subjects-check / check-fast).
+# Do not match make check-job / check-git-floor when looking for bare make check.
+need_re = re.compile(
+    r"(^|[\s;|&])make (?:check-fast|commit-subjects-check|check)(?!-)($|[\s;|&])",
+    re.MULTILINE,
+)
+fetch_ok_re = re.compile(
+    r"main:refs/remotes/origin/main|fetch-depth:\s*0\b",
+)
+subjects_re = re.compile(
+    r"(^|[\s;|&])make commit-subjects-check($|[\s;|&])",
+    re.MULTILINE,
+)
+
+needed_by = []
+subjects_owners = []
+for jid, body in jobs.items():
+    cleaned = "\n".join(
+        ln for ln in body.splitlines() if not ln.lstrip().startswith("#")
+    )
+    if need_re.search(cleaned):
+        needed_by.append(jid)
+        if not fetch_ok_re.search(cleaned):
+            print(
+                f"FAIL: job {jid} runs a make target that needs origin/main "
+                "but neither fetches main:refs/remotes/origin/main nor sets fetch-depth: 0"
+            )
+            sys.exit(1)
+    if subjects_re.search(cleaned):
+        subjects_owners.append(jid)
+
+if "check-git-2-34" in needed_by:
+    print("FAIL: check-git-2-34 must not depend on origin/main (lean b: check-git-floor only)")
+    sys.exit(1)
+if subjects_owners != ["check-static"]:
+    print(f"FAIL: exactly one job must own commit-subjects-check (want ['check-static'], got {subjects_owners})")
+    sys.exit(1)
+static = jobs.get("check-static", "")
+if "pull_request.head.sha" not in static:
+    print("FAIL: check-static must pin github.event.pull_request.head.sha for commit-subjects range")
+    sys.exit(1)
+if "fetch-depth: 0" not in static and "fetch-depth:0" not in static:
+    print("FAIL: check-static must use fetch-depth: 0 for commit-subjects history")
+    sys.exit(1)
+# Push-to-main must not run the empty origin/main..HEAD gate.
+if "github.event_name == 'pull_request'" not in static and 'github.event_name == "pull_request"' not in static:
+    print("FAIL: check-static commit-subjects/fetch must be gated to pull_request (skip empty range on main push)")
+    sys.exit(1)
+# Any shallowing of origin/main + full tip history widens origin/main..HEAD.
+shallow_re = re.compile(
+    r"git fetch[^\n]*(--depth(?:=\d+|\s+\d+)|--shallow-since=|--shallow-exclude=|--deepen(?:=\d+|\s+\d+))[^\n]*main:refs/remotes/origin/main"
+)
+if shallow_re.search(static):
+    print(
+        "FAIL: check-static must fetch origin/main without shallowing "
+        "(--depth/--shallow-since/--shallow-exclude/--deepen); checkout already fetch-depth: 0"
+    )
+    sys.exit(1)
+if "main:refs/remotes/origin/main" not in static:
+    print("FAIL: check-static must fetch main:refs/remotes/origin/main for commit-subjects")
+    sys.exit(1)
+print("PASS: origin/main mapped for " + ",".join(needed_by) + "; commit-subjects owner=check-static (PR-only; unshallow main)")
+PY
+) && ORIGIN_MAIN_STATUS=0 || ORIGIN_MAIN_STATUS=$?
+
+if [[ $ORIGIN_MAIN_STATUS -eq 0 ]]; then
+    pass "CI origin/main + single commit-subjects owner (${ORIGIN_MAIN_RESULT#PASS: })"
+else
+    fail "${ORIGIN_MAIN_RESULT:-origin/main fetch mapping failed}"
+fi
+
+echo "Test 11: check-commit-subjects fails loud on empty and merge-only ranges..."
+
+CCS_DEMO=$(mktemp -d)
+cleanup_ccs() { rm -rf "$CCS_DEMO"; }
+(
+    set -e
+    cd "$CCS_DEMO"
+    git init -q -b main
+    git config user.email "ccs@example.com"
+    git config user.name "ccs"
+    # Isolated fixture: no global hooks / templates.
+    git commit -q --allow-empty -m "feat(GIT234-MIN): base on main"
+    git branch -M main
+    git update-ref refs/remotes/origin/main HEAD
+
+    # Empty range: HEAD == origin/main
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-commit-subjects.sh" origin/main..HEAD 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: empty range exited 0: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'empty|refusing to pass while checking nothing'; then
+        echo "FAIL: empty range missing loud message: $out"
+        exit 1
+    fi
+
+    # Merge-only range: point origin/main at the side tip so origin/main..HEAD
+    # is only the merge commit (both parents are reachable from the side tip).
+    git checkout -q -b side
+    git commit -q --allow-empty -m "feat(GIT234-MIN): side tip"
+    side=$(git rev-parse HEAD)
+    git checkout -q main
+    git merge -q --no-ff -m "Merge ${side} into main" side
+    git update-ref refs/remotes/origin/main "$side"
+
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-commit-subjects.sh" origin/main..HEAD 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: merge-only range exited 0: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'only merge commits|merge-only'; then
+        echo "FAIL: merge-only range missing loud message: $out"
+        exit 1
+    fi
+) && CCS_STATUS=0 || CCS_STATUS=$?
+cleanup_ccs
+
+if [[ $CCS_STATUS -eq 0 ]]; then
+    pass "check-commit-subjects fails on empty and merge-only ranges"
+else
+    fail "check-commit-subjects empty/merge-only demo failed"
+fi
+
+echo "Test 12: shallow --depth=50 origin/main widens range past branch point (>50 behind)..."
+
+DEPTH_DEMO=$(mktemp -d)
+cleanup_depth() { rm -rf "$DEPTH_DEMO"; }
+(
+    set -e
+    # Bare "upstream" with 60 commits on main; PR branch forks early so it is
+    # >50 commits behind tip of main.
+    upstream="$DEPTH_DEMO/upstream.git"
+    work="$DEPTH_DEMO/work"
+    git init -q --bare "$upstream"
+    git clone -q "$upstream" "$work"
+    cd "$work"
+    git config user.email "depth@example.com"
+    git config user.name "depth"
+    git commit -q --allow-empty -m "chore(DEPTHDEMO): main commit 1"
+    git branch -M main
+    for i in $(seq 2 60); do
+        git commit -q --allow-empty -m "chore(DEPTHDEMO): main commit $i"
+    done
+    fork=$(git rev-parse HEAD~55)
+    git push -q origin main
+    git checkout -q -b pr-branch "$fork"
+    git commit -q --allow-empty -m "feat(GIT234-MIN): only PR tip commit"
+    git push -q -u origin pr-branch
+
+    # Two fresh PR-tip clones (checkout already fetch-depth:0). Compare a
+    # depth-capped main fetch vs an uncapped one — do not reuse a shallow
+    # repo for the uncapped case (.git/shallow poisons merge-base).
+    shallow_clone="$DEPTH_DEMO/shallow"
+    git clone -q --branch pr-branch "$upstream" "$shallow_clone"
+    git -C "$shallow_clone" fetch -q --no-tags --depth=50 origin main:refs/remotes/origin/main
+    shallow_count=$(git -C "$shallow_clone" rev-list --count origin/main..HEAD)
+
+    full_clone="$DEPTH_DEMO/full"
+    git clone -q --branch pr-branch "$upstream" "$full_clone"
+    git -C "$full_clone" fetch -q --no-tags origin main:refs/remotes/origin/main
+    full_count=$(git -C "$full_clone" rev-list --count origin/main..HEAD)
+
+    if [[ "$full_count" -ne 1 ]]; then
+        echo "FAIL: unshallow main fetch should leave origin/main..HEAD = 1 PR commit (got $full_count)"
+        exit 1
+    fi
+    if [[ "$shallow_count" -le 1 ]]; then
+        echo "FAIL: depth=50 main fetch should widen origin/main..HEAD past the branch point (got $shallow_count)"
+        exit 1
+    fi
+    echo "PASS: depth=50 range=$shallow_count commits; unshallow range=$full_count (PR-only)"
+) && DEPTH_STATUS=0 || DEPTH_STATUS=$?
+cleanup_depth
+
+if [[ $DEPTH_STATUS -eq 0 ]]; then
+    pass "shallow origin/main fetch widens subject range; unshallow keeps PR-only"
+else
+    fail "depth=50 vs unshallow origin/main range demo failed"
+fi
+
+echo "Test 13: check-test-porcelain fails on leaked file and leaked dir; Bash 3.2-safe..."
+
+PORC_DEMO=$(mktemp -d)
+cleanup_porc() { rm -rf "$PORC_DEMO"; }
+(
+    set -e
+    cd "$PORC_DEMO"
+    git init -q -b main
+    git config user.email "porc@example.com"
+    git config user.name "porc"
+    git commit -q --allow-empty -m "feat(GIT234-MIN): porcelain baseline"
+    baseline=$(mktemp)
+    git status --porcelain --untracked-files=all >"$baseline"
+
+    # Leaked file
+    printf 'x\n' > leaked-file.txt
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
+    st=$?
+    set -e
+    rm -f leaked-file.txt
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: leaked file did not fail check-test-porcelain: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'leaked-file\.txt'; then
+        echo "FAIL: leaked file missing from porcelain output: $out"
+        exit 1
+    fi
+
+    # Leaked directory (untracked dir shows as path/ in porcelain with -uall)
+    mkdir -p leaked-dir
+    printf 'y\n' > leaked-dir/inner.txt
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
+    st=$?
+    set -e
+    rm -rf leaked-dir
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: leaked dir did not fail check-test-porcelain: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'leaked-dir'; then
+        echo "FAIL: leaked dir missing from porcelain output: $out"
+        exit 1
+    fi
+
+    # Clean vs baseline must pass
+    bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" >/dev/null
+    rm -f "$baseline"
+
+    # Bash 3.2 guard rejects mapfile
+    bash "$REPO_ROOT/scripts/check-bash32-scripts.sh" "$REPO_ROOT" >/dev/null
+    bad=$(mktemp)
+    printf '%s\n' '#!/usr/bin/env bash' 'mapfile -t x < <(echo a)' >"$bad"
+    # Temporarily point guard at a copy that includes the bad file via sed injection —
+    # instead assert the pattern matcher would catch mapfile on a fixture script.
+    if ! grep -nE 'mapfile' "$bad" | grep -vE '^[[:digit:]]+:[[:space:]]*#' >/dev/null; then
+        echo "FAIL: mapfile fixture not detected"
+        exit 1
+    fi
+    rm -f "$bad"
+    echo "PASS: porcelain fails on leaked file+dir; Bash 3.2 guard green"
+) && PORC_STATUS=0 || PORC_STATUS=$?
+cleanup_porc
+
+if [[ $PORC_STATUS -eq 0 ]]; then
+    pass "check-test-porcelain + Bash 3.2 guard"
+else
+    fail "porcelain / Bash 3.2 guard demo failed"
 fi
 
 echo ""

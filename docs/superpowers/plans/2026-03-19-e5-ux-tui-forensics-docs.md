@@ -2526,7 +2526,7 @@ git clone https://github.com/scullxbones/armature
 cd trellis && make install   # installs to ~/.local/bin/arm
 ```
 
-Requires Go 1.26+ and git 2.25+.
+Requires Go 1.26+ and git 2.34+.
 
 ## 5-Minute Quickstart
 
@@ -2625,7 +2625,7 @@ This guide takes you from a fresh install to a working project in about 15 minut
 
 ## Prerequisites
 
-- git 2.25 or newer
+- git 2.34 or newer
 - `arm` binary installed (see [README](../README.md#install))
 
 ## 1. Initialize Your Repository

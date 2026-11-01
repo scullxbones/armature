@@ -2,6 +2,7 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -156,6 +157,110 @@ func enableWorktreeConfig(repoPath string) error {
 		}
 	}
 	return nil
+}
+
+// SeedWorktreeIdentity writes workerID into destWorktree's worktree-scoped
+// config so follow-up commands in that worktree resolve the claim owner.
+//
+// Git 2.43+ copies the main worktree's config.worktree on `git worktree add`;
+// Git 2.34 (the product floor) does not. Claim still seeds missing ids on
+// 2.34; copy-replacement is kept for 2.43+ so `--worker-id` / ARM_WORKER_ID
+// overrides do not keep writing the wrong ops log after Git's copy.
+// Callers pass the effective claim owner (same ID as the claim op).
+// A ~log-slot suffix is stripped; worktree config stores the bare worker id.
+//
+// An existing dest id is NEVER replaced unless it is a proven Git copy:
+// main's worktree id must read OK, be non-empty, and equal the dest id.
+// Any error or uncertainty (missing main id, read failure, distinct dest
+// init) keeps the existing id (W21). Main path comes from the first entry of
+// `git worktree list --porcelain` (not filepath.Dir of the common dir).
+func SeedWorktreeIdentity(destWorktree, workerID string) error {
+	destWorktree = strings.TrimSpace(destWorktree)
+	workerID = strings.TrimSpace(workerID)
+	if destWorktree == "" {
+		return fmt.Errorf("seed worktree identity: destination is required")
+	}
+	if workerID == "" {
+		return fmt.Errorf("seed worktree identity: worker id is required")
+	}
+	id := workerID
+	if i := strings.IndexByte(id, '~'); i >= 0 {
+		id = id[:i]
+	}
+	if err := validateWorkerID(id); err != nil {
+		return fmt.Errorf("seed worktree identity: %w", err)
+	}
+	dest := adapters.New(destWorktree)
+	if existing, err := dest.ReadGitConfigWorktree(gitConfigKey); err == nil {
+		existing = strings.TrimSpace(existing)
+		if existing != "" {
+			if existing == id {
+				return nil
+			}
+			mainID, mainErr := mainWorktreeWorkerID(destWorktree)
+			if !replaceProvenGitCopiedID(existing, mainID, mainErr) {
+				return nil
+			}
+		}
+	}
+	if err := enableWorktreeConfig(destWorktree); err != nil {
+		return fmt.Errorf("seed worktree identity: enable worktreeConfig: %w", err)
+	}
+	if err := dest.SetGitConfigWorktree(gitConfigKey, id); err != nil {
+		return fmt.Errorf("seed worktree identity: set %s: %w", gitConfigKey, err)
+	}
+	return nil
+}
+
+// replaceProvenGitCopiedID is true only when existing is a proven Git 2.43+
+// copy of main's worktree id. Error, empty main id, or mismatch → keep.
+func replaceProvenGitCopiedID(existing, mainID string, mainErr error) bool {
+	if strings.TrimSpace(existing) == "" {
+		return false
+	}
+	if mainErr != nil {
+		return false
+	}
+	mainID = strings.TrimSpace(mainID)
+	if mainID == "" {
+		return false
+	}
+	return existing == mainID
+}
+
+// mainWorktreePath returns the first path from `git worktree list --porcelain`
+// (the main worktree). Avoids filepath.Dir(common-dir), which breaks for bare
+// repos and some linked layouts.
+func mainWorktreePath(from string) (string, error) {
+	cmd := adapters.CommandGit(context.Background(), nil, "-C", from, "worktree", "list", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git worktree list --porcelain: %w", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			path := strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+			if path == "" {
+				return "", fmt.Errorf("git worktree list --porcelain: empty main path")
+			}
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("git worktree list --porcelain: no worktree entries")
+}
+
+// mainWorktreeWorkerID reads armature.worker-id from the main worktree
+// (source of Git 2.43+ worktree-add copies).
+func mainWorktreeWorkerID(destWorktree string) (string, error) {
+	mainPath, err := mainWorktreePath(destWorktree)
+	if err != nil {
+		return "", err
+	}
+	v, err := adapters.New(mainPath).ReadGitConfigWorktree(gitConfigKey)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(v), nil
 }
 
 // Init writes a worktree-scoped id (never copies a baked clone id).

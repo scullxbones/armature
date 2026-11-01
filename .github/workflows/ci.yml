@@ -23,6 +23,10 @@ permissions:
 
 env:
   GO_VERSION: "1.26.10"
+  # Exact floor exercised by check-git-2-34 (source tarball + sha256).
+  GIT_MIN_VERSION: "2.34.0"
+  GIT_MIN_TARBALL_SHA256: "0ce6222bfd31938b29360150286b51c77c643fa97740b1d35b6d1ceef8b0ecd7"
+  GIT_MIN_TARBALL_URL: "https://www.kernel.org/pub/software/scm/git/git-2.34.0.tar.gz"
 
 jobs:
   test-os:
@@ -31,6 +35,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     defaults:
       run:
         shell: bash
@@ -38,6 +44,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -90,10 +99,14 @@ jobs:
   check-core:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -111,10 +124,28 @@ jobs:
   check-static:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      # Lean (b): this is the ONE CI job that owns commit-subjects. Pin the PR
+      # tip (not the synthetic merge SHA) so origin/main..HEAD lists real commits.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
+      # origin/main fetch + subject gate are PR-only. On push to main,
+      # github.sha == the new tip and fetching origin/main makes
+      # origin/main..HEAD empty — the empty-range check would fail every
+      # main push. Subjects were already gated on the PR (lean b owner).
+      # No --depth: checkout already used fetch-depth:0; a shallow main fetch
+      # can leave origin/main short of the real branch point so
+      # origin/main..HEAD includes pre-branch unscoped commits.
+      - name: Fetch origin/main for commit-subjects
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -125,6 +156,9 @@ jobs:
           mkdir -p "$dest"
           echo "$dest" >> "$GITHUB_PATH"
           make install-rg-release DEST="$dest"
+      - name: Check commit subjects on PR tip range
+        if: github.event_name == 'pull_request'
+        run: make commit-subjects-check
       - run: make check-job JOB=check-static
         env:
           CHECK_INSTALL_TOOLS: "1"
@@ -132,16 +166,81 @@ jobs:
   mutate:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: make check-job JOB=mutate
         env:
           CHECK_INSTALL_TOOLS: "1"
+
+  # Exact Git floor (2.34.0) from a checksum-pinned source build. Proves the
+  # full CHECK_JOBS suite (incl. S12 ops-backup) on the documented minimum.
+  # Uses make check-git-floor — same partitions as other CI jobs — not bare
+  # make check: PR merge SHAs have unscoped subjects, so check-commit-subjects
+  # would exit before the suite. Partitions do not need origin/main.
+  check-git-2-34:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install Git build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential dh-autoreconf libcurl4-openssl-dev \
+            libexpat1-dev libssl-dev zlib1g-dev
+
+      - name: Install pinned Git ${{ env.GIT_MIN_VERSION }}
+        run: |
+          dest="${HOME}/git-${GIT_MIN_VERSION}"
+          bash scripts/install-git-from-source.sh \
+            --version "$GIT_MIN_VERSION" \
+            --sha256 "$GIT_MIN_TARBALL_SHA256" \
+            --url "$GIT_MIN_TARBALL_URL" \
+            --prefix "$dest"
+          echo "$dest/bin" >> "$GITHUB_PATH"
+          export PATH="$dest/bin:$PATH"
+          got="$(git --version)"
+          echo "PATH git: $got"
+          test "$got" = "git version ${GIT_MIN_VERSION}"
+
+      - name: Assert PATH Git is exactly the pinned floor
+        run: |
+          got="$(git --version)"
+          echo "$got"
+          test "$got" = "git version ${GIT_MIN_VERSION}"
+          bash scripts/assert-git-min.sh
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install ripgrep
+        run: |
+          dest="${HOME}/.local/bin"
+          mkdir -p "$dest"
+          echo "$dest" >> "$GITHUB_PATH"
+          make install-rg-release DEST="$dest"
+
+      - name: Full check suite on Git ${{ env.GIT_MIN_VERSION }}
+        env:
+          CHECK_INSTALL_TOOLS: "1"
+        run: |
+          git --version
+          make check-git-floor
 
   # Integration door (D7): whole-graph arm validate --ci. Not part of the
   # per-task publish gate — that gate must stay worker-local. This job is the
@@ -150,10 +249,15 @@ jobs:
   validate-graph:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -172,10 +276,15 @@ jobs:
   e2eharness:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -191,10 +300,15 @@ jobs:
   quickstart:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -210,11 +324,15 @@ jobs:
   govulncheck:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     continue-on-error: true
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
