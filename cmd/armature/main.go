@@ -8,7 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
+	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/exitcodes"
 	"github.com/spf13/cobra"
 )
@@ -78,6 +80,13 @@ func newRootCmd() *cobra.Command {
 
 			if cmd.Parent() == nil && shouldPrintRootHelp(format, nonInteractive, ui.IsTerminal()) {
 				return nil
+			}
+
+			// Git floor is a port precondition (docs + adapters.MinGitVersion).
+			// Fail closed before any repo resolve so every command sees the same
+			// IO cause naming installed + required versions.
+			if err := adapters.RequireMinGit(nil); err != nil {
+				return platformProtocolError(cmd, armerrors.Wrap(armerrors.CodeIO, err.Error(), nil, err))
 			}
 
 			repoPath := repoPathFromCmd(cmd)

@@ -1,12 +1,13 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 142,
+      "count": 153,
       "names": [
         "AppendLog",
         "AppendLog.Append",
         "AppendLog.AppendIf",
         "AppendLog.Path",
+        "CheckMinGitVersion",
         "Client",
         "Client.AddPaths",
         "Client.AddWorktree",
@@ -74,6 +75,7 @@
         "Client.UpdateRef",
         "Client.WithEnviron",
         "CommandGit",
+        "DetectGitVersion",
         "DiffStatusEntry",
         "DiffStatusEntry.OldPath",
         "DiffStatusEntry.Path",
@@ -112,12 +114,14 @@
         "LogEntry.Parents",
         "LogEntry.SHA",
         "LogEntry.Subject",
+        "MinGitVersion",
         "MkdirAll",
         "New",
         "NewAppendLog",
         "NewIsolated",
         "NonInteractiveGitCommand",
         "OpsGitignore",
+        "ParseGitVersionOutput",
         "ProcessClean",
         "ProcessError",
         "ProcessStatus",
@@ -132,12 +136,19 @@
         "ReadManifestFile",
         "ReadPlanFile",
         "RemoveIssueJSON",
+        "RequireMinGit",
         "RunProcess",
         "RunProcessWithEnv",
         "SetGitNetworkTimeoutForTest",
         "SimulatePendingMarker",
         "Stat",
         "StatFile",
+        "Version",
+        "Version.AtLeast",
+        "Version.Major",
+        "Version.Minor",
+        "Version.Patch",
+        "Version.String",
         "WriteCacheFile",
         "WriteCheckpointJSON",
         "WriteConfigFile",
@@ -2114,7 +2125,7 @@
       ]
     },
     "internal/worker": {
-      "count": 23,
+      "count": 24,
       "names": [
         "CheckWorkerID",
         "GetWorkerID",
@@ -2138,6 +2149,7 @@
         "InitWorkerInput.Reuse",
         "LockLogID",
         "ResolveIdentity",
+        "SeedWorktreeIdentity",
         "ValidateLogSlot"
       ]
     },

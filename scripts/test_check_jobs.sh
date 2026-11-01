@@ -475,6 +475,85 @@ else
     fail "install scripts not executable on disk"
 fi
 
+echo "Test 9: every CI job asserts Git ≥2.34; check-git-2-34 pins exact 2.34.0 source..."
+
+GIT_MIN_RESULT=$(python3 - "$CI_YML" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+lines = text.splitlines()
+jobs = {}
+current = None
+buf = []
+in_jobs = False
+for line in lines:
+    if not in_jobs:
+        if line == "jobs:" or line.startswith("jobs:"):
+            in_jobs = True
+        continue
+    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
+        break
+    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+    if m:
+        if current is not None:
+            jobs[current] = "\n".join(buf)
+        current = m.group(1)
+        buf = []
+        continue
+    if current is not None:
+        buf.append(line)
+if current is not None:
+    jobs[current] = "\n".join(buf)
+
+if "check-git-2-34" not in jobs:
+    print("FAIL: missing check-git-2-34 job")
+    sys.exit(1)
+for jid, body in jobs.items():
+    if "assert-git-min.sh" not in body:
+        print(f"FAIL: job {jid} must run scripts/assert-git-min.sh")
+        sys.exit(1)
+body = jobs["check-git-2-34"]
+for needle in (
+    "install-git-from-source.sh",
+    "GIT_MIN_VERSION",
+    "GIT_MIN_TARBALL_SHA256",
+    "make check",
+):
+    if needle not in body and needle not in text:
+        print(f"FAIL: check-git-2-34 / workflow missing {needle}")
+        sys.exit(1)
+if "0ce6222bfd31938b29360150286b51c77c643fa97740b1d35b6d1ceef8b0ecd7" not in text:
+    print("FAIL: workflow must pin git-2.34.0.tar.gz sha256")
+    sys.exit(1)
+if "2.34.0" not in text:
+    print("FAIL: workflow must name Git 2.34.0")
+    sys.exit(1)
+print("PASS")
+PY
+) && GIT_MIN_STATUS=0 || GIT_MIN_STATUS=$?
+
+if [[ $GIT_MIN_STATUS -eq 0 ]]; then
+    pass "CI asserts Git floor on every job and pins exact 2.34.0 for check-git-2-34"
+else
+    fail "${GIT_MIN_RESULT:-git min CI assertions failed}"
+fi
+
+for s in assert-git-min.sh install-git-from-source.sh; do
+    mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/$s" | awk '{print $1}')
+    if [[ "$mode" == "100755" ]]; then
+        pass "scripts/$s git mode is 100755"
+    else
+        fail "scripts/$s git mode is '${mode:-missing}', expected 100755"
+    fi
+    if [[ -x "$REPO_ROOT/scripts/$s" ]]; then
+        pass "scripts/$s executable on disk"
+    else
+        fail "scripts/$s not executable on disk"
+    fi
+done
+
 echo ""
 if [[ $FAILURES -eq 0 ]]; then
     echo "All check-job drift tests passed"

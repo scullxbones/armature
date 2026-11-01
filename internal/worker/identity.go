@@ -158,6 +158,49 @@ func enableWorktreeConfig(repoPath string) error {
 	return nil
 }
 
+// SeedWorktreeIdentity copies fromRepo's resolved worker id into
+// destWorktree's worktree-scoped config when dest has none.
+//
+// Git 2.43+ copies the main worktree's config.worktree on `git worktree add`;
+// Git 2.34 (the product floor) does not. Claim-created task worktrees must
+// keep the claiming worker's identity without relying on that newer behavior.
+// If dest already has a worktree-scoped id, it is left alone (W21: distinct
+// per-worktree ids after an explicit worker-init in that worktree).
+func SeedWorktreeIdentity(fromRepo, destWorktree string) error {
+	fromRepo = strings.TrimSpace(fromRepo)
+	destWorktree = strings.TrimSpace(destWorktree)
+	if fromRepo == "" || destWorktree == "" {
+		return fmt.Errorf("seed worktree identity: repo and destination are required")
+	}
+	if filepath.Clean(fromRepo) == filepath.Clean(destWorktree) {
+		return nil
+	}
+	dest := adapters.New(destWorktree)
+	if v, err := dest.ReadGitConfigWorktree(gitConfigKey); err == nil && strings.TrimSpace(v) != "" {
+		return nil
+	}
+	ident, err := ResolveIdentity(IdentityInput{RepoPath: fromRepo})
+	if err != nil {
+		return fmt.Errorf("seed worktree identity: resolve source: %w", err)
+	}
+	// ResolveIdentity may return a slotted stem (id~slot). Worktree config
+	// stores the bare worker id; strip a log-slot suffix if present.
+	id := ident.ID
+	if i := strings.IndexByte(id, '~'); i >= 0 {
+		id = id[:i]
+	}
+	if err := validateWorkerID(id); err != nil {
+		return fmt.Errorf("seed worktree identity: %w", err)
+	}
+	if err := enableWorktreeConfig(destWorktree); err != nil {
+		return fmt.Errorf("seed worktree identity: enable worktreeConfig: %w", err)
+	}
+	if err := dest.SetGitConfigWorktree(gitConfigKey, id); err != nil {
+		return fmt.Errorf("seed worktree identity: set %s: %w", gitConfigKey, err)
+	}
+	return nil
+}
+
 // Init writes a worktree-scoped id (never copies a baked clone id).
 func Init(in InitWorkerInput) (Identity, error) {
 	if in.RepoPath == "" {

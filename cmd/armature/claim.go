@@ -23,6 +23,7 @@ import (
 	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/snapshot"
+	"github.com/scullxbones/armature/internal/worker"
 	"github.com/scullxbones/armature/internal/worktree"
 )
 
@@ -653,6 +654,12 @@ func createWorktreeAndBranchWithExclusion(
 	}
 	if err := writeClaimExclusionMarker(worktreePath, exclusionPattern); err != nil {
 		return cleanupPartialWorktree(err, "persist claim exclusion metadata")
+	}
+	// Git 2.34 does not copy config.worktree on worktree add; seed the
+	// claiming worker's id so transition/heartbeat from the task worktree
+	// resolve the same identity as the invoking checkout.
+	if err := worker.SeedWorktreeIdentity(repoPath, worktreePath); err != nil {
+		return cleanupPartialWorktree(err, "seed worktree worker identity")
 	}
 	return nil
 }

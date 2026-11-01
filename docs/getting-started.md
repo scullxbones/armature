@@ -5,7 +5,7 @@ Armature is a git-native work orchestration system for multi-agent AI coordinati
 ## 1. Installation
 
 ### Prerequisites
-- **Git** (v2.25+)
+- **Git** (v2.34+)
 - **Go** 1.26+ (for `go install` or building from source)
 
 ### Released binaries

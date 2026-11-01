@@ -2,6 +2,17 @@
 
 This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D12).
 
+## Runtime Git floor
+
+Armature requires **Git 2.34+**. Before resolving a repo, `arm` runs
+`adapters.RequireMinGit` and refuses with an `IO` Command Failure when the
+installed `git --version` is below `2.34.0`. The cause always names the
+installed and required versions (for example
+`installed git 2.33.0 is below the required minimum git 2.34.0`). Graph
+Findings and doctor checks are not emitted for this case — the process exits
+before validate/doctor run. See `docs/getting-started.md`, README
+prerequisites, and `docs/design/architecture.md` (Git Dependency).
+
 ## Validation Codes (arm validate)
 
 The `arm validate` command checks the issue graph for semantic and structural consistency. It reports **errors** that prevent execution and **warnings** that indicate potential issues.

@@ -66,7 +66,7 @@ flowchart TD
 
 ### Prerequisites
 
-- **Git** (v2.25+ for sparse checkout support)
+- **Git** (v2.34+; sparse checkout and `--diff-merges=separate`)
 - **Go** 1.26+ (for `go install` or building from source)
 
 ### Windows is not supported
