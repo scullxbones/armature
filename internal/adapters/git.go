@@ -1329,6 +1329,21 @@ type BlobResult struct {
 // headers from paths. Avoids embedding %x00 in --format (ambiguous with -z).
 const commitWalkFormat = "%H%x09%ct%x09%P"
 
+// commitWalkConfigPins force walk output independent of user git config.
+// Unknown keys (e.g. log.diffMerges on Git <2.32) are ignored by git -c.
+// log.diffMerges=separate matches `log -m` (per-parent blocks); other values
+// (combined/first-parent/remerge/off) would change or suppress merge diffs.
+var commitWalkConfigPins = []string{
+	"-c", "log.diffMerges=separate",
+	"-c", "log.showRoot=true",
+	"-c", "core.quotePath=false",
+	"-c", "color.ui=never",
+	"-c", "color.diff=never",
+	"-c", "log.decorate=false",
+	"-c", "diff.noprefix=false",
+	"-c", "diff.relative=false",
+}
+
 // CommitWalkReverse returns every commit reachable from rev, oldest first, in
 // one git process. FirstParent and ChangedFiles use first-parent merge diffs
 // so callers can replace per-SHA CommitterUnix, FirstParent, DiffNameOnlyRange,
@@ -1339,12 +1354,18 @@ const commitWalkFormat = "%H%x09%ct%x09%P"
 // log.showRoot=false still emits the root commit, `-z` so core.quotePath
 // cannot C-quote non-ASCII paths. `-m` repeats merge SHAs once per parent;
 // parseCommitWalkOutput keeps the first block (first-parent diff).
+// Walk-affecting config is pinned via commitWalkConfigPins so user
+// log.diffMerges / quotePath / color / decorate / noprefix / relative cannot
+// change the machine-readable output (hash algorithm is still repo-native:
+// SHA-1 40-hex or SHA-256 64-hex OIDs).
 func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 	rev = strings.TrimSpace(rev)
 	if rev == "" {
 		return nil, fmt.Errorf("git log commit walk: rev is required")
 	}
-	cmd := c.cmd(
+	args := make([]string, 0, len(commitWalkConfigPins)+8)
+	args = append(args, commitWalkConfigPins...)
+	args = append(args,
 		"log",
 		"-z",
 		"--reverse",
@@ -1354,6 +1375,7 @@ func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 		"--format="+commitWalkFormat,
 		rev,
 	)
+	cmd := c.cmd(args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git log commit walk %s: %w", rev, err)
@@ -1464,10 +1486,13 @@ func readCatFileBatchItem(r *bufio.Reader) (BlobResult, error) {
 	if strings.HasSuffix(line, " missing") {
 		return BlobResult{OK: false}, nil
 	}
-	// <oid> SP <type> SP <size>
+	// <oid> SP <type> SP <size> — oid is 40-hex (SHA-1) or 64-hex (SHA-256).
 	fields := strings.Fields(line)
 	if len(fields) < 3 {
 		return BlobResult{}, fmt.Errorf("bad cat-file header %q", line)
+	}
+	if !isGitObjectID(fields[0]) {
+		return BlobResult{}, fmt.Errorf("bad cat-file oid in %q: want 40- or 64-hex object id", line)
 	}
 	size, err := strconv.Atoi(fields[len(fields)-1])
 	if err != nil || size < 0 {
@@ -1538,12 +1563,21 @@ func parseCommitWalkOutput(out []byte) ([]CommitWalkEntry, error) {
 	return entries, nil
 }
 
-func isCommitWalkHeader(raw []byte) bool {
-	// SHA (40 hex) TAB ...
-	if len(raw) < 41 || raw[40] != '\t' {
+// gitObjectIDLenSHA1 / gitObjectIDLenSHA256 are the hex widths git emits for
+// SHA-1 and SHA-256 object formats (architecture min Git 2.25 supports both
+// once the repo is initialized with --object-format=sha256 on Git ≥2.29).
+const (
+	gitObjectIDLenSHA1   = 40
+	gitObjectIDLenSHA256 = 64
+)
+
+func isGitObjectID(s string) bool {
+	n := len(s)
+	if n != gitObjectIDLenSHA1 && n != gitObjectIDLenSHA256 {
 		return false
 	}
-	for _, b := range raw[:40] {
+	for i := 0; i < n; i++ {
+		b := s[i]
 		ok := (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 		if !ok {
 			return false
@@ -1552,24 +1586,42 @@ func isCommitWalkHeader(raw []byte) bool {
 	return true
 }
 
+func isCommitWalkHeader(raw []byte) bool {
+	// OID (40 hex SHA-1 or 64 hex SHA-256) TAB ...
+	switch {
+	case len(raw) > gitObjectIDLenSHA1 && raw[gitObjectIDLenSHA1] == '\t':
+		return isGitObjectID(string(raw[:gitObjectIDLenSHA1]))
+	case len(raw) > gitObjectIDLenSHA256 && raw[gitObjectIDLenSHA256] == '\t':
+		return isGitObjectID(string(raw[:gitObjectIDLenSHA256]))
+	default:
+		return false
+	}
+}
+
 func parseCommitWalkHeader(raw []byte) (sha string, ct int64, firstParent string, err error) {
 	fields := bytes.SplitN(raw, []byte{'\t'}, 3)
 	if len(fields) != 3 {
 		return "", 0, "", fmt.Errorf("commit header %q: want sha, ct, parents", truncateForErr(raw))
 	}
 	sha = string(fields[0])
+	if !isGitObjectID(sha) {
+		return "", 0, "", fmt.Errorf("commit header oid %q: want 40- or 64-hex object id", sha)
+	}
 	ct, convErr := strconv.ParseInt(string(fields[1]), 10, 64)
 	if convErr != nil {
 		return "", 0, "", fmt.Errorf("committer unix for %s: %w", sha, convErr)
 	}
 	if parents := strings.Fields(string(fields[2])); len(parents) > 0 {
+		if !isGitObjectID(parents[0]) {
+			return "", 0, "", fmt.Errorf("commit header parent oid %q: want 40- or 64-hex object id", parents[0])
+		}
 		firstParent = parents[0]
 	}
 	return sha, ct, firstParent, nil
 }
 
 func truncateForErr(b []byte) string {
-	const max = 64
+	const max = 96 // fits a 64-hex SHA-256 oid plus a short suffix
 	if len(b) <= max {
 		return string(b)
 	}

@@ -664,6 +664,39 @@ func TestCommitterUnixRange_MatchesPerSHA_REQ_TOPTIER_S12_T2(t *testing.T) {
 	assert.Empty(t, empty)
 }
 
+func TestCommitWalkReverse_SHA256ObjectFormat_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	cmd := exec.CommandContext(context.Background(), "git", "init", "--object-format=sha256", repo)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Skipf("git init --object-format=sha256 unavailable: %v (%s)", err, out)
+	}
+	runGitDir(t, repo, "config", "user.email", "t@t")
+	runGitDir(t, repo, "config", "user.name", "t")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "ops"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "ops", "worker.log"), []byte("line\n"), 0o644))
+	runGitDir(t, repo, "add", "ops/worker.log")
+	runGitDir(t, repo, "commit", "-m", "root")
+	runGitDir(t, repo, "commit", "--allow-empty", "-m", "empty")
+
+	c := adapters.New(repo)
+	walk, walkErr := c.CommitWalkReverse("HEAD")
+	require.NoError(t, walkErr)
+	require.Len(t, walk, 2)
+	assert.Len(t, walk[0].SHA, 64)
+	assert.Empty(t, walk[0].FirstParent)
+	assert.Equal(t, []string{"ops/worker.log"}, walk[0].ChangedFiles)
+	assert.Len(t, walk[1].SHA, 64)
+	assert.Equal(t, walk[0].SHA, walk[1].FirstParent)
+
+	blobs, batchErr := c.ShowFilesBatch([]adapters.BlobRef{{Rev: walk[0].SHA, Path: "ops/worker.log"}})
+	require.NoError(t, batchErr)
+	require.Len(t, blobs, 1)
+	assert.True(t, blobs[0].OK)
+	assert.Equal(t, []byte("line\n"), blobs[0].Content)
+}
+
 func TestCommitWalkReverse_MatchesPerSHAHelpers_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)
@@ -756,6 +789,7 @@ exec %q "$@"
 	assert.Contains(t, joined, " -m ")
 	assert.Contains(t, joined, " --root ")
 	assert.Contains(t, joined, " -z ")
+	assert.Contains(t, joined, "log.diffMerges=separate")
 	assert.NotContains(t, joined, "--diff-merges")
 }
 
@@ -773,7 +807,8 @@ func gitPATHOverlay(t *testing.T, wrapperDir string) []string {
 }
 
 // adversarialGitConfigs is the OPORDER-LOCATE class matrix: every walk git
-// invocation must stay correct under hostile local config (Git 2.25 flags).
+// invocation must stay correct under hostile local config. Includes
+// log.diffMerges values that would rewrite -m output without our -c pin.
 var adversarialGitConfigs = []struct {
 	name   string
 	config [][2]string
@@ -785,6 +820,11 @@ var adversarialGitConfigs = []struct {
 	{name: "diff.renames=false", config: [][2]string{{"diff.renames", "false"}}},
 	{name: "diff.noprefix=true", config: [][2]string{{"diff.noprefix", "true"}}},
 	{name: "diff.relative=true", config: [][2]string{{"diff.relative", "true"}}},
+	{name: "log.diffMerges=combined", config: [][2]string{{"log.diffMerges", "combined"}}},
+	{name: "log.diffMerges=dense-combined", config: [][2]string{{"log.diffMerges", "dense-combined"}}},
+	{name: "log.diffMerges=first-parent", config: [][2]string{{"log.diffMerges", "first-parent"}}},
+	{name: "log.diffMerges=remerge", config: [][2]string{{"log.diffMerges", "remerge"}}},
+	{name: "log.diffMerges=off", config: [][2]string{{"log.diffMerges", "off"}}},
 	{name: "all hostile", config: [][2]string{
 		{"log.showRoot", "false"},
 		{"core.quotePath", "true"},
@@ -793,6 +833,7 @@ var adversarialGitConfigs = []struct {
 		{"diff.renames", "false"},
 		{"diff.noprefix", "true"},
 		{"diff.relative", "true"},
+		{"log.diffMerges", "combined"},
 	}},
 }
 
