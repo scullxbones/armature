@@ -2,6 +2,7 @@ package worker
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -75,4 +76,28 @@ func TestSeedWorktreeIdentity_UsesEffectiveClaimIDNotRepoConfig_REQ_GIT234_MIN(t
 	got, err := adapters.New(wt).ReadGitConfigWorktree(gitConfigKey)
 	require.NoError(t, err)
 	assert.Equal(t, "override-worker", got, "effective claim id (slot stripped) must be seeded")
+}
+
+func TestSeedWorktreeIdentity_ReplacesGitCopiedMainID_REQ_GIT234_MIN(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	_, err := Init(InitWorkerInput{RepoPath: repo, ID: "main-worker"})
+	require.NoError(t, err)
+
+	wt := filepath.Join(t.TempDir(), "copied-wt")
+	gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
+	// Git 2.43+ copies main config.worktree; Git 2.34 leaves dest empty.
+	// Simulate the copy on older hosts so the class is covered everywhere.
+	if v, readErr := adapters.New(wt).ReadGitConfigWorktree(gitConfigKey); readErr != nil || strings.TrimSpace(v) == "" {
+		require.NoError(t, adapters.New(wt).SetGitConfigWorktree(gitConfigKey, "main-worker"))
+	} else {
+		require.Equal(t, "main-worker", strings.TrimSpace(v), "fixture must start as a main-id copy")
+	}
+
+	require.NoError(t, SeedWorktreeIdentity(wt, "override-worker"))
+	got, err := adapters.New(wt).ReadGitConfigWorktree(gitConfigKey)
+	require.NoError(t, err)
+	assert.Equal(t, "override-worker", got, "Git-copied main id must yield to effective claim owner")
 }

@@ -37,6 +37,18 @@ func TestLoad_EmptyDir(t *testing.T) {
 	assert.Equal(t, 0, len(snap.Warnings))
 }
 
+func TestLoad_EmptyStateDirRefusesCwdMaterialization(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	opsDir := filepath.Join(tmpDir, "ops")
+	require.NoError(t, os.MkdirAll(opsDir, 0755))
+
+	_, err := loadSnap(opsDir, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "state dir is required")
+	assert.Contains(t, err.Error(), "refusing cwd materialization")
+}
+
 func TestLoad_SingleIssue(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

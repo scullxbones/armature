@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -43,6 +44,9 @@ func (s *Store) LoadReadOnly(ctx context.Context) (*Snapshot, error) {
 }
 
 func (s *Store) load(writeStateFiles bool) (*Snapshot, error) {
+	if strings.TrimSpace(s.stateDir) == "" {
+		return nil, fmt.Errorf("snapshot: state dir is required (refusing cwd materialization)")
+	}
 	loaded, err := ops.LoadFromDirValidated(s.opsDir)
 	if err != nil {
 		return nil, fmt.Errorf("load ops: %w", err)

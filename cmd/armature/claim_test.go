@@ -1810,6 +1810,35 @@ func TestClaimExistingWorktreeInstallsManagedWorktreeExclusion_REQ_LNGHZN_S5(t *
 	assert.NotContains(t, staged, ".worktrees/task-01", "existing managed worktree must remain excluded from broad staging")
 }
 
+func TestClaimRebindSeedsWorktreeIdentity_REQ_GIT234_MIN(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	worktreePath := filepath.Join(repo, ".worktrees", "task-01")
+	// Pre-create the dest so claim takes rebindExistingDest (skips createWorktree…).
+	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", worktreePath)
+	// Fixture stores the main id in local config (worktreeConfig may be off).
+	// Simulate a Git 2.43+ copy: enable the extension and plant main's id on dest
+	// so rebind seed must replace it with --worker-id (Codex r4437123981).
+	mainID := strings.TrimSpace(runOutput(t, repo, "config", "--get", "armature.worker-id"))
+	require.NotEmpty(t, mainID, "fixture main must have a worker id")
+	run(t, repo, "git", "config", "extensions.worktreeConfig", "true")
+	run(t, repo, "git", "config", "--worktree", "armature.worker-id", mainID)
+	run(t, worktreePath, "git", "config", "--worktree", "armature.worker-id", mainID)
+
+	claimWorker := "rebind-claim-owner"
+	claim := testRootCmd(t)
+	claim.SetOut(new(bytes.Buffer))
+	claim.SetArgs([]string{
+		"claim", "--repo", repo, "--issue", "task-01", "--worktree",
+		"--worker-id", claimWorker,
+	})
+	require.NoError(t, claim.Execute())
+
+	got := strings.TrimSpace(runOutput(t, worktreePath, "config", "--worktree", "--get", "armature.worker-id"))
+	assert.Equal(t, claimWorker, got,
+		"rebindExistingDest must SeedWorktreeIdentity with the effective claim owner")
+}
+
 func TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithTask(t)

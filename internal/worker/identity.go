@@ -159,7 +159,7 @@ func enableWorktreeConfig(repoPath string) error {
 }
 
 // SeedWorktreeIdentity writes workerID into destWorktree's worktree-scoped
-// config when dest has none.
+// config so follow-up commands in that worktree resolve the claim owner.
 //
 // Git 2.43+ copies the main worktree's config.worktree on `git worktree add`;
 // Git 2.34 (the product floor) does not. Claim-created task worktrees must
@@ -168,8 +168,11 @@ func enableWorktreeConfig(repoPath string) error {
 // including `--worker-id` / ARM_WORKER_ID overrides) — do not re-resolve from
 // repo config here, or an override can seed the wrong id or fail closed.
 // A ~log-slot suffix is stripped; worktree config stores the bare worker id.
-// If dest already has a worktree-scoped id, it is left alone (W21: distinct
-// per-worktree ids after an explicit worker-init in that worktree).
+//
+// An existing dest id is preserved only when it is an explicit worktree init
+// (W21: distinct per-worktree ids). A Git 2.43+ copy of the main worktree's
+// id is not explicit — replace it with the effective claim owner so overrides
+// do not keep writing the wrong ops log.
 func SeedWorktreeIdentity(destWorktree, workerID string) error {
 	destWorktree = strings.TrimSpace(destWorktree)
 	workerID = strings.TrimSpace(workerID)
@@ -179,16 +182,24 @@ func SeedWorktreeIdentity(destWorktree, workerID string) error {
 	if workerID == "" {
 		return fmt.Errorf("seed worktree identity: worker id is required")
 	}
-	dest := adapters.New(destWorktree)
-	if v, err := dest.ReadGitConfigWorktree(gitConfigKey); err == nil && strings.TrimSpace(v) != "" {
-		return nil
-	}
 	id := workerID
 	if i := strings.IndexByte(id, '~'); i >= 0 {
 		id = id[:i]
 	}
 	if err := validateWorkerID(id); err != nil {
 		return fmt.Errorf("seed worktree identity: %w", err)
+	}
+	dest := adapters.New(destWorktree)
+	if existing, err := dest.ReadGitConfigWorktree(gitConfigKey); err == nil {
+		existing = strings.TrimSpace(existing)
+		if existing != "" {
+			if existing == id {
+				return nil
+			}
+			if mainID, mainErr := mainWorktreeWorkerID(destWorktree); mainErr == nil && existing != mainID {
+				return nil
+			}
+		}
 	}
 	if err := enableWorktreeConfig(destWorktree); err != nil {
 		return fmt.Errorf("seed worktree identity: enable worktreeConfig: %w", err)
@@ -197,6 +208,21 @@ func SeedWorktreeIdentity(destWorktree, workerID string) error {
 		return fmt.Errorf("seed worktree identity: set %s: %w", gitConfigKey, err)
 	}
 	return nil
+}
+
+// mainWorktreeWorkerID reads armature.worker-id from the repository's main
+// worktree config (the source of Git 2.43+ worktree-add copies).
+func mainWorktreeWorkerID(destWorktree string) (string, error) {
+	common, err := adapters.New(destWorktree).CommonGitDir()
+	if err != nil {
+		return "", err
+	}
+	mainPath := filepath.Dir(common)
+	v, err := adapters.New(mainPath).ReadGitConfigWorktree(gitConfigKey)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(v), nil
 }
 
 // Init writes a worktree-scoped id (never copies a baked clone id).

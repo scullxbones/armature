@@ -220,6 +220,7 @@ func TestSyncSkipsStalePromoteAfterReopen_REQ_LNGHZN_S11_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
 	store := newSnapshotStore(ctx)
 	snap, err := store.Load(t.Context())
 	require.NoError(t, err)
@@ -316,6 +317,7 @@ func TestSyncRejectsIntegrationBranchRetarget_REQ_LNGHZN_S11_T3(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
 	store := newSnapshotStore(ctx)
 	snap, err := store.Load(t.Context())
 	require.NoError(t, err)
