@@ -197,6 +197,90 @@ func TestLookPathOnWindowsPATHEXT_REQ_PARCLI(t *testing.T) {
 	}
 }
 
+func TestParseCommitWalkOutput_KeepsFirstParentMergeBlock_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	// Synthetic `git log -z --diff-merges=separate --name-only
+	// --format=%H%x09%ct%x09%P` shape: merge SHA repeated once per parent;
+	// first path field has a leading LF.
+	const merge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const p1 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	const p2 = "cccccccccccccccccccccccccccccccccccccccc"
+	const next = "dddddddddddddddddddddddddddddddddddddddd"
+	raw := merge + "\t100\t" + p1 + " " + p2 + "\x00" +
+		"\nfrom-first-parent.txt\x00" +
+		merge + "\t100\t" + p1 + " " + p2 + "\x00" +
+		"\nfrom-second-parent.txt\x00" +
+		next + "\t200\t" + merge + "\x00"
+
+	got, err := parseCommitWalkOutput([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("entries=%d want 2 (merge once + follower)", len(got))
+	}
+	if got[0].SHA != merge {
+		t.Fatalf("first sha=%s want merge", got[0].SHA)
+	}
+	if got[0].FirstParent != p1 {
+		t.Fatalf("first parent=%s want %s", got[0].FirstParent, p1)
+	}
+	if len(got[0].ChangedFiles) != 1 || got[0].ChangedFiles[0] != "from-first-parent.txt" {
+		t.Fatalf("merge files=%v want [from-first-parent.txt]", got[0].ChangedFiles)
+	}
+	if got[1].SHA != next {
+		t.Fatalf("second sha=%s", got[1].SHA)
+	}
+}
+
+func TestParseCommitWalkOutput_SHA256ObjectIDs_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	const merge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const p1 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	const p2 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	if len(merge) != gitObjectIDLenSHA256 || len(p1) != gitObjectIDLenSHA256 {
+		t.Fatal("test fixtures must be 64-hex")
+	}
+	raw := merge + "\t100\t" + p1 + " " + p2 + "\x00" +
+		"\nops/worker.log\x00" +
+		merge + "\t100\t" + p1 + " " + p2 + "\x00" +
+		"\nops/other.log\x00"
+	got, err := parseCommitWalkOutput([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse sha256 walk: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("entries=%d want 1", len(got))
+	}
+	if got[0].SHA != merge || got[0].FirstParent != p1 {
+		t.Fatalf("got sha=%s parent=%s", got[0].SHA, got[0].FirstParent)
+	}
+	if len(got[0].ChangedFiles) != 1 || got[0].ChangedFiles[0] != "ops/worker.log" {
+		t.Fatalf("files=%v", got[0].ChangedFiles)
+	}
+}
+
+func TestIsGitObjectID_SHA1AndSHA256_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	if !isGitObjectID(strings.Repeat("a", 40)) {
+		t.Fatal("40-hex must be accepted")
+	}
+	if !isGitObjectID(strings.Repeat("b", 64)) {
+		t.Fatal("64-hex must be accepted")
+	}
+	bads := []string{
+		"", "abc",
+		strings.Repeat("0", 39), strings.Repeat("0", 41),
+		strings.Repeat("0", 63), strings.Repeat("0", 65),
+		strings.Repeat("g", 40),
+	}
+	for _, bad := range bads {
+		if isGitObjectID(bad) {
+			t.Fatalf("accepted invalid oid %q", bad)
+		}
+	}
+}
+
 func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	t.Parallel()
 	if (*Client)(nil).WithEnviron([]string{"PATH=/tmp"}) != nil {

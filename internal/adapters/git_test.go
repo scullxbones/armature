@@ -1,6 +1,7 @@
 package adapters_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -662,6 +663,364 @@ func TestCommitterUnixRange_MatchesPerSHA_REQ_TOPTIER_S12_T2(t *testing.T) {
 	empty, err := c.CommitterUnixRange(base + ".." + base)
 	require.NoError(t, err)
 	assert.Empty(t, empty)
+}
+
+func TestCommitWalkReverse_SHA256ObjectFormat_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	gittest.InitSHA256Repo(t, repo)
+	gittest.Git(t, repo, "config", "user.email", "t@t")
+	gittest.Git(t, repo, "config", "user.name", "t")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "ops"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "ops", "worker.log"), []byte("line\n"), 0o644))
+	gittest.Git(t, repo, "add", "ops/worker.log")
+	gittest.Git(t, repo, "commit", "-m", "root")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "empty")
+
+	c := adapters.New(repo)
+	walk, walkErr := c.CommitWalkReverse("HEAD")
+	require.NoError(t, walkErr)
+	require.Len(t, walk, 2)
+	assert.Len(t, walk[0].SHA, 64)
+	assert.Empty(t, walk[0].FirstParent)
+	assert.Equal(t, []string{"ops/worker.log"}, walk[0].ChangedFiles)
+	assert.Len(t, walk[1].SHA, 64)
+	assert.Equal(t, walk[0].SHA, walk[1].FirstParent)
+
+	blobs, batchErr := c.ShowFilesBatch([]adapters.BlobRef{{Rev: walk[0].SHA, Path: "ops/worker.log"}})
+	require.NoError(t, batchErr)
+	require.Len(t, blobs, 1)
+	assert.True(t, blobs[0].OK)
+	assert.Equal(t, []byte("line\n"), blobs[0].Content)
+}
+
+func TestCommitWalkReverse_MatchesPerSHAHelpers_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	trunk := runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "root.txt"), []byte("r\n"), 0o644))
+	runGitDir(t, repo, "add", "root.txt")
+	runGitDir(t, repo, "commit", "-m", "root file")
+
+	runGitDir(t, repo, "checkout", "-b", "side")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "side.txt"), []byte("s\n"), 0o644))
+	runGitDir(t, repo, "add", "side.txt")
+	runGitDir(t, repo, "commit", "-m", "side")
+
+	runGitDir(t, repo, "checkout", trunk)
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "main.txt"), []byte("m\n"), 0o644))
+	runGitDir(t, repo, "add", "main.txt")
+	runGitDir(t, repo, "commit", "-m", "main file")
+	runGitDir(t, repo, "merge", "--no-ff", "-m", "merge side", "side")
+	runGitDir(t, repo, "commit", "--allow-empty", "-m", "empty after merge")
+
+	c := adapters.New(repo)
+	walk, err := c.CommitWalkReverse("HEAD")
+	require.NoError(t, err)
+
+	revSHAs := strings.Split(strings.TrimSpace(runGitOutput(t, repo, "rev-list", "--reverse", "HEAD")), "\n")
+	require.Equal(t, revSHAs, walkSHAs(walk), "walk order must match rev-list --reverse")
+
+	for _, e := range walk {
+		ct, ctErr := c.CommitterUnix(e.SHA)
+		require.NoError(t, ctErr)
+		assert.Equal(t, ct, e.CommitterUnix, "committer for %s", e.SHA)
+
+		parent, ok, pErr := c.FirstParent(e.SHA)
+		require.NoError(t, pErr)
+		assert.Equal(t, ok, e.FirstParent != "", "has-parent for %s", e.SHA)
+		assert.Equal(t, parent, e.FirstParent, "first parent for %s", e.SHA)
+
+		var wantFiles []string
+		if !ok {
+			wantFiles, err = c.ListFilesAtCommit(e.SHA)
+		} else {
+			wantFiles, err = c.DiffNameOnlyRange(parent, e.SHA)
+		}
+		require.NoError(t, err)
+		assert.Equal(t, wantFiles, e.ChangedFiles, "changed files for %s", e.SHA)
+	}
+}
+
+func walkSHAs(walk []adapters.CommitWalkEntry) []string {
+	out := make([]string, len(walk))
+	for i, e := range walk {
+		out[i] = e.SHA
+	}
+	return out
+}
+
+// TestCommitWalkReverse_Git234FlagAllowlist_REQ_OPORDER_LOCATE is the Git 2.34
+// walk-target axis: require --diff-merges=separate/--root/-z and the config
+// pins; reject legacy -m as the merge-diff selector.
+func TestCommitWalkReverse_Git234FlagAllowlist_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	runGitDir(t, repo, "commit", "--allow-empty", "-m", "second")
+
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	argvLog := filepath.Join(t.TempDir(), "argv.log")
+	wrapperDir := t.TempDir()
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >> %q
+for a in "$@"; do
+  case "$a" in
+    -m)
+      echo "CommitWalkReverse must use --diff-merges=separate, not -m: $a" >&2
+      exit 99
+      ;;
+  esac
+done
+exec %q "$@"
+`, argvLog, realGit)
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
+
+	walk, walkErr := adapters.New(repo).WithEnviron(gitPATHOverlay(t, wrapperDir)).CommitWalkReverse("HEAD")
+	require.NoError(t, walkErr)
+	require.NotEmpty(t, walk)
+
+	raw, readErr := os.ReadFile(argvLog)
+	require.NoError(t, readErr)
+	joined := string(raw)
+	assert.Contains(t, joined, "--diff-merges=separate")
+	assert.Contains(t, joined, " --root ")
+	assert.Contains(t, joined, " -z ")
+	assert.Contains(t, joined, "log.diffMerges=separate")
+	assert.Contains(t, joined, "diff.renames=true")
+	assert.NotContains(t, joined, " -m ")
+}
+
+func gitPATHOverlay(t *testing.T, wrapperDir string) []string {
+	t.Helper()
+	env := append([]string{}, os.Environ()...)
+	overlay := wrapperDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	for i, e := range env {
+		if strings.HasPrefix(e, "PATH=") || strings.HasPrefix(e, "Path=") {
+			env[i] = "PATH=" + overlay
+			return env
+		}
+	}
+	return append(env, "PATH="+overlay)
+}
+
+// adversarialGitConfigs is the OPORDER-LOCATE class matrix: every walk git
+// invocation must stay correct under hostile local config. Includes
+// log.diffMerges values that rewrite bare `-m` output without a pin; with
+// `--diff-merges=separate` the flag alone already overrides them (see
+// TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE).
+var adversarialGitConfigs = []struct {
+	name   string
+	config [][2]string
+}{
+	{name: "log.showRoot=false", config: [][2]string{{"log.showRoot", "false"}}},
+	{name: "core.quotePath=true", config: [][2]string{{"core.quotePath", "true"}}},
+	{name: "color.ui=always", config: [][2]string{{"color.ui", "always"}}},
+	{name: "log.decorate=short", config: [][2]string{{"log.decorate", "short"}}},
+	{name: "diff.renames=false", config: [][2]string{{"diff.renames", "false"}}},
+	{name: "diff.noprefix=true", config: [][2]string{{"diff.noprefix", "true"}}},
+	{name: "diff.relative=true", config: [][2]string{{"diff.relative", "true"}}},
+	{name: "log.diffMerges=combined", config: [][2]string{{"log.diffMerges", "combined"}}},
+	{name: "log.diffMerges=dense-combined", config: [][2]string{{"log.diffMerges", "dense-combined"}}},
+	{name: "log.diffMerges=first-parent", config: [][2]string{{"log.diffMerges", "first-parent"}}},
+	{name: "log.diffMerges=remerge", config: [][2]string{{"log.diffMerges", "remerge"}}},
+	{name: "log.diffMerges=off", config: [][2]string{{"log.diffMerges", "off"}}},
+	{name: "all hostile", config: [][2]string{
+		{"log.showRoot", "false"},
+		{"core.quotePath", "true"},
+		{"color.ui", "always"},
+		{"log.decorate", "short"},
+		{"diff.renames", "false"},
+		{"diff.noprefix", "true"},
+		{"diff.relative", "true"},
+		{"log.diffMerges", "combined"},
+	}},
+}
+
+// hostileLogDiffMergesModes is the prove-don't-assume matrix for whether
+// `--diff-merges=separate` alone makes the log.diffMerges -c pin unnecessary.
+var hostileLogDiffMergesModes = []string{
+	"combined", "dense-combined", "first-parent", "remerge", "off",
+}
+
+func applyAdversarialGitConfig(t *testing.T, repo string, pairs [][2]string) {
+	t.Helper()
+	gittest.SkipUnlessConfigValuesSupported(t, pairs)
+	for _, p := range pairs {
+		runGitDir(t, repo, "config", p[0], p[1])
+	}
+}
+
+func seedCommitWalkFixture(t *testing.T) (repo string, baseline []adapters.CommitWalkEntry) {
+	t.Helper()
+	repo = gittest.InitRepo(t)
+	nonASCII := filepath.Join(repo, "ops", "ópś.log")
+	require.NoError(t, os.MkdirAll(filepath.Dir(nonASCII), 0o755))
+	require.NoError(t, os.WriteFile(nonASCII, []byte("root-line\n"), 0o644))
+	runGitDir(t, repo, "add", "ops/ópś.log")
+	runGitDir(t, repo, "commit", "-m", "root ops non-ascii")
+	trunk := runGitOutput(t, repo, "rev-parse", "--abbrev-ref", "HEAD")
+
+	runGitDir(t, repo, "checkout", "-b", "side")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "ops", "side.log"), []byte("side\n"), 0o644))
+	runGitDir(t, repo, "add", "ops/side.log")
+	runGitDir(t, repo, "commit", "-m", "side")
+	runGitDir(t, repo, "checkout", trunk)
+	runGitDir(t, repo, "merge", "--no-ff", "-m", "merge side", "side")
+
+	runGitDir(t, repo, "checkout", "-b", "leg-a")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "ops", "leg-a.log"), []byte("a\n"), 0o644))
+	runGitDir(t, repo, "add", "ops/leg-a.log")
+	runGitDir(t, repo, "commit", "-m", "leg-a")
+	runGitDir(t, repo, "checkout", trunk)
+	runGitDir(t, repo, "checkout", "-b", "leg-b")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "ops", "leg-b.log"), []byte("b\n"), 0o644))
+	runGitDir(t, repo, "add", "ops/leg-b.log")
+	runGitDir(t, repo, "commit", "-m", "leg-b")
+	runGitDir(t, repo, "checkout", trunk)
+	runGitDir(t, repo, "merge", "--no-ff", "-m", "octopus", "leg-a", "leg-b")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "ops", "renamed-src.log"), []byte("r\n"), 0o644))
+	runGitDir(t, repo, "add", "ops/renamed-src.log")
+	runGitDir(t, repo, "commit", "-m", "add rename src")
+	runGitDir(t, repo, "mv", "ops/renamed-src.log", "ops/renamed-dst.log")
+	runGitDir(t, repo, "commit", "-m", "rename ops log")
+
+	var err error
+	baseline, err = adapters.New(repo).CommitWalkReverse("HEAD")
+	require.NoError(t, err)
+	require.NotEmpty(t, baseline)
+	foundRootPath := false
+	foundRenameDst := false
+	var octopusParents int
+	for _, e := range baseline {
+		if n := strings.Count(e.FirstParent, " "); n > 0 {
+			t.Fatalf("FirstParent must be single SHA, got %q", e.FirstParent)
+		}
+		parents := runGitOutput(t, repo, "rev-list", "--parents", "-n", "1", e.SHA)
+		fields := strings.Fields(parents)
+		if len(fields) > 3 { // sha + ≥3 parents = octopus
+			octopusParents = len(fields) - 1
+			assert.Equal(t, fields[1], e.FirstParent, "octopus first-parent for %s", e.SHA)
+		}
+		for _, f := range e.ChangedFiles {
+			if f == "ops/ópś.log" {
+				foundRootPath = true
+			}
+			if f == "ops/renamed-dst.log" {
+				foundRenameDst = true
+			}
+			assert.NotContains(t, f, `\303`, "paths must not be C-quoted")
+			assert.False(t, strings.HasPrefix(f, `"`), "paths must not be quotePath-wrapped")
+		}
+	}
+	assert.True(t, foundRootPath, "root commit must list ops/ópś.log (needs --root)")
+	assert.True(t, foundRenameDst, "rename commit must list destination under diff.renames=true")
+	assert.GreaterOrEqual(t, octopusParents, 3, "fixture must include an octopus merge")
+	return repo, baseline
+}
+
+func TestCommitWalkReverse_AdversarialUserConfigMatrix_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	for _, tc := range adversarialGitConfigs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo, baseline := seedCommitWalkFixture(t)
+			applyAdversarialGitConfig(t, repo, tc.config)
+			walk, walkErr := adapters.New(repo).CommitWalkReverse("HEAD")
+			require.NoError(t, walkErr)
+			require.Equal(t, walkSHAs(baseline), walkSHAs(walk), "SHA order under %s", tc.name)
+			for i := range baseline {
+				assert.Equal(t, baseline[i].ChangedFiles, walk[i].ChangedFiles, "files[%d] under %s", i, tc.name)
+				assert.Equal(t, baseline[i].CommitterUnix, walk[i].CommitterUnix)
+				assert.Equal(t, baseline[i].FirstParent, walk[i].FirstParent)
+			}
+		})
+	}
+}
+
+// TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE proves
+// `--diff-merges=separate` alone overrides hostile log.diffMerges (pin not
+// required for correctness). Bare `-m` without the pin still diverges.
+// Production keeps the -c log.diffMerges pin as belt-and-suspenders.
+func TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	commonPins := []string{
+		"-c", "log.showRoot=true",
+		"-c", "core.quotePath=false",
+		"-c", "color.ui=never",
+		"-c", "color.diff=never",
+		"-c", "log.decorate=false",
+		"-c", "diff.renames=true",
+		"-c", "diff.noprefix=false",
+		"-c", "diff.relative=false",
+	}
+	for _, mode := range hostileLogDiffMergesModes {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			gittest.SkipUnlessConfigValuesSupported(t, [][2]string{{"log.diffMerges", mode}})
+			repo, _ := seedCommitWalkFixture(t)
+			rawWalk := func(extraPins []string, mergeFlag string) []byte {
+				t.Helper()
+				args := append(append([]string{}, extraPins...), commonPins...)
+				args = append(args,
+					"log", "-z", "--reverse", mergeFlag, "--root", "--name-only",
+					"--format=%H%x09%ct%x09%P", "HEAD",
+				)
+				cmd := adapters.NonInteractiveGitCommand(repo, args...)
+				out, err := cmd.Output()
+				require.NoError(t, err, "git %v", args)
+				return out
+			}
+			pinnedFlag := rawWalk([]string{"-c", "log.diffMerges=separate"}, "--diff-merges=separate")
+			runGitDir(t, repo, "config", "log.diffMerges", mode)
+			flagAlone := rawWalk(nil, "--diff-merges=separate")
+			assert.Equal(t, pinnedFlag, flagAlone,
+				"--diff-merges=separate alone must match pinned walk under log.diffMerges=%s", mode)
+			assert.False(t, bytes.Equal(pinnedFlag, rawWalk(nil, "-m")),
+				"bare -m must diverge under log.diffMerges=%s (else matrix is vacuous)", mode)
+		})
+	}
+}
+
+func TestShowFilesBatch_MatchesShowFileAtCommit_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	for _, tc := range adversarialGitConfigs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			repo := initTestRepo(t)
+			path := filepath.Join(repo, "ops", "worker.log")
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+			require.NoError(t, os.WriteFile(path, []byte("line-a\n"), 0o644))
+			runGitDir(t, repo, "add", "ops/worker.log")
+			runGitDir(t, repo, "commit", "-m", "a")
+			shaA := runGitOutput(t, repo, "rev-parse", "HEAD")
+			require.NoError(t, os.WriteFile(path, []byte("line-a\nline-b\n"), 0o644))
+			runGitDir(t, repo, "add", "ops/worker.log")
+			runGitDir(t, repo, "commit", "-m", "b")
+			shaB := runGitOutput(t, repo, "rev-parse", "HEAD")
+			applyAdversarialGitConfig(t, repo, tc.config)
+
+			c := adapters.New(repo)
+			refs := []adapters.BlobRef{
+				{Rev: shaA, Path: "ops/worker.log"},
+				{Rev: shaB, Path: "ops/worker.log"},
+				{Rev: shaB, Path: "ops/missing.log"},
+			}
+			got, batchErr := c.ShowFilesBatch(refs)
+			require.NoError(t, batchErr)
+			require.Len(t, got, 3)
+			a, aErr := c.ShowFileAtCommit(shaA, "ops/worker.log")
+			require.NoError(t, aErr)
+			b, bErr := c.ShowFileAtCommit(shaB, "ops/worker.log")
+			require.NoError(t, bErr)
+			assert.True(t, got[0].OK)
+			assert.Equal(t, a, got[0].Content)
+			assert.True(t, got[1].OK)
+			assert.Equal(t, b, got[1].Content)
+			assert.False(t, got[2].OK)
+		})
+	}
 }
 
 func runGitDir(t *testing.T, dir string, args ...string) {

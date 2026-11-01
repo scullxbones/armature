@@ -1,9 +1,12 @@
 package adapters
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1296,6 +1299,336 @@ func (c *Client) CommitterUnixRange(rangeSpec string) ([]int64, error) {
 		outUnix = append(outUnix, n)
 	}
 	return outUnix, nil
+}
+
+// CommitWalkEntry is one commit from CommitWalkReverse: identity, committer
+// time, first parent (empty for roots), and paths changed vs that parent
+// (full tree for roots). Matches DiffNameOnlyRange(firstParent, sha) /
+// ListFilesAtCommit for roots.
+type CommitWalkEntry struct {
+	SHA           string
+	CommitterUnix int64
+	FirstParent   string
+	ChangedFiles  []string
+}
+
+// BlobRef names a tree path at a revision for ShowFilesBatch (`rev:path`).
+type BlobRef struct {
+	Rev  string
+	Path string
+}
+
+// BlobResult is one ShowFilesBatch response. OK is false when the path is
+// missing at Rev (cat-file "missing"); that is not an error.
+type BlobResult struct {
+	Content []byte
+	OK      bool
+}
+
+// commitWalkFormat is TAB-separated sha/ct/parents so -z can NUL-delimit
+// headers from paths. Avoids embedding %x00 in --format (ambiguous with -z).
+const commitWalkFormat = "%H%x09%ct%x09%P"
+
+// commitWalkConfigPins force walk output independent of user git config.
+// log.diffMerges=separate matches `--diff-merges=separate` (per-parent
+// blocks). The CLI flag alone already overrides hostile log.diffMerges
+// (combined/dense-combined/remerge/off/…); the -c pin stays as belt-and-
+// suspenders. diff.renames=true matches DiffNameOnlyRange rename detection.
+var commitWalkConfigPins = []string{
+	"-c", "log.diffMerges=separate",
+	"-c", "log.showRoot=true",
+	"-c", "core.quotePath=false",
+	"-c", "color.ui=never",
+	"-c", "color.diff=never",
+	"-c", "log.decorate=false",
+	"-c", "diff.renames=true",
+	"-c", "diff.noprefix=false",
+	"-c", "diff.relative=false",
+}
+
+// CommitWalkReverse returns every commit reachable from rev, oldest first, in
+// one git process. FirstParent and ChangedFiles use first-parent merge diffs
+// so callers can replace per-SHA CommitterUnix, FirstParent, DiffNameOnlyRange,
+// and ListFilesAtCommit loops.
+//
+// Walk target is Git 2.34+: `--diff-merges=separate` (Git 2.31+) for
+// per-parent merge diffs, `--root` so log.showRoot=false still emits the
+// root commit, `-z` so core.quotePath cannot C-quote non-ASCII paths.
+// `--diff-merges=separate` repeats merge SHAs once per parent;
+// parseCommitWalkOutput keeps the first block (first-parent diff).
+// Walk-affecting config is pinned via commitWalkConfigPins so user
+// log.diffMerges / showRoot / quotePath / color / decorate / renames /
+// noprefix / relative cannot change the machine-readable output (hash
+// algorithm is still repo-native: SHA-1 40-hex or SHA-256 64-hex OIDs).
+// Documented install min in architecture.md is unchanged by this helper.
+func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
+	rev = strings.TrimSpace(rev)
+	if rev == "" {
+		return nil, fmt.Errorf("git log commit walk: rev is required")
+	}
+	args := make([]string, 0, len(commitWalkConfigPins)+8)
+	args = append(args, commitWalkConfigPins...)
+	args = append(args,
+		"log",
+		"-z",
+		"--reverse",
+		"--diff-merges=separate",
+		"--root",
+		"--name-only",
+		"--format="+commitWalkFormat,
+		rev,
+	)
+	cmd := c.cmd(args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git log commit walk %s: %w", rev, err)
+	}
+	entries, parseErr := parseCommitWalkOutput(out)
+	if parseErr != nil {
+		return nil, fmt.Errorf("parse commit walk %s: %w", rev, parseErr)
+	}
+	return entries, nil
+}
+
+// FilesBatchSession is one `git cat-file --batch` process. Read one BlobRef at
+// a time so callers can discard each snapshot before requesting the next
+// (LocateOps must stay O(history) memory, not O(history×log-size)).
+type FilesBatchSession struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	reader *bufio.Reader
+	closed bool
+}
+
+// BeginFilesBatch starts a Git 2.25+ `cat-file --batch` session.
+func (c *Client) BeginFilesBatch() (*FilesBatchSession, error) {
+	cmd := c.cmd("cat-file", "--batch")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file --batch stdin: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close() //nolint:errcheck // best-effort abort before start
+		return nil, fmt.Errorf("git cat-file --batch stdout: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close() //nolint:errcheck // best-effort abort before start
+		return nil, fmt.Errorf("git cat-file --batch start: %w", err)
+	}
+	return &FilesBatchSession{
+		cmd:    cmd,
+		stdin:  stdin,
+		reader: bufio.NewReader(stdout),
+	}, nil
+}
+
+// Read requests one rev:path and returns its blob. The returned Content is not
+// retained by the session; callers should drop it before the next Read.
+func (s *FilesBatchSession) Read(ref BlobRef) (BlobResult, error) {
+	if s == nil || s.closed {
+		return BlobResult{}, fmt.Errorf("git cat-file --batch: session closed")
+	}
+	line := ref.Rev + ":" + ref.Path + "\n"
+	if _, err := io.WriteString(s.stdin, line); err != nil {
+		return BlobResult{}, fmt.Errorf("git cat-file --batch write %s:%s: %w", ref.Rev, ref.Path, err)
+	}
+	res, err := readCatFileBatchItem(s.reader)
+	if err != nil {
+		return BlobResult{}, fmt.Errorf("git cat-file --batch read %s:%s: %w", ref.Rev, ref.Path, err)
+	}
+	return res, nil
+}
+
+// Close ends the batch session. Safe to call multiple times.
+func (s *FilesBatchSession) Close() error {
+	if s == nil || s.closed {
+		return nil
+	}
+	s.closed = true
+	_ = s.stdin.Close() //nolint:errcheck // closing writer signals EOF to cat-file
+	if err := s.cmd.Wait(); err != nil {
+		return fmt.Errorf("git cat-file --batch: %w", err)
+	}
+	return nil
+}
+
+// ShowFilesBatch returns blob contents for each rev:path in one
+// `git cat-file --batch` process (Git 2.25+). Missing paths yield OK=false.
+// Prefer BeginFilesBatch/Read when snapshots must not all be retained.
+func (c *Client) ShowFilesBatch(refs []BlobRef) ([]BlobResult, error) {
+	out := make([]BlobResult, len(refs))
+	if len(refs) == 0 {
+		return out, nil
+	}
+	sess, err := c.BeginFilesBatch()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sess.Close() }() //nolint:errcheck // results already read
+	for i, ref := range refs {
+		res, rerr := sess.Read(ref)
+		if rerr != nil {
+			_ = sess.Close() //nolint:errcheck
+			return nil, rerr
+		}
+		out[i] = res
+	}
+	if err := sess.Close(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func readCatFileBatchItem(r *bufio.Reader) (BlobResult, error) {
+	header, err := r.ReadBytes('\n')
+	if err != nil {
+		return BlobResult{}, err
+	}
+	line := strings.TrimSuffix(string(header), "\n")
+	if strings.HasSuffix(line, " missing") {
+		return BlobResult{OK: false}, nil
+	}
+	// <oid> SP <type> SP <size> — oid is 40-hex (SHA-1) or 64-hex (SHA-256).
+	fields := strings.Fields(line)
+	if len(fields) < 3 {
+		return BlobResult{}, fmt.Errorf("bad cat-file header %q", line)
+	}
+	if !isGitObjectID(fields[0]) {
+		return BlobResult{}, fmt.Errorf("bad cat-file oid in %q: want 40- or 64-hex object id", line)
+	}
+	size, err := strconv.Atoi(fields[len(fields)-1])
+	if err != nil || size < 0 {
+		return BlobResult{}, fmt.Errorf("bad cat-file size in %q: %w", line, err)
+	}
+	content := make([]byte, size)
+	if _, err := io.ReadFull(r, content); err != nil {
+		return BlobResult{}, err
+	}
+	// cat-file --batch appends a trailing LF after the payload.
+	if _, err := r.ReadByte(); err != nil {
+		return BlobResult{}, err
+	}
+	return BlobResult{Content: content, OK: true}, nil
+}
+
+func parseCommitWalkOutput(out []byte) ([]CommitWalkEntry, error) {
+	if len(out) == 0 {
+		return []CommitWalkEntry{}, nil
+	}
+	parts := bytes.Split(out, []byte{0})
+	var entries []CommitWalkEntry
+	seen := map[string]struct{}{}
+	i := 0
+	for i < len(parts) {
+		raw := parts[i]
+		i++
+		if len(raw) == 0 {
+			continue
+		}
+		if !isCommitWalkHeader(raw) {
+			return nil, fmt.Errorf("expected commit header, got %q", truncateForErr(raw))
+		}
+		sha, ct, firstParent, herr := parseCommitWalkHeader(raw)
+		if herr != nil {
+			return nil, herr
+		}
+		var files []string
+		for i < len(parts) {
+			p := parts[i]
+			if len(p) == 0 {
+				i++
+				break
+			}
+			if isCommitWalkHeader(p) {
+				break
+			}
+			path := strings.TrimPrefix(string(p), "\n")
+			if path != "" {
+				files = append(files, path)
+			}
+			i++
+		}
+		if _, dup := seen[sha]; dup {
+			continue
+		}
+		seen[sha] = struct{}{}
+		if files == nil {
+			files = []string{}
+		}
+		entries = append(entries, CommitWalkEntry{
+			SHA:           sha,
+			CommitterUnix: ct,
+			FirstParent:   firstParent,
+			ChangedFiles:  files,
+		})
+	}
+	return entries, nil
+}
+
+// gitObjectIDLenSHA1 / gitObjectIDLenSHA256 are the hex widths git emits for
+// SHA-1 and SHA-256 object formats (architecture min Git 2.25 supports both
+// once the repo is initialized with --object-format=sha256 on Git ≥2.29).
+const (
+	gitObjectIDLenSHA1   = 40
+	gitObjectIDLenSHA256 = 64
+)
+
+func isGitObjectID(s string) bool {
+	n := len(s)
+	if n != gitObjectIDLenSHA1 && n != gitObjectIDLenSHA256 {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		b := s[i]
+		ok := (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func isCommitWalkHeader(raw []byte) bool {
+	// OID (40 hex SHA-1 or 64 hex SHA-256) TAB ...
+	switch {
+	case len(raw) > gitObjectIDLenSHA1 && raw[gitObjectIDLenSHA1] == '\t':
+		return isGitObjectID(string(raw[:gitObjectIDLenSHA1]))
+	case len(raw) > gitObjectIDLenSHA256 && raw[gitObjectIDLenSHA256] == '\t':
+		return isGitObjectID(string(raw[:gitObjectIDLenSHA256]))
+	default:
+		return false
+	}
+}
+
+func parseCommitWalkHeader(raw []byte) (sha string, ct int64, firstParent string, err error) {
+	fields := bytes.SplitN(raw, []byte{'\t'}, 3)
+	if len(fields) != 3 {
+		return "", 0, "", fmt.Errorf("commit header %q: want sha, ct, parents", truncateForErr(raw))
+	}
+	sha = string(fields[0])
+	if !isGitObjectID(sha) {
+		return "", 0, "", fmt.Errorf("commit header oid %q: want 40- or 64-hex object id", sha)
+	}
+	ct, convErr := strconv.ParseInt(string(fields[1]), 10, 64)
+	if convErr != nil {
+		return "", 0, "", fmt.Errorf("committer unix for %s: %w", sha, convErr)
+	}
+	if parents := strings.Fields(string(fields[2])); len(parents) > 0 {
+		if !isGitObjectID(parents[0]) {
+			return "", 0, "", fmt.Errorf("commit header parent oid %q: want 40- or 64-hex object id", parents[0])
+		}
+		firstParent = parents[0]
+	}
+	return sha, ct, firstParent, nil
+}
+
+func truncateForErr(b []byte) string {
+	const max = 96 // fits a 64-hex SHA-256 oid plus a short suffix
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "…"
 }
 
 // IsAncestor reports whether anc is an ancestor of desc (inclusive).

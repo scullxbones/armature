@@ -1,16 +1,23 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 154,
+      "count": 171,
       "names": [
         "AppendLog",
         "AppendLog.Append",
         "AppendLog.AppendIf",
         "AppendLog.Path",
+        "BlobRef",
+        "BlobRef.Path",
+        "BlobRef.Rev",
+        "BlobResult",
+        "BlobResult.Content",
+        "BlobResult.OK",
         "CheckMinGitVersion",
         "Client",
         "Client.AddPaths",
         "Client.AddWorktree",
+        "Client.BeginFilesBatch",
         "Client.BeginPerRunRef",
         "Client.BlobExists",
         "Client.BundleCreateAdvertised",
@@ -20,6 +27,7 @@
         "Client.CommitDiff",
         "Client.CommitIndexNoVerify",
         "Client.CommitPathsNoVerify",
+        "Client.CommitWalkReverse",
         "Client.CommitWithMessage",
         "Client.CommitWorktreeOp",
         "Client.CommitterUnix",
@@ -67,6 +75,7 @@
         "Client.SetGitConfig",
         "Client.SetGitConfigWorktree",
         "Client.ShowFileAtCommit",
+        "Client.ShowFilesBatch",
         "Client.StablePatchID",
         "Client.StagedPaths",
         "Client.Toplevel",
@@ -75,6 +84,11 @@
         "Client.UpdateRef",
         "Client.WithEnviron",
         "CommandGit",
+        "CommitWalkEntry",
+        "CommitWalkEntry.ChangedFiles",
+        "CommitWalkEntry.CommitterUnix",
+        "CommitWalkEntry.FirstParent",
+        "CommitWalkEntry.SHA",
         "DetectGitVersion",
         "DiffStatusEntry",
         "DiffStatusEntry.OldPath",
@@ -88,6 +102,9 @@
         "ErrRemoteRefMissing",
         "ExecuteHook",
         "ExpandGlobs",
+        "FilesBatchSession",
+        "FilesBatchSession.Close",
+        "FilesBatchSession.Read",
         "GitConfig",
         "GitInitBareMain",
         "GitInitMain",
@@ -689,7 +706,7 @@
       ]
     },
     "internal/gittest": {
-      "count": 13,
+      "count": 15,
       "names": [
         "CloneFixture",
         "CloneFixtureTo",
@@ -699,11 +716,13 @@
         "Git",
         "Init",
         "InitRepo",
+        "InitSHA256Repo",
         "InitWithOrigin",
         "IsolateGit",
         "Main",
         "NewFixture",
-        "SetLocalConfig"
+        "SetLocalConfig",
+        "SkipUnlessConfigValuesSupported"
       ]
     },
     "internal/harnesshook": {

@@ -112,21 +112,34 @@ func locateAllPublishedFromWorktreeFiles(in LocateInput) ([]LocatedOp, error) {
 }
 
 func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error) {
-	shas, err := gc.RevListReverse("HEAD")
+	// Flat git budget (independent of commit / op-log-touching commit count):
+	// one CommitWalkReverse, one RevListReverse each for published/cutover
+	// ancestor sets, one cat-file --batch session streamed per log touch.
+	// Snapshots are discarded after parse (O(history) memory via line-count
+	// cache, not O(history×log-size)). Error text: "commit walk HEAD".
+	walk, err := gc.CommitWalkReverse("HEAD")
 	if err != nil {
-		return nil, fmt.Errorf("rev-list HEAD: %w", err)
+		return nil, fmt.Errorf("commit walk HEAD: %w", err)
 	}
 	pubSHA, err := resolvePublishedTip(gc, in)
 	if err != nil {
 		return nil, err
 	}
+	publishedSet, err := ancestorSet(gc, pubSHA)
+	if err != nil {
+		return nil, err
+	}
 	cutover := resolveCutover(gc, in)
+	cutoverSet, err := ancestorSet(gc, cutover)
+	if err != nil {
+		return nil, err
+	}
 	from := strings.TrimSpace(in.FromCommit)
 	pastFrom := from == ""
 	if from != "" {
 		found := false
-		for _, sha := range shas {
-			if sha == from {
+		for _, e := range walk {
+			if e.SHA == from {
 				found = true
 				break
 			}
@@ -136,49 +149,91 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 		}
 	}
 	prefs := prefixes(in)
+
+	batch, err := gc.BeginFilesBatch()
+	if err != nil {
+		return nil, err
+	}
+	located, streamErr := streamLocateFromWalk(batch, walk, from, pastFrom, prefs, publishedSet, pubSHA, cutover, cutoverSet)
+	closeErr := batch.Close()
+	if streamErr != nil {
+		return nil, streamErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return located, nil
+}
+
+type locateBlobReader interface {
+	Read(ref adapters.BlobRef) (adapters.BlobResult, error)
+}
+
+func streamLocateFromWalk(
+	batch locateBlobReader,
+	walk []adapters.CommitWalkEntry,
+	from string,
+	pastFrom bool,
+	prefs []string,
+	publishedSet map[string]struct{},
+	pubSHA string,
+	cutover string,
+	cutoverSet map[string]struct{},
+) ([]LocatedOp, error) {
+	// nonEmptyLines at rev:path — ints only, so append-only histories stay
+	// linear in memory even when each snapshot grows.
+	lineCounts := map[string]int{}
 	var located []LocatedOp
-	for i, sha := range shas {
+	for i, e := range walk {
 		if !pastFrom {
-			if sha == from {
+			if e.SHA == from {
 				pastFrom = true
 			}
 			continue
 		}
-		committer, ctErr := gc.CommitterUnix(sha)
-		if ctErr != nil {
-			return nil, ctErr
-		}
-		parent, hasParent, pErr := gc.FirstParent(sha)
-		if pErr != nil {
-			return nil, pErr
-		}
-		files, fErr := commitLogFiles(gc, sha, parent, hasParent, prefs)
-		if fErr != nil {
-			return nil, fErr
-		}
-		published, pubErr := commitPublished(gc, sha, pubSHA)
-		if pubErr != nil {
-			return nil, pubErr
-		}
+		_, inPublished := publishedSet[e.SHA]
+		published := pubSHA != "" && inPublished
 		epoch := epochTimestampFilenameLine
 		if cutover != "" {
-			before, bErr := commitStrictlyBefore(gc, sha, cutover)
-			if bErr != nil {
-				return nil, bErr
-			}
-			if !before {
+			_, inCutover := cutoverSet[e.SHA]
+			if !inCutover || e.SHA == cutover {
 				epoch = epochCommitThenLine
 			}
 		}
 		commitN := int64(i + 1)
-		for _, f := range files {
-			opsInCommit, lErr := opsIntroducedInCommit(gc, sha, parent, hasParent, f)
+		for _, f := range filterOpLogPaths(e.ChangedFiles, prefs) {
+			oldLines := 0
+			if e.FirstParent != "" {
+				parentKey := blobLineKey(e.FirstParent, f)
+				if n, ok := lineCounts[parentKey]; ok {
+					oldLines = n
+				} else {
+					oldRes, oldErr := batch.Read(adapters.BlobRef{Rev: e.FirstParent, Path: f})
+					if oldErr != nil {
+						return nil, oldErr
+					}
+					if oldRes.OK {
+						oldLines = countNonEmptyLines(oldRes.Content)
+						lineCounts[parentKey] = oldLines
+					}
+				}
+			}
+			neuRes, neuErr := batch.Read(adapters.BlobRef{Rev: e.SHA, Path: f})
+			if neuErr != nil {
+				return nil, neuErr
+			}
+			if !neuRes.OK {
+				continue
+			}
+			neu := neuRes.Content
+			lineCounts[blobLineKey(e.SHA, f)] = countNonEmptyLines(neu)
+			opsInCommit, lErr := parseLogBytesFromLine(neu, filepath.Base(f), oldLines)
 			if lErr != nil {
 				return nil, lErr
 			}
 			for _, loc := range opsInCommit {
-				loc.CommitSHA = sha
-				loc.CommitterUnix = committer
+				loc.CommitSHA = e.SHA
+				loc.CommitterUnix = e.CommitterUnix
 				loc.Published = published
 				loc.Seq.Epoch = epoch
 				loc.Seq.CommitN = commitN
@@ -189,11 +244,26 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 	return located, nil
 }
 
-func commitPublished(gc *adapters.Client, sha, pubSHA string) (bool, error) {
-	if pubSHA == "" || sha == pubSHA {
-		return pubSHA != "", nil
+func blobLineKey(rev, path string) string {
+	return rev + "\x00" + path
+}
+
+// ancestorSet returns every commit reachable from tip (inclusive) in one
+// rev-list. An empty tip yields a nil map (caller treats membership as false).
+func ancestorSet(gc *adapters.Client, tip string) (map[string]struct{}, error) {
+	tip = strings.TrimSpace(tip)
+	if tip == "" {
+		return nil, nil
 	}
-	return gc.IsAncestor(sha, pubSHA)
+	shas, err := gc.RevListReverse(tip)
+	if err != nil {
+		return nil, fmt.Errorf("rev-list %s: %w", tip, err)
+	}
+	set := make(map[string]struct{}, len(shas))
+	for _, sha := range shas {
+		set[sha] = struct{}{}
+	}
+	return set, nil
 }
 
 const CutoverConfigKey = "armature.oporder-cutover"
@@ -209,28 +279,7 @@ func resolveCutover(gc *adapters.Client, in LocateInput) string {
 	return strings.TrimSpace(v)
 }
 
-func commitStrictlyBefore(gc *adapters.Client, sha, cutover string) (bool, error) {
-	if sha == cutover {
-		return false, nil
-	}
-	return gc.IsAncestor(sha, cutover)
-}
-
-func commitLogFiles(gc *adapters.Client, sha, parent string, hasParent bool, opsPrefixes []string) ([]string, error) {
-	var files []string
-	if !hasParent {
-		all, err := gc.ListFilesAtCommit(sha)
-		if err != nil {
-			return nil, err
-		}
-		files = all
-	} else {
-		changed, err := gc.DiffNameOnlyRange(parent, sha)
-		if err != nil {
-			return nil, err
-		}
-		files = changed
-	}
+func filterOpLogPaths(files []string, opsPrefixes []string) []string {
 	var logs []string
 	for _, f := range files {
 		if !isOpLogPath(f, opsPrefixes) {
@@ -238,7 +287,7 @@ func commitLogFiles(gc *adapters.Client, sha, parent string, hasParent bool, ops
 		}
 		logs = append(logs, f)
 	}
-	return logs, nil
+	return logs
 }
 
 func isOpLogPath(f string, opsPrefixes []string) bool {
@@ -255,22 +304,6 @@ func isOpLogPath(f string, opsPrefixes []string) bool {
 		}
 	}
 	return false
-}
-
-func opsIntroducedInCommit(gc *adapters.Client, sha, parent string, hasParent bool, path string) ([]LocatedOp, error) {
-	var old []byte
-	if hasParent {
-		b, err := gc.ShowFileAtCommit(parent, path)
-		if err == nil {
-			old = b
-		}
-	}
-	neu, err := gc.ShowFileAtCommit(sha, path)
-	if err != nil {
-		return nil, nil
-	}
-	oldLines := countNonEmptyLines(old)
-	return parseLogBytesFromLine(neu, filepath.Base(path), oldLines)
 }
 
 func countNonEmptyLines(b []byte) int {
