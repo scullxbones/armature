@@ -242,7 +242,8 @@ test: build
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
-	exit $$summary
+	if [ $$summary -ne 0 ]; then exit $$summary; fi; \
+	scripts/check-test-porcelain.sh .
 
 test-ci: build
 ifeq ($(GOOS_NATIVE),windows)
@@ -268,7 +269,8 @@ coverage: build
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
-	if [ $$summary -ne 0 ]; then exit $$summary; fi
+	if [ $$summary -ne 0 ]; then exit $$summary; fi; \
+	scripts/check-test-porcelain.sh .
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
 

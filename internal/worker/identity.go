@@ -2,6 +2,7 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -162,17 +163,17 @@ func enableWorktreeConfig(repoPath string) error {
 // config so follow-up commands in that worktree resolve the claim owner.
 //
 // Git 2.43+ copies the main worktree's config.worktree on `git worktree add`;
-// Git 2.34 (the product floor) does not. Claim-created task worktrees must
-// keep the claiming worker's identity without relying on that newer behavior.
-// Callers pass the effective claim owner (the same ID used for the claim op,
-// including `--worker-id` / ARM_WORKER_ID overrides) — do not re-resolve from
-// repo config here, or an override can seed the wrong id or fail closed.
+// Git 2.34 (the product floor) does not. Claim still seeds missing ids on
+// 2.34; copy-replacement is kept for 2.43+ so `--worker-id` / ARM_WORKER_ID
+// overrides do not keep writing the wrong ops log after Git's copy.
+// Callers pass the effective claim owner (same ID as the claim op).
 // A ~log-slot suffix is stripped; worktree config stores the bare worker id.
 //
-// An existing dest id is preserved only when it is an explicit worktree init
-// (W21: distinct per-worktree ids). A Git 2.43+ copy of the main worktree's
-// id is not explicit — replace it with the effective claim owner so overrides
-// do not keep writing the wrong ops log.
+// An existing dest id is NEVER replaced unless it is a proven Git copy:
+// main's worktree id must read OK, be non-empty, and equal the dest id.
+// Any error or uncertainty (missing main id, read failure, distinct dest
+// init) keeps the existing id (W21). Main path comes from the first entry of
+// `git worktree list --porcelain` (not filepath.Dir of the common dir).
 func SeedWorktreeIdentity(destWorktree, workerID string) error {
 	destWorktree = strings.TrimSpace(destWorktree)
 	workerID = strings.TrimSpace(workerID)
@@ -196,7 +197,8 @@ func SeedWorktreeIdentity(destWorktree, workerID string) error {
 			if existing == id {
 				return nil
 			}
-			if mainID, mainErr := mainWorktreeWorkerID(destWorktree); mainErr == nil && existing != mainID {
+			mainID, mainErr := mainWorktreeWorkerID(destWorktree)
+			if !replaceProvenGitCopiedID(existing, mainID, mainErr) {
 				return nil
 			}
 		}
@@ -210,14 +212,50 @@ func SeedWorktreeIdentity(destWorktree, workerID string) error {
 	return nil
 }
 
-// mainWorktreeWorkerID reads armature.worker-id from the repository's main
-// worktree config (the source of Git 2.43+ worktree-add copies).
+// replaceProvenGitCopiedID is true only when existing is a proven Git 2.43+
+// copy of main's worktree id. Error, empty main id, or mismatch → keep.
+func replaceProvenGitCopiedID(existing, mainID string, mainErr error) bool {
+	if strings.TrimSpace(existing) == "" {
+		return false
+	}
+	if mainErr != nil {
+		return false
+	}
+	mainID = strings.TrimSpace(mainID)
+	if mainID == "" {
+		return false
+	}
+	return existing == mainID
+}
+
+// mainWorktreePath returns the first path from `git worktree list --porcelain`
+// (the main worktree). Avoids filepath.Dir(common-dir), which breaks for bare
+// repos and some linked layouts.
+func mainWorktreePath(from string) (string, error) {
+	cmd := adapters.CommandGit(context.Background(), nil, "-C", from, "worktree", "list", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git worktree list --porcelain: %w", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			path := strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+			if path == "" {
+				return "", fmt.Errorf("git worktree list --porcelain: empty main path")
+			}
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("git worktree list --porcelain: no worktree entries")
+}
+
+// mainWorktreeWorkerID reads armature.worker-id from the main worktree
+// (source of Git 2.43+ worktree-add copies).
 func mainWorktreeWorkerID(destWorktree string) (string, error) {
-	common, err := adapters.New(destWorktree).CommonGitDir()
+	mainPath, err := mainWorktreePath(destWorktree)
 	if err != nil {
 		return "", err
 	}
-	mainPath := filepath.Dir(common)
 	v, err := adapters.New(mainPath).ReadGitConfigWorktree(gitConfigKey)
 	if err != nil {
 		return "", err

@@ -1839,6 +1839,66 @@ func TestClaimRebindSeedsWorktreeIdentity_REQ_GIT234_MIN(t *testing.T) {
 		"rebindExistingDest must SeedWorktreeIdentity with the effective claim owner")
 }
 
+// Real `arm claim` binary table for seed keep/replace (runs on Git 2.34 floor CI and 2.43+).
+func TestClaimSeedKeepUnlessProvenCopy_Table_REQ_GIT234_MIN(t *testing.T) {
+	t.Parallel()
+
+	claimWithOverride := func(t *testing.T, repo, worker string) {
+		t.Helper()
+		claim := testRootCmd(t)
+		claim.SetOut(new(bytes.Buffer))
+		claim.SetArgs([]string{
+			"claim", "--repo", repo, "--issue", "task-01", "--worktree",
+			"--worker-id", worker,
+		})
+		require.NoError(t, claim.Execute())
+	}
+	wtID := func(t *testing.T, wt string) string {
+		t.Helper()
+		return strings.TrimSpace(runOutput(t, wt, "config", "--worktree", "--get", "armature.worker-id"))
+	}
+
+	t.Run("a_main_no_worktree_id_explicit_kept", func(t *testing.T) {
+		t.Parallel()
+		repo := setupRepoWithTask(t)
+		wt := filepath.Join(repo, ".worktrees", "task-01")
+		run(t, repo, "git", "worktree", "add", "-b", "task/task-01", wt)
+		run(t, repo, "git", "config", "extensions.worktreeConfig", "true")
+		// Explicit dest init; do NOT set main's worktree id (local fixture id is not worktree-scoped).
+		run(t, wt, "git", "config", "--worktree", "armature.worker-id", "explicit-wt")
+		claimWithOverride(t, repo, "override-worker")
+		assert.Equal(t, "explicit-wt", wtID(t, wt), "(a) keep when main has no worktree id")
+	})
+
+	t.Run("b_main_differs_kept", func(t *testing.T) {
+		t.Parallel()
+		repo := setupRepoWithTask(t)
+		wt := filepath.Join(repo, ".worktrees", "task-01")
+		run(t, repo, "git", "worktree", "add", "-b", "task/task-01", wt)
+		run(t, repo, "git", "config", "extensions.worktreeConfig", "true")
+		run(t, repo, "git", "config", "--worktree", "armature.worker-id", "main-worker")
+		run(t, wt, "git", "config", "--worktree", "armature.worker-id", "other-worker")
+		claimWithOverride(t, repo, "override-worker")
+		assert.Equal(t, "other-worker", wtID(t, wt), "(b) keep when dest differs from main")
+	})
+
+	t.Run("c_main_equals_copy_replaced", func(t *testing.T) {
+		t.Parallel()
+		repo := setupRepoWithTask(t)
+		wt := filepath.Join(repo, ".worktrees", "task-01")
+		run(t, repo, "git", "worktree", "add", "-b", "task/task-01", wt)
+		run(t, repo, "git", "config", "extensions.worktreeConfig", "true")
+		run(t, repo, "git", "config", "--worktree", "armature.worker-id", "main-worker")
+		run(t, wt, "git", "config", "--worktree", "armature.worker-id", "main-worker")
+		claimWithOverride(t, repo, "override-worker")
+		assert.Equal(t, "override-worker", wtID(t, wt), "(c) proven copy replaced with claim owner")
+	})
+	// (d) main id read errors → keep: covered by
+	// TestSeedWorktreeIdentity_KeepUnlessProvenCopy_Table/d_main_id_read_errors_kept
+	// (chmod on main config.worktree); claim path cannot safely break main git
+	// config without failing worktree registration checks.
+}
+
 func TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithTask(t)

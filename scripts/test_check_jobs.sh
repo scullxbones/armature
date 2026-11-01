@@ -781,6 +781,63 @@ else
     fail "check-commit-subjects empty/merge-only demo failed"
 fi
 
+echo "Test 12: shallow --depth=50 origin/main widens range past branch point (>50 behind)..."
+
+DEPTH_DEMO=$(mktemp -d)
+cleanup_depth() { rm -rf "$DEPTH_DEMO"; }
+(
+    set -e
+    # Bare "upstream" with 60 commits on main; PR branch forks early so it is
+    # >50 commits behind tip of main.
+    upstream="$DEPTH_DEMO/upstream.git"
+    work="$DEPTH_DEMO/work"
+    git init -q --bare "$upstream"
+    git clone -q "$upstream" "$work"
+    cd "$work"
+    git config user.email "depth@example.com"
+    git config user.name "depth"
+    git commit -q --allow-empty -m "chore(DEPTHDEMO): main commit 1"
+    git branch -M main
+    for i in $(seq 2 60); do
+        git commit -q --allow-empty -m "chore(DEPTHDEMO): main commit $i"
+    done
+    fork=$(git rev-parse HEAD~55)
+    git push -q origin main
+    git checkout -q -b pr-branch "$fork"
+    git commit -q --allow-empty -m "feat(GIT234-MIN): only PR tip commit"
+    git push -q -u origin pr-branch
+
+    # Two fresh PR-tip clones (checkout already fetch-depth:0). Compare a
+    # depth-capped main fetch vs an uncapped one — do not reuse a shallow
+    # repo for the uncapped case (.git/shallow poisons merge-base).
+    shallow_clone="$DEPTH_DEMO/shallow"
+    git clone -q --branch pr-branch "$upstream" "$shallow_clone"
+    git -C "$shallow_clone" fetch -q --no-tags --depth=50 origin main:refs/remotes/origin/main
+    shallow_count=$(git -C "$shallow_clone" rev-list --count origin/main..HEAD)
+
+    full_clone="$DEPTH_DEMO/full"
+    git clone -q --branch pr-branch "$upstream" "$full_clone"
+    git -C "$full_clone" fetch -q --no-tags origin main:refs/remotes/origin/main
+    full_count=$(git -C "$full_clone" rev-list --count origin/main..HEAD)
+
+    if [[ "$full_count" -ne 1 ]]; then
+        echo "FAIL: unshallow main fetch should leave origin/main..HEAD = 1 PR commit (got $full_count)"
+        exit 1
+    fi
+    if [[ "$shallow_count" -le 1 ]]; then
+        echo "FAIL: depth=50 main fetch should widen origin/main..HEAD past the branch point (got $shallow_count)"
+        exit 1
+    fi
+    echo "PASS: depth=50 range=$shallow_count commits; unshallow range=$full_count (PR-only)"
+) && DEPTH_STATUS=0 || DEPTH_STATUS=$?
+cleanup_depth
+
+if [[ $DEPTH_STATUS -eq 0 ]]; then
+    pass "shallow origin/main fetch widens subject range; unshallow keeps PR-only"
+else
+    fail "depth=50 vs unshallow origin/main range demo failed"
+fi
+
 echo ""
 if [[ $FAILURES -eq 0 ]]; then
     echo "All check-job drift tests passed"
