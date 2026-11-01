@@ -182,6 +182,16 @@ func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.
 	}
 }
 
+func TestDoctorCLI_ReportsOpenUnderMergedAncestor_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupMixedD14Tree(t)
+	d14 := doctorD14Explain(t, repo)
+	assert.Equal(t, "warning", d14.severity)
+	assert.Contains(t, d14.items, "R -> E")
+	assert.Contains(t, d14.items, "RC2 under merged E (open)",
+		"cmd enrichD14TreeConsistency must fold TreeConsistencyViolations into D14")
+}
+
 func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	_, fallback := doctorCheckGuidance("D14")
@@ -197,8 +207,11 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	expl, sug := doctorCheckGuidanceFor(doctor.Finding{
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> P"},
 	}, allMerged)
-	assert.Equal(t, "Option A: arm reopen --issue P", sug[0])
-	assert.Equal(t, "Option B: arm transition --issue R --to cancelled --force", sug[1])
+	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> P", sug[0])
+	assert.Equal(t, "Option A:", sug[1])
+	assert.Equal(t, "arm reopen --issue P", sug[2])
+	assert.Equal(t, "Option B:", sug[3])
+	assert.Equal(t, "arm transition --issue R --to cancelled --force", sug[4])
 	assert.NotContains(t, expl, "children are merged")
 
 	// Open leaf under merged ancestor → Options reopen E / cancel O then R;
@@ -212,9 +225,12 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> E"},
 	}, repair)
 	assert.Contains(t, expl, promotion.TreeRepairGuidance)
-	assert.Equal(t, "Option A: arm reopen --issue E", sug[0])
-	assert.Equal(t, "Option B: arm transition --issue O --to cancelled --force", sug[1])
-	assert.Equal(t, "Option B: arm transition --issue R --to cancelled --force", sug[2])
+	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> E", sug[0])
+	assert.Equal(t, "Option A:", sug[1])
+	assert.Equal(t, "arm reopen --issue E", sug[2])
+	assert.Equal(t, "Option B:", sug[3])
+	assert.Equal(t, "arm transition --issue O --to cancelled --force", sug[4])
+	assert.Equal(t, "arm transition --issue R --to cancelled --force", sug[5])
 	assert.Contains(t, sug, promotion.MoreStepsFollowGuidance)
 	assert.Contains(t, sug, "arm claim --issue O --worktree")
 	assert.NotContains(t, sug, "arm claim --issue R")

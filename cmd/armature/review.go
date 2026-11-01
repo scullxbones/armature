@@ -53,8 +53,46 @@ func newReviewCmd() *cobra.Command {
 	cmd.AddCommand(newReviewRecordCmd())
 	cmd.AddCommand(newReviewValidateCmd())
 	cmd.AddCommand(newReviewCommitsCmd())
+	cmd.AddCommand(newReviewSchemaCmd())
 
 	return cmd
+}
+
+func newReviewSchemaCmd() *cobra.Command {
+	var outputFile string
+
+	cmd := &cobra.Command{
+		Use:   "schema",
+		Short: "Emit the ConformanceAssessment JSON Schema",
+		Long: `Write the ConformanceAssessment JSON Schema shipped with the binary.
+
+User repos without docs/schemas can still author assessments:
+  arm review schema --output conformance-assessment.schema.json`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			return mapReviewError(cobra.MaximumNArgs(0)(cmd, args))
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return mapReviewError(runReviewSchema(cmd, outputFile))
+		},
+	}
+
+	cmd.Flags().StringVar(&outputFile, "output", "", "output file (default: stdout)")
+	return cmd
+}
+
+func runReviewSchema(cmd *cobra.Command, outputFile string) error {
+	data := review.ConformanceAssessmentSchemaJSON
+	if len(data) == 0 {
+		return fmt.Errorf("embedded ConformanceAssessment schema is empty")
+	}
+	if outputFile == "" || outputFile == "-" {
+		_, err := cmd.OutOrStdout().Write(data)
+		return err
+	}
+	if err := os.WriteFile(filepath.Clean(outputFile), data, 0o600); err != nil {
+		return fmt.Errorf("write schema: %w", err)
+	}
+	return nil
 }
 
 func newReviewPrepareCmd() *cobra.Command {
@@ -177,11 +215,11 @@ How to produce assessment.json (required input when delivery base/tip are known 
 not a legacy placeholder):
 
   1. arm review prepare --issue <id> --base <sha> --head <sha> --output bundle.json
-  2. Author ConformanceAssessment JSON per docs/schemas/conformance-assessment.schema.json
-     using schema_version, bundle_id, and contract/delivery fingerprints from the bundle,
-     plus criterion results with citations.
-  3. arm review validate --assessment assessment.json --bundle bundle.json
-  4. arm review record --issue <id> --assessment assessment.json [--bundle bundle.json]
+  2. arm review schema --output conformance-assessment.schema.json
+  3. Author ConformanceAssessment JSON per that schema (schema_version, bundle_id,
+     contract/delivery fingerprints from the bundle, criterion results with citations).
+  4. arm review validate --assessment assessment.json --bundle bundle.json
+  5. arm review record --issue <id> --assessment assessment.json [--bundle bundle.json]
 
 If the assessment is a duplicate of an existing one (same bundle ID), the command
 is idempotent and returns success without writing a duplicate operation.

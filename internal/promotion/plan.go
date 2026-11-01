@@ -54,7 +54,9 @@ type Error struct {
 	IssueID string
 	Kind    string
 	Msg     string
-	Graph   Graph // KindNotLeaf: tree for RemediationsForIssue
+	Graph   Graph  // KindNotLeaf: tree for RemediationsForIssue
+	Base    string // KindMissingAssessment: delivery base when known
+	Tip     string // KindMissingAssessment: delivery tip when known
 }
 
 func (e *Error) Error() string {
@@ -78,6 +80,9 @@ func (e *Error) RecoveryActions() []string {
 			return []string{"arm doctor"}
 		}
 		return acts
+	}
+	if e.Kind == KindMissingAssessment {
+		return missingAssessmentActions(e.IssueID, e.Base, e.Tip)
 	}
 	return []string{RecoveryArgv(e.IssueID, e.Kind)}
 }
@@ -150,7 +155,10 @@ func Evaluate(git *adapters.Client, in Input) Result {
 	}
 
 	if !hasMatchingAssessment(in, base, tip) {
-		return refuse(res, in, target, tip, KindMissingAssessment, &Error{IssueID: id, Kind: KindMissingAssessment, Msg: checkMessage(id, KindMissingAssessment)})
+		return refuse(res, in, target, tip, KindMissingAssessment, &Error{
+			IssueID: id, Kind: KindMissingAssessment, Msg: checkMessage(id, KindMissingAssessment),
+			Base: base, Tip: tip,
+		})
 	}
 
 	res.Kind = KindPromote

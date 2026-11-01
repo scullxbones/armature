@@ -1508,7 +1508,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 89,
+      "count": 96,
       "names": [
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1519,6 +1519,7 @@
         "AssessmentFact.HeadSHA",
         "AssessmentHowTo",
         "Error",
+        "Error.Base",
         "Error.Error",
         "Error.Graph",
         "Error.IssueID",
@@ -1526,8 +1527,11 @@
         "Error.Msg",
         "Error.RecoveryActions",
         "Error.RecoveryArgv",
+        "Error.Tip",
         "Evaluate",
         "FallbackGuidance",
+        "FindingHeaderPrefix",
+        "FindingID",
         "FinishedWorkDestroyed",
         "FirstRemediation",
         "Graph",
@@ -1540,6 +1544,7 @@
         "IsDeliveryRecordTemplate",
         "IsGuidanceRemediation",
         "IsLegacyTemplateRemediation",
+        "IsOptionLabel",
         "IsRequiredInputRemediation",
         "IsRunnableArmCommand",
         "IssueFacts",
@@ -1563,10 +1568,10 @@
         "Node",
         "Node.Base",
         "Node.Children",
+        "Node.ClaimedBy",
         "Node.Parent",
         "Node.Status",
         "Node.Tip",
-        "OptionArgv",
         "Plan",
         "Plan.Alternatives",
         "Plan.Guidance",
@@ -1575,6 +1580,7 @@
         "RecoveryArgv",
         "RemediationsForIssue",
         "RemediationsPlan",
+        "RenderGroupedNextActions",
         "Result",
         "Result.AppendCheck",
         "Result.CheckPayload",
@@ -1598,7 +1604,8 @@
         "StepLegacyTemplate",
         "StepRequiredInput",
         "TreeConsistencyViolations",
-        "TreeRepairGuidance"
+        "TreeRepairGuidance",
+        "WouldViolateTreeConsistency"
       ]
     },
     "internal/ready": {
@@ -1658,7 +1665,7 @@
       ]
     },
     "internal/review": {
-      "count": 95,
+      "count": 96,
       "names": [
         "Activity",
         "Activity.DeliveryHeadCount",
@@ -1685,6 +1692,7 @@
         "ConformanceAssessment.Results",
         "ConformanceAssessment.SchemaVersion",
         "ConformanceAssessment.Valid",
+        "ConformanceAssessmentSchemaJSON",
         "Contract",
         "Contract.Acceptance",
         "Contract.DefinitionOfDone",

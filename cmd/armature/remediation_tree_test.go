@@ -111,6 +111,50 @@ func setupMixedD14Tree(t *testing.T) string {
 	return repo
 }
 
+// setupNestedMergedAncestorTree: M1 (merged epic) → M2 (merged story) → D (done task).
+func setupNestedMergedAncestorTree(t *testing.T) string {
+	t.Helper()
+	repo := gittest.InitWithOrigin(t).Dir
+	run(t, repo, "git", "commit", "--allow-empty", "-m", "init")
+	bootstrapRepoForTest(t, repo)
+
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+
+	for _, c := range []struct {
+		id, title, typ, parent string
+	}{
+		{"M1", "Epic M1", "epic", ""},
+		{"M2", "Story M2", "story", "M1"},
+		{"D", "Task D", "task", "M2"},
+	} {
+		require.NoError(t, appendOp(ctx, logPath, ops.Op{
+			Type: ops.OpCreate, TargetID: c.id, Timestamp: nowEpoch(), WorkerID: workerID,
+			Payload: ops.Payload{
+				Title: c.title, NodeType: c.typ, Parent: c.parent,
+				DefinitionOfDone: c.title + " is complete and tested",
+				Acceptance:       json.RawMessage(testAcceptance),
+				Confidence:       "verified",
+				Scope:            []string{"cmd/armature/" + strings.ToLower(c.id) + ".go"},
+			},
+		}))
+	}
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpTransition, TargetID: "D", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{To: ops.StatusDone, Outcome: "fixture done for nested merged-ancestor chain"},
+	}))
+	for _, id := range []string{"M2", "M1"} {
+		require.NoError(t, appendOp(ctx, logPath, ops.Op{
+			Type: ops.OpTransition, TargetID: id, Timestamp: nowEpoch(), WorkerID: workerID,
+			Payload: ops.Payload{To: ops.StatusMerged},
+		}))
+	}
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	return repo
+}
+
 func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	repo := setupMixedD14Tree(t)
@@ -129,13 +173,15 @@ func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 	require.Equal(t, "warning", d14.severity)
 	assert.Contains(t, d14.explanation, promotion.TreeRepairGuidance)
 	require.NotEmpty(t, d14.items)
-	// Suggested must be Options, not a flat reopen-then-cancel sequence.
-	assert.True(t, strings.HasPrefix(d14.suggested[0], "Option A:"), d14.suggested[0])
-	assert.NotContains(t, d14.suggested, "arm reopen --issue E",
-		"reopen must appear as Option A:, not a flat next_actions entry")
+	// Suggested: finding header → Option A:/B: on their own lines → paste-runnable argv.
+	require.True(t, strings.HasPrefix(d14.suggested[0], promotion.FindingHeaderPrefix), d14.suggested[0])
+	assert.Contains(t, d14.suggested, "Option A:")
+	assert.Contains(t, d14.suggested, "arm reopen --issue E")
+	assert.NotContains(t, d14.suggested, "Option A: arm reopen --issue E",
+		"Option label must be its own line, not an argv prefix")
 
 	for _, item := range d14.items {
-		id := d14ItemID(item)
+		id := promotion.FindingID(item)
 		t.Run("repair_"+id, func(t *testing.T) {
 			t.Parallel()
 			plan := promotion.RemediationsPlan(id, loadPromotionGraph(t, setupMixedD14Tree(t)))
@@ -185,13 +231,15 @@ func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 	cf := agentFailureFromStdout(t, mergedOut.String())
 	assert.Equal(t, codeMerged1, cf.Code)
 	require.NotEmpty(t, cf.NextActions)
-	assert.Equal(t, "Option A: arm reopen --issue E", cf.NextActions[0])
-	assert.Equal(t, "Option B: arm transition --issue RC2 --to cancelled --force", cf.NextActions[1])
-	assert.Equal(t, "Option B: arm transition --issue R --to cancelled --force", cf.NextActions[2])
+	assert.Equal(t, "Option A:", cf.NextActions[0])
+	assert.Equal(t, "arm reopen --issue E", cf.NextActions[1])
+	assert.Equal(t, "Option B:", cf.NextActions[2])
+	assert.Equal(t, "arm transition --issue RC2 --to cancelled --force", cf.NextActions[3])
+	assert.Equal(t, "arm transition --issue R --to cancelled --force", cf.NextActions[4])
 	// Repair Options must not claim under merged; more-steps may name claim after reopen.
-	assert.NotEqual(t, "arm claim --issue RC2 --worktree", cf.NextActions[0])
-	assert.NotEqual(t, "arm claim --issue RC2 --worktree", cf.NextActions[1])
-	assert.NotEqual(t, "arm claim --issue RC2 --worktree", cf.NextActions[2])
+	for i := 0; i <= 4; i++ {
+		assert.NotEqual(t, "arm claim --issue RC2 --worktree", cf.NextActions[i])
+	}
 	for _, action := range cf.NextActions {
 		if promotion.IsRunnableArmCommand(action) {
 			assert.NotContains(t, action, "; ")
@@ -264,33 +312,63 @@ func TestRepairHarnessRejectsMutations_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Run("drop_either_alternative_fails", func(t *testing.T) {
 		t.Parallel()
 		plan := promotion.RemediationsPlan("R", loadPromotionGraph(t, setupMixedD14Tree(t)))
-		require.GreaterOrEqual(t, len(plan.Alternatives), 2)
-		// Mutation: ship only Option A — harness that requires both Options fails.
-		mutated := plan
-		mutated.Alternatives = plan.Alternatives[:1]
-		assert.Less(t, len(mutated.Alternatives), 2,
-			"dropping Option B must be detectable as incomplete Plan")
-		assert.NotEqual(t, plan.RenderNextActions(), mutated.RenderNextActions())
+		require.GreaterOrEqual(t, len(plan.Alternatives), 2,
+			"product path must expose ≥2 Options; producer-mutation proof lives in promotion package")
+		// Harness gate: a shipped Plan with either Option dropped fails this bar.
+		incomplete := plan
+		incomplete.Alternatives = plan.Alternatives[:1]
+		assert.Less(t, len(incomplete.Alternatives), 2)
+		assert.NotEqual(t, plan.RenderNextActions(), incomplete.RenderNextActions())
 	})
 
 	t.Run("suggest_claim_under_merged_fails_invariant", func(t *testing.T) {
 		t.Parallel()
 		repo := setupMixedD14Tree(t)
-		// Claim R under merged E may exit 0 and quiet D14 (R becomes claimed, not done)
-		// while RC2 open-under-merged remains — invariant must catch.
-		err := applyRepairSequence(t, repo, []string{"arm claim --issue R --worktree"})
-		_ = err
+		// Product gate: claim under merged must refuse (CLAIM-1) before creating a violation.
+		out := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, out, new(bytes.Buffer),
+			"claim", "--repo", repo, "--issue", "R", "--worktree", "--format", "agent")
+		assert.Equal(t, 1, code)
+		cf := agentFailureFromStdout(t, out.String())
+		assert.Equal(t, codeClaim1, cf.Code)
+		assert.Contains(t, cf.Cause, "merged ancestor")
+		require.NotEmpty(t, cf.NextActions)
+		assert.Contains(t, cf.NextActions, "Option A:")
+		assert.Contains(t, cf.NextActions, "arm reopen --issue E")
+
 		after := loadPromotionGraph(t, repo)
+		assert.Equal(t, ops.StatusDone, after["R"].Status, "refused claim must leave R done")
+		assert.True(t, promotion.WouldViolateTreeConsistency("R", after))
 		viol := promotion.TreeConsistencyViolations(after)
-		require.NotEmpty(t, viol,
-			"claim under merged must fail tree-consistency invariant even if D14 quiets; status R=%s",
-			after["R"].Status)
-		// Also prove D14-quiet alone is insufficient:
-		d14 := doctorD14Explain(t, repo)
-		if !containsStr(d14.items, "R -> E") {
-			assert.NotEmpty(t, viol, "D14 quiet via claim still leaves open-under-merged")
-		}
+		require.NotEmpty(t, viol, "open RC2 under merged E remains a tree-consistency violation")
 	})
+}
+
+func TestNestedMergedAncestorChainCLI_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupNestedMergedAncestorTree(t)
+	d14 := doctorD14Explain(t, repo)
+	assert.Contains(t, d14.items, "D -> M2")
+
+	plan := promotion.RemediationsPlan("D", loadPromotionGraph(t, repo))
+	require.Len(t, plan.Alternatives, 2)
+	assert.Equal(t, []string{
+		"arm reopen --issue M1",
+		"arm reopen --issue M2",
+	}, plan.Alternatives[0].RunnableCommands())
+
+	// Option A (full chain) clears D14 without leaving M2 open under M1.
+	r := setupNestedMergedAncestorTree(t)
+	require.NoError(t, applyAlternative(t, r, plan.Alternatives[0]))
+	assert.NotContains(t, doctorD14Explain(t, r).items, "D -> M2")
+	assert.Empty(t, promotion.TreeConsistencyViolations(loadPromotionGraph(t, r)))
+
+	// Nearest-only reopen leaves M2 open under M1 — harness must FAIL that shape.
+	r2 := setupNestedMergedAncestorTree(t)
+	require.NoError(t, applyRepairSequence(t, r2, []string{"arm reopen --issue M2"}))
+	viol := promotion.TreeConsistencyViolations(loadPromotionGraph(t, r2))
+	require.NotEmpty(t, viol, "nearest-only reopen must leave inconsistency")
+	assert.Contains(t, strings.Join(viol, ";"), "M2 under merged M1")
 }
 
 func TestFilledDeliverySequenceReachesMerge_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -337,8 +415,10 @@ func TestAllCancelledP2UnderG2_REQ_TOPTIER_S18_T4(t *testing.T) {
 	plan := promotion.RemediationsPlan("P2", loadPromotionGraph(t, repo))
 	require.Len(t, plan.Alternatives, 2)
 	acts := plan.RenderNextActions()
-	assert.Equal(t, "Option A: arm reopen --issue G2", acts[0])
-	assert.Equal(t, "Option B: arm transition --issue P2 --to cancelled --force", acts[1])
+	assert.Equal(t, "Option A:", acts[0])
+	assert.Equal(t, "arm reopen --issue G2", acts[1])
+	assert.Equal(t, "Option B:", acts[2])
+	assert.Equal(t, "arm transition --issue P2 --to cancelled --force", acts[3])
 
 	for i, alt := range plan.Alternatives {
 		r := setupMixedD14Tree(t)
@@ -497,13 +577,21 @@ func containsStr(ss []string, want string) bool {
 func produceAssessmentFromHowTo(t *testing.T, repo, issueID, base, tip, howTo string) (assessmentPath, bundlePath string) {
 	t.Helper()
 	require.Contains(t, howTo, "arm review prepare")
-	require.Contains(t, howTo, "docs/schemas/conformance-assessment.schema.json")
+	require.Contains(t, howTo, "arm review schema --output conformance-assessment.schema.json")
 	require.Contains(t, howTo, "--bundle bundle.json")
 
 	bundlePath = filepath.Join(t.TempDir(), "bundle.json")
 	_, err := runTrls(t, repo, "review", "prepare",
 		"--issue", issueID, "--base", base, "--head", tip, "--output", bundlePath)
 	require.NoError(t, err)
+
+	schemaPath := filepath.Join(t.TempDir(), "conformance-assessment.schema.json")
+	_, err = runTrls(t, repo, "review", "schema", "--output", schemaPath)
+	require.NoError(t, err, "arm review schema must ship the assessment schema")
+	schemaBytes, err := os.ReadFile(schemaPath)
+	require.NoError(t, err)
+	require.NotEmpty(t, schemaBytes)
+	require.Contains(t, string(schemaBytes), "Conformance Assessment")
 
 	bundleJSON, err := os.ReadFile(bundlePath)
 	require.NoError(t, err)

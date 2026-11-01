@@ -32,8 +32,8 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Equal(t, []string{"arm reopen --issue E"}, lfPlan.Alternatives[0].RunnableCommands())
 	assert.Equal(t, []string{"arm transition --issue LF --to cancelled --force"}, lfPlan.Alternatives[1].RunnableCommands())
 	lf := lfPlan.RenderNextActions()
-	assert.Equal(t, "Option A: arm reopen --issue E", lf[0])
-	assert.Equal(t, "Option B: arm transition --issue LF --to cancelled --force", lf[1])
+	assertOptionOwnLines(t, lf, 'A', "arm reopen --issue E")
+	assertOptionOwnLines(t, lf, 'B', "arm transition --issue LF --to cancelled --force")
 	assert.Contains(t, lf, MoreStepsFollowGuidance)
 	assert.Contains(t, lf, LegacyTemplateGuidance)
 	assert.Contains(t, lf, delivery.RecordArgv("LF"))
@@ -48,11 +48,11 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	}, rPlan.Alternatives[1].RunnableCommands(),
 		"Option B must cancel open descendants then self")
 	r := rPlan.RenderNextActions()
-	assert.Equal(t, "Option A: arm reopen --issue E", r[0])
-	assert.Equal(t, "Option B: arm transition --issue RC2 --to cancelled --force", r[1])
-	assert.Equal(t, "Option B: arm transition --issue R --to cancelled --force", r[2])
-	assert.NotContains(t, r, "arm transition --issue R --to cancelled --force",
-		"cancel-self must only appear as Option B:, not a flat sequential entry")
+	assertOptionOwnLines(t, r, 'A', "arm reopen --issue E")
+	assertOptionOwnLines(t, r, 'B',
+		"arm transition --issue RC2 --to cancelled --force",
+		"arm transition --issue R --to cancelled --force")
+	assert.Contains(t, r, "arm reopen --issue E", "Option label is own line; argv is paste-runnable")
 	assert.Contains(t, r, MoreStepsFollowGuidance)
 	assert.Contains(t, r, "arm claim --issue RC2 --worktree",
 		"more-steps after reopen treat RC2 as healthy open leaf")
@@ -65,12 +65,75 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	acPlan := RemediationsPlan("AC", g)
 	require.Len(t, acPlan.Alternatives, 2)
 	ac := acPlan.RenderNextActions()
-	assert.Equal(t, "Option A: arm reopen --issue E", ac[0])
-	assert.Equal(t, "Option B: arm transition --issue AC --to cancelled --force", ac[1])
+	assertOptionOwnLines(t, ac, 'A', "arm reopen --issue E")
+	assertOptionOwnLines(t, ac, 'B', "arm transition --issue AC --to cancelled --force")
 	assert.NotContains(t, ac, "arm doctor")
 
 	healthy := Graph{"T": {Status: ops.StatusOpen}}
 	assert.Equal(t, []string{"arm claim --issue T --worktree"}, RemediationsForIssue("T", healthy))
+}
+
+func TestRemediationsPlan_NestedMergedAncestorChain_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	// M1 → M2 → D: nearest-only reopen of M2 leaves M2 open under merged M1.
+	g := Graph{
+		"M1": {Status: ops.StatusMerged, Children: []string{"M2"}},
+		"M2": {Status: ops.StatusMerged, Parent: "M1", Children: []string{"D"}},
+		"D":  {Status: ops.StatusDone, Parent: "M2"},
+	}
+	assert.Equal(t, []string{"M1", "M2"}, mergedAncestorChain("D", g))
+
+	plan := RemediationsPlan("D", g)
+	require.Len(t, plan.Alternatives, 2)
+	assert.Equal(t, []string{
+		"arm reopen --issue M1",
+		"arm reopen --issue M2",
+	}, plan.Alternatives[0].RunnableCommands(),
+		"Option A must reopen FULL merged-ancestor chain rootward-first")
+	assert.Equal(t, []string{"arm transition --issue D --to cancelled --force"},
+		plan.Alternatives[1].RunnableCommands())
+
+	require.NoError(t, validateAlternatives(g, plan))
+
+	nearestOnly := Plan{Alternatives: []Alternative{{
+		Steps: []Step{{Argv: "arm reopen --issue M2", Kind: StepCommand}},
+	}}}
+	err := validateAlternatives(g, nearestOnly)
+	require.Error(t, err, "nearest-only reopen must leave M2 open under M1")
+	assert.Contains(t, err.Error(), "inconsistency")
+
+	rendered := plan.RenderNextActions()
+	assertOptionOwnLines(t, rendered, 'A', "arm reopen --issue M1", "arm reopen --issue M2")
+}
+
+func TestRemediationsPlan_OwnerAwareCancel_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	g := Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
+		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
+		"C": {Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "worker-other"},
+	}
+	plan := RemediationsPlan("R", g)
+	require.Len(t, plan.Alternatives, 2)
+	assert.Equal(t, []string{
+		"arm claim --issue C --force --worktree",
+		"arm transition --issue C --to cancelled --force",
+		"arm transition --issue R --to cancelled --force",
+	}, plan.Alternatives[1].RunnableCommands(),
+		"Option B must steal claim before cancel; --force on transition does not skip owner")
+
+	rendered := plan.RenderNextActions()
+	assert.Contains(t, rendered, "steal claim from worker-other before cancel (transition --force does not skip owner gate)")
+	assert.Contains(t, rendered, "arm claim --issue C --force --worktree")
+
+	// Open (unowned) keeps plain cancel.
+	open := Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"O"}},
+		"O": {Status: ops.StatusOpen, Parent: "E"},
+	}
+	openPlan := RemediationsPlan("O", open)
+	assert.Equal(t, []string{"arm transition --issue O --to cancelled --force"},
+		openPlan.Alternatives[1].RunnableCommands())
 }
 
 func TestRemediationsPlan_FilledDeliveryRequiredInput_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -86,8 +149,9 @@ func TestRemediationsPlan_FilledDeliveryRequiredInput_REQ_TOPTIER_S18_T4(t *test
 	assert.Equal(t, "arm review record --issue L --assessment <assessment.json> --bundle <bundle.json>", plan.MoreSteps[1].Argv)
 	assert.Contains(t, plan.MoreSteps[1].Help, "produce assessment.json:")
 	assert.Contains(t, plan.MoreSteps[1].Help, "arm review prepare --issue L --base aaa111 --head bbb222")
-	assert.Contains(t, plan.MoreSteps[1].Help, "docs/schemas/conformance-assessment.schema.json")
+	assert.Contains(t, plan.MoreSteps[1].Help, "arm review schema --output conformance-assessment.schema.json")
 	assert.Contains(t, plan.MoreSteps[1].Help, "--bundle bundle.json")
+	assert.NotContains(t, plan.MoreSteps[1].Help, "docs/schemas/conformance-assessment.schema.json")
 	assert.NotContains(t, plan.MoreSteps[1].Help, "legacy")
 
 	got := plan.RenderNextActions()
@@ -126,8 +190,8 @@ func TestRemediationsPlan_AllCancelledDescendants_REQ_TOPTIER_S18_T4(t *testing.
 	plan := RemediationsPlan("P2", g)
 	require.Len(t, plan.Alternatives, 2)
 	got := plan.RenderNextActions()
-	assert.Equal(t, "Option A: arm reopen --issue G2", got[0])
-	assert.Equal(t, "Option B: arm transition --issue P2 --to cancelled --force", got[1])
+	assertOptionOwnLines(t, got, 'A', "arm reopen --issue G2")
+	assertOptionOwnLines(t, got, 'B', "arm transition --issue P2 --to cancelled --force")
 	assert.Equal(t, "arm reopen --issue G2", FirstRemediation(got))
 
 	plain := Graph{
@@ -137,10 +201,9 @@ func TestRemediationsPlan_AllCancelledDescendants_REQ_TOPTIER_S18_T4(t *testing.
 	}
 	plainPlan := RemediationsPlan("P", plain)
 	require.Len(t, plainPlan.Alternatives, 2)
-	assert.Equal(t, []string{
-		"Option A: arm transition --issue P --to cancelled --force",
-		"Option B: arm reopen --issue P",
-	}, plainPlan.RenderNextActions())
+	plainGot := plainPlan.RenderNextActions()
+	assertOptionOwnLines(t, plainGot, 'A', "arm transition --issue P --to cancelled --force")
+	assertOptionOwnLines(t, plainGot, 'B', "arm reopen --issue P")
 }
 
 func TestTreeConsistencyInvariant_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -152,12 +215,14 @@ func TestTreeConsistencyInvariant_REQ_TOPTIER_S18_T4(t *testing.T) {
 	viol := TreeConsistencyViolations(bad)
 	require.NotEmpty(t, viol)
 	assert.Contains(t, viol[0], "R under merged E")
+	assert.True(t, WouldViolateTreeConsistency("R", bad))
 
 	good := Graph{
 		"E": {Status: ops.StatusDone, Children: []string{"R"}},
 		"R": {Status: ops.StatusOpen, Parent: "E"},
 	}
 	assert.Empty(t, TreeConsistencyViolations(good))
+	assert.False(t, WouldViolateTreeConsistency("R", good))
 
 	before := Graph{
 		"E":   {Status: ops.StatusMerged},
@@ -192,14 +257,13 @@ func TestRenderOrderNotAlphaSorted_REQ_TOPTIER_S18_T4(t *testing.T) {
 		"Z": {Status: ops.StatusDone, Parent: "E"},
 		"A": {Status: ops.StatusOpen, Parent: "E"},
 	}
-	// Remediations for E's child Z: options then more-steps; children order Z then A on E,
-	// but plan is for Z alone.
 	plan := RemediationsPlan("Z", g)
 	got := plan.RenderNextActions()
 	require.GreaterOrEqual(t, len(got), 2)
-	assert.True(t, strings.HasPrefix(got[0], "Option A:"), got[0])
-	assert.True(t, strings.HasPrefix(got[1], "Option B:"), got[1])
-	// Parent E's more-steps walk must preserve children order Z then A (not A then Z).
+	assert.True(t, IsOptionLabel(got[0]), got[0])
+	assert.Equal(t, "Option A:", got[0])
+	assert.Equal(t, "arm reopen --issue E", got[1])
+	assert.Equal(t, "Option B:", got[2])
 	eKids := healthyDescendantOrLeafSteps("E", g["E"], g)
 	require.GreaterOrEqual(t, len(eKids), 2)
 	joined := ""
@@ -211,4 +275,45 @@ func TestRenderOrderNotAlphaSorted_REQ_TOPTIER_S18_T4(t *testing.T) {
 	require.GreaterOrEqual(t, zi, 0)
 	require.GreaterOrEqual(t, ai, 0)
 	assert.Less(t, zi, ai, "model order follows children slice, not alpha")
+}
+
+func TestDropEitherAlternativeMutatesProducer_REQ_TOPTIER_S18_T4(t *testing.T) { //nolint:paralleltest // mutates package-level planProducer
+	g := Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
+		"R": {Status: ops.StatusDone, Parent: "E"},
+	}
+	prev := planProducer
+	planProducer = func(id string, graph Graph) Plan {
+		p := buildRemediationsPlan(id, graph)
+		if len(p.Alternatives) >= 2 {
+			p.Alternatives = p.Alternatives[:1]
+		}
+		return p
+	}
+	t.Cleanup(func() { planProducer = prev })
+
+	plan := RemediationsPlan("R", g)
+	assert.Less(t, len(plan.Alternatives), 2,
+		"mutating real planProducer must drop Option B on the product path")
+	assert.NotContains(t, plan.RenderNextActions(), "Option B:")
+}
+
+func assertOptionOwnLines(t *testing.T, got []string, option rune, cmds ...string) {
+	t.Helper()
+	label := optionLabel(int(option - 'A'))
+	idx := -1
+	for i, s := range got {
+		if s == label {
+			idx = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, idx, 0, "missing %s in %v", label, got)
+	require.True(t, IsOptionLabel(got[idx]), "%q must be a standalone Option label", got[idx])
+	for i, cmd := range cmds {
+		require.Less(t, idx+1+i, len(got), "missing step after %s", label)
+		assert.Equal(t, cmd, got[idx+1+i], "step %d after %s", i, label)
+		assert.False(t, strings.HasPrefix(got[idx+1+i], "Option "),
+			"argv must not carry Option prefix: %q", got[idx+1+i])
+	}
 }

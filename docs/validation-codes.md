@@ -721,21 +721,31 @@ invariant (no open/claimed work under a merged ancestor; done/merged untouched
 unless that Option explicitly cancels/reopens; merged never un-merged). Shared
 with MERGED-1 / sync via `promotion.RemediationsPlan`.
 ```bash
-# Options for done/open work under a merged ancestor (do not claim under merged):
-Option A: arm reopen --issue <merged-ancestor-id>
-Option B: arm transition --issue <id> --to cancelled --force
+# Options for done/open work under a merged ancestor (do not claim under merged).
+# Option labels are their own lines; argv lines are paste-runnable.
+# Nested merged ancestors (M1→M2→item): Option A reopens the FULL chain rootward-first.
+Option A:
+arm reopen --issue <merged-ancestor-id>
+# …then each nearer merged ancestor…
+Option B:
+# claimed/in-progress by another worker: steal first (--force on transition does not skip owner)
+arm claim --issue <claimed-id> --force --worktree
+arm transition --issue <id> --to cancelled --force
 
 # more steps follow after tree repair to promote remaining descendants:
 arm delivery record --issue <leaf-id> --base <sha> --tip <sha>
 # required input (full provenance — not legacy):
 #   arm review prepare --issue <leaf-id> --base <sha> --head <sha> --output bundle.json
-#   author ConformanceAssessment per docs/schemas/conformance-assessment.schema.json
+#   arm review schema --output conformance-assessment.schema.json
+#   author ConformanceAssessment per that schema
 #   arm review validate --assessment assessment.json --bundle bundle.json
 arm review record --issue <leaf-id> --assessment <assessment.json> --bundle <bundle.json>
 
 # all-cancelled children only (rollup will not promote — needs ≥1 merged child):
-Option A: arm transition --issue <parent-id> --to cancelled --force
-Option B: arm reopen --issue <parent-id>
+Option A:
+arm transition --issue <parent-id> --to cancelled --force
+Option B:
+arm reopen --issue <parent-id>
 
 # open leaf with no merged ancestor (--worktree required; omit value for canonical path):
 arm claim --issue <open-id> --worktree
@@ -744,6 +754,7 @@ Legacy `<sha>` templates apply only when delivery provenance is missing (same
 honesty as promotion kind `legacy`). With known Base/Tip, assessment.json is
 **required input** with the prepare/validate how-to above — not labeled legacy.
 All-merged children under a non-leaf are promoted by materialize rollup.
+Claim refuses creating a tree-consistency violation under a merged ancestor.
 
 ---
 

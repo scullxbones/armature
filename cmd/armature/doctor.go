@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -87,16 +88,20 @@ func newDoctorCmd() *cobra.Command {
 				return mapDoctorLoadError(err)
 			}
 
+			// Product caller of TreeConsistencyViolations: fold every
+			// open/claimed/in-progress under a merged ancestor into D14
+			// (doctor package cannot import promotion — depguard).
+			store := newSnapshotStore(appCtx)
+			index, indexErr := store.ReadIndex()
+			if indexErr != nil {
+				return mapDoctorLoadError(indexErr)
+			}
+			graph := promotionGraphFromStore(store, index)
+			enrichD14TreeConsistency(&report, graph)
+
 			var explainGraph promotion.Graph
 			if explain {
-				// Run already rematerialized; read on-disk issues for Base/Tip
-				// without a second materialize write. Fail closed if explain cannot classify.
-				store := newSnapshotStore(appCtx)
-				explainIndex, indexErr := store.ReadIndex()
-				if indexErr != nil {
-					return mapDoctorLoadError(indexErr)
-				}
-				explainGraph = promotionGraphFromStore(store, explainIndex)
+				explainGraph = graph
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -311,36 +316,69 @@ func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph) (explanatio
 }
 
 const d14Explanation = "An issue is still done while its parent is already merged — a stuck " +
-	"done→merged promotion. Merged-under-cancelled parents are not this check."
+	"done→merged promotion — or open/claimed work sits under a merged ancestor. " +
+	"Merged-under-cancelled parents are not this check."
+
+// enrichD14TreeConsistency merges promotion.TreeConsistencyViolations into the
+// D14 finding so doctor CLI reports every open/claimed under a merged ancestor
+// via the same invariant claim refuses.
+func enrichD14TreeConsistency(report *doctor.Report, graph promotion.Graph) {
+	if report == nil || graph == nil {
+		return
+	}
+	viol := promotion.TreeConsistencyViolations(graph)
+	if len(viol) == 0 {
+		return
+	}
+	seen := map[string]bool{}
+	var idx = -1
+	for i := range report.Checks {
+		if report.Checks[i].Check == "D14" {
+			idx = i
+			for _, item := range report.Checks[i].Items {
+				seen[item] = true
+			}
+			break
+		}
+	}
+	if idx < 0 {
+		return
+	}
+	f := &report.Checks[idx]
+	for _, v := range viol {
+		if seen[v] {
+			continue
+		}
+		f.Items = append(f.Items, v)
+		seen[v] = true
+	}
+	if len(f.Items) == 0 {
+		return
+	}
+	sort.Strings(f.Items)
+	f.Severity = doctor.SeverityWarning
+	f.Message = "Done or open/claimed work under a merged ancestor"
+}
 
 // d14Guidance keeps the broad D14 warning and uses the shared typed Plan
-// (same truth as MERGED-1 / sync). suggested preserves model order:
-// options → steps → more-steps — never alpha-sorted, never a "; "-joined argv.
+// (same truth as MERGED-1 / sync). Per finding: header → Option A/B → ordered
+// steps — never cross-item dedup, never alpha-sort, never "; "-joined argv.
 func d14Guidance(f doctor.Finding, graph promotion.Graph) (explanation string, suggested []string) {
 	explanation = d14Explanation
 	if len(f.Items) == 0 || graph == nil {
 		return explanation, []string{promotion.FallbackGuidance}
 	}
 
-	seenCmd := map[string]bool{}
 	var cmds []string
 	var needsTreeRepair bool
 	for _, item := range f.Items {
-		id, _, ok := strings.Cut(item, " -> ")
-		if !ok || id == "" {
-			id = item
-		}
+		id := promotion.FindingID(item)
 		plan := promotion.RemediationsPlan(id, graph)
 		if len(plan.Guidance) > 0 {
 			needsTreeRepair = true
 		}
-		for _, cmd := range plan.RenderNextActions() {
-			if seenCmd[cmd] {
-				continue
-			}
-			seenCmd[cmd] = true
-			cmds = append(cmds, cmd)
-		}
+		// No seenCmd: each finding keeps its full typed plan (grouping intact).
+		cmds = append(cmds, promotion.RenderGroupedNextActions(item, plan)...)
 	}
 	if needsTreeRepair {
 		explanation = d14Explanation + " " + promotion.TreeRepairGuidance

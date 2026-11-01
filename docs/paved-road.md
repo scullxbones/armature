@@ -55,9 +55,10 @@ Record progress, keep the graph green, run the configured gate, and mark the iss
 
 ### 5. Review
 
-Prepare the bundle, record the assessment, and list delivery commits.
+Prepare the bundle, emit the assessment schema, record the assessment, and list delivery commits.
 
 - `arm review prepare`
+- `arm review schema`
 - `arm review record`
 - `arm review commits`
 
@@ -96,6 +97,7 @@ Zero unclassified leaf commands is a gate.
 - `arm review commits` — Review
 - `arm review prepare` — Review
 - `arm review record` — Review
+- `arm review schema` — Review
 - `arm show` — Wave dispatch
 - `arm sources`
 - `arm sources add` — Plan / decompose

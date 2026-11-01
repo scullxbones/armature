@@ -206,6 +206,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `harness-hook` | main.go:267, harness_hook.go | Harness hook runner (internal) | **kept-evidence** | Internal. Runs on pre-commit and post-merge. |
 | `review` | main.go:271, review.go | Manage conformance reviews for issues | **kept-evidence** | Review infrastructure. |
 | `review prepare` | review.go:33 | Prepare a review bundle for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --base, --head, --output. |
+| `review schema` | review.go | Emit embedded ConformanceAssessment JSON Schema | **kept-evidence** | Subcommand of `review`. Flags: --output. Ships schema so user repos without docs/schemas can author assessments. |
 | `review record` | review.go:157 | Record a conformance assessment for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --assessment, --bundle. |
 | `review commits` | review.go:185 | List delivery commits for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --branch (default HEAD). |
 | `review validate` | review_validate.go | Read-only assessment validation with auto-fix suggestions | **kept-evidence** | Subcommand of `review`. Flags: --assessment, --bundle (required). Does not append ops. Advisory; record remains the enforcement gate. |
@@ -295,7 +296,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--root` | dag apply | string | Override inferred root | **kept-evidence** |
 | `--sources` | dag context | string | Comma-separated source IDs to include | **kept-evidence** |
 | `--template` | dag context | string | Prompt template with placeholders | **kept-evidence** |
-| `--output` | dag context, review prepare, ops-backup snapshot | string | Output file (default: stdout for dag/review; required bundle path for ops-backup snapshot) | **kept-evidence** |
+| `--output` | dag context, review prepare, review schema, ops-backup snapshot | string | Output file (default: stdout for dag/review; required bundle path for ops-backup snapshot) | **kept-evidence** |
 | `--from` | ops-backup restore-plan | string | Bundle path to plan restore from | **kept-evidence** |
 | `--format` | dag context | string | Command-local output format override (text or json; decompose.go:383). All other commands listed here read the inherited root persistent `--format` flag (see Universal/Root Flags above) rather than defining their own — they do not appear in this row. | **kept-evidence** |
 | `--existing-dag` | dag context | bool | Include existing DAG in context | **kept-evidence** |
@@ -473,6 +474,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `review commits` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `review prepare` |  | Artifact Output | cited foreign shape, verbatim | `docs/schemas/review-bundle.schema.json` | **kept-evidence** | Artifact when `--output` is unset (`WhenAllFlagsUnset`). Governing shape: ReviewBundle schema. |
 | `review prepare` | `output` | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Result mode when `--output` is set. Envelope, not bundle bytes. |
+| `review schema` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope; body writes embedded ConformanceAssessment schema bytes to stdout or `--output`. |
 | `review record` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `review validate` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `scope-delete` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |

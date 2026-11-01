@@ -1023,6 +1023,23 @@ arm review prepare --issue TASK-001 --base abc123 --head def456 --output bundle.
 
 ---
 
+### review schema
+
+Emit the ConformanceAssessment JSON Schema shipped with the binary (so user repos without `docs/schemas` can still author assessments).
+
+**Synopsis:**
+`arm review schema [flags]`
+
+**Flags:**
+- `--output string`: Output file (default: stdout).
+
+**Example:**
+```bash
+arm review schema --output conformance-assessment.schema.json
+```
+
+---
+
 ### review record
 
 Record a semantic conformance assessment for a completed task.
@@ -1040,8 +1057,9 @@ Structured output (`--format json`, `--format agent`) is `{count, assessments, h
 ```bash
 # Produce assessment.json when delivery SHAs are known (required input, not legacy):
 arm review prepare --issue TASK-001 --base abc123 --head def456 --output bundle.json
-# Author ConformanceAssessment per docs/schemas/conformance-assessment.schema.json
-# (bundle_id + fingerprints from bundle; criterion results with citations).
+arm review schema --output conformance-assessment.schema.json
+# Author ConformanceAssessment per that schema (bundle_id + fingerprints from
+# bundle; criterion results with citations).
 arm review validate --assessment assessment.json --bundle bundle.json
 arm review record --issue TASK-001 --assessment assessment.json --bundle bundle.json
 ```

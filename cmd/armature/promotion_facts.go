@@ -28,9 +28,10 @@ func promotionGraphFromIndex(index materialize.Index) promotion.Graph {
 	g := make(promotion.Graph, len(index))
 	for id, entry := range index {
 		g[id] = promotion.Node{
-			Status:   entry.Status,
-			Parent:   entry.Parent,
-			Children: append([]string(nil), entry.Children...),
+			Status:    entry.Status,
+			Parent:    entry.Parent,
+			Children:  append([]string(nil), entry.Children...),
+			ClaimedBy: entry.Assignee,
 		}
 	}
 	return g
@@ -45,11 +46,12 @@ func promotionGraphFromIssues(issues map[string]*materialize.Issue) promotion.Gr
 			continue
 		}
 		g[id] = promotion.Node{
-			Status:   issue.Status,
-			Parent:   issue.Parent,
-			Children: append([]string(nil), issue.Children...),
-			Base:     issue.Base,
-			Tip:      issue.Tip,
+			Status:    issue.Status,
+			Parent:    issue.Parent,
+			Children:  append([]string(nil), issue.Children...),
+			Base:      issue.Base,
+			Tip:       issue.Tip,
+			ClaimedBy: issue.ClaimedBy,
 		}
 	}
 	return g
@@ -69,6 +71,7 @@ func promotionGraphFromStore(store *snapshot.Store, index materialize.Index) pro
 		}
 		node.Base = issue.Base
 		node.Tip = issue.Tip
+		node.ClaimedBy = issue.ClaimedBy
 		if node.Parent == "" {
 			node.Parent = issue.Parent
 		}

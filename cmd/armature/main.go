@@ -459,6 +459,7 @@ var pavedRoadCommands = map[string]pavedRoadClass{
 	"harness-hook":            {Kind: pavedRoadKindEscape, Note: "Internal harness entrypoint. Hidden from --help groups."},
 	"review":                  {Kind: pavedRoadKindPaved},
 	"review prepare":          {Kind: pavedRoadKindPaved},
+	"review schema":           {Kind: pavedRoadKindPaved},
 	"review record":           {Kind: pavedRoadKindPaved},
 	"review commits":          {Kind: pavedRoadKindPaved},
 	"review validate":         {Kind: pavedRoadKindEscape, Note: "Advisory assessment check. Record remains the enforcement gate."},
@@ -495,8 +496,8 @@ var pavedRoadPipeline = []pavedRoadStep{
 	{
 		ID:          "review",
 		Title:       "Review",
-		Description: "Prepare the bundle, record the assessment, and list delivery commits.",
-		Commands:    []string{"review prepare", "review record", "review commits"},
+		Description: "Prepare the bundle, emit the assessment schema, record the assessment, and list delivery commits.",
+		Commands:    []string{"review prepare", "review schema", "review record", "review commits"},
 	},
 	{
 		ID:          "sync",

@@ -613,8 +613,11 @@ func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 }
 
 // checkD14DoneUnderMerged warns when an issue is still done while its parent is
-// already merged. One index pass; no git calls. Index-load failures stay
-// fail-closed in Run via loadMaterializedState (this helper assumes a loaded index).
+// already merged. Open/claimed/in-progress under a merged ancestor is folded in
+// by cmd/armature via promotion.TreeConsistencyViolations (doctor must not
+// import promotion — depguard). One index pass; no git calls. Index-load
+// failures stay fail-closed in Run via loadMaterializedState (this helper
+// assumes a loaded index).
 //
 // Skips (not warnings):
 //   - done under cancelled (ORCRUN leftover) — only merged parents qualify
@@ -641,7 +644,7 @@ func checkD14DoneUnderMerged(index materialize.Index) Finding {
 	if len(stuck) > 0 {
 		sort.Strings(stuck)
 		f.Severity = SeverityWarning
-		f.Message = "Done issues whose parent is already merged"
+		f.Message = "Done or open/claimed work under a merged ancestor"
 		f.Items = stuck
 	}
 	return f
