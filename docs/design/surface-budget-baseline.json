@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 141,
+      "count": 142,
       "names": [
         "AppendLog",
         "AppendLog.Append",
