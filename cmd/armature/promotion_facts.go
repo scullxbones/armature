@@ -45,20 +45,35 @@ func promotionGraphFromIssues(issues map[string]*materialize.Issue) promotion.Gr
 		if issue == nil {
 			continue
 		}
-		g[id] = promotion.Node{
-			Status:    issue.Status,
-			Parent:    issue.Parent,
-			Children:  append([]string(nil), issue.Children...),
-			Base:      issue.Base,
-			Tip:       issue.Tip,
-			ClaimedBy: issue.ClaimedBy,
-		}
+		g[id] = nodeFromMaterializeIssue(issue)
 	}
 	return g
 }
 
-// promotionGraphFromStore enriches the index graph with Base/Tip via ReadIssue
-// only — no rematerialize / checkpoint write (safe for arm merged).
+func nodeFromMaterializeIssue(issue *materialize.Issue) promotion.Node {
+	last := issue.ClaimedAt
+	if issue.LastHeartbeat > last {
+		last = issue.LastHeartbeat
+	}
+	if issue.LastClaimingWorkerActivity > last {
+		last = issue.LastClaimingWorkerActivity
+	}
+	return promotion.Node{
+		Status:       issue.Status,
+		Parent:       issue.Parent,
+		Children:     append([]string(nil), issue.Children...),
+		Base:         issue.Base,
+		Tip:          issue.Tip,
+		ClaimedBy:    issue.ClaimedBy,
+		ClaimToken:   issue.ClaimToken,
+		ClaimedAt:    issue.ClaimedAt,
+		LastActivity: last,
+		TTLMinutes:   issue.ClaimTTL,
+	}
+}
+
+// promotionGraphFromStore enriches the index graph with Base/Tip + lease clocks
+// via ReadIssue only — no rematerialize / checkpoint write (safe for arm merged).
 func promotionGraphFromStore(store *snapshot.Store, index materialize.Index) promotion.Graph {
 	g := promotionGraphFromIndex(index)
 	if store == nil {
@@ -69,13 +84,14 @@ func promotionGraphFromStore(store *snapshot.Store, index materialize.Index) pro
 		if err != nil || issue == nil {
 			continue
 		}
-		node.Base = issue.Base
-		node.Tip = issue.Tip
-		node.ClaimedBy = issue.ClaimedBy
-		if node.Parent == "" {
-			node.Parent = issue.Parent
+		enriched := nodeFromMaterializeIssue(issue)
+		if enriched.Parent == "" {
+			enriched.Parent = node.Parent
 		}
-		g[id] = node
+		if len(enriched.Children) == 0 {
+			enriched.Children = node.Children
+		}
+		g[id] = enriched
 	}
 	return g
 }

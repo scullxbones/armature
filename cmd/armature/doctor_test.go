@@ -206,7 +206,7 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	}
 	expl, sug := doctorCheckGuidanceFor(doctor.Finding{
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> P"},
-	}, allMerged, "")
+	}, allMerged, promotion.PlanOpts{})
 	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> P", sug[0])
 	assert.Equal(t, "Option A:", sug[1])
 	assert.Equal(t, "arm reopen --issue P", sug[2])
@@ -223,7 +223,7 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	}
 	expl, sug = doctorCheckGuidanceFor(doctor.Finding{
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> E"},
-	}, repair, "")
+	}, repair, promotion.PlanOpts{})
 	assert.Contains(t, expl, promotion.TreeRepairGuidance)
 	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> E", sug[0])
 	assert.Equal(t, "Option A:", sug[1])

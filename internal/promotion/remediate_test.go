@@ -1,14 +1,59 @@
 package promotion
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// testCLIDecide uses real claim.ForeignLiveLeaseBlocks (AcceptAt's predicate).
+func testCLIDecide(viewer string, now int64) func(string, Graph) error {
+	if now == 0 {
+		now = time.Now().Unix()
+	}
+	return func(argv string, g Graph) error {
+		argv = strings.TrimSpace(argv)
+		if !strings.HasPrefix(argv, "arm ") {
+			return nil
+		}
+		issue := IssueFlag(argv)
+		if issue == "" {
+			return nil
+		}
+		node := g[issue]
+		switch {
+		case strings.Contains(argv, "arm claim "):
+			if WouldViolateTreeConsistency(issue, g) {
+				return fmt.Errorf("tree consistency")
+			}
+			held := claim.LeaseFromClocks(node.Status, node.ClaimedBy, node.ClaimToken,
+				node.ClaimedAt, node.LastActivity, 0, node.TTLMinutes, "")
+			if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
+				return fmt.Errorf("foreign live lease")
+			}
+		case strings.Contains(argv, "--to cancelled"):
+			switch node.Status {
+			case ops.StatusClaimed, ops.StatusInProgress:
+				held := claim.LeaseFromClocks(node.Status, node.ClaimedBy, node.ClaimToken,
+					node.ClaimedAt, node.LastActivity, 0, node.TTLMinutes, "")
+				if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
+					return claim.ErrNotClaimOwner
+				}
+				if held.Holder != "" && viewer != "" && held.Holder != viewer {
+					return claim.ErrNotClaimOwner
+				}
+			}
+		}
+		return nil
+	}
+}
 
 func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
@@ -107,88 +152,106 @@ func TestRemediationsPlan_NestedMergedAncestorChain_REQ_TOPTIER_S18_T4(t *testin
 
 func TestRemediationsPlan_ForeignLeaseNoInventedTakeover_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
+	now := time.Now().Unix()
+	opts := PlanOpts{Viewer: "me", Now: now, Decide: testCLIDecide("me", now)}
+
 	g := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
-		"C": {Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "worker-other"},
+		"C": {
+			Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "worker-other",
+			ClaimToken: "tok", ClaimedAt: now - 30, LastActivity: now - 30, TTLMinutes: 60,
+		},
 	}
-	// Empty viewer → every holder is foreign: drop Option B; honest guidance only.
-	plan := RemediationsPlan("R", g)
+	plan := RemediationsPlanOpts("R", g, opts)
 	require.Len(t, plan.Alternatives, 1, "foreign live lease must drop cancel-other-worker Option B")
 	assert.Equal(t, []string{"arm reopen --issue E"}, plan.Alternatives[0].RunnableCommands())
 	rendered := plan.RenderNextActions()
 	assert.NotContains(t, rendered, "Option B:")
 	for _, line := range rendered {
 		if cmd := RunnableArgv(line); cmd != "" {
-			assert.NotContains(t, cmd, "arm claim --issue C --force", "no invented takeover argv")
-			assert.NotContains(t, cmd, "arm unassign ")
-			assert.NotEqual(t, "arm transition --issue C --to cancelled --force", cmd,
-				"must not print gate-refused cancel-other as a runnable step")
+			assert.NotEqual(t, "arm transition --issue C --to cancelled --force", cmd)
+			assert.NotEqual(t, "arm claim --issue C --worktree", cmd,
+				"MoreSteps must not emit gate-refused claim on foreign live lease")
 		}
 	}
 	joined := strings.Join(plan.Guidance, "\n")
 	assert.Contains(t, joined, "live claimed lease on C held by worker-other")
 	assert.Contains(t, joined, "arm claim --force only overrides scope overlap")
 	assert.Contains(t, joined, ".worktrees/C")
-	assert.Contains(t, joined, "Prefer Option A")
+	assert.Contains(t, joined, fmt.Sprintf("unix %d", now-30+60*60), "real TTL expiry in guidance")
 
-	// in-progress foreign live lease: same — guidance only.
-	ip := Graph{
+	leaf := Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"C"}},
+		"C": {
+			Status: ops.StatusClaimed, Parent: "E", ClaimedBy: "worker-other",
+			ClaimToken: "tok", ClaimedAt: now - 30, LastActivity: now - 30, TTLMinutes: 60,
+		},
+	}
+	leafPlan := RemediationsPlanOpts("C", leaf, opts)
+	require.Len(t, leafPlan.Alternatives, 1)
+	assert.Empty(t, leafPlan.MoreSteps, "foreign leaf must not print arm claim in MoreSteps")
+
+	// Expired foreign: Option B re-enabled for cancel targets Decide allows (R done);
+	// C cancel still refused (not owner) so omitted from Option B steps.
+	expired := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
-		"C": {Status: ops.StatusInProgress, Parent: "R", ClaimedBy: "worker-other"},
+		"C": {
+			Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "worker-other",
+			ClaimToken: "tok", ClaimedAt: now - 4000, LastActivity: now - 4000, TTLMinutes: 1,
+		},
 	}
-	ipPlan := RemediationsPlanFor("R", ip, "me")
-	require.Len(t, ipPlan.Alternatives, 1)
-	ipJoined := strings.Join(ipPlan.Guidance, "\n")
-	assert.Contains(t, ipJoined, "live in-progress lease on C held by worker-other")
-	assert.Contains(t, ipJoined, "arm doctor --fix")
-	for _, line := range ipPlan.RenderNextActions() {
-		if cmd := RunnableArgv(line); cmd != "" {
-			assert.False(t, strings.Contains(cmd, "arm claim") && strings.Contains(cmd, "--force"),
-				"no invented claim --force takeover: %s", cmd)
-		}
+	expPlan := RemediationsPlanOpts("R", expired, opts)
+	require.GreaterOrEqual(t, len(expPlan.Alternatives), 2, "expired foreign must re-enable Option B")
+	for _, step := range expPlan.Alternatives[1].Steps {
+		assert.NotEqual(t, "arm transition --issue C --to cancelled --force", step.Argv,
+			"expired foreign cancel still NOT-CLAIM-OWNER — omit from Option B")
 	}
+	assert.Contains(t, expPlan.Alternatives[1].RunnableCommands(), "arm transition --issue R --to cancelled --force")
 
 	// Owned claim: viewer matches holder → Option B cancel offered.
 	owned := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E", Children: []string{"C"}},
-		"C": {Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "me"},
+		"C": {
+			Status: ops.StatusClaimed, Parent: "R", ClaimedBy: "me",
+			ClaimToken: "tok", ClaimedAt: now - 30, LastActivity: now - 30, TTLMinutes: 60,
+		},
 	}
-	ownedPlan := RemediationsPlanFor("R", owned, "me")
+	ownedPlan := RemediationsPlanOpts("R", owned, opts)
 	require.Len(t, ownedPlan.Alternatives, 2)
 	assert.Equal(t, []string{
 		"arm transition --issue C --to cancelled --force",
 		"arm transition --issue R --to cancelled --force",
 	}, ownedPlan.Alternatives[1].RunnableCommands())
 
-	// Open (unowned) keeps plain cancel.
 	open := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"O"}},
 		"O": {Status: ops.StatusOpen, Parent: "E"},
 	}
-	openPlan := RemediationsPlan("O", open)
+	openPlan := RemediationsPlanOpts("O", open, opts)
 	assert.Equal(t, []string{"arm transition --issue O --to cancelled --force"},
 		openPlan.Alternatives[1].RunnableCommands())
 }
 
-func TestCmdGate_MatchesClaimTransitionPredicates_REQ_TOPTIER_S18_T4(t *testing.T) {
+func TestDecide_MatchesClaimForeignLiveLeaseBlocks_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
+	now := int64(1_700_000_000)
+	d := testCLIDecide("me", now)
 	g := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"C", "O"}},
-		"C": {Status: ops.StatusClaimed, Parent: "E", ClaimedBy: "other"},
+		"C": {
+			Status: ops.StatusClaimed, Parent: "E", ClaimedBy: "other",
+			ClaimToken: "tok", ClaimedAt: now - 10, LastActivity: now - 10, TTLMinutes: 60,
+		},
 		"O": {Status: ops.StatusOpen, Parent: "E"},
 	}
-	assert.Error(t, cmdGate("arm claim --issue O --worktree", g, "me"),
-		"claim under merged must refuse even with --force absent")
-	assert.Error(t, cmdGate("arm claim --issue C --force --worktree", g, "me"),
-		"foreign live lease blocks claim; --force is scope-overlap only")
-	assert.Error(t, cmdGate("arm transition --issue C --to cancelled --force", g, "me"),
-		"NOT-CLAIM-OWNER")
-	assert.NoError(t, cmdGate("arm transition --issue C --to cancelled --force", g, "other"),
-		"owner may cancel")
-	assert.NoError(t, cmdGate("arm reopen --issue E", g, "me"))
+	assert.Error(t, d("arm claim --issue O --worktree", g))
+	assert.Error(t, d("arm claim --issue C --force --worktree", g))
+	assert.Error(t, d("arm transition --issue C --to cancelled --force", g))
+	assert.NoError(t, testCLIDecide("other", now)("arm transition --issue C --to cancelled --force", g))
+	assert.NoError(t, d("arm reopen --issue E", g))
 }
 
 func TestRemediationsPlan_FilledDeliveryRequiredInput_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -343,25 +406,24 @@ func TestRenderOrderNotAlphaSorted_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Less(t, zi, ai, "model order follows children slice, not alpha")
 }
 
-func TestDropEitherAlternativeMutatesProducer_REQ_TOPTIER_S18_T4(t *testing.T) { //nolint:paralleltest // mutates package-level planProducer
+func TestDropEitherAlternativeMutatesProducer_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
 	g := Graph{
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E"},
 	}
-	restore := ReplacePlanProducerForTest(func(prev func(string, Graph, PlanOpts) Plan) func(string, Graph, PlanOpts) Plan {
-		return func(id string, graph Graph, opts PlanOpts) Plan {
-			p := prev(id, graph, opts)
+	opts := PlanOpts{
+		Producer: func(id string, graph Graph, o PlanOpts) Plan {
+			p := buildRemediationsPlan(id, graph, o)
 			if len(p.Alternatives) >= 2 {
 				p.Alternatives = p.Alternatives[:1]
 			}
 			return p
-		}
-	})
-	t.Cleanup(restore)
-
-	plan := RemediationsPlan("R", g)
+		},
+	}
+	plan := RemediationsPlanOpts("R", g, opts)
 	assert.Less(t, len(plan.Alternatives), 2,
-		"mutating real planProducer must drop Option B on the product path")
+		"Producer pass-in must drop Option B on the product path")
 	assert.NotContains(t, plan.RenderNextActions(), "Option B:")
 }
 

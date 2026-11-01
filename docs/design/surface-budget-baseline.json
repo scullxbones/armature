@@ -280,7 +280,7 @@
       ]
     },
     "internal/claim": {
-      "count": 71,
+      "count": 73,
       "names": [
         "AcceptAt",
         "ApplyAt",
@@ -303,6 +303,7 @@
         "ErrWorkerIDInUse",
         "ErrWorkerIDInvalid",
         "ErrWorkerIDMissing",
+        "ForeignLiveLeaseBlocks",
         "HeartbeatDebounceInterval",
         "HierarchyGraph",
         "HierarchyGraph.Descendants",
@@ -350,6 +351,7 @@
         "PlanInput.TargetID",
         "PlanInput.TargetScope",
         "PlanInput.WorkerID",
+        "ReplaceForeignLiveLeaseBlocksForTest",
         "ShouldHeartbeat",
         "SortForReplay",
         "ValidateTTLMinutes"
@@ -1034,7 +1036,7 @@
       ]
     },
     "internal/oporder": {
-      "count": 29,
+      "count": 30,
       "names": [
         "CutoverConfigKey",
         "DefaultPublishedRef",
@@ -1057,6 +1059,7 @@
         "Ops",
         "OwnerOf",
         "Published",
+        "ReplaceRequireOwnerForTest",
         "RequireOwner",
         "Seq",
         "Seq.CommitN",
@@ -1508,7 +1511,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 100,
+      "count": 109,
       "names": [
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1518,6 +1521,7 @@
         "AssessmentFact.BaseSHA",
         "AssessmentFact.HeadSHA",
         "AssessmentHowTo",
+        "DefaultDecideOnlyTree",
         "Error",
         "Error.Base",
         "Error.Error",
@@ -1555,6 +1559,7 @@
         "IssueFacts.IntegrationBranch",
         "IssueFacts.Status",
         "IssueFacts.Tip",
+        "IssueFlag",
         "KindCheckFailed",
         "KindEmptyDiff",
         "KindLegacy",
@@ -1568,9 +1573,13 @@
         "Node",
         "Node.Base",
         "Node.Children",
+        "Node.ClaimToken",
+        "Node.ClaimedAt",
         "Node.ClaimedBy",
+        "Node.LastActivity",
         "Node.Parent",
         "Node.Status",
+        "Node.TTLMinutes",
         "Node.Tip",
         "Plan",
         "Plan.Alternatives",
@@ -1578,13 +1587,16 @@
         "Plan.MoreSteps",
         "Plan.RenderNextActions",
         "PlanOpts",
+        "PlanOpts.Decide",
+        "PlanOpts.Now",
+        "PlanOpts.Producer",
         "PlanOpts.Viewer",
         "RecoveryArgv",
         "RemediationsForIssue",
         "RemediationsPlan",
         "RemediationsPlanFor",
+        "RemediationsPlanOpts",
         "RenderGroupedNextActions",
-        "ReplacePlanProducerForTest",
         "Result",
         "Result.AppendCheck",
         "Result.CheckPayload",

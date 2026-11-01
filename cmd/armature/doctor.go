@@ -100,24 +100,24 @@ func newDoctorCmd() *cobra.Command {
 			enrichD14TreeConsistency(&report, graph)
 
 			var explainGraph promotion.Graph
-			var viewer string
+			var planOpts promotion.PlanOpts
 			if explain {
 				explainGraph = graph
-				// Best-effort viewer so Option B matches transition owner gate.
-				// Doctor must not fail when worker-init is missing.
+				viewer := ""
 				if wid, _, werr := resolveWorkerAndLogCmd(cmd); werr == nil {
 					viewer = wid
 				}
+				planOpts = planOptsForRemediation(appCtx, viewer)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if isStructuredFormat(format) {
-				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain, explainGraph, viewer); err != nil {
+				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain, explainGraph, planOpts); err != nil {
 					return err
 				}
 			} else {
-				renderDoctorHuman(cmd, report, verbose, explain, explainGraph, viewer)
+				renderDoctorHuman(cmd, report, verbose, explain, explainGraph, planOpts)
 			}
 
 			// Doctor report is not a Command Failure (ADR 0020 §7).
@@ -216,7 +216,7 @@ type doctorCheckRow struct {
 	Suggested    []string        `json:"suggested,omitempty"`
 }
 
-func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, graph promotion.Graph, viewer string) error {
+func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, graph promotion.Graph, opts promotion.PlanOpts) error {
 	rows := make([]doctorCheckRow, 0, len(report.Checks))
 	for _, f := range report.Checks {
 		row := doctorCheckRow{
@@ -227,7 +227,7 @@ func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, graph 
 			VerboseItems: f.VerboseItems,
 		}
 		if explain && f.Severity != doctor.SeverityOK {
-			row.Explanation, row.Suggested = doctorCheckGuidanceFor(f, graph, viewer)
+			row.Explanation, row.Suggested = doctorCheckGuidanceFor(f, graph, opts)
 		}
 		rows = append(rows, row)
 	}
@@ -241,7 +241,7 @@ func doctorHelp(report doctor.Report) []string {
 	return []string{doctorCodesHelp}
 }
 
-func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool, graph promotion.Graph, viewer string) {
+func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool, graph promotion.Graph, opts promotion.PlanOpts) {
 	for _, f := range report.Checks {
 		icon := "✓"
 		switch f.Severity {
@@ -252,7 +252,7 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", icon, f.Check, f.Message)
 		if explain && f.Severity != doctor.SeverityOK {
-			explanation, suggested := doctorCheckGuidanceFor(f, graph, viewer)
+			explanation, suggested := doctorCheckGuidanceFor(f, graph, opts)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Explanation: %s\n", explanation)
 			for _, s := range suggested {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", s)
@@ -270,10 +270,10 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 
 // doctorCheckGuidance is the shape-agnostic coverage entry point (empty finding).
 func doctorCheckGuidance(check string) (explanation string, suggested []string) {
-	return doctorCheckGuidanceFor(doctor.Finding{Check: check}, nil, "")
+	return doctorCheckGuidanceFor(doctor.Finding{Check: check}, nil, promotion.PlanOpts{})
 }
 
-func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph, viewer string) (explanation string, suggested []string) {
+func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpts) (explanation string, suggested []string) {
 	switch f.Check {
 	case "D1":
 		return "Git commits reference issue IDs that are not done or merged, so history and the issue graph have drifted.",
@@ -314,7 +314,7 @@ func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph, viewer stri
 				"the lag number may be stale. Warnings are ignored; behind is an error.",
 			[]string{"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"}
 	case "D14":
-		return d14Guidance(f, graph, viewer)
+		return d14Guidance(f, graph, opts)
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
 			[]string{"see docs/validation-codes.md"}
@@ -369,7 +369,7 @@ func enrichD14TreeConsistency(report *doctor.Report, graph promotion.Graph) {
 // d14Guidance keeps the broad D14 warning and uses the shared typed Plan
 // (same truth as MERGED-1 / sync). Per finding: header → Option A/B → ordered
 // steps — never cross-item dedup, never alpha-sort, never "; "-joined argv.
-func d14Guidance(f doctor.Finding, graph promotion.Graph, viewer string) (explanation string, suggested []string) {
+func d14Guidance(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpts) (explanation string, suggested []string) {
 	explanation = d14Explanation
 	if len(f.Items) == 0 || graph == nil {
 		return explanation, []string{promotion.FallbackGuidance}
@@ -379,7 +379,7 @@ func d14Guidance(f doctor.Finding, graph promotion.Graph, viewer string) (explan
 	var needsTreeRepair bool
 	for _, item := range f.Items {
 		id := promotion.FindingID(item)
-		plan := promotion.RemediationsPlanFor(id, graph, viewer)
+		plan := promotion.RemediationsPlanOpts(id, graph, opts)
 		if len(plan.Guidance) > 0 {
 			needsTreeRepair = true
 		}

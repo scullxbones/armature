@@ -11,12 +11,16 @@ import (
 
 // Node is the minimal issue-graph fact RemediationsPlan needs.
 type Node struct {
-	Status    string
-	Parent    string
-	Children  []string
-	Base      string // delivery base SHA when known
-	Tip       string // delivery tip SHA when known
-	ClaimedBy string // claim holder when claimed/in-progress
+	Status       string
+	Parent       string
+	Children     []string
+	Base         string // delivery base SHA when known
+	Tip          string // delivery tip SHA when known
+	ClaimedBy    string // claim holder when claimed/in-progress
+	ClaimToken   string // published claim token when held
+	ClaimedAt    int64  // lease Since
+	LastActivity int64  // max(claimed_at, heartbeat, claiming activity)
+	TTLMinutes   int    // recorded claim TTL minutes
 }
 
 // Graph maps issue ID → status/children/parent/delivery. Callers project from
@@ -72,34 +76,27 @@ const (
 	FindingHeaderPrefix    = "finding: "
 )
 
-// planProducer is the seam RemediationsPlan calls. Tests may replace it to
-// mutate the real producer path (not a local Plan copy) so doctor/merged see it.
-var planProducer = buildRemediationsPlan
-
-// ReplacePlanProducerForTest wraps the plan producer; call restore when done.
-// Used by harnesses that must inject a drop into the product path.
-// wrap receives the previous producer so tests can delegate then mutate.
-func ReplacePlanProducerForTest(wrap func(prev func(string, Graph, PlanOpts) Plan) func(string, Graph, PlanOpts) Plan) (restore func()) {
-	prev := planProducer
-	planProducer = wrap(prev)
-	return func() { planProducer = prev }
-}
-
 // RemediationsPlan walks the issue tree under id and returns a typed Plan
-// (viewer unknown — every ClaimedBy holder is treated as foreign).
+// (viewer unknown — every ClaimedBy holder is treated as foreign without Decide).
 func RemediationsPlan(id string, g Graph) Plan {
-	return RemediationsPlanFor(id, g, "")
+	return RemediationsPlanOpts(id, g, PlanOpts{})
 }
 
-// RemediationsPlanFor is RemediationsPlan with the calling worker's ID so
-// Option B cancel matches transition's owner gate.
+// RemediationsPlanFor is RemediationsPlan with the calling worker's ID.
 func RemediationsPlanFor(id string, g Graph, viewer string) Plan {
-	opts := PlanOpts{Viewer: viewer}
-	p := planProducer(id, g, opts)
-	// Gate-check every printed command (same predicates as CLI). Drop any
-	// alternative that would suggest a gate-refused step — no separate simulation.
-	p = filterGateRefusedAlternatives(g, p, opts.Viewer)
-	// Finished-work preservation (product caller of FinishedWorkDestroyed).
+	return RemediationsPlanOpts(id, g, PlanOpts{Viewer: viewer})
+}
+
+// RemediationsPlanOpts builds then filters a Plan. Every printed command argv
+// (Options + MoreSteps) must pass opts.Decide before it is returned — same
+// refusals as claim/transition when Decide is the CLI predicate.
+func RemediationsPlanOpts(id string, g Graph, opts PlanOpts) Plan {
+	produce := buildRemediationsPlan
+	if opts.Producer != nil {
+		produce = opts.Producer
+	}
+	p := produce(id, g, opts)
+	p = filterDecideRefused(g, p, opts)
 	p = filterFinishedWorkDestroyingAlternatives(g, p)
 	return p
 }
@@ -125,12 +122,13 @@ func buildRemediationsPlan(id string, g Graph, opts PlanOpts) Plan {
 	}
 
 	if chain := mergedAncestorChain(id, g); len(chain) > 0 {
-		return treeRepairPlan(id, chain, node, g, opts.Viewer)
+		return treeRepairPlan(id, chain, node, g, opts)
 	}
 	return healthyPlan(id, node, g)
 }
 
-func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, viewer string) Plan {
+func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, opts PlanOpts) Plan {
+	viewer := opts.Viewer
 	// Option A: reopen the FULL merged-ancestor chain rootward-first so nested
 	// M1→M2→item never leaves M2 open under still-merged M1.
 	var reopenSteps []Step
@@ -145,26 +143,31 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, viewer 
 	}
 
 	// Option B: cancel open descendants then self — only when every cancel
-	// target passes cmdGate for this viewer. Foreign live leases: no invented
-	// takeover (claim --force is scope-overlap only); drop cancel-other-worker
-	// option and print honest holder/TTL guidance + left-behind worktree note.
+	// target passes Decide (CLI owner/TTL gate). Live foreign leases: drop
+	// Option B; print honest holder guidance (+ real TTL expiry when known).
 	cancelTargets := append(openDescendantsUnder(id, g), id)
-	var foreign []string
+	var foreignLive []string
+	var cancelSteps []Step
 	for _, tid := range cancelTargets {
-		if foreignLiveLeaseBlocks(g[tid], viewer) {
-			foreign = append(foreign, tid)
+		argv := "arm transition --issue " + tid + " --to cancelled --force"
+		if opts.Decide != nil {
+			if err := opts.Decide(argv, g); err != nil {
+				if looksForeignLive(g[tid], viewer, opts.Now) {
+					foreignLive = append(foreignLive, tid)
+				}
+				// Expired foreign / other refuse: omit from Option B rather than
+				// print a CLI-refused cancel (Decide already matched transition).
+				continue
+			}
+		} else if looksForeignLive(g[tid], viewer, opts.Now) {
+			foreignLive = append(foreignLive, tid)
+			continue
 		}
+		cancelSteps = append(cancelSteps, Step{Argv: argv, Kind: StepCommand})
 	}
-	if len(foreign) > 0 {
-		p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreign, g)...)
-	} else {
-		var cancelSteps []Step
-		for _, tid := range cancelTargets {
-			cancelSteps = append(cancelSteps, Step{
-				Argv: "arm transition --issue " + tid + " --to cancelled --force",
-				Kind: StepCommand,
-			})
-		}
+	if len(foreignLive) > 0 {
+		p.Guidance = append(p.Guidance, foreignLeaseGuidance(foreignLive, g, opts.Now)...)
+	} else if len(cancelSteps) > 0 {
 		p.Alternatives = append(p.Alternatives, Alternative{Steps: cancelSteps})
 	}
 
@@ -175,7 +178,31 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, viewer 
 	return p
 }
 
-func foreignLeaseGuidance(ids []string, g Graph) []string {
+// looksForeignLive is a graph-side hint for guidance when Decide is absent;
+// production Decide (claim.ForeignLiveLeaseBlocks) is authoritative for print.
+func looksForeignLive(node Node, viewer string, now int64) bool {
+	switch node.Status {
+	case ops.StatusClaimed, ops.StatusInProgress:
+	default:
+		return false
+	}
+	holder := strings.TrimSpace(node.ClaimedBy)
+	if holder == "" || (viewer != "" && holder == viewer) {
+		return false
+	}
+	if now > 0 && node.LastActivity > 0 {
+		ttl := node.TTLMinutes
+		if ttl <= 0 {
+			ttl = 60
+		}
+		if now >= node.LastActivity+int64(ttl)*60 {
+			return false // expired
+		}
+	}
+	return true
+}
+
+func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
 	var out []string
 	for _, id := range ids {
 		n := g[id]
@@ -183,41 +210,94 @@ func foreignLeaseGuidance(ids []string, g Graph) []string {
 		if holder == "" {
 			holder = "another worker"
 		}
+		ttlPart := "owner must release (arm transition --issue " + id + " --to cancelled) then rerun arm doctor"
+		if n.LastActivity > 0 {
+			ttl := n.TTLMinutes
+			if ttl <= 0 {
+				ttl = 60
+			}
+			exp := n.LastActivity + int64(ttl)*60
+			if now > 0 && now < exp {
+				ttlPart = fmt.Sprintf(
+					"owner must release (arm transition --issue %s --to cancelled), "+
+						"or wait until unix %d (TTL %dm from last activity %d) "+
+						"then arm doctor --fix; then rerun arm doctor",
+					id, exp, ttl, n.LastActivity,
+				)
+			}
+		}
 		out = append(out, fmt.Sprintf(
-			"live %s lease on %s held by %s — owner must release "+
-				"(arm transition --issue %s --to cancelled, or wait for TTL expiry then arm doctor --fix) "+
-				"then rerun arm doctor; arm claim --force only overrides scope overlap, not foreign live leases. "+
+			"live %s lease on %s held by %s — %s; arm claim --force only overrides scope overlap, not foreign live leases. "+
 				"Left-behind worktree may remain at .worktrees/%s. Prefer Option A (reopen) if the holder is unavailable",
-			n.Status, id, holder, id, id,
+			n.Status, id, holder, ttlPart, id,
 		))
 	}
 	return out
 }
 
-// filterGateRefusedAlternatives drops any Alternative whose StepCommand fails
-// cmdGate — printed Options never suggest a CLI-refused command.
-func filterGateRefusedAlternatives(g Graph, p Plan, viewer string) Plan {
-	if len(p.Alternatives) == 0 {
-		return p
+// filterDecideRefused drops Alternatives / MoreSteps whose command argv fails
+// opts.Decide. MoreSteps are checked on the post-reopen graph (after Option A).
+func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
+	decide := opts.Decide
+	if decide == nil {
+		decide = DefaultDecideOnlyTree(opts.Viewer)
 	}
-	var kept []Alternative
+	if len(p.Alternatives) > 0 {
+		var kept []Alternative
+		for _, alt := range p.Alternatives {
+			ok := true
+			for _, step := range alt.Steps {
+				if step.Kind != StepCommand && step.Kind != StepRequiredInput {
+					continue
+				}
+				if err := decide(step.Argv, g); err != nil {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				kept = append(kept, alt)
+			}
+		}
+		p.Alternatives = kept
+	}
+	if len(p.MoreSteps) > 0 {
+		after := graphAfterPrintedReopens(g, p)
+		var kept []Step
+		for _, step := range p.MoreSteps {
+			if step.Kind == StepCommand || step.Kind == StepRequiredInput {
+				if err := decide(step.Argv, after); err != nil {
+					continue
+				}
+			}
+			kept = append(kept, step)
+		}
+		p.MoreSteps = kept
+	}
+	return p
+}
+
+// graphAfterPrintedReopens applies arm reopen steps from Alternatives so
+// MoreSteps are Decide-checked in the post-repair graph.
+func graphAfterPrintedReopens(g Graph, p Plan) Graph {
+	after := cloneGraph(g)
 	for _, alt := range p.Alternatives {
-		ok := true
-		for _, step := range alt.Steps {
-			if step.Kind != StepCommand && step.Kind != StepRequiredInput {
+		for _, cmd := range alt.RunnableCommands() {
+			if !strings.Contains(cmd, "arm reopen ") {
 				continue
 			}
-			if err := cmdGate(step.Argv, g, viewer); err != nil {
-				ok = false
-				break
+			issue := IssueFlag(cmd)
+			if issue == "" {
+				continue
 			}
-		}
-		if ok {
-			kept = append(kept, alt)
+			n := after[issue]
+			n.Status = ops.StatusOpen
+			n.ClaimedBy = ""
+			n.ClaimToken = ""
+			after[issue] = n
 		}
 	}
-	p.Alternatives = kept
-	return p
+	return after
 }
 
 // openDescendantsUnder lists open/claimed/in-progress descendants of id
@@ -720,7 +800,7 @@ func FinishedWorkDestroyed(before, after Graph, explicitlyTouched map[string]boo
 }
 
 // applyReopenCancelEffects applies only reopen/cancel argv effects for the
-// FinishedWorkDestroyed product check. Not an option validator — cmdGate owns
+// FinishedWorkDestroyed product check. Not an option validator — Decide owns
 // that — and never invents claim-takeover success.
 func applyReopenCancelEffects(g Graph, alt Alternative) Graph {
 	after := cloneGraph(g)
@@ -751,7 +831,7 @@ func applyReopenCancelEffects(g Graph, alt Alternative) Graph {
 
 // filterFinishedWorkDestroyingAlternatives drops Alternatives that would disturb
 // done/merged nodes they do not explicitly touch — product caller of
-// FinishedWorkDestroyed (paired with cmdGate; no claim-takeover simulation).
+// FinishedWorkDestroyed (paired with Decide; no claim-takeover simulation).
 func filterFinishedWorkDestroyingAlternatives(g Graph, p Plan) Plan {
 	if len(p.Alternatives) == 0 {
 		return p

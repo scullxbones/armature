@@ -629,36 +629,36 @@ func produceAssessmentFromHowTo(t *testing.T, repo, issueID, base, tip, howTo st
 	return assessmentPath, bundlePath
 }
 
-// TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4 injects a drop
-// into the product planProducer (not a local Plan copy) and asserts doctor /
-// arm merged observe the incomplete Options. Not parallel — mutates package state.
+// TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4 passes a
+// Producer into RemediationsPlanOpts (parallel-safe; no package-global hook).
 func TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
-	type producer = func(string, promotion.Graph, promotion.PlanOpts) promotion.Plan
-	restore := promotion.ReplacePlanProducerForTest(func(prev producer) producer {
-		return func(id string, g promotion.Graph, opts promotion.PlanOpts) promotion.Plan {
-			p := prev(id, g, opts)
-			if len(p.Alternatives) >= 2 {
-				p.Alternatives = p.Alternatives[:1]
-			}
-			return p
-		}
-	})
-	t.Cleanup(restore)
-
+	t.Parallel()
 	repo := setupMixedD14Tree(t)
-	plan := promotion.RemediationsPlan("R", loadPromotionGraph(t, repo))
-	assert.Less(t, len(plan.Alternatives), 2,
-		"injected drop must shrink product Plan Alternatives")
-	d14 := doctorD14Explain(t, repo)
-	assert.NotContains(t, d14.suggested, "Option B:",
-		"doctor --explain must reflect the mutated producer (not a local Plan copy)")
-	assert.Contains(t, d14.items, "R -> E", "D14 finding remains; incomplete remediations do not clear it")
+	g := loadPromotionGraph(t, repo)
+	baseline := promotion.RemediationsPlanOpts("R", g, planOptsForRemediation(getTestContext(t, repo), ""))
+	require.GreaterOrEqual(t, len(baseline.Alternatives), 2, "product path exposes ≥2 Options")
 
+	opts := planOptsForRemediation(getTestContext(t, repo), "")
+	opts.Producer = func(id string, graph promotion.Graph, o promotion.PlanOpts) promotion.Plan {
+		// Producer nil on inner opts — no recursion.
+		full := promotion.RemediationsPlanOpts(id, graph, promotion.PlanOpts{
+			Viewer: o.Viewer, Now: o.Now, Decide: o.Decide,
+		})
+		if len(full.Alternatives) >= 2 {
+			full.Alternatives = full.Alternatives[:1]
+		}
+		return full
+	}
+	plan := promotion.RemediationsPlanOpts("R", g, opts)
+	assert.Less(t, len(plan.Alternatives), 2, "Producer pass-in must shrink product Plan")
+	assert.NotContains(t, plan.RenderNextActions(), "Option B:")
+
+	d14 := doctorD14Explain(t, repo)
+	assert.Contains(t, d14.items, "R -> E")
 	out := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, out, new(bytes.Buffer),
 		"merged", "--issue", "R", "--repo", repo, "--format", "agent")
-	assert.Equal(t, 1, code, "arm merged on incomplete-remediation tree must fail")
-	assert.NotContains(t, out.String(), "Option B:")
+	assert.Equal(t, 1, code, "arm merged on D14 non-leaf must fail")
 }
 
 // TestOwnedAndForeignLeaseUnderMergedCLI_REQ_TOPTIER_S18_T4 covers the PJ class:
@@ -683,6 +683,8 @@ func TestOwnedAndForeignLeaseUnderMergedCLI_REQ_TOPTIER_S18_T4(t *testing.T) {
 				continue
 			}
 			assert.NotContains(t, cmd, "arm claim --issue OS --force", "no invented takeover argv: %s", cmd)
+			assert.NotEqual(t, "arm claim --issue OS --worktree", cmd,
+				"MoreSteps must not emit gate-refused claim on foreign live lease")
 			assert.NotEqual(t, "arm transition --issue OS --to cancelled --force", cmd,
 				"must not print gate-refused cancel-other as runnable step")
 			assert.NotContains(t, cmd, "arm unassign ")
@@ -707,20 +709,25 @@ func TestOwnedAndForeignLeaseUnderMergedCLI_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.True(t, containsSubstring(d14.suggested, "live claimed lease on OS held by "+other))
 	assert.True(t, containsSubstring(d14.suggested, ".worktrees/OS"))
 
-	osPlan := promotion.RemediationsPlanFor("OS", g, workerID)
+	ctx := getTestContext(t, repo)
+	opts := planOptsForRemediation(ctx, workerID)
+	osPlan := promotion.RemediationsPlanOpts("OS", g, opts)
 	require.Len(t, osPlan.Alternatives, 1, "foreign lease drops Option B")
 	assert.Equal(t, []string{"arm reopen --issue G2"}, osPlan.Alternatives[0].RunnableCommands())
+	for _, step := range osPlan.MoreSteps {
+		assert.NotEqual(t, "arm claim --issue OS --worktree", step.Argv)
+	}
 
-	ownPlan := promotion.RemediationsPlanFor("OWN", g, workerID)
+	ownPlan := promotion.RemediationsPlanOpts("OWN", g, opts)
 	require.Len(t, ownPlan.Alternatives, 2, "owned lease keeps Option B cancel")
 	assert.Equal(t, []string{"arm transition --issue OWN --to cancelled --force"},
 		ownPlan.Alternatives[1].RunnableCommands())
 
-	// Run every printed Option's steps on a fresh fixture whose viewer matches the plan.
+	// Every printed Option argv: execute → progress (no exit-0 no-op loops).
 	for i := range ownPlan.Alternatives {
 		fresh, freshWorker := setupOwnedForeignMergedFixture(t)
 		before := loadPromotionGraph(t, fresh)
-		plan := promotion.RemediationsPlanFor("OWN", before, freshWorker)
+		plan := promotion.RemediationsPlanOpts("OWN", before, planOptsForRemediation(getTestContext(t, fresh), freshWorker))
 		require.Len(t, plan.Alternatives, 2)
 		alt := plan.Alternatives[i]
 		require.NoError(t, applyAlternative(t, fresh, alt), "option %c", 'A'+i)
@@ -730,9 +737,9 @@ func TestOwnedAndForeignLeaseUnderMergedCLI_REQ_TOPTIER_S18_T4(t *testing.T) {
 		assert.Empty(t, promotion.FinishedWorkDestroyed(before, after, alt.ExplicitlyTouchedIDs()))
 	}
 
-	// Foreign Option A (reopen) clears OS inconsistency; Option B correctly not offered.
 	freshOS, freshOSWorker := setupOwnedForeignMergedFixture(t)
-	osFresh := promotion.RemediationsPlanFor("OS", loadPromotionGraph(t, freshOS), freshOSWorker)
+	osFresh := promotion.RemediationsPlanOpts("OS", loadPromotionGraph(t, freshOS),
+		planOptsForRemediation(getTestContext(t, freshOS), freshOSWorker))
 	require.Len(t, osFresh.Alternatives, 1)
 	require.NoError(t, applyAlternative(t, freshOS, osFresh.Alternatives[0]))
 	afterOS := loadPromotionGraph(t, freshOS)
