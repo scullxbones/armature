@@ -339,15 +339,17 @@ func TestDoctorD14_WarnsOnDoneUnderMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 func TestDoctorD14_SkipsMergedUnderCancelled_ORCRUN_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 
+	// Include a done child under cancelled: if D14 were broadened to warn on
+	// cancelled parents (exclusion removed), this fixture must fail the test.
 	index := materialize.Index{
-		"ORCRUN":     {Status: "cancelled", Type: "epic"},
-		"ORCRUN-S1":  {Status: "merged", Type: "story", Parent: "ORCRUN"},
-		"story-orph": {Status: "merged", Type: "story", Parent: "ORCRUN"},
-		"healthy":    {Status: "merged", Type: "story"},
-		"child":      {Status: "merged", Type: "task", Parent: "healthy"},
+		"ORCRUN":        {Status: "cancelled", Type: "epic"},
+		"ORCRUN-S1":     {Status: "merged", Type: "story", Parent: "ORCRUN"},
+		"ORCRUN-T-done": {Status: "done", Type: "task", Parent: "ORCRUN"},
+		"healthy":       {Status: "merged", Type: "story"},
+		"child":         {Status: "merged", Type: "task", Parent: "healthy"},
 	}
 	f := checkD14DoneUnderMerged(index)
-	assert.Equal(t, SeverityOK, f.Severity, "merged-under-cancelled must not become a D14 finding")
+	assert.Equal(t, SeverityOK, f.Severity, "done/merged under cancelled must not become a D14 finding")
 	assert.Empty(t, f.Items)
 	assert.Equal(t, "No done issues under a merged parent", f.Message)
 }
@@ -366,6 +368,22 @@ func TestDoctorD14_OKWhenDoneParentNotMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Empty(t, f.Items)
 }
 
+func TestDoctorD14_SkipsMissingParentAndSelfParent_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	// Choice: skip (do not warn). Missing parents are D4; self-parent is not a
+	// merged-parent promotion. D14 stays a single index pass with no git calls.
+	index := materialize.Index{
+		"ghost-child": {Status: "done", Type: "task", Parent: "missing-parent"},
+		"loop-child":  {Status: "done", Type: "task", Parent: "loop-child"},
+		"story-ok":    {Status: "merged", Type: "story"},
+		"task-ok":     {Status: "merged", Type: "task", Parent: "story-ok"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, f.Severity)
+	assert.Empty(t, f.Items)
+}
+
 func TestDoctorD14_EmittedByRun_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	issuesDir := initIssuesDir(t)
@@ -375,6 +393,23 @@ func TestDoctorD14_EmittedByRun_REQ_TOPTIER_S18_T4(t *testing.T) {
 	require.NoError(t, err)
 	d14 := findCheck(t, report, "D14")
 	assert.Equal(t, SeverityOK, d14.Severity, "empty repo must not warn D14")
+}
+
+func TestDoctorD14_RunFailClosedOnIndexWriteBlock_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0644))
+	stateDir := filepath.Join(issuesDir, "state")
+	_, err := Run(issuesDir, stateDir, "", "", false, time.Now())
+	require.NoError(t, err)
+	// Block rematerialize from rewriting index.json so the next Run cannot load
+	// a usable index — D14 must not soft-skip; Run fails closed.
+	indexPath := filepath.Join(stateDir, "index.json")
+	require.NoError(t, os.Remove(indexPath))
+	require.NoError(t, os.Mkdir(indexPath, 0755))
+
+	_, err = Run(issuesDir, stateDir, "", "", false, time.Now())
+	require.Error(t, err, "index-load/write errors must fail closed before D14 runs")
 }
 
 func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testing.T) {

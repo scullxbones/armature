@@ -189,7 +189,7 @@ The issue object is `issues[0]` and includes `id`, `title`, `type`, `status`, `s
 "$ARM" --repo "$TARGET" --format agent --non-interactive doctor
 ```
 
-Stdout: `{count, checks, help}`. Each `checks[]` row is `{check, severity, message, items?, verbose_items?}`. Live `check` ids, in order, are D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12. `--fix --dry-run` prints planned claim-liveness remediations without writing ops (JSON `null` when the plan slice is empty; ops log byte size must not grow). `--fix` without dry-run **does** append ops.
+Stdout: `{count, checks, help}`. Each `checks[]` row is `{check, severity, message, items?, verbose_items?}`. Live `check` ids, in order, are D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D14. `--fix --dry-run` prints planned claim-liveness remediations without writing ops (JSON `null` when the plan slice is empty; ops log byte size must not grow). `--fix` without dry-run **does** append ops.
 
 **ready / claim**:
 

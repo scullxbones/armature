@@ -274,11 +274,17 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 	case "D10":
 		return "config.json failed a strict decode or a present field is out of range.",
 			"edit .armature/config.json and re-run arm doctor"
+	case "D11":
+		return "origin/_armature is missing, local-only ops are stale past local_only_ops_stale_hours, or the ops remote tip could not be verified.",
+			"arm push-ops"
 	case "D12":
 		return "The ops worktree is behind origin/_armature so the DAG cannot " +
 				"be confirmed fresh, or origin/_armature could not be fetched so " +
 				"the lag number may be stale. Warnings are ignored; behind is an error.",
 			"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"
+	case "D14":
+		return "An issue is still done while its parent is already merged — a stuck done→merged promotion. Merged-under-cancelled parents are not this check.",
+			"arm merged --issue <issue-id>"
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
 			"see docs/validation-codes.md"

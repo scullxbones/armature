@@ -607,20 +607,25 @@ func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 }
 
 // checkD14DoneUnderMerged warns when an issue is still done while its parent is
-// already merged. Merged children under a cancelled parent (ORCRUN) are not
-// reported — that shape is an intentional cancel-of-parent leftover, not a
-// stuck done→merged promotion.
+// already merged. One index pass; no git calls. Index-load failures stay
+// fail-closed in Run via loadMaterializedState (this helper assumes a loaded index).
+//
+// Skips (not warnings):
+//   - done under cancelled (ORCRUN leftover) — only merged parents qualify
+//   - merged under cancelled — not a stuck done→merged promotion
+//   - missing parent ID — D4 owns broken parent refs
+//   - self-parent (Parent == id) — not a merged-parent promotion; skip rather than warn
 func checkD14DoneUnderMerged(index materialize.Index) Finding {
 	f := Finding{Check: "D14", Severity: SeverityOK, Message: "No done issues under a merged parent"}
 
 	var stuck []string
 	for id, entry := range index {
-		if entry.Status != "done" || entry.Parent == "" {
+		if entry.Status != "done" || entry.Parent == "" || entry.Parent == id {
 			continue
 		}
 		parent, ok := index[entry.Parent]
 		if !ok {
-			continue
+			continue // missing parent: D4; do not double-report here
 		}
 		if parent.Status != "merged" {
 			continue

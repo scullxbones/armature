@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
@@ -153,8 +154,26 @@ func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing
 		"D9 unrecognized paths are not GCRemovals; bind or remove the reported path")
 	assert.NotContains(t, d9, "worktree gc")
 
+	_, d11 := doctorCheckGuidance("D11")
+	assert.Equal(t, "arm push-ops", d11)
+
 	_, d12 := doctorCheckGuidance("D12")
 	assert.Contains(t, d12, "origin/_armature")
+
+	_, d14 := doctorCheckGuidance("D14")
+	assert.Equal(t, "arm merged --issue <issue-id>", d14)
+}
+
+func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	defaultExpl, _ := doctorCheckGuidance("D999")
+	for _, id := range doctor.LiveCheckIDs() {
+		expl, sug := doctorCheckGuidance(id)
+		assert.NotEqual(t, defaultExpl, expl,
+			"%s must have dedicated --explain guidance (not the default fallback)", id)
+		assert.NotEmpty(t, sug, "%s suggested remediation must be non-empty", id)
+	}
 }
 
 func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {

@@ -151,8 +151,84 @@ func TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2(t *testing.T) 
 		assert.True(t, tableRow.MatchString(body),
 			"docs/validation-codes.md missing quick-reference row for %s (registry LiveCheckIDs)", id)
 	}
-	assert.Contains(t, body, "checks D1–D12 and D14",
-		"validation-codes intro must name the full live doctor range including D14")
+	for _, id := range live {
+		assert.Contains(t, body, id, "validation-codes.md must name live check %s somewhere", id)
+	}
+}
+
+// TestOrderedLiveCheckEnumerationsMatchRegistry_REQ_TOPTIER_S18_T4 fails when
+// skill/docs/scripts claim a near-complete ordered live doctor ID list that
+// omits any LiveCheckIDs() member (the class that left D14 out of SKILL.md).
+func TestOrderedLiveCheckEnumerationsMatchRegistry_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	live := LiveCheckIDs()
+	require.GreaterOrEqual(t, len(live), 10, "registry must expose a full live set")
+	wantCSV := strings.Join(live, ", ")
+	wantJSON := `["` + strings.Join(live, `","`) + `"]`
+
+	csvRE := regexp.MustCompile(`D1(?:,\s*D[1-9][0-9]*){9,}`)
+	jsonRE := regexp.MustCompile(`\["D1"(?:,"D[1-9][0-9]*"){9,}\]`)
+	// Contiguous D1–D12 range claims are allowed as shorthand, but every live ID
+	// outside that span (today: D14) must appear on the same line — the class
+	// that left product-doctor prose at D12 while the bootstrapped summary named D14.
+	claimRangeRE := regexp.MustCompile(`(?i)(?:exactly|emits|are|ids?,?\s+in\s+order|checks(?:\[\])?\s+are)\b[^.\n]{0,80}\bD1\s*[–-]\s*D12\b`)
+
+	outsideRange := make([]string, 0)
+	for _, id := range live {
+		var n int
+		if _, err := fmt.Sscanf(id, "D%d", &n); err != nil || n < 1 || n > 12 {
+			outsideRange = append(outsideRange, id)
+		}
+	}
+
+	root := repoRoot(t)
+	paths := []string{
+		filepath.Join(root, ".agents", "skills", "verify-armature", "SKILL.md"),
+		filepath.Join(root, ".agents", "skills", "verify-armature", "features", "doctor.md"),
+		filepath.Join(root, ".agents", "skills", "verify-armature", "scripts", "arm-verify.sh"),
+		filepath.Join(root, "docs", "commands.md"),
+		filepath.Join(root, "docs", "validation-codes.md"),
+		filepath.Join(root, "cmd", "armature", "doctor.go"),
+	}
+
+	var offenders []string
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err, path)
+		rel, err := filepath.Rel(root, path)
+		require.NoError(t, err)
+		rel = filepath.ToSlash(rel)
+		body := string(raw)
+		for _, m := range csvRE.FindAllString(body, -1) {
+			normalized := regexp.MustCompile(`,\s*`).ReplaceAllString(m, ", ")
+			if normalized != wantCSV {
+				offenders = append(offenders, fmt.Sprintf("%s: ordered CSV %q != LiveCheckIDs %q", rel, normalized, wantCSV))
+			}
+		}
+		for _, m := range jsonRE.FindAllString(body, -1) {
+			if m != wantJSON {
+				offenders = append(offenders, fmt.Sprintf("%s: ordered JSON %s != LiveCheckIDs %s", rel, m, wantJSON))
+			}
+		}
+		for i, line := range strings.Split(body, "\n") {
+			if !claimRangeRE.MatchString(line) {
+				continue
+			}
+			missing := make([]string, 0)
+			for _, id := range outsideRange {
+				if !regexp.MustCompile(`\b` + regexp.QuoteMeta(id) + `\b`).MatchString(line) {
+					missing = append(missing, id)
+				}
+			}
+			if len(missing) > 0 {
+				offenders = append(offenders, fmt.Sprintf("%s:%d: D1–D12 live-range claim missing %v: %s",
+					rel, i+1, missing, strings.TrimSpace(line)))
+			}
+		}
+	}
+	assert.Empty(t, offenders, "ordered live doctor ID enumerations must match LiveCheckIDs():\n%s",
+		strings.Join(offenders, "\n"))
 }
 
 // TestDocsDoNotReserveLiveCheckIDs_REQ_TOPTIER_S12_T2 fails when non-archive
