@@ -235,7 +235,7 @@ TEST_JSON_OUT ?=
 test: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
 	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
-	git status --porcelain --untracked-files=all > "$$pre"; \
+	scripts/check-test-porcelain.sh --write-baseline . "$$pre"; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -timeout $(TEST_TIMEOUT) $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	if [ -n "$(TEST_JSON_OUT)" ]; then \
 		mkdir -p "$$(dirname "$(TEST_JSON_OUT)")"; \
@@ -270,7 +270,7 @@ test-e2eharness: build
 coverage: build
 	@tmp=$$(mktemp "$${TMPDIR:-/tmp}/armature-test.XXXXXX"); \
 	pre=$$(mktemp "$${TMPDIR:-/tmp}/armature-porcelain.XXXXXX"); \
-	git status --porcelain --untracked-files=all > "$$pre"; \
+	scripts/check-test-porcelain.sh --write-baseline . "$$pre"; \
 	ARM_BIN=$(ARM_BIN) $(GO) test -json -count=1 -coverprofile=coverage.out $(UNIT_PACKAGES) > "$$tmp"; status=$$?; \
 	TEST_TIMEOUT=$(TEST_TIMEOUT) $(PYTHON) scripts/summarize_test_json.py "$$tmp"; summary=$$?; \
 	rm -f "$$tmp"; \

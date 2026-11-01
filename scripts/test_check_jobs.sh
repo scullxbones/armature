@@ -844,7 +844,7 @@ else
     fail "depth=50 vs unshallow origin/main range demo failed"
 fi
 
-echo "Test 13: check-test-porcelain fails on leaked file and leaked dir; Bash 3.2-safe..."
+echo "Test 13: check-test-porcelain content-hash baseline; rewrite dirty tracked fails; Bash 3.2 CI..."
 
 PORC_DEMO=$(mktemp -d)
 cleanup_porc() { rm -rf "$PORC_DEMO"; }
@@ -854,11 +854,37 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     git init -q -b main
     git config user.email "porc@example.com"
     git config user.name "porc"
-    git commit -q --allow-empty -m "feat(GIT234-MIN): porcelain baseline"
+    printf 'orig\n' > tracked.txt
+    git add tracked.txt
+    git commit -q -m "feat(PORC): seed tracked"
+    # Pre-existing dirty tracked file — status line stays " M" across rewrite.
+    printf 'dirty-v1\n' > tracked.txt
     baseline=$(mktemp)
-    git status --porcelain --untracked-files=all >"$baseline"
+    bash "$REPO_ROOT/scripts/check-test-porcelain.sh" --write-baseline . "$baseline"
+    if ! grep -q $'\t' "$baseline"; then
+        echo "FAIL: content-hash baseline missing TAB+hash: $(cat "$baseline")"
+        exit 1
+    fi
 
-    # Leaked file
+    # Rewrite already-modified tracked file (porcelain status unchanged, hash changes).
+    printf 'dirty-v2\n' > tracked.txt
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: rewrite of already-modified tracked file did not fail: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'tracked\.txt|hash|baseline'; then
+        echo "FAIL: rewrite failure missing path/hash signal: $out"
+        exit 1
+    fi
+    # Restore dirty-v1 so baseline matches again.
+    printf 'dirty-v1\n' > tracked.txt
+    bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" >/dev/null
+
+    # Leaked file vs clean-enough baseline that includes dirty tracked.
     printf 'x\n' > leaked-file.txt
     set +e
     out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
@@ -874,7 +900,7 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
-    # Leaked directory (untracked dir shows as path/ in porcelain with -uall)
+    # Leaked directory
     mkdir -p leaked-dir
     printf 'y\n' > leaked-dir/inner.txt
     set +e
@@ -891,29 +917,53 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
-    # Clean vs baseline must pass
-    bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" >/dev/null
     rm -f "$baseline"
 
-    # Bash 3.2 guard rejects mapfile
+    # Regex pre-check still green on make-invoked scripts.
     bash "$REPO_ROOT/scripts/check-bash32-scripts.sh" "$REPO_ROOT" >/dev/null
-    bad=$(mktemp)
-    printf '%s\n' '#!/usr/bin/env bash' 'mapfile -t x < <(echo a)' >"$bad"
-    # Temporarily point guard at a copy that includes the bad file via sed injection —
-    # instead assert the pattern matcher would catch mapfile on a fixture script.
-    if ! grep -nE 'mapfile' "$bad" | grep -vE '^[[:digit:]]+:[[:space:]]*#' >/dev/null; then
-        echo "FAIL: mapfile fixture not detected"
+
+    # CI pins real Bash 3.2 via docker bash:3.2 + mutation fixtures.
+    if ! rg -q 'bash:3\.2' "$CI_YML"; then
+        echo "FAIL: ci.yml missing bash:3.2 image pin"
         exit 1
     fi
-    rm -f "$bad"
-    echo "PASS: porcelain fails on leaked file+dir; Bash 3.2 guard green"
+    if ! rg -q 'check-bash32:' "$CI_YML"; then
+        echo "FAIL: ci.yml missing check-bash32 job"
+        exit 1
+    fi
+    if ! rg -q 'scripts/ci-bash32\.sh' "$CI_YML"; then
+        echo "FAIL: ci.yml missing ci-bash32.sh entrypoint"
+        exit 1
+    fi
+    for mut in readarray coproc v-test; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/bash32-mutations/${mut}.sh" ]]; then
+            echo "FAIL: missing bash32 mutation fixture $mut"
+            exit 1
+        fi
+    done
+    # Host bash may be 5.x — mutations must *succeed* here and *fail* in the
+    # bash:3.2 job. Assert fixtures are present and contain the tokens.
+    if ! rg -q 'readarray' "$REPO_ROOT/scripts/testdata/bash32-mutations/readarray.sh"; then
+        echo "FAIL: readarray fixture missing token"
+        exit 1
+    fi
+    if ! rg -q 'coproc' "$REPO_ROOT/scripts/testdata/bash32-mutations/coproc.sh"; then
+        echo "FAIL: coproc fixture missing token"
+        exit 1
+    fi
+    if ! rg -q '\[\[ -v' "$REPO_ROOT/scripts/testdata/bash32-mutations/v-test.sh"; then
+        echo "FAIL: [[ -v ]] fixture missing token"
+        exit 1
+    fi
+
+    echo "PASS: content-hash porcelain rewrite fails; bash:3.2 CI wired"
 ) && PORC_STATUS=0 || PORC_STATUS=$?
 cleanup_porc
 
 if [[ $PORC_STATUS -eq 0 ]]; then
-    pass "check-test-porcelain + Bash 3.2 guard"
+    pass "content-hash porcelain + bash:3.2 CI wiring"
 else
-    fail "porcelain / Bash 3.2 guard demo failed"
+    fail "porcelain content-hash / bash32 CI demo failed"
 fi
 
 echo ""

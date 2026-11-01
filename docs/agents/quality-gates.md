@@ -39,8 +39,11 @@ PR wall is the **max** of three required GitHub Actions jobs (no `needs` between
 | `check-static` | **owns commit-subjects on `pull_request` only** (PR `head.sha` + `fetch-depth: 0` + `origin/main` fetch); skipped on `push` to main (tip == `origin/main` after fetch → empty range). Then lint / crosscompile / check-job drift and the rest of the static partition |
 | `mutate` | gremlins on `./internal` then `./cmd` (full, every PR) |
 | `check-git-2-34` | checksum-pinned Git **2.34.0** on PATH, then `make check-git-floor` (CHECK_JOBS only — proves S12 on the floor; no commit-subjects) |
+| `check-bash32` | pinned `bash:3.2` container runs `scripts/ci-bash32.sh` (`bash -n` on cross-OS make scripts + `readarray` / `coproc` / `[[ -v ]]` mutation fixtures must fail). Regex pre-check in `make lint` is advisory only |
 
 Every CI job runs `scripts/assert-git-min.sh` so runner images cannot silently fall below Git 2.34. The product runtime check (`adapters.RequireMinGit` / `MinGitVersion`) matches that floor.
+
+`make test` / `make coverage` capture a **content-hash** porcelain baseline (`scripts/check-test-porcelain.sh --write-baseline`): each dirty/untracked path is recorded with a digest, so rewriting an already-modified tracked file fails even when the porcelain status line is unchanged.
 
 Lean **(b)** class: version-pinned / partitioned legs run `make check-job` (or `make check-git-floor`); **commit-subjects runs in exactly one CI job** (`check-static`) that already has the correct range (PR tip, not the synthetic merge SHA). Bare `make check` is local/publish-gate only. `scripts/check-commit-subjects.sh` fails loud on empty or merge-only ranges (never pass while checking nothing). Expected wall is ~max of the two ~4m poles plus setup (~6m); the exact-2.34 leg is an additional supply-chain proof.
 

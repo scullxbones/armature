@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Reject Bash 4+ features in make-invoked shell scripts that must run under
-# macOS /bin/bash 3.2 (and other Bash-3 environments).
+# Optional regex pre-check: reject Bash 4+ features in make-invoked shell
+# scripts that must run under macOS /bin/bash 3.2. Real enforcement is the
+# check-bash32 CI job (pinned bash:3.2 container + mutation fixtures).
 set -euo pipefail
 ROOT="${1:-.}"
 cd "$ROOT"
 
 # Cross-OS make paths (test / coverage / test-ci / check-fast and their deps).
-# Do not list this guard script itself (its detector string names the tokens).
+# Do not list mutation fixtures (they intentionally contain Bash 4+ tokens).
 SCRIPTS="
 scripts/check-test-porcelain.sh
 scripts/check-commit-subjects.sh
@@ -17,6 +18,8 @@ scripts/assert-git-min.sh
 scripts/install-git-from-source.sh
 scripts/install-verified-github-release.sh
 scripts/quickstart_check.sh
+scripts/ci-bash32.sh
+scripts/prove-bash32-mutations.sh
 "
 
 # Build the token list without writing a single source line that is itself a hit.
@@ -25,7 +28,11 @@ _tok_map="${_tok_map}file"
 _tok_read='read'
 _tok_read="${_tok_read}array"
 _tok_decl='declare -A'
-_pat="${_tok_map}|[[:space:]]${_tok_read}([[:space:]]|$)|${_tok_decl}|\\\$\\{[A-Za-z_][A-Za-z0-9_]*,,\\}|\\\$\\{[A-Za-z_][A-Za-z0-9_]*\\^\\^\\}"
+_tok_co='co'
+_tok_co="${_tok_co}proc"
+# [[ -v name ]] — match "-v" inside [[ ... ]] without naming the full token here.
+_tok_vtest='\[\[.*[[:space:]]-v[[:space:]]'
+_pat="${_tok_map}|[[:space:]]${_tok_read}([[:space:]]|$)|${_tok_decl}|${_tok_co}|${_tok_vtest}|\\\$\\{[A-Za-z_][A-Za-z0-9_]*,,\\}|\\\$\\{[A-Za-z_][A-Za-z0-9_]*\\^\\^\\}"
 
 fail=0
 for f in $SCRIPTS; do

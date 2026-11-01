@@ -96,6 +96,29 @@ jobs:
           retention-days: 14
           if-no-files-found: ${{ runner.os == 'Windows' && 'ignore' || 'warn' }}
 
+  # Real Bash 3.2: run cross-OS make scripts inside the pinned bash:3.2
+  # image. Regex pre-check (scripts/check-bash32-scripts.sh) stays advisory
+  # in make lint; this job is the fail-closed proof (bash -n + mutations).
+  check-bash32:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
+      - name: Run cross-OS scripts under bash:3.2
+        run: |
+          docker run --rm \
+            --entrypoint sh \
+            -v "$PWD:/src:ro" \
+            -w /src \
+            bash:3.2 \
+            -c 'apk add --no-cache git >/dev/null && bash scripts/ci-bash32.sh /src'
+
   check-core:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
