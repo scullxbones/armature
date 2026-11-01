@@ -463,7 +463,7 @@ arm delivery record --issue TASK-001 --base abc123 --tip def456
 
 ## doctor
 
-Run repository health checks (D1-D12).
+Run repository health checks (D1-D12 and D14).
 
 **Synopsis:**
 `arm doctor [flags]`
@@ -495,7 +495,7 @@ arm doctor quarantine --log worker-a1.log --line 2
 ```
 
 **Doctor Checks:**
-See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D12), their triggers, and remediation steps.
+See [Validation & Doctor Codes Reference](./validation-codes.md) for complete documentation of all doctor checks (D1–D12 and D14), their triggers, and remediation steps.
 
 **D9 — Unrecognized managed worktrees.** A worktree living under the managed
 `.worktrees/` root that carries no issue binding is reported as a health problem
@@ -533,6 +533,23 @@ existing local tracking ref when it can, as an error: the remote could not be
 fetched and the result may be stale, with the fetch error text. Missing
 worktree or missing `origin/_armature` (lag not computable) skips OK. D12 is
 not part of `doctor --fix`.
+
+**D14 — Done under merged parent.** Warns when an issue is still `done` while
+any ancestor is already `merged` (stuck `done → merged` promotion), and when
+open/claimed/in-progress work sits under a merged ancestor. Merged children
+under a cancelled parent (ORCRUN leftover) are not reported. `--explain` uses
+the same tree-walk remediations as MERGED-1 / sync. A remediation counts only
+if running it repairs the finding: pending work under a merged ancestor gets a
+**complete** tree-repair set first — **Option A** reopens the full merged-ancestor
+chain; **Option B** (open/claimed/in-progress subjects only) cancels that open
+work (**never** cancels a `done` node; done subjects get reopen-only and promote
+via more-steps). Never `arm claim` under merged. Further descendant promotion steps are listed after
+`more steps follow…` and are Decide-checked against each Option's resulting
+graph. Done leaves in a healthy tree get `arm delivery record` (filled SHAs when
+knowable, plus `arm review record` assessment step; else a **legacy** `<sha>`
+template). All-cancelled children do not roll up (needs ≥1 merged child) —
+cancel/reopen the parent when not under a merged ancestor. All-merged children
+are owned by materialize rollup. D14 is not part of `doctor --fix`.
 
 ---
 
@@ -692,8 +709,29 @@ removes the worktree. Otherwise the leaf stays `done` and a `promotion-check`
 op is appended. `--pr` may be stored and is not evidence. `--force` remains the
 hook-log override only; it does not waive the git check or the assessment.
 
-A refusal is `MERGED-1` with `next_actions[0]` naming the recovery command and
-the issue id. `arm transition --to merged` is refused (`TRANSITION-1`,
+Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` comes from the
+typed `promotion.RemediationsPlan` (same model as doctor `--explain` suggested):
+mutually exclusive **Option A:… / Option B:…** alternatives (ordered steps each),
+then optional `more steps follow…` promotion steps. Never a flat reopen-then-cancel
+sequence. Pending nodes under a merged ancestor → Options reopen the full merged
+ancestor chain **or** cancel every open/claimed/in-progress descendant (never a
+`done` node; expired foreign: `arm doctor --fix` then cancel open targets);
+live foreign leases hide Option B and print holder/TTL guidance once.
+More-steps promote after an Option and are Decide-checked against that Option's
+resulting graph — never re-print claim on a still-claimed node under a merged
+ancestor. Done leaves with known Base/Tip get filled `arm delivery record …`
+plus **required-input** `arm review record … --assessment <assessment.json>
+--bundle <bundle.json>` with a concrete how-to (prepare → author per schema →
+validate); only missing provenance uses a legacy `<sha>` template.
+All-cancelled-only children (no merged ancestor) → Options cancel **or** reopen
+the parent (rollup will not promote). Healthy open leaves get
+`arm claim --issue … --worktree`. Never `arm merged` on a non-leaf, and never a
+`;`-joined argv in one entry. An issue that is already `merged` is an intentional
+no-op/retry that tears down leftover delivery artifacts and prints
+`<id> is already merged` (exit 0), not a second “Marked … as merged” promotion claim.
+
+A refusal is `MERGED-1` with `next_actions` naming recovery commands and
+issue ids. `arm transition --to merged` is refused (`TRANSITION-1`,
 `arm merged --issue <id>`).
 
 **Synopsis:**
@@ -994,6 +1032,23 @@ arm review prepare --issue TASK-001 --base abc123 --head def456 --output bundle.
 
 ---
 
+### review schema
+
+Emit the ConformanceAssessment JSON Schema shipped with the binary (so user repos without `docs/schemas` can still author assessments).
+
+**Synopsis:**
+`arm review schema [flags]`
+
+**Flags:**
+- `--output string`: Output file (default: stdout).
+
+**Example:**
+```bash
+arm review schema --output conformance-assessment.schema.json
+```
+
+---
+
 ### review record
 
 Record a semantic conformance assessment for a completed task.
@@ -1009,7 +1064,13 @@ Structured output (`--format json`, `--format agent`) is `{count, assessments, h
 
 **Example:**
 ```bash
-arm review record --issue TASK-001 --assessment assessment.json
+# Produce assessment.json when delivery SHAs are known (required input, not legacy):
+arm review prepare --issue TASK-001 --base abc123 --head def456 --output bundle.json
+arm review schema --output conformance-assessment.schema.json
+# Author ConformanceAssessment per that schema (bundle_id + fingerprints from
+# bundle; criterion results with citations).
+arm review validate --assessment assessment.json --bundle bundle.json
+arm review record --issue TASK-001 --assessment assessment.json --bundle bundle.json
 ```
 
 ---
@@ -1265,7 +1326,7 @@ Classify every done leaf with the same promotion check as `arm merged`. A pass a
 **Output:** an ADR 0017 envelope even when the exit code is non-zero:
 
 ```json
-{"count":1,"issues":[{"id":"TASK-001","type":"task","status":"done","title":"Landed without assessment","kind":"missing-assessment","next_action":"arm review record --issue TASK-001 --assessment <assessment.json>"}],"help":["arm review record --issue TASK-001 --assessment <assessment.json>"]}
+{"count":1,"issues":[{"id":"TASK-001","type":"task","status":"done","title":"Landed without assessment","kind":"missing-assessment","next_action":"arm review record --issue TASK-001 --assessment <assessment.json> --bundle <bundle.json>"}],"help":["arm review record --issue TASK-001 --assessment <assessment.json> --bundle <bundle.json>"]}
 ```
 
 `help[0]` is the most actionable `arm` command with the issue id filled in. Each blocked row carries that row's command in `next_action`.

@@ -41,6 +41,20 @@ func TestRun_CleanRepo(t *testing.T) {
 		assert.Contains(t, d4.Items[0], "task-01")
 	})
 
+	t.Run("D4_SelfParent", func(t *testing.T) {
+		t.Parallel()
+		index := materialize.Index{
+			"SF": {Status: "done", Type: "task", Parent: "SF"},
+		}
+		report := runChecks(index, nil, "", time.Now())
+		d4 := findCheck(t, report, "D4")
+		assert.Equal(t, SeverityError, d4.Severity, "Parent==id must be a D4 broken parent ref")
+		require.Len(t, d4.Items, 1)
+		assert.Equal(t, "SF -> SF", d4.Items[0])
+		d5 := findCheck(t, report, "D5")
+		assert.Equal(t, SeverityOK, d5.Severity, "D5 only walks blocked_by; self-parent is D4")
+	})
+
 	t.Run("D5_NoCycle", func(t *testing.T) {
 		t.Parallel()
 		index := materialize.Index{
@@ -317,7 +331,137 @@ func TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0(t *testing.T) {
 		runIDs = append(runIDs, f.Check)
 	}
 	assert.Equal(t, LiveCheckIDs(), runIDs, "LiveCheckIDs must match the live Run path in order")
-	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12"}, LiveCheckIDs())
+	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}, LiveCheckIDs())
+}
+
+func TestDoctorD14_WarnsOnDoneUnderMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	index := materialize.Index{
+		"story-01": {Status: "merged", Type: "story"},
+		"task-01":  {Status: "done", Type: "task", Parent: "story-01"},
+		"task-02":  {Status: "merged", Type: "task", Parent: "story-01"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, "D14", f.Check)
+	assert.Equal(t, SeverityWarning, f.Severity)
+	assert.Equal(t, "Done or open/claimed work under a merged ancestor", f.Message)
+	require.Len(t, f.Items, 1)
+	assert.Equal(t, "task-01 -> story-01", f.Items[0])
+}
+
+func TestDoctorD14_WarnsOnDoneUnderMergedAncestor_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	// E merged → S done → T done: T's direct parent is not merged, but ancestor E is.
+	index := materialize.Index{
+		"E": {Status: "merged", Type: "epic"},
+		"S": {Status: "done", Type: "story", Parent: "E"},
+		"T": {Status: "done", Type: "task", Parent: "S"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	require.Equal(t, SeverityWarning, f.Severity)
+	assert.Contains(t, f.Items, "S -> E")
+	assert.Contains(t, f.Items, "T -> E", "D14 must walk all ancestors, not only the direct parent")
+}
+
+func TestDoctorD14_SkipsMergedUnderCancelled_ORCRUN_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	// Include a done child under cancelled: if D14 were broadened to warn on
+	// cancelled parents (exclusion removed), this fixture must fail the test.
+	index := materialize.Index{
+		"ORCRUN":        {Status: "cancelled", Type: "epic"},
+		"ORCRUN-S1":     {Status: "merged", Type: "story", Parent: "ORCRUN"},
+		"ORCRUN-T-done": {Status: "done", Type: "task", Parent: "ORCRUN"},
+		"healthy":       {Status: "merged", Type: "story"},
+		"child":         {Status: "merged", Type: "task", Parent: "healthy"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, f.Severity, "done/merged under cancelled must not become a D14 finding")
+	assert.Empty(t, f.Items)
+	assert.Equal(t, "No done issues under a merged parent", f.Message)
+}
+
+func TestDoctorD14_OKWhenDoneParentNotMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	index := materialize.Index{
+		"story-01": {Status: "in-progress", Type: "story"},
+		"task-01":  {Status: "done", Type: "task", Parent: "story-01"},
+		"story-02": {Status: "cancelled", Type: "story"},
+		"task-02":  {Status: "done", Type: "task", Parent: "story-02"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, f.Severity)
+	assert.Empty(t, f.Items)
+}
+
+func TestDoctorD14_SkipsMissingParentAndSelfParent_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	// D14 skips; D4 owns missing and self-parent. Keep D14 one index pass, no git.
+	index := materialize.Index{
+		"ghost-child": {Status: "done", Type: "task", Parent: "missing-parent"},
+		"loop-child":  {Status: "done", Type: "task", Parent: "loop-child"},
+		"story-ok":    {Status: "merged", Type: "story"},
+		"task-ok":     {Status: "merged", Type: "task", Parent: "story-ok"},
+	}
+	f := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, f.Severity)
+	assert.Empty(t, f.Items)
+
+	d4 := checkD4BrokenParentRefs(index)
+	assert.Equal(t, SeverityError, d4.Severity)
+	assert.Contains(t, d4.Items, "ghost-child -> missing-parent")
+	assert.Contains(t, d4.Items, "loop-child -> loop-child")
+}
+
+func TestDoctorD4_FlagsSelfParent_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	// Repro class: Parent==id is present in the index (so "missing parent" D4
+	// would miss it) and blocked_by is empty (so D5 stays OK). Removing the
+	// D4 self-parent branch must fail this test.
+	index := materialize.Index{
+		"SF": {Status: "done", Type: "task", Parent: "SF"},
+	}
+	d4 := checkD4BrokenParentRefs(index)
+	require.Equal(t, SeverityError, d4.Severity)
+	require.Equal(t, []string{"SF -> SF"}, d4.Items)
+
+	d5 := checkD5DependencyCycles(index)
+	assert.Equal(t, SeverityOK, d5.Severity)
+
+	d14 := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, d14.Severity, "D14 must not warn; D4 owns self-parent")
+}
+
+func TestDoctorD14_EmittedByRun_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0644))
+
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", "", false, time.Now())
+	require.NoError(t, err)
+	d14 := findCheck(t, report, "D14")
+	assert.Equal(t, SeverityOK, d14.Severity, "empty repo must not warn D14")
+}
+
+func TestDoctorD14_RunFailClosedOnIndexWriteBlock_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0644))
+	stateDir := filepath.Join(issuesDir, "state")
+	_, err := Run(issuesDir, stateDir, "", "", false, time.Now())
+	require.NoError(t, err)
+	// Block rematerialize from rewriting index.json so the next Run cannot load
+	// a usable index — D14 must not soft-skip; Run fails closed.
+	indexPath := filepath.Join(stateDir, "index.json")
+	require.NoError(t, os.Remove(indexPath))
+	require.NoError(t, os.Mkdir(indexPath, 0755))
+
+	_, err = Run(issuesDir, stateDir, "", "", false, time.Now())
+	require.Error(t, err, "index-load/write errors must fail closed before D14 runs")
 }
 
 func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testing.T) {

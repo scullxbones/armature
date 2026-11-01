@@ -85,7 +85,7 @@ func recordPublishValidateOverride(cmd *cobra.Command, state *executionState, re
 	if nonInteractive {
 		return fmt.Errorf("publish validate override requires a controlling terminal")
 	}
-	tty, err := openControllingTTY()
+	tty, err := openControllingTTY(cmd)
 	if err != nil {
 		return fmt.Errorf("publish validate override requires a controlling terminal")
 	}

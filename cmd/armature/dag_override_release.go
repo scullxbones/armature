@@ -13,10 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var openControllingTTY = func() (*os.File, error) {
-	return os.OpenFile("/dev/tty", os.O_RDWR, 0)
-}
-
 func confirmOverrideRelease(tty *os.File, issueID string) error {
 	_, _ = fmt.Fprintf(tty, "Type the issue ID %q to confirm release override: ", issueID)
 	line, err := bufio.NewReader(tty).ReadString('\n')
@@ -75,7 +71,7 @@ recorded reason. Agent verbs do not accept a skip flag.`,
 				return fmt.Errorf("release override requires a controlling terminal")
 			}
 
-			tty, err := openControllingTTY()
+			tty, err := openControllingTTY(cmd)
 			if err != nil {
 				return fmt.Errorf("release override requires a controlling terminal")
 			}

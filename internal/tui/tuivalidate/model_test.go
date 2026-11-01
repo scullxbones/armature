@@ -129,7 +129,7 @@ func TestValidateScreenRendersIssues(t *testing.T) {
 	m.SetState(state)
 	v := m.View()
 	if !strings.Contains(v, "No issues found") {
-		t.Errorf("expected OK, got:\n%s", v)
+		t.Errorf("expected OK(), got:\n%s", v)
 	}
 
 	state.Issues["T1"] = &materialize.Issue{ID: "T1", Type: "task", Parent: "E1"}

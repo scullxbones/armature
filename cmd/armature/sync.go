@@ -242,11 +242,26 @@ func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *clas
 		}
 		return nil
 	}
+	var graph promotion.Graph
+	store := newSnapshotStore(ctx)
+	if index, indexErr := store.ReadIndex(); indexErr == nil {
+		var graphErr error
+		graph, graphErr = promotionGraphFromStore(store, index)
+		if graphErr != nil {
+			return graphErr
+		}
+	}
+	viewer := ""
+	if wid, _, werr := resolveWorkerAndLog(ctx); werr == nil {
+		viewer = wid
+	}
+	planOpts := planOptsForRemediation(ctx, viewer)
 	if len(live.Children) > 0 {
+		acts := promotion.RemediationsPlanOpts(live.ID, graph, planOpts).RenderNextActions()
 		item.Result = promotion.Result{
 			IssueID:  live.ID,
 			Kind:     promotion.KindNotLeaf,
-			Recovery: promotion.RecoveryArgv(live.ID, promotion.KindNotLeaf),
+			Recovery: promotion.FirstRemediation(acts),
 		}
 		return nil
 	}
@@ -262,6 +277,8 @@ func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *clas
 		Issue:       promotionIssueFacts(*live),
 		PriorOps:    allOps,
 		Integration: integ,
+		Graph:       graph,
+		Opts:        planOpts,
 	})
 	return nil
 }

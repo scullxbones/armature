@@ -16,14 +16,16 @@ const (
 	syncHelpEmpty = "arm list --status done"
 )
 
-var syncKindRank = map[string]int{
-	"missing-assessment": 0,
-	"check-failed":       1,
-	"legacy":             2,
-	"empty-diff":         3,
-	"not-on-target":      4,
-	"not-leaf":           5,
-	"promote":            6,
+func syncKindRank() map[string]int {
+	return map[string]int{
+		"missing-assessment": 0,
+		"check-failed":       1,
+		"legacy":             2,
+		"empty-diff":         3,
+		"not-on-target":      4,
+		"not-leaf":           5,
+		"promote":            6,
+	}
 }
 
 // SyncHelp returns help[0] as the most actionable arm command for rows.
@@ -45,10 +47,10 @@ func SyncHelp(rows []SyncIssue) []string {
 }
 
 func syncKindRankOrLast(kind string) int {
-	if r, ok := syncKindRank[kind]; ok {
+	if r, ok := syncKindRank()[kind]; ok {
 		return r
 	}
-	return len(syncKindRank)
+	return len(syncKindRank())
 }
 
 // WriteSyncEnvelope emits {count,issues,help} for arm sync and the post-merge hook.

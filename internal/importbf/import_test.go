@@ -8,14 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var sampleCSV = `id,title,type,parent,scope
+func sampleCSV() string {
+	return `id,title,type,parent,scope
 TSK-X1,First import,task,,internal/foo/*.go
 TSK-X2,Second import,task,,"internal/bar/*.go,internal/baz/*.go"
 `
+}
 
 func TestParseCSV(t *testing.T) {
 	t.Parallel()
-	items, err := importbf.ParseCSV([]byte(sampleCSV))
+	items, err := importbf.ParseCSV([]byte(sampleCSV()))
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
 	assert.Equal(t, "TSK-X1", items[0].ID)
@@ -23,14 +25,16 @@ func TestParseCSV(t *testing.T) {
 	assert.Equal(t, []string{"internal/foo/*.go"}, items[0].Scope)
 }
 
-var sampleJSON = `[
+func sampleJSON() string {
+	return `[
   {"id":"TSK-J1","title":"JSON import","type":"story","scope":["internal/ops/**"]},
   {"id":"TSK-J2","title":"Another","type":"task","parent":"TSK-J1"}
 ]`
+}
 
 func TestParseJSON(t *testing.T) {
 	t.Parallel()
-	items, err := importbf.ParseJSON([]byte(sampleJSON))
+	items, err := importbf.ParseJSON([]byte(sampleJSON()))
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
 	assert.Equal(t, "TSK-J1", items[0].ID)
@@ -39,7 +43,7 @@ func TestParseJSON(t *testing.T) {
 
 func TestImportedItemsHaveCorrectProvenance(t *testing.T) {
 	t.Parallel()
-	items, err := importbf.ParseCSV([]byte(sampleCSV))
+	items, err := importbf.ParseCSV([]byte(sampleCSV()))
 	require.NoError(t, err)
 	for _, item := range items {
 		assert.Equal(t, "imported", item.Provenance.Method)

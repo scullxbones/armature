@@ -510,10 +510,103 @@ func f() { _ = exec.CommandContext(ctx, "git", "-C", dir, "status") }
 	}
 }
 
+func TestGolangciInTests_execFixtureFails_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"cmd/fake/lint_test.go": `package fake
+import (
+	"context"
+	"os/exec"
+)
+func TestBad(t *testing.T) {
+	_ = exec.Command("golangci-lint", "run")
+	_ = exec.CommandContext(context.Background(), "golangci-lint", "run")
+	_, _ = exec.LookPath("golangci-lint")
+}
+`,
+	})
+	_, errOut, code := runCheck(t, "golangci-in-tests", root)
+	if code == 0 {
+		t.Fatalf("expected fail on golangci-lint exec in _test.go, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "golangci-lint") {
+		t.Fatalf("must name golangci-lint, got %s", errOut)
+	}
+	if !strings.Contains(errOut, "gochecknoglobals-probe") {
+		t.Fatalf("must point at gochecknoglobals-probe, got %s", errOut)
+	}
+}
+
+func TestGolangciInTests_foldedNameFails_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	body := "package fake\nfunc f() { _ = exec.Command(\"golangci-\"+\"lint\", \"run\") }\n"
+	if strings.Contains(body, `"golangci-lint"`) {
+		t.Fatal("fixture must not contain a quoted golangci-lint token")
+	}
+	root := writeTree(t, map[string]string{
+		"go.mod":                  "module fixture\n\ngo 1.22\n",
+		"cmd/fake/folded_test.go": body,
+	})
+	_, errOut, code := runCheck(t, "golangci-in-tests", root)
+	if code == 0 {
+		t.Fatalf("expected fail on folded golangci-lint name, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "execs golangci-lint") {
+		t.Fatalf("got %s", errOut)
+	}
+}
+
+func TestGolangciInTests_allowsMentionWithoutExec(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"cmd/fake/mention_test.go": `package fake
+func TestDoc(t *testing.T) {
+	_ = "golangci-lint is run by make lint / repoguard, not go test"
+}
+`,
+	})
+	out, errOut, code := runCheck(t, "golangci-in-tests", root)
+	if code != 0 {
+		t.Fatalf("expected pass, stderr=%s", errOut)
+	}
+	if !strings.Contains(out, "OK: no _test.go execs golangci-lint") {
+		t.Fatalf("missing OK line: %s", out)
+	}
+}
+
+func TestGochecknoglobalsProbe_selftestPasses_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	out, errOut, code := runCheck(t, "gochecknoglobals-probe", root)
+	if code != 0 {
+		t.Fatalf("gochecknoglobals-probe failed on real repo:\n%s\n%s", out, errOut)
+	}
+	if !strings.Contains(out, "OK: gochecknoglobals rejects reintroduced mutable requireOwnerHook") {
+		t.Fatalf("missing OK line: %s", out)
+	}
+}
+
+func TestGochecknoglobalsProbe_missingEnableFails(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":        "module fixture\n\ngo 1.22\n",
+		".golangci.yml": "version: \"2\"\nlinters:\n  default: none\n  enable:\n    - errcheck\n",
+	})
+	_, errOut, code := runCheck(t, "gochecknoglobals-probe", root)
+	if code == 0 {
+		t.Fatal("expected fail when gochecknoglobals is not enabled")
+	}
+	if !strings.Contains(errOut, "gochecknoglobals") {
+		t.Fatalf("got %s", errOut)
+	}
+}
+
 func TestRealRepoPassesGuards(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	for _, check := range []string{"source-manifest", "test-executables", "git-hermetic"} {
+	for _, check := range []string{"source-manifest", "test-executables", "git-hermetic", "gochecknoglobals-probe", "golangci-in-tests"} {
 		out, errOut, code := runCheck(t, check, root)
 		if code != 0 {
 			t.Fatalf("%s failed on real repo:\n%s\n%s", check, out, errOut)

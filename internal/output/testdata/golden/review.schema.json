@@ -1,0 +1,1 @@
+{"count":1,"schemas":[{"name":"conformance-assessment","path":"conformance-assessment.schema.json"}],"help":["arm review schema --output conformance-assessment.schema.json writes the embedded ConformanceAssessment JSON Schema"]}

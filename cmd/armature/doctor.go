@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/scullxbones/armature/internal/doctor"
 	armerrors "github.com/scullxbones/armature/internal/errors"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +28,7 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Run repo health checks (D1-D12); --fix reconciles expired claims",
+		Short: "Run repo health checks (D1-D12, D14); --fix reconciles expired claims",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			rootErr := cmd.Root().PersistentPreRunE(cmd, args)
 			if rootErr == nil {
@@ -86,14 +88,40 @@ func newDoctorCmd() *cobra.Command {
 				return mapDoctorLoadError(err)
 			}
 
+			// Product caller of TreeConsistencyViolations: fold every
+			// open/claimed/in-progress under a merged ancestor into D14
+			// (doctor package cannot import promotion — depguard).
+			store := newSnapshotStore(appCtx)
+			index, indexErr := store.ReadIndex()
+			if indexErr != nil {
+				return mapDoctorLoadError(indexErr)
+			}
+			graphCache := newPromotionGraphCache(store, index)
+			graph, graphErr := graphCache.Graph()
+			if graphErr != nil {
+				return mapDoctorLoadError(graphErr)
+			}
+			enrichD14TreeConsistency(&report, graph)
+
+			var explainGraph promotion.Graph
+			var planOpts promotion.PlanOpts
+			if explain {
+				explainGraph = graph
+				viewer := ""
+				if wid, _, werr := resolveWorkerAndLogCmd(cmd); werr == nil {
+					viewer = wid
+				}
+				planOpts = planOptsForRemediation(appCtx, viewer)
+			}
+
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if isStructuredFormat(format) {
-				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain); err != nil {
+				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain, explainGraph, planOpts); err != nil {
 					return err
 				}
 			} else {
-				renderDoctorHuman(cmd, report, verbose, explain)
+				renderDoctorHuman(cmd, report, verbose, explain, explainGraph, planOpts)
 			}
 
 			// Doctor report is not a Command Failure (ADR 0020 §7).
@@ -189,10 +217,10 @@ type doctorCheckRow struct {
 	Items        []string        `json:"items,omitempty"`
 	VerboseItems []string        `json:"verbose_items,omitempty"`
 	Explanation  string          `json:"explanation,omitempty"`
-	Suggested    string          `json:"suggested,omitempty"`
+	Suggested    []string        `json:"suggested,omitempty"`
 }
 
-func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool) error {
+func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, graph promotion.Graph, opts promotion.PlanOpts) error {
 	rows := make([]doctorCheckRow, 0, len(report.Checks))
 	for _, f := range report.Checks {
 		row := doctorCheckRow{
@@ -203,7 +231,7 @@ func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool) error 
 			VerboseItems: f.VerboseItems,
 		}
 		if explain && f.Severity != doctor.SeverityOK {
-			row.Explanation, row.Suggested = doctorCheckGuidance(f.Check)
+			row.Explanation, row.Suggested = doctorCheckGuidanceFor(f, graph, opts)
 		}
 		rows = append(rows, row)
 	}
@@ -217,7 +245,7 @@ func doctorHelp(report doctor.Report) []string {
 	return []string{doctorCodesHelp}
 }
 
-func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool) {
+func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool, graph promotion.Graph, opts promotion.PlanOpts) {
 	for _, f := range report.Checks {
 		icon := "✓"
 		switch f.Severity {
@@ -228,9 +256,11 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", icon, f.Check, f.Message)
 		if explain && f.Severity != doctor.SeverityOK {
-			explanation, suggested := doctorCheckGuidance(f.Check)
+			explanation, suggested := doctorCheckGuidanceFor(f, graph, opts)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Explanation: %s\n", explanation)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", suggested)
+			for _, s := range suggested {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", s)
+			}
 		}
 		items := f.Items
 		if verbose && len(f.VerboseItems) > 0 {
@@ -242,47 +272,148 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 	}
 }
 
-func doctorCheckGuidance(check string) (explanation, suggested string) {
-	switch check {
+// doctorCheckGuidance is the shape-agnostic coverage entry point (empty finding).
+func doctorCheckGuidance(check string) (explanation string, suggested []string) {
+	return doctorCheckGuidanceFor(doctor.Finding{Check: check}, nil, promotion.PlanOpts{})
+}
+
+func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpts) (explanation string, suggested []string) {
+	switch f.Check {
 	case "D1":
 		return "Git commits reference issue IDs that are not done or merged, so history and the issue graph have drifted.",
-			"arm transition <issue-id> --to done"
+			[]string{"arm transition <issue-id> --to done"}
 	case "D2":
 		return "A worker's claim TTL expired without a heartbeat, which can block other workers from taking the issue.",
-			"arm doctor --fix"
+			[]string{"arm doctor --fix"}
 	case "D3":
 		return "Ops reference issue IDs that are not in the materialized graph, usually after a revert or a truncated log.",
-			"arm log --json"
+			[]string{"arm log --json"}
 	case "D4":
-		return "A child issue names a parent that is not in the graph, so the hierarchy cannot be walked.",
-			"arm reparent --issue <child-id> --parent <parent-id>"
+		return "A child issue names a missing parent, or an issue names itself as its parent (self-parent). D5 only walks blocked_by cycles.",
+			[]string{"arm reparent --issue <child-id> --parent <parent-id>"}
 	case "D5":
 		return "A blocked_by cycle makes every issue in the loop permanently unready.",
-			"arm unlink --source <issue-id> --dep <issue-id>"
+			[]string{"arm unlink --source <issue-id> --dep <issue-id>"}
 	case "D6":
 		return "Uncited issues have no documented origin, so they cannot be promoted until they cite a source or accept citation risk.",
-			"arm sources link <issue-id> --source-id <source-uuid>"
+			[]string{"arm sources link <issue-id> --source-id <source-uuid>"}
 	case "D7":
 		return "Ops were excluded because the log file name does not match the worker ID recorded in the op.",
-			"mv .armature/ops/<expected>.log .armature/ops/<got>.log"
+			[]string{"mv .armature/ops/<expected>.log .armature/ops/<got>.log"}
 	case "D8":
 		return "Dirty or untracked paths sit outside the active task's declared scope.",
-			"arm scope-rename or remove the stray path"
+			[]string{"arm scope-rename or remove the stray path"}
 	case "D9":
 		return "A checkout lives under .worktrees/ with no issue binding, so it is an unmanaged stray worktree.",
-			"arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>"
+			[]string{"arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>"}
 	case "D10":
 		return "config.json failed a strict decode or a present field is out of range.",
-			"edit .armature/config.json and re-run arm doctor"
+			[]string{"edit .armature/config.json and re-run arm doctor"}
+	case "D11":
+		return "origin/_armature is missing, local-only ops are stale past local_only_ops_stale_hours, or the ops remote tip could not be verified.",
+			[]string{"arm push-ops"}
 	case "D12":
 		return "The ops worktree is behind origin/_armature so the DAG cannot " +
 				"be confirmed fresh, or origin/_armature could not be fetched so " +
 				"the lag number may be stale. Warnings are ignored; behind is an error.",
-			"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"
+			[]string{"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"}
+	case "D14":
+		return d14Guidance(f, graph, opts)
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
-			"see docs/validation-codes.md"
+			[]string{"see docs/validation-codes.md"}
 	}
+}
+
+const d14Explanation = "An issue is still done while its parent is already merged — a stuck " +
+	"done→merged promotion — or open/claimed work sits under a merged ancestor. " +
+	"Merged-under-cancelled parents are not this check."
+
+// enrichD14TreeConsistency merges promotion.TreeConsistencyViolations into the
+// D14 finding so doctor CLI reports every open/claimed under a merged ancestor
+// via the same invariant claim refuses.
+func enrichD14TreeConsistency(report *doctor.Report, graph promotion.Graph) {
+	if report == nil || graph == nil {
+		return
+	}
+	viol := promotion.TreeConsistencyViolations(graph)
+	if len(viol) == 0 {
+		return
+	}
+	seen := map[string]bool{}
+	var idx = -1
+	for i := range report.Checks {
+		if report.Checks[i].Check == "D14" {
+			idx = i
+			for _, item := range report.Checks[i].Items {
+				seen[item] = true
+			}
+			break
+		}
+	}
+	if idx < 0 {
+		return
+	}
+	f := &report.Checks[idx]
+	for _, v := range viol {
+		if seen[v] {
+			continue
+		}
+		f.Items = append(f.Items, v)
+		seen[v] = true
+	}
+	if len(f.Items) == 0 {
+		return
+	}
+	sort.Strings(f.Items)
+	f.Severity = doctor.SeverityWarning
+	f.Message = "Done or open/claimed work under a merged ancestor"
+}
+
+// d14Guidance keeps the broad D14 warning and uses the shared typed Plan
+// (same truth as MERGED-1 / sync). Per finding: header → Option A/B → ordered
+// steps — never alpha-sort, never "; "-joined argv. Live-lease guidance is
+// emitted once per doctor run (not repeated for OS + parent P2).
+func d14Guidance(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpts) (explanation string, suggested []string) {
+	explanation = d14Explanation
+	if len(f.Items) == 0 || graph == nil {
+		return explanation, []string{promotion.FallbackGuidance}
+	}
+
+	var cmds []string
+	var needsTreeRepair bool
+	seenLiveGuidance := map[string]bool{}
+	for _, item := range f.Items {
+		id := promotion.FindingID(item)
+		plan := promotion.RemediationsPlanOpts(id, graph, opts)
+		if len(plan.Guidance) > 0 {
+			needsTreeRepair = true
+		}
+		var guidance []string
+		for _, g := range plan.Guidance {
+			g = strings.TrimSpace(g)
+			if g == "" {
+				continue
+			}
+			if promotion.IsGuidanceRemediation(g) && strings.Contains(g, " lease on ") {
+				if seenLiveGuidance[g] {
+					continue
+				}
+				seenLiveGuidance[g] = true
+			}
+			guidance = append(guidance, g)
+		}
+		plan.Guidance = guidance
+		// No seenCmd for Options/MoreSteps: each finding keeps its typed plan.
+		cmds = append(cmds, promotion.RenderGroupedNextActions(item, plan)...)
+	}
+	if needsTreeRepair {
+		explanation = d14Explanation + " " + promotion.TreeRepairGuidance
+	}
+	if len(cmds) > 0 {
+		return explanation, cmds
+	}
+	return explanation, []string{promotion.FallbackGuidance}
 }
 
 func runDoctorFix(cmd *cobra.Command, appCtx *config.Context, dryRun bool) error {

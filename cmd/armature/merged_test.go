@@ -1348,3 +1348,23 @@ func TestMergedLegacyRefusalWithoutWorker_REQ_LNGHZN_S11_T3(t *testing.T) {
 	require.NotEmpty(t, cf.NextActions)
 	assert.Contains(t, cf.NextActions[0], "arm delivery record --issue task-01")
 }
+
+func TestMergedAlreadyMergedSaysAlreadyMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "transition", "--issue", "task-01", "--to", "done",
+		"--outcome", "Completed", "--force", "--skip-delivery-gate")
+	require.NoError(t, err)
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+	markIssueMergedForTest(t, repo, "task-01")
+
+	out := new(bytes.Buffer)
+	cmd := testRootCmd(t)
+	cmd.SetOut(out)
+	cmd.SetArgs([]string{"merged", "--repo", repo, "--issue", "task-01", "--force"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, out.String(), "task-01 is already merged")
+	assert.NotContains(t, out.String(), "Marked task-01 as merged",
+		"already-merged no-op must say already merged, not claim a new promotion")
+}

@@ -100,7 +100,7 @@ func AcceptAt(held Lease, claimOp ops.Op, at int64) (Lease, bool) {
 	if claimOp.Type != ops.OpClaim {
 		return held, false
 	}
-	if foreignLiveLeaseBlocks(held, claimOp.WorkerID, at) {
+	if ForeignLiveLeaseBlocks(held, claimOp.WorkerID, at) {
 		return held, false
 	}
 	next := leaseFromClaimOp(claimOp)
@@ -110,7 +110,10 @@ func AcceptAt(held Lease, claimOp ops.Op, at int64) (Lease, bool) {
 	return next, true
 }
 
-func foreignLiveLeaseBlocks(held Lease, challengerID string, at int64) bool {
+// ForeignLiveLeaseBlocks reports whether a foreign live lease blocks challengerID
+// from claiming at time at. Exported so remediation print paths use the same
+// predicate AcceptAt uses (--force does not override).
+func ForeignLiveLeaseBlocks(held Lease, challengerID string, at int64) bool {
 	if held.Status != ops.StatusClaimed && held.Status != ops.StatusInProgress {
 		return false
 	}

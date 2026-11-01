@@ -11,13 +11,15 @@ const (
 	CheckCitations          = "citations"
 )
 
-var verifiableKeywords = []string{
-	"passes",
-	"green",
-	"make check",
-	"go test",
-	"npm test",
-	"pytest",
+func verifiableKeywords() []string {
+	return []string{
+		"passes",
+		"green",
+		"make check",
+		"go test",
+		"npm test",
+		"pytest",
+	}
 }
 
 type CitationCheck struct {
@@ -94,7 +96,7 @@ func checkCitations(checks []CitationCheck) VerificationResult {
 
 func isVerifiable(criterion string) bool {
 	lower := strings.ToLower(criterion)
-	for _, keyword := range verifiableKeywords {
+	for _, keyword := range verifiableKeywords() {
 		if strings.Contains(lower, keyword) {
 			return true
 		}

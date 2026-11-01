@@ -17,9 +17,10 @@ import (
 )
 
 type Client struct {
-	repoPath   string
-	isolateEnv bool
-	environ    []string
+	repoPath       string
+	isolateEnv     bool
+	environ        []string
+	networkTimeout time.Duration
 }
 
 const (
@@ -39,18 +40,6 @@ const (
 	// namespace is never refs/remotes/origin/* or a user branch.
 	armatureTmpNS = "refs/armature-tmp"
 )
-
-// gitNetworkTimeout is the deadline for network git calls on the ops-backup
-// path. Tests may shrink it; production code must leave the default.
-var gitNetworkTimeout = defaultGitNetworkTimeout
-
-// SetGitNetworkTimeoutForTest shrinks (or restores) the shared ops-backup
-// network deadline. Tests only — production code must leave the default.
-func SetGitNetworkTimeoutForTest(d time.Duration) (restore func()) {
-	prev := gitNetworkTimeout
-	gitNetworkTimeout = d
-	return func() { gitNetworkTimeout = prev }
-}
 
 func New(repoPath string) *Client {
 	return &Client{repoPath: repoPath}
@@ -73,6 +62,24 @@ func (c *Client) WithEnviron(environ []string) *Client {
 	cp := *c
 	cp.environ = append([]string(nil), environ...)
 	return &cp
+}
+
+// WithNetworkTimeout sets the deadline for network git calls (ops-backup remote
+// probes, FetchBranchToRef). Zero restores defaultGitNetworkTimeout.
+func (c *Client) WithNetworkTimeout(d time.Duration) *Client {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	cp.networkTimeout = d
+	return &cp
+}
+
+func (c *Client) effectiveNetworkTimeout() time.Duration {
+	if c != nil && c.networkTimeout > 0 {
+		return c.networkTimeout
+	}
+	return defaultGitNetworkTimeout
 }
 
 func (c *Client) cmd(args ...string) *exec.Cmd {
@@ -151,12 +158,14 @@ func (c *Client) cmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	return cmd
 }
 
-var gitOverrideEnvPrefixes = []string{
-	"GIT_DIR=",
-	"GIT_WORK_TREE=",
-	"GIT_INDEX_FILE=",
-	"GIT_OBJECT_DIRECTORY=",
-	"GIT_COMMON_DIR=",
+func gitOverrideEnvPrefixes() []string {
+	return []string{
+		"GIT_DIR=",
+		"GIT_WORK_TREE=",
+		"GIT_INDEX_FILE=",
+		"GIT_OBJECT_DIRECTORY=",
+		"GIT_COMMON_DIR=",
+	}
 }
 
 func resolveIsolatedGitDirs(start string) (gitDir, workTree string, err error) {
@@ -219,7 +228,7 @@ func stripGitOverrideEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, e := range env {
 		drop := false
-		for _, p := range gitOverrideEnvPrefixes {
+		for _, p := range gitOverrideEnvPrefixes() {
 			if strings.HasPrefix(e, p) {
 				drop = true
 				break
@@ -838,12 +847,13 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	return nil
 }
 
-// networkCmd builds a git child bound to gitNetworkTimeout. Caller must defer
-// cancel(). On unix, Cancel kills the process group (Setpgid) so git-remote-*
-// helpers die with the parent; WaitDelay bounds stuck-pipe waits. Ops-backup
-// remote probes must use this instead of raw context.Background().
+// networkCmd builds a git child bound to the client's network timeout (default
+// defaultGitNetworkTimeout). Caller must defer cancel(). On unix, Cancel kills
+// the process group (Setpgid) so git-remote-* helpers die with the parent;
+// WaitDelay bounds stuck-pipe waits. Ops-backup remote probes must use this
+// instead of raw context.Background().
 func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitNetworkTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), c.effectiveNetworkTimeout())
 	cmd := c.cmdContext(ctx, args...)
 	configureNetworkCmd(cmd)
 	return cmd, cancel
@@ -1334,16 +1344,18 @@ const commitWalkFormat = "%H%x09%ct%x09%P"
 // blocks). The CLI flag alone already overrides hostile log.diffMerges
 // (combined/dense-combined/remerge/off/…); the -c pin stays as belt-and-
 // suspenders. diff.renames=true matches DiffNameOnlyRange rename detection.
-var commitWalkConfigPins = []string{
-	"-c", "log.diffMerges=separate",
-	"-c", "log.showRoot=true",
-	"-c", "core.quotePath=false",
-	"-c", "color.ui=never",
-	"-c", "color.diff=never",
-	"-c", "log.decorate=false",
-	"-c", "diff.renames=true",
-	"-c", "diff.noprefix=false",
-	"-c", "diff.relative=false",
+func commitWalkConfigPins() []string {
+	return []string{
+		"-c", "log.diffMerges=separate",
+		"-c", "log.showRoot=true",
+		"-c", "core.quotePath=false",
+		"-c", "color.ui=never",
+		"-c", "color.diff=never",
+		"-c", "log.decorate=false",
+		"-c", "diff.renames=true",
+		"-c", "diff.noprefix=false",
+		"-c", "diff.relative=false",
+	}
 }
 
 // CommitWalkReverse returns every commit reachable from rev, oldest first, in
@@ -1366,8 +1378,8 @@ func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 	if rev == "" {
 		return nil, fmt.Errorf("git log commit walk: rev is required")
 	}
-	args := make([]string, 0, len(commitWalkConfigPins)+8)
-	args = append(args, commitWalkConfigPins...)
+	args := make([]string, 0, len(commitWalkConfigPins())+8)
+	args = append(args, commitWalkConfigPins()...)
 	args = append(args,
 		"log",
 		"-z",

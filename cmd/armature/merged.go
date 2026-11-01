@@ -321,7 +321,8 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {
 			return err
 		}
-		printMerged(cmd, issueID, pr)
+		// Intended no-op / retry path: tear down leftovers, do not claim a new promotion.
+		printAlreadyMerged(cmd, issueID, pr)
 		return nil
 	}
 
@@ -333,11 +334,22 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 	if integration == "" {
 		integration = ctx.Config.IntegrationBranchOrDefault()
 	}
+	graph, graphErr := promotionGraphFromStore(store, index)
+	if graphErr != nil {
+		return fmt.Errorf("promotion graph: %w", graphErr)
+	}
+	viewer, _, viewerErr := resolveWorkerAndLogCmd(cmd)
+	if viewerErr != nil {
+		viewer = ""
+	}
+	planOpts := planOptsForRemediation(ctx, viewer)
 	result := promotion.Evaluate(git, promotion.Input{
 		Issue:       promotionIssueFacts(*issue),
 		PriorOps:    allOps,
 		Integration: integration,
 		PR:          pr,
+		Graph:       graph,
+		Opts:        planOpts,
 	})
 	if result.AppendCheck || result.Promote {
 		state := mustState(cmd)
@@ -371,7 +383,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 					if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *live, cmd.ErrOrStderr()); err != nil {
 						return err
 					}
-					printMerged(cmd, issueID, pr)
+					printAlreadyMerged(cmd, issueID, pr)
 					return nil
 				}
 				freshOps, readErr := readAllOpsFromDir(filepath.Join(ctx.IssuesDir, "ops"))
@@ -387,11 +399,13 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 					PriorOps:    freshOps,
 					Integration: integration,
 					PR:          pr,
+					Graph:       graph,
+					Opts:        planOpts,
 				})
 				if fresh.Err != nil {
 					return fresh.Err
 				}
-				return &promotion.Error{IssueID: issueID, Kind: fresh.Kind, Msg: "promotion check did not pass for " + issueID}
+				return &promotion.Error{IssueID: issueID, Kind: fresh.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph, Opts: planOpts}
 			}
 		}
 	}
@@ -399,7 +413,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		if result.Err != nil {
 			return result.Err
 		}
-		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID}
+		return &promotion.Error{IssueID: issueID, Kind: result.Kind, Msg: "promotion check did not pass for " + issueID, Graph: graph, Opts: planOpts}
 	}
 
 	if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {
@@ -412,6 +426,14 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 
 func printMerged(cmd *cobra.Command, issueID, pr string) {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Marked %s as merged", issueID)
+	if pr != "" {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+}
+
+func printAlreadyMerged(cmd *cobra.Command, issueID, pr string) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s is already merged", issueID)
 	if pr != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (PR #%s)", pr)
 	}
@@ -436,7 +458,7 @@ func mapMergedError(err error) error {
 	}
 	var promo *promotion.Error
 	if errors.As(err, &promo) {
-		return armerrors.Map(codeMerged1, promo.Error(), []string{promo.RecoveryArgv()}, err)
+		return armerrors.Map(codeMerged1, promo.Error(), promo.RecoveryActions(), err)
 	}
 	msg := err.Error()
 	switch {

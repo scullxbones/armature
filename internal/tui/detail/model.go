@@ -104,17 +104,17 @@ func buildContent(issue *materialize.Issue) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(tui.Info.Render(issue.ID) + "  " + issue.Title + "\n")
+	b.WriteString(tui.Info().Render(issue.ID) + "  " + issue.Title + "\n")
 	fmt.Fprintf(&b, "Type: %s  Status: %s  Priority: %s\n",
 		issue.Type, issue.Status, issue.Priority)
 
 	if issue.DefinitionOfDone != "" {
-		b.WriteString("\n" + tui.Muted.Render("Definition of Done:") + "\n")
+		b.WriteString("\n" + tui.Muted().Render("Definition of Done:") + "\n")
 		b.WriteString(issue.DefinitionOfDone + "\n")
 	}
 
 	if issue.Outcome != "" {
-		b.WriteString("\n" + tui.Muted.Render("Outcome:") + "\n")
+		b.WriteString("\n" + tui.Muted().Render("Outcome:") + "\n")
 		b.WriteString(issue.Outcome + "\n")
 	}
 

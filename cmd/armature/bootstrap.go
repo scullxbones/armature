@@ -246,10 +246,10 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 
 		if row.Skills == bootstrap.ActionInstall {
 			skillsDest := filepath.Join(destBase, ".claude", "skills")
-			if err := deploySkills(skillsembed.SkillsFS, skillsDest); err != nil {
+			if err := deploySkills(skillsembed.SkillsFS(), skillsDest); err != nil {
 				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactSkills, "deploy skills", platformName, err)
 			}
-			if err := deployFlatSkills(skillsembed.SkillsFS, skillsDest); err != nil {
+			if err := deployFlatSkills(skillsembed.SkillsFS(), skillsDest); err != nil {
 				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactSkills, "deploy flat skills", platformName, err)
 			}
 			if err := deployRepoAgentSkills(repoPath, skillsDest); err != nil {
@@ -265,13 +265,13 @@ func executeHarnessSetup(cmd *cobra.Command, plan bootstrap.Plan, repoPath strin
 		}
 
 		if row.PluginMetadata == bootstrap.ActionInstall {
-			pluginName, err := pluginNameFromSkillsFS(skillsembed.SkillsFS)
+			pluginName, err := pluginNameFromSkillsFS(skillsembed.SkillsFS())
 			if err != nil {
 				return results, fmt.Errorf("extract plugin name: %w", err)
 			}
 
 			pluginsDest := filepath.Join(destBase, ".claude", "plugins", pluginName)
-			if err := deployPlugin(skillsembed.SkillsFS, pluginsDest); err != nil {
+			if err := deployPlugin(skillsembed.SkillsFS(), pluginsDest); err != nil {
 				return results, failHarnessInstall(&results, row.Platform, bootstrap.ArtifactPluginMetadata, "deploy plugin metadata", platformName, err)
 			}
 			results = append(results, harnessArtifactResult(
@@ -408,10 +408,12 @@ func isArmatureManagedHook(content string) bool {
 			strings.Contains(content, "\n# Armature "))
 }
 
-var obsoleteHooks = []string{"prepare-commit-msg"}
+func obsoleteHooks() []string {
+	return []string{"prepare-commit-msg"}
+}
 
 func removeObsoleteHooks(gitHooksDir, hooksDir string) error {
-	for _, hook := range obsoleteHooks {
+	for _, hook := range obsoleteHooks() {
 		templatePath := filepath.Join(hooksDir, hook+".sh.template")
 		if err := os.Remove(templatePath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove obsolete hook template %s: %w", hook, err)
@@ -561,7 +563,7 @@ func commitObsoleteHookTemplateRemovals(env Env, worktreePath string, isCollapse
 		prefix = config.StateDirName + "/hooks/"
 	}
 	var paths []string
-	for _, hook := range obsoleteHooks {
+	for _, hook := range obsoleteHooks() {
 		rel := prefix + hook + ".sh.template"
 		if !client.IsTracked(rel) {
 			continue

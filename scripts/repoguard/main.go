@@ -20,13 +20,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		switch args[0] {
 		case "-check":
 			if len(args) < 2 {
-				fmt.Fprintf(stderr, "FAIL: -check requires source-manifest|test-executables|git-hermetic|all\n")
+				fmt.Fprintf(stderr, "FAIL: -check requires source-manifest|test-executables|git-hermetic|gochecknoglobals-probe|golangci-in-tests|all\n")
 				return 2
 			}
 			check = args[1]
 			args = args[2:]
 		case "-h", "-help", "--help":
-			fmt.Fprintf(stderr, "usage: repoguard [-check source-manifest|test-executables|git-hermetic|all] [repo-root]\n")
+			fmt.Fprintf(stderr, "usage: repoguard [-check source-manifest|test-executables|git-hermetic|gochecknoglobals-probe|golangci-in-tests|all] [repo-root]\n")
 			return 0
 		default:
 			if strings.HasPrefix(args[0], "-") {
@@ -56,7 +56,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 	runOne("source-manifest", checkSourceManifest)
 	runOne("test-executables", checkTestExecutables)
 	runOne("git-hermetic", checkGitHermetic)
-	if check != "all" && check != "source-manifest" && check != "test-executables" && check != "git-hermetic" {
+	runOne("gochecknoglobals-probe", checkGochecknoglobalsProbe)
+	runOne("golangci-in-tests", checkGolangciInTests)
+	known := check == "all" ||
+		check == "source-manifest" ||
+		check == "test-executables" ||
+		check == "git-hermetic" ||
+		check == "gochecknoglobals-probe" ||
+		check == "golangci-in-tests"
+	if !known {
 		fmt.Fprintf(stderr, "FAIL: unknown check %s\n", check)
 		return 2
 	}

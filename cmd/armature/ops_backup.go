@@ -56,14 +56,17 @@ func opsBackupGit(cmd *cobra.Command) *adapters.Client {
 	// Disaster-recovery verbs must work from a fresh clone without an ops
 	// worktree / armature layout. Prefer the resolved code checkout when
 	// present; otherwise use --repo / cwd.
+	var c *adapters.Client
 	if state, err := stateFromCmd(cmd); err == nil && state.ctx != nil && state.ctx.RepoPath != "" {
-		return adapters.New(state.ctx.RepoPath)
+		c = adapters.New(state.ctx.RepoPath)
+	} else {
+		repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
+		if repoPath == "" {
+			repoPath = "."
+		}
+		c = adapters.New(repoPath)
 	}
-	repoPath, _ := cmd.Root().PersistentFlags().GetString("repo")
-	if repoPath == "" {
-		repoPath = "."
-	}
-	return adapters.New(repoPath)
+	return applyInvocationGitOpts(cmd, c)
 }
 
 type opsBackupSnapshotRow struct {

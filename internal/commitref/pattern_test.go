@@ -9,7 +9,7 @@ import (
 func TestTypedCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	for _, typ := range CommitTypes {
+	for _, typ := range CommitTypes() {
 		pattern := TypedCommitPattern("ISSUE-1")
 		assert.True(t, pattern.MatchString(typ+"(ISSUE-1): description"), "type %q should match", typ)
 	}
@@ -34,7 +34,7 @@ func TestMergeCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 func TestSubjectHasIssueScope(t *testing.T) {
 	t.Parallel()
 
-	for _, typ := range CommitTypes {
+	for _, typ := range CommitTypes() {
 		assert.True(t, subjectHasIssueScope(typ+"(ISSUE-1): description", 1), "type %q should match", typ)
 	}
 

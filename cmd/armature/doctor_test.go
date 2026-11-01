@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/output"
+	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -140,21 +142,102 @@ func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing
 	t.Parallel()
 
 	_, d4 := doctorCheckGuidance("D4")
-	assert.Equal(t, "arm reparent --issue <child-id> --parent <parent-id>", d4,
+	require.Len(t, d4, 1)
+	assert.Equal(t, "arm reparent --issue <child-id> --parent <parent-id>", d4[0],
 		"D4 must use required --issue/--parent flags; positionals are ignored")
 
 	_, d7 := doctorCheckGuidance("D7")
-	assert.Equal(t, "mv .armature/ops/<expected>.log .armature/ops/<got>.log", d7,
+	require.Len(t, d7, 1)
+	assert.Equal(t, "mv .armature/ops/<expected>.log .armature/ops/<got>.log", d7[0],
 		"D7 is a filename/worker_id mismatch; worker-init --check does not repair it")
-	assert.NotContains(t, d7, "worker-init --check")
+	assert.NotContains(t, d7[0], "worker-init --check")
 
 	_, d9 := doctorCheckGuidance("D9")
-	assert.Equal(t, "arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>", d9,
+	require.Len(t, d9, 1)
+	assert.Equal(t, "arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>", d9[0],
 		"D9 unrecognized paths are not GCRemovals; bind or remove the reported path")
-	assert.NotContains(t, d9, "worktree gc")
+	assert.NotContains(t, d9[0], "worktree gc")
+
+	_, d11 := doctorCheckGuidance("D11")
+	require.Equal(t, []string{"arm push-ops"}, d11)
 
 	_, d12 := doctorCheckGuidance("D12")
-	assert.Contains(t, d12, "origin/_armature")
+	require.Len(t, d12, 1)
+	assert.Contains(t, d12[0], "origin/_armature")
+
+	_, d14 := doctorCheckGuidance("D14")
+	require.Equal(t, []string{promotion.FallbackGuidance}, d14,
+		"shape-agnostic D14 must not blindly recommend arm merged")
+}
+
+func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	defaultExpl, _ := doctorCheckGuidance("D999")
+	for _, id := range doctor.LiveCheckIDs() {
+		expl, sug := doctorCheckGuidance(id)
+		assert.NotEqual(t, defaultExpl, expl,
+			"%s must have dedicated --explain guidance (not the default fallback)", id)
+		assert.NotEmpty(t, sug, "%s suggested remediation must be non-empty", id)
+	}
+}
+
+func TestDoctorCLI_ReportsOpenUnderMergedAncestor_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupMixedD14Tree(t)
+	d14 := doctorD14Explain(t, repo)
+	assert.Equal(t, "warning", d14.severity)
+	assert.Contains(t, d14.items, "R -> E")
+	assert.Contains(t, d14.items, "RC2 under merged E (open)",
+		"cmd enrichD14TreeConsistency must fold TreeConsistencyViolations into D14")
+}
+
+func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	_, fallback := doctorCheckGuidance("D14")
+	assert.Equal(t, []string{promotion.FallbackGuidance}, fallback)
+
+	// Done under merged parent with rollup-eligible children: reopen only —
+	// never cancel done (single Alternative renders without Option labels).
+	allMerged := promotion.Graph{
+		"P": {Status: "merged", Children: []string{"R"}},
+		"R": {Status: "done", Parent: "P", Children: []string{"C"}},
+		"C": {Status: "merged", Parent: "R"},
+	}
+	expl, sug := doctorCheckGuidanceFor(doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> P"},
+	}, allMerged, promotion.PlanOpts{})
+	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> P", sug[0])
+	assert.Equal(t, "arm reopen --issue P", sug[1])
+	assert.NotContains(t, sug, "Option B:")
+	assert.NotContains(t, sug, "arm transition --issue R --to cancelled --force")
+	assert.NotContains(t, expl, "children are merged")
+
+	// Done R under merged with open child: reopen only for R's finding.
+	repair := promotion.Graph{
+		"E": {Status: "merged", Children: []string{"R"}},
+		"R": {Status: "done", Parent: "E", Children: []string{"O"}},
+		"O": {Status: "open", Parent: "R"},
+	}
+	expl, sug = doctorCheckGuidanceFor(doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> E"},
+	}, repair, promotion.PlanOpts{})
+	assert.Contains(t, expl, promotion.TreeRepairGuidance)
+	assert.Equal(t, promotion.FindingHeaderPrefix+"R -> E", sug[0])
+	assert.Equal(t, "arm reopen --issue E", sug[1])
+	assert.NotContains(t, sug, "Option B:")
+	assert.NotContains(t, sug, "arm transition --issue R --to cancelled --force")
+	assert.Contains(t, sug, "arm claim --issue O --worktree")
+	assert.NotContains(t, sug, "arm claim --issue R")
+
+	// Open O under merged: Option A reopen + Option B cancel O.
+	_, sugO := doctorCheckGuidanceFor(doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"O under merged E (open)"},
+	}, repair, promotion.PlanOpts{})
+	assert.Equal(t, "Option A:", sugO[1])
+	assert.Equal(t, "arm reopen --issue E", sugO[2])
+	assert.Equal(t, "Option B:", sugO[3])
+	assert.Equal(t, "arm transition --issue O --to cancelled --force", sugO[4])
 }
 
 func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {
@@ -238,8 +321,8 @@ func TestDoctorExplainFlag_AgentFormatAddsStructuredFields_REQ_TOPTIER_S15_T1(t 
 		sawNonOK = true
 		explanation, ok := row["explanation"].(string)
 		require.True(t, ok, "non-OK check %v must carry explanation", row["check"])
-		suggested, ok := row["suggested"].(string)
-		require.True(t, ok, "non-OK check %v must carry suggested", row["check"])
+		suggested, ok := row["suggested"].([]any)
+		require.True(t, ok, "non-OK check %v must carry suggested[]", row["check"])
 		assert.NotEmpty(t, explanation, "non-OK check %v must carry explanation", row["check"])
 		assert.NotEmpty(t, suggested, "non-OK check %v must carry suggested", row["check"])
 	}

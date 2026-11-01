@@ -22,6 +22,7 @@ import (
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/oporder"
 	"github.com/scullxbones/armature/internal/ops"
+	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/scullxbones/armature/internal/worker"
 	"github.com/scullxbones/armature/internal/worktree"
@@ -915,6 +916,28 @@ it creates a new task worktree from the parent worktree's current branch and tip
 
 			if issue.Provenance.Confidence == "inferred" {
 				return fmt.Errorf("cannot claim %s: node has confidence=inferred — wait for a human to confirm it", issueID)
+			}
+
+			// Product gate: refuse creating open/claimed work under a merged
+			// ancestor (--force does not skip; same invariant doctor reports).
+			graph, graphErr := promotionGraphFromStore(store, store.Index())
+			if graphErr != nil {
+				return fmt.Errorf("promotion graph: %w", graphErr)
+			}
+			if promotion.WouldViolateTreeConsistency(issueID, graph) {
+				viewer, _, viewerErr := resolveWorkerAndLogCmd(cmd)
+				if viewerErr != nil {
+					viewer = ""
+				}
+				opts := planOptsForRemediation(ctx, viewer)
+				acts := promotion.RemediationsPlanOpts(issueID, graph, opts).RenderNextActions()
+				if len(acts) == 0 {
+					acts = []string{promotion.TreeRepairGuidance, "arm doctor"}
+				}
+				// Map (not Wrap): next_actions are the typed Plan, not a fixed literal.
+				return armerrors.Map(codeClaim1,
+					fmt.Sprintf("cannot claim %s: under a merged ancestor (tree consistency)", issueID),
+					acts, nil)
 			}
 
 			expectedBranch := materialize.DeriveBranchName(issue.Type, issueID)

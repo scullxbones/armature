@@ -19,12 +19,14 @@ const gitConfigKey = "armature.worker-id"
 
 var workerIDPattern = regexp.MustCompile(`^[a-z0-9_-]{1,64}$`)
 
-var reservedDOSNames = map[string]bool{
-	"con": true, "prn": true, "aux": true, "nul": true,
-	"com1": true, "com2": true, "com3": true, "com4": true, "com5": true,
-	"com6": true, "com7": true, "com8": true, "com9": true,
-	"lpt1": true, "lpt2": true, "lpt3": true, "lpt4": true, "lpt5": true,
-	"lpt6": true, "lpt7": true, "lpt8": true, "lpt9": true,
+func reservedDOSNames() map[string]bool {
+	return map[string]bool{
+		"con": true, "prn": true, "aux": true, "nul": true,
+		"com1": true, "com2": true, "com3": true, "com4": true, "com5": true,
+		"com6": true, "com7": true, "com8": true, "com9": true,
+		"lpt1": true, "lpt2": true, "lpt3": true, "lpt4": true, "lpt5": true,
+		"lpt6": true, "lpt7": true, "lpt8": true, "lpt9": true,
+	}
 }
 
 // Identity is the resolved writer for this invocation.
@@ -70,7 +72,7 @@ func CheckWorkerID(repoPath string) (bool, string) {
 }
 
 func validateWorkerID(id string) error {
-	if !workerIDPattern.MatchString(id) || reservedDOSNames[id] {
+	if !workerIDPattern.MatchString(id) || reservedDOSNames()[id] {
 		return claim.ErrWorkerIDInvalid
 	}
 	return nil
@@ -81,7 +83,7 @@ func ValidateLogSlot(slot string) error {
 	if slot == "" {
 		return nil
 	}
-	if !workerIDPattern.MatchString(slot) || reservedDOSNames[slot] {
+	if !workerIDPattern.MatchString(slot) || reservedDOSNames()[slot] {
 		return claim.ErrLogSlotInvalid
 	}
 	return nil

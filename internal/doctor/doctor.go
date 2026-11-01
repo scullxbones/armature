@@ -69,11 +69,13 @@ func runChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 	return Report{Checks: indexedChecks(index, allIssues, nil, repoPath, now, nil, nil, configPath)}
 }
 
-var liveCheckIDs = []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12"}
+func liveCheckIDs() []string {
+	return []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}
+}
 
 func LiveCheckIDs() []string {
-	out := make([]string, len(liveCheckIDs))
-	copy(out, liveCheckIDs)
+	out := make([]string, len(liveCheckIDs()))
+	copy(out, liveCheckIDs())
 	return out
 }
 
@@ -108,6 +110,7 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 		filepath.Join(issuesDir, "config.json"))
 	checks = append(checks, checkD11OpsRemote(worktreePath, filepath.Join(issuesDir, "config.json"), now))
 	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
+	checks = append(checks, checkD14DoneUnderMerged(index))
 	return Report{Checks: checks}, nil
 }
 
@@ -374,6 +377,12 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 		if entry.Parent == "" {
 			continue
 		}
+		// Self-parent is a broken parent ref (one-node hierarchy loop). D5 only
+		// walks blocked_by, so D4 owns Parent == id.
+		if entry.Parent == id {
+			broken = append(broken, fmt.Sprintf("%s -> %s", id, entry.Parent))
+			continue
+		}
 		if _, ok := index[entry.Parent]; !ok {
 			broken = append(broken, fmt.Sprintf("%s -> %s", id, entry.Parent))
 		}
@@ -601,6 +610,55 @@ func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): %s", detail)
 			f.Items = []string{detail}
 		}
+	}
+	return f
+}
+
+// checkD14DoneUnderMerged warns when an issue is still done while its parent is
+// already merged. Open/claimed/in-progress under a merged ancestor is folded in
+// by cmd/armature via promotion.TreeConsistencyViolations (doctor must not
+// import promotion — depguard). One index pass; no git calls. Index-load
+// failures stay fail-closed in Run via loadMaterializedState (this helper
+// assumes a loaded index).
+//
+// Skips (not warnings):
+//   - done under cancelled (ORCRUN leftover) — only merged parents qualify
+//   - merged under cancelled — not a stuck done→merged promotion
+//   - missing parent ID or Parent == id — D4 owns broken parent refs
+func checkD14DoneUnderMerged(index materialize.Index) Finding {
+	f := Finding{Check: "D14", Severity: SeverityOK, Message: "No done issues under a merged parent"}
+
+	var stuck []string
+	for id, entry := range index {
+		if entry.Status != "done" || entry.Parent == "" || entry.Parent == id {
+			continue // empty/self-parent: D4; do not double-report
+		}
+		// Walk ALL ancestors: warn when any ancestor is merged. Stop at
+		// cancelled (ORCRUN leftover) or missing parent (D4).
+		anc := entry.Parent
+		seen := map[string]bool{}
+		for anc != "" && !seen[anc] {
+			seen[anc] = true
+			parent, ok := index[anc]
+			if !ok {
+				break
+			}
+			if parent.Status == "cancelled" {
+				break
+			}
+			if parent.Status == "merged" {
+				stuck = append(stuck, fmt.Sprintf("%s -> %s", id, anc))
+				break
+			}
+			anc = parent.Parent
+		}
+	}
+
+	if len(stuck) > 0 {
+		sort.Strings(stuck)
+		f.Severity = SeverityWarning
+		f.Message = "Done or open/claimed work under a merged ancestor"
+		f.Items = stuck
 	}
 	return f
 }

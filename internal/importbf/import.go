@@ -23,7 +23,9 @@ type Provenance struct {
 	Confidence string `json:"confidence"`
 }
 
-var defaultProvenance = Provenance{Method: "imported", Confidence: "inferred"}
+func defaultProvenance() Provenance {
+	return Provenance{Method: "imported", Confidence: "inferred"}
+}
 
 func ParseCSV(data []byte) ([]ImportedIssue, error) {
 	r := csv.NewReader(bytes.NewReader(data))
@@ -59,7 +61,7 @@ func ParseCSV(data []byte) ([]ImportedIssue, error) {
 		items = append(items, ImportedIssue{
 			ID: get(row, "id"), Title: get(row, "title"),
 			Type: get(row, "type"), Parent: get(row, "parent"),
-			Scope: scope, Provenance: defaultProvenance, RequiresConfirmation: true,
+			Scope: scope, Provenance: defaultProvenance(), RequiresConfirmation: true,
 		})
 	}
 	return items, nil
@@ -80,7 +82,7 @@ func ParseJSON(data []byte) ([]ImportedIssue, error) {
 	for i, r := range raw {
 		items[i] = ImportedIssue{
 			ID: r.ID, Title: r.Title, Type: r.Type, Parent: r.Parent, Scope: r.Scope,
-			Provenance: defaultProvenance, RequiresConfirmation: true,
+			Provenance: defaultProvenance(), RequiresConfirmation: true,
 		}
 	}
 	return items, nil

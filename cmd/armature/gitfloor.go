@@ -19,7 +19,7 @@ func gitFloorCommandFailure(err error) error {
 	}, err)
 }
 
-// requireMinGitPreRun enforces adapters.MinGitVersion for commands that
+// requireMinGitPreRun enforces adapters.MinGitVersion() for commands that
 // override the root PersistentPreRunE (worker-init, bootstrap) and for the
 // root itself. Platform-protocol commands still go through platformProtocolError.
 func requireMinGitPreRun(cmd *cobra.Command) error {

@@ -179,14 +179,16 @@ const (
 	writePathDoesNotIntroduceE13 writePathDoesNotIntroduceFinding = "E13"
 )
 
-var writePathDoesNotIntroduce = map[writePathDoesNotIntroduceFinding]struct{}{
-	writePathDoesNotIntroduceE7:  {},
-	writePathDoesNotIntroduceE8:  {},
-	writePathDoesNotIntroduceE13: {},
+func writePathDoesNotIntroduce() map[writePathDoesNotIntroduceFinding]struct{} {
+	return map[writePathDoesNotIntroduceFinding]struct{}{
+		writePathDoesNotIntroduceE7:  {},
+		writePathDoesNotIntroduceE8:  {},
+		writePathDoesNotIntroduceE13: {},
+	}
 }
 
 func writeDoesNotIntroduceRule(rule string) bool {
-	_, ok := writePathDoesNotIntroduce[writePathDoesNotIntroduceFinding(rule)]
+	_, ok := writePathDoesNotIntroduce()[writePathDoesNotIntroduceFinding(rule)]
 	return ok
 }
 
@@ -756,7 +758,9 @@ func checkW6ComplexityMismatch(issues map[string]IssueFacts) []Finding {
 	return findings
 }
 
-var vagueWords = []string{"properly", "correctly", "good", "well", "appropriate", "suitable"}
+func vagueWords() []string {
+	return []string{"properly", "correctly", "good", "well", "appropriate", "suitable"}
+}
 
 func checkW7VagueDoD(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
@@ -765,7 +769,7 @@ func checkW7VagueDoD(issues map[string]IssueFacts) []Finding {
 			continue
 		}
 		lower := strings.ToLower(issue.DefinitionOfDone)
-		for _, word := range vagueWords {
+		for _, word := range vagueWords() {
 			if strings.Contains(lower, word) {
 				findings = append(findings, finding("warning", "W7",
 					fmt.Sprintf(`vague DoD: %s contains "%s"`, id, word), id))
@@ -877,7 +881,9 @@ func isGlobPattern(s string) bool {
 
 const minOutcomeLength = 20
 
-var vagueOutcomes = []string{"done", "completed", "finished", "ok", "fixed"}
+func vagueOutcomes() []string {
+	return []string{"done", "completed", "finished", "ok", "fixed"}
+}
 
 func checkW11VagueOutcomes(issues map[string]IssueFacts) []Finding {
 	var findings []Finding
@@ -886,7 +892,7 @@ func checkW11VagueOutcomes(issues map[string]IssueFacts) []Finding {
 			continue
 		}
 		lower := strings.TrimSpace(strings.ToLower(issue.Outcome))
-		if len(lower) < minOutcomeLength || slices.Contains(vagueOutcomes, lower) {
+		if len(lower) < minOutcomeLength || slices.Contains(vagueOutcomes(), lower) {
 			findings = append(findings, finding("warning", "W11",
 				fmt.Sprintf("vague outcome: %s outcome is %d chars", id, len(lower)), id))
 		}

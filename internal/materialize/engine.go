@@ -50,36 +50,38 @@ func (e missingTargetError) Error() string {
 	}
 }
 
-var opHandlers = map[string]opHandler{
-	ops.OpCreate:             {apply: (*State).applyCreate, missingTarget: MissingTargetUnspecified},
-	ops.OpClaim:              {apply: (*State).applyClaim, missingTarget: MissingTargetError},
-	ops.OpHeartbeat:          {apply: (*State).applyHeartbeat, missingTarget: MissingTargetIgnore},
-	ops.OpTransition:         {apply: (*State).applyTransition, missingTarget: MissingTargetError},
-	ops.OpNote:               {apply: (*State).applyNote, missingTarget: MissingTargetIgnore},
-	ops.OpNoteDelete:         {apply: (*State).applyNoteDelete, missingTarget: MissingTargetIgnore},
-	ops.OpLink:               {apply: (*State).applyLink, missingTarget: MissingTargetError},
-	ops.OpUnlink:             {apply: (*State).applyUnlink, missingTarget: MissingTargetError},
-	ops.OpDecision:           {apply: (*State).applyDecision, missingTarget: MissingTargetIgnore},
-	ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: MissingTargetIgnore},
-	ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: MissingTargetIgnore},
-	ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
-	ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: MissingTargetUnspecified},
-	ops.OpGateEvidence:       {apply: applyNoop, missingTarget: MissingTargetUnspecified},
-	ops.OpLogQuarantine:      {apply: applyNoop, missingTarget: MissingTargetUnspecified},
-	ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: MissingTargetIgnore},
-	ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: MissingTargetIgnore},
-	ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: MissingTargetIgnore},
-	ops.OpScopeDelete:        {apply: (*State).applyScopeDelete, missingTarget: MissingTargetIgnore},
-	ops.OpReparent:           {apply: (*State).applyReparent, missingTarget: MissingTargetIgnore},
-	ops.OpAssessmentAttested: {apply: (*State).applyAssessmentAttested, missingTarget: MissingTargetError},
-	ops.OpPromotionCheck:     {apply: applyNoop, missingTarget: MissingTargetIgnore},
+func opHandlers() map[string]opHandler {
+	return map[string]opHandler{
+		ops.OpCreate:             {apply: (*State).applyCreate, missingTarget: MissingTargetUnspecified},
+		ops.OpClaim:              {apply: (*State).applyClaim, missingTarget: MissingTargetError},
+		ops.OpHeartbeat:          {apply: (*State).applyHeartbeat, missingTarget: MissingTargetIgnore},
+		ops.OpTransition:         {apply: (*State).applyTransition, missingTarget: MissingTargetError},
+		ops.OpNote:               {apply: (*State).applyNote, missingTarget: MissingTargetIgnore},
+		ops.OpNoteDelete:         {apply: (*State).applyNoteDelete, missingTarget: MissingTargetIgnore},
+		ops.OpLink:               {apply: (*State).applyLink, missingTarget: MissingTargetError},
+		ops.OpUnlink:             {apply: (*State).applyUnlink, missingTarget: MissingTargetError},
+		ops.OpDecision:           {apply: (*State).applyDecision, missingTarget: MissingTargetIgnore},
+		ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: MissingTargetIgnore},
+		ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: MissingTargetIgnore},
+		ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
+		ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: MissingTargetUnspecified},
+		ops.OpGateEvidence:       {apply: applyNoop, missingTarget: MissingTargetUnspecified},
+		ops.OpLogQuarantine:      {apply: applyNoop, missingTarget: MissingTargetUnspecified},
+		ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: MissingTargetIgnore},
+		ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: MissingTargetIgnore},
+		ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: MissingTargetIgnore},
+		ops.OpScopeDelete:        {apply: (*State).applyScopeDelete, missingTarget: MissingTargetIgnore},
+		ops.OpReparent:           {apply: (*State).applyReparent, missingTarget: MissingTargetIgnore},
+		ops.OpAssessmentAttested: {apply: (*State).applyAssessmentAttested, missingTarget: MissingTargetError},
+		ops.OpPromotionCheck:     {apply: applyNoop, missingTarget: MissingTargetIgnore},
+	}
 }
 
 func applyNoop(_ *State, _ ops.Op) error { return nil }
 
 func RegisteredOpTypes() []string {
-	types := make([]string, 0, len(opHandlers))
-	for opType := range opHandlers {
+	types := make([]string, 0, len(opHandlers()))
+	for opType := range opHandlers() {
 		types = append(types, opType)
 	}
 	return types
@@ -88,7 +90,7 @@ func RegisteredOpTypes() []string {
 // ApplyOp applies a single op to the materialized state by dispatching
 // through the registered handler table. Unknown op types return an error.
 func (s *State) ApplyOp(op ops.Op) error {
-	handler, exists := opHandlers[op.Type]
+	handler, exists := opHandlers()[op.Type]
 	if !exists {
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}

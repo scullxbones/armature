@@ -117,22 +117,22 @@ func consumeLine(b []byte) (line, rest []byte, foundNL bool) {
 func TestSkillFrontMatterSumUnderCap_REQ_NXTTN_S3_T4(t *testing.T) {
 	t.Parallel()
 
-	sum, err := measureModelInvocableFrontMatter(SkillsFS)
+	sum, err := measureModelInvocableFrontMatter(SkillsFS())
 	require.NoError(t, err)
 	t.Logf("measured model-invocable front matter sum: %d bytes; cap %d", sum, seededModelInvocableFrontMatterBytes)
 	require.Greater(t, sum, 0, "embedded model-invocable skills must contribute front matter bytes")
-	require.NoError(t, checkModelInvocableFrontMatterCap(SkillsFS, seededModelInvocableFrontMatterBytes))
+	require.NoError(t, checkModelInvocableFrontMatterCap(SkillsFS(), seededModelInvocableFrontMatterBytes))
 	require.LessOrEqual(t, sum, seededModelInvocableFrontMatterBytes)
 }
 
 func TestFrontMatterBudgetFailsWhenOverCap(t *testing.T) {
 	t.Parallel()
 
-	sum, err := measureModelInvocableFrontMatter(SkillsFS)
+	sum, err := measureModelInvocableFrontMatter(SkillsFS())
 	require.NoError(t, err)
 	require.Greater(t, sum, 0)
 
-	err = checkModelInvocableFrontMatterCap(SkillsFS, sum-1)
+	err = checkModelInvocableFrontMatterCap(SkillsFS(), sum-1)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "exceeds cap")
 	require.Contains(t, err.Error(), "front matter")
@@ -141,9 +141,9 @@ func TestFrontMatterBudgetFailsWhenOverCap(t *testing.T) {
 func TestFrontMatterBudgetAllowsExactCap(t *testing.T) {
 	t.Parallel()
 
-	sum, err := measureModelInvocableFrontMatter(SkillsFS)
+	sum, err := measureModelInvocableFrontMatter(SkillsFS())
 	require.NoError(t, err)
-	require.NoError(t, checkModelInvocableFrontMatterCap(SkillsFS, sum))
+	require.NoError(t, checkModelInvocableFrontMatterCap(SkillsFS(), sum))
 }
 
 func TestMeasureCountsYAMLBetweenFencesOnly(t *testing.T) {

@@ -40,7 +40,7 @@ func (m *Model) SetState(state *materialize.State) {
 }
 
 func (m *Model) HelpBar() string {
-	return tui.Muted.Render("q quit  ? help")
+	return tui.Muted().Render("q quit  ? help")
 }
 
 func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
@@ -53,15 +53,15 @@ func (m *Model) View() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(tui.Info.Render("Sources") + "\n\n")
+	b.WriteString(tui.Info().Render("Sources") + "\n\n")
 
 	if len(m.sources) == 0 {
-		b.WriteString(tui.Muted.Render("No sources cited.") + "\n")
+		b.WriteString(tui.Muted().Render("No sources cited.") + "\n")
 		return b.String()
 	}
 
 	for _, row := range m.sources {
-		fmt.Fprintf(&b, "%s: %s\n", tui.Info.Render(row.id), strings.Join(row.issues, ", "))
+		fmt.Fprintf(&b, "%s: %s\n", tui.Info().Render(row.id), strings.Join(row.issues, ", "))
 	}
 
 	return b.String()

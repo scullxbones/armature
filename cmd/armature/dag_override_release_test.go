@@ -110,13 +110,9 @@ func TestOverrideReleaseRequiresTty_REQ_LNGHZN_S10_T12(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithDirtyDraftNode(t)
 
-	orig := openControllingTTY
-	t.Cleanup(func() { openControllingTTY = orig })
-	openControllingTTY = func() (*os.File, error) {
+	_, err := newArm(t, repo, cliEnvFor(t)).WithOpenTTY(func() (*os.File, error) {
 		return nil, errors.New("no controlling terminal")
-	}
-
-	_, err := runTrls(t, repo, "dag", "override-release", "draft-task-01", "--reason", "emergency")
+	}).Run("dag", "override-release", "draft-task-01", "--reason", "emergency")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controlling terminal")
 	assert.NotContains(t, err.Error(), "skip-validate-gate")
@@ -147,14 +143,10 @@ func TestOverrideReleaseRequiresReasonBeforeTTY(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithDirtyDraftNode(t)
 	ttyOpened := false
-	orig := openControllingTTY
-	t.Cleanup(func() { openControllingTTY = orig })
-	openControllingTTY = func() (*os.File, error) {
+	_, err := newArm(t, repo, cliEnvFor(t)).WithOpenTTY(func() (*os.File, error) {
 		ttyOpened = true
 		return nil, errors.New("no controlling terminal")
-	}
-
-	_, err := runTrls(t, repo, "dag", "override-release", "draft-task-01")
+	}).Run("dag", "override-release", "draft-task-01")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--reason is required")
 	assert.False(t, ttyOpened, "flags must be validated before touching the TTY")
@@ -163,17 +155,15 @@ func TestOverrideReleaseRequiresReasonBeforeTTY(t *testing.T) {
 func TestOverrideReleaseRequiresExistingDirtyDraft(t *testing.T) {
 	t.Parallel()
 	repo := setupRepoWithValidDraftNode(t)
-	orig := openControllingTTY
-	t.Cleanup(func() { openControllingTTY = orig })
-	openControllingTTY = func() (*os.File, error) {
+	arm := newArm(t, repo, cliEnvFor(t)).WithOpenTTY(func() (*os.File, error) {
 		return nil, errors.New("no controlling terminal")
-	}
+	})
 
-	_, err := runTrls(t, repo, "dag", "override-release", "does-not-exist", "--reason", "emergency")
+	_, err := arm.Run("dag", "override-release", "does-not-exist", "--reason", "emergency")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 
-	_, err = runTrls(t, repo, "dag", "override-release", "draft-task-01", "--reason", "emergency")
+	_, err = arm.Run("dag", "override-release", "draft-task-01", "--reason", "emergency")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no blocking findings")
 }
@@ -205,13 +195,9 @@ func TestOverrideReleaseAllowsWhenForeignFindingBlocksPlanRelease(t *testing.T) 
 	require.NoError(t, err)
 	require.NoError(t, appendRawCreate(logPath, workerID, "OTHER-9", "Do this properly for the foreign draft", "internal/other.go"))
 
-	orig := openControllingTTY
-	t.Cleanup(func() { openControllingTTY = orig })
-	openControllingTTY = func() (*os.File, error) {
+	_, err = newArm(t, repo, cliEnvFor(t)).WithOpenTTY(func() (*os.File, error) {
 		return nil, errors.New("no controlling terminal")
-	}
-
-	_, err = runTrls(t, repo, "dag", "override-release", "draft-task-01", "--reason", "waive foreign W4")
+	}).Run("dag", "override-release", "draft-task-01", "--reason", "waive foreign W4")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "controlling terminal")
 	assert.NotContains(t, err.Error(), "no blocking findings")

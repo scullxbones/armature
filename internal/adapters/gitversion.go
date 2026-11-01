@@ -14,7 +14,9 @@ import (
 // --diff-merges=separate without older-git shims. Callers that need a
 // higher feature gate (for example log.diffMerges=remerge, Git ≥2.36)
 // should use Version.AtLeast.
-var MinGitVersion = Version{Major: 2, Minor: 34, Patch: 0}
+func MinGitVersion() Version {
+	return Version{Major: 2, Minor: 34, Patch: 0}
+}
 
 // Version is a parsed Git X.Y.Z triple. Extra dotted segments after patch
 // (for example Apple Git or Windows builds) are ignored for comparison.
@@ -126,10 +128,10 @@ func DetectGitVersion(environ []string) (Version, error) {
 // CheckMinGitVersion returns a clear error when have is below MinGitVersion.
 // The message always names the installed and required versions.
 func CheckMinGitVersion(have Version) error {
-	if have.AtLeast(MinGitVersion) {
+	if have.AtLeast(MinGitVersion()) {
 		return nil
 	}
-	return fmt.Errorf("installed git %s is below the required minimum git %s", have, MinGitVersion)
+	return fmt.Errorf("installed git %s is below the required minimum git %s", have, MinGitVersion())
 }
 
 // RequireMinGit detects the installed git and enforces MinGitVersion.

@@ -32,9 +32,9 @@ func TestConfigValuesSkipMessage_RemergeGate_REQ_OPORDER_LOCATE(t *testing.T) {
 
 func TestConfigValueMinGit_RemergeRequires236_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	min, ok := configValueMinGit["log.diffMerges=remerge"]
+	min, ok := configValueMinGit()["log.diffMerges=remerge"]
 	if !ok {
-		t.Fatal("log.diffMerges=remerge must be in configValueMinGit (drop-gate mutation would miss 2.34 red)")
+		t.Fatal("log.diffMerges=remerge must be in configValueMinGit() (drop-gate mutation would miss 2.34 red)")
 	}
 	want := adapters.Version{Major: 2, Minor: 36, Patch: 0}
 	if min != want {
@@ -76,8 +76,8 @@ func TestInitSHA256Repo_SucceedsOnSupportedGit_REQ_OPORDER_LOCATE(t *testing.T) 
 	if err != nil {
 		t.Fatalf("DetectGitVersion: %v", err)
 	}
-	if !cur.AtLeast(objectFormatSHA256Min) {
-		t.Skipf("sha256 object format needs Git ≥%s (have %s)", objectFormatSHA256Min.String(), cur.String())
+	if !cur.AtLeast(objectFormatSHA256Min()) {
+		t.Skipf("sha256 object format needs Git ≥%s (have %s)", objectFormatSHA256Min().String(), cur.String())
 	}
 	dir := t.TempDir()
 	InitSHA256Repo(t, dir)
@@ -99,7 +99,7 @@ func TestSkipUnlessConfigValuesSupported_RemergeOnLiveGit_REQ_OPORDER_LOCATE(t *
 	// On Git ≥2.36 this must not skip; on 2.34 it skips (and the parent test
 	// still passes). Either outcome is the gate working.
 	SkipUnlessConfigValuesSupported(t, [][2]string{{"log.diffMerges", "remerge"}})
-	if !cur.AtLeast(configValueMinGit["log.diffMerges=remerge"]) {
+	if !cur.AtLeast(configValueMinGit()["log.diffMerges=remerge"]) {
 		t.Fatal("SkipUnlessConfigValuesSupported should have skipped on Git <2.36")
 	}
 }

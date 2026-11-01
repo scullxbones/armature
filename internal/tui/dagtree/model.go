@@ -58,7 +58,7 @@ func (m *Model) WithFilter(q string) *Model {
 }
 
 func (m *Model) HelpBar() string {
-	return tui.Muted.Render("j/k move  h/l collapse/expand  enter detail  / filter  q quit  ? help")
+	return tui.Muted().Render("j/k move  h/l collapse/expand  enter detail  / filter  q quit  ? help")
 }
 
 func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
@@ -154,10 +154,10 @@ func (m *Model) renderNode(idx int) string {
 	}
 
 	glyph := glyphFor(issue.Status)
-	idStr := tui.Info.Render(issue.ID)
+	idStr := tui.Info().Render(issue.ID)
 	title := issue.Title
 
-	row := fmt.Sprintf("%s%s %s  %s", tui.Muted.Render(prefix), glyph, idStr, title)
+	row := fmt.Sprintf("%s%s %s  %s", tui.Muted().Render(prefix), glyph, idStr, title)
 	if idx == m.cursor {
 		row = lipgloss.NewStyle().Background(lipgloss.Color("39")).
 			Foreground(lipgloss.Color("0")).Width(m.width).Render(row)

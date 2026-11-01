@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/scullxbones/armature/internal/adapters"
+	"github.com/scullxbones/armature/internal/delivery"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 
@@ -350,13 +351,30 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		t.Parallel()
 		_, git, _ := deliveryRepo(t)
 		in := doneInput("task-parent", "a", "b", nil)
-		in.Issue.Children = []string{"child"}
+		in.Issue.Children = []string{"child-b", "child-a"}
+		in.Graph = Graph{
+			"task-parent": {Status: ops.StatusDone, Children: []string{"child-b", "child-a"}},
+			"child-a":     {Status: ops.StatusDone},
+			"child-b":     {Status: ops.StatusOpen},
+		}
 		res := Evaluate(git, in)
 		assert.False(t, res.Promote)
 		assert.Equal(t, KindNotLeaf, res.Kind)
 		var pe *Error
 		require.ErrorAs(t, res.Err, &pe)
-		assert.Equal(t, "arm merged --issue task-parent", pe.RecoveryArgv())
+		acts := pe.RecoveryActions()
+		// Children slice order is child-b then child-a — model preserves it (not alpha).
+		assert.Equal(t, []string{
+			"arm claim --issue child-b --worktree",
+			LegacyTemplateGuidance,
+			delivery.RecordArgv("child-a"),
+		}, acts, "not-leaf recovery must walk real descendant next steps in model order")
+		for _, a := range acts {
+			assert.NotContains(t, a, "arm merged --issue task-parent")
+			if IsRunnableArmCommand(a) {
+				assert.NotContains(t, a, "; ")
+			}
+		}
 		assert.Contains(t, pe.Error(), "not a leaf")
 	})
 
@@ -618,6 +636,8 @@ func TestPromotionErrorNilAndDefaultRecovery(t *testing.T) {
 	e = &Error{IssueID: "x", Kind: KindNotOnTarget, Msg: "nope"}
 	assert.Equal(t, "nope", e.Error())
 	assert.Equal(t, "arm merged --issue x", e.RecoveryArgv())
+	assert.Equal(t, "arm doctor", RecoveryArgv("x", KindNotLeaf),
+		"KindNotLeaf without graph must not self-recommend arm merged")
 	assert.Equal(t, "arm doctor", RecoveryArgv("x", "other"))
 	assert.Equal(t, "promotion check for x failed", checkMessage("x", "other"))
 }

@@ -25,11 +25,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	testArmBin        string
-	testLayoutFixture gittest.Fixture
-	testTaskFixture   gittest.Fixture
-)
+// packageFixtures holds TestMain-prepared shared fixtures for cmd/armature tests.
+type packageFixtures struct {
+	armBin        string
+	layoutFixture gittest.Fixture
+	taskFixture   gittest.Fixture
+}
+
+var fixtures = &packageFixtures{} //nolint:gochecknoglobals // TestMain-prepared shared fixtures; tests never reassign the pointer
 
 func TestMain(m *testing.M) {
 	if err := gittest.IsolateGit(); err != nil {
@@ -58,8 +61,8 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "TestMain: mkdir: %v\n", err)
 		os.Exit(code)
 	}
-	testArmBin = filepath.Join(wrapperDir, "arm")
-	build := exec.CommandContext(context.Background(), "go", "build", "-o", testArmBin, "./cmd/armature")
+	fixtures.armBin = filepath.Join(wrapperDir, "arm")
+	build := exec.CommandContext(context.Background(), "go", "build", "-o", fixtures.armBin, "./cmd/armature")
 	build.Dir = dir
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "TestMain: go build: %v\n%s\n", err, out)
@@ -95,14 +98,16 @@ func TestMain(m *testing.M) {
 // packageCwdStateDirNames are materialize outputs that land in the package
 // directory when a test calls snapshot.Store.Load with an empty StateDir
 // (relative paths resolve to cwd under `go test ./cmd/armature/`).
-var packageCwdStateDirNames = []string{
-	"checkpoint.json", "index.json", "ready.json", "traceability.json", "issues",
+func packageCwdStateDirNames() []string {
+	return []string{
+		"checkpoint.json", "index.json", "ready.json", "traceability.json", "issues",
+	}
 }
 
 // packageCwdStateDirLeak names state-dir files present in the package cwd.
 func packageCwdStateDirLeak() string {
 	var found []string
-	for _, name := range packageCwdStateDirNames {
+	for _, name := range packageCwdStateDirNames() {
 		if _, err := os.Stat(name); err == nil {
 			found = append(found, name)
 		}
@@ -113,7 +118,7 @@ func packageCwdStateDirLeak() string {
 // stateDirPorcelainDirty returns git porcelain lines for package-cwd state-dir
 // leaks. Scoped so unrelated WIP edits do not trip the guard.
 func stateDirPorcelainDirty() string {
-	args := append([]string{"status", "--porcelain", "--"}, packageCwdStateDirNames...)
+	args := append([]string{"status", "--porcelain", "--"}, packageCwdStateDirNames()...)
 	out, err := exec.CommandContext(context.Background(), "git", args...).Output()
 	if err != nil {
 		return ""
@@ -3184,6 +3189,6 @@ exec %q "$@"
 
 func buildWorktreeArm(t *testing.T) string {
 	t.Helper()
-	require.NotEmpty(t, testArmBin, "TestMain must build the package arm binary")
-	return testArmBin
+	require.NotEmpty(t, fixtures.armBin, "TestMain must build the package arm binary")
+	return fixtures.armBin
 }

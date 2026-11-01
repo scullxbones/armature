@@ -7,7 +7,8 @@ import "time"
 // Clock is a function type that returns the current time as a Unix timestamp in seconds.
 type Clock func() int64
 
-// System is a Clock that returns the current wall-clock time as a Unix timestamp in seconds.
-var System Clock = func() int64 {
+// System returns the current wall-clock time as a Unix timestamp in seconds.
+// The function value itself is Clock-compatible (pass clock.System where a Clock is needed).
+func System() int64 {
 	return time.Now().Unix()
 }

@@ -158,21 +158,21 @@ func (m Model) itemView() string {
 	item := m.items[m.cursor]
 	var sb strings.Builder
 
-	header := tui.Info.Bold(true).Render(
+	header := tui.Info().Bold(true).Render(
 		fmt.Sprintf("[%d/%d] %s", m.cursor+1, len(m.items), item.ID),
 	)
 	sb.WriteString(header + "\n")
 	sb.WriteString(item.Title + "\n")
 
 	if !item.IsCited {
-		warn := tui.Warning.Render("WARNING: uncited node — type the ID to acknowledge")
+		warn := tui.Warning().Render("WARNING: uncited node — type the ID to acknowledge")
 		sb.WriteString(warn + "\n")
 		fmt.Fprintf(&sb, "Ack: %s\n", m.pendingAck)
 	}
 
 	action := m.actions[item.ID]
 	if action != "" {
-		sb.WriteString(tui.OK.Render("action: "+action) + "\n")
+		sb.WriteString(tui.OK().Render("action: "+action) + "\n")
 	}
 
 	sb.WriteString("\n")
@@ -186,14 +186,14 @@ func (m Model) itemView() string {
 func (m Model) signOffView() string {
 	approvedIDs := m.ApprovedIDs()
 	var sb strings.Builder
-	sb.WriteString(tui.OK.Bold(true).Render("All items reviewed.") + "\n\n")
+	sb.WriteString(tui.OK().Bold(true).Render("All items reviewed.") + "\n\n")
 	if len(approvedIDs) > 0 {
 		fmt.Fprintf(&sb, "Approved (%d): %s\n", len(approvedIDs), strings.Join(approvedIDs, ", "))
 	} else {
 		sb.WriteString("No items approved — no dag-transition will be emitted.\n")
 	}
 	sb.WriteString("\n")
-	sb.WriteString(tui.Warning.Bold(true).Render("Sign off? [y/n]") + "\n")
+	sb.WriteString(tui.Warning().Bold(true).Render("Sign off? [y/n]") + "\n")
 	return sb.String()
 }
 

@@ -14,7 +14,7 @@ import (
 )
 
 // Version is set at build time via -ldflags.
-var Version = "dev"
+var Version = "dev" //nolint:gochecknoglobals //ldflags-overridable build version
 
 func applyTTYDetectionPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
 	sess := ensureSession(cmd)
@@ -80,7 +80,7 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
-			// Git floor is a port precondition (docs + adapters.MinGitVersion).
+			// Git floor is a port precondition (docs + adapters.MinGitVersion()).
 			// Fail closed before any repo resolve so every command sees the same
 			// IO cause naming installed + required versions.
 			if err := requireMinGitPreRun(cmd); err != nil {
@@ -385,173 +385,180 @@ type pavedRoadDefault struct {
 	Reason   string
 }
 
-var pavedRoadCommands = map[string]pavedRoadClass{
-	"":     {Kind: pavedRoadKindPaved},
-	"help": {Kind: pavedRoadKindPaved},
+func pavedRoadCommands() map[string]pavedRoadClass {
+	return map[string]pavedRoadClass{
+		"":     {Kind: pavedRoadKindPaved},
+		"help": {Kind: pavedRoadKindPaved},
 
-	"version":     {Kind: pavedRoadKindPaved},
-	"worker-init": {Kind: pavedRoadKindPaved},
-	"bootstrap":   {Kind: pavedRoadKindPaved},
+		"version":     {Kind: pavedRoadKindPaved},
+		"worker-init": {Kind: pavedRoadKindPaved},
+		"bootstrap":   {Kind: pavedRoadKindPaved},
 
-	"ready":           {Kind: pavedRoadKindPaved},
-	"claim":           {Kind: pavedRoadKindPaved},
-	"transition":      {Kind: pavedRoadKindPaved},
-	"delivery":        {Kind: pavedRoadKindEscape, Note: "Manual delivery snapshot. Bound-worktree done records it."},
-	"delivery record": {Kind: pavedRoadKindEscape, Note: "Record a delivery range when no bound worktree can snapshot it."},
-	"note":            {Kind: pavedRoadKindPaved},
-	"decision":        {Kind: pavedRoadKindPaved},
-	"unassign":        {Kind: pavedRoadKindEscape, Note: "Claim is the dispatch reservation. Unassign is recovery."},
-	"reopen":          {Kind: pavedRoadKindEscape, Note: "Rework after done. The road completes once, then syncs."},
-	"heartbeat":       {Kind: pavedRoadKindEscape, Note: "The harness hook heartbeats on tool use. Manual heartbeat is for long stretches with no tools."},
-	"amend":           {Kind: pavedRoadKindEscape, Note: "Correct fields after create or apply. Prefer getting the plan right."},
-	"confirm":         {Kind: pavedRoadKindEscape, Note: "Interactive promotion. The road uses dag transition after validate."},
-	"assign":          {Kind: pavedRoadKindEscape, Note: "Soft assignment without a claim. Dispatch uses claim --worktree."},
+		"ready":           {Kind: pavedRoadKindPaved},
+		"claim":           {Kind: pavedRoadKindPaved},
+		"transition":      {Kind: pavedRoadKindPaved},
+		"delivery":        {Kind: pavedRoadKindEscape, Note: "Manual delivery snapshot. Bound-worktree done records it."},
+		"delivery record": {Kind: pavedRoadKindEscape, Note: "Record a delivery range when no bound worktree can snapshot it."},
+		"note":            {Kind: pavedRoadKindPaved},
+		"decision":        {Kind: pavedRoadKindPaved},
+		"unassign":        {Kind: pavedRoadKindEscape, Note: "Claim is the dispatch reservation. Unassign is recovery."},
+		"reopen":          {Kind: pavedRoadKindEscape, Note: "Rework after done. The road completes once, then syncs."},
+		"heartbeat":       {Kind: pavedRoadKindEscape, Note: "The harness hook heartbeats on tool use. Manual heartbeat is for long stretches with no tools."},
+		"amend":           {Kind: pavedRoadKindEscape, Note: "Correct fields after create or apply. Prefer getting the plan right."},
+		"confirm":         {Kind: pavedRoadKindEscape, Note: "Interactive promotion. The road uses dag transition after validate."},
+		"assign":          {Kind: pavedRoadKindEscape, Note: "Soft assignment without a claim. Dispatch uses claim --worktree."},
 
-	"dag":                  {Kind: pavedRoadKindPaved},
-	"dag apply":            {Kind: pavedRoadKindPaved},
-	"dag context":          {Kind: pavedRoadKindPaved},
-	"dag transition":       {Kind: pavedRoadKindPaved},
-	"dag revert":           {Kind: pavedRoadKindEscape, Note: "Undo a plan apply. Not part of the forward pipeline."},
-	"dag summary":          {Kind: pavedRoadKindEscape, Note: "Interactive draft survey. Prefer list and dag transition."},
-	"dag override-release": {Kind: pavedRoadKindEscape, Note: "Human Plan Release that skipped validate. Never a green release."},
-	"link":                 {Kind: pavedRoadKindPaved},
-	"unlink":               {Kind: pavedRoadKindEscape, Note: "Remove a dependency. The road adds blocked_by edges; it does not routinely delete them."},
+		"dag":                  {Kind: pavedRoadKindPaved},
+		"dag apply":            {Kind: pavedRoadKindPaved},
+		"dag context":          {Kind: pavedRoadKindPaved},
+		"dag transition":       {Kind: pavedRoadKindPaved},
+		"dag revert":           {Kind: pavedRoadKindEscape, Note: "Undo a plan apply. Not part of the forward pipeline."},
+		"dag summary":          {Kind: pavedRoadKindEscape, Note: "Interactive draft survey. Prefer list and dag transition."},
+		"dag override-release": {Kind: pavedRoadKindEscape, Note: "Human Plan Release that skipped validate. Never a green release."},
+		"link":                 {Kind: pavedRoadKindPaved},
+		"unlink":               {Kind: pavedRoadKindEscape, Note: "Remove a dependency. The road adds blocked_by edges; it does not routinely delete them."},
 
-	"sync":                    {Kind: pavedRoadKindPaved},
-	"push-ops":                {Kind: pavedRoadKindPaved, Note: "--override-validate is a human escape hatch; never a green publish."},
-	"ops-backup":              {Kind: pavedRoadKindEscape, Note: "Durable tip snapshot/restore-plan for disaster recovery. Not the daily dispatch loop."},
-	"ops-backup snapshot":     {Kind: pavedRoadKindEscape, Note: "Fail-closed bundle of origin/_armature. Recovery tooling, not wave dispatch."},
-	"ops-backup verify":       {Kind: pavedRoadKindEscape, Note: "Confirm a bundle advertises a restorable tip."},
-	"ops-backup restore-plan": {Kind: pavedRoadKindEscape, Note: "Print I2 disposition only; diverge is aside+_armature-recovered."},
-	"merged":                  {Kind: pavedRoadKindEscape, Note: "Promote one done leaf when delivery is on the target. Prefer sync after the PR lands."},
-	"materialize":             {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
-	"import":                  {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},
+		"sync":                    {Kind: pavedRoadKindPaved},
+		"push-ops":                {Kind: pavedRoadKindPaved, Note: "--override-validate is a human escape hatch; never a green publish."},
+		"ops-backup":              {Kind: pavedRoadKindEscape, Note: "Durable tip snapshot/restore-plan for disaster recovery. Not the daily dispatch loop."},
+		"ops-backup snapshot":     {Kind: pavedRoadKindEscape, Note: "Fail-closed bundle of origin/_armature. Recovery tooling, not wave dispatch."},
+		"ops-backup verify":       {Kind: pavedRoadKindEscape, Note: "Confirm a bundle advertises a restorable tip."},
+		"ops-backup restore-plan": {Kind: pavedRoadKindEscape, Note: "Print I2 disposition only; diverge is aside+_armature-recovered."},
+		"merged":                  {Kind: pavedRoadKindEscape, Note: "Promote one done leaf when delivery is on the target. Prefer sync after the PR lands."},
+		"materialize":             {Kind: pavedRoadKindEscape, Note: "Replay ops to rebuild state. Recovery, not the daily loop."},
+		"import":                  {Kind: pavedRoadKindEscape, Note: "Bulk create from CSV/JSON. Prefer dag apply from a plan."},
 
-	"create":                  {Kind: pavedRoadKindEscape, Note: "Mint one issue by flags. Prefer dag apply."},
-	"reparent":                {Kind: pavedRoadKindEscape, Note: "Move an issue in the hierarchy after the fact."},
-	"validate":                {Kind: pavedRoadKindPaved},
-	"validate doc-examples":   {Kind: pavedRoadKindEscape, Note: "Hidden make-check helper. Not an agent verb."},
-	"render-context":          {Kind: pavedRoadKindPaved},
-	"log":                     {Kind: pavedRoadKindEscape, Note: "Ops audit log. Use when diagnosing, not when dispatching."},
-	"stats":                   {Kind: pavedRoadKindEscape, Note: "Derived ops-log cost view. Use when diagnosing spend, not when dispatching."},
-	"workers":                 {Kind: pavedRoadKindEscape, Note: "Worker activity dump. Ready and list cover the dispatch loop."},
-	"sources":                 {Kind: pavedRoadKindPaved},
-	"sources add":             {Kind: pavedRoadKindPaved},
-	"sources sync":            {Kind: pavedRoadKindPaved},
-	"sources verify":          {Kind: pavedRoadKindEscape, Note: "Re-check cached sources. Add and sync are the road."},
-	"sources link":            {Kind: pavedRoadKindEscape, Note: "Attach a source after the fact. Prefer --source at create/apply."},
-	"sources accept-citation": {Kind: pavedRoadKindEscape, Note: "Record citation acceptance. Grounding at plan time is the road."},
-	"sources stale-review":    {Kind: pavedRoadKindEscape, Note: "Review sources whose cache drifted. Not the daily loop."},
-	"show":                    {Kind: pavedRoadKindPaved},
-	"list":                    {Kind: pavedRoadKindPaved},
-	"scope-rename":            {Kind: pavedRoadKindEscape, Note: "Rewrite a scope glob across issues. Planning should not need this."},
-	"scope-delete":            {Kind: pavedRoadKindEscape, Note: "Drop a scope glob. Prefer amending the plan."},
-	"doctor":                  {Kind: pavedRoadKindPaved},
-	"doctor quarantine":       {Kind: pavedRoadKindEscape, Note: "Hidden repair for a corrupt ops line. Doctor reports this command."},
-	"completion":              {Kind: pavedRoadKindEscape, Note: "Shell completion script. Not an orchestration verb."},
-	"hook":                    {Kind: pavedRoadKindEscape, Note: "Git hook management. Bootstrap --with-hooks installs them."},
-	"hook run":                {Kind: pavedRoadKindEscape, Note: "Invoke a named git hook. Git and the harness call this, not agents."},
-	"gate":                    {Kind: pavedRoadKindPaved},
-	"gate run":                {Kind: pavedRoadKindPaved},
-	"tui":                     {Kind: pavedRoadKindEscape, Note: "Interactive kanban. Agents use list, ready, and show."},
-	"context-history":         {Kind: pavedRoadKindEscape, Note: "Scan git history for context changes. Diagnostic only."},
-	"context-report":          {Kind: pavedRoadKindEscape, Note: "Price fixture-measured CLI payloads. Diagnostic metering, not the daily loop."},
-	"harness-hook":            {Kind: pavedRoadKindEscape, Note: "Internal harness entrypoint. Hidden from --help groups."},
-	"review":                  {Kind: pavedRoadKindPaved},
-	"review prepare":          {Kind: pavedRoadKindPaved},
-	"review record":           {Kind: pavedRoadKindPaved},
-	"review commits":          {Kind: pavedRoadKindPaved},
-	"review validate":         {Kind: pavedRoadKindEscape, Note: "Advisory assessment check. Record remains the enforcement gate."},
-	"worktree":                {Kind: pavedRoadKindPaved},
-	"worktree list":           {Kind: pavedRoadKindPaved},
-	"worktree gc":             {Kind: pavedRoadKindEscape, Note: "Remove worktrees after merged/cancelled. Sync/merged teardown is the road."},
+		"create":                  {Kind: pavedRoadKindEscape, Note: "Mint one issue by flags. Prefer dag apply."},
+		"reparent":                {Kind: pavedRoadKindEscape, Note: "Move an issue in the hierarchy after the fact."},
+		"validate":                {Kind: pavedRoadKindPaved},
+		"validate doc-examples":   {Kind: pavedRoadKindEscape, Note: "Hidden make-check helper. Not an agent verb."},
+		"render-context":          {Kind: pavedRoadKindPaved},
+		"log":                     {Kind: pavedRoadKindEscape, Note: "Ops audit log. Use when diagnosing, not when dispatching."},
+		"stats":                   {Kind: pavedRoadKindEscape, Note: "Derived ops-log cost view. Use when diagnosing spend, not when dispatching."},
+		"workers":                 {Kind: pavedRoadKindEscape, Note: "Worker activity dump. Ready and list cover the dispatch loop."},
+		"sources":                 {Kind: pavedRoadKindPaved},
+		"sources add":             {Kind: pavedRoadKindPaved},
+		"sources sync":            {Kind: pavedRoadKindPaved},
+		"sources verify":          {Kind: pavedRoadKindEscape, Note: "Re-check cached sources. Add and sync are the road."},
+		"sources link":            {Kind: pavedRoadKindEscape, Note: "Attach a source after the fact. Prefer --source at create/apply."},
+		"sources accept-citation": {Kind: pavedRoadKindEscape, Note: "Record citation acceptance. Grounding at plan time is the road."},
+		"sources stale-review":    {Kind: pavedRoadKindEscape, Note: "Review sources whose cache drifted. Not the daily loop."},
+		"show":                    {Kind: pavedRoadKindPaved},
+		"list":                    {Kind: pavedRoadKindPaved},
+		"scope-rename":            {Kind: pavedRoadKindEscape, Note: "Rewrite a scope glob across issues. Planning should not need this."},
+		"scope-delete":            {Kind: pavedRoadKindEscape, Note: "Drop a scope glob. Prefer amending the plan."},
+		"doctor":                  {Kind: pavedRoadKindPaved},
+		"doctor quarantine":       {Kind: pavedRoadKindEscape, Note: "Hidden repair for a corrupt ops line. Doctor reports this command."},
+		"completion":              {Kind: pavedRoadKindEscape, Note: "Shell completion script. Not an orchestration verb."},
+		"hook":                    {Kind: pavedRoadKindEscape, Note: "Git hook management. Bootstrap --with-hooks installs them."},
+		"hook run":                {Kind: pavedRoadKindEscape, Note: "Invoke a named git hook. Git and the harness call this, not agents."},
+		"gate":                    {Kind: pavedRoadKindPaved},
+		"gate run":                {Kind: pavedRoadKindPaved},
+		"tui":                     {Kind: pavedRoadKindEscape, Note: "Interactive kanban. Agents use list, ready, and show."},
+		"context-history":         {Kind: pavedRoadKindEscape, Note: "Scan git history for context changes. Diagnostic only."},
+		"context-report":          {Kind: pavedRoadKindEscape, Note: "Price fixture-measured CLI payloads. Diagnostic metering, not the daily loop."},
+		"harness-hook":            {Kind: pavedRoadKindEscape, Note: "Internal harness entrypoint. Hidden from --help groups."},
+		"review":                  {Kind: pavedRoadKindPaved},
+		"review prepare":          {Kind: pavedRoadKindPaved},
+		"review schema":           {Kind: pavedRoadKindPaved},
+		"review record":           {Kind: pavedRoadKindPaved},
+		"review commits":          {Kind: pavedRoadKindPaved},
+		"review validate":         {Kind: pavedRoadKindEscape, Note: "Advisory assessment check. Record remains the enforcement gate."},
+		"worktree":                {Kind: pavedRoadKindPaved},
+		"worktree list":           {Kind: pavedRoadKindPaved},
+		"worktree gc":             {Kind: pavedRoadKindEscape, Note: "Remove worktrees after merged/cancelled. Sync/merged teardown is the road."},
+	}
 }
 
-var pavedRoadPipeline = []pavedRoadStep{
-	{
-		ID:          "bootstrap",
-		Title:       "Bootstrap",
-		Description: "Initialize the repo, register this clone as a worker, and confirm the binary.",
-		Commands:    []string{"bootstrap", "worker-init", "version"},
-	},
-	{
-		ID:          "plan",
-		Title:       "Plan / decompose",
-		Description: "Register sources, render plan context, apply the plan, promote drafts, and add dependency edges.",
-		Commands:    []string{"sources add", "sources sync", "dag context", "dag apply", "dag transition", "link"},
-	},
-	{
-		ID:          "dispatch",
-		Title:       "Wave dispatch",
-		Description: "Survey the graph, take the ready queue, claim with a worktree, and render the worker spec.",
-		Commands:    []string{"list", "doctor", "ready", "claim", "render-context", "worktree list", "show"},
-	},
-	{
-		ID:          "work",
-		Title:       "Work",
-		Description: "Record progress, keep the graph green, run the configured gate, and mark the issue done.",
-		Commands:    []string{"note", "decision", "validate", "gate run", "transition"},
-	},
-	{
-		ID:          "review",
-		Title:       "Review",
-		Description: "Prepare the bundle, record the assessment, and list delivery commits.",
-		Commands:    []string{"review prepare", "review record", "review commits"},
-	},
-	{
-		ID:          "sync",
-		Title:       "Sync",
-		Description: "Publish ops, then let merged PRs promote issues.",
-		Commands:    []string{"push-ops", "sync"},
-	},
+func pavedRoadPipeline() []pavedRoadStep {
+	return []pavedRoadStep{
+		{
+			ID:          "bootstrap",
+			Title:       "Bootstrap",
+			Description: "Initialize the repo, register this clone as a worker, and confirm the binary.",
+			Commands:    []string{"bootstrap", "worker-init", "version"},
+		},
+		{
+			ID:          "plan",
+			Title:       "Plan / decompose",
+			Description: "Register sources, render plan context, apply the plan, promote drafts, and add dependency edges.",
+			Commands:    []string{"sources add", "sources sync", "dag context", "dag apply", "dag transition", "link"},
+		},
+		{
+			ID:          "dispatch",
+			Title:       "Wave dispatch",
+			Description: "Survey the graph, take the ready queue, claim with a worktree, and render the worker spec.",
+			Commands:    []string{"list", "doctor", "ready", "claim", "render-context", "worktree list", "show"},
+		},
+		{
+			ID:          "work",
+			Title:       "Work",
+			Description: "Record progress, keep the graph green, run the configured gate, and mark the issue done.",
+			Commands:    []string{"note", "decision", "validate", "gate run", "transition"},
+		},
+		{
+			ID:          "review",
+			Title:       "Review",
+			Description: "Prepare the bundle, emit the assessment schema, record the assessment, and list delivery commits.",
+			Commands:    []string{"review prepare", "review schema", "review record", "review commits"},
+		},
+		{
+			ID:          "sync",
+			Title:       "Sync",
+			Description: "Publish ops, then let merged PRs promote issues.",
+			Commands:    []string{"push-ops", "sync"},
+		},
+	}
 }
 
-var pavedRoadDefaultsAudit = []pavedRoadDefault{
-	{
-		Flag:     "--skip-delivery-gate",
-		Commands: []string{"transition"},
-		Reason:   "Bypasses the delivery gate on --to done. The paved road runs the gate.",
-	},
-	{
-		Flag:     "--force",
-		Commands: []string{"transition"},
-		Reason:   "Bypasses branch and PR discipline on --to done.",
-	},
-	{
-		Flag:     "--force",
-		Commands: []string{"claim"},
-		Reason:   "Bypasses claim overlap planning.",
-	},
-	{
-		Flag:     "--force",
-		Commands: []string{"merged"},
-		Reason:   "Bypasses hook-log violations only; it does not waive the git check or the assessment.",
-	},
-	{
-		Flag:     "--force",
-		Commands: []string{"sources accept-citation"},
-		Reason:   "Skips the confirmation prompt. The paved road cites sources at plan time.",
-	},
-	{
-		Flag:     "--strict=false",
-		Commands: []string{"validate"},
-		Reason:   "Keeps warnings as warnings. The paved road is fail-closed (strict by default).",
-	},
-	{
-		Flag:     "--global",
-		Commands: []string{"bootstrap"},
-		Reason:   "Deploys skills outside the repo. The paved road deploys locally.",
-	},
-	{
-		Flag:     "--raw",
-		Commands: []string{"render-context"},
-		Reason:   "Skips the token budget. The paved road truncates to budget.",
-	},
-	{
-		Flag:     "--approve-all",
-		Commands: []string{"dag summary"},
-		Reason:   "Bulk-approves drafts. Plan release is dag transition after validate.",
-	},
+func pavedRoadDefaultsAudit() []pavedRoadDefault {
+	return []pavedRoadDefault{
+		{
+			Flag:     "--skip-delivery-gate",
+			Commands: []string{"transition"},
+			Reason:   "Bypasses the delivery gate on --to done. The paved road runs the gate.",
+		},
+		{
+			Flag:     "--force",
+			Commands: []string{"transition"},
+			Reason:   "Bypasses branch and PR discipline on --to done.",
+		},
+		{
+			Flag:     "--force",
+			Commands: []string{"claim"},
+			Reason:   "Bypasses claim overlap planning.",
+		},
+		{
+			Flag:     "--force",
+			Commands: []string{"merged"},
+			Reason:   "Bypasses hook-log violations only; it does not waive the git check or the assessment.",
+		},
+		{
+			Flag:     "--force",
+			Commands: []string{"sources accept-citation"},
+			Reason:   "Skips the confirmation prompt. The paved road cites sources at plan time.",
+		},
+		{
+			Flag:     "--strict=false",
+			Commands: []string{"validate"},
+			Reason:   "Keeps warnings as warnings. The paved road is fail-closed (strict by default).",
+		},
+		{
+			Flag:     "--global",
+			Commands: []string{"bootstrap"},
+			Reason:   "Deploys skills outside the repo. The paved road deploys locally.",
+		},
+		{
+			Flag:     "--raw",
+			Commands: []string{"render-context"},
+			Reason:   "Skips the token budget. The paved road truncates to budget.",
+		},
+		{
+			Flag:     "--approve-all",
+			Commands: []string{"dag summary"},
+			Reason:   "Bulk-approves drafts. Plan release is dag transition after validate.",
+		},
+	}
 }
 
 func applyPavedRoadMetadata(root *cobra.Command) {
@@ -560,7 +567,7 @@ func applyPavedRoadMetadata(root *cobra.Command) {
 	}
 	walkPavedRoadCommands(root, func(cmd *cobra.Command) {
 		path := pavedRoadPath(cmd)
-		class, ok := pavedRoadCommands[path]
+		class, ok := pavedRoadCommands()[path]
 		if !ok && cmd.Name() == "help" {
 			class = pavedRoadClass{Kind: pavedRoadKindPaved}
 			ok = true

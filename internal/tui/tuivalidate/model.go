@@ -46,7 +46,7 @@ func (m *Model) SetState(state *materialize.State) {
 }
 
 func (m *Model) HelpBar() string {
-	return tui.Muted.Render("q quit  ? help")
+	return tui.Muted().Render("q quit  ? help")
 }
 
 func (m *Model) Update(msg tea.Msg) (tui.Screen, tea.Cmd) {
@@ -59,18 +59,18 @@ func (m *Model) View() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(tui.Info.Render("Validation Results") + "\n\n")
+	b.WriteString(tui.Info().Render("Validation Results") + "\n\n")
 
 	if len(m.results.Errors) == 0 && len(m.results.Warnings) == 0 {
-		b.WriteString(tui.OK.Render("✓ No issues found.") + "\n")
+		b.WriteString(tui.OK().Render("✓ No issues found.") + "\n")
 		return b.String()
 	}
 
 	for _, err := range m.results.Errors {
-		b.WriteString(tui.Critical.Render("ERROR: ") + err + "\n")
+		b.WriteString(tui.Critical().Render("ERROR: ") + err + "\n")
 	}
 	for _, warn := range m.results.Warnings {
-		b.WriteString(tui.Warning.Render("WARN:  ") + warn + "\n")
+		b.WriteString(tui.Warning().Render("WARN:  ") + warn + "\n")
 	}
 
 	return b.String()

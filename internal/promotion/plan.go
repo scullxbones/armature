@@ -27,11 +27,15 @@ const (
 
 // Input is the borrowed snapshot Evaluate needs. PriorOps is the source of
 // attestations, post-delivery overrides, and promotion-check dedup.
+// Graph supplies descendant status/children for not-leaf remediations.
+// Opts carries the CLI Decide predicate so MERGED-1 next_actions match doctor/claim.
 type Input struct {
 	Issue       IssueFacts
 	PriorOps    []ops.Op
 	Integration string
 	PR          string
+	Graph       Graph
+	Opts        PlanOpts
 }
 
 type Result struct {
@@ -52,6 +56,10 @@ type Error struct {
 	IssueID string
 	Kind    string
 	Msg     string
+	Graph   Graph    // KindNotLeaf: tree for RemediationsPlanOpts
+	Opts    PlanOpts // CLI Decide — same predicate as doctor/claim print paths
+	Base    string   // KindMissingAssessment: delivery base when known
+	Tip     string   // KindMissingAssessment: delivery tip when known
 }
 
 func (e *Error) Error() string {
@@ -61,21 +69,43 @@ func (e *Error) Error() string {
 	return e.Msg
 }
 
-func (e *Error) RecoveryArgv() string {
+// RecoveryActions returns one command per next_actions entry. Never joins
+// with "; " — callers must pass the slice through to the failure envelope.
+func (e *Error) RecoveryActions() []string {
 	if e == nil {
-		return "arm doctor"
+		return []string{"arm doctor"}
 	}
-	return RecoveryArgv(e.IssueID, e.Kind)
+	if e.Kind == KindNotLeaf {
+		acts := RemediationsPlanOpts(e.IssueID, e.Graph, e.Opts).RenderNextActions()
+		if len(acts) == 0 {
+			// Rollup-eligible (≥1 merged child): materialize owns promotion.
+			// All-cancelled is handled inside RemediationsPlanOpts (cancel/reopen).
+			return []string{"arm doctor"}
+		}
+		return acts
+	}
+	if e.Kind == KindMissingAssessment {
+		return missingAssessmentActions(e.IssueID, e.Base, e.Tip)
+	}
+	return []string{RecoveryArgv(e.IssueID, e.Kind)}
+}
+
+// RecoveryArgv is the first recovery action (sync singular next_action).
+func (e *Error) RecoveryArgv() string {
+	return FirstRemediation(e.RecoveryActions())
 }
 
 func RecoveryArgv(issueID, kind string) string {
 	switch kind {
 	case KindMissingAssessment:
-		return "arm review record --issue " + issueID + " --assessment <assessment.json>"
+		return "arm review record --issue " + issueID + " --assessment <assessment.json> --bundle <bundle.json>"
 	case KindLegacy, KindEmptyDiff:
 		return delivery.RecordArgv(issueID)
-	case KindNotOnTarget, KindNotLeaf:
+	case KindNotOnTarget:
 		return "arm merged --issue " + issueID
+	case KindNotLeaf:
+		// Without a graph, fail closed — never self-referential arm merged.
+		return "arm doctor"
 	default:
 		return "arm doctor"
 	}
@@ -91,8 +121,15 @@ func Evaluate(git *adapters.Client, in Input) Result {
 	}
 	if len(in.Issue.Children) > 0 {
 		res.Kind = KindNotLeaf
-		res.Recovery = RecoveryArgv(id, KindNotLeaf)
-		res.Err = &Error{IssueID: id, Kind: KindNotLeaf, Msg: "issue " + id + " is not a leaf; parents roll up when children are merged"}
+		acts := RemediationsPlanOpts(id, in.Graph, in.Opts).RenderNextActions()
+		res.Recovery = FirstRemediation(acts)
+		res.Err = &Error{
+			IssueID: id,
+			Kind:    KindNotLeaf,
+			Msg:     "issue " + id + " is not a leaf; parents roll up when children are merged",
+			Graph:   in.Graph,
+			Opts:    in.Opts,
+		}
 		return res
 	}
 
@@ -122,7 +159,10 @@ func Evaluate(git *adapters.Client, in Input) Result {
 	}
 
 	if !hasMatchingAssessment(in, base, tip) {
-		return refuse(res, in, target, tip, KindMissingAssessment, &Error{IssueID: id, Kind: KindMissingAssessment, Msg: checkMessage(id, KindMissingAssessment)})
+		return refuse(res, in, target, tip, KindMissingAssessment, &Error{
+			IssueID: id, Kind: KindMissingAssessment, Msg: checkMessage(id, KindMissingAssessment),
+			Base: base, Tip: tip,
+		})
 	}
 
 	res.Kind = KindPromote

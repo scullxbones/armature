@@ -24,6 +24,9 @@ linters:
     - misspell
     - unconvert
     - nolintlint
+    # Catches package-level mutable vars (incl. test-injection func hooks).
+    # claim/oporder/promotion stay fully covered — reintroduced hooks fail make lint.
+    - gochecknoglobals
   settings:
     depguard:
       # Modularity map (quality-controls C7; ADR 0004 fences; ADR 0023 ratchet).
@@ -277,6 +280,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/adapters"
+            - "github.com/scullxbones/armature/internal/claim"
             - "github.com/scullxbones/armature/internal/delivery"
             - "github.com/scullxbones/armature/internal/ops"
         doctor-boundary:

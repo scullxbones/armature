@@ -118,6 +118,13 @@ func TestRecordArgvFillsIssueKeepsShaPlaceholder(t *testing.T) {
 	assert.Equal(t, "arm delivery record --issue TASK-01 --base <sha> --tip <sha>", RecordArgv("TASK-01"))
 }
 
+func TestRecordArgvFilled_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t,
+		"arm delivery record --issue TASK-01 --base aaa --tip bbb",
+		RecordArgvFilled("TASK-01", "aaa", "bbb"))
+}
+
 func TestValidateRejectsUnknownIssueWithoutProvenance_REQ_LNGHZN_S11_T1(t *testing.T) {
 	t.Parallel()
 	repo := gittest.InitRepo(t)

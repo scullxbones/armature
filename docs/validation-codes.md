@@ -1,6 +1,6 @@
 # Validation & Doctor Codes Reference
 
-This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D12).
+This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D12 and D14).
 
 ## Runtime Git floor
 
@@ -528,15 +528,15 @@ arm doctor --format json
 
 ### D4: Broken Parent References
 
-**Check:** Finds issues whose `parent` field points to a non-existent issue ID.
+**Check:** Finds issues whose `parent` field points to a non-existent issue ID, or equals the issue’s own ID (self-parent).
 
-**Trigger:** A parent issue was deleted, but child issues still reference it.
+**Trigger:** A parent issue was deleted while children still reference it, or an issue names itself as its parent. (D5 only walks `blocked_by` cycles, so self-parent is a D4 finding.)
 
 **Message:** `Issues with broken parent references`
 
-**Items:** `<child-id> -> <parent-id>`
+**Items:** `<child-id> -> <parent-id>` (self-parent appears as `<id> -> <id>`)
 
-**Context:** This is a data consistency error. Children reference a parent that no longer exists.
+**Context:** This is a data consistency error. Children reference a missing parent, or a one-node parent loop that is not a valid hierarchy edge.
 
 **Fix:**
 1. Create the missing parent: `arm create --id <parent-id> --title "..." --type story`
@@ -700,6 +700,72 @@ git -C .armature rebase origin/_armature
 
 ---
 
+### D14: Done Under Merged Parent
+
+**Check:** Walks the materialized index for issues whose status is still `done` while their parent’s status is already `merged`.
+
+**Trigger:** An issue with `status == done`, a non-empty `parent`, and that parent present in the index with `status == merged`.
+
+**Message:** `Done issues whose parent is already merged` / `No done issues under a merged parent`.
+
+**Items:** `child -> parent` pairs, sorted.
+
+**Severity:** Warning. Plain `arm doctor` still exits 0; `--strict` promotes. Not part of `doctor --fix`.
+
+**Context:** Catches stuck `done → merged` promotions after any ancestor story/epic has already rolled up to `merged`. Merged children under a **cancelled** parent (the ORCRUN cancel-of-parent leftover) are intentionally **not** reported — that shape is not a stuck promotion. Non-leaf done items stay in the warning (broad check). `--explain` remediations share `promotion.RemediationsPlanOpts` (CLI Decide) with MERGED-1 / sync.
+
+**Fix:** Remediations are a typed set of **alternatives** (Option A / Option B),
+each with ordered steps — never a flat sequence that reopens then force-cancels.
+Running either Option must clear the finding and obey the tree-consistency
+invariant (no open/claimed work under a merged ancestor; done/merged untouched
+unless that Option explicitly cancels/reopens; merged never un-merged). Shared
+with MERGED-1 / sync via `promotion.RemediationsPlan`.
+```bash
+# Options for done/open work under a merged ancestor (do not claim under merged).
+# Option labels are their own lines; argv lines are paste-runnable.
+# Nested merged ancestors (M1→M2→item): Option A reopens the FULL chain rootward-first.
+Option A:
+arm reopen --issue <merged-ancestor-id>
+# …then each nearer merged ancestor…
+Option B:
+# SEQUENCE covering every open descendant + self (not a partial cancel list).
+# Foreign live lease: Option B is NOT offered (claim --force is scope-overlap
+# only; AcceptAt ignores force). Print honest guidance once per doctor run:
+#   live <status> lease on <id> held by <worker> — owner must release
+#   (cancel, or wait TTL then arm doctor --fix); left-behind .worktrees/<id>
+#   may remain; prefer Option A if the holder is unavailable.
+# Expired foreign: prepend doctor --fix (releases expired → open), then cancel
+# every open descendant including those released leases.
+arm doctor --fix
+arm transition --issue <open-or-owned-id> --to cancelled --force
+# …then each remaining open descendant, then self…
+
+# more steps follow after tree repair to promote remaining descendants:
+arm delivery record --issue <leaf-id> --base <sha> --tip <sha>
+# required input (full provenance — not legacy):
+#   arm review prepare --issue <leaf-id> --base <sha> --head <sha> --output bundle.json
+#   arm review schema --output conformance-assessment.schema.json
+#   author ConformanceAssessment per that schema
+#   arm review validate --assessment assessment.json --bundle bundle.json
+arm review record --issue <leaf-id> --assessment <assessment.json> --bundle <bundle.json>
+
+# all-cancelled children only (rollup will not promote — needs ≥1 merged child):
+Option A:
+arm transition --issue <parent-id> --to cancelled --force
+Option B:
+arm reopen --issue <parent-id>
+
+# open leaf with no merged ancestor (--worktree required; omit value for canonical path):
+arm claim --issue <open-id> --worktree
+```
+Legacy `<sha>` templates apply only when delivery provenance is missing (same
+honesty as promotion kind `legacy`). With known Base/Tip, assessment.json is
+**required input** with the prepare/validate how-to above — not labeled legacy.
+All-merged children under a non-leaf are promoted by materialize rollup.
+Claim refuses creating a tree-consistency violation under a merged ancestor.
+
+---
+
 ## Integration with Commands
 
 ### validate command flags
@@ -762,6 +828,7 @@ arm doctor [flags]
 | D10 | Doctor | Error | Config.json strict decode / range |
 | D11 | Doctor | Warning | Ops remote missing / stale local-only ops (error if unverifiable) |
 | D12 | Doctor | Error | Ops worktree behind origin/_armature, or fetch failed |
+| D14 | Doctor | Warning | Done issue whose parent is already merged (not merged-under-cancelled) |
 
 ---
 

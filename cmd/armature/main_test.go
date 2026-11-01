@@ -710,7 +710,9 @@ func TestCreateCommand(t *testing.T) {
 
 const testLayoutWorkerID = "test-worker-template"
 
-var clonedWorkerSeq atomic.Uint64
+type clonedWorkerCounter struct{ seq atomic.Uint64 }
+
+var clonedWorkers = &clonedWorkerCounter{} //nolint:gochecknoglobals // unique worker IDs across parallel tests; never reassigned
 
 func prepareRepoTemplates() error {
 	layout, err := gittest.NewFixture()
@@ -723,7 +725,7 @@ func prepareRepoTemplates() error {
 	if _, err := writeArmatureLayout(layout.Dir, testLayoutWorkerID); err != nil {
 		return fmt.Errorf("layout armature files: %w", err)
 	}
-	testLayoutFixture = layout
+	fixtures.layoutFixture = layout
 
 	task, err := gittest.CloneFixtureTo(layout)
 	if err != nil {
@@ -732,7 +734,7 @@ func prepareRepoTemplates() error {
 	if err := appendTemplateTask(task.Dir); err != nil {
 		return fmt.Errorf("task fixture op: %w", err)
 	}
-	testTaskFixture = task
+	fixtures.taskFixture = task
 	return nil
 }
 
@@ -792,7 +794,7 @@ func appendTemplateTask(repo string) error {
 
 func uniquifyClonedWorker(repo string) error {
 	oldID := testLayoutWorkerID
-	newID := fmt.Sprintf("test-worker-%d-%d", time.Now().UnixNano(), clonedWorkerSeq.Add(1))
+	newID := fmt.Sprintf("test-worker-%d-%d", time.Now().UnixNano(), clonedWorkers.seq.Add(1))
 	cfg := filepath.Join(repo, ".git", "config")
 	data, err := os.ReadFile(cfg)
 	if err != nil {
@@ -824,8 +826,8 @@ func uniquifyClonedWorker(repo string) error {
 
 func initTempRepo(t *testing.T) string {
 	t.Helper()
-	require.NotEmpty(t, testLayoutFixture.Dir, "TestMain must prepare layout fixture")
-	repo := gittest.CloneFixture(t, testLayoutFixture).Dir
+	require.NotEmpty(t, fixtures.layoutFixture.Dir, "TestMain must prepare layout fixture")
+	repo := gittest.CloneFixture(t, fixtures.layoutFixture).Dir
 	require.NoError(t, uniquifyClonedWorker(repo))
 	return repo
 }
@@ -839,8 +841,8 @@ func setupArmatureLayout(t *testing.T, repo string) string {
 
 func setupRepoWithTask(t *testing.T) string {
 	t.Helper()
-	require.NotEmpty(t, testTaskFixture.Dir, "TestMain must prepare task fixture")
-	repo := gittest.CloneFixture(t, testTaskFixture).Dir
+	require.NotEmpty(t, fixtures.taskFixture.Dir, "TestMain must prepare task fixture")
+	repo := gittest.CloneFixture(t, fixtures.taskFixture).Dir
 	require.NoError(t, uniquifyClonedWorker(repo))
 	return repo
 }

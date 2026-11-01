@@ -61,9 +61,15 @@ func (e *MissingSnapshotError) Error() string {
 }
 
 // RecordArgv is the TRANSITION-1 next_actions recovery, with the issue id
-// filled in and <sha> left as a placeholder.
+// filled in and <sha> left as a placeholder (legacy / unknown provenance).
 func RecordArgv(issueID string) string {
 	return "arm delivery record --issue " + issueID + " --base <sha> --tip <sha>"
+}
+
+// RecordArgvFilled is the same recovery with concrete base/tip SHAs when the
+// delivery range is already known (claim provenance / stored snapshot).
+func RecordArgvFilled(issueID, base, tip string) string {
+	return "arm delivery record --issue " + issueID + " --base " + base + " --tip " + tip
 }
 
 func RefName(issueID string) string {

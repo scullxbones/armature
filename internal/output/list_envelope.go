@@ -7,14 +7,16 @@ import (
 
 const ListShowHelp = "arm show <id> for outcome, scope, and acceptance"
 
-var listStatusRankEarlierFirst = map[string]int{
-	"in-progress": 0,
-	"claimed":     1,
-	"done":        2,
-	"open":        3,
-	"blocked":     4,
-	"merged":      5,
-	"cancelled":   6,
+func listStatusRankEarlierFirst() map[string]int {
+	return map[string]int{
+		"in-progress": 0,
+		"claimed":     1,
+		"done":        2,
+		"open":        3,
+		"blocked":     4,
+		"merged":      5,
+		"cancelled":   6,
+	}
 }
 
 // ListIssue is the N4 default list row: id, type, status, title only.
@@ -33,7 +35,7 @@ type ListGroup struct {
 }
 
 func listStatusRank(status string) int {
-	if n, ok := listStatusRankEarlierFirst[status]; ok {
+	if n, ok := listStatusRankEarlierFirst()[status]; ok {
 		return n
 	}
 	return 99
