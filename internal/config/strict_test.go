@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,6 +90,21 @@ func TestValidatePresentFieldsRejectsZeroPushThreshold(t *testing.T) {
 	problems := ValidatePresentFields([]byte(`{"low_stakes_push_threshold":0}`))
 	require.NotEmpty(t, problems)
 	assert.Contains(t, strings.Join(problems, "\n"), "low_stakes_push_threshold")
+}
+
+func TestValidatePresentFieldsRejectsZeroLocalOnlyOpsStaleHours(t *testing.T) {
+	t.Parallel()
+
+	problems := ValidatePresentFields([]byte(`{"local_only_ops_stale_hours":0}`))
+	require.NotEmpty(t, problems)
+	assert.Contains(t, strings.Join(problems, "\n"), "local_only_ops_stale_hours")
+}
+
+func TestLocalOnlyOpsStaleAfterDefaultAndOverride(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 24*time.Hour, (Config{}).LocalOnlyOpsStaleAfter())
+	assert.Equal(t, 6*time.Hour, (Config{LocalOnlyOpsStaleHours: 6}).LocalOnlyOpsStaleAfter())
 }
 
 func TestValidatePresentFieldsRejectsEmptyHookExecutable(t *testing.T) {

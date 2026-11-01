@@ -1,8 +1,11 @@
 package doctor
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +14,241 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeD11Git injects typed probe outcomes for fail-closed D11 tables.
+type fakeD11Git struct {
+	fetchErr         error
+	tip              string
+	resolveErr       error
+	ahead            int
+	revListErr       error
+	localOnly        []string
+	firstParentErr   error
+	committerUnix    int64
+	committerUnixErr error
+	deleted          []string
+}
+
+func (g *fakeD11Git) FetchBranchToRef(string, string) error { return g.fetchErr }
+
+func (g *fakeD11Git) ResolveRevision(rev string) (string, error) {
+	if !strings.HasPrefix(rev, d11RunNS+"/") {
+		return "", fmt.Errorf("fakeD11Git: unexpected rev %q", rev)
+	}
+	if g.resolveErr != nil {
+		return "", g.resolveErr
+	}
+	return g.tip, nil
+}
+
+func (g *fakeD11Git) RevListCount(string) (int, error) {
+	if g.revListErr != nil {
+		return 0, g.revListErr
+	}
+	return g.ahead, nil
+}
+
+func (g *fakeD11Git) FirstParentAfter(string, string) ([]string, error) {
+	if g.firstParentErr != nil {
+		return nil, g.firstParentErr
+	}
+	out := make([]string, len(g.localOnly))
+	copy(out, g.localOnly)
+	return out, nil
+}
+
+func (g *fakeD11Git) CommitterUnix(string) (int64, error) {
+	if g.committerUnixErr != nil {
+		return 0, g.committerUnixErr
+	}
+	return g.committerUnix, nil
+}
+
+func (g *fakeD11Git) DeleteRef(ref string) error {
+	g.deleted = append(g.deleted, ref)
+	return nil
+}
+
+func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(1_700_000_000, 0)
+	staleAfter := 24 * time.Hour
+	freshUnix := now.Add(-time.Hour).Unix()
+	staleUnix := now.Add(-(staleAfter + time.Hour)).Unix()
+	missingFetch := fmt.Errorf("%w: fatal: couldn't find remote ref refs/heads/_armature", adapters.ErrRemoteRefMissing)
+	unreachable := errors.New("fatal: unable to access 'origin': Could not resolve host")
+
+	tests := []struct {
+		name       string
+		g          *fakeD11Git
+		staleAfter time.Duration
+		wantOut    d11Outcome
+		wantSev    Severity
+		wantExit   int
+		contains   string
+		itemsHint  bool
+	}{
+		{
+			name:     "healthy_in_sync",
+			g:        &fakeD11Git{tip: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			wantOut:  d11Healthy,
+			wantSev:  SeverityOK,
+			wantExit: 0,
+			contains: "verified",
+		},
+		{
+			name: "healthy_fresh_local_only",
+			g: &fakeD11Git{
+				tip:           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:         2,
+				localOnly:     []string{"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+				committerUnix: freshUnix,
+			},
+			wantOut:  d11Healthy,
+			wantSev:  SeverityOK,
+			wantExit: 0,
+			contains: "verified",
+		},
+		{
+			name: "stale_local_only",
+			g: &fakeD11Git{
+				tip:           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:         3,
+				localOnly:     []string{"cccccccccccccccccccccccccccccccccccccccc"},
+				committerUnix: staleUnix,
+			},
+			wantOut:   d11Stale,
+			wantSev:   SeverityWarning,
+			wantExit:  0,
+			contains:  "Local-only ops",
+			itemsHint: true,
+		},
+		{
+			name: "stale_threshold_override_short",
+			g: &fakeD11Git{
+				tip:           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:         1,
+				localOnly:     []string{"dddddddddddddddddddddddddddddddddddddddd"},
+				committerUnix: now.Add(-2 * time.Hour).Unix(),
+			},
+			staleAfter: time.Hour,
+			wantOut:    d11Stale,
+			wantSev:    SeverityWarning,
+			wantExit:   0,
+			contains:   "Local-only ops",
+			itemsHint:  true,
+		},
+		{
+			name:      "missing_positive_evidence",
+			g:         &fakeD11Git{fetchErr: missingFetch},
+			wantOut:   d11Missing,
+			wantSev:   SeverityWarning,
+			wantExit:  0,
+			contains:  "no verified remote tracking tip",
+			itemsHint: true,
+		},
+		{
+			name:     "unreachable_no_tracking_could_not_verify",
+			g:        &fakeD11Git{fetchErr: unreachable},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+		{
+			name: "unreachable_with_old_tip_still_could_not_verify",
+			// tip is intentionally set: a buggy observer might resolve stale
+			// shared tracking. Fail-closed must not consult it after fetch fail.
+			g:        &fakeD11Git{fetchErr: unreachable, tip: "staleaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+		{
+			name:     "fetch_ok_resolve_fails",
+			g:        &fakeD11Git{resolveErr: errors.New("resolve boom")},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+		{
+			name:     "fetch_ok_empty_tip",
+			g:        &fakeD11Git{tip: ""},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+		{
+			name: "rev_list_fails",
+			g: &fakeD11Git{
+				tip:        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				revListErr: errors.New("rev-list boom"),
+			},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+		{
+			name: "first_parent_fails",
+			g: &fakeD11Git{
+				tip:            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:          2,
+				firstParentErr: errors.New("first-parent boom"),
+			},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+		{
+			name: "committer_time_fails",
+			g: &fakeD11Git{
+				tip:              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				ahead:            1,
+				localOnly:        []string{"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+				committerUnixErr: errors.New("committer boom"),
+			},
+			wantOut:  d11CouldNotVerify,
+			wantSev:  SeverityError,
+			wantExit: 1,
+			contains: "Could not verify",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			threshold := tc.staleAfter
+			if threshold == 0 {
+				threshold = staleAfter
+			}
+			obs := observeD11OpsRemote(tc.g, now, threshold)
+			assert.Equal(t, tc.wantOut, obs.outcome)
+			require.NotEmpty(t, tc.g.deleted, "per-run ref must be cleaned up")
+			assert.True(t, strings.HasPrefix(tc.g.deleted[0], d11RunNS+"/"))
+
+			got := evaluateD11OpsRemote(obs)
+			assert.Equal(t, "D11", got.Check)
+			assert.Equal(t, tc.wantSev, got.Severity)
+			assert.Contains(t, got.Message, tc.contains)
+			assert.Equal(t, tc.wantExit, d11DoctorExit(got, false))
+			if tc.wantSev == SeverityWarning {
+				assert.Equal(t, 1, d11DoctorExit(got, true), "--strict promotes warnings")
+			}
+			if tc.itemsHint {
+				require.Equal(t, []string{d11RemediationHint}, got.Items)
+				assert.Equal(t, "arm push-ops", got.Items[0])
+				assert.NotContains(t, got.Items[0], "ops-backup")
+			}
+			assert.NotContains(t, got.Message, "docs/ops-backup.md")
+		})
+	}
+}
 
 func TestEvaluateD11OpsRemote(t *testing.T) {
 	t.Parallel()
@@ -21,34 +259,42 @@ func TestEvaluateD11OpsRemote(t *testing.T) {
 		severity Severity
 		contains string
 		items    []string
+		exit     int
 	}{
 		{
 			name:     "verified ok",
+			obs:      d11Observation{outcome: d11Healthy},
 			severity: SeverityOK,
 			contains: "verified",
-		},
-		{
-			name:     "fresh local-only under threshold ok",
-			obs:      d11Observation{localOnlyCount: 2, localOnlyAge: time.Hour},
-			severity: SeverityOK,
-			contains: "verified",
+			exit:     0,
 		},
 		{
 			name:     "missing tracking warns",
-			obs:      d11Observation{missingTracking: true},
+			obs:      d11Observation{outcome: d11Missing},
 			severity: SeverityWarning,
 			contains: "no verified remote tracking tip",
 			items:    []string{d11RemediationHint},
+			exit:     0,
 		},
 		{
 			name: "stale local-only warns",
 			obs: d11Observation{
+				outcome:        d11Stale,
 				localOnlyCount: 3,
-				localOnlyAge:   localOnlyOpsStaleAfter + time.Minute,
+				localOnlyAge:   defaultLocalOnlyOpsStaleAfter + time.Minute,
 			},
 			severity: SeverityWarning,
 			contains: "Local-only ops",
 			items:    []string{d11RemediationHint},
+			exit:     0,
+		},
+		{
+			name:     "could not verify errors",
+			obs:      d11Observation{outcome: d11CouldNotVerify, detail: "network down"},
+			severity: SeverityError,
+			contains: "Could not verify",
+			items:    []string{"network down"},
+			exit:     1,
 		},
 	}
 
@@ -60,10 +306,13 @@ func TestEvaluateD11OpsRemote(t *testing.T) {
 			assert.Equal(t, tc.severity, got.Severity)
 			assert.Contains(t, got.Message, tc.contains)
 			assert.Equal(t, tc.items, got.Items)
+			assert.Equal(t, tc.exit, d11DoctorExit(got, false))
 			assert.NotContains(t, got.Message, "docs/ops-backup.md")
 			for _, item := range got.Items {
 				assert.NotContains(t, item, "docs/ops-backup.md")
-				assert.Contains(t, item, "arm ops-backup")
+				if tc.severity == SeverityWarning {
+					assert.Contains(t, item, "arm push-ops")
+				}
 			}
 		})
 	}
@@ -72,7 +321,10 @@ func TestEvaluateD11OpsRemote(t *testing.T) {
 func TestDoctorD11_WarnsOnMissingRemoteTracking_REQ_TOPTIER_S12_T2(t *testing.T) {
 	t.Parallel()
 
-	worktree := gittest.InitRepo(t)
+	// Reachable origin without refs/heads/_armature → positive missing evidence.
+	// A repo with no origin is could-not-verify (transport), not missing.
+	fx := gittest.InitWithOrigin(t)
+	worktree := fx.Dir
 	runGit(t, worktree, "checkout", "-b", "_armature")
 	runGit(t, worktree, "commit", "--allow-empty", "-m", "local-only ops")
 
@@ -86,6 +338,7 @@ func TestDoctorD11_WarnsOnMissingRemoteTracking_REQ_TOPTIER_S12_T2(t *testing.T)
 	assert.Equal(t, SeverityWarning, d11.Severity)
 	assert.Contains(t, d11.Message, "no verified remote tracking tip")
 	require.Equal(t, []string{d11RemediationHint}, d11.Items)
+	assert.Equal(t, 0, d11DoctorExit(d11, false))
 	assert.NotContains(t, d11.Message, "docs/ops-backup.md")
 }
 
@@ -93,7 +346,7 @@ func TestDoctorD11_WarnsOnStaleLocalOnlyOps_REQ_TOPTIER_S12_T2(t *testing.T) {
 	t.Parallel()
 
 	worktree, _ := opsWorktreeWithOrigin(t)
-	staleWhen := time.Now().Add(-(localOnlyOpsStaleAfter + 2*time.Hour))
+	staleWhen := time.Now().Add(-(defaultLocalOnlyOpsStaleAfter + 2*time.Hour))
 	runGitEnv(t, worktree, map[string]string{
 		"GIT_AUTHOR_DATE":    staleWhen.Format(time.RFC3339),
 		"GIT_COMMITTER_DATE": staleWhen.Format(time.RFC3339),
@@ -110,7 +363,39 @@ func TestDoctorD11_WarnsOnStaleLocalOnlyOps_REQ_TOPTIER_S12_T2(t *testing.T) {
 	assert.Contains(t, d11.Message, "Local-only ops")
 	assert.Contains(t, d11.Message, "unpublished")
 	require.Equal(t, []string{d11RemediationHint}, d11.Items)
+	assert.Equal(t, 0, d11DoctorExit(d11, false))
 	assert.NotContains(t, d11.Message, "docs/ops-backup.md")
+}
+
+func TestDoctorD11_ConfigStaleHoursOverride_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	worktree, _ := opsWorktreeWithOrigin(t)
+	// 2h old local-only — under default 24h, over configured 1h.
+	when := time.Now().Add(-2 * time.Hour)
+	runGitEnv(t, worktree, map[string]string{
+		"GIT_AUTHOR_DATE":    when.Format(time.RFC3339),
+		"GIT_COMMITTER_DATE": when.Format(time.RFC3339),
+	}, "commit", "--allow-empty", "-m", "config-threshold unpublished")
+
+	issuesDir := initIssuesDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "ops", "test-worker.log"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "config.json"), []byte(`{
+		"project_type": "go",
+		"default_ttl": 60,
+		"token_budget": 1600,
+		"low_stakes_push_threshold": 5,
+		"local_only_ops_stale_hours": 1,
+		"hooks": []
+	}`), 0o644))
+
+	report, err := Run(issuesDir, filepath.Join(issuesDir, "state"), "", worktree, false, time.Now())
+	require.NoError(t, err)
+
+	d11 := findCheck(t, report, "D11")
+	assert.Equal(t, SeverityWarning, d11.Severity)
+	assert.Contains(t, d11.Message, "Local-only ops")
+	require.Equal(t, []string{d11RemediationHint}, d11.Items)
 }
 
 func TestRun_D11_OKWhenInSync(t *testing.T) {
@@ -127,6 +412,7 @@ func TestRun_D11_OKWhenInSync(t *testing.T) {
 	assert.Equal(t, SeverityOK, d11.Severity)
 	assert.Contains(t, d11.Message, "verified")
 	assert.Empty(t, d11.Items)
+	assert.Equal(t, 0, d11DoctorExit(d11, false))
 }
 
 func TestRun_D11_SkipWhenWorktreeMissing(t *testing.T) {
@@ -160,6 +446,52 @@ func TestRun_D11_FreshLocalOnlyUnderThresholdOK(t *testing.T) {
 	assert.Contains(t, d11.Message, "verified")
 }
 
+func TestDoctorD11_DoesNotMutateSharedTracking_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	worktree, originClone := opsWorktreeWithOrigin(t)
+	before := gitOut(t, worktree, "rev-parse", "refs/remotes/origin/_armature")
+
+	// Advance origin tip without updating this clone's shared tracking, then
+	// run D11 alone (not full Run — D12 refreshes shared tracking by design).
+	runGit(t, originClone, "commit", "--allow-empty", "-m", "origin advanced while tracking stale")
+	runGit(t, originClone, "push", "origin", "_armature")
+	advanced := gitOut(t, originClone, "rev-parse", "HEAD")
+	require.NotEqual(t, before, advanced)
+
+	d11 := checkD11OpsRemote(worktree, "", time.Now())
+	assert.Equal(t, SeverityOK, d11.Severity, "fresh evidence should verify against advanced tip")
+	after := gitOut(t, worktree, "rev-parse", "refs/remotes/origin/_armature")
+	assert.Equal(t, before, after, "D11 must not refresh shared refs/remotes/origin/_armature")
+	assert.Empty(t, listRefs(t, worktree, d11RunNS), "per-run D11 refs cleaned up")
+}
+
+func TestDoctorD11_UnreachableOriginCouldNotVerify_REQ_TOPTIER_S12_T2(t *testing.T) {
+	t.Parallel()
+
+	worktree, _ := opsWorktreeWithOrigin(t)
+	before := gitOut(t, worktree, "rev-parse", "refs/remotes/origin/_armature")
+	runGit(t, worktree, "remote", "set-url", "origin", "file:///no/such/origin-for-d11-fail.git")
+
+	d11 := checkD11OpsRemote(worktree, "", time.Now())
+	assert.Equal(t, SeverityError, d11.Severity)
+	assert.Contains(t, d11.Message, "Could not verify")
+	assert.Equal(t, 1, d11DoctorExit(d11, false))
+	after := gitOut(t, worktree, "rev-parse", "refs/remotes/origin/_armature")
+	assert.Equal(t, before, after, "failed D11 must not rewrite shared tracking")
+}
+
+func TestLoadLocalOnlyOpsStaleAfter(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, loadLocalOnlyOpsStaleAfter(""))
+	assert.Equal(t, defaultLocalOnlyOpsStaleAfter, loadLocalOnlyOpsStaleAfter(filepath.Join(t.TempDir(), "missing.json")))
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"local_only_ops_stale_hours":6}`), 0o644))
+	assert.Equal(t, 6*time.Hour, loadLocalOnlyOpsStaleAfter(path))
+}
+
 func runGitEnv(t *testing.T, dir string, env map[string]string, args ...string) {
 	t.Helper()
 	cmd := adapters.NonInteractiveGitCommand(dir, args...)
@@ -169,4 +501,24 @@ func runGitEnv(t *testing.T, dir string, env map[string]string, args ...string) 
 	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v: %s", args, out)
+}
+
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := adapters.NonInteractiveGitCommand(dir, args...)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v: %s", args, out)
+	return strings.TrimSpace(string(out))
+}
+
+func listRefs(t *testing.T, dir, prefix string) []string {
+	t.Helper()
+	cmd := adapters.NonInteractiveGitCommand(dir, "for-each-ref", "--format=%(refname)", prefix)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "for-each-ref: %s", out)
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "\n")
 }

@@ -130,6 +130,11 @@ func ValidatePresentFields(data []byte) []string {
 			problems = append(problems, fmt.Sprintf("low_stakes_push_threshold %d is out of range (must be > 0)", cfg.LowStakesPushThreshold))
 		}
 	}
+	if _, ok := raw["local_only_ops_stale_hours"]; ok {
+		if cfg.LocalOnlyOpsStaleHours <= 0 {
+			problems = append(problems, fmt.Sprintf("local_only_ops_stale_hours %d is out of range (must be > 0)", cfg.LocalOnlyOpsStaleHours))
+		}
+	}
 	if _, ok := raw["hooks"]; ok {
 		for i, hook := range cfg.Hooks {
 			if hook.Name == "" {

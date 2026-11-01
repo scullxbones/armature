@@ -42,8 +42,9 @@ func (m TTLMinutes) overflowsConversions() bool {
 type PendingOps int
 
 const (
-	DefaultTTLMinutes     TTLMinutes = 60
-	DefaultPendingOpCount PendingOps = 5
+	DefaultTTLMinutes             TTLMinutes = 60
+	DefaultPendingOpCount         PendingOps = 5
+	DefaultLocalOnlyOpsStaleHours int        = 24
 )
 
 type Config struct {
@@ -51,9 +52,21 @@ type Config struct {
 	DefaultTTL             TTLMinutes            `json:"default_ttl"`
 	TokenBudget            int                   `json:"token_budget"`
 	LowStakesPushThreshold PendingOps            `json:"low_stakes_push_threshold"`
+	LocalOnlyOpsStaleHours int                   `json:"local_only_ops_stale_hours,omitempty"`
 	Hooks                  []HookConfig          `json:"hooks"`
 	Gates                  map[string]GateConfig `json:"gates,omitempty"`
 	IntegrationBranch      string                `json:"integration_branch,omitempty"`
+}
+
+// LocalOnlyOpsStaleAfter returns the D11 / G2.2 staleness window. Omitted or
+// non-positive values fall back to DefaultLocalOnlyOpsStaleHours (24h). A
+// present 0 is rejected by ValidatePresentFields / doctor D10.
+func (c Config) LocalOnlyOpsStaleAfter() time.Duration {
+	hours := c.LocalOnlyOpsStaleHours
+	if hours <= 0 {
+		hours = DefaultLocalOnlyOpsStaleHours
+	}
+	return time.Duration(hours) * time.Hour
 }
 
 const DefaultIntegrationBranch = "main"

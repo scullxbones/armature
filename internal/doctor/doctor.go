@@ -106,7 +106,7 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 	checks := indexedChecks(index, allIssues, opsTargetIDs, repoPath, now, verboseD3Context,
 		[]Finding{checkD7WorkerIDMismatches(filterMismatchWarnings(warnings))},
 		filepath.Join(issuesDir, "config.json"))
-	checks = append(checks, checkD11OpsRemote(worktreePath, now))
+	checks = append(checks, checkD11OpsRemote(worktreePath, filepath.Join(issuesDir, "config.json"), now))
 	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
 	return Report{Checks: checks}, nil
 }

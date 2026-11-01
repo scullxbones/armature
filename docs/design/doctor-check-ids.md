@@ -19,7 +19,9 @@ The in-package indexed helper still omits D7 (worker-ID mismatches need the vali
 stream), D11 (ops remote-tracking DR needs the ops worktree), and D12
 (ops-worktree lag needs the ops worktree); that is documented, not changed.
 D11 warns when `origin/_armature` is missing or local-only ops exceed the
-package staleness window; remediation names `arm ops-backup snapshot|restore-plan`.
+configurable `local_only_ops_stale_hours` window (default 24h); remediation
+names `arm push-ops` (publishes local HEAD). Probe failures are errors
+(`could not verify`), never OK from stale shared tracking.
 D12 is an error when HEAD is N>0 commits behind `origin/_armature` after a
 successful fetch (plain `arm doctor` exits 1). Fetch failure is also an
 error. Missing ops worktree stays skip-OK. Behind is not a warning:

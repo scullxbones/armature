@@ -721,7 +721,10 @@ arm note TASK-001 --msg "Started implementation after architectural review."
 
 ## push-ops
 
-Push the `_armature` ops branch to origin.
+Push the `_armature` ops branch to origin. This is the command that publishes
+**local HEAD** (including unpublished local-only ops commits). Doctor **D11**
+points missing / stale-local-only findings here — not at `ops-backup
+snapshot|restore-plan`, which only cover the already-published tip.
 
 **Synopsis:**
 `arm push-ops [flags]`
@@ -745,8 +748,9 @@ Durable tip copy for the published `_armature` orphan branch. This is the
 supported recovery surface for ops durability (narrow-gaps G2.1 / G2.3 as a
 tested CLI lever). Doctor **D11** (G2.2) warns on a missing or stale
 `origin/_armature` tip; its remediation / `next_actions` name
-`arm ops-backup snapshot|restore-plan` (not a recipe doc). Do not maintain
-parallel bash cookbooks.
+`arm push-ops` (publishes local HEAD). `snapshot` / `restore-plan` do not
+preserve unpublished local-only commits — they only cover the published tip.
+Do not maintain parallel bash cookbooks.
 
 ### Ops durability guarantees (G2.1)
 
