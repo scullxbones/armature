@@ -136,7 +136,7 @@ func TestCheckForeignChildren_RefusesAttachedChild(t *testing.T) {
 
 	err := CheckForeignChildren(plan, state)
 	require.Error(t, err)
-	var foreign *ForeignChildError
+	var foreign *foreignChildError
 	require.ErrorAs(t, err, &foreign)
 	assert.Equal(t, "FOREIGN-1", foreign.Child)
 	assert.Equal(t, "PLAN-001", foreign.Parent)

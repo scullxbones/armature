@@ -9,7 +9,9 @@ import (
 	"github.com/scullxbones/armature/internal/validate"
 )
 
-func validateFacts(issues map[string]*materialize.Issue, now int64) map[string]validate.IssueFacts {
+// IssueFacts projects materialized issues into the validate seam. Plan apply,
+// the CLI, and the validate screen share this projection.
+func IssueFacts(issues map[string]*materialize.Issue, now int64) map[string]validate.IssueFacts {
 	out := make(map[string]validate.IssueFacts, len(issues))
 	for id, issue := range issues {
 		if issue == nil {
@@ -50,11 +52,12 @@ func validateIssueFacts(issue *materialize.Issue, now int64) validate.IssueFacts
 	return f
 }
 
-func checkGraphIntroduction(state *materialize.State, proposed []ops.Op, opts validate.Options) error {
+// CheckGraphIntroduction reports whether proposed ops would introduce graph findings.
+func CheckGraphIntroduction(state *materialize.State, proposed []ops.Op, opts validate.Options) error {
 	if state == nil {
 		state = materialize.NewState()
 	}
-	afterState, err := projectValidateState(state, proposed)
+	afterState, err := ProjectState(state, proposed)
 	if err != nil {
 		return err
 	}
@@ -63,8 +66,8 @@ func checkGraphIntroduction(state *materialize.State, proposed []ops.Op, opts va
 		return err
 	}
 	return validate.CheckIntroduction(
-		validateFacts(state.Issues, opts.Now),
-		validateFacts(afterState.Issues, opts.Now),
+		IssueFacts(state.Issues, opts.Now),
+		IssueFacts(afterState.Issues, opts.Now),
 		introductionTargetIDs(proposed),
 		extra,
 		opts,
@@ -96,11 +99,12 @@ func reopenIntroductionFindings(current *materialize.State, proposed []ops.Op, o
 	if err := materialize.ApplyOpsSorted(projected, unsuppressing); err != nil {
 		return nil, fmt.Errorf("project un-suppression baseline: %w", err)
 	}
-	result := validate.Validate(validateFacts(projected.Issues, opts.Now), opts)
+	result := validate.Validate(IssueFacts(projected.Issues, opts.Now), opts)
 	return result.Findings, nil
 }
 
-func projectValidateState(current *materialize.State, proposed []ops.Op) (*materialize.State, error) {
+// ProjectState returns a clone of current with proposed ops applied.
+func ProjectState(current *materialize.State, proposed []ops.Op) (*materialize.State, error) {
 	after, err := cloneValidateState(current)
 	if err != nil {
 		return nil, err
