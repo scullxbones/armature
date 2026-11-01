@@ -26,6 +26,7 @@ func TestPJReprosFail_REQ_PORC_BASH32(t *testing.T) {
 		"subshell.yml",
 		"docker-context.yml",
 		"compose-run.yml",
+		"shell-key.yml",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -34,19 +35,40 @@ func TestPJReprosFail_REQ_PORC_BASH32(t *testing.T) {
 			assert.Greater(t, n, 0, name)
 		})
 	}
-	t.Run("dockerfile-from", func(t *testing.T) {
-		t.Parallel()
-		n, err := checkDirFixture(filepath.Join(root, "scripts/testdata/workflow-image-pins/unpinned-dirs/dockerfile-from"), true)
-		require.NoError(t, err)
-		assert.Greater(t, n, 0)
-	})
+	for _, name := range []string{"dockerfile-from", "from-platform", "from-scratch", "from-stage"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			n, err := checkDirFixture(filepath.Join(root, "scripts/testdata/workflow-image-pins/unpinned-dirs", name), true)
+			require.NoError(t, err)
+			assert.Greater(t, n, 0)
+		})
+	}
+}
+
+func TestFROMScratchAndStagePass_REQ_PORC_BASH32(t *testing.T) {
+	t.Parallel()
+	root, err := filepath.Abs("../..")
+	require.NoError(t, err)
+	for _, name := range []string{"from-scratch", "from-stage", "from-platform"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			n, err := checkDirFixture(filepath.Join(root, "scripts/testdata/workflow-image-pins/pinned-dirs", name), false)
+			require.NoError(t, err)
+			assert.Equal(t, 0, n)
+		})
+	}
+}
+
+func TestTokenFindingsReportAll_REQ_PORC_BASH32(t *testing.T) {
+	t.Parallel()
+	hits := tokenFindings("docker run a\npodman run b\nnerdctl run c\n", "f", "run")
+	require.Len(t, hits, 3)
 }
 
 func TestManifestRequired_REQ_PORC_BASH32(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "scripts"), 0o755))
-	// Empty manifest file present but no entries.
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, "scripts/container-images.manifest"), []byte("# none\n"), 0o644))
 	_, err := checkRepo(tmp)
 	require.Error(t, err)

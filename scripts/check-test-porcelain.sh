@@ -13,11 +13,15 @@
 # Paths come from `git status --porcelain -z` (NUL-separated), so spaces,
 # quotes, and non-ASCII names round-trip safely.
 #
-# Fail-closed: git failures propagate (no 2>/dev/null / || true around git).
+# All porcelain git goes through scripts/porcelain-git.sh (fail-closed).
 # Non-repo roots fail. A 0-byte baseline file is never a valid write/read.
 #
 # Bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/porcelain-git.sh
+. "$SCRIPT_DIR/porcelain-git.sh"
 
 MODE="check"
 if [ "${1:-}" = "--write-baseline" ]; then
@@ -30,7 +34,7 @@ BASELINE="${2:-}"
 cd "$ROOT"
 
 # Refuse non-git directories (no silenced git).
-git rev-parse --git-dir >/dev/null
+porcelain_git_rev_parse --git-dir >/dev/null
 
 path_digest() {
   local path="$1"
@@ -42,12 +46,12 @@ path_digest() {
       | LC_ALL=C sort \
       | while IFS= read -r f || [ -n "$f" ]; do
           [ -z "$f" ] && continue
-          h=$(git hash-object -- "$f" || printf 'unreadable')
+          h=$(porcelain_git_hash_object -- "$f" || printf 'unreadable')
           printf '%s %s\n' "$h" "$f"
         done \
-      | git hash-object --stdin
+      | porcelain_git_hash_object --stdin
   elif [ -e "$path" ] || [ -L "$path" ]; then
-    git hash-object -- "$path" || printf 'unreadable\n'
+    porcelain_git_hash_object -- "$path" || printf 'unreadable\n'
   else
     printf 'missing\n'
   fi
@@ -72,7 +76,7 @@ emit_baseline_body() {
     esac
     dig="$(path_digest "$path")"
     printf '%s\t%s\t%s\n' "$status" "$path" "$dig"
-  done < <(git status --porcelain -z --untracked-files=all) \
+  done < <(porcelain_git_status_z) \
     | LC_ALL=C sort
 }
 
@@ -107,11 +111,11 @@ fi
 
 if [ -z "$BASELINE" ]; then
   if [ -n "$current_body" ]; then
-    echo "FAIL: go test left dirt in git status --porcelain (explicit TempDir/root required):" >&2
+    echo "FAIL: go test left dirt in porcelain baseline (explicit TempDir/root required):" >&2
     printf '%s\n' "$current_body" | sed 's/\t[^	]*$//' | sed 's/^/  /' >&2
     exit 1
   fi
-  echo "OK: git status --porcelain empty after tests"
+  echo "OK: porcelain baseline empty after tests"
   exit 0
 fi
 
@@ -127,7 +131,7 @@ fi
 baseline_fp="$(cat "$BASELINE")"
 
 if [ "$current_fp" = "$baseline_fp" ]; then
-  echo "OK: git status --porcelain content-hash baseline unchanged"
+  echo "OK: porcelain content-hash baseline unchanged"
   exit 0
 fi
 

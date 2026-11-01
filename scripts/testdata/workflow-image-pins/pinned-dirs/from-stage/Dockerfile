@@ -1,0 +1,3 @@
+FROM alpine:3.22@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef AS builder
+RUN echo build
+FROM builder

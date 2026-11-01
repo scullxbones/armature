@@ -1,14 +1,14 @@
-// workflowimagepins fails closed when workflows/actions/scripts reach
-// docker|podman|buildx outside the sole allowlisted wrapper, or when
-// declarative container images are not exact values from the image manifest.
+// workflowimagepins is a static ADVISORY scanner for container-image policy.
+// Fail-closed runtime enforcement is CI PATH-shadow
+// (scripts/ci-path-shadow-engines.sh) plus scripts/run-container-image.sh.
 //
 // Holistic pin model (not a docker-CLI tokenizer):
 //   - scripts/container-images.manifest lists every allowed name@sha256
-//   - scripts/run-container-image.sh is the only allowed docker entrypoint
+//   - scripts/run-container-image.sh is the only allowlisted engine entrypoint
 //   - container:/services:/uses: docker:// / Dockerfile FROM must match manifest
-//   - any docker|podman|buildx token outside the wrapper fails
-//   - scans .github/workflows, .github/actions, root action.yml, uses: ./path,
-//     Dockerfiles, scripts/*.sh, and Makefile
+//   - any engine token outside the wrapper is reported (advisory on repo scan)
+//   - scans workflows (run: + shell:), actions, root action.yml, uses: ./path,
+//     Dockerfiles, scripts/** (any depth/ext), and Makefile
 package main
 
 import (
@@ -25,15 +25,24 @@ import (
 
 var (
 	digestPin = regexp.MustCompile(`^[^@\s]+@sha256:[0-9a-f]{64}$`)
-	// Word-boundary engine tokens (also catches compose/buildx via "docker").
-	engineToken = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_])(docker|podman|buildx)([^A-Za-z0-9_]|$)`)
-	fromLine    = regexp.MustCompile(`(?i)^\s*FROM\s+(\S+)`)
+	// Engine / runtime tokens (PATH-shadowed names + buildx).
+	engineToken = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_])(docker|podman|buildx|nerdctl|ctr|finch|lima|crictl)([^A-Za-z0-9_]|$)`)
+	fromLine    = regexp.MustCompile(`(?i)^\s*FROM\s+(.+)$`)
 )
 
 const (
 	manifestRel = "scripts/container-images.manifest"
 	wrapperRel  = "scripts/run-container-image.sh"
 )
+
+// Short exempt list for scripts that must mention engine names.
+var scriptExempt = map[string]bool{
+	"scripts/run-container-image.sh":       true,
+	"scripts/ci-path-shadow-engines.sh":    true,
+	"scripts/ci-path-shadow-selfcheck.sh":  true,
+	"scripts/check-workflow-image-pins.sh": true,
+	"scripts/test_check_jobs.sh":           true, // asserts engine-token policy
+}
 
 type finding struct {
 	File string
@@ -47,14 +56,18 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	selftest := false
+	advisory := false
 	root := "."
 	for len(args) > 0 {
 		switch args[0] {
 		case "-selftest":
 			selftest = true
 			args = args[1:]
+		case "-advisory":
+			advisory = true
+			args = args[1:]
 		case "-h", "-help", "--help":
-			fmt.Fprintf(stderr, "usage: workflowimagepins [-selftest] [repo-root]\n")
+			fmt.Fprintf(stderr, "usage: workflowimagepins [-selftest|-advisory] [repo-root]\n")
 			return 0
 		default:
 			if strings.HasPrefix(args[0], "-") {
@@ -84,13 +97,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if len(findings) > 0 {
-		fmt.Fprintln(stderr, "FAIL: container image policy violations:")
+		label := "FAIL"
+		if advisory {
+			label = "ADVISORY"
+		}
+		fmt.Fprintf(stderr, "%s: container image policy findings (static; runtime fail-closed is CI PATH-shadow):\n", label)
 		for _, f := range findings {
 			fmt.Fprintf(stderr, "  %s (%s): %s\n", f.File, f.Path, f.Msg)
 		}
+		if advisory {
+			fmt.Fprintln(stdout, "OK: workflowimagepins advisory scan complete (findings above are non-blocking)")
+			return 0
+		}
 		return 1
 	}
-	fmt.Fprintln(stdout, "OK: container images are manifest-pinned; no raw docker|podman|buildx outside wrapper")
+	fmt.Fprintln(stdout, "OK: container images are manifest-pinned; no engine tokens outside wrapper")
 	return 0
 }
 
@@ -133,8 +154,8 @@ func loadManifest(path string) (map[string]bool, error) {
 func scanTree(root string, allowed map[string]bool) ([]finding, error) {
 	var out []finding
 	wrapperAbs := filepath.Join(root, filepath.FromSlash(wrapperRel))
+	seenActions := map[string]bool{}
 
-	// Declarative + token scan of workflows/actions.
 	wfDir := filepath.Join(root, ".github", "workflows")
 	if entries, err := os.ReadDir(wfDir); err == nil {
 		for _, e := range entries {
@@ -143,7 +164,7 @@ func scanTree(root string, allowed map[string]bool) ([]finding, error) {
 				continue
 			}
 			rel := filepath.ToSlash(filepath.Join(".github", "workflows", name))
-			fs, err := checkWorkflowFile(root, filepath.Join(wfDir, name), rel, allowed)
+			fs, err := checkWorkflowFile(root, filepath.Join(wfDir, name), rel, allowed, seenActions)
 			if err != nil {
 				return nil, err
 			}
@@ -173,7 +194,11 @@ func scanTree(root string, allowed map[string]bool) ([]finding, error) {
 			rel = path
 		}
 		rel = filepath.ToSlash(rel)
-		fs, err := checkActionFile(path, rel, allowed)
+		if seenActions[rel] {
+			return nil
+		}
+		seenActions[rel] = true
+		fs, err := checkActionFile(root, path, rel, allowed, seenActions)
 		if err != nil {
 			return err
 		}
@@ -183,19 +208,20 @@ func scanTree(root string, allowed map[string]bool) ([]finding, error) {
 		return nil, err
 	}
 
-	// Root action.yml (composite/docker action at repo root).
 	for _, name := range []string{"action.yml", "action.yaml"} {
 		p := filepath.Join(root, name)
 		if _, err := os.Stat(p); err == nil {
-			fs, err := checkActionFile(p, name, allowed)
-			if err != nil {
-				return nil, err
+			if !seenActions[name] {
+				seenActions[name] = true
+				fs, err := checkActionFile(root, p, name, allowed, seenActions)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, fs...)
 			}
-			out = append(out, fs...)
 		}
 	}
 
-	// Dockerfiles anywhere except testdata / vendor-ish.
 	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -226,35 +252,37 @@ func scanTree(root string, allowed map[string]bool) ([]finding, error) {
 		return nil, err
 	}
 
-	// scripts/*.sh + Makefile: no engine tokens outside wrapper.
+	// scripts/** any depth / any extension; short exempt list only.
 	scriptsDir := filepath.Join(root, "scripts")
-	if entries, err := os.ReadDir(scriptsDir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			name := e.Name()
-			if !strings.HasSuffix(name, ".sh") {
-				continue
-			}
-			// Harness/test scripts may mention engine tokens in assertions.
-			if strings.HasPrefix(name, "test_") || strings.HasSuffix(name, "_test.sh") {
-				continue
-			}
-			abs := filepath.Join(scriptsDir, name)
-			if sameFile(abs, wrapperAbs) {
-				continue
-			}
-			rel := filepath.ToSlash(filepath.Join("scripts", name))
-			out = append(out, tokenFindingsInFile(abs, rel)...)
+	if err := filepath.WalkDir(scriptsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			if d.Name() == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			rel = path
+		}
+		rel = filepath.ToSlash(rel)
+		if scriptExempt[rel] || sameFile(path, wrapperAbs) || strings.HasPrefix(rel, "scripts/workflowimagepins/") {
+			return nil
+		}
+		out = append(out, tokenFindingsInFile(path, rel)...)
+		return nil
+	}); err != nil && !os.IsNotExist(err) {
+		return nil, err
 	}
+
 	makefile := filepath.Join(root, "Makefile")
 	if _, err := os.Stat(makefile); err == nil {
 		out = append(out, tokenFindingsInFile(makefile, "Makefile")...)
 	}
 
-	_ = wrapperAbs
 	return out, nil
 }
 
@@ -267,7 +295,7 @@ func sameFile(a, b string) bool {
 	return os.SameFile(ai, bi)
 }
 
-func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool) ([]finding, error) {
+func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool, seenActions map[string]bool) ([]finding, error) {
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err
@@ -301,6 +329,17 @@ func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool) ([]fi
 				}
 			}
 		}
+		defaultsShell := ""
+		if defaults, ok := job["defaults"].(map[string]any); ok {
+			if runMap, ok := defaults["run"].(map[string]any); ok {
+				if s, ok := runMap["shell"].(string); ok {
+					defaultsShell = s
+				}
+			}
+		}
+		if defaultsShell != "" {
+			out = append(out, tokenFindings(defaultsShell, rel, base+".defaults.run.shell")...)
+		}
 		for i, step := range jobSteps(job) {
 			spath := fmt.Sprintf("%s.steps[%d]", base, i)
 			if uses, ok := step["uses"].(string); ok {
@@ -310,14 +349,16 @@ func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool) ([]fi
 					ref := strings.TrimPrefix(uses, "docker://")
 					out = append(out, refFinding(rel, spath+".uses", ref, allowed)...)
 				case strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "../"):
-					fs, err := checkLocalActionUse(root, rel, spath+".uses", uses, allowed)
+					fs, err := checkLocalActionUse(root, rel, spath+".uses", uses, allowed, seenActions)
 					if err != nil {
 						return nil, err
 					}
 					out = append(out, fs...)
 				}
 			}
-			// Engine tokens only in run: bodies (not in uses:/using: declarative keys).
+			if shell, ok := step["shell"].(string); ok {
+				out = append(out, tokenFindings(shell, rel, spath+".shell")...)
+			}
 			if runScript, ok := stepRun(step); ok {
 				out = append(out, tokenFindings(runScript, rel, spath+".run")...)
 			}
@@ -335,8 +376,7 @@ func stepRun(step map[string]any) (string, bool) {
 	return s, ok
 }
 
-func checkLocalActionUse(root, fromFile, path, uses string, allowed map[string]bool) ([]finding, error) {
-	// GitHub Actions resolves uses: ./path relative to the repository root.
+func checkLocalActionUse(root, fromFile, path, uses string, allowed map[string]bool, seenActions map[string]bool) ([]finding, error) {
 	actionDir := filepath.Clean(filepath.Join(root, filepath.FromSlash(uses)))
 	for _, name := range []string{"action.yml", "action.yaml"} {
 		p := filepath.Join(actionDir, name)
@@ -345,7 +385,12 @@ func checkLocalActionUse(root, fromFile, path, uses string, allowed map[string]b
 			if err != nil {
 				rel = p
 			}
-			return checkActionFile(p, filepath.ToSlash(rel), allowed)
+			rel = filepath.ToSlash(rel)
+			if seenActions[rel] {
+				return nil, nil
+			}
+			seenActions[rel] = true
+			return checkActionFile(root, p, rel, allowed, seenActions)
 		}
 	}
 	return []finding{{
@@ -355,7 +400,7 @@ func checkLocalActionUse(root, fromFile, path, uses string, allowed map[string]b
 	}}, nil
 }
 
-func checkActionFile(absPath, rel string, allowed map[string]bool) ([]finding, error) {
+func checkActionFile(root, absPath, rel string, allowed map[string]bool, seenActions map[string]bool) ([]finding, error) {
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err
@@ -375,15 +420,26 @@ func checkActionFile(absPath, rel string, allowed map[string]bool) ([]finding, e
 			spath := fmt.Sprintf("runs.steps[%d]", i)
 			if uses, ok := step["uses"].(string); ok {
 				uses = strings.TrimSpace(uses)
-				if strings.HasPrefix(uses, "docker://") {
+				switch {
+				case strings.HasPrefix(uses, "docker://"):
 					out = append(out, refFinding(rel, spath+".uses", strings.TrimPrefix(uses, "docker://"), allowed)...)
+				case strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "../"):
+					fs, err := checkLocalActionUse(root, rel, spath+".uses", uses, allowed, seenActions)
+					if err != nil {
+						return nil, err
+					}
+					out = append(out, fs...)
 				}
+			}
+			if shell, ok := step["shell"].(string); ok {
+				out = append(out, tokenFindings(shell, rel, spath+".shell")...)
 			}
 			if runScript, ok := stepRun(step); ok {
 				out = append(out, tokenFindings(runScript, rel, spath+".run")...)
 			}
 		}
 	}
+	_ = root
 	return out, nil
 }
 
@@ -393,15 +449,47 @@ func checkDockerfile(absPath, rel string, allowed map[string]bool) ([]finding, e
 		return nil, err
 	}
 	var out []finding
+	stages := map[string]bool{}
 	for i, line := range strings.Split(string(data), "\n") {
 		m := fromLine.FindStringSubmatch(line)
 		if m == nil {
 			continue
 		}
-		ref := strings.TrimSpace(m[1])
-		// Strip stage AS name if present already handled — FROM img AS x → first token.
-		if idx := strings.IndexAny(ref, " \t"); idx >= 0 {
-			ref = ref[:idx]
+		rest := strings.TrimSpace(m[1])
+		// FROM [--platform=...] <image|stage> [AS name]
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			continue
+		}
+		idx := 0
+		switch {
+		case strings.HasPrefix(strings.ToLower(fields[0]), "--platform="):
+			idx = 1
+		case strings.EqualFold(fields[0], "--platform"):
+			if len(fields) < 3 {
+				out = append(out, finding{File: rel, Path: fmt.Sprintf("FROM:%d", i+1), Msg: "malformed FROM --platform"})
+				continue
+			}
+			idx = 2
+		}
+		if idx >= len(fields) {
+			out = append(out, finding{File: rel, Path: fmt.Sprintf("FROM:%d", i+1), Msg: "FROM missing image"})
+			continue
+		}
+		ref := fields[idx]
+		stageName := ""
+		for j := idx + 1; j < len(fields); j++ {
+			if strings.EqualFold(fields[j], "AS") && j+1 < len(fields) {
+				stageName = fields[j+1]
+				break
+			}
+		}
+		if stageName != "" {
+			stages[stageName] = true
+		}
+		// scratch and prior stage names need no digest pin.
+		if strings.EqualFold(ref, "scratch") || stages[ref] {
+			continue
 		}
 		out = append(out, refFinding(rel, fmt.Sprintf("FROM:%d", i+1), ref, allowed)...)
 	}
@@ -444,29 +532,26 @@ func tokenFindingsInFile(abs, rel string) []finding {
 }
 
 func tokenFindings(content, file, path string) []finding {
-	if !engineToken.MatchString(content) {
-		return nil
-	}
-	// Report once per file with a short excerpt of the first hit.
+	var out []finding
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
-		if engineToken.MatchString(line) {
-			trim := strings.TrimSpace(line)
-			if len(trim) > 120 {
-				trim = trim[:117] + "..."
-			}
-			return []finding{{
-				File: file,
-				Path: fmt.Sprintf("%s:%d", path, i+1),
-				Msg:  fmt.Sprintf("docker|podman|buildx token outside %s: %s", wrapperRel, trim),
-			}}
+		if !engineToken.MatchString(line) {
+			continue
 		}
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "#") {
+			continue
+		}
+		if len(trim) > 120 {
+			trim = trim[:117] + "..."
+		}
+		out = append(out, finding{
+			File: file,
+			Path: fmt.Sprintf("%s:%d", path, i+1),
+			Msg:  fmt.Sprintf("engine token outside %s: %s", wrapperRel, trim),
+		})
 	}
-	return []finding{{
-		File: file,
-		Path: path,
-		Msg:  fmt.Sprintf("docker|podman|buildx token outside %s", wrapperRel),
-	}}
+	return out
 }
 
 func jobSteps(job map[string]any) []map[string]any {

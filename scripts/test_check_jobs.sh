@@ -979,7 +979,7 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         fi
     done
 
-    # Manifest-keyed bash:3.2.57 + apk sha256 + sole wrapper (no raw docker in ci.yml).
+    # Manifest-keyed bash:3.2.57 + apk sha256 + sole wrapper + PATH-shadow in every job.
     MANIFEST="$REPO_ROOT/scripts/container-images.manifest"
     if ! rg -q 'bash-3\.2\.57[[:space:]]+bash:3\.2\.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a' "$MANIFEST"; then
         echo "FAIL: container-images.manifest missing bash-3.2.57 digest"
@@ -989,7 +989,18 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: ci.yml must invoke run-container-image.sh bash-3.2.57"
         exit 1
     fi
-    if rg -nE '(^|[[:space:]])(docker|podman|buildx)([[:space:]]|$)' "$CI_YML" | rg -v '^\s*#' | rg -q .; then
+    if ! rg -q 'ci-path-shadow-engines\.sh' "$CI_YML"; then
+        echo "FAIL: ci.yml missing PATH-shadow install"
+        exit 1
+    fi
+    shadow_jobs=$(rg -c 'ci-path-shadow-engines\.sh' "$CI_YML" || true)
+    if [[ "${shadow_jobs:-0}" -lt 9 ]]; then
+        echo "FAIL: PATH-shadow missing from some CI jobs (found $shadow_jobs)"
+        exit 1
+    fi
+    if rg -n -e 'docker' -e 'podman' -e 'buildx' "$CI_YML" \
+        | rg -v 'path-shadow|run-container-image|container-images|^\s*#' \
+        | rg -q .; then
         echo "FAIL: ci.yml still contains raw docker|podman|buildx token"
         exit 1
     fi
@@ -1005,6 +1016,10 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: ci.yml missing check-bash32 job"
         exit 1
     fi
+    if [[ ! -f "$REPO_ROOT/scripts/porcelain-git.sh" ]]; then
+        echo "FAIL: missing scripts/porcelain-git.sh helper"
+        exit 1
+    fi
     up=$(cd "$REPO_ROOT" && GOCACHE="${GOCACHE:-${TMPDIR:-/tmp}/armature-gocache}" GOFLAGS="${GOFLAGS:--buildvcs=false}" go list ./... | rg 'workflowimagepins' || true)
     if [[ -z "$up" ]]; then
         echo "FAIL: scripts/workflowimagepins not listable"
@@ -1015,12 +1030,38 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
-    # Holistic image-pin lint + fixture selftest (unpinned fail / pinned pass).
+    # Porcelain confined + advisory image-pin selftest (unpinned fail / pinned pass).
     bash "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$REPO_ROOT" >/dev/null
     bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
 
-    # PJ repro forms must fail via Go selftest fixtures (cmd-sub, subshell, -c, compose, FROM).
-    for form in cmd-sub subshell docker-context compose-run bare-digest uses-docker-empty; do
+    # Wrapper airtight: reject positionals-before-key, image-shaped keys, missing --.
+    set +e
+    wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" --rm bash-3.2.57 -- true 2>&1)
+    wst=$?
+    set -e
+    if [[ $wst -eq 0 ]]; then
+        echo "FAIL: wrapper accepted flag before key: $wout"
+        exit 1
+    fi
+    set +e
+    wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" 'alpine:latest' -- true 2>&1)
+    wst=$?
+    set -e
+    if [[ $wst -eq 0 ]]; then
+        echo "FAIL: wrapper accepted image-shaped key: $wout"
+        exit 1
+    fi
+    set +e
+    wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" bash-3.2.57 --rm 2>&1)
+    wst=$?
+    set -e
+    if [[ $wst -eq 0 ]]; then
+        echo "FAIL: wrapper accepted missing -- separator: $wout"
+        exit 1
+    fi
+
+    # PJ repro forms must fail via Go selftest fixtures.
+    for form in cmd-sub subshell docker-context compose-run bare-digest uses-docker-empty shell-key; do
         if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/${form}.yml" ]]; then
             echo "FAIL: missing unpinned PJ/form fixture $form"
             exit 1
@@ -1030,10 +1071,12 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
             exit 1
         fi
     done
-    if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned-dirs/dockerfile-from/Dockerfile" ]]; then
-        echo "FAIL: missing dockerfile-from unpinned fixture"
-        exit 1
-    fi
+    for dform in dockerfile-from from-platform from-scratch from-stage; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned-dirs/${dform}/Dockerfile" ]]; then
+            echo "FAIL: missing unpinned-dirs/$dform fixture"
+            exit 1
+        fi
+    done
 
     # Makefile write-baseline failure must stop make (not ignored via ';').
     if ! rg -q 'check-test-porcelain\.sh --write-baseline .* \|\| \{' "$MAKEFILE"; then
