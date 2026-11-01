@@ -136,7 +136,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      # origin/main fetch + subject gate are PR-only. On push to main,
+      # github.sha == the new tip and fetching origin/main makes
+      # origin/main..HEAD empty — the empty-range check would fail every
+      # main push. Subjects were already gated on the PR (lean b owner).
       - name: Fetch origin/main for commit-subjects
+        if: github.event_name == 'pull_request'
         run: git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
@@ -149,6 +154,7 @@ jobs:
           echo "$dest" >> "$GITHUB_PATH"
           make install-rg-release DEST="$dest"
       - name: Check commit subjects on PR tip range
+        if: github.event_name == 'pull_request'
         run: make commit-subjects-check
       - run: make check-job JOB=check-static
         env:

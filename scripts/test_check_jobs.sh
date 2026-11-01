@@ -701,7 +701,11 @@ if "pull_request.head.sha" not in static:
 if "fetch-depth: 0" not in static and "fetch-depth:0" not in static:
     print("FAIL: check-static must use fetch-depth: 0 for commit-subjects history")
     sys.exit(1)
-print("PASS: origin/main mapped for " + ",".join(needed_by) + "; commit-subjects owner=check-static")
+# Push-to-main must not run the empty origin/main..HEAD gate.
+if "github.event_name == 'pull_request'" not in static and 'github.event_name == "pull_request"' not in static:
+    print("FAIL: check-static commit-subjects/fetch must be gated to pull_request (skip empty range on main push)")
+    sys.exit(1)
+print("PASS: origin/main mapped for " + ",".join(needed_by) + "; commit-subjects owner=check-static (PR-only)")
 PY
 ) && ORIGIN_MAIN_STATUS=0 || ORIGIN_MAIN_STATUS=$?
 

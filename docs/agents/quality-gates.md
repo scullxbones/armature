@@ -36,7 +36,7 @@ PR wall is the **max** of three required GitHub Actions jobs (no `needs` between
 | Context | Runs |
 |---|---|
 | `check-core` | coverage suite once + thresholds, validate-skills, validate-doc-examples, census-drift, git-test hermetic, surface-budget |
-| `check-static` | **owns commit-subjects** (PR `head.sha` + `fetch-depth: 0` + `origin/main` fetch), then lint / crosscompile / check-job drift and the rest of the static partition |
+| `check-static` | **owns commit-subjects on `pull_request` only** (PR `head.sha` + `fetch-depth: 0` + `origin/main` fetch); skipped on `push` to main (tip == `origin/main` after fetch → empty range). Then lint / crosscompile / check-job drift and the rest of the static partition |
 | `mutate` | gremlins on `./internal` then `./cmd` (full, every PR) |
 | `check-git-2-34` | checksum-pinned Git **2.34.0** on PATH, then `make check-git-floor` (CHECK_JOBS only — proves S12 on the floor; no commit-subjects) |
 
