@@ -844,7 +844,7 @@ else
     fail "depth=50 vs unshallow origin/main range demo failed"
 fi
 
-echo "Test 13: check-test-porcelain fails on leaked file and leaked dir; Bash 3.2-safe..."
+echo "Test 13: content-hash porcelain; bash:3.2.57 digest pin; baseline fail-closed..."
 
 PORC_DEMO=$(mktemp -d)
 cleanup_porc() { rm -rf "$PORC_DEMO"; }
@@ -854,11 +854,55 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     git init -q -b main
     git config user.email "porc@example.com"
     git config user.name "porc"
-    git commit -q --allow-empty -m "feat(GIT234-MIN): porcelain baseline"
+    printf 'orig\n' > tracked.txt
+    git add tracked.txt
+    git commit -q -m "feat(PORC): seed tracked"
+    # Pre-existing dirty tracked file — status line stays " M" across rewrite.
+    printf 'dirty-v1\n' > tracked.txt
     baseline=$(mktemp)
-    git status --porcelain --untracked-files=all >"$baseline"
+    bash "$REPO_ROOT/scripts/check-test-porcelain.sh" --write-baseline . "$baseline"
+    if ! grep -q $'\t' "$baseline"; then
+        echo "FAIL: content-hash baseline missing TAB+hash: $(cat "$baseline")"
+        exit 1
+    fi
 
-    # Leaked file
+    # Rewrite already-modified tracked file (porcelain status unchanged, hash changes).
+    printf 'dirty-v2\n' > tracked.txt
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: rewrite of already-modified tracked file did not fail: $out"
+        exit 1
+    fi
+    if ! printf '%s\n' "$out" | rg -q 'tracked\.txt|hash|baseline'; then
+        echo "FAIL: rewrite failure missing path/hash signal: $out"
+        exit 1
+    fi
+    printf 'dirty-v1\n' > tracked.txt
+    bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" >/dev/null
+
+    # -z path fixtures: spaces, quotes, non-ASCII must round-trip in baseline.
+    printf 'x\n' > "spa ce.txt"
+    printf 'y\n' > $'quot"ed.txt'
+    printf 'z\n' > $'unicodé.txt'
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: special-name leaks did not fail check-test-porcelain: $out"
+        exit 1
+    fi
+    for needle in 'spa ce.txt' 'quot"ed.txt' 'unicodé.txt'; do
+        if ! printf '%s\n' "$out" | rg -F -q "$needle"; then
+            echo "FAIL: special path missing from porcelain output ($needle): $out"
+            exit 1
+        fi
+    done
+    rm -f "spa ce.txt" $'quot"ed.txt' $'unicodé.txt'
+
     printf 'x\n' > leaked-file.txt
     set +e
     out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" 2>&1)
@@ -874,7 +918,6 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
-    # Leaked directory (untracked dir shows as path/ in porcelain with -uall)
     mkdir -p leaked-dir
     printf 'y\n' > leaked-dir/inner.txt
     set +e
@@ -890,31 +933,234 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: leaked dir missing from porcelain output: $out"
         exit 1
     fi
-
-    # Clean vs baseline must pass
-    bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$baseline" >/dev/null
     rm -f "$baseline"
 
-    # Bash 3.2 guard rejects mapfile
-    bash "$REPO_ROOT/scripts/check-bash32-scripts.sh" "$REPO_ROOT" >/dev/null
-    bad=$(mktemp)
-    printf '%s\n' '#!/usr/bin/env bash' 'mapfile -t x < <(echo a)' >"$bad"
-    # Temporarily point guard at a copy that includes the bad file via sed injection —
-    # instead assert the pattern matcher would catch mapfile on a fixture script.
-    if ! grep -nE 'mapfile' "$bad" | grep -vE '^[[:digit:]]+:[[:space:]]*#' >/dev/null; then
-        echo "FAIL: mapfile fixture not detected"
+    # Non-repo root: no-baseline and --write-baseline must fail closed.
+    nonrepo=$(mktemp -d)
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" "$nonrepo" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: no-baseline on non-repo exited 0: $out"
         exit 1
     fi
-    rm -f "$bad"
-    echo "PASS: porcelain fails on leaked file+dir; Bash 3.2 guard green"
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" --write-baseline "$nonrepo" "$nonrepo/base" 2>&1)
+    st=$?
+    set -e
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: --write-baseline on non-repo exited 0: $out"
+        exit 1
+    fi
+    rm -rf "$nonrepo"
+
+    # 0-byte baseline file must fail on check.
+    zero=$(mktemp)
+    : >"$zero"
+    set +e
+    out=$(bash "$REPO_ROOT/scripts/check-test-porcelain.sh" . "$zero" 2>&1)
+    st=$?
+    set -e
+    rm -f "$zero"
+    if [[ $st -eq 0 ]]; then
+        echo "FAIL: 0-byte baseline check exited 0: $out"
+        exit 1
+    fi
+
+    # Host Bash 4+: fixtures must exit 0 (dual self-check; 3.2 failure is CI).
+    bash "$REPO_ROOT/scripts/prove-bash32-mutations.sh" >/dev/null
+
+    for mut in readarray coproc v-test; do
+        f="$REPO_ROOT/scripts/testdata/bash32-mutations/${mut}.sh"
+        if ! rg -q 'set -euo pipefail' "$f"; then
+            echo "FAIL: $mut fixture missing set -euo pipefail"
+            exit 1
+        fi
+    done
+
+    # Manifest-keyed bash:3.2.57 + apk sha256 + sole wrapper + PATH-shadow in every job.
+    MANIFEST="$REPO_ROOT/scripts/container-images.manifest"
+    if ! rg -q 'bash-3\.2\.57[[:space:]]+bash:3\.2\.57@sha256:b6252c62fc86114f93f02104a486c71e6569371d95950ea7479a2ffd6b47f16a' "$MANIFEST"; then
+        echo "FAIL: container-images.manifest missing bash-3.2.57 digest"
+        exit 1
+    fi
+    if ! rg -q 'run-container-image\.sh bash-3\.2\.57' "$CI_YML"; then
+        echo "FAIL: ci.yml must invoke run-container-image.sh bash-3.2.57"
+        exit 1
+    fi
+    if ! rg -q 'ci-path-shadow-engines\.sh' "$CI_YML"; then
+        echo "FAIL: ci.yml missing PATH-shadow install"
+        exit 1
+    fi
+    shadow_jobs=$(rg -c 'ci-path-shadow-engines\.sh' "$CI_YML" || true)
+    if [[ "${shadow_jobs:-0}" -lt 9 ]]; then
+        echo "FAIL: PATH-shadow missing from some CI jobs (found $shadow_jobs)"
+        exit 1
+    fi
+    if rg -n -e 'docker' -e 'podman' -e 'buildx' "$CI_YML" \
+        | rg -v 'path-shadow|run-container-image|container-images|^\s*#' \
+        | rg -q .; then
+        echo "FAIL: ci.yml still contains raw docker|podman|buildx token"
+        exit 1
+    fi
+    if [[ ! -f "$REPO_ROOT/scripts/alpine-v322-git-apks.sha256" ]]; then
+        echo "FAIL: missing scripts/alpine-v322-git-apks.sha256 closed apk set"
+        exit 1
+    fi
+    if ! rg -q '42f4573799ffce0c7dd4954d2247eb882eb87360dc18637930624484ecfd1c90  git-2\.49\.1-r0\.apk' \
+        "$REPO_ROOT/scripts/alpine-v322-git-apks.sha256"; then
+        echo "FAIL: alpine-v322-git-apks.sha256 missing git-2.49.1-r0 pin"
+        exit 1
+    fi
+    mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/fetch-alpine-git-apks.sh" | awk '{print $1}')
+    if [[ "$mode" != "100755" ]]; then
+        echo "FAIL: scripts/fetch-alpine-git-apks.sh must be committed executable (got ${mode:-missing})"
+        exit 1
+    fi
+    if ! rg -q 'fetch-alpine-git-apks\.sh' "$CI_YML"; then
+        echo "FAIL: ci.yml must fetch closed Alpine git apk set via fetch-alpine-git-apks.sh"
+        exit 1
+    fi
+    if ! rg -q 'apk add --no-network --allow-untrusted /apks/\*\.apk' "$CI_YML"; then
+        echo "FAIL: ci.yml missing apk add --no-network over sha-checked /apks/*.apk"
+        exit 1
+    fi
+    if ! rg -q 'apk add --no-network' "$CI_YML"; then
+        echo "FAIL: ci.yml missing apk add --no-network"
+        exit 1
+    fi
+    if ! rg -q 'check-bash32:' "$CI_YML"; then
+        echo "FAIL: ci.yml missing check-bash32 job"
+        exit 1
+    fi
+    if [[ ! -f "$REPO_ROOT/scripts/porcelain-git.sh" ]]; then
+        echo "FAIL: missing scripts/porcelain-git.sh helper"
+        exit 1
+    fi
+    up=$(cd "$REPO_ROOT" && GOCACHE="${GOCACHE:-${TMPDIR:-/tmp}/armature-gocache}" GOFLAGS="${GOFLAGS:--buildvcs=false}" go list ./... | rg 'workflowimagepins' || true)
+    if [[ -z "$up" ]]; then
+        echo "FAIL: scripts/workflowimagepins not listable"
+        exit 1
+    fi
+    if rg -q "grep -v '/scripts/workflowimagepins" "$MAKEFILE"; then
+        echo "FAIL: Makefile still excludes workflowimagepins from UNIT_PACKAGES"
+        exit 1
+    fi
+
+    # Porcelain confined + image-pin selftest (refs blocking; engine words advisory).
+    bash "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$REPO_ROOT" >/dev/null
+    bash "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$REPO_ROOT" >/dev/null
+    bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
+    # Ban proof lives in scripts/check-no-engine-bin-env.sh (fixture + scan).
+    if ! rg -q 'check-no-engine-bin-env\.sh' "$REPO_ROOT/Makefile"; then
+        echo "FAIL: Makefile lint missing check-no-engine-bin-env.sh"
+        exit 1
+    fi
+    for bypass in git-c-status.sh var-git-status.sh alias-git-status.sh \
+        cmdsub-status-or-true.sh status-semicolon.sh status-pipe-cat.sh \
+        func-git-status.sh no-pager-status-or-true.sh; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/porcelain-bypass/$bypass" ]]; then
+            echo "FAIL: missing porcelain bypass fixture $bypass"
+            exit 1
+        fi
+    done
+    if ! rg -q 'alpine:latest' "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/container-string.yml"; then
+        echo "FAIL: container-string fixture must use alpine:latest"
+        exit 1
+    fi
+    if ! rg -q 'docker://alpine:latest' "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/uses-docker.yml"; then
+        echo "FAIL: uses-docker fixture must use docker://alpine:latest"
+        exit 1
+    fi
+
+    # Wrapper airtight: reject positionals-before-key, image-shaped keys, missing --.
+    set +e
+    wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" --rm bash-3.2.57 -- true 2>&1)
+    wst=$?
+    set -e
+    if [[ $wst -eq 0 ]]; then
+        echo "FAIL: wrapper accepted flag before key: $wout"
+        exit 1
+    fi
+    set +e
+    wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" 'alpine:latest' -- true 2>&1)
+    wst=$?
+    set -e
+    if [[ $wst -eq 0 ]]; then
+        echo "FAIL: wrapper accepted image-shaped key: $wout"
+        exit 1
+    fi
+    set +e
+    wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" bash-3.2.57 --rm 2>&1)
+    wst=$?
+    set -e
+    if [[ $wst -eq 0 ]]; then
+        echo "FAIL: wrapper accepted missing -- separator: $wout"
+        exit 1
+    fi
+
+    # PJ repro forms must fail via Go selftest fixtures.
+    for form in cmd-sub subshell docker-context compose-run bare-digest uses-docker uses-docker-empty \
+        container-string container-image shell-key services-image; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/${form}.yml" ]]; then
+            echo "FAIL: missing unpinned PJ/form fixture $form"
+            exit 1
+        fi
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/pinned/${form}.yml" ]]; then
+            echo "FAIL: missing pinned twin $form"
+            exit 1
+        fi
+    done
+    for dform in dockerfile-from from-platform from-scratch from-stage; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned-dirs/${dform}/Dockerfile" ]]; then
+            echo "FAIL: missing unpinned-dirs/$dform fixture"
+            exit 1
+        fi
+    done
+
+    # Makefile write-baseline failure must stop make (not ignored via ';').
+    if ! rg -q 'check-test-porcelain\.sh --write-baseline .* \|\| \{' "$MAKEFILE"; then
+        echo "FAIL: Makefile write-baseline missing || fail-closed"
+        exit 1
+    fi
+    mkdemo=$(mktemp -d)
+    mkdir -p "$mkdemo/scripts"
+    printf '%s\n' '#!/usr/bin/env bash' 'echo forced-baseline-failure >&2' 'exit 1' \
+        >"$mkdemo/scripts/check-test-porcelain.sh"
+    chmod +x "$mkdemo/scripts/check-test-porcelain.sh"
+    cat >"$mkdemo/Makefile" <<'EOF'
+test:
+	@tmp=$$(mktemp); \
+	pre=$$(mktemp); \
+	scripts/check-test-porcelain.sh --write-baseline . "$$pre" || { rm -f "$$pre" "$$tmp"; exit 1; }; \
+	echo SHOULD_NOT_REACH; \
+	exit 0
+EOF
+    set +e
+    mkout=$(make -C "$mkdemo" test 2>&1)
+    mkst=$?
+    set -e
+    rm -rf "$mkdemo"
+    if [[ $mkst -eq 0 ]]; then
+        echo "FAIL: forced write-baseline failure did not stop make: $mkout"
+        exit 1
+    fi
+    if printf '%s\n' "$mkout" | rg -q 'SHOULD_NOT_REACH'; then
+        echo "FAIL: make continued after write-baseline failure: $mkout"
+        exit 1
+    fi
+
+    echo "PASS: content-hash + manifest image pin + baseline fail-closed"
 ) && PORC_STATUS=0 || PORC_STATUS=$?
 cleanup_porc
 
 if [[ $PORC_STATUS -eq 0 ]]; then
-    pass "check-test-porcelain + Bash 3.2 guard"
+    pass "content-hash porcelain + manifest image pin + baseline fail-closed"
 else
-    fail "porcelain / Bash 3.2 guard demo failed"
+    fail "porcelain / bash32 pin / baseline fail-closed demo failed"
 fi
+
 
 echo ""
 if [[ $FAILURES -eq 0 ]]; then

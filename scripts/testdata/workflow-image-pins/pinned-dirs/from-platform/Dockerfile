@@ -1,0 +1,1 @@
+FROM --platform=linux/amd64 alpine:3.22@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

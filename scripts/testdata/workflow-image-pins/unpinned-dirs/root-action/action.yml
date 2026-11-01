@@ -1,0 +1,4 @@
+name: root
+runs:
+  using: docker
+  image: alpine:3

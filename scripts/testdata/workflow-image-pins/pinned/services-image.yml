@@ -1,0 +1,10 @@
+name: t
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: alpine:3.22@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    steps:
+      - run: echo hi

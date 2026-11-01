@@ -1,0 +1,10 @@
+name: t
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: echo hi
+      - shell: 'docker run alpine:3'
+        run: echo bad

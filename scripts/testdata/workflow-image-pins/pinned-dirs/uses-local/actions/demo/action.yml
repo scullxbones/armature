@@ -1,0 +1,4 @@
+name: demo
+runs:
+  using: docker
+  image: alpine:3.22@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

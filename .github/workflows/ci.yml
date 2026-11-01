@@ -47,6 +47,10 @@ jobs:
 
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -96,6 +100,50 @@ jobs:
           retention-days: 14
           if-no-files-found: ${{ runner.os == 'Windows' && 'ignore' || 'warn' }}
 
+  # Real Bash 3.2.57: run cross-OS make scripts inside the digest-pinned
+  # bash:3.2.57 image. Regex pre-check stays advisory in make lint; this job
+  # is the fail-closed proof (bash -n + mutations). Host Bash 4+ must make
+  # each mutation fixture exit 0; Bash 3.2 must make each exit non-zero.
+  check-bash32:
+    if: ${{ !inputs.os-matrix-only }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        env:
+          ARM_PATH_SHADOW_WRAPPER_SMOKE: "1"
+        run: bash scripts/ci-path-shadow-selfcheck.sh
+      - name: Mutation fixtures must succeed under host Bash 4+
+        run: bash scripts/prove-bash32-mutations.sh
+      - name: Run cross-OS scripts under pinned bash:3.2.57
+        # Image via scripts/container-images.manifest key bash-3.2.57 only
+        # (scripts/run-container-image.sh — sole docker entrypoint).
+        # Closed Alpine v3.22 git .apk set sha256-verified (scripts/alpine-v322-git-apks.sha256),
+        # then apk add --no-network; --allow-untrusted only for those verified files.
+        run: |
+          apkdir="${RUNNER_TEMP:-/tmp}/alpine-git-apks"
+          bash scripts/fetch-alpine-git-apks.sh "$apkdir"
+          # --allow-untrusted applies only to the sha256-verified .apk paths in $apkdir.
+          scripts/run-container-image.sh bash-3.2.57 \
+            --rm \
+            --entrypoint sh \
+            -v "$PWD:/src:ro" \
+            -v "$apkdir:/apks:ro" \
+            -w /src \
+            -- -c 'apk add --no-network --allow-untrusted /apks/*.apk >/dev/null \
+              && got=$(git --version) \
+              && echo "apk git: $got" \
+              && echo "$got" | grep -F "git version 2.49.1" >/dev/null \
+              && bash scripts/ci-bash32.sh /src'
+
   check-core:
     if: ${{ !inputs.os-matrix-only }}
     runs-on: ubuntu-latest
@@ -107,6 +155,10 @@ jobs:
           persist-credentials: false
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -136,6 +188,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
       # origin/main fetch + subject gate are PR-only. On push to main,
       # github.sha == the new tip and fetching origin/main makes
       # origin/main..HEAD empty — the empty-range check would fail every
@@ -174,6 +230,10 @@ jobs:
           persist-credentials: false
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -224,6 +284,11 @@ jobs:
           test "$got" = "git version ${GIT_MIN_VERSION}"
           bash scripts/assert-git-min.sh
 
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -258,6 +323,10 @@ jobs:
 
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -285,6 +354,10 @@ jobs:
 
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -309,6 +382,10 @@ jobs:
 
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -333,6 +410,10 @@ jobs:
           persist-credentials: false
       - name: Assert Git ≥ product minimum
         run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}

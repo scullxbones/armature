@@ -400,6 +400,9 @@ linters:
       - linters:
           - gosec
         path: 'scripts/repoguard/'
+      - linters:
+          - gosec
+        path: 'scripts/workflowimagepins/'
 
 formatters:
   enable:

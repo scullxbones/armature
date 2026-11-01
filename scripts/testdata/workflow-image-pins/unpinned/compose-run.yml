@@ -1,0 +1,7 @@
+name: t
+on: push
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - run: docker compose run svc
