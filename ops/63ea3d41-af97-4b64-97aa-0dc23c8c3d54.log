@@ -1,2 +1,3 @@
 ["transition","TOPTIER-S12-T1",1793493380,"63ea3d41-af97-4b64-97aa-0dc23c8c3d54",{"to":"open"},1]
 ["note","TOPTIER-S12-T1",1793493381,"63ea3d41-af97-4b64-97aa-0dc23c8c3d54",{"msg":"Refiled DoD from docs/ops-backup.md cookbook to arm ops-backup CLI lever (Brian lock 1B·2A·3A·4A·5A). #404 closed without merge; supersede with lever + short guarantees.","note_id":"note-1793493381180856245"},1]
+["amend","TOPTIER-S12-T1",1793493405,"63ea3d41-af97-4b64-97aa-0dc23c8c3d54",{"scope":["internal/opsbackup/**"],"definition_of_done":"test"},1]
