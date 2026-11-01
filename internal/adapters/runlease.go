@@ -364,12 +364,19 @@ func (c *Client) sweepStaleWorkDirs() {
 	}
 }
 
-// leaseTempName reports CreateTemp leftovers under a lease dir
-// ("."<nonce>"-*.tmp"). These are never published lease names (leaseNonceName
-// requires 16 hex), so without an age sweep they leak forever after a crash
-// mid-write.
+// leaseTempName reports CreateTemp leftovers under a lease dir from
+// writeRunLease's pattern ("."<nonce>"-*.tmp" → .<16hex>-<rand>.tmp).
+// Broader ".*\.tmp" would delete foreign aged files (e.g. .other.tmp).
 func leaseTempName(name string) bool {
-	return strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".tmp")
+	// "." + 16 hex + "-" + ≥1 rand rune + ".tmp"
+	const minLen = 1 + 16 + 1 + 1 + 4
+	if len(name) < minLen || name[0] != '.' || !strings.HasSuffix(name, ".tmp") {
+		return false
+	}
+	if !leaseNonceName(name[1:17]) || name[17] != '-' {
+		return false
+	}
+	return true
 }
 
 // sweepAgedLeaseTempFiles removes orphan .<nonce>-*.tmp lease drafts whose
