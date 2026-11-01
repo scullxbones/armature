@@ -24,9 +24,11 @@ advertises refs/heads/_armature.
 verify checks that a bundle advertises that tip and that its object pack is
 restorable (fetch into a throwaway bare — not header-only list-heads).
 
-restore-plan compares the bundle tip to origin/_armature inside a throwaway
-bare (never stages into the working clone) and prints an I2-safe publish
-disposition (missing | fast-forward | already-contained |
+restore-plan compares the bundle tip to origin/_armature using network git
+inside the user's clone (so clone transport/config applies natively) with
+per-call refs/armature-tmp/<run-id>/ staging (cleaned up; never
+refs/remotes/origin/*) and prints an I2-safe publish disposition
+(missing | fast-forward | already-contained |
 diverge→_armature-recovered). Output names only durable things (recovered SHA,
 bundle path, optional aside publish name). missing requires structural
 ls-remote absence of origin/_armature; other ls-remote/fetch/resolve errors

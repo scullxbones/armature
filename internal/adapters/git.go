@@ -2,6 +2,8 @@ package adapters
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -26,11 +28,28 @@ const (
 	// defaultGitNetworkTimeout bounds ops-backup (and FetchBranchToRef) remote
 	// probes so a stalled origin fail-closes instead of hanging the CLI.
 	defaultGitNetworkTimeout = 15 * time.Second
+
+	// gitNetworkWaitDelay bounds how long Wait may block on stuck pipes after
+	// Cancel kills the network git process group (git-remote-http children).
+	gitNetworkWaitDelay = 1 * time.Second
+
+	// armatureTmpNS holds per-call restore-plan staging refs inside the user's
+	// clone. Network ops run here so git resolves clone config natively; the
+	// namespace is never refs/remotes/origin/* or a user branch.
+	armatureTmpNS = "refs/armature-tmp"
 )
 
 // gitNetworkTimeout is the deadline for network git calls on the ops-backup
 // path. Tests may shrink it; production code must leave the default.
 var gitNetworkTimeout = defaultGitNetworkTimeout
+
+// SetGitNetworkTimeoutForTest shrinks (or restores) the shared ops-backup
+// network deadline. Tests only — production code must leave the default.
+func SetGitNetworkTimeoutForTest(d time.Duration) (restore func()) {
+	prev := gitNetworkTimeout
+	gitNetworkTimeout = d
+	return func() { gitNetworkTimeout = prev }
+}
 
 func New(repoPath string) *Client {
 	return &Client{repoPath: repoPath}
@@ -797,8 +816,12 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	if branch == "" || dstRef == "" {
 		return fmt.Errorf("fetch branch to ref: branch and destination ref are required")
 	}
+	remoteURL, err := c.firstRemoteURL("origin")
+	if err != nil {
+		return fmt.Errorf("fetch branch to ref: %w", err)
+	}
 	spec := "+refs/heads/" + branch + ":" + dstRef
-	cmd, cancel := c.networkCmd("fetch", "--refmap=", "origin", spec)
+	cmd, cancel := c.networkCmd("fetch", "--no-write-fetch-head", "--refmap=", remoteURL, spec)
 	defer cancel()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		wrapped := fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
@@ -811,11 +834,14 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 }
 
 // networkCmd builds a git child bound to gitNetworkTimeout. Caller must defer
-// cancel(). Ops-backup remote probes (ls-remote, origin fetch, FetchBranchToRef)
-// must use this instead of raw context.Background().
+// cancel(). On unix, Cancel kills the process group (Setpgid) so git-remote-*
+// helpers die with the parent; WaitDelay bounds stuck-pipe waits. Ops-backup
+// remote probes must use this instead of raw context.Background().
 func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitNetworkTimeout)
-	return c.cmdContext(ctx, args...), cancel
+	cmd := c.cmdContext(ctx, args...)
+	configureNetworkCmd(cmd)
+	return cmd, cancel
 }
 
 func (c *Client) RevListCount(rangeSpec string) (int, error) {
@@ -1533,19 +1559,16 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	return nil
 }
 
-// RestoreEvidence loads the published ops tip and a bundle tip into a throwaway
-// bare repo and reports ancestry. Concurrent restore-plan callers never write
-// or read each other's working-clone staging refs (the prior FetchBundleForce
-// class: `bad object refs/remotes/.../_armature-run/<other>` under overlap).
+// RestoreEvidence compares the published ops tip to a bundle tip inside the
+// user's clone. Network probes (ls-remote + origin fetch) run with -C <clone>
+// so git resolves scopes, worktree config, includes, insteadOf, and helpers
+// natively — no regex-copied localTransportConfig. Isolation is per-call refs
+// under refs/armature-tmp/<run-id>/ (never refs/remotes/origin/* or user
+// branches); cleaned up on return.
 //
-// Origin absence is structural: `git ls-remote --refs origin refs/heads/<branch>`
-// with empty stdout → missing. Unreachable origin / other ls-remote failures
-// return err (fail-closed) — empty is never inferred from transport errors.
-//
-// The throwaway-bare origin fetch resolves relative remote URLs against the
-// clone and carries repo-local http.*.extraheader / url.*.insteadOf so it
-// behaves like ls-remote inside the user's clone. Both network probes use
-// networkCmd (gitNetworkTimeout).
+// Origin absence is structural: ls-remote empty stdout → missing. Unreachable
+// origin / other failures return err (fail-closed). Both network probes use the
+// same first remote.origin.url (multi-valued: first wins) via networkCmd.
 func (c *Client) RestoreEvidence(
 	bundlePath, advertiseRef, opsBranch string,
 ) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error) {
@@ -1556,7 +1579,25 @@ func (c *Client) RestoreEvidence(
 		return false, "", "", false, false, fmt.Errorf("restore evidence: bundle, advertise ref, and branch are required")
 	}
 	remoteRef := "refs/heads/" + opsBranch
-	_, exists, lsErr := c.lsRemoteRef("origin", remoteRef)
+
+	tmpNS, tmpErr := uniqueArmatureTmpNS()
+	if tmpErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: temp ref ns: %w", tmpErr)
+	}
+	bundleTmp := tmpNS + "/bundle"
+	originTmp := tmpNS + "/origin"
+	defer func() {
+		_ = c.DeleteRef(bundleTmp) //nolint:errcheck // best-effort temp ref cleanup
+		_ = c.DeleteRef(originTmp) //nolint:errcheck // best-effort temp ref cleanup
+	}()
+
+	// One resolution for every network op in this call (ls-remote + fetch).
+	remoteURL, urlErr := c.firstRemoteURL("origin")
+	if urlErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: origin URL: %w", urlErr)
+	}
+
+	_, exists, lsErr := c.lsRemoteRef(remoteURL, remoteRef)
 	if lsErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: ls-remote origin %s failed (fail-closed): %w", remoteRef, lsErr)
 	}
@@ -1565,25 +1606,11 @@ func (c *Client) RestoreEvidence(
 	if absErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: abs bundle: %w", absErr)
 	}
-
-	bareParent, tmpErr := os.MkdirTemp("", "armature-ops-backup-restore-")
-	if tmpErr != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: temp bare: %w", tmpErr)
-	}
-	defer func() {
-		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
-	}()
-	bare := filepath.Join(bareParent, "bare.git")
-	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
-		return false, "", "", false, false, fmt.Errorf("git init --bare: %w\n%s", initErr, out)
-	}
-	bareClient := New(bare).WithEnviron(c.environ)
-
-	spec := "+" + advertiseRef + ":" + advertiseRef
-	if out, fetchErr := bareClient.cmd("fetch", absBundle, spec).CombinedOutput(); fetchErr != nil {
+	bundleSpec := "+" + advertiseRef + ":" + bundleTmp
+	if out, fetchErr := c.cmd("fetch", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
 	}
-	recovered, err = bareClient.ResolveRevision(advertiseRef)
+	recovered, err = c.ResolveRevision(bundleTmp)
 	if err != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: %w", err)
 	}
@@ -1594,23 +1621,13 @@ func (c *Client) RestoreEvidence(
 		return true, "", recovered, false, false, nil
 	}
 
-	originURL, transportCfg, urlErr := c.originFetchSetup()
-	if urlErr != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: origin URL: %w", urlErr)
-	}
-	originDst := "refs/heads/origin-tip"
-	originSpec := "+" + remoteRef + ":" + originDst
-	fetchArgs := make([]string, 0, 2+2*len(transportCfg)+4)
-	for _, kv := range transportCfg {
-		fetchArgs = append(fetchArgs, "-c", kv.key+"="+kv.value)
-	}
-	fetchArgs = append(fetchArgs, "fetch", "--refmap=", originURL, originSpec)
-	cmd, cancel := bareClient.networkCmd(fetchArgs...)
+	originSpec := "+" + remoteRef + ":" + originTmp
+	cmd, cancel := c.networkCmd("fetch", "--no-write-fetch-head", "--refmap=", remoteURL, originSpec)
 	defer cancel()
 	if out, fetchErr := cmd.CombinedOutput(); fetchErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: fetch origin %s failed (fail-closed): %w\n%s", remoteRef, fetchErr, out)
 	}
-	originTip, err = bareClient.ResolveRevision(originDst)
+	originTip, err = c.ResolveRevision(originTmp)
 	if err != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: %w", err)
 	}
@@ -1618,11 +1635,11 @@ func (c *Client) RestoreEvidence(
 		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: empty SHA")
 	}
 
-	originAncOfRecovered, err = bareClient.IsAncestor(originTip, recovered)
+	originAncOfRecovered, err = c.IsAncestor(originTip, recovered)
 	if err != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: ancestry: %w", err)
 	}
-	recoveredAncOfOrigin, err = bareClient.IsAncestor(recovered, originTip)
+	recoveredAncOfOrigin, err = c.IsAncestor(recovered, originTip)
 	if err != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: ancestry: %w", err)
 	}
@@ -1631,6 +1648,8 @@ func (c *Client) RestoreEvidence(
 
 // lsRemoteRef reports whether remote advertises ref. Exit 0 + empty stdout means
 // reachable remote, ref absent. Non-zero exit (unreachable, auth, …) is an error.
+// remote may be a remote name or a URL (callers that share one resolved URL
+// across probes must pass that same value here).
 func (c *Client) lsRemoteRef(remote, ref string) (sha string, exists bool, err error) {
 	cmd, cancel := c.networkCmd("ls-remote", "--refs", remote, ref)
 	defer cancel()
@@ -1650,131 +1669,27 @@ func (c *Client) lsRemoteRef(remote, ref string) (sha string, exists bool, err e
 	return fields[0], true, nil
 }
 
-type configKV struct {
-	key, value string
-}
-
-// originFetchSetup resolves origin to a URL the throwaway bare can fetch and
-// collects clone-local transport config (http.*.extraheader, url.*.insteadOf)
-// that bare would otherwise lose. Uses remote.origin.url (not rewritten
-// get-url) so insteadOf still applies during the bare fetch the same way
-// ls-remote applies it inside the clone.
-func (c *Client) originFetchSetup() (url string, cfg []configKV, err error) {
-	raw, err := c.configuredRemoteURL("origin")
-	if err != nil {
-		return "", nil, err
-	}
-	url, err = absolutizeLocalRemoteURL(c.repoPath, raw)
-	if err != nil {
-		return "", nil, err
-	}
-	cfg, err = c.localTransportConfig()
-	if err != nil {
-		return "", nil, err
-	}
-	return url, cfg, nil
-}
-
-func (c *Client) configuredRemoteURL(name string) (string, error) {
-	out, err := c.cmd("config", "--get", "remote."+name+".url").CombinedOutput()
+// firstRemoteURL returns the first configured remote.<name>.url. Git fetch /
+// ls-remote use the first URL when a remote has multiple; `git config --get`
+// returns the last — callers that need one shared URL must use this.
+func (c *Client) firstRemoteURL(name string) (string, error) {
+	out, err := c.cmd("config", "--get-all", "remote."+name+".url").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git config remote.%s.url: %w\n%s", name, err, out)
 	}
-	url := strings.TrimSpace(string(out))
-	if url == "" {
-		return "", fmt.Errorf("git config remote.%s.url: empty URL", name)
-	}
-	return url, nil
-}
-
-// absolutizeLocalRemoteURL turns a clone-relative filesystem remote into an
-// absolute path so a throwaway bare (different cwd) can fetch it. Non-local
-// URLs (http(s), ssh, scp-like, file://, absolute paths) are returned unchanged.
-func absolutizeLocalRemoteURL(repoPath, url string) (string, error) {
-	url = strings.TrimSpace(url)
-	if url == "" {
-		return "", fmt.Errorf("empty remote URL")
-	}
-	if !isRelativeLocalRemoteURL(url) {
-		return url, nil
-	}
-	base, err := filepath.Abs(repoPath)
-	if err != nil {
-		return "", fmt.Errorf("abs repo for relative remote: %w", err)
-	}
-	resolved, err := filepath.Abs(filepath.Join(base, url))
-	if err != nil {
-		return "", fmt.Errorf("abs relative remote %q: %w", url, err)
-	}
-	return resolved, nil
-}
-
-func isRelativeLocalRemoteURL(url string) bool {
-	if strings.Contains(url, "://") {
-		return false
-	}
-	// scp-like host:path (but not Windows drive C:\... or bare colon in path).
-	if isSCPLikeRemoteURL(url) {
-		return false
-	}
-	if filepath.IsAbs(url) {
-		return false
-	}
-	return true
-}
-
-func isSCPLikeRemoteURL(url string) bool {
-	// Schemed URLs (https://, git://, file://, ssh://) are not scp-like.
-	if strings.Contains(url, "://") {
-		return false
-	}
-	// git's scp-like syntax: [user@]host:path with no slash before the first colon.
-	if strings.HasPrefix(url, "[") { // bracket IPv6 form is not the scp shorthand we resolve
-		return false
-	}
-	colon := strings.IndexByte(url, ':')
-	if colon <= 0 {
-		return false
-	}
-	slash := strings.IndexByte(url, '/')
-	if slash >= 0 && slash < colon {
-		return false
-	}
-	// Windows drive letter "C:..." is absolute, not scp-like.
-	if colon == 1 {
-		r := url[0]
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
-			return false
-		}
-	}
-	return true
-}
-
-// localTransportConfig returns repo-local http.*.extraheader and
-// url.*.(push)insteadOf entries so an isolated fetch can replay them via -c.
-func (c *Client) localTransportConfig() ([]configKV, error) {
-	// --get-regexp uses POSIX BRE (* not +) and matches keys case-sensitively
-	// against git's canonical lowercase names (insteadOf → insteadof).
-	out, err := c.cmd("config", "--local", "--get-regexp", `^(http\..*\.extraheader|url\..*\.insteadof|url\..*\.pushinsteadof)$`).CombinedOutput()
-	if err != nil {
-		// git exits 1 when no matches — that is empty config, not failure.
-		var ee *exec.ExitError
-		if errors.As(err, &ee) && ee.ExitCode() == 1 && strings.TrimSpace(string(out)) == "" {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("git config --local transport: %w\n%s", err, out)
-	}
-	var cfg []configKV
 	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+		url := strings.TrimSpace(line)
+		if url != "" {
+			return url, nil
 		}
-		key, value, ok := strings.Cut(line, " ")
-		if !ok || key == "" {
-			continue
-		}
-		cfg = append(cfg, configKV{key: key, value: value})
 	}
-	return cfg, nil
+	return "", fmt.Errorf("git config remote.%s.url: empty URL", name)
+}
+
+func uniqueArmatureTmpNS() (string, error) {
+	var nonce [8]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return "", err
+	}
+	return armatureTmpNS + "/" + hex.EncodeToString(nonce[:]), nil
 }

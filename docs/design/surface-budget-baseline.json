@@ -133,6 +133,7 @@
         "RemoveIssueJSON",
         "RunProcess",
         "RunProcessWithEnv",
+        "SetGitNetworkTimeoutForTest",
         "SimulatePendingMarker",
         "Stat",
         "StatFile",

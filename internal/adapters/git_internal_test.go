@@ -240,150 +240,6 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	}
 }
 
-func TestAbsolutizeLocalRemoteURL_REQ_TOPTIER_S12_T1G(t *testing.T) {
-	t.Parallel()
-	base := t.TempDir()
-	cases := []struct {
-		name string
-		url  string
-		want func(t *testing.T, got string)
-	}{
-		{
-			name: "relative_dotdot",
-			url:  "../o.git",
-			want: func(t *testing.T, got string) {
-				t.Helper()
-				exp, err := filepath.Abs(filepath.Join(base, "../o.git"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if got != exp {
-					t.Fatalf("got %q want %q", got, exp)
-				}
-			},
-		},
-		{
-			name: "relative_dot",
-			url:  "./origin.git",
-			want: func(t *testing.T, got string) {
-				t.Helper()
-				exp, err := filepath.Abs(filepath.Join(base, "./origin.git"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if got != exp {
-					t.Fatalf("got %q want %q", got, exp)
-				}
-			},
-		},
-		{
-			name: "https_unchanged",
-			url:  "https://example.com/org/repo.git",
-			want: func(t *testing.T, got string) {
-				t.Helper()
-				if got != "https://example.com/org/repo.git" {
-					t.Fatalf("got %q", got)
-				}
-			},
-		},
-		{
-			name: "scp_like_unchanged",
-			url:  "git@github.com:org/repo.git",
-			want: func(t *testing.T, got string) {
-				t.Helper()
-				if got != "git@github.com:org/repo.git" {
-					t.Fatalf("got %q", got)
-				}
-			},
-		},
-		{
-			name: "file_scheme_unchanged",
-			url:  "file:///tmp/o.git",
-			want: func(t *testing.T, got string) {
-				t.Helper()
-				if got != "file:///tmp/o.git" {
-					t.Fatalf("got %q", got)
-				}
-			},
-		},
-		{
-			name: "absolute_path_unchanged",
-			url:  "/abs/o.git",
-			want: func(t *testing.T, got string) {
-				t.Helper()
-				if got != "/abs/o.git" {
-					t.Fatalf("got %q", got)
-				}
-			},
-		},
-		{
-			name: "path_with_colon_after_slash_relative",
-			url:  "remotes/host:path.git",
-			want: func(t *testing.T, got string) {
-				t.Helper()
-				// slash before colon → not scp-like; treat as relative local path
-				exp, err := filepath.Abs(filepath.Join(base, "remotes/host:path.git"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if got != exp {
-					t.Fatalf("got %q want %q", got, exp)
-				}
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := absolutizeLocalRemoteURL(base, tc.url)
-			if err != nil {
-				t.Fatalf("absolutize: %v", err)
-			}
-			tc.want(t, got)
-		})
-	}
-
-	if _, err := absolutizeLocalRemoteURL(base, "  "); err == nil {
-		t.Fatal("empty URL must error")
-	}
-}
-
-func TestIsSCPLikeRemoteURL_REQ_TOPTIER_S12_T1G(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		url  string
-		want bool
-	}{
-		{"git@github.com:org/repo.git", true},
-		{"github.com:org/repo.git", true},
-		{"https://example.com/r.git", false},
-		{"/abs/o.git", false},
-		{"./rel.git", false},
-		{"[::1]:repo.git", false},
-		{`C:\o.git`, false},
-		{"remotes/host:path", false},
-		{"nocolon", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.url, func(t *testing.T) {
-			t.Parallel()
-			if got := isSCPLikeRemoteURL(tc.url); got != tc.want {
-				t.Fatalf("isSCPLikeRemoteURL(%q)=%v want %v", tc.url, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestLocalTransportConfigEmpty_REQ_TOPTIER_S12_T1G(t *testing.T) {
-	t.Parallel()
-	repo := t.TempDir()
-	// No git repo → config fails (not the empty-match exit 1 path).
-	c := New(repo)
-	if _, err := c.localTransportConfig(); err == nil {
-		t.Fatal("expected error for non-repo")
-	}
-}
-
 func TestNetworkCmdHonorsTimeout_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates gitNetworkTimeout
 	// Shrink shared deadline; restore after. Not parallel — mutates package var.
 	prev := gitNetworkTimeout
@@ -391,13 +247,18 @@ func TestNetworkCmdHonorsTimeout_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:pa
 	defer func() { gitNetworkTimeout = prev }()
 
 	wrapperDir := t.TempDir()
-	// Use /bin/sleep: PATH overlay is wrapper-only, so bare `sleep` is missing
-	// and the arm falls through to exit 0 without stalling.
+	// Child sleeper under a process group: Cancel must kill the group, not leave
+	// an orphaned git-remote-http stand-in hanging CombinedOutput.
 	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(`#!/bin/sh
 for a in "$@"; do
   case "$a" in
-    # exec so CommandContext kills the sleeper itself (not an orphaned child).
-    ls-remote|fetch) exec /bin/sleep 30 ;;
+    ls-remote|fetch)
+      /bin/sleep 30 &
+      child=$!
+      # Wait on child so the parent git wrapper stays alive until group kill.
+      wait "$child"
+      exit 0
+      ;;
   esac
 done
 exit 0
@@ -412,7 +273,8 @@ exit 0
 	if err == nil {
 		t.Fatal("expected timeout error from stalled ls-remote")
 	}
-	if elapsed > 2*time.Second {
-		t.Fatalf("networkCmd took %v; want fail-closed near %v", elapsed, gitNetworkTimeout)
+	// timeout + WaitDelay slack
+	if elapsed > 3*time.Second {
+		t.Fatalf("networkCmd took %v; want fail-closed near %v (+ WaitDelay)", elapsed, gitNetworkTimeout)
 	}
 }

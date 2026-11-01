@@ -20,8 +20,9 @@ const (
 	// (refs/remotes/origin/_armature). Ops-backup never writes it: snapshot
 	// fetches into per-run refs under runTrackingNS via FetchBranchToRef
 	// (empty --refmap= so the remote's configured refspec cannot also update
-	// this shared tip under concurrency). restore-plan never stages into the
-	// working clone — RestoreEvidence uses a throwaway bare.
+	// this shared tip under concurrency). restore-plan stages only under
+	// refs/armature-tmp/<run-id>/ inside the clone (cleaned up; never
+	// refs/remotes/origin/*).
 	TrackingRef = "refs/remotes/origin/_armature"
 	// LiveRef is the local ops branch. Snapshot must never rewind it.
 	LiveRef = "refs/heads/_armature"
@@ -76,7 +77,8 @@ type Git interface {
 	BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error
 	BundleVerifyRestorable(bundlePath, wantRef string) error
 	DeleteRef(ref string) error
-	// RestoreEvidence isolates origin+bundle tip compare in a throwaway bare.
+	// RestoreEvidence compares origin+bundle tips via clone-local network ops
+	// and refs/armature-tmp/<run-id>/ staging (cleaned up on return).
 	RestoreEvidence(
 		bundlePath, advertiseRef, opsBranch string,
 	) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error)
@@ -202,8 +204,8 @@ func classifyRestore(originMissing bool, originTip, recovered string, originAncO
 }
 
 // PlanRestore verifies a bundle, then compares its tip to origin/_armature via
-// RestoreEvidence (throwaway bare — never stages into the working clone, so
-// overlapping restore-plan runs cannot cross-read `_armature-run/<other>` refs).
+// RestoreEvidence (clone-local network ops + per-call refs/armature-tmp staging,
+// so overlapping restore-plan runs cannot cross-read each other's refs).
 //
 // Disposition audit (success only on positive evidence):
 //   - missing: ls-remote reports origin/_armature absent (structural)

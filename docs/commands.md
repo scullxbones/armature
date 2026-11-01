@@ -789,9 +789,11 @@ What `arm ops-backup` does guarantee when it exits 0:
   runs on one clone all succeed even while the origin tip keeps moving.
 - `verify` confirms that advertisement is present and the object pack is
   restorable (fetch into a throwaway bare — not header-only `list-heads`).
-- `restore-plan` compares the bundle tip to `origin/_armature` inside a
-  throwaway bare (never stages `_armature-run/<nonce>` into the working
-  clone, so overlapping runs cannot cross-read each other's refs) and prints
+- `restore-plan` compares the bundle tip to `origin/_armature` with network
+  git inside the user's clone (clone transport/config applies natively) and
+  per-call `refs/armature-tmp/<run-id>/` staging (cleaned up; never
+  `refs/remotes/origin/*` or user branches), so overlapping runs cannot
+  cross-read each other's refs. Prints
   `missing | fast-forward | already-contained | diverge→_armature-recovered`.
   Printed fields are durable only (recovered SHA, bundle path, optional aside
   publish name). An absent `origin/_armature` is `missing` only when
