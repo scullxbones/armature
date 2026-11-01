@@ -4,23 +4,25 @@
 package opsbackup
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/scullxbones/armature/internal/clock"
 )
 
 const (
 	// OpsBranch is the unprotected orphan coordination branch.
 	OpsBranch = "_armature"
 	// TrackingRef is the conventional published tip name
-	// (refs/remotes/origin/_armature). Ops-backup never writes it: snapshot and
-	// restore-plan fetch into per-run refs under runTrackingNS via
+	// (refs/remotes/origin/_armature). Ops-backup never writes it: snapshot
+	// fetches into per-run refs under runTrackingNS via BeginPerRunRef +
 	// FetchBranchToRef (empty --refmap= so the remote's configured refspec
-	// cannot also update this shared tip under concurrency).
+	// cannot also update this shared tip under concurrency). restore-plan
+	// stages only under refs/armature-tmp/<run-id>/ inside the clone (lease +
+	// crash-safe sweep; never refs/remotes/origin/*).
 	TrackingRef = "refs/remotes/origin/_armature"
 	// LiveRef is the local ops branch. Snapshot must never rewind it.
 	LiveRef = "refs/heads/_armature"
@@ -31,14 +33,11 @@ const (
 	// AsideRef is the full aside ref name.
 	AsideRef = "refs/heads/_armature-recovered"
 
-	// runTrackingNS is the sibling namespace for per-run origin tip fetches.
-	// Never nest under TrackingRef — Git cannot create children while a parent
-	// ref exists, and concurrent crons must not share one mutable tip.
+	// runTrackingNS is the sibling namespace for per-run origin tip fetches
+	// during snapshot. Never nest under TrackingRef — Git cannot create
+	// children while a parent ref exists, and concurrent crons must not share
+	// one mutable tip.
 	runTrackingNS = "refs/remotes/origin/_armature-run"
-	// runScratchNS is the sibling namespace for per-run restore-plan bundle loads.
-	// Never nest under the legacy fixed tip refs/remotes/backup/_armature
-	// (earlier PR revisions used that name as a direct ref / parent prefix).
-	runScratchNS = "refs/remotes/backup/_armature-run"
 )
 
 // Disposition is the I2-safe publish plan for a recovered tip.
@@ -51,6 +50,9 @@ const (
 	DispositionFastForward
 	// DispositionDivergeAside: push only to _armature-recovered; escalate.
 	DispositionDivergeAside
+	// DispositionAlreadyContained: recovered tip is already in origin history
+	// (strict ancestor of current tip). Exit 0; no publish / no aside.
+	DispositionAlreadyContained
 )
 
 func (d Disposition) String() string {
@@ -61,6 +63,8 @@ func (d Disposition) String() string {
 		return "fast-forward"
 	case DispositionDivergeAside:
 		return "diverge→_armature-recovered"
+	case DispositionAlreadyContained:
+		return "already-contained"
 	default:
 		return fmt.Sprintf("disposition(%d)", int(d))
 	}
@@ -68,13 +72,16 @@ func (d Disposition) String() string {
 
 // Git is the adapter surface opsbackup needs. *adapters.Client satisfies it.
 type Git interface {
+	BeginPerRunRef(ns string) (ref string, release func(), err error)
 	FetchBranchToRef(branch, dstRef string) error
 	ResolveRevision(rev string) (string, error)
-	IsAncestor(anc, desc string) (bool, error)
 	BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string) error
 	BundleVerifyRestorable(bundlePath, wantRef string) error
-	FetchBundleForce(bundlePath, srcRef, dstRef string) error
-	DeleteRef(ref string) error
+	// RestoreEvidence compares origin+bundle tips via clone-local network ops
+	// and refs/armature-tmp/<run-id>/ staging (lease + crash-safe sweep).
+	RestoreEvidence(
+		bundlePath, advertiseRef, opsBranch string,
+	) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error)
 }
 
 // SnapshotRequest is the input for Snapshot.
@@ -111,13 +118,11 @@ func Snapshot(g Git, req SnapshotRequest) (SnapshotResult, error) {
 	if out == "" {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: --output is required")
 	}
-	runRef, err := uniqueRunRef(runTrackingNS)
+	runRef, releaseRun, err := g.BeginPerRunRef(runTrackingNS)
 	if err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: run tracking ref: %w", err)
 	}
-	defer func() {
-		_ = g.DeleteRef(runRef) //nolint:errcheck // best-effort per-run staging cleanup
-	}()
+	defer releaseRun()
 	if err := g.FetchBranchToRef(OpsBranch, runRef); err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
 	}
@@ -149,6 +154,8 @@ func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) 
 	if mkErr := os.MkdirAll(dir, 0o750); mkErr != nil {
 		return "", func() {}, mkErr
 	}
+	// Reclaim crash leftovers next to --output before creating a new temp.
+	sweepAgedOutputTemps(dir)
 	f, err := os.CreateTemp(dir, ".armature-ops-backup-*.bundle")
 	if err != nil {
 		return "", func() {}, err
@@ -166,6 +173,25 @@ func snapshotTempPath(finalPath string) (tmp string, cleanup func(), err error) 
 	return tmp, cleanup, nil
 }
 
+// sweepAgedOutputTemps reclaims crash leftovers next to --output. Age ceiling
+// matches adapters.runLeaseMaxAgeSec (1h). Concurrent live temps are seconds old.
+func sweepAgedOutputTemps(dir string) {
+	matches, err := filepath.Glob(filepath.Join(dir, ".armature-ops-backup-*.bundle"))
+	if err != nil {
+		return
+	}
+	now := clock.System()
+	for _, p := range matches {
+		info, statErr := os.Stat(p)
+		if statErr != nil {
+			continue
+		}
+		if now-info.ModTime().Unix() > 3600 {
+			_ = os.Remove(p) //nolint:errcheck // best-effort crash leftover sweep
+		}
+	}
+}
+
 // Verify confirms a bundle advertises AdvertisedRef and that its object pack
 // is restorable (fetch into a throwaway bare — not header-only list-heads).
 func Verify(g Git, bundlePath string) error {
@@ -179,65 +205,38 @@ func Verify(g Git, bundlePath string) error {
 	return nil
 }
 
-// originEvidence is typed positive evidence about origin/_armature after the
-// per-run fetch+resolve probe. Classification never treats a probe error as a
-// successful disposition: Missing requires ErrRemoteRefMissing-class fetch
-// evidence; Tip requires a resolved SHA after a successful fetch.
-type originEvidence struct {
-	Missing bool
-	Tip     string
-}
-
-// probeOriginTip refreshes origin/_armature into runRef and returns typed
-// evidence. Fetch-reported absence → Missing. Any other fetch or resolve
-// failure fails closed (no disposition).
-func probeOriginTip(g Git, runRef string) (originEvidence, error) {
-	if err := g.FetchBranchToRef(OpsBranch, runRef); err != nil {
-		if isRemoteRefMissing(err) {
-			return originEvidence{Missing: true}, nil
-		}
-		return originEvidence{}, fmt.Errorf("ops-backup restore-plan: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)
-	}
-	tip, err := g.ResolveRevision(runRef)
-	if err != nil {
-		return originEvidence{}, fmt.Errorf("ops-backup restore-plan: resolve origin tip: %w", err)
-	}
-	if tip == "" {
-		return originEvidence{}, fmt.Errorf("ops-backup restore-plan: resolve origin tip: empty SHA")
-	}
-	return originEvidence{Tip: tip}, nil
-}
-
 // classifyRestore picks an I2 disposition from positive origin evidence and a
-// recovered tip. recoveredOlderThanOrigin (strict ancestor of current origin)
-// is DispositionDivergeAside: I2 forbids rewinding the shared tip.
-func classifyRestore(origin originEvidence, recovered string, isFF bool) (Disposition, string) {
-	if origin.Missing {
+// recovered tip. recovered strict ancestor of current origin → already-contained
+// (exit 0, no aside): the tip is already in published history. Unrelated tips
+// remain diverge→aside.
+func classifyRestore(originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool) (Disposition, string) {
+	if originMissing {
 		return DispositionMissing, ""
 	}
-	if origin.Tip == recovered || isFF {
+	if originTip == recovered || originAncOfRecovered {
 		return DispositionFastForward, ""
+	}
+	if recoveredAncOfOrigin {
+		return DispositionAlreadyContained, ""
 	}
 	return DispositionDivergeAside, AsideRef
 }
 
-// PlanRestore loads a bundle into a per-run scratch ref under runScratchNS and
-// compares against a per-run origin tip under runTrackingNS. Concurrent
-// restore-plan / snapshot invocations never share a mutable staging tip, and
-// leftover legacy refs/remotes/backup/_armature does not block child creation.
+// PlanRestore verifies a bundle, then compares its tip to origin/_armature via
+// RestoreEvidence (clone-local network ops + per-call refs/armature-tmp staging,
+// so overlapping restore-plan runs cannot cross-read each other's refs).
 //
 // Disposition audit (success only on positive evidence):
-//   - missing: fetch reported origin/_armature absent (isRemoteRefMissing)
+//   - missing: ls-remote reports origin/_armature absent (structural)
 //   - fast-forward: origin tip resolved and equals recovered, or is an ancestor
-//   - diverge→_armature-recovered: origin tip resolved and is not an ancestor of
-//     recovered — including when recovered is a strict ancestor of origin (I2:
-//     do not rewind the shared tip; publish aside only)
+//   - already-contained: recovered is a strict ancestor of current origin
+//     (exit 0; no aside — tip already in published history)
+//   - diverge→_armature-recovered: origin tip resolved and histories are
+//     unrelated (aside only; ErrDiverge)
 //
-// Fetch ok + resolve fail, unreachable origin, bundle/ancestry errors, and
-// other git failures stay fail-closed (mapped error, no success disposition).
-// On diverge it still returns the plan with DispositionDivergeAside and
-// ErrDiverge. Printed fields are durable only (recovered SHA, bundle path,
-// optional aside publish name).
+// Unreachable origin, bundle/ancestry errors, and other git failures stay
+// fail-closed (mapped error, no success disposition). Printed fields are
+// durable only (recovered SHA, bundle path, optional aside publish name).
 func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
 	if bundlePath == "" {
@@ -246,68 +245,20 @@ func PlanRestore(g Git, bundlePath string) (RestorePlan, error) {
 	if err := Verify(g, bundlePath); err != nil {
 		return RestorePlan{}, err
 	}
-	originRun, err := uniqueRunRef(runTrackingNS)
+	originMissing, originTip, recovered, originAnc, recoveredAnc, err := g.RestoreEvidence(bundlePath, AdvertisedRef, OpsBranch)
 	if err != nil {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: run tracking ref: %w", err)
+		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: %w", err)
 	}
-	defer func() {
-		_ = g.DeleteRef(originRun) //nolint:errcheck // best-effort per-run staging cleanup
-	}()
-	origin, err := probeOriginTip(g, originRun)
-	if err != nil {
-		return RestorePlan{}, err
-	}
-	scratch, err := uniqueRunRef(runScratchNS)
-	if err != nil {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: scratch ref: %w", err)
-	}
-	defer func() {
-		_ = g.DeleteRef(scratch) //nolint:errcheck // best-effort per-run staging cleanup
-	}()
-	if err := g.FetchBundleForce(bundlePath, AdvertisedRef, scratch); err != nil {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: load bundle: %w", err)
-	}
-	recovered, err := g.ResolveRevision(scratch)
-	if err != nil {
-		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: resolve recovered tip: %w", err)
+	if recovered == "" {
+		return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: resolve recovered tip: empty SHA")
 	}
 	plan := RestorePlan{
 		Recovered: recovered,
 		Bundle:    bundlePath,
 	}
-	isFF := false
-	if !origin.Missing && origin.Tip != recovered {
-		ff, ancErr := g.IsAncestor(origin.Tip, recovered)
-		if ancErr != nil {
-			return RestorePlan{}, fmt.Errorf("ops-backup restore-plan: ancestry: %w", ancErr)
-		}
-		isFF = ff
-	}
-	plan.Disposition, plan.AsideRef = classifyRestore(origin, recovered, isFF)
+	plan.Disposition, plan.AsideRef = classifyRestore(originMissing, originTip, recovered, originAnc, recoveredAnc)
 	if plan.Disposition == DispositionDivergeAside {
 		return plan, ErrDiverge
 	}
 	return plan, nil
-}
-
-func uniqueRunRef(ns string) (string, error) {
-	var nonce [8]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
-		return "", err
-	}
-	return ns + "/" + hex.EncodeToString(nonce[:]), nil
-}
-
-// isRemoteRefMissing mirrors adapters.IsRemoteRefMissing without importing the
-// adapter package (opsbackup stays on the Git port). Same class: reachable
-// origin that does not advertise the branch, not transport failure.
-func isRemoteRefMissing(err error) bool {
-	if err == nil {
-		return false
-	}
-	lower := strings.ToLower(err.Error())
-	return strings.Contains(lower, "couldn't find remote ref") ||
-		strings.Contains(lower, "does not exist in remote") ||
-		strings.Contains(lower, "no such ref") ||
-		(strings.Contains(lower, "remote ref") && strings.Contains(lower, "not found"))
 }

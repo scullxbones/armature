@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -272,6 +275,75 @@ func TestOpsBackup_StructuredStdoutExactlyOneJSON_REQ_TOPTIER_S12_T1(t *testing.
 				require.NoError(t, json.Unmarshal(stdout.Bytes(), &env))
 				require.Contains(t, env, "error")
 			}
+		})
+	}
+}
+
+// TCP accept-never-reply stalls git-remote-http. networkCmd must kill the
+// process group so snapshot / restore-plan return a fail-closed error envelope
+// within timeout+WaitDelay slack (not hang the CLI).
+func TestOpsBackup_StalledHTTPRemote_FailClosedEnvelope_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	// Mutates shared gitNetworkTimeout — not parallel.
+	restoreTimeout := adapters.SetGitNetworkTimeoutForTest(200 * time.Millisecond)
+	defer restoreTimeout()
+
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer ln.Close() //nolint:errcheck
+	go func() {
+		for {
+			conn, accErr := ln.Accept()
+			if accErr != nil {
+				return
+			}
+			// Accept then never reply — holds git-remote-http until group kill.
+			go func(c net.Conn) {
+				defer c.Close() //nolint:errcheck
+				select {}
+			}(conn)
+		}
+	}()
+	stalledURL := "http://" + ln.Addr().String() + "/armature-ops-backup.git"
+
+	repo := setupOpsBackupFreshClone(t)
+	bundle := filepath.Join(t.TempDir(), "pre.bundle")
+	{
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"ops-backup", "snapshot", "--output", bundle, "--repo", repo, "--format", "json", "--non-interactive")
+		require.Equal(t, 0, code, stdout.String())
+	}
+	gittest.Git(t, repo, "remote", "set-url", "origin", stalledURL)
+
+	slack := 3 * time.Second
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "snapshot",
+			args: []string{"ops-backup", "snapshot", "--output", filepath.Join(t.TempDir(), "stall.bundle"),
+				"--repo", repo, "--format", "json", "--non-interactive"},
+		},
+		{
+			name: "restore-plan",
+			args: []string{"ops-backup", "restore-plan", "--from", bundle,
+				"--repo", repo, "--format", "json", "--non-interactive"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout := new(bytes.Buffer)
+			stderr := new(bytes.Buffer)
+			start := time.Now()
+			code := executeThenHandleRootError(t, stdout, stderr, tc.args...)
+			elapsed := time.Since(start)
+			assert.Equal(t, 1, code, "stderr=%s stdout=%s", stderr.String(), stdout.String())
+			assert.Less(t, elapsed, slack, "%s must fail-closed near network timeout, got %v", tc.name, elapsed)
+			assertExactlyOneJSONValue(t, stdout.String())
+			var env map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(stdout.Bytes(), &env))
+			require.Contains(t, env, "error", "fail-closed must be an error envelope")
+			assert.Contains(t, stdout.String(), "OPS-BACKUP-1")
 		})
 	}
 }

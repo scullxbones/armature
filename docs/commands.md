@@ -780,31 +780,44 @@ not automate on a schedule):
 What `arm ops-backup` does guarantee when it exits 0:
 
 - `snapshot` refreshed the published tip with
-  `FetchBranchToRef` (`git fetch --refmap= origin +refs/heads/_armature:<dst>`
-  so the remote's configured refspec cannot also touch the shared tip), into
-  a **per-run** destination under `refs/remotes/origin/_armature-run/<nonce>`
-  (never writes `refs/remotes/origin/_armature`), then wrote a bundle that
-  advertises restorable `refs/heads/_armature`. Refresh failure is fail-closed
-  (no bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
+  `FetchBranchToRef` (`git fetch --no-tags --refmap= origin
+  +refs/heads/_armature:<dst>` — named remote so `remote.origin.*` applies and
+  multi-valued URLs stay first-wins; empty `--refmap=` so the remote's
+  configured refspec cannot also touch the shared tip; `--no-tags` so the
+  clone's tag set is unchanged), into a **per-run** destination under
+  `refs/remotes/origin/_armature-run/<nonce>` (live-pid lease; never writes
+  `refs/remotes/origin/_armature`), then wrote a bundle that advertises
+  restorable `refs/heads/_armature`. Refresh failure is fail-closed (no
+  bundle). Live `refs/heads/_armature` is never rewound. Overlapping cron
   runs on one clone all succeed even while the origin tip keeps moving.
 - `verify` confirms that advertisement is present and the object pack is
   restorable (fetch into a throwaway bare — not header-only `list-heads`).
-- `restore-plan` loads into a per-run scratch under
-  `refs/remotes/backup/_armature-run/<nonce>` (sibling of any legacy
-  `refs/remotes/backup/_armature` tip) and prints
-  `missing | fast-forward | diverge→_armature-recovered`. Printed fields are
-  durable only (recovered SHA, bundle path, optional aside publish name) —
-  no print-then-delete scratch ref. An absent `origin/_armature` is
-  `missing` only when fetch reports the branch absent; every other
-  fetch/resolve/ancestry failure stays fail-closed. A recovered tip that is
-  a strict ancestor of current `origin/_armature` is
-  `diverge→_armature-recovered` (exit 1) — I2 forbids rewinding the shared
-  tip. It does not apply the publish (`--apply` is not in v1). Structured
-  json/agent output for all three verbs is exactly one N2 envelope
-  `{count, <payload>[], help[]}` per invocation (diverge included: plan
-  help carries escalation; exit 1 via ADR 0020 §7 — no second error
-  envelope). Leftover per-run refs or temp dirs from a crashed prior run
-  never break the next.
+- `restore-plan` compares the bundle tip to `origin/_armature` with network
+  git inside the user's clone (clone transport/config applies natively —
+  network probes address the named `origin` remote so `remote.origin.*` such
+  as `proxy` / `tagOpt` apply; first of multi-valued URLs wins; `--no-tags`
+  on every fetch) and per-call `refs/armature-tmp/<run-id>/` staging (live-pid
+  lease; never `refs/remotes/origin/*` or user branches), so overlapping runs
+  cannot cross-read each other's refs. Prints
+  `missing | fast-forward | already-contained | diverge→_armature-recovered`.
+  Printed fields are durable only (recovered SHA, bundle path, optional aside
+  publish name). An absent `origin/_armature` is `missing` only when
+  `git ls-remote --refs` reports no exact `refs/heads/_armature` (structural —
+  pattern/suffix peers such as `…/archive/refs/heads/_armature` do not count);
+  unreachable origin and every other ls-remote/fetch/resolve/ancestry failure
+  stay fail-closed. A recovered tip that is a strict ancestor of current
+  `origin/_armature` is `already-contained` (exit 0, no aside — tip already
+  in published history). Unrelated tips are
+  `diverge→_armature-recovered` (exit 1). It does not apply the publish
+  (`--apply` is not in v1). Structured json/agent output for all three verbs
+  is exactly one N2 envelope `{count, <payload>[], help[]}` per invocation
+  (diverge included: plan help carries escalation; exit 1 via ADR 0020 §7 —
+  no second error envelope). Crash leftovers under managed per-run namespaces
+  (`refs/armature-tmp/`, `refs/remotes/origin/_armature-run/`,
+  `<common-git-dir>/armature-tmp-work/`, aged `.armature-ops-backup-*.bundle`
+  temps) are swept at the next run start without deleting a live concurrent
+  nonce (pid lease in the common git directory, visible across linked
+  worktrees).
 
 Cron or CI may invoke `snapshot`; Armature itself starts no daemon (T1).
 

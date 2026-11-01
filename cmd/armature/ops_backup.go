@@ -24,14 +24,17 @@ advertises refs/heads/_armature.
 verify checks that a bundle advertises that tip and that its object pack is
 restorable (fetch into a throwaway bare — not header-only list-heads).
 
-restore-plan loads the bundle into a per-run scratch ref under a sibling
-namespace and prints an I2-safe publish disposition (missing | fast-forward |
+restore-plan compares the bundle tip to origin/_armature using network git
+inside the user's clone (so clone transport/config applies natively) with
+per-call refs/armature-tmp/<run-id>/ staging (cleaned up; never
+refs/remotes/origin/*) and prints an I2-safe publish disposition
+(missing | fast-forward | already-contained |
 diverge→_armature-recovered). Output names only durable things (recovered SHA,
-bundle path, optional aside publish name). missing requires fetch-reported
-absence of origin/_armature; other fetch/resolve errors stay fail-closed.
-A recovered tip that is a strict ancestor of current origin/_armature is
-diverge (I2: no shared-tip rewind). It does not apply the publish. Diverge
-exits non-zero.`,
+bundle path, optional aside publish name). missing requires structural
+ls-remote absence of origin/_armature; other ls-remote/fetch/resolve errors
+stay fail-closed. A recovered tip already contained in current
+origin/_armature history is already-contained (exit 0, no aside). Unrelated
+tips diverge (exit non-zero). It does not apply the publish.`,
 		SilenceErrors: true,
 	}
 	cmd.AddCommand(newOpsBackupSnapshotCmd())

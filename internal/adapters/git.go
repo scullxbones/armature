@@ -22,7 +22,32 @@ type Client struct {
 const (
 	gitContentionMaxAttempts = 3
 	gitContentionBackoff     = 100 * time.Millisecond
+
+	// defaultGitNetworkTimeout bounds ops-backup (and FetchBranchToRef) remote
+	// probes so a stalled origin fail-closes instead of hanging the CLI.
+	defaultGitNetworkTimeout = 15 * time.Second
+
+	// gitNetworkWaitDelay bounds how long Wait may block on stuck pipes after
+	// Cancel kills the network git process group (git-remote-http children).
+	gitNetworkWaitDelay = 1 * time.Second
+
+	// armatureTmpNS holds per-call restore-plan staging refs inside the user's
+	// clone. Network ops run here so git resolves clone config natively; the
+	// namespace is never refs/remotes/origin/* or a user branch.
+	armatureTmpNS = "refs/armature-tmp"
 )
+
+// gitNetworkTimeout is the deadline for network git calls on the ops-backup
+// path. Tests may shrink it; production code must leave the default.
+var gitNetworkTimeout = defaultGitNetworkTimeout
+
+// SetGitNetworkTimeoutForTest shrinks (or restores) the shared ops-backup
+// network deadline. Tests only — production code must leave the default.
+func SetGitNetworkTimeoutForTest(d time.Duration) (restore func()) {
+	prev := gitNetworkTimeout
+	gitNetworkTimeout = d
+	return func() { gitNetworkTimeout = prev }
+}
 
 func New(repoPath string) *Client {
 	return &Client{repoPath: repoPath}
@@ -789,18 +814,36 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	if branch == "" || dstRef == "" {
 		return fmt.Errorf("fetch branch to ref: branch and destination ref are required")
 	}
-	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	// Fail-fast if origin has no URL; fetch addresses the named remote so
+	// remote.origin.* (proxy, tagOpt, …) applies and multi-valued URLs stay
+	// first-wins (git fetch by name). Do not -c remote.origin.url= — that
+	// appends a value and does not override.
+	remoteURL, err := c.firstRemoteURL("origin")
+	if err != nil {
+		return fmt.Errorf("fetch branch to ref: %w", err)
+	}
 	spec := "+refs/heads/" + branch + ":" + dstRef
-	cmd := c.cmdContext(fetchCtx, "fetch", "--refmap=", "origin", spec)
+	cmd, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
+	defer cancel()
 	if out, err := cmd.CombinedOutput(); err != nil {
-		wrapped := fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
+		wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", branch, remoteURL, err, out)
 		if remoteRefMissingText(string(out)) || remoteRefMissingText(err.Error()) {
 			return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
 		}
 		return wrapped
 	}
 	return nil
+}
+
+// networkCmd builds a git child bound to gitNetworkTimeout. Caller must defer
+// cancel(). On unix, Cancel kills the process group (Setpgid) so git-remote-*
+// helpers die with the parent; WaitDelay bounds stuck-pipe waits. Ops-backup
+// remote probes must use this instead of raw context.Background().
+func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitNetworkTimeout)
+	cmd := c.cmdContext(ctx, args...)
+	configureNetworkCmd(cmd)
+	return cmd, cancel
 }
 
 func (c *Client) RevListCount(rangeSpec string) (int, error) {
@@ -1414,14 +1457,12 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 		return fmt.Errorf("bundle create: mkdir: %w", err)
 	}
 
-	bareParent, err := os.MkdirTemp("", "armature-ops-backup-bare-")
+	workDir, releaseWork, err := c.beginArmatureWorkDir()
 	if err != nil {
 		return fmt.Errorf("bundle create: temp bare: %w", err)
 	}
-	defer func() {
-		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
-	}()
-	bare := filepath.Join(bareParent, "bare.git")
+	defer releaseWork()
+	bare := filepath.Join(workDir, "bare.git")
 	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
 		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
 	}
@@ -1499,41 +1540,146 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	if err != nil {
 		return fmt.Errorf("bundle verify: abs: %w", err)
 	}
-	bareParent, err := os.MkdirTemp("", "armature-ops-backup-verify-")
+	workDir, releaseWork, err := c.beginArmatureWorkDir()
 	if err != nil {
 		return fmt.Errorf("bundle verify: temp bare: %w", err)
 	}
-	defer func() {
-		_ = os.RemoveAll(bareParent) //nolint:errcheck // best-effort temp bare cleanup
-	}()
-	bare := filepath.Join(bareParent, "bare.git")
+	defer releaseWork()
+	bare := filepath.Join(workDir, "bare.git")
 	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
 		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
 	}
 	bareClient := New(bare).WithEnviron(c.environ)
 	spec := "+" + wantRef + ":" + wantRef
-	if out, fetchErr := bareClient.cmd("fetch", abs, spec).CombinedOutput(); fetchErr != nil {
+	if out, fetchErr := bareClient.cmd("fetch", "--no-tags", abs, spec).CombinedOutput(); fetchErr != nil {
 		return fmt.Errorf("git fetch bundle into verify bare %s: %w\n%s", spec, fetchErr, out)
 	}
 	return nil
 }
 
-// FetchBundleForce force-updates dstRef from srcRef inside a git bundle.
-func (c *Client) FetchBundleForce(bundlePath, srcRef, dstRef string) error {
+// RestoreEvidence compares the published ops tip to a bundle tip inside the
+// user's clone. Network probes (ls-remote + origin fetch) run with -C <clone>
+// so git resolves scopes, worktree config, includes, insteadOf, and helpers
+// natively — no regex-copied localTransportConfig. Isolation is per-call refs
+// under refs/armature-tmp/<run-id>/ (never refs/remotes/origin/* or user
+// branches). Staging uses a live-pid lease; crash leftovers are swept at the
+// next run start without touching concurrent live nonces.
+//
+// Origin absence is structural: ls-remote reports no exact refname match →
+// missing (git patterns can suffix-match peers like
+// refs/heads/archive/refs/heads/_armature — those must not count as exists).
+// Unreachable origin / other failures return err (fail-closed). Network probes
+// address the named origin remote so remote.origin.* applies; multi-valued
+// remote URLs stay first-wins (do not -c remote.origin.url= — that appends).
+func (c *Client) RestoreEvidence(
+	bundlePath, advertiseRef, opsBranch string,
+) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error) {
 	bundlePath = strings.TrimSpace(bundlePath)
-	srcRef = strings.TrimSpace(srcRef)
-	dstRef = strings.TrimSpace(dstRef)
-	if bundlePath == "" || srcRef == "" || dstRef == "" {
-		return fmt.Errorf("fetch bundle: path, src, and dst refs are required")
+	advertiseRef = strings.TrimSpace(advertiseRef)
+	opsBranch = strings.TrimSpace(opsBranch)
+	if bundlePath == "" || advertiseRef == "" || opsBranch == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: bundle, advertise ref, and branch are required")
 	}
-	abs, err := filepath.Abs(bundlePath)
+	remoteRef := "refs/heads/" + opsBranch
+
+	tmpNS, releaseTmp, tmpErr := c.beginArmatureTmpNS()
+	if tmpErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: temp ref ns: %w", tmpErr)
+	}
+	defer releaseTmp()
+	bundleTmp := tmpNS + "/bundle"
+	originTmp := tmpNS + "/origin"
+
+	remoteURL, urlErr := c.firstRemoteURL("origin")
+	if urlErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: origin URL: %w", urlErr)
+	}
+
+	_, exists, lsErr := c.lsRemoteRef("origin", remoteRef)
+	if lsErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: ls-remote origin %s (first-url %s) failed (fail-closed): %w", remoteRef, remoteURL, lsErr)
+	}
+
+	absBundle, absErr := filepath.Abs(bundlePath)
+	if absErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: abs bundle: %w", absErr)
+	}
+	bundleSpec := "+" + advertiseRef + ":" + bundleTmp
+	if out, fetchErr := c.cmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
+	}
+	recovered, err = c.ResolveRevision(bundleTmp)
 	if err != nil {
-		return fmt.Errorf("fetch bundle: abs: %w", err)
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: %w", err)
 	}
-	spec := "+" + srcRef + ":" + dstRef
-	out, err := c.cmd("fetch", abs, spec).CombinedOutput()
+	if recovered == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: empty SHA")
+	}
+	if !exists {
+		return true, "", recovered, false, false, nil
+	}
+
+	originSpec := "+" + remoteRef + ":" + originTmp
+	cmd, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
+	defer cancel()
+	if out, fetchErr := cmd.CombinedOutput(); fetchErr != nil {
+		return false, "", "", false, false, fmt.Errorf(
+			"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
+			remoteRef, remoteURL, fetchErr, out)
+	}
+	originTip, err = c.ResolveRevision(originTmp)
 	if err != nil {
-		return fmt.Errorf("git fetch bundle %s: %w\n%s", spec, err, out)
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: %w", err)
 	}
-	return nil
+	if originTip == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: empty SHA")
+	}
+
+	originAncOfRecovered, err = c.IsAncestor(originTip, recovered)
+	if err != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: ancestry: %w", err)
+	}
+	recoveredAncOfOrigin, err = c.IsAncestor(recovered, originTip)
+	if err != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: ancestry: %w", err)
+	}
+	return false, originTip, recovered, originAncOfRecovered, recoveredAncOfOrigin, nil
+}
+
+// lsRemoteRef reports whether the named remote advertises an exact refname.
+// Exit 0 + no exact match (empty stdout, or only pattern/suffix peers) means
+// reachable remote, ref absent. Non-zero exit (unreachable, auth, …) is an
+// error. Parsing goes through exactRefFromPatternOutput — the shared class
+// helper for every ls-remote / for-each-ref pattern existence probe. The
+// remote operand is always the name so remote.<name>.* applies; multi-valued
+// URLs stay first-wins.
+func (c *Client) lsRemoteRef(name, ref string) (sha string, exists bool, err error) {
+	cmd, cancel := c.networkCmd("ls-remote", "--refs", name, ref)
+	defer cancel()
+	out, runErr := cmd.CombinedOutput()
+	if runErr != nil {
+		return "", false, fmt.Errorf("git ls-remote %s %s: %w\n%s", name, ref, runErr, out)
+	}
+	sha, exists, err = exactRefFromPatternOutput(string(out), ref)
+	if err != nil {
+		return "", false, fmt.Errorf("git ls-remote %s %s: %w", name, ref, err)
+	}
+	return sha, exists, nil
+}
+
+// firstRemoteURL returns the first configured remote.<name>.url. Git fetch /
+// ls-remote use the first URL when a remote has multiple; `git config --get`
+// returns the last — callers that need one shared URL must use this.
+func (c *Client) firstRemoteURL(name string) (string, error) {
+	out, err := c.cmd("config", "--get-all", "remote."+name+".url").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git config remote.%s.url: %w\n%s", name, err, out)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		url := strings.TrimSpace(line)
+		if url != "" {
+			return url, nil
+		}
+	}
+	return "", fmt.Errorf("git config remote.%s.url: empty URL", name)
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/scullxbones/armature/internal/testexec"
 )
@@ -236,5 +237,120 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	cmd = base.cmd("status")
 	if cmd.Path != bin && !strings.Contains(cmd.Path, bin) {
 		t.Fatalf("process env should still find %s, got %q", bin, cmd.Path)
+	}
+}
+
+func TestNetworkCmdHonorsTimeout_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates gitNetworkTimeout
+	// Shrink shared deadline; restore after. Not parallel — mutates package var.
+	prev := gitNetworkTimeout
+	gitNetworkTimeout = 100 * time.Millisecond
+	defer func() { gitNetworkTimeout = prev }()
+
+	wrapperDir := t.TempDir()
+	// Child sleeper under a process group: Cancel must kill the group, not leave
+	// an orphaned git-remote-http stand-in hanging CombinedOutput.
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(`#!/bin/sh
+for a in "$@"; do
+  case "$a" in
+    ls-remote|fetch)
+      /bin/sleep 30 &
+      child=$!
+      # Wait on child so the parent git wrapper stays alive until group kill.
+      wait "$child"
+      exit 0
+      ;;
+  esac
+done
+exit 0
+`))
+	repo := t.TempDir()
+	c := New(repo).WithEnviron([]string{"PATH=" + wrapperDir})
+	start := time.Now()
+	cmd, cancel := c.networkCmd("ls-remote", "--refs", "origin", "refs/heads/_armature")
+	defer cancel()
+	err := cmd.Run()
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected timeout error from stalled ls-remote")
+	}
+	// timeout + WaitDelay slack
+	if elapsed > 3*time.Second {
+		t.Fatalf("networkCmd took %v; want fail-closed near %v (+ WaitDelay)", elapsed, gitNetworkTimeout)
+	}
+}
+
+func TestParseRunLeaseAndPidAlive_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	pid, started, ok := parseRunLease("pid=123\nstarted=99\n")
+	if !ok || pid != 123 || started != 99 {
+		t.Fatalf("parseRunLease got pid=%d started=%d ok=%v", pid, started, ok)
+	}
+	if _, _, ok := parseRunLease("pid=nope\n"); ok {
+		t.Fatal("expected invalid pid to fail")
+	}
+	if _, _, ok := parseRunLease("pid=1\nstarted=nope\n"); ok {
+		t.Fatal("expected bad started to fail")
+	}
+	if _, _, ok := parseRunLease(""); ok {
+		t.Fatal("expected empty lease to fail")
+	}
+	if pidAlive(0) || pidAlive(-1) {
+		t.Fatal("pidAlive must reject non-positive pids")
+	}
+	if !pidAlive(os.Getpid()) {
+		t.Fatal("pidAlive must see current process")
+	}
+	if leaseKindForRefNS(armatureTmpNS) != leaseKindArmatureTmp {
+		t.Fatal("expected exact armature-tmp lease kind")
+	}
+	if leaseKindForRefNS(armatureTmpNS+"/x") != leaseKindArmatureTmp {
+		t.Fatal("expected armature-tmp lease kind")
+	}
+	if leaseKindForRefNS("refs/remotes/origin/_armature-run") != leaseKindOriginRun {
+		t.Fatal("expected origin-run lease kind")
+	}
+}
+
+func TestParseRunLeaseStartedOptional_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	// pid alone is enough for ok (started defaults 0); age backstop then uses mtime.
+	pid, started, ok := parseRunLease("pid=7\n")
+	if !ok || pid != 7 || started != 0 {
+		t.Fatalf("got pid=%d started=%d ok=%v", pid, started, ok)
+	}
+}
+
+func TestPidAlive_EPERMTreatedAlive_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	// pid 1 exists; Signal(0) returns EPERM for unprivileged callers — must be alive.
+	if !pidAlive(1) {
+		t.Fatal("pidAlive(1) must be true (EPERM means process exists)")
+	}
+}
+
+func TestExactRefFromPatternOutput_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	want := "refs/heads/_armature"
+	sha, found, err := exactRefFromPatternOutput(
+		"abc123 refs/foo/refs/heads/_armature\ndef456 refs/heads/_armature\n", want)
+	if err != nil || !found || sha != "def456" {
+		t.Fatalf("exact hit got sha=%q found=%v err=%v", sha, found, err)
+	}
+	sha, found, err = exactRefFromPatternOutput("abc123 refs/foo/refs/heads/_armature\n", want)
+	if err != nil || found || sha != "" {
+		t.Fatalf("suffix-only must miss: sha=%q found=%v err=%v", sha, found, err)
+	}
+	_, found, err = exactRefFromPatternOutput("refs/heads/_armature\n", want)
+	if err != nil || !found {
+		t.Fatalf("refname-only format: found=%v err=%v", found, err)
+	}
+	refs, err := refsUnderPrefix(
+		"refs/armature-tmp/dead/bundle\nrefs/other/armature-tmp/dead\nrefs/armature-tmp/dead\n",
+		"refs/armature-tmp/dead")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 2 || refs[0] != "refs/armature-tmp/dead/bundle" || refs[1] != "refs/armature-tmp/dead" {
+		t.Fatalf("refsUnderPrefix got %v", refs)
 	}
 }

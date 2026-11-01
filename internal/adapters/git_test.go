@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -612,7 +615,7 @@ func TestFetchTrackingRefWithoutMovingHEAD_ReportsErrorWithoutOrigin(t *testing.
 	c := adapters.New(repo)
 	err := c.FetchTrackingRefWithoutMovingHEAD("_armature")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "git fetch origin _armature")
+	assert.Contains(t, err.Error(), "remote.origin.url")
 }
 
 func TestRevListCount_ReportsBehind(t *testing.T) {
@@ -1924,7 +1927,7 @@ func TestCommandGitAbsoluteOverlayPATH_REQ_PARCLI(t *testing.T) {
 	require.Contains(t, string(out), "git version")
 }
 
-func TestBundleCreateAdvertised_ListHeads_FetchForce_REQ_TOPTIER_S12_T1(t *testing.T) {
+func TestBundleCreateAdvertised_ListHeads_RestoreEvidence_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
 	repo := fx.Dir
@@ -1947,9 +1950,100 @@ func TestBundleCreateAdvertised_ListHeads_FetchForce_REQ_TOPTIER_S12_T1(t *testi
 	assert.Contains(t, heads, "refs/heads/_armature")
 	require.NoError(t, c.BundleVerifyRestorable(bundle, "refs/heads/_armature"))
 
-	require.NoError(t, c.FetchBundleForce(bundle, "refs/heads/_armature", "refs/remotes/backup/_armature-run/test"))
-	got := runGitOutput(t, repo, "rev-parse", "refs/remotes/backup/_armature-run/test")
-	assert.Equal(t, tip, got)
+	missing, originTip, recovered, originAnc, recoveredAnc, evErr := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, evErr)
+	assert.False(t, missing)
+	assert.Equal(t, tip, originTip)
+	assert.Equal(t, tip, recovered)
+	assert.True(t, originAnc)
+	assert.True(t, recoveredAnc)
+	for _, ns := range []string{"refs/armature-tmp", "refs/remotes/backup/_armature-run", "refs/remotes/origin/_armature-run"} {
+		out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", ns).CombinedOutput()
+		require.NoError(t, refErr)
+		assert.Empty(t, strings.TrimSpace(string(out)), "RestoreEvidence must not leave %s after return", ns)
+	}
+}
+
+func TestRestoreEvidence_MissingContainedUnreachable_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	older := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	olderBundle := filepath.Join(t.TempDir(), "older.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(olderBundle, older, "refs/heads/_armature"))
+
+	// Advance origin past the bundled tip → recovered is a strict ancestor.
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "newer")
+	gittest.Git(t, repo, "push", "origin", "_armature")
+	newer := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	missing, originTip, recovered, originAnc, recoveredAnc, err := c.RestoreEvidence(olderBundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+	assert.False(t, missing)
+	assert.Equal(t, newer, originTip)
+	assert.Equal(t, older, recovered)
+	assert.False(t, originAnc)
+	assert.True(t, recoveredAnc)
+
+	// Structural missing: delete remote branch; ls-remote empty → missing.
+	gittest.Git(t, fx.Origin, "update-ref", "-d", "refs/heads/_armature")
+	missing, originTip, recovered, originAnc, recoveredAnc, err = c.RestoreEvidence(olderBundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+	assert.True(t, missing)
+	assert.Empty(t, originTip)
+	assert.Equal(t, older, recovered)
+	assert.False(t, originAnc)
+	assert.False(t, recoveredAnc)
+
+	// Unreachable origin: fail-closed, never empty-as-missing.
+	gittest.Git(t, repo, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "no-such-origin.git"))
+	_, _, _, _, _, err = c.RestoreEvidence(olderBundle, "refs/heads/_armature", "_armature")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fail-closed")
+	assert.False(t, adapters.IsRemoteRefMissing(err))
+}
+
+// TestRestoreEvidence_SuffixOnlyRemoteRefIsMissing_REQ_TOPTIER_S12_T1G: git
+// ls-remote patterns match the tail of a refname. PJ repro: peer
+// refs/foo/refs/heads/_armature with exact refs/heads/_armature deleted must
+// yield structural missing (not fail-closed on a subsequent exact fetch).
+func TestRestoreEvidence_SuffixOnlyRemoteRefIsMissing_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	// Replace exact tip with a suffix-only peer that ls-remote still matches.
+	gittest.Git(t, fx.Origin, "update-ref", "refs/foo/refs/heads/_armature", tip)
+	gittest.Git(t, fx.Origin, "update-ref", "-d", "refs/heads/_armature")
+	out := runGitOutput(t, fx.Origin, "ls-remote", "--refs", fx.Origin, "refs/heads/_armature")
+	require.Contains(t, out, "refs/foo/refs/heads/_armature", "fixture must trigger git pattern suffix match")
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) >= 2 {
+			assert.NotEqual(t, "refs/heads/_armature", fields[1], "fixture must not advertise exact ref")
+		}
+	}
+
+	missing, originTip, recovered, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err, "suffix-only peer must be structural missing, not fail-closed fetch")
+	assert.True(t, missing)
+	assert.Empty(t, originTip)
+	assert.Equal(t, tip, recovered)
 }
 
 func TestFetchTrackingRef_AbsentRemoteRef_REQ_TOPTIER_S12_T1(t *testing.T) {
@@ -1975,7 +2069,8 @@ func TestBundleCreateAdvertised_RejectsEmptyArgs(t *testing.T) {
 	require.Error(t, c.BundleCreateAdvertised("", "abc", "refs/heads/_armature"))
 	_, listErr := c.BundleListHeads("")
 	require.Error(t, listErr)
-	require.Error(t, c.FetchBundleForce("", "refs/heads/_armature", "refs/remotes/backup/_armature-run/test"))
+	_, _, _, _, _, restoreErr := c.RestoreEvidence("", "refs/heads/_armature", "_armature")
+	require.Error(t, restoreErr)
 	require.Error(t, c.BundleVerifyRestorable("", "refs/heads/_armature"))
 	require.Error(t, c.FetchBranchToRef("", "refs/remotes/origin/_armature-run/x"))
 	require.Error(t, c.FetchBranchToRef("_armature", ""))
@@ -2007,4 +2102,809 @@ func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	before := tip
 	require.NoError(t, c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proof2"))
 	assert.Equal(t, before, runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature"))
+}
+
+func TestRestoreEvidence_CloneLocalConfigNative_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, repo, origin string) (clientRepo string)
+	}{
+		{
+			name: "relative_origin_url",
+			setup: func(t *testing.T, repo, origin string) string {
+				t.Helper()
+				rel, err := filepath.Rel(repo, origin)
+				require.NoError(t, err)
+				gittest.Git(t, repo, "remote", "set-url", "origin", rel)
+				return repo
+			},
+		},
+		{
+			name: "plain_http_extraheader",
+			setup: func(t *testing.T, repo, origin string) string {
+				t.Helper()
+				// Network ops run inside the clone: http.extraheader applies
+				// natively (no -c regex carry). insteadOf keeps this offline.
+				gittest.Git(t, repo, "remote", "set-url", "origin", "https://example.com/armature-ops-backup.git")
+				gittest.Git(t, repo, "config", "--local", "url."+origin+"/.insteadOf", "https://example.com/armature-ops-backup.git")
+				gittest.Git(t, repo, "config", "--local", "http.https://example.com/.extraheader", "AUTHORIZATION: bearer test-token")
+				return repo
+			},
+		},
+		{
+			name: "core_sshCommand_and_credential_helper",
+			setup: func(t *testing.T, repo, origin string) string {
+				t.Helper()
+				helperLog := filepath.Join(t.TempDir(), "cred-helper.log")
+				sshLog := filepath.Join(t.TempDir(), "ssh-cmd.log")
+				// Helpers are clone-local; insteadOf rewrites before network so
+				// they need not run — presence in config proves the class fix
+				// (ops run in clone, not a throwaway bare that lost them).
+				gittest.Git(t, repo, "config", "--local", "credential.helper",
+					fmt.Sprintf("!echo ran >>%q", helperLog))
+				gittest.Git(t, repo, "config", "--local", "core.sshCommand",
+					fmt.Sprintf("sh -c 'echo ran >>%q'", sshLog))
+				gittest.Git(t, repo, "remote", "set-url", "origin", "https://example.com/armature-ops-backup.git")
+				gittest.Git(t, repo, "config", "--local", "url."+origin+"/.insteadOf", "https://example.com/armature-ops-backup.git")
+				return repo
+			},
+		},
+		{
+			name: "worktree_config",
+			setup: func(t *testing.T, repo, origin string) string {
+				t.Helper()
+				wt := filepath.Join(t.TempDir(), "wt")
+				gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
+				// Worktree-local config + relative origin must resolve when
+				// Client points at the worktree path.
+				rel, err := filepath.Rel(wt, origin)
+				require.NoError(t, err)
+				gittest.Git(t, wt, "remote", "set-url", "origin", rel)
+				gittest.Git(t, wt, "config", "--local", "http.https://example.com/.extraheader", "X-Armature-Worktree: 1")
+				return wt
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fx := gittest.InitWithOrigin(t)
+			repo := fx.Dir
+			gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+			gittest.Git(t, repo, "checkout", "-b", "_armature")
+			gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+			gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+			tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+			clientRepo := tc.setup(t, repo, fx.Origin)
+			c := adapters.New(clientRepo)
+			bundle := filepath.Join(t.TempDir(), "old.bundle")
+			require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+			missing, originTip, recovered, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+			require.NoError(t, err, "clone-local network ops must honor clone/worktree config")
+			assert.False(t, missing)
+			assert.Equal(t, tip, originTip)
+			assert.Equal(t, tip, recovered)
+
+			// Temp staging cleaned up; never touch remotes tracking namespaces.
+			for _, ns := range []string{
+				"refs/armature-tmp",
+				"refs/remotes/origin/_armature-run",
+				"refs/remotes/backup/_armature-run",
+			} {
+				out, refErr := adapters.NonInteractiveGitCommand(clientRepo, "for-each-ref", "--format=%(refname)", ns).CombinedOutput()
+				require.NoError(t, refErr)
+				assert.Empty(t, strings.TrimSpace(string(out)), "must not leave %s after RestoreEvidence", ns)
+			}
+		})
+	}
+}
+
+func TestRestoreEvidence_MultiValuedOriginURL_SameEveryOp_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	firstURL := fx.Origin
+	gittest.Git(t, repo, "remote", "set-url", "origin", firstURL)
+	// Second URL is unreachable junk; last-wins config --get would break fetch.
+	gittest.Git(t, repo, "remote", "set-url", "--add", "origin", filepath.Join(t.TempDir(), "no-such-second.git"))
+
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	wrapperDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "remote-args.log")
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+log=%q
+# Log network probes: named remote "origin" only (no -c remote.origin.url= append).
+printf 'ARGV' >> "$log"
+for a in "$@"; do
+  printf ' %%s' "$a" >> "$log"
+done
+printf '\n' >> "$log"
+exec "$real_git" "$@"
+`, realGit, logPath)
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
+	c := adapters.New(repo).WithEnviron(append(os.Environ(), "PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH")))
+
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+	missing, originTip, recovered, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err, "first of multi-valued origin URL must be used for every network op")
+	assert.False(t, missing)
+	assert.Equal(t, tip, originTip)
+	assert.Equal(t, tip, recovered)
+
+	raw, readErr := os.ReadFile(logPath)
+	require.NoError(t, readErr)
+	logged := string(raw)
+	require.Contains(t, logged, "ls-remote")
+	// Named remote operand (not a bare URL) so remote.origin.* applies.
+	// Do not -c remote.origin.url= — git appends multi-valued keys.
+	assert.NotContains(t, logged, "remote.origin.url=")
+	assert.Regexp(t, `(?m)ls-remote(?:\s+--refs)?\s+origin\s+`, logged)
+	assert.Regexp(t, `(?m)fetch(?:\s+\S+)+\s+origin\s+`, logged)
+	assert.NotContains(t, logged, "ls-remote --refs "+firstURL)
+	assert.NotContains(t, logged, "fetch --no-tags --no-write-fetch-head --refmap= "+firstURL)
+	assert.Contains(t, logged, "--no-tags")
+}
+
+func TestRestoreEvidence_StalledRemoteTimesOut_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates shared network timeout
+	restoreTimeout := adapters.SetGitNetworkTimeoutForTest(100 * time.Millisecond)
+	defer restoreTimeout()
+
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	wrapperDir := t.TempDir()
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+for a in "$@"; do
+  case "$a" in
+    ls-remote)
+      # Child under same process group; Cancel must kill the group.
+      /bin/sleep 30 &
+      wait $!
+      exit 1
+      ;;
+  esac
+done
+exec "$real_git" "$@"
+`, realGit)
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
+	stalled := c.WithEnviron([]string{"PATH=" + wrapperDir})
+
+	start := time.Now()
+	_, _, _, _, _, restoreErr := stalled.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	elapsed := time.Since(start)
+	require.Error(t, restoreErr)
+	assert.Contains(t, restoreErr.Error(), "fail-closed")
+	assert.Less(t, elapsed, 3*time.Second, "stalled remote must fail-closed near timeout+WaitDelay")
+}
+
+// TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G: addressing
+// origin by name honors remote.origin.proxy; passing a URL would bypass it.
+func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates shared network timeout
+	restoreTimeout := adapters.SetGitNetworkTimeoutForTest(500 * time.Millisecond)
+	defer restoreTimeout()
+
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	var hits atomic.Int64
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() }) //nolint:errcheck // best-effort listener cleanup
+	go func() {
+		for {
+			conn, acceptErr := ln.Accept()
+			if acceptErr != nil {
+				return
+			}
+			hits.Add(1)
+			go func(c net.Conn) {
+				defer c.Close()               //nolint:errcheck // best-effort
+				_, _ = io.Copy(io.Discard, c) //nolint:errcheck // discard proxy bytes
+			}(conn)
+		}
+	}()
+
+	proxyURL := "http://" + ln.Addr().String()
+	gittest.Git(t, repo, "remote", "set-url", "origin", "http://proxied.invalid/o.git")
+	gittest.Git(t, repo, "config", "remote.origin.proxy", proxyURL)
+
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	// restore-plan network probes must dial the proxy (name path). URL path would
+	// DNS-fail proxied.invalid without touching the listener.
+	_, _, _, _, _, restoreErr := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.Error(t, restoreErr, "proxied.invalid via broken proxy must fail-closed")
+	assert.Greater(t, hits.Load(), int64(0), "remote.origin.proxy must be used (name-addressed remote)")
+
+	// FetchBranchToRef is the same class (snapshot refresh).
+	hits.Store(0)
+	fetchErr := c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proxyproof")
+	require.Error(t, fetchErr)
+	assert.Greater(t, hits.Load(), int64(0), "FetchBranchToRef must honor remote.origin.proxy")
+}
+
+// TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G: kill -9 leaves
+// refs/armature-tmp/<nonce>/; next run sweeps leaseless leftovers and never
+// deletes a concurrently live (leased) nonce.
+func TestRestoreEvidence_CrashSweepStaleTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	// Simulate kill -9 mid-run: leaseless staging refs remain.
+	gittest.Git(t, repo, "update-ref", "refs/armature-tmp/deadbeefcafebabe/bundle", tip)
+	gittest.Git(t, repo, "update-ref", "refs/armature-tmp/deadbeefcafebabe/origin", tip)
+
+	// Concurrent live nonce: lease with this process's pid + staging refs.
+	liveNonce := "livecafe01234567"
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "armature-tmp", liveNonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	require.NoError(t, os.WriteFile(leasePath, []byte(fmt.Sprintf("pid=%d\nstarted=%d\n", os.Getpid(), time.Now().Unix())), 0o600))
+	liveBundle := "refs/armature-tmp/" + liveNonce + "/bundle"
+	liveOrigin := "refs/armature-tmp/" + liveNonce + "/origin"
+	gittest.Git(t, repo, "update-ref", liveBundle, tip)
+	gittest.Git(t, repo, "update-ref", liveOrigin, tip)
+	t.Cleanup(func() {
+		_ = c.DeleteRef(liveBundle) //nolint:errcheck // best-effort live-nonce cleanup
+		_ = c.DeleteRef(liveOrigin) //nolint:errcheck // best-effort live-nonce cleanup
+		_ = os.Remove(leasePath)    //nolint:errcheck // best-effort lease cleanup
+	})
+
+	missing, originTip, recovered, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+	assert.False(t, missing)
+	assert.Equal(t, tip, originTip)
+	assert.Equal(t, tip, recovered)
+
+	out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", "refs/armature-tmp").CombinedOutput()
+	require.NoError(t, refErr)
+	left := strings.TrimSpace(string(out))
+	assert.NotContains(t, left, "deadbeefcafebabe", "leaseless crash leftovers must be swept")
+	assert.Contains(t, left, liveNonce+"/bundle", "live leased nonce must not be swept")
+	assert.Contains(t, left, liveNonce+"/origin", "live leased nonce must not be swept")
+}
+
+// TestBeginPerRunRef_SweepsStaleOriginRun_REQ_TOPTIER_S12_T1G covers the same
+// crash-safe class for snapshot's refs/remotes/origin/_armature-run/<nonce>.
+func TestBeginPerRunRef_SweepsStaleOriginRun_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	stale := "refs/remotes/origin/_armature-run/deadbeefcafebabe"
+	gittest.Git(t, repo, "update-ref", stale, tip)
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/_armature-run").CombinedOutput()
+	require.NoError(t, refErr)
+	left := strings.TrimSpace(string(out))
+	assert.NotContains(t, left, "deadbeefcafebabe")
+	assert.Contains(t, left, ref)
+}
+
+func TestBundleCreate_SweepsStaleWorkDir_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	stale := filepath.Join(gitDir, "armature-tmp-work", "deadbeefcafebabe")
+	require.NoError(t, os.MkdirAll(filepath.Join(stale, "bare.git"), 0o750))
+
+	bundle := filepath.Join(t.TempDir(), "out.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+	_, err := os.Stat(stale)
+	assert.True(t, os.IsNotExist(err), "leaseless work dir must be swept on next bundle create")
+}
+
+func TestBeginPerRunRef_SweepsMaxAgeLease_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	aged := "refs/remotes/origin/_armature-run/agedbeefcafebabe"
+	gittest.Git(t, repo, "update-ref", aged, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", "agedbeefcafebabe")
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	// Live pid but ancient started → max-age reclaim.
+	body := fmt.Sprintf("pid=%d\nstarted=1\n", os.Getpid())
+	require.NoError(t, os.WriteFile(leasePath, []byte(body), 0o600))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/_armature-run").CombinedOutput()
+	require.NoError(t, refErr)
+	left := strings.TrimSpace(string(out))
+	assert.NotContains(t, left, "agedbeefcafebabe", "max-age lease must be swept")
+	assert.Contains(t, left, ref)
+
+	_, _, err = c.BeginPerRunRef("")
+	require.Error(t, err)
+}
+
+func TestBundleVerify_SweepsDeadPidWorkLease_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "ok.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	deadNonce := "deadpid00cafebabe"
+	deadDir := filepath.Join(gitDir, "armature-tmp-work", deadNonce)
+	require.NoError(t, os.MkdirAll(filepath.Join(deadDir, "bare.git"), 0o750))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "tmp-work", deadNonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	require.NoError(t, os.WriteFile(leasePath, []byte("pid=999999999\nstarted=1\n"), 0o600))
+
+	require.NoError(t, c.BundleVerifyRestorable(bundle, "refs/heads/_armature"))
+	_, err := os.Stat(deadDir)
+	assert.True(t, os.IsNotExist(err), "dead-pid work dir must be swept")
+	_, err = os.Stat(leasePath)
+	assert.True(t, os.IsNotExist(err), "dead-pid lease must be removed")
+
+	// Idempotent release path via BeginPerRunRef.
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	require.NoError(t, c.UpdateRef(ref, tip))
+	release()
+	release()
+}
+
+func TestBeginPerRunRef_MalformedLeaseSwept_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	stale := "refs/remotes/origin/_armature-run/malformed00cafe"
+	gittest.Git(t, repo, "update-ref", stale, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", "malformed00cafe")
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	require.NoError(t, os.WriteFile(leasePath, []byte("not-a-lease\n"), 0o600))
+	// Aged unparseable lease is reclaimable (age backstop).
+	aged := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(leasePath, aged, aged))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/_armature-run").CombinedOutput()
+	require.NoError(t, refErr)
+	assert.NotContains(t, string(out), "malformed00cafe")
+}
+
+func TestBundleCreate_WorkDirMkdirFail_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	// Make armature-tmp-work a file so MkdirAll of a child fails.
+	workRoot := filepath.Join(gitDir, "armature-tmp-work")
+	require.NoError(t, os.WriteFile(workRoot, []byte("not-a-dir"), 0o600))
+	t.Cleanup(func() { _ = os.Remove(workRoot) }) //nolint:errcheck // best-effort fixture cleanup
+	err := c.BundleCreateAdvertised(filepath.Join(t.TempDir(), "x.bundle"), tip, "refs/heads/_armature")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "temp bare")
+}
+
+// TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G: leases live
+// in the common git directory so a sweep from worktree B cannot delete
+// worktree A's live staging refs (for-each-ref sees shared refs).
+func TestBeginPerRunRef_LinkedWorktreeLeaseVisible_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+
+	wt := filepath.Join(t.TempDir(), "linked-wt")
+	gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
+	t.Cleanup(func() {
+		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
+	})
+
+	mainClient := adapters.New(repo)
+	wtClient := adapters.New(wt)
+
+	mainCommon, err := mainClient.CommonGitDir()
+	require.NoError(t, err)
+	wtCommon, err := wtClient.CommonGitDir()
+	require.NoError(t, err)
+	require.Equal(t, mainCommon, wtCommon, "linked worktrees must share a common git dir")
+
+	// Worktree-private absolute-git-dir differs from common — the pre-fix bug.
+	wtAbs := strings.TrimSpace(runGitOutput(t, wt, "rev-parse", "--absolute-git-dir"))
+	require.NotEqual(t, wtAbs, mainCommon, "worktree private git dir must differ from common")
+
+	liveRef, releaseLive, err := mainClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer releaseLive()
+	require.NoError(t, mainClient.UpdateRef(liveRef, tip))
+
+	// Peer worktree starts a run (sweeps) while main's lease is live.
+	peerRef, releasePeer, err := wtClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer releasePeer()
+	require.NoError(t, wtClient.UpdateRef(peerRef, tip))
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", liveRef),
+		"live nonce from main worktree must survive peer worktree sweep")
+	assert.Equal(t, tip, runGitOutput(t, wt, "rev-parse", peerRef))
+	assert.NotEqual(t, liveRef, peerRef)
+
+	// Lease file must sit under the common dir (not the worktree-private git dir).
+	nonce := strings.TrimPrefix(liveRef, "refs/remotes/origin/_armature-run/")
+	leaseUnderCommon := filepath.Join(mainCommon, "armature-run-leases", "origin-run", nonce)
+	_, err = os.Stat(leaseUnderCommon)
+	require.NoError(t, err, "lease must be under common git dir")
+	leaseUnderPrivate := filepath.Join(wtAbs, "armature-run-leases", "origin-run", nonce)
+	_, err = os.Stat(leaseUnderPrivate)
+	assert.True(t, os.IsNotExist(err), "lease must not live under worktree-private git dir")
+}
+
+// TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G: end-to-end
+// class proof — overlapping snapshot from two linked worktrees both succeed.
+func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	// Defined in adapters_test so we can drive real adapters without importing opsbackup
+	// (opsbackup_test already covers same-clone overlap; this covers worktree visibility).
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	wt := filepath.Join(t.TempDir(), "ops-wt")
+	gittest.Git(t, repo, "worktree", "add", "-b", "ops-wt-branch", wt, "HEAD")
+	t.Cleanup(func() {
+		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
+	})
+
+	mainClient := adapters.New(repo)
+	wtClient := adapters.New(wt)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	refs := make([]string, 2)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ref, release, e := mainClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+		if e != nil {
+			errs[0] = e
+			return
+		}
+		defer release()
+		refs[0] = ref
+		if e = mainClient.FetchBranchToRef("_armature", ref); e != nil {
+			errs[0] = e
+			return
+		}
+		got, e := mainClient.ResolveRevision(ref)
+		if e != nil {
+			errs[0] = e
+			return
+		}
+		if got != tip {
+			errs[0] = fmt.Errorf("main tip %s want %s", got, tip)
+		}
+		// Hold briefly so peer sweep overlaps the live lease.
+		time.Sleep(50 * time.Millisecond)
+	}()
+	go func() {
+		defer wg.Done()
+		time.Sleep(10 * time.Millisecond)
+		ref, release, e := wtClient.BeginPerRunRef("refs/remotes/origin/_armature-run")
+		if e != nil {
+			errs[1] = e
+			return
+		}
+		defer release()
+		refs[1] = ref
+		if e = wtClient.FetchBranchToRef("_armature", ref); e != nil {
+			errs[1] = e
+			return
+		}
+		got, e := wtClient.ResolveRevision(ref)
+		if e != nil {
+			errs[1] = e
+			return
+		}
+		if got != tip {
+			errs[1] = fmt.Errorf("wt tip %s want %s", got, tip)
+		}
+	}()
+	wg.Wait()
+	require.NoError(t, errs[0], "main worktree run")
+	require.NoError(t, errs[1], "linked worktree run")
+	assert.NotEqual(t, refs[0], refs[1])
+}
+
+// TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G: wt2
+// restore-plan must not delete live run A's refs/armature-tmp/<nonce>/bundle.
+func TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	wt := filepath.Join(t.TempDir(), "restore-wt")
+	gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
+	t.Cleanup(func() {
+		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
+	})
+
+	mainClient := adapters.New(repo)
+	wtClient := adapters.New(wt)
+
+	common, err := mainClient.CommonGitDir()
+	require.NoError(t, err)
+	liveNonce := "livecafe01234567"
+	leasePath := filepath.Join(common, "armature-run-leases", "armature-tmp", liveNonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	require.NoError(t, os.WriteFile(leasePath, []byte(fmt.Sprintf("pid=%d\nstarted=%d\n", os.Getpid(), time.Now().Unix())), 0o600))
+	liveBundle := "refs/armature-tmp/" + liveNonce + "/bundle"
+	liveOrigin := "refs/armature-tmp/" + liveNonce + "/origin"
+	gittest.Git(t, repo, "update-ref", liveBundle, tip)
+	gittest.Git(t, repo, "update-ref", liveOrigin, tip)
+	t.Cleanup(func() {
+		_ = mainClient.DeleteRef(liveBundle) //nolint:errcheck // best-effort
+		_ = mainClient.DeleteRef(liveOrigin) //nolint:errcheck // best-effort
+		_ = os.Remove(leasePath)             //nolint:errcheck // best-effort
+	})
+
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, mainClient.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	_, _, _, _, _, err = wtClient.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", liveBundle),
+		"live armature-tmp bundle ref must survive peer worktree restore-plan sweep")
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", liveOrigin))
+}
+
+func TestBeginPerRunRef_Pid1LeaseNotSwept_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	nonce := "pid1beefcafebabe"
+	live := "refs/remotes/origin/_armature-run/" + nonce
+	gittest.Git(t, repo, "update-ref", live, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", nonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	body := fmt.Sprintf("pid=1\nstarted=%d\n", time.Now().Unix())
+	require.NoError(t, os.WriteFile(leasePath, []byte(body), 0o600))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", live),
+		"pid=1 lease (EPERM) must be treated alive and not swept")
+}
+
+func TestBeginPerRunRef_TruncatedFreshLeaseKept_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	nonce := "truncbeefcafebabe"
+	live := "refs/remotes/origin/_armature-run/" + nonce
+	gittest.Git(t, repo, "update-ref", live, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", nonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	// Truncated / empty body with fresh mtime → alive (atomic-write class).
+	require.NoError(t, os.WriteFile(leasePath, []byte("pid="), 0o600))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", live),
+		"truncated but fresh lease must not be swept")
+	_, err = os.Stat(leasePath)
+	require.NoError(t, err, "truncated fresh lease file must remain")
+}
+
+func TestBeginPerRunRef_NoStartedAgeBackstop_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	nonce := "nostart0cafebabe"
+	stale := "refs/remotes/origin/_armature-run/" + nonce
+	gittest.Git(t, repo, "update-ref", stale, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", nonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	// Live pid, no started line — age backstop uses mtime.
+	require.NoError(t, os.WriteFile(leasePath, []byte(fmt.Sprintf("pid=%d\n", os.Getpid())), 0o600))
+	aged := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(leasePath, aged, aged))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/_armature-run").CombinedOutput()
+	require.NoError(t, refErr)
+	assert.NotContains(t, string(out), nonce, "no-started + aged mtime must reclaim even with live pid")
+}
+
+func TestOpsBackupFetches_NoTagsPreservesClone_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "tag", "local-only-tag")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	// Origin advertises a tag the clone does not have — fetch without --no-tags
+	// would auto-follow and mutate the clone.
+	gittest.Git(t, fx.Origin, "tag", "origin-only-tag", "refs/heads/_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	beforeRefs := snapshotRefsAndTags(t, repo)
+
+	dst := "refs/remotes/origin/_armature-run/notagsproof"
+	require.NoError(t, c.FetchBranchToRef("_armature", dst))
+	afterFetch := snapshotRefsAndTags(t, repo)
+	// Per-run destination is expected; strip it for the identity compare.
+	delete(afterFetch, dst)
+	assert.Equal(t, beforeRefs, afterFetch, "FetchBranchToRef must leave refs+tags unchanged aside from dst")
+
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+	beforeRestore := snapshotRefsAndTags(t, repo)
+	_, _, _, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+	afterRestore := snapshotRefsAndTags(t, repo)
+	assert.Equal(t, beforeRestore, afterRestore, "RestoreEvidence must leave refs+tags byte-identical")
+	assert.NotContains(t, afterRestore, "refs/tags/origin-only-tag")
+	assert.Contains(t, afterRestore, "refs/tags/local-only-tag")
+}
+
+func snapshotRefsAndTags(t *testing.T, repo string) map[string]string {
+	t.Helper()
+	out, err := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname) %(objectname)").CombinedOutput()
+	require.NoError(t, err)
+	got := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		require.GreaterOrEqual(t, len(fields), 2)
+		got[fields[0]] = fields[1]
+	}
+	return got
+}
+
+// TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G: crash mid
+// atomic lease write leaves .<nonce>-*.tmp drafts that leaseNonceName skips;
+// aged temps must still be reclaimed.
+func TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	c := adapters.New(repo)
+
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leaseRoot := filepath.Join(gitDir, "armature-run-leases", "origin-run")
+	require.NoError(t, os.MkdirAll(leaseRoot, 0o750))
+	agedTmp := filepath.Join(leaseRoot, ".deadbeefcafebabe-123456.tmp")
+	freshTmp := filepath.Join(leaseRoot, ".livecafe01234567-654321.tmp")
+	require.NoError(t, os.WriteFile(agedTmp, []byte("pid=1\n"), 0o600))
+	require.NoError(t, os.WriteFile(freshTmp, []byte("pid=1\n"), 0o600))
+	aged := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(agedTmp, aged, aged))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	_ = ref
+
+	_, err = os.Stat(agedTmp)
+	assert.True(t, os.IsNotExist(err), "aged .tmp lease draft must be swept")
+	_, err = os.Stat(freshTmp)
+	require.NoError(t, err, "fresh .tmp lease draft (live write) must be kept")
+	t.Cleanup(func() { _ = os.Remove(freshTmp) }) //nolint:errcheck // best-effort
 }
