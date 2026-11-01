@@ -30,7 +30,9 @@ const (
 	leaseKindWork        = "tmp-work"
 
 	// runLeaseMaxAgeSec is an absolute ceiling for a lease even if the pid
-	// still appears alive (pid reuse). Ops-backup runs finish in seconds.
+	// still appears alive (pid reuse / Windows FindProcess always-alive /
+	// missing started line). Ops-backup runs finish in seconds; age is the
+	// cross-platform reclaim backstop so nothing leaks forever.
 	runLeaseMaxAgeSec int64 = 3600
 )
 
@@ -139,16 +141,49 @@ func (c *Client) leasePath(kind, nonce string) (string, error) {
 	return filepath.Join(common, runLeaseDir, kind, nonce), nil
 }
 
+// writeRunLease atomically publishes a lease via temp file + rename so a
+// concurrent reader never observes a truncated body from a live writer.
 func (c *Client) writeRunLease(kind, nonce string) error {
 	path, err := c.leasePath(kind, nonce)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 	body := fmt.Sprintf("pid=%d\nstarted=%d\n", os.Getpid(), clock.System())
-	return os.WriteFile(path, []byte(body), 0o600)
+	tmp, err := os.CreateTemp(dir, "."+nonce+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpName) //nolint:errcheck // best-effort
+		}
+	}()
+	if _, err := tmp.Write([]byte(body)); err != nil {
+		_ = tmp.Close() //nolint:errcheck // best-effort
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close() //nolint:errcheck // best-effort
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close() //nolint:errcheck // best-effort
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 func (c *Client) removeRunLease(kind, nonce string) error {
@@ -165,17 +200,31 @@ func (c *Client) leaseIsLive(kind, nonce string) bool {
 	if err != nil {
 		return false
 	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
 	raw, err := os.ReadFile(path) //nolint:gosec // G304: path under common git dir from our nonce
 	if err != nil {
 		return false
 	}
+	now := clock.System()
 	pid, started, ok := parseRunLease(string(raw))
-	if !ok {
+
+	// Age backstop on every platform: prefer started= when present; otherwise
+	// file mtime (covers missing started line and Windows always-alive pids).
+	ageStart := info.ModTime().Unix()
+	if started > 0 {
+		ageStart = started
+	}
+	if now-ageStart > runLeaseMaxAgeSec {
 		return false
 	}
-	now := clock.System()
-	if started > 0 && now-started > runLeaseMaxAgeSec {
-		return false
+
+	// Unparseable/empty but within the age window → treat as live so a
+	// truncated mid-write (or crash before rename cleanup) is never swept.
+	if !ok {
+		return true
 	}
 	return pidAlive(pid)
 }
@@ -199,6 +248,21 @@ func parseRunLease(body string) (pid int, started int64, ok bool) {
 		}
 	}
 	return pid, started, pid > 0
+}
+
+// leaseNonceName reports whether name looks like a published lease nonce
+// (16 hex chars). Skips CreateTemp leftovers (.<nonce>-*.tmp) under the
+// lease directory.
+func leaseNonceName(name string) bool {
+	if len(name) != 16 {
+		return false
+	}
+	for _, r := range name {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Client) sweepStaleRefNS(ns, kind string) {
@@ -227,9 +291,10 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 		entries, readErr := os.ReadDir(leaseRoot)
 		if readErr == nil {
 			for _, e := range entries {
-				if !e.IsDir() && e.Name() != "" {
-					nonces[e.Name()] = struct{}{}
+				if e.IsDir() || !leaseNonceName(e.Name()) {
+					continue
 				}
+				nonces[e.Name()] = struct{}{}
 			}
 		}
 	}
@@ -286,7 +351,7 @@ func (c *Client) sweepStaleWorkDirs() {
 		return
 	}
 	for _, e := range leaseEntries {
-		if e.IsDir() {
+		if e.IsDir() || !leaseNonceName(e.Name()) {
 			continue
 		}
 		nonce := e.Name()

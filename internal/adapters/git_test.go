@@ -2189,7 +2189,7 @@ func TestRestoreEvidence_MultiValuedOriginURL_SameEveryOp_REQ_TOPTIER_S12_T1G(t 
 	script := fmt.Sprintf(`#!/bin/sh
 real_git=%q
 log=%q
-# Log network probes: expect named remote "origin" plus -c remote.origin.url=<first>.
+# Log network probes: named remote "origin" only (no -c remote.origin.url= append).
 printf 'ARGV' >> "$log"
 for a in "$@"; do
   printf ' %%s' "$a" >> "$log"
@@ -2212,12 +2212,14 @@ exec "$real_git" "$@"
 	require.NoError(t, readErr)
 	logged := string(raw)
 	require.Contains(t, logged, "ls-remote")
-	require.Contains(t, logged, "remote.origin.url="+firstURL, "must pin first URL via -c")
 	// Named remote operand (not a bare URL) so remote.origin.* applies.
+	// Do not -c remote.origin.url= — git appends multi-valued keys.
+	assert.NotContains(t, logged, "remote.origin.url=")
 	assert.Regexp(t, `(?m)ls-remote(?:\s+--refs)?\s+origin\s+`, logged)
 	assert.Regexp(t, `(?m)fetch(?:\s+\S+)+\s+origin\s+`, logged)
 	assert.NotContains(t, logged, "ls-remote --refs "+firstURL)
-	assert.NotContains(t, logged, "fetch --no-write-fetch-head --refmap= "+firstURL)
+	assert.NotContains(t, logged, "fetch --no-tags --no-write-fetch-head --refmap= "+firstURL)
+	assert.Contains(t, logged, "--no-tags")
 }
 
 func TestRestoreEvidence_StalledRemoteTimesOut_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates shared network timeout
@@ -2489,6 +2491,9 @@ func TestBeginPerRunRef_MalformedLeaseSwept_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", "malformed00cafe")
 	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
 	require.NoError(t, os.WriteFile(leasePath, []byte("not-a-lease\n"), 0o600))
+	// Aged unparseable lease is reclaimable (age backstop).
+	aged := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(leasePath, aged, aged))
 
 	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
 	require.NoError(t, err)
@@ -2650,4 +2655,187 @@ func TestOpsBackup_LinkedWorktreeConcurrentSnapshot_REQ_TOPTIER_S12_T1G(t *testi
 	require.NoError(t, errs[0], "main worktree run")
 	require.NoError(t, errs[1], "linked worktree run")
 	assert.NotEqual(t, refs[0], refs[1])
+}
+
+// TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G: wt2
+// restore-plan must not delete live run A's refs/armature-tmp/<nonce>/bundle.
+func TestRestoreEvidence_LinkedWorktreeKeepsPeerTmpRefs_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	wt := filepath.Join(t.TempDir(), "restore-wt")
+	gittest.Git(t, repo, "worktree", "add", "--detach", wt, "HEAD")
+	t.Cleanup(func() {
+		_ = adapters.NonInteractiveGitCommand(repo, "worktree", "remove", "--force", wt).Run() //nolint:errcheck // best-effort
+	})
+
+	mainClient := adapters.New(repo)
+	wtClient := adapters.New(wt)
+
+	common, err := mainClient.CommonGitDir()
+	require.NoError(t, err)
+	liveNonce := "livecafe01234567"
+	leasePath := filepath.Join(common, "armature-run-leases", "armature-tmp", liveNonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	require.NoError(t, os.WriteFile(leasePath, []byte(fmt.Sprintf("pid=%d\nstarted=%d\n", os.Getpid(), time.Now().Unix())), 0o600))
+	liveBundle := "refs/armature-tmp/" + liveNonce + "/bundle"
+	liveOrigin := "refs/armature-tmp/" + liveNonce + "/origin"
+	gittest.Git(t, repo, "update-ref", liveBundle, tip)
+	gittest.Git(t, repo, "update-ref", liveOrigin, tip)
+	t.Cleanup(func() {
+		_ = mainClient.DeleteRef(liveBundle) //nolint:errcheck // best-effort
+		_ = mainClient.DeleteRef(liveOrigin) //nolint:errcheck // best-effort
+		_ = os.Remove(leasePath)             //nolint:errcheck // best-effort
+	})
+
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, mainClient.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	_, _, _, _, _, err = wtClient.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", liveBundle),
+		"live armature-tmp bundle ref must survive peer worktree restore-plan sweep")
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", liveOrigin))
+}
+
+func TestBeginPerRunRef_Pid1LeaseNotSwept_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	nonce := "pid1beefcafebabe"
+	live := "refs/remotes/origin/_armature-run/" + nonce
+	gittest.Git(t, repo, "update-ref", live, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", nonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	body := fmt.Sprintf("pid=1\nstarted=%d\n", time.Now().Unix())
+	require.NoError(t, os.WriteFile(leasePath, []byte(body), 0o600))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", live),
+		"pid=1 lease (EPERM) must be treated alive and not swept")
+}
+
+func TestBeginPerRunRef_TruncatedFreshLeaseKept_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	nonce := "truncbeefcafebabe"
+	live := "refs/remotes/origin/_armature-run/" + nonce
+	gittest.Git(t, repo, "update-ref", live, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", nonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	// Truncated / empty body with fresh mtime → alive (atomic-write class).
+	require.NoError(t, os.WriteFile(leasePath, []byte("pid="), 0o600))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", live),
+		"truncated but fresh lease must not be swept")
+	_, err = os.Stat(leasePath)
+	require.NoError(t, err, "truncated fresh lease file must remain")
+}
+
+func TestBeginPerRunRef_NoStartedAgeBackstop_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	tip := runGitOutput(t, repo, "rev-parse", "HEAD")
+	c := adapters.New(repo)
+
+	nonce := "nostart0cafebabe"
+	stale := "refs/remotes/origin/_armature-run/" + nonce
+	gittest.Git(t, repo, "update-ref", stale, tip)
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leasePath := filepath.Join(gitDir, "armature-run-leases", "origin-run", nonce)
+	require.NoError(t, os.MkdirAll(filepath.Dir(leasePath), 0o750))
+	// Live pid, no started line — age backstop uses mtime.
+	require.NoError(t, os.WriteFile(leasePath, []byte(fmt.Sprintf("pid=%d\n", os.Getpid())), 0o600))
+	aged := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(leasePath, aged, aged))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	require.NoError(t, c.UpdateRef(ref, tip))
+
+	out, refErr := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/_armature-run").CombinedOutput()
+	require.NoError(t, refErr)
+	assert.NotContains(t, string(out), nonce, "no-started + aged mtime must reclaim even with live pid")
+}
+
+func TestOpsBackupFetches_NoTagsPreservesClone_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "tag", "local-only-tag")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	// Origin advertises a tag the clone does not have — fetch without --no-tags
+	// would auto-follow and mutate the clone.
+	gittest.Git(t, fx.Origin, "tag", "origin-only-tag", "refs/heads/_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	beforeRefs := snapshotRefsAndTags(t, repo)
+
+	dst := "refs/remotes/origin/_armature-run/notagsproof"
+	require.NoError(t, c.FetchBranchToRef("_armature", dst))
+	afterFetch := snapshotRefsAndTags(t, repo)
+	// Per-run destination is expected; strip it for the identity compare.
+	delete(afterFetch, dst)
+	assert.Equal(t, beforeRefs, afterFetch, "FetchBranchToRef must leave refs+tags unchanged aside from dst")
+
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+	beforeRestore := snapshotRefsAndTags(t, repo)
+	_, _, _, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err)
+	afterRestore := snapshotRefsAndTags(t, repo)
+	assert.Equal(t, beforeRestore, afterRestore, "RestoreEvidence must leave refs+tags byte-identical")
+	assert.NotContains(t, afterRestore, "refs/tags/origin-only-tag")
+	assert.Contains(t, afterRestore, "refs/tags/local-only-tag")
+}
+
+func snapshotRefsAndTags(t *testing.T, repo string) map[string]string {
+	t.Helper()
+	out, err := adapters.NonInteractiveGitCommand(repo, "for-each-ref", "--format=%(refname) %(objectname)").CombinedOutput()
+	require.NoError(t, err)
+	got := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		require.GreaterOrEqual(t, len(fields), 2)
+		got[fields[0]] = fields[1]
+	}
+	return got
 }

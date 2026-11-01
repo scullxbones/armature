@@ -780,10 +780,11 @@ not automate on a schedule):
 What `arm ops-backup` does guarantee when it exits 0:
 
 - `snapshot` refreshed the published tip with
-  `FetchBranchToRef` (`git -c remote.origin.url=<first> fetch --refmap= origin
-  +refs/heads/_armature:<dst>` — named remote so `remote.origin.*` applies;
-  empty `--refmap=` so the remote's configured refspec cannot also touch the
-  shared tip), into a **per-run** destination under
+  `FetchBranchToRef` (`git fetch --no-tags --refmap= origin
+  +refs/heads/_armature:<dst>` — named remote so `remote.origin.*` applies and
+  multi-valued URLs stay first-wins; empty `--refmap=` so the remote's
+  configured refspec cannot also touch the shared tip; `--no-tags` so the
+  clone's tag set is unchanged), into a **per-run** destination under
   `refs/remotes/origin/_armature-run/<nonce>` (live-pid lease; never writes
   `refs/remotes/origin/_armature`), then wrote a bundle that advertises
   restorable `refs/heads/_armature`. Refresh failure is fail-closed (no
@@ -793,9 +794,9 @@ What `arm ops-backup` does guarantee when it exits 0:
   restorable (fetch into a throwaway bare — not header-only `list-heads`).
 - `restore-plan` compares the bundle tip to `origin/_armature` with network
   git inside the user's clone (clone transport/config applies natively —
-  network probes address the named `origin` remote with the first URL pinned
-  via `-c remote.origin.url=…` so `remote.origin.*` such as `proxy` /
-  `tagOpt` apply) and per-call `refs/armature-tmp/<run-id>/` staging (live-pid
+  network probes address the named `origin` remote so `remote.origin.*` such
+  as `proxy` / `tagOpt` apply; first of multi-valued URLs wins; `--no-tags`
+  on every fetch) and per-call `refs/armature-tmp/<run-id>/` staging (live-pid
   lease; never `refs/remotes/origin/*` or user branches), so overlapping runs
   cannot cross-read each other's refs. Prints
   `missing | fast-forward | already-contained | diverge→_armature-recovered`.

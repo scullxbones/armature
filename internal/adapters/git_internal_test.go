@@ -311,11 +311,19 @@ func TestParseRunLeaseAndPidAlive_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	}
 }
 
-func TestParseRunLeaseStartedRequired_REQ_TOPTIER_S12_T1G(t *testing.T) {
+func TestParseRunLeaseStartedOptional_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
-	// pid alone is enough for ok (started defaults 0); max-age only applies when started>0.
+	// pid alone is enough for ok (started defaults 0); age backstop then uses mtime.
 	pid, started, ok := parseRunLease("pid=7\n")
 	if !ok || pid != 7 || started != 0 {
 		t.Fatalf("got pid=%d started=%d ok=%v", pid, started, ok)
+	}
+}
+
+func TestPidAlive_EPERMTreatedAlive_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	// pid 1 exists; Signal(0) returns EPERM for unprivileged callers — must be alive.
+	if !pidAlive(1) {
+		t.Fatal("pidAlive(1) must be true (EPERM means process exists)")
 	}
 }

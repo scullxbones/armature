@@ -814,17 +814,19 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	if branch == "" || dstRef == "" {
 		return fmt.Errorf("fetch branch to ref: branch and destination ref are required")
 	}
+	// Fail-fast if origin has no URL; fetch addresses the named remote so
+	// remote.origin.* (proxy, tagOpt, …) applies and multi-valued URLs stay
+	// first-wins (git fetch by name). Do not -c remote.origin.url= — that
+	// appends a value and does not override.
 	remoteURL, err := c.firstRemoteURL("origin")
 	if err != nil {
 		return fmt.Errorf("fetch branch to ref: %w", err)
 	}
 	spec := "+refs/heads/" + branch + ":" + dstRef
-	// Address remote by name so remote.origin.* (proxy, tagOpt, …) applies;
-	// pin first URL via -c so multi-valued remotes stay consistent across probes.
-	cmd, cancel := c.networkCmdPinnedRemote("origin", remoteURL, "fetch", "--no-write-fetch-head", "--refmap=", "origin", spec)
+	cmd, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
 	defer cancel()
 	if out, err := cmd.CombinedOutput(); err != nil {
-		wrapped := fmt.Errorf("git fetch origin %s: %w\n%s", branch, err, out)
+		wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", branch, remoteURL, err, out)
 		if remoteRefMissingText(string(out)) || remoteRefMissingText(err.Error()) {
 			return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
 		}
@@ -842,18 +844,6 @@ func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.CancelFunc) {
 	cmd := c.cmdContext(ctx, args...)
 	configureNetworkCmd(cmd)
 	return cmd, cancel
-}
-
-// networkCmdPinnedRemote addresses a named remote (so remote.<name>.* applies)
-// while pinning the resolved first URL with -c remote.<name>.url=<url>. Git's
-// -c appends for multi-valued keys; fetch/ls-remote by name still select the
-// first configured URL (same as firstRemoteURL). The pin keeps the resolved
-// URL on argv for audit and matches the multi-valued class contract.
-func (c *Client) networkCmdPinnedRemote(name, url string, args ...string) (*exec.Cmd, context.CancelFunc) {
-	pinned := make([]string, 0, len(args)+2)
-	pinned = append(pinned, "-c", "remote."+name+".url="+url)
-	pinned = append(pinned, args...)
-	return c.networkCmd(pinned...)
 }
 
 func (c *Client) RevListCount(rangeSpec string) (int, error) {
@@ -1561,7 +1551,7 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	}
 	bareClient := New(bare).WithEnviron(c.environ)
 	spec := "+" + wantRef + ":" + wantRef
-	if out, fetchErr := bareClient.cmd("fetch", abs, spec).CombinedOutput(); fetchErr != nil {
+	if out, fetchErr := bareClient.cmd("fetch", "--no-tags", abs, spec).CombinedOutput(); fetchErr != nil {
 		return fmt.Errorf("git fetch bundle into verify bare %s: %w\n%s", spec, fetchErr, out)
 	}
 	return nil
@@ -1577,8 +1567,8 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 //
 // Origin absence is structural: ls-remote empty stdout → missing. Unreachable
 // origin / other failures return err (fail-closed). Network probes address the
-// named origin remote (so remote.origin.* applies) and pin the first
-// remote.origin.url via -c (multi-valued: first wins).
+// named origin remote so remote.origin.* applies; multi-valued remote URLs
+// stay first-wins (do not -c remote.origin.url= — that appends).
 func (c *Client) RestoreEvidence(
 	bundlePath, advertiseRef, opsBranch string,
 ) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error) {
@@ -1598,15 +1588,14 @@ func (c *Client) RestoreEvidence(
 	bundleTmp := tmpNS + "/bundle"
 	originTmp := tmpNS + "/origin"
 
-	// One resolution for every network op in this call (ls-remote + fetch).
 	remoteURL, urlErr := c.firstRemoteURL("origin")
 	if urlErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: origin URL: %w", urlErr)
 	}
 
-	_, exists, lsErr := c.lsRemoteRef("origin", remoteURL, remoteRef)
+	_, exists, lsErr := c.lsRemoteRef("origin", remoteRef)
 	if lsErr != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: ls-remote origin %s failed (fail-closed): %w", remoteRef, lsErr)
+		return false, "", "", false, false, fmt.Errorf("restore evidence: ls-remote origin %s (first-url %s) failed (fail-closed): %w", remoteRef, remoteURL, lsErr)
 	}
 
 	absBundle, absErr := filepath.Abs(bundlePath)
@@ -1614,7 +1603,7 @@ func (c *Client) RestoreEvidence(
 		return false, "", "", false, false, fmt.Errorf("restore evidence: abs bundle: %w", absErr)
 	}
 	bundleSpec := "+" + advertiseRef + ":" + bundleTmp
-	if out, fetchErr := c.cmd("fetch", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
+	if out, fetchErr := c.cmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
 	}
 	recovered, err = c.ResolveRevision(bundleTmp)
@@ -1629,10 +1618,12 @@ func (c *Client) RestoreEvidence(
 	}
 
 	originSpec := "+" + remoteRef + ":" + originTmp
-	cmd, cancel := c.networkCmdPinnedRemote("origin", remoteURL, "fetch", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
+	cmd, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
 	defer cancel()
 	if out, fetchErr := cmd.CombinedOutput(); fetchErr != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: fetch origin %s failed (fail-closed): %w\n%s", remoteRef, fetchErr, out)
+		return false, "", "", false, false, fmt.Errorf(
+			"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
+			remoteRef, remoteURL, fetchErr, out)
 	}
 	originTip, err = c.ResolveRevision(originTmp)
 	if err != nil {
@@ -1655,11 +1646,10 @@ func (c *Client) RestoreEvidence(
 
 // lsRemoteRef reports whether the named remote advertises ref. Exit 0 + empty
 // stdout means reachable remote, ref absent. Non-zero exit (unreachable, auth,
-// …) is an error. url is the firstRemoteURL pin passed via -c so multi-valued
-// remotes stay consistent; the remote operand is always the name so
-// remote.<name>.* applies.
-func (c *Client) lsRemoteRef(name, url, ref string) (sha string, exists bool, err error) {
-	cmd, cancel := c.networkCmdPinnedRemote(name, url, "ls-remote", "--refs", name, ref)
+// …) is an error. The remote operand is always the name so remote.<name>.*
+// applies; multi-valued URLs stay first-wins.
+func (c *Client) lsRemoteRef(name, ref string) (sha string, exists bool, err error) {
+	cmd, cancel := c.networkCmd("ls-remote", "--refs", name, ref)
 	defer cancel()
 	out, runErr := cmd.CombinedOutput()
 	if runErr != nil {
