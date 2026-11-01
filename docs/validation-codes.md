@@ -716,15 +716,20 @@ git -C .armature rebase origin/_armature
 
 **Fix:** Tree-walk pending descendants (never `arm merged` on a non-leaf):
 ```bash
-# done unmerged leaf (same truth as sync legacy):
+# done unmerged leaf — fill real SHAs when knowable; else keep <sha> template
+# (legacy done with no claim/delivery provenance; placeholders fail DELIVERY-1):
 arm delivery record --issue <leaf-id> --base <sha> --tip <sha>
 
-# open / unfinished leaf:
-arm claim --issue <open-id>
+# open leaf under a merged ancestor (inconsistent tree — do not claim):
+arm reopen --issue <merged-ancestor-id>
+# OR cancel/reparent the open child:
+arm transition --issue <open-id> --to cancelled --force
 
-# non-leaf whose children are all merged:
-arm reopen --issue <non-leaf-id>
+# open leaf with no merged ancestor (--worktree required; omit value for canonical path):
+arm claim --issue <open-id> --worktree
 ```
+All-merged children under a non-leaf are promoted by materialize rollup; there is
+no reopen argv for that shape.
 
 ---
 

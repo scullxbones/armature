@@ -9,7 +9,6 @@ import (
 
 	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/stretchr/testify/assert"
@@ -183,20 +182,37 @@ func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.
 	}
 }
 
-func TestDoctorCheckGuidance_D14FallbackAndChildrenMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
+func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	_, fallback := doctorCheckGuidance("D14")
 	assert.Equal(t, []string{promotion.FallbackGuidance}, fallback)
 
-	index := materialize.Index{
-		"P": {Status: "merged", Type: "epic", Children: []string{"R"}},
-		"R": {Status: "done", Type: "story", Parent: "P", Children: []string{"C"}},
-		"C": {Status: "merged", Type: "task", Parent: "R"},
+	// All-merged descendants under a done non-leaf: rollup owns promotion;
+	// explain falls back (no dead "reopen children-merged" argv).
+	allMerged := promotion.Graph{
+		"P": {Status: "merged", Children: []string{"R"}},
+		"R": {Status: "done", Parent: "P", Children: []string{"C"}},
+		"C": {Status: "merged", Parent: "R"},
 	}
-	_, sug := doctorCheckGuidanceFor(doctor.Finding{
+	expl, sug := doctorCheckGuidanceFor(doctor.Finding{
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> P"},
-	}, index)
-	assert.Equal(t, []string{promotion.ChildrenMergedGuidance}, sug)
+	}, allMerged)
+	assert.Equal(t, []string{promotion.FallbackGuidance}, sug)
+	assert.NotContains(t, expl, "children are merged")
+
+	// Open leaf under merged ancestor → tree repair (reopen OR cancel), never claim.
+	repair := promotion.Graph{
+		"E": {Status: "merged", Children: []string{"R"}},
+		"R": {Status: "done", Parent: "E", Children: []string{"O"}},
+		"O": {Status: "open", Parent: "R"},
+	}
+	expl, sug = doctorCheckGuidanceFor(doctor.Finding{
+		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"R -> E"},
+	}, repair)
+	assert.Contains(t, expl, promotion.TreeRepairGuidance)
+	assert.Contains(t, sug, "arm reopen --issue E")
+	assert.Contains(t, sug, "arm transition --issue O --to cancelled --force")
+	assert.NotContains(t, sug, "arm claim --issue O")
 }
 
 func TestDoctorExitsWhenOpsWorktreeBehindOrigin(t *testing.T) {

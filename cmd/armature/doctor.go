@@ -14,7 +14,6 @@ import (
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/doctor"
 	armerrors "github.com/scullxbones/armature/internal/errors"
-	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/spf13/cobra"
@@ -89,24 +88,26 @@ func newDoctorCmd() *cobra.Command {
 				return mapDoctorLoadError(err)
 			}
 
-			var explainIndex materialize.Index
+			var explainGraph promotion.Graph
 			if explain {
-				// Run already rematerialized; load index for shape-aware remediations
-				// (e.g. D14 leaf vs non-leaf). Fail closed if explain cannot classify.
-				explainIndex, err = newSnapshotStore(appCtx).ReadIndex()
-				if err != nil {
-					return mapDoctorLoadError(err)
+				// Run already rematerialized; read on-disk issues for Base/Tip
+				// without a second materialize write. Fail closed if explain cannot classify.
+				store := newSnapshotStore(appCtx)
+				explainIndex, indexErr := store.ReadIndex()
+				if indexErr != nil {
+					return mapDoctorLoadError(indexErr)
 				}
+				explainGraph = promotionGraphFromStore(store, explainIndex)
 			}
 
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
 
 			if isStructuredFormat(format) {
-				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain, explainIndex); err != nil {
+				if err := writeDoctorEnvelope(cmd.OutOrStdout(), report, explain, explainGraph); err != nil {
 					return err
 				}
 			} else {
-				renderDoctorHuman(cmd, report, verbose, explain, explainIndex)
+				renderDoctorHuman(cmd, report, verbose, explain, explainGraph)
 			}
 
 			// Doctor report is not a Command Failure (ADR 0020 §7).
@@ -205,7 +206,7 @@ type doctorCheckRow struct {
 	Suggested    []string        `json:"suggested,omitempty"`
 }
 
-func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, index materialize.Index) error {
+func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, graph promotion.Graph) error {
 	rows := make([]doctorCheckRow, 0, len(report.Checks))
 	for _, f := range report.Checks {
 		row := doctorCheckRow{
@@ -216,7 +217,7 @@ func writeDoctorEnvelope(w io.Writer, report doctor.Report, explain bool, index 
 			VerboseItems: f.VerboseItems,
 		}
 		if explain && f.Severity != doctor.SeverityOK {
-			row.Explanation, row.Suggested = doctorCheckGuidanceFor(f, index)
+			row.Explanation, row.Suggested = doctorCheckGuidanceFor(f, graph)
 		}
 		rows = append(rows, row)
 	}
@@ -230,7 +231,7 @@ func doctorHelp(report doctor.Report) []string {
 	return []string{doctorCodesHelp}
 }
 
-func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool, index materialize.Index) {
+func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explain bool, graph promotion.Graph) {
 	for _, f := range report.Checks {
 		icon := "✓"
 		switch f.Severity {
@@ -241,7 +242,7 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s %s: %s\n", icon, f.Check, f.Message)
 		if explain && f.Severity != doctor.SeverityOK {
-			explanation, suggested := doctorCheckGuidanceFor(f, index)
+			explanation, suggested := doctorCheckGuidanceFor(f, graph)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Explanation: %s\n", explanation)
 			for _, s := range suggested {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    Suggested: %s\n", s)
@@ -262,7 +263,7 @@ func doctorCheckGuidance(check string) (explanation string, suggested []string) 
 	return doctorCheckGuidanceFor(doctor.Finding{Check: check}, nil)
 }
 
-func doctorCheckGuidanceFor(f doctor.Finding, index materialize.Index) (explanation string, suggested []string) {
+func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph) (explanation string, suggested []string) {
 	switch f.Check {
 	case "D1":
 		return "Git commits reference issue IDs that are not done or merged, so history and the issue graph have drifted.",
@@ -303,7 +304,7 @@ func doctorCheckGuidanceFor(f doctor.Finding, index materialize.Index) (explanat
 				"the lag number may be stale. Warnings are ignored; behind is an error.",
 			[]string{"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"}
 	case "D14":
-		return d14Guidance(f, index)
+		return d14Guidance(f, graph)
 	default:
 		return "Doctor reported a non-OK check; see the validation codes reference for remediation.",
 			[]string{"see docs/validation-codes.md"}
@@ -315,33 +316,27 @@ const d14Explanation = "An issue is still done while its parent is already merge
 
 // d14Guidance keeps the broad D14 warning and uses the shared tree-walk
 // remediations (same truth as MERGED-1 / sync). suggested is one command (or
-// one guidance sentence) — never a "; "-joined argv list.
-func d14Guidance(f doctor.Finding, index materialize.Index) (explanation string, suggested []string) {
+// one guidance sentence) per entry — never a "; "-joined argv list.
+func d14Guidance(f doctor.Finding, graph promotion.Graph) (explanation string, suggested []string) {
 	explanation = d14Explanation
-	if len(f.Items) == 0 || index == nil {
+	if len(f.Items) == 0 || graph == nil {
 		return explanation, []string{promotion.FallbackGuidance}
 	}
 
-	graph := promotionGraphFromIndex(index)
 	seenCmd := map[string]bool{}
 	var cmds []string
-	var sawNonLeaf bool
-	var sawNonLeafAllMerged bool
+	var needsTreeRepair bool
 	for _, item := range f.Items {
 		id, _, ok := strings.Cut(item, " -> ")
 		if !ok || id == "" {
 			id = item
 		}
-		entry, ok := index[id]
-		if ok && len(entry.Children) > 0 {
-			sawNonLeaf = true
-		}
 		acts := promotion.RemediationsForIssue(id, graph)
-		if len(acts) == 0 && ok && len(entry.Children) > 0 {
-			sawNonLeafAllMerged = true
-			continue
-		}
 		for _, cmd := range acts {
+			if strings.HasPrefix(cmd, "arm reopen --issue ") ||
+				(strings.HasPrefix(cmd, "arm transition --issue ") && strings.Contains(cmd, "--to cancelled")) {
+				needsTreeRepair = true
+			}
 			if seenCmd[cmd] {
 				continue
 			}
@@ -350,11 +345,11 @@ func d14Guidance(f doctor.Finding, index materialize.Index) (explanation string,
 		}
 	}
 	sort.Strings(cmds)
+	if needsTreeRepair {
+		explanation = d14Explanation + " " + promotion.TreeRepairGuidance
+	}
 	if len(cmds) > 0 {
 		return explanation, cmds
-	}
-	if sawNonLeafAllMerged || sawNonLeaf {
-		return explanation, []string{promotion.ChildrenMergedGuidance}
 	}
 	return explanation, []string{promotion.FallbackGuidance}
 }

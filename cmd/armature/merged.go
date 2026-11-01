@@ -334,7 +334,7 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 	if integration == "" {
 		integration = ctx.Config.IntegrationBranchOrDefault()
 	}
-	graph := promotionGraphFromIndex(index)
+	graph := promotionGraphFromStore(store, index)
 	result := promotion.Evaluate(git, promotion.Input{
 		Issue:       promotionIssueFacts(*issue),
 		PriorOps:    allOps,

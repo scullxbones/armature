@@ -243,19 +243,16 @@ func refreshClassifiedLeaf(ctx *config.Context, git *adapters.Client, item *clas
 		return nil
 	}
 	var graph promotion.Graph
-	if index, indexErr := newSnapshotStore(ctx).ReadIndex(); indexErr == nil {
-		graph = promotionGraphFromIndex(index)
+	store := newSnapshotStore(ctx)
+	if index, indexErr := store.ReadIndex(); indexErr == nil {
+		graph = promotionGraphFromStore(store, index)
 	}
 	if len(live.Children) > 0 {
 		acts := promotion.RemediationsForIssue(live.ID, graph)
-		recovery := promotion.FirstRemediation(acts)
-		if len(acts) == 0 {
-			recovery = promotion.ChildrenMergedReopenArgv(live.ID)
-		}
 		item.Result = promotion.Result{
 			IssueID:  live.ID,
 			Kind:     promotion.KindNotLeaf,
-			Recovery: recovery,
+			Recovery: promotion.FirstRemediation(acts),
 		}
 		return nil
 	}

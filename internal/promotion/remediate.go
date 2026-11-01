@@ -11,21 +11,21 @@ import (
 // Node is the minimal issue-graph fact RemediationsForIssue needs.
 type Node struct {
 	Status   string
+	Parent   string
 	Children []string
+	Base     string // delivery base SHA when known
+	Tip      string // delivery tip SHA when known
 }
 
-// Graph maps issue ID → status/children. Callers project from index/issues;
-// promotion never imports materialize.
+// Graph maps issue ID → status/children/parent/delivery. Callers project from
+// index/issues; promotion never imports materialize.
 type Graph map[string]Node
 
 const (
-	// ChildrenMergedReopen is the honest next step when a non-leaf's
-	// descendants are all merged (rollup/reopen — never arm merged on parent).
-	ChildrenMergedReopenPrefix = "arm reopen --issue "
 	// FallbackGuidance is shape-agnostic text when no graph is available.
 	FallbackGuidance = "promote unmerged descendants first; reserve leaf remediations for leaves only"
-	// ChildrenMergedGuidance explains the non-leaf all-merged case for --explain.
-	ChildrenMergedGuidance = "children are merged; reopen or investigate the non-leaf rollup — do not run arm merged on the non-leaf"
+	// TreeRepairGuidance explains open/unfinished work under a merged ancestor.
+	TreeRepairGuidance = "tree needs repair: open work under a merged ancestor — reopen the merged ancestor or cancel/reparent the open child"
 )
 
 // RemediationsForIssue walks the issue tree under id and returns one honest
@@ -33,10 +33,14 @@ const (
 // itself). Rules:
 //   - merged (and cancelled) nodes are skipped
 //   - non-leaves are never suggested as arm merged; the walk recurses to leaves
-//   - done unmerged leaf → arm delivery record (same truth as sync/legacy)
-//   - open / other unfinished leaf → arm claim (honest non-merged next step)
+//   - done unmerged leaf → arm delivery record (filled SHAs when known; else template)
+//   - open leaf under a merged ancestor → repair (reopen ancestor / cancel child);
+//     never arm claim (inconsistent tree)
+//   - open leaf with no merged ancestor → arm claim --issue … --worktree
 //
 // Empty result means every descendant is merged/cancelled (or id unknown).
+// Callers must not invent reopen-for-all-merged-children: materialize rollup
+// already promotes that shape to merged.
 func RemediationsForIssue(id string, g Graph) []string {
 	if id == "" || g == nil {
 		return nil
@@ -51,10 +55,7 @@ func RemediationsForIssue(id string, g Graph) []string {
 		collectFromChildren(node.Children, g, seen, &out)
 		return out
 	}
-	if cmd := leafRemediation(id, node); cmd != "" {
-		return []string{cmd}
-	}
-	return nil
+	return leafRemediations(id, node, g)
 }
 
 func collectFromChildren(children []string, g Graph, seen map[string]bool, out *[]string) {
@@ -79,33 +80,56 @@ func collectNode(id string, g Graph, seen map[string]bool, out *[]string) {
 		return
 	}
 	if len(node.Children) > 0 {
-		// Non-leaf: never arm merged here — recurse to pending leaves.
 		collectFromChildren(node.Children, g, seen, out)
 		return
 	}
-	if cmd := leafRemediation(id, node); cmd != "" {
-		*out = append(*out, cmd)
-	}
+	*out = append(*out, leafRemediations(id, node, g)...)
 }
 
-func leafRemediation(id string, node Node) string {
+func leafRemediations(id string, node Node, g Graph) []string {
 	switch node.Status {
 	case ops.StatusMerged, ops.StatusCancelled:
-		return ""
+		return nil
 	case ops.StatusDone:
-		// Sync/legacy truth: done leaf without a proven delivery path starts
-		// at delivery record. arm merged fails without worktree/hook-log target.
-		return delivery.RecordArgv(id)
+		return []string{doneLeafDeliveryRecord(id, node)}
 	default:
-		// open / claimed / in-progress / blocked — not arm merged.
-		return "arm claim --issue " + id
+		// open / claimed / in-progress / blocked
+		if anc := nearestMergedAncestor(id, g); anc != "" {
+			return []string{
+				"arm reopen --issue " + anc,
+				"arm transition --issue " + id + " --to cancelled --force",
+			}
+		}
+		return []string{"arm claim --issue " + id + " --worktree"}
 	}
 }
 
-// ChildrenMergedReopenArgv is the actionable recovery when RemediationsForIssue
-// returns empty for a known non-leaf (all descendants terminal-merged).
-func ChildrenMergedReopenArgv(issueID string) string {
-	return ChildrenMergedReopenPrefix + issueID
+func doneLeafDeliveryRecord(id string, node Node) string {
+	base := strings.TrimSpace(node.Base)
+	tip := strings.TrimSpace(node.Tip)
+	if base != "" && tip != "" {
+		return delivery.RecordArgvFilled(id, base, tip)
+	}
+	// Template: legacy done with no claim/delivery provenance.
+	return delivery.RecordArgv(id)
+}
+
+func nearestMergedAncestor(id string, g Graph) string {
+	seen := map[string]bool{}
+	for cur := g[id].Parent; cur != ""; cur = g[cur].Parent {
+		if seen[cur] {
+			return ""
+		}
+		seen[cur] = true
+		node, ok := g[cur]
+		if !ok {
+			return ""
+		}
+		if node.Status == ops.StatusMerged {
+			return cur
+		}
+	}
+	return ""
 }
 
 // FirstRemediation picks sync's singular next_action from a list.
@@ -119,4 +143,9 @@ func FirstRemediation(actions []string) string {
 // IsRunnableArmCommand reports whether s looks like an arm argv (not prose).
 func IsRunnableArmCommand(s string) bool {
 	return strings.HasPrefix(strings.TrimSpace(s), "arm ")
+}
+
+// IsDeliveryRecordTemplate reports a delivery-record argv that still has SHA placeholders.
+func IsDeliveryRecordTemplate(cmd string) bool {
+	return strings.HasPrefix(cmd, "arm delivery record") && strings.Contains(cmd, "<sha>")
 }

@@ -538,8 +538,12 @@ not part of `doctor --fix`.
 its parent is already `merged` (stuck `done → merged` promotion). Merged
 children under a cancelled parent (ORCRUN leftover) are not reported. `--explain`
 uses the same tree-walk remediations as MERGED-1 / sync: done leaves →
-`arm delivery record`; open leaves → `arm claim`; recurse past nested non-leaves;
-all-merged children → reopen guidance. D14 is not part of `doctor --fix`.
+`arm delivery record` (filled SHAs when knowable; else `<sha>` template for
+legacy/no provenance); open leaves under a merged ancestor → tree repair
+(`arm reopen` ancestor or cancel/reparent the open child — never `arm claim`);
+healthy open leaves → `arm claim --worktree`; recurse past nested non-leaves.
+All-merged children are owned by materialize rollup (no reopen argv). D14 is
+not part of `doctor --fix`.
 
 ---
 
@@ -701,12 +705,13 @@ hook-log override only; it does not waive the git check or the assessment.
 
 Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` is one command
 per pending descendant from the shared tree walk (`promotion.RemediationsForIssue`):
-done leaves get `arm delivery record …` (same truth as sync/legacy), open leaves
-get `arm claim --issue …`, merged children are skipped, nested non-leaves recurse.
-Never `arm merged` on a non-leaf, and never a `;`-joined argv in one entry. An
-issue that is already `merged` is an intentional no-op/retry that tears down
-leftover delivery artifacts and prints `<id> is already merged` (exit 0), not a
-second “Marked … as merged” promotion claim.
+done leaves get `arm delivery record …` (filled SHAs when knowable; else template),
+open leaves under a merged ancestor get reopen/cancel repair (never claim),
+healthy open leaves get `arm claim --issue … --worktree`, merged children are
+skipped, nested non-leaves recurse. Never `arm merged` on a non-leaf, and never
+a `;`-joined argv in one entry. An issue that is already `merged` is an
+intentional no-op/retry that tears down leftover delivery artifacts and prints
+`<id> is already merged` (exit 0), not a second “Marked … as merged” promotion claim.
 
 A refusal is `MERGED-1` with `next_actions` naming recovery commands and
 issue ids. `arm transition --to merged` is refused (`TRANSITION-1`,

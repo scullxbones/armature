@@ -551,7 +551,7 @@
       ]
     },
     "internal/delivery": {
-      "count": 28,
+      "count": 29,
       "names": [
         "ComputeFromWorktree",
         "IsRecordError",
@@ -560,6 +560,7 @@
         "MissingSnapshotError.IssueID",
         "Record",
         "RecordArgv",
+        "RecordArgvFilled",
         "RecordError",
         "RecordError.Error",
         "RecordError.Kind",
@@ -1507,14 +1508,11 @@
       ]
     },
     "internal/promotion": {
-      "count": 58,
+      "count": 60,
       "names": [
         "AssessmentFact",
         "AssessmentFact.BaseSHA",
         "AssessmentFact.HeadSHA",
-        "ChildrenMergedGuidance",
-        "ChildrenMergedReopenArgv",
-        "ChildrenMergedReopenPrefix",
         "Error",
         "Error.Error",
         "Error.Graph",
@@ -1533,6 +1531,7 @@
         "Input.Issue",
         "Input.PR",
         "Input.PriorOps",
+        "IsDeliveryRecordTemplate",
         "IsRunnableArmCommand",
         "IssueFacts",
         "IssueFacts.AssessmentAttestations",
@@ -1551,8 +1550,11 @@
         "KindNotOnTarget",
         "KindPromote",
         "Node",
+        "Node.Base",
         "Node.Children",
+        "Node.Parent",
         "Node.Status",
+        "Node.Tip",
         "RecoveryArgv",
         "RemediationsForIssue",
         "Result",
@@ -1566,7 +1568,8 @@
         "Result.MergedPayload",
         "Result.Promote",
         "Result.Recovery",
-        "Result.TargetSHA"
+        "Result.TargetSHA",
+        "TreeRepairGuidance"
       ]
     },
     "internal/ready": {

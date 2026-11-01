@@ -73,9 +73,7 @@ func (e *Error) RecoveryActions() []string {
 	if e.Kind == KindNotLeaf {
 		acts := RemediationsForIssue(e.IssueID, e.Graph)
 		if len(acts) == 0 {
-			if e.IssueID != "" {
-				return []string{ChildrenMergedReopenArgv(e.IssueID)}
-			}
+			// All descendants merged/cancelled: materialize rollup owns promotion.
 			return []string{"arm doctor"}
 		}
 		return acts
@@ -115,11 +113,7 @@ func Evaluate(git *adapters.Client, in Input) Result {
 	if len(in.Issue.Children) > 0 {
 		res.Kind = KindNotLeaf
 		acts := RemediationsForIssue(id, in.Graph)
-		if len(acts) == 0 {
-			res.Recovery = ChildrenMergedReopenArgv(id)
-		} else {
-			res.Recovery = FirstRemediation(acts)
-		}
+		res.Recovery = FirstRemediation(acts)
 		res.Err = &Error{
 			IssueID: id,
 			Kind:    KindNotLeaf,

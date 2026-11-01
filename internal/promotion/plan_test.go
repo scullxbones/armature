@@ -365,7 +365,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		acts := pe.RecoveryActions()
 		assert.Equal(t, []string{
 			delivery.RecordArgv("child-a"),
-			"arm claim --issue child-b",
+			"arm claim --issue child-b --worktree",
 		}, acts, "not-leaf recovery must walk real descendant next steps")
 		for _, a := range acts {
 			assert.NotContains(t, a, "arm merged --issue task-parent")
