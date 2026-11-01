@@ -16,8 +16,10 @@ remediation — see [validation-codes.md](../validation-codes.md) and
 
 Generated from `doctor.LiveCheckIDs()`.
 The in-package indexed helper still omits D7 (worker-ID mismatches need the validated ops
-stream) and D12 (ops-worktree lag needs the ops worktree); that is
-documented, not changed.
+stream), D11 (ops remote-tracking DR needs the ops worktree), and D12
+(ops-worktree lag needs the ops worktree); that is documented, not changed.
+D11 warns when `origin/_armature` is missing or local-only ops exceed the
+package staleness window; remediation names `arm ops-backup snapshot|restore-plan`.
 D12 is an error when HEAD is N>0 commits behind `origin/_armature` after a
 successful fetch (plain `arm doctor` exits 1). Fetch failure is also an
 error. Missing ops worktree stays skip-OK. Behind is not a warning:
@@ -36,19 +38,18 @@ warnings get ignored, and a lagging clone cannot confirm a fresh DAG.
 | `D8` |
 | `D9` |
 | `D10` |
+| `D11` |
 | `D12` |
 
 ## Open reservations
 
 Git-tracked in `internal/doctor/reservations.go` (`OpenReservations`).
 A held story may reserve a future ID here; it must not ship a DoD that
-claims a live ID. S12 is authorized for the CLAIMORD-W21 cascade — D11 is
-reserved for `TOPTIER-S12-T2`.
+claims a live ID. D11 is live for `TOPTIER-S12-T2` (no longer reserved).
 
 <!-- open-reservations: generated from OpenReservations() -->
 | ID | Issue | Planned |
 |----|-------|--------|
-| `D11` | `TOPTIER-S12-T2` | Ops-branch backup / disaster-recovery doctor check (narrow-gaps G2.2). S12 is authorized for the CLAIMORD-W21 cascade; reserves D11 for S12-T2. |
 | `D13` | `LNGHZN-S11-T4` | Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run. |
 | `D14` | `TOPTIER-S18-T4` | Warn when a done issue has a merged parent; exclude merged-under-cancelled (ORCRUN). Remove this row when the check is wired into Run. |
 

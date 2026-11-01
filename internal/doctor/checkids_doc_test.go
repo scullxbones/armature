@@ -36,8 +36,9 @@ func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) 
 
 	reserved := parseReservedRows(t, string(got))
 	require.NotEmpty(t, reserved, "open-reservation table must not be empty")
-	assert.Contains(t, reserved, reservedRow{id: "D11", issue: "TOPTIER-S12-T2"},
-		"TOPTIER-S12-T2 must reserve planned D11 (S12 authorized for CLAIMORD-W21 cascade)")
+	assert.NotContains(t, reserved, reservedRow{id: "D11", issue: "TOPTIER-S12-T2"},
+		"D11 is live for TOPTIER-S12-T2; reservation must be removed")
+	assert.Contains(t, liveFromDoc, "D11", "D11 must be listed as a live check ID")
 
 	liveSet := make(map[string]struct{}, len(liveFromDoc))
 	for _, id := range liveFromDoc {
@@ -97,24 +98,20 @@ func TestCheckIDsDocGoGenerateDirective_REQ_TOPTIER_S18_T3(t *testing.T) {
 	assert.Contains(t, string(src), "//go:generate go run generate_checkids_doc.go")
 }
 
-func TestOpenReservationsIncludesS12T2D11_REQ_TOPTIER_S18_T3(t *testing.T) {
+func TestOpenReservationsExcludesLiveD11_REQ_TOPTIER_S12_T2(t *testing.T) {
 	t.Parallel()
 
 	res := OpenReservations()
 	require.NotEmpty(t, res)
-	found := false
 	for _, r := range res {
-		if r.ID == "D11" && r.Issue == "TOPTIER-S12-T2" {
-			found = true
-			assert.NotEmpty(t, r.Planned)
-		}
+		assert.NotEqual(t, "D11", r.ID, "D11 must not remain reserved once live")
 	}
-	assert.True(t, found, "OpenReservations must include TOPTIER-S12-T2 planned D11")
 
 	first := OpenReservations()
+	orig := first[0].ID
 	first[0].ID = "D999"
 	second := OpenReservations()
-	assert.Equal(t, "D11", second[0].ID, "OpenReservations must return a copy")
+	assert.Equal(t, orig, second[0].ID, "OpenReservations must return a copy")
 }
 
 func repoRoot(t *testing.T) string {

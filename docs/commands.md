@@ -743,8 +743,10 @@ the command exits non-zero; origin is not updated.
 
 Durable tip copy for the published `_armature` orphan branch. This is the
 supported recovery surface for ops durability (narrow-gaps G2.1 / G2.3 as a
-tested CLI lever). Doctor **D11** (S12-T2) should name these verbs in
-`next_actions`; do not maintain parallel bash cookbooks.
+tested CLI lever). Doctor **D11** (G2.2) warns on a missing or stale
+`origin/_armature` tip; its remediation / `next_actions` name
+`arm ops-backup snapshot|restore-plan` (not a recipe doc). Do not maintain
+parallel bash cookbooks.
 
 ### Ops durability guarantees (G2.1)
 
