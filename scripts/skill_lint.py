@@ -631,6 +631,100 @@ def lint_show_cycle_recovery(code_block, skill_file_path="", block_idx=0):
     return []
 
 
+# Target-repo git verbs that must be pinned with `git -C "$TARGET"` (or
+# `$TARGET_REPO`) inside the verify-armature skill. Bare forms mutate or read
+# whichever checkout the agent happens to be standing in — often the source
+# tree — which is exactly the Codex finding on worker-id reset.
+_VERIFY_TARGET_GIT_VERBS = (
+    "config",
+    "worktree",
+    "push",
+    "for-each-ref",
+    "remote",
+    "update-ref",
+)
+_VERIFY_TARGET_GIT_ALT = "|".join(_VERIFY_TARGET_GIT_VERBS)
+_VERIFY_UNPINNED_GIT_BACKTICK_RE = re.compile(
+    rf"`git (?!-C\b)(?:{_VERIFY_TARGET_GIT_ALT})\b[^`]*`"
+)
+# Fenced / script lines: optional env PREFIX=val and/or `capture <label>` before git.
+_VERIFY_UNPINNED_GIT_LINE_RE = re.compile(
+    rf"^\s*(?:env(?:\s+[A-Za-z_][\w]*=(?:\"[^\"]*\"|'[^']*'|\S+))+\s+)?"
+    rf"(?:capture\s+\S+\s+)?git (?!-C\b)(?!--git-dir(?:\s|=))(?!init\b)"
+)
+# Drive/teardown arm invocations in fences must carry --repo. `version` is the
+# binary identity check and runs against ./bin/arm with no repo.
+_VERIFY_ARM_INVOKE_RE = re.compile(
+    r"""^\s*(?:"\$ARM"|'\$ARM'|\$ARM|arm)\s+(?!version\b)"""
+)
+
+
+def is_verify_armature_path(path):
+    """True when path is under `.agents/skills/verify-armature/`."""
+    parts = Path(path).parts
+    for i in range(len(parts) - 2):
+        if parts[i : i + 3] == (".agents", "skills", "verify-armature"):
+            return True
+    return False
+
+
+def find_verify_armature_script_files(root_dir):
+    """Shell helpers shipped with the verify-armature skill (not covered by *.md)."""
+    scripts_dir = Path(root_dir) / ".agents" / "skills" / "verify-armature" / "scripts"
+    if not scripts_dir.is_dir():
+        return []
+    return sorted(path for path in scripts_dir.glob("*.sh") if path.is_file())
+
+
+def lint_verify_armature_pinning(content, skill_file_path=""):
+    """Flag unpinned git/arm invocations in the verify-armature skill.
+
+    Markdown: backtick spans and fenced bash lines. Shell scripts: non-comment
+    lines only (capture helpers already wrap `arm` with --repo; git must still
+    use -C / --git-dir / init-with-path).
+    """
+    location = skill_file_path or "verify-armature"
+    errors = []
+    is_shell = str(skill_file_path).endswith(".sh")
+
+    for match in _VERIFY_UNPINNED_GIT_BACKTICK_RE.finditer(content):
+        errors.append(
+            f"{location}: unpinned git in verify-armature must use "
+            f'`git -C "$TARGET"` (or "$TARGET_REPO"): {match.group(0)}'
+        )
+
+    if is_shell:
+        for lineno, raw in enumerate(content.splitlines(), start=1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if _VERIFY_UNPINNED_GIT_LINE_RE.match(raw):
+                errors.append(
+                    f"{location}:{lineno}: unpinned git in verify-armature must use "
+                    f'`git -C "$TARGET_REPO"` (or --git-dir / init with path): {line}'
+                )
+        return errors
+
+    code_blocks = extract_code_blocks(content)
+    for block_idx, code_block in enumerate(code_blocks):
+        for line in code_block.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if _VERIFY_UNPINNED_GIT_LINE_RE.match(line):
+                errors.append(
+                    f"{location}:block{block_idx}: unpinned git in verify-armature must use "
+                    f'`git -C "$TARGET"` (or "$TARGET_REPO"): {stripped}'
+                )
+            if _VERIFY_ARM_INVOKE_RE.match(line) and "--repo" not in line:
+                errors.append(
+                    f"{location}:block{block_idx}: unpinned arm in verify-armature must use "
+                    f'`arm --repo "$TARGET"` (or "$ARM" --repo "$TARGET"): {stripped}'
+                )
+
+    return errors
+
+
 def lint_skill_file(skill_file_path, valid_subcommands, valid_flags_cache=None):
     """Lint a single skill file.
 
@@ -666,6 +760,9 @@ def lint_skill_file(skill_file_path, valid_subcommands, valid_flags_cache=None):
 
         errors.extend(lint_show_cycle_recovery(code_block, str(skill_file_path), block_idx))
 
+    if is_verify_armature_path(skill_file_path):
+        errors.extend(lint_verify_armature_pinning(content, str(skill_file_path)))
+
     return errors
 
 
@@ -682,8 +779,9 @@ def main(argv):
         return 1
 
     skill_files = find_lint_files(root_dir)
+    verify_scripts = find_verify_armature_script_files(root_dir)
 
-    if not skill_files:
+    if not skill_files and not verify_scripts:
         return 0
 
     valid_flags_cache = {}
@@ -692,12 +790,23 @@ def main(argv):
         errors = lint_skill_file(skill_file, valid_subcommands, valid_flags_cache)
         all_errors.extend(errors)
 
+    for script_file in verify_scripts:
+        try:
+            content = script_file.read_text(encoding="utf-8")
+        except Exception as e:
+            all_errors.append(f"ERROR reading {script_file}: {e}")
+            continue
+        all_errors.extend(lint_verify_armature_pinning(content, str(script_file)))
+
     if all_errors:
         for error in all_errors:
             print(f"FAIL: {error}", file=sys.stderr)
         return 1
 
-    print(f"Skill lint passed: validated {len(skill_files)} skill/documentation files")
+    print(
+        f"Skill lint passed: validated {len(skill_files)} skill/documentation files"
+        + (f" and {len(verify_scripts)} verify-armature scripts" if verify_scripts else "")
+    )
     return 0
 
 

@@ -527,6 +527,43 @@ More info.
 		err := cmd.Run()
 		require.NoError(t, err, "envelope .issues[0].notes parser must pass; stderr: %s", errOutput.String())
 	})
+
+	t.Run("VerifyArmatureRejectsUnpinnedGitConfig", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, ".agents", "skills", "verify-armature")
+		require.NoError(t, os.MkdirAll(skillDir, 0755))
+		skillMD := "To clear it, `git config --worktree --unset armature.worker-id`.\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		errOutput := new(bytes.Buffer)
+		cmd.Stderr = errOutput
+		err := cmd.Run()
+		require.Error(t, err, "unpinned git config in verify-armature must fail skill-lint")
+		require.Contains(t, errOutput.String(), "unpinned git")
+	})
+
+	t.Run("VerifyArmatureAcceptsPinnedGitAndArm", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, ".agents", "skills", "verify-armature")
+		require.NoError(t, os.MkdirAll(filepath.Join(skillDir, "scripts"), 0755))
+		skillMD := "Clear with `git -C \"$TARGET\" config --worktree --unset armature.worker-id`.\n" +
+			"```bash\narm --repo \"$TARGET\" worker-init --check\narm version\n```\n"
+		require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0644))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(skillDir, "scripts", "arm-verify.sh"),
+			[]byte("#!/bin/bash\ngit -C \"$TARGET_REPO\" config --get armature.worker-id\n"),
+			0644,
+		))
+
+		cmd := exec.CommandContext(context.Background(), pythonBin, scriptPath, tmpDir) //nolint:gosec // pythonBin: test-controlled
+		cmd.Env = append(os.Environ(), "ARM_BIN="+armBin)
+		errOutput := new(bytes.Buffer)
+		cmd.Stderr = errOutput
+		err := cmd.Run()
+		require.NoError(t, err, "pinned verify-armature git/arm must pass; stderr: %s", errOutput.String())
+	})
 }
 
 func fileExists(path string) bool {

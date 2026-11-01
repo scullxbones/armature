@@ -5,7 +5,7 @@
 ## Sub-features
 
 - Dual-branch layout: code on `main`, ops on `_armature` bound at `.armature/`
-- `git config armature.ops-worktree-path` set to the ops worktree
+- `git -C "$TARGET" config armature.ops-worktree-path` set to the ops worktree
 - Local harness artifacts for verified platforms (claude skills + plugin metadata; hook config skipped unless `--with-hooks`)
 - Git hooks installed into `$TARGET/.git/hooks/` independently of `--with-hooks`: `pre-commit`, `post-commit`, `post-merge`. `prepare-commit-msg` is obsolete and removed when Armature-managed (`obsoleteHooks` in `cmd/armature/bootstrap.go`). Occupied unmanaged hook paths are skipped (`skipped_hooks`; `installHooks`). `--with-hooks` governs *harness* hook config only, not these.
 - Worker identity created only when `armature.worker-id` is missing
@@ -43,7 +43,7 @@ test -d "$TARGET/.claude/plugins/armature"
 ls "$TARGET/.git/hooks/" | rg -v '\.sample$'   # pre-commit post-commit post-merge; no prepare-commit-msg
 ```
 
-Proof: first stdout `repo_setup.status` is `initialized` (exit 0); second is `already_initialized`; `git worktree list` shows `$TARGET/.armature` on `_armature`; `git config armature.ops-worktree-path` points at it; ops dir exists; `harness_setup` reports `ok`/`install` for claude `skills` and `plugin_metadata`, and `harness_hook_config` with `status=skipped` and `action=skip` (the drive omits `--with-hooks`), with the matching directories present and non-empty; `.git/hooks/` has the three Armature hooks and no `prepare-commit-msg`. Evidence: `evidence/<run-id>/drive/02-bootstrap/`.
+Proof: first stdout `repo_setup.status` is `initialized` (exit 0); second is `already_initialized`; `git -C "$TARGET" worktree list` shows `$TARGET/.armature` on `_armature`; `git -C "$TARGET" config armature.ops-worktree-path` points at it; ops dir exists; `harness_setup` reports `ok`/`install` for claude `skills` and `plugin_metadata`, and `harness_hook_config` with `status=skipped` and `action=skip` (the drive omits `--with-hooks`), with the matching directories present and non-empty; `.git/hooks/` has the three Armature hooks and no `prepare-commit-msg`. Evidence: `evidence/<run-id>/drive/02-bootstrap/`.
 
 ## Gotchas
 

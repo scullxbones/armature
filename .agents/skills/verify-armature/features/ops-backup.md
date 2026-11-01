@@ -39,7 +39,7 @@ Proof:
 2. local `refs/heads/_armature` is the same SHA after snapshot as before
 3. `verify` exit 0, `verifications[0].advertises` is `refs/heads/_armature`
 4. `restore-plan` exit 0, `plans[0].disposition` is `fast-forward`, `recovered` is that same SHA
-5. `git for-each-ref` shows no leftover `refs/remotes/origin/_armature-run` or `refs/remotes/backup/_armature-run`
+5. `git -C "$TARGET" for-each-ref` shows no leftover `refs/remotes/origin/_armature-run` or `refs/remotes/backup/_armature-run`
 
 Evidence: `evidence/<run-id>/drive/04-snapshot/` through `07-leftover-refs/`.
 

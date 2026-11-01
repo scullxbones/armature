@@ -36,7 +36,7 @@ Proof:
 1. `ready` envelope `issues[]` contains `{"id":"TASK-VERIFY-READY",...}` (not a bare array, and the row key is `id`)
 2. `claim --worktree` exit 0 with `claimed_by` set
 3. `arm show --format json TASK-VERIFY-READY` has `status: claimed`
-4. `git worktree list` includes `$TARGET/.worktrees/TASK-VERIFY-READY` on `task/TASK-VERIFY-READY`
+4. `git -C "$TARGET" worktree list` includes `$TARGET/.worktrees/TASK-VERIFY-READY` on `task/TASK-VERIFY-READY`
 5. `arm worktree list` envelope has `bound` containing `TASK-VERIFY-READY` (payload key `worktrees`, plus `count` and `help`)
 6. ops log has a `claim` op (also visible via `arm log --json`)
 
@@ -55,4 +55,4 @@ Evidence: `evidence/<run-id>/drive/05-ready/` through `11-ops/`. Proof 6 is asse
 - Interactive `arm ready` can claim from the TUI; that is not the agent path.
 - Expired claims are **not** in `issues`. Under `--format agent` or `json` they are an `expired_claims` adjunct on the same stdout envelope.
 - Scope overlap with another claimed/in-progress task warns; `--force` to proceed.
-- Cleanup must `git worktree remove` the claim worktree (the helper does this on `cleanup`).
+- Cleanup must `git -C "$TARGET" worktree remove` the claim worktree (the helper does this on `cleanup`).

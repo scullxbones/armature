@@ -142,7 +142,7 @@ Always prefix with `"$ARM" --repo "$TARGET" --format agent --non-interactive` ex
 "$ARM" --repo "$TARGET" --format agent --non-interactive bootstrap
 ```
 
-Stdout (pretty JSON): `{ "repo_setup": { "status": "initialized" | "already_initialized" }, "harness_setup": [ { "platform", "artifact", "status", "action", "note?" } ] }`. Default platform with verified artifacts is `claude` (local `.claude/`, not `--global`). Second run is idempotent (`already_initialized`). Refuses a dirty working tree. Side effects: git worktree at `$TARGET/.armature` on branch `_armature`; `git config armature.ops-worktree-path`; worker UUID in `armature.worker-id` if none was set; `.armature/ops/`, `config.json`, `state/`.
+Stdout (pretty JSON): `{ "repo_setup": { "status": "initialized" | "already_initialized" }, "harness_setup": [ { "platform", "artifact", "status", "action", "note?" } ] }`. Default platform with verified artifacts is `claude` (local `.claude/`, not `--global`). Second run is idempotent (`already_initialized`). Refuses a dirty working tree. Side effects: git worktree at `$TARGET/.armature` on branch `_armature`; `git -C "$TARGET" config armature.ops-worktree-path`; worker UUID in `armature.worker-id` if none was set; `.armature/ops/`, `config.json`, `state/`.
 
 **worker-init**:
 
@@ -150,7 +150,7 @@ Stdout (pretty JSON): `{ "repo_setup": { "status": "initialized" | "already_init
 "$ARM" --repo "$TARGET" worker-init --check || "$ARM" --repo "$TARGET" worker-init
 ```
 
-Stdout: `Worker ID: <uuid>`. Durable handle: `git -C "$TARGET" config --get armature.worker-id` (worktree file `.git/config.worktree` once `extensions.worktreeConfig` is on). Bootstrap already calls `Init` when unset. **Without `--check`, `worker-init` always writes a new UUID** (overwrites). Use `--check` unless you intend to rotate identity. To clear it inside a temp repo, `git config --worktree --unset armature.worker-id`.
+Stdout: `Worker ID: <uuid>`. Durable handle: `git -C "$TARGET" config --get armature.worker-id` (worktree file `.git/config.worktree` once `extensions.worktreeConfig` is on). Bootstrap already calls `Init` when unset. **Without `--check`, `worker-init` always writes a new UUID** (overwrites). Use `--check` unless you intend to rotate identity. To clear it inside a temp repo, `git -C "$TARGET" config --worktree --unset armature.worker-id`.
 
 **create** (tasks must satisfy E6 or the write is refused as a Graph Finding):
 
@@ -204,7 +204,7 @@ Draft issues (`confidence=draft` at birth) are excluded from the ready queue. Pr
 # {"claimed_by":"<uuid>","issue":"TASK-VERIFY-READY","ttl":60}
 ```
 
-`claim` publishes `_armature`. Point `origin` at a local bare repo and `git push origin _armature` before claiming. With no origin the command exits `CLAIM-1` (`publish _armature class=other`) and does not provision a worktree.
+`claim` publishes `_armature`. Point `origin` at a local bare repo and `git -C "$TARGET" push origin _armature` before claiming. With no origin the command exits `CLAIM-1` (`publish _armature class=other`) and does not provision a worktree.
 
 `--worktree` is required. Valueless `--worktree` provisions `$TARGET/.worktrees/<id>` on branch `task/<id>`. Confirm with `git -C "$TARGET" worktree list` and `"$ARM" --repo "$TARGET" --format agent --non-interactive worktree list` (envelope `{count, worktrees, help, bound:[...], ...}`; `bound` includes `TASK-VERIFY-READY`).
 
@@ -269,7 +269,7 @@ The helper writes:
 Proof standard:
 
 1. Exercise the real user path (`arm <command>`), not Go test helpers, as the **sole** proof. `make test-e2eharness` is allowed as additional lifecycle evidence, not a substitute for one mapped feature in this skill.
-2. Capture the action **and** a second read: command + exit + stdout, then `arm list` / `arm show --format json` / `arm log --json` / git files under `.armature/` / `git worktree list`.
+2. Capture the action **and** a second read: command + exit + stdout, then `arm --repo "$TARGET" list` / `arm --repo "$TARGET" show --format json` / `arm --repo "$TARGET" log --json` / git files under `.armature/` / `git -C "$TARGET" worktree list`.
 3. Verify side effects: ops log line for `create`/`claim`/`source-link`, `.armature/` worktree, `armature.worker-id`, `.worktrees/<id>` after claim.
 4. No mocks. There is no network service to stub. Filesystem source URLs are real files in the temp repo.
 5. If a dry-run flag exists, prove it skipped writes by comparing ops log size / `arm list` before and after — do not trust the flag name. Known dry-runs: `arm dag apply --plan P --dry-run`, `arm doctor --fix --dry-run`, `arm sync --dry-run`. `dag apply --dry-run` still **validates** the plan (unknown source → error) and must not create the issue.
@@ -284,7 +284,7 @@ The helper:
 
 - Reads the current run env (`<state dir>/current-<checkout hash>` → `<state dir>/run.*.env`, where `<state dir>` is `$XDG_RUNTIME_DIR/arm-verify` or `${TMPDIR:-/tmp}/arm-verify-<uid>`)
 - Refuses to delete unless `realpath(target)` matches `/tmp/arm-verify-target.*` and is not the source checkout
-- `git worktree remove --force` on extra worktrees (`.armature`, `.worktrees/*`), then `rm -rf` the temp repo
+- `git -C "$TARGET" worktree remove --force` on extra worktrees (`.armature`, `.worktrees/*`), then `rm -rf` the temp repo
 - Deletes only that run env / pointer
 - Does **not** delete `.agents/skills/verify-armature/evidence/`
 - Does not `pkill arm` or match by process name (there is no daemon)

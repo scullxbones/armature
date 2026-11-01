@@ -15,7 +15,7 @@ Agent index for driving the `arm` CLI. User-visible paths only. Operating proced
 
 1. Prefer `make test-e2eharness` in the **source** tree for the composed lifecycle (claim race, coordinator recovery, happy-path merge). It already uses temp origins/clones.
 2. Prefer `scripts/arm-verify.sh drive <feature>` for a single mapped path against the isolated repo from `launch`.
-3. Stable handles: issue ids you pass (`TASK-VERIFY-CREATE`), worker UUID from `git config --get armature.worker-id` (worktree-scoped; unset with `git config --worktree --unset`), ops file `.armature/ops/<worker-uuid>.log`, worktree `.worktrees/<issue-id>`.
+3. Stable handles: issue ids you pass (`TASK-VERIFY-CREATE`), worker UUID from `git -C "$TARGET" config --get armature.worker-id` (worktree-scoped; unset with `git -C "$TARGET" config --worktree --unset`), ops file `.armature/ops/<worker-uuid>.log`, worktree `.worktrees/<issue-id>`.
 4. Every drive: capture the mutating command, then a second read (`list` / `show --format json` / `log --json` / git worktree / `.armature` files).
 
 ## Proof / skip reporting

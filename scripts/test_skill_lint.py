@@ -16,9 +16,12 @@ from skill_lint import (
     extract_arm_commands,
     extract_flags,
     find_lint_files,
+    find_verify_armature_script_files,
     has_angle_bracket_placeholder,
     has_unquoted_bracketed_synopsis,
+    is_verify_armature_path,
     lint_show_cycle_recovery,
+    lint_verify_armature_pinning,
     strip_persistent_prefix,
     strip_redirects,
     tokenize_shell_line,
@@ -360,6 +363,94 @@ class TestShowCycleRecoveryParser(unittest.TestCase):
             0,
         )
         self.assertEqual(errors, [])
+
+
+class TestVerifyArmaturePinning(unittest.TestCase):
+    def test_path_detection(self):
+        self.assertTrue(
+            is_verify_armature_path(".agents/skills/verify-armature/SKILL.md")
+        )
+        self.assertTrue(
+            is_verify_armature_path(
+                "/repo/.agents/skills/verify-armature/features/worker-init.md"
+            )
+        )
+        self.assertFalse(
+            is_verify_armature_path(".agents/skills/capturing-dogfood-findings/SKILL.md")
+        )
+        self.assertFalse(
+            is_verify_armature_path("internal/skillsembed/skills/armature-worker/SKILL.md")
+        )
+
+    def test_rejects_unpinned_git_config_backtick(self):
+        content = (
+            'To clear it inside a temp repo, '
+            '`git config --worktree --unset armature.worker-id`.\n'
+        )
+        errors = lint_verify_armature_pinning(content, "SKILL.md")
+        self.assertTrue(errors)
+        self.assertIn("unpinned git", errors[0])
+        self.assertIn("git config --worktree --unset", errors[0])
+
+    def test_accepts_pinned_git_config_backtick(self):
+        content = (
+            'To clear it inside a temp repo, '
+            '`git -C "$TARGET" config --worktree --unset armature.worker-id`.\n'
+        )
+        self.assertEqual(lint_verify_armature_pinning(content, "SKILL.md"), [])
+
+    def test_rejects_unpinned_arm_in_fence(self):
+        content = "```bash\narm worker-init --check\n```\n"
+        errors = lint_verify_armature_pinning(content, "features/worker-init.md")
+        self.assertTrue(errors)
+        self.assertIn("unpinned arm", errors[0])
+
+    def test_accepts_pinned_arm_and_version(self):
+        content = (
+            "```bash\n"
+            'arm --repo "$TARGET" worker-init --check\n'
+            '"./bin/arm" version\n'
+            "arm version --format human\n"
+            "```\n"
+        )
+        # ./bin/arm is not matched by the arm-invoke regex (literal arm / $ARM only).
+        # bare `arm version` is allowlisted.
+        self.assertEqual(
+            lint_verify_armature_pinning(content, "SKILL.md"),
+            [],
+        )
+
+    def test_rejects_unpinned_git_in_script_line(self):
+        content = 'git config --worktree --unset armature.worker-id\n'
+        errors = lint_verify_armature_pinning(
+            content, ".agents/skills/verify-armature/scripts/arm-verify.sh"
+        )
+        self.assertTrue(errors)
+        self.assertIn("unpinned git", errors[0])
+
+    def test_accepts_pinned_script_git_and_ignores_comments(self):
+        content = (
+            "# git config armature.ops-worktree-path\n"
+            'git -C "$TARGET_REPO" config --get armature.worker-id\n'
+            'git init -q --bare "$origin"\n'
+            'git --git-dir="$origin" rev-parse refs/heads/_armature\n'
+        )
+        self.assertEqual(
+            lint_verify_armature_pinning(
+                content, ".agents/skills/verify-armature/scripts/arm-verify.sh"
+            ),
+            [],
+        )
+
+    def test_find_verify_armature_script_files(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            scripts = root / ".agents/skills/verify-armature/scripts"
+            scripts.mkdir(parents=True)
+            (scripts / "arm-verify.sh").write_text("#!/bin/bash\n")
+            (scripts / "notes.txt").write_text("not a script\n")
+            found = find_verify_armature_script_files(root)
+            self.assertEqual([p.name for p in found], ["arm-verify.sh"])
 
 
 if __name__ == "__main__":
