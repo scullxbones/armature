@@ -254,7 +254,7 @@ func doctorCheckGuidance(check string) (explanation, suggested string) {
 		return "Ops reference issue IDs that are not in the materialized graph, usually after a revert or a truncated log.",
 			"arm log --json"
 	case "D4":
-		return "A child issue names a parent that is not in the graph, so the hierarchy cannot be walked.",
+		return "A child issue names a missing parent, or an issue names itself as its parent (self-parent). D5 only walks blocked_by cycles.",
 			"arm reparent --issue <child-id> --parent <parent-id>"
 	case "D5":
 		return "A blocked_by cycle makes every issue in the loop permanently unready.",

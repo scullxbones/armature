@@ -375,6 +375,12 @@ func checkD4BrokenParentRefs(index materialize.Index) Finding {
 		if entry.Parent == "" {
 			continue
 		}
+		// Self-parent is a broken parent ref (one-node hierarchy loop). D5 only
+		// walks blocked_by, so D4 owns Parent == id.
+		if entry.Parent == id {
+			broken = append(broken, fmt.Sprintf("%s -> %s", id, entry.Parent))
+			continue
+		}
 		if _, ok := index[entry.Parent]; !ok {
 			broken = append(broken, fmt.Sprintf("%s -> %s", id, entry.Parent))
 		}
@@ -613,19 +619,18 @@ func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 // Skips (not warnings):
 //   - done under cancelled (ORCRUN leftover) — only merged parents qualify
 //   - merged under cancelled — not a stuck done→merged promotion
-//   - missing parent ID — D4 owns broken parent refs
-//   - self-parent (Parent == id) — not a merged-parent promotion; skip rather than warn
+//   - missing parent ID or Parent == id — D4 owns broken parent refs
 func checkD14DoneUnderMerged(index materialize.Index) Finding {
 	f := Finding{Check: "D14", Severity: SeverityOK, Message: "No done issues under a merged parent"}
 
 	var stuck []string
 	for id, entry := range index {
 		if entry.Status != "done" || entry.Parent == "" || entry.Parent == id {
-			continue
+			continue // empty/self-parent: D4; do not double-report
 		}
 		parent, ok := index[entry.Parent]
 		if !ok {
-			continue // missing parent: D4; do not double-report here
+			continue // missing parent: D4
 		}
 		if parent.Status != "merged" {
 			continue

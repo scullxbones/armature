@@ -158,7 +158,9 @@ func TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2(t *testing.T) 
 
 // TestOrderedLiveCheckEnumerationsMatchRegistry_REQ_TOPTIER_S18_T4 fails when
 // skill/docs/scripts claim a near-complete ordered live doctor ID list that
-// omits any LiveCheckIDs() member (the class that left D14 out of SKILL.md).
+// omits any LiveCheckIDs() member. Each list/sequence is asserted on its own
+// (CSV, JSON, or claim-clause tokens) so a later "D14" on the same line cannot
+// paper over removing "then D14" / "and D14" from the sequence itself.
 func TestOrderedLiveCheckEnumerationsMatchRegistry_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 
@@ -169,18 +171,7 @@ func TestOrderedLiveCheckEnumerationsMatchRegistry_REQ_TOPTIER_S18_T4(t *testing
 
 	csvRE := regexp.MustCompile(`D1(?:,\s*D[1-9][0-9]*){9,}`)
 	jsonRE := regexp.MustCompile(`\["D1"(?:,"D[1-9][0-9]*"){9,}\]`)
-	// Contiguous D1–D12 range claims are allowed as shorthand, but every live ID
-	// outside that span (today: D14) must appear on the same line — the class
-	// that left product-doctor prose at D12 while the bootstrapped summary named D14.
-	claimRangeRE := regexp.MustCompile(`(?i)(?:exactly|emits|are|ids?,?\s+in\s+order|checks(?:\[\])?\s+are)\b[^.\n]{0,80}\bD1\s*[–-]\s*D12\b`)
-
-	outsideRange := make([]string, 0)
-	for _, id := range live {
-		var n int
-		if _, err := fmt.Sscanf(id, "D%d", &n); err != nil || n < 1 || n > 12 {
-			outsideRange = append(outsideRange, id)
-		}
-	}
+	claimKeywordRE := regexp.MustCompile(`(?i)(?:exactly|emits|are|ids?,?\s+in\s+order|checks(?:\[\])?\s+are)\b`)
 
 	root := repoRoot(t)
 	paths := []string{
@@ -212,23 +203,90 @@ func TestOrderedLiveCheckEnumerationsMatchRegistry_REQ_TOPTIER_S18_T4(t *testing
 			}
 		}
 		for i, line := range strings.Split(body, "\n") {
-			if !claimRangeRE.MatchString(line) {
+			kw := claimKeywordRE.FindStringIndex(line)
+			if kw == nil {
 				continue
 			}
-			missing := make([]string, 0)
-			for _, id := range outsideRange {
-				if !regexp.MustCompile(`\b` + regexp.QuoteMeta(id) + `\b`).MatchString(line) {
-					missing = append(missing, id)
-				}
+			seq := extractLiveCheckClaimSequence(line[kw[0]:])
+			if len(seq) == 0 {
+				continue
 			}
-			if len(missing) > 0 {
-				offenders = append(offenders, fmt.Sprintf("%s:%d: D1–D12 live-range claim missing %v: %s",
-					rel, i+1, missing, strings.TrimSpace(line)))
+			// Only assert near-complete claims (start at D1 with ≥10 expanded IDs
+			// or an explicit D1–D12 range) so incidental "D1" mentions stay ignored.
+			if seq[0] != "D1" || len(seq) < 10 {
+				continue
+			}
+			got := strings.Join(seq, ", ")
+			if got != wantCSV {
+				offenders = append(offenders, fmt.Sprintf("%s:%d: claim sequence %q != LiveCheckIDs %q (line %q)",
+					rel, i+1, got, wantCSV, strings.TrimSpace(line)))
 			}
 		}
 	}
 	assert.Empty(t, offenders, "ordered live doctor ID enumerations must match LiveCheckIDs():\n%s",
 		strings.Join(offenders, "\n"))
+}
+
+// extractLiveCheckClaimSequence parses the contiguous doctor-ID claim after a
+// keyword (exactly/emits/are/…). Stops before parentheticals so a later
+// "(including … D14 …)" cannot satisfy a truncated "D1–D12" sequence.
+func extractLiveCheckClaimSequence(clause string) []string {
+	if idx := strings.Index(clause, "("); idx >= 0 {
+		clause = clause[:idx]
+	}
+	// Strip markdown ticks so `D1`…`D12`, `D14` still tokenizes.
+	clause = strings.ReplaceAll(clause, "`", "")
+	sep := `(?:[–—−-]|…|\.{2,3})`
+	idOrRange := regexp.MustCompile(`D[1-9][0-9]*(?:\s*` + sep + `\s*D[1-9][0-9]*)?`)
+	// Require an explicit list connector — bare whitespace must not pull in a
+	// later incidental ID (e.g. "D14 with D6 at warning").
+	connector := regexp.MustCompile(`(?i)^(?:\s*(?:then|and|\+|\,)\s*)+`)
+
+	loc := idOrRange.FindStringIndex(clause)
+	if loc == nil {
+		return nil
+	}
+	rest := clause[loc[0]:]
+	var out []string
+	for {
+		m := idOrRange.FindString(rest)
+		if m == "" {
+			break
+		}
+		out = append(out, expandDoctorIDToken(m)...)
+		rest = rest[len(m):]
+		con := connector.FindString(rest)
+		if con == "" {
+			break
+		}
+		rest = rest[len(con):]
+		if !idOrRange.MatchString(rest) {
+			break
+		}
+	}
+	return out
+}
+
+func expandDoctorIDToken(tok string) []string {
+	tok = strings.TrimSpace(tok)
+	rangeRE := regexp.MustCompile(`^(D[1-9][0-9]*)\s*(?:[–—−-]|…|\.{2,3})\s*(D[1-9][0-9]*)$`)
+	if m := rangeRE.FindStringSubmatch(tok); m != nil {
+		var a, b int
+		if _, err := fmt.Sscanf(m[1], "D%d", &a); err != nil {
+			return []string{tok}
+		}
+		if _, err := fmt.Sscanf(m[2], "D%d", &b); err != nil {
+			return []string{tok}
+		}
+		if a > 0 && b >= a {
+			out := make([]string, 0, b-a+1)
+			for n := a; n <= b; n++ {
+				out = append(out, fmt.Sprintf("D%d", n))
+			}
+			return out
+		}
+	}
+	return []string{tok}
 }
 
 // TestDocsDoNotReserveLiveCheckIDs_REQ_TOPTIER_S12_T2 fails when non-archive

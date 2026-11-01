@@ -41,6 +41,20 @@ func TestRun_CleanRepo(t *testing.T) {
 		assert.Contains(t, d4.Items[0], "task-01")
 	})
 
+	t.Run("D4_SelfParent", func(t *testing.T) {
+		t.Parallel()
+		index := materialize.Index{
+			"SF": {Status: "done", Type: "task", Parent: "SF"},
+		}
+		report := runChecks(index, nil, "", time.Now())
+		d4 := findCheck(t, report, "D4")
+		assert.Equal(t, SeverityError, d4.Severity, "Parent==id must be a D4 broken parent ref")
+		require.Len(t, d4.Items, 1)
+		assert.Equal(t, "SF -> SF", d4.Items[0])
+		d5 := findCheck(t, report, "D5")
+		assert.Equal(t, SeverityOK, d5.Severity, "D5 only walks blocked_by; self-parent is D4")
+	})
+
 	t.Run("D5_NoCycle", func(t *testing.T) {
 		t.Parallel()
 		index := materialize.Index{
@@ -371,8 +385,7 @@ func TestDoctorD14_OKWhenDoneParentNotMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 func TestDoctorD14_SkipsMissingParentAndSelfParent_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 
-	// Choice: skip (do not warn). Missing parents are D4; self-parent is not a
-	// merged-parent promotion. D14 stays a single index pass with no git calls.
+	// D14 skips; D4 owns missing and self-parent. Keep D14 one index pass, no git.
 	index := materialize.Index{
 		"ghost-child": {Status: "done", Type: "task", Parent: "missing-parent"},
 		"loop-child":  {Status: "done", Type: "task", Parent: "loop-child"},
@@ -382,6 +395,31 @@ func TestDoctorD14_SkipsMissingParentAndSelfParent_REQ_TOPTIER_S18_T4(t *testing
 	f := checkD14DoneUnderMerged(index)
 	assert.Equal(t, SeverityOK, f.Severity)
 	assert.Empty(t, f.Items)
+
+	d4 := checkD4BrokenParentRefs(index)
+	assert.Equal(t, SeverityError, d4.Severity)
+	assert.Contains(t, d4.Items, "ghost-child -> missing-parent")
+	assert.Contains(t, d4.Items, "loop-child -> loop-child")
+}
+
+func TestDoctorD4_FlagsSelfParent_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+
+	// Repro class: Parent==id is present in the index (so "missing parent" D4
+	// would miss it) and blocked_by is empty (so D5 stays OK). Removing the
+	// D4 self-parent branch must fail this test.
+	index := materialize.Index{
+		"SF": {Status: "done", Type: "task", Parent: "SF"},
+	}
+	d4 := checkD4BrokenParentRefs(index)
+	require.Equal(t, SeverityError, d4.Severity)
+	require.Equal(t, []string{"SF -> SF"}, d4.Items)
+
+	d5 := checkD5DependencyCycles(index)
+	assert.Equal(t, SeverityOK, d5.Severity)
+
+	d14 := checkD14DoneUnderMerged(index)
+	assert.Equal(t, SeverityOK, d14.Severity, "D14 must not warn; D4 owns self-parent")
 }
 
 func TestDoctorD14_EmittedByRun_REQ_TOPTIER_S18_T4(t *testing.T) {

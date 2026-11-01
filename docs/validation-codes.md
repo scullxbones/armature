@@ -528,15 +528,15 @@ arm doctor --format json
 
 ### D4: Broken Parent References
 
-**Check:** Finds issues whose `parent` field points to a non-existent issue ID.
+**Check:** Finds issues whose `parent` field points to a non-existent issue ID, or equals the issue’s own ID (self-parent).
 
-**Trigger:** A parent issue was deleted, but child issues still reference it.
+**Trigger:** A parent issue was deleted while children still reference it, or an issue names itself as its parent. (D5 only walks `blocked_by` cycles, so self-parent is a D4 finding.)
 
 **Message:** `Issues with broken parent references`
 
-**Items:** `<child-id> -> <parent-id>`
+**Items:** `<child-id> -> <parent-id>` (self-parent appears as `<id> -> <id>`)
 
-**Context:** This is a data consistency error. Children reference a parent that no longer exists.
+**Context:** This is a data consistency error. Children reference a missing parent, or a one-node parent loop that is not a valid hierarchy edge.
 
 **Fix:**
 1. Create the missing parent: `arm create --id <parent-id> --title "..." --type story`
