@@ -2063,3 +2063,156 @@ func TestFetchBranchToRef_PerRunDestination_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	require.NoError(t, c.FetchBranchToRef("_armature", "refs/remotes/origin/_armature-run/proof2"))
 	assert.Equal(t, before, runGitOutput(t, repo, "rev-parse", "refs/remotes/origin/_armature"))
 }
+
+func TestRestoreEvidence_RelativeOriginAndTransportConfig_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, repo, origin string)
+		// assertInvocation, when set, installs a PATH git wrapper around the
+		// bare origin fetch and checks argv/config carry (no real HTTP).
+		assertInvocation bool
+		wantExtraheader  string
+		wantInsteadOfKey string
+		wantInsteadOfVal string
+		fetchURLPrefix   string // substring that must appear as fetch URL arg
+	}{
+		{
+			name: "relative_origin_url",
+			setup: func(t *testing.T, repo, origin string) {
+				t.Helper()
+				rel, err := filepath.Rel(repo, origin)
+				require.NoError(t, err)
+				gittest.Git(t, repo, "remote", "set-url", "origin", rel)
+			},
+		},
+		{
+			name: "extraheader_and_insteadOf_carried",
+			setup: func(t *testing.T, repo, origin string) {
+				t.Helper()
+				// Point origin at an https URL that insteadOf rewrites to the
+				// local bare — proves carry without touching the network.
+				gittest.Git(t, repo, "remote", "set-url", "origin", "https://example.com/armature-ops-backup.git")
+				gittest.Git(t, repo, "config", "--local", "url."+origin+"/.insteadOf", "https://example.com/armature-ops-backup.git")
+				gittest.Git(t, repo, "config", "--local", "http.https://example.com/.extraheader", "AUTHORIZATION: bearer test-token")
+			},
+			assertInvocation: true,
+			wantExtraheader:  "http.https://example.com/.extraheader=AUTHORIZATION: bearer test-token",
+			wantInsteadOfKey: "url.",
+			wantInsteadOfVal: "insteadof=https://example.com/armature-ops-backup.git",
+			fetchURLPrefix:   "https://example.com/armature-ops-backup.git",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fx := gittest.InitWithOrigin(t)
+			repo := fx.Dir
+			gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+			gittest.Git(t, repo, "checkout", "-b", "_armature")
+			gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+			gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+			tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+			tc.setup(t, repo, fx.Origin)
+
+			c := adapters.New(repo)
+			bundle := filepath.Join(t.TempDir(), "old.bundle")
+			require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+			var logPath string
+			if tc.assertInvocation {
+				realGit, err := exec.LookPath("git")
+				require.NoError(t, err)
+				wrapperDir := t.TempDir()
+				logPath = filepath.Join(t.TempDir(), "git-argv.log")
+				script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+log=%q
+# Log only throwaway-bare origin fetches (URL-shaped remote, not a local bundle path).
+is_fetch=
+saw_refmap=
+url_arg=
+for a in "$@"; do
+  if [ "$a" = "fetch" ]; then is_fetch=1; continue; fi
+  if [ "$a" = "--refmap=" ]; then saw_refmap=1; continue; fi
+  if [ -n "$saw_refmap" ] && [ -z "$url_arg" ]; then url_arg=$a; saw_refmap=; continue; fi
+done
+if [ -n "$is_fetch" ] && [ -n "$url_arg" ]; then
+  case "$url_arg" in
+    https://*|http://*|git@*|ssh://*)
+      printf '%%s\n' "$*" >> "$log"
+      ;;
+  esac
+fi
+exec "$real_git" "$@"
+`, realGit, logPath)
+				testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
+				c = c.WithEnviron(append(os.Environ(), "PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH")))
+			}
+
+			missing, originTip, recovered, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+			require.NoError(t, err, "relative/config-aware bare fetch must succeed like clone ls-remote")
+			assert.False(t, missing)
+			assert.Equal(t, tip, originTip)
+			assert.Equal(t, tip, recovered)
+
+			if tc.assertInvocation {
+				raw, readErr := os.ReadFile(logPath)
+				require.NoError(t, readErr)
+				logged := string(raw)
+				require.NotEmpty(t, logged, "expected bare origin fetch to be logged")
+				assert.Contains(t, logged, tc.wantExtraheader)
+				assert.Contains(t, logged, tc.wantInsteadOfVal)
+				assert.Contains(t, logged, tc.wantInsteadOfKey)
+				assert.Contains(t, logged, tc.fetchURLPrefix)
+				assert.NotContains(t, logged, "AUTHORIZATION: bearer test-token\n", "token must stay inside -c argv, not leak as its own arg alone unexpectedly")
+			}
+		})
+	}
+}
+
+func TestRestoreEvidence_StalledRemoteTimesOut_REQ_TOPTIER_S12_T1G(t *testing.T) { //nolint:paralleltest // mutates shared network timeout
+	restoreTimeout := adapters.SetGitNetworkTimeoutForTest(100 * time.Millisecond)
+	defer restoreTimeout()
+
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+	wrapperDir := t.TempDir()
+	script := fmt.Sprintf(`#!/bin/sh
+real_git=%q
+for a in "$@"; do
+  case "$a" in
+    ls-remote)
+      # exec: CommandContext must kill the sleeper PID, not an orphaned child.
+      exec /bin/sleep 30
+      ;;
+  esac
+done
+exec "$real_git" "$@"
+`, realGit)
+	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(script))
+	// Wrapper-only PATH; absolute real_git handles pass-through for non-probes.
+	stalled := c.WithEnviron([]string{"PATH=" + wrapperDir})
+
+	start := time.Now()
+	_, _, _, _, _, restoreErr := stalled.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	elapsed := time.Since(start)
+	require.Error(t, restoreErr)
+	assert.Contains(t, restoreErr.Error(), "fail-closed")
+	assert.Less(t, elapsed, 2*time.Second, "stalled remote must fail-closed near the shared network timeout")
+}
