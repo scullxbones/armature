@@ -1,4 +1,4 @@
-// workflowimagepins is a static ADVISORY scanner for container-image policy.
+// workflowimagepins scans container-image policy.
 // Fail-closed runtime enforcement is CI PATH-shadow
 // (scripts/ci-path-shadow-engines.sh) plus scripts/run-container-image.sh.
 //
@@ -6,7 +6,8 @@
 //   - scripts/container-images.manifest lists every allowed name@sha256
 //   - scripts/run-container-image.sh is the only allowlisted engine entrypoint
 //   - container:/services:/uses: docker:// / Dockerfile FROM must match manifest
-//   - any engine token outside the wrapper is reported (advisory on repo scan)
+//   - ref/digest findings are BLOCKING on repo scan
+//   - engine-word tokens outside the wrapper are ADVISORY only on repo scan
 //   - scans workflows (run: + shell:), actions, root action.yml, uses: ./path,
 //     Dockerfiles, scripts/** (any depth/ext), and Makefile
 package main
@@ -33,6 +34,9 @@ var (
 const (
 	manifestRel = "scripts/container-images.manifest"
 	wrapperRel  = "scripts/run-container-image.sh"
+
+	kindEngine = "engine"
+	kindRef    = "ref"
 )
 
 // Short exempt list for scripts that must mention engine names.
@@ -41,6 +45,7 @@ var scriptExempt = map[string]bool{
 	"scripts/ci-path-shadow-engines.sh":    true,
 	"scripts/ci-path-shadow-selfcheck.sh":  true,
 	"scripts/check-workflow-image-pins.sh": true,
+	"scripts/check-no-engine-bin-env.sh":   true,
 	"scripts/test_check_jobs.sh":           true, // asserts engine-token policy
 }
 
@@ -48,6 +53,7 @@ type finding struct {
 	File string
 	Path string
 	Msg  string
+	Kind string // kindEngine (advisory) or kindRef (blocking)
 }
 
 func main() {
@@ -56,7 +62,6 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	selftest := false
-	advisory := false
 	root := "."
 	for len(args) > 0 {
 		switch args[0] {
@@ -64,10 +69,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 			selftest = true
 			args = args[1:]
 		case "-advisory":
-			advisory = true
+			// Legacy no-op: engine words are always advisory; refs always block.
 			args = args[1:]
 		case "-h", "-help", "--help":
-			fmt.Fprintf(stderr, "usage: workflowimagepins [-selftest|-advisory] [repo-root]\n")
+			fmt.Fprintf(stderr, "usage: workflowimagepins [-selftest] [repo-root]\n")
 			return 0
 		default:
 			if strings.HasPrefix(args[0], "-") {
@@ -96,20 +101,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return 1
 	}
-	if len(findings) > 0 {
-		label := "FAIL"
-		if advisory {
-			label = "ADVISORY"
+	var engines, refs []finding
+	for _, f := range findings {
+		if f.Kind == kindEngine {
+			engines = append(engines, f)
+		} else {
+			refs = append(refs, f)
 		}
-		fmt.Fprintf(stderr, "%s: container image policy findings (static; runtime fail-closed is CI PATH-shadow):\n", label)
-		for _, f := range findings {
+	}
+	if len(engines) > 0 {
+		fmt.Fprintf(stderr, "ADVISORY: engine-word findings (non-blocking; runtime fail-closed is CI PATH-shadow):\n")
+		for _, f := range engines {
 			fmt.Fprintf(stderr, "  %s (%s): %s\n", f.File, f.Path, f.Msg)
 		}
-		if advisory {
-			fmt.Fprintln(stdout, "OK: workflowimagepins advisory scan complete (findings above are non-blocking)")
-			return 0
+	}
+	if len(refs) > 0 {
+		fmt.Fprintf(stderr, "FAIL: unpinned/unknown container image refs (blocking):\n")
+		for _, f := range refs {
+			fmt.Fprintf(stderr, "  %s (%s): %s\n", f.File, f.Path, f.Msg)
 		}
 		return 1
+	}
+	if len(engines) > 0 {
+		fmt.Fprintln(stdout, "OK: container image refs manifest-pinned (engine-word findings advisory only)")
+		return 0
 	}
 	fmt.Fprintln(stdout, "OK: container images are manifest-pinned; no engine tokens outside wrapper")
 	return 0
@@ -397,6 +412,7 @@ func checkLocalActionUse(root, fromFile, path, uses string, allowed map[string]b
 		File: fromFile,
 		Path: path,
 		Msg:  fmt.Sprintf("local action %q has no action.yml", uses),
+		Kind: kindRef,
 	}}, nil
 }
 
@@ -439,7 +455,6 @@ func checkActionFile(root, absPath, rel string, allowed map[string]bool, seenAct
 			}
 		}
 	}
-	_ = root
 	return out, nil
 }
 
@@ -467,13 +482,13 @@ func checkDockerfile(absPath, rel string, allowed map[string]bool) ([]finding, e
 			idx = 1
 		case strings.EqualFold(fields[0], "--platform"):
 			if len(fields) < 3 {
-				out = append(out, finding{File: rel, Path: fmt.Sprintf("FROM:%d", i+1), Msg: "malformed FROM --platform"})
+				out = append(out, finding{File: rel, Path: fmt.Sprintf("FROM:%d", i+1), Msg: "malformed FROM --platform", Kind: kindRef})
 				continue
 			}
 			idx = 2
 		}
 		if idx >= len(fields) {
-			out = append(out, finding{File: rel, Path: fmt.Sprintf("FROM:%d", i+1), Msg: "FROM missing image"})
+			out = append(out, finding{File: rel, Path: fmt.Sprintf("FROM:%d", i+1), Msg: "FROM missing image", Kind: kindRef})
 			continue
 		}
 		ref := fields[idx]
@@ -512,13 +527,13 @@ func declarativeImageFindings(file, path string, raw any, allowed map[string]boo
 
 func refFinding(file, path, ref string, allowed map[string]bool) []finding {
 	if ref == "" {
-		return []finding{{File: file, Path: path, Msg: "empty image ref (unpinned)"}}
+		return []finding{{File: file, Path: path, Msg: "empty image ref (unpinned)", Kind: kindRef}}
 	}
 	if !digestPin.MatchString(ref) {
-		return []finding{{File: file, Path: path, Msg: fmt.Sprintf("not name@sha256: %q", ref)}}
+		return []finding{{File: file, Path: path, Msg: fmt.Sprintf("not name@sha256: %q", ref), Kind: kindRef}}
 	}
 	if !allowed[ref] {
-		return []finding{{File: file, Path: path, Msg: fmt.Sprintf("digest not in %s: %q", manifestRel, ref)}}
+		return []finding{{File: file, Path: path, Msg: fmt.Sprintf("digest not in %s: %q", manifestRel, ref), Kind: kindRef}}
 	}
 	return nil
 }
@@ -526,7 +541,7 @@ func refFinding(file, path, ref string, allowed map[string]bool) []finding {
 func tokenFindingsInFile(abs, rel string) []finding {
 	data, err := os.ReadFile(abs)
 	if err != nil {
-		return []finding{{File: rel, Path: "file", Msg: err.Error()}}
+		return []finding{{File: rel, Path: "file", Msg: err.Error(), Kind: kindRef}}
 	}
 	return tokenFindings(string(data), rel, "file")
 }
@@ -549,6 +564,7 @@ func tokenFindings(content, file, path string) []finding {
 			File: file,
 			Path: fmt.Sprintf("%s:%d", path, i+1),
 			Msg:  fmt.Sprintf("engine token outside %s: %s", wrapperRel, trim),
+			Kind: kindEngine,
 		})
 	}
 	return out

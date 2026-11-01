@@ -126,21 +126,19 @@ jobs:
       - name: Run cross-OS scripts under pinned bash:3.2.57
         # Image via scripts/container-images.manifest key bash-3.2.57 only
         # (scripts/run-container-image.sh — sole docker entrypoint).
-        # Alpine v3.22 git-2.49.1-r0.apk sha256-verified, then apk --no-network.
-        env:
-          ALPINE_GIT_APK_URL: https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/git-2.49.1-r0.apk
-          ALPINE_GIT_APK_SHA256: 42f4573799ffce0c7dd4954d2247eb882eb87360dc18637930624484ecfd1c90
+        # Closed Alpine v3.22 git .apk set sha256-verified (scripts/alpine-v322-git-apks.sha256),
+        # then apk add --no-network; --allow-untrusted only for those verified files.
         run: |
-          curl -fsSL -o /tmp/git-2.49.1-r0.apk "$ALPINE_GIT_APK_URL"
-          echo "${ALPINE_GIT_APK_SHA256}  /tmp/git-2.49.1-r0.apk" | sha256sum -c -
-          # --allow-untrusted applies only to the sha256-verified .apk path below.
+          apkdir="${RUNNER_TEMP:-/tmp}/alpine-git-apks"
+          bash scripts/fetch-alpine-git-apks.sh "$apkdir"
+          # --allow-untrusted applies only to the sha256-verified .apk paths in $apkdir.
           scripts/run-container-image.sh bash-3.2.57 \
             --rm \
             --entrypoint sh \
             -v "$PWD:/src:ro" \
-            -v /tmp/git-2.49.1-r0.apk:/tmp/git.apk:ro \
+            -v "$apkdir:/apks:ro" \
             -w /src \
-            -- -c 'apk add --no-network --allow-untrusted /tmp/git.apk >/dev/null \
+            -- -c 'apk add --no-network --allow-untrusted /apks/*.apk >/dev/null \
               && got=$(git --version) \
               && echo "apk git: $got" \
               && echo "$got" | grep -F "git version 2.49.1" >/dev/null \

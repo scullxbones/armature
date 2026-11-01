@@ -3,6 +3,6 @@ on: push
 jobs:
   x:
     runs-on: ubuntu-latest
-    container: alpine:3.22
+    container: alpine:latest
     steps:
       - run: echo hi

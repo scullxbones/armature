@@ -4,13 +4,17 @@
 #
 # - Key is the only image input (looked up in scripts/container-images.manifest).
 # - Manifest path is fixed (no ARM_CONTAINER_IMAGE_MANIFEST override).
-# - Invokes the real engine by absolute path (ARM_DOCKER_BIN or /usr/bin/docker).
+# - Invokes the real engine by absolute path from a fixed allowlist
+#   (never an env override, never bare PATH lookup under PATH-shadow).
 # - Image is placed last before the command, after a `--` separator.
 # - Bash 3.2 compatible (macOS /bin/bash).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MANIFEST="$ROOT/scripts/container-images.manifest"
+
+# Fixed absolute-path allowlist (no env override).
+DOCKER_ALLOWLIST="/usr/bin/docker /usr/local/bin/docker"
 
 usage() {
   echo "FAIL: usage: run-container-image.sh <manifest-key> [run-flags...] -- [cmd...]" >&2
@@ -172,27 +176,18 @@ if [ "$cmd_set" -ne 1 ]; then
   exit 2
 fi
 
-# Resolve absolute docker binary (never bare PATH lookup under PATH-shadow).
-DOCKER_BIN="${ARM_DOCKER_BIN:-}"
+# Resolve absolute docker binary from fixed allowlist only.
+DOCKER_BIN=""
+for cand in $DOCKER_ALLOWLIST; do
+  if [ -x "$cand" ]; then
+    DOCKER_BIN="$cand"
+    break
+  fi
+done
 if [ -z "$DOCKER_BIN" ]; then
-  for cand in /usr/bin/docker /usr/local/bin/docker; do
-    if [ -x "$cand" ]; then
-      DOCKER_BIN="$cand"
-      break
-    fi
-  done
-fi
-if [ -z "$DOCKER_BIN" ] || [ ! -x "$DOCKER_BIN" ]; then
-  echo "FAIL: real docker binary not found (set ARM_DOCKER_BIN to an absolute path)" >&2
+  echo "FAIL: real docker binary not found on allowlist ($DOCKER_ALLOWLIST)" >&2
   exit 1
 fi
-case "$DOCKER_BIN" in
-  /*) ;;
-  *)
-    echo "FAIL: ARM_DOCKER_BIN must be absolute, got $DOCKER_BIN" >&2
-    exit 1
-    ;;
-esac
 
 # Image last after -- : engine sees: run [flags...] -- IMAGE [cmd...]
 exec "$DOCKER_BIN" run "${flags[@]}" -- "$IMAGE" "$@"

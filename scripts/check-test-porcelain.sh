@@ -46,21 +46,33 @@ path_digest() {
       | LC_ALL=C sort \
       | while IFS= read -r f || [ -n "$f" ]; do
           [ -z "$f" ] && continue
-          h=$(porcelain_git_hash_object -- "$f" || printf 'unreadable')
+          # Fail-closed: hash-object errors must propagate (no soft marker).
+          h=$(porcelain_git_hash_object -- "$f")
           printf '%s %s\n' "$h" "$f"
         done \
       | porcelain_git_hash_object --stdin
   elif [ -e "$path" ] || [ -L "$path" ]; then
-    porcelain_git_hash_object -- "$path" || printf 'unreadable\n'
+    porcelain_git_hash_object -- "$path"
   else
     printf 'missing\n'
   fi
 }
 
 # Emit sorted baseline body lines from porcelain -z (no header).
+# Status stream is a temp file so a non-zero porcelain_git_status_z exit
+# is not dropped (process substitution would swallow exit 128 under set -e).
+# Body is written to a temp file (not piped) so path_digest / hash-object
+# failures are not masked by a trailing `rm` or `sort` success.
 emit_baseline_body() {
-  local entry status path dig skip_next
+  local entry status path dig skip_next status_file body_file loop_st
+  status_file=$(mktemp)
+  body_file=$(mktemp)
+  porcelain_git_status_z >"$status_file" || {
+    rm -f "$status_file" "$body_file"
+    exit 1
+  }
   skip_next=0
+  set +e
   while IFS= read -r -d '' entry || [ -n "$entry" ]; do
     if [ "$skip_next" -eq 1 ]; then
       skip_next=0
@@ -74,10 +86,21 @@ emit_baseline_body() {
         skip_next=1
         ;;
     esac
-    dig="$(path_digest "$path")"
+    dig="$(path_digest "$path")" || {
+      rm -f "$status_file" "$body_file"
+      exit 1
+    }
     printf '%s\t%s\t%s\n' "$status" "$path" "$dig"
-  done < <(porcelain_git_status_z) \
-    | LC_ALL=C sort
+  done <"$status_file" >"$body_file"
+  loop_st=$?
+  set -e
+  rm -f "$status_file"
+  if [ "$loop_st" -ne 0 ]; then
+    rm -f "$body_file"
+    exit 1
+  fi
+  LC_ALL=C sort <"$body_file"
+  rm -f "$body_file"
 }
 
 BASELINE_HEADER='# armature-porcelain-baseline v2'

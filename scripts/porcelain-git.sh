@@ -12,10 +12,12 @@ porcelain_git_rev_parse() {
 }
 
 porcelain_git_status_z() {
-  # NUL-separated porcelain; caller consumes via read -d ''.
+  # NUL-separated porcelain; caller must capture via a temp file (not
+  # process substitution) so a non-zero exit propagates under set -e.
   git status --porcelain -z --untracked-files=all "$@"
 }
 
 porcelain_git_hash_object() {
+  # Fail-closed: callers must not soft-fallback on failure.
   git hash-object "$@"
 }

@@ -1004,8 +1004,26 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: ci.yml still contains raw docker|podman|buildx token"
         exit 1
     fi
-    if ! rg -q 'ALPINE_GIT_APK_SHA256: 42f4573799ffce0c7dd4954d2247eb882eb87360dc18637930624484ecfd1c90' "$CI_YML"; then
-        echo "FAIL: ci.yml missing Alpine git apk sha256 pin"
+    if [[ ! -f "$REPO_ROOT/scripts/alpine-v322-git-apks.sha256" ]]; then
+        echo "FAIL: missing scripts/alpine-v322-git-apks.sha256 closed apk set"
+        exit 1
+    fi
+    if ! rg -q '42f4573799ffce0c7dd4954d2247eb882eb87360dc18637930624484ecfd1c90  git-2\.49\.1-r0\.apk' \
+        "$REPO_ROOT/scripts/alpine-v322-git-apks.sha256"; then
+        echo "FAIL: alpine-v322-git-apks.sha256 missing git-2.49.1-r0 pin"
+        exit 1
+    fi
+    mode=$(git -C "$REPO_ROOT" ls-files -s -- "scripts/fetch-alpine-git-apks.sh" | awk '{print $1}')
+    if [[ "$mode" != "100755" ]]; then
+        echo "FAIL: scripts/fetch-alpine-git-apks.sh must be committed executable (got ${mode:-missing})"
+        exit 1
+    fi
+    if ! rg -q 'fetch-alpine-git-apks\.sh' "$CI_YML"; then
+        echo "FAIL: ci.yml must fetch closed Alpine git apk set via fetch-alpine-git-apks.sh"
+        exit 1
+    fi
+    if ! rg -q 'apk add --no-network --allow-untrusted /apks/\*\.apk' "$CI_YML"; then
+        echo "FAIL: ci.yml missing apk add --no-network over sha-checked /apks/*.apk"
         exit 1
     fi
     if ! rg -q 'apk add --no-network' "$CI_YML"; then
@@ -1030,9 +1048,29 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
-    # Porcelain confined + advisory image-pin selftest (unpinned fail / pinned pass).
+    # Porcelain confined + image-pin selftest (refs blocking; engine words advisory).
     bash "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$REPO_ROOT" >/dev/null
+    bash "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$REPO_ROOT" >/dev/null
     bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
+    # Ban proof lives in scripts/check-no-engine-bin-env.sh (fixture + scan).
+    if ! rg -q 'check-no-engine-bin-env\.sh' "$REPO_ROOT/Makefile"; then
+        echo "FAIL: Makefile lint missing check-no-engine-bin-env.sh"
+        exit 1
+    fi
+    for bypass in git-c-status.sh var-git-status.sh alias-git-status.sh; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/porcelain-bypass/$bypass" ]]; then
+            echo "FAIL: missing porcelain bypass fixture $bypass"
+            exit 1
+        fi
+    done
+    if ! rg -q 'alpine:latest' "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/container-string.yml"; then
+        echo "FAIL: container-string fixture must use alpine:latest"
+        exit 1
+    fi
+    if ! rg -q 'docker://alpine:latest' "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/uses-docker.yml"; then
+        echo "FAIL: uses-docker fixture must use docker://alpine:latest"
+        exit 1
+    fi
 
     # Wrapper airtight: reject positionals-before-key, image-shaped keys, missing --.
     set +e
@@ -1061,7 +1099,8 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
 
     # PJ repro forms must fail via Go selftest fixtures.
-    for form in cmd-sub subshell docker-context compose-run bare-digest uses-docker-empty shell-key; do
+    for form in cmd-sub subshell docker-context compose-run bare-digest uses-docker uses-docker-empty \
+        container-string container-image shell-key services-image; do
         if [[ ! -f "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/${form}.yml" ]]; then
             echo "FAIL: missing unpinned PJ/form fixture $form"
             exit 1
