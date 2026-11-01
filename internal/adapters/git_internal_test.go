@@ -327,3 +327,30 @@ func TestPidAlive_EPERMTreatedAlive_REQ_TOPTIER_S12_T1G(t *testing.T) {
 		t.Fatal("pidAlive(1) must be true (EPERM means process exists)")
 	}
 }
+
+func TestExactRefFromPatternOutput_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	want := "refs/heads/_armature"
+	sha, found, err := exactRefFromPatternOutput(
+		"abc123 refs/foo/refs/heads/_armature\ndef456 refs/heads/_armature\n", want)
+	if err != nil || !found || sha != "def456" {
+		t.Fatalf("exact hit got sha=%q found=%v err=%v", sha, found, err)
+	}
+	sha, found, err = exactRefFromPatternOutput("abc123 refs/foo/refs/heads/_armature\n", want)
+	if err != nil || found || sha != "" {
+		t.Fatalf("suffix-only must miss: sha=%q found=%v err=%v", sha, found, err)
+	}
+	_, found, err = exactRefFromPatternOutput("refs/heads/_armature\n", want)
+	if err != nil || !found {
+		t.Fatalf("refname-only format: found=%v err=%v", found, err)
+	}
+	refs, err := refsUnderPrefix(
+		"refs/armature-tmp/dead/bundle\nrefs/other/armature-tmp/dead\nrefs/armature-tmp/dead\n",
+		"refs/armature-tmp/dead")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 2 || refs[0] != "refs/armature-tmp/dead/bundle" || refs[1] != "refs/armature-tmp/dead" {
+		t.Fatalf("refsUnderPrefix got %v", refs)
+	}
+}

@@ -273,21 +273,23 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 		out = nil
 	}
 	nonces := map[string]struct{}{}
-	for _, line := range strings.Split(string(out), "\n") {
-		ref := strings.TrimSpace(line)
-		if ref == "" {
-			continue
+	// refsUnderPrefix rejects trailing-path pattern peers (same class as
+	// exactRefFromPatternOutput for existence probes).
+	listed, listErr := refsUnderPrefix(string(out), ns)
+	if listErr == nil {
+		for _, ref := range listed {
+			rest := strings.TrimPrefix(ref, ns+"/")
+			nonce, _, _ := strings.Cut(rest, "/")
+			if nonce == "" || strings.Contains(nonce, "/") {
+				continue
+			}
+			nonces[nonce] = struct{}{}
 		}
-		rest := strings.TrimPrefix(ref, ns+"/")
-		nonce, _, _ := strings.Cut(rest, "/")
-		if nonce == "" || strings.Contains(nonce, "/") {
-			continue
-		}
-		nonces[nonce] = struct{}{}
 	}
 	// Also consider lease files with no remaining refs (common git dir).
 	if common, gerr := c.CommonGitDir(); gerr == nil {
 		leaseRoot := filepath.Join(common, runLeaseDir, kind)
+		c.sweepAgedLeaseTempFiles(leaseRoot)
 		entries, readErr := os.ReadDir(leaseRoot)
 		if readErr == nil {
 			for _, e := range entries {
@@ -306,12 +308,11 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 		// Delete every ref under this nonce (bundle/origin or the run ref itself).
 		out2, listErr := c.cmd("for-each-ref", "--format=%(refname)", prefix).CombinedOutput()
 		if listErr == nil {
-			for _, line := range strings.Split(string(out2), "\n") {
-				ref := strings.TrimSpace(line)
-				if ref == "" {
-					continue
+			under, underErr := refsUnderPrefix(string(out2), prefix)
+			if underErr == nil {
+				for _, ref := range under {
+					_ = c.DeleteRef(ref) //nolint:errcheck // best-effort sweep
 				}
-				_ = c.DeleteRef(ref) //nolint:errcheck // best-effort sweep
 			}
 		}
 		// Single-level run ref: for-each-ref on exact prefix may miss; try direct.
@@ -344,8 +345,9 @@ func (c *Client) sweepStaleWorkDirs() {
 		_ = os.RemoveAll(filepath.Join(root, nonce)) //nolint:errcheck // best-effort
 		_ = c.removeRunLease(leaseKindWork, nonce)   //nolint:errcheck // best-effort
 	}
-	// Orphan leases with no dir.
+	// Orphan leases with no dir (+ aged CreateTemp leftovers).
 	leaseRoot := filepath.Join(common, runLeaseDir, leaseKindWork)
+	c.sweepAgedLeaseTempFiles(leaseRoot)
 	leaseEntries, readErr := os.ReadDir(leaseRoot)
 	if readErr != nil {
 		return
@@ -359,6 +361,37 @@ func (c *Client) sweepStaleWorkDirs() {
 			continue
 		}
 		_ = c.removeRunLease(leaseKindWork, nonce) //nolint:errcheck // best-effort
+	}
+}
+
+// leaseTempName reports CreateTemp leftovers under a lease dir
+// ("."<nonce>"-*.tmp"). These are never published lease names (leaseNonceName
+// requires 16 hex), so without an age sweep they leak forever after a crash
+// mid-write.
+func leaseTempName(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".tmp")
+}
+
+// sweepAgedLeaseTempFiles removes orphan .<nonce>-*.tmp lease drafts whose
+// mtime is past runLeaseMaxAgeSec. Fresh temps (live atomic write) are kept.
+func (c *Client) sweepAgedLeaseTempFiles(leaseRoot string) {
+	entries, err := os.ReadDir(leaseRoot)
+	if err != nil {
+		return
+	}
+	now := clock.System()
+	for _, e := range entries {
+		if e.IsDir() || !leaseTempName(e.Name()) {
+			continue
+		}
+		info, infoErr := e.Info()
+		if infoErr != nil {
+			continue
+		}
+		if now-info.ModTime().Unix() <= runLeaseMaxAgeSec {
+			continue
+		}
+		_ = os.Remove(filepath.Join(leaseRoot, e.Name())) //nolint:errcheck // best-effort
 	}
 }
 

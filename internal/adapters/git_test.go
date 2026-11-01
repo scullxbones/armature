@@ -2009,6 +2009,43 @@ func TestRestoreEvidence_MissingContainedUnreachable_REQ_TOPTIER_S12_T1G(t *test
 	assert.False(t, adapters.IsRemoteRefMissing(err))
 }
 
+// TestRestoreEvidence_SuffixOnlyRemoteRefIsMissing_REQ_TOPTIER_S12_T1G: git
+// ls-remote patterns match the tail of a refname. PJ repro: peer
+// refs/foo/refs/heads/_armature with exact refs/heads/_armature deleted must
+// yield structural missing (not fail-closed on a subsequent exact fetch).
+func TestRestoreEvidence_SuffixOnlyRemoteRefIsMissing_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	gittest.Git(t, repo, "checkout", "-b", "_armature")
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "ops tip")
+	gittest.Git(t, repo, "push", "-u", "origin", "_armature")
+	tip := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/_armature")
+
+	c := adapters.New(repo)
+	bundle := filepath.Join(t.TempDir(), "old.bundle")
+	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
+
+	// Replace exact tip with a suffix-only peer that ls-remote still matches.
+	gittest.Git(t, fx.Origin, "update-ref", "refs/foo/refs/heads/_armature", tip)
+	gittest.Git(t, fx.Origin, "update-ref", "-d", "refs/heads/_armature")
+	out := runGitOutput(t, fx.Origin, "ls-remote", "--refs", fx.Origin, "refs/heads/_armature")
+	require.Contains(t, out, "refs/foo/refs/heads/_armature", "fixture must trigger git pattern suffix match")
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) >= 2 {
+			assert.NotEqual(t, "refs/heads/_armature", fields[1], "fixture must not advertise exact ref")
+		}
+	}
+
+	missing, originTip, recovered, _, _, err := c.RestoreEvidence(bundle, "refs/heads/_armature", "_armature")
+	require.NoError(t, err, "suffix-only peer must be structural missing, not fail-closed fetch")
+	assert.True(t, missing)
+	assert.Empty(t, originTip)
+	assert.Equal(t, tip, recovered)
+}
+
 func TestFetchTrackingRef_AbsentRemoteRef_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
 	fx := gittest.InitWithOrigin(t)
@@ -2838,4 +2875,36 @@ func snapshotRefsAndTags(t *testing.T, repo string) map[string]string {
 		got[fields[0]] = fields[1]
 	}
 	return got
+}
+
+// TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G: crash mid
+// atomic lease write leaves .<nonce>-*.tmp drafts that leaseNonceName skips;
+// aged temps must still be reclaimed.
+func TestBeginPerRunRef_SweepsAgedLeaseTempFiles_REQ_TOPTIER_S12_T1G(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	repo := fx.Dir
+	gittest.Git(t, repo, "commit", "--allow-empty", "-m", "init")
+	c := adapters.New(repo)
+
+	gitDir := strings.TrimSpace(runGitOutput(t, repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+	leaseRoot := filepath.Join(gitDir, "armature-run-leases", "origin-run")
+	require.NoError(t, os.MkdirAll(leaseRoot, 0o750))
+	agedTmp := filepath.Join(leaseRoot, ".deadbeefcafebabe-123456.tmp")
+	freshTmp := filepath.Join(leaseRoot, ".livecafe01234567-654321.tmp")
+	require.NoError(t, os.WriteFile(agedTmp, []byte("pid=1\n"), 0o600))
+	require.NoError(t, os.WriteFile(freshTmp, []byte("pid=1\n"), 0o600))
+	aged := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(agedTmp, aged, aged))
+
+	ref, release, err := c.BeginPerRunRef("refs/remotes/origin/_armature-run")
+	require.NoError(t, err)
+	defer release()
+	_ = ref
+
+	_, err = os.Stat(agedTmp)
+	assert.True(t, os.IsNotExist(err), "aged .tmp lease draft must be swept")
+	_, err = os.Stat(freshTmp)
+	require.NoError(t, err, "fresh .tmp lease draft (live write) must be kept")
+	t.Cleanup(func() { _ = os.Remove(freshTmp) }) //nolint:errcheck // best-effort
 }

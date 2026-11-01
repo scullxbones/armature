@@ -1565,10 +1565,12 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 // branches). Staging uses a live-pid lease; crash leftovers are swept at the
 // next run start without touching concurrent live nonces.
 //
-// Origin absence is structural: ls-remote empty stdout → missing. Unreachable
-// origin / other failures return err (fail-closed). Network probes address the
-// named origin remote so remote.origin.* applies; multi-valued remote URLs
-// stay first-wins (do not -c remote.origin.url= — that appends).
+// Origin absence is structural: ls-remote reports no exact refname match →
+// missing (git patterns can suffix-match peers like
+// refs/heads/archive/refs/heads/_armature — those must not count as exists).
+// Unreachable origin / other failures return err (fail-closed). Network probes
+// address the named origin remote so remote.origin.* applies; multi-valued
+// remote URLs stay first-wins (do not -c remote.origin.url= — that appends).
 func (c *Client) RestoreEvidence(
 	bundlePath, advertiseRef, opsBranch string,
 ) (originMissing bool, originTip, recovered string, originAncOfRecovered, recoveredAncOfOrigin bool, err error) {
@@ -1644,10 +1646,13 @@ func (c *Client) RestoreEvidence(
 	return false, originTip, recovered, originAncOfRecovered, recoveredAncOfOrigin, nil
 }
 
-// lsRemoteRef reports whether the named remote advertises ref. Exit 0 + empty
-// stdout means reachable remote, ref absent. Non-zero exit (unreachable, auth,
-// …) is an error. The remote operand is always the name so remote.<name>.*
-// applies; multi-valued URLs stay first-wins.
+// lsRemoteRef reports whether the named remote advertises an exact refname.
+// Exit 0 + no exact match (empty stdout, or only pattern/suffix peers) means
+// reachable remote, ref absent. Non-zero exit (unreachable, auth, …) is an
+// error. Parsing goes through exactRefFromPatternOutput — the shared class
+// helper for every ls-remote / for-each-ref pattern existence probe. The
+// remote operand is always the name so remote.<name>.* applies; multi-valued
+// URLs stay first-wins.
 func (c *Client) lsRemoteRef(name, ref string) (sha string, exists bool, err error) {
 	cmd, cancel := c.networkCmd("ls-remote", "--refs", name, ref)
 	defer cancel()
@@ -1655,16 +1660,11 @@ func (c *Client) lsRemoteRef(name, ref string) (sha string, exists bool, err err
 	if runErr != nil {
 		return "", false, fmt.Errorf("git ls-remote %s %s: %w\n%s", name, ref, runErr, out)
 	}
-	line := strings.TrimSpace(string(out))
-	if line == "" {
-		return "", false, nil
+	sha, exists, err = exactRefFromPatternOutput(string(out), ref)
+	if err != nil {
+		return "", false, fmt.Errorf("git ls-remote %s %s: %w", name, ref, err)
 	}
-	first, _, _ := strings.Cut(line, "\n")
-	fields := strings.Fields(strings.TrimSpace(first))
-	if len(fields) < 2 {
-		return "", false, fmt.Errorf("git ls-remote %s %s: malformed output %q", name, ref, line)
-	}
-	return fields[0], true, nil
+	return sha, exists, nil
 }
 
 // firstRemoteURL returns the first configured remote.<name>.url. Git fetch /

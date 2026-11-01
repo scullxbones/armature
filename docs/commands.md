@@ -802,9 +802,10 @@ What `arm ops-backup` does guarantee when it exits 0:
   `missing | fast-forward | already-contained | diverge→_armature-recovered`.
   Printed fields are durable only (recovered SHA, bundle path, optional aside
   publish name). An absent `origin/_armature` is `missing` only when
-  `git ls-remote --refs` reports the branch absent (structural); unreachable
-  origin and every other ls-remote/fetch/resolve/ancestry failure stay
-  fail-closed. A recovered tip that is a strict ancestor of current
+  `git ls-remote --refs` reports no exact `refs/heads/_armature` (structural —
+  pattern/suffix peers such as `…/archive/refs/heads/_armature` do not count);
+  unreachable origin and every other ls-remote/fetch/resolve/ancestry failure
+  stay fail-closed. A recovered tip that is a strict ancestor of current
   `origin/_armature` is `already-contained` (exit 0, no aside — tip already
   in published history). Unrelated tips are
   `diverge→_armature-recovered` (exit 1). It does not apply the publish
