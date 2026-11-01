@@ -112,9 +112,10 @@ func locateAllPublishedFromWorktreeFiles(in LocateInput) ([]LocatedOp, error) {
 }
 
 func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error) {
-	// One CommitWalkReverse replaces per-commit CommitterUnix + FirstParent +
-	// DiffNameOnlyRange / ListFilesAtCommit. Published/cutover use one
-	// RevListReverse each as an in-memory ancestor set (not IsAncestor per SHA).
+	// Flat git budget (independent of commit / op-log-touching commit count):
+	// one CommitWalkReverse, one RevListReverse each for published/cutover
+	// ancestor sets, one ShowFilesBatch (cat-file --batch) for all log blobs.
+	// Error text says "commit walk HEAD" (not "rev-list HEAD") by design.
 	walk, err := gc.CommitWalkReverse("HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("commit walk HEAD: %w", err)
@@ -147,7 +148,15 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 		}
 	}
 	prefs := prefixes(in)
-	var located []LocatedOp
+
+	type fileJob struct {
+		commitIdx int
+		path      string
+		newRef    adapters.BlobRef
+		oldRef    *adapters.BlobRef
+	}
+	var jobs []fileJob
+	var blobRefs []adapters.BlobRef
 	for i, e := range walk {
 		if !pastFrom {
 			if e.SHA == from {
@@ -155,32 +164,69 @@ func locateByCommitWalk(gc *adapters.Client, in LocateInput) ([]LocatedOp, error
 			}
 			continue
 		}
-		hasParent := e.FirstParent != ""
-		files := filterOpLogPaths(e.ChangedFiles, prefs)
+		for _, f := range filterOpLogPaths(e.ChangedFiles, prefs) {
+			job := fileJob{
+				commitIdx: i,
+				path:      f,
+				newRef:    adapters.BlobRef{Rev: e.SHA, Path: f},
+			}
+			blobRefs = append(blobRefs, job.newRef)
+			if e.FirstParent != "" {
+				old := adapters.BlobRef{Rev: e.FirstParent, Path: f}
+				job.oldRef = &old
+				blobRefs = append(blobRefs, old)
+			}
+			jobs = append(jobs, job)
+		}
+	}
+	blobs, err := gc.ShowFilesBatch(blobRefs)
+	if err != nil {
+		return nil, err
+	}
+	if len(blobs) != len(blobRefs) {
+		return nil, fmt.Errorf("show files batch: got %d results for %d refs", len(blobs), len(blobRefs))
+	}
+
+	blobAt := 0
+	var located []LocatedOp
+	for _, job := range jobs {
+		e := walk[job.commitIdx]
+		var neu []byte
+		if blobs[blobAt].OK {
+			neu = blobs[blobAt].Content
+		}
+		blobAt++
+		var old []byte
+		if job.oldRef != nil {
+			if blobs[blobAt].OK {
+				old = blobs[blobAt].Content
+			}
+			blobAt++
+		}
+		if neu == nil {
+			continue
+		}
+		opsInCommit, lErr := opsIntroducedFromBytes(neu, old, filepath.Base(job.path))
+		if lErr != nil {
+			return nil, lErr
+		}
 		_, inPublished := publishedSet[e.SHA]
 		published := pubSHA != "" && inPublished
 		epoch := epochTimestampFilenameLine
 		if cutover != "" {
-			// Strictly before cutover: ancestor of cutover, excluding cutover itself.
 			_, inCutover := cutoverSet[e.SHA]
 			if !inCutover || e.SHA == cutover {
 				epoch = epochCommitThenLine
 			}
 		}
-		commitN := int64(i + 1)
-		for _, f := range files {
-			opsInCommit, lErr := opsIntroducedInCommit(gc, e.SHA, e.FirstParent, hasParent, f)
-			if lErr != nil {
-				return nil, lErr
-			}
-			for _, loc := range opsInCommit {
-				loc.CommitSHA = e.SHA
-				loc.CommitterUnix = e.CommitterUnix
-				loc.Published = published
-				loc.Seq.Epoch = epoch
-				loc.Seq.CommitN = commitN
-				located = append(located, loc)
-			}
+		commitN := int64(job.commitIdx + 1)
+		for _, loc := range opsInCommit {
+			loc.CommitSHA = e.SHA
+			loc.CommitterUnix = e.CommitterUnix
+			loc.Published = published
+			loc.Seq.Epoch = epoch
+			loc.Seq.CommitN = commitN
+			located = append(located, loc)
 		}
 	}
 	return located, nil
@@ -244,20 +290,9 @@ func isOpLogPath(f string, opsPrefixes []string) bool {
 	return false
 }
 
-func opsIntroducedInCommit(gc *adapters.Client, sha, parent string, hasParent bool, path string) ([]LocatedOp, error) {
-	var old []byte
-	if hasParent {
-		b, err := gc.ShowFileAtCommit(parent, path)
-		if err == nil {
-			old = b
-		}
-	}
-	neu, err := gc.ShowFileAtCommit(sha, path)
-	if err != nil {
-		return nil, nil
-	}
+func opsIntroducedFromBytes(neu, old []byte, filename string) ([]LocatedOp, error) {
 	oldLines := countNonEmptyLines(old)
-	return parseLogBytesFromLine(neu, filepath.Base(path), oldLines)
+	return parseLogBytesFromLine(neu, filename, oldLines)
 }
 
 func countNonEmptyLines(b []byte) int {

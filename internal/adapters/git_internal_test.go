@@ -197,6 +197,41 @@ func TestLookPathOnWindowsPATHEXT_REQ_PARCLI(t *testing.T) {
 	}
 }
 
+func TestParseCommitWalkOutput_KeepsFirstParentMergeBlock_REQ_OPORDER_LOCATE(t *testing.T) {
+	t.Parallel()
+	// Synthetic `git log -z -m --name-only --format=%H%x09%ct%x09%P` shape:
+	// merge SHA repeated once per parent; first path field has a leading LF.
+	const merge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const p1 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	const p2 = "cccccccccccccccccccccccccccccccccccccccc"
+	const next = "dddddddddddddddddddddddddddddddddddddddd"
+	raw := merge + "\t100\t" + p1 + " " + p2 + "\x00" +
+		"\nfrom-first-parent.txt\x00" +
+		merge + "\t100\t" + p1 + " " + p2 + "\x00" +
+		"\nfrom-second-parent.txt\x00" +
+		next + "\t200\t" + merge + "\x00"
+
+	got, err := parseCommitWalkOutput([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("entries=%d want 2 (merge once + follower)", len(got))
+	}
+	if got[0].SHA != merge {
+		t.Fatalf("first sha=%s want merge", got[0].SHA)
+	}
+	if got[0].FirstParent != p1 {
+		t.Fatalf("first parent=%s want %s", got[0].FirstParent, p1)
+	}
+	if len(got[0].ChangedFiles) != 1 || got[0].ChangedFiles[0] != "from-first-parent.txt" {
+		t.Fatalf("merge files=%v want [from-first-parent.txt]", got[0].ChangedFiles)
+	}
+	if got[1].SHA != next {
+		t.Fatalf("second sha=%s", got[1].SHA)
+	}
+}
+
 func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 	t.Parallel()
 	if (*Client)(nil).WithEnviron([]string{"PATH=/tmp"}) != nil {

@@ -1,9 +1,12 @@
 package adapters
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1309,23 +1312,46 @@ type CommitWalkEntry struct {
 	ChangedFiles  []string
 }
 
+// BlobRef names a tree path at a revision for ShowFilesBatch (`rev:path`).
+type BlobRef struct {
+	Rev  string
+	Path string
+}
+
+// BlobResult is one ShowFilesBatch response. OK is false when the path is
+// missing at Rev (cat-file "missing"); that is not an error.
+type BlobResult struct {
+	Content []byte
+	OK      bool
+}
+
+// commitWalkFormat is TAB-separated sha/ct/parents so -z can NUL-delimit
+// headers from paths. Avoids embedding %x00 in --format (ambiguous with -z).
+const commitWalkFormat = "%H%x09%ct%x09%P"
+
 // CommitWalkReverse returns every commit reachable from rev, oldest first, in
 // one git process. FirstParent and ChangedFiles use first-parent merge diffs
-// (--diff-merges=first-parent) so callers can replace per-SHA CommitterUnix,
-// FirstParent, DiffNameOnlyRange, and ListFilesAtCommit loops.
+// so callers can replace per-SHA CommitterUnix, FirstParent, DiffNameOnlyRange,
+// and ListFilesAtCommit loops.
+//
+// Flags stay within documented min Git 2.25 (architecture.md): `-m` for
+// per-parent merge diffs (not `--diff-merges=*`, Git 2.31+), `--root` so
+// log.showRoot=false still emits the root commit, `-z` so core.quotePath
+// cannot C-quote non-ASCII paths. `-m` repeats merge SHAs once per parent;
+// parseCommitWalkOutput keeps the first block (first-parent diff).
 func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 	rev = strings.TrimSpace(rev)
 	if rev == "" {
 		return nil, fmt.Errorf("git log commit walk: rev is required")
 	}
-	// Leading %x00 makes each commit header unambiguous even when the prior
-	// commit listed changed paths (empty commits omit the blank name-only line).
 	cmd := c.cmd(
 		"log",
+		"-z",
 		"--reverse",
-		"--diff-merges=first-parent",
+		"-m",
+		"--root",
 		"--name-only",
-		"--format=%x00%H%x00%ct%x00%P",
+		"--format="+commitWalkFormat,
 		rev,
 	)
 	out, err := cmd.Output()
@@ -1339,61 +1365,129 @@ func (c *Client) CommitWalkReverse(rev string) ([]CommitWalkEntry, error) {
 	return entries, nil
 }
 
+// ShowFilesBatch returns blob contents for each rev:path in one
+// `git cat-file --batch` process (Git 2.25+). Missing paths yield OK=false.
+func (c *Client) ShowFilesBatch(refs []BlobRef) ([]BlobResult, error) {
+	out := make([]BlobResult, len(refs))
+	if len(refs) == 0 {
+		return out, nil
+	}
+	cmd := c.cmd("cat-file", "--batch")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file --batch stdin: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close() //nolint:errcheck // best-effort abort before start
+		return nil, fmt.Errorf("git cat-file --batch stdout: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close() //nolint:errcheck // best-effort abort before start
+		return nil, fmt.Errorf("git cat-file --batch start: %w", err)
+	}
+	writeErr := make(chan error, 1)
+	go func() {
+		defer stdin.Close() //nolint:errcheck // writer side
+		for _, ref := range refs {
+			line := ref.Rev + ":" + ref.Path + "\n"
+			if _, werr := io.WriteString(stdin, line); werr != nil {
+				writeErr <- werr
+				return
+			}
+		}
+		writeErr <- nil
+	}()
+	reader := bufio.NewReader(stdout)
+	for i := range refs {
+		res, rerr := readCatFileBatchItem(reader)
+		if rerr != nil {
+			_ = cmd.Process.Kill() //nolint:errcheck // drain failed batch
+			_ = cmd.Wait()         //nolint:errcheck
+			return nil, fmt.Errorf("git cat-file --batch item %d (%s:%s): %w", i, refs[i].Rev, refs[i].Path, rerr)
+		}
+		out[i] = res
+	}
+	if werr := <-writeErr; werr != nil {
+		_ = cmd.Wait() //nolint:errcheck
+		return nil, fmt.Errorf("git cat-file --batch write: %w", werr)
+	}
+	if err := cmd.Wait(); err != nil {
+		return nil, fmt.Errorf("git cat-file --batch: %w", err)
+	}
+	return out, nil
+}
+
+func readCatFileBatchItem(r *bufio.Reader) (BlobResult, error) {
+	header, err := r.ReadBytes('\n')
+	if err != nil {
+		return BlobResult{}, err
+	}
+	line := strings.TrimSuffix(string(header), "\n")
+	if strings.HasSuffix(line, " missing") {
+		return BlobResult{OK: false}, nil
+	}
+	// <oid> SP <type> SP <size>
+	fields := strings.Fields(line)
+	if len(fields) < 3 {
+		return BlobResult{}, fmt.Errorf("bad cat-file header %q", line)
+	}
+	size, err := strconv.Atoi(fields[len(fields)-1])
+	if err != nil || size < 0 {
+		return BlobResult{}, fmt.Errorf("bad cat-file size in %q: %w", line, err)
+	}
+	content := make([]byte, size)
+	if _, err := io.ReadFull(r, content); err != nil {
+		return BlobResult{}, err
+	}
+	// cat-file --batch appends a trailing LF after the payload.
+	if _, err := r.ReadByte(); err != nil {
+		return BlobResult{}, err
+	}
+	return BlobResult{Content: content, OK: true}, nil
+}
+
 func parseCommitWalkOutput(out []byte) ([]CommitWalkEntry, error) {
 	if len(out) == 0 {
 		return []CommitWalkEntry{}, nil
 	}
+	parts := bytes.Split(out, []byte{0})
 	var entries []CommitWalkEntry
+	seen := map[string]struct{}{}
 	i := 0
-	for i < len(out) {
-		if out[i] != 0 {
-			return nil, fmt.Errorf("expected NUL commit header at offset %d", i)
-		}
+	for i < len(parts) {
+		raw := parts[i]
 		i++
-		headerEnd := i
-		for headerEnd < len(out) && out[headerEnd] != '\n' {
-			headerEnd++
+		if len(raw) == 0 {
+			continue
 		}
-		header := string(out[i:headerEnd])
-		parts := strings.Split(header, "\x00")
-		if len(parts) != 3 {
-			return nil, fmt.Errorf("commit header %q: want sha, ct, parents", header)
+		if !isCommitWalkHeader(raw) {
+			return nil, fmt.Errorf("expected commit header, got %q", truncateForErr(raw))
 		}
-		sha := parts[0]
-		ct, convErr := strconv.ParseInt(parts[1], 10, 64)
-		if convErr != nil {
-			return nil, fmt.Errorf("committer unix for %s: %w", sha, convErr)
-		}
-		firstParent := ""
-		if parents := strings.Fields(parts[2]); len(parents) > 0 {
-			firstParent = parents[0]
-		}
-		i = headerEnd
-		if i < len(out) && out[i] == '\n' {
-			i++
+		sha, ct, firstParent, herr := parseCommitWalkHeader(raw)
+		if herr != nil {
+			return nil, herr
 		}
 		var files []string
-		switch {
-		case i >= len(out) || out[i] == 0:
-			// Empty commit: next header (or EOF) follows immediately.
-		case out[i] == '\n':
-			i++ // blank line git inserts before name-only paths
-			for i < len(out) && out[i] != 0 {
-				lineEnd := i
-				for lineEnd < len(out) && out[lineEnd] != '\n' && out[lineEnd] != 0 {
-					lineEnd++
-				}
-				if lineEnd > i {
-					files = append(files, string(out[i:lineEnd]))
-				}
-				i = lineEnd
-				if i < len(out) && out[i] == '\n' {
-					i++
-				}
+		for i < len(parts) {
+			p := parts[i]
+			if len(p) == 0 {
+				i++
+				break
 			}
-		default:
-			return nil, fmt.Errorf("after commit %s: unexpected %q", sha, out[i:min(i+16, len(out))])
+			if isCommitWalkHeader(p) {
+				break
+			}
+			path := strings.TrimPrefix(string(p), "\n")
+			if path != "" {
+				files = append(files, path)
+			}
+			i++
 		}
+		if _, dup := seen[sha]; dup {
+			continue
+		}
+		seen[sha] = struct{}{}
 		if files == nil {
 			files = []string{}
 		}
@@ -1405,6 +1499,44 @@ func parseCommitWalkOutput(out []byte) ([]CommitWalkEntry, error) {
 		})
 	}
 	return entries, nil
+}
+
+func isCommitWalkHeader(raw []byte) bool {
+	// SHA (40 hex) TAB ...
+	if len(raw) < 41 || raw[40] != '\t' {
+		return false
+	}
+	for _, b := range raw[:40] {
+		ok := (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func parseCommitWalkHeader(raw []byte) (sha string, ct int64, firstParent string, err error) {
+	fields := bytes.SplitN(raw, []byte{'\t'}, 3)
+	if len(fields) != 3 {
+		return "", 0, "", fmt.Errorf("commit header %q: want sha, ct, parents", truncateForErr(raw))
+	}
+	sha = string(fields[0])
+	ct, convErr := strconv.ParseInt(string(fields[1]), 10, 64)
+	if convErr != nil {
+		return "", 0, "", fmt.Errorf("committer unix for %s: %w", sha, convErr)
+	}
+	if parents := strings.Fields(string(fields[2])); len(parents) > 0 {
+		firstParent = parents[0]
+	}
+	return sha, ct, firstParent, nil
+}
+
+func truncateForErr(b []byte) string {
+	const max = 64
+	if len(b) <= max {
+		return string(b)
+	}
+	return string(b[:max]) + "…"
 }
 
 // IsAncestor reports whether anc is an ancestor of desc (inclusive).

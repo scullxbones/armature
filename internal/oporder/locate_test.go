@@ -121,33 +121,36 @@ func writeOpLog(t *testing.T, repo, rel string, log []ops.Op) {
 }
 
 // TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE proves
-// locateByCommitWalk uses a flat git-process budget (CommitWalkReverse +
-// ancestor rev-lists), not one CommitterUnix / FirstParent / DiffNameOnlyRange
-// / IsAncestor per SHA.
+// locateByCommitWalk uses a flat git-process budget even as op-changing
+// commits grow (CommitWalkReverse + ancestor rev-lists + one ShowFilesBatch),
+// not per-SHA CommitterUnix/FirstParent/Diff/IsAncestor or per-file ShowFile.
 func TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
-	countFor := func(nEmpty int) (calls int, located []LocatedOp) {
+	countFor := func(nOpCommits int) (calls int, located []LocatedOp) {
 		t.Helper()
 		fx := gittest.InitWithOrigin(t)
 		dir := fx.Dir
-		writeOpLog(t, dir, "ops/worker-a.log", []ops.Op{
-			{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 90, WorkerID: "worker-a",
-				Payload: ops.Payload{Title: "T", NodeType: "task"}},
-		})
-		gittest.Git(t, dir, "add", "ops/worker-a.log")
-		gittest.Git(t, dir, "commit", "-m", "seed op")
+		gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
 		gittest.Git(t, dir, "branch", "-M", "_armature")
 		gittest.Git(t, dir, "push", "-u", "origin", "HEAD:refs/heads/_armature")
-		for i := 0; i < nEmpty; i++ {
-			gittest.Git(t, dir, "commit", "--allow-empty", "-m", fmt.Sprintf("empty-%d", i))
+
+		var log []ops.Op
+		for i := 0; i < nOpCommits; i++ {
+			log = append(log, ops.Op{
+				Type: ops.OpCreate, TargetID: fmt.Sprintf("task-%02d", i), Timestamp: int64(100 + i),
+				WorkerID: "worker-a", Payload: ops.Payload{Title: "T", NodeType: "task"},
+			})
+			writeOpLog(t, dir, "ops/worker-a.log", log)
+			gittest.Git(t, dir, "add", "ops/worker-a.log")
+			gittest.Git(t, dir, "commit", "-m", fmt.Sprintf("op-%d", i))
 		}
 
 		counterPath := filepath.Join(t.TempDir(), "git-calls")
 		require.NoError(t, os.WriteFile(counterPath, nil, 0o644))
 		gc := adapters.New(dir).WithEnviron(countingGitEnviron(t, counterPath))
 		out, err := locateByCommitWalk(gc, LocateInput{
-			OpsWorktree:  dir,
-			PublishedRef: "origin/_armature",
-			Cutover:      headSHA(t, dir), // forces cutover ancestor-set path
+			OpsWorktree:       dir,
+			ExtraPublishedTip: "HEAD",
+			Cutover:           headSHA(t, dir),
 		})
 		require.NoError(t, err)
 		raw, readErr := os.ReadFile(counterPath)
@@ -155,16 +158,55 @@ func TestLocateByCommitWalk_GitInvocationsBounded_REQ_OPORDER_LOCATE(t *testing.
 		return len(raw), out
 	}
 
-	smallCalls, smallLoc := countFor(40)
-	largeCalls, largeLoc := countFor(200)
-	require.NotEmpty(t, smallLoc)
-	require.NotEmpty(t, largeLoc)
+	smallCalls, smallLoc := countFor(8)
+	largeCalls, largeLoc := countFor(40)
+	require.Len(t, smallLoc, 8)
+	require.Len(t, largeLoc, 40)
 	assert.Equal(t, smallCalls, largeCalls,
-		"git exec count must be independent of empty-commit count (got %d for 40, %d for 200)",
+		"git exec count must be independent of op-changing commit count (got %d for 8, %d for 40)",
 		smallCalls, largeCalls)
-	// CommitWalkReverse + resolve published tip + published rev-list + cutover rev-list
+	// walk + resolve tip + published rev-list + cutover rev-list + cat-file --batch
 	assert.LessOrEqual(t, largeCalls, 8, "locate walk must stay a small constant git budget")
-	assert.GreaterOrEqual(t, largeCalls, 3)
+	assert.GreaterOrEqual(t, largeCalls, 4)
+}
+
+// TestLocateOps_AdversarialGitConfigMatrix_REQ_OPORDER_LOCATE runs LocateOps
+// under hostile local git config (showRoot/quotePath/color/decorate/renames/
+// noprefix/relative) and still recovers root + non-ASCII ops paths.
+func TestLocateOps_AdversarialGitConfigMatrix_REQ_OPORDER_LOCATE(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	configs := [][][2]string{
+		{{"log.showRoot", "false"}, {"core.quotePath", "true"}},
+		{
+			{"log.showRoot", "false"},
+			{"core.quotePath", "true"},
+			{"color.ui", "always"},
+			{"log.decorate", "short"},
+			{"diff.renames", "false"},
+			{"diff.noprefix", "true"},
+			{"diff.relative", "true"},
+		},
+	}
+	for _, cfg := range configs {
+		fx := gittest.InitWithOrigin(t)
+		dir := fx.Dir
+		nonASCII := "ops/ópś.log"
+		writeOpLog(t, dir, nonASCII, []ops.Op{
+			{Type: ops.OpCreate, TargetID: "task-root", Timestamp: 50, WorkerID: "ópś",
+				Payload: ops.Payload{Title: "R", NodeType: "task"}},
+		})
+		gittest.Git(t, dir, "add", nonASCII)
+		gittest.Git(t, dir, "commit", "-m", "root non-ascii op")
+		gittest.Git(t, dir, "branch", "-M", "_armature")
+		gittest.Git(t, dir, "push", "-u", "origin", "HEAD:refs/heads/_armature")
+		for _, p := range cfg {
+			gittest.Git(t, dir, "config", p[0], p[1])
+		}
+		located, err := LocateOps(LocateInput{OpsWorktree: dir, ExtraPublishedTip: "HEAD"})
+		require.NoError(t, err)
+		require.NotEmpty(t, located, "root ops must survive log.showRoot=false")
+		assert.Equal(t, "task-root", located[0].Op.TargetID)
+		assert.Equal(t, "ópś.log", located[0].Seq.Filename)
+	}
 }
 
 func countingGitEnviron(t *testing.T, counterPath string) []string {

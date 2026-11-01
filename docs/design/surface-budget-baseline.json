@@ -1,12 +1,18 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 160,
+      "count": 167,
       "names": [
         "AppendLog",
         "AppendLog.Append",
         "AppendLog.AppendIf",
         "AppendLog.Path",
+        "BlobRef",
+        "BlobRef.Path",
+        "BlobRef.Rev",
+        "BlobResult",
+        "BlobResult.Content",
+        "BlobResult.OK",
         "CheckMinGitVersion",
         "Client",
         "Client.AddPaths",
@@ -68,6 +74,7 @@
         "Client.SetGitConfig",
         "Client.SetGitConfigWorktree",
         "Client.ShowFileAtCommit",
+        "Client.ShowFilesBatch",
         "Client.StablePatchID",
         "Client.StagedPaths",
         "Client.Toplevel",
