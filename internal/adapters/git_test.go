@@ -668,10 +668,7 @@ func TestCommitterUnixRange_MatchesPerSHA_REQ_TOPTIER_S12_T2(t *testing.T) {
 func TestCommitWalkReverse_SHA256ObjectFormat_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	initCmd := adapters.NonInteractiveGitCommand(repo, "init", "--object-format=sha256")
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("sha256 object format unavailable: %v (%s)", err, out)
-	}
+	gittest.InitSHA256Repo(t, repo)
 	gittest.Git(t, repo, "config", "user.email", "t@t")
 	gittest.Git(t, repo, "config", "user.name", "t")
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, "ops"), 0o755))
@@ -848,6 +845,7 @@ var hostileLogDiffMergesModes = []string{
 
 func applyAdversarialGitConfig(t *testing.T, repo string, pairs [][2]string) {
 	t.Helper()
+	gittest.SkipUnlessConfigValuesSupported(t, pairs)
 	for _, p := range pairs {
 		runGitDir(t, repo, "config", p[0], p[1])
 	}
@@ -960,6 +958,7 @@ func TestCommitWalkReverse_DiffMergesFlagAlone_REQ_OPORDER_LOCATE(t *testing.T) 
 	for _, mode := range hostileLogDiffMergesModes {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
+			gittest.SkipUnlessConfigValuesSupported(t, [][2]string{{"log.diffMerges", mode}})
 			repo, _ := seedCommitWalkFixture(t)
 			rawWalk := func(extraPins []string, mergeFlag string) []byte {
 				t.Helper()

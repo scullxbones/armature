@@ -706,7 +706,7 @@
       ]
     },
     "internal/gittest": {
-      "count": 13,
+      "count": 15,
       "names": [
         "CloneFixture",
         "CloneFixtureTo",
@@ -716,11 +716,13 @@
         "Git",
         "Init",
         "InitRepo",
+        "InitSHA256Repo",
         "InitWithOrigin",
         "IsolateGit",
         "Main",
         "NewFixture",
-        "SetLocalConfig"
+        "SetLocalConfig",
+        "SkipUnlessConfigValuesSupported"
       ]
     },
     "internal/harnesshook": {
