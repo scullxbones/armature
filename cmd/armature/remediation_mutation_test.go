@@ -18,7 +18,7 @@ import (
 // filtering requires Decide: nil Decide + DefaultDecideOnlyTree leaks foreign
 // live claim on a healthy tree (no merged ancestor). Gate kill proofs for
 // RequireOwner / ForeignLiveLeaseBlocks / tree consistency live in
-// remediation_gates_test.go (real path; no injected Decide/Producer).
+// remediation_gates_test.go (real path; no injected Decide).
 func TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	now := time.Now().Unix()

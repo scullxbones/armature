@@ -19,7 +19,7 @@ import (
 )
 
 // Owner/lease gates the printed remediation path uses (real code — no injected
-// Decide/Producer). Product tests below exercise the print path; TestDisableMutationsFailNamedTests
+// Decide). Product tests below exercise the print path; TestDisableMutationsFailNamedTests
 // proves a source disable-mutation fails a focused package-local test (cheaper
 // than re-running ./cmd/armature thrice).
 func remediationPrintGates() []struct {
@@ -62,7 +62,7 @@ func remediationPrintGates() []struct {
 
 // TestPrintedRemediation_RequireOwnerBlocksForeignCancel_REQ_TOPTIER_S18_T4
 // drives REAL print path: planOptsForRemediation → remediationDecide →
-// requirePublishedOwner → oporder.RequireOwner. No injected Decide/Producer.
+// requirePublishedOwner → oporder.RequireOwner. No injected Decide.
 // Disable-mutation `if false && (workerID…)` at RequireOwner must FAIL this test.
 func TestPrintedRemediation_RequireOwnerBlocksForeignCancel_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
