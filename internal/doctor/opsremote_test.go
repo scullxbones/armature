@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/testexec"
@@ -87,7 +89,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 	}{
 		{
 			name:     "healthy_in_sync",
-			g:        &fakeD11Git{tip: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			g:        &fakeD11Git{tip: gitoid.PadSHA1("a")},
 			wantOut:  d11Healthy,
 			wantSev:  SeverityOK,
 			wantExit: 0,
@@ -96,7 +98,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "healthy_fresh_local_only",
 			g: &fakeD11Git{
-				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:             gitoid.PadSHA1("a"),
 				ahead:           2,
 				committerUnixes: []int64{freshUnix, freshUnix},
 			},
@@ -108,7 +110,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "stale_local_only",
 			g: &fakeD11Git{
-				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:             gitoid.PadSHA1("a"),
 				ahead:           3,
 				committerUnixes: []int64{staleUnix, staleUnix, staleUnix},
 			},
@@ -121,7 +123,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "stale_threshold_override_short",
 			g: &fakeD11Git{
-				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:             gitoid.PadSHA1("a"),
 				ahead:           1,
 				committerUnixes: []int64{now.Add(-2 * time.Hour).Unix()},
 			},
@@ -178,7 +180,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "rev_list_fails",
 			g: &fakeD11Git{
-				tip:        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:        gitoid.PadSHA1("a"),
 				revListErr: errors.New("rev-list boom"),
 			},
 			wantOut:  d11CouldNotVerify,
@@ -189,7 +191,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "committer_range_fails",
 			g: &fakeD11Git{
-				tip:               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:               gitoid.PadSHA1("a"),
 				ahead:             2,
 				committerRangeErr: errors.New("committer range boom"),
 			},
@@ -201,7 +203,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "count_mismatch_fail_closed",
 			g: &fakeD11Git{
-				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:             gitoid.PadSHA1("a"),
 				ahead:           3,
 				committerUnixes: []int64{freshUnix, freshUnix},
 			},
@@ -215,7 +217,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 			// Count includes the old side-branch tip; first-parent would only
 			// see the recent merge. Full-range oldest must still be stale.
 			g: &fakeD11Git{
-				tip:             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:             gitoid.PadSHA1("a"),
 				ahead:           2,
 				committerUnixes: []int64{freshUnix, staleUnix},
 			},
@@ -228,7 +230,7 @@ func TestObserveEvaluateD11_FailClosedTable_REQ_TOPTIER_S12_T2(t *testing.T) {
 		{
 			name: "committer_time_fails",
 			g: &fakeD11Git{
-				tip:               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				tip:               gitoid.PadSHA1("a"),
 				ahead:             1,
 				committerRangeErr: errors.New("committer boom"),
 			},

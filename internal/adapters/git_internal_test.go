@@ -204,10 +204,10 @@ func TestParseCommitWalkOutput_KeepsFirstParentMergeBlock_REQ_OPORDER_LOCATE(t *
 	// Synthetic `git log -z --diff-merges=separate --name-only
 	// --format=%H%x09%ct%x09%P` shape: merge SHA repeated once per parent;
 	// first path field has a leading LF.
-	const merge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	const p1 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	const p2 = "cccccccccccccccccccccccccccccccccccccccc"
-	const next = "dddddddddddddddddddddddddddddddddddddddd"
+	var merge = gitoid.PadSHA1("a")
+	var p1 = gitoid.PadSHA1("b")
+	var p2 = gitoid.PadSHA1("c")
+	var next = gitoid.PadSHA1("d")
 	raw := merge + "\t100\t" + p1 + " " + p2 + "\x00" +
 		"\nfrom-first-parent.txt\x00" +
 		merge + "\t100\t" + p1 + " " + p2 + "\x00" +

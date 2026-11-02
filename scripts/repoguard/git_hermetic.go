@@ -154,6 +154,9 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 
 	fmt.Fprintln(stdout, "OK: git-hermetic allows:")
 	for _, a := range allowlist() {
+		if a.Check != allowGitHermeticName && a.Check != allowGitHermeticInit {
+			continue
+		}
 		fmt.Fprintf(stdout, "  %s (%s): %s\n", a.RelPath, a.Check, a.Reason)
 	}
 

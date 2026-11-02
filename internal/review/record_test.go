@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/attestation"
 
 	"github.com/stretchr/testify/assert"
@@ -1029,7 +1031,7 @@ func gateEvidenceRecordFixture(t *testing.T, ev gateEvidence) (*ReviewBundle, *C
 		Issue:         IssueInfo{ID: "task-01", Type: "task", Title: "Gate digest"},
 		Contract:      Contract{DefinitionOfDone: "Done", Acceptance: []string{"Works"}},
 		Delivery: Delivery{
-			BaseSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			BaseSHA: gitoid.PadSHA1("a"),
 			HeadSHA: ev.HeadSHA,
 			Diff:    "--- a/f.go\n+++ b/f.go\n@@ -1,0 +1,1 @@\n+package main",
 		},
@@ -1063,7 +1065,7 @@ func TestRecord_GateEvidenceHashVerified_REQ_LNGHZN_S10_T3(t *testing.T) {
 	ev := gateEvidence{
 		Profile:    "full",
 		Command:    []string{"true"},
-		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA:    gitoid.PadSHA1("b"),
 		Start:      1,
 		End:        2,
 		Exit:       0,
@@ -1085,7 +1087,7 @@ func TestRecord_GateEvidenceTamperedLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	ev := gateEvidence{
 		Profile:    "full",
 		Command:    []string{"true"},
-		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA:    gitoid.PadSHA1("b"),
 		Start:      1,
 		End:        2,
 		Exit:       0,
@@ -1107,7 +1109,7 @@ func TestRecord_GateEvidenceMissingHashFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	ev := gateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA: gitoid.PadSHA1("b"),
 		Start:   1,
 		End:     2,
 		Exit:    0,
@@ -1124,7 +1126,7 @@ func TestRecord_GateEvidenceMissingLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 	ev := gateEvidence{
 		Profile:    "full",
 		Command:    []string{"true"},
-		HeadSHA:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA:    gitoid.PadSHA1("b"),
 		Start:      1,
 		End:        2,
 		Exit:       0,

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
 
@@ -468,8 +470,8 @@ func validDecodeBundle() ReviewBundle {
 			Acceptance:       []string{"works"},
 		},
 		Delivery: Delivery{
-			BaseSHA:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			HeadSHA:      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			BaseSHA:      gitoid.PadSHA1("a"),
+			HeadSHA:      gitoid.PadSHA1("b"),
 			ChangedFiles: []string{"impl.go"},
 		},
 		Fingerprints: Fingerprints{

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -132,8 +134,8 @@ func TestReviewBundleSchema_ValidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
     "acceptance": ["Passes unit tests", "Code is documented"]
   },
   "delivery": {
-    "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "base_sha": "` + gitoid.PadSHA1("a") + `",
+    "head_sha": "` + gitoid.PadSHA1("b") + `",
     "changed_files": ["src/main.go", "src/main_test.go"]
   },
   "fingerprints": {
@@ -280,8 +282,8 @@ func TestPlanAndReviewBundleSchemasAcceptAllIssueTypes_REQ_TOPTIER_S2_T1(t *test
 			bundleJSON := `{"schema_version":1,"bundle_id":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",` +
 				`"issue":{"id":"TYPE-1","type":"` + issueType + `","title":"Accepted type","outcome":"Implemented"},` +
 				`"contract":{"definition_of_done":"Done","acceptance":[]},` +
-				`"delivery":{"base_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
-				`"head_sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","changed_files":[]},` +
+				`"delivery":{"base_sha": "` + gitoid.PadSHA1("a") + `",` +
+				`"head_sha": "` + gitoid.PadSHA1("b") + `","changed_files":[]},` +
 				`"fingerprints":{"contract":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",` +
 				`"delivery":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}`
 			validateAgainstSchema(t, "review-bundle.schema.json", bundleJSON)
@@ -323,8 +325,8 @@ func TestReviewBundleSchema_InvalidExample_REQ_TOPTIER_S2_T1(t *testing.T) {
     "acceptance": ["Passes unit tests", "Code is documented"]
   },
   "delivery": {
-    "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "base_sha": "` + gitoid.PadSHA1("a") + `",
+    "head_sha": "` + gitoid.PadSHA1("b") + `",
     "changed_files": ["src/main.go", "src/main_test.go"]
   },
   "fingerprints": {
@@ -527,8 +529,8 @@ func TestReviewBundleSchema_AllowsEmptyDefinitionOfDone_REQ_TOPTIER_S2_T1(t *tes
     "acceptance": []
   },
   "delivery": {
-    "base_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "base_sha": "` + gitoid.PadSHA1("a") + `",
+    "head_sha": "` + gitoid.PadSHA1("b") + `",
     "changed_files": []
   },
   "fingerprints": {

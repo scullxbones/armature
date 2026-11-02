@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/config"
 	"github.com/scullxbones/armature/internal/gittest"
@@ -87,8 +89,8 @@ func TestDeliveryRecordRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
 		"delivery", "record", "--repo", repo, "--issue", "task-01",
-		"--base", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-		"--tip", "cafebabecafebabecafebabecafebabecafebabe",
+		"--base", gitoid.PadSHA1("deadbeef"),
+		"--tip", gitoid.PadSHA1("cafebabe"),
 		"--format", "agent")
 	assert.Equal(t, 1, code)
 

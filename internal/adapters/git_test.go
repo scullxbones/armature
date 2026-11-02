@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/testexec"
@@ -393,7 +395,7 @@ func TestListFilesAtCommit_InvalidSHA(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	_, err := c.ListFilesAtCommit("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	_, err := c.ListFilesAtCommit(gitoid.PadSHA1("deadbeef"))
 	assert.Error(t, err)
 }
 
@@ -1400,7 +1402,7 @@ func TestResetHard_InvalidRef(t *testing.T) {
 	repo := initTestRepo(t)
 	c := adapters.New(repo)
 
-	err := c.ResetHard("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	err := c.ResetHard(gitoid.PadSHA1("deadbeef"))
 	assert.Error(t, err)
 }
 

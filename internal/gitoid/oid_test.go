@@ -32,6 +32,21 @@ func TestValid_SHA1AndSHA256_REQ_PV70(t *testing.T) {
 	}
 }
 
+func TestPadSHA1OwnsWidth_REQ_419(t *testing.T) {
+	t.Parallel()
+	got := PadSHA1("ab")
+	if len(got) != LenSHA1 {
+		t.Fatalf("PadSHA1 len=%d want %d", len(got), LenSHA1)
+	}
+	if !Valid(got) {
+		t.Fatalf("PadSHA1 must yield Valid OID, got %q", got)
+	}
+	got64 := PadSHA256("cd")
+	if len(got64) != LenSHA256 || !Valid(got64) {
+		t.Fatalf("PadSHA256 invalid: %q", got64)
+	}
+}
+
 func TestValidEqualsPatternLower_REQ_PV70(t *testing.T) {
 	t.Parallel()
 	re := regexp.MustCompile(PatternLower)

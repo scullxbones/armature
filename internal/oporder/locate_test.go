@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/gittest"
@@ -94,7 +96,7 @@ func TestLocateOps_MissingFromCommitErrors_REQ_CLAIMORD_W14(t *testing.T) { //no
 
 	located, err := LocateOps(LocateInput{
 		OpsWorktree:       dir,
-		FromCommit:        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		FromCommit:        gitoid.PadSHA1("deadbeef"),
 		ExtraPublishedTip: "HEAD",
 	})
 	require.Error(t, err)

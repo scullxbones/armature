@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/clock"
 	"github.com/scullxbones/armature/internal/testexec"
@@ -89,7 +91,7 @@ func TestActivityGetWorktreeHEADDetached_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	shaValue := "abcdef1234567890abcdef1234567890abcdef12"
+	shaValue := gitoid.PadSHA1("abcdef1234567890")
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
@@ -103,7 +105,7 @@ func TestActivityAppendActivityCreatesLog_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
+	shaValue := gitoid.PadSHA1("1234567890abcdef")
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
@@ -132,7 +134,7 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
+	shaValue := gitoid.PadSHA1("1234567890abcdef")
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
@@ -167,7 +169,7 @@ func TestActivityAppendActivityMultipleEntries_REQ_EXECEV_T1(t *testing.T) {
 func TestActivityEnvVarKillSwitchHasNoEffect_REQ_EXECEV_T1(t *testing.T) {
 	gitDir := t.TempDir()
 
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
+	shaValue := gitoid.PadSHA1("1234567890abcdef")
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
@@ -354,7 +356,7 @@ func TestActivityFailOpenOnHEADError_REQ_EXECEV_T1(t *testing.T) { //nolint:para
 func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) { //nolint:paralleltest // redirects os.Stderr
 	gitDir := t.TempDir()
 
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
+	shaValue := gitoid.PadSHA1("1234567890abcdef")
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
@@ -446,7 +448,7 @@ func TestActivityLogEntryWithTimestamp_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
 
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
+	shaValue := gitoid.PadSHA1("1234567890abcdef")
 	headPath := filepath.Join(gitDir, "HEAD")
 	require.NoError(t, os.WriteFile(headPath, []byte(shaValue+"\n"), 0o600))
 
@@ -513,7 +515,7 @@ func TestActivityFallbackGetHEAD_InvalidGitDir_REQ_EXECEV_M7(t *testing.T) {
 func TestActivityAppendActivityCapsOversizedCommand_REQ_EXECEV_M5(t *testing.T) {
 	t.Parallel()
 	gitDir := t.TempDir()
-	shaValue := "1234567890abcdef1234567890abcdef12345678"
+	shaValue := gitoid.PadSHA1("1234567890abcdef")
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(shaValue+"\n"), 0o600))
 
 	hugeCommand := strings.Repeat("x", maxCommandSize*3)

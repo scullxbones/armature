@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,8 +52,8 @@ func (m *mockGitAdapter) DiffNameOnlyRange(base, head string) ([]string, error) 
 func TestPrepare_Success(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -148,8 +150,8 @@ func TestPrepare_DiffNameOnlyRangeError(t *testing.T) {
 func TestPrepare_BundleIDDeterministic(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -178,8 +180,8 @@ func TestPrepare_BundleIDDeterministic(t *testing.T) {
 func TestPrepare_WithCriteria(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	criteria := []string{
 		"Functionality meets requirements",
@@ -213,8 +215,8 @@ func TestPrepare_WithCriteria(t *testing.T) {
 func TestPrepare_EmptyChangedFiles(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -240,8 +242,8 @@ func TestPrepare_EmptyChangedFiles(t *testing.T) {
 func TestPrepare_IssueTitlePreserved(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	issueTitle := "Complex feature implementation with tests"
 
@@ -269,8 +271,8 @@ func TestPrepare_IssueTitlePreserved(t *testing.T) {
 func TestPrepare_BundleValidation(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -297,8 +299,8 @@ func TestPrepare_BundleValidation(t *testing.T) {
 func TestPrepare_ExcludesArmatureArtifacts(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -330,8 +332,8 @@ func TestPrepare_ExcludesArmatureArtifacts(t *testing.T) {
 func TestPrepare_ExcludesArmDir(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -358,8 +360,8 @@ func TestPrepare_ExcludesArmDir(t *testing.T) {
 func TestPrepare_ErrorWhenDeliveryEmpty(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -386,8 +388,8 @@ func TestPrepare_ErrorWhenDeliveryEmpty(t *testing.T) {
 func TestPrepare_DiffFiltersExcludedPaths(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	armatureDiff := "diff --git a/.armature/ops/worker.log b/.armature/ops/worker.log\n" +
 		"--- a/.armature/ops/worker.log\n" +
@@ -428,8 +430,8 @@ func TestPrepare_DiffFiltersExcludedPaths(t *testing.T) {
 func TestPrepare_MultipleArmaturePaths(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -462,20 +464,20 @@ func TestPrepare_MultipleArmaturePaths(t *testing.T) {
 func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/armature-activity.log"
 
 	logContent := activityLogLineJSON(t, map[string]any{
-		"command": "make build", "head_sha": "def456def456def456def456def456def456def4",
+		"command": "make build", "head_sha": gitoid.PadSHA1("def456"),
 		"output_hash": "abc123", "output_head": "Build succeeded",
 	}) + "\n" + activityLogLineJSON(t, map[string]any{
-		"command": "make test", "head_sha": "def456def456def456def456def456def456def4",
+		"command": "make test", "head_sha": gitoid.PadSHA1("def456"),
 		"output_hash": "def789", "output_head": "Tests passed",
 	}) + "\n" + activityLogLineJSON(t, map[string]any{
-		"command": "go lint", "head_sha": "abc123abc123abc123abc123abc123abc123abc1",
+		"command": "go lint", "head_sha": gitoid.PadSHA1("abc123"),
 		"output_hash": "ghi012", "output_head": "Lint clean",
 	})
 	err := os.WriteFile(logPath, []byte(logContent), 0o644)
@@ -512,8 +514,8 @@ func TestPrepare_WithActivityLog_REQ_EXECEV_T2(t *testing.T) {
 
 //nolint:paralleltest // os.Chdir is process-wide
 func TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV(t *testing.T) {
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	tmpDir := t.TempDir()
 	logContent := activityLogLineJSON(t, map[string]any{"head_sha": headSHA})
@@ -551,8 +553,8 @@ func TestPrepare_ActivityLogPathIsAbsolute_REQ_EXECEV(t *testing.T) {
 func TestPrepare_WithoutActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	git := &mockGitAdapter{
 		resolveRevisionFn: func(rev string) (string, error) {
@@ -581,8 +583,8 @@ func TestPrepare_WithoutActivityLog_REQ_EXECEV_T2(t *testing.T) {
 func TestPrepare_EmptyActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/armature-activity.log"
@@ -619,18 +621,18 @@ func TestPrepare_EmptyActivityLog_REQ_EXECEV_T2(t *testing.T) {
 func TestPrepare_MalformedActivityLog_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/armature-activity.log"
 
 	logContent := activityLogLineJSON(t, map[string]any{
-		"command": "make build", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "abc123",
+		"command": "make build", "head_sha": gitoid.PadSHA1("def456"), "output_hash": "abc123",
 	}) + "\n" +
 		"this is a completely malformed line\n" +
 		activityLogLineJSON(t, map[string]any{
-			"command": "make test", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "def789",
+			"command": "make test", "head_sha": gitoid.PadSHA1("def456"), "output_hash": "def789",
 		})
 	err := os.WriteFile(logPath, []byte(logContent), 0o644)
 	require.NoError(t, err)
@@ -662,11 +664,11 @@ func TestPrepare_MalformedActivityLog_REQ_EXECEV_T2(t *testing.T) {
 func TestActivityDigestDeterministic_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	baseSHA := "abc123abc123abc123abc123abc123abc123abc1"
-	headSHA := "def456def456def456def456def456def456def4"
+	baseSHA := gitoid.PadSHA1("abc123")
+	headSHA := gitoid.PadSHA1("def456")
 
 	logContent := activityLogLineJSON(t, map[string]any{
-		"command": "make build", "head_sha": "def456def456def456def456def456def456def4", "output_hash": "abc123",
+		"command": "make build", "head_sha": gitoid.PadSHA1("def456"), "output_hash": "abc123",
 	})
 
 	tmpDir := t.TempDir()

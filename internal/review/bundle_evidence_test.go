@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +40,7 @@ func TestReviewBundleIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	opsDir := filepath.Join(issuesDir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0o755))
 
-	head := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	head := gitoid.PadSHA1("b")
 	ev := ops.GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
@@ -94,8 +96,8 @@ func TestBundleIDIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 			Acceptance:       []string{"bundle id binds evidence"},
 		},
 		Delivery: Delivery{
-			BaseSHA:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			HeadSHA:      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			BaseSHA:      gitoid.PadSHA1("a"),
+			HeadSHA:      gitoid.PadSHA1("b"),
 			ChangedFiles: []string{"cmd/armature/gate.go"},
 		},
 	}
@@ -103,7 +105,7 @@ func TestBundleIDIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	withEvidence.GateEvidence = []gateEvidence{{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA: gitoid.PadSHA1("b"),
 		Start:   100,
 		End:     101,
 		Exit:    0,
@@ -112,7 +114,7 @@ func TestBundleIDIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	otherEvidence.GateEvidence = []gateEvidence{{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA: gitoid.PadSHA1("b"),
 		Start:   200,
 		End:     201,
 		Exit:    0,
@@ -151,17 +153,17 @@ func TestAttachGateEvidence_WrongSHAExcluded_REQ_LNGHZN_S10_T3(t *testing.T) {
 	bundle := attachFixture(t, ops.GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		HeadSHA: gitoid.PadSHA1("a"),
 		Start:   1,
 		End:     2,
 		Exit:    0,
-	}, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+	}, gitoid.PadSHA1("b"))
 	assert.Empty(t, bundle.GateEvidence)
 }
 
 func TestAttachGateEvidence_UncommittedExcluded_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
-	head := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	head := gitoid.PadSHA1("b")
 	bundle := attachFixture(t, ops.GateEvidence{
 		Profile:     "full",
 		Command:     []string{"true"},
@@ -176,7 +178,7 @@ func TestAttachGateEvidence_UncommittedExcluded_REQ_LNGHZN_S10_T3(t *testing.T) 
 
 func TestAttachGateEvidence_NonZeroExitExcluded_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
-	head := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	head := gitoid.PadSHA1("b")
 	bundle := attachFixture(t, ops.GateEvidence{
 		Profile: "full",
 		Command: []string{"false"},
@@ -193,7 +195,7 @@ func TestAttachGateEvidence_EmptyDeliveryHeadAttachesNothing_REQ_LNGHZN_S10_T3(t
 	bundle := attachFixture(t, ops.GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA: gitoid.PadSHA1("b"),
 		Start:   1,
 		End:     2,
 		Exit:    0,
@@ -211,7 +213,7 @@ func TestAttachGateEvidence_InvalidPayloadErrors_REQ_LNGHZN_S10_T3(t *testing.T)
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
 		Issue:         IssueInfo{ID: "LNGHZN-S10-T3", Type: "task", Title: "Gate evidence"},
-		Delivery:      Delivery{HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+		Delivery:      Delivery{HeadSHA: gitoid.PadSHA1("b")},
 	}
 	err := attachFromIssuesDir(t, bundle, issuesDir)
 	require.Error(t, err)
@@ -223,7 +225,7 @@ func TestAttachGateEvidence_UnrelatedCorruptJSONStillAttaches_REQ_LNGHZN_S10_T3(
 	issuesDir := t.TempDir()
 	opsDir := filepath.Join(issuesDir, "ops")
 	require.NoError(t, os.MkdirAll(opsDir, 0o755))
-	head := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	head := gitoid.PadSHA1("b")
 	ev := ops.GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
@@ -248,7 +250,7 @@ func TestAttachGateEvidence_UnrelatedCorruptJSONStillAttaches_REQ_LNGHZN_S10_T3(
 
 func TestAttachGateEvidence_CitableMatchFinalizesBundleID_REQ_LNGHZN_S10_T3(t *testing.T) {
 	t.Parallel()
-	head := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	head := gitoid.PadSHA1("b")
 	ev := ops.GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
