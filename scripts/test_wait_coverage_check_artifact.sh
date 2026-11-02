@@ -63,11 +63,21 @@ python3 - "$WAIT" "$MUT" <<'PY'
 import sys
 src, dst = sys.argv[1], sys.argv[2]
 t = open(src).read()
-old = 'echo "FAIL: timed out waiting for coverage-check artifact ${name}" >&2\n\texit 1'
-new = 'echo "FAIL: timed out waiting for coverage-check artifact ${name}" >&2\n\texit 0'
+# Final exit after the timed-out FAIL message (may be preceded by last-gh-err log).
+old = 'echo "FAIL: timed out waiting for coverage-check artifact ${name}" >&2\n'
 if old not in t:
-    raise SystemExit("timeout exit site not found")
-open(dst, "w").write(t.replace(old, new, 1))
+    raise SystemExit("timeout FAIL message site not found")
+# Flip the exit 1 that closes the timed-out block (last exit 1 before zip download).
+idx = t.rfind("\texit 1\nfi\n\n\"$GH_BIN\" api")
+if idx < 0:
+    # Fallback: last standalone exit 1 in the empty-id timeout branch.
+    marker = 'echo "FAIL: timed out waiting for coverage-check artifact ${name}" >&2\n'
+    start = t.index(marker)
+    end = t.index("\texit 1\n", start)
+    t2 = t[:end] + "\texit 0\n" + t[end + len("\texit 1\n"):]
+else:
+    t2 = t[:idx] + "\texit 0\nfi\n\n\"$GH_BIN\" api" + t[idx + len("\texit 1\nfi\n\n\"$GH_BIN\" api"):]
+open(dst, "w").write(t2)
 PY
 chmod +x "$MUT"
 set +e

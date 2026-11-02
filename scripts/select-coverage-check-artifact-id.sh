@@ -12,10 +12,14 @@
 # (head_repository_id blocks fork-PR artifacts that share repository_id.)
 #
 # Exit codes (fail-closed):
-#   0  — exactly one match; id printed on stdout
+#   0  — exactly one match; numeric id printed on stdout
 #   2  — zero matches (not ready yet — caller may poll)
-#   1  — hard fail (missing .artifacts, malformed JSON, multiple matches, …)
-#        always prints "FAIL: <reason>" on stderr
+#   1  — hard fail (missing .artifacts, malformed JSON, multiple matches,
+#        non-numeric/null id, …). Always prints "FAIL: <reason>" on stderr.
+#
+# Note: two successful check-core uploads for the same head SHA hard-fail
+# here (count != 1). Re-runs must not leave duplicate live artifacts; the
+# poller aborts on that hard-fail rather than picking arbitrarily.
 #
 # IMPORTANT: do not pass --arg/--argjson to `gh api --jq` — pipe to jq.
 
@@ -39,6 +43,8 @@ case "$REPO_ID" in
 esac
 
 # Parse + filter. Capture jq failures as hard FAIL (not raw exit 5).
+# FILTER_CLAUSES_BEGIN — each `and (…)`` below is load-bearing; fixtures
+# neutralize them one at a time and assert a single-field-wrong fixture flips.
 set +e
 FILTERED=$(jq -c --arg sha "$HEAD_SHA" --argjson rid "$REPO_ID" '
 	if (type != "object") then
@@ -60,6 +66,7 @@ FILTERED=$(jq -c --arg sha "$HEAD_SHA" --argjson rid "$REPO_ID" '
 ' "$JSON" 2>"$JSON.jq.err")
 jq_st=$?
 set -e
+# FILTER_CLAUSES_END
 
 if [ "$jq_st" -ne 0 ]; then
 	err=$(tr '\n' ' ' <"$JSON.jq.err" 2>/dev/null || true)
@@ -79,5 +86,13 @@ if [ "$COUNT" -ne 1 ]; then
 	exit 1
 fi
 
-printf '%s\n' "$FILTERED" | jq -r '.[0].id'
+ID=$(printf '%s\n' "$FILTERED" | jq -r '.[0].id | tostring')
+case "$ID" in
+	'' | null | *[!0-9]*)
+		echo "FAIL: artifact id must be a numeric id (got ${ID})" >&2
+		exit 1
+		;;
+esac
+
+printf '%s\n' "$ID"
 exit 0

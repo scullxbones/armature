@@ -13,7 +13,8 @@
 #
 # Exit: 0 on success; 1 on timeout or hard selector/API failure.
 # Zero matches (selector exit 2) keep polling; any other non-zero from the
-# selector aborts immediately (no || true).
+# selector aborts immediately on first hard-fail (no || true). Two live
+# check-core artifacts for one head SHA are a selector hard-fail.
 
 set -euo pipefail
 
@@ -34,16 +35,19 @@ echo "Waiting for artifact name=${name} repo_id=${REPO_ID} head_sha=${HEAD_SHA}"
 TMPDIR_ART=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_ART"' EXIT
 JSON="$TMPDIR_ART/artifacts.json"
+LAST_GH_ERR=""
 
 id=""
 i=0
 while [ "$i" -lt "$MAX_POLLS" ]; do
 	i=$((i + 1))
 	set +e
-	"$GH_BIN" api "repos/${REPO}/actions/artifacts?name=${name}&per_page=20" >"$JSON"
+	"$GH_BIN" api "repos/${REPO}/actions/artifacts?name=${name}&per_page=20" \
+		>"$JSON" 2>"$TMPDIR_ART/gh.err"
 	api_st=$?
 	set -e
 	if [ "$api_st" -ne 0 ]; then
+		LAST_GH_ERR=$(tr '\n' ' ' <"$TMPDIR_ART/gh.err" 2>/dev/null || true)
 		echo "poll ${i}/${MAX_POLLS}: gh api failed (status ${api_st}); retrying"
 		sleep "$SLEEP_SECS"
 		continue
@@ -63,7 +67,7 @@ while [ "$i" -lt "$MAX_POLLS" ]; do
 		sleep "$SLEEP_SECS"
 		continue
 	fi
-	# Hard fail from selector (multiple, malformed, fork mismatch class, …).
+	# First hard-fail from selector aborts (multiple / malformed / bad id, …).
 	cat "$TMPDIR_ART/sel.err" >&2 || true
 	echo "FAIL: coverage-check artifact selector hard-failed (exit ${sel_st})" >&2
 	exit 1
@@ -71,6 +75,9 @@ done
 
 if [ -z "$id" ]; then
 	echo "FAIL: timed out waiting for coverage-check artifact ${name}" >&2
+	if [ -n "$LAST_GH_ERR" ]; then
+		echo "FAIL: last gh api error: ${LAST_GH_ERR}" >&2
+	fi
 	exit 1
 fi
 
