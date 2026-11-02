@@ -24,6 +24,45 @@ func TestNeedsPromotionEnrichment_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.True(t, needsPromotionEnrichment(promotion.Node{Status: ops.StatusOpen, ClaimedBy: "w"}))
 }
 
+// TestNodeFromMaterializeIssue_LastActivityMax_REQ_coverage_determinism locks the
+// LastHeartbeat / LastClaimingWorkerActivity max branches. Without a dedicated
+// caller, parallel suite scheduling left promotion_facts.go:60 (LastHeartbeat >
+// ClaimedAt) covered on some check-core runs and uncovered on others → cmd
+// coverage flipped 83.76% ↔ 83.78% on an identical tree (#426/#432 quote flakes).
+func TestNodeFromMaterializeIssue_LastActivityMax_REQ_coverage_determinism(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		Status:                     ops.StatusClaimed,
+		ClaimedAt:                  1000,
+		LastHeartbeat:              1500,
+		LastClaimingWorkerActivity: 1600,
+		ClaimedBy:                  "w1",
+		ClaimToken:                 "tok",
+		ClaimTTL:                   60,
+		Parent:                     "P",
+		Children:                   []string{"C"},
+		Base:                       "b",
+		Tip:                        "t",
+	}
+	n := nodeFromMaterializeIssue(issue)
+	assert.Equal(t, int64(1600), n.LastActivity,
+		"LastActivity must be max(ClaimedAt, LastHeartbeat, LastClaimingWorkerActivity)")
+	assert.Equal(t, "w1", n.ClaimedBy)
+	assert.Equal(t, "tok", n.ClaimToken)
+	assert.Equal(t, 60, n.TTLMinutes)
+
+	issue2 := *issue
+	issue2.LastClaimingWorkerActivity = 1400
+	n2 := nodeFromMaterializeIssue(&issue2)
+	assert.Equal(t, int64(1500), n2.LastActivity)
+
+	issue3 := *issue
+	issue3.LastHeartbeat = 900
+	issue3.LastClaimingWorkerActivity = 800
+	n3 := nodeFromMaterializeIssue(&issue3)
+	assert.Equal(t, int64(1000), n3.LastActivity)
+}
+
 func TestPromotionGraphCache_Memoizes_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	index := materialize.Index{
