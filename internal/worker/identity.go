@@ -57,7 +57,7 @@ type InitWorkerInput struct {
 func GetWorkerID(repoPath string) (string, error) {
 	ident, err := ResolveIdentity(IdentityInput{RepoPath: repoPath})
 	if err != nil {
-		return "", fmt.Errorf("worker ID not configured — run 'trls worker-init': %w", err)
+		return "", fmt.Errorf("worker ID not configured — run 'arm worker-init': %w", err)
 	}
 	return ident.ID, nil
 }

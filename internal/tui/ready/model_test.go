@@ -21,7 +21,7 @@ func asReady(t *testing.T, m tea.Model) readytui.Model {
 
 func makeEntries() []internalready.ReadyEntry {
 	return []internalready.ReadyEntry{
-		{Issue: "E5-S2-T3", Title: "trls ready interactive TUI", Priority: "medium"},
+		{Issue: "E5-S2-T3", Title: "arm ready interactive TUI", Priority: "medium"},
 		{Issue: "E5-S3-T1", Title: "Git client forensics methods", Priority: "medium"},
 		{Issue: "E5-S3-T2", Title: "Another task", Priority: "low"},
 	}

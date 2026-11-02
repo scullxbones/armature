@@ -66,6 +66,18 @@ func TestNavBarShowsValidateBadgeWhenErrors(t *testing.T) {
 	}
 }
 
+func TestNavBar_BrandIsArmTui_REQ_BUG_1783480206(t *testing.T) {
+	t.Parallel()
+	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "worker-xyz")
+	nav := m.NavBar()
+	if !strings.Contains(nav, "arm tui · worker-xyz") {
+		t.Errorf("nav brand must name arm tui, got: %q", nav)
+	}
+	if strings.Contains(nav, "trls") {
+		t.Errorf("nav must not retain pre-rename trls brand, got: %q", nav)
+	}
+}
+
 func TestQuitKey(t *testing.T) {
 	t.Parallel()
 	m := app.New("/tmp/issues", "/tmp/issues/state/.tui", "default")

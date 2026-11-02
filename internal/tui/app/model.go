@@ -146,7 +146,7 @@ func (m Model) NavBar() string {
 		indicator = tui.Advisory().Render("↺ poll")
 	}
 	left := strings.Join(parts, "  ")
-	right := "trls tui · " + m.workerID + " · " + indicator
+	right := "arm tui · " + m.workerID + " · " + indicator
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	gap = max(gap, 1)
 	return left + strings.Repeat(" ", gap) + right
