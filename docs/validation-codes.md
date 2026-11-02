@@ -706,7 +706,7 @@ git -C .armature rebase origin/_armature
 
 **Trigger:** An issue with `status == done`, a non-empty `parent`, and that parent present in the index with `status == merged`.
 
-**Message:** `Done issues whose parent is already merged` / `No done issues under a merged parent`.
+**Message:** `Done work under a merged ancestor` / `No done issues under a merged parent`. CLI enrich folds open/claimed via `TreeConsistencyViolations` and then uses `Done or open/claimed work under a merged ancestor`.
 
 **Items:** `child -> parent` pairs, sorted.
 
@@ -719,7 +719,7 @@ each with ordered steps — never a flat sequence that reopens then force-cancel
 Running either Option must clear the finding and obey the tree-consistency
 invariant (no open/claimed work under a merged ancestor; done/merged untouched
 unless that Option explicitly cancels/reopens; merged never un-merged). Shared
-with MERGED-1 / sync via `promotion.RemediationsPlan`.
+with MERGED-1 / sync via `promotion.RemediationsPlanOpts`.
 ```bash
 # Options for done/open work under a merged ancestor (do not claim under merged).
 # Option labels are their own lines; argv lines are paste-runnable.

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/promotion"
+	"github.com/scullxbones/armature/internal/snapshot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,4 +53,28 @@ func TestPromotionGraphCache_NilCache_REQ_TOPTIER_S18_T4(t *testing.T) {
 	_, err := c.Graph()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil cache")
+}
+
+func TestPromotionGraphFromStore_ReadIssueError_FailClosed_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	stateDir := t.TempDir()
+	issuesDir := filepath.Join(stateDir, "issues")
+	require.NoError(t, os.MkdirAll(issuesDir, 0o755))
+	// needsPromotionEnrichment(done)==true → ReadIssue called
+	index := materialize.Index{
+		"P": {Status: ops.StatusMerged, Type: "story", Children: []string{"T"}},
+		"T": {Status: ops.StatusDone, Type: "task", Parent: "P"},
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "T.json"), []byte("{not-json"), 0o644))
+	store := snapshot.NewStore(t.TempDir() /* unused ops */, stateDir)
+	g, err := promotionGraphFromStore(store, index)
+	require.Error(t, err)
+	assert.Nil(t, g, "fail-closed: must not return a partial/empty graph")
+	assert.Contains(t, err.Error(), "promotion graph: read issue T:")
+
+	c := newPromotionGraphCache(store, index)
+	_, err1 := c.Graph()
+	_, err2 := c.Graph()
+	require.Error(t, err1)
+	assert.Equal(t, err1.Error(), err2.Error(), "memoized error")
 }

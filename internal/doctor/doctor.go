@@ -657,7 +657,7 @@ func checkD14DoneUnderMerged(index materialize.Index) Finding {
 	if len(stuck) > 0 {
 		sort.Strings(stuck)
 		f.Severity = SeverityWarning
-		f.Message = "Done or open/claimed work under a merged ancestor"
+		f.Message = "Done work under a merged ancestor"
 		f.Items = stuck
 	}
 	return f

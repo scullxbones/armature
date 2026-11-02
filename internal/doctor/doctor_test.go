@@ -345,7 +345,7 @@ func TestDoctorD14_WarnsOnDoneUnderMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 	f := checkD14DoneUnderMerged(index)
 	assert.Equal(t, "D14", f.Check)
 	assert.Equal(t, SeverityWarning, f.Severity)
-	assert.Equal(t, "Done or open/claimed work under a merged ancestor", f.Message)
+	assert.Equal(t, "Done work under a merged ancestor", f.Message)
 	require.Len(t, f.Items, 1)
 	assert.Equal(t, "task-01 -> story-01", f.Items[0])
 }

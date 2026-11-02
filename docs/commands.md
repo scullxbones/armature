@@ -710,7 +710,7 @@ op is appended. `--pr` may be stored and is not evidence. `--force` remains the
 hook-log override only; it does not waive the git check or the assessment.
 
 Non-leaves are refused (`MERGED-1` / `not-leaf`); `next_actions` comes from the
-typed `promotion.RemediationsPlan` (same model as doctor `--explain` suggested):
+typed `promotion.RemediationsPlanOpts` (same model as doctor `--explain` suggested):
 mutually exclusive **Option A:… / Option B:…** alternatives (ordered steps each),
 then optional `more steps follow…` promotion steps. Never a flat reopen-then-cancel
 sequence. Pending nodes under a merged ancestor → Options reopen the full merged

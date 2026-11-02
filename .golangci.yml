@@ -392,8 +392,9 @@ linters:
           - paralleltest
           - tparallel
         path: 'cmd/'
-      # testexec owns a process-wide trampoline; error-path tests reset it and
-      # cannot run beside t.Parallel helpers in the same package.
+      # testexec owns a process-wide trampoline inode (never reassigned; see
+      # processTrampoline nolint). Error-path tests build a *local* trampoline
+      # with injected fsDeps and cannot run beside t.Parallel in this package.
       - linters:
           - paralleltest
           - tparallel

@@ -9,6 +9,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/doctor"
 	"github.com/scullxbones/armature/internal/gittest"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/scullxbones/armature/internal/promotion"
 	"github.com/stretchr/testify/assert"
@@ -190,6 +191,35 @@ func TestDoctorCLI_ReportsOpenUnderMergedAncestor_REQ_TOPTIER_S18_T4(t *testing.
 	assert.Contains(t, d14.items, "R -> E")
 	assert.Contains(t, d14.items, "RC2 under merged E (open)",
 		"cmd enrichD14TreeConsistency must fold TreeConsistencyViolations into D14")
+}
+
+func TestEnrichD14TreeConsistency_Messages_REQ_TOPTIER_S18_T4(t *testing.T) {
+	t.Parallel()
+	// Done-only: TreeConsistencyViolations empty → enrich returns early; message stays done-only.
+	doneOnly := &doctor.Report{Checks: []doctor.Finding{{
+		Check: "D14", Severity: doctor.SeverityWarning,
+		Message: "Done work under a merged ancestor",
+		Items:   []string{"T -> P"},
+	}}}
+	enrichD14TreeConsistency(doneOnly, promotion.Graph{
+		"P": {Status: ops.StatusMerged, Children: []string{"T"}},
+		"T": {Status: ops.StatusDone, Parent: "P"},
+	})
+	assert.Equal(t, "Done work under a merged ancestor", doneOnly.Checks[0].Message)
+	assert.NotContains(t, doneOnly.Checks[0].Message, "open/claimed")
+
+	// Open under merged → enrich folds viol and sets the broad message.
+	openUnder := &doctor.Report{Checks: []doctor.Finding{{
+		Check: "D14", Severity: doctor.SeverityOK,
+		Message: "No done issues under a merged parent",
+	}}}
+	enrichD14TreeConsistency(openUnder, promotion.Graph{
+		"E": {Status: ops.StatusMerged, Children: []string{"O"}},
+		"O": {Status: ops.StatusOpen, Parent: "E"},
+	})
+	assert.Equal(t, "Done or open/claimed work under a merged ancestor", openUnder.Checks[0].Message)
+	assert.Equal(t, doctor.SeverityWarning, openUnder.Checks[0].Severity)
+	require.NotEmpty(t, openUnder.Checks[0].Items)
 }
 
 func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *testing.T) {
