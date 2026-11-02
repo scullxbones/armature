@@ -67,7 +67,8 @@ while [ "$i" -lt "$MAX_POLLS" ]; do
 		sleep "$SLEEP_SECS"
 		continue
 	fi
-	# First hard-fail from selector aborts (multiple / malformed / bad id, …).
+	# First hard-fail from selector aborts — never continue the poll loop.
+	# (A continue-after-hard-fail mutant is killed by call-count fixtures.)
 	cat "$TMPDIR_ART/sel.err" >&2 || true
 	echo "FAIL: coverage-check artifact selector hard-failed (exit ${sel_st})" >&2
 	exit 1

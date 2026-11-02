@@ -218,7 +218,7 @@ else
 	echo "$CLAUSE_OUT" | sed 's/^/  /'
 fi
 
-echo "Test 8: edit workflow — no || true / set +e on any run: line; uses wait script..."
+echo "Test 8: edit workflow — no || true / set +e / continue-on-error / shell: overrides..."
 if [[ ! -f "$EDIT_WF" ]]; then
 	fail "missing edit workflow"
 else
@@ -231,6 +231,12 @@ if "wait-coverage-check-artifact.sh" not in text:
     sys.exit(1)
 lines = text.splitlines()
 problems = []
+# Step-level keys under jobs.*.steps[] — reject continue-on-error / shell: overrides.
+for i, line in enumerate(lines):
+    if re.match(r"^\s+continue-on-error\s*:", line):
+        problems.append(f"step continue-on-error at line {i+1}")
+    if re.match(r"^\s+shell\s*:", line):
+        problems.append(f"step shell: override at line {i+1}")
 i = 0
 while i < len(lines):
     line = lines[i]
