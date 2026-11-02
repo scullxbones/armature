@@ -32,7 +32,7 @@ if [ "${#dirs[@]}" -eq 0 ]; then
   exit 2
 fi
 
-# Pin tools after argv parse so exit-2 sites above stay at lines 26/32.
+# Pin tools after argv parse so --bogus / no-DIR exit-2 paths never depend on resolver.
 SCRIPT_DIR="$(cd "${0%/*}" && pwd)"
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/guard-resolve-tool.sh"

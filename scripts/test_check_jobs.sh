@@ -1415,9 +1415,11 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     _dotst=$?
     _dotdot=$(bash "$REPO_ROOT/scripts/guard-resolve-tool.sh" .. 2>&1)
     _dotdotst=$?
+    _usrdotdot=$(bash "$REPO_ROOT/scripts/guard-resolve-tool.sh" '/usr/bin/..' 2>&1)
+    _usrdotdotst=$?
     set -e
-    if [ "$_dotst" -eq 0 ] || [ "$_dotdotst" -eq 0 ]; then
-        echo "FAIL: guard_resolve_tool must reject . and .. names"
+    if [ "$_dotst" -eq 0 ] || [ "$_dotdotst" -eq 0 ] || [ "$_usrdotdotst" -eq 0 ]; then
+        echo "FAIL: guard_resolve_tool must reject . / .. / /usr/bin/.. names"
         exit 1
     fi
     # Planted ambient fixtures each FAIL the real check (command-position).
