@@ -76,8 +76,8 @@ allow_line() {
   case "$key" in
     # Git-hermetic fixtures embed exec.CommandContext(..., "git", ..., "status")
     # as source text inside string literals; package has its own repoguard check.
-    scripts/repoguard/repoguard_test.go:486) return 0 ;;
-    scripts/repoguard/repoguard_test.go:501) return 0 ;;
+    scripts/repoguard/repoguard_test.go:489) return 0 ;;
+    scripts/repoguard/repoguard_test.go:504) return 0 ;;
     *) return 1 ;;
   esac
 }
