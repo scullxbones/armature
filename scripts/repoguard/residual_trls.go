@@ -20,6 +20,10 @@ const residualTrlsFix = "Rename residual pre-rename CLI token trls → arm. " +
 var residualTrlsWord = regexp.MustCompile(`(?i)\btrls\b`)
 
 func checkResidualTrls(root string, stdout, stderr io.Writer) error {
+	if err := validateAllowlist(); err != nil {
+		fmt.Fprintf(stderr, "FAIL: %v\n", err)
+		return err
+	}
 	if err := requireGoMod(root); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
