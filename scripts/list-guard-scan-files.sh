@@ -32,16 +32,26 @@ if [ "${#dirs[@]}" -eq 0 ]; then
   exit 2
 fi
 
-list_tmp=$(mktemp)
-trap 'rm -f "$list_tmp"' EXIT
+# Pin tools after argv parse so exit-2 sites above stay at lines 26/32.
+SCRIPT_DIR="$(cd "${0%/*}" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/guard-resolve-tool.sh"
+FIND="$(guard_resolve_tool find)" || exit 1
+SORT="$(guard_resolve_tool sort)" || exit 1
+MKTEMP="$(guard_resolve_tool mktemp)" || exit 1
+RM="$(guard_resolve_tool rm)" || exit 1
+
+list_tmp=$("$MKTEMP")
+trap '"$RM" -f "$list_tmp"' EXIT
 {
   for d in "${dirs[@]}"; do
     if [ ! -d "$d" ]; then
-      continue
+      echo "FAIL: list-guard-scan-files.sh: not a directory: $d" >&2
+      exit 2
     fi
-    find "$d" -type f
+    "$FIND" "$d" -type f
   done
-} | LC_ALL=C sort -u >"$list_tmp"
+} | LC_ALL=C "$SORT" -u >"$list_tmp"
 
 while IFS= read -r f || [ -n "${f:-}" ]; do
   [ -z "${f:-}" ] && continue

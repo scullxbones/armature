@@ -31,7 +31,7 @@ if [ "${ARM_PORCELAIN_SKIP_SELFTEST:-0}" = "1" ]; then
   exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "${0%/*}" && pwd)"
 LISTER="$SCRIPT_DIR/list-guard-scan-files.sh"
 cd "$ROOT"
 
@@ -39,18 +39,17 @@ HELPER="scripts/porcelain-git.sh"
 fail=0
 scanned=0
 
-# Absolute grep for fixture proofs; scanning uses bare `grep` so PATH shims work.
-# Never read GREP= from the environment.
-REAL_GREP=""
-for cand in /usr/bin/grep /bin/grep; do
-  if [ -x "$cand" ]; then
-    REAL_GREP="$cand"
-    break
-  fi
-done
-if [ -z "$REAL_GREP" ]; then
-  REAL_GREP="$(command -v grep)"
-fi
+# Pin tools via sanctioned resolver (absolute system paths only; never PATH).
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/guard-resolve-tool.sh"
+GREP="$(guard_resolve_tool grep)" || exit 1
+AWK="$(guard_resolve_tool awk)" || exit 1
+MKTEMP="$(guard_resolve_tool mktemp)" || exit 1
+BASH_BIN="$(guard_resolve_tool bash)" || exit 1
+RM="$(guard_resolve_tool rm)" || exit 1
+# Production never honors GREP=/PATH overrides or ambient lookup.
+:
+:
 
 # Build class regex without embedding both tokens on one source line.
 _gw='gi'
@@ -94,10 +93,11 @@ require_readable() {
 # Fail-closed grep to tempfile: exit 0 = hits, 1 = none, ≥2 → FAIL unscannable.
 # Never `|| true` — that lets missing/garbage paths pass.
 # Each -ge 2 site uses a unique status var + FAIL call-site tag (B3 per-site kill).
+
 grep_hits() {
   local re="$1" src="$2" out="$3" gh_st
   set +e
-  LC_ALL=C grep -a -nE "$re" "$src" >"$out"
+  LC_ALL=C "$GREP" -a -nE "$re" "$src" >"$out"
   gh_st=$?
   set -e
   if [ "$gh_st" -ge 2 ]; then
@@ -110,7 +110,7 @@ grep_hits() {
 
 # Flatten \-continuations to a tempfile so NULs/\xff survive (no bash $(...) truncate).
 flatten_to() {
-  awk '{
+  "$AWK" '{
     if (sub(/\\$/, "")) { printf "%s", $0; next }
     print
   }' "$1" >"$2"
@@ -127,35 +127,35 @@ has_non_ws() {
 scan_file() {
   local f="$1"
   local flat hits_file raw_hits line_no key kept="" hit sf_vst
-  flat="$(mktemp)"
-  hits_file="$(mktemp)"
-  raw_hits="$(mktemp)"
+  flat="$("$MKTEMP")"
+  hits_file="$("$MKTEMP")"
+  raw_hits="$("$MKTEMP")"
   flatten_to "$f" "$flat"
   # LC_ALL=C + grep -a: non-UTF8 (\xff) on a hit line must still fail
   # (UTF-8 locale + -a alone still drops invalid-byte lines).
   # Write hits to a file — bash $(...) strips NUL and can hide mid-file hits.
   if ! grep_hits "$BAN_RE" "$flat" "$raw_hits" "$f"; then
-    rm -f "$flat" "$hits_file" "$raw_hits"
+    "$RM" -f "$flat" "$hits_file" "$raw_hits"
     return 0
   fi
   # Distinct argv shape (-vE) vs silencers (-v -E) for per-site PATH shims.
   set +e
-  LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$hits_file"
+  LC_ALL=C "$GREP" -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$hits_file"
   sf_vst=$?
   set -e
-  rm -f "$flat" "$raw_hits"
+  "$RM" -f "$flat" "$raw_hits"
   if [ "$sf_vst" -ge 2 ]; then
     echo "FAIL: $f unscannable (scan_file:comment-filter)" >&2
     fail=1
-    rm -f "$hits_file"
+    "$RM" -f "$hits_file"
     return 0
   fi
   if [ ! -s "$hits_file" ]; then
-    rm -f "$hits_file"
+    "$RM" -f "$hits_file"
     return 0
   fi
   if [ "$f" = "$HELPER" ]; then
-    rm -f "$hits_file"
+    "$RM" -f "$hits_file"
     return 0
   fi
   while IFS= read -r hit || [ -n "${hit:-}" ]; do
@@ -182,7 +182,7 @@ scan_file() {
     done <"$hits_file"
     fail=1
   fi
-  rm -f "$hits_file"
+  "$RM" -f "$hits_file"
 }
 
 scan_silencers() {
@@ -191,40 +191,40 @@ scan_silencers() {
   if [ "$f" = "$HELPER" ]; then
     return 0
   fi
-  flat="$(mktemp)"
-  hits_file="$(mktemp)"
-  raw_hits="$(mktemp)"
-  sil_hits="$(mktemp)"
+  flat="$("$MKTEMP")"
+  hits_file="$("$MKTEMP")"
+  raw_hits="$("$MKTEMP")"
+  sil_hits="$("$MKTEMP")"
   flatten_to "$f" "$flat"
   if ! grep_hits "$BAN_RE" "$flat" "$raw_hits" "$f"; then
-    rm -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
+    "$RM" -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
     return 0
   fi
   # Distinct from scan_file (-vE): use -v -E so PATH shims can target one site.
   set +e
-  LC_ALL=C grep -a -v -E '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$sil_hits"
+  LC_ALL=C "$GREP" -a -v -E '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$sil_hits"
   sil_vst=$?
   set -e
   if [ "$sil_vst" -ge 2 ]; then
     echo "FAIL: $f unscannable (scan_silencers:comment-filter)" >&2
     fail=1
-    rm -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
+    "$RM" -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
     return 0
   fi
   set +e
-  LC_ALL=C grep -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
+  LC_ALL=C "$GREP" -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
     "$sil_hits" >"$hits_file"
   sil_sst=$?
   set -e
-  rm -f "$flat" "$raw_hits" "$sil_hits"
+  "$RM" -f "$flat" "$raw_hits" "$sil_hits"
   if [ "$sil_sst" -ge 2 ]; then
     echo "FAIL: $f unscannable (scan_silencers:silencer-filter)" >&2
     fail=1
-    rm -f "$hits_file"
+    "$RM" -f "$hits_file"
     return 0
   fi
   if [ ! -s "$hits_file" ]; then
-    rm -f "$hits_file"
+    "$RM" -f "$hits_file"
     return 0
   fi
   while IFS= read -r hit || [ -n "${hit:-}" ]; do
@@ -250,17 +250,17 @@ scan_silencers() {
     done <"$hits_file"
     fail=1
   fi
-  rm -f "$hits_file"
+  "$RM" -f "$hits_file"
 }
 
 # Shared selector: every scan-eligible file under scripts/ (no ext/shebang filter).
 # Scope = main: only scripts/testdata/* excluded — do NOT skip scripts/repoguard/*.
 # Fail-closed: write list to file; nonzero lister exit → fail (never swallow).
 # Count files actually scanned — blank/whitespace-only selector print must FAIL.
-scan_list=$(mktemp)
-trap 'rm -f "$scan_list"' EXIT
+scan_list=$("$MKTEMP")
+trap '"$RM" -f "$scan_list"' EXIT
 set +e
-bash "$LISTER" --exclude-testdata scripts >"$scan_list"
+"$BASH_BIN" "$LISTER" --exclude-testdata scripts >"$scan_list"
 lister_st=$?
 set -e
 if [ "$lister_st" -ne 0 ]; then
@@ -292,4 +292,4 @@ echo "OK: scripts/ porcelain git confined to $HELPER"
 if [ "$SKIP_SELFTEST" -eq 1 ]; then
   exit 0
 fi
-bash "$ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh" "$ROOT"
+"$BASH_BIN" "$ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh" "$ROOT"
