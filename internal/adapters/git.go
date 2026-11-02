@@ -29,9 +29,17 @@ const (
 	gitContentionMaxAttempts = 3
 	gitContentionBackoff     = 100 * time.Millisecond
 
-	// defaultGitNetworkTimeout bounds ops-backup (and FetchBranchToRef) remote
-	// probes so a stalled origin fail-closes instead of hanging the CLI.
+	// defaultGitNetworkTimeout bounds short remote probes (ops-backup,
+	// FetchBranchToRef, CreateOrphanBranch's single-ref fetch) so a stalled
+	// origin fail-closes instead of hanging the CLI.
 	defaultGitNetworkTimeout = 15 * time.Second
+
+	// defaultGitPublishNetworkTimeout bounds Push and FetchAndRebase's
+	// `git fetch origin`. Those transfer whatever history origin has; the 15s
+	// probe budget would fail a healthy slow link. Thirty minutes still
+	// fail-closes a blackholed origin and stays above a normal push or fetch
+	// that succeeds today. WithNetworkTimeout overrides it.
+	defaultGitPublishNetworkTimeout = 30 * time.Minute
 
 	// gitNetworkWaitDelay bounds how long Wait may block on stuck pipes after
 	// Cancel kills the network git process group (git-remote-http children).
@@ -67,7 +75,8 @@ func (c *Client) WithEnviron(environ []string) *Client {
 }
 
 // WithNetworkTimeout sets the deadline for network git calls (ops-backup remote
-// probes, FetchBranchToRef). Zero restores defaultGitNetworkTimeout.
+// probes, FetchBranchToRef, Push, FetchAndRebase). Zero restores each call's
+// default (probe budget or the longer publish budget).
 func (c *Client) WithNetworkTimeout(d time.Duration) *Client {
 	if c == nil {
 		return nil
@@ -533,11 +542,12 @@ func (c *Client) CreateOrphanBranch(branch string) error {
 	}
 
 	// Fetch after git clone --single-branch so origin/<branch> exists locally.
-	fetchCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	fetchCmd := c.cmdContext(fetchCtx, "fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
-	if err := fetchCmd.Run(); err != nil {
-		cancel()
+	// Failure is non-fatal: the orphan path below still runs.
+	fetchCmd, _, cancelFetch := c.networkCmd("fetch", "origin", "+refs/heads/"+branch+":refs/remotes/origin/"+branch)
+	defer cancelFetch()
+	if fetchErr := fetchCmd.Run(); fetchErr != nil {
+		// Origin can be missing on a fresh repo; the orphan path below still runs.
+		cancelFetch()
 	}
 
 	remoteBranch := "origin/" + branch
@@ -763,8 +773,10 @@ func enhanceGitLockfileError(base, out string) string {
 }
 
 func (c *Client) Push(branch string) error {
-	cmd := c.cmd("push", "origin", branch)
+	cmd, ctx, cancel := c.withPublishDeadline().networkCmd("push", "origin", branch)
+	defer cancel()
 	out, err := cmd.CombinedOutput()
+	out, err = networkResult(ctx, out, err)
 	if err != nil {
 		return fmt.Errorf("git push origin %s: %w\n%s", branch, err, out)
 	}
@@ -772,12 +784,16 @@ func (c *Client) Push(branch string) error {
 }
 
 func (c *Client) FetchAndRebase(branch string) error {
-	fetch := c.cmd("fetch", "origin")
-	if out, err := fetch.CombinedOutput(); err != nil {
+	fetch, ctx, cancel := c.withPublishDeadline().networkCmd("fetch", "origin")
+	defer cancel()
+	out, err := fetch.CombinedOutput()
+	out, err = networkResult(ctx, out, err)
+	if err != nil {
 		return fmt.Errorf("git fetch origin: %w\n%s", err, out)
 	}
 	rebase := c.cmd("rebase", "origin/"+branch)
-	if out, err := rebase.CombinedOutput(); err != nil {
+	out, err = rebase.CombinedOutput()
+	if err != nil {
 		return fmt.Errorf("git rebase origin/%s: %w\n%s", branch, err, out)
 	}
 	return nil
@@ -837,9 +853,11 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 		return fmt.Errorf("fetch branch to ref: %w", err)
 	}
 	spec := "+refs/heads/" + branch + ":" + dstRef
-	cmd, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
+	cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
 	defer cancel()
-	if out, err := cmd.CombinedOutput(); err != nil {
+	out, err := cmd.CombinedOutput()
+	out, err = networkResult(ctx, out, err)
+	if err != nil {
 		wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", branch, remoteURL, err, out)
 		if remoteRefMissingText(string(out)) || remoteRefMissingText(err.Error()) {
 			return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
@@ -849,16 +867,34 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	return nil
 }
 
-// networkCmd builds a git child bound to the client's network timeout (default
-// defaultGitNetworkTimeout). Caller must defer cancel(). On unix, Cancel kills
-// the process group (Setpgid) so git-remote-* helpers die with the parent;
-// WaitDelay bounds stuck-pipe waits. Ops-backup remote probes must use this
-// instead of raw context.Background().
-func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.CancelFunc) {
+// withPublishDeadline returns a client whose networkCmd budget is the publish
+// cap, unless the caller already set WithNetworkTimeout.
+func (c *Client) withPublishDeadline() *Client {
+	if c == nil || c.networkTimeout > 0 {
+		return c
+	}
+	return c.WithNetworkTimeout(defaultGitPublishNetworkTimeout)
+}
+
+// networkCmd is the only owner of remote-network git (fetch, push, ls-remote,
+// pull, clone, and probes of a named remote). It applies the deadline,
+// process-group cancel, and WaitDelay. Pass the remote by name so
+// remote.<name>.* applies inside the clone; do not -c remote.<name>.url=
+// (git appends a value and does not override). Caller must defer cancel().
+func (c *Client) networkCmd(args ...string) (*exec.Cmd, context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.effectiveNetworkTimeout())
 	cmd := c.cmdContext(ctx, args...)
 	configureNetworkCmd(cmd)
-	return cmd, cancel
+	return cmd, ctx, cancel
+}
+
+// networkResult keeps a deadline visible when process-group kill turns it into
+// "signal: killed". Successful runs (nil err) are unchanged.
+func networkResult(ctx context.Context, out []byte, err error) ([]byte, error) {
+	if err != nil && ctx != nil && ctx.Err() != nil {
+		return out, fmt.Errorf("%w: %v", ctx.Err(), err)
+	}
+	return out, err
 }
 
 func (c *Client) RevListCount(rangeSpec string) (int, error) {
@@ -1797,6 +1833,7 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 
 	// Push tip SHA directly — no lock-free fixed refs/bundle-backup/_armature.
 	spec := tipSHA + ":" + advertiseRef
+	// gitnetallow: bundle-create-local-bare-push local bare path under armature-tmp-work, not a named remote
 	if out, pushErr := c.cmd("push", bare, spec).CombinedOutput(); pushErr != nil {
 		return fmt.Errorf("git push bare %s: %w\n%s", spec, pushErr, out)
 	}
@@ -1879,6 +1916,7 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	}
 	bareClient := New(bare).WithEnviron(c.environ)
 	spec := "+" + wantRef + ":" + wantRef
+	// gitnetallow: bundle-verify-local-fetch absolute bundle file into a throwaway local bare, not a remote URL
 	if out, fetchErr := bareClient.cmd("fetch", "--no-tags", abs, spec).CombinedOutput(); fetchErr != nil {
 		return fmt.Errorf("git fetch bundle into verify bare %s: %w\n%s", spec, fetchErr, out)
 	}
@@ -1933,6 +1971,7 @@ func (c *Client) RestoreEvidence(
 		return false, "", "", false, false, fmt.Errorf("restore evidence: abs bundle: %w", absErr)
 	}
 	bundleSpec := "+" + advertiseRef + ":" + bundleTmp
+	// gitnetallow: restore-local-bundle-fetch absolute bundle file into refs/armature-tmp; origin fetch stays on networkCmd
 	if out, fetchErr := c.cmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
 	}
@@ -1948,9 +1987,11 @@ func (c *Client) RestoreEvidence(
 	}
 
 	originSpec := "+" + remoteRef + ":" + originTmp
-	cmd, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
+	cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
 	defer cancel()
-	if out, fetchErr := cmd.CombinedOutput(); fetchErr != nil {
+	out, fetchErr := cmd.CombinedOutput()
+	out, fetchErr = networkResult(ctx, out, fetchErr)
+	if fetchErr != nil {
 		return false, "", "", false, false, fmt.Errorf(
 			"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
 			remoteRef, remoteURL, fetchErr, out)
@@ -1982,9 +2023,10 @@ func (c *Client) RestoreEvidence(
 // remote operand is always the name so remote.<name>.* applies; multi-valued
 // URLs stay first-wins.
 func (c *Client) lsRemoteRef(name, ref string) (sha string, exists bool, err error) {
-	cmd, cancel := c.networkCmd("ls-remote", "--refs", name, ref)
+	cmd, ctx, cancel := c.networkCmd("ls-remote", "--refs", name, ref)
 	defer cancel()
 	out, runErr := cmd.CombinedOutput()
+	out, runErr = networkResult(ctx, out, runErr)
 	if runErr != nil {
 		return "", false, fmt.Errorf("git ls-remote %s %s: %w\n%s", name, ref, runErr, out)
 	}

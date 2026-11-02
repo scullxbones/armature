@@ -42,6 +42,7 @@ arm worker-init --check || arm worker-init   # register worker identity once per
 |---|---|
 | Second decoder of `sources/manifest.json` (typed `sourceEntry` copies or `json.RawMessage` entries; PRs #333 and #362) | `scripts/repoguard` (`make lint` / `make check`). Decode with `sources.Manifest.Unmarshal` or `sources.ReadManifest`, then pass `validate.KnownSources` / `validate.UnreadableSources`. |
 | Hard-coded 40-hex-only git object-id pattern (misses SHA-256 64-hex; ADR 0025 / PV-70) | `scripts/repoguard -check object-id` (`make lint` / `make check`). Use `internal/gitoid.Valid` (equals `gitoid.PatternLower`: lowercase 40\|64 hex). |
+| Ad hoc remote-network git (`fetch`, `push`, `ls-remote`, `pull`, `clone` against a named remote or remote URL) outside `networkCmd` | `scripts/repoguard -check git-network` (`make lint` / `make check`). Build the child with `Client.networkCmd` (deadline, process-group cancel, named-remote transport). A local bundle or bare path needs its own `gitnetallow` site, not a file-wide exemption. |
 
 ## Canonical references
 
