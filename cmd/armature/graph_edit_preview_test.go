@@ -85,6 +85,25 @@ func TestUnlinkCauseNamesNextPair_REQ_AGTFND(t *testing.T) {
 	assert.NotContains(t, strings.Join(cf.NextActions, "\n"), "merged")
 }
 
+// TestGraphEditCascadeCause_FallbackW1_REQ_coverage_determinism locks
+// unlink.go:155 (chosen==nil fallback when a W1 finding does not cite both
+// graph-edit IDs). Finding order from validate made that branch intermittent
+// under parallel check-core → cmd coverage flipped 83.86% ↔ 83.89%.
+func TestGraphEditCascadeCause_FallbackW1_REQ_coverage_determinism(t *testing.T) {
+	t.Parallel()
+	repo := setupReadmeOverlapCascade(t)
+	ctx := getTestContext(t, repo)
+	op := ops.Op{
+		Type:     ops.OpUnlink,
+		TargetID: "TOPTIER-S15-T2",
+		Payload:  ops.Payload{Dep: "TOPTIER-S6-T3", Rel: "blocked_by"},
+	}
+	// Pass IDs no W1 cites → force the chosen==nil fallback on every W1.
+	cause := graphEditCascadeCause(ctx, op, "NOT-CITED-SOURCE", "NOT-CITED-DEP")
+	assert.Contains(t, cause, "cannot introduce Graph Finding (scope overlap W1): next pair")
+	assert.NotEqual(t, "", cause)
+}
+
 func TestLinkRefusesIntroducedCycle_REQ_AGTFND(t *testing.T) {
 	t.Parallel()
 	repo := gittest.InitWithOrigin(t).Dir
