@@ -728,6 +728,109 @@ else
     fail "${ORIGIN_MAIN_RESULT:-origin/main fetch mapping failed}"
 fi
 
+echo "Test 10b: own edited workflow rechecks quotes; CI never skips required jobs on edit..."
+
+QUOTE_EDIT_RESULT=$(python3 - "$REPO_ROOT" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+ci = (root / ".github/workflows/ci.yml").read_text()
+edit_wf = root / ".github/workflows/pr-coverage-quotes-on-edit.yml"
+if not edit_wf.is_file():
+    print("FAIL: missing .github/workflows/pr-coverage-quotes-on-edit.yml")
+    sys.exit(1)
+edit = edit_wf.read_text()
+
+# CI must NOT subscribe to edited (would emit required jobs as skipped).
+if re.search(r"(?m)^  pull_request:\n(?:.*\n)*?    types:\s*\[[^\]]*edited", ci):
+    print("FAIL: ci.yml pull_request must not list edited (own workflow owns that)")
+    sys.exit(1)
+if "pr-coverage-quotes-on-edit:" in ci:
+    print("FAIL: pr-coverage-quotes-on-edit must not live in ci.yml")
+    sys.exit(1)
+if "github.event.action != 'edited'" in ci or 'github.event.action != "edited"' in ci:
+    print("FAIL: ci.yml must not skip jobs on edited (never emit required names as skipped)")
+    sys.exit(1)
+
+# check-core: live body via gh api; upload before compare; always() upload.
+if 'gh api "repos/${REPO}/pulls/${PR_NUMBER}"' not in ci and \
+   "gh api \"repos/${REPO}/pulls/${PR_NUMBER}\"" not in ci:
+    print("FAIL: check-core must fetch CURRENT body via gh api pulls/$N")
+    sys.exit(1)
+if "GITHUB_EVENT_PATH" in ci and "pull_request.body" in ci:
+    print("FAIL: check-core must not read coverage body from GITHUB_EVENT_PATH")
+    sys.exit(1)
+# Upload step must use always() and precede the compare step.
+upload_idx = ci.find("Upload coverage-check.log for late PR body paste")
+compare_idx = ci.find("PR body coverage quotes match this job's coverage.out")
+write_idx = ci.find("Write coverage-check.log")
+if min(write_idx, upload_idx, compare_idx) < 0:
+    print("FAIL: check-core missing write/upload/compare coverage-check steps")
+    sys.exit(1)
+if not (write_idx < upload_idx < compare_idx):
+    print("FAIL: check-core must write log, upload (always), then compare")
+    sys.exit(1)
+upload_block = ci[upload_idx:compare_idx]
+if "always()" not in upload_block:
+    print("FAIL: coverage-check.log upload must use always() so failed compare still leaves artifact")
+    sys.exit(1)
+if "coverage-check-${{ github.event.pull_request.head.sha }}" not in ci and \
+   "coverage-check-${{github.event.pull_request.head.sha}}" not in ci:
+    print("FAIL: check-core must upload coverage-check-<head.sha> artifact")
+    sys.exit(1)
+
+# Own edited workflow contract.
+if "types: [edited]" not in edit and 'types: ["edited"]' not in edit:
+    print("FAIL: edit workflow must be on: pull_request types: [edited]")
+    sys.exit(1)
+if "pr-coverage-quotes-on-edit:" not in edit:
+    print("FAIL: edit workflow missing pr-coverage-quotes-on-edit job")
+    sys.exit(1)
+if "assert-git-min.sh" not in edit:
+    print("FAIL: edit workflow must run assert-git-min.sh")
+    sys.exit(1)
+if "ci-path-shadow-engines.sh" not in edit:
+    print("FAIL: edit workflow must PATH-shadow container engines")
+    sys.exit(1)
+if "pr-coverage-quote-check.sh" not in edit:
+    print("FAIL: edit workflow must invoke pr-coverage-quote-check.sh")
+    sys.exit(1)
+if "wait-coverage-check-artifact.sh" not in edit:
+    print("FAIL: edit workflow must call wait-coverage-check-artifact.sh (poll loop not inline YAML)")
+    sys.exit(1)
+if "|| true" in edit and "select-coverage-check-artifact-id" in edit:
+    print("FAIL: edit workflow must not || true the artifact selector")
+    sys.exit(1)
+if re.search(r"gh api[^\n]*--jq[^\n]*(--arg|--argjson)", edit):
+    print("FAIL: gh api --jq does not accept --arg/--argjson (CI class failure on #432)")
+    sys.exit(1)
+if "ci-path-shadow-selfcheck.sh" not in edit:
+    print("FAIL: edit workflow must run PATH-shadow self-check")
+    sys.exit(1)
+if 'gh api "repos/${REPO}/pulls/${PR_NUMBER}"' not in edit:
+    print("FAIL: edit workflow must fetch CURRENT body via gh api")
+    sys.exit(1)
+# SHA-pinned checkout only (no @vN floating tags).
+for m in re.finditer(r"uses:\s*(\S+)", edit):
+    uses = m.group(1)
+    if uses.startswith("./"):
+        continue
+    if "@" not in uses or not re.search(r"@[0-9a-f]{40}\b", uses):
+        print(f"FAIL: edit workflow action not SHA-pinned: {uses}")
+        sys.exit(1)
+
+print("PASS")
+PY
+) && QUOTE_EDIT_STATUS=0 || QUOTE_EDIT_STATUS=$?
+
+if [[ $QUOTE_EDIT_STATUS -eq 0 ]]; then
+    pass "own edited workflow rechecks quotes; CI never skips required jobs on edit"
+else
+    fail "${QUOTE_EDIT_RESULT:-PR edited quote-check workflow assertion failed}"
+fi
+
 echo "Test 11: check-commit-subjects fails loud on empty and merge-only ranges..."
 
 CCS_DEMO=$(mktemp -d)

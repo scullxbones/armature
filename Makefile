@@ -1,4 +1,4 @@
-.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check test-pr-coverage-quote-check lint adr-principles clean mutate check check-job check-git-floor print-check-jobs print-govulncheck-version print-tool-versions install-golangci-lint-release install-gremlins-release install-rg-release install-syft-release test-install-verified-release install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check container-run
+.PHONY: test test-ci test-skill-transcript test-e2eharness coverage coverage-check test-coverage-check test-pr-coverage-quote-check test-select-coverage-check-artifact-id test-wait-coverage-check-artifact lint adr-principles clean mutate check check-job check-git-floor print-check-jobs print-govulncheck-version print-tool-versions install-golangci-lint-release install-gremlins-release install-rg-release install-syft-release test-install-verified-release install-check-tools test-check-jobs check-fast test-check-fast help skill dist-skills install build validate-skills validate-doc-examples validate-graph deploy-skills trace-report skill-lint census-drift-check test-census-drift-check git-test-hermetic-check test-git-test-hermetic-check git-test-exec-check test-git-test-exec-check embed-examples crosscompile context-report test-summarize-test-json commit-subjects-check mock-ban-check test-mock-ban source-manifest-decode-check test-source-manifest-decode surface-budget-check surface-budget-ratchet test-surface-budget-check container-run
 
 GO ?= go
 PYTHON ?= python3
@@ -34,7 +34,9 @@ help:
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check      - Run coverage then fail if cmd < 83% or internal < 86%"
 	@echo "  make test-coverage-check - Test coverage-check.sh threshold logic itself (pass/fail fixtures)"
-	@echo "  make test-pr-coverage-quote-check - Test pr-coverage-quote-check.sh (match/mismatch/no-quote fixtures)"
+	@echo "  make test-pr-coverage-quote-check - Test pr-coverage-quote-check.sh (0.10 tol / missing-quote fail fixtures)"
+	@echo "  make test-select-coverage-check-artifact-id - Test artifact id filter (fail-closed; head_sha+repo ids)"
+	@echo "  make test-wait-coverage-check-artifact - Test edit-workflow poller (timeout + PATH-shadow mutants)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make container-run       - Run a manifest-keyed image (KEY=... ARGS='run flags' CMD='...')"
 	@echo "  make mutate              - Run mutation testing on core packages"
@@ -75,7 +77,7 @@ DEST ?=
 
 CHECK_JOBS := check-static check-core mutate
 
-CHECK_JOB_check-static := test-check-jobs test-install-verified-release lint crosscompile test-census-drift-check test-coverage-check test-pr-coverage-quote-check test-git-test-hermetic-check test-git-test-exec-check test-summarize-test-json test-mock-ban test-source-manifest-decode test-surface-budget-check
+CHECK_JOB_check-static := test-check-jobs test-install-verified-release lint crosscompile test-census-drift-check test-coverage-check test-pr-coverage-quote-check test-select-coverage-check-artifact-id test-wait-coverage-check-artifact test-git-test-hermetic-check test-git-test-exec-check test-summarize-test-json test-mock-ban test-source-manifest-decode test-surface-budget-check
 CHECK_TOOLS_check-static := golangci-lint
 
 CHECK_JOB_check-core := coverage-check validate-skills validate-doc-examples census-drift-check git-test-hermetic-check git-test-exec-check surface-budget-check
@@ -381,6 +383,12 @@ test-coverage-check:
 
 test-pr-coverage-quote-check:
 	@scripts/test_pr_coverage_quote_check.sh .
+
+test-select-coverage-check-artifact-id:
+	@scripts/test_select_coverage_check_artifact_id.sh .
+
+test-wait-coverage-check-artifact:
+	@scripts/test_wait_coverage_check_artifact.sh .
 
 mock-ban-check:
 	@scripts/check-mock-ban.sh .

@@ -149,6 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -172,16 +173,35 @@ jobs:
       - run: make check-job JOB=check-core
         env:
           CHECK_INSTALL_TOOLS: "1"
-      # Soft-pass when the PR body has no coverage quotes. Reuses coverage.out
-      # from check-core (no suite re-run); GITHUB_EVENT_PATH only — no gh API.
-      - name: PR body coverage quotes match this job's coverage.out
+      # Fail-closed quote check (hundredths |d|≤10). Live PR body via gh api
+      # (event payload goes stale on late paste). Upload the log BEFORE compare
+      # so a failed compare still leaves the artifact for the edited workflow.
+      - name: Write coverage-check.log
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
           test -f coverage.out
-          scripts/coverage-check.sh . coverage.out | tee /tmp/coverage-check.log
-          jq -r '.pull_request.body // empty' "$GITHUB_EVENT_PATH" > /tmp/pr-body.md
-          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md /tmp/coverage-check.log
+          scripts/coverage-check.sh . coverage.out | tee coverage-check.log
+      - name: Upload coverage-check.log for late PR body paste
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-check-${{ github.event.pull_request.head.sha }}
+          path: coverage-check.log
+          retention-days: 5
+          if-no-files-found: error
+      - name: PR body coverage quotes match this job's coverage.out
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          test -f coverage-check.log
+          # CURRENT body — not GITHUB_EVENT_PATH (stale after body-only edits).
+          gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq .body > /tmp/pr-body.md
+          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md coverage-check.log
 
   check-static:
     if: ${{ !inputs.os-matrix-only }}

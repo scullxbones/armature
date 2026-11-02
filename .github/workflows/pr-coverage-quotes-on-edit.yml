@@ -1,0 +1,55 @@
+# Late PR-body coverage paste recompare.
+#
+# Own workflow so body `edited` never emits required CI job names
+# (check-core, mutate, …) as skipped. Polls for the head SHA's
+# coverage-check artifact from check-core (upload-before-compare) and
+# compares the LIVE PR body via gh api.
+
+name: PR coverage quotes on edit
+
+on:
+  pull_request:
+    types: [edited]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  pr-coverage-quotes-on-edit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
+
+      - name: Wait for coverage-check artifact on this head SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: bash scripts/wait-coverage-check-artifact.sh "$REPO" "$HEAD_SHA" coverage-check.log
+
+      - name: PR body coverage quotes match prior coverage-check.log
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # CURRENT body — event payload at workflow start can still race an
+          # in-flight edit; re-fetch at compare time.
+          gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq .body > /tmp/pr-body.md
+          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md coverage-check.log
