@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/harnesshook"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +32,7 @@ func TestActivityWriterParserRoundTrip_REQ_EXECEV(t *testing.T) {
 	t.Parallel()
 
 	gitDir := t.TempDir()
-	headSHA := "1234567890abcdef1234567890abcdef12345678"
+	headSHA := gitoid.PadSHA1("1234567890abcdef")
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(headSHA+"\n"), 0o600))
 
 	command := `grep "foo" main.go` + "\nsecond line with a \"quote\" and unicode: héllo wörld 日本語"
@@ -62,7 +64,7 @@ func TestActivityWriterParserRoundTrip_UnknownExitCode_REQ_EXECEV(t *testing.T) 
 	t.Parallel()
 
 	gitDir := t.TempDir()
-	headSHA := "abcdef1234567890abcdef1234567890abcdef12"
+	headSHA := gitoid.PadSHA1("abcdef1234567890")
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(headSHA+"\n"), 0o600))
 
 	require.NoError(t, harnesshook.AppendActivity(gitDir, "go test ./...", 0, false, []byte("FAIL")))
@@ -80,7 +82,7 @@ func TestActivityWriterParserRoundTrip_MultipleEntriesHeadSHA_REQ_EXECEV(t *test
 	t.Parallel()
 
 	gitDir := t.TempDir()
-	headSHA := "fedcba0987654321fedcba0987654321fedcba09"
+	headSHA := gitoid.PadSHA1("fedcba0987654321")
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(headSHA+"\n"), 0o600))
 
 	for i := 0; i < 3; i++ {
@@ -103,7 +105,7 @@ func TestAppendActivity_EverythingWrittenRoundTripsThroughParser_REQ_NOCOMMENTS(
 	t.Parallel()
 
 	gitDir := t.TempDir()
-	headSHA := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	headSHA := gitoid.PadSHA1("a")
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte(headSHA+"\n"), 0o600))
 
 	writes := []struct {

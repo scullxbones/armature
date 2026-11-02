@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/stretchr/testify/assert"
@@ -59,8 +61,8 @@ func TestValidateRejectsMissingObjects_REQ_LNGHZN_S11_T1(t *testing.T) {
 	_, err := Validate(git, Request{
 		IssueID:   "rec-missing",
 		IssueType: "task",
-		Base:      "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-		Tip:       "cafebabecafebabecafebabecafebabecafebabe",
+		Base:      gitoid.PadSHA1("deadbeef"),
+		Tip:       gitoid.PadSHA1("cafebabe"),
 	})
 	require.Error(t, err)
 	assert.True(t, IsRecordError(err))

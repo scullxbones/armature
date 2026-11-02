@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -472,7 +474,7 @@ func TestRun_Integration_D3_GateEvidenceIsNotAnOrphan_REQ_LNGHZN_S10_T3(t *testi
 	require.NoError(t, ops.AppendGateEvidence(logPath, "worker-01", ops.GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		HeadSHA: gitoid.PadSHA1("b"),
 		Start:   100,
 		End:     101,
 		Exit:    0,

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io/fs"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/review"
@@ -32,9 +34,9 @@ type fixtureGit struct {
 func (g fixtureGit) ResolveRevision(rev string) (string, error) {
 	switch rev {
 	case "base":
-		return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", nil
+		return gitoid.PadSHA1("a"), nil
 	case "head":
-		return "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", nil
+		return gitoid.PadSHA1("b"), nil
 	default:
 		return rev, nil
 	}

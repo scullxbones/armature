@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
@@ -107,7 +109,7 @@ func TestMaterializeAtSHA_InvalidSHA(t *testing.T) {
 	t.Parallel()
 	_, gc := initAtSHATestRepo(t)
 
-	_, err := MaterializeAtSHA(gc, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "ops")
+	_, err := MaterializeAtSHA(gc, gitoid.PadSHA1("deadbeef"), "ops")
 	assert.Error(t, err)
 }
 

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +21,7 @@ func TestAppendAndReadGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 	ev := GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		HeadSHA: gitoid.PadSHA1("a"),
 		Start:   10,
 		End:     12,
 		Exit:    0,
@@ -89,7 +91,7 @@ func testEvidence() GateEvidence {
 	return GateEvidence{
 		Profile: "full",
 		Command: []string{"true"},
-		HeadSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		HeadSHA: gitoid.PadSHA1("a"),
 		Start:   1,
 		End:     2,
 		Exit:    0,

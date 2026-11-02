@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,7 +123,7 @@ func TestArtifactOutputModesUseForeignShapeAndOtherModesConform_REQ_AOC_S3_T3(t 
 		"bundles":[{"path":"bundle.json"}],
 		"help":["arm review record --issue X --assessment a.json --bundle bundle.json"]
 	}`)
-	writeGolden(t, dir, "prepare.artifact.json", reviewBundleGolden)
+	writeGolden(t, dir, "prepare.artifact.json", reviewBundleGolden())
 	writeGolden(t, dir, "apply.json", `{
 		"count":1,
 		"issues":[{"id":"T1","type":"task","status":"open","title":"one"}],
@@ -145,7 +147,7 @@ func TestArtifactOutputModesUseForeignShapeAndOtherModesConform_REQ_AOC_S3_T3(t 
 	require.Contains(t, err.Error(), "prepare")
 	require.Contains(t, err.Error(), "must not use the Agent Output Contract envelope")
 
-	writeGolden(t, dir, "prepare.artifact.json", reviewBundleGolden)
+	writeGolden(t, dir, "prepare.artifact.json", reviewBundleGolden())
 	require.NoError(t, os.Remove(filepath.Join(dir, "prepare.output.json")))
 	err = Lint(root, dir)
 	require.Error(t, err)
@@ -372,7 +374,8 @@ func attachBind(root *Command, bind func(Mode, []byte, io.Writer, io.Writer) err
 	}
 }
 
-const reviewBundleGolden = `{
+func reviewBundleGolden() string {
+	return `{
   "schema_version": 1,
   "bundle_id": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "issue": {
@@ -387,8 +390,8 @@ const reviewBundleGolden = `{
     "acceptance": ["TestEveryAgentFacingCommandHasConformingFixture_REQ_AOC_S3_T3"]
   },
   "delivery": {
-    "base_sha": "1234567890abcdef1234567890abcdef12345678",
-    "head_sha": "abcdef1234567890abcdef1234567890abcdef12",
+    "base_sha": "` + gitoid.PadSHA1("1234567890abcdef") + `",
+    "head_sha": "` + gitoid.PadSHA1("abcdef1234567890") + `",
     "changed_files": ["internal/output/conformance.go"],
     "diff": "--- a/internal/output/conformance.go\n+++ b/internal/output/conformance.go\n"
   },
@@ -397,6 +400,7 @@ const reviewBundleGolden = `{
     "delivery": "5d41402abc4b2a76b9719d911017c592250c71ed373cade4e832627b4f6c043a"
   }
 }`
+}
 
 const planInstanceGolden = `{
   "version": 1,

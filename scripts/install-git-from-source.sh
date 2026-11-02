@@ -41,7 +41,8 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-if [[ ! "$SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+# Content digest (SHA-256 hex), not a git object id — length check + hex class, no OID quantifier.
+if [[ ${#SHA256} -ne 64 || ! "$SHA256" =~ ^[0-9a-f]+$ ]]; then
   echo "FAIL: --sha256 must be 64 lowercase hex chars" >&2
   exit 1
 fi

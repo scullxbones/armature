@@ -138,8 +138,8 @@ func mustBundleJSONWithSHAs(t *testing.T, base, head string) []byte {
 			"changed_files": []string{"impl.go"},
 		},
 		"fingerprints": map[string]any{
-			"contract": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			"delivery": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			"contract": gitoid.PadSHA256("b"),
+			"delivery": gitoid.PadSHA256("c"),
 		},
 	}
 	data, err := json.Marshal(bundle)

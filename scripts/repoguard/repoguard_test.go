@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSourceManifest_omitemptyRawMessageBypass_REQ_REPOGUARD(t *testing.T) {
@@ -608,7 +611,7 @@ func TestRealRepoPassesGuards(t *testing.T) {
 	root := repoRoot(t)
 	checks := []string{
 		"source-manifest", "test-executables", "git-hermetic", "gochecknoglobals-probe",
-		"golangci-in-tests", "object-id", "git-network",
+		"golangci-in-tests", "object-id", "residual-trls", "git-network",
 	}
 	for _, check := range checks {
 		out, errOut, code := runCheck(t, check, root)
@@ -616,15 +619,15 @@ func TestRealRepoPassesGuards(t *testing.T) {
 			t.Fatalf("%s failed on real repo:\n%s\n%s", check, out, errOut)
 		}
 		if check == "git-hermetic" {
-			if !strings.Contains(out, "internal/adapters/git_internal_test.go") {
-				t.Fatalf("must list the git-name allow, got %s", out)
-			}
 			if !strings.Contains(out, "scripts/repoguard/repoguard_test.go") {
 				t.Fatalf("must list the repoguard fixture allow, got %s", out)
 			}
 		}
 		if check == "object-id" && !strings.Contains(out, "OK: object-id") {
 			t.Fatalf("missing object-id OK line: %s", out)
+		}
+		if check == "residual-trls" && !strings.Contains(out, "OK: residual trls") {
+			t.Fatalf("missing residual-trls OK line: %s", out)
 		}
 		if check == "git-network" {
 			if !strings.Contains(out, "OK: remote-network git calls go through networkCmd") {
@@ -766,6 +769,745 @@ func readGitNetFixture(t *testing.T, name string) string {
 		t.Fatal(err)
 	}
 	return string(body)
+}
+
+func TestObjectID_Xdigit40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/zz/a.go": `package zz
+var A = "^[[:xdigit:]]{40}$"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on [[:xdigit:]]{40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_UnanchoredHex40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+var pat = "[0-9a-f]{40}"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on unanchored [0-9a-f]{40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_FortyHexBasicLitFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const sample = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on 40-hex BasicLit, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "BasicLit") && !strings.Contains(errOut, "gitoid") {
+		t.Fatalf("must name BasicLit or gitoid, got %s", errOut)
+	}
+}
+
+func TestObjectID_LenLessThan40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+func ok(s string) bool { return len(s) < 40 }
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on len(x) < 40, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_HexLenConstFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const HexLen = 40
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on const HexLen = 40, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_UncompilablePatternFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+var pat = "^[0-9a-f]{40}$|bogus("
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on uncompilable OID pattern, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_FindStringPartialFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Unanchored {40} matches a prefix of 64-hex via FindString.
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+var pat = "[0-9a-f]{40}"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on FindString(64)!=64 probe, stderr=%s", errOut)
+	}
+	if !oidPatternBanned(`[0-9a-f]{40}`) {
+		t.Fatal("FindString probe mutant: unanchored {40} must be banned")
+	}
+	if oidPatternBanned(`^[a-f0-9]{40}$|^[a-f0-9]{64}$`) {
+		t.Fatal("dual-width PatternLower must not be flagged")
+	}
+}
+
+func TestObjectID_Bare64SubstringDoesNotSuppress_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const note = ` + "`oid [0-9a-f]{40} (also see {64} elsewhere)`" + `
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail: bare {64} must not suppress 40-only hit, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_Alnum40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/zz/a.go": `package zz
+var A = "^[[:alnum:]]{40}$"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on [[:alnum:]]{40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_Brace40Comma40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+var pat = "^[0-9a-f]{40,40}$"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on {40,40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_Word40AnchoredFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const pat = ` + "`^\\w{40}$`" + `
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on ^\\w{40}$, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_LenEq40Kept_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+func ok(s string) bool { return len(s) == 40 }
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on len==40, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "gitoid") {
+		t.Fatalf("fix must name gitoid, got %s", errOut)
+	}
+}
+
+func TestObjectID_TextGrepQEFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":               "module fixture\n\ngo 1.22\n",
+		"scripts/check_sha.sh": "grep -qE '^[0-9a-f]{40}$' \"$1\"\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on grep -qE 40-only, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_TextReAssignFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":               "module fixture\n\ngo 1.22\n",
+		"scripts/check_sha.sh": "re='^[0-9a-f]{40}$'\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on re= assign, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_TextBREFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":         "module fixture\n\ngo 1.22\n",
+		"scripts/bre.sh": "grep '^[0-9a-f]\\{40\\}$' \"$1\"\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on BRE \\{40\\}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_TextAwkFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":       "module fixture\n\ngo 1.22\n",
+		"scripts/a.sh": "awk '/^[0-9a-f]{40}$/' \"$1\"\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on awk /{40}/, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_TextPyHeredocFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":         "module fixture\n\ngo 1.22\n",
+		"scripts/pin.sh": "python3 - <<'PY'\nimport re\nre.fullmatch(r'^[0-9a-f]{40}$', s)\nPY\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on re.fullmatch in heredoc, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_TextBashRegexFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":        "module fixture\n\ngo 1.22\n",
+		"scripts/eq.sh": "[[ $x =~ ^[0-9a-f]{40}$ ]]\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on unquoted =~, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_TextPyConstantFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":          "module fixture\n\ngo 1.22\n",
+		"scripts/oids.py": "SHA_RE = r'^[0-9a-f]{40}$'\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on plain .py constant, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_TextWorkflowYAMLFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":                  "module fixture\n\ngo 1.22\n",
+		".github/workflows/x.yml": "jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: grep -E '^[0-9a-f]{40}$' file\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on workflow YAML grep -E, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_ProbeWeakenedFailsREQ_419(t *testing.T) {
+	t.Parallel()
+	if !oidPatternBanned(`^[[:xdigit:]]{40}$`) {
+		t.Fatal("weaken detection: compile-probe must reject [[:xdigit:]]{40}")
+	}
+	if oidPatternBanned(`^[a-f0-9]{40}$|^[a-f0-9]{64}$`) {
+		t.Fatal("dual-width PatternLower must not be flagged")
+	}
+	if !oidPatternBanned(`^[0-9a-f]{40}$|bogus(`) {
+		t.Fatal("compile-error mutant: uncompilable OID pattern must be a hit")
+	}
+}
+
+func TestObjectID_WaiverLineDoesNotCoverNewHit_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"scripts/test_check_jobs.sh": strings.Repeat("\n", 374) +
+			`sha_re = re.compile(r"^[0-9a-f]{40}$")` + "\n" +
+			`other = re.compile(r"^[[:xdigit:]]{40}$")` + "\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on new pattern in waived file, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "test_check_jobs.sh:376") && !strings.Contains(errOut, "[[:xdigit:]]") {
+		t.Fatalf("must flag the new line, not only the waived one; stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_AppendGrepToWaivedFileFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Per-site waiver at line 375 must not cover an appended plant.
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), "scripts", "test_check_jobs.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := writeTree(t, map[string]string{
+		"go.mod":                     "module fixture\n\ngo 1.22\n",
+		"scripts/test_check_jobs.sh": string(body) + "\ngrep -qE '^[0-9a-f]{40}$' \"$1\"\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("appending grep -qE 40-only to waived file must FAIL, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "test_check_jobs.sh") {
+		t.Fatalf("must name waived file hit, got %s", errOut)
+	}
+}
+
+func TestResidualTrls_CmdGoFails_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"cmd/armature/main.go": `package main
+const brand = "trls tui"
+`,
+	})
+	_, errOut, code := runCheck(t, "residual-trls", root)
+	if code == 0 {
+		t.Fatalf("expected fail on cmd/ trls, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "cmd/armature/main.go") {
+		t.Fatalf("must name cmd hit, got %s", errOut)
+	}
+}
+
+func TestResidualTrls_TestGoFails_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/foo/foo_test.go": `package foo
+func TestX(t *testing.T) { _ = "run trls ready" }
+`,
+	})
+	_, errOut, code := runCheck(t, "residual-trls", root)
+	if code == 0 {
+		t.Fatalf("expected fail on _test.go trls, stderr=%s", errOut)
+	}
+}
+
+func TestResidualTrls_CastFails_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":                "module fixture\n\ngo 1.22\n",
+		"docs/assets/demo.cast": "{\"version\":2}\n[0.0, \"o\", \"trls tui · worker\"]\n",
+	})
+	_, errOut, code := runCheck(t, "residual-trls", root)
+	if code == 0 {
+		t.Fatalf("expected fail on docs/assets cast, stderr=%s", errOut)
+	}
+}
+
+func TestResidualTrls_CleanPasses_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":                   "module fixture\n\ngo 1.22\n",
+		"cmd/armature/main.go":     "package main\nconst brand = \"arm tui\"\n",
+		"internal/foo/foo_test.go": "package foo\nfunc TestX(t *testing.T) { _ = \"arm ready\" }\n",
+		"docs/assets/demo.cast":    "{\"version\":2}\n[0.0, \"o\", \"arm tui · worker\"]\n",
+	})
+	out, errOut, code := runCheck(t, "residual-trls", root)
+	if code != 0 {
+		t.Fatalf("expected pass, stdout=%s stderr=%s", out, errOut)
+	}
+}
+
+func TestResidualTrls_WaiverLineDoesNotCoverNewHit_REQ_421(t *testing.T) {
+	t.Parallel()
+	// Restores the parallel coverage lost when the worker-package grep guard
+	// moved into repoguard: a new trls on a non-waived line must FAIL.
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/worker/residual_trls_test.go": strings.Repeat("\n", 16) +
+			`assert.NotContains(t, err.Error(), "trls")` + "\n" +
+			`// trls new` + "\n",
+		"internal/tui/app/model_test.go": strings.Repeat("\n", 75) +
+			`if strings.Contains(nav, "trls") {` + "\n" +
+			`t.Errorf("nav must not retain pre-rename trls brand, got: %q", nav)` + "\n",
+	})
+	_, errOut, code := runCheck(t, "residual-trls", root)
+	if code == 0 {
+		t.Fatalf("expected fail on // trls new after waived line, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "residual_trls_test.go:18") && !strings.Contains(errOut, "trls new") {
+		t.Fatalf("must flag the new line, got %s", errOut)
+	}
+}
+
+func TestResidualTrls_RejectsLineZeroWaiver_REQ_421(t *testing.T) {
+	t.Parallel()
+	if allowedResidualTrlsSite("internal/worker/residual_trls_test.go", 0, "trls") {
+		t.Fatal("Line == 0 must not waive residual-trls")
+	}
+	if !allowedResidualTrlsSite("internal/worker/residual_trls_test.go", 17, "trls") {
+		t.Fatal("line 17 + needle must waive")
+	}
+}
+
+// --- Fail-closed plants (#424): each plant fails rc!=0 against the real binary. ---
+
+func realRepoguard(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "repoguard")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
+	cmd.Dir = filepath.Join(repoRoot(t), "scripts", "repoguard")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go build repoguard: %v\n%s", err, out)
+	}
+	return bin
+}
+
+func runRealObjectID(t *testing.T, root string) (stderr string, code int) {
+	t.Helper()
+	bin := realRepoguard(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "-check", "object-id", root)
+	var errBuf bytes.Buffer
+	cmd.Stdout = &bytes.Buffer{}
+	cmd.Stderr = &errBuf
+	err := cmd.Run()
+	code = 0
+	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			code = ee.ExitCode()
+		} else {
+			t.Fatalf("run repoguard: %v", err)
+		}
+	}
+	return errBuf.String(), code
+}
+
+func TestPlant_ConstN40_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const n = 40
+`,
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("plant const n = 40 must fail, stderr=%s", errOut)
+	}
+	t.Logf("plant const n=40 rc=%d", code)
+}
+
+func TestPlant_Hex64BasicLit_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const sample = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+`,
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("plant 64-hex BasicLit must fail, stderr=%s", errOut)
+	}
+	t.Logf("plant 64-hex BasicLit rc=%d", code)
+}
+
+func TestPlant_Pattern64Only_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+var pat = "^[0-9a-f]{64}$"
+`,
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("plant 64-only pattern must fail, stderr=%s", errOut)
+	}
+	t.Logf("plant ^[0-9a-f]{64}$ rc=%d", code)
+}
+
+func TestPlant_UncompilableRegexp_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+var pat = "([0-9a-f]+"
+`,
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("plant uncompilable ([0-9a-f]+ must fail, stderr=%s", errOut)
+	}
+	t.Logf("plant uncompilable regexp rc=%d", code)
+}
+
+func TestPlant_UnterminatedQuote_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":            "module fixture\n\ngo 1.22\n",
+		"scripts/broken.sh": "#!/bin/bash\necho 'unterminated\n",
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("plant unterminated quote must fail, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "tokenizer fail-closed") && !strings.Contains(errOut, "unterminated quote") {
+		t.Fatalf("must name tokenizer/unterminated, got %s", errOut)
+	}
+	t.Logf("plant unterminated quote rc=%d", code)
+}
+
+func TestPlant_UnquotedGrep40_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":            "module fixture\n\ngo 1.22\n",
+		"scripts/grep40.sh": "grep -E ^[0-9a-f]{40}$ \"$1\"\n",
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("plant unquoted grep -E 40-only must fail, stderr=%s", errOut)
+	}
+	t.Logf("plant unquoted grep -E rc=%d", code)
+}
+
+func TestPlant_YAMLPattern40_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":              "module fixture\n\ngo 1.22\n",
+		".github/pattern.yml": "pattern: ^[0-9a-f]{40}$\n",
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("plant YAML pattern 40-only must fail, stderr=%s", errOut)
+	}
+	t.Logf("plant YAML pattern rc=%d", code)
+}
+
+func TestPlant_TextSkipDirsExplicit_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Explicit justified list: docs/, ops/, non-.github dot-dirs skipped; else scanned.
+	want := map[string]bool{"testdata": true, "vendor": true, ".git": true, "node_modules": true, "ops": true, "docs": true}
+	got := textSkipDirList()
+	if len(got) != len(want) {
+		t.Fatalf("textSkipDirList=%v want exactly %v", got, want)
+	}
+	for _, d := range got {
+		if !want[d] {
+			t.Fatalf("unexpected skip %q; justified list is %v", d, want)
+		}
+	}
+	root := writeTree(t, map[string]string{
+		"go.mod":                   "module fixture\n\ngo 1.22\n",
+		"docs/hidden.sh":           "grep -E ^[0-9a-f]{40}$ x\n",
+		"ops/hidden.sh":            "grep -E ^[0-9a-f]{40}$ x\n",
+		".cache/hidden.sh":         "grep -E ^[0-9a-f]{40}$ x\n",
+		"scripts/visible.sh":       "grep -E ^[0-9a-f]{40}$ x\n",
+		".github/workflows/ci.yml": "run: grep -E '^[0-9a-f]{40}$' x\n",
+	})
+	errOut, code := runRealObjectID(t, root)
+	if code == 0 {
+		t.Fatalf("visible scripts/.github must still be scanned, stderr=%s", errOut)
+	}
+	if strings.Contains(errOut, "docs/hidden") || strings.Contains(errOut, "ops/hidden") || strings.Contains(errOut, ".cache/hidden") {
+		t.Fatalf("docs/ops/dot-dirs must be skipped, got %s", errOut)
+	}
+	if !strings.Contains(errOut, "scripts/visible") && !strings.Contains(errOut, ".github/workflows") {
+		t.Fatalf("must flag scanned paths, got %s", errOut)
+	}
+	t.Logf("plant textSkipDirs scan/skip rc=%d", code)
+}
+
+func TestValidateAllowEntries_LineZeroFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	err := validateAllowEntries([]allowEntry{{
+		RelPath: "internal/fake/plant.go",
+		Check:   allowObjectID,
+		Line:    0,
+		Needle:  "plant",
+		Reason:  "planted Line==0 must fail",
+	}})
+	if err == nil {
+		t.Fatal("validateAllowEntries must reject Line==0")
+	}
+	if !strings.Contains(err.Error(), "Line == 0") {
+		t.Fatalf("must name Line == 0, got %v", err)
+	}
+}
+
+func TestPlant_EmptyNeedleFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	err := validateAllowEntries([]allowEntry{{
+		RelPath: "go.mod",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  "",
+		Reason:  "empty needle plant",
+	}})
+	code := 0
+	if err != nil {
+		code = 1
+	}
+	if code == 0 {
+		t.Fatal("empty Needle must FAIL validateAllowEntries")
+	}
+	if !strings.Contains(err.Error(), "empty Needle") {
+		t.Fatalf("must name empty Needle, got %v", err)
+	}
+	// Empty needle must not waive any hit at file:line.
+	idx := newAllowIndex([]allowEntry{{
+		RelPath: "go.mod",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  "",
+		Reason:  "empty needle plant",
+	}})
+	if idx.allowed("go.mod", allowObjectID, 1, "module github.com/scullxbones/armature") {
+		t.Fatal("empty Needle must not match any hit")
+	}
+	t.Logf("plant empty-needle rc=%d", code)
+}
+
+func TestPlant_UnusedNoHitFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Needle text is on go.mod:1 ("module") but never waives an object-id hit.
+	entries := []allowEntry{{
+		RelPath: "go.mod",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  "module",
+		Reason:  "no-hit plant",
+	}}
+	if err := validateAllowEntries(entries); err != nil {
+		t.Fatalf("structural validate must pass: %v", err)
+	}
+	idx := newAllowIndex(entries)
+	// No idx.allowed calls → unused.
+	err := idx.unused(allowObjectID)
+	code := 0
+	if err != nil {
+		code = 1
+	}
+	if code == 0 {
+		t.Fatal("entry that never waived a hit must FAIL unused")
+	}
+	if !strings.Contains(err.Error(), "unused") {
+		t.Fatalf("must name unused, got %v", err)
+	}
+	t.Logf("plant no-hit unused rc=%d", code)
+}
+
+func TestPlant_MissingFileUnusedFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	entries := []allowEntry{{
+		RelPath: "does-not-exist-plant.go",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  `^[0-9a-f]{40}$`,
+		Reason:  "missing-file plant",
+	}}
+	if err := validateAllowEntries(entries); err != nil {
+		t.Fatalf("structural validate must pass: %v", err)
+	}
+	idx := newAllowIndex(entries)
+	err := idx.unused(allowObjectID)
+	code := 0
+	if err != nil {
+		code = 1
+	}
+	if code == 0 {
+		t.Fatal("missing-file entry must FAIL as unused")
+	}
+	if !strings.Contains(err.Error(), "unused") || !strings.Contains(err.Error(), "does-not-exist-plant.go") {
+		t.Fatalf("must name unused + missing path, got %v", err)
+	}
+	t.Logf("plant missing-file unused rc=%d", code)
+}
+
+func TestPlant_StaleNeedleUnusedFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Needle absent from line → never matches a hit → unused FAIL
+	// (replaces validateAllowEntriesPresent ErrNotExist/stale skip).
+	entries := []allowEntry{{
+		RelPath: "waived.sh",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  `^[0-9a-f]{40}$`,
+		Reason:  "stale plant",
+	}}
+	idx := newAllowIndex(entries)
+	if idx.allowed("waived.sh", allowObjectID, 1, "echo ok") {
+		t.Fatal("stale needle must not match")
+	}
+	err := idx.unused(allowObjectID)
+	code := 0
+	if err != nil {
+		code = 1
+	}
+	if code == 0 {
+		t.Fatal("stale needle (no hit waived) must FAIL unused")
+	}
+	t.Logf("plant stale-needle unused rc=%d", code)
+}
+
+func TestPlant_GitHermeticRejectsWholeFile_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Avoid a bare "git" BasicLit here — that would mark package main as
+	// git-executing and fail TestRealRepoPassesGuards (no TestMain).
+	gitNeedle := string([]byte{'g', 'i', 't'})
+	if allowedGitHermeticSite("internal/adapters/git_internal_test.go", allowGitHermeticName, 0, gitNeedle) {
+		t.Fatal("git-hermetic allowed() must reject Line==0 whole-file")
+	}
+	if allowedSite("any.go", allowObjectID, 0, "x") {
+		t.Fatal("shared allowedSite must reject Line==0")
+	}
+	if err := validateAllowEntries([]allowEntry{{
+		RelPath: "x.go", Check: allowGitHermeticName, Line: 0, Needle: gitNeedle, Reason: "plant",
+	}}); err == nil {
+		t.Fatal("shared validator must reject Line==0 for git-hermetic")
+	}
 }
 
 func assertExecRejected(t *testing.T, name, body string) {

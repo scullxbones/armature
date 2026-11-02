@@ -205,6 +205,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/scullxbones/armature/internal/context"
+            - "github.com/scullxbones/armature/internal/gitoid"
             - "github.com/scullxbones/armature/internal/materialize"
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/output"

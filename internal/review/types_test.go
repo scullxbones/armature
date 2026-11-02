@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/attestation"
 	"github.com/scullxbones/armature/internal/ops"
 
@@ -370,8 +372,8 @@ func TestDecodeConformanceAssessment_RejectsNullCitations_REQ_LNGHZN_S8_T1(t *te
 	valid := `{
   "schema_version": 1,
   "bundle_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "contract_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "delivery_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "contract_fingerprint": "` + gitoid.PadSHA256("b") + `",
+  "delivery_fingerprint": "` + gitoid.PadSHA256("c") + `",
   "results": [
     {
       "id": "definition_of_done",
@@ -396,8 +398,8 @@ func TestDecodeConformanceAssessment_RejectsInvalidCitationColumn_REQ_LNGHZN_S8_
 	valid := `{
   "schema_version": 1,
   "bundle_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "contract_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "delivery_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "contract_fingerprint": "` + gitoid.PadSHA256("b") + `",
+  "delivery_fingerprint": "` + gitoid.PadSHA256("c") + `",
   "results": [
     {
       "id": "definition_of_done",
@@ -429,8 +431,8 @@ func TestDecodeConformanceAssessment_RejectsNullCitationLine_REQ_LNGHZN_S8_T1(t 
 	valid := `{
   "schema_version": 1,
   "bundle_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "contract_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "delivery_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "contract_fingerprint": "` + gitoid.PadSHA256("b") + `",
+  "delivery_fingerprint": "` + gitoid.PadSHA256("c") + `",
   "results": [
     {
       "id": "definition_of_done",
@@ -468,13 +470,13 @@ func validDecodeBundle() ReviewBundle {
 			Acceptance:       []string{"works"},
 		},
 		Delivery: Delivery{
-			BaseSHA:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			HeadSHA:      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			BaseSHA:      gitoid.PadSHA1("a"),
+			HeadSHA:      gitoid.PadSHA1("b"),
 			ChangedFiles: []string{"impl.go"},
 		},
 		Fingerprints: Fingerprints{
-			Contract: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			Delivery: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			Contract: gitoid.PadSHA256("b"),
+			Delivery: gitoid.PadSHA256("c"),
 		},
 	}
 }
@@ -568,7 +570,7 @@ func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
 	activity := Activity{
-		Digest:            "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+		Digest:            gitoid.PadSHA256("abc123"),
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
 		EarlierCount:      2,

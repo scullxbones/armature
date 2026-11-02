@@ -30,7 +30,15 @@ allow-list is ADR-class.
 2. **Fence.** Add `gitoid-pure` (deny other `internal`). Widen
    `review-boundary` and `harnesshook-boundary` to allow `gitoid` only.
 3. **Guard.** `scripts/repoguard -check object-id` (wired into `make lint`)
-   fails new 40-hex-only OID regex / schema patterns that omit 64-hex.
+   bans hex-length knowledge outside `internal/gitoid`. Patterns that quantify
+   a gitoid width (`{40}` / `{64}`, including BRE `\{n\}`) are compiled with
+   Go `regexp` (compile error = hit) and probed with whole-input
+   `FindString`: accepting a 40-hex OID while `FindString(64hex) != 64hex` is
+   a hit. Separate AST fences catch 40-hex BasicLits, `len` compared to 40,
+   and `const HexLen = 40` near hex/OID names. Text walk covers every quoted /
+   regex-looking token on `.sh`/`.bash`/`.py`/`.yml`/`.yaml` (including
+   `.github/workflows`) with no command-name prefilter. Per-site waivers are
+   file+line+needle in `scripts/repoguard/allow.go` (stale when the line moves).
 
 ## Consequences
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/attestation"
 
 	"github.com/stretchr/testify/assert"
@@ -273,8 +275,8 @@ func TestNewAttestation_PopulatesSHAs(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery789",
 	}
 	delivery := Delivery{
-		BaseSHA:      "abc123abc123abc123abc123abc123abc123abc1",
-		HeadSHA:      "def456def456def456def456def456def456def4",
+		BaseSHA:      gitoid.PadSHA1("abc123"),
+		HeadSHA:      gitoid.PadSHA1("def456"),
 		ChangedFiles: []string{"main.go"},
 	}
 
@@ -504,7 +506,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 	t.Run("activity log missing or unreadable", func(t *testing.T) {
 		t.Parallel()
 		err := ValidateAssessment(validValidateInputWithActivity(t, &Activity{
-			Digest:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Digest:     gitoid.PadSHA256("a"),
 			EntryCount: 1,
 			LogPath:    filepath.Join(t.TempDir(), "does-not-exist.log"),
 		}))

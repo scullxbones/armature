@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/opsbackup"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,7 +82,7 @@ func TestSnapshot_BeginPerRunRefFails_REQ_TOPTIER_S12_T1G(t *testing.T) {
 
 func TestSnapshot_FakeGitTable_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
-	const tip = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	var tip = gitoid.PadSHA1("a")
 	cases := []struct {
 		name       string
 		g          *fakeGit
@@ -185,11 +187,9 @@ func TestVerify_FakeGitTable_REQ_TOPTIER_S12_T1(t *testing.T) {
 
 func TestPlanRestore_FakeGitDispositionTable_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
-	const (
-		originSHA    = "1111111111111111111111111111111111111111"
-		recoveredSHA = "2222222222222222222222222222222222222222"
-		olderSHA     = "0000000000000000000000000000000000000001"
-	)
+	originSHA := gitoid.PadSHA1("1")
+	recoveredSHA := gitoid.PadSHA1("2")
+	olderSHA := gitoid.PadSHA1("0")[:gitoid.LenSHA1-1] + "1"
 
 	cases := []struct {
 		name                 string

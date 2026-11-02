@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/gitoid"
+
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/claim"
 	"github.com/scullxbones/armature/internal/gittest"
@@ -94,7 +96,7 @@ func TestLocateOps_MissingFromCommitErrors_REQ_CLAIMORD_W14(t *testing.T) { //no
 
 	located, err := LocateOps(LocateInput{
 		OpsWorktree:       dir,
-		FromCommit:        "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		FromCommit:        gitoid.PadSHA1("deadbeef"),
 		ExtraPublishedTip: "HEAD",
 	})
 	require.Error(t, err)
@@ -191,7 +193,7 @@ func (c *countingBlobReader) Read(ref adapters.BlobRef) (adapters.BlobResult, er
 // cat-file reads O(op-changing commits), not ~2×, and never retains all versions.
 func TestStreamLocateFromWalk_BlobReadsLinear_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	const n = 40
+	n := gitoid.LenSHA1
 	const path = "ops/worker-a.log"
 	walk := make([]adapters.CommitWalkEntry, 0, n)
 	blobs := map[string][]byte{}

@@ -708,10 +708,12 @@
       ]
     },
     "internal/gitoid": {
-      "count": 4,
+      "count": 6,
       "names": [
         "LenSHA1",
         "LenSHA256",
+        "PadSHA1",
+        "PadSHA256",
         "PatternLower",
         "Valid"
       ]

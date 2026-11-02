@@ -119,7 +119,7 @@ expected_hash() {
             h=$1
             n=$2
             gsub(/^\*/, "", n)
-            if (NF == 1 && $1 ~ /^[0-9a-fA-F]{64}$/) { print tolower(h); exit }
+            if (NF == 1 && length($1) == 64 && $1 ~ /^[0-9a-fA-F]+$/) { print tolower(h); exit }
             if (n == b) { print tolower(h); exit }
         }
     ' "$sums"

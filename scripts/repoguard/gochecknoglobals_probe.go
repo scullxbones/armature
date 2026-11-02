@@ -64,6 +64,14 @@ func checkGochecknoglobalsProbe(root string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	// Per-probe cache dir: parallel make lint / go test must not share one
+	// XDG_CACHE_HOME (flake: TestGochecknoglobalsProbe_selftestPasses_REQ_REPOGUARD).
+	cacheDir := filepath.Join(dir, ".cache")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		fmt.Fprintf(stderr, "FAIL: mkdir probe cache: %v\n", err)
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, golangciBinary, "run",
@@ -72,7 +80,7 @@ func checkGochecknoglobalsProbe(root string, stdout, stderr io.Writer) error {
 		"--max-same-issues=0",
 		"./...")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "XDG_CACHE_HOME=/tmp/golangci-lint-cache")
+	cmd.Env = append(os.Environ(), "XDG_CACHE_HOME="+cacheDir)
 	out, err := cmd.CombinedOutput()
 	joined := string(out)
 	if err == nil {

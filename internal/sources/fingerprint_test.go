@@ -1,13 +1,16 @@
 package sources
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 )
 
 func TestFingerprintKnownValue(t *testing.T) {
 	t.Parallel()
 	input := []byte("hello")
-	expected := "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+	sum := sha256.Sum256(input)
+	expected := hex.EncodeToString(sum[:])
 	got := Fingerprint(input)
 	if got != expected {
 		t.Errorf("Fingerprint(%q) = %q; want %q", input, got, expected)
