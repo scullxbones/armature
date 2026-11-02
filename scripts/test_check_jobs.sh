@@ -1227,8 +1227,22 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: engine guard must not restore extension find filter"
         exit 1
     fi
-    if ! rg -q 'ARM_PORCELAIN_SKIP_SELFTEST' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
-        echo "FAIL: porcelain guard must support SKIP_SELFTEST for real-guard selftest"
+    if ! rg -q -e '--skip-selftest' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain guard must support --skip-selftest (not env) for real-guard selftest"
+        exit 1
+    fi
+    if rg -v '^\s*#' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" | rg -q 'GREP="\$\{GREP:-grep\}"'; then
+        echo "FAIL: porcelain must not read GREP= from env (production scan seam)"
+        exit 1
+    fi
+    if rg -v '^\s*#' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" | rg -q 'GREP="\$\{GREP:-grep\}"'; then
+        echo "FAIL: engine must not read GREP= from env (production scan seam)"
+        exit 1
+    fi
+    # CI invokes guards with repo root `.` (not bare / wrong root).
+    if ! rg -q 'check-porcelain-failclosed\.sh \.' "$REPO_ROOT/Makefile" \
+        || ! rg -q 'check-no-engine-bin-env\.sh \.' "$REPO_ROOT/Makefile"; then
+        echo "FAIL: Makefile must call both guards with repo root ."
         exit 1
     fi
     if ! rg -q 'real guard' "$REPO_ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh"; then
@@ -1257,7 +1271,7 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_sel/scripts/"
     chmod +x "$demo_sel/scripts/"*.sh
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_sel/scripts/check-porcelain-failclosed.sh" "$demo_sel" 2>&1)
+    pout=$(bash "$demo_sel/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_sel" 2>&1)
     pst=$?
     eout=$(bash "$demo_sel/scripts/check-no-engine-bin-env.sh" "$demo_sel" 2>&1)
     est=$?
@@ -1281,11 +1295,11 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
     # REQ fail-closed (PJ B1–B3): every scan helper fail-closed; both guards;
     # assert specific FAIL lines; mutate REAL script copies (sed), not stand-ins.
-    if ! rg -q 'LC_ALL=C ("\$GREP"|grep) -a' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+    if ! rg -q 'LC_ALL=C grep -a' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
         echo "FAIL: porcelain must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
         exit 1
     fi
-    if ! rg -q 'LC_ALL=C ("\$GREP"|grep) -a' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+    if ! rg -q 'LC_ALL=C grep -a' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
         echo "FAIL: engine must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
         exit 1
     fi
@@ -1341,10 +1355,21 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
             exit 1
         fi
     done
-    # B3: GREP= override for behavioural grep-exit≥2 REQ (no rg 'unscannable' text check).
-    if ! rg -q 'GREP="\$\{GREP:-grep\}"' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
-        || ! rg -q 'GREP="\$\{GREP:-grep\}"' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
-        echo "FAIL: both guards must honor GREP= override for fail-closed grep shim"
+    # B3: bare grep (PATH-shimable) + named unscannable call sites; no GREP= env.
+    if ! rg -q 'unscannable \(grep_hits\)' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'unscannable \(grep_hits\)' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: both guards must name unscannable (grep_hits) call site"
+        exit 1
+    fi
+    if ! rg -q 'scan_file:comment-filter' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'scan_silencers:comment-filter' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'scan_silencers:silencer-filter' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain must name each -ge 2 unscannable call site"
+        exit 1
+    fi
+    if ! rg -q 'REAL_GREP' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'REAL_GREP' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: both guards must capture REAL_GREP for fixture proofs under PATH shims"
         exit 1
     fi
     if ! rg -q 'scripts/testdata/\*' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
@@ -1426,7 +1451,7 @@ exit 0
 MUT_GARBAGE
     chmod +x "$demo_b1/scripts/list-guard-scan-files.sh"
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pout=$(bash "$demo_b1/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_b1" 2>&1)
     pst=$?
     eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
     est=$?
@@ -1446,7 +1471,7 @@ exit 0
 MUT_EMPTY
     chmod +x "$demo_b1/scripts/list-guard-scan-files.sh"
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pout=$(bash "$demo_b1/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_b1" 2>&1)
     pst=$?
     eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
     est=$?
@@ -1467,7 +1492,7 @@ exit 0
 MUT_BLANK
     chmod +x "$demo_b1/scripts/list-guard-scan-files.sh"
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pout=$(bash "$demo_b1/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_b1" 2>&1)
     pst=$?
     eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
     est=$?
@@ -1478,6 +1503,27 @@ MUT_BLANK
     fi
     if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'scanned 0 files (engine)'; then
         echo "FAIL: B1 engine must fail on blank-only selector: $eout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    # Whitespace-only selector (spaces/tabs) → scanned 0 both guards.
+    cat >"$demo_b1/scripts/list-guard-scan-files.sh" <<'MUT_WS'
+#!/usr/bin/env bash
+printf ' \t \n  \n'
+exit 0
+MUT_WS
+    chmod +x "$demo_b1/scripts/list-guard-scan-files.sh"
+    set +e
+    pout=$(bash "$demo_b1/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_b1" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'scanned 0 files (porcelain)'; then
+        echo "FAIL: B1 porcelain must fail on whitespace-only selector: $pout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'scanned 0 files (engine)'; then
+        echo "FAIL: B1 engine must fail on whitespace-only selector: $eout"
         rm -rf "$demo_b1"; exit 1
     fi
     # Mutation on REAL guards: drop require_readable + restore || true → garbage passes.
@@ -1527,7 +1573,7 @@ t = re.sub(
 p.write_text(t)
 PY
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pout=$(bash "$demo_b1/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_b1" 2>&1)
     pst=$?
     eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
     est=$?
@@ -1542,62 +1588,179 @@ PY
     fi
     rm -rf "$demo_b1"
 
-    # --- B3 grep≥2: behavioural REQ after require_readable (GREP= shim exit 2) ---
+    # --- Env seams: GREP=true / SKIP env must not disable scanning ---
+    demo_seam=$(mktemp -d)
+    seed_guard_demo "$demo_seam"
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_seam/scripts/zz"
+    printf '%s\n' "$_BANNED" >"$demo_seam/scripts/ez"
+    set +e
+    pout=$(GREP=true bash "$demo_seam/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_seam" 2>&1)
+    pst=$?
+    eout=$(GREP=true bash "$demo_seam/scripts/check-no-engine-bin-env.sh" "$demo_seam" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz'; then
+        echo "FAIL: GREP=true must not disable porcelain scan: $pout"
+        rm -rf "$demo_seam"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/ez'; then
+        echo "FAIL: GREP=true must not disable engine scan: $eout"
+        rm -rf "$demo_seam"; exit 1
+    fi
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_seam/scripts/check-porcelain-failclosed.sh" "$demo_seam" 2>&1)
+    pst=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'ARM_PORCELAIN_SKIP_SELFTEST env is banned'; then
+        echo "FAIL: ARM_PORCELAIN_SKIP_SELFTEST=1 must be rejected (use --skip-selftest): $pout"
+        rm -rf "$demo_seam"; exit 1
+    fi
+    rm -rf "$demo_seam"
+
+    # --- B3 grep≥2: PATH shim (not GREP=); per-site mutant kills ---
+    install_grep_shim() {
+        # $1=dir $2=mode: all|grep_hits|sf_comment|sil_comment|sil_filter
+        # Placeholder hit line is assembled at runtime so this source file never
+        # embeds contiguous porcelain tokens (guard scans test_check_jobs.sh).
+        local shimdir="$1" mode="$2" real=""
+        for cand in /usr/bin/grep /bin/grep; do
+            [ -x "$cand" ] && real=$cand && break
+        done
+        [ -n "$real" ] || real=$(command -v grep)
+        mkdir -p "$shimdir"
+        cat >"$shimdir/grep" <<SHIM
+#!/usr/bin/env bash
+REAL="$real"
+MODE="$mode"
+_gw='gi'; _gw="\${_gw}t"
+_st='sta'; _st="\${_st}tus"
+HIT="1:\${_gw} \${_st} 2>/dev/null"
+joined=\$*
+case "\$MODE" in
+  all) exit 2 ;;
+  grep_hits)
+    case "\$joined" in *-nE*) exit 2 ;; esac
+    exit 1
+    ;;
+  sf_comment)
+    case "\$joined" in
+      *-nE*) printf '1:placeholder\\n'; exit 0 ;;
+      *-vE*) exit 2 ;;
+    esac
+    exit 1
+    ;;
+  sil_comment)
+    case "\$joined" in
+      *-nE*) printf '1:placeholder\\n'; exit 0 ;;
+      *-vE*) exit 1 ;;
+      *-v\ *-E*|*-v\ -E*) exit 2 ;;
+    esac
+    exit 1
+    ;;
+  sil_filter)
+    case "\$joined" in
+      *-nE*) printf '%s\\n' "\$HIT"; exit 0 ;;
+      *-vE*) printf '%s\\n' "\$HIT"; exit 0 ;;
+      *-v\ *-E*|*-v\ -E*) printf '%s\\n' "\$HIT"; exit 0 ;;
+      *-E*) exit 2 ;;
+    esac
+    exit 1
+    ;;
+esac
+exec "\$REAL" "\$@"
+SHIM
+        chmod +x "$shimdir/grep"
+    }
+    mutate_ge2_site() {
+        # $1=script $2=unique status var name (gh_st|sf_vst|sil_vst|sil_sst)
+        python3 - "$1" "$2" <<'PY'
+import pathlib, sys
+p, var = pathlib.Path(sys.argv[1]), sys.argv[2]
+t = p.read_text()
+old = f'if [ "${var}" -ge 2 ]; then'
+new = f'if false; then  # mutated: ignore {var}>=2'
+if old not in t:
+    raise SystemExit(f'missing site {old!r} in {p}')
+p.write_text(t.replace(old, new, 1))
+PY
+    }
+
     demo_g2=$(mktemp -d)
     seed_guard_demo "$demo_g2"
     printf 'ok\n' >"$demo_g2/scripts/zz_ok"
     printf 'ok\n' >"$demo_g2/scripts/ez_ok"
-    grep_shim=$(mktemp)
-    cat >"$grep_shim" <<'SHIM'
-#!/usr/bin/env bash
-exit 2
-SHIM
-    chmod +x "$grep_shim"
+    shimdir=$(mktemp -d)
+    install_grep_shim "$shimdir" all
     set +e
-    pout=$(GREP="$grep_shim" ARM_PORCELAIN_SKIP_SELFTEST=1 \
-        bash "$demo_g2/scripts/check-porcelain-failclosed.sh" "$demo_g2" 2>&1)
+    pout=$(PATH="$shimdir:$PATH" bash "$demo_g2/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_g2" 2>&1)
     pst=$?
-    eout=$(GREP="$grep_shim" bash "$demo_g2/scripts/check-no-engine-bin-env.sh" "$demo_g2" 2>&1)
+    eout=$(PATH="$shimdir:$PATH" bash "$demo_g2/scripts/check-no-engine-bin-env.sh" "$demo_g2" 2>&1)
     est=$?
     set -e
-    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz_ok unscannable'; then
-        echo "FAIL: B3 porcelain GREP=exit2 must FAIL unscannable after readable: $pout"
-        rm -rf "$demo_g2" "$grep_shim"; exit 1
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz_ok unscannable (grep_hits)'; then
+        echo "FAIL: B3 porcelain PATH-shim must FAIL unscannable (grep_hits): $pout"
+        rm -rf "$demo_g2" "$shimdir"; exit 1
     fi
-    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/ez_ok unscannable'; then
-        echo "FAIL: B3 engine GREP=exit2 must FAIL unscannable after readable: $eout"
-        rm -rf "$demo_g2" "$grep_shim"; exit 1
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/ez_ok unscannable (grep_hits)'; then
+        echo "FAIL: B3 engine PATH-shim must FAIL unscannable (grep_hits): $eout"
+        rm -rf "$demo_g2" "$shimdir"; exit 1
     fi
-    # Mutant: if [ "$st" -ge 2 ] → if false — must incorrectly exit 0 (suite kills if not).
-    python3 - "$demo_g2/scripts/check-porcelain-failclosed.sh" "$demo_g2/scripts/check-no-engine-bin-env.sh" <<'PY'
-import pathlib, sys
-for arg in sys.argv[1:]:
-    p = pathlib.Path(arg)
-    t = p.read_text()
-    n = t.replace('if [ "$st" -ge 2 ]; then', 'if false; then  # mutated: ignore grep exit>=2')
-    n = n.replace('if [ "$vst" -ge 2 ]; then', 'if false; then  # mutated')
-    n = n.replace('if [ "$sst" -ge 2 ]; then', 'if false; then  # mutated')
-    n = n.replace('if [ "$gst" -ge 2 ]; then', 'if false; then  # mutated')
-    if n == t:
-        raise SystemExit(f'grep>=2 mutant: no st-ge-2 site in {p}')
-    p.write_text(n)
-PY
+
+    # Engine: mutate gh_st alone → must exit 0 under all-exit-2 shim.
+    cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_g2/scripts/"
+    mutate_ge2_site "$demo_g2/scripts/check-no-engine-bin-env.sh" gh_st
     set +e
-    pout=$(GREP="$grep_shim" ARM_PORCELAIN_SKIP_SELFTEST=1 \
-        bash "$demo_g2/scripts/check-porcelain-failclosed.sh" "$demo_g2" 2>&1)
-    pst=$?
-    eout=$(GREP="$grep_shim" bash "$demo_g2/scripts/check-no-engine-bin-env.sh" "$demo_g2" 2>&1)
+    eout=$(PATH="$shimdir:$PATH" bash "$demo_g2/scripts/check-no-engine-bin-env.sh" "$demo_g2" 2>&1)
     est=$?
     set -e
-    if [ "$pst" -ne 0 ]; then
-        echo "FAIL: B3 mutation (ignore grep>=2) porcelain must exit 0: st=$pst $pout"
-        rm -rf "$demo_g2" "$grep_shim"; exit 1
-    fi
     if [ "$est" -ne 0 ]; then
-        echo "FAIL: B3 mutation (ignore grep>=2) engine must exit 0: st=$est $eout"
-        rm -rf "$demo_g2" "$grep_shim"; exit 1
+        echo "FAIL: B3 engine gh_st mutant must exit 0 under PATH shim: st=$est $eout"
+        rm -rf "$demo_g2" "$shimdir"; exit 1
     fi
-    rm -rf "$demo_g2" "$grep_shim"
+
+    # Porcelain: mutate each -ge 2 site individually with a site-selective shim.
+    for site_spec in \
+        'gh_st|grep_hits|unscannable (grep_hits)' \
+        'sf_vst|sf_comment|unscannable (scan_file:comment-filter)' \
+        'sil_vst|sil_comment|unscannable (scan_silencers:comment-filter)' \
+        'sil_sst|sil_filter|unscannable (scan_silencers:silencer-filter)'
+    do
+        IFS='|' read -r var mode needle <<<"$site_spec"
+        cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_g2/scripts/"
+        install_grep_shim "$shimdir" "$mode"
+        set +e
+        pout=$(PATH="$shimdir:$PATH" bash "$demo_g2/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_g2" 2>&1)
+        pst=$?
+        set -e
+        if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q "FAIL: scripts/zz_ok $needle"; then
+            # sil_filter uses porcelain content; FAIL may be on zz_ok with site tag
+            if [ "$mode" = sil_filter ]; then
+                if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q "$needle"; then
+                    echo "FAIL: B3 healthy porcelain site $var/$mode must FAIL $needle: $pout"
+                    rm -rf "$demo_g2" "$shimdir"; exit 1
+                fi
+            else
+                echo "FAIL: B3 healthy porcelain site $var/$mode must FAIL $needle: $pout"
+                rm -rf "$demo_g2" "$shimdir"; exit 1
+            fi
+        fi
+        mutate_ge2_site "$demo_g2/scripts/check-porcelain-failclosed.sh" "$var"
+        set +e
+        pout=$(PATH="$shimdir:$PATH" bash "$demo_g2/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_g2" 2>&1)
+        pst=$?
+        set -e
+        if printf '%s\n' "$pout" | grep -q "$needle"; then
+            echo "FAIL: B3 mutant $var must not emit $needle: $pout"
+            rm -rf "$demo_g2" "$shimdir"; exit 1
+        fi
+        # grep_hits / comment-filter mutants should fully miss (exit 0); sil_filter may still
+        # flag porcelain invocation — requiring the site-tagged line is the kill.
+        if [ "$mode" != sil_filter ] && [ "$pst" -ne 0 ]; then
+            echo "FAIL: B3 mutant $var must exit 0 under site shim: st=$pst $pout"
+            rm -rf "$demo_g2" "$shimdir"; exit 1
+        fi
+    done
+    rm -rf "$demo_g2" "$shimdir"
 
     # --- B2 / REQ2: NUL-first + NUL-later fixtures for BOTH guards ---
     demo_nul=$(mktemp -d)
@@ -1612,7 +1775,7 @@ PY
     # Capture via files — bash $(...) warns/strips NUL from guard stderr/stdout.
     pout_f=$(mktemp); eout_f=$(mktemp)
     set +e
-    ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" >"$pout_f" 2>&1
+    bash "$demo_nul/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_nul" >"$pout_f" 2>&1
     pst=$?
     bash "$demo_nul/scripts/check-no-engine-bin-env.sh" "$demo_nul" >"$eout_f" 2>&1
     est=$?
@@ -1654,7 +1817,7 @@ if old not in t:
 p.write_text(t.replace(old, inj, 1))
 PY
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" 2>&1)
+    pout=$(bash "$demo_nul/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_nul" 2>&1)
     pst=$?
     eout=$(bash "$demo_nul/scripts/check-no-engine-bin-env.sh" "$demo_nul" 2>&1)
     est=$?
@@ -1675,7 +1838,7 @@ PY
     printf '%s %s' "$_gw" "$_st" >"$demo_ff/scripts/zz"; printf '\xff\n' >>"$demo_ff/scripts/zz"
     printf '%s' "${_u}${_db}" >"$demo_ff/scripts/ez"; printf '\xff\n' >>"$demo_ff/scripts/ez"
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_ff/scripts/check-porcelain-failclosed.sh" "$demo_ff" 2>&1)
+    pout=$(bash "$demo_ff/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_ff" 2>&1)
     pst=$?
     eout=$(bash "$demo_ff/scripts/check-no-engine-bin-env.sh" "$demo_ff" 2>&1)
     est=$?
@@ -1693,13 +1856,19 @@ PY
     utf8_loc=""
     if utf8_loc=$(pick_utf8_locale); then
         # No .bak under scripts/ — backups are scanned and trip engine bans in comments.
-        # Drop LC_ALL=C from both `grep` and `"$GREP"` scan sites.
-        sed -i -e 's/LC_ALL=C "\$GREP" -a/"$GREP" -a/g' -e 's/LC_ALL=C grep -a/grep -a/g' \
-            "$demo_ff/scripts/check-porcelain-failclosed.sh" \
-            "$demo_ff/scripts/check-no-engine-bin-env.sh"
+        # Drop LC_ALL=C from bare `grep` scan sites (portable; no GNU sed -i).
+        python3 - "$demo_ff/scripts/check-porcelain-failclosed.sh" \
+            "$demo_ff/scripts/check-no-engine-bin-env.sh" <<'PY'
+import pathlib, sys
+for path in sys.argv[1:]:
+    p = pathlib.Path(path)
+    t = p.read_text()
+    t = t.replace('LC_ALL=C grep -a', 'grep -a')
+    p.write_text(t)
+PY
         set +e
-        pout=$(LC_ALL="$utf8_loc" LANG="$utf8_loc" ARM_PORCELAIN_SKIP_SELFTEST=1 \
-            bash "$demo_ff/scripts/check-porcelain-failclosed.sh" "$demo_ff" 2>&1)
+        pout=$(LC_ALL="$utf8_loc" LANG="$utf8_loc" \
+            bash "$demo_ff/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_ff" 2>&1)
         pst=$?
         eout=$(LC_ALL="$utf8_loc" LANG="$utf8_loc" \
             bash "$demo_ff/scripts/check-no-engine-bin-env.sh" "$demo_ff" 2>&1)
@@ -1729,7 +1898,7 @@ PY
     printf '%s\n' "${_u}${_db}" >"$demo_scope/scripts/repoguard/eleak.go"
     printf '%s\n' "${_u}${_db}" >"$demo_scope/scripts/testdata/ok-eng.sh"
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_scope/scripts/check-porcelain-failclosed.sh" "$demo_scope" 2>&1)
+    pout=$(bash "$demo_scope/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_scope" 2>&1)
     pst=$?
     eout=$(bash "$demo_scope/scripts/check-no-engine-bin-env.sh" "$demo_scope" 2>&1)
     est=$?
@@ -1755,9 +1924,13 @@ PY
         rm -rf "$demo_scope"; exit 1
     fi
     # Mutation on REAL selector: */testdata/* broadly → nested leak missed (both).
-    sed -i 's|scripts/testdata/\*|*/testdata/*|g' "$demo_scope/scripts/list-guard-scan-files.sh"
+    python3 - "$demo_scope/scripts/list-guard-scan-files.sh" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+p.write_text(p.read_text().replace('scripts/testdata/*', '*/testdata/*'))
+PY
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_scope/scripts/check-porcelain-failclosed.sh" "$demo_scope" 2>&1)
+    pout=$(bash "$demo_scope/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_scope" 2>&1)
     eout=$(bash "$demo_scope/scripts/check-no-engine-bin-env.sh" "$demo_scope" 2>&1)
     set -e
     if printf '%s\n' "$pout" | grep -q 'FAIL: scripts/other/testdata/leak.sh'; then
@@ -1771,9 +1944,16 @@ PY
     # Engine-specific mutant: skip scripts/repoguard/* → suite must kill (miss eleak).
     cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_scope/scripts/"
     cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_scope/scripts/"
-    sed -i '/case "\$f" in/a\
-    scripts/repoguard/*) continue ;;
-' "$demo_scope/scripts/check-no-engine-bin-env.sh"
+    python3 - "$demo_scope/scripts/check-no-engine-bin-env.sh" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+old = 'case "$f" in'
+new = 'case "$f" in\n    scripts/repoguard/*) continue ;;'
+t = p.read_text()
+if old not in t:
+    raise SystemExit('missing case "$f" in engine guard')
+p.write_text(t.replace(old, new, 1))
+PY
     set +e
     eout=$(bash "$demo_scope/scripts/check-no-engine-bin-env.sh" "$demo_scope" 2>&1)
     est=$?
@@ -1795,7 +1975,7 @@ exit 2
 MUT_CRASH
     chmod +x "$demo_crash/scripts/list-guard-scan-files.sh"
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_crash/scripts/check-porcelain-failclosed.sh" "$demo_crash" 2>&1)
+    pout=$(bash "$demo_crash/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_crash" 2>&1)
     pst=$?
     eout=$(bash "$demo_crash/scripts/check-no-engine-bin-env.sh" "$demo_crash" 2>&1)
     est=$?
@@ -1815,7 +1995,7 @@ MUT_CRASH
     mutate_heredoc_swallow "$demo_crash/scripts/check-porcelain-failclosed.sh" '--exclude-testdata scripts'
     mutate_heredoc_swallow "$demo_crash/scripts/check-no-engine-bin-env.sh" '--exclude-testdata scripts .github'
     set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_crash/scripts/check-porcelain-failclosed.sh" "$demo_crash" 2>&1)
+    pout=$(bash "$demo_crash/scripts/check-porcelain-failclosed.sh" --skip-selftest "$demo_crash" 2>&1)
     pst=$?
     eout=$(bash "$demo_crash/scripts/check-no-engine-bin-env.sh" "$demo_crash" 2>&1)
     est=$?

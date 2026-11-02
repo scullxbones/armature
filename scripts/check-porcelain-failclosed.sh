@@ -9,10 +9,28 @@
 # False positives → narrow per-line allowlist + written reason (never loosen).
 #
 # Selftest fixtures live under scripts/testdata/porcelain-bypass/; the selftest
-# drives THIS guard against each fixture (ARM_PORCELAIN_SKIP_SELFTEST=1) so
-# weakening these regexes fails the selftest.
+# drives THIS guard against each fixture (--skip-selftest) so weakening these
+# regexes fails the selftest. Production never reads tool/skip overrides from env.
 set -euo pipefail
-ROOT="${1:-.}"
+
+SKIP_SELFTEST=0
+ROOT="."
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --skip-selftest) SKIP_SELFTEST=1; shift ;;
+    -*)
+      echo "FAIL: unknown flag $1" >&2
+      exit 2
+      ;;
+    *) ROOT="$1"; shift; break ;;
+  esac
+done
+# Env skip/tool overrides are never honored (GREP=true must not disable scanning).
+if [ "${ARM_PORCELAIN_SKIP_SELFTEST:-0}" = "1" ]; then
+  echo "FAIL: ARM_PORCELAIN_SKIP_SELFTEST env is banned; use --skip-selftest" >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LISTER="$SCRIPT_DIR/list-guard-scan-files.sh"
 cd "$ROOT"
@@ -20,8 +38,19 @@ cd "$ROOT"
 HELPER="scripts/porcelain-git.sh"
 fail=0
 scanned=0
-# Overridable for fail-closed tests (PATH-shim / GREP= that exits ≥2).
-GREP="${GREP:-grep}"
+
+# Absolute grep for fixture proofs; scanning uses bare `grep` so PATH shims work.
+# Never read GREP= from the environment.
+REAL_GREP=""
+for cand in /usr/bin/grep /bin/grep; do
+  if [ -x "$cand" ]; then
+    REAL_GREP="$cand"
+    break
+  fi
+done
+if [ -z "$REAL_GREP" ]; then
+  REAL_GREP="$(command -v grep)"
+fi
 
 # Build class regex without embedding both tokens on one source line.
 _gw='gi'
@@ -64,14 +93,15 @@ require_readable() {
 
 # Fail-closed grep to tempfile: exit 0 = hits, 1 = none, ≥2 → FAIL unscannable.
 # Never `|| true` — that lets missing/garbage paths pass.
+# Each -ge 2 site uses a unique status var + FAIL call-site tag (B3 per-site kill).
 grep_hits() {
-  local re="$1" src="$2" out="$3" st
+  local re="$1" src="$2" out="$3" gh_st
   set +e
-  LC_ALL=C "$GREP" -a -nE "$re" "$src" >"$out"
-  st=$?
+  LC_ALL=C grep -a -nE "$re" "$src" >"$out"
+  gh_st=$?
   set -e
-  if [ "$st" -ge 2 ]; then
-    echo "FAIL: $4 unscannable" >&2
+  if [ "$gh_st" -ge 2 ]; then
+    echo "FAIL: $4 unscannable (grep_hits)" >&2
     fail=1
     return 1
   fi
@@ -86,9 +116,17 @@ flatten_to() {
   }' "$1" >"$2"
 }
 
+# True if $1 has any non-whitespace character.
+has_non_ws() {
+  case "$1" in
+    *[![:space:]]*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 scan_file() {
   local f="$1"
-  local flat hits_file raw_hits line_no key kept="" hit
+  local flat hits_file raw_hits line_no key kept="" hit sf_vst
   flat="$(mktemp)"
   hits_file="$(mktemp)"
   raw_hits="$(mktemp)"
@@ -100,13 +138,14 @@ scan_file() {
     rm -f "$flat" "$hits_file" "$raw_hits"
     return 0
   fi
+  # Distinct argv shape (-vE) vs silencers (-v -E) for per-site PATH shims.
   set +e
-  LC_ALL=C "$GREP" -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$hits_file"
-  local vst=$?
+  LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$hits_file"
+  sf_vst=$?
   set -e
   rm -f "$flat" "$raw_hits"
-  if [ "$vst" -ge 2 ]; then
-    echo "FAIL: $f unscannable" >&2
+  if [ "$sf_vst" -ge 2 ]; then
+    echo "FAIL: $f unscannable (scan_file:comment-filter)" >&2
     fail=1
     rm -f "$hits_file"
     return 0
@@ -148,7 +187,7 @@ scan_file() {
 
 scan_silencers() {
   local f="$1"
-  local flat hits_file raw_hits kept="" hit line_no key sil_hits
+  local flat hits_file raw_hits kept="" hit line_no key sil_hits sil_vst sil_sst
   if [ "$f" = "$HELPER" ]; then
     return 0
   fi
@@ -161,24 +200,25 @@ scan_silencers() {
     rm -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
     return 0
   fi
+  # Distinct from scan_file (-vE): use -v -E so PATH shims can target one site.
   set +e
-  LC_ALL=C "$GREP" -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$sil_hits"
-  local vst=$?
+  LC_ALL=C grep -a -v -E '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$sil_hits"
+  sil_vst=$?
   set -e
-  if [ "$vst" -ge 2 ]; then
-    echo "FAIL: $f unscannable" >&2
+  if [ "$sil_vst" -ge 2 ]; then
+    echo "FAIL: $f unscannable (scan_silencers:comment-filter)" >&2
     fail=1
     rm -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
     return 0
   fi
   set +e
-  LC_ALL=C "$GREP" -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
+  LC_ALL=C grep -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
     "$sil_hits" >"$hits_file"
-  local sst=$?
+  sil_sst=$?
   set -e
   rm -f "$flat" "$raw_hits" "$sil_hits"
-  if [ "$sst" -ge 2 ]; then
-    echo "FAIL: $f unscannable" >&2
+  if [ "$sil_sst" -ge 2 ]; then
+    echo "FAIL: $f unscannable (scan_silencers:silencer-filter)" >&2
     fail=1
     rm -f "$hits_file"
     return 0
@@ -216,8 +256,7 @@ scan_silencers() {
 # Shared selector: every scan-eligible file under scripts/ (no ext/shebang filter).
 # Scope = main: only scripts/testdata/* excluded — do NOT skip scripts/repoguard/*.
 # Fail-closed: write list to file; nonzero lister exit → fail (never swallow).
-# Count files actually scanned — blank-only selector print (printf '\n\n') must
-# FAIL even when the list file is non-empty by size.
+# Count files actually scanned — blank/whitespace-only selector print must FAIL.
 scan_list=$(mktemp)
 trap 'rm -f "$scan_list"' EXIT
 set +e
@@ -230,7 +269,10 @@ if [ "$lister_st" -ne 0 ]; then
 fi
 
 while IFS= read -r f || [ -n "${f:-}" ]; do
-  [ -z "${f:-}" ] && continue
+  # Blank or whitespace-only selector lines do not count as scanned files.
+  if ! has_non_ws "${f:-}"; then
+    continue
+  fi
   require_readable "$f"
   scanned=$((scanned + 1))
   scan_file "$f"
@@ -247,7 +289,7 @@ if [ "$fail" -ne 0 ]; then
 fi
 echo "OK: scripts/ porcelain git confined to $HELPER"
 
-if [ "${ARM_PORCELAIN_SKIP_SELFTEST:-0}" = "1" ]; then
+if [ "$SKIP_SELFTEST" -eq 1 ]; then
   exit 0
 fi
 bash "$ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh" "$ROOT"
