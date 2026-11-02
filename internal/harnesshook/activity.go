@@ -12,6 +12,7 @@ import (
 
 	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/clock"
+	"github.com/scullxbones/armature/internal/gitoid"
 )
 
 // ActivityEntry represents a single execution captured in the activity log.
@@ -101,8 +102,7 @@ func getWorktreeHEAD(gitDir string) (string, error) {
 }
 
 func headRefLooksLikeSHA(headRef string) bool {
-	n := len(headRef)
-	return n == 40 || n == 64
+	return gitoid.Valid(headRef)
 }
 
 func fallbackGetHEAD(gitDir string) (string, error) {

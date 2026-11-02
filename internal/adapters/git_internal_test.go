@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scullxbones/armature/internal/gitoid"
 	"github.com/scullxbones/armature/internal/testexec"
 )
 
@@ -238,7 +239,7 @@ func TestParseCommitWalkOutput_SHA256ObjectIDs_REQ_OPORDER_LOCATE(t *testing.T) 
 	const merge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const p1 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	const p2 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-	if len(merge) != gitObjectIDLenSHA256 || len(p1) != gitObjectIDLenSHA256 {
+	if len(merge) != gitoid.LenSHA256 || len(p1) != gitoid.LenSHA256 {
 		t.Fatal("test fixtures must be 64-hex")
 	}
 	raw := merge + "\t100\t" + p1 + " " + p2 + "\x00" +
@@ -262,17 +263,18 @@ func TestParseCommitWalkOutput_SHA256ObjectIDs_REQ_OPORDER_LOCATE(t *testing.T) 
 
 func TestIsGitObjectID_SHA1AndSHA256_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	if !isGitObjectID(strings.Repeat("a", 40)) {
-		t.Fatal("40-hex must be accepted")
+	if !isGitObjectID(strings.Repeat("a", gitoid.LenSHA1)) {
+		t.Fatal("40-hex lowercase must be accepted")
 	}
-	if !isGitObjectID(strings.Repeat("b", 64)) {
-		t.Fatal("64-hex must be accepted")
+	if !isGitObjectID(strings.Repeat("b", gitoid.LenSHA256)) {
+		t.Fatal("64-hex lowercase must be accepted")
 	}
 	bads := []string{
 		"", "abc",
-		strings.Repeat("0", 39), strings.Repeat("0", 41),
-		strings.Repeat("0", 63), strings.Repeat("0", 65),
-		strings.Repeat("g", 40),
+		strings.Repeat("0", gitoid.LenSHA1-1), strings.Repeat("0", gitoid.LenSHA1+1),
+		strings.Repeat("0", gitoid.LenSHA256-1), strings.Repeat("0", gitoid.LenSHA256+1),
+		strings.Repeat("g", gitoid.LenSHA1),
+		strings.Repeat("A", gitoid.LenSHA1), // schema Exact: lowercase only
 	}
 	for _, bad := range bads {
 		if isGitObjectID(bad) {

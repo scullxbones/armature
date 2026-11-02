@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/scullxbones/armature/internal/gitoid"
 )
 
 type Client struct {
@@ -1578,36 +1580,17 @@ func parseCommitWalkOutput(out []byte) ([]CommitWalkEntry, error) {
 	return entries, nil
 }
 
-// gitObjectIDLenSHA1 / gitObjectIDLenSHA256 are the hex widths git emits for
-// SHA-1 and SHA-256 object formats (architecture min Git 2.25 supports both
-// once the repo is initialized with --object-format=sha256 on Git ≥2.29).
-const (
-	gitObjectIDLenSHA1   = 40
-	gitObjectIDLenSHA256 = 64
-)
-
 func isGitObjectID(s string) bool {
-	n := len(s)
-	if n != gitObjectIDLenSHA1 && n != gitObjectIDLenSHA256 {
-		return false
-	}
-	for i := 0; i < n; i++ {
-		b := s[i]
-		ok := (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
-		if !ok {
-			return false
-		}
-	}
-	return true
+	return gitoid.Valid(s)
 }
 
 func isCommitWalkHeader(raw []byte) bool {
 	// OID (40 hex SHA-1 or 64 hex SHA-256) TAB ...
 	switch {
-	case len(raw) > gitObjectIDLenSHA1 && raw[gitObjectIDLenSHA1] == '\t':
-		return isGitObjectID(string(raw[:gitObjectIDLenSHA1]))
-	case len(raw) > gitObjectIDLenSHA256 && raw[gitObjectIDLenSHA256] == '\t':
-		return isGitObjectID(string(raw[:gitObjectIDLenSHA256]))
+	case len(raw) > gitoid.LenSHA1 && raw[gitoid.LenSHA1] == '\t':
+		return isGitObjectID(string(raw[:gitoid.LenSHA1]))
+	case len(raw) > gitoid.LenSHA256 && raw[gitoid.LenSHA256] == '\t':
+		return isGitObjectID(string(raw[:gitoid.LenSHA256]))
 	default:
 		return false
 	}
