@@ -608,7 +608,7 @@ func TestRealRepoPassesGuards(t *testing.T) {
 	root := repoRoot(t)
 	checks := []string{
 		"source-manifest", "test-executables", "git-hermetic", "gochecknoglobals-probe",
-		"golangci-in-tests", "object-id", "git-network",
+		"golangci-in-tests", "object-id", "residual-trls", "git-network",
 	}
 	for _, check := range checks {
 		out, errOut, code := runCheck(t, check, root)
@@ -625,6 +625,9 @@ func TestRealRepoPassesGuards(t *testing.T) {
 		}
 		if check == "object-id" && !strings.Contains(out, "OK: object-id") {
 			t.Fatalf("missing object-id OK line: %s", out)
+		}
+		if check == "residual-trls" && !strings.Contains(out, "OK: residual trls") {
+			t.Fatalf("missing residual-trls OK line: %s", out)
 		}
 		if check == "git-network" {
 			if !strings.Contains(out, "OK: remote-network git calls go through networkCmd") {
@@ -766,6 +769,181 @@ func readGitNetFixture(t *testing.T, name string) string {
 		t.Fatal(err)
 	}
 	return string(body)
+}
+
+func TestObjectID_Xdigit40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/zz/a.go": `package zz
+var A = "^[[:xdigit:]]{40}$"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on [[:xdigit:]]{40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_Alnum40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/zz/a.go": `package zz
+var A = "^[[:alnum:]]{40}$"
+`,
+		"scripts/xdigit.sh": "grep -E '^[[:alnum:]]{40}$' <<EOF\nEOF\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on [[:alnum:]]{40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_Brace40Comma40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+var pat = "^[0-9a-f]{40,40}$"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on {40,40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_Word40AnchoredFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// New shape beyond xdigit/alnum: anchored \w{40}.
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+const pat = ` + "`^\\w{40}$`" + `
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on ^\\w{40}$, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_LenEq40Kept_REQ_419(t *testing.T) {
+	t.Parallel()
+	// len==40 is kept: not a regexp literal, so compile-probe cannot see it.
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/fake/oid.go": `package fake
+func ok(s string) bool { return len(s) == 40 }
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on len==40, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "gitoid") {
+		t.Fatalf("fix must name gitoid, got %s", errOut)
+	}
+}
+
+func TestObjectID_ScriptGrepEFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":               "module fixture\n\ngo 1.22\n",
+		"scripts/check_sha.sh": "grep -E '^[0-9a-f]{40}$' \"$1\"\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on scripts/ grep -E 40-only, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_ProbeWeakenedFailsREQ_419(t *testing.T) {
+	t.Parallel()
+	// Mutation: a weakened probe that only syntax-matches hex-class\{40\} misses
+	// [[:xdigit:]]. The REQ_419 compile-probe must still fail that shape.
+	if !oidPatternRejects64(`^[[:xdigit:]]{40}$`) {
+		t.Fatal("weaken detection: compile-probe must reject [[:xdigit:]]{40}")
+	}
+	if oidPatternRejects64(`^[a-f0-9]{40}$|^[a-f0-9]{64}$`) {
+		t.Fatal("dual-width PatternLower must not be flagged")
+	}
+}
+
+func TestObjectID_WaiverLineDoesNotCoverNewHit_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Waived file+line+needle: a *new* 40-only pattern in the same file must fail.
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"scripts/test_check_jobs.sh": strings.Repeat("\n", 374) +
+			`sha_re = re.compile(r"^[0-9a-f]{40}$")` + "\n" +
+			`other = re.compile(r"^[[:xdigit:]]{40}$")` + "\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on new pattern in waived file, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "test_check_jobs.sh:376") && !strings.Contains(errOut, "[[:xdigit:]]") {
+		t.Fatalf("must flag the new line, not only the waived one; stderr=%s", errOut)
+	}
+}
+
+func TestResidualTrls_CmdGoFails_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"cmd/armature/main.go": `package main
+const brand = "trls tui"
+`,
+	})
+	_, errOut, code := runCheck(t, "residual-trls", root)
+	if code == 0 {
+		t.Fatalf("expected fail on cmd/ trls, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "cmd/armature/main.go") {
+		t.Fatalf("must name cmd hit, got %s", errOut)
+	}
+}
+
+func TestResidualTrls_TestGoFails_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/foo/foo_test.go": `package foo
+func TestX(t *testing.T) { _ = "run trls ready" }
+`,
+	})
+	_, errOut, code := runCheck(t, "residual-trls", root)
+	if code == 0 {
+		t.Fatalf("expected fail on _test.go trls, stderr=%s", errOut)
+	}
+}
+
+func TestResidualTrls_CastFails_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":                "module fixture\n\ngo 1.22\n",
+		"docs/assets/demo.cast": "{\"version\":2}\n[0.0, \"o\", \"trls tui · worker\"]\n",
+	})
+	_, errOut, code := runCheck(t, "residual-trls", root)
+	if code == 0 {
+		t.Fatalf("expected fail on docs/assets cast, stderr=%s", errOut)
+	}
+}
+
+func TestResidualTrls_CleanPasses_REQ_421(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":                   "module fixture\n\ngo 1.22\n",
+		"cmd/armature/main.go":     "package main\nconst brand = \"arm tui\"\n",
+		"internal/foo/foo_test.go": "package foo\nfunc TestX(t *testing.T) { _ = \"arm ready\" }\n",
+		"docs/assets/demo.cast":    "{\"version\":2}\n[0.0, \"o\", \"arm tui · worker\"]\n",
+	})
+	out, errOut, code := runCheck(t, "residual-trls", root)
+	if code != 0 {
+		t.Fatalf("expected pass, stdout=%s stderr=%s", out, errOut)
+	}
 }
 
 func assertExecRejected(t *testing.T, name, body string) {

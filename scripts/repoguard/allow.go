@@ -1,13 +1,25 @@
 package main
 
+import "strings"
+
 const allowGitHermeticName = "git-hermetic-name"
 
 const allowGitHermeticInit = "git-hermetic-init"
+
+const allowObjectID = "object-id"
+
+const allowResidualTrls = "residual-trls"
 
 type allowEntry struct {
 	RelPath string
 	Check   string
 	Reason  string
+	// Line is required for object-id waivers (1-based). Zero means "file-level"
+	// for checks that still use whole-file allows (git-hermetic, residual-trls).
+	Line int
+	// Needle must still appear on that line (object-id). Empty → line-only match.
+	// Stale when the waived pattern moves or a new pattern appears elsewhere.
+	Needle string
 }
 
 func allowlist() []allowEntry {
@@ -21,6 +33,23 @@ func allowlist() []allowEntry {
 			RelPath: "scripts/repoguard/repoguard_test.go",
 			Check:   allowGitHermeticInit,
 			Reason:  "fixture assertions and example sources quote raw git init; production packages still fail",
+		},
+		{
+			RelPath: "scripts/test_check_jobs.sh",
+			Check:   allowObjectID,
+			Line:    375,
+			Needle:  `^[0-9a-f]{40}$`,
+			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
+		},
+		{
+			RelPath: "internal/worker/residual_trls_test.go",
+			Check:   allowResidualTrls,
+			Reason:  "behavioral REQ tests name the banned token in assertions",
+		},
+		{
+			RelPath: "internal/tui/app/model_test.go",
+			Check:   allowResidualTrls,
+			Reason:  "NavBar REQ asserts the brand string must not contain trls",
 		},
 	}
 }
@@ -73,9 +102,31 @@ func gitNetAllows() []gitNetAllow {
 
 func allowed(relPath, check string) bool {
 	for _, a := range allowlist() {
-		if a.RelPath == relPath && a.Check == check {
+		if a.RelPath == relPath && a.Check == check && a.Line == 0 {
 			return true
 		}
+	}
+	return false
+}
+
+// allowedObjectIDSite is the per-site object-id waiver: file + line + needle.
+// A new 40-only pattern elsewhere in a waived file (or on a moved line without
+// the needle) is NOT covered — that was the #419 per-site requirement.
+func allowedObjectIDSite(relPath string, line int, pattern string) bool {
+	for _, a := range allowlist() {
+		if a.Check != allowObjectID || a.RelPath != relPath {
+			continue
+		}
+		if a.Line == 0 {
+			continue // object-id forbids whole-file waivers
+		}
+		if line != a.Line {
+			continue
+		}
+		if a.Needle != "" && pattern != a.Needle && !strings.Contains(pattern, a.Needle) {
+			continue
+		}
+		return true
 	}
 	return false
 }
