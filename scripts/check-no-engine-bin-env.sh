@@ -37,13 +37,16 @@ ABS_RE="(^|[^A-Za-z0-9_])(${ABS_DOCKER_1}|${ABS_DOCKER_2})([^A-Za-z0-9_]|$)"
 
 WRAPPER="scripts/run-container-image.sh"
 fail=0
+scanned=0
+# Overridable for fail-closed tests (PATH-shim / GREP= that exits ≥2).
+GREP="${GREP:-grep}"
 
 # Fail-closed grep: exit 0 = hits, 1 = no hits, ≥2 = error → FAIL unscannable.
 # Never `|| true` — that lets missing/garbage paths pass.
 grep_hits() {
   local re="$1" f="$2" out="$3" st
   set +e
-  LC_ALL=C grep -a -nE "$re" "$f" >"$out"
+  LC_ALL=C "$GREP" -a -nE "$re" "$f" >"$out"
   st=$?
   set -e
   if [ "$st" -ge 2 ]; then
@@ -117,7 +120,8 @@ scan_abs_docker() {
 # Shared selector: every scan-eligible file under scripts/ and .github/.
 # Scope = main: only scripts/testdata/* excluded via --exclude-testdata.
 # Fail-closed: write list to file; nonzero lister exit → fail (never swallow).
-# Empty list from a selector that exits 0 → fail (never scan nothing silently).
+# Count files actually scanned — blank-only selector print (printf '\n\n') must
+# FAIL even when the list file is non-empty by size.
 scan_list=$(mktemp)
 trap 'rm -f "$scan_list"' EXIT
 set +e
@@ -128,10 +132,6 @@ if [ "$lister_st" -ne 0 ]; then
   echo "FAIL: list-guard-scan-files.sh exited $lister_st (engine scan aborted)" >&2
   exit 1
 fi
-if [ ! -s "$scan_list" ]; then
-  echo "FAIL: list-guard-scan-files.sh produced empty scan list (engine)" >&2
-  exit 1
-fi
 
 while IFS= read -r f || [ -n "${f:-}" ]; do
   [ -z "${f:-}" ] && continue
@@ -140,10 +140,16 @@ while IFS= read -r f || [ -n "${f:-}" ]; do
     scripts/check-no-engine-bin-env.sh) continue ;;
     scripts/list-guard-scan-files.sh) continue ;;
   esac
+  scanned=$((scanned + 1))
   scan_env "$f"
   scan_cmd_p "$f"
   scan_abs_docker "$f"
 done <"$scan_list"
+
+if [ "$scanned" -eq 0 ]; then
+  echo "FAIL: scanned 0 files (engine)" >&2
+  exit 1
+fi
 
 # Fixture must exist and must match the ban pattern (proves the regex).
 FIXTURE="scripts/testdata/engine-bin-env/banned-export.sh"
@@ -156,6 +162,7 @@ if ! LC_ALL=C grep -a -qE "$RE" "$FIXTURE"; then
   exit 1
 fi
 # Prove scanner would flag it if it lived under scripts/ (not testdata).
+# Fixture proofs use real grep (not GREP=) so scan-shim tests still reach here.
 tmp=$(mktemp)
 cp "$FIXTURE" "$tmp"
 hits_file=$(mktemp)

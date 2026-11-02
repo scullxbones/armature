@@ -19,6 +19,9 @@ cd "$ROOT"
 
 HELPER="scripts/porcelain-git.sh"
 fail=0
+scanned=0
+# Overridable for fail-closed tests (PATH-shim / GREP= that exits ≥2).
+GREP="${GREP:-grep}"
 
 # Build class regex without embedding both tokens on one source line.
 _gw='gi'
@@ -64,7 +67,7 @@ require_readable() {
 grep_hits() {
   local re="$1" src="$2" out="$3" st
   set +e
-  LC_ALL=C grep -a -nE "$re" "$src" >"$out"
+  LC_ALL=C "$GREP" -a -nE "$re" "$src" >"$out"
   st=$?
   set -e
   if [ "$st" -ge 2 ]; then
@@ -98,7 +101,7 @@ scan_file() {
     return 0
   fi
   set +e
-  LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$hits_file"
+  LC_ALL=C "$GREP" -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$hits_file"
   local vst=$?
   set -e
   rm -f "$flat" "$raw_hits"
@@ -159,7 +162,7 @@ scan_silencers() {
     return 0
   fi
   set +e
-  LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$sil_hits"
+  LC_ALL=C "$GREP" -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$sil_hits"
   local vst=$?
   set -e
   if [ "$vst" -ge 2 ]; then
@@ -169,7 +172,7 @@ scan_silencers() {
     return 0
   fi
   set +e
-  LC_ALL=C grep -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
+  LC_ALL=C "$GREP" -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
     "$sil_hits" >"$hits_file"
   local sst=$?
   set -e
@@ -213,7 +216,8 @@ scan_silencers() {
 # Shared selector: every scan-eligible file under scripts/ (no ext/shebang filter).
 # Scope = main: only scripts/testdata/* excluded — do NOT skip scripts/repoguard/*.
 # Fail-closed: write list to file; nonzero lister exit → fail (never swallow).
-# Empty list from a selector that exits 0 → fail (never scan nothing silently).
+# Count files actually scanned — blank-only selector print (printf '\n\n') must
+# FAIL even when the list file is non-empty by size.
 scan_list=$(mktemp)
 trap 'rm -f "$scan_list"' EXIT
 set +e
@@ -224,17 +228,19 @@ if [ "$lister_st" -ne 0 ]; then
   echo "FAIL: list-guard-scan-files.sh exited $lister_st (porcelain scan aborted)" >&2
   exit 1
 fi
-if [ ! -s "$scan_list" ]; then
-  echo "FAIL: list-guard-scan-files.sh produced empty scan list (porcelain)" >&2
-  exit 1
-fi
 
 while IFS= read -r f || [ -n "${f:-}" ]; do
   [ -z "${f:-}" ] && continue
   require_readable "$f"
+  scanned=$((scanned + 1))
   scan_file "$f"
   scan_silencers "$f"
 done <"$scan_list"
+
+if [ "$scanned" -eq 0 ]; then
+  echo "FAIL: scanned 0 files (porcelain)" >&2
+  exit 1
+fi
 
 if [ "$fail" -ne 0 ]; then
   exit 1
