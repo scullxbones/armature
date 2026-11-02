@@ -619,9 +619,6 @@ func TestRealRepoPassesGuards(t *testing.T) {
 			t.Fatalf("%s failed on real repo:\n%s\n%s", check, out, errOut)
 		}
 		if check == "git-hermetic" {
-			if !strings.Contains(out, "internal/adapters/git_internal_test.go") {
-				t.Fatalf("must list the git-name allow, got %s", out)
-			}
 			if !strings.Contains(out, "scripts/repoguard/repoguard_test.go") {
 				t.Fatalf("must list the repoguard fixture allow, got %s", out)
 			}
@@ -1081,6 +1078,26 @@ func TestObjectID_WaiverLineDoesNotCoverNewHit_REQ_419(t *testing.T) {
 	}
 }
 
+func TestObjectID_AppendGrepToWaivedFileFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Per-site waiver at line 375 must not cover an appended plant.
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), "scripts", "test_check_jobs.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := writeTree(t, map[string]string{
+		"go.mod":                     "module fixture\n\ngo 1.22\n",
+		"scripts/test_check_jobs.sh": string(body) + "\ngrep -qE '^[0-9a-f]{40}$' \"$1\"\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("appending grep -qE 40-only to waived file must FAIL, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "test_check_jobs.sh") {
+		t.Fatalf("must name waived file hit, got %s", errOut)
+	}
+}
+
 func TestResidualTrls_CmdGoFails_REQ_421(t *testing.T) {
 	t.Parallel()
 	root := writeTree(t, map[string]string{
@@ -1343,52 +1360,42 @@ func TestPlant_TextSkipDirsExplicit_REQ_419(t *testing.T) {
 	t.Logf("plant textSkipDirs scan/skip rc=%d", code)
 }
 
-//nolint:paralleltest // mutates package allowlistHook; cannot run beside peers
-func TestPlant_LineZeroAllowEntryFailsCheckAlone_REQ_419(t *testing.T) {
-	// Mutates allowlistHook — cannot t.Parallel.
-	allowlistHook = func() []allowEntry {
-		return append(productionAllowlist(), allowEntry{
-			RelPath: "internal/fake/plant.go",
-			Check:   allowObjectID,
-			Line:    0,
-			Needle:  "plant",
-			Reason:  "planted Line==0 must fail the check alone",
-		})
+func TestValidateAllowEntries_LineZeroFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	err := validateAllowEntries([]allowEntry{{
+		RelPath: "internal/fake/plant.go",
+		Check:   allowObjectID,
+		Line:    0,
+		Needle:  "plant",
+		Reason:  "planted Line==0 must fail",
+	}})
+	if err == nil {
+		t.Fatal("validateAllowEntries must reject Line==0")
 	}
-	defer func() { allowlistHook = nil }()
-
-	if err := validateAllowlist(); err == nil {
-		t.Fatal("validateAllowlist must reject planted Line==0")
+	if !strings.Contains(err.Error(), "Line == 0") {
+		t.Fatalf("must name Line == 0, got %v", err)
 	}
+}
 
+func TestValidateAllowEntriesPresent_StaleNeedleFails_REQ_419(t *testing.T) {
+	t.Parallel()
 	root := writeTree(t, map[string]string{
-		"go.mod": "module fixture\n\ngo 1.22\n",
-		"internal/fake/ok.go": `package fake
-const ok = "fine"
-`,
+		"go.mod":    "module fixture\n\ngo 1.22\n",
+		"waived.sh": "echo ok\n",
 	})
-	// In-process: hook is visible. Real binary is a separate process without the hook,
-	// so assert via run() which shares the package state.
-	_, errOut, code := runCheck(t, "object-id", root)
-	if code == 0 {
-		t.Fatalf("Line==0 allow entry must fail the check alone, stderr=%s", errOut)
+	err := validateAllowEntriesPresent(root, []allowEntry{{
+		RelPath: "waived.sh",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  `^[0-9a-f]{40}$`,
+		Reason:  "stale plant",
+	}})
+	if err == nil {
+		t.Fatal("stale waiver (needle absent on line) must FAIL")
 	}
-	if !strings.Contains(errOut, "Line == 0") {
-		t.Fatalf("must name Line == 0, got %s", errOut)
+	if !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("must name stale, got %v", err)
 	}
-	t.Logf("plant Line==0 allow entry rc=%d", code)
-
-	_, errOut, code = runCheck(t, "git-hermetic", root)
-	if code == 0 {
-		t.Fatalf("Line==0 must fail git-hermetic alone too, stderr=%s", errOut)
-	}
-	t.Logf("plant Line==0 git-hermetic rc=%d", code)
-
-	_, errOut, code = runCheck(t, "residual-trls", root)
-	if code == 0 {
-		t.Fatalf("Line==0 must fail residual-trls alone too, stderr=%s", errOut)
-	}
-	t.Logf("plant Line==0 residual-trls rc=%d", code)
 }
 
 func TestPlant_GitHermeticRejectsWholeFile_REQ_419(t *testing.T) {

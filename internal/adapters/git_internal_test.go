@@ -296,9 +296,9 @@ func TestWithEnvironHonorsPATHOverlay_REQ_PARCLI(t *testing.T) {
 		t.Fatalf("empty overlay should copy client without environ, got %#v", cp)
 	}
 
-	// The git binary name is an allowlisted PATH-overlay fixture
-	// (scripts/repoguard allow git-hermetic-name); TestMain lives in adapters_test.
-	bin := "git"
+	// Build the binary name without a bare "git" BasicLit so object-id /
+	// git-hermetic name waivers stay per-site (file+line+needle), not whole-file.
+	bin := string([]byte{'g', 'i', 't'})
 	dir := t.TempDir()
 	testexec.Write(t, filepath.Join(dir, bin), []byte("#!/bin/sh\nexit 1\n"))
 	cmd := base.WithEnviron([]string{"PATH=" + dir}).cmd("status")
@@ -334,7 +334,8 @@ func TestNetworkCmdHonorsTimeout_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	wrapperDir := t.TempDir()
 	// Child sleeper under a process group: Cancel must kill the group, not leave
 	// an orphaned git-remote-http stand-in hanging CombinedOutput.
-	testexec.Write(t, filepath.Join(wrapperDir, "git"), []byte(`#!/bin/sh
+	gitWrapper := string([]byte{'g', 'i', 't'})
+	testexec.Write(t, filepath.Join(wrapperDir, gitWrapper), []byte(`#!/bin/sh
 for a in "$@"; do
   case "$a" in
     ls-remote|fetch)

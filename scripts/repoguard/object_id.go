@@ -35,19 +35,39 @@ var (
 // textSkipDirList is the explicit, justified exclusion list for the object-id
 // text walk. Anything else under the repo root is scanned (subject to extension
 // filter). .github is intentionally NOT skipped so workflows are covered.
+// Non-.github dot-dirs are skipped via textSkipDir (prefix rule kept here so
+// the exclusion policy lives in one place).
 func textSkipDirList() []string {
 	return []string{
 		"testdata",     // fixture corpora, not product patterns
 		"vendor",       // third-party
-		".git",         // git objects
+		".git",         // git objects (also matched by dot-dir rule)
 		"node_modules", // third-party
 		"ops",          // runtime armature state (non-gating follow-up #427)
 		"docs",         // prose/schemas walked separately for schema patterns (#427)
 	}
 }
 
+// textSkipDir reports whether a directory name should be skipped during the
+// object-id text walk. .github is scanned; other dot-dirs and textSkipDirList
+// entries are skipped.
+func textSkipDir(name string) bool {
+	if name == ".github" {
+		return false
+	}
+	if strings.HasPrefix(name, ".") {
+		return true // non-.github dot-dirs
+	}
+	for _, skip := range textSkipDirList() {
+		if name == skip {
+			return true
+		}
+	}
+	return false
+}
+
 func checkObjectID(root string, stdout, stderr io.Writer) error {
-	if err := validateAllowlist(); err != nil {
+	if err := validateAllowlist(root); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
@@ -427,16 +447,8 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 			if path == root {
 				return nil
 			}
-			if name == ".github" {
-				return nil // scan workflows
-			}
-			for _, skip := range textSkipDirList() {
-				if name == skip {
-					return filepath.SkipDir
-				}
-			}
-			if strings.HasPrefix(name, ".") {
-				return filepath.SkipDir // non-.github dot-dirs
+			if textSkipDir(name) {
+				return filepath.SkipDir
 			}
 			return nil
 		}
@@ -445,6 +457,8 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 			rel = path
 		}
 		rel = filepath.ToSlash(rel)
+		// Pattern-definition + selftest fixtures live under scripts/repoguard;
+		// narrowing further is #427.
 		if underDir(rel, "scripts/repoguard") {
 			return nil
 		}
@@ -470,6 +484,12 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 		}
 		for _, t := range toks {
 			if allowedObjectIDSite(rel, t.line, t.tok) || oidPatternAcceptsBoth(t.tok) {
+				continue
+			}
+			// Bare 40-hex tokens in shell (plant); 64-hex content digests stay #427.
+			if (ext == ".sh" || ext == ".bash") && isExactHexWidth(t.tok, gitoid.LenSHA1) {
+				hits = append(hits, fmt.Sprintf("%s:%d: 40-hex token encodes gitoid width; use gitoid.PadSHA1 or LenSHA1",
+					rel, t.line))
 				continue
 			}
 			for _, cand := range oidPatternCandidates(t.tok) {

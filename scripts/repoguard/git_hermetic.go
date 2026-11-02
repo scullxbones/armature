@@ -31,7 +31,7 @@ func gitIdentHelpers() map[string]bool {
 }
 
 func checkGitHermetic(root string, stdout, stderr io.Writer) error {
-	if err := validateAllowlist(); err != nil {
+	if err := validateAllowlist(root); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
