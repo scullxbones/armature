@@ -97,12 +97,8 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 							initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 						}
 					}
-					if s == "git" {
-						if idx.allowed(pf.rel, allowGitHermeticName, pos.Line, "git") {
-							// waived binary-name fixture
-						} else {
-							usesGit = true
-						}
+					if s == "git" && !idx.allowed(pf.rel, allowGitHermeticName, pos.Line, "git") {
+						usesGit = true
 					}
 				}
 			case *ast.BinaryExpr:
@@ -135,8 +131,6 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 		})
 
 		key := pkgKey(pf.rel, pf.pkg)
-		if usesGit {
-		}
 		if usesGit {
 			gitPkgs[key] = true
 		}
