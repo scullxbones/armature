@@ -1374,27 +1374,19 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: guards/lister must pin tools via guard_resolve_tool"
         exit 1
     fi
-    # -ge 2 sites at fixed lines (porcelain 103/147/208/220; engine 64/195/235).
-    _ge2_lines() { rg -n 'if \[ "\$'"$2"' -ge 2 \]' "$1" | cut -d: -f1 | tr '\n' ' '; }
-    if [ "$(rg -n 'if \[ "\$gh_st" -ge 2 \]' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" | cut -d: -f1)" != "103" ] \
-        || [ "$(rg -n 'if \[ "\$sf_vst" -ge 2 \]' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" | cut -d: -f1)" != "147" ] \
-        || [ "$(rg -n 'if \[ "\$sil_vst" -ge 2 \]' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" | cut -d: -f1)" != "208" ] \
-        || [ "$(rg -n 'if \[ "\$sil_sst" -ge 2 \]' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" | cut -d: -f1)" != "220" ]; then
-        echo "FAIL: porcelain -ge 2 sites must be at lines 103/147/208/220"
+    # Behavioural: -ge 2 sites exist (by status var), not by line-number pins.
+    for var in gh_st sf_vst sil_vst sil_sst; do
+        if ! rg -q -e "if [ \"\$${var}\" -ge 2 ]" "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+            echo "FAIL: porcelain missing -ge 2 site for $var"
+            exit 1
+        fi
+    done
+    if ! rg -q -e 'if [ "$gh_st" -ge 2 ]' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: engine missing gh_st -ge 2 site"
         exit 1
     fi
-    if [ "$(rg -n 'if \[ "\$gh_st" -ge 2 \]' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" | cut -d: -f1)" != "64" ]; then
-        echo "FAIL: engine gh_st -ge 2 must be at line 64"
-        exit 1
-    fi
-    _fx_lines=$(rg -n 'if \[ "\$fx_st" -ge 2 \]' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" | cut -d: -f1 | tr '\n' ' ')
-    if [ "$_fx_lines" != "195 235 " ]; then
-        echo "FAIL: engine fx_st -ge 2 sites must be at lines 195/235 (got '$_fx_lines')"
-        exit 1
-    fi
-    if [ "$(sed -n '26p' "$REPO_ROOT/scripts/list-guard-scan-files.sh" | rg -c 'exit 2')" != "1" ] \
-        || [ "$(sed -n '32p' "$REPO_ROOT/scripts/list-guard-scan-files.sh" | rg -c 'exit 2')" != "1" ]; then
-        echo "FAIL: lister exit-2 sites must be at lines 26/32"
+    if [ "$(rg -c -e 'if [ "$fx_st" -ge 2 ]' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh")" -lt 2 ]; then
+        echo "FAIL: engine must have two fx_st -ge 2 sites"
         exit 1
     fi
     if rg -v '^\s*#' "$REPO_ROOT/scripts/list-guard-scan-files.sh" | rg -q '\[ ! -d "\$d" \] && continue|! -d "\$d" \]; then[[:space:]]*continue'; then
@@ -1411,6 +1403,65 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
     if ! rg -q 'check-guard-no-ambient-tools\.sh' "$REPO_ROOT/Makefile"; then
         echo "FAIL: Makefile lint must run check-guard-no-ambient-tools.sh"
+        exit 1
+    fi
+    # Resolver: -f && -x; reject . and ..
+    if ! rg -q '\[ -f "\$cand" \] && \[ -x "\$cand" \]' "$REPO_ROOT/scripts/guard-resolve-tool.sh"; then
+        echo "FAIL: guard_resolve_tool must require -f and -x"
+        exit 1
+    fi
+    set +e
+    _dot=$(bash "$REPO_ROOT/scripts/guard-resolve-tool.sh" . 2>&1)
+    _dotst=$?
+    _dotdot=$(bash "$REPO_ROOT/scripts/guard-resolve-tool.sh" .. 2>&1)
+    _dotdotst=$?
+    set -e
+    if [ "$_dotst" -eq 0 ] || [ "$_dotdotst" -eq 0 ]; then
+        echo "FAIL: guard_resolve_tool must reject . and .. names"
+        exit 1
+    fi
+    # Planted ambient fixtures each FAIL the real check (command-position).
+    for amb_fx in \
+        if-grep.sh bang-grep.sh while-grep.sh lc-all-grep.sh \
+        env-grep.sh cmdsub-wc.sh git-ls-files.sh after-hashlen.sh
+    do
+        amb_src="$REPO_ROOT/scripts/testdata/guard-ambient/$amb_fx"
+        if [ ! -f "$amb_src" ]; then
+            echo "FAIL: missing ambient planted fixture $amb_fx"
+            exit 1
+        fi
+        amb_demo=$(mktemp -d)
+        mkdir -p "$amb_demo/scripts"
+        cp "$REPO_ROOT/scripts/guard-resolve-tool.sh" "$amb_demo/scripts/"
+        cp "$amb_src" "$amb_demo/scripts/check-planted-ambient.sh"
+        chmod +x "$amb_demo/scripts/"*.sh
+        set +e
+        amb_out=$(bash "$REPO_ROOT/scripts/check-guard-no-ambient-tools.sh" "$amb_demo" 2>&1)
+        amb_st=$?
+        set -e
+        rm -rf "$amb_demo"
+        if [ "$amb_st" -eq 0 ]; then
+            echo "FAIL: ambient check must FAIL planted $amb_fx: $amb_out"
+            exit 1
+        fi
+        if ! printf '%s\n' "$amb_out" | grep -q 'bare external'; then
+            echo "FAIL: ambient check must name bare external for $amb_fx: $amb_out"
+            exit 1
+        fi
+    done
+    # Lister exit-2 paths: --bogus and no DIR → non-zero (pins removed / behavioural).
+    set +e
+    _bogus=$(bash "$REPO_ROOT/scripts/list-guard-scan-files.sh" --bogus 2>&1)
+    _bogusst=$?
+    _nodir=$(bash "$REPO_ROOT/scripts/list-guard-scan-files.sh" 2>&1)
+    _nodirst=$?
+    set -e
+    if [ "$_bogusst" -eq 0 ] || ! printf '%s\n' "$_bogus" | grep -qi 'unknown flag\|FAIL'; then
+        echo "FAIL: lister --bogus must exit non-zero: st=$_bogusst $_bogus"
+        exit 1
+    fi
+    if [ "$_nodirst" -eq 0 ] || ! printf '%s\n' "$_nodir" | grep -qi 'need at least one DIR\|FAIL'; then
+        echo "FAIL: lister with no DIR must exit non-zero: st=$_nodirst $_nodir"
         exit 1
     fi
     if ! rg -q 'scripts/testdata/\*' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
@@ -1821,7 +1872,7 @@ PY
         rm -rf "$demo_g2" "$shimdir"; exit 1
     fi
 
-    # Engine: mutate gh_st (line 64) alone → exit 0 under all-exit-2 seam.
+    # Engine: mutate gh_st alone → exit 0 under all-exit-2 seam.
     # Drop fixture proof section so -qE/-nE fixture paths cannot fail the mutant.
     cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_g2/scripts/"
     install_grep_shim "$shim" all
@@ -1860,7 +1911,7 @@ PY
         rm -rf "$demo_g2" "$shimdir"; exit 1
     fi
 
-    # Engine fixture fx_st sites (195 / 235): kill each individually.
+    # Engine fixture fx_st sites: kill each individually.
     # Mute the sibling -ge2 and its empty-hits FAIL so only the target is observable.
     mute_fixture_empty() {
         python3 - "$1" "$2" <<'PY'
@@ -1918,7 +1969,7 @@ PY
         fi
     done
 
-    # Porcelain: mutate each -ge 2 site (103/147/208/220) with site-selective seam.
+    # Porcelain: mutate each -ge 2 site with site-selective seam.
     for site_spec in \
         'gh_st|grep_hits|unscannable (grep_hits)' \
         'sf_vst|sf_comment|unscannable (scan_file:comment-filter)' \
