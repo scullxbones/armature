@@ -39,7 +39,7 @@ do
   esac
   # Guard must see a scripts/ tree; skip nested selftest.
   set +e
-  out=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$GUARD" "$demo" 2>&1)
+  out=$(bash "$GUARD" --skip-selftest "$demo" 2>&1)
   st=$?
   set -e
   rm -rf "$demo"

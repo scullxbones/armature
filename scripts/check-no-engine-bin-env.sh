@@ -5,6 +5,7 @@
 #   3) absolute-path docker (/usr/bin/docker, /usr/local/bin/docker) outside
 #      scripts/run-container-image.sh (the sole intentional allowlist use)
 # Fixtures under scripts/testdata/engine-bin-env/ prove each ban.
+# Production never reads tool overrides from env (GREP=true must not disable scanning).
 set -euo pipefail
 ROOT="${1:-.}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -38,19 +39,30 @@ ABS_RE="(^|[^A-Za-z0-9_])(${ABS_DOCKER_1}|${ABS_DOCKER_2})([^A-Za-z0-9_]|$)"
 WRAPPER="scripts/run-container-image.sh"
 fail=0
 scanned=0
-# Overridable for fail-closed tests (PATH-shim / GREP= that exits ≥2).
-GREP="${GREP:-grep}"
+
+# Absolute grep for fixture proofs; scanning uses bare `grep` so PATH shims work.
+# Never read GREP= from the environment.
+REAL_GREP=""
+for cand in /usr/bin/grep /bin/grep; do
+  if [ -x "$cand" ]; then
+    REAL_GREP="$cand"
+    break
+  fi
+done
+if [ -z "$REAL_GREP" ]; then
+  REAL_GREP="$(command -v grep)"
+fi
 
 # Fail-closed grep: exit 0 = hits, 1 = no hits, ≥2 = error → FAIL unscannable.
 # Never `|| true` — that lets missing/garbage paths pass.
 grep_hits() {
-  local re="$1" f="$2" out="$3" st
+  local re="$1" f="$2" out="$3" gh_st
   set +e
-  LC_ALL=C "$GREP" -a -nE "$re" "$f" >"$out"
-  st=$?
+  LC_ALL=C grep -a -nE "$re" "$f" >"$out"
+  gh_st=$?
   set -e
-  if [ "$st" -ge 2 ]; then
-    echo "FAIL: $f unscannable" >&2
+  if [ "$gh_st" -ge 2 ]; then
+    echo "FAIL: $f unscannable (grep_hits)" >&2
     fail=1
     return 1
   fi
@@ -63,6 +75,14 @@ require_readable() {
     echo "FAIL: $f is not a readable file" >&2
     exit 1
   fi
+}
+
+# True if $1 has any non-whitespace character.
+has_non_ws() {
+  case "$1" in
+    *[![:space:]]*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 scan_env() {
@@ -120,8 +140,7 @@ scan_abs_docker() {
 # Shared selector: every scan-eligible file under scripts/ and .github/.
 # Scope = main: only scripts/testdata/* excluded via --exclude-testdata.
 # Fail-closed: write list to file; nonzero lister exit → fail (never swallow).
-# Count files actually scanned — blank-only selector print (printf '\n\n') must
-# FAIL even when the list file is non-empty by size.
+# Count files actually scanned — blank/whitespace-only selector print must FAIL.
 scan_list=$(mktemp)
 trap 'rm -f "$scan_list"' EXIT
 set +e
@@ -134,7 +153,9 @@ if [ "$lister_st" -ne 0 ]; then
 fi
 
 while IFS= read -r f || [ -n "${f:-}" ]; do
-  [ -z "${f:-}" ] && continue
+  if ! has_non_ws "${f:-}"; then
+    continue
+  fi
   require_readable "$f"
   case "$f" in
     scripts/check-no-engine-bin-env.sh) continue ;;
@@ -157,22 +178,22 @@ if [ ! -f "$FIXTURE" ]; then
   echo "FAIL: missing ban fixture $FIXTURE" >&2
   exit 1
 fi
-if ! LC_ALL=C grep -a -qE "$RE" "$FIXTURE"; then
+if ! LC_ALL=C "$REAL_GREP" -a -qE "$RE" "$FIXTURE"; then
   echo "FAIL: ban fixture does not contain ${BANNED} word" >&2
   exit 1
 fi
 # Prove scanner would flag it if it lived under scripts/ (not testdata).
-# Fixture proofs use real grep (not GREP=) so scan-shim tests still reach here.
+# Fixture proofs use REAL_GREP so PATH shims do not break ban proofs.
 tmp=$(mktemp)
 cp "$FIXTURE" "$tmp"
 hits_file=$(mktemp)
 set +e
-LC_ALL=C grep -a -nE "$RE" "$tmp" >"$hits_file"
-gst=$?
+LC_ALL=C "$REAL_GREP" -a -nE "$RE" "$tmp" >"$hits_file"
+fx_st=$?
 set -e
 rm -f "$tmp"
-if [ "$gst" -ge 2 ]; then
-  echo "FAIL: $FIXTURE unscannable" >&2
+if [ "$fx_st" -ge 2 ]; then
+  echo "FAIL: $FIXTURE unscannable (fixture)" >&2
   rm -f "$hits_file"
   exit 1
 fi
@@ -188,7 +209,7 @@ if [ ! -f "$FIXTURE_CMDP" ]; then
   echo "FAIL: missing ban fixture $FIXTURE_CMDP" >&2
   exit 1
 fi
-if ! LC_ALL=C grep -a -qE "$CMD_P_RE" "$FIXTURE_CMDP"; then
+if ! LC_ALL=C "$REAL_GREP" -a -qE "$CMD_P_RE" "$FIXTURE_CMDP"; then
   echo "FAIL: command -p fixture not matched by ban regex" >&2
   exit 1
 fi
@@ -198,7 +219,7 @@ if [ ! -f "$FIXTURE_ABS" ]; then
   echo "FAIL: missing ban fixture $FIXTURE_ABS" >&2
   exit 1
 fi
-if ! LC_ALL=C grep -a -qE "$ABS_RE" "$FIXTURE_ABS"; then
+if ! LC_ALL=C "$REAL_GREP" -a -qE "$ABS_RE" "$FIXTURE_ABS"; then
   echo "FAIL: abs-docker fixture not matched by ban regex" >&2
   exit 1
 fi
@@ -207,12 +228,12 @@ tmp=$(mktemp)
 cp "$FIXTURE_ABS" "$tmp"
 hits_file=$(mktemp)
 set +e
-LC_ALL=C grep -a -nE "$ABS_RE" "$tmp" >"$hits_file"
-gst=$?
+LC_ALL=C "$REAL_GREP" -a -nE "$ABS_RE" "$tmp" >"$hits_file"
+fx_st=$?
 set -e
 rm -f "$tmp"
-if [ "$gst" -ge 2 ]; then
-  echo "FAIL: $FIXTURE_ABS unscannable" >&2
+if [ "$fx_st" -ge 2 ]; then
+  echo "FAIL: $FIXTURE_ABS unscannable (fixture)" >&2
   rm -f "$hits_file"
   exit 1
 fi
