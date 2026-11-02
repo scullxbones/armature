@@ -10,7 +10,7 @@ import (
 	"github.com/scullxbones/armature/internal/ops"
 )
 
-// Node is the minimal issue-graph fact RemediationsPlan needs.
+// Node is the minimal issue-graph fact RemediationsPlanOpts needs.
 type Node struct {
 	Status       string
 	Parent       string
@@ -77,16 +77,12 @@ const (
 	FindingHeaderPrefix    = "finding: "
 )
 
-// RemediationsPlan walks the issue tree under id and returns a typed Plan
-// (viewer unknown — every ClaimedBy holder is treated as foreign without Decide).
-func RemediationsPlan(id string, g Graph) Plan {
-	return RemediationsPlanOpts(id, g, PlanOpts{})
-}
-
 // RemediationsPlanOpts builds then filters a Plan. Every printed command argv
 // (Options + MoreSteps) must pass opts.Decide before it is returned — same
 // refusals as claim/transition when Decide is the CLI predicate. MoreSteps are
-// Decide-checked against each Option's resulting graph.
+// Decide-checked against each Option's resulting graph. Pass PlanOpts{} when
+// the viewer is unknown (every ClaimedBy holder is treated as foreign until
+// Decide is wired).
 func RemediationsPlanOpts(id string, g Graph, opts PlanOpts) Plan {
 	p := buildRemediationsPlan(id, g, opts)
 	p = filterDecideRefused(g, p, opts)

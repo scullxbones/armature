@@ -185,7 +185,7 @@ func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 		t.Run("repair_"+id, func(t *testing.T) {
 			t.Parallel()
 			g0 := loadPromotionGraph(t, setupMixedD14Tree(t))
-			plan := promotion.RemediationsPlan(id, g0)
+			plan := promotion.RemediationsPlanOpts(id, g0, promotion.PlanOpts{})
 			require.NotEmpty(t, plan.Alternatives, "D14 item %s must have alternatives", item)
 			switch g0[id].Status {
 			case "open", "claimed", "in-progress":
@@ -343,7 +343,7 @@ func TestNestedMergedAncestorChainCLI_REQ_TOPTIER_S18_T4(t *testing.T) {
 	d14 := doctorD14Explain(t, repo)
 	assert.Contains(t, d14.items, "D -> M2")
 
-	plan := promotion.RemediationsPlan("D", loadPromotionGraph(t, repo))
+	plan := promotion.RemediationsPlanOpts("D", loadPromotionGraph(t, repo), promotion.PlanOpts{})
 	require.Len(t, plan.Alternatives, 1, "done under nested merged: reopen only")
 	assert.Equal(t, []string{
 		"arm reopen --issue M1",
@@ -372,9 +372,9 @@ func TestFilledDeliverySequenceReachesMerge_REQ_TOPTIER_S18_T4(t *testing.T) {
 	_, err := runTrls(t, repo, "materialize")
 	require.NoError(t, err)
 
-	plan := promotion.RemediationsPlan("task-01", promotion.Graph{
+	plan := promotion.RemediationsPlanOpts("task-01", promotion.Graph{
 		"task-01": {Status: ops.StatusDone, Base: base, Tip: tip},
-	})
+	}, promotion.PlanOpts{})
 	require.Len(t, plan.MoreSteps, 2)
 	assert.Equal(t, promotion.StepCommand, plan.MoreSteps[0].Kind)
 	assert.Equal(t, delivery.RecordArgvFilled("task-01", base, tip), plan.MoreSteps[0].Argv)
@@ -406,7 +406,7 @@ func TestAllCancelledP2UnderG2_REQ_TOPTIER_S18_T4(t *testing.T) {
 	d14 := doctorD14Explain(t, repo)
 	assert.Contains(t, d14.items, "P2 -> G2")
 
-	plan := promotion.RemediationsPlan("P2", loadPromotionGraph(t, repo))
+	plan := promotion.RemediationsPlanOpts("P2", loadPromotionGraph(t, repo), promotion.PlanOpts{})
 	require.Len(t, plan.Alternatives, 1, "done under merged: reopen only — never cancel done P2")
 	acts := plan.RenderNextActions()
 	assert.Equal(t, "arm reopen --issue G2", acts[0])
@@ -637,7 +637,7 @@ func produceAssessmentFromHowTo(t *testing.T, repo, issueID, base, tip, howTo st
 
 // TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4 proves open
 // under-merged exposes ≥2 Options and arm merged on a D14 non-leaf fails
-// (Producer injection removed — no package/test seams).
+// (no package/test seams for Decide).
 func TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	repo := setupMixedD14Tree(t)

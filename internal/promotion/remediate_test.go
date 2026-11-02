@@ -72,7 +72,7 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 		"ACC": {Status: ops.StatusCancelled, Parent: "AC"},
 	}
 
-	lfPlan := RemediationsPlan("LF", g)
+	lfPlan := RemediationsPlanOpts("LF", g, PlanOpts{})
 	require.Len(t, lfPlan.Alternatives, 1, "done leaf: Option A reopen only — never cancel done")
 	assert.Equal(t, []string{"arm reopen --issue E"}, lfPlan.Alternatives[0].RunnableCommands())
 	lf := lfPlan.RenderNextActions()
@@ -84,7 +84,7 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Contains(t, lf, delivery.RecordArgv("LF"))
 	assert.Equal(t, "arm reopen --issue E", FirstRemediation(lf))
 
-	rPlan := RemediationsPlan("R", g)
+	rPlan := RemediationsPlanOpts("R", g, PlanOpts{})
 	require.Len(t, rPlan.Alternatives, 1, "done subject: reopen only — open RC2 has its own D14 Option B")
 	assert.Equal(t, []string{"arm reopen --issue E"}, rPlan.Alternatives[0].RunnableCommands())
 	r := rPlan.RenderNextActions()
@@ -99,16 +99,16 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Equal(t, "arm reopen --issue E", FirstRemediation(r))
 
 	// Open RC2 under merged: Option A reopen + Option B cancel self.
-	rc2Plan := RemediationsPlan("RC2", g)
+	rc2Plan := RemediationsPlanOpts("RC2", g, PlanOpts{})
 	require.Len(t, rc2Plan.Alternatives, 2)
 	assert.Equal(t, []string{"arm reopen --issue E"}, rc2Plan.Alternatives[0].RunnableCommands())
 	assert.Equal(t, []string{"arm transition --issue RC2 --to cancelled --force"},
 		rc2Plan.Alternatives[1].RunnableCommands())
 
-	assert.Empty(t, RemediationsPlan("RC3", g).RenderNextActions())
-	assert.Empty(t, RemediationsPlan("AM", g).RenderNextActions())
+	assert.Empty(t, RemediationsPlanOpts("RC3", g, PlanOpts{}).RenderNextActions())
+	assert.Empty(t, RemediationsPlanOpts("AM", g, PlanOpts{}).RenderNextActions())
 
-	acPlan := RemediationsPlan("AC", g)
+	acPlan := RemediationsPlanOpts("AC", g, PlanOpts{})
 	require.Len(t, acPlan.Alternatives, 1, "done with only-cancelled kids: reopen only — never cancel done")
 	ac := acPlan.RenderNextActions()
 	assert.Contains(t, ac, "arm reopen --issue E")
@@ -117,7 +117,7 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.NotContains(t, ac, "arm doctor")
 
 	healthy := Graph{"T": {Status: ops.StatusOpen}}
-	assert.Equal(t, []string{"arm claim --issue T --worktree"}, RemediationsPlan("T", healthy).RenderNextActions())
+	assert.Equal(t, []string{"arm claim --issue T --worktree"}, RemediationsPlanOpts("T", healthy, PlanOpts{}).RenderNextActions())
 }
 
 func TestRemediationsPlan_NestedMergedAncestorChain_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -130,7 +130,7 @@ func TestRemediationsPlan_NestedMergedAncestorChain_REQ_TOPTIER_S18_T4(t *testin
 	}
 	assert.Equal(t, []string{"M1", "M2"}, mergedAncestorChain("D", g))
 
-	plan := RemediationsPlan("D", g)
+	plan := RemediationsPlanOpts("D", g, PlanOpts{})
 	require.Len(t, plan.Alternatives, 1, "done under nested merged: reopen only — never cancel done")
 	assert.Equal(t, []string{
 		"arm reopen --issue M1",
@@ -269,7 +269,7 @@ func TestRemediationsPlan_FilledDeliveryRequiredInput_REQ_TOPTIER_S18_T4(t *test
 	g := Graph{
 		"L": {Status: ops.StatusDone, Base: "aaa111", Tip: "bbb222"},
 	}
-	plan := RemediationsPlan("L", g)
+	plan := RemediationsPlanOpts("L", g, PlanOpts{})
 	require.Len(t, plan.MoreSteps, 2)
 	assert.Equal(t, StepCommand, plan.MoreSteps[0].Kind)
 	assert.Equal(t, delivery.RecordArgvFilled("L", "aaa111", "bbb222"), plan.MoreSteps[0].Argv)
@@ -308,15 +308,15 @@ func TestRemediationsPlan_AllMergedChildrenEmpty_REQ_TOPTIER_S18_T4(t *testing.T
 		"P": {Status: ops.StatusDone, Children: []string{"C"}},
 		"C": {Status: ops.StatusMerged, Parent: "P"},
 	}
-	assert.Empty(t, RemediationsPlan("P", allMerged).RenderNextActions())
-	assert.Equal(t, "arm doctor", FirstRemediation(RemediationsPlan("P", allMerged).RenderNextActions()))
+	assert.Empty(t, RemediationsPlanOpts("P", allMerged, PlanOpts{}).RenderNextActions())
+	assert.Equal(t, "arm doctor", FirstRemediation(RemediationsPlanOpts("P", allMerged, PlanOpts{}).RenderNextActions()))
 
 	mixed := Graph{
 		"P": {Status: ops.StatusDone, Children: []string{"M", "X"}},
 		"M": {Status: ops.StatusMerged, Parent: "P"},
 		"X": {Status: ops.StatusCancelled, Parent: "P"},
 	}
-	assert.Empty(t, RemediationsPlan("P", mixed).RenderNextActions())
+	assert.Empty(t, RemediationsPlanOpts("P", mixed, PlanOpts{}).RenderNextActions())
 }
 
 func TestRemediationsPlan_AllCancelledDescendants_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -326,7 +326,7 @@ func TestRemediationsPlan_AllCancelledDescendants_REQ_TOPTIER_S18_T4(t *testing.
 		"P2": {Status: ops.StatusDone, Parent: "G2", Children: []string{"OS"}},
 		"OS": {Status: ops.StatusCancelled, Parent: "P2"},
 	}
-	plan := RemediationsPlan("P2", g)
+	plan := RemediationsPlanOpts("P2", g, PlanOpts{})
 	require.Len(t, plan.Alternatives, 1, "done under merged with only-cancelled kids: reopen only")
 	got := plan.RenderNextActions()
 	assert.Contains(t, got, "arm reopen --issue G2")
@@ -340,7 +340,7 @@ func TestRemediationsPlan_AllCancelledDescendants_REQ_TOPTIER_S18_T4(t *testing.
 		"C1": {Status: ops.StatusCancelled, Parent: "P"},
 		"C2": {Status: ops.StatusCancelled, Parent: "P"},
 	}
-	plainPlan := RemediationsPlan("P", plain)
+	plainPlan := RemediationsPlanOpts("P", plain, PlanOpts{})
 	require.Len(t, plainPlan.Alternatives, 2)
 	plainGot := plainPlan.RenderNextActions()
 	assertOptionOwnLines(t, plainGot, 'A', "arm transition --issue P --to cancelled --force")
@@ -398,7 +398,7 @@ func TestRenderOrderNotAlphaSorted_REQ_TOPTIER_S18_T4(t *testing.T) {
 		"Z": {Status: ops.StatusDone, Parent: "E"},
 		"A": {Status: ops.StatusOpen, Parent: "E"},
 	}
-	plan := RemediationsPlan("Z", g)
+	plan := RemediationsPlanOpts("Z", g, PlanOpts{})
 	got := plan.RenderNextActions()
 	require.GreaterOrEqual(t, len(got), 1)
 	assert.Equal(t, "arm reopen --issue E", got[0], "single Alternative renders without Option label")
@@ -426,7 +426,7 @@ func TestTreeRepairPlan_NeverCancelsDone_REQ_TOPTIER_S18_T4(t *testing.T) {
 		"E": {Status: ops.StatusMerged, Children: []string{"R"}},
 		"R": {Status: ops.StatusDone, Parent: "E", Base: "aaa111", Tip: "bbb222"},
 	}
-	plan := RemediationsPlan("R", g)
+	plan := RemediationsPlanOpts("R", g, PlanOpts{})
 	require.Len(t, plan.Alternatives, 1)
 	assert.Equal(t, []string{"arm reopen --issue E"}, plan.Alternatives[0].RunnableCommands())
 	for _, alt := range plan.Alternatives {
