@@ -43,93 +43,132 @@ BAN_RE="$CLASS_RE|$VAR_RE|$XARGS_RE"
 allow_line() {
   local key="$1"
   case "$key" in
-    # none yet — add "path:N) return 0 ;;  # reason" entries here only
+    # Git-hermetic fixtures embed exec.CommandContext(..., "git", ..., "status")
+    # as source text inside string literals; package has its own repoguard check.
+    scripts/repoguard/repoguard_test.go:486) return 0 ;;
+    scripts/repoguard/repoguard_test.go:501) return 0 ;;
     *) return 1 ;;
   esac
 }
 
-flatten() {
+# Flatten \-continuations to a tempfile so NULs/\xff survive (no bash $(...) truncate).
+flatten_to() {
   awk '{
     if (sub(/\\$/, "")) { printf "%s", $0; next }
     print
-  }' "$1"
+  }' "$1" >"$2"
 }
 
 scan_file() {
   local f="$1"
-  local flat hits line_no key kept=""
-  flat="$(flatten "$f")"
-  hits="$(printf '%s\n' "$flat" | grep -nE "$BAN_RE" \
-    | grep -vE '^[[:digit:]]+:[[:space:]]*#' || true)"
-  if [ -z "$hits" ]; then
+  local flat hits_file line_no key kept="" hit
+  flat="$(mktemp)"
+  hits_file="$(mktemp)"
+  flatten_to "$f" "$flat"
+  # LC_ALL=C + grep -a: non-UTF8 (\xff) on a hit line must still fail
+  # (UTF-8 locale + -a alone still drops invalid-byte lines).
+  # Write hits to a file — bash $(...) strips NUL and can hide mid-file hits.
+  LC_ALL=C grep -a -nE "$BAN_RE" "$flat" \
+    | LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' >"$hits_file" || true
+  rm -f "$flat"
+  if [ ! -s "$hits_file" ]; then
+    rm -f "$hits_file"
     return 0
   fi
   if [ "$f" = "$HELPER" ]; then
+    rm -f "$hits_file"
     return 0
   fi
-  while IFS= read -r hit || [ -n "$hit" ]; do
-    [ -z "$hit" ] && continue
+  while IFS= read -r hit || [ -n "${hit:-}" ]; do
+    [ -z "${hit:-}" ] && continue
     line_no="${hit%%:*}"
     key="$f:$line_no"
     if allow_line "$key"; then
       continue
     fi
-    kept="${kept}${hit}"$'\n'
-  done <<EOF
-$hits
-EOF
-  if [ -z "$kept" ]; then
-    return 0
+    kept=1
+    echo "FAIL: $f invokes porcelain ${_st}/${_ho} outside $HELPER:" >&2
+    # Print remaining hits for this file (re-read from start once).
+    break
+  done <"$hits_file"
+  if [ -n "$kept" ]; then
+    while IFS= read -r hit || [ -n "${hit:-}" ]; do
+      [ -z "${hit:-}" ] && continue
+      line_no="${hit%%:*}"
+      key="$f:$line_no"
+      if allow_line "$key"; then
+        continue
+      fi
+      printf '  %s\n' "$hit" >&2
+    done <"$hits_file"
+    fail=1
   fi
-  echo "FAIL: $f invokes porcelain ${_st}/${_ho} outside $HELPER:" >&2
-  printf '%s' "$kept" | sed 's/^/  /' >&2
-  fail=1
+  rm -f "$hits_file"
 }
 
 scan_silencers() {
   local f="$1"
-  local flat hits kept="" hit line_no key
+  local flat hits_file kept="" hit line_no key
   if [ "$f" = "$HELPER" ]; then
     return 0
   fi
-  flat="$(flatten "$f")"
-  hits="$(printf '%s\n' "$flat" | grep -nE "$BAN_RE" \
-    | grep -vE '^[[:digit:]]+:[[:space:]]*#' \
-    | grep -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' || true)"
-  if [ -z "$hits" ]; then
+  flat="$(mktemp)"
+  hits_file="$(mktemp)"
+  flatten_to "$f" "$flat"
+  LC_ALL=C grep -a -nE "$BAN_RE" "$flat" \
+    | LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' \
+    | LC_ALL=C grep -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
+    >"$hits_file" || true
+  rm -f "$flat"
+  if [ ! -s "$hits_file" ]; then
+    rm -f "$hits_file"
     return 0
   fi
-  while IFS= read -r hit || [ -n "$hit" ]; do
-    [ -z "$hit" ] && continue
+  while IFS= read -r hit || [ -n "${hit:-}" ]; do
+    [ -z "${hit:-}" ] && continue
     line_no="${hit%%:*}"
     key="$f:$line_no"
     if allow_line "$key"; then
       continue
     fi
-    kept="${kept}${hit}"$'\n'
-  done <<EOF
-$hits
-EOF
+    kept=1
+    break
+  done <"$hits_file"
   if [ -n "$kept" ]; then
     echo "FAIL: $f silences porcelain ${_st}/${_ho}:" >&2
-    printf '%s' "$kept" | sed 's/^/  /' >&2
+    while IFS= read -r hit || [ -n "${hit:-}" ]; do
+      [ -z "${hit:-}" ] && continue
+      line_no="${hit%%:*}"
+      key="$f:$line_no"
+      if allow_line "$key"; then
+        continue
+      fi
+      printf '  %s\n' "$hit" >&2
+    done <"$hits_file"
     fail=1
   fi
+  rm -f "$hits_file"
 }
 
-# Shared selector: every non-binary under scripts/ (no ext/shebang filter).
-# Skip scripts/repoguard/: Go fixtures quote git/status for hermetic AST tests;
-# that package has its own git-hermetic repoguard check.
+# Shared selector: every scan-eligible file under scripts/ (no ext/shebang filter).
+# Scope = main: only scripts/testdata/* excluded — do NOT skip scripts/repoguard/*.
+# Fail-closed: write list to file; nonzero lister exit → fail (never swallow).
+scan_list=$(mktemp)
+trap 'rm -f "$scan_list"' EXIT
+set +e
+bash "$LISTER" --exclude-testdata scripts >"$scan_list"
+lister_st=$?
+set -e
+if [ "$lister_st" -ne 0 ]; then
+  echo "FAIL: list-guard-scan-files.sh exited $lister_st (porcelain scan aborted)" >&2
+  exit 1
+fi
+
 while IFS= read -r f || [ -n "${f:-}" ]; do
   [ -z "${f:-}" ] && continue
-  case "$f" in
-    scripts/repoguard/*) continue ;;
-  esac
   scan_file "$f"
   scan_silencers "$f"
-done <<EOF
-$(bash "$LISTER" --exclude-testdata scripts)
-EOF
+done <"$scan_list"
 
 if [ "$fail" -ne 0 ]; then
   exit 1
