@@ -102,7 +102,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		Payload:  ops.Payload{Assessment: anonAttJSON},
 	})
 
-	usages := CollectUsage(opList)
+	usages := collectUsage(opList)
 	require.Len(t, usages, 4, "zero/omitted token fields must not produce usage records")
 	assert.Equal(t, "outcome", usages[0].Source)
 	assert.Equal(t, "assessment", usages[1].Source)
@@ -119,7 +119,14 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 		"TASK-E":  {ID: "TASK-E", Type: "task", Parent: "STORY-1", Scope: []string{"pkg/e.go"}, PreferredModel: "claude-haiku-4-5"},
 	}
 
-	report := Estimate(usages, issues, defaultRates())
+	report := estimate(usages, issues, defaultRates())
+	viaOps := Estimate(opList, issues, defaultRates())
+	assert.Equal(t, report.Stories, viaOps.Stories)
+	assert.Equal(t, report.byIssue, viaOps.byIssue)
+	raw, err := json.Marshal(viaOps)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"input_usd_per_mtok"`)
+	assert.NotContains(t, string(raw), "byIssue")
 
 	require.Len(t, report.Stories, 2)
 	byStory := map[string]Totals{}
@@ -129,7 +136,7 @@ func TestStatsCost_REQ_TOPTIER_S11_T2(t *testing.T) {
 	assert.InDelta(t, 3.00+1.00+5.00+3.00, byStory["STORY-1"].USD, 1e-9)
 	assert.Equal(t, 3_000_000, byStory["STORY-1"].InputTokens)
 	assert.Equal(t, 1_000_000, byStory["STORY-1"].OutputTokens)
-	assert.InDelta(t, 3.00, report.ByIssue["TASK-E"].USD, 1e-9)
+	assert.InDelta(t, 3.00, report.byIssue["TASK-E"].USD, 1e-9)
 	assert.InDelta(t, 15.00, byStory["STORY-2"].USD, 1e-9)
 
 	require.GreaterOrEqual(t, len(report.Waves), 2, "overlapping scopes must not share a wave")
@@ -162,8 +169,8 @@ func TestLoadRateTableOverridesDefault(t *testing.T) {
 
 	rates, err := loadRateTable(path)
 	require.NoError(t, err)
-	assert.Equal(t, 10.0, rates[DefaultModel].InputUSDPerMTok)
-	assert.Equal(t, 20.0, rates[DefaultModel].OutputUSDPerMTok)
+	assert.Equal(t, 10.0, rates[defaultModel].InputUSDPerMTok)
+	assert.Equal(t, 20.0, rates[defaultModel].OutputUSDPerMTok)
 	assert.Equal(t, 1.0, rates["claude-haiku-4-5"].InputUSDPerMTok, "unmentioned models keep built-in rates")
 
 	usd := usdFromTokens(1_000_000, 1_000_000, rateFor(rates, "", ""))
@@ -179,18 +186,18 @@ func TestResolveRatesPrefersRepoFile(t *testing.T) {
 
 	rates, err := ResolveRates("", dir)
 	require.NoError(t, err)
-	assert.Equal(t, 7.0, rates[DefaultModel].InputUSDPerMTok)
+	assert.Equal(t, 7.0, rates[defaultModel].InputUSDPerMTok)
 
 	defaults, err := ResolveRates("", t.TempDir())
 	require.NoError(t, err)
-	assert.Equal(t, defaultRates()[DefaultModel], defaults[DefaultModel])
+	assert.Equal(t, defaultRates()[defaultModel], defaults[defaultModel])
 }
 
 func TestUSDFromTokensUsesPerMillion(t *testing.T) {
 	t.Parallel()
-	assert.InDelta(t, 3.0, usdFromTokens(1_000_000, 0, defaultRates()[DefaultModel]), 1e-9)
-	assert.InDelta(t, 15.0, usdFromTokens(0, 1_000_000, defaultRates()[DefaultModel]), 1e-9)
-	assert.InDelta(t, 0.0, usdFromTokens(0, 0, defaultRates()[DefaultModel]), 1e-9)
+	assert.InDelta(t, 3.0, usdFromTokens(1_000_000, 0, defaultRates()[defaultModel]), 1e-9)
+	assert.InDelta(t, 15.0, usdFromTokens(0, 1_000_000, defaultRates()[defaultModel]), 1e-9)
+	assert.InDelta(t, 0.0, usdFromTokens(0, 0, defaultRates()[defaultModel]), 1e-9)
 }
 
 func loadValidatedOps(opsDir string) ([]ops.Op, error) {
@@ -246,9 +253,9 @@ func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	require.NoError(t, os.WriteFile(flagPath, []byte(`{"models":{"default":{"input_usd_per_mtok":1,"output_usd_per_mtok":1}}}`), 0o600))
 	rates, err := ResolveRates(flagPath, "")
 	require.NoError(t, err)
-	assert.Equal(t, 1.0, rates[DefaultModel].InputUSDPerMTok)
+	assert.Equal(t, 1.0, rates[defaultModel].InputUSDPerMTok)
 
-	assert.Equal(t, defaultRates()[DefaultModel], rateFor(nil, "", ""))
+	assert.Equal(t, defaultRates()[defaultModel], rateFor(nil, "", ""))
 	assert.Equal(t, defaultRates()["claude-haiku-4-5"], rateFor(defaultRates(), "claude-haiku-4-5", ""))
 
 	issues := map[string]IssueInfo{
@@ -257,9 +264,9 @@ func TestLoadOpsAndRateFallbacks(t *testing.T) {
 	}
 	assert.NotEmpty(t, storyRoot("A", issues))
 	assert.Equal(t, "missing", storyRoot("missing", issues))
-	assert.False(t, Under("ghost", "STORY", issues))
+	assert.False(t, under("ghost", "STORY", issues))
 
-	usages := CollectUsage([]ops.Op{{
+	usages := collectUsage([]ops.Op{{
 		Type:     ops.OpAssessmentAttested,
 		TargetID: "T1",
 		Payload:  ops.Payload{Assessment: json.RawMessage(`{`)},
@@ -299,7 +306,7 @@ func TestCollectUsage_DedupesIdempotentAssessments(t *testing.T) {
 		return body
 	}
 
-	usages := CollectUsage([]ops.Op{
+	usages := collectUsage([]ops.Op{
 		{Type: ops.OpAssessmentAttested, TargetID: "TASK-A", Payload: ops.Payload{Assessment: att("fp-same", 1_000_000, 0)}},
 		{Type: ops.OpAssessmentAttested, TargetID: "TASK-A", Payload: ops.Payload{Assessment: att("fp-same", 1_000_000, 0)}},
 		{Type: ops.OpAssessmentAttested, TargetID: "TASK-B", Payload: ops.Payload{Assessment: att("fp-same", 1_000_000, 0)}},

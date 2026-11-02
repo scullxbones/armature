@@ -15,23 +15,24 @@ import (
 	"github.com/scullxbones/armature/internal/scopematch"
 )
 
-// DefaultModel is the rate-table key used when a usage record has no model.
-const DefaultModel = "default"
+// defaultModel is the rate-table key used when a usage record has no model.
+const defaultModel = "default"
 
 // DefaultRatesFile is the optional repo-local rate table under the ops worktree.
 const DefaultRatesFile = "cost-rates.json"
 
-// Rate is USD charged per million input/output tokens for one model.
-type Rate struct {
+// rate is USD charged per million input/output tokens for one model.
+type rate struct {
 	InputUSDPerMTok  float64 `json:"input_usd_per_mtok"`
 	OutputUSDPerMTok float64 `json:"output_usd_per_mtok"`
 }
 
-type RateTable map[string]Rate
+// RateTable is the per-model price list Estimate and ResolveRates share.
+type RateTable map[string]rate
 
-// Usage is one recorded token observation (outcome or assessment). Zero counts
+// usage is one recorded token observation (outcome or assessment). Zero counts
 // are unset and never appear here.
-type Usage struct {
+type usage struct {
 	IssueID      string
 	Model        string
 	InputTokens  int
@@ -57,14 +58,14 @@ type Totals struct {
 
 // Report is the --cost view: per-story and per-wave estimates.
 type Report struct {
-	Stories []Totals          `json:"stories"`
-	Waves   []Totals          `json:"waves"`
-	Rates   RateTable         `json:"rates"`
-	ByIssue map[string]Totals `json:"-"`
+	Stories []Totals  `json:"stories"`
+	Waves   []Totals  `json:"waves"`
+	Rates   RateTable `json:"rates"`
+	byIssue map[string]Totals
 }
 
 type rateFile struct {
-	Models map[string]Rate `json:"models"`
+	Models map[string]rate `json:"models"`
 }
 
 func defaultRates() RateTable {
@@ -74,7 +75,7 @@ func defaultRates() RateTable {
 		"claude-opus-4-5":   {InputUSDPerMTok: 15.00, OutputUSDPerMTok: 75.00},
 		"gpt-4.1":           {InputUSDPerMTok: 2.00, OutputUSDPerMTok: 8.00},
 		"gpt-4.1-mini":      {InputUSDPerMTok: 0.40, OutputUSDPerMTok: 1.60},
-		DefaultModel:        {InputUSDPerMTok: 3.00, OutputUSDPerMTok: 15.00},
+		defaultModel:        {InputUSDPerMTok: 3.00, OutputUSDPerMTok: 15.00},
 	}
 }
 
@@ -110,11 +111,11 @@ func ResolveRates(ratesPath, issuesDir string) (RateTable, error) {
 	return defaultRates(), nil
 }
 
-// CollectUsage extracts token-bearing outcome and assessment records. Zero is unset.
+// collectUsage extracts token-bearing outcome and assessment records. Zero is unset.
 // Assessment attestations are deduplicated by issue ID + ResultFingerprint, matching
 // materialize.applyAssessmentAttested, so concurrent idempotent appends are billed once.
-func CollectUsage(opList []ops.Op) []Usage {
-	var out []Usage
+func collectUsage(opList []ops.Op) []usage {
+	var out []usage
 	seenAttestation := map[attestationKey]struct{}{}
 	for _, op := range opList {
 		switch op.Type {
@@ -122,7 +123,7 @@ func CollectUsage(opList []ops.Op) []Usage {
 			if op.Payload.InputTokens == 0 && op.Payload.OutputTokens == 0 {
 				continue
 			}
-			out = append(out, Usage{
+			out = append(out, usage{
 				IssueID:      op.TargetID,
 				Model:        op.Payload.PreferredModel,
 				InputTokens:  op.Payload.InputTokens,
@@ -142,7 +143,7 @@ func CollectUsage(opList []ops.Op) []Usage {
 			if att.InputTokens == 0 && att.OutputTokens == 0 {
 				continue
 			}
-			out = append(out, Usage{
+			out = append(out, usage{
 				IssueID:      op.TargetID,
 				Model:        att.ModelIdentity,
 				InputTokens:  att.InputTokens,
@@ -159,29 +160,34 @@ type attestationKey struct {
 	fingerprint string
 }
 
-func usdFromTokens(inputTokens, outputTokens int, rate Rate) float64 {
+func usdFromTokens(inputTokens, outputTokens int, price rate) float64 {
 	const million = 1_000_000.0
-	return float64(inputTokens)/million*rate.InputUSDPerMTok +
-		float64(outputTokens)/million*rate.OutputUSDPerMTok
+	return float64(inputTokens)/million*price.InputUSDPerMTok +
+		float64(outputTokens)/million*price.OutputUSDPerMTok
 }
 
-func rateFor(table RateTable, model, preferred string) Rate {
+func rateFor(table RateTable, model, preferred string) rate {
 	if table == nil {
 		table = defaultRates()
 	}
-	for _, key := range []string{model, preferred, DefaultModel} {
+	for _, key := range []string{model, preferred, defaultModel} {
 		if key == "" {
 			continue
 		}
-		if rate, ok := table[key]; ok {
-			return rate
+		if price, ok := table[key]; ok {
+			return price
 		}
 	}
-	return table[DefaultModel]
+	return table[defaultModel]
 }
 
-// Estimate aggregates usage into per-issue, per-story, and per-wave dollar totals.
-func Estimate(usages []Usage, issues map[string]IssueInfo, rates RateTable) Report {
+// Estimate collects token-bearing outcome and assessment ops, then aggregates
+// them into per-issue, per-story, and per-wave dollar totals.
+func Estimate(opList []ops.Op, issues map[string]IssueInfo, rates RateTable) Report {
+	return estimate(collectUsage(opList), issues, rates)
+}
+
+func estimate(usages []usage, issues map[string]IssueInfo, rates RateTable) Report {
 	if rates == nil {
 		rates = defaultRates()
 	}
@@ -216,7 +222,7 @@ func Estimate(usages []Usage, issues map[string]IssueInfo, rates RateTable) Repo
 		Stories: sortedTotals(storyBuckets),
 		Waves:   partitionWaves(byIssue, issues),
 		Rates:   rates,
-		ByIssue: byIssue,
+		byIssue: byIssue,
 	}
 	return report
 }
@@ -243,8 +249,8 @@ func storyRoot(issueID string, issues map[string]IssueInfo) string {
 	return last
 }
 
-// Under reports whether issueID is ancestor or equals rootID.
-func Under(issueID, rootID string, issues map[string]IssueInfo) bool {
+// under reports whether issueID is ancestor or equals rootID.
+func under(issueID, rootID string, issues map[string]IssueInfo) bool {
 	seen := map[string]bool{}
 	for cur := issueID; cur != "" && !seen[cur]; cur = issues[cur].Parent {
 		seen[cur] = true
@@ -261,8 +267,8 @@ func Under(issueID, rootID string, issues map[string]IssueInfo) bool {
 // Rollup sums spend for rootID and every descendant.
 func Rollup(report Report, rootID string, issues map[string]IssueInfo) Totals {
 	out := Totals{ID: rootID}
-	for id, tot := range report.ByIssue {
-		if Under(id, rootID, issues) {
+	for id, tot := range report.byIssue {
+		if under(id, rootID, issues) {
 			out.InputTokens += tot.InputTokens
 			out.OutputTokens += tot.OutputTokens
 			out.USD += tot.USD
@@ -349,5 +355,5 @@ func canJoinWave(candidate string, wave []string, issues map[string]IssueInfo) b
 }
 
 func related(a, b string, issues map[string]IssueInfo) bool {
-	return Under(a, b, issues) || Under(b, a, issues)
+	return under(a, b, issues) || under(b, a, issues)
 }
