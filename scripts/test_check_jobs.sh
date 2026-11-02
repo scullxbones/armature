@@ -1125,12 +1125,29 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: ci.yml must fetch closed Alpine git apk set via fetch-alpine-git-apks.sh"
         exit 1
     fi
-    if ! rg -q 'apk add --no-network --allow-untrusted /apks/\*\.apk' "$CI_YML"; then
-        echo "FAIL: ci.yml missing apk add --no-network over sha-checked /apks/*.apk"
+    if rg -n '/apks/\*\.apk' "$CI_YML" | rg -v '^\s*[0-9]+:\s*#' | rg -q .; then
+        echo "FAIL: ci.yml still uses /apks/*.apk glob (must list basenames from sha256 file)"
+        exit 1
+    fi
+    if ! rg -q 'alpine-v322-git-apks\.sha256' "$CI_YML"; then
+        echo "FAIL: ci.yml must derive apk basenames from alpine-v322-git-apks.sha256"
+        exit 1
+    fi
+    if ! rg -q 'apk add --no-network --allow-untrusted \$apks' "$CI_YML"; then
+        echo "FAIL: ci.yml missing apk add --no-network over explicit \$apks basenames"
         exit 1
     fi
     if ! rg -q 'apk add --no-network' "$CI_YML"; then
         echo "FAIL: ci.yml missing apk add --no-network"
+        exit 1
+    fi
+    RELEASE_YML="$REPO_ROOT/.github/workflows/release.yml"
+    if ! rg -q 'ci-path-shadow-engines\.sh' "$RELEASE_YML"; then
+        echo "FAIL: release.yml missing PATH-shadow install"
+        exit 1
+    fi
+    if ! rg -q 'ci-path-shadow-selfcheck\.sh' "$RELEASE_YML"; then
+        echo "FAIL: release.yml missing PATH-shadow self-check"
         exit 1
     fi
     if ! rg -q 'check-bash32:' "$CI_YML"; then
@@ -1152,6 +1169,7 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
 
     # Porcelain confined + image-pin selftest (refs blocking; engine words advisory).
+    # Guards must exit 0 here (assertion strings below avoid banned class tokens).
     bash "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$REPO_ROOT" >/dev/null
     bash "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$REPO_ROOT" >/dev/null
     bash "$REPO_ROOT/scripts/check-workflow-image-pins.sh" "$REPO_ROOT" >/dev/null
@@ -1161,13 +1179,58 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
     for bypass in git-c-status.sh var-git-status.sh alias-git-status.sh \
+        eval-git-status.sh xargs-git.sh \
         cmdsub-status-or-true.sh status-semicolon.sh status-pipe-cat.sh \
-        func-git-status.sh no-pager-status-or-true.sh; do
+        func-git-status.sh no-pager-status-or-true.sh extless-git-status; do
         if [[ ! -f "$REPO_ROOT/scripts/testdata/porcelain-bypass/$bypass" ]]; then
             echo "FAIL: missing porcelain bypass fixture $bypass"
             exit 1
         fi
     done
+    # Split tokens so this file is not itself a porcelain/xargs/command-p hit.
+    _alias_pat="alias gs='gi"
+    _alias_pat="${_alias_pat}t sta"
+    _alias_pat="${_alias_pat}tus'"
+    if ! rg -F -q "$_alias_pat" "$REPO_ROOT/scripts/testdata/porcelain-bypass/alias-git-status.sh"; then
+        echo "FAIL: alias-git-status.sh must be a real alias fixture"
+        exit 1
+    fi
+    _xa='xar'; _xa="${_xa}gs"
+    _gw='gi'; _gw="${_gw}t"
+    if ! rg -q "${_xa}[[:space:]]+${_gw}" "$REPO_ROOT/scripts/testdata/porcelain-bypass/xargs-git.sh"; then
+        echo "FAIL: xargs-git.sh fixture missing ${_xa}→${_gw} form"
+        exit 1
+    fi
+    if ! rg -q 'XARGS_RE=' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain guard missing XARGS_RE ban"
+        exit 1
+    fi
+    if ! rg -q 'is_scanned_script' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain guard must scan extensionless scripts via is_scanned_script"
+        exit 1
+    fi
+    if ! rg -q 'ARM_PORCELAIN_SKIP_SELFTEST' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain guard must support SKIP_SELFTEST for real-guard selftest"
+        exit 1
+    fi
+    if ! rg -q 'real guard' "$REPO_ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh"; then
+        echo "FAIL: porcelain selftest must drive the real guard"
+        exit 1
+    fi
+    for engfix in banned-export.sh banned-command-p-docker.sh banned-abs-docker.sh; do
+        if [[ ! -f "$REPO_ROOT/scripts/testdata/engine-bin-env/$engfix" ]]; then
+            echo "FAIL: missing engine-bin ban fixture $engfix"
+            exit 1
+        fi
+    done
+    if ! rg -q 'CMD_P_RE=' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: check-no-engine-bin-env.sh missing command -p <engine> ban"
+        exit 1
+    fi
+    if ! rg -q 'ABS_RE=' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: check-no-engine-bin-env.sh missing absolute-path engine ban"
+        exit 1
+    fi
     if ! rg -q 'alpine:latest' "$REPO_ROOT/scripts/testdata/workflow-image-pins/unpinned/container-string.yml"; then
         echo "FAIL: container-string fixture must use alpine:latest"
         exit 1
@@ -1177,7 +1240,8 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         exit 1
     fi
 
-    # Wrapper airtight: reject positionals-before-key, image-shaped keys, missing --.
+    # Wrapper airtight: reject positionals-before-key, image-shaped keys, missing --,
+    # and dropped docker-run flags outside the closed allowlist.
     set +e
     wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" --rm bash-3.2.57 -- true 2>&1)
     wst=$?
@@ -1200,6 +1264,28 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     set -e
     if [[ $wst -eq 0 ]]; then
         echo "FAIL: wrapper accepted missing -- separator: $wout"
+        exit 1
+    fi
+    set +e
+    wout=$(bash "$REPO_ROOT/scripts/run-container-image.sh" bash-3.2.57 --privileged -- true 2>&1)
+    wst=$?
+    set -e
+    if [[ $wst -eq 0 ]]; then
+        echo "FAIL: wrapper accepted dropped --privileged flag: $wout"
+        exit 1
+    fi
+    if ! printf '%s\n' "$wout" | rg -q 'unknown/disallowed docker-run flag'; then
+        echo "FAIL: wrapper --privileged rejection missing disallow message: $wout"
+        exit 1
+    fi
+    if ! rg -q 'Closed docker-run flag set' "$REPO_ROOT/scripts/run-container-image.sh"; then
+        echo "FAIL: run-container-image.sh missing closed flag-set documentation"
+        exit 1
+    fi
+    # Closed set must not re-admit dropped flags.
+    flag_allow=$(sed -n '/^flag_bool/,/^}/p; /^flag_value/,/^}/p' "$REPO_ROOT/scripts/run-container-image.sh")
+    if printf '%s\n' "$flag_allow" | rg -q 'privileged|publish|health-cmd|--device'; then
+        echo "FAIL: wrapper flag allowlist still contains dropped flags"
         exit 1
     fi
 

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fixture: extensionless scripts/ file with porcelain git must be scanned.
+set -euo pipefail
+git status --porcelain
