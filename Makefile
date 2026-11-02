@@ -34,7 +34,7 @@ help:
 	@echo "  make coverage            - Generate coverage report (coverage.html)"
 	@echo "  make coverage-check      - Run coverage then fail if cmd < 83% or internal < 86%"
 	@echo "  make test-coverage-check - Test coverage-check.sh threshold logic itself (pass/fail fixtures)"
-	@echo "  make test-pr-coverage-quote-check - Test pr-coverage-quote-check.sh (match/mismatch/no-quote fixtures)"
+	@echo "  make test-pr-coverage-quote-check - Test pr-coverage-quote-check.sh (0.10 tol / missing-quote fail fixtures)"
 	@echo "  make lint                - Run golangci-lint and ADR doc lint"
 	@echo "  make container-run       - Run a manifest-keyed image (KEY=... ARGS='run flags' CMD='...')"
 	@echo "  make mutate              - Run mutation testing on core packages"

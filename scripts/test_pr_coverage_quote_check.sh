@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Fixture test for scripts/pr-coverage-quote-check.sh.
 #
-# Locks in:
+# Locks in (REQ coverage-quote boundaries):
 #   1. match — body quotes equal log → exit 0
-#   2. mismatch — body internal % disagrees with log → exit 1
-#   3. no-quote — empty / docs-only body → soft-pass exit 0
-#   4. table form — "| check-core coverage | **internal …**, cmd … |" match
-#   5. cmd-only mismatch still fails when only cmd is quoted
+#   2. REQ |diff|=0.10 — inclusive pass on cmd and internal
+#   3. REQ |diff|=0.11 — fail
+#   4. REQ missing quote — empty / docs-only / cmd-only → fail (no soft-pass)
+#   5. REQ wrong-package — non-cmd/non-internal coverage token → fail
+#   6. table form — "| check-core coverage | **internal …**, cmd … |" match
 #
 # Wired into make check-static via test-pr-coverage-quote-check (not into
 # check-core: local make check has no PR body).
@@ -51,8 +52,8 @@ if [[ $STATUS -ne 0 ]]; then
 	echo "  FAIL: expected exit 0, got $STATUS"
 	echo "$OUTPUT"
 	FAILURES=$((FAILURES + 1))
-elif ! grep -q "OK: PR body coverage quotes match log" <<<"$OUTPUT"; then
-	echo "  FAIL: expected OK match message"
+elif ! grep -q "OK: PR body coverage quotes within" <<<"$OUTPUT"; then
+	echo "  FAIL: expected OK within-tol message"
 	echo "$OUTPUT"
 	FAILURES=$((FAILURES + 1))
 else
@@ -60,22 +61,19 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Test 2: mismatched internal % fails
+# Test 2: REQ |diff|=0.10 inclusive pass
 # ----------------------------------------------------------------------------
-echo "Test 2: pr-coverage-quote-check fails when body internal % disagrees..."
+echo "Test 2: REQ |body−log|=0.10 passes (inclusive)..."
 
-MISMATCH_BODY="$WORKDIR/mismatch.md"
-cat >"$MISMATCH_BODY" <<'EOF'
-Ready note quoted **internal 86.08%**, cmd 83.75% from an older check-core.
+TOL_PASS="$WORKDIR/tol_pass.md"
+cat >"$TOL_PASS" <<'EOF'
+cmd coverage: 83.89%
+internal coverage: 85.97%
 EOF
 
-run_check "$MISMATCH_BODY"
-if [[ $STATUS -eq 0 ]]; then
-	echo "  FAIL: expected non-zero exit"
-	echo "$OUTPUT"
-	FAILURES=$((FAILURES + 1))
-elif ! grep -q "FAIL: body quotes internal coverage 86.08% but log has 86.07%" <<<"$OUTPUT"; then
-	echo "  FAIL: expected internal mismatch message"
+run_check "$TOL_PASS"
+if [[ $STATUS -ne 0 ]]; then
+	echo "  FAIL: expected exit 0 for |diff|=0.10, got $STATUS"
 	echo "$OUTPUT"
 	FAILURES=$((FAILURES + 1))
 else
@@ -83,9 +81,33 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Test 3: no coverage quote soft-passes
+# Test 3: REQ |diff|=0.11 fail
 # ----------------------------------------------------------------------------
-echo "Test 3: pr-coverage-quote-check soft-passes when body has no coverage quotes..."
+echo "Test 3: REQ |body−log|=0.11 fails..."
+
+TOL_FAIL="$WORKDIR/tol_fail.md"
+cat >"$TOL_FAIL" <<'EOF'
+cmd coverage: 83.90%
+internal coverage: 86.07%
+EOF
+
+run_check "$TOL_FAIL"
+if [[ $STATUS -eq 0 ]]; then
+	echo "  FAIL: expected non-zero exit for |diff|=0.11"
+	echo "$OUTPUT"
+	FAILURES=$((FAILURES + 1))
+elif ! grep -q "FAIL: body quotes cmd coverage 83.90% but log has 83.79%" <<<"$OUTPUT"; then
+	echo "  FAIL: expected cmd |diff|>0.10 message"
+	echo "$OUTPUT"
+	FAILURES=$((FAILURES + 1))
+else
+	echo "  PASS"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 4: REQ missing quote fails (no soft-pass)
+# ----------------------------------------------------------------------------
+echo "Test 4: REQ missing coverage quotes fail (no soft-pass)..."
 
 EMPTY_BODY="$WORKDIR/empty.md"
 cat >"$EMPTY_BODY" <<'EOF'
@@ -93,12 +115,54 @@ Docs-only PR. No numbers here.
 EOF
 
 run_check "$EMPTY_BODY"
-if [[ $STATUS -ne 0 ]]; then
-	echo "  FAIL: expected exit 0 soft-pass, got $STATUS"
+if [[ $STATUS -eq 0 ]]; then
+	echo "  FAIL: expected non-zero exit for quote-less body"
 	echo "$OUTPUT"
 	FAILURES=$((FAILURES + 1))
-elif ! grep -q "OK: no coverage quotes in body (soft-pass)" <<<"$OUTPUT"; then
-	echo "  FAIL: expected soft-pass message"
+elif ! grep -q "FAIL: PR body must quote both cmd and internal coverage percentages" <<<"$OUTPUT"; then
+	echo "  FAIL: expected missing-quote message"
+	echo "$OUTPUT"
+	FAILURES=$((FAILURES + 1))
+else
+	echo "  PASS"
+fi
+
+CMD_ONLY="$WORKDIR/cmd_only.md"
+cat >"$CMD_ONLY" <<'EOF'
+cmd coverage: 83.79%
+EOF
+
+run_check "$CMD_ONLY"
+if [[ $STATUS -eq 0 ]]; then
+	echo "  FAIL: expected non-zero exit for cmd-only body (internal missing)"
+	echo "$OUTPUT"
+	FAILURES=$((FAILURES + 1))
+elif ! grep -q "FAIL: PR body must quote both cmd and internal coverage percentages" <<<"$OUTPUT"; then
+	echo "  FAIL: expected missing-quote message for cmd-only"
+	echo "$OUTPUT"
+	FAILURES=$((FAILURES + 1))
+else
+	echo "  PASS (cmd-only)"
+fi
+
+# ----------------------------------------------------------------------------
+# Test 5: REQ wrong-package quotes fail
+# ----------------------------------------------------------------------------
+echo "Test 5: REQ wrong-package coverage token fails..."
+
+WRONG_PKG="$WORKDIR/wrong_pkg.md"
+cat >"$WRONG_PKG" <<'EOF'
+scripts coverage: 83.79%
+mutate coverage: 86.07%
+EOF
+
+run_check "$WRONG_PKG"
+if [[ $STATUS -eq 0 ]]; then
+	echo "  FAIL: expected non-zero exit for wrong-package quotes"
+	echo "$OUTPUT"
+	FAILURES=$((FAILURES + 1))
+elif ! grep -q "FAIL: PR body must quote both cmd and internal coverage percentages" <<<"$OUTPUT"; then
+	echo "  FAIL: expected missing cmd/internal message for wrong-package body"
 	echo "$OUTPUT"
 	FAILURES=$((FAILURES + 1))
 else
@@ -106,9 +170,9 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Test 4: table form from ready notes matches
+# Test 6: table form from ready notes matches
 # ----------------------------------------------------------------------------
-echo "Test 4: pr-coverage-quote-check accepts table-form coverage quotes..."
+echo "Test 6: pr-coverage-quote-check accepts table-form coverage quotes..."
 
 TABLE_BODY="$WORKDIR/table.md"
 cat >"$TABLE_BODY" <<'EOF'
@@ -120,31 +184,8 @@ if [[ $STATUS -ne 0 ]]; then
 	echo "  FAIL: expected exit 0 for matching table form, got $STATUS"
 	echo "$OUTPUT"
 	FAILURES=$((FAILURES + 1))
-elif ! grep -q "OK: PR body coverage quotes match log" <<<"$OUTPUT"; then
-	echo "  FAIL: expected OK match message (not soft-pass) for table form"
-	echo "$OUTPUT"
-	FAILURES=$((FAILURES + 1))
-else
-	echo "  PASS"
-fi
-
-# ----------------------------------------------------------------------------
-# Test 5: cmd-only quote that disagrees still fails
-# ----------------------------------------------------------------------------
-echo "Test 5: pr-coverage-quote-check fails on cmd-only mismatch..."
-
-CMD_ONLY="$WORKDIR/cmd_only.md"
-cat >"$CMD_ONLY" <<'EOF'
-cmd coverage: 83.75%
-EOF
-
-run_check "$CMD_ONLY"
-if [[ $STATUS -eq 0 ]]; then
-	echo "  FAIL: expected non-zero exit for cmd-only mismatch"
-	echo "$OUTPUT"
-	FAILURES=$((FAILURES + 1))
-elif ! grep -q "FAIL: body quotes cmd coverage 83.75% but log has 83.79%" <<<"$OUTPUT"; then
-	echo "  FAIL: expected cmd mismatch message"
+elif ! grep -q "OK: PR body coverage quotes within" <<<"$OUTPUT"; then
+	echo "  FAIL: expected OK within-tol message for table form"
 	echo "$OUTPUT"
 	FAILURES=$((FAILURES + 1))
 else

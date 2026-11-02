@@ -5,6 +5,9 @@ on:
     branches:
       - main
   pull_request:
+    # edited: late PR-body coverage paste must re-run quote-check without
+    # paying the heavy suite (heavy jobs skip action==edited below).
+    types: [opened, synchronize, reopened, edited]
   # github.event_name in a called workflow is the caller's event (push on
   # tags), not workflow_call — skip non-matrix jobs via this input instead.
   workflow_call:
@@ -30,6 +33,8 @@ env:
 
 jobs:
   test-os:
+    # Body-only edits must not re-pay the OS matrix.
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     strategy:
       fail-fast: false
       matrix:
@@ -105,7 +110,7 @@ jobs:
   # is the fail-closed proof (bash -n + mutations). Host Bash 4+ must make
   # each mutation fixture exit 0; Bash 3.2 must make each exit non-zero.
   check-bash32:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -145,7 +150,7 @@ jobs:
               && bash scripts/ci-bash32.sh /src'
 
   check-core:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -172,19 +177,66 @@ jobs:
       - run: make check-job JOB=check-core
         env:
           CHECK_INSTALL_TOOLS: "1"
-      # Soft-pass when the PR body has no coverage quotes. Reuses coverage.out
-      # from check-core (no suite re-run); GITHUB_EVENT_PATH only — no gh API.
+      # Fail-closed quote check (|diff|≤0.10). Reuses coverage.out from this
+      # job (no suite re-run); GITHUB_EVENT_PATH only — no gh API. Artifact
+      # lets the edited-only job re-compare a late body paste.
       - name: PR body coverage quotes match this job's coverage.out
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
           test -f coverage.out
-          scripts/coverage-check.sh . coverage.out | tee /tmp/coverage-check.log
+          scripts/coverage-check.sh . coverage.out | tee coverage-check.log
           jq -r '.pull_request.body // empty' "$GITHUB_EVENT_PATH" > /tmp/pr-body.md
-          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md /tmp/coverage-check.log
+          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md coverage-check.log
+      - name: Upload coverage-check.log for late PR body paste
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-check-${{ github.event.pull_request.head.sha }}
+          path: coverage-check.log
+          retention-days: 5
+          if-no-files-found: error
+
+  # Body-edit only: re-compare PR body to the head SHA's prior coverage-check
+  # log. Does not re-run UNIT_PACKAGES / mutate / OS matrix.
+  pr-coverage-quotes-on-edit:
+    if: ${{ !inputs.os-matrix-only && github.event_name == 'pull_request' && github.event.action == 'edited' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Download coverage-check.log for this head SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          name="coverage-check-${HEAD_SHA}"
+          # Newest non-expired artifact with this exact name (prior check-core).
+          id="$(gh api "repos/${REPO}/actions/artifacts?name=${name}&per_page=10" \
+            --jq '[.artifacts[] | select(.expired==false)] | .[0].id // empty')"
+          if [ -z "$id" ]; then
+            echo "FAIL: no coverage-check artifact named ${name}" >&2
+            echo "  Push a commit (or re-run check-core) before relying on a late body paste." >&2
+            exit 1
+          fi
+          gh api "repos/${REPO}/actions/artifacts/${id}/zip" > /tmp/coverage-check.zip
+          unzip -o -d /tmp/coverage-check-art /tmp/coverage-check.zip
+          test -f /tmp/coverage-check-art/coverage-check.log
+          cp /tmp/coverage-check-art/coverage-check.log coverage-check.log
+      - name: PR body coverage quotes match prior coverage-check.log
+        run: |
+          set -euo pipefail
+          jq -r '.pull_request.body // empty' "$GITHUB_EVENT_PATH" > /tmp/pr-body.md
+          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md coverage-check.log
 
   check-static:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -230,7 +282,7 @@ jobs:
           CHECK_INSTALL_TOOLS: "1"
 
   mutate:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -257,7 +309,7 @@ jobs:
   # make check: PR merge SHAs have unscoped subjects, so check-commit-subjects
   # would exit before the suite. Partitions do not need origin/main.
   check-git-2-34:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -322,7 +374,7 @@ jobs:
   # automated path for make validate-graph; it materializes the ops branch
   # because a PR checkout has no .armature worktree.
   validate-graph:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -353,7 +405,7 @@ jobs:
         run: make validate-graph
 
   e2eharness:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -381,7 +433,7 @@ jobs:
         run: make test-e2eharness
 
   quickstart:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -409,7 +461,7 @@ jobs:
         run: bash scripts/quickstart_check.sh
 
   govulncheck:
-    if: ${{ !inputs.os-matrix-only }}
+    if: ${{ !inputs.os-matrix-only && (github.event_name != 'pull_request' || github.event.action != 'edited') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -728,6 +728,94 @@ else
     fail "${ORIGIN_MAIN_RESULT:-origin/main fetch mapping failed}"
 fi
 
+echo "Test 10b: PR coverage quote-check re-runs on body edited without heavy suite..."
+
+QUOTE_EDIT_RESULT=$(python3 - "$CI_YML" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+# pull_request types must include edited (late paste).
+# Match the on: pull_request: block's types list (not job-level if:).
+on_pr = re.search(
+    r"(?m)^  pull_request:\n(?:.*\n)*?    types:\s*\[([^\]]+)\]",
+    text,
+)
+if not on_pr:
+    print("FAIL: pull_request types: list missing (need edited for late body paste)")
+    sys.exit(1)
+types = {t.strip() for t in on_pr.group(1).split(",")}
+for need in ("opened", "synchronize", "reopened", "edited"):
+    if need not in types:
+        print(f"FAIL: pull_request types missing {need!r} (got {sorted(types)})")
+        sys.exit(1)
+
+if "pr-coverage-quotes-on-edit:" not in text:
+    print("FAIL: missing pr-coverage-quotes-on-edit job for body-edited recompare")
+    sys.exit(1)
+if "github.event.action == 'edited'" not in text and 'github.event.action == "edited"' not in text:
+    print("FAIL: pr-coverage-quotes-on-edit / heavy-skip must key off action == edited")
+    sys.exit(1)
+
+# Heavy partition jobs must skip edited so body paste does not re-pay the suite.
+heavy = ("check-core", "check-static", "mutate", "check-bash32", "check-git-2-34",
+         "validate-graph", "e2eharness", "quickstart", "govulncheck", "test-os")
+jobs = {}
+current = None
+buf = []
+in_jobs = False
+for line in text.splitlines():
+    if not in_jobs:
+        if line == "jobs:" or line.startswith("jobs:"):
+            in_jobs = True
+        continue
+    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
+        break
+    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+    if m:
+        if current is not None:
+            jobs[current] = "\n".join(buf)
+        current = m.group(1)
+        buf = []
+        continue
+    if current is not None:
+        buf.append(line)
+if current is not None:
+    jobs[current] = "\n".join(buf)
+
+skip_re = re.compile(
+    r"github\.event_name\s*!=\s*'pull_request'\s*\|\|\s*github\.event\.action\s*!=\s*'edited'"
+)
+for jid in heavy:
+    body = jobs.get(jid, "")
+    # Job-level if: is among the first non-step keys; search whole body is fine.
+    if not skip_re.search(body):
+        print(f"FAIL: job {jid} must skip pull_request edited (avoid heavy re-run on body paste)")
+        sys.exit(1)
+
+edit_job = jobs.get("pr-coverage-quotes-on-edit", "")
+if "github.event.action == 'edited'" not in edit_job and 'github.event.action == "edited"' not in edit_job:
+    print("FAIL: pr-coverage-quotes-on-edit must run only on edited")
+    sys.exit(1)
+if "pr-coverage-quote-check.sh" not in edit_job:
+    print("FAIL: pr-coverage-quotes-on-edit must invoke pr-coverage-quote-check.sh")
+    sys.exit(1)
+if "coverage-check-${{ github.event.pull_request.head.sha }}" not in text and \
+   "coverage-check-${{github.event.pull_request.head.sha}}" not in text:
+    print("FAIL: check-core must upload coverage-check-<head.sha> artifact for edited recompare")
+    sys.exit(1)
+
+print("PASS")
+PY
+) && QUOTE_EDIT_STATUS=0 || QUOTE_EDIT_STATUS=$?
+
+if [[ $QUOTE_EDIT_STATUS -eq 0 ]]; then
+    pass "PR edited re-runs quote-check; heavy jobs skip edited"
+else
+    fail "${QUOTE_EDIT_RESULT:-PR edited quote-check workflow assertion failed}"
+fi
+
 echo "Test 11: check-commit-subjects fails loud on empty and merge-only ranges..."
 
 CCS_DEMO=$(mktemp -d)

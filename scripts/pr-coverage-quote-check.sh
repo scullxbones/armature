@@ -3,11 +3,13 @@
 #
 # Usage: pr-coverage-quote-check.sh <body-file> <coverage-log>
 #
-# Soft-pass (exit 0) when the body has no coverage quote patterns — docs-only
-# / empty bodies are fine. Fail when the body quotes cmd and/or internal %
-# that disagree with the log lines produced by coverage-check.sh:
-#   cmd coverage: 83.79%
-#   internal coverage: 86.07%
+# Fail-closed: the body must quote both cmd and internal coverage %. Soft-pass
+# on empty / quote-less bodies is intentionally gone — late pastes and skipped
+# pastes must not greenwash check-core.
+#
+# Tolerance: each quoted tree passes when |body − log| ≤ 0.10 absolute points;
+# 0.11 fails. The coverage-check.sh internal ≥ 86% floor is a separate hard
+# gate and is not relaxed here.
 #
 # Accepted body shapes (non-exhaustive):
 #   cmd coverage: 83.75%
@@ -22,6 +24,9 @@ set -euo pipefail
 
 BODY=${1:?usage: pr-coverage-quote-check.sh <body-file> <coverage-log>}
 LOG=${2:?usage: pr-coverage-quote-check.sh <body-file> <coverage-log>}
+
+# Absolute tolerance in coverage points (inclusive).
+TOL=0.10
 
 if [ ! -f "$BODY" ]; then
 	echo "FAIL: body file not found: $BODY" >&2
@@ -71,9 +76,11 @@ END {
 BODY_CMD=$(printf '%s\n' "$EVAL" | sed -n 's/^cmd=//p' | head -n 1)
 BODY_INT=$(printf '%s\n' "$EVAL" | sed -n 's/^int=//p' | head -n 1)
 
-if [ -z "${BODY_CMD}" ] && [ -z "${BODY_INT}" ]; then
-	echo "OK: no coverage quotes in body (soft-pass)"
-	exit 0
+if [ -z "${BODY_CMD}" ] || [ -z "${BODY_INT}" ]; then
+	echo "FAIL: PR body must quote both cmd and internal coverage percentages" >&2
+	echo "  body cmd: ${BODY_CMD:-<missing>}" >&2
+	echo "  body internal: ${BODY_INT:-<missing>}" >&2
+	exit 1
 fi
 
 if [ -z "${LOG_CMD}" ] || [ -z "${LOG_INT}" ]; then
@@ -82,13 +89,22 @@ if [ -z "${LOG_CMD}" ] || [ -z "${LOG_INT}" ]; then
 	exit 1
 fi
 
+# |body − log| ≤ TOL → 0; else 1. Bash 3.2 has no float ops — awk decides.
+within_tol() {
+	awk -v b="$1" -v l="$2" -v tol="$TOL" 'BEGIN {
+		d = b - l
+		if (d < 0) d = -d
+		exit (d <= tol + 0) ? 0 : 1
+	}'
+}
+
 FAIL=0
-if [ -n "${BODY_CMD}" ] && [ "${BODY_CMD}" != "${LOG_CMD}" ]; then
-	echo "FAIL: body quotes cmd coverage ${BODY_CMD}% but log has ${LOG_CMD}%" >&2
+if ! within_tol "${BODY_CMD}" "${LOG_CMD}"; then
+	echo "FAIL: body quotes cmd coverage ${BODY_CMD}% but log has ${LOG_CMD}% (|diff| > ${TOL})" >&2
 	FAIL=1
 fi
-if [ -n "${BODY_INT}" ] && [ "${BODY_INT}" != "${LOG_INT}" ]; then
-	echo "FAIL: body quotes internal coverage ${BODY_INT}% but log has ${LOG_INT}%" >&2
+if ! within_tol "${BODY_INT}" "${LOG_INT}"; then
+	echo "FAIL: body quotes internal coverage ${BODY_INT}% but log has ${LOG_INT}% (|diff| > ${TOL})" >&2
 	FAIL=1
 fi
 
@@ -96,5 +112,5 @@ if [ "$FAIL" -ne 0 ]; then
 	exit 1
 fi
 
-echo "OK: PR body coverage quotes match log (cmd ${LOG_CMD}%, internal ${LOG_INT}%)"
+echo "OK: PR body coverage quotes within ${TOL} of log (cmd ${BODY_CMD}% ~ ${LOG_CMD}%, internal ${BODY_INT}% ~ ${LOG_INT}%)"
 exit 0
