@@ -302,8 +302,8 @@ func TestRestorePlan_UnreachableOrigin_FailClosed_REQ_TOPTIER_S12_T1(t *testing.
 func TestVerify_TruncatedBundle_RealAdapter_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
 	repo, _, _ := setupOpsOrigin(t)
-	// Enlarge the tip so the pack is not tiny; header-only truncation must fail
-	// when verified via fetch into an empty bare (not list-heads alone).
+	// Header-only truncation must fail when verified via fetch into an empty bare
+	// (not list-heads alone).
 	blob := filepath.Join(repo, "payload.bin")
 	require.NoError(t, os.WriteFile(blob, make([]byte, 64*1024), 0o600))
 	gittest.Git(t, repo, "add", "payload.bin")

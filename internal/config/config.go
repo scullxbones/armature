@@ -22,8 +22,7 @@ const GatesFileName = "gates.json"
 // a bare number of minutes so existing config files load unchanged.
 type TTLMinutes int
 
-// Duration returns the TTL as a time.Duration. Overflow/negative counts yield 0;
-// D10 rejects those values via durationFromCount before they are relied on.
+// Duration returns the TTL as a time.Duration. Overflow and negative counts yield 0.
 func (m TTLMinutes) Duration() time.Duration {
 	d, err := durationFromCount(int64(m), time.Minute)
 	if err != nil {
@@ -32,8 +31,7 @@ func (m TTLMinutes) Duration() time.Duration {
 	return d
 }
 
-// Seconds returns the TTL as whole seconds. Overflow/negative counts yield 0;
-// same bounds as Duration (via durationFromCount).
+// Seconds returns the TTL as whole seconds. Overflow and negative counts yield 0.
 func (m TTLMinutes) Seconds() int64 {
 	d, err := durationFromCount(int64(m), time.Minute)
 	if err != nil {

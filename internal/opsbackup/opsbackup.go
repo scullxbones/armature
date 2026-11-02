@@ -16,27 +16,15 @@ import (
 const (
 	// OpsBranch is the unprotected orphan coordination branch.
 	OpsBranch = "_armature"
-	// TrackingRef is the conventional published tip name
-	// (refs/remotes/origin/_armature). Ops-backup never writes it: snapshot
-	// fetches into per-run refs under runTrackingNS via BeginPerRunRef +
-	// FetchBranchToRef (empty --refmap= so the remote's configured refspec
-	// cannot also update this shared tip under concurrency). restore-plan
-	// stages only under refs/armature-tmp/<run-id>/ inside the clone (lease +
-	// crash-safe sweep; never refs/remotes/origin/*).
-	TrackingRef = "refs/remotes/origin/_armature"
-	// LiveRef is the local ops branch. Snapshot must never rewind it.
-	LiveRef = "refs/heads/_armature"
 	// AdvertisedRef is the tip name written into the bundle header for restore.
 	AdvertisedRef = "refs/heads/_armature"
-	// AsideBranch is the I2-safe publish target when tips diverge.
-	AsideBranch = "_armature-recovered"
 	// AsideRef is the full aside ref name.
 	AsideRef = "refs/heads/_armature-recovered"
 
 	// runTrackingNS is the sibling namespace for per-run origin tip fetches
-	// during snapshot. Never nest under TrackingRef — Git cannot create
-	// children while a parent ref exists, and concurrent crons must not share
-	// one mutable tip.
+	// during snapshot. Never nest under refs/remotes/origin/_armature — Git
+	// cannot create children while a parent ref exists, and concurrent crons
+	// must not share one mutable tip.
 	runTrackingNS = "refs/remotes/origin/_armature-run"
 )
 
@@ -108,8 +96,8 @@ type RestorePlan struct {
 // ErrDiverge is returned by PlanRestore when tips diverge (aside only).
 var ErrDiverge = errors.New("ops-backup: recovered tip diverges from origin/_armature; publish aside to _armature-recovered and escalate")
 
-// Snapshot refreshes the published tip via a per-run tracking ref (sibling of
-// TrackingRef; never writes the shared tip), then writes a bundle that
+// Snapshot refreshes the published tip via a per-run tracking ref (never
+// writes refs/remotes/origin/_armature), then writes a bundle that
 // advertises refs/heads/_armature. Failed refresh aborts before creating the
 // output. Live refs/heads/_armature is never moved. On bundle failure a
 // pre-existing --output path is left untouched (temp file + rename).

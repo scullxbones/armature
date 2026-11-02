@@ -272,11 +272,6 @@ func renderDoctorHuman(cmd *cobra.Command, report doctor.Report, verbose, explai
 	}
 }
 
-// doctorCheckGuidance is the shape-agnostic coverage entry point (empty finding).
-func doctorCheckGuidance(check string) (explanation string, suggested []string) {
-	return doctorCheckGuidanceFor(doctor.Finding{Check: check}, nil, promotion.PlanOpts{})
-}
-
 func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpts) (explanation string, suggested []string) {
 	switch f.Check {
 	case "D1":
@@ -329,9 +324,6 @@ const d14Explanation = "An issue is still done while its parent is already merge
 	"done→merged promotion — or open/claimed work sits under a merged ancestor. " +
 	"Merged-under-cancelled parents are not this check."
 
-// enrichD14TreeConsistency merges promotion.TreeConsistencyViolations into the
-// D14 finding so doctor CLI reports every open/claimed under a merged ancestor
-// via the same invariant claim refuses.
 func enrichD14TreeConsistency(report *doctor.Report, graph promotion.Graph) {
 	if report == nil || graph == nil {
 		return

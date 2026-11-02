@@ -1,5 +1,3 @@
-# Late PR-body coverage paste recompare.
-#
 # Own workflow so body `edited` never emits required CI job names
 # (check-core, mutate, …) as skipped. Polls for the head SHA's
 # coverage-check artifact from check-core (upload-before-compare) and

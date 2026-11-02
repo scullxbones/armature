@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// packageFixtures holds TestMain-prepared shared fixtures for cmd/armature tests.
 type packageFixtures struct {
 	armBin        string
 	layoutFixture gittest.Fixture
@@ -104,7 +103,6 @@ func packageCwdStateDirNames() []string {
 	}
 }
 
-// packageCwdStateDirLeak names state-dir files present in the package cwd.
 func packageCwdStateDirLeak() string {
 	var found []string
 	for _, name := range packageCwdStateDirNames() {

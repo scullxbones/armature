@@ -21,7 +21,6 @@ const defaultModel = "default"
 // DefaultRatesFile is the optional repo-local rate table under the ops worktree.
 const DefaultRatesFile = "cost-rates.json"
 
-// rate is USD charged per million input/output tokens for one model.
 type rate struct {
 	InputUSDPerMTok  float64 `json:"input_usd_per_mtok"`
 	OutputUSDPerMTok float64 `json:"output_usd_per_mtok"`
@@ -249,7 +248,6 @@ func storyRoot(issueID string, issues map[string]IssueInfo) string {
 	return last
 }
 
-// under reports whether issueID is ancestor or equals rootID.
 func under(issueID, rootID string, issues map[string]IssueInfo) bool {
 	seen := map[string]bool{}
 	for cur := issueID; cur != "" && !seen[cur]; cur = issues[cur].Parent {

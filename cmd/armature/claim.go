@@ -656,8 +656,6 @@ func createWorktreeAndBranchWithExclusion(
 	if err := writeClaimExclusionMarker(worktreePath, exclusionPattern); err != nil {
 		return cleanupPartialWorktree(err, "persist claim exclusion metadata")
 	}
-	// Git 2.34 does not copy config.worktree on worktree add; seed the
-	// effective claim owner (same ID as the claim op, including overrides).
 	if err := worker.SeedWorktreeIdentity(worktreePath, workerID); err != nil {
 		return cleanupPartialWorktree(err, "seed worktree worker identity")
 	}
@@ -934,7 +932,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 				if len(acts) == 0 {
 					acts = []string{promotion.TreeRepairGuidance, "arm doctor"}
 				}
-				// Map (not Wrap): next_actions are the typed Plan, not a fixed literal.
 				return armerrors.Map(codeClaim1,
 					fmt.Sprintf("cannot claim %s: under a merged ancestor (tree consistency)", issueID),
 					acts, nil)
@@ -1141,8 +1138,6 @@ it creates a new task worktree from the parent worktree's current branch and tip
 						)
 					}
 				}
-				// Rebind skips createWorktreeAndBranchWithExclusion; still seed
-				// the effective claim owner onto a Git-2.34 worktree.
 				if err := worker.SeedWorktreeIdentity(worktreePath, workerID); err != nil {
 					return compensateClaimIfHeldByToken(
 						cmd, store, logPath, issueID, workerID, "seed worktree worker identity",

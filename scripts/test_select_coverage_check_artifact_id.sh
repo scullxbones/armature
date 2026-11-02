@@ -231,7 +231,6 @@ if "wait-coverage-check-artifact.sh" not in text:
     sys.exit(1)
 lines = text.splitlines()
 problems = []
-# Step-level keys under jobs.*.steps[] — reject continue-on-error / shell: overrides.
 for i, line in enumerate(lines):
     if re.match(r"^\s+continue-on-error\s*:", line):
         problems.append(f"step continue-on-error at line {i+1}")

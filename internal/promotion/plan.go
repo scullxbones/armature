@@ -78,8 +78,6 @@ func (e *Error) RecoveryActions() []string {
 	if e.Kind == KindNotLeaf {
 		acts := RemediationsPlanOpts(e.IssueID, e.Graph, e.Opts).RenderNextActions()
 		if len(acts) == 0 {
-			// Rollup-eligible (≥1 merged child): materialize owns promotion.
-			// All-cancelled is handled inside RemediationsPlanOpts (cancel/reopen).
 			return []string{"arm doctor"}
 		}
 		return acts

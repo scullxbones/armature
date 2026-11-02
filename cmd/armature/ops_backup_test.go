@@ -286,16 +286,15 @@ func TestOpsBackup_StalledHTTPRemote_FailClosedEnvelope_REQ_TOPTIER_S12_T1G(t *t
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer ln.Close() //nolint:errcheck
+	defer swallowErr(ln.Close())
 	go func() {
 		for {
 			conn, accErr := ln.Accept()
 			if accErr != nil {
 				return
 			}
-			// Accept then never reply — holds git-remote-http until group kill.
 			go func(c net.Conn) {
-				defer c.Close() //nolint:errcheck
+				defer swallowErr(c.Close())
 				select {}
 			}(conn)
 		}

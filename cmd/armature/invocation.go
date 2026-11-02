@@ -112,12 +112,8 @@ type Invocation struct {
 	TTY     bool
 	TempDir string
 
-	// OpenControllingTTY overrides /dev/tty open for interactive confirmations.
-	// Nil uses the default opener. Tests inject a fake; product leaves nil.
 	OpenControllingTTY func() (*os.File, error)
-	// GitNetworkTimeout overrides adapters.Client network deadline for this
-	// invocation. Zero keeps the adapter default. Tests shrink it; product leaves 0.
-	GitNetworkTimeout time.Duration
+	GitNetworkTimeout  time.Duration
 
 	replayLeases          func([]ops.Op) map[string]claim.Lease
 	afterIdempotencyCheck func()

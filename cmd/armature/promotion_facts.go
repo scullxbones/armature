@@ -42,19 +42,6 @@ func promotionGraphFromIndex(index materialize.Index) promotion.Graph {
 	return g
 }
 
-// promotionGraphFromIssues includes delivery Base/Tip when known so remediation
-// can emit filled arm delivery record argv instead of <sha> templates.
-func promotionGraphFromIssues(issues map[string]*materialize.Issue) promotion.Graph {
-	g := make(promotion.Graph, len(issues))
-	for id, issue := range issues {
-		if issue == nil {
-			continue
-		}
-		g[id] = nodeFromMaterializeIssue(issue)
-	}
-	return g
-}
-
 func nodeFromMaterializeIssue(issue *materialize.Issue) promotion.Node {
 	last := issue.ClaimedAt
 	if issue.LastHeartbeat > last {
@@ -77,8 +64,6 @@ func nodeFromMaterializeIssue(issue *materialize.Issue) promotion.Node {
 	}
 }
 
-// promotionGraphCache lazily builds and memoizes an enriched promotion graph
-// for one store+index pair. Fail-closed: any ReadIssue error aborts the build.
 type promotionGraphCache struct {
 	store *snapshot.Store
 	index materialize.Index
@@ -116,7 +101,6 @@ func buildPromotionGraphFromStore(store *snapshot.Store, index materialize.Index
 		return g, nil
 	}
 	for id, node := range g {
-		// Lazy: only ReadIssue when delivery clocks / lease facts matter.
 		if !needsPromotionEnrichment(node) {
 			continue
 		}

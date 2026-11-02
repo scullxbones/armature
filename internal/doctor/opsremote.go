@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,10 +15,7 @@ import (
 	"github.com/scullxbones/armature/internal/redact"
 )
 
-// defaultLocalOnlyOpsStaleAfter is the G2.2 / D11 default staleness window for
-// unpublished local ops commits on _armature when config omits
-// local_only_ops_stale_hours.
-const defaultLocalOnlyOpsStaleAfter = 24 * time.Hour
+const defaultLocalOnlyOpsStaleAfter = time.Duration(config.DefaultLocalOnlyOpsStaleHours) * time.Hour
 
 const (
 	d11OpsBranch       = "_armature"
@@ -193,7 +191,7 @@ func observeD11OpsRemote(g d11Git, now time.Time, staleAfter time.Duration) d11O
 			detail:  fmt.Sprintf("rev-list --count reported %d local-only commit(s) but committer range listed %d", ahead, len(unixes)),
 		}
 	}
-	oldestUnix := oldestUnixTimestamp(unixes)
+	oldestUnix := slices.Min(unixes)
 	age := now.Sub(time.Unix(oldestUnix, 0))
 	if age < 0 {
 		age = 0
@@ -208,18 +206,6 @@ func observeD11OpsRemote(g d11Git, now time.Time, staleAfter time.Duration) d11O
 	}
 	obs.outcome = d11Healthy
 	return obs
-}
-
-// oldestUnixTimestamp returns the minimum value in unixes. Caller must pass a
-// non-empty slice (observeD11OpsRemote fail-closes on empty / count mismatch).
-func oldestUnixTimestamp(unixes []int64) int64 {
-	oldest := unixes[0]
-	for _, unix := range unixes[1:] {
-		if unix < oldest {
-			oldest = unix
-		}
-	}
-	return oldest
 }
 
 func evaluateD11OpsRemote(obs d11Observation, configFallbackWarn string) Finding {

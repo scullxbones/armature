@@ -1818,7 +1818,7 @@ func TestClaimRebindSeedsWorktreeIdentity_REQ_GIT234_MIN(t *testing.T) {
 	run(t, repo, "git", "worktree", "add", "-b", "task/task-01", worktreePath)
 	// Fixture stores the main id in local config (worktreeConfig may be off).
 	// Simulate a Git 2.43+ copy: enable the extension and plant main's id on dest
-	// so rebind seed must replace it with --worker-id (Codex r4437123981).
+	// so rebind seed must replace it with --worker-id.
 	mainID := strings.TrimSpace(runOutput(t, repo, "config", "--get", "armature.worker-id"))
 	require.NotEmpty(t, mainID, "fixture main must have a worker id")
 	run(t, repo, "git", "config", "extensions.worktreeConfig", "true")
@@ -1839,7 +1839,6 @@ func TestClaimRebindSeedsWorktreeIdentity_REQ_GIT234_MIN(t *testing.T) {
 		"rebindExistingDest must SeedWorktreeIdentity with the effective claim owner")
 }
 
-// Real `arm claim` binary table for seed keep/replace (runs on Git 2.34 floor CI and 2.43+).
 func TestClaimSeedKeepUnlessProvenCopy_Table_REQ_GIT234_MIN(t *testing.T) {
 	t.Parallel()
 
@@ -1893,10 +1892,6 @@ func TestClaimSeedKeepUnlessProvenCopy_Table_REQ_GIT234_MIN(t *testing.T) {
 		claimWithOverride(t, repo, "override-worker")
 		assert.Equal(t, "override-worker", wtID(t, wt), "(c) proven copy replaced with claim owner")
 	})
-	// (d) main id read errors → keep: covered by
-	// TestSeedWorktreeIdentity_KeepUnlessProvenCopy_Table/d_main_id_read_errors_kept
-	// (chmod on main config.worktree); claim path cannot safely break main git
-	// config without failing worktree registration checks.
 }
 
 func TestClaimExclusionFailureAppendsNoClaim_REQ_LNGHZN_S5(t *testing.T) {

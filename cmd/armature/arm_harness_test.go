@@ -63,9 +63,6 @@ func (h *armHarness) Run(args ...string) (string, error) {
 	return h.stdout.String(), err
 }
 
-// testSlots holds per-*testing.T CLI env overlays and shared temp dirs so
-// parallel tests stay isolated without os.Setenv. Tests never reassign this
-// pointer; they only mutate maps through helpers.
 type testSlots struct {
 	mu    sync.Mutex
 	env   map[*testing.T]map[string]string
