@@ -6,10 +6,11 @@
 # `scripts/foo.txt` must be scanned. Callers exclude their own allowlisted paths.
 #
 # Fail-closed bytes:
-#   - Non-UTF8 / odd bytes are still listed; callers must scan with grep -a
-#     (or LC_ALL=C) so a hit line carrying \xff still fails.
-#   - NUL: skip only when bash refuses the file (first byte is NUL). A NUL
-#     later in the file is still listed so "NUL later + git status" fails.
+#   - Non-UTF8 / odd bytes are still listed; callers must scan with
+#     LC_ALL=C grep -a so a hit line carrying \xff still fails.
+#   - NUL: NEVER skip silently. Files whose first byte is NUL are listed;
+#     callers scan with LC_ALL=C grep -a (or FAIL: <f> unscannable). A NUL
+#     later in the file is likewise listed so "NUL later + git status" fails.
 #   - --exclude-testdata matches main scope exactly: only scripts/testdata/*
 #     (never nested other-package testdata dirs; never scripts/repoguard/*).
 #
@@ -31,16 +32,6 @@ if [ "${#dirs[@]}" -eq 0 ]; then
   exit 2
 fi
 
-# Bash refuses a normal text read when the first byte is NUL. Empty files and
-# files whose first NUL appears later remain listed (scan anyway).
-bash_refuses() {
-  local f="$1" first
-  [ -f "$f" ] || return 0
-  [ ! -s "$f" ] && return 1
-  first=$(dd if="$f" bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
-  [ "$first" = "00" ]
-}
-
 list_tmp=$(mktemp)
 trap 'rm -f "$list_tmp"' EXIT
 {
@@ -59,9 +50,6 @@ while IFS= read -r f || [ -n "${f:-}" ]; do
     case "$f" in
       scripts/testdata/*|scripts/testdata) continue ;;
     esac
-  fi
-  if bash_refuses "$f"; then
-    continue
   fi
   printf '%s\n' "$f"
 done <"$list_tmp"
