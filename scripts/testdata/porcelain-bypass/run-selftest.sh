@@ -1,54 +1,59 @@
 #!/usr/bin/env bash
 # Invoked by scripts/check-porcelain-failclosed.sh (testdata; not scanned).
-# Proves: bypass forms detected; status exit 128 + hash-object failure
-# fail both --write-baseline and check modes.
+# Proves: bypass forms detected by the REAL guard (not a copied regex);
+# status exit 128 + hash-object failure fail both --write-baseline and check.
 set -euo pipefail
 
 ROOT="${1:-.}"
 BYPASS_DIR="$ROOT/scripts/testdata/porcelain-bypass"
 CHECKER="$ROOT/scripts/check-test-porcelain.sh"
+GUARD="$ROOT/scripts/check-porcelain-failclosed.sh"
 
-_gw='gi'
-_gw="${_gw}t"
-_st='sta'
-_st="${_st}tus"
-_ho='hash-obj'
-_ho="${_ho}ect"
-_tok_end='([^A-Za-z0-9_-]|$)'
-_tok_start='(^|[^A-Za-z0-9_-])'
-CLASS_RE="${_tok_start}${_gw}([^A-Za-z0-9_-](.*[^A-Za-z0-9_-])?)(${_st}|${_ho})${_tok_end}"
-VAR_RE="${_tok_start}(\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?|\"\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?\")[[:space:]]+(${_st}|${_ho})${_tok_end}"
-
-flatten() {
-  awk '{
-    if (sub(/\\$/, "")) { printf "%s", $0; next }
-    print
-  }' "$1"
-}
-
+# Drive the real guard against each fixture in an isolated scripts/ tree.
+# Weakening CLASS_RE/VAR_RE/XARGS_RE in check-porcelain-failclosed.sh must
+# make this loop fail (fixtures no longer detected).
 for fx in \
   git-c-status.sh \
   var-git-status.sh \
   alias-git-status.sh \
+  eval-git-status.sh \
+  xargs-git.sh \
   cmdsub-status-or-true.sh \
   status-semicolon.sh \
   status-pipe-cat.sh \
   func-git-status.sh \
-  no-pager-status-or-true.sh
+  no-pager-status-or-true.sh \
+  extless-git-status
 do
   path="$BYPASS_DIR/$fx"
   if [ ! -f "$path" ]; then
     echo "FAIL: missing porcelain bypass fixture $path" >&2
     exit 1
   fi
-  flat="$(flatten "$path")"
-  hits="$(printf '%s\n' "$flat" | grep -nE "$CLASS_RE|$VAR_RE" \
-    | grep -vE '^[[:digit:]]+:[[:space:]]*#' || true)"
-  if [ -z "$hits" ]; then
-    echo "FAIL: bypass fixture $fx not detected by porcelain ban regex" >&2
+  demo=$(mktemp -d)
+  mkdir -p "$demo/scripts"
+  # Preserve extensionless name when the fixture has no suffix.
+  case "$fx" in
+    *.*) cp "$path" "$demo/scripts/$fx" ;;
+    *) cp "$path" "$demo/scripts/$fx" ;;
+  esac
+  # Guard must see a scripts/ tree; skip nested selftest.
+  set +e
+  out=$(bash "$GUARD" --skip-selftest "$demo" 2>&1)
+  st=$?
+  set -e
+  rm -rf "$demo"
+  # Integrity: require the specific FAIL: scripts/<fixture> line — a crashing
+  # guard (nonzero without that line) must fail this selftest.
+  if ! printf '%s\n' "$out" | grep -q "FAIL: scripts/${fx}"; then
+    echo "FAIL: real guard missing 'FAIL: scripts/${fx}' (st=$st): $out" >&2
     exit 1
   fi
-  echo "OK: bypass fixture $fx detected"
+  if [ "$st" -eq 0 ]; then
+    echo "FAIL: real guard exited 0 after flagging $fx: $out" >&2
+    exit 1
+  fi
+  echo "OK: real guard flagged bypass fixture $fx"
 done
 
 write_ok_helper() {

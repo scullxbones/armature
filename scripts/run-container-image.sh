@@ -106,10 +106,13 @@ if [ "$img_ok" -ne 1 ]; then
   exit 1
 fi
 
-# Known docker-run flags (boolean vs value-taking).
+# Closed docker-run flag set actually used by callers (ci.yml check-bash32,
+# ci-path-shadow-selfcheck, make container-run). Dropped flags (e.g.
+# --privileged, -p/--publish, --device, -e/--env, --network, health/cpus/…)
+# are rejected — add here only with a written caller reason.
 flag_bool() {
   case "$1" in
-    --rm|--tty|-t|--interactive|-i|--detach|-d|--init|--privileged|--read-only|--quiet|-q|--pull=*)
+    --rm)
       return 0
       ;;
   esac
@@ -118,7 +121,7 @@ flag_bool() {
 
 flag_value() {
   case "$1" in
-    --entrypoint|-v|--volume|--mount|-w|--workdir|-e|--env|--env-file|-u|--user|--name|--network|--net|--platform|-p|--publish|--label|--cidfile|--memory|-m|--cpus|--cpu-shares|--restart|--runtime|--security-opt|--device|--add-host|--dns|--health-cmd|--health-interval)
+    --entrypoint|-v|--volume|-w|--workdir)
       return 0
       ;;
   esac

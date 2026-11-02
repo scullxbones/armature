@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fixture: var-held git command ($g status) must be banned outside helper.
+# Fixture: shell alias wrapping porcelain git must be banned outside helper.
 set -euo pipefail
-g=git
-$g status --porcelain
+alias gs='git status'
+gs --porcelain
