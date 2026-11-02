@@ -174,6 +174,48 @@ else
 	pass
 fi
 
+echo "Test 5: kill continue-after-hard-fail mutant (selector called once)..."
+# Counting selector: multi-match hard-fail. Oracle must invoke once; a mutant
+# that replaces the hard-fail `exit 1` with `continue` invokes MAX_POLLS times.
+COUNT_SEL="$WORKDIR/count_sel.sh"
+CALLS="$WORKDIR/sel_calls"
+: >"$CALLS"
+cat >"$COUNT_SEL" <<EOF
+#!/usr/bin/env bash
+echo x >>"$CALLS"
+exec "$SELECTOR" "\$@"
+EOF
+chmod +x "$COUNT_SEL"
+MUT_CONT="$WORKDIR/wait_continue.sh"
+python3 - "$WAIT" "$MUT_CONT" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+t = open(src).read()
+old = 'echo "FAIL: coverage-check artifact selector hard-failed (exit ${sel_st})" >&2\n\texit 1'
+new = 'echo "FAIL: coverage-check artifact selector hard-failed (exit ${sel_st})" >&2\n\tcontinue'
+if old not in t:
+    raise SystemExit("hard-fail exit site not found")
+open(dst, "w").write(t.replace(old, new, 1))
+PY
+chmod +x "$MUT_CONT"
+: >"$CALLS"
+set +e
+GH_BIN="$STUB2" SELECTOR="$COUNT_SEL" MAX_POLLS=3 SLEEP_SECS=0 \
+	"$WAIT" scullxbones/armature deadbeef "$WORKDIR/out5a.log" >/dev/null 2>&1
+ORACLE_CALLS=$(wc -l <"$CALLS" | tr -d ' ')
+: >"$CALLS"
+GH_BIN="$STUB2" SELECTOR="$COUNT_SEL" MAX_POLLS=3 SLEEP_SECS=0 \
+	"$MUT_CONT" scullxbones/armature deadbeef "$WORKDIR/out5b.log" >/dev/null 2>&1
+MUT_CALLS=$(wc -l <"$CALLS" | tr -d ' ')
+set -e
+if [[ "$ORACLE_CALLS" != "1" ]]; then
+	fail "oracle hard-fail must call selector once (got $ORACLE_CALLS)"
+elif [[ "$MUT_CALLS" -le 1 ]]; then
+	fail "continue-after-hard-fail mutant should re-call selector (got $MUT_CALLS)"
+else
+	pass "killed continue-after-hard-fail (oracle calls=$ORACLE_CALLS mutant=$MUT_CALLS)"
+fi
+
 echo ""
 if [[ $FAILURES -eq 0 ]]; then
 	echo "All wait-coverage-check-artifact tests passed"
