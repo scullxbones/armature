@@ -41,9 +41,6 @@ func TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4(t *testing.T)
 		"mutation drop Decide from print path must leak claim C (RED proof)")
 }
 
-// TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4
-// runs every printed Option/CLAIM-1 next_actions argv for owned, foreign-live,
-// and foreign-expired fixtures IN ORDER via the binary → D14 clear; no exit-0 no-op.
 func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 	repo, workerID := setupOwnedForeignMergedFixture(t)
@@ -68,7 +65,6 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 		assert.NotContains(t, cmd, "arm claim --issue OS --force")
 	}
 
-	// CLAIM-1 next_actions for OS under merged (live).
 	out := new(bytes.Buffer)
 	code := executeThenHandleRootError(t, out, new(bytes.Buffer),
 		"claim", "--issue", "OS", "--force", "--worktree", "--repo", repo, "--format", "agent")
@@ -95,7 +91,6 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 			"option %c must clear OWN under-merged (progress, not a no-op)", 'A'+i)
 	}
 
-	// Live guidance once across OS+P2 doctor findings.
 	d14 := doctorD14Explain(t, repo)
 	count := 0
 	for _, s := range d14.suggested {
@@ -105,14 +100,11 @@ func TestPrintedArgvExecuteProgress_OwnedForeignLiveExpired_REQ_TOPTIER_S18_T4(t
 	}
 	assert.Equal(t, 1, count, "live-lease guidance must appear once per doctor run")
 
-	// Foreign-expired: claim OS --ttl 1, wait past expiry. Done P2 is reopen-only;
-	// Option B (doctor --fix + cancel) lives on open OS's plan.
 	expBase, expWorker := setupForeignExpiredMergedFixture(t)
 	expOpts := planOptsForRemediation(getTestContext(t, expBase), expWorker)
 	expG := loadPromotionGraph(t, expBase)
 	require.Equal(t, ops.StatusClaimed, expG["OS"].Status)
 
-	// CLAIM-1 after expiry while G2 still merged: must NOT print claim OS.
 	claimOut := new(bytes.Buffer)
 	claimCode := executeThenHandleRootError(t, claimOut, new(bytes.Buffer),
 		"claim", "--issue", "OS", "--force", "--worktree", "--repo", expBase, "--format", "agent")

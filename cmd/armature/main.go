@@ -14,7 +14,7 @@ import (
 )
 
 // Version is set at build time via -ldflags.
-var Version = "dev" //nolint:gochecknoglobals //ldflags-overridable build version
+var Version = "dev" //nolint:gochecknoglobals
 
 func applyTTYDetectionPolicy(cmd *cobra.Command) (format string, nonInteractive bool) {
 	sess := ensureSession(cmd)
@@ -80,9 +80,6 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
-			// Git floor is a port precondition (docs + adapters.MinGitVersion()).
-			// Fail closed before any repo resolve so every command sees the same
-			// IO cause naming installed + required versions.
 			if err := requireMinGitPreRun(cmd); err != nil {
 				return err
 			}

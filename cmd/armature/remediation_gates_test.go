@@ -163,9 +163,8 @@ func TestDisableMutationsFailNamedTests_REQ_TOPTIER_S18_T4(t *testing.T) {
 			require.Contains(t, string(body), gate.Needle)
 
 			mutDir := t.TempDir()
-			mutFile := filepath.Join(mutDir, filepath.Base(gate.Source))
+			mutFile := filepath.Join(mutDir, "mutated.go")
 			mutated := disableGateMutation(gate.Name, string(body))
-			// #nosec G703 -- mutFile is under t.TempDir with filepath.Base only
 			require.NoError(t, os.WriteFile(mutFile, []byte(mutated), 0o644))
 			require.True(t, gateDisabled(gate.Name, mutated),
 				"disable mutation must neutralize gate %s", gate.Name)

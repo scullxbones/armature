@@ -142,31 +142,31 @@ func TestDoctorAgentEnvelope_AOC_REQ_TOPTIER_S15_T1(t *testing.T) {
 func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing.T) {
 	t.Parallel()
 
-	_, d4 := doctorCheckGuidance("D4")
+	_, d4 := doctorCheckGuidanceFor(doctor.Finding{Check: "D4"}, nil, promotion.PlanOpts{})
 	require.Len(t, d4, 1)
 	assert.Equal(t, "arm reparent --issue <child-id> --parent <parent-id>", d4[0],
 		"D4 must use required --issue/--parent flags; positionals are ignored")
 
-	_, d7 := doctorCheckGuidance("D7")
+	_, d7 := doctorCheckGuidanceFor(doctor.Finding{Check: "D7"}, nil, promotion.PlanOpts{})
 	require.Len(t, d7, 1)
 	assert.Equal(t, "mv .armature/ops/<expected>.log .armature/ops/<got>.log", d7[0],
 		"D7 is a filename/worker_id mismatch; worker-init --check does not repair it")
 	assert.NotContains(t, d7[0], "worker-init --check")
 
-	_, d9 := doctorCheckGuidance("D9")
+	_, d9 := doctorCheckGuidanceFor(doctor.Finding{Check: "D9"}, nil, promotion.PlanOpts{})
 	require.Len(t, d9, 1)
 	assert.Equal(t, "arm claim --issue <issue-id> --worktree <path>; or git worktree remove --force <path>", d9[0],
 		"D9 unrecognized paths are not GCRemovals; bind or remove the reported path")
 	assert.NotContains(t, d9[0], "worktree gc")
 
-	_, d11 := doctorCheckGuidance("D11")
+	_, d11 := doctorCheckGuidanceFor(doctor.Finding{Check: "D11"}, nil, promotion.PlanOpts{})
 	require.Equal(t, []string{"arm push-ops"}, d11)
 
-	_, d12 := doctorCheckGuidance("D12")
+	_, d12 := doctorCheckGuidanceFor(doctor.Finding{Check: "D12"}, nil, promotion.PlanOpts{})
 	require.Len(t, d12, 1)
 	assert.Contains(t, d12[0], "origin/_armature")
 
-	_, d14 := doctorCheckGuidance("D14")
+	_, d14 := doctorCheckGuidanceFor(doctor.Finding{Check: "D14"}, nil, promotion.PlanOpts{})
 	require.Equal(t, []string{promotion.FallbackGuidance}, d14,
 		"shape-agnostic D14 must not blindly recommend arm merged")
 }
@@ -174,9 +174,9 @@ func TestDoctorCheckGuidance_SuggestedRemediations_REQ_TOPTIER_S15_T1(t *testing
 func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 
-	defaultExpl, _ := doctorCheckGuidance("D999")
+	defaultExpl, _ := doctorCheckGuidanceFor(doctor.Finding{Check: "D999"}, nil, promotion.PlanOpts{})
 	for _, id := range doctor.LiveCheckIDs() {
-		expl, sug := doctorCheckGuidance(id)
+		expl, sug := doctorCheckGuidanceFor(doctor.Finding{Check: id}, nil, promotion.PlanOpts{})
 		assert.NotEqual(t, defaultExpl, expl,
 			"%s must have dedicated --explain guidance (not the default fallback)", id)
 		assert.NotEmpty(t, sug, "%s suggested remediation must be non-empty", id)
@@ -195,7 +195,6 @@ func TestDoctorCLI_ReportsOpenUnderMergedAncestor_REQ_TOPTIER_S18_T4(t *testing.
 
 func TestEnrichD14TreeConsistency_Messages_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
-	// Done-only: TreeConsistencyViolations empty → enrich returns early; message stays done-only.
 	doneOnly := &doctor.Report{Checks: []doctor.Finding{{
 		Check: "D14", Severity: doctor.SeverityWarning,
 		Message: "Done work under a merged ancestor",
@@ -208,7 +207,6 @@ func TestEnrichD14TreeConsistency_Messages_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.Equal(t, "Done work under a merged ancestor", doneOnly.Checks[0].Message)
 	assert.NotContains(t, doneOnly.Checks[0].Message, "open/claimed")
 
-	// Open under merged → enrich folds viol and sets the broad message.
 	openUnder := &doctor.Report{Checks: []doctor.Finding{{
 		Check: "D14", Severity: doctor.SeverityOK,
 		Message: "No done issues under a merged parent",
@@ -224,11 +222,9 @@ func TestEnrichD14TreeConsistency_Messages_REQ_TOPTIER_S18_T4(t *testing.T) {
 
 func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
-	_, fallback := doctorCheckGuidance("D14")
+	_, fallback := doctorCheckGuidanceFor(doctor.Finding{Check: "D14"}, nil, promotion.PlanOpts{})
 	assert.Equal(t, []string{promotion.FallbackGuidance}, fallback)
 
-	// Done under merged parent with rollup-eligible children: reopen only —
-	// never cancel done (single Alternative renders without Option labels).
 	allMerged := promotion.Graph{
 		"P": {Status: "merged", Children: []string{"R"}},
 		"R": {Status: "done", Parent: "P", Children: []string{"C"}},
@@ -243,7 +239,6 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	assert.NotContains(t, sug, "arm transition --issue R --to cancelled --force")
 	assert.NotContains(t, expl, "children are merged")
 
-	// Done R under merged with open child: reopen only for R's finding.
 	repair := promotion.Graph{
 		"E": {Status: "merged", Children: []string{"R"}},
 		"R": {Status: "done", Parent: "E", Children: []string{"O"}},
@@ -260,7 +255,6 @@ func TestDoctorCheckGuidance_D14FallbackAndTreeRepair_REQ_TOPTIER_S18_T4(t *test
 	assert.Contains(t, sug, "arm claim --issue O --worktree")
 	assert.NotContains(t, sug, "arm claim --issue R")
 
-	// Open O under merged: Option A reopen + Option B cancel O.
 	_, sugO := doctorCheckGuidanceFor(doctor.Finding{
 		Check: "D14", Severity: doctor.SeverityWarning, Items: []string{"O under merged E (open)"},
 	}, repair, promotion.PlanOpts{})

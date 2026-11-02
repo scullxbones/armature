@@ -46,7 +46,6 @@ fail() {
 	FAILURES=$((FAILURES + 1))
 }
 
-# ----------------------------------------------------------------------------
 echo "Test 1: exact match passes..."
 MATCH_BODY="$WORKDIR/match.md"
 cat >"$MATCH_BODY" <<'EOF'
@@ -59,7 +58,6 @@ if [[ $STATUS -ne 0 ]]; then fail "expected exit 0, got $STATUS"
 elif ! grep -q "OK: PR body coverage quotes within 0.10" <<<"$OUTPUT"; then fail "expected OK message"
 else pass; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 2: REQ 83.90 vs 83.80 (|diff|=0.10) passes..."
 TOL10="$WORKDIR/tol10.md"
 cat >"$TOL10" <<'EOF'
@@ -70,7 +68,6 @@ run_check "$TOL10"
 if [[ $STATUS -ne 0 ]]; then fail "expected exit 0 for |diff|=0.10"
 else pass; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 3: REQ body 0.11 BELOW log fails..."
 BELOW="$WORKDIR/below.md"
 cat >"$BELOW" <<'EOF'
@@ -82,7 +79,6 @@ if [[ $STATUS -eq 0 ]]; then fail "expected fail for body 0.11 below log"
 elif ! grep -q "FAIL: body quotes cmd coverage 83.69%" <<<"$OUTPUT"; then fail "expected cmd below-log message"
 else pass; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 4: REQ |diff|=0.11 above fails..."
 ABOVE="$WORKDIR/above.md"
 cat >"$ABOVE" <<'EOF'
@@ -93,7 +89,6 @@ run_check "$ABOVE"
 if [[ $STATUS -eq 0 ]]; then fail "expected fail for |diff|=0.11"
 else pass; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 5: REQ missing quotes fail (no soft-pass)..."
 EMPTY_BODY="$WORKDIR/empty.md"
 cat >"$EMPTY_BODY" <<'EOF'
@@ -112,7 +107,6 @@ run_check "$CMD_ONLY"
 if [[ $STATUS -eq 0 ]]; then fail "expected fail for cmd-only"
 else pass "cmd-only"; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 6: REQ wrong-package / foo 86.09% fails..."
 WRONG="$WORKDIR/wrong.md"
 cat >"$WRONG" <<'EOF'
@@ -133,7 +127,6 @@ run_check "$SCRIPTS_PKG"
 if [[ $STATUS -eq 0 ]]; then fail "expected fail for wrong-package quotes"
 else pass "wrong-package"; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 7: REQ internal 50 vs 86.09 fails..."
 INT50="$WORKDIR/int50.md"
 cat >"$INT50" <<'EOF'
@@ -145,10 +138,8 @@ if [[ $STATUS -eq 0 ]]; then fail "expected fail for internal 50 vs 86.09"
 elif ! grep -q "FAIL: body quotes internal coverage 50.00%" <<<"$OUTPUT"; then fail "expected internal mismatch message"
 else pass; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 8: REQ sweep 80.00–100.00 exact-0.10 pass / 0.11 fail both dirs..."
 SWEEP_OUT="$WORKDIR/sweep.out"
-# Generate pairs in awk; invoke the real within_tol logic by writing tiny bodies.
 python3 - "$SCRIPT" "$WORKDIR" <<'PY' >"$SWEEP_OUT"
 import subprocess, sys, tempfile, os
 script, work = sys.argv[1], sys.argv[2]
@@ -202,7 +193,6 @@ else
 	pass "$(cat "$SWEEP_OUT")"
 fi
 
-# ----------------------------------------------------------------------------
 echo "Test 9: kill mutants (<=→<, abs removed, internal any-word)..."
 kill_mutant() {
 	local name="$1"
@@ -297,7 +287,6 @@ PY
 chmod +x "$M3"
 kill_mutant "internal-any-word" "$M3" "$WRONG" "$LOG" 0 "false_pass"
 
-# ----------------------------------------------------------------------------
 echo "Test 10: table form still matches..."
 TABLE_BODY="$WORKDIR/table.md"
 cat >"$TABLE_BODY" <<'EOF'
@@ -307,7 +296,6 @@ run_check "$TABLE_BODY"
 if [[ $STATUS -ne 0 ]]; then fail "expected exit 0 for table form"
 else pass; fi
 
-# ----------------------------------------------------------------------------
 echo "Test 11: REQ A — stale push-event body fails; live body (edit) passes..."
 # Models check-core reading a stale event payload vs edit recheck / gh api live body.
 STALE="$WORKDIR/stale_event_body.md"

@@ -205,8 +205,8 @@ func tryCancelSequence(cancelTargets []string, g Graph, opts PlanOpts, withFix b
 	return Alternative{Steps: steps}, true
 }
 
-// looksForeignLive is a graph-side hint for guidance when Decide is absent;
-// production Decide (claim.ForeignLiveLeaseBlocks) is authoritative for print.
+// looksForeignLive reports a foreign claimed or in-progress lease still inside TTL.
+// claim.ForeignLiveLeaseBlocks is authoritative for whether argv is printed.
 func looksForeignLive(node Node, viewer string, now int64) bool {
 	switch node.Status {
 	case ops.StatusClaimed, ops.StatusInProgress:
@@ -570,7 +570,7 @@ func doneLeafSteps(id string, node Node) []Step {
 
 // AssessmentHowTo is the concrete how-to for producing assessment.json when
 // delivery Base/Tip provenance is known (required-input, not legacy). Shared by
-// doctor suggested, MERGED-1 next_actions, and review --help.
+// doctor suggested and MERGED-1 next_actions.
 func AssessmentHowTo(issueID, base, tip string) string {
 	return fmt.Sprintf(
 		"produce assessment.json: arm review prepare --issue %s --base %s --head %s --output bundle.json; "+
@@ -777,7 +777,6 @@ func RunnableArgv(s string) string {
 	return ""
 }
 
-// AlternativeRunnable returns arm argv for one alternative.
 func (a Alternative) RunnableCommands() []string {
 	var out []string
 	for _, step := range a.Steps {

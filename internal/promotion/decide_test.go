@@ -11,8 +11,7 @@ import (
 	"github.com/scullxbones/armature/internal/promotion"
 )
 
-// cliDecide mirrors cmd/armature remediationDecide using real claim predicates
-// (package promotion cannot import claim in non-test code).
+// cliDecide mirrors cmd/armature remediationDecide using real claim predicates.
 func cliDecide(viewer string, now int64) func(string, promotion.Graph) error {
 	if now == 0 {
 		now = time.Now().Unix()

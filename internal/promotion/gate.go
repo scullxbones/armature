@@ -28,9 +28,8 @@ func IssueFlag(argv string) string {
 	return ""
 }
 
-// DefaultDecideOnlyTree is a minimal Decide for tests that only need the
-// shared tree-consistency gate (no lease clocks). Production uses cmd's
-// remediationDecide wired to claim.ForeignLiveLeaseBlocks + RequireOwner.
+// DefaultDecideOnlyTree gates claims with WouldViolateTreeConsistency only.
+// filterDecideRefused uses it when PlanOpts.Decide is nil.
 func DefaultDecideOnlyTree(viewer string) func(string, Graph) error {
 	return func(argv string, g Graph) error {
 		argv = strings.TrimSpace(argv)

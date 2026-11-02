@@ -11,10 +11,6 @@ import (
 	"github.com/scullxbones/armature/internal/promotion"
 )
 
-// remediationDecide returns the CLI decision predicate used before printing any
-// remediation argv (Options, MoreSteps, CLAIM-1 next_actions). It calls the same
-// claim.ForeignLiveLeaseBlocks AcceptAt uses and requirePublishedOwner transition
-// uses — not a promotion-local copy.
 func remediationDecide(appCtx *config.Context, viewer string, now int64) func(string, promotion.Graph) error {
 	if now == 0 {
 		now = time.Now().Unix()
@@ -72,7 +68,6 @@ func leaseFromPromotionNode(n promotion.Node) claim.Lease {
 	)
 }
 
-// planOptsForRemediation builds PlanOpts with CLI Decide for print paths.
 func planOptsForRemediation(appCtx *config.Context, viewer string) promotion.PlanOpts {
 	now := time.Now().Unix()
 	return promotion.PlanOpts{

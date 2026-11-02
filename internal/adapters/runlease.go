@@ -269,7 +269,6 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 	ns = strings.TrimRight(strings.TrimSpace(ns), "/")
 	out, err := c.cmd("for-each-ref", "--format=%(refname)", ns+"/").Output()
 	if err != nil {
-		// Empty / missing namespace is fine.
 		out = nil
 	}
 	nonces := map[string]struct{}{}
@@ -315,7 +314,6 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 				}
 			}
 		}
-		// Single-level run ref: for-each-ref on exact prefix may miss; try direct.
 		_ = c.DeleteRef(prefix)           //nolint:errcheck // best-effort
 		_ = c.removeRunLease(kind, nonce) //nolint:errcheck // best-effort
 	}

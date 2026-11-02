@@ -4,8 +4,6 @@ package adapters
 
 import "os"
 
-// pidAlive reports whether pid looks live. On non-unix, FindProcess always
-// succeeds; treat unknown pids as dead so crash sweeps still reclaim leftovers.
 func pidAlive(pid int) bool {
 	if pid <= 0 {
 		return false

@@ -489,7 +489,6 @@ func reservedFailureCodePrefixes() map[string]struct{} {
 	}
 }
 
-// reservedFailureCodes is filled during ledger census in tests (mutable registry).
 type failureCodeSet struct {
 	codes map[string]struct{}
 }
@@ -497,10 +496,6 @@ type failureCodeSet struct {
 func (s *failureCodeSet) has(code string) bool {
 	_, ok := s.codes[code]
 	return ok
-}
-
-func (s *failureCodeSet) add(code string) {
-	s.codes[code] = struct{}{}
 }
 
 var reservedFailureCodes = &failureCodeSet{codes: map[string]struct{}{}} //nolint:gochecknoglobals // test census accumulator; tests never reassign the pointer

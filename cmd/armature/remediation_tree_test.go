@@ -173,7 +173,6 @@ func TestMixedTreeRemediationRepairsD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 	require.Equal(t, "warning", d14.severity)
 	assert.Contains(t, d14.explanation, promotion.TreeRepairGuidance)
 	require.NotEmpty(t, d14.items)
-	// Suggested: finding header → Option A:/B: on their own lines → paste-runnable argv.
 	require.True(t, strings.HasPrefix(d14.suggested[0], promotion.FindingHeaderPrefix), d14.suggested[0])
 	assert.Contains(t, d14.suggested, "Option A:")
 	assert.Contains(t, d14.suggested, "arm reopen --issue E")
@@ -642,7 +641,6 @@ func TestDropEitherAlternativeFailsDoctorAndMerged_REQ_TOPTIER_S18_T4(t *testing
 	t.Parallel()
 	repo := setupMixedD14Tree(t)
 	g := loadPromotionGraph(t, repo)
-	// Done R: reopen only. Open RC2: ≥2 Options.
 	rPlan := promotion.RemediationsPlanOpts("R", g, planOptsForRemediation(getTestContext(t, repo), ""))
 	require.Len(t, rPlan.Alternatives, 1, "done R reopen only")
 	rc2 := promotion.RemediationsPlanOpts("RC2", g, planOptsForRemediation(getTestContext(t, repo), ""))

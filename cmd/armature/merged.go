@@ -321,7 +321,6 @@ func runMerged(cmd *cobra.Command, issueID, pr string, force bool) error {
 		if err := teardownDeliveryArtifacts(ctx.RepoPath, git, *issue, cmd.ErrOrStderr()); err != nil {
 			return err
 		}
-		// Intended no-op / retry path: tear down leftovers, do not claim a new promotion.
 		printAlreadyMerged(cmd, issueID, pr)
 		return nil
 	}

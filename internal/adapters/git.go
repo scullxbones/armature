@@ -1845,7 +1845,7 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 	return nil
 }
 
-// BundleListHeads returns ref names advertised by a git bundle (first column of
+// BundleListHeads returns ref names advertised by a git bundle (second field of
 // git bundle list-heads).
 func (c *Client) BundleListHeads(bundlePath string) ([]string, error) {
 	bundlePath = strings.TrimSpace(bundlePath)
@@ -1926,7 +1926,7 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 // RestoreEvidence compares the published ops tip to a bundle tip inside the
 // user's clone. Network probes (ls-remote + origin fetch) run with -C <clone>
 // so git resolves scopes, worktree config, includes, insteadOf, and helpers
-// natively — no regex-copied localTransportConfig. Isolation is per-call refs
+// natively. Isolation is per-call refs
 // under refs/armature-tmp/<run-id>/ (never refs/remotes/origin/* or user
 // branches). Staging uses a live-pid lease; crash leftovers are swept at the
 // next run start without touching concurrent live nonces.
