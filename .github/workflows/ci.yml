@@ -172,6 +172,16 @@ jobs:
       - run: make check-job JOB=check-core
         env:
           CHECK_INSTALL_TOOLS: "1"
+      # Soft-pass when the PR body has no coverage quotes. Reuses coverage.out
+      # from check-core (no suite re-run); GITHUB_EVENT_PATH only — no gh API.
+      - name: PR body coverage quotes match this job's coverage.out
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          test -f coverage.out
+          scripts/coverage-check.sh . coverage.out | tee /tmp/coverage-check.log
+          jq -r '.pull_request.body // empty' "$GITHUB_EVENT_PATH" > /tmp/pr-body.md
+          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md /tmp/coverage-check.log
 
   check-static:
     if: ${{ !inputs.os-matrix-only }}

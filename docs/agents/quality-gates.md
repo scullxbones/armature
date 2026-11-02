@@ -27,7 +27,7 @@ Fix failures; never suppress. Linters: `govet`, `errcheck`, `ineffassign`, `stat
 
 This is the commit/push gate. It's distinct from `arm validate --ci` / `arm doctor`, which is the task-completion sanity check — see [workflow.md](workflow.md).
 
-`check` runs the unit suite exactly once: `coverage` runs `go test -coverprofile=coverage.out`, and `coverage-check` depends on `coverage` then reads that same profile rather than re-running the suite (docs/design/gate-efficiency.md D3). `make check` has no prerequisites; it loops `make check-job` so `make -j check` stays serial. Standalone `make coverage-check` generates a current profile first. `test-coverage-check` exercises the threshold script on fixtures and does not re-run the suite.
+`check` runs the unit suite exactly once: `coverage` runs `go test -coverprofile=coverage.out`, and `coverage-check` depends on `coverage` then reads that same profile rather than re-running the suite (docs/design/gate-efficiency.md D3). `make check` has no prerequisites; it loops `make check-job` so `make -j check` stays serial. Standalone `make coverage-check` generates a current profile first. `test-coverage-check` exercises the threshold script on fixtures and does not re-run the suite. PR body coverage figures must be copied word-for-word from the check-core / `coverage-check` lines (`cmd coverage: …%` / `internal coverage: …%`); agents can verify with `scripts/pr-coverage-quote-check.sh` (CI soft-passes when the body has no coverage quotes; fixture coverage is `test-pr-coverage-quote-check` under check-static).
 
 ## CI required checks
 
