@@ -1881,10 +1881,8 @@
       ]
     },
     "internal/stats": {
-      "count": 36,
+      "count": 23,
       "names": [
-        "CollectUsage",
-        "DefaultModel",
         "DefaultRatesFile",
         "Estimate",
         "FormatSpend",
@@ -1895,12 +1893,8 @@
         "IssueInfo.PreferredModel",
         "IssueInfo.Scope",
         "IssueInfo.Type",
-        "Rate",
-        "Rate.InputUSDPerMTok",
-        "Rate.OutputUSDPerMTok",
         "RateTable",
         "Report",
-        "Report.ByIssue",
         "Report.Rates",
         "Report.Stories",
         "Report.Waves",
@@ -1911,14 +1905,7 @@
         "Totals.InputTokens",
         "Totals.Issues",
         "Totals.OutputTokens",
-        "Totals.USD",
-        "Under",
-        "Usage",
-        "Usage.InputTokens",
-        "Usage.IssueID",
-        "Usage.Model",
-        "Usage.OutputTokens",
-        "Usage.Source"
+        "Totals.USD"
       ]
     },
     "internal/strictjson": {

@@ -111,6 +111,6 @@ func loadSpendReport(ctx *config.Context, snap *snapshot.Snapshot) (*stats.Repor
 		return nil, nil, err
 	}
 	issues := snapshotIssueInfo(snap)
-	report := stats.Estimate(stats.CollectUsage(snap.MaterializedOps), issues, rates)
+	report := stats.Estimate(snap.MaterializedOps, issues, rates)
 	return &report, issues, nil
 }

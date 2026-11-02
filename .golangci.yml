@@ -323,6 +323,16 @@ linters:
             - "github.com/scullxbones/armature/internal/ops"
             - "github.com/scullxbones/armature/internal/strictjson"
             - "github.com/scullxbones/armature/internal/validate"
+        stats-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/stats/*.go"
+            - "!**/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/scullxbones/armature/internal/attestation"
+            - "github.com/scullxbones/armature/internal/ops"
+            - "github.com/scullxbones/armature/internal/scopematch"
     errcheck:
       check-type-assertions: true
       check-blank: true
