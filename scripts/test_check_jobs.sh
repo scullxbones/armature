@@ -1245,7 +1245,7 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     _st='sta'; _st="${_st}tus"
     demo_sel=$(mktemp -d)
     mkdir -p "$demo_sel/scripts" "$demo_sel/.github"
-    # Repro: printf 'git status\n' > scripts/zz (no shebang) must fail porcelain.
+    # Repro: printf '<git> <status>\n' > scripts/zz (no shebang) must fail porcelain.
     printf '%s %s\n' "$_gw" "$_st" >"$demo_sel/scripts/zz"
     printf '%s %s\n' "$_gw" "$_st" >"$demo_sel/scripts/leak.txt"
     # Engine tokens in extensionless + .txt must fail engine guard.
@@ -1279,6 +1279,219 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: engine must flag scripts/engine.txt: $eout"
         exit 1
     fi
+    # REQ fail-closed 1–4 (PJ block on 9b6038e8): non-UTF8, NUL-later, main scope, lister crash.
+    # Structural guards + live demos; each mutation must make the REQ demo exit 0 incorrectly.
+    if ! rg -q 'LC_ALL=C grep -a' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
+        exit 1
+    fi
+    if ! rg -q 'LC_ALL=C grep -a' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: engine must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
+        exit 1
+    fi
+    if ! rg -q 'bash_refuses' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
+        echo "FAIL: selector must only skip bash-refused (NUL-first) files"
+        exit 1
+    fi
+    if rg -q "tr -d '\\\\000'|tr -d '\\\\0'" "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
+        echo "FAIL: selector must not skip every NUL-bearing file (tr -d NUL raw/stripped)"
+        exit 1
+    fi
+    if rg -q 'is_non_binary' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
+        echo "FAIL: selector must not restore is_non_binary any-NUL skip"
+        exit 1
+    fi
+    if ! rg -q 'scripts/testdata/\*' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
+        echo "FAIL: --exclude-testdata must match scripts/testdata/* only (main scope)"
+        exit 1
+    fi
+    if rg -q 'case "\$f" in' -A2 "$REPO_ROOT/scripts/list-guard-scan-files.sh" \
+        | rg -q '\*/testdata/\*'; then
+        echo "FAIL: selector case must not exclude nested */testdata/* (narrower than main)"
+        exit 1
+    fi
+    if rg -q 'scripts/repoguard/\*\) continue' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain must not skip scripts/repoguard/* (narrower than main)"
+        exit 1
+    fi
+    if ! rg -q 'lister_st' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'lister_st' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: guards must check lister exit status (fail-closed crash)"
+        exit 1
+    fi
+    # Live demos (parallel-safe tempdirs).
+    _gw='gi'; _gw="${_gw}t"
+    _st='sta'; _st="${_st}tus"
+    _u='/usr'; _db='/bin/doc'; _db="${_db}ker"
+    # 1) Non-UTF8 \xff on hit line — porcelain + engine must fail.
+    demo_ff=$(mktemp -d)
+    mkdir -p "$demo_ff/scripts" "$demo_ff/.github"
+    printf '%s %s' "$_gw" "$_st" >"$demo_ff/scripts/zz"; printf '\xff\n' >>"$demo_ff/scripts/zz"
+    printf '%s' "${_u}${_db}" >"$demo_ff/scripts/ez"; printf '\xff\n' >>"$demo_ff/scripts/ez"
+    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_ff/scripts/"
+    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_ff/scripts/"
+    cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_ff/scripts/"
+    chmod +x "$demo_ff/scripts/"*.sh
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_ff/scripts/check-porcelain-failclosed.sh" "$demo_ff" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_ff/scripts/check-no-engine-bin-env.sh" "$demo_ff" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz'; then
+        echo "FAIL: REQ1 porcelain must flag ${_gw} ${_st} + \\xff: $pout"
+        rm -rf "$demo_ff"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/ez'; then
+        echo "FAIL: REQ1 engine must flag abs docker + \\xff: $eout"
+        rm -rf "$demo_ff"; exit 1
+    fi
+    # Mutation: drop LC_ALL=C → UTF-8 locale misses \xff hit → exit 0.
+    sed -i.bak 's/LC_ALL=C grep -a/grep -a/g' "$demo_ff/scripts/check-porcelain-failclosed.sh"
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_ff/scripts/check-porcelain-failclosed.sh" "$demo_ff" 2>&1)
+    pst=$?
+    set -e
+    if [ "$pst" -ne 0 ]; then
+        echo "FAIL: REQ1 mutation (no LC_ALL=C) must miss \\xff hit (want exit 0): $pout"
+        rm -rf "$demo_ff"; exit 1
+    fi
+    rm -rf "$demo_ff"
+    # 2) NUL later + porcelain tokens must fail (selector must list the file).
+    demo_nul=$(mktemp -d)
+    mkdir -p "$demo_nul/scripts"
+    printf 'x\0' >"$demo_nul/scripts/zz"; printf '%s %s\n' "$_gw" "$_st" >>"$demo_nul/scripts/zz"
+    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_nul/scripts/"
+    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_nul/scripts/"
+    chmod +x "$demo_nul/scripts/"*.sh
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" 2>&1)
+    pst=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz'; then
+        echo "FAIL: REQ2 porcelain must flag NUL-later + ${_gw} ${_st}: $pout"
+        rm -rf "$demo_nul"; exit 1
+    fi
+    # Mutation: restore any-NUL skip → REQ fails (exit 0).
+    cat >"$demo_nul/scripts/list-guard-scan-files.sh" <<'MUT_NUL'
+#!/usr/bin/env bash
+set -euo pipefail
+EXCLUDE_TESTDATA=0; dirs=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in --exclude-testdata) EXCLUDE_TESTDATA=1; shift ;; *) dirs+=("$1"); shift ;; esac
+done
+is_non_binary() {
+  local f="$1" raw stripped
+  [ -f "$f" ] || return 1
+  [ ! -s "$f" ] && return 0
+  raw=$(wc -c <"$f" | tr -d ' '); stripped=$(tr -d '\000' <"$f" | wc -c | tr -d ' ')
+  [ "$raw" = "$stripped" ]
+}
+list_tmp=$(mktemp); trap 'rm -f "$list_tmp"' EXIT
+{ for d in "${dirs[@]}"; do [ -d "$d" ] && find "$d" -type f; done; } | LC_ALL=C sort -u >"$list_tmp"
+while IFS= read -r f || [ -n "${f:-}" ]; do
+  [ -z "${f:-}" ] && continue
+  if [ "$EXCLUDE_TESTDATA" -eq 1 ]; then case "$f" in scripts/testdata/*|scripts/testdata) continue ;; esac; fi
+  if is_non_binary "$f"; then printf '%s\n' "$f"; fi
+done <"$list_tmp"
+MUT_NUL
+    chmod +x "$demo_nul/scripts/list-guard-scan-files.sh"
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" 2>&1)
+    pst=$?
+    set -e
+    if [ "$pst" -ne 0 ]; then
+        echo "FAIL: REQ2 mutation (any-NUL skip) must miss NUL-later hit (want exit 0): $pout"
+        rm -rf "$demo_nul"; exit 1
+    fi
+    rm -rf "$demo_nul"
+    # 3) Scope = main: nested */testdata/* and scripts/repoguard/* scanned; only scripts/testdata/* excluded.
+    demo_scope=$(mktemp -d)
+    mkdir -p "$demo_scope/scripts/other/testdata" "$demo_scope/scripts/repoguard" "$demo_scope/scripts/testdata"
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_scope/scripts/other/testdata/leak.sh"
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_scope/scripts/repoguard/leak.go"
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_scope/scripts/testdata/ok.sh"
+    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_scope/scripts/"
+    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_scope/scripts/"
+    chmod +x "$demo_scope/scripts/"*.sh
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_scope/scripts/check-porcelain-failclosed.sh" "$demo_scope" 2>&1)
+    pst=$?
+    set -e
+    if [ "$pst" -eq 0 ] \
+        || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/other/testdata/leak.sh' \
+        || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/repoguard/leak.go'; then
+        echo "FAIL: REQ3 must scan nested testdata + repoguard: $pout"
+        rm -rf "$demo_scope"; exit 1
+    fi
+    if printf '%s\n' "$pout" | grep -q 'scripts/testdata/ok.sh'; then
+        echo "FAIL: REQ3 must NOT scan scripts/testdata/*: $pout"
+        rm -rf "$demo_scope"; exit 1
+    fi
+    # Mutation: exclude */testdata/* broadly → nested leak missed.
+    sed -i.bak 's|scripts/testdata/\*|*/testdata/*|g' "$demo_scope/scripts/list-guard-scan-files.sh"
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_scope/scripts/check-porcelain-failclosed.sh" "$demo_scope" 2>&1)
+    pst=$?
+    set -e
+    if printf '%s\n' "$pout" | grep -q 'FAIL: scripts/other/testdata/leak.sh'; then
+        echo "FAIL: REQ3 mutation (*/testdata/*) must miss nested leak: $pout"
+        rm -rf "$demo_scope"; exit 1
+    fi
+    rm -rf "$demo_scope"
+    # 4) Lister exit 2 + violating zz → guard must NOT exit 0.
+    demo_crash=$(mktemp -d)
+    mkdir -p "$demo_crash/scripts"
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_crash/scripts/zz"
+    cat >"$demo_crash/scripts/list-guard-scan-files.sh" <<'MUT_CRASH'
+#!/usr/bin/env bash
+exit 2
+MUT_CRASH
+    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_crash/scripts/"
+    chmod +x "$demo_crash/scripts/"*.sh
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_crash/scripts/check-porcelain-failclosed.sh" "$demo_crash" 2>&1)
+    pst=$?
+    set -e
+    if [ "$pst" -eq 0 ]; then
+        echo "FAIL: REQ4 porcelain must fail when lister exits 2: $pout"
+        rm -rf "$demo_crash"; exit 1
+    fi
+    # Mutation: restore heredoc $(lister) without exit check → exit 0 despite crash.
+    cat >"$demo_crash/scripts/check-porcelain-failclosed.sh" <<'MUT_HEREDOC'
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="${1:-.}"; SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; LISTER="$SCRIPT_DIR/list-guard-scan-files.sh"
+cd "$ROOT"; fail=0
+HELPER="scripts/porcelain-git.sh"
+_gw='gi'; _gw="${_gw}t"; _st='sta'; _st="${_st}tus"
+CLASS_RE="(^|[^A-Za-z0-9_-])${_gw}([^A-Za-z0-9_-].*)?${_st}([^A-Za-z0-9_-]|$)"
+scan_file() {
+  local f="$1" hits
+  hits="$(LC_ALL=C grep -a -nE "$CLASS_RE" "$f" || true)"
+  if [ -n "$hits" ] && [ "$f" != "$HELPER" ]; then
+    echo "FAIL: $f invokes porcelain" >&2; fail=1
+  fi
+}
+while IFS= read -r f || [ -n "${f:-}" ]; do
+  [ -z "${f:-}" ] && continue
+  scan_file "$f"
+done <<EOF
+$(bash "$LISTER" --exclude-testdata scripts)
+EOF
+if [ "$fail" -ne 0 ]; then exit 1; fi
+echo "OK: swallowed"
+MUT_HEREDOC
+    chmod +x "$demo_crash/scripts/check-porcelain-failclosed.sh"
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_crash/scripts/check-porcelain-failclosed.sh" "$demo_crash" 2>&1)
+    pst=$?
+    set -e
+    if [ "$pst" -ne 0 ]; then
+        echo "FAIL: REQ4 mutation (heredoc swallow) must exit 0 with crashing lister: st=$pst $pout"
+        rm -rf "$demo_crash"; exit 1
+    fi
+    rm -rf "$demo_crash"
     for engfix in banned-export.sh banned-command-p-docker.sh banned-abs-docker.sh; do
         if [[ ! -f "$REPO_ROOT/scripts/testdata/engine-bin-env/$engfix" ]]; then
             echo "FAIL: missing engine-bin ban fixture $engfix"
