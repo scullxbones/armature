@@ -1281,11 +1281,11 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
     # REQ fail-closed (PJ B1–B3): every scan helper fail-closed; both guards;
     # assert specific FAIL lines; mutate REAL script copies (sed), not stand-ins.
-    if ! rg -q 'LC_ALL=C grep -a' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+    if ! rg -q 'LC_ALL=C ("\$GREP"|grep) -a' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
         echo "FAIL: porcelain must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
         exit 1
     fi
-    if ! rg -q 'LC_ALL=C grep -a' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+    if ! rg -q 'LC_ALL=C ("\$GREP"|grep) -a' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
         echo "FAIL: engine must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
         exit 1
     fi
@@ -1317,9 +1317,10 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: both guards must require each listed path is a readable file"
         exit 1
     fi
-    if ! rg -q 'empty scan list' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
-        || ! rg -q 'empty scan list' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
-        echo "FAIL: both guards must fail on empty selector list"
+    # B1 class: count files actually scanned (blank-only selector must not pass).
+    if ! rg -q 'scanned 0 files' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'scanned 0 files' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: both guards must FAIL when scanned file count is 0"
         exit 1
     fi
     # Committed NUL-first REQ fixtures (one per guard family).
@@ -1340,9 +1341,10 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
             exit 1
         fi
     done
-    if ! rg -q 'unscannable' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
-        || ! rg -q 'unscannable' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
-        echo "FAIL: both guards must FAIL unscannable on grep exit >=2"
+    # B3: GREP= override for behavioural grep-exit≥2 REQ (no rg 'unscannable' text check).
+    if ! rg -q 'GREP="\$\{GREP:-grep\}"' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'GREP="\$\{GREP:-grep\}"' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: both guards must honor GREP= override for fail-closed grep shim"
         exit 1
     fi
     if ! rg -q 'scripts/testdata/\*' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
@@ -1398,7 +1400,8 @@ import pathlib, sys
 path, args = pathlib.Path(sys.argv[1]), sys.argv[2]
 text = path.read_text()
 text = text.replace('if [ "$lister_st" -ne 0 ]; then', 'if false; then  # mutated: ignore lister crash')
-text = text.replace('if [ ! -s "$scan_list" ]; then', 'if false; then  # mutated: allow empty list')
+# Crashing lister + heredoc yields blank list; also drop scanned-0 so swallow is observable.
+text = text.replace('if [ "$scanned" -eq 0 ]; then', 'if false; then  # mutated: allow scanned 0')
 old = 'done <"$scan_list"'
 new = (
     'done <<EOF\n'
@@ -1436,7 +1439,7 @@ MUT_GARBAGE
         echo "FAIL: B1 engine must reject garbage selector path: $eout"
         rm -rf "$demo_b1"; exit 1
     fi
-    # Empty list (selector exit 0) → both FAIL.
+    # Empty list (selector exit 0) → both FAIL (scanned 0).
     cat >"$demo_b1/scripts/list-guard-scan-files.sh" <<'MUT_EMPTY'
 #!/usr/bin/env bash
 exit 0
@@ -1448,12 +1451,33 @@ MUT_EMPTY
     eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
     est=$?
     set -e
-    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'empty scan list'; then
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'scanned 0 files (porcelain)'; then
         echo "FAIL: B1 porcelain must fail on empty selector list: $pout"
         rm -rf "$demo_b1"; exit 1
     fi
-    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'empty scan list'; then
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'scanned 0 files (engine)'; then
         echo "FAIL: B1 engine must fail on empty selector list: $eout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    # Blank-only selector (printf '\n\n'; exit 0) — size>0 but scanned 0 → FAIL both.
+    cat >"$demo_b1/scripts/list-guard-scan-files.sh" <<'MUT_BLANK'
+#!/usr/bin/env bash
+printf '\n\n'
+exit 0
+MUT_BLANK
+    chmod +x "$demo_b1/scripts/list-guard-scan-files.sh"
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'scanned 0 files (porcelain)'; then
+        echo "FAIL: B1 porcelain must fail on blank-only selector: $pout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'scanned 0 files (engine)'; then
+        echo "FAIL: B1 engine must fail on blank-only selector: $eout"
         rm -rf "$demo_b1"; exit 1
     fi
     # Mutation on REAL guards: drop require_readable + restore || true → garbage passes.
@@ -1517,6 +1541,63 @@ PY
         rm -rf "$demo_b1"; exit 1
     fi
     rm -rf "$demo_b1"
+
+    # --- B3 grep≥2: behavioural REQ after require_readable (GREP= shim exit 2) ---
+    demo_g2=$(mktemp -d)
+    seed_guard_demo "$demo_g2"
+    printf 'ok\n' >"$demo_g2/scripts/zz_ok"
+    printf 'ok\n' >"$demo_g2/scripts/ez_ok"
+    grep_shim=$(mktemp)
+    cat >"$grep_shim" <<'SHIM'
+#!/usr/bin/env bash
+exit 2
+SHIM
+    chmod +x "$grep_shim"
+    set +e
+    pout=$(GREP="$grep_shim" ARM_PORCELAIN_SKIP_SELFTEST=1 \
+        bash "$demo_g2/scripts/check-porcelain-failclosed.sh" "$demo_g2" 2>&1)
+    pst=$?
+    eout=$(GREP="$grep_shim" bash "$demo_g2/scripts/check-no-engine-bin-env.sh" "$demo_g2" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz_ok unscannable'; then
+        echo "FAIL: B3 porcelain GREP=exit2 must FAIL unscannable after readable: $pout"
+        rm -rf "$demo_g2" "$grep_shim"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/ez_ok unscannable'; then
+        echo "FAIL: B3 engine GREP=exit2 must FAIL unscannable after readable: $eout"
+        rm -rf "$demo_g2" "$grep_shim"; exit 1
+    fi
+    # Mutant: if [ "$st" -ge 2 ] → if false — must incorrectly exit 0 (suite kills if not).
+    python3 - "$demo_g2/scripts/check-porcelain-failclosed.sh" "$demo_g2/scripts/check-no-engine-bin-env.sh" <<'PY'
+import pathlib, sys
+for arg in sys.argv[1:]:
+    p = pathlib.Path(arg)
+    t = p.read_text()
+    n = t.replace('if [ "$st" -ge 2 ]; then', 'if false; then  # mutated: ignore grep exit>=2')
+    n = n.replace('if [ "$vst" -ge 2 ]; then', 'if false; then  # mutated')
+    n = n.replace('if [ "$sst" -ge 2 ]; then', 'if false; then  # mutated')
+    n = n.replace('if [ "$gst" -ge 2 ]; then', 'if false; then  # mutated')
+    if n == t:
+        raise SystemExit(f'grep>=2 mutant: no st-ge-2 site in {p}')
+    p.write_text(n)
+PY
+    set +e
+    pout=$(GREP="$grep_shim" ARM_PORCELAIN_SKIP_SELFTEST=1 \
+        bash "$demo_g2/scripts/check-porcelain-failclosed.sh" "$demo_g2" 2>&1)
+    pst=$?
+    eout=$(GREP="$grep_shim" bash "$demo_g2/scripts/check-no-engine-bin-env.sh" "$demo_g2" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -ne 0 ]; then
+        echo "FAIL: B3 mutation (ignore grep>=2) porcelain must exit 0: st=$pst $pout"
+        rm -rf "$demo_g2" "$grep_shim"; exit 1
+    fi
+    if [ "$est" -ne 0 ]; then
+        echo "FAIL: B3 mutation (ignore grep>=2) engine must exit 0: st=$est $eout"
+        rm -rf "$demo_g2" "$grep_shim"; exit 1
+    fi
+    rm -rf "$demo_g2" "$grep_shim"
 
     # --- B2 / REQ2: NUL-first + NUL-later fixtures for BOTH guards ---
     demo_nul=$(mktemp -d)
@@ -1612,7 +1693,8 @@ PY
     utf8_loc=""
     if utf8_loc=$(pick_utf8_locale); then
         # No .bak under scripts/ — backups are scanned and trip engine bans in comments.
-        sed -i 's/LC_ALL=C grep -a/grep -a/g' \
+        # Drop LC_ALL=C from both `grep` and `"$GREP"` scan sites.
+        sed -i -e 's/LC_ALL=C "\$GREP" -a/"$GREP" -a/g' -e 's/LC_ALL=C grep -a/grep -a/g' \
             "$demo_ff/scripts/check-porcelain-failclosed.sh" \
             "$demo_ff/scripts/check-no-engine-bin-env.sh"
         set +e
