@@ -2,18 +2,32 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/sources"
 	"github.com/scullxbones/armature/internal/testexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRemoteOpsRefMissing_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	assert.False(t, remoteOpsRefMissing(nil))
+	assert.True(t, remoteOpsRefMissing(adapters.ErrRemoteRefMissing))
+	assert.True(t, remoteOpsRefMissing(errors.New("invalid upstream")))
+	assert.True(t, remoteOpsRefMissing(errors.New("Unknown revision")))
+	assert.True(t, remoteOpsRefMissing(errors.New("needed a single revision")))
+	assert.True(t, remoteOpsRefMissing(errors.New("does not exist")))
+	assert.True(t, remoteOpsRefMissing(errors.New("not a valid object name")))
+	assert.False(t, remoteOpsRefMissing(errors.New("connection refused")))
+}
 
 func TestMakefileValidateGraphIsArmValidateCI_REQ_PUBLISH_VALIDATE(t *testing.T) {
 	t.Parallel()

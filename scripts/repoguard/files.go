@@ -28,8 +28,20 @@ func requireGoMod(root string) error {
 }
 
 func parseGoTree(root string, testOnly bool) ([]parsedFile, *token.FileSet, error) {
+	return parseGoTreeOpts(root, testOnly, false, false)
+}
+
+func parseProdGo(root string) ([]parsedFile, *token.FileSet, error) {
+	return parseGoTreeOpts(root, false, true, true)
+}
+
+func parseGoTreeOpts(root string, testOnly, prodOnly, comments bool) ([]parsedFile, *token.FileSet, error) {
 	fset := token.NewFileSet()
 	var out []parsedFile
+	mode := parser.SkipObjectResolution
+	if comments {
+		mode |= parser.ParseComments
+	}
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -50,6 +62,9 @@ func parseGoTree(root string, testOnly bool) ([]parsedFile, *token.FileSet, erro
 		if testOnly && !strings.HasSuffix(name, "_test.go") {
 			return nil
 		}
+		if prodOnly && strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
 		src, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -57,7 +72,7 @@ func parseGoTree(root string, testOnly bool) ([]parsedFile, *token.FileSet, erro
 		if isIgnoreTagged(src) {
 			return nil
 		}
-		file, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+		file, err := parser.ParseFile(fset, path, src, mode)
 		if err != nil {
 			rel, relErr := filepath.Rel(root, path)
 			if relErr != nil {

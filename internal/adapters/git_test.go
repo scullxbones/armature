@@ -1065,6 +1065,46 @@ func TestCurrentBranch(t *testing.T) {
 	assert.NotEmpty(t, branch)
 }
 
+func TestPush_LocalOriginSucceeds(t *testing.T) {
+	t.Parallel()
+	fx := gittest.InitWithOrigin(t)
+	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
+	c := adapters.New(fx.Dir)
+	require.NoError(t, c.Push("main"))
+	local := runGitOutput(t, fx.Dir, "rev-parse", "HEAD")
+	remote := runGitOutput(t, fx.Origin, "rev-parse", "refs/heads/main")
+	assert.Equal(t, local, remote)
+}
+
+func TestPush_StalledRemoteTimesOut(t *testing.T) {
+	t.Parallel()
+	repo := initTestRepo(t)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() }) //nolint:errcheck // best-effort listener cleanup
+	ctx := t.Context()
+	go func() {
+		for {
+			conn, accErr := ln.Accept()
+			if accErr != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close() //nolint:errcheck // best-effort
+				<-ctx.Done()
+			}(conn)
+		}
+	}()
+	gittest.Git(t, repo, "remote", "add", "origin", "http://"+ln.Addr().String()+"/stall.git")
+	c := adapters.New(repo).WithNetworkTimeout(200 * time.Millisecond)
+	start := time.Now()
+	err = c.Push("main")
+	elapsed := time.Since(start)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, elapsed, 3*time.Second, "stalled push must fail-closed near the network deadline")
+}
+
 func TestPush_ErrorOnNoRemote(t *testing.T) {
 	t.Parallel()
 	repo := initTestRepo(t)

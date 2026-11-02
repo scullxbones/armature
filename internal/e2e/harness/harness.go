@@ -29,6 +29,7 @@ func New(t *testing.T, armBinPath string) *Harness {
 	tempDir := t.TempDir()
 	fx := gittest.InitWithOrigin(t)
 	gittest.Git(t, fx.Dir, "commit", "--allow-empty", "-m", "init")
+	// gitnetallow: e2e-local-origin-push local bare from gittest.InitWithOrigin, not a network URL
 	if err := gitRun(t, fx.Dir, "push", "-u", "origin", "main"); err != nil {
 		t.Fatalf("failed to push to origin: %v", err)
 	}
@@ -50,6 +51,7 @@ func New(t *testing.T, armBinPath string) *Harness {
 }
 
 func (h *Harness) Clone(name, path string) error {
+	// gitnetallow: e2e-local-origin-clone local bare path in h.OriginDir, not a network URL
 	if err := gitRun(h.t, h.TempDir, "clone", h.OriginDir, path); err != nil {
 		h.t.Fatalf("failed to clone: %v", err)
 	}

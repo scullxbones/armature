@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -350,12 +351,15 @@ exit 0
 	repo := t.TempDir()
 	c := New(repo).WithEnviron([]string{"PATH=" + wrapperDir}).WithNetworkTimeout(timeout)
 	start := time.Now()
-	cmd, cancel := c.networkCmd("ls-remote", "--refs", "origin", "refs/heads/_armature")
+	cmd, ctx, cancel := c.networkCmd("ls-remote", "--refs", "origin", "refs/heads/_armature")
 	defer cancel()
 	err := cmd.Run()
+	if ctx.Err() != nil {
+		err = errors.Join(ctx.Err(), err)
+	}
 	elapsed := time.Since(start)
-	if err == nil {
-		t.Fatal("expected timeout error from stalled ls-remote")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
 	}
 	// timeout + WaitDelay slack
 	if elapsed > 3*time.Second {

@@ -606,7 +606,11 @@ func TestGochecknoglobalsProbe_missingEnableFails(t *testing.T) {
 func TestRealRepoPassesGuards(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
-	for _, check := range []string{"source-manifest", "test-executables", "git-hermetic", "gochecknoglobals-probe", "golangci-in-tests", "object-id"} {
+	checks := []string{
+		"source-manifest", "test-executables", "git-hermetic", "gochecknoglobals-probe",
+		"golangci-in-tests", "object-id", "git-network",
+	}
+	for _, check := range checks {
 		out, errOut, code := runCheck(t, check, root)
 		if code != 0 {
 			t.Fatalf("%s failed on real repo:\n%s\n%s", check, out, errOut)
@@ -621,6 +625,14 @@ func TestRealRepoPassesGuards(t *testing.T) {
 		}
 		if check == "object-id" && !strings.Contains(out, "OK: object-id") {
 			t.Fatalf("missing object-id OK line: %s", out)
+		}
+		if check == "git-network" {
+			if !strings.Contains(out, "OK: remote-network git calls go through networkCmd") {
+				t.Fatalf("missing git-network OK line: %s", out)
+			}
+			if !strings.Contains(out, "bundle-create-local-bare-push") || !strings.Contains(out, "e2e-local-origin-clone") {
+				t.Fatalf("must list per-site local-transport allows, got %s", out)
+			}
 		}
 	}
 }
@@ -666,6 +678,94 @@ const Pattern = ` + "`^[a-f0-9]{40}$|^[a-f0-9]{64}$`" + `
 	if code != 0 {
 		t.Fatalf("expected pass, stdout=%s stderr=%s", out, errOut)
 	}
+}
+
+func TestGitNetwork_testdataBypasses_REQ_REPOGUARD(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		file string
+		verb string
+	}{
+		{"fetch", "fetch_origin.go", "fetch"},
+		{"push", "push_origin.go", "push"},
+		{"ls-remote", "ls_remote_commandgit.go", "ls-remote"},
+		{"variable", "var_subcommand.go", "fetch"},
+		{"const", "const_subcommand.go", "pull"},
+		{"append", "append_args.go", "push"},
+		{"alias", "alias_builder.go", "clone"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := readGitNetFixture(t, tc.file)
+			root := writeTree(t, map[string]string{
+				"go.mod":             "module fixture\n\ngo 1.22\n",
+				"cmd/fake/bypass.go": body,
+			})
+			_, errOut, code := runCheck(t, "git-network", root)
+			if code == 0 {
+				t.Fatalf("%s: expected fail", tc.name)
+			}
+			if !strings.Contains(errOut, "outside networkCmd") || !strings.Contains(errOut, tc.verb) {
+				t.Fatalf("%s: must name networkCmd and %s, got %s", tc.name, tc.verb, errOut)
+			}
+			if !strings.Contains(errOut, "Use networkCmd") {
+				t.Fatalf("%s: fix message missing, got %s", tc.name, errOut)
+			}
+		})
+	}
+}
+
+func TestGitNetwork_sanctionedAndLocalAllowPass(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod":                   "module fixture\n\ngo 1.22\n",
+		"cmd/fake/ok.go":           readGitNetFixture(t, "sanctioned_networkcmd.go"),
+		"internal/adapters/git.go": readGitNetFixture(t, "local_transport_allow.go"),
+	})
+	out, errOut, code := runCheck(t, "git-network", root)
+	if code != 0 {
+		t.Fatalf("expected pass, stdout=%s stderr=%s", out, errOut)
+	}
+	if !strings.Contains(out, "OK: remote-network git calls go through networkCmd") {
+		t.Fatalf("missing OK line: %s", out)
+	}
+	if !strings.Contains(out, "bundle-create-local-bare-push") {
+		t.Fatalf("must list the local-transport allow, got %s", out)
+	}
+}
+
+func TestGitNetwork_fileCommentDoesNotAllow(t *testing.T) {
+	t.Parallel()
+	body := `// gitnetallow: bundle-create-local-bare-push local bare path under armature-tmp-work, not a named remote
+package fake
+
+func bad(c *Client) {
+	c.cmd("fetch", "origin", "main")
+}
+`
+	root := writeTree(t, map[string]string{
+		"go.mod":           "module fixture\n\ngo 1.22\n",
+		"cmd/fake/wide.go": body,
+	})
+	_, errOut, code := runCheck(t, "git-network", root)
+	if code == 0 {
+		t.Fatal("file-level gitnetallow must not exempt a fetch")
+	}
+	if !strings.Contains(errOut, "outside networkCmd") {
+		t.Fatalf("got %s", errOut)
+	}
+}
+
+func readGitNetFixture(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join(repoRoot(t), "scripts", "repoguard", "testdata", "gitnet", name)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
 }
 
 func assertExecRejected(t *testing.T, name, body string) {
