@@ -1,54 +1,76 @@
 #!/usr/bin/env bash
 # Invoked by scripts/check-porcelain-failclosed.sh (testdata; not scanned).
-# Proves: bypass forms detected; status exit 128 + hash-object failure
-# fail both --write-baseline and check modes.
+# Proves: bypass forms detected by the REAL guard (not a copied regex);
+# status exit 128 + hash-object failure fail both --write-baseline and check.
+# Tools pinned via guard_resolve_tool (no ambient PATH lookup).
 set -euo pipefail
 
 ROOT="${1:-.}"
+SCRIPT_DIR="$(cd "${0%/*}" && pwd)"
+# Resolver lives next to other scripts/; from testdata/porcelain-bypass go up 2.
+RESOLVER_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck disable=SC1091
+. "$RESOLVER_DIR/guard-resolve-tool.sh"
+MKTEMP="$(guard_resolve_tool mktemp)" || exit 1
+MKDIR="$(guard_resolve_tool mkdir)" || exit 1
+CP="$(guard_resolve_tool cp)" || exit 1
+RM="$(guard_resolve_tool rm)" || exit 1
+BASH_BIN="$(guard_resolve_tool bash)" || exit 1
+GREP="$(guard_resolve_tool grep)" || exit 1
+SED="$(guard_resolve_tool sed)" || exit 1
+CAT="$(guard_resolve_tool cat)" || exit 1
+CHMOD="$(guard_resolve_tool chmod)" || exit 1
+GIT="$(guard_resolve_tool git)" || exit 1
+
 BYPASS_DIR="$ROOT/scripts/testdata/porcelain-bypass"
 CHECKER="$ROOT/scripts/check-test-porcelain.sh"
+GUARD="$ROOT/scripts/check-porcelain-failclosed.sh"
 
-_gw='gi'
-_gw="${_gw}t"
-_st='sta'
-_st="${_st}tus"
-_ho='hash-obj'
-_ho="${_ho}ect"
-_tok_end='([^A-Za-z0-9_-]|$)'
-_tok_start='(^|[^A-Za-z0-9_-])'
-CLASS_RE="${_tok_start}${_gw}([^A-Za-z0-9_-](.*[^A-Za-z0-9_-])?)(${_st}|${_ho})${_tok_end}"
-VAR_RE="${_tok_start}(\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?|\"\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?\")[[:space:]]+(${_st}|${_ho})${_tok_end}"
-
-flatten() {
-  awk '{
-    if (sub(/\\$/, "")) { printf "%s", $0; next }
-    print
-  }' "$1"
-}
-
+# Drive the real guard against each fixture in an isolated scripts/ tree.
+# Weakening CLASS_RE/VAR_RE/XARGS_RE in check-porcelain-failclosed.sh must
+# make this loop fail (fixtures no longer detected).
 for fx in \
   git-c-status.sh \
   var-git-status.sh \
   alias-git-status.sh \
+  eval-git-status.sh \
+  xargs-git.sh \
   cmdsub-status-or-true.sh \
   status-semicolon.sh \
   status-pipe-cat.sh \
   func-git-status.sh \
-  no-pager-status-or-true.sh
+  no-pager-status-or-true.sh \
+  extless-git-status
 do
   path="$BYPASS_DIR/$fx"
   if [ ! -f "$path" ]; then
     echo "FAIL: missing porcelain bypass fixture $path" >&2
     exit 1
   fi
-  flat="$(flatten "$path")"
-  hits="$(printf '%s\n' "$flat" | grep -nE "$CLASS_RE|$VAR_RE" \
-    | grep -vE '^[[:digit:]]+:[[:space:]]*#' || true)"
-  if [ -z "$hits" ]; then
-    echo "FAIL: bypass fixture $fx not detected by porcelain ban regex" >&2
+  demo=$("$MKTEMP" -d)
+  "$MKDIR" -p "$demo/scripts"
+  # Preserve extensionless name when the fixture has no suffix.
+  case "$fx" in
+    *.*) "$CP" "$path" "$demo/scripts/$fx" ;;
+    *) "$CP" "$path" "$demo/scripts/$fx" ;;
+  esac
+  # Guard must see a scripts/ tree; skip nested selftest.
+  set +e
+  out=$("$BASH_BIN" "$GUARD" --skip-selftest "$demo" 2>&1)
+  st=$?
+  set -e
+  "$RM" -rf "$demo"
+  # Integrity: require the specific FAIL: scripts/<fixture> line — a crashing
+  # guard (nonzero without that line) must fail this selftest.
+  if ! printf '%s\n' "$out" | "$GREP" -q "FAIL: scripts/${fx}"; then
+    echo "FAIL: real guard missing 'FAIL: scripts/${fx}' (st=$st): $out" >&2
     exit 1
   fi
-  echo "OK: bypass fixture $fx detected"
+  if [ "$st" -eq 0 ]; then
+    echo "FAIL: real guard exited 0 after flagging $fx: $out" >&2
+    exit 1
+  fi
+  echo "OK: real guard flagged bypass fixture $fx"
 done
 
 write_ok_helper() {
@@ -57,23 +79,23 @@ write_ok_helper() {
   # write via split tokens then sed to real names for the temp helper only.
   _s='sta'; _s="${_s}tus"
   _h='hash-obj'; _h="${_h}ect"
-  cat >"$dest" <<EOF
+  "$CAT" >"$dest" <<EOF
 porcelain_git_rev_parse() { git rev-parse "\$@"; }
 porcelain_git_${_s}_z() { git ${_s} --porcelain -z --untracked-files=all "\$@"; }
 porcelain_git_${_h}() { git ${_h} "\$@"; }
 EOF
-  sed -i.bak \
+  "$SED" -i.bak \
     -e "s/porcelain_git_${_s}_z/porcelain_git_status_z/g" \
     -e "s/porcelain_git_${_h}/porcelain_git_hash_object/g" \
     -e "s/git ${_s}/git status/g" \
     -e "s/git ${_h}/git hash-object/g" \
     "$dest"
-  rm -f "$dest.bak"
+  "$RM" -f "$dest.bak"
 }
 
 write_status128_helper() {
   local dest="$1"
-  cat >"$dest" <<'EOF'
+  "$CAT" >"$dest" <<'EOF'
 porcelain_git_rev_parse() { git rev-parse "$@"; }
 porcelain_git_status_z() { return 128; }
 porcelain_git_hash_object() { git hash-object "$@"; }
@@ -82,7 +104,7 @@ EOF
 
 write_hashfail_helper() {
   local dest="$1"
-  cat >"$dest" <<'EOF'
+  "$CAT" >"$dest" <<'EOF'
 porcelain_git_rev_parse() { git rev-parse "$@"; }
 porcelain_git_status_z() { git status --porcelain -z --untracked-files=all "$@"; }
 porcelain_git_hash_object() { echo "stub hash-object fail" >&2; return 1; }
@@ -92,34 +114,34 @@ EOF
 prove_status_exit() {
   local mode="$1"
   local demo baseline out st
-  demo=$(mktemp -d)
-  mkdir -p "$demo/scripts"
-  git -C "$demo" init -q
-  git -C "$demo" config user.email "t@t"
-  git -C "$demo" config user.name "t"
+  demo=$("$MKTEMP" -d)
+  "$MKDIR" -p "$demo/scripts"
+  "$GIT" -C "$demo" init -q
+  "$GIT" -C "$demo" config user.email "t@t"
+  "$GIT" -C "$demo" config user.name "t"
   echo x >"$demo/tracked.txt"
-  git -C "$demo" add tracked.txt
-  git -C "$demo" commit -qm init
+  "$GIT" -C "$demo" add tracked.txt
+  "$GIT" -C "$demo" commit -qm init
   echo dirt >"$demo/leak.txt"
-  cp "$CHECKER" "$demo/scripts/check-test-porcelain.sh"
-  chmod +x "$demo/scripts/check-test-porcelain.sh"
+  "$CP" "$CHECKER" "$demo/scripts/check-test-porcelain.sh"
+  "$CHMOD" +x "$demo/scripts/check-test-porcelain.sh"
 
   set +e
   if [ "$mode" = "write" ]; then
     write_status128_helper "$demo/scripts/porcelain-git.sh"
     baseline="$demo/base"
-    out=$(bash "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" 2>&1)
+    out=$("$BASH_BIN" "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" 2>&1)
     st=$?
   else
     write_ok_helper "$demo/scripts/porcelain-git.sh"
     baseline="$demo/base"
-    bash "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" >/dev/null
+    "$BASH_BIN" "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" >/dev/null
     write_status128_helper "$demo/scripts/porcelain-git.sh"
-    out=$(bash "$demo/scripts/check-test-porcelain.sh" "$demo" "$baseline" 2>&1)
+    out=$("$BASH_BIN" "$demo/scripts/check-test-porcelain.sh" "$demo" "$baseline" 2>&1)
     st=$?
   fi
   set -e
-  rm -rf "$demo"
+  "$RM" -rf "$demo"
   if [ "$st" -eq 0 ]; then
     echo "FAIL: status exit 128 swallowed in $mode mode: $out" >&2
     exit 1
@@ -130,39 +152,39 @@ prove_status_exit() {
 prove_hash_object_fail() {
   local mode="$1"
   local demo baseline out st
-  demo=$(mktemp -d)
-  mkdir -p "$demo/scripts"
-  git -C "$demo" init -q
-  git -C "$demo" config user.email "t@t"
-  git -C "$demo" config user.name "t"
+  demo=$("$MKTEMP" -d)
+  "$MKDIR" -p "$demo/scripts"
+  "$GIT" -C "$demo" init -q
+  "$GIT" -C "$demo" config user.email "t@t"
+  "$GIT" -C "$demo" config user.name "t"
   echo x >"$demo/tracked.txt"
-  git -C "$demo" add tracked.txt
-  git -C "$demo" commit -qm init
+  "$GIT" -C "$demo" add tracked.txt
+  "$GIT" -C "$demo" commit -qm init
   echo dirt >"$demo/leak.txt"
-  cp "$CHECKER" "$demo/scripts/check-test-porcelain.sh"
-  chmod +x "$demo/scripts/check-test-porcelain.sh"
+  "$CP" "$CHECKER" "$demo/scripts/check-test-porcelain.sh"
+  "$CHMOD" +x "$demo/scripts/check-test-porcelain.sh"
 
   set +e
   if [ "$mode" = "write" ]; then
     write_hashfail_helper "$demo/scripts/porcelain-git.sh"
     baseline="$demo/base"
-    out=$(bash "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" 2>&1)
+    out=$("$BASH_BIN" "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" 2>&1)
     st=$?
   else
     write_ok_helper "$demo/scripts/porcelain-git.sh"
     baseline="$demo/base"
-    bash "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" >/dev/null
+    "$BASH_BIN" "$demo/scripts/check-test-porcelain.sh" --write-baseline "$demo" "$baseline" >/dev/null
     write_hashfail_helper "$demo/scripts/porcelain-git.sh"
-    out=$(bash "$demo/scripts/check-test-porcelain.sh" "$demo" "$baseline" 2>&1)
+    out=$("$BASH_BIN" "$demo/scripts/check-test-porcelain.sh" "$demo" "$baseline" 2>&1)
     st=$?
   fi
   set -e
-  rm -rf "$demo"
+  "$RM" -rf "$demo"
   if [ "$st" -eq 0 ]; then
     echo "FAIL: hash-object failure soft-passed in $mode mode: $out" >&2
     exit 1
   fi
-  if printf '%s\n' "$out" | grep -q 'unreadable'; then
+  if printf '%s\n' "$out" | "$GREP" -q 'unreadable'; then
     echo "FAIL: hash-object failure still soft-marked unreadable in $mode: $out" >&2
     exit 1
   fi

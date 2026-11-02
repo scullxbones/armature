@@ -305,6 +305,7 @@ lint: adr-principles
 	}
 	XDG_CACHE_HOME=/tmp/golangci-lint-cache golangci-lint run ./...
 	@scripts/check-bash32-scripts.sh .
+	@scripts/check-guard-no-ambient-tools.sh .
 	@scripts/check-porcelain-failclosed.sh .
 	@scripts/check-no-engine-bin-env.sh .
 	@scripts/check-workflow-image-pins.sh .
