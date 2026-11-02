@@ -31,6 +31,10 @@ func gitIdentHelpers() map[string]bool {
 }
 
 func checkGitHermetic(root string, stdout, stderr io.Writer) error {
+	if err := validateAllowlist(); err != nil {
+		fmt.Fprintf(stderr, "FAIL: %v\n", err)
+		return err
+	}
 	if err := requireGoMod(root); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
@@ -48,8 +52,6 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 	for _, pf := range files {
 		fileNums, fileStrs := collectFileConsts(pf.file, pf.imports)
 		inGittest := underDir(pf.rel, "internal/gittest")
-		nameAllow := allowed(pf.rel, allowGitHermeticName)
-		initAllow := allowed(pf.rel, allowGitHermeticInit)
 		usesGit := false
 		isolated := false
 
@@ -69,33 +71,51 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				if gitCallExec(x, pf.imports, fileStrs) {
 					usesGit = true
 				}
-				if !inGittest && !initAllow && gitCallInit(x, pf.imports, fileStrs) {
-					initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+				if !inGittest && gitCallInit(x, pf.imports, fileStrs) {
+					pos := fset.Position(x.Pos())
+					if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+					}
 				}
 			case *ast.CompositeLit:
 				args := foldedElems(x, fileStrs)
 				if gitArgv(args) {
 					usesGit = true
 				}
-				if !inGittest && !initAllow && gitArgvInit(args) {
-					initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+				if !inGittest && gitArgvInit(args) {
+					pos := fset.Position(x.Pos())
+					if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+					}
 				}
 			case *ast.BasicLit:
 				if s, ok := foldString(x, fileStrs); ok {
-					if gitInitInText(s) && !inGittest && !initAllow {
-						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+					pos := fset.Position(x.Pos())
+					if gitInitInText(s) && !inGittest {
+						if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+							initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+						}
 					}
-					if s == "git" && !nameAllow {
-						usesGit = true
+					if s == "git" {
+						if allowedGitHermeticSite(pf.rel, allowGitHermeticName, pos.Line, "git") {
+							// waived binary-name fixture
+						} else {
+							usesGit = true
+						}
 					}
 				}
 			case *ast.BinaryExpr:
 				if s, ok := foldString(x, fileStrs); ok {
-					if gitInitInText(s) && !inGittest && !initAllow {
-						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+					pos := fset.Position(x.Pos())
+					if gitInitInText(s) && !inGittest {
+						if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+							initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
+						}
 					}
-					if s == "git" && !nameAllow {
-						usesGit = true
+					if s == "git" {
+						if !allowedGitHermeticSite(pf.rel, allowGitHermeticName, pos.Line, "git") {
+							usesGit = true
+						}
 					}
 				}
 			case *ast.Ident:

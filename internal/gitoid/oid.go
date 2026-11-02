@@ -42,10 +42,14 @@ func padHex(prefix string, n int) string {
 	if prefix == "" {
 		prefix = "a"
 	}
+	for _, r := range prefix {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+			panic("gitoid: padHex prefix must be hex")
+		}
+	}
 	var b strings.Builder
 	for b.Len() < n {
 		b.WriteString(prefix)
 	}
-	out := strings.ToLower(b.String()[:n])
-	return out
+	return strings.ToLower(b.String()[:n])
 }

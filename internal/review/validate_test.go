@@ -506,7 +506,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 	t.Run("activity log missing or unreadable", func(t *testing.T) {
 		t.Parallel()
 		err := ValidateAssessment(validValidateInputWithActivity(t, &Activity{
-			Digest:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Digest:     gitoid.PadSHA256("a"),
 			EntryCount: 1,
 			LogPath:    filepath.Join(t.TempDir(), "does-not-exist.log"),
 		}))

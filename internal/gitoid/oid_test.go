@@ -47,6 +47,16 @@ func TestPadSHA1OwnsWidth_REQ_419(t *testing.T) {
 	}
 }
 
+func TestPadHexRejectsNonHexPrefix_REQ_419(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("padHex non-hex prefix must panic")
+		}
+	}()
+	_ = PadSHA1("not-hex")
+}
+
 func TestValidEqualsPatternLower_REQ_PV70(t *testing.T) {
 	t.Parallel()
 	re := regexp.MustCompile(PatternLower)

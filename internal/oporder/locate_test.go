@@ -193,7 +193,7 @@ func (c *countingBlobReader) Read(ref adapters.BlobRef) (adapters.BlobResult, er
 // cat-file reads O(op-changing commits), not ~2×, and never retains all versions.
 func TestStreamLocateFromWalk_BlobReadsLinear_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	const n = 40
+	n := gitoid.LenSHA1
 	const path = "ops/worker-a.log"
 	walk := make([]adapters.CommitWalkEntry, 0, n)
 	blobs := map[string][]byte{}

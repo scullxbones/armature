@@ -1130,7 +1130,7 @@ func TestRecord_GateEvidenceMissingLogFails_REQ_LNGHZN_S10_T3(t *testing.T) {
 		Start:      1,
 		End:        2,
 		Exit:       0,
-		OutputHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		OutputHash: gitoid.PadSHA256("a"),
 		LogPath:    filepath.Join(t.TempDir(), "missing.log"),
 	}
 	bundle, assessment := gateEvidenceRecordFixture(t, ev)

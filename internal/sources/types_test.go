@@ -3,6 +3,8 @@ package sources
 import (
 	"testing"
 	"time"
+
+	"github.com/scullxbones/armature/internal/gitoid"
 )
 
 func TestManifestGetByURL(t *testing.T) {
@@ -63,7 +65,7 @@ func TestManifestRoundTrip(t *testing.T) {
 		ID:           "src-001",
 		URL:          "https://example.com/doc",
 		Title:        "Example Document",
-		Fingerprint:  "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+		Fingerprint:  gitoid.PadSHA256("abc123"),
 		LastSynced:   time.Date(2026, 3, 19, 12, 0, 0, 0, time.UTC),
 		ProviderType: "github",
 	}

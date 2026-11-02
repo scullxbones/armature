@@ -63,8 +63,8 @@ func TestReviewBundleIncludesGateEvidence_REQ_LNGHZN_S10_T3(t *testing.T) {
 			HeadSHA: head,
 		},
 		Fingerprints: Fingerprints{
-			Contract: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			Delivery: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Contract: gitoid.PadSHA256("a"),
+			Delivery: gitoid.PadSHA256("b"),
 		},
 	}
 

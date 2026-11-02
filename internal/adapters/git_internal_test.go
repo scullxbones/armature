@@ -237,9 +237,9 @@ func TestParseCommitWalkOutput_KeepsFirstParentMergeBlock_REQ_OPORDER_LOCATE(t *
 
 func TestParseCommitWalkOutput_SHA256ObjectIDs_REQ_OPORDER_LOCATE(t *testing.T) {
 	t.Parallel()
-	const merge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	const p1 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	const p2 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	var merge = gitoid.PadSHA256("a")
+	var p1 = gitoid.PadSHA256("b")
+	var p2 = gitoid.PadSHA256("c")
 	if len(merge) != gitoid.LenSHA256 || len(p1) != gitoid.LenSHA256 {
 		t.Fatal("test fixtures must be 64-hex")
 	}
