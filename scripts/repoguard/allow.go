@@ -4,6 +4,10 @@ const allowGitHermeticName = "git-hermetic-name"
 
 const allowGitHermeticInit = "git-hermetic-init"
 
+const allowObjectID = "object-id"
+
+const allowResidualTrls = "residual-trls"
+
 type allowEntry struct {
 	RelPath string
 	Check   string
@@ -21,6 +25,31 @@ func allowlist() []allowEntry {
 			RelPath: "scripts/repoguard/repoguard_test.go",
 			Check:   allowGitHermeticInit,
 			Reason:  "fixture assertions and example sources quote raw git init; production packages still fail",
+		},
+		{
+			RelPath: "internal/gitoid/oid.go",
+			Check:   allowObjectID,
+			Reason:  "canonical PatternLower home — the one allowed 40|64 literal",
+		},
+		{
+			RelPath: "internal/gitoid/oid_test.go",
+			Check:   allowObjectID,
+			Reason:  "asserts PatternLower contains {40} and {64}; not a second predicate",
+		},
+		{
+			RelPath: "scripts/test_check_jobs.sh",
+			Check:   allowObjectID,
+			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
+		},
+		{
+			RelPath: "internal/worker/residual_trls_test.go",
+			Check:   allowResidualTrls,
+			Reason:  "behavioral REQ tests name the banned token in assertions",
+		},
+		{
+			RelPath: "internal/tui/app/model_test.go",
+			Check:   allowResidualTrls,
+			Reason:  "NavBar REQ asserts the brand string must not contain trls",
 		},
 	}
 }
