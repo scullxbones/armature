@@ -7,9 +7,10 @@
 # on empty / quote-less bodies is intentionally gone — late pastes and skipped
 # pastes must not greenwash check-core.
 #
-# Tolerance: each quoted tree passes when |body − log| ≤ 0.10 absolute points;
-# 0.11 fails. The coverage-check.sh internal ≥ 86% floor is a separate hard
-# gate and is not relaxed here.
+# Tolerance: compare in integer hundredths — round(x*100), then |d| ≤ 10
+# (0.10 points inclusive). 0.11 fails. Float equality at the 0.10 boundary is
+# unreliable; hundredths kill that class. The coverage-check.sh internal ≥ 86%
+# floor is a separate hard gate and is not relaxed here.
 #
 # Accepted body shapes (non-exhaustive):
 #   cmd coverage: 83.75%
@@ -17,16 +18,16 @@
 #   **internal 86.08%**, cmd 83.75%
 #   | check-core coverage | **internal 86.08%**, cmd 83.75% |
 #
-# Bash 3.2-safe. No network / gh API — body and log are plain files (CI can
-# feed GITHUB_EVENT_PATH via jq; agents can tee make check-job JOB=check-core).
+# Bash 3.2-safe. Body and log are plain files (CI fetches a live PR body via
+# gh api into a file; agents can tee make check-job JOB=check-core).
 
 set -euo pipefail
 
 BODY=${1:?usage: pr-coverage-quote-check.sh <body-file> <coverage-log>}
 LOG=${2:?usage: pr-coverage-quote-check.sh <body-file> <coverage-log>}
 
-# Absolute tolerance in coverage points (inclusive).
-TOL=0.10
+# Inclusive hundredths budget: |round(body*100) − round(log*100)| ≤ TOL_HUNDREDTHS.
+TOL_HUNDREDTHS=10
 
 if [ ! -f "$BODY" ]; then
 	echo "FAIL: body file not found: $BODY" >&2
@@ -43,7 +44,8 @@ LOG_INT=$(sed -n 's/^internal coverage: \([0-9][0-9]*\.[0-9][0-9]*\)%$/\1/p' "$L
 
 # Collect body quotes in one awk pass (no shared-stdin multi-sed).
 # Prefer "cmd coverage:" / "internal coverage:"; also accept "cmd N.NN%" /
-# "internal N.NN%" on a line that mentions coverage (table / bold forms).
+# "internal N.NN%" short forms. Short-form tokens are LITERALLY cmd / internal
+# (not any word) so "foo 86.09%" cannot satisfy the internal quote.
 EVAL=$(awk '
 function take_pct(s,   m) {
 	if (match(s, /[0-9]+\.[0-9]+%/)) {
@@ -62,8 +64,8 @@ function take_pct(s,   m) {
 		intp = take_pct(substr(line, RSTART, RLENGTH))
 	}
 	# Short forms: "internal 86.08%" / "cmd 83.75%" (optional ** around token).
-	# Also covers table cells that mention coverage elsewhere on the line.
-	if (intp == "" && match(low, /internal[[:space:]]+[0-9]+\.[0-9]+%/)) {
+	# Bound the token: must be the word internal/cmd, not an arbitrary word.
+	if (intp == "" && match(low, /(^|[^a-z])internal[[:space:]]+[0-9]+\.[0-9]+%/)) {
 		intp = take_pct(substr(line, RSTART, RLENGTH))
 	}
 	if (cmd == "" && match(low, /(^|[^a-z])cmd[[:space:]]+[0-9]+\.[0-9]+%/)) {
@@ -89,22 +91,25 @@ if [ -z "${LOG_CMD}" ] || [ -z "${LOG_INT}" ]; then
 	exit 1
 fi
 
-# |body − log| ≤ TOL → 0; else 1. Bash 3.2 has no float ops — awk decides.
+# |round(body*100) − round(log*100)| ≤ TOL_HUNDREDTHS → 0; else 1.
+# Abs is mandatory: without it, body 0.11 below log falsely passes a one-sided check.
 within_tol() {
-	awk -v b="$1" -v l="$2" -v tol="$TOL" 'BEGIN {
-		d = b - l
+	awk -v b="$1" -v l="$2" -v tol="$TOL_HUNDREDTHS" 'BEGIN {
+		bh = int(b * 100 + 0.5)
+		lh = int(l * 100 + 0.5)
+		d = bh - lh
 		if (d < 0) d = -d
-		exit (d <= tol + 0) ? 0 : 1
+		exit (d <= tol) ? 0 : 1
 	}'
 }
 
 FAIL=0
 if ! within_tol "${BODY_CMD}" "${LOG_CMD}"; then
-	echo "FAIL: body quotes cmd coverage ${BODY_CMD}% but log has ${LOG_CMD}% (|diff| > ${TOL})" >&2
+	echo "FAIL: body quotes cmd coverage ${BODY_CMD}% but log has ${LOG_CMD}% (|diff| > 0.10)" >&2
 	FAIL=1
 fi
 if ! within_tol "${BODY_INT}" "${LOG_INT}"; then
-	echo "FAIL: body quotes internal coverage ${BODY_INT}% but log has ${LOG_INT}% (|diff| > ${TOL})" >&2
+	echo "FAIL: body quotes internal coverage ${BODY_INT}% but log has ${LOG_INT}% (|diff| > 0.10)" >&2
 	FAIL=1
 fi
 
@@ -112,5 +117,5 @@ if [ "$FAIL" -ne 0 ]; then
 	exit 1
 fi
 
-echo "OK: PR body coverage quotes within ${TOL} of log (cmd ${BODY_CMD}% ~ ${LOG_CMD}%, internal ${BODY_INT}% ~ ${LOG_INT}%)"
+echo "OK: PR body coverage quotes within 0.10 of log (cmd ${BODY_CMD}% ~ ${LOG_CMD}%, internal ${BODY_INT}% ~ ${LOG_INT}%)"
 exit 0

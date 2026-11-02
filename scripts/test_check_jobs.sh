@@ -728,90 +728,99 @@ else
     fail "${ORIGIN_MAIN_RESULT:-origin/main fetch mapping failed}"
 fi
 
-echo "Test 10b: PR coverage quote-check re-runs on body edited without heavy suite..."
+echo "Test 10b: own edited workflow rechecks quotes; CI never skips required jobs on edit..."
 
-QUOTE_EDIT_RESULT=$(python3 - "$CI_YML" <<'PY'
+QUOTE_EDIT_RESULT=$(python3 - "$REPO_ROOT" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-text = Path(sys.argv[1]).read_text()
-# pull_request types must include edited (late paste).
-# Match the on: pull_request: block's types list (not job-level if:).
-on_pr = re.search(
-    r"(?m)^  pull_request:\n(?:.*\n)*?    types:\s*\[([^\]]+)\]",
-    text,
-)
-if not on_pr:
-    print("FAIL: pull_request types: list missing (need edited for late body paste)")
+root = Path(sys.argv[1])
+ci = (root / ".github/workflows/ci.yml").read_text()
+edit_wf = root / ".github/workflows/pr-coverage-quotes-on-edit.yml"
+if not edit_wf.is_file():
+    print("FAIL: missing .github/workflows/pr-coverage-quotes-on-edit.yml")
     sys.exit(1)
-types = {t.strip() for t in on_pr.group(1).split(",")}
-for need in ("opened", "synchronize", "reopened", "edited"):
-    if need not in types:
-        print(f"FAIL: pull_request types missing {need!r} (got {sorted(types)})")
-        sys.exit(1)
+edit = edit_wf.read_text()
 
-if "pr-coverage-quotes-on-edit:" not in text:
-    print("FAIL: missing pr-coverage-quotes-on-edit job for body-edited recompare")
+# CI must NOT subscribe to edited (would emit required jobs as skipped).
+if re.search(r"(?m)^  pull_request:\n(?:.*\n)*?    types:\s*\[[^\]]*edited", ci):
+    print("FAIL: ci.yml pull_request must not list edited (own workflow owns that)")
     sys.exit(1)
-if "github.event.action == 'edited'" not in text and 'github.event.action == "edited"' not in text:
-    print("FAIL: pr-coverage-quotes-on-edit / heavy-skip must key off action == edited")
+if "pr-coverage-quotes-on-edit:" in ci:
+    print("FAIL: pr-coverage-quotes-on-edit must not live in ci.yml")
+    sys.exit(1)
+if "github.event.action != 'edited'" in ci or 'github.event.action != "edited"' in ci:
+    print("FAIL: ci.yml must not skip jobs on edited (never emit required names as skipped)")
     sys.exit(1)
 
-# Heavy partition jobs must skip edited so body paste does not re-pay the suite.
-heavy = ("check-core", "check-static", "mutate", "check-bash32", "check-git-2-34",
-         "validate-graph", "e2eharness", "quickstart", "govulncheck", "test-os")
-jobs = {}
-current = None
-buf = []
-in_jobs = False
-for line in text.splitlines():
-    if not in_jobs:
-        if line == "jobs:" or line.startswith("jobs:"):
-            in_jobs = True
+# check-core: live body via gh api; upload before compare; always() upload.
+if 'gh api "repos/${REPO}/pulls/${PR_NUMBER}"' not in ci and \
+   "gh api \"repos/${REPO}/pulls/${PR_NUMBER}\"" not in ci:
+    print("FAIL: check-core must fetch CURRENT body via gh api pulls/$N")
+    sys.exit(1)
+if "GITHUB_EVENT_PATH" in ci and "pull_request.body" in ci:
+    print("FAIL: check-core must not read coverage body from GITHUB_EVENT_PATH")
+    sys.exit(1)
+# Upload step must use always() and precede the compare step.
+upload_idx = ci.find("Upload coverage-check.log for late PR body paste")
+compare_idx = ci.find("PR body coverage quotes match this job's coverage.out")
+write_idx = ci.find("Write coverage-check.log")
+if min(write_idx, upload_idx, compare_idx) < 0:
+    print("FAIL: check-core missing write/upload/compare coverage-check steps")
+    sys.exit(1)
+if not (write_idx < upload_idx < compare_idx):
+    print("FAIL: check-core must write log, upload (always), then compare")
+    sys.exit(1)
+upload_block = ci[upload_idx:compare_idx]
+if "always()" not in upload_block:
+    print("FAIL: coverage-check.log upload must use always() so failed compare still leaves artifact")
+    sys.exit(1)
+if "coverage-check-${{ github.event.pull_request.head.sha }}" not in ci and \
+   "coverage-check-${{github.event.pull_request.head.sha}}" not in ci:
+    print("FAIL: check-core must upload coverage-check-<head.sha> artifact")
+    sys.exit(1)
+
+# Own edited workflow contract.
+if "types: [edited]" not in edit and 'types: ["edited"]' not in edit:
+    print("FAIL: edit workflow must be on: pull_request types: [edited]")
+    sys.exit(1)
+if "pr-coverage-quotes-on-edit:" not in edit:
+    print("FAIL: edit workflow missing pr-coverage-quotes-on-edit job")
+    sys.exit(1)
+if "assert-git-min.sh" not in edit:
+    print("FAIL: edit workflow must run assert-git-min.sh")
+    sys.exit(1)
+if "ci-path-shadow-engines.sh" not in edit:
+    print("FAIL: edit workflow must PATH-shadow container engines")
+    sys.exit(1)
+if "pr-coverage-quote-check.sh" not in edit:
+    print("FAIL: edit workflow must invoke pr-coverage-quote-check.sh")
+    sys.exit(1)
+if "workflow_run.head_sha" not in edit or "workflow_run.repository_id" not in edit:
+    print("FAIL: edit workflow artifact lookup must filter head_sha AND repository_id")
+    sys.exit(1)
+if "poll" not in edit.lower() and "Waiting for artifact" not in edit:
+    print("FAIL: edit workflow must wait/poll for coverage-check artifact")
+    sys.exit(1)
+if 'gh api "repos/${REPO}/pulls/${PR_NUMBER}"' not in edit:
+    print("FAIL: edit workflow must fetch CURRENT body via gh api")
+    sys.exit(1)
+# SHA-pinned checkout only (no @vN floating tags).
+for m in re.finditer(r"uses:\s*(\S+)", edit):
+    uses = m.group(1)
+    if uses.startswith("./"):
         continue
-    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
-        break
-    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
-    if m:
-        if current is not None:
-            jobs[current] = "\n".join(buf)
-        current = m.group(1)
-        buf = []
-        continue
-    if current is not None:
-        buf.append(line)
-if current is not None:
-    jobs[current] = "\n".join(buf)
-
-skip_re = re.compile(
-    r"github\.event_name\s*!=\s*'pull_request'\s*\|\|\s*github\.event\.action\s*!=\s*'edited'"
-)
-for jid in heavy:
-    body = jobs.get(jid, "")
-    # Job-level if: is among the first non-step keys; search whole body is fine.
-    if not skip_re.search(body):
-        print(f"FAIL: job {jid} must skip pull_request edited (avoid heavy re-run on body paste)")
+    if "@" not in uses or not re.search(r"@[0-9a-f]{40}\b", uses):
+        print(f"FAIL: edit workflow action not SHA-pinned: {uses}")
         sys.exit(1)
-
-edit_job = jobs.get("pr-coverage-quotes-on-edit", "")
-if "github.event.action == 'edited'" not in edit_job and 'github.event.action == "edited"' not in edit_job:
-    print("FAIL: pr-coverage-quotes-on-edit must run only on edited")
-    sys.exit(1)
-if "pr-coverage-quote-check.sh" not in edit_job:
-    print("FAIL: pr-coverage-quotes-on-edit must invoke pr-coverage-quote-check.sh")
-    sys.exit(1)
-if "coverage-check-${{ github.event.pull_request.head.sha }}" not in text and \
-   "coverage-check-${{github.event.pull_request.head.sha}}" not in text:
-    print("FAIL: check-core must upload coverage-check-<head.sha> artifact for edited recompare")
-    sys.exit(1)
 
 print("PASS")
 PY
 ) && QUOTE_EDIT_STATUS=0 || QUOTE_EDIT_STATUS=$?
 
 if [[ $QUOTE_EDIT_STATUS -eq 0 ]]; then
-    pass "PR edited re-runs quote-check; heavy jobs skip edited"
+    pass "own edited workflow rechecks quotes; CI never skips required jobs on edit"
 else
     fail "${QUOTE_EDIT_RESULT:-PR edited quote-check workflow assertion failed}"
 fi

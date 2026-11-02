@@ -1,0 +1,87 @@
+# Late PR-body coverage paste recompare.
+#
+# Own workflow so body `edited` never emits required CI job names
+# (check-core, mutate, …) as skipped. Polls for the head SHA's
+# coverage-check artifact from check-core (upload-before-compare) and
+# compares the LIVE PR body via gh api.
+
+name: PR coverage quotes on edit
+
+on:
+  pull_request:
+    types: [edited]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  pr-coverage-quotes-on-edit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Assert Git ≥ product minimum
+        run: bash scripts/assert-git-min.sh
+      - name: PATH-shadow container engines
+        run: bash scripts/ci-path-shadow-engines.sh
+      - name: PATH-shadow self-check
+        run: bash scripts/ci-path-shadow-selfcheck.sh
+
+      - name: Wait for coverage-check artifact on this head SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          name="coverage-check-${HEAD_SHA}"
+          REPO_ID="$(gh api "repos/${REPO}" --jq .id)"
+          echo "Waiting for artifact name=${name} repo_id=${REPO_ID} head_sha=${HEAD_SHA}"
+          # check-core can still be running when the body is edited early.
+          # Poll; never hard-fail on first miss.
+          id=""
+          i=0
+          while [ "$i" -lt 120 ]; do
+            i=$((i + 1))
+            id="$(gh api "repos/${REPO}/actions/artifacts?name=${name}&per_page=20" \
+              --jq --arg sha "$HEAD_SHA" --argjson rid "$REPO_ID" \
+              '[.artifacts[]
+                | select(.expired == false
+                    and .workflow_run.head_sha == $sha
+                    and .workflow_run.repository_id == $rid)]
+               | .[0].id // empty')"
+            if [ -n "$id" ]; then
+              echo "Found artifact id=${id} after ${i} poll(s)"
+              break
+            fi
+            echo "poll ${i}/120: artifact not ready yet"
+            sleep 30
+          done
+          if [ -z "$id" ]; then
+            echo "FAIL: timed out waiting for coverage-check artifact ${name}" >&2
+            exit 1
+          fi
+          gh api "repos/${REPO}/actions/artifacts/${id}/zip" > /tmp/coverage-check.zip
+          unzip -o -d /tmp/coverage-check-art /tmp/coverage-check.zip
+          test -f /tmp/coverage-check-art/coverage-check.log
+          cp /tmp/coverage-check-art/coverage-check.log coverage-check.log
+
+      - name: PR body coverage quotes match prior coverage-check.log
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # CURRENT body — event payload at workflow start can still race an
+          # in-flight edit; re-fetch at compare time.
+          gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq .body > /tmp/pr-body.md
+          scripts/pr-coverage-quote-check.sh /tmp/pr-body.md coverage-check.log
