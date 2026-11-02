@@ -31,7 +31,7 @@ func gitIdentHelpers() map[string]bool {
 }
 
 func checkGitHermetic(root string, stdout, stderr io.Writer) error {
-	if err := validateAllowlist(root); err != nil {
+	if err := validateAllowlist(); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
@@ -39,6 +39,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
+	idx := newAllowIndex(allowlist())
 	files, fset, err := parseGoTree(root, true)
 	if err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
@@ -73,7 +74,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				}
 				if !inGittest && gitCallInit(x, pf.imports, fileStrs) {
 					pos := fset.Position(x.Pos())
-					if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+					if !idx.allowed(pf.rel, allowGitHermeticInit, pos.Line, "init") {
 						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 					}
 				}
@@ -84,7 +85,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				}
 				if !inGittest && gitArgvInit(args) {
 					pos := fset.Position(x.Pos())
-					if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+					if !idx.allowed(pf.rel, allowGitHermeticInit, pos.Line, "init") {
 						initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 					}
 				}
@@ -92,12 +93,12 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				if s, ok := foldString(x, fileStrs); ok {
 					pos := fset.Position(x.Pos())
 					if gitInitInText(s) && !inGittest {
-						if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+						if !idx.allowed(pf.rel, allowGitHermeticInit, pos.Line, "init") {
 							initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 						}
 					}
 					if s == "git" {
-						if allowedGitHermeticSite(pf.rel, allowGitHermeticName, pos.Line, "git") {
+						if idx.allowed(pf.rel, allowGitHermeticName, pos.Line, "git") {
 							// waived binary-name fixture
 						} else {
 							usesGit = true
@@ -108,12 +109,12 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 				if s, ok := foldString(x, fileStrs); ok {
 					pos := fset.Position(x.Pos())
 					if gitInitInText(s) && !inGittest {
-						if !allowedGitHermeticSite(pf.rel, allowGitHermeticInit, pos.Line, "init") {
+						if !idx.allowed(pf.rel, allowGitHermeticInit, pos.Line, "init") {
 							initHits = append(initHits, formatHit(fset, x.Pos(), pf.rel, "raw git init"))
 						}
 					}
 					if s == "git" {
-						if !allowedGitHermeticSite(pf.rel, allowGitHermeticName, pos.Line, "git") {
+						if !idx.allowed(pf.rel, allowGitHermeticName, pos.Line, "git") {
 							usesGit = true
 						}
 					}
@@ -134,6 +135,8 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 		})
 
 		key := pkgKey(pf.rel, pf.pkg)
+		if usesGit {
+		}
 		if usesGit {
 			gitPkgs[key] = true
 		}
@@ -170,6 +173,15 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 		failed = true
 	} else {
 		fmt.Fprintln(stdout, "OK: every git-executing test package has TestMain isolation")
+	}
+
+	if isArmatureRoot(root) {
+		for _, check := range []string{allowGitHermeticInit, allowGitHermeticName} {
+			if err := idx.unused(check); err != nil {
+				fmt.Fprintf(stderr, "FAIL: %v\n", err)
+				failed = true
+			}
+		}
 	}
 
 	fmt.Fprintln(stdout, "OK: git-hermetic allows:")

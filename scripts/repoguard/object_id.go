@@ -67,7 +67,7 @@ func textSkipDir(name string) bool {
 }
 
 func checkObjectID(root string, stdout, stderr io.Writer) error {
-	if err := validateAllowlist(root); err != nil {
+	if err := validateAllowlist(); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
@@ -75,6 +75,7 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
+	idx := newAllowIndex(allowlist())
 	var hits []string
 	files, fset, err := parseGoTree(root, false)
 	if err != nil {
@@ -97,7 +98,7 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 				}
 				pos := fset.Position(x.Pos())
 				for _, reason := range oidStringReasons(s) {
-					if allowedObjectIDSite(pf.rel, pos.Line, reason.needle) {
+					if idx.allowed(pf.rel, allowObjectID, pos.Line, reason.needle) {
 						continue
 					}
 					hits = append(hits, formatHit(fset, x.Pos(), pf.rel, reason.msg))
@@ -105,14 +106,14 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 			case *ast.BinaryExpr:
 				if reason := oidWidthCompareReason(x); reason != "" {
 					pos := fset.Position(x.Pos())
-					if !allowedObjectIDSite(pf.rel, pos.Line, "width-compare") {
+					if !idx.allowed(pf.rel, allowObjectID, pos.Line, "width-compare") {
 						hits = append(hits, formatHit(fset, x.Pos(), pf.rel, reason))
 					}
 				}
 			case *ast.ValueSpec:
 				for _, reason := range oidWidthConstReasons(x) {
 					pos := fset.Position(x.Pos())
-					if !allowedObjectIDSite(pf.rel, pos.Line, reason.needle) {
+					if !idx.allowed(pf.rel, allowObjectID, pos.Line, reason.needle) {
 						hits = append(hits, formatHit(fset, x.Pos(), pf.rel, reason.msg))
 					}
 				}
@@ -120,13 +121,13 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 			return true
 		})
 	}
-	schemaHits, err := checkSchemaObjectIDPatterns(root)
+	schemaHits, err := checkSchemaObjectIDPatterns(root, idx)
 	if err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
 	hits = append(hits, schemaHits...)
-	textHits, err := checkTextObjectIDPatterns(root)
+	textHits, err := checkTextObjectIDPatterns(root, idx)
 	if err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
@@ -138,6 +139,12 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintln(stderr, objectIDFix)
 		return fmt.Errorf("object-id hex-length knowledge outside gitoid")
+	}
+	if isArmatureRoot(root) {
+		if err := idx.unused(allowObjectID); err != nil {
+			fmt.Fprintf(stderr, "FAIL: %v\n", err)
+			return err
+		}
 	}
 	fmt.Fprintln(stdout, "OK: object-id patterns accept SHA-1 (40) and SHA-256 (64) via gitoid")
 	return nil
@@ -360,7 +367,9 @@ func oidWidthConstReasons(spec *ast.ValueSpec) []oidHitReason {
 	return out
 }
 
-func checkSchemaObjectIDPatterns(root string) ([]string, error) {
+var schemaPatternLine = regexp.MustCompile(`"pattern"\s*:\s*"((?:\\.|[^"\\])*)"`)
+
+func checkSchemaObjectIDPatterns(root string, idx *allowIndex) ([]string, error) {
 	dir := filepath.Join(root, "docs", "schemas")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -379,64 +388,42 @@ func checkSchemaObjectIDPatterns(root string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Line-approximate: scan raw text for pattern lines to attach waivers.
-		lineOf := map[string]int{}
-		for i, line := range strings.Split(string(data), "\n") {
-			if strings.Contains(line, `"pattern"`) {
-				if m := regexp.MustCompile(`"pattern"\s*:\s*"((?:\\.|[^"\\])*)"`).FindStringSubmatch(line); len(m) == 2 {
-					lineOf[m[1]] = i + 1
-				}
-			}
-		}
+		// Validate JSON, then scan per-line so duplicate pattern values keep
+		// distinct line numbers (map last-wins would leave sibling waivers unused).
 		var doc any
 		if err := json.Unmarshal(data, &doc); err != nil {
 			return nil, fmt.Errorf("%s: %w", rel, err)
 		}
-		walkSchemaPatterns(doc, rel, "", lineOf, &hits)
+		_ = doc
+		for i, line := range strings.Split(string(data), "\n") {
+			m := schemaPatternLine.FindStringSubmatch(line)
+			if len(m) != 2 {
+				continue
+			}
+			pat, err := strconv.Unquote(`"` + m[1] + `"`)
+			if err != nil {
+				pat = m[1]
+			}
+			lineNo := i + 1
+			if oidPatternAcceptsBoth(pat) {
+				continue
+			}
+			for _, cand := range oidPatternCandidates(pat) {
+				reason := oidPatternBanReason(cand)
+				if reason == "" {
+					continue
+				}
+				if idx.allowed(rel, allowObjectID, lineNo, cand) || idx.allowed(rel, allowObjectID, lineNo, pat) {
+					continue
+				}
+				hits = append(hits, fmt.Sprintf("%s:%d: %s", rel, lineNo, reason))
+			}
+		}
 	}
 	return hits, nil
 }
 
-func walkSchemaPatterns(node any, rel, path string, lineOf map[string]int, hits *[]string) {
-	switch v := node.(type) {
-	case map[string]any:
-		if pat, ok := v["pattern"].(string); ok {
-			if oidPatternAcceptsBoth(pat) {
-				// ok
-			} else {
-				line := lineOf[pat]
-				if line == 0 {
-					line = 1
-				}
-				for _, cand := range oidPatternCandidates(pat) {
-					reason := oidPatternBanReason(cand)
-					if reason == "" {
-						continue
-					}
-					if allowedObjectIDSite(rel, line, cand) || allowedObjectIDSite(rel, line, pat) {
-						continue
-					}
-					*hits = append(*hits, fmt.Sprintf("%s:%d: %s (%s)", rel, line, reason, path))
-				}
-			}
-		}
-		for k, child := range v {
-			childPath := path
-			if childPath == "" {
-				childPath = k
-			} else {
-				childPath = path + "." + k
-			}
-			walkSchemaPatterns(child, rel, childPath, lineOf, hits)
-		}
-	case []any:
-		for i, child := range v {
-			walkSchemaPatterns(child, rel, fmt.Sprintf("%s[%d]", path, i), lineOf, hits)
-		}
-	}
-}
-
-func checkTextObjectIDPatterns(root string) ([]string, error) {
+func checkTextObjectIDPatterns(root string, idx *allowIndex) ([]string, error) {
 	var hits []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -483,7 +470,7 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 			return nil
 		}
 		for _, t := range toks {
-			if allowedObjectIDSite(rel, t.line, t.tok) || oidPatternAcceptsBoth(t.tok) {
+			if idx.allowed(rel, allowObjectID, t.line, t.tok) || oidPatternAcceptsBoth(t.tok) {
 				continue
 			}
 			// Bare 40-hex tokens in shell (plant); 64-hex content digests stay #427.
@@ -497,7 +484,7 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 				if reason == "" {
 					continue
 				}
-				if allowedObjectIDSite(rel, t.line, cand) {
+				if idx.allowed(rel, allowObjectID, t.line, cand) {
 					continue
 				}
 				hits = append(hits, fmt.Sprintf("%s:%d: %s", rel, t.line, reason))

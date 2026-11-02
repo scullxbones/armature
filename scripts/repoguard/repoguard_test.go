@@ -1377,25 +1377,119 @@ func TestValidateAllowEntries_LineZeroFails_REQ_419(t *testing.T) {
 	}
 }
 
-func TestValidateAllowEntriesPresent_StaleNeedleFails_REQ_419(t *testing.T) {
+func TestPlant_EmptyNeedleFails_REQ_419(t *testing.T) {
 	t.Parallel()
-	root := writeTree(t, map[string]string{
-		"go.mod":    "module fixture\n\ngo 1.22\n",
-		"waived.sh": "echo ok\n",
-	})
-	err := validateAllowEntriesPresent(root, []allowEntry{{
+	err := validateAllowEntries([]allowEntry{{
+		RelPath: "go.mod",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  "",
+		Reason:  "empty needle plant",
+	}})
+	code := 0
+	if err != nil {
+		code = 1
+	}
+	if code == 0 {
+		t.Fatal("empty Needle must FAIL validateAllowEntries")
+	}
+	if !strings.Contains(err.Error(), "empty Needle") {
+		t.Fatalf("must name empty Needle, got %v", err)
+	}
+	// Empty needle must not waive any hit at file:line.
+	idx := newAllowIndex([]allowEntry{{
+		RelPath: "go.mod",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  "",
+		Reason:  "empty needle plant",
+	}})
+	if idx.allowed("go.mod", allowObjectID, 1, "module github.com/scullxbones/armature") {
+		t.Fatal("empty Needle must not match any hit")
+	}
+	t.Logf("plant empty-needle rc=%d", code)
+}
+
+func TestPlant_UnusedNoHitFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Needle text is on go.mod:1 ("module") but never waives an object-id hit.
+	entries := []allowEntry{{
+		RelPath: "go.mod",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  "module",
+		Reason:  "no-hit plant",
+	}}
+	if err := validateAllowEntries(entries); err != nil {
+		t.Fatalf("structural validate must pass: %v", err)
+	}
+	idx := newAllowIndex(entries)
+	// No idx.allowed calls → unused.
+	err := idx.unused(allowObjectID)
+	code := 0
+	if err != nil {
+		code = 1
+	}
+	if code == 0 {
+		t.Fatal("entry that never waived a hit must FAIL unused")
+	}
+	if !strings.Contains(err.Error(), "unused") {
+		t.Fatalf("must name unused, got %v", err)
+	}
+	t.Logf("plant no-hit unused rc=%d", code)
+}
+
+func TestPlant_MissingFileUnusedFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	entries := []allowEntry{{
+		RelPath: "does-not-exist-plant.go",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  `^[0-9a-f]{40}$`,
+		Reason:  "missing-file plant",
+	}}
+	if err := validateAllowEntries(entries); err != nil {
+		t.Fatalf("structural validate must pass: %v", err)
+	}
+	idx := newAllowIndex(entries)
+	err := idx.unused(allowObjectID)
+	code := 0
+	if err != nil {
+		code = 1
+	}
+	if code == 0 {
+		t.Fatal("missing-file entry must FAIL as unused")
+	}
+	if !strings.Contains(err.Error(), "unused") || !strings.Contains(err.Error(), "does-not-exist-plant.go") {
+		t.Fatalf("must name unused + missing path, got %v", err)
+	}
+	t.Logf("plant missing-file unused rc=%d", code)
+}
+
+func TestPlant_StaleNeedleUnusedFails_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Needle absent from line → never matches a hit → unused FAIL
+	// (replaces validateAllowEntriesPresent ErrNotExist/stale skip).
+	entries := []allowEntry{{
 		RelPath: "waived.sh",
 		Check:   allowObjectID,
 		Line:    1,
 		Needle:  `^[0-9a-f]{40}$`,
 		Reason:  "stale plant",
-	}})
-	if err == nil {
-		t.Fatal("stale waiver (needle absent on line) must FAIL")
+	}}
+	idx := newAllowIndex(entries)
+	if idx.allowed("waived.sh", allowObjectID, 1, "echo ok") {
+		t.Fatal("stale needle must not match")
 	}
-	if !strings.Contains(err.Error(), "stale") {
-		t.Fatalf("must name stale, got %v", err)
+	err := idx.unused(allowObjectID)
+	code := 0
+	if err != nil {
+		code = 1
 	}
+	if code == 0 {
+		t.Fatal("stale needle (no hit waived) must FAIL unused")
+	}
+	t.Logf("plant stale-needle unused rc=%d", code)
 }
 
 func TestPlant_GitHermeticRejectsWholeFile_REQ_419(t *testing.T) {
@@ -1410,7 +1504,7 @@ func TestPlant_GitHermeticRejectsWholeFile_REQ_419(t *testing.T) {
 		t.Fatal("shared allowedSite must reject Line==0")
 	}
 	if err := validateAllowEntries([]allowEntry{{
-		RelPath: "x.go", Check: allowGitHermeticName, Line: 0, Reason: "plant",
+		RelPath: "x.go", Check: allowGitHermeticName, Line: 0, Needle: gitNeedle, Reason: "plant",
 	}}); err == nil {
 		t.Fatal("shared validator must reject Line==0 for git-hermetic")
 	}

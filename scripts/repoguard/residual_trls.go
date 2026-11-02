@@ -20,7 +20,7 @@ const residualTrlsFix = "Rename residual pre-rename CLI token trls → arm. " +
 var residualTrlsWord = regexp.MustCompile(`(?i)\btrls\b`)
 
 func checkResidualTrls(root string, stdout, stderr io.Writer) error {
-	if err := validateAllowlist(root); err != nil {
+	if err := validateAllowlist(); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
@@ -28,9 +28,10 @@ func checkResidualTrls(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
+	idx := newAllowIndex(allowlist())
 	var hits []string
 	for _, dir := range []string{"cmd", "internal", "docs/assets"} {
-		dirHits, err := scanResidualTrlsDir(root, dir)
+		dirHits, err := scanResidualTrlsDir(root, dir, idx)
 		if err != nil {
 			fmt.Fprintf(stderr, "FAIL: %v\n", err)
 			return err
@@ -44,11 +45,17 @@ func checkResidualTrls(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stderr, residualTrlsFix)
 		return fmt.Errorf("residual trls token")
 	}
+	if isArmatureRoot(root) {
+		if err := idx.unused(allowResidualTrls); err != nil {
+			fmt.Fprintf(stderr, "FAIL: %v\n", err)
+			return err
+		}
+	}
 	fmt.Fprintln(stdout, "OK: residual trls absent under cmd/, internal/, docs/assets/ (per-site allowlist)")
 	return nil
 }
 
-func scanResidualTrlsDir(root, relDir string) ([]string, error) {
+func scanResidualTrlsDir(root, relDir string, idx *allowIndex) ([]string, error) {
 	abs := filepath.Join(root, filepath.FromSlash(relDir))
 	if _, err := os.Stat(abs); err != nil {
 		if os.IsNotExist(err) {
@@ -95,7 +102,7 @@ func scanResidualTrlsDir(root, relDir string) ([]string, error) {
 				continue
 			}
 			lineNo := i + 1
-			if allowedResidualTrlsSite(rel, lineNo, "trls") {
+			if idx.allowed(rel, allowResidualTrls, lineNo, "trls") {
 				continue
 			}
 			hits = append(hits, rel+":"+strconv.Itoa(lineNo)+": "+strings.TrimSpace(line))
