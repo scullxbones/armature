@@ -1,12 +1,12 @@
 # Next-Work Sequencing
 
-**Date:** 2026-11-02. Gardened after the **S12 → W21** product cascade landed on `main`; this page tracks the remaining ranked backlog off the cut-era framing. No named successor release yet.
+**Date:** 2026-11-01. Gardened after the **S12 → W21** product cascade landed on `main`; this page tracks the remaining ranked backlog off the cut-era framing. No named successor release yet.
 
 **Closed history:** Tier S, the Tier A feature spine, delivered pull-ins, the 2026-09-18 recommended sequence, and the F2 grilling decisions are in [`docs/archive/next-work-sequencing-closed-through-2026-09-27.md`](../archive/next-work-sequencing-closed-through-2026-09-27.md). v0.1.0 cut and post-cut leftover deliveries are in [`docs/archive/next-work-sequencing-closed-v010.md`](../archive/next-work-sequencing-closed-v010.md). S12 ops-backup / D11 / D14 and CLAIMORD-W21 product delivery are in [`docs/archive/next-work-sequencing-closed-s12-w21.md`](../archive/next-work-sequencing-closed-s12-w21.md). Ordinals below match that snapshot. Do not renumber them.
 
 **Purpose:** One execution order across the planning rounds (`top-tier-gap-analysis.md`, `long-horizon-proposals.md`, `the-next-ten.html`, `narrow-gaps-addendum.md`) plus later filings that earned a row. Armature's DAG orders work inside a tree. It does not rank independent proposals that share no `blocked_by` edge. This file is that ranking. When an item is decomposed, its DAG is authoritative inside the item. This file only orders between items.
 
-Statuses below audited 2026-11-02 against `origin/main` @ `d7b0809b` (#418 SHA-256 gitoid atop #420 residual `trls`) and the S12 cascade merge train. Re-audit before dispatch. Do not fold #419 (gitoid lint follow-ups) into this garden.
+Statuses below audited 2026-11-01 against `origin/main` @ `d7b0809b` (#418 SHA-256 gitoid atop #420 residual `trls`) and the S12 cascade merge train. Re-audit before dispatch. Do not fold #419 (gitoid lint follow-ups) into this garden.
 
 ## What to do next
 

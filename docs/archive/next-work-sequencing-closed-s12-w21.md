@@ -33,3 +33,4 @@ Item **24 T4** (doctor **D13** / `LNGHZN-S11-T4`) remains on the living page; re
 
 - No named successor release. First external cut remains **v0.1.0**.
 - Living page after this archive names **HOSTREF-S1** (item 28a) as the concrete next ranked theme.
+- Tip also carries #415 (PORC-BASH32) and #418 (SHA-256 gitoid); those are adjacent product landings on `main`, not item-22 / S12 cascade deliveries, so they stay out of the delivery column above.
