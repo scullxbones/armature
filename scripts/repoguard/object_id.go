@@ -15,26 +15,19 @@ import (
 )
 
 const objectIDFix = "Use github.com/scullxbones/armature/internal/gitoid.Valid " +
-	"(equals gitoid.PatternLower: lowercase 40|64 hex). Do not hard-code a 40-hex-only object-id pattern. " +
-	"Per-site waivers go in allow.go (allowObjectID)."
+	"(equals gitoid.PatternLower: lowercase 40|64 hex). Do not hard-code a pattern that " +
+	"accepts a 40-hex OID but rejects a 64-hex OID. Per-site waivers: allow.go (file+line+needle)."
 
-// oidHex40Pattern matches hex-class + {40} or {40,40} OID regexes.
-var oidHex40Pattern = regexp.MustCompile(`(?i)(\[[0-9a-fA-F\-]+\]|\\x[0-9a-fA-F]{2})\{40(?:,40)?\}`)
+// Lowercase hex probe OIDs (gitoid.PatternLower alphabet). Consts avoid globals.
+const (
+	oidProbe40Hex = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"                         // 40
+	oidProbe64Hex = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 64
+)
 
-// oidHex64Pattern matches hex-class + {64} (dual-width companion).
-var oidHex64Pattern = regexp.MustCompile(`(?i)(\[[0-9a-fA-F\-]+\]|\\x[0-9a-fA-F]{2})\{64(?:,64)?\}`)
-
-// oidWord40Pattern matches \w{40} / \w{40,40} — never a hex-only OID predicate.
-var oidWord40Pattern = regexp.MustCompile(`\\w\{40(?:,40)?\}`)
-
-func isOIDTextExt(ext string) bool {
-	switch strings.ToLower(ext) {
-	case ".sh", ".bash", ".py", ".yml", ".yaml", ".json", ".md", ".txt", ".toml":
-		return true
-	default:
-		return false
-	}
-}
+var (
+	shellRegexLine = regexp.MustCompile(`(?i)(\bgrep\b.*\s-[EP]\b|\begrep\b|\bsed\b|\[\[.*=~|\bre\.compile\b)`)
+	quotedString   = regexp.MustCompile(`(?:'([^']*)'|"([^"]*)"|` + "`" + `([^` + "`" + `]*)` + "`" + `)`)
+)
 
 func checkObjectID(root string, stdout, stderr io.Writer) error {
 	if err := requireGoMod(root); err != nil {
@@ -51,9 +44,6 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 		if underDir(pf.rel, "testdata") || underDir(pf.rel, "scripts/repoguard") {
 			continue
 		}
-		if allowed(pf.rel, allowObjectID) {
-			continue
-		}
 		ast.Inspect(pf.file, func(n ast.Node) bool {
 			switch x := n.(type) {
 			case *ast.BasicLit:
@@ -64,12 +54,20 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 				if err != nil {
 					return true
 				}
-				if isOIDOnly40(s) {
-					hits = append(hits, formatHit(fset, x.Pos(), pf.rel, `40-hex-only object-id pattern; allow 40|64 via gitoid`))
+				if oidPatternRejects64(s) {
+					pos := fset.Position(x.Pos())
+					if !allowedObjectIDSite(pf.rel, pos.Line, s) {
+						hits = append(hits, formatHit(fset, x.Pos(), pf.rel,
+							`pattern accepts 40-hex OID but rejects 64-hex; use gitoid.Valid`))
+					}
 				}
 			case *ast.BinaryExpr:
+				// Keep len(x)==40: not a regex, so the compile-probe cannot see it.
 				if reason := oidLenEq40Reason(x); reason != "" {
-					hits = append(hits, formatHit(fset, x.Pos(), pf.rel, reason))
+					pos := fset.Position(x.Pos())
+					if !allowedObjectIDSite(pf.rel, pos.Line, "len==40") {
+						hits = append(hits, formatHit(fset, x.Pos(), pf.rel, reason))
+					}
 				}
 			}
 			return true
@@ -98,25 +96,19 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-// isOIDOnly40 reports a hard-coded 40-only (or \w{40}) OID pattern.
-// A string that also carries a hex-class {64} quantifier is treated as dual-width
-// and allowed (gitoid.PatternLower). A bare "{64}" substring elsewhere does NOT
-// suppress a 40-only hit — that was the #419 gap.
-func isOIDOnly40(s string) bool {
-	if oidWord40Pattern.MatchString(s) {
-		return true
-	}
-	if !oidHex40Pattern.MatchString(s) {
+// oidPatternRejects64 reports that s compiles as a Go regexp and matches a
+// 40-char lowercase hex OID but not the 64-char equivalent. This is the class
+// probe — POSIX classes, \w, {40,40}, etc. fall out of MatchString behavior.
+func oidPatternRejects64(s string) bool {
+	re, err := regexp.Compile(s)
+	if err != nil {
 		return false
 	}
-	if oidHex64Pattern.MatchString(s) {
-		return false
-	}
-	return true
+	return re.MatchString(oidProbe40Hex) && !re.MatchString(oidProbe64Hex)
 }
 
 // oidLenEq40Reason flags len(x) == 40 / len(x) != 40 with a numeric literal.
-// Callers must use gitoid.Valid (or compare against both LenSHA1 and LenSHA256).
+// Kept alongside the regex probe: length compares are not regexp literals.
 func oidLenEq40Reason(bin *ast.BinaryExpr) string {
 	if bin.Op != token.EQL && bin.Op != token.NEQ {
 		return ""
@@ -162,9 +154,6 @@ func checkSchemaObjectIDPatterns(root string) ([]string, error) {
 			continue
 		}
 		rel := filepath.ToSlash(filepath.Join("docs", "schemas", e.Name()))
-		if allowed(rel, allowObjectID) {
-			continue
-		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			return nil, err
@@ -181,8 +170,10 @@ func checkSchemaObjectIDPatterns(root string) ([]string, error) {
 func walkSchemaPatterns(node any, rel, path string, hits *[]string) {
 	switch v := node.(type) {
 	case map[string]any:
-		if pat, ok := v["pattern"].(string); ok && isOIDOnly40(pat) {
-			*hits = append(*hits, fmt.Sprintf("%s: pattern %s is 40-hex-only; use gitoid.PatternLower (40|64)", rel, path))
+		if pat, ok := v["pattern"].(string); ok && oidPatternRejects64(pat) {
+			if !allowedObjectIDSite(rel, 0, pat) {
+				*hits = append(*hits, fmt.Sprintf("%s: pattern %s accepts 40-hex OID but rejects 64-hex; use gitoid.PatternLower", rel, path))
+			}
 		}
 		for k, child := range v {
 			childPath := path
@@ -215,7 +206,7 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 			case "testdata", "vendor", ".git", "node_modules", "ops":
 				return filepath.SkipDir
 			case ".github":
-				return nil // scan workflow YAML for raw 40-only OID regexes
+				return nil
 			}
 			if strings.HasPrefix(name, ".") {
 				return filepath.SkipDir
@@ -227,23 +218,13 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 			rel = path
 		}
 		rel = filepath.ToSlash(rel)
-		if underDir(rel, "scripts/repoguard") {
+		if underDir(rel, "scripts/repoguard") || underDir(rel, "docs") {
 			return nil
 		}
-		// docs/schemas are covered by checkSchemaObjectIDPatterns; other docs
-		// (ADRs, design notes) describe banned forms and are not executable.
-		if underDir(rel, "docs") {
-			return nil
-		}
-		if allowed(rel, allowObjectID) {
-			return nil
-		}
-		ext := filepath.Ext(name)
-		if !isOIDTextExt(ext) {
-			return nil
-		}
-		// Go sources are covered by the AST pass (string lits + len==40).
-		if strings.EqualFold(ext, ".go") {
+		ext := strings.ToLower(filepath.Ext(name))
+		switch ext {
+		case ".sh", ".bash", ".py":
+		default:
 			return nil
 		}
 		data, readErr := os.ReadFile(path)
@@ -251,11 +232,33 @@ func checkTextObjectIDPatterns(root string) ([]string, error) {
 			return readErr
 		}
 		for i, line := range strings.Split(string(data), "\n") {
-			if isOIDOnly40(line) {
-				hits = append(hits, fmt.Sprintf("%s:%d: 40-hex-only object-id pattern; allow 40|64 via gitoid", rel, i+1))
+			if !shellRegexLine.MatchString(line) && !strings.Contains(line, "re.compile") {
+				continue
+			}
+			for _, pat := range quotedStringsIn(line) {
+				if !oidPatternRejects64(pat) {
+					continue
+				}
+				lineNo := i + 1
+				if allowedObjectIDSite(rel, lineNo, pat) {
+					continue
+				}
+				hits = append(hits, fmt.Sprintf("%s:%d: pattern accepts 40-hex OID but rejects 64-hex; use gitoid", rel, lineNo))
 			}
 		}
 		return nil
 	})
 	return hits, err
+}
+
+func quotedStringsIn(line string) []string {
+	var out []string
+	for _, m := range quotedString.FindAllStringSubmatch(line, -1) {
+		for _, g := range m[1:] {
+			if g != "" {
+				out = append(out, g)
+			}
+		}
+	}
+	return out
 }

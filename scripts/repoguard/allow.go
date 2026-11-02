@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 const allowGitHermeticName = "git-hermetic-name"
 
 const allowGitHermeticInit = "git-hermetic-init"
@@ -12,6 +14,12 @@ type allowEntry struct {
 	RelPath string
 	Check   string
 	Reason  string
+	// Line is required for object-id waivers (1-based). Zero means "file-level"
+	// for checks that still use whole-file allows (git-hermetic, residual-trls).
+	Line int
+	// Needle must still appear on that line (object-id). Empty → line-only match.
+	// Stale when the waived pattern moves or a new pattern appears elsewhere.
+	Needle string
 }
 
 func allowlist() []allowEntry {
@@ -27,18 +35,10 @@ func allowlist() []allowEntry {
 			Reason:  "fixture assertions and example sources quote raw git init; production packages still fail",
 		},
 		{
-			RelPath: "internal/gitoid/oid.go",
-			Check:   allowObjectID,
-			Reason:  "canonical PatternLower home — the one allowed 40|64 literal",
-		},
-		{
-			RelPath: "internal/gitoid/oid_test.go",
-			Check:   allowObjectID,
-			Reason:  "asserts PatternLower contains {40} and {64}; not a second predicate",
-		},
-		{
 			RelPath: "scripts/test_check_jobs.sh",
 			Check:   allowObjectID,
+			Line:    375,
+			Needle:  `^[0-9a-f]{40}$`,
 			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
 		},
 		{
@@ -102,9 +102,31 @@ func gitNetAllows() []gitNetAllow {
 
 func allowed(relPath, check string) bool {
 	for _, a := range allowlist() {
-		if a.RelPath == relPath && a.Check == check {
+		if a.RelPath == relPath && a.Check == check && a.Line == 0 {
 			return true
 		}
+	}
+	return false
+}
+
+// allowedObjectIDSite is the per-site object-id waiver: file + line + needle.
+// A new 40-only pattern elsewhere in a waived file (or on a moved line without
+// the needle) is NOT covered — that was the #419 per-site requirement.
+func allowedObjectIDSite(relPath string, line int, pattern string) bool {
+	for _, a := range allowlist() {
+		if a.Check != allowObjectID || a.RelPath != relPath {
+			continue
+		}
+		if a.Line == 0 {
+			continue // object-id forbids whole-file waivers
+		}
+		if line != a.Line {
+			continue
+		}
+		if a.Needle != "" && pattern != a.Needle && !strings.Contains(pattern, a.Needle) {
+			continue
+		}
+		return true
 	}
 	return false
 }

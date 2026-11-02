@@ -30,15 +30,16 @@ allow-list is ADR-class.
 2. **Fence.** Add `gitoid-pure` (deny other `internal`). Widen
    `review-boundary` and `harnesshook-boundary` to allow `gitoid` only.
 3. **Guard.** `scripts/repoguard -check object-id` (wired into `make lint`)
-   fails new 40-hex-only OID regex / schema / script patterns that omit 64-hex,
-   including `{40,40}`, `\w{40}`, and `len(x)==40` forms. Scope matches this
-   ADR: no other package (and no unchecked script) may hard-code a 40-only
-   pattern. Per-site waivers live in `scripts/repoguard/allow.go`.
+   finds candidate pattern literals (Go string lits; schema `pattern`; shell
+   `grep -E/-P` / `sed` / `[[ =~ ]]` / `re.compile`), compiles them with Go
+   `regexp`, and fails any pattern that matches a 40-char lowercase hex OID
+   but rejects the 64-char equivalent. POSIX classes / `\w` / `{40,40}` fall
+   out of MatchString behavior — no syntax-regex list. `len(x)==40` is kept as
+   a separate AST fence (not a regexp). Per-site waivers are file+line+needle
+   in `scripts/repoguard/allow.go` (stale when the line moves).
 
 ## Consequences
 
 Review decode, adapters git parsers, and harnesshook HEAD detection share one
 helper aligned with the schema. Uppercase hex is rejected. Future OID checks
-must call `gitoid.Valid` or fail the object-id guard. A bare `{64}` substring
-in the same string does not waive a 40-only hit — only a hex-class `{64}`
-quantifier (dual-width) does.
+must call `gitoid.Valid` or fail the object-id guard.

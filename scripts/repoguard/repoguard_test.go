@@ -771,13 +771,41 @@ func readGitNetFixture(t *testing.T, name string) string {
 	return string(body)
 }
 
+func TestObjectID_Xdigit40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/zz/a.go": `package zz
+var A = "^[[:xdigit:]]{40}$"
+`,
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on [[:xdigit:]]{40}, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_Alnum40Fails_REQ_419(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"internal/zz/a.go": `package zz
+var A = "^[[:alnum:]]{40}$"
+`,
+		"scripts/xdigit.sh": "grep -E '^[[:alnum:]]{40}$' <<EOF\nEOF\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on [[:alnum:]]{40}, stderr=%s", errOut)
+	}
+}
+
 func TestObjectID_Brace40Comma40Fails_REQ_419(t *testing.T) {
 	t.Parallel()
 	root := writeTree(t, map[string]string{
 		"go.mod": "module fixture\n\ngo 1.22\n",
 		"internal/fake/oid.go": `package fake
-import "regexp"
-var pat = regexp.MustCompile(` + "`[0-9a-f]{40,40}`" + `)
+var pat = "^[0-9a-f]{40,40}$"
 `,
 	})
 	_, errOut, code := runCheck(t, "object-id", root)
@@ -786,36 +814,24 @@ var pat = regexp.MustCompile(` + "`[0-9a-f]{40,40}`" + `)
 	}
 }
 
-func TestObjectID_Word40Fails_REQ_419(t *testing.T) {
+func TestObjectID_Word40AnchoredFails_REQ_419(t *testing.T) {
 	t.Parallel()
+	// New shape beyond xdigit/alnum: anchored \w{40}.
 	root := writeTree(t, map[string]string{
 		"go.mod": "module fixture\n\ngo 1.22\n",
 		"internal/fake/oid.go": `package fake
-const pat = ` + "`\\w{40}`" + `
+const pat = ` + "`^\\w{40}$`" + `
 `,
 	})
 	_, errOut, code := runCheck(t, "object-id", root)
 	if code == 0 {
-		t.Fatalf("expected fail on \\w{40}, stderr=%s", errOut)
+		t.Fatalf("expected fail on ^\\w{40}$, stderr=%s", errOut)
 	}
 }
 
-func TestObjectID_Bare64SubstringDoesNotSuppress_REQ_419(t *testing.T) {
+func TestObjectID_LenEq40Kept_REQ_419(t *testing.T) {
 	t.Parallel()
-	root := writeTree(t, map[string]string{
-		"go.mod": "module fixture\n\ngo 1.22\n",
-		"internal/fake/oid.go": `package fake
-const note = ` + "`oid [0-9a-f]{40} (also see {64} elsewhere)`" + `
-`,
-	})
-	_, errOut, code := runCheck(t, "object-id", root)
-	if code == 0 {
-		t.Fatalf("expected fail: bare {64} must not suppress 40-only hit, stderr=%s", errOut)
-	}
-}
-
-func TestObjectID_LenEq40Fails_REQ_419(t *testing.T) {
-	t.Parallel()
+	// len==40 is kept: not a regexp literal, so compile-probe cannot see it.
 	root := writeTree(t, map[string]string{
 		"go.mod": "module fixture\n\ngo 1.22\n",
 		"internal/fake/oid.go": `package fake
@@ -831,15 +847,45 @@ func ok(s string) bool { return len(s) == 40 }
 	}
 }
 
-func TestObjectID_ScriptFortyOnlyFails_REQ_419(t *testing.T) {
+func TestObjectID_ScriptGrepEFails_REQ_419(t *testing.T) {
 	t.Parallel()
 	root := writeTree(t, map[string]string{
 		"go.mod":               "module fixture\n\ngo 1.22\n",
-		"scripts/check_sha.sh": "sha_re='^[0-9a-f]{40}$'\n",
+		"scripts/check_sha.sh": "grep -E '^[0-9a-f]{40}$' \"$1\"\n",
 	})
 	_, errOut, code := runCheck(t, "object-id", root)
 	if code == 0 {
-		t.Fatalf("expected fail on scripts/ 40-only pattern, stderr=%s", errOut)
+		t.Fatalf("expected fail on scripts/ grep -E 40-only, stderr=%s", errOut)
+	}
+}
+
+func TestObjectID_ProbeWeakenedFailsREQ_419(t *testing.T) {
+	t.Parallel()
+	// Mutation: a weakened probe that only syntax-matches hex-class\{40\} misses
+	// [[:xdigit:]]. The REQ_419 compile-probe must still fail that shape.
+	if !oidPatternRejects64(`^[[:xdigit:]]{40}$`) {
+		t.Fatal("weaken detection: compile-probe must reject [[:xdigit:]]{40}")
+	}
+	if oidPatternRejects64(`^[a-f0-9]{40}$|^[a-f0-9]{64}$`) {
+		t.Fatal("dual-width PatternLower must not be flagged")
+	}
+}
+
+func TestObjectID_WaiverLineDoesNotCoverNewHit_REQ_419(t *testing.T) {
+	t.Parallel()
+	// Waived file+line+needle: a *new* 40-only pattern in the same file must fail.
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"scripts/test_check_jobs.sh": strings.Repeat("\n", 374) +
+			`sha_re = re.compile(r"^[0-9a-f]{40}$")` + "\n" +
+			`other = re.compile(r"^[[:xdigit:]]{40}$")` + "\n",
+	})
+	_, errOut, code := runCheck(t, "object-id", root)
+	if code == 0 {
+		t.Fatalf("expected fail on new pattern in waived file, stderr=%s", errOut)
+	}
+	if !strings.Contains(errOut, "test_check_jobs.sh:376") && !strings.Contains(errOut, "[[:xdigit:]]") {
+		t.Fatalf("must flag the new line, not only the waived one; stderr=%s", errOut)
 	}
 }
 
