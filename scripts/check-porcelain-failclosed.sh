@@ -51,6 +51,30 @@ allow_line() {
   esac
 }
 
+require_readable() {
+  local f="$1"
+  if [ ! -f "$f" ] || [ ! -r "$f" ]; then
+    echo "FAIL: $f is not a readable file" >&2
+    exit 1
+  fi
+}
+
+# Fail-closed grep to tempfile: exit 0 = hits, 1 = none, ≥2 → FAIL unscannable.
+# Never `|| true` — that lets missing/garbage paths pass.
+grep_hits() {
+  local re="$1" src="$2" out="$3" st
+  set +e
+  LC_ALL=C grep -a -nE "$re" "$src" >"$out"
+  st=$?
+  set -e
+  if [ "$st" -ge 2 ]; then
+    echo "FAIL: $4 unscannable" >&2
+    fail=1
+    return 1
+  fi
+  return 0
+}
+
 # Flatten \-continuations to a tempfile so NULs/\xff survive (no bash $(...) truncate).
 flatten_to() {
   awk '{
@@ -61,16 +85,29 @@ flatten_to() {
 
 scan_file() {
   local f="$1"
-  local flat hits_file line_no key kept="" hit
+  local flat hits_file raw_hits line_no key kept="" hit
   flat="$(mktemp)"
   hits_file="$(mktemp)"
+  raw_hits="$(mktemp)"
   flatten_to "$f" "$flat"
   # LC_ALL=C + grep -a: non-UTF8 (\xff) on a hit line must still fail
   # (UTF-8 locale + -a alone still drops invalid-byte lines).
   # Write hits to a file — bash $(...) strips NUL and can hide mid-file hits.
-  LC_ALL=C grep -a -nE "$BAN_RE" "$flat" \
-    | LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' >"$hits_file" || true
-  rm -f "$flat"
+  if ! grep_hits "$BAN_RE" "$flat" "$raw_hits" "$f"; then
+    rm -f "$flat" "$hits_file" "$raw_hits"
+    return 0
+  fi
+  set +e
+  LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$hits_file"
+  local vst=$?
+  set -e
+  rm -f "$flat" "$raw_hits"
+  if [ "$vst" -ge 2 ]; then
+    echo "FAIL: $f unscannable" >&2
+    fail=1
+    rm -f "$hits_file"
+    return 0
+  fi
   if [ ! -s "$hits_file" ]; then
     rm -f "$hits_file"
     return 0
@@ -108,18 +145,41 @@ scan_file() {
 
 scan_silencers() {
   local f="$1"
-  local flat hits_file kept="" hit line_no key
+  local flat hits_file raw_hits kept="" hit line_no key sil_hits
   if [ "$f" = "$HELPER" ]; then
     return 0
   fi
   flat="$(mktemp)"
   hits_file="$(mktemp)"
+  raw_hits="$(mktemp)"
+  sil_hits="$(mktemp)"
   flatten_to "$f" "$flat"
-  LC_ALL=C grep -a -nE "$BAN_RE" "$flat" \
-    | LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' \
-    | LC_ALL=C grep -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
-    >"$hits_file" || true
-  rm -f "$flat"
+  if ! grep_hits "$BAN_RE" "$flat" "$raw_hits" "$f"; then
+    rm -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
+    return 0
+  fi
+  set +e
+  LC_ALL=C grep -a -vE '^[[:digit:]]+:[[:space:]]*#' "$raw_hits" >"$sil_hits"
+  local vst=$?
+  set -e
+  if [ "$vst" -ge 2 ]; then
+    echo "FAIL: $f unscannable" >&2
+    fail=1
+    rm -f "$flat" "$hits_file" "$raw_hits" "$sil_hits"
+    return 0
+  fi
+  set +e
+  LC_ALL=C grep -a -E '2>/dev/null|2>&-|set \+e|\|\|[[:space:]]*(true|:|echo|exit[[:space:]]+0)' \
+    "$sil_hits" >"$hits_file"
+  local sst=$?
+  set -e
+  rm -f "$flat" "$raw_hits" "$sil_hits"
+  if [ "$sst" -ge 2 ]; then
+    echo "FAIL: $f unscannable" >&2
+    fail=1
+    rm -f "$hits_file"
+    return 0
+  fi
   if [ ! -s "$hits_file" ]; then
     rm -f "$hits_file"
     return 0
@@ -153,6 +213,7 @@ scan_silencers() {
 # Shared selector: every scan-eligible file under scripts/ (no ext/shebang filter).
 # Scope = main: only scripts/testdata/* excluded — do NOT skip scripts/repoguard/*.
 # Fail-closed: write list to file; nonzero lister exit → fail (never swallow).
+# Empty list from a selector that exits 0 → fail (never scan nothing silently).
 scan_list=$(mktemp)
 trap 'rm -f "$scan_list"' EXIT
 set +e
@@ -163,9 +224,14 @@ if [ "$lister_st" -ne 0 ]; then
   echo "FAIL: list-guard-scan-files.sh exited $lister_st (porcelain scan aborted)" >&2
   exit 1
 fi
+if [ ! -s "$scan_list" ]; then
+  echo "FAIL: list-guard-scan-files.sh produced empty scan list (porcelain)" >&2
+  exit 1
+fi
 
 while IFS= read -r f || [ -n "${f:-}" ]; do
   [ -z "${f:-}" ] && continue
+  require_readable "$f"
   scan_file "$f"
   scan_silencers "$f"
 done <"$scan_list"

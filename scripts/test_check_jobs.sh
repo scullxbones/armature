@@ -1279,8 +1279,8 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: engine must flag scripts/engine.txt: $eout"
         exit 1
     fi
-    # REQ fail-closed 1–4 (PJ block on 9b6038e8): non-UTF8, NUL-later, main scope, lister crash.
-    # Structural guards + live demos; each mutation must make the REQ demo exit 0 incorrectly.
+    # REQ fail-closed (PJ B1–B3): every scan helper fail-closed; both guards;
+    # assert specific FAIL lines; mutate REAL script copies (sed), not stand-ins.
     if ! rg -q 'LC_ALL=C grep -a' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
         echo "FAIL: porcelain must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
         exit 1
@@ -1289,8 +1289,9 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: engine must scan with LC_ALL=C grep -a (non-UTF8 fail-closed)"
         exit 1
     fi
-    if ! rg -q 'bash_refuses' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
-        echo "FAIL: selector must only skip bash-refused (NUL-first) files"
+    # B2: never silently skip NUL-first files in the selector.
+    if rg -q 'bash_refuses' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
+        echo "FAIL: selector must not silently skip NUL-first (bash_refuses) files"
         exit 1
     fi
     if rg -q "tr -d '\\\\000'|tr -d '\\\\0'" "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
@@ -1299,6 +1300,31 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
     if rg -q 'is_non_binary' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
         echo "FAIL: selector must not restore is_non_binary any-NUL skip"
+        exit 1
+    fi
+    # B1: no || true on scan greps; require readable paths; empty list fails.
+    # Match code only (ignore comments that name the anti-pattern).
+    if rg -v '^\s*#' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" | rg -q '\|\| true'; then
+        echo "FAIL: porcelain must not swallow grep errors with || true"
+        exit 1
+    fi
+    if rg -v '^\s*#' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" | rg -q '\|\| true'; then
+        echo "FAIL: engine must not swallow grep errors with || true"
+        exit 1
+    fi
+    if ! rg -q 'require_readable|is not a readable file' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'require_readable|is not a readable file' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: both guards must require each listed path is a readable file"
+        exit 1
+    fi
+    if ! rg -q 'empty scan list' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'empty scan list' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: both guards must fail on empty selector list"
+        exit 1
+    fi
+    if ! rg -q 'unscannable' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || ! rg -q 'unscannable' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: both guards must FAIL unscannable on grep exit >=2"
         exit 1
     fi
     if ! rg -q 'scripts/testdata/\*' "$REPO_ROOT/scripts/list-guard-scan-files.sh"; then
@@ -1310,8 +1336,9 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: selector case must not exclude nested */testdata/* (narrower than main)"
         exit 1
     fi
-    if rg -q 'scripts/repoguard/\*\) continue' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
-        echo "FAIL: porcelain must not skip scripts/repoguard/* (narrower than main)"
+    if rg -q 'scripts/repoguard/\*\) continue' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
+        || rg -q 'scripts/repoguard/\*\) continue' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: guards must not skip scripts/repoguard/* (narrower than main)"
         exit 1
     fi
     if ! rg -q 'lister_st' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
@@ -1319,19 +1346,234 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: guards must check lister exit status (fail-closed crash)"
         exit 1
     fi
-    # Live demos (parallel-safe tempdirs).
+
+    # Parallel-safe helpers for dual-guard demos (each call gets its own tempdir).
     _gw='gi'; _gw="${_gw}t"
     _st='sta'; _st="${_st}tus"
     _u='/usr'; _db='/bin/doc'; _db="${_db}ker"
-    # 1) Non-UTF8 \xff on hit line — porcelain + engine must fail.
+    _A='ARM_'; _B='DOCKER'; _C='_BIN'
+    _BANNED="${_A}${_B}${_C}"
+    seed_guard_demo() {
+        local d="$1"
+        mkdir -p "$d/scripts" "$d/.github" "$d/scripts/testdata/engine-bin-env"
+        cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$d/scripts/"
+        cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$d/scripts/"
+        cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$d/scripts/"
+        cp "$REPO_ROOT/scripts/testdata/engine-bin-env/"* "$d/scripts/testdata/engine-bin-env/"
+        chmod +x "$d/scripts/"*.sh
+    }
+    pick_utf8_locale() {
+        local cand
+        for cand in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
+            if locale -a 2>/dev/null | grep -qiE "^$(printf '%s' "$cand" | sed 's/\./\\./g')\$"; then
+                printf '%s\n' "$cand"
+                return 0
+            fi
+        done
+        return 1
+    }
+    # Mutate a REAL guard copy: restore heredoc $(lister) swallow (no exit check).
+    mutate_heredoc_swallow() {
+        local guard="$1" lister_args="$2"
+        python3 - "$guard" "$lister_args" <<'PY'
+import pathlib, sys
+path, args = pathlib.Path(sys.argv[1]), sys.argv[2]
+text = path.read_text()
+text = text.replace('if [ "$lister_st" -ne 0 ]; then', 'if false; then  # mutated: ignore lister crash')
+text = text.replace('if [ ! -s "$scan_list" ]; then', 'if false; then  # mutated: allow empty list')
+old = 'done <"$scan_list"'
+new = (
+    'done <<EOF\n'
+    f'$(bash "$LISTER" {args})\n'
+    'EOF'
+)
+if old not in text:
+    raise SystemExit(f'mutate_heredoc_swallow: missing {old!r} in {path}')
+path.write_text(text.replace(old, new, 1))
+PY
+    }
+
+    # --- B1: garbage selector path / empty list must FAIL both guards ---
+    demo_b1=$(mktemp -d)
+    seed_guard_demo "$demo_b1"
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_b1/scripts/zz"
+    printf '%s\n' "$_BANNED" >"$demo_b1/scripts/ez"
+    cat >"$demo_b1/scripts/list-guard-scan-files.sh" <<'MUT_GARBAGE'
+#!/usr/bin/env bash
+echo "garbage!!@@ nope"
+exit 0
+MUT_GARBAGE
+    chmod +x "$demo_b1/scripts/list-guard-scan-files.sh"
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: garbage!!@@ nope is not a readable file'; then
+        echo "FAIL: B1 porcelain must reject garbage selector path: $pout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: garbage!!@@ nope is not a readable file'; then
+        echo "FAIL: B1 engine must reject garbage selector path: $eout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    # Empty list (selector exit 0) → both FAIL.
+    cat >"$demo_b1/scripts/list-guard-scan-files.sh" <<'MUT_EMPTY'
+#!/usr/bin/env bash
+exit 0
+MUT_EMPTY
+    chmod +x "$demo_b1/scripts/list-guard-scan-files.sh"
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'empty scan list'; then
+        echo "FAIL: B1 porcelain must fail on empty selector list: $pout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'empty scan list'; then
+        echo "FAIL: B1 engine must fail on empty selector list: $eout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    # Mutation on REAL guards: drop require_readable + restore || true → garbage passes.
+    cat >"$demo_b1/scripts/list-guard-scan-files.sh" <<'MUT_GARBAGE'
+#!/usr/bin/env bash
+echo "garbage!!@@ nope"
+exit 0
+MUT_GARBAGE
+    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_b1/scripts/"
+    cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_b1/scripts/"
+    chmod +x "$demo_b1/scripts/"*.sh
+    python3 - "$demo_b1/scripts/check-porcelain-failclosed.sh" <<'PY'
+import pathlib, re
+p = pathlib.Path(__import__('sys').argv[1])
+t = p.read_text()
+t = t.replace('require_readable "$f"', ': # mutated: skip readable check')
+t = re.sub(
+    r'flatten_to\(\) \{.*?\n\}\n',
+    'flatten_to() {\n'
+    '  # mutated: ignore missing/garbage paths (B1 regression companion)\n'
+    '  awk \'{ print }\' "$1" >"$2" 2>/dev/null || true\n'
+    '}\n',
+    t, count=1, flags=re.S)
+t = re.sub(
+    r'grep_hits\(\) \{.*?\n\}\n',
+    'grep_hits() {\n'
+    '  local re="$1" src="$2" out="$3"\n'
+    '  LC_ALL=C grep -a -nE "$re" "$src" >"$out" || true\n'
+    '  return 0\n'
+    '}\n',
+    t, count=1, flags=re.S)
+p.write_text(t)
+PY
+    python3 - "$demo_b1/scripts/check-no-engine-bin-env.sh" <<'PY'
+import pathlib, re
+p = pathlib.Path(__import__('sys').argv[1])
+t = p.read_text()
+t = t.replace('require_readable "$f"', ': # mutated: skip readable check')
+t = re.sub(
+    r'grep_hits\(\) \{.*?\n\}\n',
+    'grep_hits() {\n'
+    '  local re="$1" f="$2" out="$3"\n'
+    '  LC_ALL=C grep -a -nE "$re" "$f" >"$out" || true\n'
+    '  return 0\n'
+    '}\n',
+    t, count=1, flags=re.S)
+p.write_text(t)
+PY
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_b1/scripts/check-porcelain-failclosed.sh" "$demo_b1" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_b1/scripts/check-no-engine-bin-env.sh" "$demo_b1" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -ne 0 ]; then
+        echo "FAIL: B1 mutation (|| true + no readable check) porcelain must miss garbage (want 0): $pout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    if [ "$est" -ne 0 ]; then
+        echo "FAIL: B1 mutation (|| true + no readable check) engine must miss garbage (want 0): $eout"
+        rm -rf "$demo_b1"; exit 1
+    fi
+    rm -rf "$demo_b1"
+
+    # --- B2 / REQ2: NUL-first + NUL-later fixtures for BOTH guards ---
+    demo_nul=$(mktemp -d)
+    seed_guard_demo "$demo_nul"
+    # NUL-first (B2 repro): must be scanned, never silently dropped.
+    printf '\x00\n%s %s\n' "$_gw" "$_st" >"$demo_nul/scripts/zz4.sh"
+    printf '\x00\n%s\n' "$_BANNED" >"$demo_nul/scripts/ez4.sh"
+    # NUL-later still fails.
+    printf 'x\0' >"$demo_nul/scripts/zz"; printf '%s %s\n' "$_gw" "$_st" >>"$demo_nul/scripts/zz"
+    printf 'x\0' >"$demo_nul/scripts/ez"; printf '%s\n' "$_BANNED" >>"$demo_nul/scripts/ez"
+    # Capture via files — bash $(...) warns/strips NUL from guard stderr/stdout.
+    pout_f=$(mktemp); eout_f=$(mktemp)
+    set +e
+    ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" >"$pout_f" 2>&1
+    pst=$?
+    bash "$demo_nul/scripts/check-no-engine-bin-env.sh" "$demo_nul" >"$eout_f" 2>&1
+    est=$?
+    set -e
+    if [ "$pst" -eq 0 ] || ! grep -q 'FAIL: scripts/zz4.sh' "$pout_f"; then
+        echo "FAIL: B2/REQ2 porcelain must flag NUL-first zz4.sh: $(tr -d '\000' <"$pout_f")"
+        rm -rf "$demo_nul" "$pout_f" "$eout_f"; exit 1
+    fi
+    if ! grep -q 'FAIL: scripts/zz' "$pout_f"; then
+        echo "FAIL: REQ2 porcelain must flag NUL-later zz: $(tr -d '\000' <"$pout_f")"
+        rm -rf "$demo_nul" "$pout_f" "$eout_f"; exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! grep -q 'FAIL: scripts/ez4.sh' "$eout_f"; then
+        echo "FAIL: B2/REQ2 engine must flag NUL-first ez4.sh: $(tr -d '\000' <"$eout_f")"
+        rm -rf "$demo_nul" "$pout_f" "$eout_f"; exit 1
+    fi
+    if ! grep -q 'FAIL: scripts/ez' "$eout_f"; then
+        echo "FAIL: REQ2 engine must flag NUL-later ez: $(tr -d '\000' <"$eout_f")"
+        rm -rf "$demo_nul" "$pout_f" "$eout_f"; exit 1
+    fi
+    rm -f "$pout_f" "$eout_f"
+    # Mutation on REAL selector copy: restore any-NUL / NUL-first skip → miss hits.
+    python3 - "$demo_nul/scripts/list-guard-scan-files.sh" <<'PY'
+import pathlib
+p = pathlib.Path(__import__('sys').argv[1])
+# Inject silent NUL-first skip before printf (B2 regression).
+old = '  printf \'%s\\n\' "$f"'
+inj = (
+    '  # mutated: silently skip NUL-first (B2 regression)\n'
+    '  first=$(dd if="$f" bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d \' \\n\')\n'
+    '  [ "$first" = "00" ] && continue\n'
+    '  raw=$(wc -c <"$f" | tr -d \' \'); stripped=$(tr -d \'\\000\' <"$f" | wc -c | tr -d \' \')\n'
+    '  [ "$raw" != "$stripped" ] && continue\n'
+    '  printf \'%s\\n\' "$f"'
+)
+t = p.read_text()
+if old not in t:
+    raise SystemExit('NUL skip inject: printf site missing')
+p.write_text(t.replace(old, inj, 1))
+PY
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_nul/scripts/check-no-engine-bin-env.sh" "$demo_nul" 2>&1)
+    est=$?
+    set -e
+    if [ "$pst" -ne 0 ]; then
+        echo "FAIL: B2 mutation (NUL skip) porcelain must miss (want 0): $pout"
+        rm -rf "$demo_nul"; exit 1
+    fi
+    if [ "$est" -ne 0 ]; then
+        echo "FAIL: B2 mutation (NUL skip) engine must miss (want 0): $eout"
+        rm -rf "$demo_nul"; exit 1
+    fi
+    rm -rf "$demo_nul"
+
+    # --- REQ1: Non-UTF8 \xff on hit line — BOTH guards; pin UTF-8 for mutant ---
     demo_ff=$(mktemp -d)
-    mkdir -p "$demo_ff/scripts" "$demo_ff/.github"
+    seed_guard_demo "$demo_ff"
     printf '%s %s' "$_gw" "$_st" >"$demo_ff/scripts/zz"; printf '\xff\n' >>"$demo_ff/scripts/zz"
     printf '%s' "${_u}${_db}" >"$demo_ff/scripts/ez"; printf '\xff\n' >>"$demo_ff/scripts/ez"
-    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_ff/scripts/"
-    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_ff/scripts/"
-    cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_ff/scripts/"
-    chmod +x "$demo_ff/scripts/"*.sh
     set +e
     pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_ff/scripts/check-porcelain-failclosed.sh" "$demo_ff" 2>&1)
     pst=$?
@@ -1346,149 +1588,143 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: REQ1 engine must flag abs docker + \\xff: $eout"
         rm -rf "$demo_ff"; exit 1
     fi
-    # Mutation: drop LC_ALL=C → UTF-8 locale misses \xff hit → exit 0.
-    sed -i.bak 's/LC_ALL=C grep -a/grep -a/g' "$demo_ff/scripts/check-porcelain-failclosed.sh"
-    set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_ff/scripts/check-porcelain-failclosed.sh" "$demo_ff" 2>&1)
-    pst=$?
-    set -e
-    if [ "$pst" -ne 0 ]; then
-        echo "FAIL: REQ1 mutation (no LC_ALL=C) must miss \\xff hit (want exit 0): $pout"
-        rm -rf "$demo_ff"; exit 1
+    # Mutation on REAL copies: drop LC_ALL=C. Run under UTF-8 so miss is observable
+    # even when the suite itself runs with LC_ALL=C / LANG unset.
+    utf8_loc=""
+    if utf8_loc=$(pick_utf8_locale); then
+        # No .bak under scripts/ — backups are scanned and trip engine bans in comments.
+        sed -i 's/LC_ALL=C grep -a/grep -a/g' \
+            "$demo_ff/scripts/check-porcelain-failclosed.sh" \
+            "$demo_ff/scripts/check-no-engine-bin-env.sh"
+        set +e
+        pout=$(LC_ALL="$utf8_loc" LANG="$utf8_loc" ARM_PORCELAIN_SKIP_SELFTEST=1 \
+            bash "$demo_ff/scripts/check-porcelain-failclosed.sh" "$demo_ff" 2>&1)
+        pst=$?
+        eout=$(LC_ALL="$utf8_loc" LANG="$utf8_loc" \
+            bash "$demo_ff/scripts/check-no-engine-bin-env.sh" "$demo_ff" 2>&1)
+        est=$?
+        set -e
+        if [ "$pst" -ne 0 ]; then
+            echo "FAIL: REQ1 mutation (no LC_ALL=C) porcelain must miss \\xff under $utf8_loc (want 0): $pout"
+            rm -rf "$demo_ff"; exit 1
+        fi
+        if [ "$est" -ne 0 ]; then
+            echo "FAIL: REQ1 mutation (no LC_ALL=C) engine must miss \\xff under $utf8_loc (want 0): $eout"
+            rm -rf "$demo_ff"; exit 1
+        fi
+    else
+        echo "NOTICE: skipping REQ1 LC_ALL=C-drop mutation — no UTF-8 locale available"
     fi
     rm -rf "$demo_ff"
-    # 2) NUL later + porcelain tokens must fail (selector must list the file).
-    demo_nul=$(mktemp -d)
-    mkdir -p "$demo_nul/scripts"
-    printf 'x\0' >"$demo_nul/scripts/zz"; printf '%s %s\n' "$_gw" "$_st" >>"$demo_nul/scripts/zz"
-    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_nul/scripts/"
-    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_nul/scripts/"
-    chmod +x "$demo_nul/scripts/"*.sh
-    set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" 2>&1)
-    pst=$?
-    set -e
-    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz'; then
-        echo "FAIL: REQ2 porcelain must flag NUL-later + ${_gw} ${_st}: $pout"
-        rm -rf "$demo_nul"; exit 1
-    fi
-    # Mutation: restore any-NUL skip → REQ fails (exit 0).
-    cat >"$demo_nul/scripts/list-guard-scan-files.sh" <<'MUT_NUL'
-#!/usr/bin/env bash
-set -euo pipefail
-EXCLUDE_TESTDATA=0; dirs=()
-while [ "$#" -gt 0 ]; do
-  case "$1" in --exclude-testdata) EXCLUDE_TESTDATA=1; shift ;; *) dirs+=("$1"); shift ;; esac
-done
-is_non_binary() {
-  local f="$1" raw stripped
-  [ -f "$f" ] || return 1
-  [ ! -s "$f" ] && return 0
-  raw=$(wc -c <"$f" | tr -d ' '); stripped=$(tr -d '\000' <"$f" | wc -c | tr -d ' ')
-  [ "$raw" = "$stripped" ]
-}
-list_tmp=$(mktemp); trap 'rm -f "$list_tmp"' EXIT
-{ for d in "${dirs[@]}"; do [ -d "$d" ] && find "$d" -type f; done; } | LC_ALL=C sort -u >"$list_tmp"
-while IFS= read -r f || [ -n "${f:-}" ]; do
-  [ -z "${f:-}" ] && continue
-  if [ "$EXCLUDE_TESTDATA" -eq 1 ]; then case "$f" in scripts/testdata/*|scripts/testdata) continue ;; esac; fi
-  if is_non_binary "$f"; then printf '%s\n' "$f"; fi
-done <"$list_tmp"
-MUT_NUL
-    chmod +x "$demo_nul/scripts/list-guard-scan-files.sh"
-    set +e
-    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_nul/scripts/check-porcelain-failclosed.sh" "$demo_nul" 2>&1)
-    pst=$?
-    set -e
-    if [ "$pst" -ne 0 ]; then
-        echo "FAIL: REQ2 mutation (any-NUL skip) must miss NUL-later hit (want exit 0): $pout"
-        rm -rf "$demo_nul"; exit 1
-    fi
-    rm -rf "$demo_nul"
-    # 3) Scope = main: nested */testdata/* and scripts/repoguard/* scanned; only scripts/testdata/* excluded.
+
+    # --- REQ3: Scope = main — BOTH guards scan nested testdata + repoguard ---
     demo_scope=$(mktemp -d)
+    seed_guard_demo "$demo_scope"
     mkdir -p "$demo_scope/scripts/other/testdata" "$demo_scope/scripts/repoguard" "$demo_scope/scripts/testdata"
     printf '%s %s\n' "$_gw" "$_st" >"$demo_scope/scripts/other/testdata/leak.sh"
     printf '%s %s\n' "$_gw" "$_st" >"$demo_scope/scripts/repoguard/leak.go"
-    printf '%s %s\n' "$_gw" "$_st" >"$demo_scope/scripts/testdata/ok.sh"
-    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_scope/scripts/"
-    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_scope/scripts/"
-    chmod +x "$demo_scope/scripts/"*.sh
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_scope/scripts/testdata/ok-porc.sh"
+    printf '%s\n' "${_u}${_db}" >"$demo_scope/scripts/other/testdata/eleak.sh"
+    printf '%s\n' "${_u}${_db}" >"$demo_scope/scripts/repoguard/eleak.go"
+    printf '%s\n' "${_u}${_db}" >"$demo_scope/scripts/testdata/ok-eng.sh"
     set +e
     pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_scope/scripts/check-porcelain-failclosed.sh" "$demo_scope" 2>&1)
     pst=$?
+    eout=$(bash "$demo_scope/scripts/check-no-engine-bin-env.sh" "$demo_scope" 2>&1)
+    est=$?
     set -e
     if [ "$pst" -eq 0 ] \
         || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/other/testdata/leak.sh' \
         || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/repoguard/leak.go'; then
-        echo "FAIL: REQ3 must scan nested testdata + repoguard: $pout"
+        echo "FAIL: REQ3 porcelain must scan nested testdata + repoguard: $pout"
         rm -rf "$demo_scope"; exit 1
     fi
-    if printf '%s\n' "$pout" | grep -q 'scripts/testdata/ok.sh'; then
-        echo "FAIL: REQ3 must NOT scan scripts/testdata/*: $pout"
+    if printf '%s\n' "$pout" | grep -q 'scripts/testdata/ok-porc.sh'; then
+        echo "FAIL: REQ3 porcelain must NOT scan scripts/testdata/*: $pout"
         rm -rf "$demo_scope"; exit 1
     fi
-    # Mutation: exclude */testdata/* broadly → nested leak missed.
-    sed -i.bak 's|scripts/testdata/\*|*/testdata/*|g' "$demo_scope/scripts/list-guard-scan-files.sh"
+    if [ "$est" -eq 0 ] \
+        || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/other/testdata/eleak.sh' \
+        || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/repoguard/eleak.go'; then
+        echo "FAIL: REQ3 engine must scan nested testdata + repoguard: $eout"
+        rm -rf "$demo_scope"; exit 1
+    fi
+    if printf '%s\n' "$eout" | grep -q 'scripts/testdata/ok-eng.sh'; then
+        echo "FAIL: REQ3 engine must NOT scan scripts/testdata/*: $eout"
+        rm -rf "$demo_scope"; exit 1
+    fi
+    # Mutation on REAL selector: */testdata/* broadly → nested leak missed (both).
+    sed -i 's|scripts/testdata/\*|*/testdata/*|g' "$demo_scope/scripts/list-guard-scan-files.sh"
     set +e
     pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_scope/scripts/check-porcelain-failclosed.sh" "$demo_scope" 2>&1)
-    pst=$?
+    eout=$(bash "$demo_scope/scripts/check-no-engine-bin-env.sh" "$demo_scope" 2>&1)
     set -e
     if printf '%s\n' "$pout" | grep -q 'FAIL: scripts/other/testdata/leak.sh'; then
-        echo "FAIL: REQ3 mutation (*/testdata/*) must miss nested leak: $pout"
+        echo "FAIL: REQ3 mutation (*/testdata/*) porcelain must miss nested leak: $pout"
+        rm -rf "$demo_scope"; exit 1
+    fi
+    if printf '%s\n' "$eout" | grep -q 'FAIL: scripts/other/testdata/eleak.sh'; then
+        echo "FAIL: REQ3 mutation (*/testdata/*) engine must miss nested leak: $eout"
+        rm -rf "$demo_scope"; exit 1
+    fi
+    # Engine-specific mutant: skip scripts/repoguard/* → suite must kill (miss eleak).
+    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_scope/scripts/"
+    cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_scope/scripts/"
+    sed -i '/case "\$f" in/a\
+    scripts/repoguard/*) continue ;;
+' "$demo_scope/scripts/check-no-engine-bin-env.sh"
+    set +e
+    eout=$(bash "$demo_scope/scripts/check-no-engine-bin-env.sh" "$demo_scope" 2>&1)
+    est=$?
+    set -e
+    if printf '%s\n' "$eout" | grep -q 'FAIL: scripts/repoguard/eleak.go'; then
+        echo "FAIL: REQ3 engine mutation (skip repoguard) must miss eleak: $eout"
         rm -rf "$demo_scope"; exit 1
     fi
     rm -rf "$demo_scope"
-    # 4) Lister exit 2 + violating zz → guard must NOT exit 0.
+
+    # --- REQ4: Lister exit 2 — BOTH guards; assert specific FAIL line; heredoc on REAL ---
     demo_crash=$(mktemp -d)
-    mkdir -p "$demo_crash/scripts"
+    seed_guard_demo "$demo_crash"
     printf '%s %s\n' "$_gw" "$_st" >"$demo_crash/scripts/zz"
+    printf '%s\n' "${_u}${_db}" >"$demo_crash/scripts/ez"
     cat >"$demo_crash/scripts/list-guard-scan-files.sh" <<'MUT_CRASH'
 #!/usr/bin/env bash
 exit 2
 MUT_CRASH
-    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_crash/scripts/"
-    chmod +x "$demo_crash/scripts/"*.sh
+    chmod +x "$demo_crash/scripts/list-guard-scan-files.sh"
     set +e
     pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_crash/scripts/check-porcelain-failclosed.sh" "$demo_crash" 2>&1)
     pst=$?
+    eout=$(bash "$demo_crash/scripts/check-no-engine-bin-env.sh" "$demo_crash" 2>&1)
+    est=$?
     set -e
-    if [ "$pst" -eq 0 ]; then
-        echo "FAIL: REQ4 porcelain must fail when lister exits 2: $pout"
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: list-guard-scan-files.sh exited 2 (porcelain scan aborted)'; then
+        echo "FAIL: REQ4 porcelain must FAIL lister exit 2 line: $pout"
         rm -rf "$demo_crash"; exit 1
     fi
-    # Mutation: restore heredoc $(lister) without exit check → exit 0 despite crash.
-    cat >"$demo_crash/scripts/check-porcelain-failclosed.sh" <<'MUT_HEREDOC'
-#!/usr/bin/env bash
-set -euo pipefail
-ROOT="${1:-.}"; SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; LISTER="$SCRIPT_DIR/list-guard-scan-files.sh"
-cd "$ROOT"; fail=0
-HELPER="scripts/porcelain-git.sh"
-_gw='gi'; _gw="${_gw}t"; _st='sta'; _st="${_st}tus"
-CLASS_RE="(^|[^A-Za-z0-9_-])${_gw}([^A-Za-z0-9_-].*)?${_st}([^A-Za-z0-9_-]|$)"
-scan_file() {
-  local f="$1" hits
-  hits="$(LC_ALL=C grep -a -nE "$CLASS_RE" "$f" || true)"
-  if [ -n "$hits" ] && [ "$f" != "$HELPER" ]; then
-    echo "FAIL: $f invokes porcelain" >&2; fail=1
-  fi
-}
-while IFS= read -r f || [ -n "${f:-}" ]; do
-  [ -z "${f:-}" ] && continue
-  scan_file "$f"
-done <<EOF
-$(bash "$LISTER" --exclude-testdata scripts)
-EOF
-if [ "$fail" -ne 0 ]; then exit 1; fi
-echo "OK: swallowed"
-MUT_HEREDOC
-    chmod +x "$demo_crash/scripts/check-porcelain-failclosed.sh"
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: list-guard-scan-files.sh exited 2 (engine scan aborted)'; then
+        echo "FAIL: REQ4 engine must FAIL lister exit 2 line: $eout"
+        rm -rf "$demo_crash"; exit 1
+    fi
+    # Mutation on REAL guard copies: restore heredoc $(lister) swallow → exit 0.
+    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_crash/scripts/"
+    cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_crash/scripts/"
+    chmod +x "$demo_crash/scripts/"*.sh
+    mutate_heredoc_swallow "$demo_crash/scripts/check-porcelain-failclosed.sh" '--exclude-testdata scripts'
+    mutate_heredoc_swallow "$demo_crash/scripts/check-no-engine-bin-env.sh" '--exclude-testdata scripts .github'
     set +e
     pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_crash/scripts/check-porcelain-failclosed.sh" "$demo_crash" 2>&1)
     pst=$?
+    eout=$(bash "$demo_crash/scripts/check-no-engine-bin-env.sh" "$demo_crash" 2>&1)
+    est=$?
     set -e
     if [ "$pst" -ne 0 ]; then
-        echo "FAIL: REQ4 mutation (heredoc swallow) must exit 0 with crashing lister: st=$pst $pout"
+        echo "FAIL: REQ4 mutation (heredoc swallow) porcelain must exit 0: st=$pst $pout"
+        rm -rf "$demo_crash"; exit 1
+    fi
+    if [ "$est" -ne 0 ]; then
+        echo "FAIL: REQ4 mutation (heredoc swallow) engine must exit 0: st=$est $eout"
         rm -rf "$demo_crash"; exit 1
     fi
     rm -rf "$demo_crash"
