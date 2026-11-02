@@ -13,6 +13,8 @@
 # weakening these regexes fails the selftest.
 set -euo pipefail
 ROOT="${1:-.}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LISTER="$SCRIPT_DIR/list-guard-scan-files.sh"
 cd "$ROOT"
 
 HELPER="scripts/porcelain-git.sh"
@@ -51,18 +53,6 @@ flatten() {
     if (sub(/\\$/, "")) { printf "%s", $0; next }
     print
   }' "$1"
-}
-
-# Extensionless scripts under scripts/ (shebang) plus *.sh/*.bash/*.py.
-is_scanned_script() {
-  local f="$1" base
-  base="${f##*/}"
-  case "$base" in
-    *.sh|*.bash|*.py) return 0 ;;
-    *.*) return 1 ;;
-  esac
-  # Extensionless: require a shebang so binary/data files are skipped.
-  head -n 1 "$f" 2>/dev/null | grep -q '^#!'
 }
 
 scan_file() {
@@ -127,15 +117,18 @@ EOF
   fi
 }
 
-while IFS= read -r f || [ -n "$f" ]; do
-  [ -z "$f" ] && continue
-  if ! is_scanned_script "$f"; then
-    continue
-  fi
+# Shared selector: every non-binary under scripts/ (no ext/shebang filter).
+# Skip scripts/repoguard/: Go fixtures quote git/status for hermetic AST tests;
+# that package has its own git-hermetic repoguard check.
+while IFS= read -r f || [ -n "${f:-}" ]; do
+  [ -z "${f:-}" ] && continue
+  case "$f" in
+    scripts/repoguard/*) continue ;;
+  esac
   scan_file "$f"
   scan_silencers "$f"
 done <<EOF
-$(find scripts -type f ! -path 'scripts/testdata/*' | LC_ALL=C sort)
+$(bash "$LISTER" --exclude-testdata scripts)
 EOF
 
 if [ "$fail" -ne 0 ]; then

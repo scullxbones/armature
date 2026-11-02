@@ -43,8 +43,14 @@ do
   st=$?
   set -e
   rm -rf "$demo"
+  # Integrity: require the specific FAIL: scripts/<fixture> line — a crashing
+  # guard (nonzero without that line) must fail this selftest.
+  if ! printf '%s\n' "$out" | grep -q "FAIL: scripts/${fx}"; then
+    echo "FAIL: real guard missing 'FAIL: scripts/${fx}' (st=$st): $out" >&2
+    exit 1
+  fi
   if [ "$st" -eq 0 ]; then
-    echo "FAIL: real guard did not flag bypass fixture $fx: $out" >&2
+    echo "FAIL: real guard exited 0 after flagging $fx: $out" >&2
     exit 1
   fi
   echo "OK: real guard flagged bypass fixture $fx"

@@ -1205,8 +1205,26 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: porcelain guard missing XARGS_RE ban"
         exit 1
     fi
-    if ! rg -q 'is_scanned_script' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
-        echo "FAIL: porcelain guard must scan extensionless scripts via is_scanned_script"
+    # Shared non-binary file selector (no ext/shebang filter) — class for porcelain + engine.
+    if [[ ! -f "$REPO_ROOT/scripts/list-guard-scan-files.sh" ]]; then
+        echo "FAIL: missing scripts/list-guard-scan-files.sh shared selector"
+        exit 1
+    fi
+    if ! rg -q 'list-guard-scan-files\.sh' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain guard must use list-guard-scan-files.sh"
+        exit 1
+    fi
+    if ! rg -q 'list-guard-scan-files\.sh' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: engine guard must use list-guard-scan-files.sh"
+        exit 1
+    fi
+    # Mutation: restoring ext/shebang filters must fail this REQ.
+    if rg -q 'is_scanned_script' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
+        echo "FAIL: porcelain must not restore is_scanned_script ext/shebang filter"
+        exit 1
+    fi
+    if rg -q -- '-name '\''\*\.sh'\''' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
+        echo "FAIL: engine guard must not restore extension find filter"
         exit 1
     fi
     if ! rg -q 'ARM_PORCELAIN_SKIP_SELFTEST' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh"; then
@@ -1215,6 +1233,50 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
     fi
     if ! rg -q 'real guard' "$REPO_ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh"; then
         echo "FAIL: porcelain selftest must drive the real guard"
+        exit 1
+    fi
+    # Selftest integrity: require specific FAIL: scripts/<fixture> (not any nonzero).
+    if ! rg -q 'FAIL: scripts/' "$REPO_ROOT/scripts/testdata/porcelain-bypass/run-selftest.sh"; then
+        echo "FAIL: porcelain selftest must require FAIL: scripts/<fixture> line"
+        exit 1
+    fi
+    # REQ: extensionless no-shebang + .txt must be scanned by both guards.
+    _gw='gi'; _gw="${_gw}t"
+    _st='sta'; _st="${_st}tus"
+    demo_sel=$(mktemp -d)
+    mkdir -p "$demo_sel/scripts" "$demo_sel/.github"
+    # Repro: printf 'git status\n' > scripts/zz (no shebang) must fail porcelain.
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_sel/scripts/zz"
+    printf '%s %s\n' "$_gw" "$_st" >"$demo_sel/scripts/leak.txt"
+    # Engine tokens in extensionless + .txt must fail engine guard.
+    _u='/usr'; _db='/bin/doc'; _db="${_db}ker"
+    printf '%s\n' "${_u}${_db}" >"$demo_sel/scripts/zz_engine"
+    printf '%s\n' "${_u}${_db}" >"$demo_sel/scripts/engine.txt"
+    cp "$REPO_ROOT/scripts/list-guard-scan-files.sh" "$demo_sel/scripts/"
+    cp "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" "$demo_sel/scripts/"
+    cp "$REPO_ROOT/scripts/check-no-engine-bin-env.sh" "$demo_sel/scripts/"
+    chmod +x "$demo_sel/scripts/"*.sh
+    set +e
+    pout=$(ARM_PORCELAIN_SKIP_SELFTEST=1 bash "$demo_sel/scripts/check-porcelain-failclosed.sh" "$demo_sel" 2>&1)
+    pst=$?
+    eout=$(bash "$demo_sel/scripts/check-no-engine-bin-env.sh" "$demo_sel" 2>&1)
+    est=$?
+    set -e
+    rm -rf "$demo_sel"
+    if [ "$pst" -eq 0 ] || ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/zz'; then
+        echo "FAIL: porcelain must flag extensionless no-shebang scripts/zz: $pout"
+        exit 1
+    fi
+    if ! printf '%s\n' "$pout" | grep -q 'FAIL: scripts/leak.txt'; then
+        echo "FAIL: porcelain must flag scripts/leak.txt: $pout"
+        exit 1
+    fi
+    if [ "$est" -eq 0 ] || ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/zz_engine'; then
+        echo "FAIL: engine must flag extensionless scripts/zz_engine: $eout"
+        exit 1
+    fi
+    if ! printf '%s\n' "$eout" | grep -q 'FAIL: scripts/engine.txt'; then
+        echo "FAIL: engine must flag scripts/engine.txt: $eout"
         exit 1
     fi
     for engfix in banned-export.sh banned-command-p-docker.sh banned-abs-docker.sh; do

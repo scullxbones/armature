@@ -7,6 +7,8 @@
 # Fixtures under scripts/testdata/engine-bin-env/ prove each ban.
 set -euo pipefail
 ROOT="${1:-.}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LISTER="$SCRIPT_DIR/list-guard-scan-files.sh"
 cd "$ROOT"
 
 # Exact env name as a word. Built without writing the banned token as a
@@ -72,17 +74,18 @@ scan_abs_docker() {
   fi
 }
 
-while IFS= read -r f || [ -n "$f" ]; do
-  [ -z "$f" ] && continue
+# Shared selector: every non-binary under scripts/ and .github/ (no ext/shebang).
+while IFS= read -r f || [ -n "${f:-}" ]; do
+  [ -z "${f:-}" ] && continue
   case "$f" in
     scripts/check-no-engine-bin-env.sh) continue ;;
-    scripts/testdata/*) continue ;;
+    scripts/list-guard-scan-files.sh) continue ;;
   esac
   scan_env "$f"
   scan_cmd_p "$f"
   scan_abs_docker "$f"
 done <<EOF
-$(find scripts .github -type f \( -name '*.sh' -o -name '*.bash' -o -name '*.yml' -o -name '*.yaml' -o -name '*.go' -o -name 'Makefile' \) 2>/dev/null | LC_ALL=C sort)
+$(bash "$LISTER" --exclude-testdata scripts .github)
 EOF
 
 # Fixture must exist and must match the ban pattern (proves the regex).
