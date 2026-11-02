@@ -797,14 +797,17 @@ if "ci-path-shadow-engines.sh" not in edit:
 if "pr-coverage-quote-check.sh" not in edit:
     print("FAIL: edit workflow must invoke pr-coverage-quote-check.sh")
     sys.exit(1)
-if "select-coverage-check-artifact-id.sh" not in edit:
-    print("FAIL: edit workflow must use select-coverage-check-artifact-id.sh (jq --arg, not gh api --jq --arg)")
+if "wait-coverage-check-artifact.sh" not in edit:
+    print("FAIL: edit workflow must call wait-coverage-check-artifact.sh (poll loop not inline YAML)")
+    sys.exit(1)
+if "|| true" in edit and "select-coverage-check-artifact-id" in edit:
+    print("FAIL: edit workflow must not || true the artifact selector")
     sys.exit(1)
 if re.search(r"gh api[^\n]*--jq[^\n]*(--arg|--argjson)", edit):
     print("FAIL: gh api --jq does not accept --arg/--argjson (CI class failure on #432)")
     sys.exit(1)
-if "poll" not in edit.lower() and "Waiting for artifact" not in edit:
-    print("FAIL: edit workflow must wait/poll for coverage-check artifact")
+if "ci-path-shadow-selfcheck.sh" not in edit:
+    print("FAIL: edit workflow must run PATH-shadow self-check")
     sys.exit(1)
 if 'gh api "repos/${REPO}/pulls/${PR_NUMBER}"' not in edit:
     print("FAIL: edit workflow must fetch CURRENT body via gh api")
