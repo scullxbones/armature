@@ -1322,6 +1322,24 @@ cleanup_porc() { rm -rf "$PORC_DEMO"; }
         echo "FAIL: both guards must fail on empty selector list"
         exit 1
     fi
+    # Committed NUL-first REQ fixtures (one per guard family).
+    if [[ ! -f "$REPO_ROOT/scripts/testdata/porcelain-bypass/nul-first-status" ]]; then
+        echo "FAIL: missing porcelain NUL-first REQ fixture"
+        exit 1
+    fi
+    if [[ ! -f "$REPO_ROOT/scripts/testdata/engine-bin-env/nul-first-banned-export" ]]; then
+        echo "FAIL: missing engine NUL-first REQ fixture"
+        exit 1
+    fi
+    for fx in \
+        "$REPO_ROOT/scripts/testdata/porcelain-bypass/nul-first-status" \
+        "$REPO_ROOT/scripts/testdata/engine-bin-env/nul-first-banned-export"; do
+        first=$(dd if="$fx" bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+        if [ "$first" != "00" ]; then
+            echo "FAIL: NUL-first fixture $fx first byte is $first (want 00)"
+            exit 1
+        fi
+    done
     if ! rg -q 'unscannable' "$REPO_ROOT/scripts/check-porcelain-failclosed.sh" \
         || ! rg -q 'unscannable' "$REPO_ROOT/scripts/check-no-engine-bin-env.sh"; then
         echo "FAIL: both guards must FAIL unscannable on grep exit >=2"
@@ -1504,8 +1522,9 @@ PY
     demo_nul=$(mktemp -d)
     seed_guard_demo "$demo_nul"
     # NUL-first (B2 repro): must be scanned, never silently dropped.
-    printf '\x00\n%s %s\n' "$_gw" "$_st" >"$demo_nul/scripts/zz4.sh"
-    printf '\x00\n%s\n' "$_BANNED" >"$demo_nul/scripts/ez4.sh"
+    # Seed from committed REQ fixtures (one per guard).
+    cp "$REPO_ROOT/scripts/testdata/porcelain-bypass/nul-first-status" "$demo_nul/scripts/zz4.sh"
+    cp "$REPO_ROOT/scripts/testdata/engine-bin-env/nul-first-banned-export" "$demo_nul/scripts/ez4.sh"
     # NUL-later still fails.
     printf 'x\0' >"$demo_nul/scripts/zz"; printf '%s %s\n' "$_gw" "$_st" >>"$demo_nul/scripts/zz"
     printf 'x\0' >"$demo_nul/scripts/ez"; printf '%s\n' "$_BANNED" >>"$demo_nul/scripts/ez"
