@@ -364,12 +364,9 @@
       ]
     },
     "internal/commitref": {
-      "count": 4,
+      "count": 1,
       "names": [
-        "CommitTypes",
-        "IsValidReference",
-        "MergeCommitPattern",
-        "TypedCommitPattern"
+        "IsValidReference"
       ]
     },
     "internal/config": {
