@@ -61,6 +61,27 @@ func allowlist() []allowEntry {
 			Needle:  `@[0-9a-f]{40}\b`,
 			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
 		},
+		{
+			RelPath: "scripts/workflowimagepins/main.go",
+			Check:   allowObjectID,
+			Line:    40,
+			Needle:  `^[0-9a-f]{40}$`,
+			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
+		},
+		{
+			RelPath: "scripts/workflowimagepins/main.go",
+			Check:   allowObjectID,
+			Line:    840,
+			Needle:  "width-compare",
+			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
+		},
+		{
+			RelPath: "scripts/workflowimagepins/main.go",
+			Check:   allowObjectID,
+			Line:    842,
+			Needle:  "width-compare",
+			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
+		},
 		// Schema SHA-256 *content* digests that the scanner flags as 64-only
 		// (sha256:-prefixed patterns are not hits under oidPatternBanReason today;
 		// unused-entry audit forbids waiving them).

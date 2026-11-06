@@ -1,0 +1,6 @@
+name: demo
+description: composite fixture
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

@@ -1,0 +1,5 @@
+name: t
+on: push
+jobs:
+  call:
+    uses: octo-org/example/.github/workflows/ci.yml@v1
