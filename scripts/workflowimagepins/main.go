@@ -67,7 +67,7 @@ type finding struct {
 	File string
 	Path string
 	Msg  string
-	Kind string // kindEngine (advisory) or kindRef (blocking)
+	Kind string // kindEngine is advisory; kindRef and kindAction block
 }
 
 func main() {
