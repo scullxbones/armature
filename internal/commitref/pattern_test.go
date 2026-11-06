@@ -9,12 +9,12 @@ import (
 func TestTypedCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	for _, typ := range CommitTypes() {
-		pattern := TypedCommitPattern("ISSUE-1")
+	for _, typ := range commitTypes() {
+		pattern := typedCommitPattern("ISSUE-1")
 		assert.True(t, pattern.MatchString(typ+"(ISSUE-1): description"), "type %q should match", typ)
 	}
 
-	pattern := TypedCommitPattern("ISSUE-1")
+	pattern := typedCommitPattern("ISSUE-1")
 	assert.True(t, pattern.MatchString("feat(ISSUE-1)!: breaking change"), "breaking-change bang form should match")
 	assert.False(t, pattern.MatchString("oops(ISSUE-1): bypass convention"), "disallowed type should not match")
 	assert.False(t, pattern.MatchString("feat(ISSUE-1):"), "bare subject with no description should not match")
@@ -24,17 +24,34 @@ func TestTypedCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 func TestMergeCommitPattern_REQ_LNGHZN_S4(t *testing.T) {
 	t.Parallel()
 
-	pattern := MergeCommitPattern("ISSUE-1")
+	pattern := mergeCommitPattern("ISSUE-1")
 	assert.True(t, pattern.MatchString("merge: ISSUE-1 integrate feature work"))
 	assert.False(t, pattern.MatchString("merge: ISSUE-1"), "bare subject with no description should not match")
 	assert.False(t, pattern.MatchString("merge: ISSUE-2 integrate feature work"), "different issue ID should not match")
 	assert.False(t, pattern.MatchString("feat(ISSUE-1): description"), "typed form should not match the merge pattern")
 }
 
+func TestIsValidReference_QuotesIssueIDLiterals(t *testing.T) {
+	t.Parallel()
+
+	id := "ISSUE.1+2"
+	assert.True(t, IsValidReference("feat(ISSUE.1+2): description", 1, id))
+	assert.False(t, IsValidReference("feat(ISSUEX1+2): description", 1, id), "dot must stay literal")
+	assert.False(t, IsValidReference("feat(ISSUE.112): description", 1, id), "plus must stay literal")
+	assert.True(t, IsValidReference("merge: ISSUE.1+2 integrate", 2, id))
+	assert.False(t, IsValidReference("merge: ISSUEX1+2 integrate", 2, id))
+	assert.False(t, IsValidReference("merge: ISSUE.1+2 integrate", 1, id), "single-parent merge form should not match")
+
+	spaced := "foo bar"
+	assert.True(t, IsValidReference("feat(foo bar): description", 1, spaced))
+	assert.True(t, IsValidReference("merge: foo bar integrate", 2, spaced))
+	assert.False(t, IsValidReference("merge: foo integrate", 2, spaced))
+}
+
 func TestSubjectHasIssueScope(t *testing.T) {
 	t.Parallel()
 
-	for _, typ := range CommitTypes() {
+	for _, typ := range commitTypes() {
 		assert.True(t, subjectHasIssueScope(typ+"(ISSUE-1): description", 1), "type %q should match", typ)
 	}
 
