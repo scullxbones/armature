@@ -1,5 +1,5 @@
-// workflowimagepins scans container-image policy.
-// Fail-closed runtime enforcement is CI PATH-shadow
+// workflowimagepins scans container-image policy and GitHub Action pins.
+// Fail-closed runtime enforcement for images is CI PATH-shadow
 // (scripts/ci-path-shadow-engines.sh) plus scripts/run-container-image.sh.
 //
 // Holistic pin model (not a docker-CLI tokenizer):
@@ -7,9 +7,16 @@
 //   - scripts/run-container-image.sh is the only allowlisted engine entrypoint
 //   - container:/services:/uses: docker:// / Dockerfile FROM must match manifest
 //   - ref/digest findings are BLOCKING on repo scan
+//   - external uses: (owner/repo[/path]@ref, including first-party actions and
+//     job-level reusable workflows) must be a 40-character lowercase commit SHA
+//   - repository-local uses (./, ../, $/) are exempt only when the resolved
+//     path stays inside the checkout; docker:// and image: are not actions
 //   - engine-word tokens outside the wrapper are ADVISORY only on repo scan
-//   - scans workflows (run: + shell:), actions, root action.yml, uses: ./path,
+//   - scans workflows (run: + shell: + uses:), actions, root action.yml,
 //     Dockerfiles, scripts/** (any depth/ext), and Makefile
+//
+// YAML parse errors fail the scan. .git, testdata, vendor, and node_modules
+// are not production roots; fixtures under those trees are not findings.
 package main
 
 import (
@@ -29,6 +36,9 @@ var (
 	// Engine / runtime tokens (PATH-shadowed names + buildx).
 	engineToken = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_])(docker|podman|buildx|nerdctl|ctr|finch|lima|crictl)([^A-Za-z0-9_]|$)`)
 	fromLine    = regexp.MustCompile(`(?i)^\s*FROM\s+(.+)$`)
+	// GitHub Action pins are commit SHAs from the GitHub API: 40 lowercase hex.
+	actionSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	hexRef    = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 )
 
 const (
@@ -37,6 +47,7 @@ const (
 
 	kindEngine = "engine"
 	kindRef    = "ref"
+	kindAction = "action"
 )
 
 // scriptExempt returns the short exempt list for scripts that must mention
@@ -96,7 +107,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "FAIL: selftest: %v\n", err)
 			return 1
 		}
-		fmt.Fprintln(stdout, "OK: workflow image-pin selftest (unpinned fail, pinned pass)")
+		fmt.Fprintln(stdout, "OK: workflow image-pin and action-pin selftest (unpinned fail, pinned pass)")
 		return 0
 	}
 	findings, err := checkRepo(abs)
@@ -104,11 +115,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return 1
 	}
-	var engines, refs []finding
+	var engines, refs, actions []finding
 	for _, f := range findings {
-		if f.Kind == kindEngine {
+		switch f.Kind {
+		case kindEngine:
 			engines = append(engines, f)
-		} else {
+		case kindAction:
+			actions = append(actions, f)
+		default:
 			refs = append(refs, f)
 		}
 	}
@@ -123,13 +137,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		for _, f := range refs {
 			fmt.Fprintf(stderr, "  %s (%s): %s\n", f.File, f.Path, f.Msg)
 		}
+	}
+	if len(actions) > 0 {
+		fmt.Fprintf(stderr, "FAIL: unpinned GitHub Action uses (blocking):\n")
+		for _, f := range actions {
+			fmt.Fprintf(stderr, "  %s (%s): %s\n", f.File, f.Path, f.Msg)
+		}
+	}
+	if len(refs) > 0 || len(actions) > 0 {
 		return 1
 	}
 	if len(engines) > 0 {
-		fmt.Fprintln(stdout, "OK: container image refs manifest-pinned (engine-word findings advisory only)")
+		fmt.Fprintln(stdout, "OK: container image refs manifest-pinned; external actions SHA-pinned (engine-word findings advisory only)")
 		return 0
 	}
-	fmt.Fprintln(stdout, "OK: container images are manifest-pinned; no engine tokens outside wrapper")
+	fmt.Fprintln(stdout, "OK: container images are manifest-pinned; external actions are SHA-pinned; no engine tokens outside wrapper")
 	return 0
 }
 
@@ -314,6 +336,10 @@ func sameFile(a, b string) bool {
 }
 
 func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool, seenActions map[string]bool) ([]finding, error) {
+	if seenActions[rel] {
+		return nil, nil
+	}
+	seenActions[rel] = true
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err
@@ -323,13 +349,28 @@ func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool, seenA
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("%s: yaml parse: %w", rel, err)
 	}
-	jobs, ok := doc["jobs"].(map[string]any)
+	rawJobs, ok := doc["jobs"]
 	if !ok {
 		return out, nil
+	}
+	jobs, ok := rawJobs.(map[string]any)
+	if !ok {
+		return []finding{{
+			File: rel,
+			Path: "jobs",
+			Msg:  "jobs is not a mapping",
+			Kind: kindAction,
+		}}, nil
 	}
 	for jobName, rawJob := range jobs {
 		job, ok := rawJob.(map[string]any)
 		if !ok {
+			out = append(out, finding{
+				File: rel,
+				Path: "jobs." + jobName,
+				Msg:  "job is not a mapping",
+				Kind: kindAction,
+			})
 			continue
 		}
 		base := "jobs." + jobName
@@ -347,6 +388,13 @@ func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool, seenA
 				}
 			}
 		}
+		if rawUses, ok := job["uses"]; ok {
+			fs, err := consumeUsesValue(root, rel, base+".uses", rawUses, allowed, seenActions)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, fs...)
+		}
 		defaultsShell := ""
 		if defaults, ok := job["defaults"].(map[string]any); ok {
 			if runMap, ok := defaults["run"].(map[string]any); ok {
@@ -358,29 +406,11 @@ func checkWorkflowFile(root, absPath, rel string, allowed map[string]bool, seenA
 		if defaultsShell != "" {
 			out = append(out, tokenFindings(defaultsShell, rel, base+".defaults.run.shell")...)
 		}
-		for i, step := range jobSteps(job) {
-			spath := fmt.Sprintf("%s.steps[%d]", base, i)
-			if uses, ok := step["uses"].(string); ok {
-				uses = strings.TrimSpace(uses)
-				switch {
-				case strings.HasPrefix(uses, "docker://"):
-					ref := strings.TrimPrefix(uses, "docker://")
-					out = append(out, refFinding(rel, spath+".uses", ref, allowed)...)
-				case strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "../"):
-					fs, err := checkLocalActionUse(root, rel, spath+".uses", uses, allowed, seenActions)
-					if err != nil {
-						return nil, err
-					}
-					out = append(out, fs...)
-				}
-			}
-			if shell, ok := step["shell"].(string); ok {
-				out = append(out, tokenFindings(shell, rel, spath+".shell")...)
-			}
-			if runScript, ok := stepRun(step); ok {
-				out = append(out, tokenFindings(runScript, rel, spath+".run")...)
-			}
+		fs, err := scanSteps(root, rel, base, job, allowed, seenActions)
+		if err != nil {
+			return nil, err
 		}
+		out = append(out, fs...)
 	}
 	return out, nil
 }
@@ -395,27 +425,94 @@ func stepRun(step map[string]any) (string, bool) {
 }
 
 func checkLocalActionUse(root, fromFile, path, uses string, allowed map[string]bool, seenActions map[string]bool) ([]finding, error) {
-	actionDir := filepath.Clean(filepath.Join(root, filepath.FromSlash(uses)))
-	for _, name := range []string{"action.yml", "action.yaml"} {
-		p := filepath.Join(actionDir, name)
-		if _, err := os.Stat(p); err == nil {
-			rel, err := filepath.Rel(root, p)
-			if err != nil {
-				rel = p
-			}
-			rel = filepath.ToSlash(rel)
-			if seenActions[rel] {
-				return nil, nil
-			}
-			seenActions[rel] = true
-			return checkActionFile(root, p, rel, allowed, seenActions)
+	lexical, inside := resolveLocal(root, uses)
+	if !inside {
+		return []finding{{
+			File: fromFile,
+			Path: path,
+			Msg:  fmt.Sprintf("local reference %q escapes the checkout", uses),
+			Kind: kindAction,
+		}}, nil
+	}
+	resolved, err := filepath.EvalSymlinks(lexical)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []finding{{
+				File: fromFile,
+				Path: path,
+				Msg:  missingLocalMsg(uses),
+				Kind: kindAction,
+			}}, nil
 		}
+		return nil, err
+	}
+	if !staysInside(root, resolved) {
+		return []finding{{
+			File: fromFile,
+			Path: path,
+			Msg:  fmt.Sprintf("local reference %q escapes the checkout", uses),
+			Kind: kindAction,
+		}}, nil
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		low := strings.ToLower(info.Name())
+		if strings.HasSuffix(low, ".yml") || strings.HasSuffix(low, ".yaml") {
+			rel, err := relUnderRoot(root, resolved)
+			if err != nil {
+				return nil, err
+			}
+			return checkWorkflowFile(root, resolved, rel, allowed, seenActions)
+		}
+		return []finding{{
+			File: fromFile,
+			Path: path,
+			Msg:  fmt.Sprintf("local reference %q is not an action directory or workflow file", uses),
+			Kind: kindAction,
+		}}, nil
+	}
+	for _, name := range []string{"action.yml", "action.yaml"} {
+		p := filepath.Join(resolved, name)
+		st, err := os.Stat(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		if st.IsDir() {
+			continue
+		}
+		target, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			return nil, err
+		}
+		if !staysInside(root, target) {
+			return []finding{{
+				File: fromFile,
+				Path: path,
+				Msg:  fmt.Sprintf("local reference %q escapes the checkout", uses),
+				Kind: kindAction,
+			}}, nil
+		}
+		rel, err := relUnderRoot(root, target)
+		if err != nil {
+			return nil, err
+		}
+		if seenActions[rel] {
+			return nil, nil
+		}
+		seenActions[rel] = true
+		return checkActionFile(root, target, rel, allowed, seenActions)
 	}
 	return []finding{{
 		File: fromFile,
 		Path: path,
-		Msg:  fmt.Sprintf("local action %q has no action.yml", uses),
-		Kind: kindRef,
+		Msg:  missingLocalMsg(uses),
+		Kind: kindAction,
 	}}, nil
 }
 
@@ -429,34 +526,26 @@ func checkActionFile(root, absPath, rel string, allowed map[string]bool, seenAct
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("%s: yaml parse: %w", rel, err)
 	}
-	if runs, ok := doc["runs"].(map[string]any); ok {
+	if rawRuns, ok := doc["runs"]; ok {
+		runs, ok := rawRuns.(map[string]any)
+		if !ok {
+			return []finding{{
+				File: rel,
+				Path: "runs",
+				Msg:  "runs is not a mapping",
+				Kind: kindAction,
+			}}, nil
+		}
 		if using, ok := runs["using"].(string); ok && using == "docker" {
 			if img, ok := runs["image"]; ok {
 				out = append(out, declarativeImageFindings(rel, "runs.image", img, allowed)...)
 			}
 		}
-		for i, step := range jobSteps(runs) {
-			spath := fmt.Sprintf("runs.steps[%d]", i)
-			if uses, ok := step["uses"].(string); ok {
-				uses = strings.TrimSpace(uses)
-				switch {
-				case strings.HasPrefix(uses, "docker://"):
-					out = append(out, refFinding(rel, spath+".uses", strings.TrimPrefix(uses, "docker://"), allowed)...)
-				case strings.HasPrefix(uses, "./") || strings.HasPrefix(uses, "../"):
-					fs, err := checkLocalActionUse(root, rel, spath+".uses", uses, allowed, seenActions)
-					if err != nil {
-						return nil, err
-					}
-					out = append(out, fs...)
-				}
-			}
-			if shell, ok := step["shell"].(string); ok {
-				out = append(out, tokenFindings(shell, rel, spath+".shell")...)
-			}
-			if runScript, ok := stepRun(step); ok {
-				out = append(out, tokenFindings(runScript, rel, spath+".run")...)
-			}
+		fs, err := scanSteps(root, rel, "runs", runs, allowed, seenActions)
+		if err != nil {
+			return nil, err
 		}
+		out = append(out, fs...)
 	}
 	return out, nil
 }
@@ -573,20 +662,199 @@ func tokenFindings(content, file, path string) []finding {
 	return out
 }
 
-func jobSteps(job map[string]any) []map[string]any {
-	raw, ok := job["steps"]
+func scanSteps(root, rel, base string, parent map[string]any, allowed map[string]bool, seen map[string]bool) ([]finding, error) {
+	raw, ok := parent["steps"]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	list, ok := raw.([]any)
 	if !ok {
-		return nil
+		return []finding{{
+			File: rel,
+			Path: base + ".steps",
+			Msg:  "steps is not a list",
+			Kind: kindAction,
+		}}, nil
 	}
-	var out []map[string]any
-	for _, item := range list {
-		if m, ok := item.(map[string]any); ok {
-			out = append(out, m)
+	var out []finding
+	for i, item := range list {
+		spath := fmt.Sprintf("%s.steps[%d]", base, i)
+		step, ok := item.(map[string]any)
+		if !ok {
+			out = append(out, finding{
+				File: rel,
+				Path: spath,
+				Msg:  "step is not a mapping",
+				Kind: kindAction,
+			})
+			continue
+		}
+		if rawUses, exists := step["uses"]; exists {
+			fs, err := consumeUsesValue(root, rel, spath+".uses", rawUses, allowed, seen)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, fs...)
+		}
+		if shell, ok := step["shell"].(string); ok {
+			out = append(out, tokenFindings(shell, rel, spath+".shell")...)
+		}
+		if runScript, ok := stepRun(step); ok {
+			out = append(out, tokenFindings(runScript, rel, spath+".run")...)
 		}
 	}
-	return out
+	return out, nil
+}
+
+func consumeUsesValue(root, fromFile, path string, raw any, allowed map[string]bool, seen map[string]bool) ([]finding, error) {
+	uses, ok := raw.(string)
+	if !ok {
+		return []finding{{
+			File: fromFile,
+			Path: path,
+			Msg:  "uses is not a string",
+			Kind: kindAction,
+		}}, nil
+	}
+	return consumeUses(root, fromFile, path, uses, allowed, seen)
+}
+
+func consumeUses(root, fromFile, path, uses string, allowed map[string]bool, seen map[string]bool) ([]finding, error) {
+	uses = strings.TrimSpace(uses)
+	switch {
+	case uses == "":
+		return []finding{{
+			File: fromFile,
+			Path: path,
+			Msg:  "empty uses",
+			Kind: kindAction,
+		}}, nil
+	case strings.HasPrefix(uses, "docker://"):
+		return refFinding(fromFile, path, strings.TrimPrefix(uses, "docker://"), allowed), nil
+	case isLocalUse(uses):
+		return checkLocalActionUse(root, fromFile, path, uses, allowed, seen)
+	default:
+		if msg := externalPinIssue(uses); msg != "" {
+			return []finding{{
+				File: fromFile,
+				Path: path,
+				Msg:  msg,
+				Kind: kindAction,
+			}}, nil
+		}
+		return nil, nil
+	}
+}
+
+func isLocalUse(uses string) bool {
+	switch {
+	case uses == ".", uses == "..":
+		return true
+	case strings.HasPrefix(uses, "./"), strings.HasPrefix(uses, "../"), strings.HasPrefix(uses, "$/"):
+		return true
+	default:
+		return false
+	}
+}
+
+func resolveLocal(root, uses string) (string, bool) {
+	u := uses
+	if strings.HasPrefix(u, "$/") {
+		u = "./" + strings.TrimPrefix(u, "$/")
+	}
+	if u == "" || filepath.IsAbs(filepath.FromSlash(u)) {
+		return "", false
+	}
+	abs := filepath.Clean(filepath.Join(root, filepath.FromSlash(u)))
+	return abs, withinRoot(root, abs)
+}
+
+func withinRoot(root, abs string) bool {
+	root = filepath.Clean(root)
+	abs = filepath.Clean(abs)
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return true
+}
+
+// staysInside accepts abs when it is under root or under root's symlink target.
+// Callers pass a cleaned or EvalSymlinks path; the lexical escape check uses
+// withinRoot on the unevaluated path first.
+func staysInside(root, abs string) bool {
+	if withinRoot(root, abs) {
+		return true
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil && withinRoot(real, abs) {
+		return true
+	}
+	return false
+}
+
+func relUnderRoot(root, abs string) (string, error) {
+	base := filepath.Clean(root)
+	if !withinRoot(base, abs) {
+		real, err := filepath.EvalSymlinks(root)
+		if err != nil || !withinRoot(real, abs) {
+			return "", fmt.Errorf("%s is outside %s", abs, root)
+		}
+		base = real
+	}
+	rel, err := filepath.Rel(base, abs)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+func missingLocalMsg(uses string) string {
+	low := strings.ToLower(uses)
+	if strings.HasSuffix(low, ".yml") || strings.HasSuffix(low, ".yaml") {
+		return fmt.Sprintf("local workflow %q does not exist", uses)
+	}
+	return fmt.Sprintf("local action %q has no action.yml", uses)
+}
+
+// externalPinIssue reports why uses is not a full lowercase commit SHA.
+// An empty string means the ref is pinned.
+func externalPinIssue(uses string) string {
+	if strings.Count(uses, "@") != 1 {
+		return fmt.Sprintf("external action %q is not pinned to a 40-character lowercase commit SHA", uses)
+	}
+	repo, ref, _ := strings.Cut(uses, "@")
+	if !validActionRepo(repo) {
+		return fmt.Sprintf("external action %q is not an owner/repo action pinned to a 40-character lowercase commit SHA", uses)
+	}
+	if ref == "" {
+		return fmt.Sprintf("external action %q is not pinned to a 40-character lowercase commit SHA", uses)
+	}
+	if actionSHA.MatchString(ref) {
+		return ""
+	}
+	if hexRef.MatchString(ref) {
+		switch {
+		case len(ref) == 40:
+			return fmt.Sprintf("external action %q is not a lowercase commit SHA; want 40 lowercase hex characters", uses)
+		case len(ref) < 40:
+			return fmt.Sprintf("external action %q is a short SHA; want a 40-character lowercase commit SHA", uses)
+		default:
+			return fmt.Sprintf("external action %q is a %d-character SHA; want a 40-character lowercase commit SHA", uses, len(ref))
+		}
+	}
+	return fmt.Sprintf("external action %q uses movable ref %q; want a 40-character lowercase commit SHA", uses, ref)
+}
+
+func validActionRepo(repo string) bool {
+	if repo == "" || strings.Contains(repo, " ") || strings.HasPrefix(repo, "/") || strings.HasPrefix(repo, ".") {
+		return false
+	}
+	owner, rest, ok := strings.Cut(repo, "/")
+	if !ok || owner == "" || rest == "" {
+		return false
+	}
+	return !strings.Contains(owner, " ")
 }

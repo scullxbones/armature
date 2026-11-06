@@ -1,0 +1,5 @@
+name: t
+on: push
+jobs:
+  call:
+    uses: ./.github/workflows/ci.yml
