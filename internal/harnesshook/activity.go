@@ -15,8 +15,9 @@ import (
 	"github.com/scullxbones/armature/internal/gitoid"
 )
 
-// ActivityEntry represents a single execution captured in the activity log.
-type ActivityEntry struct {
+// activityEntry is one execution row in the activity log. AppendActivity writes
+// rows; callers do not construct them.
+type activityEntry struct {
 	Command       string
 	ExitCode      int
 	ExitCodeKnown bool
@@ -27,7 +28,7 @@ type ActivityEntry struct {
 	Timestamp     string
 }
 
-type TruncatedOutput struct {
+type truncatedOutput struct {
 	Head string
 	Tail string
 	Hash string
@@ -38,11 +39,11 @@ const (
 	maxCommandSize     = 4096
 )
 
-func truncateOutput(output []byte) TruncatedOutput {
+func truncateOutput(output []byte) truncatedOutput {
 	hash := fmt.Sprintf("%x", sha256.Sum256(output))
 
 	if len(output) <= maxOutputChunkSize*2 {
-		return TruncatedOutput{
+		return truncatedOutput{
 			Head: string(output),
 			Tail: "",
 			Hash: hash,
@@ -52,7 +53,7 @@ func truncateOutput(output []byte) TruncatedOutput {
 	headEnd := runeBoundaryAtOrBefore(output, maxOutputChunkSize)
 	tailStart := runeBoundaryAtOrAfter(output, len(output)-maxOutputChunkSize)
 
-	return TruncatedOutput{
+	return truncatedOutput{
 		Head: string(output[:headEnd]),
 		Tail: string(output[tailStart:]),
 		Hash: hash,
@@ -158,7 +159,7 @@ func appendActivity(clk clock.Clock, gitDir string, command string, exitCode int
 
 	truncated := truncateOutput(output)
 
-	entry := ActivityEntry{
+	entry := activityEntry{
 		Command:       truncateCommand(command),
 		ExitCode:      exitCode,
 		ExitCodeKnown: exitCodeKnown,
@@ -207,7 +208,7 @@ type activityLogLine struct {
 	OutputTail    string `json:"output_tail,omitempty"`
 }
 
-func formatActivityLogEntry(entry ActivityEntry) string {
+func formatActivityLogEntry(entry activityEntry) string {
 	if strings.TrimSpace(entry.Command) == "" {
 		return ""
 	}
@@ -229,7 +230,7 @@ func formatActivityLogEntry(entry ActivityEntry) string {
 	return string(data)
 }
 
-func fallbackActivityJSONL(entry ActivityEntry) string {
+func fallbackActivityJSONL(entry activityEntry) string {
 	if strings.TrimSpace(entry.Command) == "" {
 		return ""
 	}

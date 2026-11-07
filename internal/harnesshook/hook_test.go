@@ -45,7 +45,7 @@ func TestHook_Evaluate_AllowsInScopeEdit_REQ_ARCHIMP_S17_T1(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, DecisionAllow, result.Decision.Action)
+	assert.Equal(t, decisionAllow, result.Decision.Action)
 	assert.NotEmpty(t, result.Output)
 }
 
@@ -104,7 +104,7 @@ func TestHook_Evaluate_AllowsAbsolutePathWithWorktreeRoot_REQ_ARCHIMP_S18_T1(t *
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, DecisionAllow, result.Decision.Action, "absolute path within scope should be allowed when root is provided")
+	assert.Equal(t, decisionAllow, result.Decision.Action, "absolute path within scope should be allowed when root is provided")
 	assert.NotEmpty(t, result.Output)
 }
 
@@ -139,7 +139,7 @@ func TestHook_Evaluate_BlocksOutOfScopeRelativePathWithSubdirectoryCwd_P1_SECURI
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, DecisionBlock, result.Decision.Action,
+	assert.Equal(t, decisionBlock, result.Decision.Action,
 		"relative path with subdirectory cwd should be evaluated against worktree root, not cwd")
 	assert.Contains(t, result.Decision.Message, "outside task scope")
 }
@@ -172,7 +172,7 @@ func TestHook_Evaluate_RelativePathNoCwdWithRoot_EvaluatedAgainstRoot(t *testing
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, DecisionBlock, result.Decision.Action,
+	assert.Equal(t, decisionBlock, result.Decision.Action,
 		"path outside the declared scope should be blocked even with no cwd, when Root is set")
 }
 
@@ -204,6 +204,6 @@ func TestHook_Evaluate_RelativePathNoCwdWithRoot_InScopeAllowed(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, DecisionAllow, result.Decision.Action,
+	assert.Equal(t, decisionAllow, result.Decision.Action,
 		"in-scope relative path with no cwd but Root set should still be allowed")
 }

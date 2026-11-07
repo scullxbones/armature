@@ -57,7 +57,7 @@ func TestClaudeAdapterEncodesPreToolUseBlockWithPermissionDenial(t *testing.T) {
 	adapter := newClaudeAdapter()
 	event := Event{Kind: EventPreToolUse}
 
-	out, code, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "blocked"})
+	out, code, err := adapter.Encode(event, Decision{Action: decisionBlock, Message: "blocked"})
 
 	require.NoError(t, err)
 	require.Equal(t, 0, code)
@@ -74,7 +74,7 @@ func TestClaudeAdapterEncodesStopBlockWithDecisionBlock(t *testing.T) {
 	adapter := newClaudeAdapter()
 	event := Event{Kind: EventStop}
 
-	out, code, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "stop blocked"})
+	out, code, err := adapter.Encode(event, Decision{Action: decisionBlock, Message: "stop blocked"})
 
 	require.NoError(t, err)
 	require.Equal(t, 0, code)
@@ -90,7 +90,7 @@ func TestCodexAdapterEncodesBlockDecisionWithBlockNotDeny(t *testing.T) {
 	adapter := newCodexAdapter()
 	event := Event{Kind: EventPreToolUse}
 
-	out, _, err := adapter.Encode(event, Decision{Action: DecisionBlock, Message: "out of scope"})
+	out, _, err := adapter.Encode(event, Decision{Action: decisionBlock, Message: "out of scope"})
 
 	require.NoError(t, err)
 	var parsed map[string]any
@@ -117,7 +117,7 @@ func TestClaudeAdapterWriteConfigPreservesExistingSettings(t *testing.T) {
 
 func TestAdaptersExposeCapabilities(t *testing.T) {
 	t.Parallel()
-	adapters := []PlatformAdapter{newClaudeAdapter(), newCodexAdapter(), newDevinAdapter()}
+	adapters := []platformAdapter{newClaudeAdapter(), newCodexAdapter(), newDevinAdapter()}
 	for _, adapter := range adapters {
 		caps := adapter.Capabilities()
 		assert.True(t, caps.PreToolUse, adapter.Name())
@@ -641,7 +641,7 @@ func TestCodexAdapterEncodeApproveDecision(t *testing.T) {
 	adapter := newCodexAdapter()
 	event := Event{Kind: EventPreToolUse}
 
-	out, code, err := adapter.Encode(event, Decision{Action: DecisionAllow})
+	out, code, err := adapter.Encode(event, Decision{Action: decisionAllow})
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
 	assert.Contains(t, string(out), `"approve"`)
@@ -794,7 +794,7 @@ func TestDevinAdapterEncode_ApproveDecision(t *testing.T) {
 	t.Parallel()
 	adapter := newDevinAdapter()
 
-	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: DecisionAllow})
+	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: decisionAllow})
 	require.NoError(t, err)
 	assert.Equal(t, 0, exitCode)
 	assert.Contains(t, string(data), "approve")
@@ -804,7 +804,7 @@ func TestDevinAdapterEncode_BlockDecision(t *testing.T) {
 	t.Parallel()
 	adapter := newDevinAdapter()
 
-	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: DecisionBlock, Message: "blocked"})
+	data, exitCode, err := adapter.Encode(Event{}, Decision{Action: decisionBlock, Message: "blocked"})
 	require.NoError(t, err)
 	assert.Equal(t, 0, exitCode)
 	assert.Contains(t, string(data), "block")

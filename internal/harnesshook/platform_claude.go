@@ -129,7 +129,7 @@ func (a *claudeAdapter) Decode(input []byte) (Event, error) {
 }
 
 func (a *claudeAdapter) Encode(event Event, decision Decision) ([]byte, int, error) {
-	if decision.Action != DecisionBlock {
+	if decision.Action != decisionBlock {
 		data, err := json.Marshal(map[string]any{
 			"continue":       true,
 			"suppressOutput": true,

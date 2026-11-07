@@ -78,7 +78,7 @@ func (a *codexAdapter) Encode(_ Event, decision Decision) ([]byte, int, error) {
 }
 
 func encodeApproveOrBlockJSON(decision Decision) ([]byte, int, error) {
-	if decision.Action != DecisionBlock {
+	if decision.Action != decisionBlock {
 		data, err := json.Marshal(map[string]any{"decision": "approve"})
 		return data, 0, err
 	}

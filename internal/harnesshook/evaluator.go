@@ -27,35 +27,35 @@ func (e *defaultEvaluator) Evaluate(_ context.Context, event Event) (Decision, e
 	case EventStop:
 		return e.evaluateStop(), nil
 	default:
-		return Decision{Action: DecisionNone, Message: "event ignored"}, nil
+		return Decision{Action: decisionNone, Message: "event ignored"}, nil
 	}
 }
 
 func (e *defaultEvaluator) evaluatePreToolUse(event Event) Decision {
 	if isDirectCommitCommand(event.Command) {
 		return Decision{
-			Action:  DecisionBlock,
+			Action:  decisionBlock,
 			Message: "Armature owns commits during harness execution; do not run git commit directly",
 		}
 	}
 	if len(event.Paths) == 0 {
-		return Decision{Action: DecisionAllow, Message: "no path policy applies"}
+		return Decision{Action: decisionAllow, Message: "no path policy applies"}
 	}
 	result := harnesspolicy.CheckScope(e.cfg.policy.Scope, e.cfg.root, event.Paths)
 	if !result.Allowed {
-		return Decision{Action: DecisionBlock, Message: result.Message()}
+		return Decision{Action: decisionBlock, Message: result.Message()}
 	}
-	return Decision{Action: DecisionAllow, Message: "path is within task scope"}
+	return Decision{Action: decisionAllow, Message: "path is within task scope"}
 }
 
 func (e *defaultEvaluator) evaluateStop() Decision {
 	results := e.cfg.policy.Verify()
 	for _, result := range results {
 		if !result.Passed {
-			return Decision{Action: DecisionBlock, Message: result.Message}
+			return Decision{Action: decisionBlock, Message: result.Message}
 		}
 	}
-	return Decision{Action: DecisionAllow, Message: "verification passed"}
+	return Decision{Action: decisionAllow, Message: "verification passed"}
 }
 
 func isDirectCommitCommand(command string) bool {
