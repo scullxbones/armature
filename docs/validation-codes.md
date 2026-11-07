@@ -1,6 +1,6 @@
 # Validation & Doctor Codes Reference
 
-This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D12 and D14).
+This document describes all diagnostic codes emitted by `arm validate` (errors E2–E10, E12–E13 and warnings W1–W8, W10–W11) and `arm doctor` (checks D1–D14).
 
 ## Runtime Git floor
 
@@ -700,6 +700,27 @@ git -C .armature rebase origin/_armature
 
 ---
 
+### D13: Merged Without Delivery Match
+
+**Check:** Walks the materialized issues for leaves whose status is `merged` but carry no stored delivery match (`matched_commit`). Only `arm sync` and `arm merged` store that match when they promote a recorded delivery (ADR 0022).
+
+**Trigger:** An issue with `status == merged`, no children, and an empty `matched_commit` — typically merged before ADR 0022 or by a path that bypassed the promotion check.
+
+**Message:** `Merged issues with no stored delivery match` / `No merged issues without a stored delivery match`.
+
+**Items:** Issue IDs, sorted.
+
+**Severity:** Warning. Plain `arm doctor` still exits 0; `--strict` promotes. Not part of `doctor --fix`.
+
+**Context:** ADR 0022 §8: issues already `merged` stay put. D13 never demotes and appends no ops. Parents are skipped: rollup derives a parent's `merged` and never records a delivery.
+
+**Fix:** None required. Inspect the issue to confirm by hand that its work landed:
+```bash
+arm show --issue <issue-id>
+```
+
+---
+
 ### D14: Done Under Merged Parent
 
 **Check:** Walks the materialized index for issues whose status is still `done` while their parent’s status is already `merged`.
@@ -828,6 +849,7 @@ arm doctor [flags]
 | D10 | Doctor | Error | Config.json strict decode / range |
 | D11 | Doctor | Warning | Ops remote missing / stale local-only ops (error if unverifiable) |
 | D12 | Doctor | Error | Ops worktree behind origin/_armature, or fetch failed |
+| D13 | Doctor | Warning | Merged leaf with no stored delivery match (never demotes) |
 | D14 | Doctor | Warning | Done issue whose parent is already merged (not merged-under-cancelled) |
 
 ---

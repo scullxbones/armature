@@ -16,13 +16,7 @@ type CheckReservation struct {
 }
 
 func openReservations() []CheckReservation {
-	return []CheckReservation{
-		{
-			ID:      "D13",
-			Issue:   "LNGHZN-S11-T4",
-			Planned: "Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run.",
-		},
-	}
+	return nil
 }
 
 var checkIDPattern = regexp.MustCompile(`^D[1-9][0-9]*$`)

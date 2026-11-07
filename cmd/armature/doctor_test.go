@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/scullxbones/armature/internal/doctor"
@@ -181,6 +182,42 @@ func TestDoctorCheckGuidance_CoversEveryLiveCheck_REQ_TOPTIER_S18_T4(t *testing.
 			"%s must have dedicated --explain guidance (not the default fallback)", id)
 		assert.NotEmpty(t, sug, "%s suggested remediation must be non-empty", id)
 	}
+}
+
+func TestDoctorCLI_ReportsD13MergedWithoutDeliveryMatch_REQ_LNGHZN_S11_T4(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	require.NoError(t, appendOp(ctx, logPath, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: ops.Payload{To: ops.StatusMerged},
+	}))
+
+	stdout := new(bytes.Buffer)
+	_ = executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+		"doctor", "--repo", repo, "--explain", "--format", "json")
+	out := stdout.String()
+	payload := assertSingleJSONObject(t, out)
+	checks, ok := payload["checks"].([]any)
+	require.True(t, ok)
+	var d13 map[string]any
+	for _, raw := range checks {
+		row, ok := raw.(map[string]any)
+		require.True(t, ok)
+		if row["check"] == "D13" {
+			d13 = row
+		}
+	}
+	require.NotNil(t, d13, "arm doctor --format json must report D13; out=%s", out)
+	assert.Equal(t, "warning", d13["severity"])
+	assert.Equal(t, []any{"task-01"}, d13["items"])
+	assert.Equal(t, []any{"arm show --issue <issue-id>"}, d13["suggested"])
+
+	status, err := runTrls(t, repo, "show", "--issue", "task-01", "--field", "status")
+	require.NoError(t, err)
+	assert.Equal(t, "merged", strings.TrimSpace(status), "D13 must not demote the merged issue")
 }
 
 func TestDoctorCLI_ReportsOpenUnderMergedAncestor_REQ_TOPTIER_S18_T4(t *testing.T) {

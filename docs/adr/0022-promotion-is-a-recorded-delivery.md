@@ -126,7 +126,7 @@ Failure `{error:{code,cause,next_actions,exit_code}}` on stdout.
 
 8. **History.** Issues already `merged` stay put. `arm doctor` check **D13**
    warns when a `merged` issue has no stored delivery match. It does not
-   demote. D13 is reserved for `LNGHZN-S11-T4`.
+   demote. D13 was reserved for `LNGHZN-S11-T4`, which made it live.
 
 ## Consequences
 
