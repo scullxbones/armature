@@ -1,0 +1,2 @@
+go test fuzz v1
+string("https://github.com/%2e/hello-world/issues/1")
