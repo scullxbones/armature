@@ -1,6 +1,8 @@
 package externalref
 
 import (
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -60,6 +62,21 @@ func TestParseGitHubIssueURL_REQ_HOSTREF_S1_T3(t *testing.T) {
 			raw:  "https://github.com/octocat/hello-world/issues/4?",
 			want: "https://github.com/octocat/hello-world/issues/4",
 		},
+		{
+			name: "hyphenated owner",
+			raw:  "https://github.com/cool-org/hello-world/issues/8",
+			want: "https://github.com/cool-org/hello-world/issues/8",
+		},
+		{
+			name: "repo named .github",
+			raw:  "https://github.com/octocat/.github/issues/5",
+			want: "https://github.com/octocat/.github/issues/5",
+		},
+		{
+			name: "owner at 39 characters",
+			raw:  "https://github.com/" + strings.Repeat("a", 39) + "/hello-world/issues/6",
+			want: "https://github.com/" + strings.Repeat("a", 39) + "/hello-world/issues/6",
+		},
 	}
 
 	for _, tc := range tests {
@@ -69,6 +86,7 @@ func TestParseGitHubIssueURL_REQ_HOSTREF_S1_T3(t *testing.T) {
 			got, err := ParseGitHubIssueURL(tc.raw)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got.URL())
+			assertStableCanonicalIssueURL(t, got)
 		})
 	}
 
@@ -107,6 +125,24 @@ func TestParseLinearURLErrors_REQ_HOSTREF_S1_T3(t *testing.T) {
 		{name: "explicit port", raw: "https://github.com:443/octocat/hello-world/issues/1"},
 		{name: "empty", raw: ""},
 		{name: "malformed", raw: "not a url"},
+		{name: "encoded question mark in repo", raw: "https://github.com/octocat/repo%3Fsecret/issues/1"},
+		{name: "encoded question mark in owner", raw: "https://github.com/octo%3Fcat/hello-world/issues/1"},
+		{name: "encoded hash in repo", raw: "https://github.com/octocat/repo%23secret/issues/1"},
+		{name: "encoded hash in owner", raw: "https://github.com/octo%23cat/hello-world/issues/1"},
+		{name: "encoded null in repo", raw: "https://github.com/octocat/repo%00secret/issues/1"},
+		{name: "encoded newline in repo", raw: "https://github.com/octocat/repo%0asecret/issues/1"},
+		{name: "encoded carriage return in repo", raw: "https://github.com/octocat/repo%0dsecret/issues/1"},
+		{name: "encoded tab in repo", raw: "https://github.com/octocat/repo%09secret/issues/1"},
+		{name: "dot owner", raw: "https://github.com/./hello-world/issues/1"},
+		{name: "dot dot owner", raw: "https://github.com/../hello-world/issues/1"},
+		{name: "dot repo", raw: "https://github.com/octocat/./issues/1"},
+		{name: "dot dot repo", raw: "https://github.com/octocat/../issues/1"},
+		{name: "encoded dot owner", raw: "https://github.com/%2e/hello-world/issues/1"},
+		{name: "encoded dot dot repo", raw: "https://github.com/octocat/%2e%2e/issues/1"},
+		{name: "owner ending with hyphen", raw: "https://github.com/octocat-/hello-world/issues/1"},
+		{name: "owner starting with hyphen", raw: "https://github.com/-octocat/hello-world/issues/1"},
+		{name: "owner longer than 39 characters", raw: "https://github.com/" + strings.Repeat("a", 40) + "/hello-world/issues/1"},
+		{name: "repo longer than 100 characters", raw: "https://github.com/octocat/" + strings.Repeat("a", 101) + "/issues/1"},
 	}
 
 	for _, tc := range tests {
@@ -118,4 +154,23 @@ func TestParseLinearURLErrors_REQ_HOSTREF_S1_T3(t *testing.T) {
 			assert.Equal(t, "", got.URL())
 		})
 	}
+}
+
+func assertStableCanonicalIssueURL(t *testing.T, got GitHubIssue) {
+	t.Helper()
+	canonical := got.URL()
+	u, err := url.Parse(canonical)
+	require.NoError(t, err)
+	assert.Equal(t, "https", u.Scheme)
+	assert.Equal(t, "github.com", u.Host)
+	assert.Empty(t, u.RawQuery)
+	assert.Empty(t, u.Fragment)
+	assert.Nil(t, u.User)
+	parts := strings.Split(u.Path, "/")
+	require.Len(t, parts, 5)
+	assert.Equal(t, "", parts[0])
+	assert.Equal(t, "issues", parts[3])
+	again, err := ParseGitHubIssueURL(canonical)
+	require.NoError(t, err)
+	assert.Equal(t, canonical, again.URL())
 }

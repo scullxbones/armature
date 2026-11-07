@@ -48,7 +48,7 @@ func canonicalGitHubIssueURL(raw string) (string, bool) {
 	}
 	owner := strings.ToLower(parts[1])
 	repo := strings.ToLower(parts[2])
-	if owner == "" || repo == "" {
+	if !validGitHubOwner(owner) || !validGitHubRepo(repo) {
 		return "", false
 	}
 	n, err := strconv.ParseUint(parts[4], 10, 64)
@@ -56,4 +56,32 @@ func canonicalGitHubIssueURL(raw string) (string, bool) {
 		return "", false
 	}
 	return "https://github.com/" + owner + "/" + repo + "/issues/" + strconv.FormatUint(n, 10), true
+}
+
+func validGitHubOwner(s string) bool {
+	if len(s) < 1 || len(s) > 39 || s[0] == '-' || s[len(s)-1] == '-' {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validGitHubRepo(s string) bool {
+	if s == "." || s == ".." || len(s) < 1 || len(s) > 100 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '_' || c == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
