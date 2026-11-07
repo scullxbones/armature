@@ -19,6 +19,7 @@ func classifiedValidity() map[string]bool {
 		OpNote:               false,
 		OpNoteDelete:         false,
 		OpAssign:             false,
+		OpExternalRef:        false,
 		OpSourceFingerprint:  false,
 		OpGateEvidence:       false,
 		OpLogQuarantine:      false,

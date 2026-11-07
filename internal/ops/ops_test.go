@@ -79,7 +79,7 @@ func TestPropOpRoundTrip(t *testing.T) {
 	properties := gopter.NewProperties(params)
 
 	opTypes := gen.OneConstOf(OpCreate, OpClaim, OpHeartbeat, OpTransition,
-		OpNote, OpLink, OpSourceLink, OpSourceFingerprint, OpDAGTransition, OpDecision, OpAssign)
+		OpNote, OpLink, OpSourceLink, OpSourceFingerprint, OpDAGTransition, OpDecision, OpAssign, OpExternalRef)
 
 	properties.Property("marshal then parse preserves type, target, timestamp, worker", prop.ForAll(
 		func(opType string, targetID string, ts int64, workerID string) bool {
@@ -209,6 +209,7 @@ func TestGenerateSchema_DocumentsEveryRegisteredOpType(t *testing.T) {
 		OpDAGTransition,
 		OpDecision,
 		OpAssign,
+		OpExternalRef,
 		OpAmend,
 		OpCitationAccepted,
 		OpScopeRename,

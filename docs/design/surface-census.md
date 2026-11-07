@@ -105,6 +105,7 @@ The following op types are defined in internal/ops/types.go and materialized by 
 | `dag-transition` | internal/ops/types.go:18 | engine.go | **kept-evidence** | Promotes confidence (draft→verified). Payload: issue_id, confirmed, confirmed_noninteractively. Sets dag_confirmed flag. |
 | `decision` | internal/ops/types.go:19 | engine.go | **kept-evidence** | Records structured decision. Payload: topic, choice, rationale, affects (scope globs). |
 | `assign` | internal/ops/types.go:20 | engine.go | **kept-evidence** | Assigns worker to issue. Payload: assigned_to (worker ID). |
+| `external-ref` | internal/ops/types.go | HOSTREF-S1-T2 | **kept-evidence** | Names a GitHub issue URL on an Armature issue. Classified not validity-affecting, beside assign. Payload: external_ref, external_role, withdraw_external_ref. No approval field and no body field. Replay handler is HOSTREF-S1-T2. |
 | `amend` | internal/ops/types.go:21 | engine.go | **kept-evidence** | Updates issue metadata. Payload: type, scope, context_files, dod, acceptance (partial updates). |
 | `citation-accepted` | internal/ops/types.go:22 | engine.go | **kept-evidence** | Records citation acceptance. Payload: source_entry_id, confirmed_noninteractively flag. |
 | `scope-rename` | internal/ops/types.go:23 | engine.go | **kept-evidence** | Renames scope glob. Payload: old_path, new_path. Updates scope entries. |

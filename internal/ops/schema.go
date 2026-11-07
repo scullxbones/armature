@@ -36,6 +36,7 @@ func schemaOpDocs() []schemaOpDoc {
 		{OpType: OpDAGTransition, PayloadField: "to, issue_id, confirmed, confirmed_noninteractively, uncovered_acknowledged"},
 		{OpType: OpDecision, PayloadField: "topic, choice, rationale, affects"},
 		{OpType: OpAssign, PayloadField: "assigned_to (empty string to unassign)"},
+		{OpType: OpExternalRef, PayloadField: "external_ref, external_role, withdraw_external_ref"},
 		{OpType: OpAmend, PayloadField: "type, scope, context_files, clear_context_files, acceptance, definition_of_done"},
 		{OpType: OpCitationAccepted, PayloadField: "source_entry_id, confirmed_noninteractively"},
 		{OpType: OpScopeRename, PayloadField: "old_path, new_path"},
@@ -69,7 +70,7 @@ func schemaDocumentedOpTypes() []string {
 // strictly newer, so an older clone run after an upgrade cannot commit a
 // downgrade and set two clones fighting over the shared _armature branch
 // (AGENTS.md I3).
-const ScaffoldingVersion = 5
+const ScaffoldingVersion = 6
 
 const scaffoldingVersionPrefix = "# scaffolding-version: "
 
