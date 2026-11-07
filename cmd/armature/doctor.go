@@ -28,7 +28,7 @@ func newDoctorCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Run repo health checks (D1-D12, D14); --fix reconciles expired claims",
+		Short: "Run repo health checks (D1-D14); --fix reconciles expired claims",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			rootErr := cmd.Root().PersistentPreRunE(cmd, args)
 			if rootErr == nil {
@@ -312,6 +312,10 @@ func doctorCheckGuidanceFor(f doctor.Finding, graph promotion.Graph, opts promot
 				"be confirmed fresh, or origin/_armature could not be fetched so " +
 				"the lag number may be stale. Warnings are ignored; behind is an error.",
 			[]string{"git -C .armature fetch origin _armature && git -C .armature rebase origin/_armature"}
+	case "D13":
+		return "A merged leaf has no stored delivery match, so nothing in git proves its work landed; " +
+				"it predates ADR 0022 or bypassed arm sync / arm merged. It stays merged: doctor never demotes it.",
+			[]string{"arm show --issue <issue-id>"}
 	case "D14":
 		return d14Guidance(f, graph, opts)
 	default:

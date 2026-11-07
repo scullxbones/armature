@@ -70,7 +70,7 @@ func runChecks(index materialize.Index, allIssues map[string]*materialize.Issue,
 }
 
 func liveCheckIDs() []string {
-	return []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}
+	return []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D13", "D14"}
 }
 
 func LiveCheckIDs() []string {
@@ -110,6 +110,7 @@ func Run(issuesDir string, stateDir string, repoPath string, worktreePath string
 		filepath.Join(issuesDir, "config.json"))
 	checks = append(checks, checkD11OpsRemote(worktreePath, filepath.Join(issuesDir, "config.json"), now))
 	checks = append(checks, checkD12OpsWorktreeLag(worktreePath))
+	checks = append(checks, checkD13MergedWithoutDeliveryMatch(allIssues))
 	checks = append(checks, checkD14DoneUnderMerged(index))
 	return Report{Checks: checks}, nil
 }
@@ -610,6 +611,30 @@ func evaluateD12OpsWorktreeLag(behind int, fetchErr error) Finding {
 			f.Message = fmt.Sprintf("Could not fetch origin/_armature; ops worktree appears not behind (result may be stale): %s", detail)
 			f.Items = []string{detail}
 		}
+	}
+	return f
+}
+
+// checkD13MergedWithoutDeliveryMatch warns when a merged leaf carries no stored
+// delivery match (ADR 0022 §8): only arm sync / arm merged write matched_commit,
+// so a merged leaf without one predates ADR 0022 or bypassed it. Parents are
+// skipped because rollup never records a delivery. Read-only: never demotes.
+func checkD13MergedWithoutDeliveryMatch(allIssues map[string]*materialize.Issue) Finding {
+	f := Finding{Check: "D13", Severity: SeverityOK, Message: "No merged issues without a stored delivery match"}
+
+	var unmatched []string
+	for id, issue := range allIssues {
+		if issue == nil || issue.Status != ops.StatusMerged || len(issue.Children) > 0 || issue.MatchedCommit != "" {
+			continue
+		}
+		unmatched = append(unmatched, id)
+	}
+
+	if len(unmatched) > 0 {
+		sort.Strings(unmatched)
+		f.Severity = SeverityWarning
+		f.Message = "Merged issues with no stored delivery match"
+		f.Items = unmatched
 	}
 	return f
 }

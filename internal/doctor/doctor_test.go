@@ -333,7 +333,7 @@ func TestLiveCheckIDsMatchesRun_REQ_TOPTIER_S18_T0(t *testing.T) {
 		runIDs = append(runIDs, f.Check)
 	}
 	assert.Equal(t, LiveCheckIDs(), runIDs, "LiveCheckIDs must match the live Run path in order")
-	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D14"}, LiveCheckIDs())
+	assert.Equal(t, []string{"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11", "D12", "D13", "D14"}, LiveCheckIDs())
 }
 
 func TestDoctorD14_WarnsOnDoneUnderMerged_REQ_TOPTIER_S18_T4(t *testing.T) {

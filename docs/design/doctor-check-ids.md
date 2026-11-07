@@ -17,8 +17,8 @@ remediation — see [validation-codes.md](../validation-codes.md) and
 Generated from `doctor.LiveCheckIDs()`.
 The in-package indexed helper still omits D7 (worker-ID mismatches need the validated ops
 stream), D11 (ops remote-tracking DR needs the ops worktree), D12
-(ops-worktree lag needs the ops worktree), and D14 (appended after D12 so Run
-order keeps D13 free for `LNGHZN-S11-T4`); that is documented, not changed.
+(ops-worktree lag needs the ops worktree), and D13 and D14 (appended after
+D12 in Run order); that is documented, not changed.
 D11 warns when `origin/_armature` is missing or local-only ops exceed the
 configurable `local_only_ops_stale_hours` window (default 24h); remediation
 names `arm push-ops` (publishes local HEAD). Probe failures are errors
@@ -27,6 +27,8 @@ D12 is an error when HEAD is N>0 commits behind `origin/_armature` after a
 successful fetch (plain `arm doctor` exits 1). Fetch failure is also an
 error. Missing ops worktree stays skip-OK. Behind is not a warning:
 warnings get ignored, and a lagging clone cannot confirm a fresh DAG.
+D13 warns when a `merged` leaf has no stored delivery match (ADR 0022 §8).
+It never demotes; the issue stays `merged`.
 D14 warns when an issue is still `done` while its parent is already `merged`.
 Merged children under a cancelled parent (ORCRUN) are not reported.
 
@@ -45,19 +47,20 @@ Merged children under a cancelled parent (ORCRUN) are not reported.
 | `D10` |
 | `D11` |
 | `D12` |
+| `D13` |
 | `D14` |
 
 ## Open reservations
 
 Git-tracked in `internal/doctor/reservations.go` (`OpenReservations`).
 A held story may reserve a future ID here; it must not ship a DoD that
-claims a live ID. D11 is live for `TOPTIER-S12-T2` and D14 is live for
-`TOPTIER-S18-T4` (both no longer reserved).
+claims a live ID. D11 is live for `TOPTIER-S12-T2`, D13 is live for
+`LNGHZN-S11-T4`, and D14 is live for `TOPTIER-S18-T4` (all no longer reserved).
 
 <!-- open-reservations: generated from OpenReservations() -->
 | ID | Issue | Planned |
 |----|-------|--------|
-| `D13` | `LNGHZN-S11-T4` | Warn when a merged issue has no stored delivery match (ADR 0022). Does not demote. Remove this row when the check is wired into Run. |
+| — | — | _none_ |
 
 ## Allocating a new ID
 

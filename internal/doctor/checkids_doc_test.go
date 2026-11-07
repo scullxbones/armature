@@ -36,15 +36,15 @@ func TestCheckIDsDocMatchesLiveAndReservations_REQ_TOPTIER_S18_T3(t *testing.T) 
 		"live table must list LiveCheckIDs() in Run order")
 
 	reserved := parseReservedRows(t, string(got))
-	require.NotEmpty(t, reserved, "open-reservation table must not be empty")
 	assert.NotContains(t, reserved, reservedRow{id: "D11", issue: "TOPTIER-S12-T2"},
 		"D11 is live for TOPTIER-S12-T2; reservation must be removed")
+	assert.NotContains(t, reserved, reservedRow{id: "D13", issue: "LNGHZN-S11-T4"},
+		"D13 is live for LNGHZN-S11-T4; reservation must be removed")
 	assert.NotContains(t, reserved, reservedRow{id: "D14", issue: "TOPTIER-S18-T4"},
 		"D14 is live for TOPTIER-S18-T4; reservation must be removed")
 	assert.Contains(t, liveFromDoc, "D11", "D11 must be listed as a live check ID")
+	assert.Contains(t, liveFromDoc, "D13", "D13 must be listed as a live check ID")
 	assert.Contains(t, liveFromDoc, "D14", "D14 must be listed as a live check ID")
-	assert.Contains(t, reserved, reservedRow{id: "D13", issue: "LNGHZN-S11-T4"},
-		"D13 must remain reserved for LNGHZN-S11-T4")
 
 	liveSet := make(map[string]struct{}, len(liveFromDoc))
 	for _, id := range liveFromDoc {
@@ -107,18 +107,15 @@ func TestCheckIDsDocGoGenerateDirective_REQ_TOPTIER_S18_T3(t *testing.T) {
 func TestOpenReservationsExcludesLiveD11_REQ_TOPTIER_S12_T2(t *testing.T) {
 	t.Parallel()
 
-	res := OpenReservations()
-	require.NotEmpty(t, res)
-	for _, r := range res {
+	for _, r := range OpenReservations() {
 		assert.NotEqual(t, "D11", r.ID, "D11 must not remain reserved once live")
 		assert.NotEqual(t, "D14", r.ID, "D14 must not remain reserved once live")
 	}
 
-	first := OpenReservations()
-	orig := first[0].ID
-	first[0].ID = "D999"
-	second := OpenReservations()
-	assert.Equal(t, orig, second[0].ID, "OpenReservations must return a copy")
+	if first := OpenReservations(); len(first) > 0 {
+		first[0].ID = "D999"
+		assert.NotEqual(t, "D999", OpenReservations()[0].ID, "OpenReservations must return a copy")
+	}
 }
 
 func TestOpenReservationsExcludesLiveD14_REQ_TOPTIER_S18_T4(t *testing.T) {
@@ -128,6 +125,15 @@ func TestOpenReservationsExcludesLiveD14_REQ_TOPTIER_S18_T4(t *testing.T) {
 		assert.NotEqual(t, "D14", r.ID, "D14 must not remain reserved once live for TOPTIER-S18-T4")
 	}
 	assert.Contains(t, LiveCheckIDs(), "D14")
+}
+
+func TestOpenReservationsExcludesLiveD13_REQ_LNGHZN_S11_T4(t *testing.T) {
+	t.Parallel()
+
+	for _, r := range OpenReservations() {
+		assert.NotEqual(t, "D13", r.ID, "D13 must not remain reserved once live for LNGHZN-S11-T4")
+	}
+	assert.Contains(t, LiveCheckIDs(), "D13")
 }
 
 // TestValidationCodesDocListsEveryLiveCheck_REQ_TOPTIER_S12_T2 derives the live
