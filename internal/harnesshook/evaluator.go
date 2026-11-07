@@ -63,8 +63,6 @@ func isDirectCommitCommand(command string) bool {
 	if len(fields) == 0 || fields[0] != "git" {
 		return false
 	}
-	// Skip git global options (flags and their arguments) before the subcommand.
-	// Flags that consume the next token as their argument:
 	flagsTakingArg := map[string]bool{"-C": true, "-c": true, "-f": true}
 	i := 1
 	for i < len(fields) {

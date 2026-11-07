@@ -68,8 +68,6 @@ type EvaluateInput struct {
 	Root     string // worktree root for path normalization (optional; defaults to os.Getwd())
 }
 
-// hook owns adapter selection, policy resolution, and evaluation for one run.
-// The type stays unexported; callers use NewHook and Evaluate.
 type hook struct {
 	resolver policyResolver
 }

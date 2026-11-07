@@ -15,8 +15,6 @@ import (
 	"github.com/scullxbones/armature/internal/gitoid"
 )
 
-// activityEntry is one execution row in the activity log. AppendActivity writes
-// rows; callers do not construct them.
 type activityEntry struct {
 	Command       string
 	ExitCode      int

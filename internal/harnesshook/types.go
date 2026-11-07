@@ -24,7 +24,6 @@ type Event struct {
 }
 
 // decisionAction is the verdict returned by an evaluator (allow, block, or no opinion).
-// Callers read Decision.Action as a string; the constants stay inside this package.
 type decisionAction string
 
 const (
@@ -50,15 +49,11 @@ type PlatformCapabilities struct {
 	SupportedShellTools []string
 }
 
-// platformAdapter is the per-platform hook lifecycle. Callers select one with
-// NewAdapterForPlatform and use its methods; the interface is not part of the
-// package surface.
 type platformAdapter interface {
 	Name() string
 	Capabilities() PlatformCapabilities
 	WriteConfig(workdir string) error
 	OwnsConfig(workdir string) (bool, error)
 	Decode(input []byte) (Event, error)
-	// Encode returns (payload, exitCode, err). exitCode is non-zero only when the platform uses exit status to signal blocking.
 	Encode(event Event, decision Decision) ([]byte, int, error)
 }

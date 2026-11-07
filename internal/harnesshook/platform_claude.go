@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/scullxbones/armature/internal/adapters"
 )
 
 type claudeAdapter struct{}
@@ -80,7 +82,7 @@ func (a *claudeAdapter) WriteConfig(workdir string) error {
 
 	settingsPath := filepath.Join(dir, "settings.json")
 	cfg := map[string]any{}
-	if existing, err := os.ReadFile(settingsPath); err == nil { //nolint:gosec // G304: internal settings path
+	if existing, err := adapters.ReadFile(settingsPath); err == nil {
 		parsed := map[string]any{}
 		if err := json.Unmarshal(existing, &parsed); err == nil {
 			cfg = parsed

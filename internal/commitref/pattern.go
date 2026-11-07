@@ -1,5 +1,5 @@
 // Package commitref decides whether a commit subject counts for an issue.
-// Callers use IsValidReference. Type list and regexes stay inside the package.
+// Callers use IsValidReference.
 // scripts/check-commit-subjects.sh duplicates subjectHasIssueScope for any-id
 // subjects; keep those two rules aligned.
 package commitref

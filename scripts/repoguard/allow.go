@@ -239,10 +239,6 @@ func allowedSite(relPath, check string, line int, pattern string) bool {
 	return newAllowIndex(allowlist()).allowed(relPath, check, line, pattern)
 }
 
-func allowedObjectIDSite(relPath string, line int, pattern string) bool {
-	return allowedSite(relPath, allowObjectID, line, pattern)
-}
-
 func allowedResidualTrlsSite(relPath string, line int, needle string) bool {
 	return allowedSite(relPath, allowResidualTrls, line, needle)
 }
