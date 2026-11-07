@@ -4,8 +4,9 @@ import "fmt"
 
 // NewAdapterForPlatform is the single registry for platform adapter selection.
 // The hook runner and bootstrap install path both go through here so adapter
-// instantiation cannot drift across the harness-hook subsystem.
-func NewAdapterForPlatform(platform string) (PlatformAdapter, error) {
+// instantiation cannot drift across the harness-hook subsystem. The returned
+// adapter's concrete type and the platformAdapter interface stay unexported.
+func NewAdapterForPlatform(platform string) (platformAdapter, error) {
 	switch platform {
 	case "", "claude":
 		return newClaudeAdapter(), nil

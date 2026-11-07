@@ -23,19 +23,19 @@ type Event struct {
 	Output        []byte         // Output from PostToolUse events (empty if not available)
 }
 
-// DecisionAction is the verdict returned by an Evaluator (allow, block, or no opinion).
-type DecisionAction string
+// decisionAction is the verdict returned by an evaluator (allow, block, or no opinion).
+// Callers read Decision.Action as a string; the constants stay inside this package.
+type decisionAction string
 
-// Decision action constants.
 const (
-	DecisionAllow DecisionAction = "allow"
-	DecisionBlock DecisionAction = "block"
-	DecisionNone  DecisionAction = "none"
+	decisionAllow decisionAction = "allow"
+	decisionBlock decisionAction = "block"
+	decisionNone  decisionAction = "none"
 )
 
 // Decision is the evaluator's verdict together with an optional human-readable message.
 type Decision struct {
-	Action  DecisionAction
+	Action  decisionAction
 	Message string
 }
 
@@ -50,9 +50,10 @@ type PlatformCapabilities struct {
 	SupportedShellTools []string
 }
 
-// PlatformAdapter is the interface that each harness platform must implement to participate
-// in the hook lifecycle.
-type PlatformAdapter interface {
+// platformAdapter is the per-platform hook lifecycle. Callers select one with
+// NewAdapterForPlatform and use its methods; the interface is not part of the
+// package surface.
+type platformAdapter interface {
 	Name() string
 	Capabilities() PlatformCapabilities
 	WriteConfig(workdir string) error

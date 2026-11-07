@@ -54,7 +54,7 @@ type RunResult struct {
 // EvaluateInput captures all inputs needed to evaluate a hook event.
 //
 // Binding resolution (ADR-0007) happens exactly once, in the caller (the
-// harness-hook command), via ResolveBindingFromEvent. Hook.Evaluate accepts
+// harness-hook command), via ResolveBindingFromEvent. Evaluate accepts
 // the already-resolved issue ID and does not re-derive it, so the policy
 // enforced always matches the binding that was stale-checked and logged.
 //
@@ -68,15 +68,19 @@ type EvaluateInput struct {
 	Root     string // worktree root for path normalization (optional; defaults to os.Getwd())
 }
 
-type Hook struct {
+// hook owns adapter selection, policy resolution, and evaluation for one run.
+// The type stays unexported; callers use NewHook and Evaluate.
+type hook struct {
 	resolver policyResolver
 }
 
-func NewHook(resolver policyResolver) *Hook {
-	return &Hook{resolver: resolver}
+// NewHook builds the harness-hook evaluator. The resolver loads task policy;
+// platform adapters stay behind NewAdapterForPlatform.
+func NewHook(resolver policyResolver) *hook {
+	return &hook{resolver: resolver}
 }
 
-func (h *Hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, error) {
+func (h *hook) Evaluate(ctx context.Context, input EvaluateInput) (RunResult, error) {
 	adapter, err := NewAdapterForPlatform(input.Platform)
 	if err != nil {
 		return RunResult{}, err

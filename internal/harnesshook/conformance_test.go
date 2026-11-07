@@ -130,10 +130,10 @@ func TestConformanceMatrix_BindingStates_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 			require.NoError(t, err)
 			if tc.expectAllow {
-				assert.Equal(t, DecisionAllow, result.Decision.Action, "expected allow for %s", tc.name)
+				assert.Equal(t, decisionAllow, result.Decision.Action, "expected allow for %s", tc.name)
 				assert.Contains(t, result.Decision.Message, tc.expectMsg)
 			} else {
-				assert.Equal(t, DecisionBlock, result.Decision.Action, "expected block for %s", tc.name)
+				assert.Equal(t, decisionBlock, result.Decision.Action, "expected block for %s", tc.name)
 				assert.Contains(t, result.Decision.Message, tc.expectMsg)
 			}
 		})
@@ -219,9 +219,9 @@ func TestConformanceMatrix_ToolClasses_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 			require.NoError(t, err)
 			if tc.expectAllow {
-				assert.Equal(t, DecisionAllow, result.Decision.Action, "expected allow for %s", tc.name)
+				assert.Equal(t, decisionAllow, result.Decision.Action, "expected allow for %s", tc.name)
 			} else {
-				assert.Equal(t, DecisionBlock, result.Decision.Action, "expected block for %s", tc.name)
+				assert.Equal(t, decisionBlock, result.Decision.Action, "expected block for %s", tc.name)
 			}
 			assert.Contains(t, result.Decision.Message, tc.expectMsg)
 		})
@@ -298,9 +298,9 @@ func TestConformanceMatrix_PathTypes_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 			require.NoError(t, err)
 			if tc.expectAllow {
-				assert.Equal(t, DecisionAllow, result.Decision.Action, "expected allow for %s", tc.name)
+				assert.Equal(t, decisionAllow, result.Decision.Action, "expected allow for %s", tc.name)
 			} else {
-				assert.Equal(t, DecisionBlock, result.Decision.Action, "expected block for %s", tc.name)
+				assert.Equal(t, decisionBlock, result.Decision.Action, "expected block for %s", tc.name)
 			}
 			assert.Contains(t, result.Decision.Message, tc.expectMsg)
 		})
@@ -370,10 +370,10 @@ func TestConformanceMatrix_DogfoodBypassCases_REQ_TOPTIER_S5_T1(t *testing.T) {
 
 			require.NoError(t, err)
 			if tc.expectAllow {
-				assert.Equal(t, DecisionAllow, result.Decision.Action,
+				assert.Equal(t, decisionAllow, result.Decision.Action,
 					"bypass case: %s - %s", tc.name, tc.description)
 			} else {
-				assert.Equal(t, DecisionBlock, result.Decision.Action,
+				assert.Equal(t, decisionBlock, result.Decision.Action,
 					"bypass case: %s - %s", tc.name, tc.description)
 				assert.Contains(t, result.Decision.Message, "outside task scope")
 			}
@@ -408,7 +408,7 @@ func TestConformanceMatrix_EmptyScope_REQ_TOPTIER_S5_T1(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, DecisionBlock, result.Decision.Action)
+	assert.Equal(t, decisionBlock, result.Decision.Action)
 	assert.Contains(t, result.Decision.Message, "task has no declared scope")
 }
 
@@ -440,7 +440,7 @@ func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, DecisionAllow, result.Decision.Action,
+	assert.Equal(t, decisionAllow, result.Decision.Action,
 		"absolute path within scope should be allowed")
 
 	absOutOfScopePath := filepath.Join(tmpDir, "cmd", "main.go")
@@ -456,7 +456,7 @@ func TestConformanceMatrix_AbsolutePaths_REQ_TOPTIER_S5_T1(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, DecisionBlock, result.Decision.Action,
+	assert.Equal(t, decisionBlock, result.Decision.Action,
 		"absolute path outside scope should be blocked")
 }
 
@@ -487,6 +487,6 @@ func TestConformanceMatrix_NoPathPolicy_REQ_TOPTIER_S5_T1(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, DecisionAllow, result.Decision.Action)
+	assert.Equal(t, decisionAllow, result.Decision.Action)
 	assert.Contains(t, result.Decision.Message, "no path policy applies")
 }

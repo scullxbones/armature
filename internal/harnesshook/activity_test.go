@@ -391,7 +391,7 @@ func TestActivityFailOpenOnLogWriteError_REQ_EXECEV_T1(t *testing.T) { //nolint:
 
 func TestActivityFormatLogEntry_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
-	entry := ActivityEntry{
+	entry := activityEntry{
 		Command:       "test command",
 		ExitCode:      0,
 		ExitCodeKnown: true,
@@ -417,7 +417,7 @@ func TestActivityFormatLogEntry_REQ_EXECEV_T1(t *testing.T) {
 
 func TestActivityFormatLogEntryUnknownExitCode_REQ_EXECEV_T1(t *testing.T) {
 	t.Parallel()
-	entry := ActivityEntry{
+	entry := activityEntry{
 		Command:       "test command",
 		ExitCode:      0,
 		ExitCodeKnown: false,
@@ -581,17 +581,17 @@ func TestAppendActivity_EmptyOrMissingCommandWritesNothing_REQ_NOCOMMENTS(t *tes
 func TestFallbackActivityJSONL_CannotEmitEmptyCommand_REQ_NOCOMMENTS(t *testing.T) {
 	t.Parallel()
 
-	assert.Empty(t, fallbackActivityJSONL(ActivityEntry{
+	assert.Empty(t, fallbackActivityJSONL(activityEntry{
 		Timestamp:    "2026-09-24T00:00:00Z",
 		WorktreeHead: "abc",
 	}))
-	assert.Empty(t, fallbackActivityJSONL(ActivityEntry{
+	assert.Empty(t, fallbackActivityJSONL(activityEntry{
 		Command:      "   ",
 		Timestamp:    "2026-09-24T00:00:00Z",
 		WorktreeHead: "abc",
 	}))
 
-	line := fallbackActivityJSONL(ActivityEntry{
+	line := fallbackActivityJSONL(activityEntry{
 		Command:       `grep "foo"`,
 		ExitCode:      0,
 		ExitCodeKnown: true,

@@ -23,7 +23,7 @@ func TestEvaluatorBlocksOutOfScopeEdit(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, DecisionBlock, decision.Action)
+	require.Equal(t, decisionBlock, decision.Action)
 	assert.Contains(t, decision.Message, "outside task scope")
 }
 
@@ -40,7 +40,7 @@ func TestEvaluatorAllowsInScopeEdit(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, DecisionAllow, decision.Action)
+	require.Equal(t, decisionAllow, decision.Action)
 }
 
 func TestEvaluatorBlocksGitCommit(t *testing.T) {
@@ -56,7 +56,7 @@ func TestEvaluatorBlocksGitCommit(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, DecisionBlock, decision.Action)
+	require.Equal(t, decisionBlock, decision.Action)
 	assert.Contains(t, decision.Message, "Armature owns commits")
 }
 
@@ -79,7 +79,7 @@ func TestEvaluatorBlocksGitCommitWithGlobalOptions(t *testing.T) {
 				Command: cmd,
 			})
 			require.NoError(t, err)
-			require.Equal(t, DecisionBlock, decision.Action, "should block: %s", cmd)
+			require.Equal(t, decisionBlock, decision.Action, "should block: %s", cmd)
 			assert.Contains(t, decision.Message, "Armature owns commits")
 		})
 	}
@@ -100,7 +100,7 @@ func TestEvaluatorRunsStopVerification(t *testing.T) {
 	decision, err := evaluator.Evaluate(context.Background(), Event{Kind: EventStop})
 
 	require.NoError(t, err)
-	require.Equal(t, DecisionAllow, decision.Action)
+	require.Equal(t, decisionAllow, decision.Action)
 	assert.Contains(t, decision.Message, "verification passed")
 }
 
@@ -115,6 +115,6 @@ func TestEvaluatorBlocksStopWhenVerificationFails(t *testing.T) {
 	decision, err := evaluator.Evaluate(context.Background(), Event{Kind: EventStop})
 
 	require.NoError(t, err)
-	require.Equal(t, DecisionBlock, decision.Action)
+	require.Equal(t, decisionBlock, decision.Action)
 	assert.Contains(t, decision.Message, "unverifiable")
 }
