@@ -696,6 +696,16 @@
         "ExitUsageError"
       ]
     },
+    "internal/externalref": {
+      "count": 5,
+      "names": [
+        "GitHubIssue",
+        "GitHubIssue.URL",
+        "NotGitHubIssueError",
+        "NotGitHubIssueError.Error",
+        "ParseGitHubIssueURL"
+      ]
+    },
     "internal/filelock": {
       "count": 3,
       "names": [
@@ -1262,10 +1272,9 @@
       ]
     },
     "internal/opsbackup": {
-      "count": 33,
+      "count": 30,
       "names": [
         "AdvertisedRef",
-        "AsideBranch",
         "AsideRef",
         "Disposition",
         "Disposition.String",
@@ -1281,7 +1290,6 @@
         "Git.FetchBranchToRef",
         "Git.ResolveRevision",
         "Git.RestoreEvidence",
-        "LiveRef",
         "OpsBranch",
         "PlanRestore",
         "RestorePlan",
@@ -1295,7 +1303,6 @@
         "SnapshotResult",
         "SnapshotResult.Bundle",
         "SnapshotResult.Tip",
-        "TrackingRef",
         "Verify"
       ]
     },

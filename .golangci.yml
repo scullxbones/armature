@@ -97,6 +97,14 @@ linters:
           deny:
             - pkg: "github.com/scullxbones/armature/internal"
               desc: "gitoid is a pure object-id helper and must not import other internal packages"
+        # New deny (ADR 0023 Decision 3). Current imports already comply.
+        externalref-pure:
+          list-mode: lax
+          files:
+            - "**/internal/externalref/*.go"
+          deny:
+            - pkg: "github.com/scullxbones/armature/internal"
+              desc: "externalref is a pure URL parser and must not import other internal packages"
         scopematch-pure:
           list-mode: lax
           files:
