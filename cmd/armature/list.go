@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"sort"
 	"strings"
@@ -70,13 +71,14 @@ func newListCmd() *cobra.Command {
 
 			filtered := filterParent != "" || filterType != "" || filterStatus != "" || terminal || wantHostURL != ""
 			listFacts := outputListFacts(index)
+			out := cmd.OutOrStdout()
 			if structuredFormat(cmd) {
 				rows := output.ListRows(listFacts, ids)
 				var groups []output.ListGroup
 				if group {
 					groups = output.ListGroupsByStatus(listFacts, ids)
 				}
-				return output.WriteListEnvelope(cmd.OutOrStdout(), rows, groups, group, filtered)
+				return output.WriteListEnvelope(out, rows, groups, group, filtered)
 			}
 
 			if group {
@@ -85,7 +87,9 @@ func newListCmd() *cobra.Command {
 					if g.Status == ops.StatusDone {
 						label = "done (awaiting merge)"
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
+					if _, err := fmt.Fprintf(out, "\n=== %s ===\n", label); err != nil {
+						return err
+					}
 					for _, id := range g.IDs {
 						e := index[id]
 						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
@@ -96,8 +100,12 @@ func newListCmd() *cobra.Command {
 							}
 							line += "]"
 						}
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
-						writeHostRefLines(cmd, snap.State.Issues[id])
+						if _, err := fmt.Fprintln(out, line); err != nil {
+							return err
+						}
+						if err := writeHostRefLines(out, snap.State.Issues[id]); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
@@ -107,7 +115,9 @@ func newListCmd() *cobra.Command {
 				if len(ids) == 0 {
 					return nil
 				}
-				boardEntries := make([]output.BoardEntry, 0, len(ids))
+				if _, err := fmt.Fprintf(out, "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE"); err != nil {
+					return err
+				}
 				for _, id := range ids {
 					e := index[id]
 					claimed := ""
@@ -115,43 +125,33 @@ func newListCmd() *cobra.Command {
 					if issue != nil {
 						claimed = issue.ClaimedBy
 					}
-					boardEntries = append(boardEntries, output.BoardEntry{
-						Issue:   id,
-						Status:  e.Status,
-						Claimed: claimed,
-						Outcome: e.Outcome,
-						Title:   e.Title,
-					})
-				}
-				if err := output.RenderBoard(cmd.OutOrStdout(), boardEntries); err != nil {
-					return err
-				}
-				for _, id := range ids {
-					writeHostRefLines(cmd, snap.State.Issues[id])
+					outcome := e.Outcome
+					const maxOutcome = 30
+					if len(outcome) > maxOutcome {
+						outcome = outcome[:27] + "..."
+					}
+					if _, err := fmt.Fprintf(out, "%-12s %-12s %-38s %-30s %s\n", id, e.Status, claimed, outcome, e.Title); err != nil {
+						return err
+					}
+					if err := writeHostRefLines(out, issue); err != nil {
+						return err
+					}
 				}
 				return nil
 			}
 
-			entries := make([]output.ListEntry, 0, len(ids))
 			for _, id := range ids {
 				e := index[id]
-				entries = append(entries, output.ListEntry{
-					Issue:      id,
-					Status:     e.Status,
-					Title:      e.Title,
-					AssignedTo: e.AssignedWorker,
-				})
-			}
-			for i, e := range entries {
 				status := e.Status
-				if e.AssignedTo != "" {
-					status = status + " (assigned to " + e.AssignedTo + ")"
+				if e.AssignedWorker != "" {
+					status = status + " (assigned to " + e.AssignedWorker + ")"
 				}
-				_, err := fmt.Fprintf(cmd.OutOrStdout(), "  %-12s  %-14s  %s\n", e.Issue, status, e.Title)
-				if err != nil {
+				if _, err := fmt.Fprintf(out, "  %-12s  %-14s  %s\n", id, status, e.Title); err != nil {
 					return err
 				}
-				writeHostRefLines(cmd, snap.State.Issues[ids[i]])
+				if err := writeHostRefLines(out, snap.State.Issues[id]); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -167,13 +167,16 @@ func newListCmd() *cobra.Command {
 	return cmd
 }
 
-func writeHostRefLines(cmd *cobra.Command, issue *materialize.Issue) {
+func writeHostRefLines(w io.Writer, issue *materialize.Issue) error {
 	if issue == nil || len(issue.HostRefs) == 0 {
-		return
+		return nil
 	}
 	for _, line := range formatHostRefLines(issue.HostRefs) {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", line)
+		if _, err := fmt.Fprintf(w, "    %s\n", line); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func formatHostRefLines(refs []materialize.HostRef) []string {
@@ -203,14 +206,4 @@ func formatHostRefLines(refs []materialize.HostRef) []string {
 		lines = append(lines, strings.Join(parts, "  "))
 	}
 	return lines
-}
-
-func dropHostURL(order []string, url string) []string {
-	next := make([]string, 0, len(order))
-	for _, item := range order {
-		if item != url {
-			next = append(next, item)
-		}
-	}
-	return next
 }

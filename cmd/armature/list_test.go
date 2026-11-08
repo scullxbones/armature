@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 const (
 	listHostURLA = "https://github.com/scullxbones/armature/issues/1"
 	listHostURLB = "https://github.com/scullxbones/armature/issues/2"
+	listHostURLC = "https://github.com/scullxbones/armature/issues/3"
 )
 
 func appendExternalRefOp(t *testing.T, repo, targetID, url, role, withdraw string) {
@@ -279,3 +281,50 @@ func TestFormatHostRefLinesMarksCurrent_REQ_HOSTREF_S1_T9(t *testing.T) {
 	assert.Contains(t, lines[1], "role=engineering")
 	assert.Contains(t, lines[1], "current")
 }
+
+func TestListParentBoardAttachesHostRefsToOwningRow_REQ_HOSTREF_S1_T9(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithStoryAndTask(t)
+	plantVerifiedTaskUnder(t, repo, "task-child-b", "src/child-b.go", "story-01")
+
+	appendExternalRefOp(t, repo, "task-01", listHostURLA, "engineering", "")
+	appendExternalRefOp(t, repo, "task-01", listHostURLC, "filter", "")
+	appendExternalRefOp(t, repo, "task-child-b", listHostURLB, "support", "")
+	appendExternalRefOp(t, repo, "task-child-b", listHostURLC, "filter", "")
+
+	human, err := runTrls(t, repo, "--format", "human", "list",
+		"--parent", "story-01", "--external-ref", listHostURLC)
+	require.NoError(t, err)
+
+	idxA := strings.Index(human, "task-01")
+	idxB := strings.Index(human, "task-child-b")
+	require.GreaterOrEqual(t, idxA, 0)
+	require.Greater(t, idxB, idxA, "board rows stay sorted by id")
+
+	aBlock := human[idxA:idxB]
+	bBlock := human[idxB:]
+	assert.Contains(t, aBlock, listHostURLA)
+	assert.Contains(t, aBlock, "role=engineering")
+	assert.NotContains(t, aBlock, listHostURLB, "task-01 must not show task-child-b's URL")
+	assert.Contains(t, bBlock, listHostURLB)
+	assert.Contains(t, bBlock, "role=support")
+	assert.NotContains(t, bBlock, listHostURLA, "task-child-b must not show task-01's URL")
+}
+
+func TestWriteHostRefLinesPropagatesWriterError_REQ_HOSTREF_S1_T9(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID: "task-01",
+		HostRefs: []materialize.HostRef{
+			{URL: listHostURLA, Role: "engineering"},
+		},
+	}
+	errBoom := errors.New("write failed")
+	err := writeHostRefLines(errWriter{err: errBoom}, issue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errBoom)
+}
+
+type errWriter struct{ err error }
+
+func (e errWriter) Write([]byte) (int, error) { return 0, e.err }

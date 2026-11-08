@@ -47,6 +47,16 @@ func outputIssueFacts(issue *materialize.Issue) output.IssueFacts {
 	return f
 }
 
+func dropHostURL(order []string, url string) []string {
+	next := make([]string, 0, len(order))
+	for _, item := range order {
+		if item != url {
+			next = append(next, item)
+		}
+	}
+	return next
+}
+
 func outputListFacts(index materialize.Index) map[string]output.ListFacts {
 	out := make(map[string]output.ListFacts, len(index))
 	for id, e := range index {
