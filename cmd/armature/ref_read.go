@@ -18,7 +18,7 @@ func newRefReadCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			issueID := args[0]
 			store := newSnapshotStore(currentCtx(cmd))
-			snap, err := store.Load(cmd.Context())
+			snap, err := store.LoadReadOnly(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("load snapshot: %w", err)
 			}

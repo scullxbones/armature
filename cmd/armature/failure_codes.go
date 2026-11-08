@@ -30,6 +30,7 @@ func init() {
 	armerrors.Register("PUSH-OPS-2")
 	armerrors.Register("REOPEN-1")
 	armerrors.Register("REPARENT-1")
+	armerrors.Register("REF-READ-1")
 	armerrors.Register("SCOPE-DELETE-1")
 	armerrors.Register("SCOPE-RENAME-1")
 	armerrors.Register("SHOW-1")

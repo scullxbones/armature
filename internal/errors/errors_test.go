@@ -90,3 +90,19 @@ func TestPrefixFromModuleOrUse_REQ_LNGHZN_S6_T1(t *testing.T) {
 		t.Errorf("Prefix(render-context) = %q, want RENDER-CONTEXT", got)
 	}
 }
+
+func TestMapPanicsOnUnregisteredCode_REQ_HOSTREF_S1_T6(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("Map of an unregistered code must panic")
+		}
+		msg := fmt.Sprint(r)
+		if !strings.Contains(msg, "unregistered") || !strings.Contains(msg, "NOT-A-REAL-CODE-1") {
+			t.Errorf("panic = %v, want unregistered NOT-A-REAL-CODE-1", r)
+		}
+	}()
+	cf := Map("NOT-A-REAL-CODE-1", "should not construct", nil, nil)
+	t.Fatalf("Map returned %v for unregistered code", cf)
+}
