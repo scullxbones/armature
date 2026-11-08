@@ -418,21 +418,16 @@ func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located 
 }
 
 // shouldRebuildFromCommittedHistory reports that cached snapshots mixed pending
-// ops into LastCommitSHA state, and later work is not a prefix continuation of
-// that mix — newly committed ops in a different order, or more pending that
-// cold replay would place by file after the commit walk. Incremental apply
-// would keep the pending-derived order; cold replay of committed history would
-// not. Rebuild from the full commit walk instead of filtering the located stream.
+// ops into LastCommitSHA state, and later work arrived — newly committed ops,
+// or more pending that cold replay would place by file after the commit walk.
+// Per-file byte offsets do not carry cross-worker order, so they cannot prove
+// the cache is an ordered prefix of committed history. Rebuild from the full
+// commit walk whenever pending-derived state meets new committed events.
 func shouldRebuildFromCommittedHistory(worktree string, cp Checkpoint, located []oporder.LocatedOp) (bool, error) {
 	if worktree == "" || cp.LastCommitSHA == "" {
 		return false, nil
 	}
 	gc := adapters.New(worktree)
-	head, err := gc.HeadSHA()
-	if err != nil {
-		return false, fmt.Errorf("ops HEAD: %w", err)
-	}
-	pendingBeyondHEAD := false
 	pendingBeyondLast := false
 	for name, off := range cp.ByteOffsets {
 		if off <= 0 {
@@ -440,50 +435,20 @@ func shouldRebuildFromCommittedHistory(worktree string, cp Checkpoint, located [
 		}
 		if off > int64(len(committedLogBytes(gc, cp.LastCommitSHA, name))) {
 			pendingBeyondLast = true
-		}
-		if off > int64(len(committedLogBytes(gc, head, name))) {
-			pendingBeyondHEAD = true
+			break
 		}
 	}
 	if !pendingBeyondLast {
 		return false, nil
 	}
 	if len(located) > 0 {
-		if pendingBeyondHEAD {
-			return true, nil
-		}
-		return pendingSkipBreaksLocatedPrefix(worktree, located, cp.ByteOffsets)
+		return true, nil
 	}
 	pending, pendErr := uncommittedWorktreeOps(worktree, cp.ByteOffsets)
 	if pendErr != nil {
 		return false, pendErr
 	}
 	return len(pending) > 0, nil
-}
-
-func pendingSkipBreaksLocatedPrefix(worktree string, located []oporder.LocatedOp, offsets map[string]int64) (bool, error) {
-	skipLeft, err := skipLeftFromOffsets(worktree, located, offsets)
-	if err != nil {
-		return false, err
-	}
-	remaining := 0
-	for _, n := range skipLeft {
-		remaining += n
-	}
-	if remaining == 0 {
-		return false, nil
-	}
-	for _, loc := range located {
-		if skipLeft[loc.Seq.Filename] > 0 {
-			skipLeft[loc.Seq.Filename]--
-			remaining--
-			continue
-		}
-		if remaining > 0 {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func skipLocatedCoveredByOffsets(worktree string, located []oporder.LocatedOp, offsets map[string]int64) ([]oporder.LocatedOp, error) {

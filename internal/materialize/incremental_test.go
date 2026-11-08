@@ -65,6 +65,56 @@ func TestReplayCostBoundedWithNOneRunLogs_REQ_CLAIMORD_W14(t *testing.T) { //nol
 	assert.JSONEq(t, string(gotCold), string(gotInc), "cold walk and incremental state must match")
 }
 
+func TestRebuildCost_PendingMeetsNewCommits_REQ_HOSTREF_S1_T2(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	const n = 8
+	for i := 0; i < n; i++ {
+		wid := "cattle-" + string(rune('a'+i))
+		id := "task-0" + string(rune('1'+i))
+		writeMaterializeOpLog(t, dir, "ops/"+wid+".log", []ops.Op{
+			{Type: ops.OpCreate, TargetID: id, Timestamp: int64(100 + i), WorkerID: wid,
+				Payload: ops.Payload{Title: "T" + wid, NodeType: "task"}},
+		})
+		gittest.Git(t, dir, "add", "ops/"+wid+".log")
+		gittest.Git(t, dir, "commit", "-m", "log "+wid)
+	}
+	stateDir := t.TempDir()
+	_, firstRes, err := Run(stateDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	require.True(t, firstRes.FullReplay)
+	require.Equal(t, n, firstRes.OpsProcessed)
+
+	require.NoError(t, ops.AppendOp(filepath.Join(dir, "ops", "cattle-a.log"), ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+	_, pendingRes, err := Run(stateDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	require.False(t, pendingRes.FullReplay)
+	require.Equal(t, 1, pendingRes.OpsProcessed, "pending alone stays incremental")
+
+	require.NoError(t, ops.AppendOp(filepath.Join(dir, "ops", "cattle-b.log"), ops.Op{
+		Type: ops.OpNote, TargetID: "task-02", Timestamp: 201, WorkerID: "cattle-b",
+		Payload: ops.Payload{Msg: "other"},
+	}))
+	gittest.Git(t, dir, "add", "ops/cattle-b.log")
+	gittest.Git(t, dir, "commit", "-m", "cattle-b publish")
+
+	_, rebuiltRes, err := Run(stateDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	coldDir := t.TempDir()
+	_, coldRes, err := Run(coldDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	assert.True(t, rebuiltRes.FullReplay)
+	assert.Equal(t, coldRes.OpsProcessed, rebuiltRes.OpsProcessed)
+	assert.Equal(t, n+2, rebuiltRes.OpsProcessed,
+		"rebuild walks n cattle creates + other-worker commit + remaining pending")
+	t.Logf("n_cattle=%d CLAIMORD_incremental=1 pending_meets_commit_rebuild=%d", n, rebuiltRes.OpsProcessed)
+}
+
 func TestIncrementalReplayAppliesUncommittedDiskOps_REQ_CLAIMORD_W14(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
 	fx := gittest.InitWithOrigin(t)
 	dir := fx.Dir
@@ -140,7 +190,8 @@ func TestIncremental_PendingExternalRefThenCommitMatchesCold_REQ_HOSTREF_S1_T2(t
 
 	afterCommit, afterRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
 	require.NoError(t, err)
-	assert.False(t, afterRes.FullReplay)
+	assert.True(t, afterRes.FullReplay,
+		"pending-derived cache that meets newly committed events rebuilds from committed history")
 
 	coldDir := t.TempDir()
 	cold, coldRes, err := Run(coldDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
@@ -149,7 +200,8 @@ func TestIncremental_PendingExternalRefThenCommitMatchesCold_REQ_HOSTREF_S1_T2(t
 
 	require.Equal(t, cold.Issues["task-01"].HostRefs, afterCommit.Issues["task-01"].HostRefs,
 		"pending then committed HostRefs must equal cold replay; identical URL/role events stay distinct")
-	assert.Equal(t, 0, afterRes.OpsProcessed, "pending that later commits must not be applied a second time")
+	assert.Equal(t, coldRes.OpsProcessed, afterRes.OpsProcessed,
+		"rebuild cost is a full committed walk, not a second apply of pending lines")
 
 	incIdx, err := LoadIndex(filepath.Join(stateDir, "index.json"))
 	require.NoError(t, err)
@@ -231,6 +283,8 @@ const (
 	hostRefActBWithdrawA
 	hostRefActBWithdrawB
 	hostRefActBCommit
+	hostRefActMaterialize
+	hostRefActCommitEach
 	hostRefActCount
 )
 
@@ -238,7 +292,9 @@ func TestIncremental_TwoWorkerPendingRecordThenOtherCommitMatchesCold_REQ_HOSTRE
 	driveTwoWorkerHostRefScript(t, []byte{
 		hostRefActARecordA,
 		hostRefActBRecordB,
+		hostRefActMaterialize,
 		hostRefActBCommit,
+		hostRefActMaterialize,
 		hostRefActACommit,
 	})
 }
@@ -247,8 +303,34 @@ func TestIncremental_TwoWorkerPendingWithdrawThenOtherRecordMatchesCold_REQ_HOST
 	driveTwoWorkerHostRefScript(t, []byte{
 		hostRefActARecordA,
 		hostRefActACommit,
+		hostRefActMaterialize,
 		hostRefActAWithdrawA,
 		hostRefActBRecordA,
+		hostRefActMaterialize,
+		hostRefActBCommit,
+		hostRefActMaterialize,
+		hostRefActACommit,
+	})
+}
+
+func TestIncremental_BatchedTwoWorkerPendingRecordMatchesCold_REQ_HOSTREF_S1_T2(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	driveTwoWorkerHostRefScript(t, []byte{
+		hostRefActARecordA,
+		hostRefActBRecordB,
+		hostRefActMaterialize,
+		hostRefActBCommit,
+		hostRefActACommit,
+	})
+}
+
+func TestIncremental_BatchedTwoWorkerPendingWithdrawMatchesCold_REQ_HOSTREF_S1_T2(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	driveTwoWorkerHostRefScript(t, []byte{
+		hostRefActARecordA,
+		hostRefActACommit,
+		hostRefActMaterialize,
+		hostRefActAWithdrawA,
+		hostRefActBRecordA,
+		hostRefActMaterialize,
 		hostRefActBCommit,
 		hostRefActACommit,
 	})
@@ -256,13 +338,21 @@ func TestIncremental_TwoWorkerPendingWithdrawThenOtherRecordMatchesCold_REQ_HOST
 
 func TestProperty_TwoWorkerHostRefInterleavingsMatchCold_REQ_HOSTREF_S1_T2(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
 	scripts := [][]byte{
-		{hostRefActARecordA, hostRefActBRecordB, hostRefActBCommit, hostRefActACommit},
-		{hostRefActARecordA, hostRefActACommit, hostRefActAWithdrawA, hostRefActBRecordA, hostRefActBCommit, hostRefActACommit},
-		{hostRefActARecordA, hostRefActACommit, hostRefActBRecordB, hostRefActBCommit},
-		{hostRefActBRecordA, hostRefActBCommit, hostRefActARecordB, hostRefActACommit, hostRefActBWithdrawA, hostRefActBCommit},
+		{hostRefActARecordA, hostRefActBRecordB, hostRefActMaterialize, hostRefActBCommit, hostRefActACommit},
+		{hostRefActARecordA, hostRefActBRecordB, hostRefActMaterialize, hostRefActCommitEach},
+		{
+			hostRefActARecordA, hostRefActACommit, hostRefActMaterialize, hostRefActAWithdrawA,
+			hostRefActBRecordA, hostRefActMaterialize, hostRefActBCommit, hostRefActACommit,
+		},
+		{hostRefActARecordA, hostRefActBRecordB, hostRefActMaterialize, hostRefActBCommit, hostRefActMaterialize, hostRefActACommit},
+		{hostRefActARecordA, hostRefActACommit, hostRefActMaterialize, hostRefActBRecordB, hostRefActBCommit},
+		{
+			hostRefActBRecordA, hostRefActBCommit, hostRefActMaterialize, hostRefActARecordB,
+			hostRefActACommit, hostRefActBWithdrawA, hostRefActBCommit,
+		},
 	}
 	for seed := uint64(1); seed <= 16; seed++ {
-		scripts = append(scripts, hostRefScriptFromSeed(seed, 6))
+		scripts = append(scripts, hostRefScriptFromSeed(seed, 8))
 	}
 	for i, script := range scripts {
 		t.Logf("script%d", i)
@@ -271,14 +361,18 @@ func TestProperty_TwoWorkerHostRefInterleavingsMatchCold_REQ_HOSTREF_S1_T2(t *te
 }
 
 func FuzzTwoWorkerHostRefInterleavingMatchesCold_REQ_HOSTREF_S1_T2(f *testing.F) {
-	f.Add([]byte{hostRefActARecordA, hostRefActBRecordB, hostRefActBCommit, hostRefActACommit})
-	f.Add([]byte{hostRefActARecordA, hostRefActACommit, hostRefActAWithdrawA, hostRefActBRecordA, hostRefActBCommit, hostRefActACommit})
+	f.Add([]byte{hostRefActARecordA, hostRefActBRecordB, hostRefActMaterialize, hostRefActBCommit, hostRefActACommit})
+	f.Add([]byte{hostRefActARecordA, hostRefActBRecordB, hostRefActMaterialize, hostRefActCommitEach})
+	f.Add([]byte{
+		hostRefActARecordA, hostRefActACommit, hostRefActMaterialize, hostRefActAWithdrawA,
+		hostRefActBRecordA, hostRefActMaterialize, hostRefActBCommit, hostRefActACommit,
+	})
 	f.Fuzz(func(t *testing.T, script []byte) {
 		if len(script) == 0 {
 			t.Skip()
 		}
-		if len(script) > 8 {
-			script = script[:8]
+		if len(script) > 10 {
+			script = script[:10]
 		}
 		driveTwoWorkerHostRefScript(t, script)
 	})
@@ -405,16 +499,26 @@ func driveTwoWorkerHostRefScript(t *testing.T, script []byte) {
 			if act == hostRefActBCommit {
 				workerIdx = 1
 			}
-			if !dirty[workerIdx] {
-				continue
-			}
-			rel := "ops/" + workers[workerIdx] + ".log"
-			gittest.Git(t, dir, "add", rel)
-			gittest.Git(t, dir, "commit", "-m", workers[workerIdx]+" publish")
-			dirty[workerIdx] = false
+			commitWorkerIfDirty(t, dir, workers[workerIdx], &dirty[workerIdx])
+		case hostRefActCommitEach:
+			commitWorkerIfDirty(t, dir, workers[1], &dirty[1])
+			commitWorkerIfDirty(t, dir, workers[0], &dirty[0])
+		case hostRefActMaterialize:
+			requireHostRefIncEqualsCold(t, dir, stateDir)
 		}
-		requireHostRefIncEqualsCold(t, dir, stateDir)
 	}
+	requireHostRefIncEqualsCold(t, dir, stateDir)
+}
+
+func commitWorkerIfDirty(t *testing.T, dir, worker string, dirty *bool) {
+	t.Helper()
+	if !*dirty {
+		return
+	}
+	rel := "ops/" + worker + ".log"
+	gittest.Git(t, dir, "add", rel)
+	gittest.Git(t, dir, "commit", "-m", worker+" publish")
+	*dirty = false
 }
 
 func hostRefScriptFromSeed(seed uint64, n int) []byte {
