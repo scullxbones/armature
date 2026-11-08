@@ -697,12 +697,18 @@
       ]
     },
     "internal/externalref": {
-      "count": 4,
+      "count": 10,
       "names": [
         "ErrInvalidGitHubIssueURL",
+        "ErrMissingGitHubToken",
+        "FetchGitHubIssue",
         "GitHubIssue",
         "GitHubIssue.URL",
-        "ParseGitHubIssueURL"
+        "ParseGitHubIssueURL",
+        "PlanText",
+        "PlanText.Body",
+        "PlanText.Title",
+        "PlanText.URL"
       ]
     },
     "internal/filelock": {
