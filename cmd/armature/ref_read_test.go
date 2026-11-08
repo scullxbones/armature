@@ -60,6 +60,43 @@ func TestArmRefReadRejectsUnknownURL_REQ_HOSTREF_S1_T6(t *testing.T) {
 	assert.Equal(t, beforeState, armatureStateTreeSnapshot(t, repo), "rejected unknown URL must write no state files")
 }
 
+func TestArmRefReadUnknownIssueLeavesState_REQ_HOSTREF_S1_T6(t *testing.T) {
+	t.Parallel()
+
+	repo := setupRepoWithTask(t)
+	plantHostRef(t, repo, hostRefReadURLA, "engineering")
+	setCLIEnv(t, "GITHUB_TOKEN", "test-token")
+
+	beforeLogs := workerLogSnapshot(t, repo)
+	beforeState := armatureStateTreeSnapshot(t, repo)
+	_, stderr, err := runTrlsWithStderr(t, repo, "ref-read", "missing-issue")
+	require.Error(t, err)
+	combined := stderr + "\n" + err.Error()
+	assert.Contains(t, combined, "missing-issue")
+	assert.Contains(t, strings.ToLower(combined), "not found")
+	assert.Equal(t, beforeLogs, workerLogSnapshot(t, repo), "unknown issue must append no op")
+	assert.Equal(t, beforeState, armatureStateTreeSnapshot(t, repo), "unknown issue must leave on-disk state unchanged")
+}
+
+func TestArmRefReadFetchFailureLeavesState_REQ_HOSTREF_S1_T6(t *testing.T) {
+	repo := setupRepoWithTask(t)
+	plantHostRef(t, repo, hostRefReadURLA, "engineering")
+	withGitHubIssueTransport(t, http.StatusInternalServerError, map[string]any{
+		"message": "boom",
+	})
+	setCLIEnv(t, "GITHUB_TOKEN", "test-token")
+
+	beforeLogs := workerLogSnapshot(t, repo)
+	beforeState := armatureStateTreeSnapshot(t, repo)
+	_, stderr, err := runTrlsWithStderr(t, repo, "ref-read", "task-01")
+	require.Error(t, err)
+	combined := stderr + "\n" + err.Error()
+	assert.Contains(t, combined, "HTTP")
+	assert.NotContains(t, combined, "test-token")
+	assert.Equal(t, beforeLogs, workerLogSnapshot(t, repo), "fetch failure must append no op")
+	assert.Equal(t, beforeState, armatureStateTreeSnapshot(t, repo), "fetch failure must leave on-disk state unchanged")
+}
+
 func TestArmRefReadJSON_REQ_HOSTREF_S1_T6(t *testing.T) {
 	repo := setupRepoWithTask(t)
 	plantHostRef(t, repo, hostRefReadURLA, "support")
@@ -198,6 +235,45 @@ func TestArmRefReadJSONFailures_REQ_HOSTREF_S1_T6(t *testing.T) {
 		assert.Contains(t, strings.ToLower(cf.Cause), "host")
 		require.NotEmpty(t, cf.NextActions)
 		assert.Equal(t, beforeState, armatureStateTreeSnapshot(t, repo))
+	})
+
+	t.Run("unknown issue", func(t *testing.T) {
+		t.Parallel()
+		repo := setupRepoWithTask(t)
+		plantHostRef(t, repo, hostRefReadURLA, "engineering")
+		setCLIEnv(t, "GITHUB_TOKEN", "test-token")
+		beforeState := armatureStateTreeSnapshot(t, repo)
+
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"ref-read", "--repo", repo, "missing-issue", "--format", "json")
+		assert.Equal(t, 1, code)
+		cf := assertAgentFailureEnvelope(t, stdout.String())
+		assert.Equal(t, "REF-READ-1", cf.Code)
+		assert.Equal(t, 1, cf.ExitCode)
+		assert.Contains(t, cf.Cause, "missing-issue")
+		require.NotEmpty(t, cf.NextActions)
+		assert.Equal(t, beforeState, armatureStateTreeSnapshot(t, repo), "unknown issue must leave on-disk state unchanged")
+	})
+
+	t.Run("fetch failure", func(t *testing.T) {
+		repo := setupRepoWithTask(t)
+		plantHostRef(t, repo, hostRefReadURLA, "engineering")
+		withGitHubIssueTransport(t, http.StatusInternalServerError, map[string]any{"message": "boom"})
+		setCLIEnv(t, "GITHUB_TOKEN", "test-token")
+		beforeState := armatureStateTreeSnapshot(t, repo)
+
+		stdout := new(bytes.Buffer)
+		code := executeThenHandleRootError(t, stdout, new(bytes.Buffer),
+			"ref-read", "--repo", repo, "task-01", "--format", "json")
+		assert.Equal(t, 1, code)
+		cf := assertAgentFailureEnvelope(t, stdout.String())
+		assert.Equal(t, "REF-READ-1", cf.Code)
+		assert.Equal(t, 1, cf.ExitCode)
+		assert.Contains(t, cf.Cause, "HTTP")
+		assert.NotContains(t, cf.Cause, "test-token")
+		require.NotEmpty(t, cf.NextActions)
+		assert.Equal(t, beforeState, armatureStateTreeSnapshot(t, repo), "fetch failure must leave on-disk state unchanged")
 	})
 
 	t.Run("usage wrong arity", func(t *testing.T) {
