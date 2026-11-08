@@ -73,9 +73,10 @@ GREMLINS_VERSION      := v0.6.0
 GOVULNCHECK_VERSION   := v1.1.4
 RIPGREP_VERSION       := 15.2.0
 SYFT_VERSION          := v1.55.0
-# Extra attempts after the first GET. curl backs off exponentially and retries
-# HTTP 408/429/500/502/503/504. The installer still sha256-verifies every byte
-# and addresses its cache as repo/version/sha256/artifact. No unpinned URL.
+# Extra attempts after the first GET. ARMATURE_TOOL_FETCH_RETRY_MAX_TIME is the
+# wall-clock budget for one artifact (attempts, redirects, and the asset-API
+# then release-URL fallback), not a per-curl timeout. Digests come only from
+# scripts/github-release.sha256.
 TOOL_FETCH_RETRIES ?= 5
 TOOL_FETCH_RETRY_MAX_TIME ?= 120
 TOOL_FETCH_ENV = ARMATURE_TOOL_FETCH_RETRIES="$(TOOL_FETCH_RETRIES)" ARMATURE_TOOL_FETCH_RETRY_MAX_TIME="$(TOOL_FETCH_RETRY_MAX_TIME)"
@@ -169,7 +170,6 @@ install-golangci-lint-release:
 		--repo golangci/golangci-lint \
 		--version "$(GOLANGCI_LINT_VERSION)" \
 		--tarball 'golangci-lint-{ver}-{os}-{arch}.tar.gz' \
-		--checksums 'golangci-lint-{ver}-checksums.txt' \
 		--bin golangci-lint \
 		--dest "$$dest"
 
@@ -179,7 +179,6 @@ install-gremlins-release:
 		--repo go-gremlins/gremlins \
 		--version "$(GREMLINS_VERSION)" \
 		--tarball 'gremlins_{ver}_{os}_{arch}.tar.gz' \
-		--checksums checksums.txt \
 		--bin gremlins \
 		--dest "$$dest"
 
@@ -199,7 +198,6 @@ install-rg-release:
 		--repo BurntSushi/ripgrep \
 		--version "$(RIPGREP_VERSION)" \
 		--tarball "$$tarball" \
-		--checksums "$$tarball.sha256" \
 		--bin rg \
 		--dest "$$dest"
 
@@ -209,7 +207,6 @@ install-syft-release:
 		--repo anchore/syft \
 		--version "$(SYFT_VERSION)" \
 		--tarball 'syft_{ver}_{os}_{arch}.tar.gz' \
-		--checksums 'syft_{ver}_checksums.txt' \
 		--bin syft \
 		--dest "$$dest"
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The installer trusts only ARMATURE_TOOL_PIN_FILE. These tests use a local
+# stub: transient 504, a forged self-hashed cache, an https redirect with
+# auth stripped, and a truncated 200 that must not win over a good fallback.
 set -euo pipefail
 
 REPO_ROOT="${1:-.}"
@@ -28,118 +31,132 @@ TARBALL="tool-9.9.9-linux-amd64.tar.gz"
 REL="example/tool/releases/download/v9.9.9"
 tar -C "$WORKDIR/bin" -czf "$WORKDIR/www/$REL/$TARBALL" tool
 HASH=$(sha256sum "$WORKDIR/www/$REL/$TARBALL" | awk '{print $1}')
-write_good_sums() {
-    printf '%s  %s\n' "$HASH" "$TARBALL" > "$WORKDIR/www/$REL/tool-9.9.9-checksums.txt"
+# A downloaded checksum file that lies. The installer must not consult it.
+printf '%s  %s\n' "$(printf '0%.0s' {1..64})" "$TARBALL" > "$WORKDIR/www/$REL/tool-9.9.9-checksums.txt"
+
+PIN_FILE="$WORKDIR/pins.txt"
+write_pin() {
+    printf '%s  %s  %s  %s\n' "$1" "$TARBALL" "example/tool" "v9.9.9" > "$PIN_FILE"
 }
-write_good_sums
+write_pin "$HASH"
 
 MODE_FILE="$WORKDIR/mode"
-COUNTS_FILE="$WORKDIR/counts"
+AUTH_FILE="$WORKDIR/auth"
 PORT_FILE="$WORKDIR/port"
+TLS_PORT_FILE="$WORKDIR/tls-port"
 printf 'ok\n' > "$MODE_FILE"
-: > "$COUNTS_FILE"
+: > "$AUTH_FILE"
 
-python3 - "$WORKDIR/www" "$PORT_FILE" "$MODE_FILE" "$COUNTS_FILE" <<'PY' &
-import http.server
-import os
-import sys
+openssl req -x509 -newkey rsa:2048 -keyout "$WORKDIR/key.pem" -out "$WORKDIR/cert.pem" \
+    -days 1 -nodes -subj /CN=localhost \
+    -addext subjectAltName=DNS:localhost,IP:127.0.0.1 >/dev/null 2>&1
+
+python3 - "$WORKDIR" <<'PY' &
+import http.server, json, os, ssl, sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-port_file = Path(sys.argv[2])
-mode_file = Path(sys.argv[3])
-counts_file = Path(sys.argv[4])
-os.chdir(root)
+mode_file = root / "mode"
+auth_file = root / "auth"
+port_file = root / "port"
+tls_port_file = root / "tls-port"
+www = root / "www"
+tarball_rel = "example/tool/releases/download/v9.9.9/tool-9.9.9-linux-amd64.tar.gz"
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def serve_bytes(self, status, body, content_type):
-        data = body if isinstance(body, bytes) else body.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+def note(handler):
+    auth = handler.headers.get("Authorization")
+    with auth_file.open("a", encoding="utf-8") as fh:
+        fh.write(f"{handler.path} host={handler.headers.get('Host')} auth={auth}\n")
 
-    def serve_api(self, path):
-        import json
-        host, port = self.server.server_address
-        base = f"http://{host}:{port}/api"
-        if path == "/api/repos/example/tool/releases/tags/v9.9.9":
-            body = json.dumps({
-                "assets": [
-                    {
-                        "name": "tool-9.9.9-checksums.txt",
-                        "url": base + "/asset/checksums",
-                    },
-                    {
-                        "name": "tool-9.9.9-linux-amd64.tar.gz",
-                        "url": base + "/asset/tarball",
-                    },
-                ]
-            })
-            self.serve_bytes(200, body, "application/json")
-            return
-        rel = Path("example/tool/releases/download/v9.9.9")
-        if path == "/api/asset/checksums":
-            self.serve_bytes(200, (rel / "tool-9.9.9-checksums.txt").read_bytes(), "text/plain")
-            return
-        if path == "/api/asset/tarball":
-            mode = mode_file.read_text(encoding="utf-8").strip() if mode_file.exists() else "ok"
-            if mode == "api-403-once":
-                hits = 0
-                if counts_file.exists():
-                    hits = sum(
-                        1
-                        for line in counts_file.read_text(encoding="utf-8").splitlines()
-                        if line.split("?", 1)[0] == path
-                    )
-                if hits == 1:
-                    self.serve_bytes(403, "forbidden", "text/plain")
-                    return
-            self.serve_bytes(200, (rel / "tool-9.9.9-linux-amd64.tar.gz").read_bytes(), "application/gzip")
-            return
-        self.serve_bytes(404, "missing api route", "text/plain")
-
-    def do_GET(self):
-        mode = mode_file.read_text(encoding="utf-8").strip() if mode_file.exists() else "ok"
-        prior = 0
-        if counts_file.exists():
-            prior = sum(1 for line in counts_file.read_text(encoding="utf-8").splitlines() if line == self.path)
-        with counts_file.open("a", encoding="utf-8") as fh:
-            fh.write(self.path + "\n")
-        n = prior + 1
-        path = self.path.split("?", 1)[0]
-        if path.startswith("/api/"):
-            self.serve_api(path)
-            return
-        fail = False
-        if mode == "always-504" or mode == "release-504" or mode == "api-403-once":
-            fail = True
-        elif mode == "flaky" and n == 1:
-            fail = True
-        elif mode == "tarball-504" and path.endswith(".tar.gz"):
-            fail = True
-        if fail:
-            body = b"gateway timeout"
-            self.send_response(504)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        return super().do_GET()
-
+class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-port_file.write_text(str(httpd.server_address[1]), encoding="utf-8")
-httpd.serve_forever()
+    def send_bytes(self, status, body, content_type="application/octet-stream", extra=None):
+        data = body if isinstance(body, bytes) else body.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        if extra:
+            for k, v in extra:
+                self.send_header(k, v)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        if data:
+            self.wfile.write(data)
+
+    def do_GET(self):
+        note(self)
+        mode = mode_file.read_text(encoding="utf-8").strip()
+        path = self.path.split("?", 1)[0]
+        tls_port = tls_port_file.read_text(encoding="utf-8").strip() if tls_port_file.exists() else "0"
+        if path == "/artifact":
+            self.send_bytes(200, (www / tarball_rel).read_bytes())
+            return
+        if path.startswith("/api/") and mode in ("redirect", "http-redirect"):
+            self.send_bytes(500, "api down", "text/plain")
+            return
+        if path == "/api/repos/example/tool/releases/tags/v9.9.9" and mode == "partial":
+            host = self.headers.get("Host")
+            body = json.dumps({"assets": [{
+                "name": "tool-9.9.9-linux-amd64.tar.gz",
+                "url": f"http://{host}/api/asset/tarball",
+            }]})
+            self.send_bytes(200, body, "application/json")
+            return
+        if path == "/api/asset/tarball" and mode == "partial":
+            self.send_response(200)
+            self.send_header("Content-Length", "500000")
+            self.end_headers()
+            self.wfile.write(b"short")
+            self.close_connection = True
+            return
+        if path.endswith(tarball_rel) and mode == "redirect":
+            self.send_bytes(302, "", "text/plain", [("Location", f"https://localhost:{tls_port}/artifact")])
+            return
+        if path.endswith(tarball_rel) and mode == "http-redirect":
+            host = self.headers.get("Host")
+            self.send_bytes(302, "", "text/plain", [("Location", f"http://{host}/files/{tarball_rel}")])
+            return
+        if path.startswith("/files/") and mode == "http-redirect":
+            rel = path[len("/files/"):]
+            self.send_bytes(200, (www / rel).read_bytes())
+            return
+        # Ordinary file serving, with optional one-shot 504s.
+        target = www / path.lstrip("/")
+        counts = root / "counts"
+        prior = 0
+        if counts.exists():
+            prior = sum(1 for line in counts.read_text(encoding="utf-8").splitlines() if line == path)
+        with counts.open("a", encoding="utf-8") as fh:
+            fh.write(path + "\n")
+        n = prior + 1
+        if mode == "always-504" or (mode == "flaky" and n == 1):
+            self.send_bytes(504, "gateway timeout", "text/plain")
+            return
+        if not target.is_file():
+            self.send_bytes(404, "missing", "text/plain")
+            return
+        self.send_bytes(200, target.read_bytes())
+
+def serve(httpd, port_path):
+    port_path.write_text(str(httpd.server_address[1]), encoding="utf-8")
+    httpd.serve_forever()
+
+plain = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.load_cert_chain(root / "cert.pem", root / "key.pem")
+tls = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+tls.socket = ctx.wrap_socket(tls.socket, server_side=True)
+import threading
+threading.Thread(target=serve, args=(plain, port_file), daemon=True).start()
+threading.Thread(target=serve, args=(tls, tls_port_file), daemon=True).start()
+threading.Event().wait()
 PY
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$WORKDIR"' EXIT
 
 for _ in $(seq 1 50); do
-    if [[ -s "$PORT_FILE" ]]; then
+    if [[ -s "$PORT_FILE" && -s "$TLS_PORT_FILE" ]]; then
         break
     fi
     sleep 0.05
@@ -148,285 +165,205 @@ PORT=$(cat "$PORT_FILE")
 BASE="http://127.0.0.1:${PORT}"
 CACHE="$WORKDIR/cache"
 
-reset_counts() { : > "$COUNTS_FILE"; }
 set_mode() { printf '%s\n' "$1" > "$MODE_FILE"; }
+reset_counts() { : > "$WORKDIR/counts"; : > "$AUTH_FILE"; }
 
 run_install() {
-    DEST="$WORKDIR/dest"
-    rm -rf "$DEST"
-    mkdir -p "$DEST"
+    local dest="$WORKDIR/dest"
+    rm -rf "$dest"
+    mkdir -p "$dest"
     env \
         GITHUB_RELEASE_BASE="$BASE" \
         ARMATURE_TOOL_CACHE="$CACHE" \
-        ARMATURE_TOOL_FETCH_RETRIES="${ARMATURE_TOOL_FETCH_RETRIES:-5}" \
-        ARMATURE_TOOL_FETCH_RETRY_MAX_TIME="${ARMATURE_TOOL_FETCH_RETRY_MAX_TIME:-30}" \
+        ARMATURE_TOOL_PIN_FILE="$PIN_FILE" \
+        ARMATURE_TOOL_FETCH_RETRIES="${ARMATURE_TOOL_FETCH_RETRIES:-1}" \
+        ARMATURE_TOOL_FETCH_RETRY_MAX_TIME="${ARMATURE_TOOL_FETCH_RETRY_MAX_TIME:-20}" \
+        ARMATURE_TOOL_FETCH_BACKOFF_SECS="${ARMATURE_TOOL_FETCH_BACKOFF_SECS:-0}" \
         "$SCRIPT" \
         --repo example/tool \
         --version v9.9.9 \
         --tarball 'tool-{ver}-{os}-{arch}.tar.gz' \
-        --checksums 'tool-{ver}-checksums.txt' \
         --bin tool \
-        --dest "$DEST"
+        --dest "$dest"
 }
 
-echo "Test 1: matching checksum installs the binary..."
+echo "Test 1: pinned sha256 installs; a lying checksum file is not fetched..."
 set_mode ok
 reset_counts
 rm -rf "$CACHE"
-if run_install >/dev/null && [[ -x "$WORKDIR/dest/tool" ]]; then
-    pass "installs on checksum match"
+if run_install >/dev/null && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
+    if rg -q 'checksums.txt' "$WORKDIR/counts"; then
+        fail "installer fetched a checksum file"
+    else
+        pass "install trusts the pin, not a checksum file"
+    fi
 else
-    fail "expected install on matching checksum"
+    fail "expected install from the pinned digest"
 fi
 
-echo "Test 2: checksum mismatch fails..."
-printf '%s  %s\n' "$(printf '0%.0s' {1..64})" "$TARBALL" \
-    > "$WORKDIR/www/$REL/tool-9.9.9-checksums.txt"
+echo "Test 2: bytes that do not match the pin fail closed..."
+write_pin "$(printf 'a%.0s' {1..64})"
 set_mode ok
-reset_counts
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
+write_pin "$HASH"
 if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "checksum mismatch" && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-    pass "mismatch fails the install"
+    pass "checksum mismatch fails the install"
 else
-    fail "expected checksum mismatch failure, status=$STATUS out=$OUT"
+    fail "expected checksum mismatch, status=$STATUS out=$OUT"
 fi
 
-echo "Test 3: missing checksums entry fails..."
-printf '%s  other-file.tar.gz\n' "$HASH" \
-    > "$WORKDIR/www/$REL/tool-9.9.9-checksums.txt"
-set_mode ok
+echo "Test 3: missing pin fails..."
+printf '%s  other.tar.gz  example/tool  v9.9.9\n' "$HASH" > "$PIN_FILE"
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "no sha256 entry"; then
-    pass "missing checksums entry fails"
+write_pin "$HASH"
+if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "no pinned sha256"; then
+    pass "missing pin fails"
 else
-    fail "expected missing-entry failure, status=$STATUS out=$OUT"
+    fail "expected missing pin failure, status=$STATUS out=$OUT"
 fi
 
 echo "Test 4: one HTTP 504 then 200 still installs..."
-write_good_sums
 set_mode flaky
 reset_counts
 rm -rf "$CACHE"
 export ARMATURE_TOOL_FETCH_RETRIES=2
-export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=20
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-if [[ $STATUS -eq 0 ]] && [[ -x "$WORKDIR/dest/tool" ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
+unset ARMATURE_TOOL_FETCH_RETRIES
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
     pass "transient 504 then 200 installs the pinned binary"
 else
     fail "expected install after transient 504, status=$STATUS out=$OUT"
 fi
-unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
 
-echo "Test 5: checksum mismatch still fails after retries exist..."
-printf '%s  %s\n' "$(printf 'a%.0s' {1..64})" "$TARBALL" \
-    > "$WORKDIR/www/$REL/tool-9.9.9-checksums.txt"
-set_mode ok
-reset_counts
-set +e
-OUT=$(run_install 2>&1)
-STATUS=$?
-set -e
-if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "checksum mismatch" && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-    pass "checksum mismatch fails closed"
-else
-    fail "expected hard failure on checksum mismatch, status=$STATUS out=$OUT"
-fi
-
-echo "Test 6: warm version+sha256 cache survives a later tarball 504..."
-write_good_sums
-set_mode ok
-reset_counts
-rm -rf "$CACHE"
-if ! run_install >/dev/null; then
-    fail "prime install failed"
-else
-    cached="$CACHE/example/tool/v9.9.9/$HASH/$TARBALL"
-    if [[ ! -f "$cached" ]]; then
-        fail "cache key repo/version/sha256/artifact missing at $cached"
-    else
-        set_mode tarball-504
-        reset_counts
-        export ARMATURE_TOOL_FETCH_RETRIES=1
-        export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
-        set +e
-        OUT=$(run_install 2>&1)
-        STATUS=$?
-        set -e
-        tarball_hits=$(rg -c "/$TARBALL$" "$COUNTS_FILE" || true)
-        if [[ $STATUS -eq 0 ]] && [[ -x "$WORKDIR/dest/tool" ]] && [[ "${tarball_hits:-0}" -eq 0 ]]; then
-            pass "cache hit verified and skipped the tarball download"
-        else
-            fail "expected cache hit without tarball GET, status=$STATUS hits=${tarball_hits:-0} out=$OUT"
-        fi
-        unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-    fi
-fi
-
-echo "Test 7: corrupted cache entry is not installed..."
-write_good_sums
-set_mode tarball-504
-reset_counts
-cached="$CACHE/example/tool/v9.9.9/$HASH/$TARBALL"
-if [[ -f "$cached" ]]; then
-    printf 'not-the-tarball\n' > "$cached"
-    export ARMATURE_TOOL_FETCH_RETRIES=1
-    export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
-    set +e
-    OUT=$(run_install 2>&1)
-    STATUS=$?
-    set -e
-    unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-    if [[ $STATUS -ne 0 ]] && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-        pass "bad cache bytes are rejected when the tarball cannot be re-fetched"
-    else
-        fail "expected refusal of corrupted cache, status=$STATUS out=$OUT"
-    fi
-else
-    fail "no cache file to corrupt"
-fi
-
-echo "Test 8: persistent HTTP 504 fails the fetch..."
-write_good_sums
+echo "Test 5: persistent HTTP 504 fails..."
 set_mode always-504
-reset_counts
 rm -rf "$CACHE"
-export ARMATURE_TOOL_FETCH_RETRIES=1
-export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "download failed" && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-    pass "exhausted retries fail closed"
+if [[ $STATUS -ne 0 ]] && [[ ! -e "$WORKDIR/dest/tool" ]]; then
+    pass "exhausted fetch fails closed"
 else
-    fail "expected hard failure after retries, status=$STATUS out=$OUT"
+    fail "expected failure on persistent 504, status=$STATUS out=$OUT"
 fi
 
-echo "Test 9: checksums HTTP 504 uses the one verified cached artifact..."
-write_good_sums
+echo "Test 6: cache entry that matches the pin survives a 504..."
 set_mode ok
-reset_counts
 rm -rf "$CACHE"
-if ! run_install >/dev/null; then
-    fail "prime install for checksums outage failed"
-else
-    set_mode always-504
-    reset_counts
-    export ARMATURE_TOOL_FETCH_RETRIES=1
-    export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
-    set +e
-    OUT=$(run_install 2>&1)
-    STATUS=$?
-    set -e
-    unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-    if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
-        pass "single verified cache entry survives a checksums 504"
-    else
-        fail "expected cached artifact during checksums 504, status=$STATUS out=$OUT"
-    fi
-fi
-
-echo "Test 10: two cached hashes and a checksums 504 fail closed..."
-write_good_sums
-set_mode ok
-if [[ ! -f "$CACHE/example/tool/v9.9.9/$HASH/$TARBALL" ]]; then
-    fail "expected primed cache before ambiguity check"
-else
-    python3 - "$CACHE/example/tool/v9.9.9" "$TARBALL" <<'PY'
-import hashlib
-import pathlib
-import sys
-root = pathlib.Path(sys.argv[1])
-name = sys.argv[2]
-data = b"second-artifact"
-digest = hashlib.sha256(data).hexdigest()
-dest = root / digest
-dest.mkdir(parents=True)
-(dest / name).write_bytes(data)
-PY
-    set_mode always-504
-    export ARMATURE_TOOL_FETCH_RETRIES=1
-    export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
-    set +e
-    OUT=$(run_install 2>&1)
-    STATUS=$?
-    set -e
-    unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-    if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "no single verified" && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-        pass "ambiguous cache is not installed"
-    else
-        fail "expected ambiguity failure, status=$STATUS out=$OUT"
-    fi
-fi
-
-echo "Test 11: release-download 504 still installs via the pinned asset API..."
-write_good_sums
-set_mode release-504
-reset_counts
-rm -rf "$CACHE"
-export ARMATURE_GITHUB_API="${BASE}/api"
-export ARMATURE_TOOL_FETCH_RETRIES=1
-export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
+run_install >/dev/null
+set_mode always-504
+export ARMATURE_TOOL_FETCH_RETRIES=0
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-release_hits=$(rg -c "/releases/download/" "$COUNTS_FILE" || true)
-unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] && [[ "${release_hits:-0}" -eq 0 ]]; then
-    pass "asset API installs the pinned binary without the download gateway"
+unset ARMATURE_TOOL_FETCH_RETRIES
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
+    pass "pinned cache hit is installed"
 else
-    fail "expected asset API install, status=$STATUS release_hits=${release_hits:-0} out=$OUT"
+    fail "expected pinned cache hit, status=$STATUS out=$OUT"
 fi
 
-echo "Test 12: asset API bytes still fail closed on checksum mismatch..."
-printf '%s  %s\n' "$(printf 'b%.0s' {1..64})" "$TARBALL" \
-    > "$WORKDIR/www/$REL/tool-9.9.9-checksums.txt"
-set_mode release-504
-reset_counts
-rm -rf "$CACHE"
-export ARMATURE_GITHUB_API="${BASE}/api"
-export ARMATURE_TOOL_FETCH_RETRIES=1
-export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
+echo "Test 7: bytes at the pin path that do not match are not installed..."
+printf 'not-the-tarball\n' > "$CACHE/example/tool/v9.9.9/$HASH/$TARBALL"
+set_mode always-504
+export ARMATURE_TOOL_FETCH_RETRIES=0
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "checksum mismatch" && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-    pass "asset API checksum mismatch fails closed"
+unset ARMATURE_TOOL_FETCH_RETRIES
+if [[ $STATUS -ne 0 ]] && [[ ! -e "$WORKDIR/dest/tool" ]]; then
+    pass "corrupt pin-path cache is rejected"
 else
-    fail "expected checksum mismatch via asset API, status=$STATUS out=$OUT"
+    fail "expected rejection of corrupt cache, status=$STATUS out=$OUT"
 fi
 
-echo "Test 13: one asset-API HTTP 403 then 200 still installs..."
-write_good_sums
-set_mode api-403-once
-reset_counts
+echo "Test 8: a lone self-hashed forged cache entry is rejected..."
 rm -rf "$CACHE"
-export ARMATURE_GITHUB_API="${BASE}/api"
-export ARMATURE_TOOL_FETCH_RETRIES=1
-export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=15
-export ARMATURE_TOOL_FETCH_BACKOFF_SECS=0
+forged="$WORKDIR/forged"
+printf 'forged-tarball\n' > "$forged"
+forged_hash=$(sha256sum "$forged" | awk '{print $1}')
+mkdir -p "$CACHE/example/tool/v9.9.9/$forged_hash"
+cp "$forged" "$CACHE/example/tool/v9.9.9/$forged_hash/$TARBALL"
+set_mode always-504
+export ARMATURE_TOOL_FETCH_RETRIES=0
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME ARMATURE_TOOL_FETCH_BACKOFF_SECS
-if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] && echo "$OUT" | rg -q "HTTP 403"; then
-    pass "transient asset API 403 is retried and checksum-verified"
+unset ARMATURE_TOOL_FETCH_RETRIES
+if [[ $STATUS -ne 0 ]] && [[ ! -e "$WORKDIR/dest/tool" ]]; then
+    pass "forged self-hashed cache is rejected"
 else
-    fail "expected install after asset API 403, status=$STATUS out=$OUT"
+    fail "expected forged cache rejection, status=$STATUS out=$OUT"
+fi
+
+echo "Test 9: API failure, then https 302, auth stripped, verified 200..."
+set_mode redirect
+reset_counts
+rm -rf "$CACHE"
+export ARMATURE_GITHUB_API="${BASE}/api"
+export ARMATURE_TOOL_CACERT="$WORKDIR/cert.pem"
+export ARMATURE_TOOL_FETCH_RETRIES=0
+export GITHUB_TOKEN=pin-test-token
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_CACERT ARMATURE_TOOL_FETCH_RETRIES GITHUB_TOKEN
+release_auth=$(rg "releases/download" "$AUTH_FILE" || true)
+artifact_auth=$(rg "^/artifact " "$AUTH_FILE" || true)
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] \
+    && echo "$release_auth" | rg -q "auth=Bearer pin-test-token" \
+    && echo "$artifact_auth" | rg -q "auth=None"; then
+    pass "https redirect installed the pin and dropped auth"
+else
+    fail "expected https redirect install, status=$STATUS release=$release_auth artifact=$artifact_auth out=$OUT"
+fi
+
+echo "Test 10: http redirect is refused even when the target matches the pin..."
+set_mode http-redirect
+reset_counts
+rm -rf "$CACHE"
+export ARMATURE_GITHUB_API="${BASE}/api"
+export ARMATURE_TOOL_FETCH_RETRIES=0
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES
+if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "not https" && [[ ! -e "$WORKDIR/dest/tool" ]]; then
+    pass "http redirect is refused"
+else
+    fail "expected http redirect refusal, status=$STATUS out=$OUT"
+fi
+
+echo "Test 11: truncated 200 falls through to the release URL..."
+set_mode partial
+reset_counts
+rm -rf "$CACHE"
+export ARMATURE_GITHUB_API="${BASE}/api"
+export ARMATURE_TOOL_FETCH_RETRIES=0
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
+    pass "truncated transfer fell through to a verified body"
+else
+    fail "expected fallback after truncated 200, status=$STATUS out=$OUT"
 fi
 
 kill "$SERVER_PID" 2>/dev/null || true

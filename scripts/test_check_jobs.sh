@@ -367,6 +367,54 @@ if ! rg -q 'https://api.github.com' "$REPO_ROOT/scripts/install-verified-github-
 else
     pass "installer can fetch the pinned tag via the GitHub asset API"
 fi
+if rg -q -- '--checksums' "$MAKEFILE"; then
+    fail "Makefile must not download a checksum file; digests are scripts/github-release.sha256"
+else
+    pass "Makefile does not pass --checksums"
+fi
+if ! rg -q 'wall-clock' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must say the retry budget is wall-clock for one artifact"
+else
+    pass "installer documents the wall-clock artifact budget"
+fi
+PIN_RESULT=$(python3 - "$MAKEFILE" "$REPO_ROOT/scripts/github-release.sha256" <<'PY'
+import re, sys
+from pathlib import Path
+make = Path(sys.argv[1]).read_text()
+pins = Path(sys.argv[2]).read_text().splitlines()
+def ver(name):
+    m = re.search(rf"^{name}\s*:?=\s*(\S+)", make, re.M)
+    if not m:
+        raise SystemExit(f"FAIL: missing {name}")
+    return m.group(1)
+need = [
+    ("BurntSushi/ripgrep", ver("RIPGREP_VERSION"), "ripgrep-{v}-x86_64-unknown-linux-musl.tar.gz"),
+    ("golangci/golangci-lint", ver("GOLANGCI_LINT_VERSION"), "golangci-lint-{v}-linux-amd64.tar.gz"),
+    ("go-gremlins/gremlins", ver("GREMLINS_VERSION"), "gremlins_{v}_linux_amd64.tar.gz"),
+    ("anchore/syft", ver("SYFT_VERSION"), "syft_{v}_linux_amd64.tar.gz"),
+]
+rows = []
+for line in pins:
+    if not line or line.startswith("#"):
+        continue
+    parts = line.split()
+    if len(parts) != 4 or len(parts[0]) != 64:
+        raise SystemExit(f"FAIL: bad pin row: {line}")
+    rows.append(parts)
+for repo, version, pattern in need:
+    plain = version[1:] if version.startswith("v") else version
+    filename = pattern.format(v=plain)
+    hit = [r for r in rows if r[2] == repo and r[3] == version and r[1] == filename]
+    if len(hit) != 1:
+        raise SystemExit(f"FAIL: pin table missing {repo} {version} {filename}")
+print("PASS")
+PY
+) && PIN_STATUS=0 || PIN_STATUS=$?
+if [[ $PIN_STATUS -eq 0 ]]; then
+    pass "github-release.sha256 pins the Makefile tool versions"
+else
+    fail "${PIN_RESULT:-pin table does not match Makefile versions}"
+fi
 if ! rg -q 'TOOL_FETCH_RETRIES \?= 5' "$MAKEFILE"; then
     fail "Makefile must set TOOL_FETCH_RETRIES ?= 5"
 else
@@ -435,11 +483,15 @@ for jid in need:
     if "~/.cache/armature/github-releases" not in body:
         print(f"FAIL: {jid} cache path is not the installer cache")
         sys.exit(1)
-    if "hashFiles('Makefile', 'scripts/install-verified-github-release.sh')" not in body:
-        print(f"FAIL: {jid} cache key must hash Makefile versions and the installer")
+    key = "hashFiles('Makefile', 'scripts/github-release.sha256', 'scripts/install-verified-github-release.sh')"
+    if key not in body:
+        print(f"FAIL: {jid} cache key must hash Makefile, pin table, and installer")
         sys.exit(1)
-    if "actions: write" not in body:
-        print(f"FAIL: {jid} needs actions: write to save the tool cache")
+    if "github.job" not in body:
+        print(f"FAIL: {jid} cache key must be partitioned by github.job")
+        sys.exit(1)
+    if "actions: write" in body:
+        print(f"FAIL: {jid} must not add actions: write; actions/cache uses its runtime token")
         sys.exit(1)
 print("PASS")
 PY

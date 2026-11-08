@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# Install one pinned GitHub release binary after sha256 verification.
-# Transient HTTP failures (including 504) are retried with curl's exponential
-# backoff, bounded by ARMATURE_TOOL_FETCH_RETRIES and
-# ARMATURE_TOOL_FETCH_RETRY_MAX_TIME. Verified tarballs are cached at
-# $cache/$owner/$name/$version/$sha256/$tarball. A cache hit is installed
-# only when the bytes still match that sha256. There is no unpinned URL
-# and no skip-verification path.
+# Install one pinned GitHub release binary.
+# The only trusted digest is scripts/github-release.sha256 (override with
+# ARMATURE_TOOL_PIN_FILE). A downloaded checksum file, a cache path, and a
+# filename are not digests.
+#
+# TOOL_FETCH_RETRY_MAX_TIME / ARMATURE_TOOL_FETCH_RETRY_MAX_TIME is the
+# wall-clock budget for one artifact: every attempt, redirect, and the
+# asset-API then release-URL fallback. It is not a per-curl timeout.
 set -euo pipefail
 
 usage() {
     cat <<'EOF'
 Usage: scripts/install-verified-github-release.sh --repo OWNER/NAME --version VER \
-  --tarball NAME --checksums NAME --bin NAME --dest DIR
+  --tarball NAME --bin NAME --dest DIR
 
-Tarball and checksums names may contain placeholders:
-  {version}  version as given (--version)
-  {ver}      version with a leading v stripped
-  {os}       linux|darwin|windows
-  {arch}     amd64|arm64
+Tarball names may contain {version} {ver} {os} {arch}.
+The expected sha256 is looked up from scripts/github-release.sha256.
 
 Optional:
-  TARBALL_URL / CHECKSUMS_URL  override download URLs (tests)
+  TARBALL_URL                  override the release download URL (tests)
   GITHUB_RELEASE_BASE          default https://github.com
-  ARMATURE_GITHUB_API          asset API base, 0 to skip; default
-                               https://api.github.com when the release base is
-                               https://github.com. Same tag and filename only.
+  ARMATURE_GITHUB_API          asset API base, or 0 to skip; default
+                               https://api.github.com when the release base
+                               is https://github.com
+  ARMATURE_TOOL_PIN_FILE       pin table (tests)
   ARMATURE_TOOL_CACHE          cache directory, or 0 to disable
-                               default $XDG_CACHE_HOME/armature/github-releases
-                               or $HOME/.cache/armature/github-releases
-  ARMATURE_TOOL_FETCH_RETRIES  extra attempts after the first (default 5, max 8)
+  ARMATURE_TOOL_CACERT         extra CA bundle passed to curl (tests)
+  ARMATURE_TOOL_FETCH_RETRIES  extra attempts per URL after the first (default 5, max 8)
   ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
-                               seconds for the retry budget (default 120, max 300)
+                               wall-clock seconds for this artifact (default 120, max 300)
+  ARMATURE_TOOL_FETCH_BACKOFF_SECS
+                               base sleep between attempts (default 1, max 30)
 EOF
     exit 2
 }
@@ -38,7 +38,6 @@ EOF
 REPO=""
 VERSION=""
 TARBALL_TMPL=""
-CHECKSUMS_TMPL=""
 BIN=""
 DEST=""
 
@@ -47,7 +46,6 @@ while [[ $# -gt 0 ]]; do
         --repo) REPO="${2:-}"; shift 2 ;;
         --version) VERSION="${2:-}"; shift 2 ;;
         --tarball) TARBALL_TMPL="${2:-}"; shift 2 ;;
-        --checksums) CHECKSUMS_TMPL="${2:-}"; shift 2 ;;
         --bin) BIN="${2:-}"; shift 2 ;;
         --dest) DEST="${2:-}"; shift 2 ;;
         -h|--help) usage ;;
@@ -55,8 +53,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$REPO" || -z "$VERSION" || -z "$TARBALL_TMPL" || -z "$CHECKSUMS_TMPL" || -z "$BIN" || -z "$DEST" ]]; then
-    echo "FAIL: --repo, --version, --tarball, --checksums, --bin, and --dest are required" >&2
+if [[ -z "$REPO" || -z "$VERSION" || -z "$TARBALL_TMPL" || -z "$BIN" || -z "$DEST" ]]; then
+    echo "FAIL: --repo, --version, --tarball, --bin, and --dest are required" >&2
     usage
 fi
 
@@ -95,14 +93,17 @@ expand() {
 }
 
 TARBALL=$(expand "$TARBALL_TMPL")
-CHECKSUMS=$(expand "$CHECKSUMS_TMPL")
-
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+PIN_FILE="${ARMATURE_TOOL_PIN_FILE:-$SCRIPT_DIR/github-release.sha256}"
 GITHUB_RELEASE_BASE="${GITHUB_RELEASE_BASE:-https://github.com}"
 TARBALL_URL="${TARBALL_URL:-${GITHUB_RELEASE_BASE%/}/${REPO}/releases/download/${VERSION}/${TARBALL}}"
-CHECKSUMS_URL="${CHECKSUMS_URL:-${GITHUB_RELEASE_BASE%/}/${REPO}/releases/download/${VERSION}/${CHECKSUMS}}"
 
 if ! command -v curl >/dev/null 2>&1; then
     echo "FAIL: curl is required to install $BIN" >&2
+    exit 1
+fi
+if [[ ! -f "$PIN_FILE" ]]; then
+    echo "FAIL: pin table not found: $PIN_FILE" >&2
     exit 1
 fi
 
@@ -122,70 +123,228 @@ require_uint() {
     printf '%s\n' "$n"
 }
 
-FETCH_RETRIES=$(require_uint ARMATURE_TOOL_FETCH_RETRIES "${ARMATURE_TOOL_FETCH_RETRIES:-5}" 1 8)
+FETCH_RETRIES=$(require_uint ARMATURE_TOOL_FETCH_RETRIES "${ARMATURE_TOOL_FETCH_RETRIES:-5}" 0 8)
 FETCH_RETRY_MAX_TIME=$(require_uint ARMATURE_TOOL_FETCH_RETRY_MAX_TIME "${ARMATURE_TOOL_FETCH_RETRY_MAX_TIME:-120}" 1 300)
+FETCH_BACKOFF=$(require_uint ARMATURE_TOOL_FETCH_BACKOFF_SECS "${ARMATURE_TOOL_FETCH_BACKOFF_SECS:-1}" 0 30)
 
-WORKDIR=$(mktemp -d)
-trap 'rm -rf "$WORKDIR"' EXIT
-
-echo "Downloading $BIN@$VERSION (checksum-verified GitHub release)..."
-echo "  tarball: $TARBALL_URL"
-echo "  checksums: $CHECKSUMS_URL"
-echo "  retry: ${FETCH_RETRIES} extra attempts, exponential backoff, budget ${FETCH_RETRY_MAX_TIME}s"
-
-# --retry covers timeouts and HTTP 408/429/500/502/503/504.
-# --retry-delay is omitted so curl keeps its exponential backoff.
-# Prints the HTTP status on stdout. Body goes to dest. Empty status on
-# a transport failure after retries.
-curl_retry() {
-    local dest="$1" url="$2"
-    shift 2
-    curl -sS -f \
-        --retry "$FETCH_RETRIES" \
-        --retry-max-time "$FETCH_RETRY_MAX_TIME" \
-        --retry-connrefused \
-        --max-time 120 \
-        "$@" \
-        -o "$dest" \
-        -w '%{http_code}' \
-        "$url" || true
+lookup_pin() {
+    local hash file repo ver
+    PIN=""
+    while read -r hash file repo ver _; do
+        case "$hash" in
+            ''|\#*) continue ;;
+        esac
+        if [[ "$repo" == "$REPO" && "$ver" == "$VERSION" && "$file" == "$TARBALL" ]]; then
+            PIN=$(printf '%s' "$hash" | tr '[:upper:]' '[:lower:]')
+        fi
+    done < "$PIN_FILE"
+    if [[ ${#PIN} -ne 64 ]] || [[ ! "$PIN" =~ ^[0-9a-f]+$ ]]; then
+        echo "FAIL: no pinned sha256 for $REPO $VERSION $TARBALL in $PIN_FILE" >&2
+        exit 1
+    fi
 }
 
-curl_get() {
-    local code
-    code=$(curl_retry "$2" "$1")
-    [[ "$code" == "200" ]]
+lookup_pin
+
+file_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
 }
 
-# GitHub answers secondary rate limits with 403 or 429. curl --retry does not
-# treat those as transient, and one 403 must not abandon a pinned asset.
-curl_resilient() {
-    local dest="$1" url="$2"
-    shift 2
-    local attempt=1 code backoff
-    backoff=$(require_uint ARMATURE_TOOL_FETCH_BACKOFF_SECS "${ARMATURE_TOOL_FETCH_BACKOFF_SECS:-2}" 0 30)
-    while [[ "$attempt" -le 4 ]]; do
-        code=$(curl_retry "$dest" "$url" "$@")
-        if [[ "$code" == "200" ]]; then
-            printf '%s\n' 200
-            return 0
+url_host() {
+    local u="$1"
+    u="${u#*://}"
+    u="${u%%/*}"
+    u="${u%%\?*}"
+    u="${u#*@}"
+    u="${u%%:*}"
+    printf '%s' "$u" | tr '[:upper:]' '[:lower:]'
+}
+
+cache_file() {
+    local root owner name
+    if [[ "${ARMATURE_TOOL_CACHE-}" == "0" ]]; then
+        return 1
+    fi
+    if [[ -n "${ARMATURE_TOOL_CACHE-}" ]]; then
+        root="$ARMATURE_TOOL_CACHE"
+    elif [[ -n "${XDG_CACHE_HOME-}" ]]; then
+        root="$XDG_CACHE_HOME/armature/github-releases"
+    elif [[ -n "${HOME-}" ]]; then
+        root="$HOME/.cache/armature/github-releases"
+    else
+        return 1
+    fi
+    owner="${REPO%%/*}"
+    name="${REPO#*/}"
+    case "$owner$name$VERSION$TARBALL$PIN" in
+        *..*|*' '*|*'\\'*) return 1 ;;
+    esac
+    if [[ "$owner" == "$REPO" || "$name" == */* ]]; then
+        return 1
+    fi
+    printf '%s\n' "$root/$owner/$name/$VERSION/$PIN/$TARBALL"
+}
+
+# One HTTP transaction. Prints "<curl-exit> <http-code>" on stdout.
+# Headers land in $WORKDIR/last.hdr. Redirects are not followed here.
+# A non-zero curl exit (including a truncated body) is a failed transfer
+# even when the status line was 200.
+http_once() {
+    local dest="$1" url="$2" token="$3" limit="$4" accept="${5:-}" st code
+    if [[ -z "$accept" ]]; then
+        accept="*/*"
+    fi
+    LAST_HDR="$WORKDIR/last.hdr"
+    set +e
+    if [[ -n "${ARMATURE_TOOL_CACERT:-}" && -n "$token" ]]; then
+        code=$(curl -sS --max-time "$limit" --cacert "$ARMATURE_TOOL_CACERT" \
+            -H "Authorization: Bearer ${token}" \
+            -H "Accept: ${accept}" \
+            -H "User-Agent: armature-install-verified-release" \
+            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
+            "$url")
+        st=$?
+    elif [[ -n "${ARMATURE_TOOL_CACERT:-}" ]]; then
+        code=$(curl -sS --max-time "$limit" --cacert "$ARMATURE_TOOL_CACERT" \
+            -H "Accept: ${accept}" \
+            -H "User-Agent: armature-install-verified-release" \
+            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
+            "$url")
+        st=$?
+    elif [[ -n "$token" ]]; then
+        code=$(curl -sS --max-time "$limit" \
+            -H "Authorization: Bearer ${token}" \
+            -H "Accept: ${accept}" \
+            -H "User-Agent: armature-install-verified-release" \
+            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
+            "$url")
+        st=$?
+    else
+        code=$(curl -sS --max-time "$limit" \
+            -H "Accept: ${accept}" \
+            -H "User-Agent: armature-install-verified-release" \
+            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
+            "$url")
+        st=$?
+    fi
+    set -e
+    printf '%s %s\n' "$st" "${code:-000}"
+}
+
+time_left() {
+    local used=$((SECONDS - FETCH_START))
+    local left=$((FETCH_RETRY_MAX_TIME - used))
+    if [[ "$left" -lt 1 ]]; then
+        printf '0\n'
+    else
+        printf '%s\n' "$left"
+    fi
+}
+
+# Follow at most 5 redirects. Only https targets. Drop Authorization when
+# the next host differs from the URL we were asked to fetch.
+fetch_url() {
+    local url="$1" dest="$2" token="$3" accept="${4:-}"
+    local hops=0 cur="$url" origin host loc st code left
+    origin=$(url_host "$url")
+    while [[ "$hops" -le 5 ]]; do
+        left=$(time_left)
+        if [[ "$left" -eq 0 ]]; then
+            echo "FAIL: tool fetch exceeded ${FETCH_RETRY_MAX_TIME}s wall-clock budget" >&2
+            return 1
         fi
-        if [[ "$code" != "403" && "$code" != "429" ]]; then
-            printf '%s\n' "$code"
-            return 0
+        host=$(url_host "$cur")
+        if [[ "$host" != "$origin" ]]; then
+            token=""
         fi
-        if [[ "$attempt" -eq 4 ]]; then
-            printf '%s\n' "$code"
-            return 0
+        http_once "$dest" "$cur" "$token" "$left" "$accept" > "$WORKDIR/status"
+        read -r st code < "$WORKDIR/status"
+        if [[ "$st" -ne 0 ]]; then
+            rm -f "$dest"
+            return 1
         fi
-        echo "WARN: HTTP $code (attempt $attempt); backing off" >&2
-        rm -f "$dest"
-        if [[ "$backoff" -gt 0 ]]; then
-            sleep $((attempt * backoff))
-        fi
-        attempt=$((attempt + 1))
+        case "$code" in
+            200)
+                if [[ ! -s "$dest" ]]; then
+                    return 1
+                fi
+                return 0
+                ;;
+            301|302|303|307|308)
+                loc=$(awk '
+                    {
+                        line = $0
+                        gsub(/\r/, "", line)
+                        low = tolower(line)
+                        if (low ~ /^location:[ \t]*/) {
+                            sub(/^[^:]+:[ \t]*/, "", line)
+                            print line
+                        }
+                    }
+                ' "$LAST_HDR" | tail -n 1)
+                case "$loc" in
+                    https://*) ;;
+                    *)
+                        echo "FAIL: redirect from $cur is not https ($loc)" >&2
+                        rm -f "$dest"
+                        return 2
+                        ;;
+                esac
+                cur="$loc"
+                hops=$((hops + 1))
+                ;;
+            *)
+                rm -f "$dest"
+                return 1
+                ;;
+        esac
     done
-    printf '%s\n' "${code:-000}"
+    echo "FAIL: too many redirects for $url" >&2
+    return 2
+}
+
+digest_matches() {
+    local got
+    got=$(file_sha256 "$1")
+    [[ "$got" == "$PIN" ]]
+}
+
+# Retry transport failures inside the wall-clock budget. A finished body
+# whose digest is not the pin is not retried; the caller tries the other URL.
+fetch_matching() {
+    local url="$1" token="$2" dest="$3" accept="${4:-}"
+    local attempt=0 st
+    while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
+        if [[ "$(time_left)" -eq 0 ]]; then
+            return 1
+        fi
+        set +e
+        fetch_url "$url" "$dest" "$token" "$accept"
+        st=$?
+        set -e
+        if [[ "$st" -eq 2 ]]; then
+            return 1
+        fi
+        if [[ "$st" -eq 0 ]]; then
+            if digest_matches "$dest"; then
+                return 0
+            fi
+            SAW_MISMATCH=1
+            echo "WARN: $url bytes do not match pinned sha256" >&2
+            rm -f "$dest"
+            return 1
+        fi
+        rm -f "$dest"
+        attempt=$((attempt + 1))
+        if [[ "$attempt" -le "$FETCH_RETRIES" && "$FETCH_BACKOFF" -gt 0 && "$(time_left)" -gt 0 ]]; then
+            sleep $((FETCH_BACKOFF * attempt))
+        fi
+    done
+    return 1
 }
 
 api_base_url() {
@@ -203,53 +362,11 @@ api_base_url() {
     return 1
 }
 
-# Download one exact release asset (tag + filename) from the GitHub API.
-# The releases/download gateway on github.com can 504 while this asset URL
-# still redirects to the release blob. Checksums are verified by the caller.
-api_curl() {
-    local dest="$1" url="$2" accept="$3" token="${4:-}"
-    if [[ -n "$token" ]]; then
-        curl_resilient "$dest" "$url" \
-            -H "Accept: ${accept}" \
-            -H "User-Agent: armature-install-verified-release" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Authorization: Bearer ${token}"
-    else
-        curl_resilient "$dest" "$url" \
-            -H "Accept: ${accept}" \
-            -H "User-Agent: armature-install-verified-release" \
-            -H "X-GitHub-Api-Version: 2022-11-28"
-    fi
-}
-
-api_download() {
-    local filename="$1" dest="$2" api meta url code token
-    api=$(api_base_url) || return 1
-    if ! command -v python3 >/dev/null 2>&1; then
-        echo "WARN: python3 is required for the GitHub asset API; skipping it" >&2
-        return 1
-    fi
-    meta="$WORKDIR/release.json"
-    if [[ ! -s "$meta" ]]; then
-        token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-        local rel="${api}/repos/${REPO}/releases/tags/${VERSION}"
-        code=$(api_curl "$meta" "$rel" "application/vnd.github+json" "$token")
-        # A job token is scoped to one repo and can 401/403 on a public
-        # tool repo. Retry once with no credential. Do not double-retry 5xx;
-        # curl_retry already spent the backoff budget.
-        if [[ "$code" == "401" || "$code" == "403" ]]; then
-            rm -f "$meta"
-            code=$(api_curl "$meta" "$rel" "application/vnd.github+json" "")
-        fi
-        if [[ "$code" != "200" ]]; then
-            rm -f "$meta"
-            return 1
-        fi
-    fi
-    url=$(python3 - "$meta" "$filename" "$api" <<'PY'
-import json
-import sys
-
+api_asset_url() {
+    local api="$1" meta="$2"
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$meta" "$TARBALL" "$api" <<'PY'
+import json, sys
 meta, name, api = sys.argv[1], sys.argv[2], sys.argv[3]
 prefix = api.rstrip("/") + "/"
 with open(meta, encoding="utf-8") as fh:
@@ -264,255 +381,100 @@ for asset in data.get("assets") or []:
     raise SystemExit(1)
 raise SystemExit(1)
 PY
-    ) || return 1
-    case "$url" in
-        "$api"/*) ;;
-        *) echo "FAIL: asset URL for $filename is outside $api" >&2; return 1 ;;
-    esac
-    token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-    if [[ -n "$token" ]]; then
-        code=$(curl_resilient "$dest" "$url" \
-            -L --max-redirs 5 \
-            -H "Accept: application/octet-stream" \
-            -H "User-Agent: armature-install-verified-release" \
-            -H "Authorization: Bearer ${token}")
-        # A scoped job token can 401/403 on a public tool repo.
-        if [[ "$code" == "401" || "$code" == "403" ]]; then
-            rm -f "$dest"
-            code=$(curl_resilient "$dest" "$url" \
-                -L --max-redirs 5 \
-                -H "Accept: application/octet-stream" \
-                -H "User-Agent: armature-install-verified-release")
-        fi
-    else
-        code=$(curl_resilient "$dest" "$url" \
-            -L --max-redirs 5 \
-            -H "Accept: application/octet-stream" \
-            -H "User-Agent: armature-install-verified-release")
-    fi
-    [[ "$code" == "200" ]]
 }
 
-# Prefer the asset API for the pinned tag and filename. Fall back to the
-# release download URL for the same name. The tag is the Makefile version,
-# never a floating latest tag.
-fetch_named() {
-    local filename="$1" dest="$2" release_url="$3"
-    if api_base_url >/dev/null; then
-        if api_download "$filename" "$dest"; then
-            echo "fetched $filename via GitHub release asset API"
-            return 0
-        fi
-        echo "WARN: GitHub asset API failed for $filename; trying $release_url" >&2
-    fi
-    curl_get "$release_url" "$dest"
-}
-
-file_sha256() {
-    if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$1" | awk '{print $1}'
-    else
-        shasum -a 256 "$1" | awk '{print $1}'
-    fi
-}
-
-expected_hash() {
-    local sums="$1" base="$2"
-    awk -v b="$base" '
-        {
-            h=$1
-            n=$2
-            gsub(/^\*/, "", n)
-            if (NF == 1 && length($1) == 64 && $1 ~ /^[0-9a-fA-F]+$/) { print tolower(h); exit }
-            if (n == b) { print tolower(h); exit }
-        }
-    ' "$sums"
-}
-
-path_component_ok() {
-    case "$1" in
-        ''|*'..'*|*'/'*|*'\\'*) return 1 ;;
-    esac
-    case "$1" in
-        *[!A-Za-z0-9._+-]*) return 1 ;;
-    esac
-    return 0
-}
-
-cache_root() {
-    if [[ "${ARMATURE_TOOL_CACHE-}" == "0" ]]; then
-        return 1
-    fi
-    if [[ -n "${ARMATURE_TOOL_CACHE-}" ]]; then
-        printf '%s\n' "$ARMATURE_TOOL_CACHE"
-        return 0
-    fi
-    if [[ -n "${XDG_CACHE_HOME-}" ]]; then
-        printf '%s\n' "$XDG_CACHE_HOME/armature/github-releases"
-        return 0
-    fi
-    if [[ -z "${HOME-}" ]]; then
-        return 1
-    fi
-    printf '%s\n' "$HOME/.cache/armature/github-releases"
-}
-
-# Cache identity is owner/name/version/sha256/tarball.
-cache_file_path() {
-    local hash="$1" root owner name
-    root=$(cache_root) || return 1
-    owner="${REPO%%/*}"
-    name="${REPO#*/}"
-    if [[ "$owner" == "$REPO" || "$name" == *"/"* ]]; then
-        return 1
-    fi
-    path_component_ok "$owner" || return 1
-    path_component_ok "$name" || return 1
-    path_component_ok "$VERSION" || return 1
-    path_component_ok "$TARBALL" || return 1
-    path_component_ok "$hash" || return 1
-    if [[ ${#hash} -ne 64 ]]; then
-        return 1
-    fi
-    printf '%s\n' "$root/$owner/$name/$VERSION/$hash/$TARBALL"
-}
-
-cache_copy_if_valid() {
-    local hash="$1" dest="$2" path got
-    path=$(cache_file_path "$hash") || return 1
-    if [[ ! -f "$path" ]]; then
-        return 1
-    fi
-    got=$(file_sha256 "$path")
-    if [[ "$got" != "$hash" ]]; then
-        echo "WARN: cached $TARBALL at $hash failed checksum; ignoring" >&2
-        rm -f "$path"
-        return 1
-    fi
-    cp "$path" "$dest"
-    got=$(file_sha256 "$dest")
-    if [[ "$got" != "$hash" ]]; then
-        rm -f "$dest"
-        return 1
-    fi
-    return 0
-}
-
-store_cache() {
-    local src="$1" hash="$2" path dir tmp got
-    path=$(cache_file_path "$hash") || return 0
-    dir=$(dirname "$path")
-    mkdir -p "$dir" || return 0
-    tmp=$(mktemp "$dir/.partial.XXXXXX") || return 0
-    if ! cp "$src" "$tmp"; then
-        rm -f "$tmp"
-        return 0
-    fi
-    got=$(file_sha256 "$tmp")
-    if [[ "$got" != "$hash" ]]; then
-        rm -f "$tmp"
-        return 0
-    fi
-    mv -f "$tmp" "$path"
-}
-
-# When the checksums URL is down, accept a cache entry only if exactly one
-# version directory contains bytes that hash to its directory name.
-restore_unique_cached() {
-    local dest="$1" root owner name verdir base path got n found hash
-    root=$(cache_root) || return 1
-    owner="${REPO%%/*}"
-    name="${REPO#*/}"
-    verdir="$root/$owner/$name/$VERSION"
-    if [[ ! -d "$verdir" ]]; then
-        return 1
-    fi
-    n=0
-    found=""
-    hash=""
-    for path in "$verdir"/*; do
-        [[ -d "$path" ]] || continue
-        base=$(basename "$path")
-        if [[ ${#base} -ne 64 ]]; then
-            continue
-        fi
-        case "$base" in
-            *[!0-9a-f]*) continue ;;
-        esac
-        if [[ ! -f "$path/$TARBALL" ]]; then
-            continue
-        fi
-        got=$(file_sha256 "$path/$TARBALL")
-        if [[ "$got" != "$base" ]]; then
-            echo "WARN: cached $TARBALL at $base failed checksum; ignoring" >&2
-            continue
-        fi
-        n=$((n + 1))
-        found="$path/$TARBALL"
-        hash="$base"
-    done
-    if [[ "$n" -ne 1 ]]; then
-        return 1
-    fi
-    cp "$found" "$dest"
-    got=$(file_sha256 "$dest")
-    if [[ "$got" != "$hash" ]]; then
-        rm -f "$dest"
-        return 1
-    fi
-    HASH="$hash"
-    return 0
-}
-
+WORKDIR=$(mktemp -d)
+trap 'rm -rf "$WORKDIR"' EXIT
+FETCH_START=$SECONDS
+SAW_MISMATCH=0
+TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 TARBALL_DEST="$WORKDIR/$TARBALL"
+
+echo "Installing $BIN@$VERSION (pinned sha256 ${PIN})"
+echo "  budget: ${FETCH_RETRY_MAX_TIME}s wall-clock for this artifact"
+
 from_cache=0
-if fetch_named "$CHECKSUMS" "$WORKDIR/checksums" "$CHECKSUMS_URL"; then
-    HASH=$(expected_hash "$WORKDIR/checksums" "$TARBALL")
-    if [[ -z "$HASH" || ${#HASH} -ne 64 ]]; then
-        echo "FAIL: checksums file has no sha256 entry for $TARBALL" >&2
-        echo "checksums file:" >&2
-        cat "$WORKDIR/checksums" >&2
-        exit 1
-    fi
-    if cache_copy_if_valid "$HASH" "$TARBALL_DEST"; then
+CACHE_PATH=""
+if CACHE_PATH=$(cache_file); then
+    if [[ -f "$CACHE_PATH" ]] && digest_matches "$CACHE_PATH"; then
+        cp "$CACHE_PATH" "$TARBALL_DEST"
         from_cache=1
-        echo "cache hit: $REPO@$VERSION $TARBALL sha256 $HASH"
-    elif ! fetch_named "$TARBALL" "$TARBALL_DEST" "$TARBALL_URL"; then
-        echo "FAIL: download failed for $TARBALL_URL" >&2
-        exit 1
+        echo "cache hit: pinned sha256 $PIN"
+    elif [[ -f "$CACHE_PATH" ]]; then
+        echo "WARN: cached $TARBALL does not match pinned sha256; ignoring" >&2
+        rm -f "$CACHE_PATH"
     fi
-elif restore_unique_cached "$TARBALL_DEST"; then
-    from_cache=1
-    echo "checksums endpoint unavailable; using cached $TARBALL sha256 $HASH"
-else
-    echo "FAIL: download failed for $CHECKSUMS_URL and no single verified cached artifact for $REPO@$VERSION" >&2
-    exit 1
 fi
 
-GOT=$(file_sha256 "$TARBALL_DEST")
-if [[ "$GOT" != "$HASH" ]]; then
-    echo "FAIL: checksum mismatch for $TARBALL" >&2
-    echo "  expected: $HASH" >&2
-    echo "  actual:   $GOT" >&2
+downloaded=0
+if [[ "$from_cache" -eq 0 ]]; then
+    api=""
+    if api=$(api_base_url); then
+        meta="$WORKDIR/release.json"
+        rel="${api}/repos/${REPO}/releases/tags/${VERSION}"
+        if fetch_url "$rel" "$meta" "$TOKEN" "application/vnd.github+json"; then
+            asset=$(api_asset_url "$api" "$meta" || true)
+            case "$asset" in
+                "$api"/*)
+                    if fetch_matching "$asset" "$TOKEN" "$TARBALL_DEST" "application/octet-stream"; then
+                        downloaded=1
+                        echo "fetched $TARBALL via GitHub release asset API"
+                    fi
+                    ;;
+            esac
+        else
+            echo "WARN: GitHub asset API failed for $REPO@$VERSION" >&2
+        fi
+    fi
+    if [[ "$downloaded" -eq 0 ]]; then
+        if fetch_matching "$TARBALL_URL" "$TOKEN" "$TARBALL_DEST"; then
+            downloaded=1
+            echo "fetched $TARBALL via release download URL"
+        fi
+    fi
+fi
+
+if [[ "$from_cache" -eq 0 && "$downloaded" -eq 0 ]]; then
+    if [[ "$SAW_MISMATCH" -eq 1 && -f "$TARBALL_DEST" ]]; then
+        got=$(file_sha256 "$TARBALL_DEST")
+        echo "FAIL: checksum mismatch for $TARBALL" >&2
+        echo "  expected: $PIN" >&2
+        echo "  actual:   $got" >&2
+    elif [[ "$SAW_MISMATCH" -eq 1 ]]; then
+        echo "FAIL: checksum mismatch for $TARBALL" >&2
+        echo "  expected: $PIN" >&2
+        echo "  actual:   (response did not match the pinned sha256)" >&2
+    else
+        echo "FAIL: could not fetch $TARBALL matching pinned sha256 $PIN" >&2
+    fi
     exit 1
 fi
-if [[ "$from_cache" -eq 0 ]]; then
-    echo "OK: $TARBALL sha256 matches $CHECKSUMS"
-else
-    echo "OK: $TARBALL sha256 matches cached $HASH"
+if ! digest_matches "$TARBALL_DEST"; then
+    got=$(file_sha256 "$TARBALL_DEST")
+    echo "FAIL: checksum mismatch for $TARBALL" >&2
+    echo "  expected: $PIN" >&2
+    echo "  actual:   $got" >&2
+    exit 1
 fi
-store_cache "$TARBALL_DEST" "$HASH" || echo "WARN: could not update tool cache for $TARBALL" >&2
+echo "OK: $TARBALL sha256 matches pinned $PIN"
+
+if [[ -n "$CACHE_PATH" && "$from_cache" -eq 0 ]]; then
+    mkdir -p "$(dirname "$CACHE_PATH")"
+    cp "$TARBALL_DEST" "$CACHE_PATH.tmp"
+    if digest_matches "$CACHE_PATH.tmp"; then
+        mv -f "$CACHE_PATH.tmp" "$CACHE_PATH"
+    else
+        rm -f "$CACHE_PATH.tmp"
+    fi
+fi
 
 mkdir -p "$WORKDIR/extract"
 tar -xzf "$TARBALL_DEST" -C "$WORKDIR/extract"
-
 FOUND=$(find "$WORKDIR/extract" -type f -name "$BIN" | head -n 1)
 if [[ -z "$FOUND" ]]; then
     echo "FAIL: tarball $TARBALL does not contain binary $BIN" >&2
-    find "$WORKDIR/extract" -type f >&2
     exit 1
 fi
-
 mkdir -p "$DEST"
 install -m 0755 "$FOUND" "$DEST/$BIN"
 echo "Installed $DEST/$BIN ($BIN@$VERSION)"
