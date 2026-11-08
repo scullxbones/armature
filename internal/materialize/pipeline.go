@@ -278,7 +278,7 @@ func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[stri
 		case err != nil:
 			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 		default:
-			return applyCommitLocated(stateDir, opts, cp, located, false)
+			return replayFromCheckpoint(stateDir, opts, cp, located)
 		}
 	}
 	if shaMissing || len(allOps) == 0 {
@@ -399,9 +399,115 @@ func persistReplayArtifacts(stateDir string, state *State, fullReplay bool, cp C
 	return nil
 }
 
+func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp) (*State, Result, error) {
+	rebuild, err := shouldRebuildFromCommittedHistory(opts.OpsWorktree, cp, located)
+	if err != nil {
+		return nil, Result{}, err
+	}
+	if !rebuild {
+		return applyCommitLocated(stateDir, opts, cp, located, false)
+	}
+	located, err = oporder.LocateOps(oporder.LocateInput{
+		OpsWorktree:       opts.OpsWorktree,
+		ExtraPublishedTip: "HEAD",
+	})
+	if err != nil {
+		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
+	}
+	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
+}
+
+// shouldRebuildFromCommittedHistory reports that cached snapshots mixed pending
+// ops into LastCommitSHA state, and later work is not a prefix continuation of
+// that mix — newly committed ops in a different order, or more pending that
+// cold replay would place by file after the commit walk. Incremental apply
+// would keep the pending-derived order; cold replay of committed history would
+// not. Rebuild from the full commit walk instead of filtering the located stream.
+func shouldRebuildFromCommittedHistory(worktree string, cp Checkpoint, located []oporder.LocatedOp) (bool, error) {
+	if worktree == "" || cp.LastCommitSHA == "" {
+		return false, nil
+	}
+	gc := adapters.New(worktree)
+	head, err := gc.HeadSHA()
+	if err != nil {
+		return false, fmt.Errorf("ops HEAD: %w", err)
+	}
+	pendingBeyondHEAD := false
+	pendingBeyondLast := false
+	for name, off := range cp.ByteOffsets {
+		if off <= 0 {
+			continue
+		}
+		if off > int64(len(committedLogBytes(gc, cp.LastCommitSHA, name))) {
+			pendingBeyondLast = true
+		}
+		if off > int64(len(committedLogBytes(gc, head, name))) {
+			pendingBeyondHEAD = true
+		}
+	}
+	if !pendingBeyondLast {
+		return false, nil
+	}
+	if len(located) > 0 {
+		if pendingBeyondHEAD {
+			return true, nil
+		}
+		return pendingSkipBreaksLocatedPrefix(worktree, located, cp.ByteOffsets)
+	}
+	pending, pendErr := uncommittedWorktreeOps(worktree, cp.ByteOffsets)
+	if pendErr != nil {
+		return false, pendErr
+	}
+	return len(pending) > 0, nil
+}
+
+func pendingSkipBreaksLocatedPrefix(worktree string, located []oporder.LocatedOp, offsets map[string]int64) (bool, error) {
+	skipLeft, err := skipLeftFromOffsets(worktree, located, offsets)
+	if err != nil {
+		return false, err
+	}
+	remaining := 0
+	for _, n := range skipLeft {
+		remaining += n
+	}
+	if remaining == 0 {
+		return false, nil
+	}
+	for _, loc := range located {
+		if skipLeft[loc.Seq.Filename] > 0 {
+			skipLeft[loc.Seq.Filename]--
+			remaining--
+			continue
+		}
+		if remaining > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func skipLocatedCoveredByOffsets(worktree string, located []oporder.LocatedOp, offsets map[string]int64) ([]oporder.LocatedOp, error) {
-	if len(located) == 0 || len(offsets) == 0 {
+	skipLeft, err := skipLeftFromOffsets(worktree, located, offsets)
+	if err != nil {
+		return nil, err
+	}
+	if len(skipLeft) == 0 {
 		return located, nil
+	}
+	out := make([]oporder.LocatedOp, 0, len(located))
+	for _, loc := range located {
+		if skipLeft[loc.Seq.Filename] > 0 {
+			skipLeft[loc.Seq.Filename]--
+			continue
+		}
+		out = append(out, loc)
+	}
+	return out, nil
+}
+
+func skipLeftFromOffsets(worktree string, located []oporder.LocatedOp, offsets map[string]int64) (map[string]int, error) {
+	if len(located) == 0 || len(offsets) == 0 {
+		return map[string]int{}, nil
 	}
 	gc := adapters.New(worktree)
 	head, err := gc.HeadSHA()
@@ -420,15 +526,7 @@ func skipLocatedCoveredByOffsets(worktree string, located []oporder.LocatedOp, o
 		}
 		skipLeft[name] = skipCountFromCommitted(committedLogBytes(gc, head, name), applied, name, n)
 	}
-	out := make([]oporder.LocatedOp, 0, len(located))
-	for _, loc := range located {
-		if skipLeft[loc.Seq.Filename] > 0 {
-			skipLeft[loc.Seq.Filename]--
-			continue
-		}
-		out = append(out, loc)
-	}
-	return out, nil
+	return skipLeft, nil
 }
 
 func skipCountFromCommitted(committed []byte, applied int64, filename string, locatedN int) int {

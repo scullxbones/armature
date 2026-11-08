@@ -16,7 +16,10 @@ import (
 // bare merged status, indistinguishable from one an op asserted, so retraction
 // could not reach it and an incremental run kept a parent merged where a cold
 // replay did not. See TOPTIER-B1.
-const CurrentStateVersion = 1
+// 2: Issue.HostRefs. A v1 snapshot whose log already contained external-ref
+// skipped that type as unhandled (or never wrote host_refs). Incremental replay
+// from such a checkpoint cannot reconstruct historical HostRefs from the cache.
+const CurrentStateVersion = 2
 
 type Checkpoint struct {
 	LastCommitSHA string `json:"last_materialized_commit"`
