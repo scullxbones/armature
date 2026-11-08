@@ -15,24 +15,16 @@ const allowObjectID = "object-id"
 
 const allowResidualTrls = "residual-trls"
 
-// allowEntry is the single waiver type for every repoguard check.
-// Line must be > 0 (1-based). Needle must be non-empty. Matching is exact
-// file + line + needle (hit must equal needle or contain it; never the reverse).
-// An entry that never waives a real hit during the scan is unused → FAIL.
 type allowEntry struct {
 	RelPath string
 	Check   string
 	Reason  string
 	Line    int
-	// Needle must appear in the hit. Empty is rejected by validateAllowEntries
-	// (strings.Contains(hit, "") would otherwise waive any hit at file:line).
-	Needle string
+	Needle  string
 }
 
 func allowlist() []allowEntry {
 	return []allowEntry{
-		// git-hermetic-name dropped: git_internal_test constructs the binary
-		// name without a bare "git" BasicLit (see WithEnviron PATH overlay).
 		{
 			RelPath: "scripts/repoguard/repoguard_test.go",
 			Check:   allowGitHermeticInit,
@@ -82,9 +74,6 @@ func allowlist() []allowEntry {
 			Needle:  "width-compare",
 			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
 		},
-		// Schema SHA-256 *content* digests that the scanner flags as 64-only
-		// (sha256:-prefixed patterns are not hits under oidPatternBanReason today;
-		// unused-entry audit forbids waiving them).
 		{
 			RelPath: "docs/schemas/activity-index.schema.json",
 			Check:   allowObjectID,
@@ -151,8 +140,6 @@ func allowlist() []allowEntry {
 	}
 }
 
-// allowIndex tracks which allowlist entries waived a hit during one scan.
-// Missing files and needle-on-line-but-no-hit entries stay unused → FAIL.
 type allowIndex struct {
 	entries []allowEntry
 	used    []bool
@@ -162,9 +149,6 @@ func newAllowIndex(entries []allowEntry) *allowIndex {
 	return &allowIndex{entries: entries, used: make([]bool, len(entries))}
 }
 
-// validateAllowlist fails closed on malformed entries (Line == 0, empty needle).
-// Unused-entry audit happens after the real scan via allowIndex.unused — not by
-// skipping fixture trees via module name or ErrNotExist.
 func validateAllowlist() error {
 	return validateAllowEntries(allowlist())
 }
@@ -192,8 +176,6 @@ func validateAllowEntries(entries []allowEntry) error {
 	return nil
 }
 
-// unused fails when any entry for check never waived a hit during the scan.
-// Missing files and no-hit sites never set used[i] → FAIL.
 func (idx *allowIndex) unused(check string) error {
 	for i, a := range idx.entries {
 		if a.Check != check {
@@ -208,8 +190,6 @@ func (idx *allowIndex) unused(check string) error {
 	return nil
 }
 
-// allowed records a waiver when file+line+needle match a hit. Empty needles
-// never match (defense in depth; validateAllowEntries already rejects them).
 func (idx *allowIndex) allowed(relPath, check string, line int, pattern string) bool {
 	if line == 0 || pattern == "" {
 		return false
@@ -233,8 +213,6 @@ func (idx *allowIndex) allowed(relPath, check string, line int, pattern string) 
 	return false
 }
 
-// allowedSite is match-only against the production allowlist (no usage
-// tracking). Prefer allowIndex.allowed during real scans.
 func allowedSite(relPath, check string, line int, pattern string) bool {
 	return newAllowIndex(allowlist()).allowed(relPath, check, line, pattern)
 }
@@ -247,10 +225,6 @@ func allowedGitHermeticSite(relPath, check string, line int, needle string) bool
 	return allowedSite(relPath, check, line, needle)
 }
 
-// gitNetAllow is one local-transport git call site. The production statement
-// carries `gitnetallow: <site> <reason>` and the checker accepts that call
-// only when file, function, site, and reason all match. A file-wide comment
-// does not match.
 type gitNetAllow struct {
 	RelPath string
 	Func    string
