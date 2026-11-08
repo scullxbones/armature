@@ -282,7 +282,7 @@ func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
 func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 	decide := opts.Decide
 	if decide == nil {
-		decide = defaultDecideOnlyTree(opts.Viewer)
+		decide = defaultDecideOnlyTree()
 	}
 	if len(p.Alternatives) > 0 {
 		var kept []Alternative
