@@ -987,6 +987,25 @@ arm ref TASK-001 https://github.com/octocat/hello-world/issues/1 --withdraw
 
 ---
 
+## ref-read
+
+Print the title and body of a live host ref for an issue. With no `--url`,
+reads the current live name. With `--url`, that URL must already be live on
+the issue. Uses `GITHUB_TOKEN` from the environment. Appends no op and does
+not write the host.
+
+Human output is the title, a blank line, and the body. `--format json` prints
+a JSON object with `url`, `title`, and `body`.
+
+**Synopsis:**
+`arm ref-read [issue-id] [flags]`
+
+**Flags:**
+- `--url string`: Live host URL to read (default: current).
+
+
+---
+
 ## render-context
 
 Render assembled context for an issue. When a published live owner exists,

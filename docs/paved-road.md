@@ -138,6 +138,7 @@ Zero unclassified leaf commands is a gate.
 - `arm ops-backup restore-plan` — Print I2 disposition only; diverge is aside+_armature-recovered.
 - `arm ops-backup snapshot` — Fail-closed bundle of origin/_armature. Recovery tooling, not wave dispatch.
 - `arm ops-backup verify` — Confirm a bundle advertises a restorable tip.
+- `arm ref-read` — Fetch host title/body once. Show and list print names without network.
 - `arm reopen` — Rework after done. The road completes once, then syncs.
 - `arm reparent` — Move an issue in the hierarchy after the fact.
 - `arm review validate` — Advisory assessment check. Record remains the enforcement gate.

@@ -190,6 +190,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `sources sync` | sources.go | Sync source manifest state | **kept-evidence** | Subcommand of `sources`. |
 | `sources verify` | sources.go | Verify source manifest entries | **kept-evidence** | Subcommand of `sources`. |
 | `show` | main.go:231, show.go | Display issue details | **kept-evidence** | Query tool. Structured json/agent emit `{count, issues, help}`. `--field` stays a scalar extractor. `--full` returns complete large text fields. |
+| `ref-read` | main.go, ref_read.go | Print title and body of a live host ref | **kept-evidence** | Read-only fetch. Human prints title, blank line, body. `--format json` prints `{url,title,body}`. Appends no op; writes no host status. |
 | `list` | main.go:235, list.go | List issues | **kept-evidence** | Query tool. Supports filtering and grouping. |
 | `scope-rename` | main.go:239, scope_rename.go | Rename scope glob | **kept-evidence** | Cleanup. Updates scope and decision affects. |
 | `scope-delete` | main.go:243, scope_delete.go | Delete scope glob | **kept-evidence** | Cleanup. Removes from scope arrays. |
@@ -316,7 +317,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 |------|-----------|------|-------|--------|
 | `--ci` | validate, sources accept-citation | bool | Fail-closed alias used by CI / make validate-graph, not by make check (validate). On `sources accept-citation`, skips the confirmation prompt. | **kept-evidence** |
 | `--non-interactive` | sources accept-citation | bool | Command-local alias that skips the confirmation prompt (same as `--ci`/`--force`). Distinct from the inherited root persistent `--non-interactive`. | **kept-evidence** |
-| `--url` | sources add | string | URL or path of source | **kept-evidence** |
+| `--url` | sources add, ref-read | string | URL or path of source (sources add); live host URL to read (ref-read, default current) | **kept-evidence** |
 | `--type` | sources add | string | Provider type (filesystem, confluence, sharepoint) | **kept-evidence** |
 | `--source-id` | sources link | string | UUID of the source entry in the manifest | **kept-evidence** |
 
@@ -475,6 +476,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `ops-backup restore-plan` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `ref` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `ref-read` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--format json` prints `{url,title,body}` per host-ref.md. |
 | `render-context` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `reopen` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `reparent` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |

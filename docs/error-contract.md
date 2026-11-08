@@ -77,6 +77,7 @@ stay on the platform/git protocol.
 | `REF-1` | ref | `arm ref` could not complete (invalid URL, publish failure, or port error). | HOSTREF-S1-T5 | |
 | `REOPEN-1` | reopen | `arm reopen` could not complete. | LNGHZN-S6-T5 | |
 | `REPARENT-1` | reparent | `arm reparent` could not complete. | LNGHZN-S6-T5 | |
+| `REF-READ-1` | ref-read | `arm ref-read` could not complete (unknown issue, no/unknown live host name, missing `GITHUB_TOKEN`, fetch failure). Appends no op and writes no state. | HOSTREF-S1-T6 | |
 | `SCOPE-DELETE-1` | scope-delete | `arm scope-delete` could not complete. | LNGHZN-S6-T5 | |
 | `SCOPE-RENAME-1` | scope-rename | `arm scope-rename` could not complete. | LNGHZN-S6-T5 | |
 | `SHOW-1` | show | `arm show` could not complete (unknown issue, snapshot load). | LNGHZN-S6-T5 | |

@@ -108,7 +108,11 @@ func Wrap(code, cause string, nextActions []string, err error) *CommandFailure {
 // Map is Wrap for a Failure Code chosen at the CLI port (command prefix).
 // Call sites with a computed code must use Map so the next-actions census
 // (which inspects New/Wrap) does not require a string constant.
+// Unregistered codes panic: Register the code (and ledger it) before Map.
 func Map(code, cause string, nextActions []string, err error) *CommandFailure {
+	if !registry.has(code) {
+		panic("unregistered failure code: " + code)
+	}
 	return Wrap(code, cause, nextActions, err)
 }
 
