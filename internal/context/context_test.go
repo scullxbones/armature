@@ -65,6 +65,9 @@ func issueFacts(issue *materialize.Issue) IssueFacts {
 	for _, d := range issue.Decisions {
 		f.Decisions = append(f.Decisions, DecisionFact{Topic: d.Topic, Choice: d.Choice, Rationale: d.Rationale})
 	}
+	for _, r := range issue.HostRefs {
+		f.HostRefs = append(f.HostRefs, HostRefFact{URL: r.URL, Role: r.Role, Withdrawn: r.Withdrawn})
+	}
 	return f
 }
 
