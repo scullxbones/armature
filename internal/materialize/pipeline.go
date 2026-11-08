@@ -297,15 +297,16 @@ func runCommitIncremental(stateDir string, headDiskOps []ops.Op, _ map[string]in
 }
 
 // mergeCommittedWithPending builds the replay stream for a LocateOps materialize.
-// Creates come first so claim-before-create cannot arise when a create is still
-// unpublished. Committed creates precede pending creates so a committed parent
-// exists before an unpublished child (Children links, --parent ready filters).
-// Remaining committed ops keep LocateOps order (clock-skew HostRefs). Remaining
-// pending ops are inserted by timestamp so an unpublished stale foreign claim
-// cannot land after a later committed release and resurrect the lease on full
-// rebuild.
+// Creates (committed, then pending) precede other committed ops so a slotted-log
+// claim committed without its create file, and a pending child under a committed
+// parent, cannot claim-before-create. Create-hoist is order-equivalent to cold
+// LocateOps on HostRef clock-skew fixtures (create is already first for the
+// issue); see TestMergeCommittedWithPending_HostRefCreateAlreadyFirst_REQ_HOSTREF_S1.
+// Non-create pending ops always follow the entire committed prefix — never
+// interleaved by Timestamp (pending withdraw after committed add stays
+// clock-independent across publish). Remaining pending ops are
+// timestamp-ordered among themselves only.
 func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
-	sortOpsByTimestamp(pending)
 	var pendingCreates, pendingRest []ops.Op
 	for _, op := range pending {
 		if op.Type == ops.OpCreate {
@@ -314,6 +315,7 @@ func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
 		}
 		pendingRest = append(pendingRest, op)
 	}
+	sortOpsByTimestamp(pendingRest)
 	var committedCreates, committedRest []ops.Op
 	for _, op := range committed {
 		if op.Type == ops.OpCreate {
@@ -325,15 +327,8 @@ func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
 	out := make([]ops.Op, 0, len(committed)+len(pending))
 	out = append(out, committedCreates...)
 	out = append(out, pendingCreates...)
-	pi := 0
-	for _, op := range committedRest {
-		for pi < len(pendingRest) && pendingRest[pi].Timestamp < op.Timestamp {
-			out = append(out, pendingRest[pi])
-			pi++
-		}
-		out = append(out, op)
-	}
-	return append(out, pendingRest[pi:]...)
+	out = append(out, committedRest...)
+	return append(out, pendingRest...)
 }
 
 func applyCommitLocated(
@@ -364,7 +359,7 @@ func applyCommitLocated(
 			return nil, Result{}, skipErr
 		}
 	}
-	committed := filterLocatedToHeadDisk(oporder.Ops(located), headDiskOps)
+	committed := oporder.Ops(located)
 	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, offsetHint)
 	if pendErr != nil {
 		return nil, Result{}, pendErr
@@ -373,6 +368,13 @@ func applyCommitLocated(
 	unhandledOps, err := applyOpsWithTolerance(state, newOps, nil)
 	if err != nil {
 		return nil, Result{}, err
+	}
+	// Rewritten-history LocateOps walks can surface ghost unknown types that are
+	// gone from HEAD disk. Warn only about unknowns that still exist on disk so
+	// validate --ci stays green without reordering the committed stream.
+	warnUnhandled := unhandledOps
+	if len(headDiskOps) > 0 {
+		warnUnhandled = unhandledPresentOnHeadDisk(unhandledOps, headDiskOps)
 	}
 	state.RunRollup()
 	head, headErr := adapters.New(opts.OpsWorktree).HeadSHA()
@@ -396,7 +398,7 @@ func applyCommitLocated(
 		OpsProcessed: len(newOps),
 		FullReplay:   fullReplay,
 		UnhandledOps: unhandledOps,
-		Warnings:     formatUnhandledOpsWarnings(unhandledOps),
+		Warnings:     formatUnhandledOpsWarnings(warnUnhandled),
 	}, nil
 }
 
@@ -461,13 +463,12 @@ func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located 
 	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true, headDiskOps)
 }
 
-// filterLocatedToHeadDisk keeps LocateOps order but drops historical lines that
-// no longer exist on the HEAD disk logs (rewritten/removed JSONL). Without this,
-// unknown orchestrate-* ghosts from rewritten history surface as snapshot
-// warnings and fail arm validate --ci.
-func filterLocatedToHeadDisk(located, headDisk []ops.Op) []ops.Op {
-	if len(headDisk) == 0 || len(located) == 0 {
-		return located
+// unhandledPresentOnHeadDisk keeps unknown-type ops that still exist on the
+// HEAD disk logs (for snapshot warnings). Ghost unknowns from rewritten history
+// walks are omitted from warnings without changing replay order.
+func unhandledPresentOnHeadDisk(unhandled, headDisk []ops.Op) []ops.Op {
+	if len(unhandled) == 0 || len(headDisk) == 0 {
+		return nil
 	}
 	remain := make(map[string]int, len(headDisk))
 	for _, op := range headDisk {
@@ -477,8 +478,8 @@ func filterLocatedToHeadDisk(located, headDisk []ops.Op) []ops.Op {
 		}
 		remain[string(key)]++
 	}
-	out := make([]ops.Op, 0, len(headDisk))
-	for _, op := range located {
+	var out []ops.Op
+	for _, op := range unhandled {
 		key, err := ops.MarshalOp(op)
 		if err != nil {
 			continue

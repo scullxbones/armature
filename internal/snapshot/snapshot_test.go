@@ -61,7 +61,8 @@ func TestLoad_RequiresOpsWorktree_REQ_HOSTREF_S1(t *testing.T) {
 	assert.Contains(t, err.Error(), "ops worktree is required")
 }
 
-func TestLoad_EmptyDir(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_EmptyDir(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -90,7 +91,8 @@ func TestLoad_EmptyStateDirRefusesCwdMaterialization(t *testing.T) {
 	assert.Contains(t, err.Error(), "refusing cwd materialization")
 }
 
-func TestLoad_SingleIssue(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_SingleIssue(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -112,7 +114,8 @@ func TestLoad_SingleIssue(t *testing.T) { //nolint:paralleltest // gittest.Isola
 	assert.Equal(t, "issue-1", snap.MaterializedOps[0].TargetID)
 }
 
-func TestLoad_WorkerIDMismatchWarning(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_WorkerIDMismatchWarning(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -138,7 +141,8 @@ func TestLoad_WorkerIDMismatchWarning(t *testing.T) { //nolint:paralleltest // g
 	assert.True(t, found, "expected warning about worker ID mismatch, got: %v", snap.Warnings)
 }
 
-func TestLoad_UnknownOpWarningIncluded(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_UnknownOpWarningIncluded(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -165,7 +169,8 @@ func TestLoad_UnknownOpWarningIncluded(t *testing.T) { //nolint:paralleltest // 
 	assert.True(t, found, "expected unknown op warning, got: %v", snap.Warnings)
 }
 
-func TestLoad_StateAndIssuesAgreement(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_StateAndIssuesAgreement(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -189,7 +194,8 @@ func TestLoad_StateAndIssuesAgreement(t *testing.T) { //nolint:paralleltest // g
 	assert.Contains(t, parent.Children, "child-task")
 }
 
-func TestLoad_IndexPopulated(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_IndexPopulated(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -208,7 +214,8 @@ func TestLoad_IndexPopulated(t *testing.T) { //nolint:paralleltest // gittest.Is
 	assert.Equal(t, "Task 2", snap.Index["task-2"].Title)
 }
 
-func TestLoad_StateIndexConsistency(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_StateIndexConsistency(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -226,7 +233,8 @@ func TestLoad_StateIndexConsistency(t *testing.T) { //nolint:paralleltest // git
 	assert.Equal(t, stateIssue.Status, indexEntry.Status)
 }
 
-func TestLoad_AllFieldsPopulated(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_AllFieldsPopulated(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -241,7 +249,8 @@ func TestLoad_AllFieldsPopulated(t *testing.T) { //nolint:paralleltest // gittes
 	assert.NotNil(t, snap.Warnings)
 }
 
-func TestLoad_CapturedOpsDoNotIncludeLaterAppends(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_CapturedOpsDoNotIncludeLaterAppends(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -276,7 +285,8 @@ func containsAny(s string, substrs ...string) bool {
 	return false
 }
 
-func TestStore_IssueAfterRefresh_REQ_ARCHIMP_S14_T1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestStore_IssueAfterRefresh_REQ_ARCHIMP_S14_T1(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -302,7 +312,8 @@ func TestStore_IssueAfterRefresh_REQ_ARCHIMP_S14_T1(t *testing.T) { //nolint:par
 	assert.Equal(t, "Test Issue", store.Issue("issue-1").Title)
 }
 
-func TestStore_IssueNotFound_REQ_ARCHIMP_S14_T1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestStore_IssueNotFound_REQ_ARCHIMP_S14_T1(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -407,7 +418,8 @@ func TestStore_ReadIssue_NotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 
@@ -436,7 +448,8 @@ func TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3(t *testing.T) { //nolint:
 	assert.Equal(t, "Task Two", store.Issue("task-2").Title)
 }
 
-func TestLoadReadOnly_ClockSkewedWithdrawMatchesCold_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoadReadOnly_ClockSkewedWithdrawMatchesCold_REQ_HOSTREF_S1(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 	pinOporderCutoverAtHEAD(t, worktree)
@@ -484,7 +497,8 @@ func TestLoadReadOnly_ClockSkewedWithdrawMatchesCold_REQ_HOSTREF_S1(t *testing.T
 	require.Equal(t, cold.Issues["task-01"].HostRefs, issue.HostRefs)
 }
 
-func TestLoad_ClockSkewedWithdrawWritePathMatchesReadOnly_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+func TestLoad_ClockSkewedWithdrawWritePathMatchesReadOnly_REQ_HOSTREF_S1(t *testing.T) {
+	t.Parallel()
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
 	pinOporderCutoverAtHEAD(t, worktree)
