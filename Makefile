@@ -73,6 +73,12 @@ GREMLINS_VERSION      := v0.6.0
 GOVULNCHECK_VERSION   := v1.1.4
 RIPGREP_VERSION       := 15.2.0
 SYFT_VERSION          := v1.55.0
+# Extra attempts after the first GET. curl backs off exponentially and retries
+# HTTP 408/429/500/502/503/504. The installer still sha256-verifies every byte
+# and addresses its cache as repo/version/sha256/artifact. No unpinned URL.
+TOOL_FETCH_RETRIES ?= 5
+TOOL_FETCH_RETRY_MAX_TIME ?= 120
+TOOL_FETCH_ENV = ARMATURE_TOOL_FETCH_RETRIES="$(TOOL_FETCH_RETRIES)" ARMATURE_TOOL_FETCH_RETRY_MAX_TIME="$(TOOL_FETCH_RETRY_MAX_TIME)"
 DEST ?=
 
 CHECK_JOBS := check-static check-core mutate
@@ -159,7 +165,7 @@ endef
 
 install-golangci-lint-release:
 	@$(resolve-dest); \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo golangci/golangci-lint \
 		--version "$(GOLANGCI_LINT_VERSION)" \
 		--tarball 'golangci-lint-{ver}-{os}-{arch}.tar.gz' \
@@ -169,7 +175,7 @@ install-golangci-lint-release:
 
 install-gremlins-release:
 	@$(resolve-dest); \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo go-gremlins/gremlins \
 		--version "$(GREMLINS_VERSION)" \
 		--tarball 'gremlins_{ver}_{os}_{arch}.tar.gz' \
@@ -189,7 +195,7 @@ install-rg-release:
 		*) echo "FAIL: no ripgrep GitHub asset mapping for $$os-$$machine" >&2; exit 1 ;; \
 	esac; \
 	tarball="ripgrep-$(RIPGREP_VERSION)-$$trip.tar.gz"; \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo BurntSushi/ripgrep \
 		--version "$(RIPGREP_VERSION)" \
 		--tarball "$$tarball" \
@@ -199,7 +205,7 @@ install-rg-release:
 
 install-syft-release:
 	@$(resolve-dest); \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo anchore/syft \
 		--version "$(SYFT_VERSION)" \
 		--tarball 'syft_{ver}_{os}_{arch}.tar.gz' \

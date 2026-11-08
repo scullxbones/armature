@@ -347,6 +347,37 @@ if ! rg -q 'checksum mismatch' "$REPO_ROOT/scripts/install-verified-github-relea
 else
     pass "installer mentions checksum mismatch failure"
 fi
+if rg -q -- '--retry[[:space:]]+0' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must not pass --retry 0 (that disables HTTP 504 retries)"
+else
+    pass "installer does not hard-disable curl retries"
+fi
+if ! rg -q 'ARMATURE_TOOL_FETCH_RETRIES:-5' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer default ARMATURE_TOOL_FETCH_RETRIES drifted from 5"
+else
+    pass "installer defaults to 5 extra fetch attempts"
+fi
+if rg -q 'releases/latest' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must not fetch /releases/latest"
+else
+    pass "installer does not use /releases/latest"
+fi
+if ! rg -q 'https://api.github.com' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must be able to fetch the pinned tag from the GitHub asset API"
+else
+    pass "installer can fetch the pinned tag via the GitHub asset API"
+fi
+if ! rg -q 'TOOL_FETCH_RETRIES \?= 5' "$MAKEFILE"; then
+    fail "Makefile must set TOOL_FETCH_RETRIES ?= 5"
+else
+    pass "Makefile bounds tool-fetch retries at 5"
+fi
+env_hits=$(rg -c '\$\(TOOL_FETCH_ENV\)' "$MAKEFILE" || true)
+if [[ "${env_hits:-0}" -lt 4 ]]; then
+    fail "Makefile must pass TOOL_FETCH_ENV into all four release installers (got ${env_hits:-0})"
+else
+    pass "Makefile passes bounded retries into release installers"
+fi
 if rg -q 'go install github.com/golangci/golangci-lint' "$CI_YML"; then
     fail "ci.yml go-installs golangci-lint"
 else
@@ -361,6 +392,63 @@ if rg -n 'version: v2\.14' "$CI_YML"; then
     fail "ci.yml duplicates the golangci-lint version number"
 else
     pass "ci.yml does not duplicate GOLANGCI_LINT_VERSION"
+fi
+
+echo "Test 6b: tool-fetch jobs cache version-pinned releases and still verify sha256..."
+
+CACHE_RESULT=$(python3 - "$CI_YML" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+lines = text.splitlines()
+jobs = {}
+current = None
+buf = []
+in_jobs = False
+for line in lines:
+    if not in_jobs:
+        if line == "jobs:" or line.startswith("jobs:"):
+            in_jobs = True
+        continue
+    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
+        break
+    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+    if m:
+        if current is not None:
+            jobs[current] = "\n".join(buf)
+        current = m.group(1)
+        buf = []
+        continue
+    if current is not None:
+        buf.append(line)
+if current is not None:
+    jobs[current] = "\n".join(buf)
+
+need = ("check-core", "check-static", "mutate", "check-git-2-34")
+for jid in need:
+    body = jobs.get(jid, "")
+    if "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" not in body:
+        print(f"FAIL: {jid} missing pinned actions/cache")
+        sys.exit(1)
+    if "~/.cache/armature/github-releases" not in body:
+        print(f"FAIL: {jid} cache path is not the installer cache")
+        sys.exit(1)
+    if "hashFiles('Makefile', 'scripts/install-verified-github-release.sh')" not in body:
+        print(f"FAIL: {jid} cache key must hash Makefile versions and the installer")
+        sys.exit(1)
+    if "actions: write" not in body:
+        print(f"FAIL: {jid} needs actions: write to save the tool cache")
+        sys.exit(1)
+print("PASS")
+PY
+) && CACHE_STATUS=0 || CACHE_STATUS=$?
+
+if [[ $CACHE_STATUS -eq 0 ]]; then
+    pass "tool-fetch jobs cache ~/.cache/armature/github-releases keyed from Makefile"
+else
+    fail "${CACHE_RESULT:-tool cache CI assertion failed}"
 fi
 
 echo "Test 7: GitHub Actions are SHA-pinned with version comments, least privilege, persist-credentials: false..."
