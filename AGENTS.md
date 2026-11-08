@@ -6,7 +6,7 @@ Go project. Build with `make`, not raw `go build`. Writing python tools is a las
 
 ## Constitution
 
-**Version:** 1 — ratified by ADR 0009. Amendments require a new ADR; wording-only fixes don't. See `docs/adr/0009-ratify-the-armature-constitution.md` and the full text in `CONSTITUTION.md`.
+**Version:** 2 — ratified by ADR 0009; T1 amended by ADR 0024. Amendments require a new ADR; wording-only fixes don't. See `docs/adr/0009-ratify-the-armature-constitution.md`, `docs/adr/0024-arm-mcp-stdio-session-is-not-t1.md`, and the full text in `CONSTITUTION.md`.
 
 **Invariants** (we will / we will never):
 - **I1 — Git-native.** All state lives in git. No database, no server, no daemon.
@@ -19,7 +19,7 @@ Go project. Build with `make`, not raw `go build`. Writing python tools is a las
 
 **Non-goals:** not a CI system (N1); not an agent framework (N2); not a chat bus (N3); not a merge authority (N4); not a human-first PM suite (N5).
 
-**Tripwires** — dies on contact, cite don't re-argue: needs a long-running process (T1; amended by ADR 0024); rewrites history (T2); syncs bidirectionally with a mutable remote (T3).
+**Tripwires** — dies on contact, cite don't re-argue: needs a long-running process (T1; amended by ADR 0024 — one exemption: harness-spawned `arm mcp` stdio session, no socket, in-process `arm` tool calls, exits on stdin EOF or signal); rewrites history (T2); syncs bidirectionally with a mutable remote (T3).
 
 ## First-time setup
 
