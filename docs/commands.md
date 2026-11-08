@@ -661,9 +661,11 @@ An empty match is still the envelope: `{count: 0, "issues": [], "help": [...]}` 
 `arm list [flags]`
 
 **Flags:**
+- `--external-ref string`: Keep issues whose live host names contain this github.com issue URL. The value is parsed with `ParseGitHubIssueURL` (canonical form). Invalid URLs are a command error. Human lines print live names, roles, and which name is current. List does not fetch and does not print a body.
 - `--group`: Group issues by status. Human format uses `=== STATUS ===` headers sorted by workflow priority. Structured output adds a `groups` adjunct and does not drop or cap `issues`.
 - `--parent string`: Filter by parent issue ID.
 - `--status string`: Filter by status: `open`, `in-progress`, `done`, `merged`, `cancelled`, `blocked`.
+- `--terminal`: Filter to all terminal statuses (`done`, `merged`, `cancelled`).
 - `--type string`: Filter by issue type: `task`, `story`, `feature`, `bug`.
 
 **Examples:**
@@ -671,6 +673,7 @@ An empty match is still the envelope: `{count: 0, "issues": [], "help": [...]}` 
 arm list --status done
 arm list --status open --parent STORY-001
 arm list --group
+arm list --external-ref https://github.com/scullxbones/armature/issues/383
 ```
 
 ---
@@ -693,9 +696,12 @@ Show the audit log of ops.
 ## materialize
 
 Replay op logs and update materialized state files. `materialize.Run` with
-`Options.OpsWorktree` set to a git checkout is incremental from
-`checkpoint.last_materialized_commit`. Default snapshot load (claim/list)
-still concatenates log files so uncommitted test layouts keep working.
+`Options.OpsWorktree` set to a git checkout uses committed order via
+`LocateOps` (incremental from `checkpoint.last_materialized_commit` when
+present). Production `snapshot.Load` / `LoadReadOnly` always pass the ops
+worktree from `newSnapshotStore`, so claim/list/show and other readers see
+the same order as cold materialize — never timestamp-sorted `runFileConcat`.
+File-concat remains only for non-git test layouts that omit `OpsWorktree`.
 
 **Synopsis:**
 `arm materialize [flags]`
@@ -949,6 +955,35 @@ are). They are not folded into `issues`.
   on the stdout envelope (`id`, `title`, `status`, `claimed_by`, timestamps, TTL).
   Structured stderr is not a results channel for that data. An agent that runs
   `2>/dev/null` still sees them. `help` notes the adjunct when it is non-empty.
+
+---
+
+## ref
+
+Record or withdraw a GitHub issue URL name on an Armature issue.
+
+**Synopsis:**
+`arm ref ISSUE URL [--role ROLE]`
+`arm ref ISSUE URL --withdraw`
+
+**Description:**
+Parses the URL with `ParseGitHubIssueURL` and appends an `external-ref` op.
+`--role` is an open label (empty allowed). Recording the same canonical URL and
+role while that pair is already the current live name is a no-op at exit 0
+(ADR 0018); a repeated no-op still publishes an unpublished local tip.
+Withdrawing a URL that is not live is also a no-op. `--role` and `--withdraw`
+together are a command error. Replay always appends; the command decides the
+no-op before write. Does not fetch host content and does not write to GitHub.
+
+**Flags:**
+- `--role string`: Role label for the host name (for example `support` or `engineering`).
+- `--withdraw`: Withdraw a live host name.
+
+**Example:**
+```bash
+arm ref TASK-001 https://github.com/octocat/hello-world/issues/1 --role engineering
+arm ref TASK-001 https://github.com/octocat/hello-world/issues/1 --withdraw
+```
 
 ---
 

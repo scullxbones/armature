@@ -68,6 +68,75 @@ func TestMarshalIssue_CanonicalFields(t *testing.T) {
 	assert.Equal(t, "open", got.Status)
 }
 
+func TestShowPrintsHostNames_REQ_HOSTREF_S1_T7(t *testing.T) {
+	t.Parallel()
+
+	const (
+		urlA = "https://github.com/scullxbones/armature/issues/1"
+		urlB = "https://github.com/scullxbones/armature/issues/2"
+	)
+	issue := IssueFacts{
+		ID:     "TASK-01",
+		Title:  "Show host names",
+		Type:   "task",
+		Status: "open",
+		HostRefs: []HostRefFact{
+			{URL: urlA, Role: "support"},
+			{URL: urlB, Role: "engineering", Current: true},
+		},
+	}
+
+	t.Run("human prints ordered names role and current without body", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		require.NoError(t, RenderIssue(&buf, issue))
+		out := buf.String()
+		assert.Contains(t, out, "HostRefs:")
+		assert.Contains(t, out, "  - "+urlA+" role=support\n")
+		assert.Contains(t, out, "  - "+urlB+" role=engineering current\n")
+		assert.Less(t, strings.Index(out, urlA), strings.Index(out, urlB), "live names must stay in order")
+		assert.NotContains(t, out, "Body:")
+		assert.NotContains(t, out, "body")
+		assert.NotContains(t, out, "FetchGitHubIssue")
+	})
+
+	t.Run("json prints ordered names role and current without body", func(t *testing.T) {
+		t.Parallel()
+		got := MarshalIssue(issue)
+		require.Equal(t, []HostRefJSON{
+			{URL: urlA, Role: "support"},
+			{URL: urlB, Role: "engineering", Current: true},
+		}, got.HostRefs)
+
+		raw, err := json.Marshal(got)
+		require.NoError(t, err)
+		var decoded map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw, &decoded))
+		assert.Contains(t, decoded, "host_refs")
+		assert.NotContains(t, decoded, "body")
+		var refs []map[string]any
+		require.NoError(t, json.Unmarshal(decoded["host_refs"], &refs))
+		require.Len(t, refs, 2)
+		assert.NotContains(t, refs[0], "body")
+		assert.NotContains(t, refs[1], "body")
+		assert.Equal(t, urlA, refs[0]["url"])
+		assert.Equal(t, "support", refs[0]["role"])
+		_, hasCurrentA := refs[0]["current"]
+		assert.False(t, hasCurrentA, "non-current omitempty must drop current")
+		assert.Equal(t, urlB, refs[1]["url"])
+		assert.Equal(t, true, refs[1]["current"])
+	})
+
+	t.Run("omits HostRefs when empty", func(t *testing.T) {
+		t.Parallel()
+		empty := IssueFacts{ID: "TASK-02", Title: "None", Type: "task", Status: "open"}
+		var buf bytes.Buffer
+		require.NoError(t, RenderIssue(&buf, empty))
+		assert.NotContains(t, buf.String(), "HostRefs:")
+		assert.Nil(t, MarshalIssue(empty).HostRefs)
+	})
+}
+
 func TestRenderList_Empty(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer

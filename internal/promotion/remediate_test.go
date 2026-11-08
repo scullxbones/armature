@@ -80,7 +80,7 @@ func TestRemediationsPlan_MixedTreeOptions_REQ_TOPTIER_S18_T4(t *testing.T) {
 	assert.NotContains(t, lf, "Option A:") // single Alternative renders without labels
 	assert.NotContains(t, lf, "Option B:")
 	assert.NotContains(t, lf, "arm transition --issue LF --to cancelled")
-	assert.Contains(t, lf, LegacyTemplateGuidance)
+	assert.Contains(t, lf, legacyTemplateGuidance)
 	assert.Contains(t, lf, delivery.RecordArgv("LF"))
 	assert.Equal(t, "arm reopen --issue E", FirstRemediation(lf))
 
@@ -450,7 +450,7 @@ func assertOptionOwnLines(t *testing.T, got []string, option rune, cmds ...strin
 		}
 	}
 	require.GreaterOrEqual(t, idx, 0, "missing %s in %v", label, got)
-	require.True(t, IsOptionLabel(got[idx]), "%q must be a standalone Option label", got[idx])
+	require.True(t, isOptionLabel(got[idx]), "%q must be a standalone Option label", got[idx])
 	for i, cmd := range cmds {
 		require.Less(t, idx+1+i, len(got), "missing step after %s", label)
 		assert.Equal(t, cmd, got[idx+1+i], "step %d after %s", i, label)
