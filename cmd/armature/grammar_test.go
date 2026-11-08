@@ -58,6 +58,7 @@ func checkHyphenatedUses(root *cobra.Command) []string {
 		"worker-init":     true,
 		"render-context":  true,
 		"context-report":  true,
+		"ref-read":        true,
 	}
 
 	subcommandHyphens := map[string]map[string]bool{

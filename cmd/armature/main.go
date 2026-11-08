@@ -445,6 +445,7 @@ func pavedRoadCommands() map[string]pavedRoadClass {
 		"sources accept-citation": {Kind: pavedRoadKindEscape, Note: "Record citation acceptance. Grounding at plan time is the road."},
 		"sources stale-review":    {Kind: pavedRoadKindEscape, Note: "Review sources whose cache drifted. Not the daily loop."},
 		"show":                    {Kind: pavedRoadKindPaved},
+		"ref-read":                {Kind: pavedRoadKindEscape, Note: "Fetch host title/body once. Show and list print names without network."},
 		"list":                    {Kind: pavedRoadKindPaved},
 		"scope-rename":            {Kind: pavedRoadKindEscape, Note: "Rewrite a scope glob across issues. Planning should not need this."},
 		"scope-delete":            {Kind: pavedRoadKindEscape, Note: "Drop a scope glob. Prefer amending the plan."},
