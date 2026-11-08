@@ -28,9 +28,7 @@ func IssueFlag(argv string) string {
 	return ""
 }
 
-// defaultDecideOnlyTree gates claims with WouldViolateTreeConsistency only.
-// filterDecideRefused uses it when PlanOpts.Decide is nil.
-func defaultDecideOnlyTree(viewer string) func(string, Graph) error {
+func defaultDecideOnlyTree() func(string, Graph) error {
 	return func(argv string, g Graph) error {
 		argv = strings.TrimSpace(argv)
 		if !strings.HasPrefix(argv, "arm ") {

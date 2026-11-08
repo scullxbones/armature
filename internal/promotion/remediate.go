@@ -33,8 +33,7 @@ type StepKind string
 
 const (
 	// StepCommand is a runnable arm argv.
-	StepCommand StepKind = "command"
-	// stepGuidance is non-argv prose.
+	StepCommand  StepKind = "command"
 	stepGuidance StepKind = "guidance"
 	// stepLegacyTemplate is a placeholder argv with no provenance (kind "legacy").
 	stepLegacyTemplate StepKind = "legacy-template"
@@ -71,10 +70,8 @@ const (
 	// moreStepsFollowGuidance marks descendant promotion steps that do not by
 	// themselves clear a done-under-merged (D14) finding.
 	moreStepsFollowGuidance = "more steps follow after tree repair to promote remaining descendants"
-	// legacyTemplateGuidance labels <sha> placeholders as legacy templates
-	// (same honesty as promotion kind "legacy").
-	legacyTemplateGuidance = "legacy: template argv — substitute real values; placeholders fail closed"
-	FindingHeaderPrefix    = "finding: "
+	legacyTemplateGuidance  = "legacy: template argv — substitute real values; placeholders fail closed"
+	FindingHeaderPrefix     = "finding: "
 )
 
 // RemediationsPlanOpts builds then filters a Plan. Every printed command argv
@@ -285,7 +282,7 @@ func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
 func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 	decide := opts.Decide
 	if decide == nil {
-		decide = defaultDecideOnlyTree(opts.Viewer)
+		decide = defaultDecideOnlyTree()
 	}
 	if len(p.Alternatives) > 0 {
 		var kept []Alternative
@@ -401,7 +398,6 @@ func applyArgvEffect(g Graph, argv string, opts PlanOpts) Graph {
 	return after
 }
 
-// graphAfterAlternative applies an Option's runnable argv effects in order.
 func graphAfterAlternative(g Graph, alt Alternative, opts PlanOpts) Graph {
 	after := cloneGraph(g)
 	for _, cmd := range alt.RunnableCommands() {
@@ -754,7 +750,6 @@ func renderStep(step Step) []string {
 	}
 }
 
-// isOptionLabel reports a standalone Option A:/B: line (not an argv).
 func isOptionLabel(s string) bool {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, "Option ") {
@@ -817,7 +812,6 @@ func IsRunnableArmCommand(s string) bool {
 	return RunnableArgv(s) != ""
 }
 
-// isDeliveryRecordTemplate reports a delivery-record argv with SHA placeholders.
 func isDeliveryRecordTemplate(cmd string) bool {
 	cmd = strings.TrimSpace(cmd)
 	return strings.HasPrefix(cmd, "arm delivery record") && strings.Contains(cmd, "<sha>")

@@ -43,6 +43,8 @@ PR wall is the **max** of three required GitHub Actions jobs (no `needs` between
 
 Every CI job runs `scripts/assert-git-min.sh` so runner images cannot silently fall below Git 2.34. The product runtime check (`adapters.RequireMinGit` / `MinGitVersion`) matches that floor.
 
+Pinned tool binaries (`rg`, `golangci-lint`, `gremlins`, `syft`) come from `scripts/install-verified-github-release.sh` at the exact Makefile version. The only trusted digest is `scripts/github-release.sha256`. Each install downloads the tarball again. The fetch tries the GitHub release asset API for that tag and filename, then the release download URL. Requests send no credentials. Redirects are limited to https by curl (`--proto-redir`). `TOOL_FETCH_RETRY_MAX_TIME` (default 120) is the wall-clock budget for one artifact. A non-positive remainder is not passed to curl, because `--max-time 0` means no limit. A checksum mismatch fails the install.
+
 `make test` / `make coverage` capture a **content-hash** porcelain baseline (`scripts/check-test-porcelain.sh --write-baseline`): each dirty/untracked path is recorded with a digest, so rewriting an already-modified tracked file fails even when the porcelain status line is unchanged.
 
 Lean **(b)** class: version-pinned / partitioned legs run `make check-job` (or `make check-git-floor`); **commit-subjects runs in exactly one CI job** (`check-static`) that already has the correct range (PR tip, not the synthetic merge SHA). Bare `make check` is local/publish-gate only. `scripts/check-commit-subjects.sh` fails loud on empty or merge-only ranges (never pass while checking nothing). Expected wall is ~max of the two ~4m poles plus setup (~6m); the exact-2.34 leg is an additional supply-chain proof.
