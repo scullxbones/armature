@@ -85,13 +85,13 @@ empty-outcome `done`s in 15 minutes). True duplicates are 0.153% of the log.
    append it does not rewrite anything (I2). Suppressed duplicates leave no trace —
    worker thrash is a harness defect belonging in the dogfood corpus, and a counter
    on an existing op would both rewrite history and race under I3.
-10. **Two carve-outs, both cited.** `arm harness-hook` is **Protocol Output**: it
-    writes decisions to stdout that a runtime parses without judgment, in a shape
-    dictated by Claude Code and Codex. Separately, some commands emit a **canonical
-    artifact** on stdout — `review prepare` writes a ReviewBundle whose schema
-    requires its own top-level fields, `completion` writes a shell script, and
-    `dag apply --schema|--example` writes a JSON Schema document. Enveloping those
-    would break the documented redirect-to-file flows, so they are **Artifact
+10. **Two carve-outs, both cited.** `arm harness-hook` and `arm mcp` are **Protocol
+    Output**: they speak a host-owned bidirectional stdin/stdout protocol (harness
+    hook decisions; MCP newline JSON-RPC). Separately, some commands emit a
+    **canonical artifact** on stdout — `review prepare` writes a ReviewBundle whose
+    schema requires its own top-level fields, `completion` writes a shell script,
+    and `dag apply --schema|--example` writes a JSON Schema document. Enveloping
+    those would break the documented redirect-to-file flows, so they are **Artifact
     Output**. Because two of the three qualify only under particular flags, the
     class attaches to a command *mode*, and admission requires citing the governing
     schema or consumer. Both carve-outs are explicitly classified in code and
@@ -297,7 +297,7 @@ and the wire shape is dictated by that harness rather than by us.
 Exemption from envelope lint is by that classification, never by command
 name, path, or `Use` string.
 
-The sole Protocol Output command is `harness-hook`.
+The Protocol Output commands are `harness-hook` and `mcp`.
 
 ### N8. Artifact Output carve-out
 
