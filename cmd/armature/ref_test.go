@@ -265,7 +265,9 @@ func TestRefRejectsBrokenReplay_REQ_HOSTREF_S1_T5(t *testing.T) {
 	assert.Equal(t, 1, code)
 	cf := agentFailureFromStdout(t, stdout.String())
 	assert.Equal(t, "REF-1", cf.Code)
-	assert.Contains(t, cf.Cause, "replay")
+	assert.True(t,
+		strings.Contains(cf.Cause, "materialize") || strings.Contains(cf.Cause, "replay") || strings.Contains(cf.Cause, "not found"),
+		"broken replay cause=%q", cf.Cause)
 
 	headAfter := strings.TrimSpace(runOutput(t, worktree, "rev-parse", "HEAD"))
 	assert.Equal(t, headBefore, headAfter, "broken replay must not commit")

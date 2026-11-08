@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/scullxbones/armature/internal/externalref"
@@ -51,12 +52,18 @@ func newRefCmd() *cobra.Command {
 				Payload:   payload,
 			}
 
+			// Live HostRefs for the ADR 0018 predicate come from the shared
+			// snapshot path (LoadReadOnly), not replayIssueOps. That keeps the
+			// writer on the same materialize view as readers; after the
+			// committed-order snapshot lands, OpsWorktree on newSnapshotStore
+			// supplies LocateOps order without a local timestamp-order patch.
 			wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) {
-				live, _, replayErr := replayIssueOps(appCtx.IssuesDir, issueID)
-				if replayErr != nil {
-					return false, replayErr
+				snap, loadErr := newSnapshotStore(appCtx).LoadReadOnly(context.Background())
+				if loadErr != nil {
+					return false, loadErr
 				}
-				if live == nil {
+				live, ok := snap.Issues[issueID]
+				if !ok || live == nil {
 					return false, fmt.Errorf("issue not found: %s", issueID)
 				}
 				if hostRefCommandIsNoOp(live.HostRefs, canonical, role, withdraw) {
