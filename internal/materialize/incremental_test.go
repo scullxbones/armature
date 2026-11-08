@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -417,6 +418,7 @@ func twoWorkerHostRefFixture(t *testing.T) (dir, stateDir string) {
 	fx := gittest.InitWithOrigin(t)
 	dir = fx.Dir
 	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, dir)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
 	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
 		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
@@ -430,6 +432,16 @@ func twoWorkerHostRefFixture(t *testing.T) (dir, stateDir string) {
 
 func hostRefRunOpts(dir string) Options {
 	return Options{WriteStateFiles: true, OpsWorktree: dir}
+}
+
+// pinOporderCutoverAtHEAD sets armature.oporder-cutover to HEAD so later commits
+// use commit-then-line order (epoch 1). Required for HostRef clock-skew proofs.
+func pinOporderCutoverAtHEAD(t *testing.T, worktree string) {
+	t.Helper()
+	sha, err := adapters.New(worktree).HeadSHA()
+	require.NoError(t, err)
+	require.NotEmpty(t, sha)
+	require.NoError(t, gittest.SetLocalConfig(worktree, "armature.oporder-cutover", sha))
 }
 
 func requireHostRefIncEqualsCold(t *testing.T, dir, stateDir string) Result {
@@ -529,4 +541,309 @@ func hostRefScriptFromSeed(seed uint64, n int) []byte {
 		out[i] = byte(s % uint64(hostRefActCount))
 	}
 	return out
+}
+
+func TestMergeCommittedWithPending_PendingAfterCommittedRegardlessOfTimestamp_REQ_HOSTREF_S1(t *testing.T) {
+	t.Parallel()
+	committed := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "us",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+		{Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 300, WorkerID: "us",
+			Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"}},
+	}
+	pending := []ops.Op{
+		{Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "us",
+			Payload: ops.Payload{WithdrawExternalRef: hostURLA}},
+	}
+	got := mergeCommittedWithPending(committed, pending)
+	require.Len(t, got, 3)
+	assert.Equal(t, int64(300), got[1].Timestamp, "committed add stays before pending")
+	assert.Equal(t, int64(200), got[2].Timestamp, "pending withdraw follows committed prefix")
+	assert.True(t, got[2].Payload.WithdrawExternalRef != "", "withdraw is last despite earlier wall clock")
+}
+
+func TestMergeCommittedWithPending_HostRefCreateAlreadyFirst_REQ_HOSTREF_S1(t *testing.T) {
+	t.Parallel()
+	// HostRef clock-skew streams already begin with create; create-hoist is a
+	// no-op relative to cold LocateOps for that issue.
+	committed := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "us",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+		{Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 300, WorkerID: "us",
+			Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"}},
+	}
+	pending := []ops.Op{
+		{Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "us",
+			Payload: ops.Payload{WithdrawExternalRef: hostURLA}},
+	}
+	got := mergeCommittedWithPending(committed, pending)
+	require.Equal(t, committed[0], got[0], "create-hoist is order-equivalent when create is already first")
+	require.Equal(t, committed[1], got[1])
+	require.Equal(t, pending[0], got[2], "pending withdraw stays after committed add")
+}
+
+func TestMergeCommittedWithPending_CommittedParentBeforePendingChild_REQ_HOSTREF_S1(t *testing.T) {
+	t.Parallel()
+	committed := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100, WorkerID: "us",
+			Payload: ops.Payload{Title: "S", NodeType: "story"}},
+	}
+	pending := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 200, WorkerID: "us",
+			Payload: ops.Payload{Title: "T", NodeType: "task", Parent: "story-01"}},
+	}
+	got := mergeCommittedWithPending(committed, pending)
+	require.Len(t, got, 2)
+	assert.Equal(t, "story-01", got[0].TargetID)
+	assert.Equal(t, "task-01", got[1].TargetID)
+}
+
+func TestCutoverEpochPreservesTimestampOverCrossFileLine_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	// Pre-cutover history shares CommitN. Sorting by Line across files would
+	// apply planner cancel/open (high line in the create log) after a later
+	// merged transition (low line in another worker log) and leave the issue
+	// open — resurrecting W1 on validate --ci. SortLocated epoch-0 uses
+	// timestamp order instead.
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+
+	planner := filepath.Join(dir, "ops", "planner.log")
+	finisher := filepath.Join(dir, "ops", "finisher.log")
+	require.NoError(t, ops.AppendOp(planner, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "planner",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	// Pad planner log so cancel/open sit at high line numbers.
+	for i := 0; i < 20; i++ {
+		require.NoError(t, ops.AppendOp(planner, ops.Op{
+			Type: ops.OpNote, TargetID: "task-01", Timestamp: int64(101 + i), WorkerID: "planner",
+			Payload: ops.Payload{Msg: "pad"},
+		}))
+	}
+	require.NoError(t, ops.AppendOp(planner, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 150, WorkerID: "planner",
+		Payload: ops.Payload{To: ops.StatusCancelled},
+	}))
+	require.NoError(t, ops.AppendOp(planner, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 160, WorkerID: "planner",
+		Payload: ops.Payload{To: ops.StatusOpen},
+	}))
+	require.NoError(t, ops.AppendOp(finisher, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300, WorkerID: "finisher",
+		Payload: ops.Payload{To: ops.StatusDone, Outcome: "shipped"},
+	}))
+	require.NoError(t, ops.AppendOp(finisher, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 310, WorkerID: "finisher",
+		Payload: ops.Payload{To: ops.StatusMerged},
+	}))
+	gittest.Git(t, dir, "add", "ops")
+	gittest.Git(t, dir, "commit", "-m", "cutover dump")
+
+	stateDir := t.TempDir()
+	got, _, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusMerged, got.Issues["task-01"].Status,
+		"epoch-0 LocateOps must keep timestamp order so merged wins over earlier open")
+}
+
+func TestCommitOrderIgnoresClockSkewWhenAllOpsPassed_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	logPath := filepath.Join(dir, "ops", "cattle-a.log")
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 300, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "add A")
+
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+		Payload: ops.Payload{WithdrawExternalRef: hostURLA},
+	}))
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "withdraw A")
+
+	diskOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, diskOps, 3)
+
+	stateDir := t.TempDir()
+	// Passing non-nil allOps used to fall through to timestamp-sorted runFileConcat
+	// on full replay and resurrect A (withdraw ts200 before add ts300).
+	got, _, err := Run(stateDir, diskOps, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	require.Equal(t, []HostRef{
+		{URL: hostURLA, Role: "engineering", At: 300, WorkerID: "cattle-a"},
+		{URL: hostURLA, At: 200, WorkerID: "cattle-a", Withdrawn: true},
+	}, got.Issues["task-01"].HostRefs)
+	_, ok := CurrentHostRef(got.Issues["task-01"].HostRefs)
+	assert.False(t, ok)
+}
+
+func TestPendingWithdrawAfterCommittedAddMatchesPublishedCold_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	logPath := filepath.Join(dir, "ops", "cattle-a.log")
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 300, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "add A ts300")
+
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+		Payload: ops.Payload{WithdrawExternalRef: hostURLA},
+	}))
+
+	want := []HostRef{
+		{URL: hostURLA, Role: "engineering", At: 300, WorkerID: "cattle-a"},
+		{URL: hostURLA, At: 200, WorkerID: "cattle-a", Withdrawn: true},
+	}
+
+	pendingDir := t.TempDir()
+	pending, _, err := Run(pendingDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	require.Equal(t, want, pending.Issues["task-01"].HostRefs,
+		"pending withdraw (ts200) must apply after committed add (ts300)")
+	_, live := CurrentHostRef(pending.Issues["task-01"].HostRefs)
+	assert.False(t, live)
+
+	coldPending := t.TempDir()
+	coldP, _, err := Run(coldPending, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	require.Equal(t, want, coldP.Issues["task-01"].HostRefs, "cold with same pending must match")
+
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "withdraw A ts200")
+
+	afterDir := t.TempDir()
+	after, _, err := Run(afterDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	require.Equal(t, want, after.Issues["task-01"].HostRefs,
+		"publishing the withdraw must not change HostRef current vs pending view")
+
+	coldAfter := t.TempDir()
+	coldA, _, err := Run(coldAfter, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	require.Equal(t, want, coldA.Issues["task-01"].HostRefs)
+	_, live = CurrentHostRef(coldA.Issues["task-01"].HostRefs)
+	assert.False(t, live)
+}
+
+func TestUnhandledPresentOnHeadDisk_OmitsHistoryGhosts_REQ_HOSTREF_S1(t *testing.T) {
+	t.Parallel()
+	disk := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	}
+	ghost := ops.Op{Type: "orchestrate-dispatch", TargetID: "task-01", Timestamp: 150, WorkerID: "a"}
+	liveUnknown := ops.Op{Type: "orchestrate-complete", TargetID: "task-01", Timestamp: 160, WorkerID: "a"}
+	disk = append(disk, liveUnknown)
+	got := unhandledPresentOnHeadDisk([]ops.Op{ghost, liveUnknown}, disk)
+	require.Equal(t, []ops.Op{liveUnknown}, got, "ghost unknowns omit; disk-present unknowns warn")
+}
+
+func TestRunWriteFreeDoesNotTouchStateTree_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	stateDir := t.TempDir()
+	before := map[string]struct{}{}
+	require.NoError(t, filepath.Walk(stateDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			rel, relErr := filepath.Rel(stateDir, path)
+			if relErr != nil {
+				return relErr
+			}
+			before[rel] = struct{}{}
+		}
+		return nil
+	}))
+
+	_, _, err := Run(stateDir, nil, nil, Options{WriteStateFiles: false, OpsWorktree: dir})
+	require.NoError(t, err)
+
+	after := map[string]struct{}{}
+	require.NoError(t, filepath.Walk(stateDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			rel, relErr := filepath.Rel(stateDir, path)
+			if relErr != nil {
+				return relErr
+			}
+			after[rel] = struct{}{}
+		}
+		return nil
+	}))
+	assert.Equal(t, before, after, "WriteStateFiles:false must not create checkpoint/index/issue files")
+}
+
+func TestPendingReplayNotDuplicatedOnSecondLoad_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	logPath := filepath.Join(dir, "ops", "cattle-a.log")
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 300, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+
+	stateDir := t.TempDir()
+	first, firstRes, err := Run(stateDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	require.True(t, firstRes.FullReplay)
+	require.Equal(t, 2, firstRes.OpsProcessed, "cold walk applies create + pending external-ref")
+	require.Len(t, first.Issues["task-01"].HostRefs, 1)
+
+	second, secondRes, err := Run(stateDir, nil, nil, hostRefRunOpts(dir))
+	require.NoError(t, err)
+	assert.False(t, secondRes.FullReplay)
+	assert.Equal(t, 0, secondRes.OpsProcessed, "cached pending must not re-apply on second load")
+	require.Equal(t, first.Issues["task-01"].HostRefs, second.Issues["task-01"].HostRefs)
 }

@@ -3,7 +3,6 @@ package materialize
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -124,6 +123,10 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 			return runCommitIncremental(stateDir, allOps, byteOffsets, opts)
 		}
 	}
+	// No git checkout at OpsWorktree: file-concat (tests and non-git layouts).
+	// Keep OpsWorktree so incremental replay can still use worktreeOpsAfterOffsets
+	// against the on-disk ops tree; lastCommitWorktree stays empty (no HEAD).
+	// Production Load always supplies a worktree with .git and never reaches here.
 	return runFileConcat(stateDir, allOps, byteOffsets, opts, "")
 }
 
@@ -259,12 +262,11 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	return nil
 }
 
-func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Options) (*State, Result, error) {
+func runCommitIncremental(stateDir string, headDiskOps []ops.Op, _ map[string]int64, opts Options) (*State, Result, error) {
 	_, cp, err := prepareWriteState(stateDir, opts.WriteStateFiles)
 	if err != nil {
 		return nil, Result{}, err
 	}
-	shaMissing := false
 	fullReplay := cp.LastCommitSHA == "" || cp.StateVersion != CurrentStateVersion
 	if !fullReplay {
 		located, err := oporder.LocateOps(oporder.LocateInput{
@@ -274,37 +276,74 @@ func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[stri
 		})
 		switch {
 		case err != nil && oporder.IsFromCommitMissing(err):
-			shaMissing = true
+			// Fall through to a cold committed-order walk.
 		case err != nil:
 			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 		default:
-			return replayFromCheckpoint(stateDir, opts, cp, located)
+			return replayFromCheckpoint(stateDir, opts, cp, located, headDiskOps)
 		}
 	}
-	if shaMissing || len(allOps) == 0 {
-		located, err := oporder.LocateOps(oporder.LocateInput{
-			OpsWorktree:       opts.OpsWorktree,
-			ExtraPublishedTip: "HEAD",
-		})
-		if err != nil {
-			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
-		}
-		return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
-	}
-	return runFileConcat(stateDir, allOps, byteOffsets, opts, opts.OpsWorktree)
-}
-
-func sortLocatedByCommit(located []oporder.LocatedOp) {
-	slices.SortStableFunc(located, func(a, b oporder.LocatedOp) int {
-		if n := cmp.Compare(a.Seq.CommitN, b.Seq.CommitN); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Seq.Line, b.Seq.Line)
+	// OpsWorktree with .git always uses committed order. Never fall through to
+	// timestamp-sorted runFileConcat: clock-skewed HostRefs (and any other
+	// order-sensitive replay) would diverge from cold LocateOps.
+	located, err := oporder.LocateOps(oporder.LocateInput{
+		OpsWorktree:       opts.OpsWorktree,
+		ExtraPublishedTip: "HEAD",
 	})
+	if err != nil {
+		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
+	}
+	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true, headDiskOps)
 }
 
-func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, fullReplay bool) (*State, Result, error) {
-	sortLocatedByCommit(located)
+// mergeCommittedWithPending builds the replay stream for a LocateOps materialize.
+// Creates (committed, then pending) precede other committed ops so a slotted-log
+// claim committed without its create file, and a pending child under a committed
+// parent, cannot claim-before-create. Create-hoist is order-equivalent to cold
+// LocateOps on HostRef clock-skew fixtures (create is already first for the
+// issue); see TestMergeCommittedWithPending_HostRefCreateAlreadyFirst_REQ_HOSTREF_S1.
+// Non-create pending ops always follow the entire committed prefix — never
+// interleaved by Timestamp (pending withdraw after committed add stays
+// clock-independent across publish). Remaining pending ops are
+// timestamp-ordered among themselves only.
+func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
+	var pendingCreates, pendingRest []ops.Op
+	for _, op := range pending {
+		if op.Type == ops.OpCreate {
+			pendingCreates = append(pendingCreates, op)
+			continue
+		}
+		pendingRest = append(pendingRest, op)
+	}
+	sortOpsByTimestamp(pendingRest)
+	var committedCreates, committedRest []ops.Op
+	for _, op := range committed {
+		if op.Type == ops.OpCreate {
+			committedCreates = append(committedCreates, op)
+			continue
+		}
+		committedRest = append(committedRest, op)
+	}
+	out := make([]ops.Op, 0, len(committed)+len(pending))
+	out = append(out, committedCreates...)
+	out = append(out, pendingCreates...)
+	out = append(out, committedRest...)
+	return append(out, pendingRest...)
+}
+
+func applyCommitLocated(
+	stateDir string,
+	opts Options,
+	cp Checkpoint,
+	located []oporder.LocatedOp,
+	fullReplay bool,
+	headDiskOps []ops.Op,
+) (*State, Result, error) {
+	// LocateOps already SortLocated (epoch-0 timestamp order for pre-cutover
+	// history; commit-then-line after cutover). Keep that order — never re-sort
+	// by CommitN/Line alone (cross-file line order on cutover dumps reopens
+	// merged issues and resurrects W1 on validate --ci).
+	oporder.SortLocated(located)
 	state, loadErr := loadOrNewState(filepath.Join(stateDir, "issues"), fullReplay)
 	if loadErr != nil {
 		return nil, Result{}, loadErr
@@ -320,15 +359,22 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 			return nil, Result{}, skipErr
 		}
 	}
-	newOps := oporder.Ops(located)
+	committed := oporder.Ops(located)
 	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, offsetHint)
 	if pendErr != nil {
 		return nil, Result{}, pendErr
 	}
-	newOps = append(newOps, pending...)
+	newOps := mergeCommittedWithPending(committed, pending)
 	unhandledOps, err := applyOpsWithTolerance(state, newOps, nil)
 	if err != nil {
 		return nil, Result{}, err
+	}
+	// Rewritten-history LocateOps walks can surface ghost unknown types that are
+	// gone from HEAD disk. Warn only about unknowns that still exist on disk so
+	// validate --ci stays green without reordering the committed stream.
+	warnUnhandled := unhandledOps
+	if len(headDiskOps) > 0 {
+		warnUnhandled = unhandledPresentOnHeadDisk(unhandledOps, headDiskOps)
 	}
 	state.RunRollup()
 	head, headErr := adapters.New(opts.OpsWorktree).HeadSHA()
@@ -352,7 +398,7 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 		OpsProcessed: len(newOps),
 		FullReplay:   fullReplay,
 		UnhandledOps: unhandledOps,
-		Warnings:     formatUnhandledOpsWarnings(unhandledOps),
+		Warnings:     formatUnhandledOpsWarnings(warnUnhandled),
 	}, nil
 }
 
@@ -399,13 +445,13 @@ func persistReplayArtifacts(stateDir string, state *State, fullReplay bool, cp C
 	return nil
 }
 
-func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp) (*State, Result, error) {
+func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, headDiskOps []ops.Op) (*State, Result, error) {
 	rebuild, err := shouldRebuildFromCommittedHistory(opts.OpsWorktree, cp, located)
 	if err != nil {
 		return nil, Result{}, err
 	}
 	if !rebuild {
-		return applyCommitLocated(stateDir, opts, cp, located, false)
+		return applyCommitLocated(stateDir, opts, cp, located, false, headDiskOps)
 	}
 	located, err = oporder.LocateOps(oporder.LocateInput{
 		OpsWorktree:       opts.OpsWorktree,
@@ -414,7 +460,38 @@ func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located 
 	if err != nil {
 		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 	}
-	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
+	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true, headDiskOps)
+}
+
+// unhandledPresentOnHeadDisk keeps unknown-type ops that still exist on the
+// HEAD disk logs (for snapshot warnings). Ghost unknowns from rewritten history
+// walks are omitted from warnings without changing replay order.
+func unhandledPresentOnHeadDisk(unhandled, headDisk []ops.Op) []ops.Op {
+	if len(unhandled) == 0 || len(headDisk) == 0 {
+		return nil
+	}
+	remain := make(map[string]int, len(headDisk))
+	for _, op := range headDisk {
+		key, err := ops.MarshalOp(op)
+		if err != nil {
+			continue
+		}
+		remain[string(key)]++
+	}
+	var out []ops.Op
+	for _, op := range unhandled {
+		key, err := ops.MarshalOp(op)
+		if err != nil {
+			continue
+		}
+		k := string(key)
+		if remain[k] == 0 {
+			continue
+		}
+		remain[k]--
+		out = append(out, op)
+	}
+	return out
 }
 
 // shouldRebuildFromCommittedHistory reports that cached snapshots mixed pending
