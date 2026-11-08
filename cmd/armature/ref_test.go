@@ -277,3 +277,83 @@ func TestRefRejectsBrokenReplay_REQ_HOSTREF_S1_T5(t *testing.T) {
 	assert.Empty(t, externalRefOpsForIssue(t, repo, issueID))
 	assert.False(t, originArmatureContains(t, bareDir, `"external_ref"`))
 }
+
+// Clock-skew plant: add A@ts300 committed, then withdraw A@ts200 committed.
+// Cold LocateOps leaves A withdrawn; timestamp sort would resurrect A.
+// Prove arm ref's LoadReadOnly predicate follows cold committed order.
+
+func requireHostRefsMatchColdCommitted(t *testing.T, repo, issueID string) []materialize.HostRef {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	ctx.StateDir = getTestStateDir(t, repo)
+	require.NotEmpty(t, ctx.WorktreePath)
+
+	snap, err := newSnapshotStore(ctx).LoadReadOnly(t.Context())
+	require.NoError(t, err)
+	live := snap.Issues[issueID]
+	require.NotNil(t, live)
+
+	coldDir := t.TempDir()
+	cold, _, err := materialize.Run(coldDir, nil, nil, materialize.Options{
+		WriteStateFiles: true,
+		OpsWorktree:     ctx.WorktreePath,
+	})
+	require.NoError(t, err)
+	coldIssue := cold.Issues[issueID]
+	require.NotNil(t, coldIssue)
+	require.Equal(t, coldIssue.HostRefs, live.HostRefs,
+		"arm ref predicate view must match cold committed-order HostRefs")
+	return live.HostRefs
+}
+
+func TestRefWithdrawClockSkewedAlreadyWithdrawnIsNoOp_REQ_HOSTREF_S1_T5(t *testing.T) {
+	t.Parallel()
+	repo := setupBootstrappedShowRepo(t)
+	workerID := plantClockSkewedHostRefWithdraw(t, repo)
+	requireNoLiveHostRefA(t, repo, workerID)
+	beforeRefs := requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	beforeLogs := workerLogSnapshot(t, repo)
+	beforeOps := externalRefOpsForIssue(t, repo, "task-01")
+
+	out, err := runTrls(t, repo, "ref", "task-01", hostRefURLA, "--withdraw")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"noop":true`,
+		"committed-order has no live A; withdraw must no-op (timestamp order would wrongly append)")
+
+	assert.Equal(t, beforeLogs, workerLogSnapshot(t, repo))
+	require.Len(t, externalRefOpsForIssue(t, repo, "task-01"), len(beforeOps))
+	afterRefs := requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	require.Equal(t, beforeRefs, afterRefs)
+	_, ok := materialize.CurrentHostRef(afterRefs)
+	assert.False(t, ok)
+}
+
+func TestRefRecordClockSkewedWithdrawnReAdds_REQ_HOSTREF_S1_T5(t *testing.T) {
+	t.Parallel()
+	repo := setupBootstrappedShowRepo(t)
+	workerID := plantClockSkewedHostRefWithdraw(t, repo)
+	requireNoLiveHostRefA(t, repo, workerID)
+	_ = requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	beforeOps := externalRefOpsForIssue(t, repo, "task-01")
+	require.Len(t, beforeOps, 2, "planted add+withdraw")
+
+	out, err := runTrls(t, repo, "ref", "task-01", hostRefURLA, "--role", "engineering")
+	require.NoError(t, err)
+	assert.NotContains(t, out, `"noop":true`,
+		"committed-order has no live A; re-record must append (timestamp order would wrongly no-op)")
+	assert.Contains(t, out, `"url":"`+hostRefURLA+`"`)
+
+	got := externalRefOpsForIssue(t, repo, "task-01")
+	require.Len(t, got, 3)
+	assert.Equal(t, hostRefURLA, got[2].Payload.ExternalRef)
+	assert.Equal(t, "engineering", got[2].Payload.ExternalRole)
+	assert.Empty(t, got[2].Payload.WithdrawExternalRef)
+
+	refs := requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	require.Len(t, refs, 3)
+	cur, ok := materialize.CurrentHostRef(refs)
+	require.True(t, ok)
+	assert.Equal(t, hostRefURLA, cur.URL)
+	assert.Equal(t, "engineering", cur.Role)
+	assert.Equal(t, workerID, cur.WorkerID)
+}

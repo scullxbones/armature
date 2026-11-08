@@ -53,10 +53,8 @@ func newRefCmd() *cobra.Command {
 			}
 
 			// Live HostRefs for the ADR 0018 predicate come from the shared
-			// snapshot path (LoadReadOnly), not replayIssueOps. That keeps the
-			// writer on the same materialize view as readers; after the
-			// committed-order snapshot lands, OpsWorktree on newSnapshotStore
-			// supplies LocateOps order without a local timestamp-order patch.
+			// snapshot path (LoadReadOnly), not replayIssueOps — same committed
+			// LocateOps order as readers via newSnapshotStore's OpsWorktree.
 			wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) {
 				snap, loadErr := newSnapshotStore(appCtx).LoadReadOnly(context.Background())
 				if loadErr != nil {
