@@ -135,6 +135,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `amend` | main.go:122, amend.go | Update issue metadata | **kept-evidence** | Allows corrections after creation. Payload-driven updates. |
 | `confirm` | main.go:126, confirm.go | Interactive confidence promotion | **kept-evidence** | DAG flow. Promotes draft→verified. Plan Release runs whole-graph strict validate. |
 | `assign` | main.go:130, assign.go | Assign worker to issue | **kept-evidence** | Decouples assignment from claiming. Sets assigned_worker. |
+| `ref` | main.go, ref.go | Record or withdraw a GitHub issue URL | **kept-evidence** | Writes `external-ref`. ADR 0018 no-op before write; repeated no-op still publishes an unpublished local tip. Parses with `ParseGitHubIssueURL`. |
 
 ### DAG Commands (dag group)
 
@@ -273,6 +274,8 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--base` | transition, delivery record | string | Delivery base SHA for the ADR 0022 snapshot (distinct from review prepare `--base`) | **kept-evidence** |
 | `--tip` | transition, delivery record | string | Delivery tip SHA for the ADR 0022 snapshot | **kept-evidence** |
 | `--worker` | assign, ready | string | Worker ID for assignment | **kept-evidence** |
+| `--role` | ref | string | Role label on a host name (empty allowed) | **kept-evidence** |
+| `--withdraw` | ref | bool | Withdraw a live host name; cannot combine with `--role` | **kept-evidence** |
 | `--topic` | decision | string | Decision topic | **kept-evidence** |
 | `--choice` | decision | string | Chosen option | **kept-evidence** |
 | `--rationale` | decision, sources accept-citation | string | Why this choice (decision) or why the citation is accepted | **kept-evidence** |
@@ -471,6 +474,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `ops-backup verify` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `ops-backup restore-plan` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `ready` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
+| `ref` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `render-context` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `reopen` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `reparent` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
@@ -510,9 +514,9 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - **Confidence States**: 3 (all kept-evidence)
 - **Issue Fields**: 41 (37 kept-evidence, 2 kept-justified, 2 parked)
 - **Op Types**: 20 (all kept-evidence)
-- **CLI Commands**: 58 (all kept-evidence, 4 groups)
+- **CLI Commands**: 59 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
-- **Command output modes**: 67 (62 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
+- **Command output modes**: 68 (63 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 
