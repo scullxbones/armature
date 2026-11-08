@@ -28,13 +28,15 @@ func newHookCmd() *cobra.Command {
 
 // platformProtocolRoots names the command subtrees whose stdout belongs to an
 // external platform rather than to the agent error contract: git drives
-// `arm hook`, and the harness drives `arm harness-hook`. ADR 0020 §6 keeps both
-// on the platform/git protocol on the wire — non-zero exit plus a stderr
-// reason — even though they are Command Failures conceptually.
+// `arm hook`, the harness drives `arm harness-hook`, and the MCP host drives
+// `arm mcp`. ADR 0020 §6 keeps hook / harness-hook on the platform/git protocol
+// on the wire — non-zero exit plus a stderr reason — even though they are
+// Command Failures conceptually. ADR 0024 adds mcp as Protocol Output.
 func platformProtocolRoots() map[string]bool {
 	return map[string]bool{
 		"hook":         true,
 		"harness-hook": true,
+		"mcp":          true,
 	}
 }
 

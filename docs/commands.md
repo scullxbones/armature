@@ -618,6 +618,41 @@ See [Harness Hook Integration Guide](./harness-hook.md) for the full resolution 
 
 ---
 
+## mcp
+
+Hidden Protocol Output command. Serves one MCP session over stdio with a single
+tool named `arm` (ADR 0024). The process lives only as long as the parent's
+stdio pipes and exits on EOF. It opens no socket, does not detach, and does not
+survive the parent.
+
+**Synopsis:**
+`arm mcp [--repo <path>]`
+
+**Behavior:**
+- Speaks newline-delimited JSON-RPC on stdin/stdout (MCP `initialize`,
+  `tools/list`, `tools/call`).
+- `tools/list` exposes one tool, `arm`, whose argument is `args` (string array).
+- Each `tools/call` runs one in-process `arm` command via `Run` (TTY false,
+  empty stdin). Protocol Output, Artifact Output, `harness-hook`, `hook`,
+  `mcp`, and `worker-init` are refused before `Run`.
+- `--worker-id` is an error. Set `ARM_WORKER_ID` in the host environment instead.
+- `--repo` is one `os.Chdir` before the session starts.
+
+**Host config (example):**
+```json
+{
+  "mcpServers": {
+    "armature": {
+      "type": "stdio",
+      "command": "arm",
+      "args": ["mcp", "--repo", "${workspaceFolder}"]
+    }
+  }
+}
+```
+
+---
+
 ## import
 
 Import issues from a CSV or JSON file.

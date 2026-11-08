@@ -177,8 +177,9 @@ func TestHarnessHookIsSoleProtocolOutput_REQ_AOC_S1_T2(t *testing.T) {
 		}
 	}
 	walk(root)
-	require.Equal(t, []string{"harness-hook"}, protocol,
-		"harness-hook must be the sole Protocol Output command on the tree")
+	// ADR 0024 / MCPSTDIO-S1-T4: Protocol Output is harness-hook and mcp.
+	require.ElementsMatch(t, []string{"harness-hook", "mcp"}, protocol,
+		"Protocol Output commands must be harness-hook and mcp")
 }
 
 func TestApplyRunResult_PropagatesExitCode(t *testing.T) {

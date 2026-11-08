@@ -371,7 +371,7 @@ func TestCommandTreeStructure_REQ_NXTTN_S5_T4(t *testing.T) {
 		"version", "worker-init", "bootstrap",
 		"create", "reparent", "validate", "render-context", "log", "stats",
 		"workers", "sources", "show", "list", "scope-rename", "scope-delete",
-		"doctor", "completion", "hook", "tui", "context-history", "harness-hook",
+		"doctor", "completion", "hook", "tui", "context-history", "harness-hook", "mcp",
 		"review",
 	}
 

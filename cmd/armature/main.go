@@ -76,6 +76,10 @@ func newRootCmd() *cobra.Command {
 				return nil
 			}
 
+			if isMCPCommand(cmd) {
+				return nil
+			}
+
 			if cmd.Parent() == nil && shouldPrintRootHelp(format, nonInteractive, ui.IsTerminal()) {
 				return nil
 			}
@@ -324,6 +328,10 @@ func newRootCmd() *cobra.Command {
 	harnessHookCmd.GroupID = "admin"
 	root.AddCommand(harnessHookCmd)
 
+	mcpCmd := newMCPCmd()
+	mcpCmd.GroupID = "admin"
+	root.AddCommand(mcpCmd)
+
 	reviewCmd := newReviewCmd()
 	reviewCmd.GroupID = "admin"
 	root.AddCommand(reviewCmd)
@@ -465,6 +473,7 @@ func pavedRoadCommands() map[string]pavedRoadClass {
 		"context-history":         {Kind: pavedRoadKindEscape, Note: "Scan git history for context changes. Diagnostic only."},
 		"context-report":          {Kind: pavedRoadKindEscape, Note: "Price fixture-measured CLI payloads. Diagnostic metering, not the daily loop."},
 		"harness-hook":            {Kind: pavedRoadKindEscape, Note: "Internal harness entrypoint. Hidden from --help groups."},
+		"mcp":                     {Kind: pavedRoadKindEscape, Note: "Hidden MCP stdio session. Protocol Output; one tool arm."},
 		"review":                  {Kind: pavedRoadKindPaved},
 		"review prepare":          {Kind: pavedRoadKindPaved},
 		"review schema":           {Kind: pavedRoadKindPaved},

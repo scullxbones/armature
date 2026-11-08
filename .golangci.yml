@@ -379,6 +379,10 @@ linters:
         path: 'cmd/armature/invocation.go'
       - linters:
           - forbidigo
+        path: 'cmd/armature/mcp.go'
+        text: 'os.Chdir'
+      - linters:
+          - forbidigo
         path: 'internal/tui/tty.go'
       - linters:
           - forbidigo
