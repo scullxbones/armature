@@ -366,10 +366,7 @@ func enrichD14TreeConsistency(report *doctor.Report, graph promotion.Graph) {
 	f.Message = "Done or open/claimed work under a merged ancestor"
 }
 
-// d14Guidance keeps the broad D14 warning and uses the shared typed Plan
-// (same truth as MERGED-1 / sync). Per finding: header → Option A/B → ordered
-// steps — never alpha-sort, never "; "-joined argv. Live-lease guidance is
-// emitted once per doctor run (not repeated for OS + parent P2).
+// Live-lease guidance is emitted once per doctor run, not repeated for each finding.
 func d14Guidance(f doctor.Finding, graph promotion.Graph, opts promotion.PlanOpts) (explanation string, suggested []string) {
 	explanation = d14Explanation
 	if len(f.Items) == 0 || graph == nil {

@@ -345,7 +345,6 @@ func TestDocsDoNotReserveLiveCheckIDs_REQ_TOPTIER_S12_T2(t *testing.T) {
 			if !reservedRE.MatchString(line) {
 				continue
 			}
-			// Explicitly historical / negated wording is fine.
 			if strings.Contains(lower, "no longer reserved") ||
 				strings.Contains(lower, "not reserved") ||
 				strings.Contains(lower, "was reserved") ||

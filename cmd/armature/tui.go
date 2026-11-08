@@ -33,7 +33,7 @@ func newTUICmd() *cobra.Command {
 
 			if !uiFrom(cmd).IsInteractive() {
 				tuiOpsDir := filepath.Join(appCtx.IssuesDir, "ops")
-				store := snapshot.NewStore(tuiOpsDir, stateDir)
+				store := snapshot.NewStore(tuiOpsDir, stateDir).WithOpsWorktree(appCtx.WorktreePath)
 				snap, err := store.Load(context.Background())
 				if err != nil {
 					return fmt.Errorf("load snapshot: %w", err)

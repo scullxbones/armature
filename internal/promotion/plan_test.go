@@ -228,7 +228,7 @@ func TestPartialCherryPickAndEmptyDiffStayDone_REQ_LNGHZN_S11_T2(t *testing.T) {
 		gittest.Git(t, dir, "cherry-pick", first)
 		res := Evaluate(git, doneInput("task-cherry", base, tip, attest(t, base, tip)))
 		assert.False(t, res.Promote)
-		assert.Equal(t, KindNotOnTarget, res.Kind)
+		assert.Equal(t, kindNotOnTarget, res.Kind)
 		assert.True(t, res.AppendCheck)
 	})
 
@@ -238,7 +238,7 @@ func TestPartialCherryPickAndEmptyDiffStayDone_REQ_LNGHZN_S11_T2(t *testing.T) {
 		sha := head(t, git)
 		res := Evaluate(git, doneInput("task-empty", sha, sha, attest(t, sha, sha)))
 		assert.False(t, res.Promote)
-		assert.Equal(t, KindEmptyDiff, res.Kind)
+		assert.Equal(t, kindEmptyDiff, res.Kind)
 	})
 
 	t.Run("whitespace-only squash is not a patch-id-only match", func(t *testing.T) {
@@ -252,7 +252,7 @@ func TestPartialCherryPickAndEmptyDiffStayDone_REQ_LNGHZN_S11_T2(t *testing.T) {
 		gittest.Git(t, dir, "commit", "-m", "whitespace only")
 		res := Evaluate(git, doneInput("task-ws", base, tip, attest(t, base, tip)))
 		assert.False(t, res.Promote)
-		assert.Equal(t, KindNotOnTarget, res.Kind)
+		assert.Equal(t, kindNotOnTarget, res.Kind)
 	})
 }
 
@@ -263,7 +263,7 @@ func TestEvaluateDedupsPromotionCheck(t *testing.T) {
 	tip := head(t, git)
 	in := doneInput("task-dedup", base, tip, nil)
 	first := Evaluate(git, in)
-	require.Equal(t, KindNotOnTarget, first.Kind)
+	require.Equal(t, kindNotOnTarget, first.Kind)
 	require.True(t, first.AppendCheck)
 	in.PriorOps = append(in.PriorOps, ops.Op{
 		Type:     ops.OpPromotionCheck,
@@ -271,7 +271,7 @@ func TestEvaluateDedupsPromotionCheck(t *testing.T) {
 		Payload:  first.CheckPayload,
 	})
 	second := Evaluate(git, in)
-	assert.Equal(t, KindNotOnTarget, second.Kind)
+	assert.Equal(t, kindNotOnTarget, second.Kind)
 	assert.False(t, second.AppendCheck)
 }
 
@@ -366,7 +366,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		// Children slice order is child-b then child-a — model preserves it (not alpha).
 		assert.Equal(t, []string{
 			"arm claim --issue child-b --worktree",
-			LegacyTemplateGuidance,
+			legacyTemplateGuidance,
 			delivery.RecordArgv("child-a"),
 		}, acts, "not-leaf recovery must walk real descendant next steps in model order")
 		for _, a := range acts {
@@ -384,7 +384,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		in := doneInput("task-legacy", "", "", nil)
 		res := Evaluate(git, in)
 		assert.False(t, res.Promote)
-		assert.Equal(t, KindLegacy, res.Kind)
+		assert.Equal(t, kindLegacy, res.Kind)
 		assert.Contains(t, res.Recovery, "arm delivery record --issue task-legacy")
 	})
 
@@ -395,7 +395,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		tip := head(t, git)
 		res := Evaluate(git, doneInput("task-empty-commit", base, tip, attest(t, base, tip)))
 		assert.False(t, res.Promote)
-		assert.Equal(t, KindEmptyDiff, res.Kind)
+		assert.Equal(t, kindEmptyDiff, res.Kind)
 	})
 
 	t.Run("reads delivery from last done payload", func(t *testing.T) {
@@ -416,7 +416,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 			},
 		}}
 		res := Evaluate(git, in)
-		assert.Equal(t, KindNotOnTarget, res.Kind)
+		assert.Equal(t, kindNotOnTarget, res.Kind)
 		assert.NotEmpty(t, res.CombinedPatchID)
 	})
 
@@ -448,7 +448,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		res := Evaluate(git, in)
 		assert.False(t, res.Promote)
 		assert.Equal(t, KindCheckFailed, res.Kind)
-		assert.Equal(t, "arm doctor", RecoveryArgv("task-badint", KindCheckFailed))
+		assert.Equal(t, "arm doctor", recoveryArgv("task-badint", KindCheckFailed))
 	})
 
 	t.Run("rename inside a larger squash stays done", func(t *testing.T) {
@@ -474,7 +474,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		gittest.Git(t, dir, "commit", "-m", "larger squash")
 		res := Evaluate(git, doneInput("task-rename", base, tip, attest(t, base, tip)))
 		assert.False(t, res.Promote)
-		assert.Equal(t, KindNotOnTarget, res.Kind)
+		assert.Equal(t, kindNotOnTarget, res.Kind)
 	})
 
 	t.Run("mixed add/delete contained in larger squash promotes by tree", func(t *testing.T) {
@@ -549,7 +549,7 @@ func TestEvaluateGuardsAndFallbacks_REQ_LNGHZN_S11_T2(t *testing.T) {
 		gittest.Git(t, dir, "commit", "-m", "larger squash")
 		res := Evaluate(git, doneInput("task-rename-edit", base, tip, attest(t, base, tip)))
 		assert.False(t, res.Promote, "modified rename must not tree-match inside a larger squash; got %s", res.Kind)
-		assert.Equal(t, KindNotOnTarget, res.Kind)
+		assert.Equal(t, kindNotOnTarget, res.Kind)
 	})
 }
 
@@ -633,11 +633,11 @@ func TestPromotionErrorNilAndDefaultRecovery(t *testing.T) {
 	var e *Error
 	assert.Empty(t, e.Error())
 	assert.Equal(t, "arm doctor", e.RecoveryArgv())
-	e = &Error{IssueID: "x", Kind: KindNotOnTarget, Msg: "nope"}
+	e = &Error{IssueID: "x", Kind: kindNotOnTarget, Msg: "nope"}
 	assert.Equal(t, "nope", e.Error())
 	assert.Equal(t, "arm merged --issue x", e.RecoveryArgv())
-	assert.Equal(t, "arm doctor", RecoveryArgv("x", KindNotLeaf),
+	assert.Equal(t, "arm doctor", recoveryArgv("x", KindNotLeaf),
 		"KindNotLeaf without graph must not self-recommend arm merged")
-	assert.Equal(t, "arm doctor", RecoveryArgv("x", "other"))
+	assert.Equal(t, "arm doctor", recoveryArgv("x", "other"))
 	assert.Equal(t, "promotion check for x failed", checkMessage("x", "other"))
 }

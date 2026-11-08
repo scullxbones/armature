@@ -284,7 +284,8 @@ func newHarnessHookCmd() *cobra.Command {
 				return nil
 			}
 
-			store := snapshot.NewStore(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir)
+			store := snapshot.NewStore(filepath.Join(appCtx.IssuesDir, "ops"), appCtx.StateDir).
+				WithOpsWorktree(appCtx.WorktreePath)
 			snap, err := store.Load(cmd.Context())
 			if err != nil {
 				return failOpenPassThrough(cmd.ErrOrStderr(), logGitDir, fmt.Sprintf("failed to load snapshot: %v", err), "snapshot load failed")
