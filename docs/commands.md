@@ -661,9 +661,11 @@ An empty match is still the envelope: `{count: 0, "issues": [], "help": [...]}` 
 `arm list [flags]`
 
 **Flags:**
+- `--external-ref string`: Keep issues whose live host names contain this github.com issue URL. The value is parsed with `ParseGitHubIssueURL` (canonical form). Invalid URLs are a command error. Human lines print live names, roles, and which name is current. List does not fetch and does not print a body.
 - `--group`: Group issues by status. Human format uses `=== STATUS ===` headers sorted by workflow priority. Structured output adds a `groups` adjunct and does not drop or cap `issues`.
 - `--parent string`: Filter by parent issue ID.
 - `--status string`: Filter by status: `open`, `in-progress`, `done`, `merged`, `cancelled`, `blocked`.
+- `--terminal`: Filter to all terminal statuses (`done`, `merged`, `cancelled`).
 - `--type string`: Filter by issue type: `task`, `story`, `feature`, `bug`.
 
 **Examples:**
@@ -671,6 +673,7 @@ An empty match is still the envelope: `{count: 0, "issues": [], "help": [...]}` 
 arm list --status done
 arm list --status open --parent STORY-001
 arm list --group
+arm list --external-ref https://github.com/scullxbones/armature/issues/383
 ```
 
 ---
