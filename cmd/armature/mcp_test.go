@@ -48,13 +48,38 @@ func TestProtocolOutputCommandsAreHarnessHookAndMcp_REQ_MCPSTDIO_S1_T4(t *testin
 func TestAdmitToolArgsRefusesWorkerInit_REQ_MCPSTDIO_S1_T4(t *testing.T) {
 	t.Parallel()
 	require.Error(t, admitToolArgs([]string{"worker-init"}))
+	require.Error(t, admitToolArgs([]string{"--format=json", "worker-init"}))
+	require.Error(t, admitToolArgs([]string{"--format", "json", "worker-init"}))
+	require.Error(t, admitToolArgs([]string{"--repo", "/tmp", "worker-init"}))
 	require.Error(t, admitToolArgs([]string{"harness-hook"}))
+	require.Error(t, admitToolArgs([]string{"--format=json", "harness-hook"}))
 	require.Error(t, admitToolArgs([]string{"hook", "run", "pre-commit"}))
 	require.Error(t, admitToolArgs([]string{"mcp"}))
 	require.Error(t, admitToolArgs([]string{"review", "prepare"}))
 	require.Error(t, admitToolArgs([]string{"completion", "bash"}))
 	require.NoError(t, admitToolArgs([]string{"ready"}))
+	require.NoError(t, admitToolArgs([]string{"--format=json", "ready"}))
 	require.NoError(t, admitToolArgs([]string{"list", "--external-ref"}))
+}
+
+func TestToolRunnerSurfacesStderrOnlyFailures_REQ_MCPSTDIO_S1(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithTask(t)
+	_, err := runTrls(t, repo, "worker-init")
+	require.NoError(t, err)
+
+	// Unknown flag: cobra writes the reason to stderr and exits non-zero with empty stdout.
+	text, exitCode, raw, err := runMCPToolCallRaw(t, repo, []string{"ready", "--not-a-real-flag"})
+	require.NoError(t, err)
+	assert.NotEqual(t, 0, exitCode)
+	assert.NotEmpty(t, text, "stderr-only failures must surface diagnostics in tool result text")
+	assert.Contains(t, strings.ToLower(text), "flag")
+	assert.Contains(t, raw, `"stderr"`)
+	assert.Contains(t, raw, `"isError":true`)
+	// Protocol stream is JSON-RPC only: no bare stderr line outside the response object.
+	for _, line := range nonEmptyMCPLines(raw) {
+		require.True(t, strings.HasPrefix(strings.TrimSpace(line), "{"), "protocol stdout must stay JSON-RPC: %q", line)
+	}
 }
 
 func TestMCPRefusesWorkerIDFlag(t *testing.T) {

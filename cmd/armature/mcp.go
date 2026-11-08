@@ -105,7 +105,11 @@ func toolRunner(outer Invocation) mcpsession.Runner {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		code := Run(ctx, toolInvocation(outer, c.Args, &stdout, &stderr))
-		return mcpsession.Result{Stdout: stdout.Bytes(), ExitCode: code}
+		return mcpsession.Result{
+			Stdout:   stdout.Bytes(),
+			Stderr:   stderr.Bytes(),
+			ExitCode: code,
+		}
 	}
 }
 
@@ -119,21 +123,42 @@ func toolInvocation(outer Invocation, args []string, stdout, stderr *bytes.Buffe
 	return inv
 }
 
-// admitToolArgs refuses Protocol Output, Artifact Output, and a short name
-// denylist before Run so those commands never execute inside the session.
+var refusedMCPCommands = map[string]bool{ //nolint:gochecknoglobals // static denylist
+	"harness-hook": true,
+	"hook":         true,
+	"mcp":          true,
+	"worker-init":  true,
+}
+
+// admitToolArgs refuses Protocol Output, Artifact Output, and denylisted
+// commands by resolved cobra identity (so leading global flags cannot bypass).
 func admitToolArgs(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("mcp tool arm requires a non-empty args array")
-	}
-	switch args[0] {
-	case "harness-hook", "hook", "mcp", "worker-init":
-		return fmt.Errorf("mcp refuses %q", args[0])
 	}
 
 	root := newRootCmd()
 	cmd, _, err := root.Find(args)
 	if err != nil || cmd == nil {
+		// Fall back to scanning argv tokens when Find cannot resolve.
+		for _, tok := range args {
+			if tok == "--" {
+				break
+			}
+			if strings.HasPrefix(tok, "-") {
+				continue
+			}
+			if refusedMCPCommands[tok] {
+				return fmt.Errorf("mcp refuses %q", tok)
+			}
+			break
+		}
 		return nil
+	}
+	for c := cmd; c != nil && c != root; c = c.Parent() {
+		if refusedMCPCommands[c.Name()] {
+			return fmt.Errorf("mcp refuses %q", c.Name())
+		}
 	}
 	setFlags := flagNamesSetInArgs(args)
 	channel := output.ClassifyFlags(cmd.Annotations, setFlags)

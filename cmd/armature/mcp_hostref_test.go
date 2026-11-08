@@ -5,15 +5,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func runMCPToolCall(t *testing.T, repo string, args []string) (stdout string, exitCode int, err error) {
+	t.Helper()
+	text, code, _, err := runMCPToolCallRaw(t, repo, args)
+	return text, code, err
+}
+
+func runMCPToolCallRaw(t *testing.T, repo string, args []string) (text string, exitCode int, raw string, err error) {
 	t.Helper()
 	argsJSON, marshalErr := json.Marshal(map[string]any{"args": args})
 	require.NoError(t, marshalErr)
@@ -27,21 +35,49 @@ func runMCPToolCall(t *testing.T, repo string, args []string) (stdout string, ex
 			`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":%s}`+"\n",
 		paramsJSON,
 	)
+	// Keep stdin open until the tools/call response is written so EOF does not
+	// cancel an in-flight Runner (ADR 0024). Close afterward to end Serve.
+	pr, pw := io.Pipe()
 	out := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	code := Run(context.Background(), Invocation{
-		Args:    []string{"mcp", "--repo", repo},
-		Dir:     repo,
-		Env:     OverlayEnv(OSEnv(), cliEnvFor(t)),
-		Stdin:   strings.NewReader(req),
-		Stdout:  out,
-		Stderr:  stderr,
-		TempDir: t.TempDir(),
-	})
-	if code != 0 {
-		return out.String(), 0, fmt.Errorf("arm mcp exited %d: %s", code, stderr.String())
+	done := make(chan int, 1)
+	go func() {
+		done <- Run(context.Background(), Invocation{
+			Args:    []string{"mcp", "--repo", repo},
+			Dir:     repo,
+			Env:     OverlayEnv(OSEnv(), cliEnvFor(t)),
+			Stdin:   pr,
+			Stdout:  out,
+			Stderr:  stderr,
+			TempDir: t.TempDir(),
+		})
+	}()
+	_, writeErr := io.WriteString(pw, req)
+	require.NoError(t, writeErr)
+
+	closePW := func() {
+		t.Helper()
+		require.NoError(t, pw.Close())
 	}
-	lines := nonEmptyMCPLines(out.String())
+	deadline := time.After(15 * time.Second)
+	for !strings.Contains(out.String(), `"id":2`) {
+		select {
+		case code := <-done:
+			closePW()
+			return out.String(), 0, out.String(), fmt.Errorf("arm mcp exited %d before tools/call response: %s", code, stderr.String())
+		case <-deadline:
+			closePW()
+			return out.String(), 0, out.String(), fmt.Errorf("timeout waiting for tools/call response: %s", stderr.String())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	closePW()
+	code := <-done
+	raw = out.String()
+	if code != 0 {
+		return raw, 0, raw, fmt.Errorf("arm mcp exited %d: %s", code, stderr.String())
+	}
+	lines := nonEmptyMCPLines(raw)
 	require.NotEmpty(t, lines)
 	var resp struct {
 		Result struct {
@@ -52,7 +88,9 @@ func runMCPToolCall(t *testing.T, repo string, args []string) (stdout string, ex
 			StructuredContent struct {
 				ExitCode int    `json:"exitCode"`
 				Stdout   string `json:"stdout"`
+				Stderr   string `json:"stderr"`
 			} `json:"structuredContent"`
+			IsError bool `json:"isError"`
 		} `json:"result"`
 		Error *struct {
 			Message string `json:"message"`
@@ -60,13 +98,16 @@ func runMCPToolCall(t *testing.T, repo string, args []string) (stdout string, ex
 	}
 	require.NoError(t, json.Unmarshal([]byte(lines[len(lines)-1]), &resp))
 	if resp.Error != nil {
-		return "", 0, fmt.Errorf("rpc error: %s", resp.Error.Message)
+		return "", 0, raw, fmt.Errorf("rpc error: %s", resp.Error.Message)
 	}
-	text := resp.Result.StructuredContent.Stdout
+	text = resp.Result.StructuredContent.Stdout
 	if text == "" && len(resp.Result.Content) > 0 {
 		text = resp.Result.Content[0].Text
 	}
-	return text, resp.Result.StructuredContent.ExitCode, nil
+	if text == "" && resp.Result.StructuredContent.Stderr != "" {
+		text = resp.Result.StructuredContent.Stderr
+	}
+	return text, resp.Result.StructuredContent.ExitCode, raw, nil
 }
 
 func nonEmptyMCPLines(s string) []string {
