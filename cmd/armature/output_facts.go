@@ -39,12 +39,54 @@ func outputIssueFacts(issue *materialize.Issue) output.IssueFacts {
 	for _, n := range issue.Notes {
 		f.Notes = append(f.Notes, output.NoteFact{Msg: n.Msg, Deleted: n.Deleted})
 	}
+	f.HostRefs = hostRefFacts(issue.HostRefs)
 	if len(issue.AssessmentAttestations) > 0 {
 		if data, err := json.Marshal(issue.AssessmentAttestations); err == nil {
 			f.AssessmentAttestations = data
 		}
 	}
 	return f
+}
+
+// hostRefFacts projects live host names in CurrentHostRef order. Withdrawn
+// events drop out; the latest live name is marked current. No body is copied.
+func hostRefFacts(refs []materialize.HostRef) []output.HostRefFact {
+	live := map[string]materialize.HostRef{}
+	order := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Withdrawn {
+			delete(live, ref.URL)
+			order = dropHostURL(order, ref.URL)
+			continue
+		}
+		order = dropHostURL(order, ref.URL)
+		order = append(order, ref.URL)
+		live[ref.URL] = ref
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	currentURL := order[len(order)-1]
+	out := make([]output.HostRefFact, 0, len(order))
+	for _, url := range order {
+		ref := live[url]
+		out = append(out, output.HostRefFact{
+			URL:     ref.URL,
+			Role:    ref.Role,
+			Current: url == currentURL,
+		})
+	}
+	return out
+}
+
+func dropHostURL(order []string, url string) []string {
+	next := make([]string, 0, len(order))
+	for _, item := range order {
+		if item != url {
+			next = append(next, item)
+		}
+	}
+	return next
 }
 
 func outputListFacts(index materialize.Index) map[string]output.ListFacts {
