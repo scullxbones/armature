@@ -3,7 +3,6 @@ package materialize
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -263,7 +262,7 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	return nil
 }
 
-func runCommitIncremental(stateDir string, _ []ops.Op, _ map[string]int64, opts Options) (*State, Result, error) {
+func runCommitIncremental(stateDir string, headDiskOps []ops.Op, _ map[string]int64, opts Options) (*State, Result, error) {
 	_, cp, err := prepareWriteState(stateDir, opts.WriteStateFiles)
 	if err != nil {
 		return nil, Result{}, err
@@ -281,7 +280,7 @@ func runCommitIncremental(stateDir string, _ []ops.Op, _ map[string]int64, opts 
 		case err != nil:
 			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 		default:
-			return replayFromCheckpoint(stateDir, opts, cp, located)
+			return replayFromCheckpoint(stateDir, opts, cp, located, headDiskOps)
 		}
 	}
 	// OpsWorktree with .git always uses committed order. Never fall through to
@@ -294,16 +293,7 @@ func runCommitIncremental(stateDir string, _ []ops.Op, _ map[string]int64, opts 
 	if err != nil {
 		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 	}
-	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
-}
-
-func sortLocatedByCommit(located []oporder.LocatedOp) {
-	slices.SortStableFunc(located, func(a, b oporder.LocatedOp) int {
-		if n := cmp.Compare(a.Seq.CommitN, b.Seq.CommitN); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Seq.Line, b.Seq.Line)
-	})
+	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true, headDiskOps)
 }
 
 // mergeCommittedWithPending builds the replay stream for a LocateOps materialize.
@@ -346,8 +336,12 @@ func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
 	return append(out, pendingRest[pi:]...)
 }
 
-func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, fullReplay bool) (*State, Result, error) {
-	sortLocatedByCommit(located)
+func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, fullReplay bool, headDiskOps []ops.Op) (*State, Result, error) {
+	// LocateOps already SortLocated (epoch-0 timestamp order for pre-cutover
+	// history; commit-then-line after cutover). Keep that order — never re-sort
+	// by CommitN/Line alone (cross-file line order on cutover dumps reopens
+	// merged issues and resurrects W1 on validate --ci).
+	oporder.SortLocated(located)
 	state, loadErr := loadOrNewState(filepath.Join(stateDir, "issues"), fullReplay)
 	if loadErr != nil {
 		return nil, Result{}, loadErr
@@ -363,7 +357,7 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 			return nil, Result{}, skipErr
 		}
 	}
-	committed := oporder.Ops(located)
+	committed := filterLocatedToHeadDisk(oporder.Ops(located), headDiskOps)
 	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, offsetHint)
 	if pendErr != nil {
 		return nil, Result{}, pendErr
@@ -442,13 +436,13 @@ func persistReplayArtifacts(stateDir string, state *State, fullReplay bool, cp C
 	return nil
 }
 
-func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp) (*State, Result, error) {
+func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, headDiskOps []ops.Op) (*State, Result, error) {
 	rebuild, err := shouldRebuildFromCommittedHistory(opts.OpsWorktree, cp, located)
 	if err != nil {
 		return nil, Result{}, err
 	}
 	if !rebuild {
-		return applyCommitLocated(stateDir, opts, cp, located, false)
+		return applyCommitLocated(stateDir, opts, cp, located, false, headDiskOps)
 	}
 	located, err = oporder.LocateOps(oporder.LocateInput{
 		OpsWorktree:       opts.OpsWorktree,
@@ -457,7 +451,39 @@ func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located 
 	if err != nil {
 		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 	}
-	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
+	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true, headDiskOps)
+}
+
+// filterLocatedToHeadDisk keeps LocateOps order but drops historical lines that
+// no longer exist on the HEAD disk logs (rewritten/removed JSONL). Without this,
+// unknown orchestrate-* ghosts from rewritten history surface as snapshot
+// warnings and fail arm validate --ci.
+func filterLocatedToHeadDisk(located, headDisk []ops.Op) []ops.Op {
+	if len(headDisk) == 0 || len(located) == 0 {
+		return located
+	}
+	remain := make(map[string]int, len(headDisk))
+	for _, op := range headDisk {
+		key, err := ops.MarshalOp(op)
+		if err != nil {
+			continue
+		}
+		remain[string(key)]++
+	}
+	out := make([]ops.Op, 0, len(headDisk))
+	for _, op := range located {
+		key, err := ops.MarshalOp(op)
+		if err != nil {
+			continue
+		}
+		k := string(key)
+		if remain[k] == 0 {
+			continue
+		}
+		remain[k]--
+		out = append(out, op)
+	}
+	return out
 }
 
 // shouldRebuildFromCommittedHistory reports that cached snapshots mixed pending

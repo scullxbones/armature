@@ -36,6 +36,14 @@ func commitOps(t *testing.T, worktree string, msg string) {
 	gittest.Git(t, worktree, "commit", "-m", msg)
 }
 
+func pinOporderCutoverAtHEAD(t *testing.T, worktree string) {
+	t.Helper()
+	sha, err := adapters.New(worktree).HeadSHA()
+	require.NoError(t, err)
+	require.NotEmpty(t, sha)
+	require.NoError(t, gittest.SetLocalConfig(worktree, "armature.oporder-cutover", sha))
+}
+
 func loadSnap(opsDir, stateDir, worktree string) (*Snapshot, error) {
 	return NewStore(opsDir, stateDir).WithOpsWorktree(worktree).Load(context.Background())
 }
@@ -431,6 +439,7 @@ func TestSnapshotCurrentTruthAccess_REQ_ARCHIMP_S18_T3(t *testing.T) { //nolint:
 func TestLoadReadOnly_ClockSkewedWithdrawMatchesCold_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, worktree)
 	logPath := filepath.Join(opsDir, "cattle-a.log")
 
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
@@ -478,6 +487,7 @@ func TestLoadReadOnly_ClockSkewedWithdrawMatchesCold_REQ_HOSTREF_S1(t *testing.T
 func TestLoad_ClockSkewedWithdrawWritePathMatchesReadOnly_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
 	worktree, opsDir, stateDir := committedOpsLayout(t)
 	gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, worktree)
 	logPath := filepath.Join(opsDir, "cattle-a.log")
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
@@ -514,6 +524,7 @@ func FuzzLoadReadOnlyHostRefCommitOrder_REQ_HOSTREF_S1(f *testing.F) {
 		}
 		worktree, opsDir, stateDir := committedOpsLayout(t)
 		gittest.Git(t, worktree, "commit", "--allow-empty", "-m", "init")
+		pinOporderCutoverAtHEAD(t, worktree)
 		logPath := filepath.Join(opsDir, "cattle-a.log")
 		require.NoError(t, ops.AppendOp(logPath, ops.Op{
 			Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",

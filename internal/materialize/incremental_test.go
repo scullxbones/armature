@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/stretchr/testify/assert"
@@ -417,6 +418,7 @@ func twoWorkerHostRefFixture(t *testing.T) (dir, stateDir string) {
 	fx := gittest.InitWithOrigin(t)
 	dir = fx.Dir
 	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, dir)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
 	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
 		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
@@ -430,6 +432,16 @@ func twoWorkerHostRefFixture(t *testing.T) (dir, stateDir string) {
 
 func hostRefRunOpts(dir string) Options {
 	return Options{WriteStateFiles: true, OpsWorktree: dir}
+}
+
+// pinOporderCutoverAtHEAD sets armature.oporder-cutover to HEAD so later commits
+// use commit-then-line order (epoch 1). Required for HostRef clock-skew proofs.
+func pinOporderCutoverAtHEAD(t *testing.T, worktree string) {
+	t.Helper()
+	sha, err := adapters.New(worktree).HeadSHA()
+	require.NoError(t, err)
+	require.NotEmpty(t, sha)
+	require.NoError(t, gittest.SetLocalConfig(worktree, "armature.oporder-cutover", sha))
 }
 
 func requireHostRefIncEqualsCold(t *testing.T, dir, stateDir string) Result {
@@ -584,10 +596,61 @@ func TestMergeCommittedWithPending_CommittedParentBeforePendingChild(t *testing.
 	assert.Equal(t, "task-01", got[1].TargetID)
 }
 
+func TestCutoverEpochPreservesTimestampOverCrossFileLine_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	// Pre-cutover history shares CommitN. Sorting by Line across files would
+	// apply planner cancel/open (high line in the create log) after a later
+	// merged transition (low line in another worker log) and leave the issue
+	// open — resurrecting W1 on validate --ci. SortLocated epoch-0 uses
+	// timestamp order instead.
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+
+	planner := filepath.Join(dir, "ops", "planner.log")
+	finisher := filepath.Join(dir, "ops", "finisher.log")
+	require.NoError(t, ops.AppendOp(planner, ops.Op{
+		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "planner",
+		Payload: ops.Payload{Title: "T", NodeType: "task"},
+	}))
+	// Pad planner log so cancel/open sit at high line numbers.
+	for i := 0; i < 20; i++ {
+		require.NoError(t, ops.AppendOp(planner, ops.Op{
+			Type: ops.OpNote, TargetID: "task-01", Timestamp: int64(101 + i), WorkerID: "planner",
+			Payload: ops.Payload{Msg: "pad"},
+		}))
+	}
+	require.NoError(t, ops.AppendOp(planner, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 150, WorkerID: "planner",
+		Payload: ops.Payload{To: ops.StatusCancelled},
+	}))
+	require.NoError(t, ops.AppendOp(planner, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 160, WorkerID: "planner",
+		Payload: ops.Payload{To: ops.StatusOpen},
+	}))
+	require.NoError(t, ops.AppendOp(finisher, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300, WorkerID: "finisher",
+		Payload: ops.Payload{To: ops.StatusDone, Outcome: "shipped"},
+	}))
+	require.NoError(t, ops.AppendOp(finisher, ops.Op{
+		Type: ops.OpTransition, TargetID: "task-01", Timestamp: 310, WorkerID: "finisher",
+		Payload: ops.Payload{To: ops.StatusMerged},
+	}))
+	gittest.Git(t, dir, "add", "ops")
+	gittest.Git(t, dir, "commit", "-m", "cutover dump")
+
+	stateDir := t.TempDir()
+	got, _, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	require.Equal(t, ops.StatusMerged, got.Issues["task-01"].Status,
+		"epoch-0 LocateOps must keep timestamp order so merged wins over earlier open")
+}
+
 func TestCommitOrderIgnoresClockSkewWhenAllOpsPassed_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
 	fx := gittest.InitWithOrigin(t)
 	dir := fx.Dir
 	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	pinOporderCutoverAtHEAD(t, dir)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
 	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
 		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",

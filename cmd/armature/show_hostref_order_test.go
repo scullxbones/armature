@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/adapters"
 	"github.com/scullxbones/armature/internal/gittest"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
@@ -81,6 +82,12 @@ func plantClockSkewedHostRefWithdraw(t *testing.T, repo string) string {
 
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
+
+	// Pin cutover at current HEAD (post-create) so add/withdraw use commit order.
+	sha, headErr := adapters.New(ctx.WorktreePath).HeadSHA()
+	require.NoError(t, headErr)
+	require.NotEmpty(t, sha)
+	require.NoError(t, gittest.SetLocalConfig(ctx.WorktreePath, "armature.oporder-cutover", sha))
 
 	// create is already committed via arm create. Record A at ts300, then withdraw
 	// at ts200, committing in that order so cold LocateOps sees withdraw last while
