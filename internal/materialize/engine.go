@@ -62,6 +62,7 @@ func opHandlers() map[string]opHandler {
 		ops.OpUnlink:             {apply: (*State).applyUnlink, missingTarget: MissingTargetError},
 		ops.OpDecision:           {apply: (*State).applyDecision, missingTarget: MissingTargetIgnore},
 		ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: MissingTargetIgnore},
+		ops.OpExternalRef:        {apply: (*State).applyExternalRef, missingTarget: MissingTargetIgnore},
 		ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: MissingTargetIgnore},
 		ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
 		ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: MissingTargetUnspecified},
@@ -340,6 +341,21 @@ func (s *State) applyUnlink(op ops.Op) error {
 func (s *State) applyAssign(op ops.Op) error {
 	issue := s.Issues[op.TargetID]
 	issue.AssignedWorker = op.Payload.AssignedTo
+	issue.Updated = op.Timestamp
+	return nil
+}
+
+func (s *State) applyExternalRef(op ops.Op) error {
+	issue := s.Issues[op.TargetID]
+	ref := HostRef{At: op.Timestamp, WorkerID: op.WorkerID}
+	if url := op.Payload.WithdrawExternalRef; url != "" {
+		ref.URL = url
+		ref.Withdrawn = true
+	} else {
+		ref.URL = op.Payload.ExternalRef
+		ref.Role = op.Payload.ExternalRole
+	}
+	issue.HostRefs = append(issue.HostRefs, ref)
 	issue.Updated = op.Timestamp
 	return nil
 }
@@ -625,7 +641,8 @@ func (s *State) enqueueRollupParent(issue *Issue, inDegree map[string]int, queue
 func (s *State) BuildIndex() Index {
 	index := make(Index, len(s.Issues))
 	for id, issue := range s.Issues {
-		index[id] = IndexEntry{
+		live, order := liveHostState(issue.HostRefs)
+		entry := IndexEntry{
 			Status:         issue.Status,
 			Type:           issue.Type,
 			Parent:         issue.Parent,
@@ -641,6 +658,11 @@ func (s *State) BuildIndex() Index {
 			Branch:         issue.Branch,
 			PR:             issue.PR,
 		}
+		if len(order) > 0 {
+			entry.CurrentHostURL = live[order[len(order)-1]].URL
+			entry.LiveHostURLs = append([]string(nil), order...)
+		}
+		index[id] = entry
 	}
 	return index
 }

@@ -534,17 +534,25 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		Type: ops.OpCitationAccepted, TargetID: "task-01", Timestamp: 240, WorkerID: workerID,
 		Payload: ops.Payload{SourceEntryID: "src-1", ConfirmedNoninteractively: true},
 	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 250, WorkerID: workerID,
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
 
 	opsInitial, err := ops.ReadLog(logPath)
 	require.NoError(t, err)
 	info, err := os.Stat(logPath)
 	require.NoError(t, err)
 	offsets := map[string]int64{filepath.Base(logPath): info.Size()}
-	baselineState, baselineResult, err := materializeAndReturn(stateDir, opsInitial, offsets)
+	fileOpts := Options{WriteStateFiles: true, OpsWorktree: dir}
+	baselineState, baselineResult, err := Run(stateDir, opsInitial, offsets, fileOpts)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(baselineState.Issues))
-	assert.Equal(t, 6, baselineResult.OpsProcessed)
+	assert.Equal(t, 7, baselineResult.OpsProcessed)
 	assert.True(t, baselineResult.FullReplay, "baseline should be a full replay")
+	require.Equal(t, []HostRef{
+		{URL: hostURLA, Role: "engineering", At: 250, WorkerID: workerID},
+	}, baselineState.Issues["task-01"].HostRefs)
 
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
 	cp, err := LoadCheckpoint(checkpointPath)
@@ -565,10 +573,10 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	info2, err := os.Stat(logPath)
 	require.NoError(t, err)
 	offsets2 := map[string]int64{filepath.Base(logPath): info2.Size()}
-	incrementalState, incrementalResult, err := materializeAndReturn(stateDir, opsAll, offsets2)
+	incrementalState, incrementalResult, err := Run(stateDir, opsAll, offsets2, fileOpts)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(incrementalState.Issues))
-	assert.Equal(t, 8, incrementalResult.OpsProcessed, "should have processed all 8 ops")
+	assert.Equal(t, 2, incrementalResult.OpsProcessed, "incremental must apply only ops after checkpoint offsets")
 	assert.False(t, incrementalResult.FullReplay, "incremental replay should set FullReplay=false")
 
 	dir2 := t.TempDir()
@@ -602,6 +610,10 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		Payload: ops.Payload{SourceEntryID: "src-1", ConfirmedNoninteractively: true},
 	}))
 	require.NoError(t, ops.AppendOp(logPath2, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 250, WorkerID: workerID,
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath2, ops.Op{
 		Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300, WorkerID: workerID,
 		Payload: ops.Payload{TTL: 60},
 	}))
@@ -615,7 +627,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 	fullReplayState, fullReplayResult, err := materializeAndReturn(stateDir2, opsAll2, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(fullReplayState.Issues))
-	assert.Equal(t, 8, fullReplayResult.OpsProcessed)
+	assert.Equal(t, 9, fullReplayResult.OpsProcessed)
 	assert.True(t, fullReplayResult.FullReplay)
 
 	assert.Equal(t, len(fullReplayState.Issues), len(incrementalState.Issues), "issue count must match")
@@ -630,8 +642,31 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		assert.Equal(t, fullIssue.Notes, incrementalIssue.Notes, "notes must match")
 		assert.Equal(t, fullIssue.Decisions, incrementalIssue.Decisions, "decisions must match")
 		assert.Equal(t, fullIssue.SourceLinks, incrementalIssue.SourceLinks, "source links must match")
+		assert.Equal(t, fullIssue.HostRefs, incrementalIssue.HostRefs, "host refs must match")
 		assert.Equal(t, fullIssue.CitationAcceptances, incrementalIssue.CitationAcceptances, "citation acceptances must match")
 	}
+}
+
+func TestSkipCountFromCommitted_REQ_HOSTREF_S1_T2(t *testing.T) {
+	t.Parallel()
+	line1, err := ops.MarshalOp(ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	})
+	require.NoError(t, err)
+	line2, err := ops.MarshalOp(ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 201, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	})
+	require.NoError(t, err)
+	committed := append(append(append([]byte{}, line1...), '\n'), append(line2, '\n')...)
+	const logName = "cattle-a.log"
+	assert.Equal(t, 2, skipCountFromCommitted(committed, int64(len(committed)), logName, 2),
+		"offsets covering the committed file skip every newly located op")
+	assert.Equal(t, 0, skipCountFromCommitted(committed, 0, logName, 2),
+		"no prior offset means none of the located ops were already applied")
+	assert.Equal(t, 1, skipCountFromCommitted(committed, int64(len(line1)+1), logName, 2),
+		"a prefix offset skips only the pending lines that later committed")
 }
 
 func TestIncremental_ReplayRepairsStaleIssueState(t *testing.T) {

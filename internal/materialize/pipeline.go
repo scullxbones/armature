@@ -1,6 +1,8 @@
 package materialize
 
 import (
+	"bufio"
+	"bytes"
 	"cmp"
 	"errors"
 	"fmt"
@@ -139,9 +141,17 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 	}
 
 	state.RetractDerivedPromotions()
-	sortOpsByTimestamp(allOps)
+	applyOps := allOps
+	if !fullReplay && opts.OpsWorktree != "" {
+		delta, deltaErr := worktreeOpsAfterOffsets(opts.OpsWorktree, cp.ByteOffsets)
+		if deltaErr != nil {
+			return nil, Result{}, deltaErr
+		}
+		applyOps = delta
+	}
+	sortOpsByTimestamp(applyOps)
 
-	unhandledOps, err := applyOpsWithTolerance(state, allOps, nil)
+	unhandledOps, err := applyOpsWithTolerance(state, applyOps, nil)
 	if err != nil {
 		return nil, Result{}, err
 	}
@@ -169,7 +179,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 	warnings := formatUnhandledOpsWarnings(unhandledOps)
 	return state, Result{
 		IssueCount:   len(state.Issues),
-		OpsProcessed: len(allOps),
+		OpsProcessed: len(applyOps),
 		FullReplay:   fullReplay,
 		UnhandledOps: unhandledOps,
 		Warnings:     warnings,
@@ -268,7 +278,7 @@ func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[stri
 		case err != nil:
 			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 		default:
-			return applyCommitLocated(stateDir, opts, cp, located, false)
+			return replayFromCheckpoint(stateDir, opts, cp, located)
 		}
 	}
 	if shaMissing || len(allOps) == 0 {
@@ -300,11 +310,17 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 		return nil, Result{}, loadErr
 	}
 	state.RetractDerivedPromotions()
-	newOps := oporder.Ops(located)
 	offsetHint := cp.ByteOffsets
 	if fullReplay {
 		offsetHint = nil
+	} else {
+		var skipErr error
+		located, skipErr = skipLocatedCoveredByOffsets(opts.OpsWorktree, located, offsetHint)
+		if skipErr != nil {
+			return nil, Result{}, skipErr
+		}
 	}
+	newOps := oporder.Ops(located)
 	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, offsetHint)
 	if pendErr != nil {
 		return nil, Result{}, pendErr
@@ -381,6 +397,179 @@ func persistReplayArtifacts(stateDir string, state *State, fullReplay bool, cp C
 	cov := traceability.Compute(coverageRefs(state.Issues))
 	swallowErr(traceability.Write(filepath.Join(stateDir, "traceability.json"), cov))
 	return nil
+}
+
+func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp) (*State, Result, error) {
+	rebuild, err := shouldRebuildFromCommittedHistory(opts.OpsWorktree, cp, located)
+	if err != nil {
+		return nil, Result{}, err
+	}
+	if !rebuild {
+		return applyCommitLocated(stateDir, opts, cp, located, false)
+	}
+	located, err = oporder.LocateOps(oporder.LocateInput{
+		OpsWorktree:       opts.OpsWorktree,
+		ExtraPublishedTip: "HEAD",
+	})
+	if err != nil {
+		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
+	}
+	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
+}
+
+// shouldRebuildFromCommittedHistory reports that cached snapshots mixed pending
+// ops into LastCommitSHA state, and later work arrived — newly committed ops,
+// or more pending that cold replay would place by file after the commit walk.
+// Per-file byte offsets do not carry cross-worker order, so they cannot prove
+// the cache is an ordered prefix of committed history. Rebuild from the full
+// commit walk whenever pending-derived state meets new committed events.
+func shouldRebuildFromCommittedHistory(worktree string, cp Checkpoint, located []oporder.LocatedOp) (bool, error) {
+	if worktree == "" || cp.LastCommitSHA == "" {
+		return false, nil
+	}
+	gc := adapters.New(worktree)
+	pendingBeyondLast := false
+	for name, off := range cp.ByteOffsets {
+		if off <= 0 {
+			continue
+		}
+		if off > int64(len(committedLogBytes(gc, cp.LastCommitSHA, name))) {
+			pendingBeyondLast = true
+			break
+		}
+	}
+	if !pendingBeyondLast {
+		return false, nil
+	}
+	if len(located) > 0 {
+		return true, nil
+	}
+	pending, pendErr := uncommittedWorktreeOps(worktree, cp.ByteOffsets)
+	if pendErr != nil {
+		return false, pendErr
+	}
+	return len(pending) > 0, nil
+}
+
+func skipLocatedCoveredByOffsets(worktree string, located []oporder.LocatedOp, offsets map[string]int64) ([]oporder.LocatedOp, error) {
+	skipLeft, err := skipLeftFromOffsets(worktree, located, offsets)
+	if err != nil {
+		return nil, err
+	}
+	if len(skipLeft) == 0 {
+		return located, nil
+	}
+	out := make([]oporder.LocatedOp, 0, len(located))
+	for _, loc := range located {
+		if skipLeft[loc.Seq.Filename] > 0 {
+			skipLeft[loc.Seq.Filename]--
+			continue
+		}
+		out = append(out, loc)
+	}
+	return out, nil
+}
+
+func skipLeftFromOffsets(worktree string, located []oporder.LocatedOp, offsets map[string]int64) (map[string]int, error) {
+	if len(located) == 0 || len(offsets) == 0 {
+		return map[string]int{}, nil
+	}
+	gc := adapters.New(worktree)
+	head, err := gc.HeadSHA()
+	if err != nil {
+		return nil, fmt.Errorf("ops HEAD: %w", err)
+	}
+	locatedN := map[string]int{}
+	for _, loc := range located {
+		locatedN[loc.Seq.Filename]++
+	}
+	skipLeft := map[string]int{}
+	for name, n := range locatedN {
+		applied := offsets[name]
+		if applied <= 0 {
+			continue
+		}
+		skipLeft[name] = skipCountFromCommitted(committedLogBytes(gc, head, name), applied, name, n)
+	}
+	return skipLeft, nil
+}
+
+func skipCountFromCommitted(committed []byte, applied int64, filename string, locatedN int) int {
+	if applied >= int64(len(committed)) {
+		return locatedN
+	}
+	n := locatedN - len(parseOwnedLogOps(committed[applied:], filename))
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+func parseOwnedLogOps(content []byte, filename string) []ops.Op {
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner.Buffer(make([]byte, 1<<20), 1<<20)
+	var out []ops.Op
+	for scanner.Scan() {
+		raw := scanner.Bytes()
+		if len(raw) == 0 {
+			continue
+		}
+		op, err := ops.ParseLine(raw)
+		if err != nil {
+			continue
+		}
+		if filename != "" && !ops.WorkerOwnsLog(op.WorkerID, filename) {
+			continue
+		}
+		out = append(out, op)
+	}
+	return out
+}
+
+func committedLogBytes(gc *adapters.Client, head, name string) []byte {
+	for _, rel := range []string{"ops/" + name, ".armature/ops/" + name} {
+		content, err := gc.ShowFileAtCommit(head, rel)
+		if err == nil {
+			return content
+		}
+	}
+	return nil
+}
+
+func worktreeOpsAfterOffsets(worktree string, offsets map[string]int64) ([]ops.Op, error) {
+	if worktree == "" {
+		return nil, nil
+	}
+	if offsets == nil {
+		offsets = map[string]int64{}
+	}
+	var extra []ops.Op
+	for _, dir := range worktreeOpsLogDirs(worktree) {
+		entries, readErr := os.ReadDir(dir.abs)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			return nil, readErr
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
+				continue
+			}
+			start := offsets[e.Name()]
+			suffix, readErr := ops.ReadLogFromOffset(filepath.Join(dir.abs, e.Name()), start)
+			if readErr != nil {
+				continue
+			}
+			for _, op := range suffix {
+				if !ops.WorkerOwnsLog(op.WorkerID, e.Name()) {
+					continue
+				}
+				extra = append(extra, op)
+			}
+		}
+	}
+	return extra, nil
 }
 
 func uncommittedWorktreeOps(worktree string, offsets map[string]int64) ([]ops.Op, error) {

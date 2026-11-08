@@ -65,6 +65,7 @@ The following fields appear on the materialized Issue struct (internal/materiali
 | `notes` | []Note | state.go:35 | note op | **kept-evidence** | Worker annotations. Set by note command. |
 | `decisions` | []Decision | state.go:36 | decision op | **kept-evidence** | Structured decisions affecting scope. Set by decision command. |
 | `source_links` | []SourceLink | state.go:37 | source-link op | **kept-evidence** | External source references. Set by source-link or create --source. |
+| `host_refs` | []HostRef | state.go | external-ref op | **kept-evidence** | Named GitHub issue URLs in replay order, including withdrawn events. Replay always appends. Current is the latest live name. The index stores current_host_url and live_host_urls so list can filter without opening each issue. |
 | `citation_acceptances` | []CitationAcceptance | state.go:38 | citation-accepted op | **kept-evidence** | Record of accepted source citations. Set by accept-citation command. |
 | `assessment_attestations` | []review.AssessmentAttestation | state.go:39 | assessment-attested op (review.go) | **kept-evidence** | Code review assessment records. Set by review record flow. |
 | `claimed_by` | string | state.go:40 | claim op | **kept-evidence** | Worker ID that holds the claim. Set by claim command. |
@@ -105,7 +106,7 @@ The following op types are defined in internal/ops/types.go and materialized by 
 | `dag-transition` | internal/ops/types.go:18 | engine.go | **kept-evidence** | Promotes confidence (draft→verified). Payload: issue_id, confirmed, confirmed_noninteractively. Sets dag_confirmed flag. |
 | `decision` | internal/ops/types.go:19 | engine.go | **kept-evidence** | Records structured decision. Payload: topic, choice, rationale, affects (scope globs). |
 | `assign` | internal/ops/types.go:20 | engine.go | **kept-evidence** | Assigns worker to issue. Payload: assigned_to (worker ID). |
-| `external-ref` | internal/ops/types.go | HOSTREF-S1-T2 | **kept-evidence** | Names a GitHub issue URL on an Armature issue. Classified not validity-affecting, beside assign. Payload: external_ref, external_role, withdraw_external_ref. No approval field and no body field. Replay handler is HOSTREF-S1-T2. |
+| `external-ref` | internal/ops/types.go | engine.go | **kept-evidence** | Names a GitHub issue URL on an Armature issue. Classified not validity-affecting, beside assign. Payload: external_ref, external_role, withdraw_external_ref. Replay always appends a HostRef; CurrentHostRef is the latest live name; index stores current_host_url and live_host_urls. The command decides ADR 0018 no-ops before write. |
 | `amend` | internal/ops/types.go:21 | engine.go | **kept-evidence** | Updates issue metadata. Payload: type, scope, context_files, dod, acceptance (partial updates). |
 | `citation-accepted` | internal/ops/types.go:22 | engine.go | **kept-evidence** | Records citation acceptance. Payload: source_entry_id, confirmed_noninteractively flag. |
 | `scope-rename` | internal/ops/types.go:23 | engine.go | **kept-evidence** | Renames scope glob. Payload: old_path, new_path. Updates scope entries. |
@@ -506,8 +507,8 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - **Issue Types**: 5 (all kept-evidence)
 - **Statuses**: 7 (all kept-evidence)
 - **Confidence States**: 3 (all kept-evidence)
-- **Issue Fields**: 40 (36 kept-evidence, 2 kept-justified, 2 parked)
-- **Op Types**: 19 (all kept-evidence)
+- **Issue Fields**: 41 (37 kept-evidence, 2 kept-justified, 2 parked)
+- **Op Types**: 20 (all kept-evidence)
 - **CLI Commands**: 58 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
 - **Command output modes**: 67 (62 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
