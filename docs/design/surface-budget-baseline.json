@@ -696,6 +696,15 @@
         "ExitUsageError"
       ]
     },
+    "internal/externalref": {
+      "count": 4,
+      "names": [
+        "ErrInvalidGitHubIssueURL",
+        "GitHubIssue",
+        "GitHubIssue.URL",
+        "ParseGitHubIssueURL"
+      ]
+    },
     "internal/filelock": {
       "count": 3,
       "names": [

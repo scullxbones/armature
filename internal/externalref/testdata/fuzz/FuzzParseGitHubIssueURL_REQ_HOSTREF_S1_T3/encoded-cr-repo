@@ -1,0 +1,2 @@
+go test fuzz v1
+string("https://github.com/octocat/repo%0dsecret/issues/1")
