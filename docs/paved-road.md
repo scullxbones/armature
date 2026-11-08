@@ -92,6 +92,7 @@ Zero unclassified leaf commands is a gate.
 - `arm note` — Work
 - `arm push-ops` — Sync
 - `arm ready` — Wave dispatch
+- `arm ref`
 - `arm render-context` — Wave dispatch
 - `arm review`
 - `arm review commits` — Review
