@@ -95,6 +95,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path.startswith("/api/") and mode in ("redirect", "http-redirect"):
             self.send_bytes(500, "api down", "text/plain")
             return
+        if mode == "api-flaky" and path.startswith("/api/repos/"):
+            counts = root / "counts"
+            prior = 0
+            if counts.exists():
+                prior = sum(1 for line in counts.read_text(encoding="utf-8").splitlines() if line == path)
+            with counts.open("a", encoding="utf-8") as fh:
+                fh.write(path + "\n")
+            if prior == 0:
+                self.send_bytes(504, "gateway timeout", "text/plain")
+                return
+            host = self.headers.get("Host")
+            body = json.dumps({"assets": [{
+                "name": "tool-9.9.9-linux-amd64.tar.gz",
+                "url": f"http://{host}/api/asset/tarball",
+            }]})
+            self.send_bytes(200, body, "application/json")
+            return
+        if mode == "api-flaky" and path == "/api/asset/tarball":
+            self.send_bytes(200, (www / tarball_rel).read_bytes())
+            return
+        if mode == "api-flaky" and path.endswith(tarball_rel):
+            self.send_bytes(504, "gateway timeout", "text/plain")
+            return
         if path == "/api/repos/example/tool/releases/tags/v9.9.9" and mode == "partial":
             host = self.headers.get("Host")
             body = json.dumps({"assets": [{
@@ -364,6 +387,23 @@ if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
     pass "truncated transfer fell through to a verified body"
 else
     fail "expected fallback after truncated 200, status=$STATUS out=$OUT"
+fi
+
+echo "Test 12: one asset-API 504 is retried when the release URL stays down..."
+set_mode api-flaky
+reset_counts
+rm -rf "$CACHE"
+export ARMATURE_GITHUB_API="${BASE}/api"
+export ARMATURE_TOOL_FETCH_RETRIES=2
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] && echo "$OUT" | rg -q "asset API"; then
+    pass "asset API 504 was retried and matched the pin"
+else
+    fail "expected asset API retry, status=$STATUS out=$OUT"
 fi
 
 kill "$SERVER_PID" 2>/dev/null || true

@@ -263,6 +263,7 @@ fetch_url() {
         fi
         http_once "$dest" "$cur" "$token" "$left" "$accept" > "$WORKDIR/status"
         read -r st code < "$WORKDIR/status"
+        LAST_HTTP="$code"
         if [[ "$st" -ne 0 ]]; then
             rm -f "$dest"
             return 1
@@ -347,6 +348,32 @@ fetch_matching() {
     return 1
 }
 
+# Same budget as fetch_matching, without a digest check (release JSON).
+fetch_retry() {
+    local url="$1" dest="$2" token="$3" accept="$4"
+    local attempt=0 st
+    while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
+        if [[ "$(time_left)" -eq 0 ]]; then
+            return 1
+        fi
+        set +e
+        fetch_url "$url" "$dest" "$token" "$accept"
+        st=$?
+        set -e
+        if [[ "$st" -eq 0 ]]; then
+            return 0
+        fi
+        if [[ "$st" -eq 2 ]]; then
+            return 1
+        fi
+        attempt=$((attempt + 1))
+        if [[ "$attempt" -le "$FETCH_RETRIES" && "$FETCH_BACKOFF" -gt 0 && "$(time_left)" -gt 0 ]]; then
+            sleep $((FETCH_BACKOFF * attempt))
+        fi
+    done
+    return 1
+}
+
 api_base_url() {
     if [[ -n "${ARMATURE_GITHUB_API+x}" ]]; then
         if [[ -z "$ARMATURE_GITHUB_API" || "$ARMATURE_GITHUB_API" == "0" ]]; then
@@ -387,6 +414,7 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 FETCH_START=$SECONDS
 SAW_MISMATCH=0
+LAST_HTTP=""
 TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 TARBALL_DEST="$WORKDIR/$TARBALL"
 
@@ -412,7 +440,17 @@ if [[ "$from_cache" -eq 0 ]]; then
     if api=$(api_base_url); then
         meta="$WORKDIR/release.json"
         rel="${api}/repos/${REPO}/releases/tags/${VERSION}"
-        if fetch_url "$rel" "$meta" "$TOKEN" "application/vnd.github+json"; then
+        api_meta_ok=0
+        if fetch_retry "$rel" "$meta" "$TOKEN" "application/vnd.github+json"; then
+            api_meta_ok=1
+        elif [[ -n "$TOKEN" && ( "$LAST_HTTP" == "401" || "$LAST_HTTP" == "403" ) ]]; then
+            # A job token is often refused on another public repo.
+            TOKEN=""
+            if fetch_retry "$rel" "$meta" "" "application/vnd.github+json"; then
+                api_meta_ok=1
+            fi
+        fi
+        if [[ "$api_meta_ok" -eq 1 ]]; then
             asset=$(api_asset_url "$api" "$meta" || true)
             case "$asset" in
                 "$api"/*)
@@ -423,7 +461,7 @@ if [[ "$from_cache" -eq 0 ]]; then
                     ;;
             esac
         else
-            echo "WARN: GitHub asset API failed for $REPO@$VERSION" >&2
+            echo "WARN: GitHub asset API failed for $REPO@$VERSION (HTTP ${LAST_HTTP:-none})" >&2
         fi
     fi
     if [[ "$downloaded" -eq 0 ]]; then
