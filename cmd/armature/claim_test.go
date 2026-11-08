@@ -1346,6 +1346,12 @@ func TestClaimRollsBackStaleTakeoverToOpen(t *testing.T) {
 		Payload:   ops.Payload{TTL: 1, WorktreePath: "/legacy/task-01"},
 	}
 	require.NoError(t, ops.AppendOp(logPath, staleClaimOp))
+	// Publish the foreign claim so LocateOps places it in committed history.
+	// An unpublished foreign claim left pending would re-apply after our
+	// committed compensation release under pending-after-committed merge.
+	ctx := getTestContext(t, repo)
+	gittest.Git(t, ctx.WorktreePath, "add", "ops/"+otherWorker+".log")
+	gittest.Git(t, ctx.WorktreePath, "commit", "-m", "stale foreign claim")
 
 	_, err = runTrls(t, repo, "materialize")
 	require.NoError(t, err)
@@ -1413,6 +1419,13 @@ func TestClaimRollsBackStaleSameWorkerClaimToOpen(t *testing.T) {
 		StateDir:  filepath.Join(repo, ".armature", "state"),
 	})
 	require.NoError(t, err, "should resolve worker ID and log path")
+
+	// Pin cutover after create so a backdated stale claim stays after create in
+	// LocateOps commit order (epoch-0 timestamp order would claim-before-create).
+	sameCtx := getTestContext(t, repo)
+	sha, headErr := adapters.New(sameCtx.WorktreePath).HeadSHA()
+	require.NoError(t, headErr)
+	require.NoError(t, gittest.SetLocalConfig(sameCtx.WorktreePath, "armature.oporder-cutover", sha))
 
 	staleClaimTime := time.Now().Unix() - 7200
 	staleClaimOp := ops.Op{
@@ -1537,6 +1550,9 @@ func TestClaimCompensationRestoreVsRelease_REQ_ARCHIMP_S20_T4(t *testing.T) {
 			Payload:   ops.Payload{TTL: 1, WorktreePath: "/legacy/task-01"},
 		}
 		require.NoError(t, ops.AppendOp(filepath.Join(repo, ".armature", "ops", otherWorker+".log"), staleClaimOp))
+		relCtx := getTestContext(t, repo)
+		gittest.Git(t, relCtx.WorktreePath, "add", "ops/"+otherWorker+".log")
+		gittest.Git(t, relCtx.WorktreePath, "commit", "-m", "stale foreign claim")
 		_, err = runTrls(t, repo, "materialize")
 		require.NoError(t, err)
 

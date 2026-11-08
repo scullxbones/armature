@@ -15,13 +15,6 @@ import (
 // root) so scope checks compare like-for-like against a policy's root-based
 // scope entries rather than a raw relative path.
 //
-// When absolutization against cwd fails (cwd empty or itself relative) but a
-// worktree root was supplied, join the relative path against root instead of
-// leaving it as-is. Falling through to the raw relative path would let it
-// match scope entries textually (e.g. a path "internal/x.go" matching scope
-// "internal/" even though, relative to root, the file actually lives
-// elsewhere) — a residual scope-check bypass.
-//
 // If both cwd and root are empty, paths is returned unmodified.
 func AbsolutizePaths(paths []string, cwd, root string) []string {
 	if cwd == "" && root == "" {
@@ -72,8 +65,7 @@ type hook struct {
 	resolver policyResolver
 }
 
-// NewHook builds the harness-hook evaluator. The resolver loads task policy;
-// platform adapters stay behind NewAdapterForPlatform.
+// NewHook builds the harness-hook evaluator. The resolver loads task policy.
 func NewHook(resolver policyResolver) *hook {
 	return &hook{resolver: resolver}
 }

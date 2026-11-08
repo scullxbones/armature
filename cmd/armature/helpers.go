@@ -954,7 +954,7 @@ func readAllOpsFromDir(opsDir string) ([]ops.Op, error) {
 func newSnapshotStore(ctx *config.Context) *snapshot.Store {
 	opsDir := filepath.Join(ctx.IssuesDir, "ops")
 	stateDir := ctx.StateDir
-	return snapshot.NewStore(opsDir, stateDir)
+	return snapshot.NewStore(opsDir, stateDir).WithOpsWorktree(ctx.WorktreePath)
 }
 
 func issuesMatchingScope(index materialize.Index, pred func(string) bool) []string {
