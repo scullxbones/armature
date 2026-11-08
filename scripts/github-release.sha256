@@ -1,0 +1,20 @@
+# sha256  filename  repo  version
+# Install trusts only these digests. Versions match the Makefile pins.
+3750b2e93f37e0c692657da574d7019a101c0084da05a790c83fd335bad973e4  ripgrep-15.2.0-aarch64-apple-darwin.tar.gz  BurntSushi/ripgrep  15.2.0
+800b1e7206afe799dfb5a6901f23147cfaabe0e52210538100f61e86e1740915  ripgrep-15.2.0-aarch64-unknown-linux-musl.tar.gz  BurntSushi/ripgrep  15.2.0
+af7825fcc69a2afc7a7aea55fc9af90e26421d8f20fe59df32e233c0b8a231c1  ripgrep-15.2.0-x86_64-apple-darwin.tar.gz  BurntSushi/ripgrep  15.2.0
+33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c  ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz  BurntSushi/ripgrep  15.2.0
+a5667c1c3536be1740133213e1e822bfb8f0d98ea12903174d6d5f635e4ed68d  golangci-lint-2.14.0-darwin-amd64.tar.gz  golangci/golangci-lint  v2.14.0
+5ef5f36a7147e91dc58ef9ef4d11bb7bad5ead0c76eb6c01327a73c641d1dcc3  golangci-lint-2.14.0-darwin-arm64.tar.gz  golangci/golangci-lint  v2.14.0
+ab90aeb7b066f92a33415b638a50fe5344bbb75a0d32ad30cc248d88f81032ab  golangci-lint-2.14.0-linux-amd64.tar.gz  golangci/golangci-lint  v2.14.0
+ee7ec5f3453d15ddf106fae5a4d6c71737712348a979d1fe9cd52ec7ea299bae  golangci-lint-2.14.0-linux-arm64.tar.gz  golangci/golangci-lint  v2.14.0
+6b00937bb51a9ac994371b9835572320f1f26f4e3ffce7b212b8b85afa0a12ae  gremlins_0.6.0_darwin_amd64.tar.gz  go-gremlins/gremlins  v0.6.0
+90de858ffad3eea5018e41cdf28747b7003966684b9420f4605eb10bdad0c301  gremlins_0.6.0_darwin_arm64.tar.gz  go-gremlins/gremlins  v0.6.0
+b02a42e47935f891c9a411d68c07e211c7082609e79c2435b67c85ee9658c538  gremlins_0.6.0_linux_amd64.tar.gz  go-gremlins/gremlins  v0.6.0
+686542674e54559afb7e86d6994d342c19a856cfd970c315748989537936664c  gremlins_0.6.0_linux_arm64.tar.gz  go-gremlins/gremlins  v0.6.0
+5b4f42d7d9cc19149539f0117ad66521883df9793942b48d20b17904fa6526f2  gremlins_0.6.0_windows_amd64.tar.gz  go-gremlins/gremlins  v0.6.0
+efb7754f07788179852f261b18c94b830bfd8843837d83b9460d975451e82a09  gremlins_0.6.0_windows_arm64.tar.gz  go-gremlins/gremlins  v0.6.0
+e2e5831cbabaec9a36fe65c34755c1113982c842a685edce3ce0b54a0ded8003  syft_1.55.0_darwin_amd64.tar.gz  anchore/syft  v1.55.0
+1217c258bd5eb91ef3189cf22a82e02f9cac07e4ce934350f428e93aff674625  syft_1.55.0_darwin_arm64.tar.gz  anchore/syft  v1.55.0
+bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d  syft_1.55.0_linux_amd64.tar.gz  anchore/syft  v1.55.0
+929bd163db2d7cd2255d3bcb8967208079813d7b46b0c952f7b794d8e2c7d304  syft_1.55.0_linux_arm64.tar.gz  anchore/syft  v1.55.0
