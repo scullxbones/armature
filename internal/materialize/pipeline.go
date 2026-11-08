@@ -336,7 +336,14 @@ func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
 	return append(out, pendingRest[pi:]...)
 }
 
-func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, fullReplay bool, headDiskOps []ops.Op) (*State, Result, error) {
+func applyCommitLocated(
+	stateDir string,
+	opts Options,
+	cp Checkpoint,
+	located []oporder.LocatedOp,
+	fullReplay bool,
+	headDiskOps []ops.Op,
+) (*State, Result, error) {
 	// LocateOps already SortLocated (epoch-0 timestamp order for pre-cutover
 	// history; commit-then-line after cutover). Keep that order — never re-sort
 	// by CommitN/Line alone (cross-file line order on cutover dumps reopens
