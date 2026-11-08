@@ -958,6 +958,35 @@ are). They are not folded into `issues`.
 
 ---
 
+## ref
+
+Record or withdraw a GitHub issue URL name on an Armature issue.
+
+**Synopsis:**
+`arm ref ISSUE URL [--role ROLE]`
+`arm ref ISSUE URL --withdraw`
+
+**Description:**
+Parses the URL with `ParseGitHubIssueURL` and appends an `external-ref` op.
+`--role` is an open label (empty allowed). Recording the same canonical URL and
+role while that pair is already the current live name is a no-op at exit 0
+(ADR 0018); a repeated no-op still publishes an unpublished local tip.
+Withdrawing a URL that is not live is also a no-op. `--role` and `--withdraw`
+together are a command error. Replay always appends; the command decides the
+no-op before write. Does not fetch host content and does not write to GitHub.
+
+**Flags:**
+- `--role string`: Role label for the host name (for example `support` or `engineering`).
+- `--withdraw`: Withdraw a live host name.
+
+**Example:**
+```bash
+arm ref TASK-001 https://github.com/octocat/hello-world/issues/1 --role engineering
+arm ref TASK-001 https://github.com/octocat/hello-world/issues/1 --withdraw
+```
+
+---
+
 ## ref-read
 
 Print the title and body of a live host ref for an issue. With no `--url`,
@@ -973,6 +1002,7 @@ a JSON object with `url`, `title`, and `body`.
 
 **Flags:**
 - `--url string`: Live host URL to read (default: current).
+
 
 ---
 

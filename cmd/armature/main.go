@@ -200,6 +200,10 @@ func newRootCmd() *cobra.Command {
 	assignCmd.GroupID = "workflow"
 	root.AddCommand(assignCmd)
 
+	refCmd := newRefCmd()
+	refCmd.GroupID = "workflow"
+	root.AddCommand(refCmd)
+
 	dagCmd := newDAGCmd()
 	dagCmd.GroupID = "dag"
 	root.AddCommand(dagCmd)
@@ -408,6 +412,7 @@ func pavedRoadCommands() map[string]pavedRoadClass {
 		"amend":           {Kind: pavedRoadKindEscape, Note: "Correct fields after create or apply. Prefer getting the plan right."},
 		"confirm":         {Kind: pavedRoadKindEscape, Note: "Interactive promotion. The road uses dag transition after validate."},
 		"assign":          {Kind: pavedRoadKindEscape, Note: "Soft assignment without a claim. Dispatch uses claim --worktree."},
+		"ref":             {Kind: pavedRoadKindPaved, Note: "Names a GitHub issue URL on an Armature issue. Host body stays on the ticket."},
 
 		"dag":                  {Kind: pavedRoadKindPaved},
 		"dag apply":            {Kind: pavedRoadKindPaved},

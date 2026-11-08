@@ -74,6 +74,7 @@ stay on the platform/git protocol.
 | `OPS-BACKUP-2` | ops-backup | Reserved. `restore-plan` diverge emits the plan envelope (disposition + escalation help) and exits non-zero via ADR 0020 §7 (`skipCommandFailure`); it does not emit this Command Failure on the wire. | TOPTIER-S12-T1 | |
 | `PUSH-OPS-1` | push-ops | `arm push-ops` could not complete. | LNGHZN-S6-T5 | |
 | `PUSH-OPS-2` | push-ops | `arm push-ops` refused to publish because the graph failed `arm validate --ci` / `make validate-graph` after integrating `origin/_armature`. | PUBLISH-VALIDATE | |
+| `REF-1` | ref | `arm ref` could not complete (invalid URL, publish failure, or port error). | HOSTREF-S1-T5 | |
 | `REOPEN-1` | reopen | `arm reopen` could not complete. | LNGHZN-S6-T5 | |
 | `REPARENT-1` | reparent | `arm reparent` could not complete. | LNGHZN-S6-T5 | |
 | `REF-READ-1` | ref-read | `arm ref-read` could not complete (unknown issue, no/unknown live host name, missing `GITHUB_TOKEN`, fetch failure). Appends no op and writes no state. | HOSTREF-S1-T6 | |

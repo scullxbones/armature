@@ -28,6 +28,7 @@ func init() {
 	armerrors.Register("OPS-BACKUP-2")
 	armerrors.Register("PUSH-OPS-1")
 	armerrors.Register("PUSH-OPS-2")
+	armerrors.Register("REF-1")
 	armerrors.Register("REOPEN-1")
 	armerrors.Register("REPARENT-1")
 	armerrors.Register("REF-READ-1")

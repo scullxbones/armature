@@ -24,7 +24,7 @@ func TestHandlersDoNotReloadStateDirectly_REQ_ARCHIMP_S14_T6(t *testing.T) {
 		"context_history.go", "decompose.go", "hook.go",
 		"scope_delete.go", "merged.go", "scope_rename.go", "ready.go",
 		"reparent.go", "show.go", "stalereview.go", "sync.go", "tui.go", "validate.go",
-		"transition.go",
+		"transition.go", "ref.go",
 	}
 
 	exempt := map[string]bool{
