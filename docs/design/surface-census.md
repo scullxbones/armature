@@ -322,6 +322,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | Flag | Command(s) | Type | Notes | Status |
 |------|-----------|------|-------|--------|
 | `--status` | list | string | Filter by status | **kept-evidence** |
+| `--external-ref` | list | string | Filter to issues whose live host names contain the parsed github.com issue URL (HOSTREF-S1-T9). No fetch; no body. | **kept-evidence** |
 | `--terminal` | list | bool | Filter to terminal statuses (done, merged, cancelled) | **kept-evidence** |
 | `--group` | list | bool | Group by status with headers | **kept-evidence** |
 | `--assigned-to` | ready | string | Filter to tasks assigned to worker | **kept-evidence** |
