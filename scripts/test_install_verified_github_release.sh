@@ -89,9 +89,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         mode = mode_file.read_text(encoding="utf-8").strip()
         path = self.path.split("?", 1)[0]
         tls_port = tls_port_file.read_text(encoding="utf-8").strip() if tls_port_file.exists() else "0"
-        if path == "/artifact":
+        if path == "/artifact" or path.startswith("/edge/"):
             self.send_bytes(200, (www / tarball_rel).read_bytes())
             return
+        if mode == "custom-redir":
+            if path.startswith("/api/"):
+                self.send_bytes(500, "api down", "text/plain")
+                return
+            if path.endswith(tarball_rel):
+                loc = (root / "location").read_text(encoding="utf-8").strip()
+                self.send_bytes(302, "", "text/plain", [("Location", loc)])
+                return
         if path.startswith("/api/") and mode in ("redirect", "http-redirect"):
             self.send_bytes(500, "api down", "text/plain")
             return
@@ -332,7 +340,7 @@ else
     fail "expected forged cache rejection, status=$STATUS out=$OUT"
 fi
 
-echo "Test 9: API failure, then https 302, auth stripped, verified 200..."
+echo "Test 9: https redirect installs, and a job token is never sent..."
 set_mode redirect
 reset_counts
 rm -rf "$CACHE"
@@ -345,14 +353,11 @@ OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
 unset ARMATURE_GITHUB_API ARMATURE_TOOL_CACERT ARMATURE_TOOL_FETCH_RETRIES GITHUB_TOKEN
-release_auth=$(rg "releases/download" "$AUTH_FILE" || true)
-artifact_auth=$(rg "^/artifact " "$AUTH_FILE" || true)
 if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] \
-    && echo "$release_auth" | rg -q "auth=Bearer pin-test-token" \
-    && echo "$artifact_auth" | rg -q "auth=None"; then
-    pass "https redirect installed the pin and dropped auth"
+    && ! rg -q 'pin-test-token' "$AUTH_FILE"; then
+    pass "https redirect installed the pin without sending a token"
 else
-    fail "expected https redirect install, status=$STATUS release=$release_auth artifact=$artifact_auth out=$OUT"
+    fail "expected token-free https redirect, status=$STATUS auth=$(cat "$AUTH_FILE") out=$OUT"
 fi
 
 echo "Test 10: http redirect is refused even when the target matches the pin..."
@@ -361,15 +366,48 @@ reset_counts
 rm -rf "$CACHE"
 export ARMATURE_GITHUB_API="${BASE}/api"
 export ARMATURE_TOOL_FETCH_RETRIES=0
+export GITHUB_TOKEN=pin-test-token
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES
-if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "not https" && [[ ! -e "$WORKDIR/dest/tool" ]]; then
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES GITHUB_TOKEN
+if [[ $STATUS -ne 0 ]] && ! rg -q '/files/' "$AUTH_FILE" && ! rg -q 'pin-test-token' "$AUTH_FILE" \
+    && [[ ! -e "$WORKDIR/dest/tool" ]]; then
     pass "http redirect is refused"
 else
-    fail "expected http redirect refusal, status=$STATUS out=$OUT"
+    fail "expected http redirect refusal, status=$STATUS auth=$(cat "$AUTH_FILE") out=$OUT"
+fi
+
+echo "Test 10b: fragment, userinfo, and @-authority redirects never carry the token..."
+TLS_PORT=$(cat "$TLS_PORT_FILE")
+export ARMATURE_GITHUB_API="${BASE}/api"
+export ARMATURE_TOOL_CACERT="$WORKDIR/cert.pem"
+export ARMATURE_TOOL_FETCH_RETRIES=0
+export GITHUB_TOKEN=pin-test-token
+token_leak=0
+for loc in \
+    "https://localhost:${TLS_PORT}/edge/fragment#@api.github.com/releases" \
+    "https://user:pass@localhost:${TLS_PORT}/edge/userinfo" \
+    "https://api.github.com@localhost:${TLS_PORT}/edge/at-sign"
+do
+    printf '%s\n' "$loc" > "$WORKDIR/location"
+    set_mode custom-redir
+    reset_counts
+    rm -rf "$CACHE" "$WORKDIR/dest"
+    set +e
+    OUT=$(run_install 2>&1)
+    STATUS=$?
+    set -e
+    if [[ $STATUS -ne 0 ]] || [[ "$( "$WORKDIR/dest/tool" 2>/dev/null || true )" != "fake-tool" ]] \
+        || rg -q 'pin-test-token' "$AUTH_FILE"; then
+        token_leak=1
+        fail "token reached a non-GitHub-looking redirect ($loc) status=$STATUS auth=$(cat "$AUTH_FILE") out=$OUT"
+    fi
+done
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_CACERT ARMATURE_TOOL_FETCH_RETRIES GITHUB_TOKEN
+if [[ "$token_leak" -eq 0 ]]; then
+    pass "fragment, userinfo, and @-authority redirects did not receive the token"
 fi
 
 echo "Test 11: truncated 200 falls through to the release URL..."
@@ -404,6 +442,103 @@ if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] && ec
     pass "asset API 504 was retried and matched the pin"
 else
     fail "expected asset API retry, status=$STATUS out=$OUT"
+fi
+
+echo "Test 13: a symlink at the old predictable cache temp path is not followed..."
+set_mode ok
+reset_counts
+rm -rf "$CACHE"
+sentinel="$WORKDIR/sentinel"
+printf 'sentinel-contents\n' > "$sentinel"
+pin_dir="$CACHE/example/tool/v9.9.9/$HASH"
+mkdir -p "$pin_dir"
+ln -s "$sentinel" "$pin_dir/$TARBALL.tmp"
+if run_install >/dev/null && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] \
+    && [[ "$(cat "$sentinel")" == "sentinel-contents" ]]; then
+    pass "predictable cache temp symlink was not overwritten"
+else
+    fail "cache publish followed a temp symlink (sentinel=$(cat "$sentinel" 2>/dev/null))"
+fi
+
+echo "Test 14: two installers can publish the same cache entry..."
+set_mode ok
+rm -rf "$CACHE" "$WORKDIR/dest-a" "$WORKDIR/dest-b"
+mkdir -p "$WORKDIR/dest-a" "$WORKDIR/dest-b"
+env \
+    GITHUB_RELEASE_BASE="$BASE" \
+    ARMATURE_TOOL_CACHE="$CACHE" \
+    ARMATURE_TOOL_PIN_FILE="$PIN_FILE" \
+    ARMATURE_TOOL_FETCH_RETRIES=0 \
+    ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=20 \
+    ARMATURE_TOOL_FETCH_BACKOFF_SECS=0 \
+    "$SCRIPT" --repo example/tool --version v9.9.9 \
+    --tarball 'tool-{ver}-{os}-{arch}.tar.gz' --bin tool --dest "$WORKDIR/dest-a" \
+    >"$WORKDIR/conc-a.out" 2>&1 &
+pid_a=$!
+env \
+    GITHUB_RELEASE_BASE="$BASE" \
+    ARMATURE_TOOL_CACHE="$CACHE" \
+    ARMATURE_TOOL_PIN_FILE="$PIN_FILE" \
+    ARMATURE_TOOL_FETCH_RETRIES=0 \
+    ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=20 \
+    ARMATURE_TOOL_FETCH_BACKOFF_SECS=0 \
+    "$SCRIPT" --repo example/tool --version v9.9.9 \
+    --tarball 'tool-{ver}-{os}-{arch}.tar.gz' --bin tool --dest "$WORKDIR/dest-b" \
+    >"$WORKDIR/conc-b.out" 2>&1 &
+pid_b=$!
+set +e
+wait "$pid_a"; st_a=$?
+wait "$pid_b"; st_b=$?
+set -e
+cached="$CACHE/example/tool/v9.9.9/$HASH/$TARBALL"
+if [[ $st_a -eq 0 && $st_b -eq 0 ]] \
+    && [[ "$( "$WORKDIR/dest-a/tool" )" == "fake-tool" ]] \
+    && [[ "$( "$WORKDIR/dest-b/tool" )" == "fake-tool" ]] \
+    && [[ -f "$cached" ]] && [[ "$(sha256sum "$cached" | awk '{print $1}')" == "$HASH" ]]; then
+    pass "concurrent installs both succeeded and the cache matches the pin"
+else
+    fail "concurrent cache publish failed a=$st_a b=$st_b"
+fi
+
+echo "Test 15: an unwritable cache does not fail the install..."
+set_mode ok
+rm -rf "$CACHE"
+mkdir -p "$CACHE"
+chmod a-w "$CACHE"
+if [[ -w "$CACHE" ]]; then
+    chmod u+w "$CACHE" 2>/dev/null || true
+    rm -rf "$CACHE"
+    printf 'not-a-directory\n' > "$CACHE"
+fi
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+chmod u+w "$CACHE" 2>/dev/null || true
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
+    pass "unwritable cache is ignored"
+else
+    fail "unwritable cache failed the install, status=$STATUS out=$OUT"
+fi
+
+echo "Test 16: backoff is clamped to the remaining budget..."
+set_mode always-504
+rm -rf "$CACHE"
+export ARMATURE_TOOL_FETCH_RETRIES=1
+export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=1
+export ARMATURE_TOOL_FETCH_BACKOFF_SECS=30
+start=$(date +%s)
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+end=$(date +%s)
+unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME ARMATURE_TOOL_FETCH_BACKOFF_SECS
+elapsed=$((end - start))
+if [[ $STATUS -ne 0 && "$elapsed" -lt 8 && ! -e "$WORKDIR/dest/tool" ]]; then
+    pass "30s backoff was clamped inside a 1s budget (${elapsed}s)"
+else
+    fail "backoff exceeded the budget, elapsed=${elapsed}s status=$STATUS out=$OUT"
 fi
 
 kill "$SERVER_PID" 2>/dev/null || true

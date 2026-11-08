@@ -2,7 +2,7 @@
 # Install one pinned GitHub release binary.
 # The only trusted digest is scripts/github-release.sha256 (override with
 # ARMATURE_TOOL_PIN_FILE). A downloaded checksum file, a cache path, and a
-# filename are not digests.
+# filename are not digests. Requests send no credentials.
 #
 # TOOL_FETCH_RETRY_MAX_TIME / ARMATURE_TOOL_FETCH_RETRY_MAX_TIME is the
 # wall-clock budget for one artifact: every attempt, redirect, and the
@@ -154,16 +154,6 @@ file_sha256() {
     fi
 }
 
-url_host() {
-    local u="$1"
-    u="${u#*://}"
-    u="${u%%/*}"
-    u="${u%%\?*}"
-    u="${u#*@}"
-    u="${u%%:*}"
-    printf '%s' "$u" | tr '[:upper:]' '[:lower:]'
-}
-
 cache_file() {
     local root owner name
     if [[ "${ARMATURE_TOOL_CACHE-}" == "0" ]]; then
@@ -189,50 +179,40 @@ cache_file() {
     printf '%s\n' "$root/$owner/$name/$VERSION/$PIN/$TARBALL"
 }
 
-# One HTTP transaction. Prints "<curl-exit> <http-code>" on stdout.
-# Headers land in $WORKDIR/last.hdr. Redirects are not followed here.
-# A non-zero curl exit (including a truncated body) is a failed transfer
-# even when the status line was 200.
-http_once() {
-    local dest="$1" url="$2" token="$3" limit="$4" accept="${5:-}" st code
+# One transfer, including redirects. No credentials are sent: public release
+# assets do not need them, and a hand-rolled host check cannot decide that
+# safely. curl follows redirects without --location-trusted. --proto-redir
+# allows only https on those hops. A non-zero curl exit (truncated body,
+# refused redirect) is a failed transfer even when a status line was 200.
+transfer() {
+    local dest="$1" url="$2" limit="$3" accept="${4:-}" st code
     if [[ -z "$accept" ]]; then
         accept="*/*"
     fi
-    LAST_HDR="$WORKDIR/last.hdr"
     set +e
-    if [[ -n "${ARMATURE_TOOL_CACERT:-}" && -n "$token" ]]; then
+    if [[ -n "${ARMATURE_TOOL_CACERT:-}" ]]; then
         code=$(curl -sS --max-time "$limit" --cacert "$ARMATURE_TOOL_CACERT" \
-            -H "Authorization: Bearer ${token}" \
+            -L --max-redirs 5 --proto-redir =https \
             -H "Accept: ${accept}" \
             -H "User-Agent: armature-install-verified-release" \
-            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
-            "$url")
-        st=$?
-    elif [[ -n "${ARMATURE_TOOL_CACERT:-}" ]]; then
-        code=$(curl -sS --max-time "$limit" --cacert "$ARMATURE_TOOL_CACERT" \
-            -H "Accept: ${accept}" \
-            -H "User-Agent: armature-install-verified-release" \
-            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
-            "$url")
-        st=$?
-    elif [[ -n "$token" ]]; then
-        code=$(curl -sS --max-time "$limit" \
-            -H "Authorization: Bearer ${token}" \
-            -H "Accept: ${accept}" \
-            -H "User-Agent: armature-install-verified-release" \
-            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
+            -o "$dest" -w '%{http_code}' \
             "$url")
         st=$?
     else
         code=$(curl -sS --max-time "$limit" \
+            -L --max-redirs 5 --proto-redir =https \
             -H "Accept: ${accept}" \
             -H "User-Agent: armature-install-verified-release" \
-            -D "$LAST_HDR" -o "$dest" -w '%{http_code}' \
+            -o "$dest" -w '%{http_code}' \
             "$url")
         st=$?
     fi
     set -e
-    printf '%s %s\n' "$st" "${code:-000}"
+    if [[ "$st" -ne 0 || "$code" != "200" || ! -s "$dest" ]]; then
+        rm -f "$dest"
+        return 1
+    fi
+    return 0
 }
 
 time_left() {
@@ -245,67 +225,16 @@ time_left() {
     fi
 }
 
-# Follow at most 5 redirects. Only https targets. Drop Authorization when
-# the next host differs from the URL we were asked to fetch.
-fetch_url() {
-    local url="$1" dest="$2" token="$3" accept="${4:-}"
-    local hops=0 cur="$url" origin host loc st code left
-    origin=$(url_host "$url")
-    while [[ "$hops" -le 5 ]]; do
-        left=$(time_left)
-        if [[ "$left" -eq 0 ]]; then
-            echo "FAIL: tool fetch exceeded ${FETCH_RETRY_MAX_TIME}s wall-clock budget" >&2
-            return 1
-        fi
-        host=$(url_host "$cur")
-        if [[ "$host" != "$origin" ]]; then
-            token=""
-        fi
-        http_once "$dest" "$cur" "$token" "$left" "$accept" > "$WORKDIR/status"
-        read -r st code < "$WORKDIR/status"
-        LAST_HTTP="$code"
-        if [[ "$st" -ne 0 ]]; then
-            rm -f "$dest"
-            return 1
-        fi
-        case "$code" in
-            200)
-                if [[ ! -s "$dest" ]]; then
-                    return 1
-                fi
-                return 0
-                ;;
-            301|302|303|307|308)
-                loc=$(awk '
-                    {
-                        line = $0
-                        gsub(/\r/, "", line)
-                        low = tolower(line)
-                        if (low ~ /^location:[ \t]*/) {
-                            sub(/^[^:]+:[ \t]*/, "", line)
-                            print line
-                        }
-                    }
-                ' "$LAST_HDR" | tail -n 1)
-                case "$loc" in
-                    https://*) ;;
-                    *)
-                        echo "FAIL: redirect from $cur is not https ($loc)" >&2
-                        rm -f "$dest"
-                        return 2
-                        ;;
-                esac
-                cur="$loc"
-                hops=$((hops + 1))
-                ;;
-            *)
-                rm -f "$dest"
-                return 1
-                ;;
-        esac
-    done
-    echo "FAIL: too many redirects for $url" >&2
-    return 2
+# Sleep is part of the artifact budget. Never sleep past the deadline.
+pause_for_retry() {
+    local want="$1" left
+    [[ "$want" -gt 0 ]] || return 0
+    left=$(time_left)
+    [[ "$left" -gt 0 ]] || return 0
+    if [[ "$want" -gt "$left" ]]; then
+        want="$left"
+    fi
+    sleep "$want"
 }
 
 digest_matches() {
@@ -317,23 +246,16 @@ digest_matches() {
 # Retry transport failures inside the wall-clock budget. A finished body
 # whose digest is not the pin is not retried; the caller tries the other URL.
 fetch_matching() {
-    local url="$1" token="$2" dest="$3" accept="${4:-}"
-    local attempt=0 st
+    local url="$1" dest="$2" accept="${3:-}"
+    local attempt=0
     while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
         if [[ "$(time_left)" -eq 0 ]]; then
             return 1
         fi
-        set +e
-        fetch_url "$url" "$dest" "$token" "$accept"
-        st=$?
-        set -e
-        if [[ "$st" -eq 2 ]]; then
-            return 1
+        if transfer "$dest" "$url" "$(time_left)" "$accept" && digest_matches "$dest"; then
+            return 0
         fi
-        if [[ "$st" -eq 0 ]]; then
-            if digest_matches "$dest"; then
-                return 0
-            fi
+        if [[ -s "$dest" ]]; then
             SAW_MISMATCH=1
             echo "WARN: $url bytes do not match pinned sha256" >&2
             rm -f "$dest"
@@ -341,8 +263,8 @@ fetch_matching() {
         fi
         rm -f "$dest"
         attempt=$((attempt + 1))
-        if [[ "$attempt" -le "$FETCH_RETRIES" && "$FETCH_BACKOFF" -gt 0 && "$(time_left)" -gt 0 ]]; then
-            sleep $((FETCH_BACKOFF * attempt))
+        if [[ "$attempt" -le "$FETCH_RETRIES" ]]; then
+            pause_for_retry $((FETCH_BACKOFF * attempt))
         fi
     done
     return 1
@@ -350,25 +272,18 @@ fetch_matching() {
 
 # Same budget as fetch_matching, without a digest check (release JSON).
 fetch_retry() {
-    local url="$1" dest="$2" token="$3" accept="$4"
-    local attempt=0 st
+    local url="$1" dest="$2" accept="$3"
+    local attempt=0
     while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
         if [[ "$(time_left)" -eq 0 ]]; then
             return 1
         fi
-        set +e
-        fetch_url "$url" "$dest" "$token" "$accept"
-        st=$?
-        set -e
-        if [[ "$st" -eq 0 ]]; then
+        if transfer "$dest" "$url" "$(time_left)" "$accept"; then
             return 0
         fi
-        if [[ "$st" -eq 2 ]]; then
-            return 1
-        fi
         attempt=$((attempt + 1))
-        if [[ "$attempt" -le "$FETCH_RETRIES" && "$FETCH_BACKOFF" -gt 0 && "$(time_left)" -gt 0 ]]; then
-            sleep $((FETCH_BACKOFF * attempt))
+        if [[ "$attempt" -le "$FETCH_RETRIES" ]]; then
+            pause_for_retry $((FETCH_BACKOFF * attempt))
         fi
     done
     return 1
@@ -414,8 +329,6 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 FETCH_START=$SECONDS
 SAW_MISMATCH=0
-LAST_HTTP=""
-TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 TARBALL_DEST="$WORKDIR/$TARBALL"
 
 echo "Installing $BIN@$VERSION (pinned sha256 ${PIN})"
@@ -440,32 +353,22 @@ if [[ "$from_cache" -eq 0 ]]; then
     if api=$(api_base_url); then
         meta="$WORKDIR/release.json"
         rel="${api}/repos/${REPO}/releases/tags/${VERSION}"
-        api_meta_ok=0
-        if fetch_retry "$rel" "$meta" "$TOKEN" "application/vnd.github+json"; then
-            api_meta_ok=1
-        elif [[ -n "$TOKEN" && ( "$LAST_HTTP" == "401" || "$LAST_HTTP" == "403" ) ]]; then
-            # A job token is often refused on another public repo.
-            TOKEN=""
-            if fetch_retry "$rel" "$meta" "" "application/vnd.github+json"; then
-                api_meta_ok=1
-            fi
-        fi
-        if [[ "$api_meta_ok" -eq 1 ]]; then
+        if fetch_retry "$rel" "$meta" "application/vnd.github+json"; then
             asset=$(api_asset_url "$api" "$meta" || true)
             case "$asset" in
                 "$api"/*)
-                    if fetch_matching "$asset" "$TOKEN" "$TARBALL_DEST" "application/octet-stream"; then
+                    if fetch_matching "$asset" "$TARBALL_DEST" "application/octet-stream"; then
                         downloaded=1
                         echo "fetched $TARBALL via GitHub release asset API"
                     fi
                     ;;
             esac
         else
-            echo "WARN: GitHub asset API failed for $REPO@$VERSION (HTTP ${LAST_HTTP:-none})" >&2
+            echo "WARN: GitHub asset API failed for $REPO@$VERSION" >&2
         fi
     fi
     if [[ "$downloaded" -eq 0 ]]; then
-        if fetch_matching "$TARBALL_URL" "$TOKEN" "$TARBALL_DEST"; then
+        if fetch_matching "$TARBALL_URL" "$TARBALL_DEST"; then
             downloaded=1
             echo "fetched $TARBALL via release download URL"
         fi
@@ -496,15 +399,28 @@ if ! digest_matches "$TARBALL_DEST"; then
 fi
 echo "OK: $TARBALL sha256 matches pinned $PIN"
 
-if [[ -n "$CACHE_PATH" && "$from_cache" -eq 0 ]]; then
-    mkdir -p "$(dirname "$CACHE_PATH")"
-    cp "$TARBALL_DEST" "$CACHE_PATH.tmp"
-    if digest_matches "$CACHE_PATH.tmp"; then
-        mv -f "$CACHE_PATH.tmp" "$CACHE_PATH"
-    else
-        rm -f "$CACHE_PATH.tmp"
+# Best-effort. A cache miss, a symlink, or a permissions error must not
+# fail the install or write outside the cache directory.
+publish_cache() {
+    local dir tmp
+    [[ -n "${CACHE_PATH:-}" ]] || return 0
+    dir=$(dirname "$CACHE_PATH")
+    mkdir -p "$dir" 2>/dev/null || return 0
+    tmp=$(mktemp "$dir/.part.XXXXXX" 2>/dev/null) || return 0
+    if ! cp "$TARBALL_DEST" "$tmp" 2>/dev/null; then
+        rm -f "$tmp"
+        return 0
     fi
-fi
+    if ! digest_matches "$tmp"; then
+        rm -f "$tmp"
+        return 0
+    fi
+    if ! mv -f "$tmp" "$CACHE_PATH" 2>/dev/null; then
+        rm -f "$tmp"
+    fi
+    return 0
+}
+publish_cache || true
 
 mkdir -p "$WORKDIR/extract"
 tar -xzf "$TARBALL_DEST" -C "$WORKDIR/extract"
