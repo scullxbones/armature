@@ -19,10 +19,12 @@ type Call struct {
 	Args []string
 }
 
-// Result is the stdout, stderr, and exit code of one in-process arm command.
+// Result is the captured output and exit code of one in-process arm command.
+// Stderr-only failures must fold diagnostics into Stdout at the Runner
+// boundary (C10: no exported Result.Stderr). toolResultText and
+// structuredContent then surface those bytes without a wider package API.
 type Result struct {
 	Stdout   []byte
-	Stderr   []byte
 	ExitCode int
 }
 
@@ -376,6 +378,8 @@ func handleToolsCall(
 			return ExitRunnerPanic
 		}
 		text := toolResultText(out.res)
+		// stderr key stays for schema stability; diagnostics from stderr-only
+		// failures are folded into Stdout by the Runner (see toolRunner).
 		result := map[string]any{
 			"content": []map[string]any{
 				{"type": "text", "text": text},
@@ -383,7 +387,7 @@ func handleToolsCall(
 			"structuredContent": map[string]any{
 				"exitCode": out.res.ExitCode,
 				"stdout":   string(out.res.Stdout),
-				"stderr":   string(out.res.Stderr),
+				"stderr":   "",
 			},
 			"isError": out.res.ExitCode != 0,
 		}
@@ -463,16 +467,10 @@ func handleToolsCall(
 	}
 }
 
-// toolResultText prefers stdout; on failure with empty stdout, surfaces stderr
-// so stderr-only command failures are visible in the tool result without
-// writing to the MCP protocol stream outside the JSON-RPC response.
+// toolResultText returns the Runner's captured Stdout. Callers that capture a
+// separate stderr stream must fold stderr-only failure diagnostics into
+// Stdout before returning Result (C10 / Deep Module: no Result.Stderr).
 func toolResultText(res Result) string {
-	if len(res.Stdout) > 0 {
-		return string(res.Stdout)
-	}
-	if res.ExitCode != 0 && len(res.Stderr) > 0 {
-		return string(res.Stderr)
-	}
 	return string(res.Stdout)
 }
 

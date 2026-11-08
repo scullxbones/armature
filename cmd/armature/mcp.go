@@ -105,9 +105,17 @@ func toolRunner(outer Invocation) mcpsession.Runner {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		code := Run(ctx, toolInvocation(outer, c.Args, &stdout, &stderr))
+		out := stdout.Bytes()
+		errb := stderr.Bytes()
+		// Fold stderr-only failures into Stdout so tool results keep actionable
+		// diagnostics without exporting mcpsession.Result.Stderr (C10).
+		// Protocol stdout stays JSON-RPC only: these bytes ride inside the
+		// tools/call result, not the session writer.
+		if code != 0 && len(out) == 0 && len(errb) > 0 {
+			out = errb
+		}
 		return mcpsession.Result{
-			Stdout:   stdout.Bytes(),
-			Stderr:   stderr.Bytes(),
+			Stdout:   out,
 			ExitCode: code,
 		}
 	}
