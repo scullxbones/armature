@@ -401,7 +401,6 @@ func TestDoctorD14_OKWhenDoneParentNotMerged_REQ_TOPTIER_S18_T4(t *testing.T) {
 func TestDoctorD14_SkipsMissingParentAndSelfParent_REQ_TOPTIER_S18_T4(t *testing.T) {
 	t.Parallel()
 
-	// D14 skips; D4 owns missing and self-parent. Keep D14 one index pass, no git.
 	index := materialize.Index{
 		"ghost-child": {Status: "done", Type: "task", Parent: "missing-parent"},
 		"loop-child":  {Status: "done", Type: "task", Parent: "loop-child"},

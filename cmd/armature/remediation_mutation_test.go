@@ -29,7 +29,7 @@ func TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4(t *testing.T)
 			ClaimToken: "tok", ClaimedAt: now - 30, LastActivity: now - 30, TTLMinutes: 60,
 		},
 	}
-	opts := promotion.PlanOpts{Viewer: "me", Now: now} // Decide nil
+	opts := promotion.PlanOpts{Viewer: "me", Now: now}
 	plan := promotion.RemediationsPlanOpts("P", g, opts)
 	leaked := false
 	for _, line := range plan.RenderNextActions() {
