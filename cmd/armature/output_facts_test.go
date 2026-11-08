@@ -75,6 +75,40 @@ func TestOutputIssueFactsNil(t *testing.T) {
 	assert.Equal(t, output.IssueFacts{}, outputIssueFacts(nil))
 }
 
+func TestOutputIssueFactsHostRefs_REQ_HOSTREF_S1_T7(t *testing.T) {
+	t.Parallel()
+
+	const (
+		urlA = "https://github.com/scullxbones/armature/issues/1"
+		urlB = "https://github.com/scullxbones/armature/issues/2"
+	)
+	issue := &materialize.Issue{
+		ID:     "TASK-01",
+		Title:  "Host refs",
+		Type:   "task",
+		Status: ops.StatusOpen,
+		HostRefs: []materialize.HostRef{
+			{URL: urlA, Role: "support", At: 10, WorkerID: "w1"},
+			{URL: urlB, Role: "engineering", At: 20, WorkerID: "w2"},
+			{URL: urlA, At: 30, WorkerID: "w1", Withdrawn: true},
+			{URL: urlA, Role: "support", At: 40, WorkerID: "w1"},
+		},
+	}
+
+	facts := outputIssueFacts(issue)
+	require.Equal(t, []output.HostRefFact{
+		{URL: urlB, Role: "engineering", Current: false},
+		{URL: urlA, Role: "support", Current: true},
+	}, facts.HostRefs)
+
+	issue.HostRefs[3].Role = "mutated"
+	assert.Equal(t, "support", facts.HostRefs[1].Role, "host ref facts must copy role")
+
+	assert.Equal(t, []output.HostRefFact(nil), outputIssueFacts(&materialize.Issue{
+		ID: "TASK-02", Title: "None", Type: "task", Status: ops.StatusOpen,
+	}).HostRefs)
+}
+
 func TestOutputListFactsCopiesIndexRows(t *testing.T) {
 	t.Parallel()
 	index := materialize.Index{

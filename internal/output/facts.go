@@ -13,6 +13,14 @@ type NoteFact struct {
 	Deleted bool
 }
 
+// HostRefFact is one live host name for arm show. Current marks the latest
+// live name. Body is never carried.
+type HostRefFact struct {
+	URL     string
+	Role    string
+	Current bool
+}
+
 type IssueFacts struct {
 	ID                     string
 	Title                  string
@@ -38,5 +46,6 @@ type IssueFacts struct {
 	Blocks                 []string
 	Acceptance             json.RawMessage
 	Notes                  []NoteFact
+	HostRefs               []HostRefFact
 	AssessmentAttestations json.RawMessage
 }

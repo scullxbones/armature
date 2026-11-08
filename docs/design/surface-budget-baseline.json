@@ -1291,10 +1291,9 @@
       ]
     },
     "internal/opsbackup": {
-      "count": 33,
+      "count": 30,
       "names": [
         "AdvertisedRef",
-        "AsideBranch",
         "AsideRef",
         "Disposition",
         "Disposition.String",
@@ -1310,7 +1309,6 @@
         "Git.FetchBranchToRef",
         "Git.ResolveRevision",
         "Git.RestoreEvidence",
-        "LiveRef",
         "OpsBranch",
         "PlanRestore",
         "RestorePlan",
@@ -1324,12 +1322,11 @@
         "SnapshotResult",
         "SnapshotResult.Bundle",
         "SnapshotResult.Tip",
-        "TrackingRef",
         "Verify"
       ]
     },
     "internal/output": {
-      "count": 186,
+      "count": 196,
       "names": [
         "ArtifactCitationKey",
         "ArtifactMode",
@@ -1380,6 +1377,14 @@
         "ExpiredClaim.LastHeartbeat",
         "ExpiredClaim.Status",
         "ExpiredClaim.Title",
+        "HostRefFact",
+        "HostRefFact.Current",
+        "HostRefFact.Role",
+        "HostRefFact.URL",
+        "HostRefJSON",
+        "HostRefJSON.Current",
+        "HostRefJSON.Role",
+        "HostRefJSON.URL",
         "IssueFacts",
         "IssueFacts.Acceptance",
         "IssueFacts.AssessmentAttestations",
@@ -1392,6 +1397,7 @@
         "IssueFacts.CombinedPatchID",
         "IssueFacts.DefinitionOfDone",
         "IssueFacts.Derived",
+        "IssueFacts.HostRefs",
         "IssueFacts.ID",
         "IssueFacts.IntegrationBranch",
         "IssueFacts.MatchedCommit",
@@ -1418,6 +1424,7 @@
         "IssueJSON.CombinedPatchID",
         "IssueJSON.DefinitionOfDone",
         "IssueJSON.Derived",
+        "IssueJSON.HostRefs",
         "IssueJSON.ID",
         "IssueJSON.IntegrationBranch",
         "IssueJSON.MatchedCommit",

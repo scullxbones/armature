@@ -15,6 +15,12 @@ type ListEntry struct {
 	AssignedTo string `json:"assigned_to,omitempty"`
 }
 
+type HostRefJSON struct {
+	URL     string `json:"url"`
+	Role    string `json:"role,omitempty"`
+	Current bool   `json:"current,omitempty"`
+}
+
 type IssueJSON struct {
 	ID                     string          `json:"id"`
 	Title                  string          `json:"title"`
@@ -31,6 +37,7 @@ type IssueJSON struct {
 	Blocks                 []string        `json:"blocks,omitempty"`
 	Acceptance             json.RawMessage `json:"acceptance,omitempty"`
 	Notes                  []string        `json:"notes,omitempty"`
+	HostRefs               []HostRefJSON   `json:"host_refs,omitempty"`
 	AssessmentAttestations json.RawMessage `json:"assessment_attestations,omitempty"`
 	Branch                 string          `json:"branch,omitempty"`
 	Base                   string          `json:"base,omitempty"`
@@ -50,6 +57,13 @@ func MarshalIssue(issue IssueFacts) IssueJSON {
 			noteTexts = append(noteTexts, n.Msg)
 		}
 	}
+	hostRefs := make([]HostRefJSON, 0, len(issue.HostRefs))
+	for _, ref := range issue.HostRefs {
+		hostRefs = append(hostRefs, HostRefJSON(ref))
+	}
+	if len(hostRefs) == 0 {
+		hostRefs = nil
+	}
 
 	return IssueJSON{
 		ID:                     issue.ID,
@@ -67,6 +81,7 @@ func MarshalIssue(issue IssueFacts) IssueJSON {
 		Blocks:                 issue.Blocks,
 		Acceptance:             issue.Acceptance,
 		Notes:                  noteTexts,
+		HostRefs:               hostRefs,
 		AssessmentAttestations: issue.AssessmentAttestations,
 		Branch:                 issue.Branch,
 		Base:                   issue.Base,
@@ -216,6 +231,19 @@ func RenderIssue(w io.Writer, issue IssueFacts) error {
 	}
 	if len(issue.Blocks) > 0 {
 		ew.printf("Blocks:    %s\n", strings.Join(issue.Blocks, ", "))
+	}
+	if len(issue.HostRefs) > 0 {
+		ew.printf("HostRefs:\n")
+		for _, ref := range issue.HostRefs {
+			line := "  - " + ref.URL
+			if ref.Role != "" {
+				line += " role=" + ref.Role
+			}
+			if ref.Current {
+				line += " current"
+			}
+			ew.printf("%s\n", line)
+		}
 	}
 
 	if ew.err != nil {
