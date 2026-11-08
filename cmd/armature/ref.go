@@ -53,8 +53,11 @@ func newRefCmd() *cobra.Command {
 
 			wrote, err := appendHighStakesOpIfAfter(state, logPath, op, func() (bool, error) {
 				live, _, replayErr := replayIssueOps(appCtx.IssuesDir, issueID)
-				if replayErr != nil || live == nil {
-					return true, nil
+				if replayErr != nil {
+					return false, replayErr
+				}
+				if live == nil {
+					return false, fmt.Errorf("issue not found: %s", issueID)
 				}
 				if hostRefCommandIsNoOp(live.HostRefs, canonical, role, withdraw) {
 					return false, nil
