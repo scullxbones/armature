@@ -1,4 +1,4 @@
-// Package externalref parses github.com issue URLs into GitHubIssue values.
+// Package externalref parses github.com issue URLs and fetches issue title and body.
 package externalref
 
 import (
