@@ -99,6 +99,66 @@ func TestIncrementalReplayAppliesUncommittedDiskOps_REQ_CLAIMORD_W14(t *testing.
 	assert.Equal(t, "disk-only", third.Issues["task-01"].Notes[0].Msg)
 }
 
+func TestIncremental_PendingExternalRefThenCommitMatchesCold_REQ_HOSTREF_S1_T2(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	stateDir := t.TempDir()
+	_, firstRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.True(t, firstRes.FullReplay)
+
+	logPath := filepath.Join(dir, "ops", "cattle-a.log")
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 201, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+
+	pending, pendingRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.False(t, pendingRes.FullReplay)
+	assert.Equal(t, 2, pendingRes.OpsProcessed)
+	require.Equal(t, []HostRef{
+		{URL: hostURLA, Role: "engineering", At: 200, WorkerID: "cattle-a"},
+		{URL: hostURLA, Role: "engineering", At: 201, WorkerID: "cattle-a"},
+	}, pending.Issues["task-01"].HostRefs)
+
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "external-ref")
+
+	afterCommit, afterRes, err := Run(stateDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.False(t, afterRes.FullReplay)
+
+	coldDir := t.TempDir()
+	cold, coldRes, err := Run(coldDir, nil, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	assert.True(t, coldRes.FullReplay)
+
+	require.Equal(t, cold.Issues["task-01"].HostRefs, afterCommit.Issues["task-01"].HostRefs,
+		"pending then committed HostRefs must equal cold replay; identical URL/role events stay distinct")
+	assert.Equal(t, 0, afterRes.OpsProcessed, "pending that later commits must not be applied a second time")
+
+	incIdx, err := LoadIndex(filepath.Join(stateDir, "index.json"))
+	require.NoError(t, err)
+	coldIdx, err := LoadIndex(filepath.Join(coldDir, "index.json"))
+	require.NoError(t, err)
+	assert.Equal(t, coldIdx["task-01"].CurrentHostURL, incIdx["task-01"].CurrentHostURL)
+	assert.Equal(t, coldIdx["task-01"].LiveHostURLs, incIdx["task-01"].LiveHostURLs)
+}
+
 func TestCommitIncremental_MissingCheckpointSHAForcesColdReplay_REQ_CLAIMORD_W14(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
 	fx := gittest.InitWithOrigin(t)
 	dir := fx.Dir
