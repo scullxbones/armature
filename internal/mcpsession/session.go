@@ -113,8 +113,9 @@ func (q *lineInbox) popPending() (lineEvent, bool) {
 // breaks, or Runner panics. version is reported in initialize.
 //
 // An in-flight tools/call is cancelled when stdin hits EOF, the parent
-// context ends, or a stop signal arrives (ADR 0024). Extra request lines
-// that arrive during a call are queued and handled after the call returns.
+// context ends, or a stop signal arrives (ADR 0024) — independent of any
+// requests already queued. Extra request lines that arrive during a call
+// are queued and handled after the call returns only if the session continues.
 func Serve(ctx context.Context, in io.Reader, out io.Writer, sig <-chan os.Signal, version string, run Runner) Exit {
 	if run == nil {
 		run = func(context.Context, Call) Result { return Result{} }
@@ -434,30 +435,20 @@ func handleToolsCall(
 			return waitSignalExit(sig)
 		case ev, ok := <-inbox.live:
 			if !ok {
-				ev = lineEvent{err: io.EOF}
-				ok = true
+				// Closed live channel is EOF. Do not re-enter this select arm:
+				// a closed channel stays readable and would spin, appending
+				// synthetic EOFs to pending (CPU/memory growth).
+				return stopForClientClose()
 			}
-			if exit, terminal := classifyLineEvent(ev, ok); terminal {
+			if exit, terminal := classifyLineEvent(ev, true); terminal {
 				if exit != ExitClientClose {
 					cancel()
 					return exit
 				}
-				// Client closed stdin. If the Runner already finished, emit its
-				// result then exit. If more requests were queued before EOF,
-				// finish this call and let Serve drain them before exiting.
-				// Only cancel a still-running call when nothing else is queued
-				// (mid-call disconnect — ADR 0024 / io.Pipe proof).
-				select {
-				case out := <-done:
-					inbox.push(ev)
-					return finish(out)
-				default:
-					if len(inbox.pending) > 0 {
-						inbox.push(ev)
-						continue
-					}
-					return stopForClientClose()
-				}
+				// Stdin EOF is always terminal for the active call (ADR 0024),
+				// regardless of requests already queued. stopForClientClose
+				// cancels the Runner; queued work is abandoned with the session.
+				return stopForClientClose()
 			}
 			// Another request arrived while this call runs: queue it; stay serial.
 			inbox.push(ev)

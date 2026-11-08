@@ -255,6 +255,63 @@ func TestServeEOFDuringBlockingCallCancelsRunner_REQ_MCPSTDIO_S1(t *testing.T) {
 	}
 }
 
+func TestServeEOFWithQueuedRequestCancelsRunner_REQ_MCPSTDIO_S1(t *testing.T) {
+	t.Parallel()
+
+	pr, pw := io.Pipe()
+	started := make(chan struct{})
+	cancelled := make(chan struct{})
+	var calls atomic.Int32
+	run := func(ctx context.Context, _ Call) Result {
+		n := calls.Add(1)
+		if n == 1 {
+			close(started)
+			select {
+			case <-ctx.Done():
+				close(cancelled)
+				return Result{ExitCode: 1, Stdout: []byte("cancelled\n")}
+			case <-time.After(5 * time.Second):
+				t.Error("runner was not cancelled after stdin EOF with queued request")
+				return Result{ExitCode: 1}
+			}
+		}
+		t.Errorf("queued tools/call must not run after stdin EOF; call #%d", n)
+		return Result{ExitCode: 1}
+	}
+
+	done := make(chan Exit, 1)
+	go func() {
+		done <- Serve(context.Background(), pr, io.Discard, nil, "v", run)
+	}()
+
+	_, err := io.WriteString(pw, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"arm","arguments":{"args":["slow"]}}}`+"\n")
+	require.NoError(t, err)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first runner never started")
+	}
+	// Queue a second tools/call while the first is still blocking.
+	_, err = io.WriteString(pw, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"arm","arguments":{"args":["queued"]}}}`+"\n")
+	require.NoError(t, err)
+	// Give the reader time to enqueue id:2 before EOF.
+	time.Sleep(20 * time.Millisecond)
+	require.NoError(t, pw.Close())
+
+	select {
+	case <-cancelled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner ctx was not cancelled on stdin EOF with queued request")
+	}
+	select {
+	case exit := <-done:
+		assert.Equal(t, ExitClientClose, exit)
+		assert.Equal(t, int32(1), calls.Load(), "queued call must not start after EOF")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve spun or hung after EOF with queued request (closed live channel)")
+	}
+}
+
 func TestServeContextCancelDuringBlockingCall_REQ_MCPSTDIO_S1(t *testing.T) {
 	t.Parallel()
 

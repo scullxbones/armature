@@ -8,12 +8,48 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// syncBuf is a mutex-backed buffer safe for concurrent Write (session) and
+// String (test helper). Optionally signals once when needle appears.
+type syncBuf struct {
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	needle string
+	notify chan struct{}
+	saw    bool
+}
+
+func newSyncBuf(needle string) *syncBuf {
+	s := &syncBuf{needle: needle}
+	if needle != "" {
+		s.notify = make(chan struct{})
+	}
+	return s
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, err := s.buf.Write(p)
+	if s.notify != nil && !s.saw && strings.Contains(s.buf.String(), s.needle) {
+		s.saw = true
+		close(s.notify)
+	}
+	return n, err
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 func runMCPToolCall(t *testing.T, repo string, args []string) (stdout string, exitCode int, err error) {
 	t.Helper()
@@ -38,8 +74,8 @@ func runMCPToolCallRaw(t *testing.T, repo string, args []string) (text string, e
 	// Keep stdin open until the tools/call response is written so EOF does not
 	// cancel an in-flight Runner (ADR 0024). Close afterward to end Serve.
 	pr, pw := io.Pipe()
-	out := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
+	out := newSyncBuf(`"id":2`)
+	stderr := newSyncBuf("")
 	done := make(chan int, 1)
 	go func() {
 		done <- Run(context.Background(), Invocation{
@@ -60,16 +96,14 @@ func runMCPToolCallRaw(t *testing.T, repo string, args []string) (text string, e
 		require.NoError(t, pw.Close())
 	}
 	deadline := time.After(15 * time.Second)
-	for !strings.Contains(out.String(), `"id":2`) {
-		select {
-		case code := <-done:
-			closePW()
-			return out.String(), 0, out.String(), fmt.Errorf("arm mcp exited %d before tools/call response: %s", code, stderr.String())
-		case <-deadline:
-			closePW()
-			return out.String(), 0, out.String(), fmt.Errorf("timeout waiting for tools/call response: %s", stderr.String())
-		case <-time.After(5 * time.Millisecond):
-		}
+	select {
+	case code := <-done:
+		closePW()
+		return out.String(), 0, out.String(), fmt.Errorf("arm mcp exited %d before tools/call response: %s", code, stderr.String())
+	case <-deadline:
+		closePW()
+		return out.String(), 0, out.String(), fmt.Errorf("timeout waiting for tools/call response: %s", stderr.String())
+	case <-out.notify:
 	}
 	closePW()
 	code := <-done
