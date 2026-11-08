@@ -57,6 +57,41 @@ func dropHostURL(order []string, url string) []string {
 	return next
 }
 
+// formatHostRefLines prints live names in the same order/current rule as
+// hostRefFacts (#449): withdrawn drop out; latest live is current. No body.
+// Line shape matches arm show's "URL role=… current" tokens (list indents).
+func formatHostRefLines(refs []materialize.HostRef) []string {
+	live := map[string]materialize.HostRef{}
+	order := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Withdrawn {
+			delete(live, ref.URL)
+			order = dropHostURL(order, ref.URL)
+			continue
+		}
+		order = dropHostURL(order, ref.URL)
+		order = append(order, ref.URL)
+		live[ref.URL] = ref
+	}
+	if len(order) == 0 {
+		return nil
+	}
+	currentURL := order[len(order)-1]
+	lines := make([]string, 0, len(order))
+	for _, url := range order {
+		ref := live[url]
+		line := url
+		if ref.Role != "" {
+			line += " role=" + ref.Role
+		}
+		if url == currentURL {
+			line += " current"
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
 func outputListFacts(index materialize.Index) map[string]output.ListFacts {
 	out := make(map[string]output.ListFacts, len(index))
 	for id, e := range index {

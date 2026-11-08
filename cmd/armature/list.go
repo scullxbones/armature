@@ -6,7 +6,6 @@ import (
 	"io"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/scullxbones/armature/internal/externalref"
 	"github.com/scullxbones/armature/internal/materialize"
@@ -177,33 +176,4 @@ func writeHostRefLines(w io.Writer, issue *materialize.Issue) error {
 		}
 	}
 	return nil
-}
-
-func formatHostRefLines(refs []materialize.HostRef) []string {
-	current, hasCurrent := materialize.CurrentHostRef(refs)
-	live := map[string]materialize.HostRef{}
-	order := []string{}
-	for _, ref := range refs {
-		if ref.Withdrawn {
-			delete(live, ref.URL)
-			order = dropHostURL(order, ref.URL)
-			continue
-		}
-		order = dropHostURL(order, ref.URL)
-		order = append(order, ref.URL)
-		live[ref.URL] = ref
-	}
-	lines := make([]string, 0, len(order))
-	for _, url := range order {
-		ref := live[url]
-		parts := []string{url}
-		if ref.Role != "" {
-			parts = append(parts, "role="+ref.Role)
-		}
-		if hasCurrent && url == current.URL {
-			parts = append(parts, "current")
-		}
-		lines = append(lines, strings.Join(parts, "  "))
-	}
-	return lines
 }
