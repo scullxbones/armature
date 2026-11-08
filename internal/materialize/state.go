@@ -72,6 +72,7 @@ type Issue struct {
 	Notes                  []Note                              `json:"notes,omitempty"`
 	Decisions              []Decision                          `json:"decisions,omitempty"`
 	SourceLinks            []SourceLink                        `json:"source_links,omitempty"`
+	HostRefs               []HostRef                           `json:"host_refs,omitempty"`
 	CitationAcceptances    []CitationAcceptance                `json:"citation_acceptances,omitempty"`
 	AssessmentAttestations []attestation.AssessmentAttestation `json:"assessment_attestations,omitempty"`
 	ClaimedBy              string                              `json:"claimed_by,omitempty"`
@@ -121,6 +122,14 @@ type SourceLink struct {
 	Title         string `json:"title,omitempty"`
 }
 
+type HostRef struct {
+	URL       string `json:"url"`
+	Role      string `json:"role,omitempty"`
+	At        int64  `json:"at"`
+	WorkerID  string `json:"worker_id"`
+	Withdrawn bool   `json:"withdrawn,omitempty"`
+}
+
 type Note struct {
 	ID        string `json:"id,omitempty"`
 	WorkerID  string `json:"worker_id"`
@@ -162,6 +171,8 @@ type IndexEntry struct {
 	Scope          []string `json:"scope,omitempty"`
 	Branch         string   `json:"branch,omitempty"`
 	PR             string   `json:"pr,omitempty"`
+	CurrentHostURL string   `json:"current_host_url,omitempty"`
+	LiveHostURLs   []string `json:"live_host_urls,omitempty"`
 }
 
 type Index map[string]IndexEntry

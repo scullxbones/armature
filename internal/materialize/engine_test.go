@@ -361,7 +361,7 @@ func TestRegisteredOpTypes_ReturnsAllSupportedTypes(t *testing.T) {
 	expectedTypes := []string{
 		ops.OpCreate, ops.OpClaim, ops.OpHeartbeat, ops.OpTransition,
 		ops.OpNote, ops.OpNoteDelete, ops.OpLink, ops.OpUnlink,
-		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
+		ops.OpDecision, ops.OpAssign, ops.OpExternalRef, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent, ops.OpAssessmentAttested,
 		ops.OpGateEvidence, ops.OpPromotionCheck, ops.OpLogQuarantine,
@@ -398,7 +398,7 @@ func TestRegisteredOpTypes_ManagedExecutionOpsNotRegistered(t *testing.T) {
 	standardOps := []string{
 		ops.OpCreate, ops.OpClaim, ops.OpHeartbeat, ops.OpTransition,
 		ops.OpNote, ops.OpNoteDelete, ops.OpLink, ops.OpUnlink,
-		ops.OpDecision, ops.OpAssign, ops.OpAmend, ops.OpSourceLink,
+		ops.OpDecision, ops.OpAssign, ops.OpExternalRef, ops.OpAmend, ops.OpSourceLink,
 		ops.OpSourceFingerprint, ops.OpCitationAccepted, ops.OpDAGTransition,
 		ops.OpScopeRename, ops.OpScopeDelete, ops.OpReparent,
 		ops.OpGateEvidence, ops.OpPromotionCheck, ops.OpLogQuarantine,
@@ -419,7 +419,7 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 		}
 		wantIgnore := map[string]struct{}{
 			ops.OpHeartbeat: {}, ops.OpNote: {}, ops.OpNoteDelete: {}, ops.OpDecision: {},
-			ops.OpAssign: {}, ops.OpAmend: {}, ops.OpSourceLink: {}, ops.OpCitationAccepted: {},
+			ops.OpAssign: {}, ops.OpExternalRef: {}, ops.OpAmend: {}, ops.OpSourceLink: {}, ops.OpCitationAccepted: {},
 			ops.OpDAGTransition: {}, ops.OpScopeRename: {}, ops.OpScopeDelete: {}, ops.OpReparent: {},
 			ops.OpPromotionCheck: {},
 		}

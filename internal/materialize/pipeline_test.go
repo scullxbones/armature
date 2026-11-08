@@ -630,6 +630,7 @@ func TestIncremental_MatchesFullReplay(t *testing.T) {
 		assert.Equal(t, fullIssue.Notes, incrementalIssue.Notes, "notes must match")
 		assert.Equal(t, fullIssue.Decisions, incrementalIssue.Decisions, "decisions must match")
 		assert.Equal(t, fullIssue.SourceLinks, incrementalIssue.SourceLinks, "source links must match")
+		assert.Equal(t, fullIssue.HostRefs, incrementalIssue.HostRefs, "host refs must match")
 		assert.Equal(t, fullIssue.CitationAcceptances, incrementalIssue.CitationAcceptances, "citation acceptances must match")
 	}
 }
