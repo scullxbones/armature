@@ -19,7 +19,7 @@ const (
 
 func TestArmRefReadPrintsStdout_REQ_HOSTREF_S1_T6(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	plantHostRef(t, repo, "task-01", hostRefReadURLA, "engineering")
+	plantHostRef(t, repo, hostRefReadURLA, "engineering")
 	withGitHubIssueTransport(t, http.StatusOK, map[string]any{
 		"title": "Plan title",
 		"body":  "Plan body line",
@@ -37,7 +37,7 @@ func TestArmRefReadRejectsUnknownURL_REQ_HOSTREF_S1_T6(t *testing.T) {
 	t.Parallel()
 
 	repo := setupRepoWithTask(t)
-	plantHostRef(t, repo, "task-01", hostRefReadURLA, "engineering")
+	plantHostRef(t, repo, hostRefReadURLA, "engineering")
 	setCLIEnv(t, "GITHUB_TOKEN", "test-token")
 
 	before := workerLogSnapshot(t, repo)
@@ -51,7 +51,7 @@ func TestArmRefReadRejectsUnknownURL_REQ_HOSTREF_S1_T6(t *testing.T) {
 
 func TestArmRefReadJSON_REQ_HOSTREF_S1_T6(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	plantHostRef(t, repo, "task-01", hostRefReadURLA, "support")
+	plantHostRef(t, repo, hostRefReadURLA, "support")
 	withGitHubIssueTransport(t, http.StatusOK, map[string]any{
 		"title": "JSON title",
 		"body":  "JSON body",
@@ -71,8 +71,8 @@ func TestArmRefReadJSON_REQ_HOSTREF_S1_T6(t *testing.T) {
 
 func TestArmRefReadURLSelectsLiveName_REQ_HOSTREF_S1_T6(t *testing.T) {
 	repo := setupRepoWithTask(t)
-	plantHostRef(t, repo, "task-01", hostRefReadURLA, "support")
-	plantHostRef(t, repo, "task-01", hostRefReadURLB, "engineering")
+	plantHostRef(t, repo, hostRefReadURLA, "support")
+	plantHostRef(t, repo, hostRefReadURLB, "engineering")
 	withGitHubIssueTransport(t, http.StatusOK, map[string]any{
 		"title": "Older live",
 		"body":  "still live",
@@ -91,7 +91,7 @@ func TestArmRefReadMissingToken_REQ_HOSTREF_S1_T6(t *testing.T) {
 	t.Parallel()
 
 	repo := setupRepoWithTask(t)
-	plantHostRef(t, repo, "task-01", hostRefReadURLA, "engineering")
+	plantHostRef(t, repo, hostRefReadURLA, "engineering")
 	setCLIEnv(t, "GITHUB_TOKEN", "")
 
 	before := workerLogSnapshot(t, repo)
@@ -124,14 +124,14 @@ func TestArmRefReadHyphenAllowlist_REQ_HOSTREF_S1_T6(t *testing.T) {
 	assert.Equal(t, "ref-read", cmd.Name())
 }
 
-func plantHostRef(t *testing.T, repo, issueID, url, role string) {
+func plantHostRef(t *testing.T, repo, url, role string) {
 	t.Helper()
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type:      ops.OpExternalRef,
-		TargetID:  issueID,
+		TargetID:  "task-01",
 		Timestamp: nowEpoch(),
 		WorkerID:  workerID,
 		Payload:   ops.Payload{ExternalRef: url, ExternalRole: role},
@@ -176,7 +176,7 @@ func TestArmRefReadRejectsWithdrawnURL_REQ_HOSTREF_S1_T6(t *testing.T) {
 	t.Parallel()
 
 	repo := setupRepoWithTask(t)
-	plantHostRef(t, repo, "task-01", hostRefReadURLA, "engineering")
+	plantHostRef(t, repo, hostRefReadURLA, "engineering")
 	ctx := getTestContext(t, repo)
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
