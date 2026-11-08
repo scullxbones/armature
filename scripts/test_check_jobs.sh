@@ -442,65 +442,11 @@ else
     pass "ci.yml does not duplicate GOLANGCI_LINT_VERSION"
 fi
 
-echo "Test 6b: tool-fetch jobs cache version-pinned releases and still verify sha256..."
-
-CACHE_RESULT=$(python3 - "$CI_YML" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-text = Path(sys.argv[1]).read_text()
-lines = text.splitlines()
-jobs = {}
-current = None
-buf = []
-in_jobs = False
-for line in lines:
-    if not in_jobs:
-        if line == "jobs:" or line.startswith("jobs:"):
-            in_jobs = True
-        continue
-    if line[:1] not in (" ", "\t", "") and line.strip() and not line.strip().startswith("#"):
-        break
-    m = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
-    if m:
-        if current is not None:
-            jobs[current] = "\n".join(buf)
-        current = m.group(1)
-        buf = []
-        continue
-    if current is not None:
-        buf.append(line)
-if current is not None:
-    jobs[current] = "\n".join(buf)
-
-need = ("check-core", "check-static", "mutate", "check-git-2-34")
-for jid in need:
-    body = jobs.get(jid, "")
-    if "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" not in body:
-        print(f"FAIL: {jid} missing pinned actions/cache")
-        sys.exit(1)
-    if "~/.cache/armature/github-releases" not in body:
-        print(f"FAIL: {jid} cache path is not the installer cache")
-        sys.exit(1)
-    key = "hashFiles('Makefile', 'scripts/github-release.sha256', 'scripts/install-verified-github-release.sh')"
-    if key not in body:
-        print(f"FAIL: {jid} cache key must hash Makefile, pin table, and installer")
-        sys.exit(1)
-    if "github.job" not in body:
-        print(f"FAIL: {jid} cache key must be partitioned by github.job")
-        sys.exit(1)
-    if "actions: write" in body:
-        print(f"FAIL: {jid} must not add actions: write; actions/cache uses its runtime token")
-        sys.exit(1)
-print("PASS")
-PY
-) && CACHE_STATUS=0 || CACHE_STATUS=$?
-
-if [[ $CACHE_STATUS -eq 0 ]]; then
-    pass "tool-fetch jobs cache ~/.cache/armature/github-releases keyed from Makefile"
+echo "Test 6b: tool installs are not backed by a hand-rolled Actions cache..."
+if rg -q 'armature/github-releases' "$CI_YML"; then
+    fail "ci.yml still caches tool tarballs; download and verify the pin instead"
 else
-    fail "${CACHE_RESULT:-tool cache CI assertion failed}"
+    pass "ci.yml does not cache tool tarballs"
 fi
 
 echo "Test 7: GitHub Actions are SHA-pinned with version comments, least privilege, persist-credentials: false..."

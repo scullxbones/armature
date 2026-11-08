@@ -87,6 +87,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         note(self)
         mode = mode_file.read_text(encoding="utf-8").strip()
+        if mode == "hang":
+            import time
+            time.sleep(20)
+            self.send_bytes(504, "late", "text/plain")
+            return
         path = self.path.split("?", 1)[0]
         tls_port = tls_port_file.read_text(encoding="utf-8").strip() if tls_port_file.exists() else "0"
         if path == "/artifact" or path.startswith("/edge/"):
@@ -194,7 +199,6 @@ for _ in $(seq 1 50); do
 done
 PORT=$(cat "$PORT_FILE")
 BASE="http://127.0.0.1:${PORT}"
-CACHE="$WORKDIR/cache"
 
 set_mode() { printf '%s\n' "$1" > "$MODE_FILE"; }
 reset_counts() { : > "$WORKDIR/counts"; : > "$AUTH_FILE"; }
@@ -205,7 +209,6 @@ run_install() {
     mkdir -p "$dest"
     env \
         GITHUB_RELEASE_BASE="$BASE" \
-        ARMATURE_TOOL_CACHE="$CACHE" \
         ARMATURE_TOOL_PIN_FILE="$PIN_FILE" \
         ARMATURE_TOOL_FETCH_RETRIES="${ARMATURE_TOOL_FETCH_RETRIES:-1}" \
         ARMATURE_TOOL_FETCH_RETRY_MAX_TIME="${ARMATURE_TOOL_FETCH_RETRY_MAX_TIME:-20}" \
@@ -221,7 +224,6 @@ run_install() {
 echo "Test 1: pinned sha256 installs; a lying checksum file is not fetched..."
 set_mode ok
 reset_counts
-rm -rf "$CACHE"
 if run_install >/dev/null && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
     if rg -q 'checksums.txt' "$WORKDIR/counts"; then
         fail "installer fetched a checksum file"
@@ -262,7 +264,6 @@ fi
 echo "Test 4: one HTTP 504 then 200 still installs..."
 set_mode flaky
 reset_counts
-rm -rf "$CACHE"
 export ARMATURE_TOOL_FETCH_RETRIES=2
 set +e
 OUT=$(run_install 2>&1)
@@ -277,7 +278,6 @@ fi
 
 echo "Test 5: persistent HTTP 504 fails..."
 set_mode always-504
-rm -rf "$CACHE"
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
@@ -288,62 +288,9 @@ else
     fail "expected failure on persistent 504, status=$STATUS out=$OUT"
 fi
 
-echo "Test 6: cache entry that matches the pin survives a 504..."
-set_mode ok
-rm -rf "$CACHE"
-run_install >/dev/null
-set_mode always-504
-export ARMATURE_TOOL_FETCH_RETRIES=0
-set +e
-OUT=$(run_install 2>&1)
-STATUS=$?
-set -e
-unset ARMATURE_TOOL_FETCH_RETRIES
-if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
-    pass "pinned cache hit is installed"
-else
-    fail "expected pinned cache hit, status=$STATUS out=$OUT"
-fi
-
-echo "Test 7: bytes at the pin path that do not match are not installed..."
-printf 'not-the-tarball\n' > "$CACHE/example/tool/v9.9.9/$HASH/$TARBALL"
-set_mode always-504
-export ARMATURE_TOOL_FETCH_RETRIES=0
-set +e
-OUT=$(run_install 2>&1)
-STATUS=$?
-set -e
-unset ARMATURE_TOOL_FETCH_RETRIES
-if [[ $STATUS -ne 0 ]] && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-    pass "corrupt pin-path cache is rejected"
-else
-    fail "expected rejection of corrupt cache, status=$STATUS out=$OUT"
-fi
-
-echo "Test 8: a lone self-hashed forged cache entry is rejected..."
-rm -rf "$CACHE"
-forged="$WORKDIR/forged"
-printf 'forged-tarball\n' > "$forged"
-forged_hash=$(sha256sum "$forged" | awk '{print $1}')
-mkdir -p "$CACHE/example/tool/v9.9.9/$forged_hash"
-cp "$forged" "$CACHE/example/tool/v9.9.9/$forged_hash/$TARBALL"
-set_mode always-504
-export ARMATURE_TOOL_FETCH_RETRIES=0
-set +e
-OUT=$(run_install 2>&1)
-STATUS=$?
-set -e
-unset ARMATURE_TOOL_FETCH_RETRIES
-if [[ $STATUS -ne 0 ]] && [[ ! -e "$WORKDIR/dest/tool" ]]; then
-    pass "forged self-hashed cache is rejected"
-else
-    fail "expected forged cache rejection, status=$STATUS out=$OUT"
-fi
-
 echo "Test 9: https redirect installs, and a job token is never sent..."
 set_mode redirect
 reset_counts
-rm -rf "$CACHE"
 export ARMATURE_GITHUB_API="${BASE}/api"
 export ARMATURE_TOOL_CACERT="$WORKDIR/cert.pem"
 export ARMATURE_TOOL_FETCH_RETRIES=0
@@ -363,7 +310,6 @@ fi
 echo "Test 10: http redirect is refused even when the target matches the pin..."
 set_mode http-redirect
 reset_counts
-rm -rf "$CACHE"
 export ARMATURE_GITHUB_API="${BASE}/api"
 export ARMATURE_TOOL_FETCH_RETRIES=0
 export GITHUB_TOKEN=pin-test-token
@@ -394,7 +340,7 @@ do
     printf '%s\n' "$loc" > "$WORKDIR/location"
     set_mode custom-redir
     reset_counts
-    rm -rf "$CACHE" "$WORKDIR/dest"
+    rm -rf "$WORKDIR/dest"
     set +e
     OUT=$(run_install 2>&1)
     STATUS=$?
@@ -413,7 +359,6 @@ fi
 echo "Test 11: truncated 200 falls through to the release URL..."
 set_mode partial
 reset_counts
-rm -rf "$CACHE"
 export ARMATURE_GITHUB_API="${BASE}/api"
 export ARMATURE_TOOL_FETCH_RETRIES=0
 set +e
@@ -430,7 +375,6 @@ fi
 echo "Test 12: one asset-API 504 is retried when the release URL stays down..."
 set_mode api-flaky
 reset_counts
-rm -rf "$CACHE"
 export ARMATURE_GITHUB_API="${BASE}/api"
 export ARMATURE_TOOL_FETCH_RETRIES=2
 set +e
@@ -444,86 +388,27 @@ else
     fail "expected asset API retry, status=$STATUS out=$OUT"
 fi
 
-echo "Test 13: a symlink at the old predictable cache temp path is not followed..."
-set_mode ok
-reset_counts
-rm -rf "$CACHE"
-sentinel="$WORKDIR/sentinel"
-printf 'sentinel-contents\n' > "$sentinel"
-pin_dir="$CACHE/example/tool/v9.9.9/$HASH"
-mkdir -p "$pin_dir"
-ln -s "$sentinel" "$pin_dir/$TARBALL.tmp"
-if run_install >/dev/null && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] \
-    && [[ "$(cat "$sentinel")" == "sentinel-contents" ]]; then
-    pass "predictable cache temp symlink was not overwritten"
-else
-    fail "cache publish followed a temp symlink (sentinel=$(cat "$sentinel" 2>/dev/null))"
-fi
-
-echo "Test 14: two installers can publish the same cache entry..."
-set_mode ok
-rm -rf "$CACHE" "$WORKDIR/dest-a" "$WORKDIR/dest-b"
-mkdir -p "$WORKDIR/dest-a" "$WORKDIR/dest-b"
-env \
-    GITHUB_RELEASE_BASE="$BASE" \
-    ARMATURE_TOOL_CACHE="$CACHE" \
-    ARMATURE_TOOL_PIN_FILE="$PIN_FILE" \
-    ARMATURE_TOOL_FETCH_RETRIES=0 \
-    ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=20 \
-    ARMATURE_TOOL_FETCH_BACKOFF_SECS=0 \
-    "$SCRIPT" --repo example/tool --version v9.9.9 \
-    --tarball 'tool-{ver}-{os}-{arch}.tar.gz' --bin tool --dest "$WORKDIR/dest-a" \
-    >"$WORKDIR/conc-a.out" 2>&1 &
-pid_a=$!
-env \
-    GITHUB_RELEASE_BASE="$BASE" \
-    ARMATURE_TOOL_CACHE="$CACHE" \
-    ARMATURE_TOOL_PIN_FILE="$PIN_FILE" \
-    ARMATURE_TOOL_FETCH_RETRIES=0 \
-    ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=20 \
-    ARMATURE_TOOL_FETCH_BACKOFF_SECS=0 \
-    "$SCRIPT" --repo example/tool --version v9.9.9 \
-    --tarball 'tool-{ver}-{os}-{arch}.tar.gz' --bin tool --dest "$WORKDIR/dest-b" \
-    >"$WORKDIR/conc-b.out" 2>&1 &
-pid_b=$!
-set +e
-wait "$pid_a"; st_a=$?
-wait "$pid_b"; st_b=$?
-set -e
-cached="$CACHE/example/tool/v9.9.9/$HASH/$TARBALL"
-if [[ $st_a -eq 0 && $st_b -eq 0 ]] \
-    && [[ "$( "$WORKDIR/dest-a/tool" )" == "fake-tool" ]] \
-    && [[ "$( "$WORKDIR/dest-b/tool" )" == "fake-tool" ]] \
-    && [[ -f "$cached" ]] && [[ "$(sha256sum "$cached" | awk '{print $1}')" == "$HASH" ]]; then
-    pass "concurrent installs both succeeded and the cache matches the pin"
-else
-    fail "concurrent cache publish failed a=$st_a b=$st_b"
-fi
-
-echo "Test 15: an unwritable cache does not fail the install..."
-set_mode ok
-rm -rf "$CACHE"
-mkdir -p "$CACHE"
-chmod a-w "$CACHE"
-if [[ -w "$CACHE" ]]; then
-    chmod u+w "$CACHE" 2>/dev/null || true
-    rm -rf "$CACHE"
-    printf 'not-a-directory\n' > "$CACHE"
-fi
+echo "Test 13: a spent budget does not call curl with --max-time 0..."
+set_mode hang
+export ARMATURE_TOOL_FETCH_RETRIES=3
+export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=1
+export ARMATURE_TOOL_FETCH_BACKOFF_SECS=0
+start=$(date +%s)
 set +e
 OUT=$(run_install 2>&1)
 STATUS=$?
 set -e
-chmod u+w "$CACHE" 2>/dev/null || true
-if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
-    pass "unwritable cache is ignored"
+end=$(date +%s)
+unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME ARMATURE_TOOL_FETCH_BACKOFF_SECS
+elapsed=$((end - start))
+if [[ $STATUS -ne 0 && "$elapsed" -lt 5 && ! -e "$WORKDIR/dest/tool" ]]; then
+    pass "a spent budget did not start an unlimited curl (${elapsed}s against a 20s hang)"
 else
-    fail "unwritable cache failed the install, status=$STATUS out=$OUT"
+    fail "deadline boundary failed, elapsed=${elapsed}s status=$STATUS out=$OUT"
 fi
 
 echo "Test 16: backoff is clamped to the remaining budget..."
 set_mode always-504
-rm -rf "$CACHE"
 export ARMATURE_TOOL_FETCH_RETRIES=1
 export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=1
 export ARMATURE_TOOL_FETCH_BACKOFF_SECS=30

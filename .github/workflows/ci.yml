@@ -165,13 +165,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      # Per-job key so one save does not freeze the other jobs' tool sets.
-      # Install still requires scripts/github-release.sha256.
-      - name: Cache checksum-verified tool releases
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/armature/github-releases
-          key: armature-tools-${{ github.job }}-${{ runner.os }}-${{ hashFiles('Makefile', 'scripts/github-release.sha256', 'scripts/install-verified-github-release.sh') }}
       # ubuntu-latest does not ship rg. census/skills scripts and check-core helpers still use it.
       - name: Install ripgrep
         run: |
@@ -244,11 +237,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Cache checksum-verified tool releases
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/armature/github-releases
-          key: armature-tools-${{ github.job }}-${{ runner.os }}-${{ hashFiles('Makefile', 'scripts/github-release.sha256', 'scripts/install-verified-github-release.sh') }}
       # ubuntu-latest does not ship rg. test-check-jobs uses rg -q.
       - name: Install ripgrep
         run: |
@@ -281,11 +269,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Cache checksum-verified tool releases
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/armature/github-releases
-          key: armature-tools-${{ github.job }}-${{ runner.os }}-${{ hashFiles('Makefile', 'scripts/github-release.sha256', 'scripts/install-verified-github-release.sh') }}
       - run: make check-job JOB=mutate
         env:
           CHECK_INSTALL_TOOLS: "1"
@@ -341,12 +324,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - name: Cache checksum-verified tool releases
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/armature/github-releases
-          key: armature-tools-${{ github.job }}-${{ runner.os }}-${{ hashFiles('Makefile', 'scripts/github-release.sha256', 'scripts/install-verified-github-release.sh') }}
 
       - name: Install ripgrep
         run: |

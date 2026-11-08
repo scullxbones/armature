@@ -50,14 +50,14 @@ func allowlist() []allowEntry {
 		{
 			RelPath: "scripts/test_check_jobs.sh",
 			Check:   allowObjectID,
-			Line:    515,
+			Line:    461,
 			Needle:  `^[0-9a-f]{40}$`,
 			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
 		},
 		{
 			RelPath: "scripts/test_check_jobs.sh",
 			Check:   allowObjectID,
-			Line:    960,
+			Line:    906,
 			Needle:  `@[0-9a-f]{40}\b`,
 			Reason:  "GitHub Actions uses: pin SHAs are always 40-hex by GitHub's API, not repo object-format OIDs",
 		},

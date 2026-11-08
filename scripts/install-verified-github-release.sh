@@ -24,7 +24,6 @@ Optional:
                                https://api.github.com when the release base
                                is https://github.com
   ARMATURE_TOOL_PIN_FILE       pin table (tests)
-  ARMATURE_TOOL_CACHE          cache directory, or 0 to disable
   ARMATURE_TOOL_CACERT         extra CA bundle passed to curl (tests)
   ARMATURE_TOOL_FETCH_RETRIES  extra attempts per URL after the first (default 5, max 8)
   ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
@@ -154,31 +153,6 @@ file_sha256() {
     fi
 }
 
-cache_file() {
-    local root owner name
-    if [[ "${ARMATURE_TOOL_CACHE-}" == "0" ]]; then
-        return 1
-    fi
-    if [[ -n "${ARMATURE_TOOL_CACHE-}" ]]; then
-        root="$ARMATURE_TOOL_CACHE"
-    elif [[ -n "${XDG_CACHE_HOME-}" ]]; then
-        root="$XDG_CACHE_HOME/armature/github-releases"
-    elif [[ -n "${HOME-}" ]]; then
-        root="$HOME/.cache/armature/github-releases"
-    else
-        return 1
-    fi
-    owner="${REPO%%/*}"
-    name="${REPO#*/}"
-    case "$owner$name$VERSION$TARBALL$PIN" in
-        *..*|*' '*|*'\\'*) return 1 ;;
-    esac
-    if [[ "$owner" == "$REPO" || "$name" == */* ]]; then
-        return 1
-    fi
-    printf '%s\n' "$root/$owner/$name/$VERSION/$PIN/$TARBALL"
-}
-
 # One transfer, including redirects. No credentials are sent: public release
 # assets do not need them, and a hand-rolled host check cannot decide that
 # safely. curl follows redirects without --location-trusted. --proto-redir
@@ -186,6 +160,11 @@ cache_file() {
 # refused redirect) is a failed transfer even when a status line was 200.
 transfer() {
     local dest="$1" url="$2" limit="$3" accept="${4:-}" st code
+    # --max-time 0 means no limit. Refuse a non-positive deadline.
+    if [[ -z "$limit" || "$limit" -le 0 ]]; then
+        echo "FAIL: refusing download with a non-positive deadline" >&2
+        return 1
+    fi
     if [[ -z "$accept" ]]; then
         accept="*/*"
     fi
@@ -247,12 +226,13 @@ digest_matches() {
 # whose digest is not the pin is not retried; the caller tries the other URL.
 fetch_matching() {
     local url="$1" dest="$2" accept="${3:-}"
-    local attempt=0
+    local attempt=0 left
     while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
-        if [[ "$(time_left)" -eq 0 ]]; then
+        left=$(time_left)
+        if [[ "$left" -le 0 ]]; then
             return 1
         fi
-        if transfer "$dest" "$url" "$(time_left)" "$accept" && digest_matches "$dest"; then
+        if transfer "$dest" "$url" "$left" "$accept" && digest_matches "$dest"; then
             return 0
         fi
         if [[ -s "$dest" ]]; then
@@ -273,12 +253,13 @@ fetch_matching() {
 # Same budget as fetch_matching, without a digest check (release JSON).
 fetch_retry() {
     local url="$1" dest="$2" accept="$3"
-    local attempt=0
+    local attempt=0 left
     while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
-        if [[ "$(time_left)" -eq 0 ]]; then
+        left=$(time_left)
+        if [[ "$left" -le 0 ]]; then
             return 1
         fi
-        if transfer "$dest" "$url" "$(time_left)" "$accept"; then
+        if transfer "$dest" "$url" "$left" "$accept"; then
             return 0
         fi
         attempt=$((attempt + 1))
@@ -334,48 +315,33 @@ TARBALL_DEST="$WORKDIR/$TARBALL"
 echo "Installing $BIN@$VERSION (pinned sha256 ${PIN})"
 echo "  budget: ${FETCH_RETRY_MAX_TIME}s wall-clock for this artifact"
 
-from_cache=0
-CACHE_PATH=""
-if CACHE_PATH=$(cache_file); then
-    if [[ -f "$CACHE_PATH" ]] && digest_matches "$CACHE_PATH"; then
-        cp "$CACHE_PATH" "$TARBALL_DEST"
-        from_cache=1
-        echo "cache hit: pinned sha256 $PIN"
-    elif [[ -f "$CACHE_PATH" ]]; then
-        echo "WARN: cached $TARBALL does not match pinned sha256; ignoring" >&2
-        rm -f "$CACHE_PATH"
-    fi
-fi
-
 downloaded=0
-if [[ "$from_cache" -eq 0 ]]; then
-    api=""
-    if api=$(api_base_url); then
-        meta="$WORKDIR/release.json"
-        rel="${api}/repos/${REPO}/releases/tags/${VERSION}"
-        if fetch_retry "$rel" "$meta" "application/vnd.github+json"; then
-            asset=$(api_asset_url "$api" "$meta" || true)
-            case "$asset" in
-                "$api"/*)
-                    if fetch_matching "$asset" "$TARBALL_DEST" "application/octet-stream"; then
-                        downloaded=1
-                        echo "fetched $TARBALL via GitHub release asset API"
-                    fi
-                    ;;
-            esac
-        else
-            echo "WARN: GitHub asset API failed for $REPO@$VERSION" >&2
-        fi
+api=""
+if api=$(api_base_url); then
+    meta="$WORKDIR/release.json"
+    rel="${api}/repos/${REPO}/releases/tags/${VERSION}"
+    if fetch_retry "$rel" "$meta" "application/vnd.github+json"; then
+        asset=$(api_asset_url "$api" "$meta" || true)
+        case "$asset" in
+            "$api"/*)
+                if fetch_matching "$asset" "$TARBALL_DEST" "application/octet-stream"; then
+                    downloaded=1
+                    echo "fetched $TARBALL via GitHub release asset API"
+                fi
+                ;;
+        esac
+    else
+        echo "WARN: GitHub asset API failed for $REPO@$VERSION" >&2
     fi
-    if [[ "$downloaded" -eq 0 ]]; then
-        if fetch_matching "$TARBALL_URL" "$TARBALL_DEST"; then
-            downloaded=1
-            echo "fetched $TARBALL via release download URL"
-        fi
+fi
+if [[ "$downloaded" -eq 0 ]]; then
+    if fetch_matching "$TARBALL_URL" "$TARBALL_DEST"; then
+        downloaded=1
+        echo "fetched $TARBALL via release download URL"
     fi
 fi
 
-if [[ "$from_cache" -eq 0 && "$downloaded" -eq 0 ]]; then
+if [[ "$downloaded" -eq 0 ]]; then
     if [[ "$SAW_MISMATCH" -eq 1 && -f "$TARBALL_DEST" ]]; then
         got=$(file_sha256 "$TARBALL_DEST")
         echo "FAIL: checksum mismatch for $TARBALL" >&2
@@ -398,29 +364,6 @@ if ! digest_matches "$TARBALL_DEST"; then
     exit 1
 fi
 echo "OK: $TARBALL sha256 matches pinned $PIN"
-
-# Best-effort. A cache miss, a symlink, or a permissions error must not
-# fail the install or write outside the cache directory.
-publish_cache() {
-    local dir tmp
-    [[ -n "${CACHE_PATH:-}" ]] || return 0
-    dir=$(dirname "$CACHE_PATH")
-    mkdir -p "$dir" 2>/dev/null || return 0
-    tmp=$(mktemp "$dir/.part.XXXXXX" 2>/dev/null) || return 0
-    if ! cp "$TARBALL_DEST" "$tmp" 2>/dev/null; then
-        rm -f "$tmp"
-        return 0
-    fi
-    if ! digest_matches "$tmp"; then
-        rm -f "$tmp"
-        return 0
-    fi
-    if ! mv -f "$tmp" "$CACHE_PATH" 2>/dev/null; then
-        rm -f "$tmp"
-    fi
-    return 0
-}
-publish_cache || true
 
 mkdir -p "$WORKDIR/extract"
 tar -xzf "$TARBALL_DEST" -C "$WORKDIR/extract"
