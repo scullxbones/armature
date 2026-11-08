@@ -72,9 +72,9 @@ func TestToolRunnerSurfacesStderrOnlyFailures_REQ_MCPSTDIO_S1(t *testing.T) {
 	text, exitCode, raw, err := runMCPToolCallRaw(t, repo, []string{"ready", "--not-a-real-flag"})
 	require.NoError(t, err)
 	assert.NotEqual(t, 0, exitCode)
-	assert.NotEmpty(t, text, "stderr-only failures must surface diagnostics in tool result text")
+	assert.NotEmpty(t, text, "stderr-only failures must fold diagnostics into tool result text/stdout")
 	assert.Contains(t, strings.ToLower(text), "flag")
-	assert.Contains(t, raw, `"stderr"`)
+	assert.Contains(t, raw, `"stdout"`)
 	assert.Contains(t, raw, `"isError":true`)
 	// Protocol stream is JSON-RPC only: no bare stderr line outside the response object.
 	for _, line := range nonEmptyMCPLines(raw) {

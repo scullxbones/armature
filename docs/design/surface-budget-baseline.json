@@ -1047,7 +1047,7 @@
       ]
     },
     "internal/mcpsession": {
-      "count": 14,
+      "count": 13,
       "names": [
         "Call",
         "Call.Args",
@@ -1059,7 +1059,6 @@
         "ExitWireBroken",
         "Result",
         "Result.ExitCode",
-        "Result.Stderr",
         "Result.Stdout",
         "Runner",
         "Serve"

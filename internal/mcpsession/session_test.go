@@ -221,7 +221,7 @@ func TestServeEOFDuringBlockingCallCancelsRunner_REQ_MCPSTDIO_S1(t *testing.T) {
 		select {
 		case <-ctx.Done():
 			close(cancelled)
-			return Result{ExitCode: 1, Stderr: []byte("cancelled\n")}
+			return Result{ExitCode: 1, Stdout: []byte("cancelled\n")}
 		case <-time.After(5 * time.Second):
 			t.Error("runner was not cancelled after stdin EOF")
 			return Result{ExitCode: 1}
@@ -403,10 +403,10 @@ func TestServeMalformedArgumentsReturnsRPCErrorAndContinues_REQ_MCPSTDIO_S1(t *t
 	assert.Contains(t, out.String(), `"id":2`)
 }
 
-func TestToolResultTextSurfacesStderrOnFailure(t *testing.T) {
+func TestToolResultTextSurfacesFoldedStdout(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "out", toolResultText(Result{Stdout: []byte("out"), Stderr: []byte("err"), ExitCode: 1}))
-	assert.Equal(t, "err\n", toolResultText(Result{Stderr: []byte("err\n"), ExitCode: 2}))
+	assert.Equal(t, "out", toolResultText(Result{Stdout: []byte("out"), ExitCode: 1}))
+	assert.Equal(t, "err\n", toolResultText(Result{Stdout: []byte("err\n"), ExitCode: 2}))
 	assert.Equal(t, "", toolResultText(Result{ExitCode: 0}))
 }
 
