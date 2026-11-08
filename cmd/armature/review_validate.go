@@ -57,7 +57,7 @@ func runReviewValidate(cmd *cobra.Command, assessmentFile, bundleFile string) er
 		return fmt.Errorf("--bundle expects a file path, not JSON content")
 	}
 
-	assessmentData, err := readAssessmentFile(assessmentFile)
+	assessmentData, err := readAssessmentFile(cmd, assessmentFile)
 	if err != nil {
 		return err
 	}

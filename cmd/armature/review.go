@@ -329,7 +329,7 @@ func runReviewRecord(cmd *cobra.Command, issueID, assessmentFile, bundleFile str
 		}
 	}
 
-	assessmentData, err := readAssessmentFile(assessmentFile)
+	assessmentData, err := readAssessmentFile(cmd, assessmentFile)
 	if err != nil {
 		return err
 	}
@@ -448,11 +448,11 @@ func looksLikeJSONArg(value string) bool {
 	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
 }
 
-func readAssessmentFile(path string) ([]byte, error) {
+func readAssessmentFile(cmd *cobra.Command, path string) ([]byte, error) {
 	var data []byte
 	var err error
 	if path == "-" {
-		data, err = io.ReadAll(os.Stdin)
+		data, err = io.ReadAll(cmd.InOrStdin())
 	} else {
 		data, err = os.ReadFile(filepath.Clean(path))
 	}
