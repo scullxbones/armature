@@ -1046,6 +1046,24 @@
         "WriteIssue"
       ]
     },
+    "internal/mcpsession": {
+      "count": 13,
+      "names": [
+        "Call",
+        "Call.Args",
+        "Exit",
+        "ExitClientClose",
+        "ExitRunnerPanic",
+        "ExitSignaled",
+        "ExitSignaledAgain",
+        "ExitWireBroken",
+        "Result",
+        "Result.ExitCode",
+        "Result.Stdout",
+        "Runner",
+        "Serve"
+      ]
+    },
     "internal/oporder": {
       "count": 29,
       "names": [
