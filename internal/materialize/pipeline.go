@@ -124,6 +124,10 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 			return runCommitIncremental(stateDir, allOps, byteOffsets, opts)
 		}
 	}
+	// No git checkout at OpsWorktree: file-concat (tests and non-git layouts).
+	// Keep OpsWorktree so incremental replay can still use worktreeOpsAfterOffsets
+	// against the on-disk ops tree; lastCommitWorktree stays empty (no HEAD).
+	// Production Load always supplies a worktree with .git and never reaches here.
 	return runFileConcat(stateDir, allOps, byteOffsets, opts, "")
 }
 
@@ -259,12 +263,11 @@ func ApplyOpsSorted(state *State, proposed []ops.Op) error {
 	return nil
 }
 
-func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[string]int64, opts Options) (*State, Result, error) {
+func runCommitIncremental(stateDir string, _ []ops.Op, _ map[string]int64, opts Options) (*State, Result, error) {
 	_, cp, err := prepareWriteState(stateDir, opts.WriteStateFiles)
 	if err != nil {
 		return nil, Result{}, err
 	}
-	shaMissing := false
 	fullReplay := cp.LastCommitSHA == "" || cp.StateVersion != CurrentStateVersion
 	if !fullReplay {
 		located, err := oporder.LocateOps(oporder.LocateInput{
@@ -274,24 +277,24 @@ func runCommitIncremental(stateDir string, allOps []ops.Op, byteOffsets map[stri
 		})
 		switch {
 		case err != nil && oporder.IsFromCommitMissing(err):
-			shaMissing = true
+			// Fall through to a cold committed-order walk.
 		case err != nil:
 			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 		default:
 			return replayFromCheckpoint(stateDir, opts, cp, located)
 		}
 	}
-	if shaMissing || len(allOps) == 0 {
-		located, err := oporder.LocateOps(oporder.LocateInput{
-			OpsWorktree:       opts.OpsWorktree,
-			ExtraPublishedTip: "HEAD",
-		})
-		if err != nil {
-			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
-		}
-		return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
+	// OpsWorktree with .git always uses committed order. Never fall through to
+	// timestamp-sorted runFileConcat: clock-skewed HostRefs (and any other
+	// order-sensitive replay) would diverge from cold LocateOps.
+	located, err := oporder.LocateOps(oporder.LocateInput{
+		OpsWorktree:       opts.OpsWorktree,
+		ExtraPublishedTip: "HEAD",
+	})
+	if err != nil {
+		return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 	}
-	return runFileConcat(stateDir, allOps, byteOffsets, opts, opts.OpsWorktree)
+	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true)
 }
 
 func sortLocatedByCommit(located []oporder.LocatedOp) {
@@ -301,6 +304,46 @@ func sortLocatedByCommit(located []oporder.LocatedOp) {
 		}
 		return cmp.Compare(a.Seq.Line, b.Seq.Line)
 	})
+}
+
+// mergeCommittedWithPending builds the replay stream for a LocateOps materialize.
+// Creates come first so claim-before-create cannot arise when a create is still
+// unpublished. Committed creates precede pending creates so a committed parent
+// exists before an unpublished child (Children links, --parent ready filters).
+// Remaining committed ops keep LocateOps order (clock-skew HostRefs). Remaining
+// pending ops are inserted by timestamp so an unpublished stale foreign claim
+// cannot land after a later committed release and resurrect the lease on full
+// rebuild.
+func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
+	sortOpsByTimestamp(pending)
+	var pendingCreates, pendingRest []ops.Op
+	for _, op := range pending {
+		if op.Type == ops.OpCreate {
+			pendingCreates = append(pendingCreates, op)
+			continue
+		}
+		pendingRest = append(pendingRest, op)
+	}
+	var committedCreates, committedRest []ops.Op
+	for _, op := range committed {
+		if op.Type == ops.OpCreate {
+			committedCreates = append(committedCreates, op)
+			continue
+		}
+		committedRest = append(committedRest, op)
+	}
+	out := make([]ops.Op, 0, len(committed)+len(pending))
+	out = append(out, committedCreates...)
+	out = append(out, pendingCreates...)
+	pi := 0
+	for _, op := range committedRest {
+		for pi < len(pendingRest) && pendingRest[pi].Timestamp < op.Timestamp {
+			out = append(out, pendingRest[pi])
+			pi++
+		}
+		out = append(out, op)
+	}
+	return append(out, pendingRest[pi:]...)
 }
 
 func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []oporder.LocatedOp, fullReplay bool) (*State, Result, error) {
@@ -320,12 +363,12 @@ func applyCommitLocated(stateDir string, opts Options, cp Checkpoint, located []
 			return nil, Result{}, skipErr
 		}
 	}
-	newOps := oporder.Ops(located)
+	committed := oporder.Ops(located)
 	pending, pendErr := uncommittedWorktreeOps(opts.OpsWorktree, offsetHint)
 	if pendErr != nil {
 		return nil, Result{}, pendErr
 	}
-	newOps = append(newOps, pending...)
+	newOps := mergeCommittedWithPending(committed, pending)
 	unhandledOps, err := applyOpsWithTolerance(state, newOps, nil)
 	if err != nil {
 		return nil, Result{}, err

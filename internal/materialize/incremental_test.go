@@ -530,3 +530,100 @@ func hostRefScriptFromSeed(seed uint64, n int) []byte {
 	}
 	return out
 }
+
+func TestMergeCommittedWithPending_StaleForeignBeforeCommittedRelease(t *testing.T) {
+	t.Parallel()
+	committed := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 300, WorkerID: "us"},
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 300, WorkerID: "us",
+			Payload: ops.Payload{ClaimToken: "tok", TTL: 60}},
+		{Type: ops.OpTransition, TargetID: "task-01", Timestamp: 300, WorkerID: "us",
+			Payload: ops.Payload{To: ops.StatusOpen, IfClaimToken: "tok", RestoreClaim: true}},
+	}
+	pending := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 100, WorkerID: "other",
+			Payload: ops.Payload{TTL: 1, WorktreePath: "/legacy"}},
+	}
+	got := mergeCommittedWithPending(committed, pending)
+	require.Equal(t, []string{
+		ops.OpCreate, ops.OpClaim, ops.OpClaim, ops.OpTransition,
+	}, []string{got[0].Type, got[1].Type, got[2].Type, got[3].Type})
+	assert.Equal(t, "other", got[1].WorkerID, "stale foreign pending must precede later committed claim/release")
+	assert.Equal(t, "us", got[2].WorkerID)
+}
+
+func TestMergeCommittedWithPending_PendingCreateBeforeCommittedClaim(t *testing.T) {
+	t.Parallel()
+	committed := []ops.Op{
+		{Type: ops.OpClaim, TargetID: "task-01", Timestamp: 200, WorkerID: "us",
+			Payload: ops.Payload{ClaimToken: "tok", TTL: 60}},
+	}
+	pending := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 300, WorkerID: "us",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	}
+	got := mergeCommittedWithPending(committed, pending)
+	require.Len(t, got, 2)
+	assert.Equal(t, ops.OpCreate, got[0].Type)
+	assert.Equal(t, ops.OpClaim, got[1].Type)
+}
+
+func TestMergeCommittedWithPending_CommittedParentBeforePendingChild(t *testing.T) {
+	t.Parallel()
+	committed := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100, WorkerID: "us",
+			Payload: ops.Payload{Title: "S", NodeType: "story"}},
+	}
+	pending := []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 200, WorkerID: "us",
+			Payload: ops.Payload{Title: "T", NodeType: "task", Parent: "story-01"}},
+	}
+	got := mergeCommittedWithPending(committed, pending)
+	require.Len(t, got, 2)
+	assert.Equal(t, "story-01", got[0].TargetID)
+	assert.Equal(t, "task-01", got[1].TargetID)
+}
+
+func TestCommitOrderIgnoresClockSkewWhenAllOpsPassed_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
+	fx := gittest.InitWithOrigin(t)
+	dir := fx.Dir
+	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ops"), 0o755))
+	writeMaterializeOpLog(t, dir, "ops/cattle-a.log", []ops.Op{
+		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "cattle-a",
+			Payload: ops.Payload{Title: "T", NodeType: "task"}},
+	})
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "create")
+
+	logPath := filepath.Join(dir, "ops", "cattle-a.log")
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 300, WorkerID: "cattle-a",
+		Payload: ops.Payload{ExternalRef: hostURLA, ExternalRole: "engineering"},
+	}))
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "add A")
+
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 200, WorkerID: "cattle-a",
+		Payload: ops.Payload{WithdrawExternalRef: hostURLA},
+	}))
+	gittest.Git(t, dir, "add", "ops/cattle-a.log")
+	gittest.Git(t, dir, "commit", "-m", "withdraw A")
+
+	diskOps, err := ops.ReadLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, diskOps, 3)
+
+	stateDir := t.TempDir()
+	// Passing non-nil allOps used to fall through to timestamp-sorted runFileConcat
+	// on full replay and resurrect A (withdraw ts200 before add ts300).
+	got, _, err := Run(stateDir, diskOps, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
+	require.NoError(t, err)
+	require.Equal(t, []HostRef{
+		{URL: hostURLA, Role: "engineering", At: 300, WorkerID: "cattle-a"},
+		{URL: hostURLA, At: 200, WorkerID: "cattle-a", Withdrawn: true},
+	}, got.Issues["task-01"].HostRefs)
+	_, ok := CurrentHostRef(got.Issues["task-01"].HostRefs)
+	assert.False(t, ok)
+}
