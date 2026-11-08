@@ -130,10 +130,6 @@ func GenerateSchema() string {
 }
 
 // GenerateOpsGitignore returns the ops-worktree .gitignore this binary writes.
-// The scaffolding-version header is the same mechanism SCHEMA uses: bootstrap
-// refuses to overwrite a committed gitignore whose recorded version is newer
-// than this binary, so clones on different arm versions cannot fight over
-// _armature (AGENTS.md I3). The ignore body itself lives in adapters.OpsGitignore.
 func GenerateOpsGitignore() string {
 	return scaffoldingVersionPrefix + strconv.Itoa(ScaffoldingVersion) + "\n" + adapters.OpsGitignore
 }
