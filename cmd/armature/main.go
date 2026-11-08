@@ -272,6 +272,10 @@ func newRootCmd() *cobra.Command {
 	showCmd.GroupID = "admin"
 	root.AddCommand(showCmd)
 
+	refReadCmd := newRefReadCmd()
+	refReadCmd.GroupID = "admin"
+	root.AddCommand(refReadCmd)
+
 	listCmd := newListCmd()
 	listCmd.GroupID = "admin"
 	root.AddCommand(listCmd)
