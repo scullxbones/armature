@@ -19,20 +19,22 @@ type Call struct {
 	Args []string
 }
 
-// Result is the stdout and exit code of one in-process arm command.
+// Result is the stdout, stderr, and exit code of one in-process arm command.
 type Result struct {
 	Stdout   []byte
+	Stderr   []byte
 	ExitCode int
 }
 
 // Runner runs one Call. Serve never calls Runner concurrently.
+// Runner must honor ctx cancellation (ADR 0024: session exits on client close).
 type Runner func(ctx context.Context, c Call) Result
 
 // Exit is why Serve returned.
 type Exit int
 
 const (
-	// ExitClientClose means the client closed stdin (EOF).
+	// ExitClientClose means the client closed stdin (EOF) or the parent context ended.
 	ExitClientClose Exit = iota
 	// ExitSignaled means the session received a stop signal and drained.
 	ExitSignaled
@@ -40,9 +42,12 @@ const (
 	ExitSignaledAgain
 	// ExitRunnerPanic means Runner panicked.
 	ExitRunnerPanic
-	// ExitWireBroken means the request line was not valid JSON-RPC.
+	// ExitWireBroken means the request line was not valid JSON-RPC or the writer failed.
 	ExitWireBroken
 )
+
+// continueSession is the sentinel Exit from handleRequest meaning "keep serving".
+const continueSession Exit = -1
 
 const signalGrace = 500 * time.Millisecond
 
@@ -76,9 +81,38 @@ type armArguments struct {
 	Args []string `json:"args"`
 }
 
+type lineEvent struct {
+	line string
+	err  error
+}
+
+// lineInbox merges a pending queue (lines arrived during an in-flight call)
+// with the live reader channel so Serve stays serial while still seeing EOF.
+type lineInbox struct {
+	live    <-chan lineEvent
+	pending []lineEvent
+}
+
+func (q *lineInbox) push(ev lineEvent) {
+	q.pending = append(q.pending, ev)
+}
+
+func (q *lineInbox) popPending() (lineEvent, bool) {
+	if len(q.pending) == 0 {
+		return lineEvent{}, false
+	}
+	ev := q.pending[0]
+	q.pending = q.pending[1:]
+	return ev, true
+}
+
 // Serve reads one JSON object per line from in, writes one response per
 // request to out, and returns when the client closes, signals, the wire
 // breaks, or Runner panics. version is reported in initialize.
+//
+// An in-flight tools/call is cancelled when stdin hits EOF, the parent
+// context ends, or a stop signal arrives (ADR 0024). Extra request lines
+// that arrive during a call are queued and handled after the call returns.
 func Serve(ctx context.Context, in io.Reader, out io.Writer, sig <-chan os.Signal, version string, run Runner) Exit {
 	if run == nil {
 		run = func(context.Context, Call) Result { return Result{} }
@@ -86,8 +120,9 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, sig <-chan os.Signa
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	lines := make(chan lineEvent, 1)
-	go readLines(in, lines)
+	live := make(chan lineEvent, 1)
+	go readLines(ctx, in, live)
+	inbox := &lineInbox{live: live}
 
 	var writeMu sync.Mutex
 	write := func(v any) error {
@@ -102,6 +137,12 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, sig <-chan os.Signa
 	}
 
 	for {
+		if ev, ok := inbox.popPending(); ok {
+			if exit := dispatchLine(ctx, ev, true, version, run, write, sig, cancel, inbox); exit != continueSession {
+				return exit
+			}
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return ExitClientClose
@@ -109,52 +150,77 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, sig <-chan os.Signa
 			_ = s
 			cancel()
 			return waitSignalExit(sig)
-		case ev, ok := <-lines:
-			if !ok || ev.err == io.EOF {
+		case ev, ok := <-inbox.live:
+			if !ok {
+				cancel()
 				return ExitClientClose
 			}
-			if ev.err != nil {
-				return ExitWireBroken
-			}
-			req, err := decodeRequest(ev.line)
-			if err != nil {
-				return ExitWireBroken
-			}
-			if req.Method == "" {
-				return ExitWireBroken
-			}
-			if isNotification(req) {
-				continue
-			}
-			exit, handled := handleRequest(ctx, req, version, run, write, sig, cancel)
-			if handled {
-				if exit != -1 {
-					return exit
-				}
-				continue
+			if exit := dispatchLine(ctx, ev, true, version, run, write, sig, cancel, inbox); exit != continueSession {
+				return exit
 			}
 		}
 	}
 }
 
-type lineEvent struct {
-	line string
-	err  error
+func dispatchLine(
+	ctx context.Context,
+	ev lineEvent,
+	ok bool,
+	version string,
+	run Runner,
+	write func(any) error,
+	sig <-chan os.Signal,
+	cancel context.CancelFunc,
+	inbox *lineInbox,
+) Exit {
+	if exit, done := classifyLineEvent(ev, ok); done {
+		cancel()
+		return exit
+	}
+	req, err := decodeRequest(ev.line)
+	if err != nil || req.Method == "" {
+		cancel()
+		return ExitWireBroken
+	}
+	if isNotification(req) {
+		return continueSession
+	}
+	return handleRequest(ctx, req, version, run, write, sig, cancel, inbox)
 }
 
-func readLines(in io.Reader, out chan<- lineEvent) {
+func classifyLineEvent(ev lineEvent, ok bool) (Exit, bool) {
+	if !ok || ev.err == io.EOF {
+		return ExitClientClose, true
+	}
+	if ev.err != nil {
+		return ExitWireBroken, true
+	}
+	return continueSession, false
+}
+
+// readLines scans in and sends one event per line. Sends are cancelled when
+// ctx ends so the goroutine cannot block forever on a full channel after Serve
+// returns. A blocked Scan still waits on the reader (EOF unblocks it).
+func readLines(ctx context.Context, in io.Reader, out chan<- lineEvent) {
 	defer close(out)
 	sc := bufio.NewScanner(in)
-	// MCP initialize payloads are small; raise the limit for long tool results on the request side.
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	for sc.Scan() {
-		out <- lineEvent{line: sc.Text()}
+		select {
+		case <-ctx.Done():
+			return
+		case out <- lineEvent{line: sc.Text()}:
+		}
 	}
+	ev := lineEvent{err: io.EOF}
 	if err := sc.Err(); err != nil {
-		out <- lineEvent{err: err}
-		return
+		ev.err = err
 	}
-	out <- lineEvent{err: io.EOF}
+	select {
+	case <-ctx.Done():
+		return
+	case out <- ev:
+	}
 }
 
 func decodeRequest(line string) (jsonRPCRequest, error) {
@@ -184,7 +250,8 @@ func handleRequest(
 	write func(any) error,
 	sig <-chan os.Signal,
 	cancel context.CancelFunc,
-) (Exit, bool) {
+	inbox *lineInbox,
+) Exit {
 	switch req.Method {
 	case "initialize":
 		result := map[string]any{
@@ -198,14 +265,16 @@ func handleRequest(
 			},
 		}
 		if err := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: result}); err != nil {
-			return ExitWireBroken, true
+			cancel()
+			return ExitWireBroken
 		}
-		return -1, true
+		return continueSession
 	case "ping":
 		if err := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: map[string]any{}}); err != nil {
-			return ExitWireBroken, true
+			cancel()
+			return ExitWireBroken
 		}
-		return -1, true
+		return continueSession
 	case "tools/list":
 		result := map[string]any{
 			"tools": []map[string]any{
@@ -226,21 +295,22 @@ func handleRequest(
 			},
 		}
 		if err := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: result}); err != nil {
-			return ExitWireBroken, true
+			cancel()
+			return ExitWireBroken
 		}
-		return -1, true
+		return continueSession
 	case "tools/call":
-		return handleToolsCall(ctx, req, run, write, sig, cancel)
+		return handleToolsCall(ctx, req, run, write, sig, cancel, inbox)
 	default:
-		err := write(jsonRPCResponse{
+		if err := write(jsonRPCResponse{
 			JSONRPC: "2.0",
 			ID:      req.ID,
 			Error:   &rpcError{Code: -32601, Message: "method not found: " + req.Method},
-		})
-		if err != nil {
-			return ExitWireBroken, true
+		}); err != nil {
+			cancel()
+			return ExitWireBroken
 		}
-		return -1, true
+		return continueSession
 	}
 }
 
@@ -251,27 +321,38 @@ func handleToolsCall(
 	write func(any) error,
 	sig <-chan os.Signal,
 	cancel context.CancelFunc,
-) (Exit, bool) {
+	inbox *lineInbox,
+) Exit {
 	var params toolsCallParams
+	if len(req.Params) == 0 {
+		if err := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32602, Message: "invalid params"}}); err != nil {
+			cancel()
+			return ExitWireBroken
+		}
+		return continueSession
+	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		if werr := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32602, Message: "invalid params"}}); werr != nil {
-			return ExitWireBroken, true
+			cancel()
+			return ExitWireBroken
 		}
-		return ExitWireBroken, true
+		return continueSession
 	}
 	if params.Name != toolName {
 		if werr := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32602, Message: "unknown tool: " + params.Name}}); werr != nil {
-			return ExitWireBroken, true
+			cancel()
+			return ExitWireBroken
 		}
-		return -1, true
+		return continueSession
 	}
 	var args armArguments
 	if len(params.Arguments) > 0 {
 		if err := json.Unmarshal(params.Arguments, &args); err != nil {
 			if werr := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32602, Message: "invalid arguments"}}); werr != nil {
-				return ExitWireBroken, true
+				cancel()
+				return ExitWireBroken
 			}
-			return ExitWireBroken, true
+			return continueSession
 		}
 	}
 
@@ -289,30 +370,110 @@ func handleToolsCall(
 		done <- callOutcome{res: run(ctx, Call(args))}
 	}()
 
-	select {
-	case <-sig:
-		cancel()
-		return waitSignalExit(sig), true
-	case out := <-done:
+	finish := func(out callOutcome) Exit {
 		if out.pan != nil {
-			return ExitRunnerPanic, true
+			cancel()
+			return ExitRunnerPanic
 		}
-		text := string(out.res.Stdout)
+		text := toolResultText(out.res)
 		result := map[string]any{
 			"content": []map[string]any{
 				{"type": "text", "text": text},
 			},
 			"structuredContent": map[string]any{
 				"exitCode": out.res.ExitCode,
-				"stdout":   text,
+				"stdout":   string(out.res.Stdout),
+				"stderr":   string(out.res.Stderr),
 			},
 			"isError": out.res.ExitCode != 0,
 		}
 		if err := write(jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: result}); err != nil {
-			return ExitWireBroken, true
+			cancel()
+			return ExitWireBroken
 		}
-		return -1, true
+		return continueSession
 	}
+
+	// stopForClientClose handles stdin EOF / parent cancel during a call.
+	// If the Runner already finished (eager EOF after a finite Reader's last
+	// request), write that result first. Otherwise cancel and wait briefly.
+	stopForClientClose := func() Exit {
+		select {
+		case out := <-done:
+			if exit := finish(out); exit != continueSession {
+				return exit
+			}
+			cancel()
+			return ExitClientClose
+		default:
+		}
+		cancel()
+		timer := time.NewTimer(signalGrace)
+		defer timer.Stop()
+		select {
+		case out := <-done:
+			if exit := finish(out); exit != continueSession {
+				return exit
+			}
+			return ExitClientClose
+		case <-timer.C:
+			return ExitClientClose
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return stopForClientClose()
+		case <-sig:
+			cancel()
+			return waitSignalExit(sig)
+		case ev, ok := <-inbox.live:
+			if !ok {
+				ev = lineEvent{err: io.EOF}
+				ok = true
+			}
+			if exit, terminal := classifyLineEvent(ev, ok); terminal {
+				if exit != ExitClientClose {
+					cancel()
+					return exit
+				}
+				// Client closed stdin. If the Runner already finished, emit its
+				// result then exit. If more requests were queued before EOF,
+				// finish this call and let Serve drain them before exiting.
+				// Only cancel a still-running call when nothing else is queued
+				// (mid-call disconnect — ADR 0024 / io.Pipe proof).
+				select {
+				case out := <-done:
+					inbox.push(ev)
+					return finish(out)
+				default:
+					if len(inbox.pending) > 0 {
+						inbox.push(ev)
+						continue
+					}
+					return stopForClientClose()
+				}
+			}
+			// Another request arrived while this call runs: queue it; stay serial.
+			inbox.push(ev)
+		case out := <-done:
+			return finish(out)
+		}
+	}
+}
+
+// toolResultText prefers stdout; on failure with empty stdout, surfaces stderr
+// so stderr-only command failures are visible in the tool result without
+// writing to the MCP protocol stream outside the JSON-RPC response.
+func toolResultText(res Result) string {
+	if len(res.Stdout) > 0 {
+		return string(res.Stdout)
+	}
+	if res.ExitCode != 0 && len(res.Stderr) > 0 {
+		return string(res.Stderr)
+	}
+	return string(res.Stdout)
 }
 
 func waitSignalExit(sig <-chan os.Signal) Exit {
