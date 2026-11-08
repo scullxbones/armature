@@ -1291,10 +1291,9 @@
       ]
     },
     "internal/opsbackup": {
-      "count": 33,
+      "count": 30,
       "names": [
         "AdvertisedRef",
-        "AsideBranch",
         "AsideRef",
         "Disposition",
         "Disposition.String",
@@ -1310,7 +1309,6 @@
         "Git.FetchBranchToRef",
         "Git.ResolveRevision",
         "Git.RestoreEvidence",
-        "LiveRef",
         "OpsBranch",
         "PlanRestore",
         "RestorePlan",
@@ -1324,7 +1322,6 @@
         "SnapshotResult",
         "SnapshotResult.Bundle",
         "SnapshotResult.Tip",
-        "TrackingRef",
         "Verify"
       ]
     },
@@ -1520,7 +1517,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 107,
+      "count": 95,
       "names": [
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1529,8 +1526,6 @@
         "AssessmentFact",
         "AssessmentFact.BaseSHA",
         "AssessmentFact.HeadSHA",
-        "AssessmentHowTo",
-        "DefaultDecideOnlyTree",
         "Error",
         "Error.Base",
         "Error.Error",
@@ -1556,10 +1551,8 @@
         "Input.Opts",
         "Input.PR",
         "Input.PriorOps",
-        "IsDeliveryRecordTemplate",
         "IsGuidanceRemediation",
         "IsLegacyTemplateRemediation",
-        "IsOptionLabel",
         "IsRequiredInputRemediation",
         "IsRunnableArmCommand",
         "IssueFacts",
@@ -1572,15 +1565,10 @@
         "IssueFacts.Tip",
         "IssueFlag",
         "KindCheckFailed",
-        "KindEmptyDiff",
-        "KindLegacy",
         "KindMissingAssessment",
         "KindNotDone",
         "KindNotLeaf",
-        "KindNotOnTarget",
         "KindPromote",
-        "LegacyTemplateGuidance",
-        "MoreStepsFollowGuidance",
         "Node",
         "Node.Base",
         "Node.Children",
@@ -1601,7 +1589,6 @@
         "PlanOpts.Decide",
         "PlanOpts.Now",
         "PlanOpts.Viewer",
-        "RecoveryArgv",
         "RemediationsPlanOpts",
         "RenderGroupedNextActions",
         "Result",
@@ -1622,9 +1609,7 @@
         "Step.Help",
         "Step.Kind",
         "StepCommand",
-        "StepGuidance",
         "StepKind",
-        "StepLegacyTemplate",
         "StepRequiredInput",
         "TreeConsistencyViolations",
         "TreeRepairGuidance",
@@ -1806,7 +1791,7 @@
       ]
     },
     "internal/snapshot": {
-      "count": 17,
+      "count": 18,
       "names": [
         "NewStore",
         "Snapshot",
@@ -1824,7 +1809,8 @@
         "Store.LoadReadOnly",
         "Store.ReadIndex",
         "Store.ReadIssue",
-        "Store.StatePath"
+        "Store.StatePath",
+        "Store.WithOpsWorktree"
       ]
     },
     "internal/sources": {

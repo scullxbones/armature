@@ -693,9 +693,12 @@ Show the audit log of ops.
 ## materialize
 
 Replay op logs and update materialized state files. `materialize.Run` with
-`Options.OpsWorktree` set to a git checkout is incremental from
-`checkpoint.last_materialized_commit`. Default snapshot load (claim/list)
-still concatenates log files so uncommitted test layouts keep working.
+`Options.OpsWorktree` set to a git checkout uses committed order via
+`LocateOps` (incremental from `checkpoint.last_materialized_commit` when
+present). Production `snapshot.Load` / `LoadReadOnly` always pass the ops
+worktree from `newSnapshotStore`, so claim/list/show and other readers see
+the same order as cold materialize — never timestamp-sorted `runFileConcat`.
+File-concat remains only for non-git test layouts that omit `OpsWorktree`.
 
 **Synopsis:**
 `arm materialize [flags]`

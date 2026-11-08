@@ -33,11 +33,10 @@ type StepKind string
 
 const (
 	// StepCommand is a runnable arm argv.
-	StepCommand StepKind = "command"
-	// StepGuidance is non-argv prose.
-	StepGuidance StepKind = "guidance"
-	// StepLegacyTemplate is a placeholder argv with no provenance (kind "legacy").
-	StepLegacyTemplate StepKind = "legacy-template"
+	StepCommand  StepKind = "command"
+	stepGuidance StepKind = "guidance"
+	// stepLegacyTemplate is a placeholder argv with no provenance (kind "legacy").
+	stepLegacyTemplate StepKind = "legacy-template"
 	// StepRequiredInput is a real gate that needs a produced artifact (not legacy).
 	StepRequiredInput StepKind = "required-input"
 )
@@ -68,13 +67,11 @@ const (
 	FallbackGuidance = "promote unmerged descendants first; reserve leaf remediations for leaves only"
 	// TreeRepairGuidance explains open/unfinished work under a merged ancestor.
 	TreeRepairGuidance = "tree needs repair: open work under a merged ancestor — reopen the merged ancestor chain or cancel/reparent the open child"
-	// MoreStepsFollowGuidance marks descendant promotion steps that do not by
+	// moreStepsFollowGuidance marks descendant promotion steps that do not by
 	// themselves clear a done-under-merged (D14) finding.
-	MoreStepsFollowGuidance = "more steps follow after tree repair to promote remaining descendants"
-	// LegacyTemplateGuidance labels <sha> placeholders as legacy templates
-	// (same honesty as promotion kind "legacy").
-	LegacyTemplateGuidance = "legacy: template argv — substitute real values; placeholders fail closed"
-	FindingHeaderPrefix    = "finding: "
+	moreStepsFollowGuidance = "more steps follow after tree repair to promote remaining descendants"
+	legacyTemplateGuidance  = "legacy: template argv — substitute real values; placeholders fail closed"
+	FindingHeaderPrefix     = "finding: "
 )
 
 // RemediationsPlanOpts builds then filters a Plan. Every printed command argv
@@ -285,7 +282,7 @@ func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
 func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 	decide := opts.Decide
 	if decide == nil {
-		decide = DefaultDecideOnlyTree(opts.Viewer)
+		decide = defaultDecideOnlyTree()
 	}
 	if len(p.Alternatives) > 0 {
 		var kept []Alternative
@@ -401,7 +398,6 @@ func applyArgvEffect(g Graph, argv string, opts PlanOpts) Graph {
 	return after
 }
 
-// graphAfterAlternative applies an Option's runnable argv effects in order.
 func graphAfterAlternative(g Graph, alt Alternative, opts PlanOpts) Graph {
 	after := cloneGraph(g)
 	for _, cmd := range alt.RunnableCommands() {
@@ -559,19 +555,19 @@ func doneLeafSteps(id string, node Node) []Step {
 			{
 				Argv: "arm review record --issue " + id + " --assessment <assessment.json> --bundle <bundle.json>",
 				Kind: StepRequiredInput,
-				Help: AssessmentHowTo(id, base, tip),
+				Help: assessmentHowTo(id, base, tip),
 			},
 		}
 	}
 	return []Step{
-		{Argv: delivery.RecordArgv(id), Kind: StepLegacyTemplate, Help: LegacyTemplateGuidance},
+		{Argv: delivery.RecordArgv(id), Kind: stepLegacyTemplate, Help: legacyTemplateGuidance},
 	}
 }
 
-// AssessmentHowTo is the concrete how-to for producing assessment.json when
+// assessmentHowTo is the concrete how-to for producing assessment.json when
 // delivery Base/Tip provenance is known (required-input, not legacy). Shared by
 // doctor suggested and MERGED-1 next_actions.
-func AssessmentHowTo(issueID, base, tip string) string {
+func assessmentHowTo(issueID, base, tip string) string {
 	return fmt.Sprintf(
 		"produce assessment.json: arm review prepare --issue %s --base %s --head %s --output bundle.json; "+
 			"arm review schema --output conformance-assessment.schema.json; "+
@@ -584,7 +580,7 @@ func AssessmentHowTo(issueID, base, tip string) string {
 }
 
 // missingAssessmentActions is the shared recovery list for MERGED-1 /
-// sync missing-assessment (same how-to as doctor required-input). AssessmentHowTo
+// sync missing-assessment (same how-to as doctor required-input). assessmentHowTo
 // appears once — on the required-input Help — never doubled as a separate guidance step.
 func missingAssessmentActions(issueID, base, tip string) []string {
 	base = strings.TrimSpace(base)
@@ -598,7 +594,7 @@ func missingAssessmentActions(issueID, base, tip string) []string {
 	return renderStep(Step{
 		Argv: "arm review record --issue " + issueID + " --assessment <assessment.json> --bundle <bundle.json>",
 		Kind: StepRequiredInput,
-		Help: AssessmentHowTo(issueID, base, tip),
+		Help: assessmentHowTo(issueID, base, tip),
 	})
 }
 
@@ -704,7 +700,7 @@ func (p Plan) RenderNextActions() []string {
 	}
 	if len(p.MoreSteps) > 0 {
 		if len(p.Alternatives) >= 2 {
-			out = append(out, MoreStepsFollowGuidance)
+			out = append(out, moreStepsFollowGuidance)
 		}
 		for _, step := range p.MoreSteps {
 			out = append(out, renderStep(step)...)
@@ -729,12 +725,12 @@ func optionLabel(i int) string {
 
 func renderStep(step Step) []string {
 	switch step.Kind {
-	case StepGuidance:
+	case stepGuidance:
 		return []string{step.Argv}
-	case StepLegacyTemplate:
+	case stepLegacyTemplate:
 		help := step.Help
 		if help == "" {
-			help = LegacyTemplateGuidance
+			help = legacyTemplateGuidance
 		}
 		return []string{help, step.Argv}
 	case StepRequiredInput:
@@ -754,8 +750,7 @@ func renderStep(step Step) []string {
 	}
 }
 
-// IsOptionLabel reports a standalone Option A:/B: line (not an argv).
-func IsOptionLabel(s string) bool {
+func isOptionLabel(s string) bool {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, "Option ") {
 		return false
@@ -768,7 +763,7 @@ func IsOptionLabel(s string) bool {
 // Option labels and guidance return empty — command lines are plain `arm …`.
 func RunnableArgv(s string) string {
 	s = strings.TrimSpace(s)
-	if IsOptionLabel(s) || IsGuidanceRemediation(s) || IsLegacyTemplateRemediation(s) {
+	if isOptionLabel(s) || IsGuidanceRemediation(s) || IsLegacyTemplateRemediation(s) {
 		return ""
 	}
 	if strings.HasPrefix(s, "arm ") {
@@ -817,8 +812,7 @@ func IsRunnableArmCommand(s string) bool {
 	return RunnableArgv(s) != ""
 }
 
-// IsDeliveryRecordTemplate reports a delivery-record argv with SHA placeholders.
-func IsDeliveryRecordTemplate(cmd string) bool {
+func isDeliveryRecordTemplate(cmd string) bool {
 	cmd = strings.TrimSpace(cmd)
 	return strings.HasPrefix(cmd, "arm delivery record") && strings.Contains(cmd, "<sha>")
 }
@@ -826,10 +820,10 @@ func IsDeliveryRecordTemplate(cmd string) bool {
 // IsLegacyTemplateRemediation reports placeholder recovery labeled like kind "legacy".
 func IsLegacyTemplateRemediation(cmd string) bool {
 	cmd = strings.TrimSpace(cmd)
-	if cmd == LegacyTemplateGuidance {
+	if cmd == legacyTemplateGuidance {
 		return true
 	}
-	return IsDeliveryRecordTemplate(cmd)
+	return isDeliveryRecordTemplate(cmd)
 }
 
 // IsRequiredInputRemediation reports a review-record assessment placeholder.
@@ -842,7 +836,7 @@ func IsRequiredInputRemediation(cmd string) bool {
 // IsGuidanceRemediation reports non-argv prose entries in a remediation list.
 func IsGuidanceRemediation(cmd string) bool {
 	cmd = strings.TrimSpace(cmd)
-	if IsOptionLabel(cmd) {
+	if isOptionLabel(cmd) {
 		return true
 	}
 	if strings.HasPrefix(cmd, FindingHeaderPrefix) {
@@ -861,7 +855,7 @@ func IsGuidanceRemediation(cmd string) bool {
 		return true
 	}
 	switch cmd {
-	case FallbackGuidance, TreeRepairGuidance, MoreStepsFollowGuidance, LegacyTemplateGuidance:
+	case FallbackGuidance, TreeRepairGuidance, moreStepsFollowGuidance, legacyTemplateGuidance:
 		return true
 	default:
 		return false

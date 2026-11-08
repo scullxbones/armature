@@ -25,8 +25,6 @@ path_owner_uid() {
 }
 
 parent_is_safe() {
-  # Safe means: a real directory (not a symlink) that either belongs to this
-  # user or is sticky, so other users cannot rename or replace entries we own.
   local p=$1 perms
   if [ -L "$p" ]; then
     return 1
@@ -127,9 +125,7 @@ assert_safe_to_source() {
 }
 
 abs_path() {
-  # Resolve to an absolute, symlink-free path with shell builtins only.
-  # AGENTS.md reserves Python for a last resort, and realpath/readlink -f are
-  # not guaranteed on every supported checkout.
+  # realpath and readlink -f are not guaranteed on every supported checkout.
   local p=$1 dir base
   if [ -d "$p" ]; then
     (CDPATH= cd -P -- "$p" && pwd)
@@ -1119,7 +1115,6 @@ jq_assert_args() {
   shift 2
   [ "${1:-}" = "--" ] || die "jq_assert_args: expected -- before jq args"
   shift
-  # shellcheck disable=SC2068
   jq -e "$@" "$file" >/dev/null 2>&1 || die "$message (see $file)"
 }
 
