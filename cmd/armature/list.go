@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"slices"
 	"sort"
 
+	"github.com/scullxbones/armature/internal/externalref"
 	"github.com/scullxbones/armature/internal/materialize"
 	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
@@ -15,12 +18,13 @@ func newListCmd() *cobra.Command {
 	var filterParent string
 	var filterType string
 	var filterStatus string
+	var filterExternalRef string
 	var group bool
 	var terminal bool
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List issues with optional --type, --parent, and --status filters",
+		Short: "List issues with optional --type, --parent, --status, and --external-ref filters",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := currentCtx(cmd)
 			store := newSnapshotStore(ctx)
@@ -32,6 +36,15 @@ func newListCmd() *cobra.Command {
 			index := snap.Index
 			if index == nil {
 				index = make(materialize.Index)
+			}
+
+			var wantHostURL string
+			if filterExternalRef != "" {
+				gh, parseErr := externalref.ParseGitHubIssueURL(filterExternalRef)
+				if parseErr != nil {
+					return fmt.Errorf("parse --external-ref: %w", parseErr)
+				}
+				wantHostURL = gh.URL()
 			}
 
 			var ids []string
@@ -48,19 +61,23 @@ func newListCmd() *cobra.Command {
 				if terminal && !ops.IsTerminalStatus(entry.Status) {
 					continue
 				}
+				if wantHostURL != "" && !slices.Contains(entry.LiveHostURLs, wantHostURL) {
+					continue
+				}
 				ids = append(ids, id)
 			}
 			sort.Strings(ids)
 
-			filtered := filterParent != "" || filterType != "" || filterStatus != "" || terminal
+			filtered := filterParent != "" || filterType != "" || filterStatus != "" || terminal || wantHostURL != ""
 			listFacts := outputListFacts(index)
+			out := cmd.OutOrStdout()
 			if structuredFormat(cmd) {
 				rows := output.ListRows(listFacts, ids)
 				var groups []output.ListGroup
 				if group {
 					groups = output.ListGroupsByStatus(listFacts, ids)
 				}
-				return output.WriteListEnvelope(cmd.OutOrStdout(), rows, groups, group, filtered)
+				return output.WriteListEnvelope(out, rows, groups, group, filtered)
 			}
 
 			if group {
@@ -69,7 +86,9 @@ func newListCmd() *cobra.Command {
 					if g.Status == ops.StatusDone {
 						label = "done (awaiting merge)"
 					}
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n=== %s ===\n", label)
+					if _, err := fmt.Fprintf(out, "\n=== %s ===\n", label); err != nil {
+						return err
+					}
 					for _, id := range g.IDs {
 						e := index[id]
 						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
@@ -80,7 +99,12 @@ func newListCmd() *cobra.Command {
 							}
 							line += "]"
 						}
-						_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+						if _, err := fmt.Fprintln(out, line); err != nil {
+							return err
+						}
+						if err := writeHostRefLines(out, snap.State.Issues[id]); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
@@ -90,7 +114,9 @@ func newListCmd() *cobra.Command {
 				if len(ids) == 0 {
 					return nil
 				}
-				boardEntries := make([]output.BoardEntry, 0, len(ids))
+				if _, err := fmt.Fprintf(out, "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE"); err != nil {
+					return err
+				}
 				for _, id := range ids {
 					e := index[id]
 					claimed := ""
@@ -98,37 +124,56 @@ func newListCmd() *cobra.Command {
 					if issue != nil {
 						claimed = issue.ClaimedBy
 					}
-					boardEntries = append(boardEntries, output.BoardEntry{
-						Issue:   id,
-						Status:  e.Status,
-						Claimed: claimed,
-						Outcome: e.Outcome,
-						Title:   e.Title,
-					})
+					outcome := e.Outcome
+					const maxOutcome = 30
+					if len(outcome) > maxOutcome {
+						outcome = outcome[:27] + "..."
+					}
+					if _, err := fmt.Fprintf(out, "%-12s %-12s %-38s %-30s %s\n", id, e.Status, claimed, outcome, e.Title); err != nil {
+						return err
+					}
+					if err := writeHostRefLines(out, issue); err != nil {
+						return err
+					}
 				}
-				return output.RenderBoard(cmd.OutOrStdout(), boardEntries)
+				return nil
 			}
 
-			entries := make([]output.ListEntry, 0, len(ids))
 			for _, id := range ids {
 				e := index[id]
-				le := output.ListEntry{
-					Issue:      id,
-					Status:     e.Status,
-					Title:      e.Title,
-					AssignedTo: e.AssignedWorker,
+				status := e.Status
+				if e.AssignedWorker != "" {
+					status = status + " (assigned to " + e.AssignedWorker + ")"
 				}
-				entries = append(entries, le)
+				if _, err := fmt.Fprintf(out, "  %-12s  %-14s  %s\n", id, status, e.Title); err != nil {
+					return err
+				}
+				if err := writeHostRefLines(out, snap.State.Issues[id]); err != nil {
+					return err
+				}
 			}
-			return output.RenderList(cmd.OutOrStdout(), entries)
+			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&filterParent, "parent", "", "filter by parent issue ID")
 	cmd.Flags().StringVar(&filterType, "type", "", "filter by issue type (task, story, feature, bug)")
 	cmd.Flags().StringVar(&filterStatus, "status", "", "filter by status (open, in-progress, done, merged, cancelled, blocked)")
+	cmd.Flags().StringVar(&filterExternalRef, "external-ref", "", "filter by live GitHub issue URL (parsed canonical form)")
 	cmd.Flags().BoolVar(&group, "group", false, "group issues by status (human headers; structured groups adjunct)")
 	cmd.Flags().BoolVar(&terminal, "terminal", false, "filter to all terminal statuses (done, merged, cancelled)")
 
 	return cmd
+}
+
+func writeHostRefLines(w io.Writer, issue *materialize.Issue) error {
+	if issue == nil || len(issue.HostRefs) == 0 {
+		return nil
+	}
+	for _, line := range formatHostRefLines(issue.HostRefs) {
+		if _, err := fmt.Fprintf(w, "    %s\n", line); err != nil {
+			return err
+		}
+	}
+	return nil
 }
