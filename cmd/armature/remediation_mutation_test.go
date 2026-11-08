@@ -15,7 +15,7 @@ import (
 )
 
 // TestMutation_DropDecideFromPrintPath_Fails_REQ_TOPTIER_S18_T4 proves argv
-// filtering requires Decide: nil Decide + DefaultDecideOnlyTree leaks foreign
+// filtering requires Decide: a nil Decide uses the tree-only gate and leaks foreign
 // live claim on a healthy tree (no merged ancestor). Gate kill proofs for
 // RequireOwner / ForeignLiveLeaseBlocks / tree consistency live in
 // remediation_gates_test.go (real path; no injected Decide).
