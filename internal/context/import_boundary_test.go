@@ -28,6 +28,7 @@ func TestProductionContextDoesNotImportMaterializeOrConfig(t *testing.T) {
 		`"github.com/scullxbones/armature/internal/materialize"`: "context consumes IssueFacts, not materialized issues",
 		`"github.com/scullxbones/armature/internal/config"`:      "state directory name is local to context IssueFacts",
 		`"github.com/scullxbones/armature/internal/ops"`:         "status vocabulary is local to context IssueFacts",
+		`"github.com/scullxbones/armature/internal/externalref"`: "render-context must not fetch host issue bodies",
 	}
 	fset := token.NewFileSet()
 	var violations []string

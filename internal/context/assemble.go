@@ -47,6 +47,9 @@ func assemble(issueID string, issues map[string]IssueFacts, reader fileReader) (
 	layers = append(layers, buildCoreSpec(issue))
 	layers = append(layers, buildContextFiles(issue, reader))
 	layers = append(layers, buildSnippets(issue))
+	if hostLayer := buildHostRefs(issue); hostLayer.Content != "" {
+		layers = append(layers, hostLayer)
+	}
 	layers = append(layers, buildBlockerOutcomes(issue, issues))
 	parentLayer, err := buildParentChain(issue, graph, issues)
 	if err != nil {
@@ -171,6 +174,60 @@ func buildCoreSpec(issue IssueFacts) layer {
 	content := fmt.Sprintf("# Issue: %s\nType: %s | Scope: %s | Priority: %s\n\n## Definition of Done\n%s",
 		issue.Title, issue.Type, scope, priority, dod)
 	return layer{Name: "core_spec", DropRank: 1, Content: content}
+}
+
+func buildHostRefs(issue IssueFacts) layer {
+	live := liveHostRefFacts(issue.HostRefs)
+	if len(live) == 0 {
+		return layer{Name: "host_refs", DropRank: 3, Content: ""}
+	}
+	currentURL := live[len(live)-1].URL
+	lines := make([]string, 0, len(live))
+	for _, ref := range live {
+		line := "- " + ref.URL
+		if ref.Role != "" {
+			line += " role=" + ref.Role
+		}
+		if ref.URL == currentURL {
+			line += " [current]"
+		}
+		lines = append(lines, line)
+	}
+	return layer{
+		Name:     "host_refs",
+		DropRank: 3,
+		Content:  "## Host Refs\n" + strings.Join(lines, "\n"),
+	}
+}
+
+func liveHostRefFacts(refs []HostRefFact) []HostRefFact {
+	live := map[string]HostRefFact{}
+	order := []string{}
+	for _, ref := range refs {
+		if ref.Withdrawn {
+			delete(live, ref.URL)
+			order = dropHostRefURL(order, ref.URL)
+			continue
+		}
+		order = dropHostRefURL(order, ref.URL)
+		order = append(order, ref.URL)
+		live[ref.URL] = ref
+	}
+	out := make([]HostRefFact, 0, len(order))
+	for _, url := range order {
+		out = append(out, live[url])
+	}
+	return out
+}
+
+func dropHostRefURL(order []string, url string) []string {
+	next := make([]string, 0, len(order))
+	for _, item := range order {
+		if item != url {
+			next = append(next, item)
+		}
+	}
+	return next
 }
 
 func buildSnippets(issue IssueFacts) layer {

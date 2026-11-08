@@ -25,6 +25,7 @@ type IssueFacts struct {
 	Context          []byte
 	Notes            []NoteFact
 	Decisions        []DecisionFact
+	HostRefs         []HostRefFact
 }
 
 type NoteFact struct {
@@ -37,6 +38,14 @@ type DecisionFact struct {
 	Topic     string
 	Choice    string
 	Rationale string
+}
+
+// HostRefFact is one external-ref event on an issue: URL, role, and whether
+// that event withdrew the name. Assemble prints live names only.
+type HostRefFact struct {
+	URL       string
+	Role      string
+	Withdrawn bool
 }
 
 func graphFromFacts(facts map[string]IssueFacts) *dag.Graph {

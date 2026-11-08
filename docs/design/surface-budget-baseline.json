@@ -422,12 +422,16 @@
       ]
     },
     "internal/context": {
-      "count": 33,
+      "count": 38,
       "names": [
         "DecisionFact",
         "DecisionFact.Choice",
         "DecisionFact.Rationale",
         "DecisionFact.Topic",
+        "HostRefFact",
+        "HostRefFact.Role",
+        "HostRefFact.URL",
+        "HostRefFact.Withdrawn",
         "IssueFacts",
         "IssueFacts.BlockedBy",
         "IssueFacts.Blocks",
@@ -436,6 +440,7 @@
         "IssueFacts.ContextFiles",
         "IssueFacts.Decisions",
         "IssueFacts.DefinitionOfDone",
+        "IssueFacts.HostRefs",
         "IssueFacts.ID",
         "IssueFacts.Notes",
         "IssueFacts.Outcome",
