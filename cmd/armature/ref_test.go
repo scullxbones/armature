@@ -275,4 +275,3 @@ func TestRefRejectsBrokenReplay_REQ_HOSTREF_S1_T5(t *testing.T) {
 	assert.Empty(t, externalRefOpsForIssue(t, repo, issueID))
 	assert.False(t, originArmatureContains(t, bareDir, `"external_ref"`))
 }
-
