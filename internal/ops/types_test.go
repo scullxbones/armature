@@ -81,6 +81,44 @@ func TestPayload_SourceEntryID_OmittedWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestPayload_ExternalRefFieldsRoundTrip_REQ_HOSTREF_S1_T1(t *testing.T) {
+	t.Parallel()
+	p := Payload{
+		ExternalRef:         "https://github.com/scullxbones/armature/issues/383",
+		ExternalRole:        "engineering",
+		WithdrawExternalRef: "https://github.com/scullxbones/armature/issues/1",
+	}
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if bytes.Contains(data, []byte(`"approval"`)) || bytes.Contains(data, []byte(`"body"`)) {
+		t.Errorf("external-ref payload must not grow approval or body fields, got: %s", data)
+	}
+	if !bytes.Contains(data, []byte(`"external_ref"`)) ||
+		!bytes.Contains(data, []byte(`"external_role"`)) ||
+		!bytes.Contains(data, []byte(`"withdraw_external_ref"`)) {
+		t.Errorf("expected external_ref, external_role, and withdraw_external_ref in JSON, got: %s", data)
+	}
+	var got Payload
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if got.ExternalRef != p.ExternalRef || got.ExternalRole != p.ExternalRole || got.WithdrawExternalRef != p.WithdrawExternalRef {
+		t.Errorf("round-trip mismatch: got %+v want %+v", got, p)
+	}
+
+	omitted, err := json.Marshal(Payload{Title: "no host name"})
+	if err != nil {
+		t.Fatalf("marshal empty external-ref fields: %v", err)
+	}
+	for _, key := range []string{"external_ref", "external_role", "withdraw_external_ref", "approval", "body"} {
+		if bytes.Contains(omitted, []byte(`"`+key+`"`)) {
+			t.Errorf("expected %s omitted when empty, got: %s", key, omitted)
+		}
+	}
+}
+
 func TestOutcomeOp_RecordsTokenCounts_REQ_TOPTIER_S11_T1(t *testing.T) {
 	t.Parallel()
 

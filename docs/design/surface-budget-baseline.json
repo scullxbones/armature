@@ -1051,7 +1051,7 @@
       ]
     },
     "internal/ops": {
-      "count": 206,
+      "count": 210,
       "names": [
         "AffectsValidity",
         "AppendAndCommit",
@@ -1134,6 +1134,7 @@
         "OpCreate",
         "OpDAGTransition",
         "OpDecision",
+        "OpExternalRef",
         "OpGateEvidence",
         "OpHeartbeat",
         "OpItem",
@@ -1184,6 +1185,8 @@
         "Payload.DeletedPath",
         "Payload.Dep",
         "Payload.EstComplexity",
+        "Payload.ExternalRef",
+        "Payload.ExternalRole",
         "Payload.IfClaimToken",
         "Payload.InputTokens",
         "Payload.IntegrationBranch",
@@ -1232,6 +1235,7 @@
         "Payload.Topic",
         "Payload.UncoveredAcknowledged",
         "Payload.VersionID",
+        "Payload.WithdrawExternalRef",
         "Payload.WorktreePath",
         "PendingPushTracker",
         "PendingPushTracker.Increment",

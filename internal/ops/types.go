@@ -20,6 +20,7 @@ const (
 	OpDAGTransition     = "dag-transition"
 	OpDecision          = "decision"
 	OpAssign            = "assign"
+	OpExternalRef       = "external-ref"
 	OpAmend             = "amend"
 	OpCitationAccepted  = "citation-accepted"
 	OpScopeRename       = "scope-rename"
@@ -144,6 +145,9 @@ type Payload struct {
 	Rationale                         string          `json:"rationale,omitempty"`
 	Affects                           []string        `json:"affects,omitempty"`
 	AssignedTo                        string          `json:"assigned_to,omitempty"`
+	ExternalRef                       string          `json:"external_ref,omitempty"`
+	ExternalRole                      string          `json:"external_role,omitempty"`
+	WithdrawExternalRef               string          `json:"withdraw_external_ref,omitempty"`
 	Confidence                        string          `json:"confidence,omitempty"`
 	OldPath                           string          `json:"old_path,omitempty"`
 	NewPath                           string          `json:"new_path,omitempty"`
