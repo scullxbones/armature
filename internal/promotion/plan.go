@@ -1,5 +1,7 @@
 // Package promotion matches a recorded delivery on the integration branch
 // (ADR 0022) and requires a matching assessment or post-delivery Release Override.
+// Callers use Evaluate and RemediationsPlanOpts. Kind names for empty-diff,
+// legacy, and not-on-target stay inside this package; callers read Result.Kind.
 package promotion
 
 import (
@@ -16,10 +18,10 @@ import (
 
 const (
 	KindPromote           = "promote"
-	KindNotOnTarget       = "not-on-target"
+	kindNotOnTarget       = "not-on-target"
 	KindMissingAssessment = "missing-assessment"
-	KindEmptyDiff         = "empty-diff"
-	KindLegacy            = "legacy"
+	kindEmptyDiff         = "empty-diff"
+	kindLegacy            = "legacy"
 	KindCheckFailed       = "check-failed"
 	KindNotLeaf           = "not-leaf"
 	KindNotDone           = "not-done"
@@ -85,7 +87,7 @@ func (e *Error) RecoveryActions() []string {
 	if e.Kind == KindMissingAssessment {
 		return missingAssessmentActions(e.IssueID, e.Base, e.Tip)
 	}
-	return []string{RecoveryArgv(e.IssueID, e.Kind)}
+	return []string{recoveryArgv(e.IssueID, e.Kind)}
 }
 
 // RecoveryArgv is the first recovery action (sync singular next_action).
@@ -93,13 +95,13 @@ func (e *Error) RecoveryArgv() string {
 	return FirstRemediation(e.RecoveryActions())
 }
 
-func RecoveryArgv(issueID, kind string) string {
+func recoveryArgv(issueID, kind string) string {
 	switch kind {
 	case KindMissingAssessment:
 		return "arm review record --issue " + issueID + " --assessment <assessment.json> --bundle <bundle.json>"
-	case KindLegacy, KindEmptyDiff:
+	case kindLegacy, kindEmptyDiff:
 		return delivery.RecordArgv(issueID)
-	case KindNotOnTarget:
+	case kindNotOnTarget:
 		return "arm merged --issue " + issueID
 	case KindNotLeaf:
 		// Without a graph, fail closed — never self-referential arm merged.
@@ -111,10 +113,10 @@ func RecoveryArgv(issueID, kind string) string {
 
 func Evaluate(git *adapters.Client, in Input) Result {
 	id := in.Issue.ID
-	res := Result{IssueID: id, Recovery: RecoveryArgv(id, KindCheckFailed)}
+	res := Result{IssueID: id, Recovery: recoveryArgv(id, KindCheckFailed)}
 	if in.Issue.Status != ops.StatusDone {
 		res.Kind = KindNotDone
-		res.Recovery = RecoveryArgv(id, KindNotDone)
+		res.Recovery = recoveryArgv(id, KindNotDone)
 		return res
 	}
 	if len(in.Issue.Children) > 0 {
@@ -133,9 +135,9 @@ func Evaluate(git *adapters.Client, in Input) Result {
 
 	base, tip, integration := deliveryOf(in)
 	if base == "" || tip == "" {
-		res.Kind = KindLegacy
-		res.Recovery = RecoveryArgv(id, KindLegacy)
-		res.Err = &Error{IssueID: id, Kind: KindLegacy, Msg: "done issue " + id + " has no delivery snapshot"}
+		res.Kind = kindLegacy
+		res.Recovery = recoveryArgv(id, kindLegacy)
+		res.Err = &Error{IssueID: id, Kind: kindLegacy, Msg: "done issue " + id + " has no delivery snapshot"}
 		return res
 	}
 
@@ -152,7 +154,7 @@ func Evaluate(git *adapters.Client, in Input) Result {
 	}
 	res.MatchedCommit = matched
 
-	if kind == KindEmptyDiff || kind == KindNotOnTarget {
+	if kind == kindEmptyDiff || kind == kindNotOnTarget {
 		return refuse(res, in, target, tip, kind, &Error{IssueID: id, Kind: kind, Msg: checkMessage(id, kind)})
 	}
 
@@ -180,9 +182,9 @@ func Evaluate(git *adapters.Client, in Input) Result {
 
 func checkMessage(id, kind string) string {
 	switch kind {
-	case KindEmptyDiff:
+	case kindEmptyDiff:
 		return "delivery range for " + id + " is empty; nothing matches"
-	case KindNotOnTarget:
+	case kindNotOnTarget:
 		return "delivery for " + id + " is not on the integration branch"
 	case KindMissingAssessment:
 		return "delivery for " + id + " is on the target but no matching assessment is recorded"
@@ -194,7 +196,7 @@ func checkMessage(id, kind string) string {
 func refuse(res Result, in Input, target, tip, kind string, err error) Result {
 	res.Kind = kind
 	res.Err = err
-	res.Recovery = RecoveryArgv(in.Issue.ID, kind)
+	res.Recovery = recoveryArgv(in.Issue.ID, kind)
 	return failCheck(res, in, target, tip, kind)
 }
 
@@ -245,7 +247,7 @@ func deliveryOf(in Input) (base, tip, integration string) {
 
 func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, matched, kind string, err error) {
 	if base == tip {
-		return "", "", KindEmptyDiff, nil
+		return "", "", kindEmptyDiff, nil
 	}
 	paths, err := git.DiffNameOnlyTwoDot(base, tip)
 	if err != nil {
@@ -256,7 +258,7 @@ func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, mat
 		return "", "", KindCheckFailed, err
 	}
 	if len(paths) == 0 || strings.TrimSpace(diff) == "" {
-		return "", "", KindEmptyDiff, nil
+		return "", "", kindEmptyDiff, nil
 	}
 	patchID, err = git.StablePatchID(diff)
 	if err != nil {
@@ -277,7 +279,7 @@ func matchDelivery(git *adapters.Client, base, tip, target string) (patchID, mat
 			return patchID, sha, KindPromote, nil
 		}
 	}
-	return patchID, "", KindNotOnTarget, nil
+	return patchID, "", kindNotOnTarget, nil
 }
 
 // containsRename is the ADR 0022 rename exception: git -M rename detection

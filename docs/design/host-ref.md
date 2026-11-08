@@ -42,6 +42,8 @@ type HostRef struct {
 
 `Issue.HostRefs` is that slice in replay order.
 
+Readers (`snapshot.Load` / `LoadReadOnly`, including `arm show`, `arm ref-read`, and the `arm ref` predicate) take HostRefs from a materialize run with `OpsWorktree` set. That path uses committed LocateOps order. It does not timestamp-sort disk logs. A withdraw committed after an add stays after the add even when the withdraw's `at` is earlier.
+
 Replay always appends one `HostRef`. It does not call `slices.Contains`. It does not decide the no-op. The command does that before it writes.
 
 Current is the latest live name. A name is live when a later event has not withdrawn it. Recording the same canonical URL and role again, while that pair is already the latest live event, appends nothing. Recording it again after a different name appends a new event and makes it current. A withdraw of a URL that is not live appends nothing. A withdraw of a live URL appends a withdrawn event. Re-adding that URL later appends a live event and makes it current.

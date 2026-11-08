@@ -73,6 +73,13 @@ GREMLINS_VERSION      := v0.6.0
 GOVULNCHECK_VERSION   := v1.1.4
 RIPGREP_VERSION       := 15.2.0
 SYFT_VERSION          := v1.55.0
+# Extra attempts after the first GET. ARMATURE_TOOL_FETCH_RETRY_MAX_TIME is the
+# wall-clock budget for one artifact (attempts, redirects, and the asset-API
+# then release-URL fallback), not a per-curl timeout. Digests come only from
+# scripts/github-release.sha256.
+TOOL_FETCH_RETRIES ?= 5
+TOOL_FETCH_RETRY_MAX_TIME ?= 120
+TOOL_FETCH_ENV = ARMATURE_TOOL_FETCH_RETRIES="$(TOOL_FETCH_RETRIES)" ARMATURE_TOOL_FETCH_RETRY_MAX_TIME="$(TOOL_FETCH_RETRY_MAX_TIME)"
 DEST ?=
 
 CHECK_JOBS := check-static check-core mutate
@@ -159,21 +166,19 @@ endef
 
 install-golangci-lint-release:
 	@$(resolve-dest); \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo golangci/golangci-lint \
 		--version "$(GOLANGCI_LINT_VERSION)" \
 		--tarball 'golangci-lint-{ver}-{os}-{arch}.tar.gz' \
-		--checksums 'golangci-lint-{ver}-checksums.txt' \
 		--bin golangci-lint \
 		--dest "$$dest"
 
 install-gremlins-release:
 	@$(resolve-dest); \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo go-gremlins/gremlins \
 		--version "$(GREMLINS_VERSION)" \
 		--tarball 'gremlins_{ver}_{os}_{arch}.tar.gz' \
-		--checksums checksums.txt \
 		--bin gremlins \
 		--dest "$$dest"
 
@@ -189,21 +194,19 @@ install-rg-release:
 		*) echo "FAIL: no ripgrep GitHub asset mapping for $$os-$$machine" >&2; exit 1 ;; \
 	esac; \
 	tarball="ripgrep-$(RIPGREP_VERSION)-$$trip.tar.gz"; \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo BurntSushi/ripgrep \
 		--version "$(RIPGREP_VERSION)" \
 		--tarball "$$tarball" \
-		--checksums "$$tarball.sha256" \
 		--bin rg \
 		--dest "$$dest"
 
 install-syft-release:
 	@$(resolve-dest); \
-	scripts/install-verified-github-release.sh \
+	$(TOOL_FETCH_ENV) scripts/install-verified-github-release.sh \
 		--repo anchore/syft \
 		--version "$(SYFT_VERSION)" \
 		--tarball 'syft_{ver}_{os}_{arch}.tar.gz' \
-		--checksums 'syft_{ver}_checksums.txt' \
 		--bin syft \
 		--dest "$$dest"
 

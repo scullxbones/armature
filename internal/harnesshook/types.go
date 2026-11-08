@@ -3,7 +3,6 @@ package harnesshook
 // EventKind identifies the phase of a hook event (pre-tool-use, post-tool-use, stop).
 type EventKind string
 
-// Event phase constants recognised by the harness hook runner.
 const (
 	EventPreToolUse  EventKind = "pre-tool-use"
 	EventPostToolUse EventKind = "post-tool-use"
@@ -23,7 +22,6 @@ type Event struct {
 	Output        []byte         // Output from PostToolUse events (empty if not available)
 }
 
-// decisionAction is the verdict returned by an evaluator (allow, block, or no opinion).
 type decisionAction string
 
 const (

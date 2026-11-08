@@ -39,6 +39,7 @@ func outputIssueFacts(issue *materialize.Issue) output.IssueFacts {
 	for _, n := range issue.Notes {
 		f.Notes = append(f.Notes, output.NoteFact{Msg: n.Msg, Deleted: n.Deleted})
 	}
+	f.HostRefs = hostRefFacts(issue.HostRefs)
 	if len(issue.AssessmentAttestations) > 0 {
 		if data, err := json.Marshal(issue.AssessmentAttestations); err == nil {
 			f.AssessmentAttestations = data
@@ -47,20 +48,9 @@ func outputIssueFacts(issue *materialize.Issue) output.IssueFacts {
 	return f
 }
 
-func dropHostURL(order []string, url string) []string {
-	next := make([]string, 0, len(order))
-	for _, item := range order {
-		if item != url {
-			next = append(next, item)
-		}
-	}
-	return next
-}
-
-// formatHostRefLines prints live names in the same order/current rule as
-// hostRefFacts (#449): withdrawn drop out; latest live is current. No body.
-// Line shape matches arm show's "URL role=… current" tokens (list indents).
-func formatHostRefLines(refs []materialize.HostRef) []string {
+// hostRefFacts projects live host names in CurrentHostRef order. Withdrawn
+// events drop out; the latest live name is marked current. No body is copied.
+func hostRefFacts(refs []materialize.HostRef) []output.HostRefFact {
 	live := map[string]materialize.HostRef{}
 	order := make([]string, 0, len(refs))
 	for _, ref := range refs {
@@ -77,14 +67,41 @@ func formatHostRefLines(refs []materialize.HostRef) []string {
 		return nil
 	}
 	currentURL := order[len(order)-1]
-	lines := make([]string, 0, len(order))
+	out := make([]output.HostRefFact, 0, len(order))
 	for _, url := range order {
 		ref := live[url]
-		line := url
+		out = append(out, output.HostRefFact{
+			URL:     ref.URL,
+			Role:    ref.Role,
+			Current: url == currentURL,
+		})
+	}
+	return out
+}
+
+func dropHostURL(order []string, url string) []string {
+	next := make([]string, 0, len(order))
+	for _, item := range order {
+		if item != url {
+			next = append(next, item)
+		}
+	}
+	return next
+}
+
+// formatHostRefLines renders hostRefFacts as arm-show token lines for list.
+func formatHostRefLines(refs []materialize.HostRef) []string {
+	facts := hostRefFacts(refs)
+	if len(facts) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(facts))
+	for _, ref := range facts {
+		line := ref.URL
 		if ref.Role != "" {
 			line += " role=" + ref.Role
 		}
-		if url == currentURL {
+		if ref.Current {
 			line += " current"
 		}
 		lines = append(lines, line)
