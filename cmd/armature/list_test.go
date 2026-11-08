@@ -2,13 +2,43 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/scullxbones/armature/internal/externalref"
+	"github.com/scullxbones/armature/internal/materialize"
+	"github.com/scullxbones/armature/internal/ops"
 	"github.com/scullxbones/armature/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	listHostURLA = "https://github.com/scullxbones/armature/issues/1"
+	listHostURLB = "https://github.com/scullxbones/armature/issues/2"
+	listHostURLC = "https://github.com/scullxbones/armature/issues/3"
+)
+
+func appendExternalRefOp(t *testing.T, repo, targetID, url, role, withdraw string) {
+	t.Helper()
+	ctx := getTestContext(t, repo)
+	workerID, logPath, err := resolveWorkerAndLog(ctx)
+	require.NoError(t, err)
+	payload := ops.Payload{}
+	if withdraw != "" {
+		payload.WithdrawExternalRef = withdraw
+	} else {
+		payload.ExternalRef = url
+		payload.ExternalRole = role
+	}
+	require.NoError(t, ops.AppendOp(logPath, ops.Op{
+		Type: ops.OpExternalRef, TargetID: targetID, Timestamp: nowEpoch(), WorkerID: workerID,
+		Payload: payload,
+	}))
+	_, err = runTrls(t, repo, "materialize")
+	require.NoError(t, err)
+}
 
 func runListJSON(t *testing.T, repo string, extra ...string) string {
 	t.Helper()
@@ -172,3 +202,129 @@ func TestListCountIsTrueTotal_REQ_AOC_S2_T2(t *testing.T) {
 	}
 	assert.True(t, foundShow, "empty list help must still point at arm show")
 }
+
+func TestListExternalRefFiltersLiveNames_REQ_HOSTREF_S1_T9(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithStoryAndTask(t)
+
+	appendExternalRefOp(t, repo, "task-01", listHostURLA, "engineering", "")
+	appendExternalRefOp(t, repo, "task-01", listHostURLB, "support", "")
+	plantVerifiedTask(t, repo, "task-02", "src/other.go")
+	appendExternalRefOp(t, repo, "task-02", listHostURLB, "engineering", "")
+	plantVerifiedTask(t, repo, "task-03", "src/withdrawn.go")
+	appendExternalRefOp(t, repo, "task-03", listHostURLA, "support", "")
+	appendExternalRefOp(t, repo, "task-03", "", "", listHostURLA)
+
+	decoded := decodeListEnvelope(t, runListJSON(t, repo, "--external-ref", listHostURLA))
+	var issues []output.ListIssue
+	require.NoError(t, json.Unmarshal(decoded["issues"], &issues))
+	require.Len(t, issues, 1)
+	assert.Equal(t, "task-01", issues[0].ID)
+
+	var count int
+	require.NoError(t, json.Unmarshal(decoded["count"], &count))
+	assert.Equal(t, 1, count)
+
+	rawIn := "https://GitHub.com/Scullxbones/Armature/issues/01?utm=1#frag"
+	canonical, err := externalref.ParseGitHubIssueURL(rawIn)
+	require.NoError(t, err)
+	assert.Equal(t, listHostURLA, canonical.URL())
+
+	decodedRaw := decodeListEnvelope(t, runListJSON(t, repo, "--external-ref", rawIn))
+	require.NoError(t, json.Unmarshal(decodedRaw["issues"], &issues))
+	require.Len(t, issues, 1)
+	assert.Equal(t, "task-01", issues[0].ID)
+
+	decodedB := decodeListEnvelope(t, runListJSON(t, repo, "--external-ref", listHostURLB))
+	require.NoError(t, json.Unmarshal(decodedB["issues"], &issues))
+	ids := make([]string, 0, len(issues))
+	for _, row := range issues {
+		ids = append(ids, row.ID)
+	}
+	assert.ElementsMatch(t, []string{"task-01", "task-02"}, ids)
+
+	empty := decodeListEnvelope(t, runListJSON(t, repo, "--external-ref", "https://github.com/scullxbones/armature/issues/999"))
+	require.NoError(t, json.Unmarshal(empty["count"], &count))
+	assert.Equal(t, 0, count)
+
+	_, err = runTrls(t, repo, "list", "--external-ref", "https://linear.app/team/issue/ABC-1")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, externalref.ErrInvalidGitHubIssueURL)
+
+	human, err := runTrls(t, repo, "--format", "human", "list", "--external-ref", listHostURLA)
+	require.NoError(t, err)
+	assert.Contains(t, human, "task-01")
+	assert.Contains(t, human, listHostURLA)
+	assert.Contains(t, human, "role=engineering")
+	assert.Contains(t, human, listHostURLB)
+	assert.Contains(t, human, "current")
+	assert.NotContains(t, human, "task-02")
+	assert.NotContains(t, human, "task-03")
+	assert.NotContains(t, human, `"body"`)
+	assert.NotContains(t, strings.ToLower(human), "plan text")
+}
+
+func TestFormatHostRefLinesMarksCurrent_REQ_HOSTREF_S1_T9(t *testing.T) {
+	t.Parallel()
+	refs := []materialize.HostRef{
+		{URL: listHostURLA, Role: "engineering"},
+		{URL: listHostURLB, Role: "support"},
+		{URL: listHostURLA, Withdrawn: true},
+		{URL: listHostURLA, Role: "engineering"},
+	}
+	lines := formatHostRefLines(refs)
+	require.Len(t, lines, 2)
+	assert.Contains(t, lines[0], listHostURLB)
+	assert.Contains(t, lines[0], "role=support")
+	assert.NotContains(t, lines[0], "current")
+	assert.Contains(t, lines[1], listHostURLA)
+	assert.Contains(t, lines[1], "role=engineering")
+	assert.Contains(t, lines[1], "current")
+}
+
+func TestListParentBoardAttachesHostRefsToOwningRow_REQ_HOSTREF_S1_T9(t *testing.T) {
+	t.Parallel()
+	repo := setupRepoWithStoryAndTask(t)
+	plantVerifiedTaskUnder(t, repo, "task-child-b", "src/child-b.go", "story-01")
+
+	appendExternalRefOp(t, repo, "task-01", listHostURLA, "engineering", "")
+	appendExternalRefOp(t, repo, "task-01", listHostURLC, "filter", "")
+	appendExternalRefOp(t, repo, "task-child-b", listHostURLB, "support", "")
+	appendExternalRefOp(t, repo, "task-child-b", listHostURLC, "filter", "")
+
+	human, err := runTrls(t, repo, "--format", "human", "list",
+		"--parent", "story-01", "--external-ref", listHostURLC)
+	require.NoError(t, err)
+
+	idxA := strings.Index(human, "task-01")
+	idxB := strings.Index(human, "task-child-b")
+	require.GreaterOrEqual(t, idxA, 0)
+	require.Greater(t, idxB, idxA, "board rows stay sorted by id")
+
+	aBlock := human[idxA:idxB]
+	bBlock := human[idxB:]
+	assert.Contains(t, aBlock, listHostURLA)
+	assert.Contains(t, aBlock, "role=engineering")
+	assert.NotContains(t, aBlock, listHostURLB, "task-01 must not show task-child-b's URL")
+	assert.Contains(t, bBlock, listHostURLB)
+	assert.Contains(t, bBlock, "role=support")
+	assert.NotContains(t, bBlock, listHostURLA, "task-child-b must not show task-01's URL")
+}
+
+func TestWriteHostRefLinesPropagatesWriterError_REQ_HOSTREF_S1_T9(t *testing.T) {
+	t.Parallel()
+	issue := &materialize.Issue{
+		ID: "task-01",
+		HostRefs: []materialize.HostRef{
+			{URL: listHostURLA, Role: "engineering"},
+		},
+	}
+	errBoom := errors.New("write failed")
+	err := writeHostRefLines(errWriter{err: errBoom}, issue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errBoom)
+}
+
+type errWriter struct{ err error }
+
+func (e errWriter) Write([]byte) (int, error) { return 0, e.err }
