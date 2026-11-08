@@ -347,6 +347,85 @@ if ! rg -q 'checksum mismatch' "$REPO_ROOT/scripts/install-verified-github-relea
 else
     pass "installer mentions checksum mismatch failure"
 fi
+if rg -q -- '--retry[[:space:]]+0' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must not pass --retry 0 (that disables HTTP 504 retries)"
+else
+    pass "installer does not hard-disable curl retries"
+fi
+if ! rg -q 'ARMATURE_TOOL_FETCH_RETRIES:-5' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer default ARMATURE_TOOL_FETCH_RETRIES drifted from 5"
+else
+    pass "installer defaults to 5 extra fetch attempts"
+fi
+if rg -q 'releases/latest' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must not fetch /releases/latest"
+else
+    pass "installer does not use /releases/latest"
+fi
+if ! rg -q 'https://api.github.com' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must be able to fetch the pinned tag from the GitHub asset API"
+else
+    pass "installer can fetch the pinned tag via the GitHub asset API"
+fi
+if rg -q -- '--checksums' "$MAKEFILE"; then
+    fail "Makefile must not download a checksum file; digests are scripts/github-release.sha256"
+else
+    pass "Makefile does not pass --checksums"
+fi
+if ! rg -q 'wall-clock' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer must say the retry budget is wall-clock for one artifact"
+else
+    pass "installer documents the wall-clock artifact budget"
+fi
+PIN_RESULT=$(python3 - "$MAKEFILE" "$REPO_ROOT/scripts/github-release.sha256" <<'PY'
+import re, sys
+from pathlib import Path
+make = Path(sys.argv[1]).read_text()
+pins = Path(sys.argv[2]).read_text().splitlines()
+def ver(name):
+    m = re.search(rf"^{name}\s*:?=\s*(\S+)", make, re.M)
+    if not m:
+        raise SystemExit(f"FAIL: missing {name}")
+    return m.group(1)
+need = [
+    ("BurntSushi/ripgrep", ver("RIPGREP_VERSION"), "ripgrep-{v}-x86_64-unknown-linux-musl.tar.gz"),
+    ("golangci/golangci-lint", ver("GOLANGCI_LINT_VERSION"), "golangci-lint-{v}-linux-amd64.tar.gz"),
+    ("go-gremlins/gremlins", ver("GREMLINS_VERSION"), "gremlins_{v}_linux_amd64.tar.gz"),
+    ("anchore/syft", ver("SYFT_VERSION"), "syft_{v}_linux_amd64.tar.gz"),
+]
+rows = []
+for line in pins:
+    if not line or line.startswith("#"):
+        continue
+    parts = line.split()
+    if len(parts) != 4 or len(parts[0]) != 64:
+        raise SystemExit(f"FAIL: bad pin row: {line}")
+    rows.append(parts)
+for repo, version, pattern in need:
+    plain = version[1:] if version.startswith("v") else version
+    filename = pattern.format(v=plain)
+    hit = [r for r in rows if r[2] == repo and r[3] == version and r[1] == filename]
+    if len(hit) != 1:
+        raise SystemExit(f"FAIL: pin table missing {repo} {version} {filename}")
+print("PASS")
+PY
+) && PIN_STATUS=0 || PIN_STATUS=$?
+if [[ $PIN_STATUS -eq 0 ]]; then
+    pass "github-release.sha256 pins the Makefile tool versions"
+else
+    fail "${PIN_RESULT:-pin table does not match Makefile versions}"
+fi
+if ! rg -q 'TOOL_FETCH_RETRIES \?= 5' "$MAKEFILE"; then
+    fail "Makefile must set TOOL_FETCH_RETRIES ?= 5"
+else
+    pass "Makefile bounds tool-fetch retries at 5"
+fi
+env_hits=$(rg -c '\$\(TOOL_FETCH_ENV\)' "$MAKEFILE" || true)
+if [[ "${env_hits:-0}" -lt 4 ]]; then
+    fail "Makefile must pass TOOL_FETCH_ENV into all four release installers (got ${env_hits:-0})"
+else
+    pass "Makefile passes bounded retries into release installers"
+fi
 if rg -q 'go install github.com/golangci/golangci-lint' "$CI_YML"; then
     fail "ci.yml go-installs golangci-lint"
 else
@@ -361,6 +440,13 @@ if rg -n 'version: v2\.14' "$CI_YML"; then
     fail "ci.yml duplicates the golangci-lint version number"
 else
     pass "ci.yml does not duplicate GOLANGCI_LINT_VERSION"
+fi
+
+echo "Test 6b: tool installs are not backed by a hand-rolled Actions cache..."
+if rg -q 'armature/github-releases' "$CI_YML"; then
+    fail "ci.yml still caches tool tarballs; download and verify the pin instead"
+else
+    pass "ci.yml does not cache tool tarballs"
 fi
 
 echo "Test 7: GitHub Actions are SHA-pinned with version comments, least privilege, persist-credentials: false..."
