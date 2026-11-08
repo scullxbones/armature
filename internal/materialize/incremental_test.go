@@ -786,7 +786,10 @@ func TestRunWriteFreeDoesNotTouchStateTree_REQ_HOSTREF_S1(t *testing.T) { //noli
 			return err
 		}
 		if !info.IsDir() {
-			rel, _ := filepath.Rel(stateDir, path)
+			rel, relErr := filepath.Rel(stateDir, path)
+			if relErr != nil {
+				return relErr
+			}
 			before[rel] = struct{}{}
 		}
 		return nil
@@ -801,7 +804,10 @@ func TestRunWriteFreeDoesNotTouchStateTree_REQ_HOSTREF_S1(t *testing.T) { //noli
 			return err
 		}
 		if !info.IsDir() {
-			rel, _ := filepath.Rel(stateDir, path)
+			rel, relErr := filepath.Rel(stateDir, path)
+			if relErr != nil {
+				return relErr
+			}
 			after[rel] = struct{}{}
 		}
 		return nil
