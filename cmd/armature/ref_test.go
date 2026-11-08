@@ -282,8 +282,9 @@ func TestRefRejectsBrokenReplay_REQ_HOSTREF_S1_T5(t *testing.T) {
 // Cold LocateOps leaves A withdrawn; timestamp sort would resurrect A.
 // Prove arm ref's LoadReadOnly predicate follows cold committed order.
 
-func requireHostRefsMatchColdCommitted(t *testing.T, repo, issueID string) []materialize.HostRef {
+func requireHostRefsMatchColdCommitted(t *testing.T, repo string) []materialize.HostRef {
 	t.Helper()
+	const issueID = "task-01"
 	ctx := getTestContext(t, repo)
 	ctx.StateDir = getTestStateDir(t, repo)
 	require.NotEmpty(t, ctx.WorktreePath)
@@ -311,7 +312,7 @@ func TestRefWithdrawClockSkewedAlreadyWithdrawnIsNoOp_REQ_HOSTREF_S1_T5(t *testi
 	repo := setupBootstrappedShowRepo(t)
 	workerID := plantClockSkewedHostRefWithdraw(t, repo)
 	requireNoLiveHostRefA(t, repo, workerID)
-	beforeRefs := requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	beforeRefs := requireHostRefsMatchColdCommitted(t, repo)
 	beforeLogs := workerLogSnapshot(t, repo)
 	beforeOps := externalRefOpsForIssue(t, repo, "task-01")
 
@@ -322,7 +323,7 @@ func TestRefWithdrawClockSkewedAlreadyWithdrawnIsNoOp_REQ_HOSTREF_S1_T5(t *testi
 
 	assert.Equal(t, beforeLogs, workerLogSnapshot(t, repo))
 	require.Len(t, externalRefOpsForIssue(t, repo, "task-01"), len(beforeOps))
-	afterRefs := requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	afterRefs := requireHostRefsMatchColdCommitted(t, repo)
 	require.Equal(t, beforeRefs, afterRefs)
 	_, ok := materialize.CurrentHostRef(afterRefs)
 	assert.False(t, ok)
@@ -333,7 +334,7 @@ func TestRefRecordClockSkewedWithdrawnReAdds_REQ_HOSTREF_S1_T5(t *testing.T) {
 	repo := setupBootstrappedShowRepo(t)
 	workerID := plantClockSkewedHostRefWithdraw(t, repo)
 	requireNoLiveHostRefA(t, repo, workerID)
-	_ = requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	_ = requireHostRefsMatchColdCommitted(t, repo)
 	beforeOps := externalRefOpsForIssue(t, repo, "task-01")
 	require.Len(t, beforeOps, 2, "planted add+withdraw")
 
@@ -349,7 +350,7 @@ func TestRefRecordClockSkewedWithdrawnReAdds_REQ_HOSTREF_S1_T5(t *testing.T) {
 	assert.Equal(t, "engineering", got[2].Payload.ExternalRole)
 	assert.Empty(t, got[2].Payload.WithdrawExternalRef)
 
-	refs := requireHostRefsMatchColdCommitted(t, repo, "task-01")
+	refs := requireHostRefsMatchColdCommitted(t, repo)
 	require.Len(t, refs, 3)
 	cur, ok := materialize.CurrentHostRef(refs)
 	require.True(t, ok)
