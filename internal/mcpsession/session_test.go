@@ -64,7 +64,7 @@ func TestServeRunsOneCallAtATime_REQ_MCPSTDIO_S1_T3(t *testing.T) {
 	var order []string
 	secondDone := make(chan struct{})
 
-	run := func(ctx context.Context, c Call) Result {
+	run := func(_ context.Context, c Call) Result {
 		n := atomic.AddInt32(&concurrent, 1)
 		for {
 			old := atomic.LoadInt32(&maxConcurrent)
