@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# The installer trusts only ARMATURE_TOOL_PIN_FILE. These tests use a local
-# stub: transient 504, a forged self-hashed cache, an https redirect with
-# auth stripped, and a truncated 200 that must not win over a good fallback.
 set -euo pipefail
 
 REPO_ROOT="${1:-.}"
@@ -31,7 +28,6 @@ TARBALL="tool-9.9.9-linux-amd64.tar.gz"
 REL="example/tool/releases/download/v9.9.9"
 tar -C "$WORKDIR/bin" -czf "$WORKDIR/www/$REL/$TARBALL" tool
 HASH=$(sha256sum "$WORKDIR/www/$REL/$TARBALL" | awk '{print $1}')
-# A downloaded checksum file that lies. The installer must not consult it.
 printf '%s  %s\n' "$(printf '0%.0s' {1..64})" "$TARBALL" > "$WORKDIR/www/$REL/tool-9.9.9-checksums.txt"
 
 PIN_FILE="$WORKDIR/pins.txt"
@@ -162,7 +158,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             rel = path[len("/files/"):]
             self.send_bytes(200, (www / rel).read_bytes())
             return
-        # Ordinary file serving, with optional one-shot 504s.
         target = www / path.lstrip("/")
         counts = root / "counts"
         prior = 0

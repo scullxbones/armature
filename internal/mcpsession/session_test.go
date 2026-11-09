@@ -83,8 +83,6 @@ func TestServeRunsOneCallAtATime_REQ_MCPSTDIO_S1_T3(t *testing.T) {
 		return Result{Stdout: []byte("ok:" + strings.Join(c.Args, " ")), ExitCode: 0}
 	}
 
-	// Keep stdin open until both serial calls finish. EOF during an in-flight
-	// call is terminal (abandons the queue); this test proves seriality, not EOF.
 	pr, pw := io.Pipe()
 	done := make(chan Exit, 1)
 	go func() {
@@ -261,7 +259,7 @@ func TestServeEOFDuringBlockingCallCancelsRunner_REQ_MCPSTDIO_S1(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("runner never started")
 	}
-	require.NoError(t, pw.Close()) // stdin EOF while call is in flight
+	require.NoError(t, pw.Close())
 
 	select {
 	case <-cancelled:
@@ -312,10 +310,8 @@ func TestServeEOFWithQueuedRequestCancelsRunner_REQ_MCPSTDIO_S1(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("first runner never started")
 	}
-	// Queue a second tools/call while the first is still blocking.
 	_, err = io.WriteString(pw, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"arm","arguments":{"args":["queued"]}}}`+"\n")
 	require.NoError(t, err)
-	// Give the reader time to enqueue id:2 before EOF.
 	time.Sleep(20 * time.Millisecond)
 	require.NoError(t, pw.Close())
 
@@ -351,7 +347,6 @@ func TestServeContextCancelDuringBlockingCall_REQ_MCPSTDIO_S1(t *testing.T) {
 		}
 	}
 
-	// Keep stdin open so EOF is not the stop signal; only context cancel is.
 	pr, pw := io.Pipe()
 	t.Cleanup(func() { require.NoError(t, pw.Close()) })
 
@@ -402,7 +397,7 @@ func TestServeSignalGraceAndSecondSignal_REQ_MCPSTDIO_S1(t *testing.T) {
 	<-started
 
 	sig <- os.Interrupt
-	sig <- os.Interrupt // second signal during grace
+	sig <- os.Interrupt
 	select {
 	case exit := <-done:
 		assert.Equal(t, ExitSignaledAgain, exit)

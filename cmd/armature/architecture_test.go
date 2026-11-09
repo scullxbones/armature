@@ -333,7 +333,7 @@ func TestNoProcessEnvCwdOrTempDirInProduction_REQ_PARCLI(t *testing.T) {
 
 	allow := map[string]bool{
 		filepath.Join(cmdDir, "invocation.go"):      true,
-		filepath.Join(cmdDir, "mcp.go"):             true, // ADR 0024: one os.Chdir before Serve
+		filepath.Join(cmdDir, "mcp.go"):             true,
 		filepath.Join(internalDir, "tui", "tty.go"): true,
 	}
 	banned := []string{"os.Getenv(", "os.LookupEnv(", "os.Chdir(", "os.TempDir("}

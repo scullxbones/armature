@@ -45,11 +45,6 @@ const (
 	runLeaseMaxAgeSec int64 = 3600
 )
 
-// acquireStagingLock takes a blocking flock on
-// <common-git-dir>/armature-run-leases/staging.lock. Callers hold it only
-// around clone-local staging fetch and staging-ref delete (not BeginPerRunRef
-// allocation) so peer deletes cannot interleave with another fetch's
-// negotiation. unlock is idempotent.
 func (c *Client) acquireStagingLock() (unlock func(), err error) {
 	common, err := c.CommonGitDir()
 	if err != nil {
@@ -59,29 +54,26 @@ func (c *Client) acquireStagingLock() (unlock func(), err error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("staging lock: mkdir: %w", err)
 	}
-	path := filepath.Join(dir, stagingLockFile)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: path under common git dir
+	path := filepath.Clean(filepath.Join(dir, stagingLockFile))
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("staging lock: open: %w", err)
 	}
 	if err := filelock.Lock(f); err != nil {
-		_ = f.Close() //nolint:errcheck // best-effort
+		swallowErr(f.Close())
 		return nil, fmt.Errorf("staging lock: flock: %w", err)
 	}
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			_ = filelock.Unlock(f) //nolint:errcheck // best-effort
-			_ = f.Close()          //nolint:errcheck // best-effort
+			swallowErr(filelock.Unlock(f))
+			swallowErr(f.Close())
 		})
 	}, nil
 }
 
 // BeginPerRunRef sweeps stale peers under ns, allocates ns/<nonce>, and holds a
-// live-pid lease until release. release deletes the ref and the lease under the
-// clone staging flock (issue #435) so a peer fetch cannot negotiate against a
-// ref that disappears mid-fetch. Allocation itself is not serialized — linked
-// worktrees may hold overlapping live nonces; only fetch+delete are locked.
+// live-pid lease until release. release deletes the ref and the lease.
 func (c *Client) BeginPerRunRef(ns string) (ref string, release func(), err error) {
 	ns = strings.TrimRight(strings.TrimSpace(ns), "/")
 	if ns == "" {
@@ -102,18 +94,17 @@ func (c *Client) BeginPerRunRef(ns string) (ref string, release func(), err erro
 			return
 		}
 		released = true
-		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort release
-			_ = c.DeleteRef(ref) //nolint:errcheck // best-effort
+		swallowErr(c.withStagingLock(func() error {
+			swallowErr(c.DeleteRef(ref))
 			return nil
-		})
-		_ = c.removeRunLease(leaseKindForRefNS(ns), nonce) //nolint:errcheck // best-effort
+		}))
+		swallowErr(c.removeRunLease(leaseKindForRefNS(ns), nonce))
 	}
 	return ref, release, nil
 }
 
 // beginArmatureTmpNS allocates refs/armature-tmp/<nonce> with a live lease after
-// sweeping crash leftovers. release deletes bundle+origin refs under the clone
-// staging flock (issue #435); see BeginPerRunRef.
+// sweeping crash leftovers.
 func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error) {
 	c.sweepStaleRefNS(armatureTmpNS, leaseKindArmatureTmp)
 	nonce, err := randomNonce()
@@ -130,17 +121,16 @@ func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error)
 			return
 		}
 		released = true
-		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort release
-			_ = c.DeleteRef(prefix + "/bundle") //nolint:errcheck // best-effort
-			_ = c.DeleteRef(prefix + "/origin") //nolint:errcheck // best-effort
+		swallowErr(c.withStagingLock(func() error {
+			swallowErr(c.DeleteRef(prefix + "/bundle"))
+			swallowErr(c.DeleteRef(prefix + "/origin"))
 			return nil
-		})
+		}))
 		_ = c.removeRunLease(leaseKindArmatureTmp, nonce) //nolint:errcheck // best-effort
 	}
 	return prefix, release, nil
 }
 
-// withStagingLock runs fn under the clone staging flock.
 func (c *Client) withStagingLock(fn func() error) error {
 	unlock, err := c.acquireStagingLock()
 	if err != nil {
@@ -364,9 +354,7 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 			continue
 		}
 		prefix := ns + "/" + nonce
-		// Delete under the staging flock so a concurrent clone-local fetch
-		// cannot negotiate against a ref that vanishes mid-fetch (#435).
-		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort sweep
+		swallowErr(c.withStagingLock(func() error {
 			if c.leaseIsLive(kind, nonce) {
 				return nil
 			}
@@ -375,13 +363,13 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 				under, underErr := refsUnderPrefix(string(out2), prefix)
 				if underErr == nil {
 					for _, ref := range under {
-						_ = c.DeleteRef(ref) //nolint:errcheck // best-effort sweep
+						swallowErr(c.DeleteRef(ref))
 					}
 				}
 			}
-			_ = c.DeleteRef(prefix) //nolint:errcheck // best-effort
+			swallowErr(c.DeleteRef(prefix))
 			return nil
-		})
+		}))
 		_ = c.removeRunLease(kind, nonce) //nolint:errcheck // best-effort
 	}
 }
@@ -466,6 +454,8 @@ func (c *Client) sweepAgedLeaseTempFiles(leaseRoot string) {
 		_ = os.Remove(filepath.Join(leaseRoot, e.Name())) //nolint:errcheck // best-effort
 	}
 }
+
+func swallowErr(err error) { _ = err }
 
 func randomNonce() (string, error) {
 	var nonce [8]byte

@@ -48,8 +48,6 @@ func outputIssueFacts(issue *materialize.Issue) output.IssueFacts {
 	return f
 }
 
-// hostRefFacts projects live host names in CurrentHostRef order. Withdrawn
-// events drop out; the latest live name is marked current. No body is copied.
 func hostRefFacts(refs []materialize.HostRef) []output.HostRefFact {
 	live := map[string]materialize.HostRef{}
 	order := make([]string, 0, len(refs))
@@ -89,7 +87,6 @@ func dropHostURL(order []string, url string) []string {
 	return next
 }
 
-// formatHostRefLines renders hostRefFacts as arm-show token lines for list.
 func formatHostRefLines(refs []materialize.HostRef) []string {
 	facts := hostRefFacts(refs)
 	if len(facts) == 0 {

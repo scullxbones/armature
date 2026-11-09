@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# Install one pinned GitHub release binary.
-# The only trusted digest is scripts/github-release.sha256 (override with
-# ARMATURE_TOOL_PIN_FILE). A downloaded checksum file, a cache path, and a
-# filename are not digests. Requests send no credentials.
-#
-# TOOL_FETCH_RETRY_MAX_TIME / ARMATURE_TOOL_FETCH_RETRY_MAX_TIME is the
-# wall-clock budget for one artifact: every attempt, redirect, and the
-# asset-API then release-URL fallback. It is not a per-curl timeout.
-# Each curl is capped (ARMATURE_TOOL_FETCH_API_MAX_TIME /
-# ARMATURE_TOOL_FETCH_ATTEMPT_MAX_TIME) so a hung asset API still leaves
-# time for the release download URL. A finished body that does not match
-# the pin is not retried.
 set -euo pipefail
 
 usage() {
@@ -137,8 +125,6 @@ FETCH_RETRY_MAX_TIME=$(require_uint ARMATURE_TOOL_FETCH_RETRY_MAX_TIME "${ARMATU
 FETCH_BACKOFF=$(require_uint ARMATURE_TOOL_FETCH_BACKOFF_SECS "${ARMATURE_TOOL_FETCH_BACKOFF_SECS:-1}" 0 30)
 API_ATTEMPT_MAX=$(require_uint ARMATURE_TOOL_FETCH_API_MAX_TIME "${ARMATURE_TOOL_FETCH_API_MAX_TIME:-15}" 1 60)
 ATTEMPT_MAX=$(require_uint ARMATURE_TOOL_FETCH_ATTEMPT_MAX_TIME "${ARMATURE_TOOL_FETCH_ATTEMPT_MAX_TIME:-60}" 1 120)
-# A dead asset API must not spend the artifact budget. Two extra tries,
-# then the release download URL.
 API_EXTRA_MAX=2
 
 lookup_pin() {
@@ -168,7 +154,6 @@ file_sha256() {
     fi
 }
 
-# Smaller of the remaining artifact budget and the per-curl cap.
 attempt_limit() {
     local cap="$1" left
     left=$(time_left)
@@ -183,14 +168,11 @@ attempt_limit() {
     printf '%s\n' "$left"
 }
 
-# One transfer, including redirects. No credentials are sent: public release
-# assets do not need them, and a hand-rolled host check cannot decide that
-# safely. curl follows redirects without --location-trusted. --proto-redir
-# allows only https on those hops. A non-zero curl exit (truncated body,
-# refused redirect) is a failed transfer even when a status line was 200.
+# A non-zero curl exit (truncated body, refused redirect) is a failed
+# transfer even when a status line was 200.
 transfer() {
     local dest="$1" url="$2" limit="$3" accept="${4:-}" st code hdr
-    # --max-time 0 means no limit. Refuse a non-positive deadline.
+    # --max-time 0 means no limit.
     LAST_HTTP=""
     LAST_RETRY_AFTER=""
     if [[ -z "$limit" || "$limit" -le 0 ]]; then
@@ -245,7 +227,6 @@ time_left() {
     fi
 }
 
-# Sleep is part of the artifact budget. Never sleep past the deadline.
 pause_for_retry() {
     local want="$1" left
     [[ "$want" -gt 0 ]] || return 0
@@ -257,7 +238,6 @@ pause_for_retry() {
     sleep "$want"
 }
 
-# Linear backoff, capped, but honor a longer Retry-After inside the budget.
 sleep_before_retry() {
     local attempt="$1" want
     want=$((FETCH_BACKOFF * attempt))
@@ -276,9 +256,6 @@ digest_matches() {
     [[ "$got" == "$PIN" ]]
 }
 
-# Retry transport failures inside the wall-clock budget. A finished body
-# whose digest is not the pin is not retried and cannot become a pass.
-# args: url dest accept extra_retries per_curl_cap
 fetch_matching() {
     local url="$1" dest="$2" accept="${3:-}" retries="$4" cap="$5"
     local attempt=0 limit
@@ -306,8 +283,6 @@ fetch_matching() {
     return 1
 }
 
-# Same budget as fetch_matching, without a digest check (release JSON).
-# args: url dest accept extra_retries per_curl_cap
 fetch_retry() {
     local url="$1" dest="$2" accept="$3" retries="$4" cap="$5"
     local attempt=0 limit
@@ -401,8 +376,6 @@ if api=$(api_base_url); then
         echo "WARN: GitHub asset API failed for $REPO@$VERSION (http ${LAST_HTTP:-none})" >&2
     fi
 fi
-# A digest mismatch is the pinned file being wrong. Do not try another URL
-# and do not retry into a pass.
 if [[ "$downloaded" -eq 0 && "$SAW_MISMATCH" -eq 0 ]]; then
     if fetch_matching "$TARBALL_URL" "$TARBALL_DEST" "*/*" "$FETCH_RETRIES" "$ATTEMPT_MAX"; then
         downloaded=1

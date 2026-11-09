@@ -123,10 +123,6 @@ func runFullPipeline(stateDir string, allOps []ops.Op,
 			return runCommitIncremental(stateDir, allOps, byteOffsets, opts)
 		}
 	}
-	// No git checkout at OpsWorktree: file-concat (tests and non-git layouts).
-	// Keep OpsWorktree so incremental replay can still use worktreeOpsAfterOffsets
-	// against the on-disk ops tree; lastCommitWorktree stays empty (no HEAD).
-	// Production Load always supplies a worktree with .git and never reaches here.
 	return runFileConcat(stateDir, allOps, byteOffsets, opts, "")
 }
 
@@ -276,16 +272,12 @@ func runCommitIncremental(stateDir string, headDiskOps []ops.Op, _ map[string]in
 		})
 		switch {
 		case err != nil && oporder.IsFromCommitMissing(err):
-			// Fall through to a cold committed-order walk.
 		case err != nil:
 			return nil, Result{}, fmt.Errorf("locate ops: %w", err)
 		default:
 			return replayFromCheckpoint(stateDir, opts, cp, located, headDiskOps)
 		}
 	}
-	// OpsWorktree with .git always uses committed order. Never fall through to
-	// timestamp-sorted runFileConcat: clock-skewed HostRefs (and any other
-	// order-sensitive replay) would diverge from cold LocateOps.
 	located, err := oporder.LocateOps(oporder.LocateInput{
 		OpsWorktree:       opts.OpsWorktree,
 		ExtraPublishedTip: "HEAD",
@@ -296,16 +288,6 @@ func runCommitIncremental(stateDir string, headDiskOps []ops.Op, _ map[string]in
 	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true, headDiskOps)
 }
 
-// mergeCommittedWithPending builds the replay stream for a LocateOps materialize.
-// Creates (committed, then pending) precede other committed ops so a slotted-log
-// claim committed without its create file, and a pending child under a committed
-// parent, cannot claim-before-create. Create-hoist is order-equivalent to cold
-// LocateOps on HostRef clock-skew fixtures (create is already first for the
-// issue); see TestMergeCommittedWithPending_HostRefCreateAlreadyFirst_REQ_HOSTREF_S1.
-// Non-create pending ops always follow the entire committed prefix — never
-// interleaved by Timestamp (pending withdraw after committed add stays
-// clock-independent across publish). Remaining pending ops are
-// timestamp-ordered among themselves only.
 func mergeCommittedWithPending(committed, pending []ops.Op) []ops.Op {
 	var pendingCreates, pendingRest []ops.Op
 	for _, op := range pending {
@@ -339,10 +321,6 @@ func applyCommitLocated(
 	fullReplay bool,
 	headDiskOps []ops.Op,
 ) (*State, Result, error) {
-	// LocateOps already SortLocated (epoch-0 timestamp order for pre-cutover
-	// history; commit-then-line after cutover). Keep that order — never re-sort
-	// by CommitN/Line alone (cross-file line order on cutover dumps reopens
-	// merged issues and resurrects W1 on validate --ci).
 	oporder.SortLocated(located)
 	state, loadErr := loadOrNewState(filepath.Join(stateDir, "issues"), fullReplay)
 	if loadErr != nil {
@@ -369,9 +347,6 @@ func applyCommitLocated(
 	if err != nil {
 		return nil, Result{}, err
 	}
-	// Rewritten-history LocateOps walks can surface ghost unknown types that are
-	// gone from HEAD disk. Warn only about unknowns that still exist on disk so
-	// validate --ci stays green without reordering the committed stream.
 	warnUnhandled := unhandledOps
 	if len(headDiskOps) > 0 {
 		warnUnhandled = unhandledPresentOnHeadDisk(unhandledOps, headDiskOps)
@@ -463,9 +438,6 @@ func replayFromCheckpoint(stateDir string, opts Options, cp Checkpoint, located 
 	return applyCommitLocated(stateDir, opts, Checkpoint{}, located, true, headDiskOps)
 }
 
-// unhandledPresentOnHeadDisk keeps unknown-type ops that still exist on the
-// HEAD disk logs (for snapshot warnings). Ghost unknowns from rewritten history
-// walks are omitted from warnings without changing replay order.
 func unhandledPresentOnHeadDisk(unhandled, headDisk []ops.Op) []ops.Op {
 	if len(unhandled) == 0 || len(headDisk) == 0 {
 		return nil

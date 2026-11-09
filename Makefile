@@ -73,10 +73,6 @@ GREMLINS_VERSION      := v0.6.0
 GOVULNCHECK_VERSION   := v1.1.4
 RIPGREP_VERSION       := 15.2.0
 SYFT_VERSION          := v1.55.0
-# Extra attempts after the first GET on the release URL. The asset API uses
-# at most two of these so a dead API falls through inside
-# ARMATURE_TOOL_FETCH_RETRY_MAX_TIME (wall-clock for one artifact, not a
-# per-curl timeout). Digests come only from scripts/github-release.sha256.
 TOOL_FETCH_RETRIES ?= 30
 TOOL_FETCH_RETRY_MAX_TIME ?= 120
 TOOL_FETCH_ENV = ARMATURE_TOOL_FETCH_RETRIES="$(TOOL_FETCH_RETRIES)" ARMATURE_TOOL_FETCH_RETRY_MAX_TIME="$(TOOL_FETCH_RETRY_MAX_TIME)"

@@ -1,5 +1,5 @@
 // Package mcpsession serves one newline-delimited MCP session over stdio.
-// It imports neither net nor os/exec. Lifetime is the caller's pipes (ADR 0024).
+// Lifetime is the caller's pipes (ADR 0024).
 package mcpsession
 
 import (
@@ -20,9 +20,6 @@ type Call struct {
 }
 
 // Result is the captured output and exit code of one in-process arm command.
-// Stderr-only failures must fold diagnostics into Stdout at the Runner
-// boundary (C10: no exported Result.Stderr). toolResultText and
-// structuredContent then surface those bytes without a wider package API.
 type Result struct {
 	Stdout   []byte
 	ExitCode int
@@ -38,7 +35,7 @@ type Exit int
 const (
 	// ExitClientClose means the client closed stdin (EOF) or the parent context ended.
 	ExitClientClose Exit = iota
-	// ExitSignaled means the session received a stop signal and drained.
+	// ExitSignaled means the session received a stop signal.
 	ExitSignaled
 	// ExitSignaledAgain means a second signal arrived during the grace wait.
 	ExitSignaledAgain
@@ -48,7 +45,6 @@ const (
 	ExitWireBroken
 )
 
-// continueSession is the sentinel Exit from handleRequest meaning "keep serving".
 const continueSession Exit = -1
 
 const signalGrace = 500 * time.Millisecond
@@ -88,8 +84,6 @@ type lineEvent struct {
 	err  error
 }
 
-// lineInbox merges a pending queue (lines arrived during an in-flight call)
-// with the live reader channel so Serve stays serial while still seeing EOF.
 type lineInbox struct {
 	live    <-chan lineEvent
 	pending []lineEvent
@@ -201,9 +195,7 @@ func classifyLineEvent(ev lineEvent, ok bool) (Exit, bool) {
 	return continueSession, false
 }
 
-// readLines scans in and sends one event per line. Sends are cancelled when
-// ctx ends so the goroutine cannot block forever on a full channel after Serve
-// returns. A blocked Scan still waits on the reader (EOF unblocks it).
+// A blocked Scan still waits on the reader. EOF unblocks it.
 func readLines(ctx context.Context, in io.Reader, out chan<- lineEvent) {
 	defer close(out)
 	sc := bufio.NewScanner(in)
@@ -379,8 +371,6 @@ func handleToolsCall(
 			return ExitRunnerPanic
 		}
 		text := toolResultText(out.res)
-		// stderr key stays for schema stability; diagnostics from stderr-only
-		// failures are folded into Stdout by the Runner (see toolRunner).
 		result := map[string]any{
 			"content": []map[string]any{
 				{"type": "text", "text": text},
@@ -399,9 +389,6 @@ func handleToolsCall(
 		return continueSession
 	}
 
-	// stopForClientClose handles stdin EOF / parent cancel during a call.
-	// If the Runner already finished (eager EOF after a finite Reader's last
-	// request), write that result first. Otherwise cancel and wait briefly.
 	stopForClientClose := func() Exit {
 		select {
 		case out := <-done:
@@ -450,7 +437,6 @@ func handleToolsCall(
 				// cancels the Runner; queued work is abandoned with the session.
 				return stopForClientClose()
 			}
-			// Another request arrived while this call runs: queue it; stay serial.
 			inbox.push(ev)
 		case out := <-done:
 			return finish(out)
@@ -458,9 +444,6 @@ func handleToolsCall(
 	}
 }
 
-// toolResultText returns the Runner's captured Stdout. Callers that capture a
-// separate stderr stream must fold stderr-only failure diagnostics into
-// Stdout before returning Result (C10 / Deep Module: no Result.Stderr).
 func toolResultText(res Result) string {
 	return string(res.Stdout)
 }

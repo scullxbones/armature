@@ -852,9 +852,6 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	if err != nil {
 		return fmt.Errorf("fetch branch to ref: %w", err)
 	}
-	// Serialize with staging-ref deletes (issue #435): concurrent fetch into
-	// one clone negotiates against peer staging refs that must not vanish
-	// mid-fetch.
 	return c.withStagingLock(func() error {
 		spec := "+refs/heads/" + branch + ":" + dstRef
 		cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
@@ -1933,11 +1930,8 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 // so git resolves scopes, worktree config, includes, insteadOf, and helpers
 // natively. Isolation is per-call refs under refs/armature-tmp/<run-id>/
 // (never refs/remotes/origin/* or user branches). Staging uses a live-pid
-// lease; clone-local fetches and staging-ref deletes share the staging flock
-// so a peer cannot delete temp refs while this fetch negotiates against them —
-// unique nonces alone still race with `fatal: bad object refs/armature-tmp/…`
-// (issue #435). Crash leftovers are swept at the next run start without
-// touching concurrent live nonces.
+// lease. Crash leftovers are swept at the next run start without touching
+// concurrent live nonces.
 //
 // Origin absence is structural: ls-remote reports no exact refname match →
 // missing (git patterns can suffix-match peers like
@@ -1979,10 +1973,6 @@ func (c *Client) RestoreEvidence(
 		return false, "", "", false, false, fmt.Errorf("restore evidence: abs bundle: %w", absErr)
 	}
 
-	// Hold the staging flock across both clone-local fetches + tip resolves so
-	// peer release (delete) cannot interleave mid-negotiation (issue #435).
-	// Acquire explicitly (not via withStagingLock closure) so repoguard still
-	// attributes the local bundle fetch to RestoreEvidence.
 	unlockStaging, lockErr := c.acquireStagingLock()
 	if lockErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: staging lock: %w", lockErr)

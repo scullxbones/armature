@@ -110,8 +110,6 @@ func Snapshot(g Git, req SnapshotRequest) (SnapshotResult, error) {
 	if err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: run tracking ref: %w", err)
 	}
-	// Hold staging flock only through tip resolve + ref delete. Bundle create
-	// uses the tip SHA in a throwaway bare and must not keep the clone lock.
 	defer releaseRun()
 	if err := g.FetchBranchToRef(OpsBranch, runRef); err != nil {
 		return SnapshotResult{}, fmt.Errorf("ops-backup snapshot: refresh origin/%s failed (fail-closed): %w", OpsBranch, err)

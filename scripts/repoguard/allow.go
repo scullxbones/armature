@@ -147,10 +147,6 @@ func newAllowIndex(entries []allowEntry) *allowIndex {
 	return &allowIndex{entries: entries, used: make([]bool, len(entries))}
 }
 
-// validateAllowEntries fails closed on malformed entries (Line == 0, empty
-// needle). Unused-entry audit always runs after the real scan via
-// allowIndex.unused on the allowlist argument passed into each check — never
-// by skipping trees via go.mod module name.
 func validateAllowEntries(entries []allowEntry) error {
 	for i, a := range entries {
 		if a.Line == 0 {

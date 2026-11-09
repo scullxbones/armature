@@ -41,7 +41,7 @@ type DecisionFact struct {
 }
 
 // HostRefFact is one external-ref event on an issue: URL, role, and whether
-// that event withdrew the name. Assemble prints live names only.
+// that event withdrew the name.
 type HostRefFact struct {
 	URL       string
 	Role      string

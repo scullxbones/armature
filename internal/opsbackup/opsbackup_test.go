@@ -862,12 +862,6 @@ func TestOpsBackup_ParallelAllVerbsOverlap_REQ_TOPTIER_S12_T1F(t *testing.T) {
 	}
 }
 
-// TestOpsBackup_ParallelMovingTip_NoSharedTrackingLock_REQ_TOPTIER_S12_T1 keeps
-// t.Parallel and hammers snapshot/verify/restore-plan while origin/_armature
-// moves. Issue #435: without the clone staging flock, concurrent clone-local
-// fetches race on peer refs/armature-tmp|…|_armature-run deletes
-// (`fatal: bad object refs/armature-tmp/…`). See also
-// TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435.
 func TestOpsBackup_ParallelMovingTip_NoSharedTrackingLock_REQ_TOPTIER_S12_T1(t *testing.T) {
 	t.Parallel()
 	repo, origin, tip0 := setupOpsOrigin(t)

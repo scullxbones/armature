@@ -434,8 +434,6 @@ func hostRefRunOpts(dir string) Options {
 	return Options{WriteStateFiles: true, OpsWorktree: dir}
 }
 
-// pinOporderCutoverAtHEAD sets armature.oporder-cutover to HEAD so later commits
-// use commit-then-line order (epoch 1). Required for HostRef clock-skew proofs.
 func pinOporderCutoverAtHEAD(t *testing.T, worktree string) {
 	t.Helper()
 	sha, err := adapters.New(worktree).HeadSHA()
@@ -564,8 +562,6 @@ func TestMergeCommittedWithPending_PendingAfterCommittedRegardlessOfTimestamp_RE
 
 func TestMergeCommittedWithPending_HostRefCreateAlreadyFirst_REQ_HOSTREF_S1(t *testing.T) {
 	t.Parallel()
-	// HostRef clock-skew streams already begin with create; create-hoist is a
-	// no-op relative to cold LocateOps for that issue.
 	committed := []ops.Op{
 		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "us",
 			Payload: ops.Payload{Title: "T", NodeType: "task"}},
@@ -599,11 +595,6 @@ func TestMergeCommittedWithPending_CommittedParentBeforePendingChild_REQ_HOSTREF
 }
 
 func TestCutoverEpochPreservesTimestampOverCrossFileLine_REQ_HOSTREF_S1(t *testing.T) { //nolint:paralleltest // gittest.IsolateGit
-	// Pre-cutover history shares CommitN. Sorting by Line across files would
-	// apply planner cancel/open (high line in the create log) after a later
-	// merged transition (low line in another worker log) and leave the issue
-	// open — resurrecting W1 on validate --ci. SortLocated epoch-0 uses
-	// timestamp order instead.
 	fx := gittest.InitWithOrigin(t)
 	dir := fx.Dir
 	gittest.Git(t, dir, "commit", "--allow-empty", "-m", "init")
@@ -615,7 +606,6 @@ func TestCutoverEpochPreservesTimestampOverCrossFileLine_REQ_HOSTREF_S1(t *testi
 		Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "planner",
 		Payload: ops.Payload{Title: "T", NodeType: "task"},
 	}))
-	// Pad planner log so cancel/open sit at high line numbers.
 	for i := 0; i < 20; i++ {
 		require.NoError(t, ops.AppendOp(planner, ops.Op{
 			Type: ops.OpNote, TargetID: "task-01", Timestamp: int64(101 + i), WorkerID: "planner",
@@ -681,8 +671,6 @@ func TestCommitOrderIgnoresClockSkewWhenAllOpsPassed_REQ_HOSTREF_S1(t *testing.T
 	require.Len(t, diskOps, 3)
 
 	stateDir := t.TempDir()
-	// Passing non-nil allOps used to fall through to timestamp-sorted runFileConcat
-	// on full replay and resurrect A (withdraw ts200 before add ts300).
 	got, _, err := Run(stateDir, diskOps, nil, Options{WriteStateFiles: true, OpsWorktree: dir})
 	require.NoError(t, err)
 	require.Equal(t, []HostRef{

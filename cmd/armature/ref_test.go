@@ -278,10 +278,6 @@ func TestRefRejectsBrokenReplay_REQ_HOSTREF_S1_T5(t *testing.T) {
 	assert.False(t, originArmatureContains(t, bareDir, `"external_ref"`))
 }
 
-// Clock-skew plant: add A@ts300 committed, then withdraw A@ts200 committed.
-// Cold LocateOps leaves A withdrawn; timestamp sort would resurrect A.
-// Prove arm ref's LoadReadOnly predicate follows cold committed order.
-
 func requireHostRefsMatchColdCommitted(t *testing.T, repo string) []materialize.HostRef {
 	t.Helper()
 	const issueID = "task-01"

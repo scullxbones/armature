@@ -68,7 +68,6 @@ func TestToolRunnerSurfacesStderrOnlyFailures_REQ_MCPSTDIO_S1(t *testing.T) {
 	_, err := runTrls(t, repo, "worker-init")
 	require.NoError(t, err)
 
-	// Unknown flag: cobra writes the reason to stderr and exits non-zero with empty stdout.
 	text, exitCode, raw, err := runMCPToolCallRaw(t, repo, []string{"ready", "--not-a-real-flag"})
 	require.NoError(t, err)
 	assert.NotEqual(t, 0, exitCode)
@@ -76,7 +75,6 @@ func TestToolRunnerSurfacesStderrOnlyFailures_REQ_MCPSTDIO_S1(t *testing.T) {
 	assert.Contains(t, strings.ToLower(text), "flag")
 	assert.Contains(t, raw, `"stdout"`)
 	assert.Contains(t, raw, `"isError":true`)
-	// Protocol stream is JSON-RPC only: no bare stderr line outside the response object.
 	for _, line := range nonEmptyMCPLines(raw) {
 		require.True(t, strings.HasPrefix(strings.TrimSpace(line), "{"), "protocol stdout must stay JSON-RPC: %q", line)
 	}

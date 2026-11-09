@@ -46,15 +46,11 @@ func TestCommandCodeBansProcessStdio_REQ_MCPSTDIO_S1_T2(t *testing.T) {
 		}
 		src, readErr := os.ReadFile(filepath.Join(pkgDir, name))
 		require.NoError(t, readErr, name)
-		file, parseErr := parser.ParseFile(fset, name, src, 0)
+		_, parseErr := parser.ParseFile(fset, name, src, 0)
 		require.NoError(t, parseErr, name)
 		astText := string(src)
 		for _, ident := range bannedIdents {
 			if strings.Contains(astText, ident) {
-				// Confirm it is a real selector use, not a comment-only hit.
-				for _, comment := range file.Comments {
-					_ = comment
-				}
 				violations = append(violations, fmt.Sprintf("%s references %s (only invocation.go and main.go may)", name, ident))
 			}
 		}
