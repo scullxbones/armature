@@ -62,6 +62,7 @@ func TestServeRunsOneCallAtATime_REQ_MCPSTDIO_S1_T3(t *testing.T) {
 	var maxConcurrent int32
 	var mu sync.Mutex
 	var order []string
+	secondDone := make(chan struct{})
 
 	run := func(ctx context.Context, c Call) Result {
 		n := atomic.AddInt32(&concurrent, 1)
@@ -76,15 +77,35 @@ func TestServeRunsOneCallAtATime_REQ_MCPSTDIO_S1_T3(t *testing.T) {
 		mu.Lock()
 		order = append(order, strings.Join(c.Args, " "))
 		mu.Unlock()
+		if strings.Join(c.Args, " ") == "two" {
+			close(secondDone)
+		}
 		return Result{Stdout: []byte("ok:" + strings.Join(c.Args, " ")), ExitCode: 0}
 	}
 
-	req1 := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"arm","arguments":{"args":["one"]}}}`
-	req2 := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"arm","arguments":{"args":["two"]}}}`
-	in := strings.NewReader(req1 + "\n" + req2 + "\n")
-	var out bytes.Buffer
-	exit := Serve(context.Background(), in, &out, nil, "v", run)
-	require.Equal(t, ExitClientClose, exit)
+	// Keep stdin open until both serial calls finish. EOF during an in-flight
+	// call is terminal (abandons the queue); this test proves seriality, not EOF.
+	pr, pw := io.Pipe()
+	done := make(chan Exit, 1)
+	go func() {
+		done <- Serve(context.Background(), pr, io.Discard, nil, "v", run)
+	}()
+	_, err := io.WriteString(pw, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"arm","arguments":{"args":["one"]}}}`+"\n")
+	require.NoError(t, err)
+	_, err = io.WriteString(pw, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"arm","arguments":{"args":["two"]}}}`+"\n")
+	require.NoError(t, err)
+	select {
+	case <-secondDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second serial call never completed")
+	}
+	require.NoError(t, pw.Close())
+	select {
+	case exit := <-done:
+		require.Equal(t, ExitClientClose, exit)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after stdin EOF")
+	}
 	assert.Equal(t, int32(1), atomic.LoadInt32(&maxConcurrent), "Runner must never run concurrently")
 	mu.Lock()
 	assert.Equal(t, []string{"one", "two"}, order)
