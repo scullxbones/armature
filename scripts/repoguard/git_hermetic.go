@@ -30,8 +30,8 @@ func gitIdentHelpers() map[string]bool {
 	}
 }
 
-func checkGitHermetic(root string, stdout, stderr io.Writer) error {
-	if err := validateAllowlist(); err != nil {
+func checkGitHermetic(root string, allows []allowEntry, stdout, stderr io.Writer) error {
+	if err := validateAllowEntries(allows); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
@@ -39,7 +39,7 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
-	idx := newAllowIndex(allowlist())
+	idx := newAllowIndex(allows)
 	files, fset, err := parseGoTree(root, true)
 	if err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
@@ -147,8 +147,6 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintln(stderr, "Use gittest.Init / gittest.InitRepo instead.")
 		failed = true
-	} else {
-		fmt.Fprintln(stdout, "OK: no raw git init in _test.go files outside internal/gittest")
 	}
 
 	var missing []string
@@ -165,29 +163,26 @@ func checkGitHermetic(root string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintln(stderr, "Add a TestMain that calls gittest.Main or gittest.IsolateGit.")
 		failed = true
-	} else {
-		fmt.Fprintln(stdout, "OK: every git-executing test package has TestMain isolation")
 	}
 
-	if isArmatureRoot(root) {
-		for _, check := range []string{allowGitHermeticInit, allowGitHermeticName} {
-			if err := idx.unused(check); err != nil {
-				fmt.Fprintf(stderr, "FAIL: %v\n", err)
-				failed = true
-			}
+	for _, check := range []string{allowGitHermeticInit, allowGitHermeticName} {
+		if err := idx.unused(check); err != nil {
+			fmt.Fprintf(stderr, "FAIL: %v\n", err)
+			failed = true
 		}
-	}
-
-	fmt.Fprintln(stdout, "OK: git-hermetic allows:")
-	for _, a := range allowlist() {
-		if a.Check != allowGitHermeticName && a.Check != allowGitHermeticInit {
-			continue
-		}
-		fmt.Fprintf(stdout, "  %s (%s): %s\n", a.RelPath, a.Check, a.Reason)
 	}
 
 	if failed {
 		return fmt.Errorf("git-test-hermetic")
+	}
+	fmt.Fprintln(stdout, "OK: no raw git init in _test.go files outside internal/gittest")
+	fmt.Fprintln(stdout, "OK: every git-executing test package has TestMain isolation")
+	fmt.Fprintln(stdout, "OK: git-hermetic allows:")
+	for _, a := range allows {
+		if a.Check != allowGitHermeticName && a.Check != allowGitHermeticInit {
+			continue
+		}
+		fmt.Fprintf(stdout, "  %s (%s): %s\n", a.RelPath, a.Check, a.Reason)
 	}
 	return nil
 }
