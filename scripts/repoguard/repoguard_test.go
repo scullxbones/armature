@@ -504,7 +504,7 @@ func TestMain(m *testing.M) { os.Exit(gittest.Main(m)) }
 func f() { _ = exec.CommandContext(ctx, "git", "-C", dir, "status") }
 `,
 	})
-	out, errOut, code := runCheck(t, "git-hermetic", root)
+	out, errOut, code := runCheckAllows(t, "git-hermetic", root, nil)
 	if code != 0 {
 		t.Fatalf("expected pass, stderr=%s", errOut)
 	}
@@ -677,7 +677,7 @@ const Pattern = ` + "`^[a-f0-9]{40}$|^[a-f0-9]{64}$`" + `
 `,
 		"docs/schemas/ok.schema.json": `{"properties":{"sha":{"pattern":"^[a-f0-9]{40}$|^[a-f0-9]{64}$"}}}`,
 	})
-	out, errOut, code := runCheck(t, "object-id", root)
+	out, errOut, code := runCheckAllows(t, "object-id", root, nil)
 	if code != 0 {
 		t.Fatalf("expected pass, stdout=%s stderr=%s", out, errOut)
 	}
@@ -1149,7 +1149,7 @@ func TestResidualTrls_CleanPasses_REQ_421(t *testing.T) {
 		"internal/foo/foo_test.go": "package foo\nfunc TestX(t *testing.T) { _ = \"arm ready\" }\n",
 		"docs/assets/demo.cast":    "{\"version\":2}\n[0.0, \"o\", \"arm tui · worker\"]\n",
 	})
-	out, errOut, code := runCheck(t, "residual-trls", root)
+	out, errOut, code := runCheckAllows(t, "residual-trls", root, nil)
 	if code != 0 {
 		t.Fatalf("expected pass, stdout=%s stderr=%s", out, errOut)
 	}
@@ -1510,6 +1510,85 @@ func TestPlant_GitHermeticRejectsWholeFile_REQ_419(t *testing.T) {
 	}
 }
 
+func TestUnusedWaiver_NonArmatureModuleFails_REQ_437(t *testing.T) {
+	t.Parallel()
+	// Fixture go.mod is not github.com/scullxbones/armature — unused audit
+	// must still run (no isArmatureRoot gate).
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+	})
+	allows := []allowEntry{{
+		RelPath: "does-not-exist-437.go",
+		Check:   allowObjectID,
+		Line:    1,
+		Needle:  `^[0-9a-f]{40}$`,
+		Reason:  "unused waiver on non-armature module plant",
+	}}
+	_, errOut, code := runCheckAllows(t, "object-id", root, allows)
+	if code != 1 {
+		t.Fatalf("unused waiver on module fixture must FAIL rc=1, got %d stderr=%s", code, errOut)
+	}
+	if !strings.Contains(errOut, "unused") || !strings.Contains(errOut, "does-not-exist-437.go") {
+		t.Fatalf("must name unused + path, got %s", errOut)
+	}
+}
+
+func TestUnusedWaiver_RealRepoPlantsFail_REQ_437(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+	withPlant := func(plant allowEntry) []allowEntry {
+		return append(append([]allowEntry(nil), allowlist()...), plant)
+	}
+
+	_, errOut, code := runCheckAllows(t, "object-id", root, withPlant(allowEntry{
+		RelPath: "go.mod", Check: allowObjectID, Line: 1, Needle: "", Reason: "empty-needle plant",
+	}))
+	if code != 1 || !strings.Contains(errOut, "empty Needle") {
+		t.Fatalf("empty-needle must FAIL on real repo, rc=%d stderr=%s", code, errOut)
+	}
+
+	_, errOut, code = runCheckAllows(t, "object-id", root, withPlant(allowEntry{
+		RelPath: "go.mod", Check: allowObjectID, Line: 1, Needle: "module", Reason: "no-hit plant",
+	}))
+	if code != 1 || !strings.Contains(errOut, "unused") {
+		t.Fatalf("no-hit waiver must FAIL unused on real repo, rc=%d stderr=%s", code, errOut)
+	}
+
+	_, errOut, code = runCheckAllows(t, "object-id", root, withPlant(allowEntry{
+		RelPath: "missing-437-plant.go", Check: allowObjectID, Line: 1,
+		Needle: `^[0-9a-f]{40}$`, Reason: "missing-file plant",
+	}))
+	if code != 1 || !strings.Contains(errOut, "unused") || !strings.Contains(errOut, "missing-437-plant.go") {
+		t.Fatalf("missing-file must FAIL unused on real repo, rc=%d stderr=%s", code, errOut)
+	}
+
+	// Shifted line: real waived site at scripts/test_check_jobs.sh:461, off-by-one.
+	_, errOut, code = runCheckAllows(t, "object-id", root, withPlant(allowEntry{
+		RelPath: "scripts/test_check_jobs.sh", Check: allowObjectID, Line: 462,
+		Needle: `^[0-9a-f]{40}$`, Reason: "shifted-line plant",
+	}))
+	if code != 1 || !strings.Contains(errOut, "unused") {
+		t.Fatalf("shifted-line waiver must FAIL unused on real repo, rc=%d stderr=%s", code, errOut)
+	}
+}
+
+func TestGitHermetic_FailPrintsNoOK_REQ_437(t *testing.T) {
+	t.Parallel()
+	root := writeTree(t, map[string]string{
+		"go.mod": "module fixture\n\ngo 1.22\n",
+		"cmd/fake/x_test.go": `package fake
+func f() { _ = []string{"git", "init"} }
+`,
+	})
+	out, errOut, code := runCheckAllows(t, "git-hermetic", root, nil)
+	if code == 0 {
+		t.Fatalf("expected fail, stderr=%s", errOut)
+	}
+	if strings.Contains(out, "OK:") {
+		t.Fatalf("failing git-hermetic must print no OK line, stdout=%s", out)
+	}
+}
+
 func assertExecRejected(t *testing.T, name, body string) {
 	t.Helper()
 	root := writeTree(t, map[string]string{
@@ -1541,6 +1620,29 @@ func runCheck(t *testing.T, check, root string) (string, string, int) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"-check", check, root}, &stdout, &stderr)
+	return stdout.String(), stderr.String(), code
+}
+
+// runCheckAllows invokes one allowlist-aware check with an explicit allowlist
+// (nil/empty for fixture scans that must not inherit production waivers).
+func runCheckAllows(t *testing.T, check, root string, allows []allowEntry) (string, string, int) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	var err error
+	switch check {
+	case "object-id":
+		err = checkObjectID(root, allows, &stdout, &stderr)
+	case "git-hermetic":
+		err = checkGitHermetic(root, allows, &stdout, &stderr)
+	case "residual-trls":
+		err = checkResidualTrls(root, allows, &stdout, &stderr)
+	default:
+		t.Fatalf("runCheckAllows: unsupported check %q", check)
+	}
+	code := 0
+	if err != nil {
+		code = 1
+	}
 	return stdout.String(), stderr.String(), code
 }
 
