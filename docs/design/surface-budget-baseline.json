@@ -1550,7 +1550,7 @@
       ]
     },
     "internal/promotion": {
-      "count": 95,
+      "count": 91,
       "names": [
         "Alternative",
         "Alternative.ExplicitlyTouchedIDs",
@@ -1609,6 +1609,7 @@
         "Node.ClaimedAt",
         "Node.ClaimedBy",
         "Node.LastActivity",
+        "Node.Lease",
         "Node.Parent",
         "Node.Status",
         "Node.TTLMinutes",
@@ -1637,12 +1638,7 @@
         "Result.Recovery",
         "Result.TargetSHA",
         "RunnableArgv",
-        "Step",
-        "Step.Argv",
-        "Step.Help",
-        "Step.Kind",
         "StepCommand",
-        "StepKind",
         "StepRequiredInput",
         "TreeConsistencyViolations",
         "TreeRepairGuidance",

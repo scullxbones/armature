@@ -33,16 +33,14 @@ func testCLIDecide(viewer string, now int64) func(string, Graph) error {
 			if WouldViolateTreeConsistency(issue, g) {
 				return fmt.Errorf("tree consistency")
 			}
-			held := claim.LeaseFromClocks(node.Status, node.ClaimedBy, node.ClaimToken,
-				node.ClaimedAt, node.LastActivity, 0, node.TTLMinutes, "")
+			held := node.Lease()
 			if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
 				return fmt.Errorf("foreign live lease")
 			}
 		case strings.Contains(argv, "--to cancelled"):
 			switch node.Status {
 			case ops.StatusClaimed, ops.StatusInProgress:
-				held := claim.LeaseFromClocks(node.Status, node.ClaimedBy, node.ClaimToken,
-					node.ClaimedAt, node.LastActivity, 0, node.TTLMinutes, "")
+				held := node.Lease()
 				if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
 					return claim.ErrNotClaimOwner
 				}
@@ -141,7 +139,7 @@ func TestRemediationsPlan_NestedMergedAncestorChain_REQ_TOPTIER_S18_T4(t *testin
 
 	// CmdGate + construction: full chain is offered; nearest-only is not a product Option.
 	assert.Equal(t, []string{"M1", "M2"}, mergedAncestorChain("D", g))
-	nearestOnly := Alternative{Steps: []Step{{Argv: "arm reopen --issue M2", Kind: StepCommand}}}
+	nearestOnly := Alternative{Steps: []step{{Argv: "arm reopen --issue M2", Kind: StepCommand}}}
 	afterNearest := applyReopenCancelEffects(g, nearestOnly)
 	viol := TreeConsistencyViolations(afterNearest)
 	require.NotEmpty(t, viol, "nearest-only reopen must leave M2 open under M1")
