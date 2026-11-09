@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/scullxbones/armature/internal/clock"
+	"github.com/scullxbones/armature/internal/filelock"
 )
 
 const (
@@ -18,6 +20,13 @@ const (
 	// share staging refs; leases must be equally visible so one worktree's
 	// sweep cannot treat another's live nonce as stale.
 	runLeaseDir = "armature-run-leases"
+
+	// stagingLockFile serializes clone-local staging fetch + temp-ref delete
+	// under the common git dir. Unique per-run refs alone are not enough:
+	// concurrent `git fetch` into one clone negotiates against sibling
+	// staging refs; a peer release mid-fetch yields
+	// `fatal: bad object refs/armature-tmp/…/bundle` (issue #435).
+	stagingLockFile = "staging.lock"
 
 	// armatureWorkDir is under the common git directory. Throwaway bare
 	// repos for bundle create/verify live here (not os.TempDir / not a
@@ -36,9 +45,43 @@ const (
 	runLeaseMaxAgeSec int64 = 3600
 )
 
+// acquireStagingLock takes a blocking flock on
+// <common-git-dir>/armature-run-leases/staging.lock. Callers hold it only
+// around clone-local staging fetch and staging-ref delete (not BeginPerRunRef
+// allocation) so peer deletes cannot interleave with another fetch's
+// negotiation. unlock is idempotent.
+func (c *Client) acquireStagingLock() (unlock func(), err error) {
+	common, err := c.CommonGitDir()
+	if err != nil {
+		return nil, fmt.Errorf("staging lock: common git dir: %w", err)
+	}
+	dir := filepath.Join(common, runLeaseDir)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return nil, fmt.Errorf("staging lock: mkdir: %w", err)
+	}
+	path := filepath.Join(dir, stagingLockFile)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: path under common git dir
+	if err != nil {
+		return nil, fmt.Errorf("staging lock: open: %w", err)
+	}
+	if err := filelock.Lock(f); err != nil {
+		_ = f.Close() //nolint:errcheck // best-effort
+		return nil, fmt.Errorf("staging lock: flock: %w", err)
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			_ = filelock.Unlock(f) //nolint:errcheck // best-effort
+			_ = f.Close()          //nolint:errcheck // best-effort
+		})
+	}, nil
+}
+
 // BeginPerRunRef sweeps stale peers under ns, allocates ns/<nonce>, and holds a
-// live-pid lease until release. release deletes the ref and the lease. Safe
-// under concurrent BeginPerRunRef for distinct nonces.
+// live-pid lease until release. release deletes the ref and the lease under the
+// clone staging flock (issue #435) so a peer fetch cannot negotiate against a
+// ref that disappears mid-fetch. Allocation itself is not serialized — linked
+// worktrees may hold overlapping live nonces; only fetch+delete are locked.
 func (c *Client) BeginPerRunRef(ns string) (ref string, release func(), err error) {
 	ns = strings.TrimRight(strings.TrimSpace(ns), "/")
 	if ns == "" {
@@ -59,14 +102,18 @@ func (c *Client) BeginPerRunRef(ns string) (ref string, release func(), err erro
 			return
 		}
 		released = true
-		_ = c.DeleteRef(ref) //nolint:errcheck // best-effort
-		_ = c.removeRunLease(leaseKindForRefNS(ns), nonce)
+		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort release
+			_ = c.DeleteRef(ref) //nolint:errcheck // best-effort
+			return nil
+		})
+		_ = c.removeRunLease(leaseKindForRefNS(ns), nonce) //nolint:errcheck // best-effort
 	}
 	return ref, release, nil
 }
 
 // beginArmatureTmpNS allocates refs/armature-tmp/<nonce> with a live lease after
-// sweeping crash leftovers. release deletes bundle+origin refs and the lease.
+// sweeping crash leftovers. release deletes bundle+origin refs under the clone
+// staging flock (issue #435); see BeginPerRunRef.
 func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error) {
 	c.sweepStaleRefNS(armatureTmpNS, leaseKindArmatureTmp)
 	nonce, err := randomNonce()
@@ -83,11 +130,24 @@ func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error)
 			return
 		}
 		released = true
-		_ = c.DeleteRef(prefix + "/bundle")               //nolint:errcheck // best-effort
-		_ = c.DeleteRef(prefix + "/origin")               //nolint:errcheck // best-effort
+		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort release
+			_ = c.DeleteRef(prefix + "/bundle") //nolint:errcheck // best-effort
+			_ = c.DeleteRef(prefix + "/origin") //nolint:errcheck // best-effort
+			return nil
+		})
 		_ = c.removeRunLease(leaseKindArmatureTmp, nonce) //nolint:errcheck // best-effort
 	}
 	return prefix, release, nil
+}
+
+// withStagingLock runs fn under the clone staging flock.
+func (c *Client) withStagingLock(fn func() error) error {
+	unlock, err := c.acquireStagingLock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return fn()
 }
 
 // beginArmatureWorkDir allocates <common-git-dir>/armature-tmp-work/<nonce> for
@@ -304,17 +364,24 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 			continue
 		}
 		prefix := ns + "/" + nonce
-		// Delete every ref under this nonce (bundle/origin or the run ref itself).
-		out2, listErr := c.cmd("for-each-ref", "--format=%(refname)", prefix).CombinedOutput()
-		if listErr == nil {
-			under, underErr := refsUnderPrefix(string(out2), prefix)
-			if underErr == nil {
-				for _, ref := range under {
-					_ = c.DeleteRef(ref) //nolint:errcheck // best-effort sweep
+		// Delete under the staging flock so a concurrent clone-local fetch
+		// cannot negotiate against a ref that vanishes mid-fetch (#435).
+		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort sweep
+			if c.leaseIsLive(kind, nonce) {
+				return nil
+			}
+			out2, listErr := c.cmd("for-each-ref", "--format=%(refname)", prefix).CombinedOutput()
+			if listErr == nil {
+				under, underErr := refsUnderPrefix(string(out2), prefix)
+				if underErr == nil {
+					for _, ref := range under {
+						_ = c.DeleteRef(ref) //nolint:errcheck // best-effort sweep
+					}
 				}
 			}
-		}
-		_ = c.DeleteRef(prefix)           //nolint:errcheck // best-effort
+			_ = c.DeleteRef(prefix) //nolint:errcheck // best-effort
+			return nil
+		})
 		_ = c.removeRunLease(kind, nonce) //nolint:errcheck // best-effort
 	}
 }
