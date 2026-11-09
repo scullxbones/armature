@@ -15,9 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// mcpChdirMu serializes os.Chdir for arm mcp --repo so parallel tests and
-// concurrent sessions cannot race the process working directory.
-var mcpChdirMu sync.Mutex //nolint:gochecknoglobals // process cwd is process-global
+var mcpChdirMu sync.Mutex //nolint:gochecknoglobals
 
 func newMCPCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -107,10 +105,6 @@ func toolRunner(outer Invocation) mcpsession.Runner {
 		code := Run(ctx, toolInvocation(outer, c.Args, &stdout, &stderr))
 		out := stdout.Bytes()
 		errb := stderr.Bytes()
-		// Fold stderr-only failures into Stdout so tool results keep actionable
-		// diagnostics without exporting mcpsession.Result.Stderr (C10).
-		// Protocol stdout stays JSON-RPC only: these bytes ride inside the
-		// tools/call result, not the session writer.
 		if code != 0 && len(out) == 0 && len(errb) > 0 {
 			out = errb
 		}
@@ -131,15 +125,13 @@ func toolInvocation(outer Invocation, args []string, stdout, stderr *bytes.Buffe
 	return inv
 }
 
-var refusedMCPCommands = map[string]bool{ //nolint:gochecknoglobals // static denylist
+var refusedMCPCommands = map[string]bool{ //nolint:gochecknoglobals
 	"harness-hook": true,
 	"hook":         true,
 	"mcp":          true,
 	"worker-init":  true,
 }
 
-// admitToolArgs refuses Protocol Output, Artifact Output, and denylisted
-// commands by resolved cobra identity (so leading global flags cannot bypass).
 func admitToolArgs(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("mcp tool arm requires a non-empty args array")
@@ -148,7 +140,6 @@ func admitToolArgs(args []string) error {
 	root := newRootCmd()
 	cmd, _, err := root.Find(args)
 	if err != nil || cmd == nil {
-		// Fall back to scanning argv tokens when Find cannot resolve.
 		for _, tok := range args {
 			if tok == "--" {
 				break

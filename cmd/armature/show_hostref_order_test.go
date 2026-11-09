@@ -83,15 +83,11 @@ func plantClockSkewedHostRefWithdraw(t *testing.T, repo string) string {
 	workerID, logPath, err := resolveWorkerAndLog(ctx)
 	require.NoError(t, err)
 
-	// Pin cutover at current HEAD (post-create) so add/withdraw use commit order.
 	sha, headErr := adapters.New(ctx.WorktreePath).HeadSHA()
 	require.NoError(t, headErr)
 	require.NotEmpty(t, sha)
 	require.NoError(t, gittest.SetLocalConfig(ctx.WorktreePath, "armature.oporder-cutover", sha))
 
-	// create is already committed via arm create. Record A at ts300, then withdraw
-	// at ts200, committing in that order so cold LocateOps sees withdraw last while
-	// timestamp sort would resurrect A.
 	require.NoError(t, ops.AppendOp(logPath, ops.Op{
 		Type: ops.OpExternalRef, TargetID: "task-01", Timestamp: 300, WorkerID: workerID,
 		Payload: ops.Payload{ExternalRef: showHostRefURLA, ExternalRole: "engineering"},

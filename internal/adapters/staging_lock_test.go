@@ -16,12 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435 proves clone-local
-// fetch and staging-ref delete share the staging flock. Forced interleaving
-// (FIFO-gated origin fetch, not sleep): victim FetchBranchToRef enters the
-// gate → peer BeginPerRunRef+release must not finish its delete while the
-// fetch is still gated → continue → both succeed. Without the flock, peer
-// release can delete mid-fetch and yield `fatal: bad object refs/…` (#435).
 func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 	t.Parallel()
 
@@ -66,7 +60,7 @@ func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 		}
 		buf := make([]byte, 16)
 		_, readErr := f.Read(buf)
-		_ = f.Close() //nolint:errcheck // best-effort
+		swallowErr(f.Close())
 		enteredDone <- readErr
 	}()
 	select {
@@ -78,7 +72,7 @@ func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 
 	go func() {
 		defer close(peerReleaseDone)
-		peerRelease() // delete under staging flock — must wait for fetch lock
+		peerRelease()
 		select {
 		case <-allowFetch:
 		default:
@@ -110,10 +104,6 @@ func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 	assert.Equal(t, tip, got)
 }
 
-// TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435 is the
-// forced-interleaving RestoreEvidence repro for issue #435. A FIFO-gated git
-// wrapper pauses the origin fetch; peer release of a live armature-run ref
-// must block until the victim's staging flock is released.
 func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing.T) {
 	t.Parallel()
 
@@ -156,7 +146,7 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 		}
 		buf := make([]byte, 16)
 		_, readErr := f.Read(buf)
-		_ = f.Close() //nolint:errcheck // best-effort
+		swallowErr(f.Close())
 		enteredDone <- readErr
 	}()
 	select {
@@ -197,8 +187,6 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 		"peer must not delete staging refs while victim RestoreEvidence holds the flock")
 }
 
-// installOriginFetchGate wraps git so the first `fetch … origin …` blocks on
-// FIFOs (entered then continue) before exec'ing the real binary.
 func installOriginFetchGate(t *testing.T) (wrapperDir, enteredFIFO, continueFIFO string) {
 	t.Helper()
 	realGit, err := exec.LookPath("git")

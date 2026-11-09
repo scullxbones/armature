@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// syncBuf is a mutex-backed buffer safe for concurrent Write (session) and
-// String (test helper). Optionally signals once when needle appears.
 type syncBuf struct {
 	mu     sync.Mutex
 	buf    bytes.Buffer

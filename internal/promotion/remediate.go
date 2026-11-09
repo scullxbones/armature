@@ -28,9 +28,6 @@ type Node struct {
 // index/issues; promotion never imports materialize.
 type Graph map[string]Node
 
-// stepKind classifies a remediation step for agents and harnesses.
-// Callers match StepCommand and StepRequiredInput; the type stays inside
-// this package.
 type stepKind string
 
 const (
@@ -43,9 +40,6 @@ const (
 	StepRequiredInput stepKind = "required-input"
 )
 
-// step is one ordered action inside an Alternative or MoreSteps.
-// Argv, Kind, and Help stay readable on Plan values; callers build plans
-// through RemediationsPlanOpts rather than constructing steps.
 type step struct {
 	Argv string
 	Kind stepKind
@@ -206,19 +200,16 @@ func tryCancelSequence(cancelTargets []string, g Graph, opts PlanOpts, withFix b
 	return Alternative{Steps: steps}, true
 }
 
-// Lease maps a promotion node onto the claim clocks this package records.
-// LastClaimingWorkerActivity and WorktreePath are not on Node, so they stay
-// zero and empty — the same inputs ForeignLiveLeaseBlocks sees.
 func (n Node) Lease() claim.Lease {
+	const claimingWorkerActivity int64 = 0
+	const worktreePath = ""
 	return claim.LeaseFromClocks(
 		n.Status, n.ClaimedBy, n.ClaimToken,
-		n.ClaimedAt, n.LastActivity, 0,
-		n.TTLMinutes, "",
+		n.ClaimedAt, n.LastActivity, claimingWorkerActivity,
+		n.TTLMinutes, worktreePath,
 	)
 }
 
-// foreignHeld reports a claimed or in-progress lease held by someone other
-// than viewer. The holder comparison trims; the lease itself does not.
 func foreignHeld(node Node, viewer string) (claim.Lease, bool) {
 	switch node.Status {
 	case ops.StatusClaimed, ops.StatusInProgress:
@@ -232,8 +223,6 @@ func foreignHeld(node Node, viewer string) (claim.Lease, bool) {
 	return node.Lease(), true
 }
 
-// looksForeignLive reports a foreign claimed or in-progress lease still inside TTL.
-// claim.ForeignLiveLeaseBlocks is authoritative for whether argv is printed.
 func looksForeignLive(node Node, viewer string, now int64) bool {
 	held, ok := foreignHeld(node, viewer)
 	return ok && claim.LeaseLive(held, now)

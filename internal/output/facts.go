@@ -14,7 +14,7 @@ type NoteFact struct {
 }
 
 // HostRefFact is one live host name for arm show. Current marks the latest
-// live name. Body is never carried.
+// live name.
 type HostRefFact struct {
 	URL     string
 	Role    string

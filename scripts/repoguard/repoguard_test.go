@@ -1512,8 +1512,6 @@ func TestPlant_GitHermeticRejectsWholeFile_REQ_419(t *testing.T) {
 
 func TestUnusedWaiver_NonArmatureModuleFails_REQ_437(t *testing.T) {
 	t.Parallel()
-	// Fixture go.mod is not github.com/scullxbones/armature — unused audit
-	// must still run (no isArmatureRoot gate).
 	root := writeTree(t, map[string]string{
 		"go.mod": "module fixture\n\ngo 1.22\n",
 	})
@@ -1562,7 +1560,6 @@ func TestUnusedWaiver_RealRepoPlantsFail_REQ_437(t *testing.T) {
 		t.Fatalf("missing-file must FAIL unused on real repo, rc=%d stderr=%s", code, errOut)
 	}
 
-	// Shifted line: real waived site at scripts/test_check_jobs.sh:466, off-by-one.
 	_, errOut, code = runCheckAllows(t, "object-id", root, withPlant(allowEntry{
 		RelPath: "scripts/test_check_jobs.sh", Check: allowObjectID, Line: 467,
 		Needle: `^[0-9a-f]{40}$`, Reason: "shifted-line plant",
@@ -1623,8 +1620,6 @@ func runCheck(t *testing.T, check, root string) (string, string, int) {
 	return stdout.String(), stderr.String(), code
 }
 
-// runCheckAllows invokes one allowlist-aware check with an explicit allowlist
-// (nil/empty for fixture scans that must not inherit production waivers).
 func runCheckAllows(t *testing.T, check, root string, allows []allowEntry) (string, string, int) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer

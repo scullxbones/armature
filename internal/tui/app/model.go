@@ -231,7 +231,6 @@ func (m Model) doRefresh() tea.Cmd {
 	issuesDir := m.issuesDir
 	stateDir := m.stateDir
 	return func() tea.Msg {
-		// issuesDir is the ops worktree root (collapsed .armature checkout).
 		store := snapshot.NewStore(filepath.Join(issuesDir, "ops"), stateDir).
 			WithOpsWorktree(issuesDir)
 		snap, err := store.Load(context.Background())

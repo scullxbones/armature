@@ -35,11 +35,7 @@ func NewStore(opsDir, stateDir string) *Store {
 	}
 }
 
-// WithOpsWorktree returns the store configured to materialize from the ops
-// git checkout's committed order (LocateOps) when the path contains .git.
-// Production callers via newSnapshotStore always set this. A path without
-// .git (legacy plain-.armature fixtures) still configures the store but Load
-// falls back to file-concat allOps replay.
+// WithOpsWorktree sets the ops checkout Load materializes from.
 func (s *Store) WithOpsWorktree(opsWorktree string) *Store {
 	s.opsWorktree = opsWorktree
 	return s
@@ -50,7 +46,7 @@ func (s *Store) Load(ctx context.Context) (*Snapshot, error) {
 }
 
 // LoadReadOnly materializes in memory without writing checkpoint, index, or
-// issue state files. Used by dry-run classification paths and host-ref reads.
+// issue state files.
 func (s *Store) LoadReadOnly(ctx context.Context) (*Snapshot, error) {
 	return s.load(false)
 }
@@ -73,11 +69,6 @@ func (s *Store) load(writeStateFiles bool) (*Snapshot, error) {
 		allOps = []ops.Op{}
 	}
 
-	// Pass OpsWorktree only when it is a real git checkout so materialize uses
-	// committed LocateOps order. A configured path without .git (legacy test
-	// fixtures that store ops under a plain .armature dir) keeps file-concat
-	// allOps replay — production newSnapshotStore always points at a linked
-	// worktree with .git.
 	opsWorktree := s.opsWorktree
 	if _, err := os.Stat(filepath.Join(opsWorktree, ".git")); err != nil {
 		opsWorktree = ""

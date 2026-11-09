@@ -2710,10 +2710,6 @@ exec "$real_git" "$@"
 	assert.Less(t, elapsed, 3*time.Second, "stalled remote must fail-closed near timeout+WaitDelay")
 }
 
-// countingHTTPProxy is a 127.0.0.1 listener that counts Accepts. When answer is
-// true it returns HTTP 503 immediately so git fail-closes after the dial; when
-// false it blackholes the connection (Accept + discard) and only fails via the
-// caller's network deadline — which can cancel before the dial under load (#462).
 func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic.Int64) {
 	t.Helper()
 	hits = &atomic.Int64{}
@@ -2728,15 +2724,18 @@ func countingHTTPProxy(t *testing.T, answer bool) (proxyURL string, hits *atomic
 			}
 			hits.Add(1)
 			go func(c net.Conn) {
-				defer c.Close() //nolint:errcheck // best-effort
+				defer swallowClose(c)
 				if !answer {
-					_, _ = io.Copy(io.Discard, c) //nolint:errcheck // blackhole
+					_, copyErr := io.Copy(io.Discard, c)
+					swallowErr(copyErr)
 					return
 				}
-				_ = c.SetReadDeadline(time.Now().Add(50 * time.Millisecond)) //nolint:errcheck // best-effort
+				swallowErr(c.SetReadDeadline(time.Now().Add(50 * time.Millisecond)))
 				buf := make([]byte, 4096)
-				_, _ = c.Read(buf)                                                                        //nolint:errcheck // drain request prefix; reply regardless
-				_, _ = io.WriteString(c, "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n") //nolint:errcheck // best-effort 503
+				_, readErr := c.Read(buf)
+				swallowErr(readErr)
+				_, writeErr := io.WriteString(c, "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n")
+				swallowErr(writeErr)
 			}(conn)
 		}
 	}()
@@ -2757,9 +2756,6 @@ func proxyProofRepo(t *testing.T, proxyURL string) (repo, tip string) {
 	return repo, tip
 }
 
-// TestRemoteOriginProxyProof_BlackholeMissesTightDeadline_REQ_462: blackhole
-// proxy + nanosecond deadline can fail-close with hits==0 — the macOS flake
-// class. Do not use this shape as a proxy-honor proof.
 func TestRemoteOriginProxyProof_BlackholeMissesTightDeadline_REQ_462(t *testing.T) {
 	t.Parallel()
 	proxyURL, hits := countingHTTPProxy(t, false)
@@ -2772,14 +2768,10 @@ func TestRemoteOriginProxyProof_BlackholeMissesTightDeadline_REQ_462(t *testing.
 	assert.Equal(t, int64(0), hits.Load(), "blackhole + tight deadline must be able to miss the dial")
 }
 
-// TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462:
-// HTTP 503 after Accept fail-closes via the proxy response, so the dial is
-// observed without depending on process-group cancel beating the TCP handshake.
 func TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462(t *testing.T) {
 	t.Parallel()
 	proxyURL, hits := countingHTTPProxy(t, true)
 	repo, tip := proxyProofRepo(t, proxyURL)
-	// Same 500ms budget that flaked with a blackhole under macOS CI load (#462).
 	c := adapters.New(repo).WithNetworkTimeout(500 * time.Millisecond)
 	bundle := filepath.Join(t.TempDir(), "old.bundle")
 	require.NoError(t, c.BundleCreateAdvertised(bundle, tip, "refs/heads/_armature"))
@@ -2791,9 +2783,7 @@ func TestRemoteOriginProxyProof_AnsweringRecordsDialWithoutDeadlineRace_REQ_462(
 	assert.Less(t, elapsed, 2*time.Second, "503 must fail-closed without waiting out a blackhole hang")
 }
 
-// TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G: addressing
-// origin by name honors remote.origin.proxy; passing a URL would bypass it.
-// Uses an answering proxy (#462): blackhole + short deadline races cancel vs dial.
+// Addressing origin by name honors remote.origin.proxy. Passing a URL bypasses it.
 func TestRestoreEvidence_RemoteOriginProxyByName_REQ_TOPTIER_S12_T1G(t *testing.T) {
 	t.Parallel()
 
