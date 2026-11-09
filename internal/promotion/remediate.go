@@ -28,29 +28,33 @@ type Node struct {
 // index/issues; promotion never imports materialize.
 type Graph map[string]Node
 
-// StepKind classifies a remediation step for agents and harnesses.
-type StepKind string
+// stepKind classifies a remediation step for agents and harnesses.
+// Callers match StepCommand and StepRequiredInput; the type stays inside
+// this package.
+type stepKind string
 
 const (
 	// StepCommand is a runnable arm argv.
-	StepCommand  StepKind = "command"
-	stepGuidance StepKind = "guidance"
+	StepCommand  stepKind = "command"
+	stepGuidance stepKind = "guidance"
 	// stepLegacyTemplate is a placeholder argv with no provenance (kind "legacy").
-	stepLegacyTemplate StepKind = "legacy-template"
+	stepLegacyTemplate stepKind = "legacy-template"
 	// StepRequiredInput is a real gate that needs a produced artifact (not legacy).
-	StepRequiredInput StepKind = "required-input"
+	StepRequiredInput stepKind = "required-input"
 )
 
-// Step is one ordered action inside an Alternative or MoreSteps.
-type Step struct {
+// step is one ordered action inside an Alternative or MoreSteps.
+// Argv, Kind, and Help stay readable on Plan values; callers build plans
+// through RemediationsPlanOpts rather than constructing steps.
+type step struct {
 	Argv string
-	Kind StepKind
+	Kind stepKind
 	Help string // template label or how-to for required-input; empty for plain commands
 }
 
 // Alternative is one mutually exclusive repair path (ordered steps).
 type Alternative struct {
-	Steps []Step
+	Steps []step
 }
 
 // Plan is the typed repair model shared by doctor suggested and MERGED-1
@@ -58,7 +62,7 @@ type Alternative struct {
 // choice (typically the reopen/keep path). Never a flat ambiguous sequence.
 type Plan struct {
 	Alternatives []Alternative
-	MoreSteps    []Step
+	MoreSteps    []step
 	Guidance     []string
 }
 
@@ -110,9 +114,9 @@ func treeRepairPlan(id string, mergedChain []string, node Node, g Graph, opts Pl
 	viewer := opts.Viewer
 	// Option A: reopen the FULL merged-ancestor chain rootward-first so nested
 	// M1→M2→item never leaves M2 open under still-merged M1.
-	var reopenSteps []Step
+	var reopenSteps []step
 	for _, anc := range mergedChain {
-		reopenSteps = append(reopenSteps, Step{Argv: "arm reopen --issue " + anc, Kind: StepCommand})
+		reopenSteps = append(reopenSteps, step{Argv: "arm reopen --issue " + anc, Kind: StepCommand})
 	}
 	reopen := Alternative{Steps: reopenSteps}
 
@@ -177,10 +181,10 @@ func buildCancelSequence(cancelTargets []string, g Graph, opts PlanOpts) (Altern
 
 func tryCancelSequence(cancelTargets []string, g Graph, opts PlanOpts, withFix bool) (Alternative, bool) {
 	sim := cloneGraph(g)
-	var steps []Step
+	var steps []step
 	if withFix {
 		fixArgv := "arm doctor --fix"
-		steps = append(steps, Step{Argv: fixArgv, Kind: StepCommand})
+		steps = append(steps, step{Argv: fixArgv, Kind: StepCommand})
 		sim = applyArgvEffect(sim, fixArgv, opts)
 	}
 	for _, tid := range cancelTargets {
@@ -193,7 +197,7 @@ func tryCancelSequence(cancelTargets []string, g Graph, opts PlanOpts, withFix b
 			// No Decide: refuse inventing cancel-other on live foreign.
 			return Alternative{}, false
 		}
-		steps = append(steps, Step{Argv: argv, Kind: StepCommand})
+		steps = append(steps, step{Argv: argv, Kind: StepCommand})
 		sim = applyArgvEffect(sim, argv, opts)
 	}
 	if len(steps) == 0 {
@@ -202,42 +206,44 @@ func tryCancelSequence(cancelTargets []string, g Graph, opts PlanOpts, withFix b
 	return Alternative{Steps: steps}, true
 }
 
-// looksForeignLive reports a foreign claimed or in-progress lease still inside TTL.
-// claim.ForeignLiveLeaseBlocks is authoritative for whether argv is printed.
-func looksForeignLive(node Node, viewer string, now int64) bool {
+// Lease maps a promotion node onto the claim clocks this package records.
+// LastClaimingWorkerActivity and WorktreePath are not on Node, so they stay
+// zero and empty — the same inputs ForeignLiveLeaseBlocks sees.
+func (n Node) Lease() claim.Lease {
+	return claim.LeaseFromClocks(
+		n.Status, n.ClaimedBy, n.ClaimToken,
+		n.ClaimedAt, n.LastActivity, 0,
+		n.TTLMinutes, "",
+	)
+}
+
+// foreignHeld reports a claimed or in-progress lease held by someone other
+// than viewer. The holder comparison trims; the lease itself does not.
+func foreignHeld(node Node, viewer string) (claim.Lease, bool) {
 	switch node.Status {
 	case ops.StatusClaimed, ops.StatusInProgress:
 	default:
-		return false
+		return claim.Lease{}, false
 	}
 	holder := strings.TrimSpace(node.ClaimedBy)
 	if holder == "" || (viewer != "" && holder == viewer) {
-		return false
+		return claim.Lease{}, false
 	}
-	return claim.LeaseLive(leaseFromNode(node), now)
+	return node.Lease(), true
+}
+
+// looksForeignLive reports a foreign claimed or in-progress lease still inside TTL.
+// claim.ForeignLiveLeaseBlocks is authoritative for whether argv is printed.
+func looksForeignLive(node Node, viewer string, now int64) bool {
+	held, ok := foreignHeld(node, viewer)
+	return ok && claim.LeaseLive(held, now)
 }
 
 // looksForeignExpired reports a foreign claimed/in-progress lease past TTL.
 // Option B prepends arm doctor --fix for these so cancel can cover them.
 func looksForeignExpired(node Node, viewer string, now int64) bool {
-	switch node.Status {
-	case ops.StatusClaimed, ops.StatusInProgress:
-	default:
-		return false
-	}
-	holder := strings.TrimSpace(node.ClaimedBy)
-	if holder == "" || (viewer != "" && holder == viewer) {
-		return false
-	}
-	return !claim.LeaseLive(leaseFromNode(node), now)
-}
-
-func leaseFromNode(node Node) claim.Lease {
-	return claim.LeaseFromClocks(
-		node.Status, node.ClaimedBy, node.ClaimToken,
-		node.ClaimedAt, node.LastActivity, 0,
-		node.TTLMinutes, "",
-	)
+	held, ok := foreignHeld(node, viewer)
+	return ok && !claim.LeaseLive(held, now)
 }
 
 func foreignLeaseGuidance(ids []string, g Graph, now int64) []string {
@@ -304,7 +310,7 @@ func filterDecideRefused(g Graph, p Plan, opts PlanOpts) Plan {
 			optionGraphs = append(optionGraphs, graphAfterAlternative(g, alt, opts))
 		}
 	}
-	var kept []Step
+	var kept []step
 	for _, step := range p.MoreSteps {
 		if step.Kind != StepCommand && step.Kind != StepRequiredInput {
 			kept = append(kept, step)
@@ -362,7 +368,7 @@ func applyArgvEffect(g Graph, argv string, opts PlanOpts) Graph {
 			default:
 				continue
 			}
-			if claim.LeaseLive(leaseFromNode(n), opts.Now) {
+			if claim.LeaseLive(n.Lease(), opts.Now) {
 				continue
 			}
 			if n.Status == ops.StatusInProgress {
@@ -475,26 +481,26 @@ func strandedPlan(id string, node Node, g Graph) Plan {
 	if !onlyCancelledDescendants(id, g) {
 		return Plan{}
 	}
-	cancel := Step{Argv: "arm transition --issue " + id + " --to cancelled --force", Kind: StepCommand}
+	cancel := step{Argv: "arm transition --issue " + id + " --to cancelled --force", Kind: StepCommand}
 	switch node.Status {
 	case ops.StatusDone, ops.StatusBlocked:
 		return Plan{
 			Alternatives: []Alternative{
-				{Steps: []Step{cancel}},
-				{Steps: []Step{{Argv: "arm reopen --issue " + id, Kind: StepCommand}}},
+				{Steps: []step{cancel}},
+				{Steps: []step{{Argv: "arm reopen --issue " + id, Kind: StepCommand}}},
 			},
 		}
 	default:
-		return Plan{MoreSteps: []Step{cancel}}
+		return Plan{MoreSteps: []step{cancel}}
 	}
 }
 
-func healthyDescendantOrLeafSteps(id string, node Node, g Graph) []Step {
+func healthyDescendantOrLeafSteps(id string, node Node, g Graph) []step {
 	if len(node.Children) == 0 {
 		return leafPromotionSteps(id, node)
 	}
 	seen := map[string]bool{}
-	var out []Step
+	var out []step
 	collectHealthyChildren(node.Children, g, seen, &out)
 	if len(out) == 0 {
 		return nil
@@ -502,13 +508,13 @@ func healthyDescendantOrLeafSteps(id string, node Node, g Graph) []Step {
 	return out
 }
 
-func collectHealthyChildren(children []string, g Graph, seen map[string]bool, out *[]Step) {
+func collectHealthyChildren(children []string, g Graph, seen map[string]bool, out *[]step) {
 	for _, childID := range children {
 		collectHealthyNode(childID, g, seen, out)
 	}
 }
 
-func collectHealthyNode(id string, g Graph, seen map[string]bool, out *[]Step) {
+func collectHealthyNode(id string, g Graph, seen map[string]bool, out *[]step) {
 	if id == "" || seen[id] {
 		return
 	}
@@ -525,7 +531,7 @@ func collectHealthyNode(id string, g Graph, seen map[string]bool, out *[]Step) {
 		before := len(*out)
 		collectHealthyChildren(node.Children, g, seen, out)
 		if len(*out) == before && onlyCancelledDescendants(id, g) {
-			*out = append(*out, Step{
+			*out = append(*out, step{
 				Argv: "arm transition --issue " + id + " --to cancelled --force",
 				Kind: StepCommand,
 			})
@@ -535,22 +541,22 @@ func collectHealthyNode(id string, g Graph, seen map[string]bool, out *[]Step) {
 	*out = append(*out, leafPromotionSteps(id, node)...)
 }
 
-func leafPromotionSteps(id string, node Node) []Step {
+func leafPromotionSteps(id string, node Node) []step {
 	switch node.Status {
 	case ops.StatusMerged, ops.StatusCancelled:
 		return nil
 	case ops.StatusDone:
 		return doneLeafSteps(id, node)
 	default:
-		return []Step{{Argv: "arm claim --issue " + id + " --worktree", Kind: StepCommand}}
+		return []step{{Argv: "arm claim --issue " + id + " --worktree", Kind: StepCommand}}
 	}
 }
 
-func doneLeafSteps(id string, node Node) []Step {
+func doneLeafSteps(id string, node Node) []step {
 	base := strings.TrimSpace(node.Base)
 	tip := strings.TrimSpace(node.Tip)
 	if base != "" && tip != "" {
-		return []Step{
+		return []step{
 			{Argv: delivery.RecordArgvFilled(id, base, tip), Kind: StepCommand},
 			{
 				Argv: "arm review record --issue " + id + " --assessment <assessment.json> --bundle <bundle.json>",
@@ -559,7 +565,7 @@ func doneLeafSteps(id string, node Node) []Step {
 			},
 		}
 	}
-	return []Step{
+	return []step{
 		{Argv: delivery.RecordArgv(id), Kind: stepLegacyTemplate, Help: legacyTemplateGuidance},
 	}
 }
@@ -591,7 +597,7 @@ func missingAssessmentActions(issueID, base, tip string) []string {
 	if tip == "" {
 		tip = "<sha>"
 	}
-	return renderStep(Step{
+	return renderStep(step{
 		Argv: "arm review record --issue " + issueID + " --assessment <assessment.json> --bundle <bundle.json>",
 		Kind: StepRequiredInput,
 		Help: assessmentHowTo(issueID, base, tip),
@@ -723,29 +729,29 @@ func optionLabel(i int) string {
 	return fmt.Sprintf("Option %c:", 'A'+i)
 }
 
-func renderStep(step Step) []string {
-	switch step.Kind {
+func renderStep(s step) []string {
+	switch s.Kind {
 	case stepGuidance:
-		return []string{step.Argv}
+		return []string{s.Argv}
 	case stepLegacyTemplate:
-		help := step.Help
+		help := s.Help
 		if help == "" {
 			help = legacyTemplateGuidance
 		}
-		return []string{help, step.Argv}
+		return []string{help, s.Argv}
 	case StepRequiredInput:
 		var out []string
-		if step.Help != "" {
-			out = append(out, step.Help)
+		if s.Help != "" {
+			out = append(out, s.Help)
 		}
-		out = append(out, step.Argv)
+		out = append(out, s.Argv)
 		return out
 	default:
 		var out []string
-		if step.Help != "" {
-			out = append(out, step.Help)
+		if s.Help != "" {
+			out = append(out, s.Help)
 		}
-		out = append(out, step.Argv)
+		out = append(out, s.Argv)
 		return out
 	}
 }

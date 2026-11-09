@@ -352,10 +352,15 @@ if rg -q -- '--retry[[:space:]]+0' "$REPO_ROOT/scripts/install-verified-github-r
 else
     pass "installer does not hard-disable curl retries"
 fi
-if ! rg -q 'ARMATURE_TOOL_FETCH_RETRIES:-5' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
-    fail "installer default ARMATURE_TOOL_FETCH_RETRIES drifted from 5"
+if ! rg -q 'ARMATURE_TOOL_FETCH_RETRIES:-30' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "installer default ARMATURE_TOOL_FETCH_RETRIES drifted from 30"
 else
-    pass "installer defaults to 5 extra fetch attempts"
+    pass "installer defaults to 30 extra release-URL attempts"
+fi
+if ! rg -q 'API_EXTRA_MAX=2' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
+    fail "asset API extra attempts must stay capped at 2 so a dead API falls through"
+else
+    pass "asset API extra attempts stay capped at 2"
 fi
 if rg -q 'releases/latest' "$REPO_ROOT/scripts/install-verified-github-release.sh"; then
     fail "installer must not fetch /releases/latest"
@@ -415,10 +420,10 @@ if [[ $PIN_STATUS -eq 0 ]]; then
 else
     fail "${PIN_RESULT:-pin table does not match Makefile versions}"
 fi
-if ! rg -q 'TOOL_FETCH_RETRIES \?= 5' "$MAKEFILE"; then
-    fail "Makefile must set TOOL_FETCH_RETRIES ?= 5"
+if ! rg -q 'TOOL_FETCH_RETRIES \?= 30' "$MAKEFILE"; then
+    fail "Makefile must set TOOL_FETCH_RETRIES ?= 30"
 else
-    pass "Makefile bounds tool-fetch retries at 5"
+    pass "Makefile sets TOOL_FETCH_RETRIES ?= 30"
 fi
 env_hits=$(rg -c '\$\(TOOL_FETCH_ENV\)' "$MAKEFILE" || true)
 if [[ "${env_hits:-0}" -lt 4 ]]; then

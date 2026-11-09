@@ -30,7 +30,7 @@ func remediationDecide(appCtx *config.Context, viewer string, now int64) func(st
 			if promotion.WouldViolateTreeConsistency(issue, g) {
 				return fmt.Errorf("cannot claim %s: under a merged ancestor (tree consistency)", issue)
 			}
-			held := leaseFromPromotionNode(node)
+			held := node.Lease()
 			if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
 				return fmt.Errorf("cannot claim %s: foreign live lease held by %s (claim --force only overrides scope overlap)", issue, held.Holder)
 			}
@@ -43,7 +43,7 @@ func remediationDecide(appCtx *config.Context, viewer string, now int64) func(st
 						return err
 					}
 				} else {
-					held := leaseFromPromotionNode(node)
+					held := node.Lease()
 					if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
 						return claim.ErrNotClaimOwner
 					}
@@ -58,14 +58,6 @@ func remediationDecide(appCtx *config.Context, viewer string, now int64) func(st
 			return nil
 		}
 	}
-}
-
-func leaseFromPromotionNode(n promotion.Node) claim.Lease {
-	return claim.LeaseFromClocks(
-		n.Status, n.ClaimedBy, n.ClaimToken,
-		n.ClaimedAt, n.LastActivity, 0,
-		n.TTLMinutes, "",
-	)
 }
 
 func planOptsForRemediation(appCtx *config.Context, viewer string) promotion.PlanOpts {

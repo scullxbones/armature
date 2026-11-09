@@ -1562,9 +1562,9 @@ func TestUnusedWaiver_RealRepoPlantsFail_REQ_437(t *testing.T) {
 		t.Fatalf("missing-file must FAIL unused on real repo, rc=%d stderr=%s", code, errOut)
 	}
 
-	// Shifted line: real waived site at scripts/test_check_jobs.sh:461, off-by-one.
+	// Shifted line: real waived site at scripts/test_check_jobs.sh:466, off-by-one.
 	_, errOut, code = runCheckAllows(t, "object-id", root, withPlant(allowEntry{
-		RelPath: "scripts/test_check_jobs.sh", Check: allowObjectID, Line: 462,
+		RelPath: "scripts/test_check_jobs.sh", Check: allowObjectID, Line: 467,
 		Needle: `^[0-9a-f]{40}$`, Reason: "shifted-line plant",
 	}))
 	if code != 1 || !strings.Contains(errOut, "unused") {

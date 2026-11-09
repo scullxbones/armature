@@ -31,16 +31,14 @@ func cliDecide(viewer string, now int64) func(string, promotion.Graph) error {
 			if promotion.WouldViolateTreeConsistency(issue, g) {
 				return fmt.Errorf("tree consistency")
 			}
-			held := claim.LeaseFromClocks(node.Status, node.ClaimedBy, node.ClaimToken,
-				node.ClaimedAt, node.LastActivity, 0, node.TTLMinutes, "")
+			held := node.Lease()
 			if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
 				return fmt.Errorf("foreign live lease")
 			}
 		case strings.Contains(argv, "--to cancelled"):
 			switch node.Status {
 			case ops.StatusClaimed, ops.StatusInProgress:
-				held := claim.LeaseFromClocks(node.Status, node.ClaimedBy, node.ClaimToken,
-					node.ClaimedAt, node.LastActivity, 0, node.TTLMinutes, "")
+				held := node.Lease()
 				if claim.ForeignLiveLeaseBlocks(held, viewer, now) {
 					return claim.ErrNotClaimOwner
 				}

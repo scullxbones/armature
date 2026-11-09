@@ -93,6 +93,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_bytes(504, "late", "text/plain")
             return
         path = self.path.split("?", 1)[0]
+        if mode == "api-hang" and path.startswith("/api/"):
+            import time
+            time.sleep(30)
+            self.send_bytes(504, "late", "text/plain")
+            return
         tls_port = tls_port_file.read_text(encoding="utf-8").strip() if tls_port_file.exists() else "0"
         if path == "/artifact" or path.startswith("/edge/"):
             self.send_bytes(200, (www / tarball_rel).read_bytes())
@@ -166,7 +171,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with counts.open("a", encoding="utf-8") as fh:
             fh.write(path + "\n")
         n = prior + 1
-        if mode == "always-504" or (mode == "flaky" and n == 1):
+        if mode == "mismatch-once" and n == 1:
+            self.send_bytes(200, b"not-the-tarball")
+            return
+        if mode == "always-504" or (mode == "flaky" and n == 1) or (mode == "flaky-8" and n <= 8):
             self.send_bytes(504, "gateway timeout", "text/plain")
             return
         if not target.is_file():
@@ -386,6 +394,84 @@ if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] && ec
     pass "asset API 504 was retried and matched the pin"
 else
     fail "expected asset API retry, status=$STATUS out=$OUT"
+fi
+
+echo "Test 14: a hung asset API falls through to the release URL..."
+set_mode api-hang
+reset_counts
+export ARMATURE_GITHUB_API="${BASE}/api"
+export ARMATURE_TOOL_FETCH_RETRIES=4
+export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=8
+export ARMATURE_TOOL_FETCH_BACKOFF_SECS=0
+export ARMATURE_TOOL_FETCH_API_MAX_TIME=1
+start=$(date +%s)
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+end=$(date +%s)
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
+unset ARMATURE_TOOL_FETCH_BACKOFF_SECS ARMATURE_TOOL_FETCH_API_MAX_TIME
+elapsed=$((end - start))
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] \
+    && echo "$OUT" | rg -q "release download URL" && [[ "$elapsed" -lt 7 ]]; then
+    pass "hung asset API fell through to the release URL (${elapsed}s)"
+else
+    fail "hung API did not fall through, elapsed=${elapsed}s status=$STATUS out=$OUT"
+fi
+
+echo "Test 17: an unreachable asset API still installs from the release URL..."
+set_mode ok
+reset_counts
+export ARMATURE_GITHUB_API="http://127.0.0.1:1"
+export ARMATURE_TOOL_FETCH_RETRIES=2
+export ARMATURE_TOOL_FETCH_BACKOFF_SECS=0
+export ARMATURE_TOOL_FETCH_API_MAX_TIME=2
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+unset ARMATURE_GITHUB_API ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_BACKOFF_SECS ARMATURE_TOOL_FETCH_API_MAX_TIME
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]] \
+    && echo "$OUT" | rg -q "release download URL"; then
+    pass "unreachable asset API installed via the release URL"
+else
+    fail "expected release URL fallback, status=$STATUS out=$OUT"
+fi
+
+echo "Test 18: a digest mismatch is not retried into a pass..."
+set_mode mismatch-once
+reset_counts
+export ARMATURE_TOOL_FETCH_RETRIES=4
+export ARMATURE_TOOL_FETCH_BACKOFF_SECS=0
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_BACKOFF_SECS
+hits=$(rg -c 'tool-9.9.9-linux-amd64.tar.gz' "$WORKDIR/counts" || echo 0)
+if [[ $STATUS -ne 0 ]] && echo "$OUT" | rg -q "checksum mismatch" \
+    && [[ ! -e "$WORKDIR/dest/tool" ]] && [[ "$hits" -eq 1 ]]; then
+    pass "checksum mismatch failed without a second fetch"
+else
+    fail "mismatch was retried or installed, status=$STATUS hits=$hits out=$OUT"
+fi
+
+echo "Test 19: the release URL survives more than five transport failures..."
+set_mode flaky-8
+reset_counts
+export ARMATURE_TOOL_FETCH_RETRIES=30
+export ARMATURE_TOOL_FETCH_BACKOFF_SECS=0
+export ARMATURE_TOOL_FETCH_RETRY_MAX_TIME=20
+set +e
+OUT=$(run_install 2>&1)
+STATUS=$?
+set -e
+unset ARMATURE_TOOL_FETCH_RETRIES ARMATURE_TOOL_FETCH_BACKOFF_SECS ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
+if [[ $STATUS -eq 0 ]] && [[ "$( "$WORKDIR/dest/tool" )" == "fake-tool" ]]; then
+    pass "release URL installed after eight transport failures"
+else
+    fail "expected install after eight 504s, status=$STATUS out=$OUT"
 fi
 
 echo "Test 13: a spent budget does not call curl with --max-time 0..."

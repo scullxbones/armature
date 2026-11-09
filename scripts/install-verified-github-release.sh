@@ -7,6 +7,10 @@
 # TOOL_FETCH_RETRY_MAX_TIME / ARMATURE_TOOL_FETCH_RETRY_MAX_TIME is the
 # wall-clock budget for one artifact: every attempt, redirect, and the
 # asset-API then release-URL fallback. It is not a per-curl timeout.
+# Each curl is capped (ARMATURE_TOOL_FETCH_API_MAX_TIME /
+# ARMATURE_TOOL_FETCH_ATTEMPT_MAX_TIME) so a hung asset API still leaves
+# time for the release download URL. A finished body that does not match
+# the pin is not retried.
 set -euo pipefail
 
 usage() {
@@ -25,11 +29,17 @@ Optional:
                                is https://github.com
   ARMATURE_TOOL_PIN_FILE       pin table (tests)
   ARMATURE_TOOL_CACERT         extra CA bundle passed to curl (tests)
-  ARMATURE_TOOL_FETCH_RETRIES  extra attempts per URL after the first (default 5, max 8)
+  ARMATURE_TOOL_FETCH_RETRIES  extra attempts on the release URL after the first
+                               (default 30, max 40). The asset API uses at most
+                               two of these so a dead API falls through.
   ARMATURE_TOOL_FETCH_RETRY_MAX_TIME
                                wall-clock seconds for this artifact (default 120, max 300)
   ARMATURE_TOOL_FETCH_BACKOFF_SECS
                                base sleep between attempts (default 1, max 30)
+  ARMATURE_TOOL_FETCH_API_MAX_TIME
+                               per-curl seconds for the asset API (default 15, max 60)
+  ARMATURE_TOOL_FETCH_ATTEMPT_MAX_TIME
+                               per-curl seconds for a tarball (default 60, max 120)
 EOF
     exit 2
 }
@@ -122,9 +132,14 @@ require_uint() {
     printf '%s\n' "$n"
 }
 
-FETCH_RETRIES=$(require_uint ARMATURE_TOOL_FETCH_RETRIES "${ARMATURE_TOOL_FETCH_RETRIES:-5}" 0 8)
+FETCH_RETRIES=$(require_uint ARMATURE_TOOL_FETCH_RETRIES "${ARMATURE_TOOL_FETCH_RETRIES:-30}" 0 40)
 FETCH_RETRY_MAX_TIME=$(require_uint ARMATURE_TOOL_FETCH_RETRY_MAX_TIME "${ARMATURE_TOOL_FETCH_RETRY_MAX_TIME:-120}" 1 300)
 FETCH_BACKOFF=$(require_uint ARMATURE_TOOL_FETCH_BACKOFF_SECS "${ARMATURE_TOOL_FETCH_BACKOFF_SECS:-1}" 0 30)
+API_ATTEMPT_MAX=$(require_uint ARMATURE_TOOL_FETCH_API_MAX_TIME "${ARMATURE_TOOL_FETCH_API_MAX_TIME:-15}" 1 60)
+ATTEMPT_MAX=$(require_uint ARMATURE_TOOL_FETCH_ATTEMPT_MAX_TIME "${ARMATURE_TOOL_FETCH_ATTEMPT_MAX_TIME:-60}" 1 120)
+# A dead asset API must not spend the artifact budget. Two extra tries,
+# then the release download URL.
+API_EXTRA_MAX=2
 
 lookup_pin() {
     local hash file repo ver
@@ -153,14 +168,31 @@ file_sha256() {
     fi
 }
 
+# Smaller of the remaining artifact budget and the per-curl cap.
+attempt_limit() {
+    local cap="$1" left
+    left=$(time_left)
+    if [[ "$left" -le 0 ]]; then
+        printf '0\n'
+        return 0
+    fi
+    if [[ "$cap" -gt 0 && "$left" -gt "$cap" ]]; then
+        printf '%s\n' "$cap"
+        return 0
+    fi
+    printf '%s\n' "$left"
+}
+
 # One transfer, including redirects. No credentials are sent: public release
 # assets do not need them, and a hand-rolled host check cannot decide that
 # safely. curl follows redirects without --location-trusted. --proto-redir
 # allows only https on those hops. A non-zero curl exit (truncated body,
 # refused redirect) is a failed transfer even when a status line was 200.
 transfer() {
-    local dest="$1" url="$2" limit="$3" accept="${4:-}" st code
+    local dest="$1" url="$2" limit="$3" accept="${4:-}" st code hdr
     # --max-time 0 means no limit. Refuse a non-positive deadline.
+    LAST_HTTP=""
+    LAST_RETRY_AFTER=""
     if [[ -z "$limit" || "$limit" -le 0 ]]; then
         echo "FAIL: refusing download with a non-positive deadline" >&2
         return 1
@@ -168,10 +200,13 @@ transfer() {
     if [[ -z "$accept" ]]; then
         accept="*/*"
     fi
+    hdr="${dest}.hdr"
+    rm -f "$hdr"
     set +e
     if [[ -n "${ARMATURE_TOOL_CACERT:-}" ]]; then
         code=$(curl -sS --max-time "$limit" --cacert "$ARMATURE_TOOL_CACERT" \
             -L --max-redirs 5 --proto-redir =https \
+            -D "$hdr" \
             -H "Accept: ${accept}" \
             -H "User-Agent: armature-install-verified-release" \
             -o "$dest" -w '%{http_code}' \
@@ -180,6 +215,7 @@ transfer() {
     else
         code=$(curl -sS --max-time "$limit" \
             -L --max-redirs 5 --proto-redir =https \
+            -D "$hdr" \
             -H "Accept: ${accept}" \
             -H "User-Agent: armature-install-verified-release" \
             -o "$dest" -w '%{http_code}' \
@@ -187,6 +223,11 @@ transfer() {
         st=$?
     fi
     set -e
+    LAST_HTTP="$code"
+    if [[ -f "$hdr" ]]; then
+        LAST_RETRY_AFTER=$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="retry-after:" {print $2; exit}')
+        rm -f "$hdr"
+    fi
     if [[ "$st" -ne 0 || "$code" != "200" || ! -s "$dest" ]]; then
         rm -f "$dest"
         return 1
@@ -216,6 +257,19 @@ pause_for_retry() {
     sleep "$want"
 }
 
+# Linear backoff, capped, but honor a longer Retry-After inside the budget.
+sleep_before_retry() {
+    local attempt="$1" want
+    want=$((FETCH_BACKOFF * attempt))
+    if [[ "$want" -gt 15 ]]; then
+        want=15
+    fi
+    if [[ "${LAST_RETRY_AFTER:-}" =~ ^[0-9]+$ ]] && [[ "$LAST_RETRY_AFTER" -gt "$want" ]]; then
+        want=$LAST_RETRY_AFTER
+    fi
+    pause_for_retry "$want"
+}
+
 digest_matches() {
     local got
     got=$(file_sha256 "$1")
@@ -223,51 +277,63 @@ digest_matches() {
 }
 
 # Retry transport failures inside the wall-clock budget. A finished body
-# whose digest is not the pin is not retried; the caller tries the other URL.
+# whose digest is not the pin is not retried and cannot become a pass.
+# args: url dest accept extra_retries per_curl_cap
 fetch_matching() {
-    local url="$1" dest="$2" accept="${3:-}"
-    local attempt=0 left
-    while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
-        left=$(time_left)
-        if [[ "$left" -le 0 ]]; then
+    local url="$1" dest="$2" accept="${3:-}" retries="$4" cap="$5"
+    local attempt=0 limit
+    while [[ "$attempt" -le "$retries" ]]; do
+        limit=$(attempt_limit "$cap")
+        if [[ "$limit" -le 0 ]]; then
             return 1
         fi
-        if transfer "$dest" "$url" "$left" "$accept" && digest_matches "$dest"; then
+        if transfer "$dest" "$url" "$limit" "$accept" && digest_matches "$dest"; then
             return 0
         fi
         if [[ -s "$dest" ]]; then
             SAW_MISMATCH=1
-            echo "WARN: $url bytes do not match pinned sha256" >&2
+            echo "WARN: downloaded bytes do not match pinned sha256" >&2
             rm -f "$dest"
             return 1
         fi
         rm -f "$dest"
         attempt=$((attempt + 1))
-        if [[ "$attempt" -le "$FETCH_RETRIES" ]]; then
-            pause_for_retry $((FETCH_BACKOFF * attempt))
+        if [[ "$attempt" -le "$retries" ]]; then
+            echo "WARN: tarball fetch failed (http ${LAST_HTTP:-none}), retrying" >&2
+            sleep_before_retry "$attempt"
         fi
     done
     return 1
 }
 
 # Same budget as fetch_matching, without a digest check (release JSON).
+# args: url dest accept extra_retries per_curl_cap
 fetch_retry() {
-    local url="$1" dest="$2" accept="$3"
-    local attempt=0 left
-    while [[ "$attempt" -le "$FETCH_RETRIES" ]]; do
-        left=$(time_left)
-        if [[ "$left" -le 0 ]]; then
+    local url="$1" dest="$2" accept="$3" retries="$4" cap="$5"
+    local attempt=0 limit
+    while [[ "$attempt" -le "$retries" ]]; do
+        limit=$(attempt_limit "$cap")
+        if [[ "$limit" -le 0 ]]; then
             return 1
         fi
-        if transfer "$dest" "$url" "$left" "$accept"; then
+        if transfer "$dest" "$url" "$limit" "$accept"; then
             return 0
         fi
         attempt=$((attempt + 1))
-        if [[ "$attempt" -le "$FETCH_RETRIES" ]]; then
-            pause_for_retry $((FETCH_BACKOFF * attempt))
+        if [[ "$attempt" -le "$retries" ]]; then
+            echo "WARN: asset API fetch failed (http ${LAST_HTTP:-none}), retrying" >&2
+            sleep_before_retry "$attempt"
         fi
     done
     return 1
+}
+
+api_extra_attempts() {
+    local n=$FETCH_RETRIES
+    if [[ "$n" -gt "$API_EXTRA_MAX" ]]; then
+        n=$API_EXTRA_MAX
+    fi
+    printf '%s\n' "$n"
 }
 
 api_base_url() {
@@ -317,25 +383,28 @@ echo "  budget: ${FETCH_RETRY_MAX_TIME}s wall-clock for this artifact"
 
 downloaded=0
 api=""
+api_retries=$(api_extra_attempts)
 if api=$(api_base_url); then
     meta="$WORKDIR/release.json"
     rel="${api}/repos/${REPO}/releases/tags/${VERSION}"
-    if fetch_retry "$rel" "$meta" "application/vnd.github+json"; then
+    if fetch_retry "$rel" "$meta" "application/vnd.github+json" "$api_retries" "$API_ATTEMPT_MAX"; then
         asset=$(api_asset_url "$api" "$meta" || true)
         case "$asset" in
             "$api"/*)
-                if fetch_matching "$asset" "$TARBALL_DEST" "application/octet-stream"; then
+                if [[ "$SAW_MISMATCH" -eq 0 ]] && fetch_matching "$asset" "$TARBALL_DEST" "application/octet-stream" "$api_retries" "$ATTEMPT_MAX"; then
                     downloaded=1
                     echo "fetched $TARBALL via GitHub release asset API"
                 fi
                 ;;
         esac
     else
-        echo "WARN: GitHub asset API failed for $REPO@$VERSION" >&2
+        echo "WARN: GitHub asset API failed for $REPO@$VERSION (http ${LAST_HTTP:-none})" >&2
     fi
 fi
-if [[ "$downloaded" -eq 0 ]]; then
-    if fetch_matching "$TARBALL_URL" "$TARBALL_DEST"; then
+# A digest mismatch is the pinned file being wrong. Do not try another URL
+# and do not retry into a pass.
+if [[ "$downloaded" -eq 0 && "$SAW_MISMATCH" -eq 0 ]]; then
+    if fetch_matching "$TARBALL_URL" "$TARBALL_DEST" "*/*" "$FETCH_RETRIES" "$ATTEMPT_MAX"; then
         downloaded=1
         echo "fetched $TARBALL via release download URL"
     fi
@@ -352,7 +421,7 @@ if [[ "$downloaded" -eq 0 ]]; then
         echo "  expected: $PIN" >&2
         echo "  actual:   (response did not match the pinned sha256)" >&2
     else
-        echo "FAIL: could not fetch $TARBALL matching pinned sha256 $PIN" >&2
+        echo "FAIL: could not fetch $TARBALL matching pinned sha256 $PIN (last http ${LAST_HTTP:-none})" >&2
     fi
     exit 1
 fi
