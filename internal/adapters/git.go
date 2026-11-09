@@ -1981,48 +1981,46 @@ func (c *Client) RestoreEvidence(
 
 	// Hold the staging flock across both clone-local fetches + tip resolves so
 	// peer release (delete) cannot interleave mid-negotiation (issue #435).
-	lockErr := c.withStagingLock(func() error {
-		bundleSpec := "+" + advertiseRef + ":" + bundleTmp
-		// gitnetallow: restore-local-bundle-fetch absolute bundle file into refs/armature-tmp; origin fetch stays on networkCmd
-		if out, fetchErr := c.cmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
-			return fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
-		}
-		var resolveErr error
-		recovered, resolveErr = c.ResolveRevision(bundleTmp)
-		if resolveErr != nil {
-			return fmt.Errorf("restore evidence: resolve recovered tip: %w", resolveErr)
-		}
-		if recovered == "" {
-			return fmt.Errorf("restore evidence: resolve recovered tip: empty SHA")
-		}
-		if !exists {
-			return nil
-		}
-
-		originSpec := "+" + remoteRef + ":" + originTmp
-		cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
-		defer cancel()
-		out, fetchErr := cmd.CombinedOutput()
-		out, fetchErr = networkResult(ctx, out, fetchErr)
-		if fetchErr != nil {
-			return fmt.Errorf(
-				"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
-				remoteRef, remoteURL, fetchErr, out)
-		}
-		originTip, resolveErr = c.ResolveRevision(originTmp)
-		if resolveErr != nil {
-			return fmt.Errorf("restore evidence: resolve origin tip: %w", resolveErr)
-		}
-		if originTip == "" {
-			return fmt.Errorf("restore evidence: resolve origin tip: empty SHA")
-		}
-		return nil
-	})
+	// Acquire explicitly (not via withStagingLock closure) so repoguard still
+	// attributes the local bundle fetch to RestoreEvidence.
+	unlockStaging, lockErr := c.acquireStagingLock()
 	if lockErr != nil {
-		return false, "", "", false, false, lockErr
+		return false, "", "", false, false, fmt.Errorf("restore evidence: staging lock: %w", lockErr)
+	}
+	defer unlockStaging()
+
+	bundleSpec := "+" + advertiseRef + ":" + bundleTmp
+	// gitnetallow: restore-local-bundle-fetch absolute bundle file into refs/armature-tmp; origin fetch stays on networkCmd
+	if out, fetchErr := c.cmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
+	}
+	recovered, err = c.ResolveRevision(bundleTmp)
+	if err != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: %w", err)
+	}
+	if recovered == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: empty SHA")
 	}
 	if !exists {
 		return true, "", recovered, false, false, nil
+	}
+
+	originSpec := "+" + remoteRef + ":" + originTmp
+	cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
+	defer cancel()
+	out, fetchErr := cmd.CombinedOutput()
+	out, fetchErr = networkResult(ctx, out, fetchErr)
+	if fetchErr != nil {
+		return false, "", "", false, false, fmt.Errorf(
+			"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
+			remoteRef, remoteURL, fetchErr, out)
+	}
+	originTip, err = c.ResolveRevision(originTmp)
+	if err != nil {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: %w", err)
+	}
+	if originTip == "" {
+		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: empty SHA")
 	}
 
 	originAncOfRecovered, err = c.IsAncestor(originTip, recovered)
