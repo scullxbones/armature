@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/scullxbones/armature/internal/clock"
+	"github.com/scullxbones/armature/internal/filelock"
 )
 
 const (
@@ -18,6 +20,13 @@ const (
 	// share staging refs; leases must be equally visible so one worktree's
 	// sweep cannot treat another's live nonce as stale.
 	runLeaseDir = "armature-run-leases"
+
+	// stagingLockFile serializes clone-local staging fetch + temp-ref delete
+	// under the common git dir. Unique per-run refs alone are not enough:
+	// concurrent `git fetch` into one clone negotiates against sibling
+	// staging refs; a peer release mid-fetch yields
+	// `fatal: bad object refs/armature-tmp/…/bundle` (issue #435).
+	stagingLockFile = "staging.lock"
 
 	// armatureWorkDir is under the common git directory. Throwaway bare
 	// repos for bundle create/verify live here (not os.TempDir / not a
@@ -36,14 +45,57 @@ const (
 	runLeaseMaxAgeSec int64 = 3600
 )
 
+// acquireStagingLock takes a blocking flock on
+// <common-git-dir>/armature-run-leases/staging.lock. Hold from staging-ref
+// allocation through fetch + delete so peer releases cannot interleave with
+// another fetch's negotiation. unlock is idempotent.
+func (c *Client) acquireStagingLock() (unlock func(), err error) {
+	common, err := c.CommonGitDir()
+	if err != nil {
+		return nil, fmt.Errorf("staging lock: common git dir: %w", err)
+	}
+	dir := filepath.Join(common, runLeaseDir)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return nil, fmt.Errorf("staging lock: mkdir: %w", err)
+	}
+	path := filepath.Join(dir, stagingLockFile)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // G304: path under common git dir
+	if err != nil {
+		return nil, fmt.Errorf("staging lock: open: %w", err)
+	}
+	if err := filelock.Lock(f); err != nil {
+		_ = f.Close() //nolint:errcheck // best-effort
+		return nil, fmt.Errorf("staging lock: flock: %w", err)
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			_ = filelock.Unlock(f) //nolint:errcheck // best-effort
+			_ = f.Close()          //nolint:errcheck // best-effort
+		})
+	}, nil
+}
+
 // BeginPerRunRef sweeps stale peers under ns, allocates ns/<nonce>, and holds a
-// live-pid lease until release. release deletes the ref and the lease. Safe
-// under concurrent BeginPerRunRef for distinct nonces.
+// live-pid lease until release. release deletes the ref and the lease. The
+// clone staging flock is held from allocation through release so concurrent
+// BeginPerRunRef / restore-plan fetches cannot negotiate against a peer ref
+// that disappears mid-fetch (issue #435).
 func (c *Client) BeginPerRunRef(ns string) (ref string, release func(), err error) {
 	ns = strings.TrimRight(strings.TrimSpace(ns), "/")
 	if ns == "" {
 		return "", nil, fmt.Errorf("begin per-run ref: namespace required")
 	}
+	unlock, err := c.acquireStagingLock()
+	if err != nil {
+		return "", nil, fmt.Errorf("begin per-run ref: %w", err)
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			unlock()
+		}
+	}()
 	c.sweepStaleRefNS(ns, leaseKindForRefNS(ns))
 	nonce, err := randomNonce()
 	if err != nil {
@@ -61,13 +113,26 @@ func (c *Client) BeginPerRunRef(ns string) (ref string, release func(), err erro
 		released = true
 		_ = c.DeleteRef(ref) //nolint:errcheck // best-effort
 		_ = c.removeRunLease(leaseKindForRefNS(ns), nonce)
+		unlock()
 	}
+	ok = true
 	return ref, release, nil
 }
 
 // beginArmatureTmpNS allocates refs/armature-tmp/<nonce> with a live lease after
 // sweeping crash leftovers. release deletes bundle+origin refs and the lease.
+// Holds the clone staging flock until release (see BeginPerRunRef / #435).
 func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error) {
+	unlock, err := c.acquireStagingLock()
+	if err != nil {
+		return "", nil, err
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			unlock()
+		}
+	}()
 	c.sweepStaleRefNS(armatureTmpNS, leaseKindArmatureTmp)
 	nonce, err := randomNonce()
 	if err != nil {
@@ -86,7 +151,9 @@ func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error)
 		_ = c.DeleteRef(prefix + "/bundle")               //nolint:errcheck // best-effort
 		_ = c.DeleteRef(prefix + "/origin")               //nolint:errcheck // best-effort
 		_ = c.removeRunLease(leaseKindArmatureTmp, nonce) //nolint:errcheck // best-effort
+		unlock()
 	}
+	ok = true
 	return prefix, release, nil
 }
 

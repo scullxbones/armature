@@ -1926,10 +1926,13 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 // RestoreEvidence compares the published ops tip to a bundle tip inside the
 // user's clone. Network probes (ls-remote + origin fetch) run with -C <clone>
 // so git resolves scopes, worktree config, includes, insteadOf, and helpers
-// natively. Isolation is per-call refs
-// under refs/armature-tmp/<run-id>/ (never refs/remotes/origin/* or user
-// branches). Staging uses a live-pid lease; crash leftovers are swept at the
-// next run start without touching concurrent live nonces.
+// natively. Isolation is per-call refs under refs/armature-tmp/<run-id>/
+// (never refs/remotes/origin/* or user branches). Staging uses a live-pid
+// lease plus the clone staging flock (held until release) so a peer cannot
+// delete its temp refs while this fetch negotiates against them — unique
+// nonces alone still race with `fatal: bad object refs/armature-tmp/…`
+// (issue #435). Crash leftovers are swept at the next run start without
+// touching concurrent live nonces.
 //
 // Origin absence is structural: ls-remote reports no exact refname match →
 // missing (git patterns can suffix-match peers like
