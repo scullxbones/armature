@@ -101,11 +101,11 @@ func (c *Client) BeginPerRunRef(ns string) (ref string, release func(), err erro
 			return
 		}
 		released = true
-		_ = c.withStagingLock(func() error {
+		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort release
 			_ = c.DeleteRef(ref) //nolint:errcheck // best-effort
 			return nil
 		})
-		_ = c.removeRunLease(leaseKindForRefNS(ns), nonce)
+		_ = c.removeRunLease(leaseKindForRefNS(ns), nonce) //nolint:errcheck // best-effort
 	}
 	return ref, release, nil
 }
@@ -129,7 +129,7 @@ func (c *Client) beginArmatureTmpNS() (prefix string, release func(), err error)
 			return
 		}
 		released = true
-		_ = c.withStagingLock(func() error {
+		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort release
 			_ = c.DeleteRef(prefix + "/bundle") //nolint:errcheck // best-effort
 			_ = c.DeleteRef(prefix + "/origin") //nolint:errcheck // best-effort
 			return nil
@@ -365,7 +365,7 @@ func (c *Client) sweepStaleRefNS(ns, kind string) {
 		prefix := ns + "/" + nonce
 		// Delete under the staging flock so a concurrent clone-local fetch
 		// cannot negotiate against a ref that vanishes mid-fetch (#435).
-		_ = c.withStagingLock(func() error {
+		_ = c.withStagingLock(func() error { //nolint:errcheck // best-effort sweep
 			if c.leaseIsLive(kind, nonce) {
 				return nil
 			}
