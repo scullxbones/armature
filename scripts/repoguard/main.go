@@ -55,13 +55,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 			failed = true
 		}
 	}
+	allows := allowlist()
 	runOne("source-manifest", checkSourceManifest)
 	runOne("test-executables", checkTestExecutables)
-	runOne("git-hermetic", checkGitHermetic)
+	runOne("git-hermetic", func(root string, stdout, stderr io.Writer) error {
+		return checkGitHermetic(root, allows, stdout, stderr)
+	})
 	runOne("gochecknoglobals-probe", checkGochecknoglobalsProbe)
 	runOne("golangci-in-tests", checkGolangciInTests)
-	runOne("object-id", checkObjectID)
-	runOne("residual-trls", checkResidualTrls)
+	runOne("object-id", func(root string, stdout, stderr io.Writer) error {
+		return checkObjectID(root, allows, stdout, stderr)
+	})
+	runOne("residual-trls", func(root string, stdout, stderr io.Writer) error {
+		return checkResidualTrls(root, allows, stdout, stderr)
+	})
 	runOne("git-network", checkGitNetwork)
 	known := check == "all" ||
 		check == "source-manifest" ||
