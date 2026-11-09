@@ -66,8 +66,8 @@ func textSkipDir(name string) bool {
 	return false
 }
 
-func checkObjectID(root string, stdout, stderr io.Writer) error {
-	if err := validateAllowlist(); err != nil {
+func checkObjectID(root string, allows []allowEntry, stdout, stderr io.Writer) error {
+	if err := validateAllowEntries(allows); err != nil {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
@@ -75,7 +75,7 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "FAIL: %v\n", err)
 		return err
 	}
-	idx := newAllowIndex(allowlist())
+	idx := newAllowIndex(allows)
 	var hits []string
 	files, fset, err := parseGoTree(root, false)
 	if err != nil {
@@ -140,11 +140,9 @@ func checkObjectID(root string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stderr, objectIDFix)
 		return fmt.Errorf("object-id hex-length knowledge outside gitoid")
 	}
-	if isArmatureRoot(root) {
-		if err := idx.unused(allowObjectID); err != nil {
-			fmt.Fprintf(stderr, "FAIL: %v\n", err)
-			return err
-		}
+	if err := idx.unused(allowObjectID); err != nil {
+		fmt.Fprintf(stderr, "FAIL: %v\n", err)
+		return err
 	}
 	fmt.Fprintln(stdout, "OK: object-id patterns accept SHA-1 (40) and SHA-256 (64) via gitoid")
 	return nil
