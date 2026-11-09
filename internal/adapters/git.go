@@ -852,19 +852,24 @@ func (c *Client) FetchBranchToRef(branch, dstRef string) error {
 	if err != nil {
 		return fmt.Errorf("fetch branch to ref: %w", err)
 	}
-	spec := "+refs/heads/" + branch + ":" + dstRef
-	cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
-	defer cancel()
-	out, err := cmd.CombinedOutput()
-	out, err = networkResult(ctx, out, err)
-	if err != nil {
-		wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", branch, remoteURL, err, out)
-		if remoteRefMissingText(string(out)) || remoteRefMissingText(err.Error()) {
-			return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
+	// Serialize with staging-ref deletes (issue #435): concurrent fetch into
+	// one clone negotiates against peer staging refs that must not vanish
+	// mid-fetch.
+	return c.withStagingLock(func() error {
+		spec := "+refs/heads/" + branch + ":" + dstRef
+		cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", spec)
+		defer cancel()
+		out, fetchErr := cmd.CombinedOutput()
+		out, fetchErr = networkResult(ctx, out, fetchErr)
+		if fetchErr != nil {
+			wrapped := fmt.Errorf("git fetch origin %s (first-url %s): %w\n%s", branch, remoteURL, fetchErr, out)
+			if remoteRefMissingText(string(out)) || remoteRefMissingText(fetchErr.Error()) {
+				return fmt.Errorf("%w: %v", ErrRemoteRefMissing, wrapped)
+			}
+			return wrapped
 		}
-		return wrapped
-	}
-	return nil
+		return nil
+	})
 }
 
 // withPublishDeadline returns a client whose networkCmd budget is the publish
@@ -1928,9 +1933,9 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 // so git resolves scopes, worktree config, includes, insteadOf, and helpers
 // natively. Isolation is per-call refs under refs/armature-tmp/<run-id>/
 // (never refs/remotes/origin/* or user branches). Staging uses a live-pid
-// lease plus the clone staging flock (held until release) so a peer cannot
-// delete its temp refs while this fetch negotiates against them — unique
-// nonces alone still race with `fatal: bad object refs/armature-tmp/…`
+// lease; clone-local fetches and staging-ref deletes share the staging flock
+// so a peer cannot delete temp refs while this fetch negotiates against them —
+// unique nonces alone still race with `fatal: bad object refs/armature-tmp/…`
 // (issue #435). Crash leftovers are swept at the next run start without
 // touching concurrent live nonces.
 //
@@ -1973,38 +1978,51 @@ func (c *Client) RestoreEvidence(
 	if absErr != nil {
 		return false, "", "", false, false, fmt.Errorf("restore evidence: abs bundle: %w", absErr)
 	}
-	bundleSpec := "+" + advertiseRef + ":" + bundleTmp
-	// gitnetallow: restore-local-bundle-fetch absolute bundle file into refs/armature-tmp; origin fetch stays on networkCmd
-	if out, fetchErr := c.cmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
-	}
-	recovered, err = c.ResolveRevision(bundleTmp)
-	if err != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: %w", err)
-	}
-	if recovered == "" {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve recovered tip: empty SHA")
+
+	// Hold the staging flock across both clone-local fetches + tip resolves so
+	// peer release (delete) cannot interleave mid-negotiation (issue #435).
+	lockErr := c.withStagingLock(func() error {
+		bundleSpec := "+" + advertiseRef + ":" + bundleTmp
+		// gitnetallow: restore-local-bundle-fetch absolute bundle file into refs/armature-tmp; origin fetch stays on networkCmd
+		if out, fetchErr := c.cmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", absBundle, bundleSpec).CombinedOutput(); fetchErr != nil {
+			return fmt.Errorf("restore evidence: load bundle: %w\n%s", fetchErr, out)
+		}
+		var resolveErr error
+		recovered, resolveErr = c.ResolveRevision(bundleTmp)
+		if resolveErr != nil {
+			return fmt.Errorf("restore evidence: resolve recovered tip: %w", resolveErr)
+		}
+		if recovered == "" {
+			return fmt.Errorf("restore evidence: resolve recovered tip: empty SHA")
+		}
+		if !exists {
+			return nil
+		}
+
+		originSpec := "+" + remoteRef + ":" + originTmp
+		cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
+		defer cancel()
+		out, fetchErr := cmd.CombinedOutput()
+		out, fetchErr = networkResult(ctx, out, fetchErr)
+		if fetchErr != nil {
+			return fmt.Errorf(
+				"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
+				remoteRef, remoteURL, fetchErr, out)
+		}
+		originTip, resolveErr = c.ResolveRevision(originTmp)
+		if resolveErr != nil {
+			return fmt.Errorf("restore evidence: resolve origin tip: %w", resolveErr)
+		}
+		if originTip == "" {
+			return fmt.Errorf("restore evidence: resolve origin tip: empty SHA")
+		}
+		return nil
+	})
+	if lockErr != nil {
+		return false, "", "", false, false, lockErr
 	}
 	if !exists {
 		return true, "", recovered, false, false, nil
-	}
-
-	originSpec := "+" + remoteRef + ":" + originTmp
-	cmd, ctx, cancel := c.networkCmd("fetch", "--no-tags", "--no-write-fetch-head", "--refmap=", "origin", originSpec)
-	defer cancel()
-	out, fetchErr := cmd.CombinedOutput()
-	out, fetchErr = networkResult(ctx, out, fetchErr)
-	if fetchErr != nil {
-		return false, "", "", false, false, fmt.Errorf(
-			"restore evidence: fetch origin %s (first-url %s) failed (fail-closed): %w\n%s",
-			remoteRef, remoteURL, fetchErr, out)
-	}
-	originTip, err = c.ResolveRevision(originTmp)
-	if err != nil {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: %w", err)
-	}
-	if originTip == "" {
-		return false, "", "", false, false, fmt.Errorf("restore evidence: resolve origin tip: empty SHA")
 	}
 
 	originAncOfRecovered, err = c.IsAncestor(originTip, recovered)
