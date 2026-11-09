@@ -1,6 +1,6 @@
 # Armature Constitution
 
-**Version:** 1 — ratified by ADR 0009. Amendments require a new ADR; wording-only fixes to an entry's phrasing (not its meaning) don't. See `docs/adr/0009-ratify-the-armature-constitution.md`.
+**Version:** 2 — ratified by ADR 0009; T1 amended by ADR 0024. Amendments require a new ADR; wording-only fixes to an entry's phrasing (not its meaning) don't. See `docs/adr/0009-ratify-the-armature-constitution.md` and `docs/adr/0024-arm-mcp-stdio-session-is-not-t1.md`.
 
 Target length: ~2KB. This is a guideline, not a gate — favor conciseness over grammatical polish when the two trade off.
 
@@ -30,6 +30,6 @@ Armature is not:
 
 A proposal that does any of the following dies on contact — cite the tripwire, don't re-argue it:
 
-- **T1** — needs a long-running process.
+- **T1** — needs a long-running process. One exemption: `arm mcp`, a stdio session held by the one client that started it. It opens no socket, acts only on that client's requests, serves each request as one `arm` command inside itself, and exits when that client closes stdin or signals.
 - **T2** — rewrites history.
 - **T3** — syncs bidirectionally with a mutable remote.

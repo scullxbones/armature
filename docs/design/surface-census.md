@@ -208,6 +208,7 @@ All commands are defined in cmd/armature/main.go (newRootCmd function, lines 19-
 | `context-history` | main.go:263, context_history.go | Scan git history for context | **kept-evidence** | Diagnostic. Helps find stable reference commits. |
 | `context-report` | main.go, context_report.go | Price fixture-measured main-path CLI payloads by bytes and estimated tokens | **kept-evidence** | Diagnostic meter. json/agent stdout for list, ready, show, render-context, and review (list/ready/show are compact AOC envelopes); plus a fixture render-context bundle. Embedded testdata. bytes/4 matches token_budget. |
 | `harness-hook` | main.go:267, harness_hook.go | Harness hook runner (internal) | **kept-evidence** | Internal. Runs on pre-commit and post-merge. |
+| `mcp` | main.go, mcp.go | MCP stdio session (internal) | **kept-evidence** | Hidden Protocol Output. One tool `arm`. ADR 0024 / MCPSTDIO-S1. |
 | `review` | main.go:271, review.go | Manage conformance reviews for issues | **kept-evidence** | Review infrastructure. |
 | `review prepare` | review.go:33 | Prepare a review bundle for an issue | **kept-evidence** | Subcommand of `review`. Flags: --issue, --base, --head, --output. |
 | `review schema` | review.go | Emit embedded ConformanceAssessment JSON Schema | **kept-evidence** | Subcommand of `review`. Flags: --output. Ships schema so user repos without docs/schemas can author assessments. |
@@ -347,7 +348,7 @@ Local to the root command (`newRootCmd` `Flags()`, not `PersistentFlags()`). The
 | `--check` | worker-init | bool | Verify existing worker ID without modifying | **kept-evidence** |
 | `--id` | worker-init | string | Worktree-scoped worker id to write | **kept-evidence** |
 | `--reuse` | worker-init | bool | Allow --id that already has a published log | **kept-evidence** |
-| `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. | **kept-evidence** |
+| `--repo` | worker-init, validate doc-examples | string | Command-local repository path override (worker_init.go:42, validate_doc_examples.go:24). bootstrap, doctor, harness-hook, mcp, and push-ops read the inherited root persistent `--repo` flag (see Universal/Root Flags above) rather than defining their own. mcp uses it as one `os.Chdir` before Serve. | **kept-evidence** |
 | `--verbose` | doctor | bool | Emit file paths and uncited issue IDs | **kept-evidence** |
 | `--fix` | doctor | bool | Reconcile expired claims (claimed->open, in-progress->blocked) by appending ops; see [recovery-state-machine.md](./recovery-state-machine.md) | **kept-evidence** |
 | `--log` | doctor quarantine | string | Ops log basename to repair | **kept-evidence** |
@@ -428,7 +429,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - Grouping constructors with no `Run`/`RunE` (`dag`, `sources`, `worktree`, `hook`, `gate`) are not modes.
 - A non-root command that has visible (non-hidden) subcommands is group help, not a mode (`review`).
 - Bare `arm` (root) is a mode even though it has children.
-- Hidden leaves remain (`harness-hook`, `validate doc-examples`). Protocol Output cannot hide by `Hidden`.
+- Hidden leaves remain (`harness-hook`, `mcp`, `validate doc-examples`). Protocol Output cannot hide by `Hidden`.
 - `--field` is a projection (N9.6). It is never a selecting flag and never a row in this table.
 
 **Selecting flag** is `Mode.Selector`: the cobra flag name without dashes. An empty cell is the default enumerated invocation (all artifact-selecting flags unset). `schema` means `--schema` is set. `output` on `review prepare` means `--output` is set, which is the agent-facing result mode; the empty selecting-flag row is the Artifact Output bundle on stdout.
@@ -460,7 +461,8 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 | `doctor` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `doctor quarantine` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | Hidden leaf. N9 default: agent-facing envelope. |
 | `gate run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
-| `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Sole Protocol Output. `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
+| `harness-hook` |  | Protocol Output | host harness stdin/stdout protocol |  | **kept-evidence** | Protocol Output (with `mcp`). `MarkProtocolOutput` is the exemption, not the Use string. Hidden leaf still enumerated. |
+| `mcp` |  | Protocol Output | host MCP newline JSON-RPC on stdio |  | **kept-evidence** | Protocol Output (ADR 0024). Hidden. One tool `arm`. `MarkProtocolOutput` is the exemption. |
 | `heartbeat` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `hook run` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
 | `import` |  | agent-facing | `{count, <payload>[], help[]}` |  | **kept-evidence** | N9 default: agent-facing envelope. `--field` is a projection, not a mode. |
@@ -518,7 +520,7 @@ Enumeration is the same walk as `internal/output.EnumerateModes` (AOC-S3-T3):
 - **Op Types**: 20 (all kept-evidence)
 - **CLI Commands**: 59 (all kept-evidence, 4 groups)
 - **Command Flags**: ~100+ (all kept-evidence)
-- **Command output modes**: 68 (63 agent-facing, 4 Artifact Output, 1 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
+- **Command output modes**: 69 (63 agent-facing, 4 Artifact Output, 2 Protocol Output). Grouping commands are not modes. `--field` is not a mode.
 - **Parked Surfaces**: 2 (`assignee` and `preferred_model` fields — see Issue Fields)
 - **Estimated Complexity Levels**: 2 enumerated (`small`, `large`, interpreted by validate.go), plus free-form; no current producer (CLI flag or decompose field) sets this field
 

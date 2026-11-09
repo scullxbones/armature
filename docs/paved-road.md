@@ -133,6 +133,7 @@ Zero unclassified leaf commands is a gate.
 - `arm import` — Bulk create from CSV/JSON. Prefer dag apply from a plan.
 - `arm log` — Ops audit log. Use when diagnosing, not when dispatching.
 - `arm materialize` — Replay ops to rebuild state. Recovery, not the daily loop.
+- `arm mcp` — Hidden MCP stdio session. Protocol Output; one tool arm.
 - `arm merged` — Promote one done leaf when delivery is on the target. Prefer sync after the PR lands.
 - `arm ops-backup` — Durable tip snapshot/restore-plan for disaster recovery. Not the daily dispatch loop.
 - `arm ops-backup restore-plan` — Print I2 disposition only; diverge is aside+_armature-recovered.

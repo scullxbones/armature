@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/scullxbones/armature/internal/adapters"
@@ -107,6 +108,7 @@ type Invocation struct {
 	Args    []string
 	Dir     string
 	Env     Env
+	Stdin   io.Reader
 	Stdout  io.Writer
 	Stderr  io.Writer
 	TTY     bool
@@ -149,8 +151,11 @@ func normalizeInvocation(inv Invocation) Invocation {
 	if inv.Env == nil {
 		inv.Env = OSEnv()
 	}
+	if inv.Stdin == nil {
+		inv.Stdin = strings.NewReader("")
+	}
 	if inv.Stdout == nil {
-		inv.Stdout = os.Stdout
+		inv.Stdout = io.Discard
 	}
 	if inv.Stderr == nil {
 		inv.Stderr = os.Stderr
@@ -166,6 +171,7 @@ func OSInvocation(args []string, stdout, stderr io.Writer) Invocation {
 	return Invocation{
 		Args:    args,
 		Env:     OSEnv(),
+		Stdin:   os.Stdin,
 		Stdout:  stdout,
 		Stderr:  stderr,
 		TTY:     tui.StdoutIsTerminal(),
@@ -307,6 +313,7 @@ func commandFor(inv Invocation) *cobra.Command {
 	sess := newSession(inv)
 	root := newRootCmd()
 	attachSession(root, sess)
+	root.SetIn(inv.Stdin)
 	root.SetOut(inv.Stdout)
 	root.SetErr(inv.Stderr)
 	return root
