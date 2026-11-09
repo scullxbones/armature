@@ -110,8 +110,8 @@ func installOriginFetchGate(t *testing.T) (wrapperDir, enteredFIFO, continueFIFO
 	gateDir := t.TempDir()
 	enteredFIFO = filepath.Join(gateDir, "entered")
 	continueFIFO = filepath.Join(gateDir, "continue")
-	require.NoError(t, exec.Command("mkfifo", enteredFIFO).Run())  //nolint:gosec // test FIFO path under TempDir
-	require.NoError(t, exec.Command("mkfifo", continueFIFO).Run()) //nolint:gosec // test FIFO path under TempDir
+	require.NoError(t, exec.CommandContext(t.Context(), "mkfifo", enteredFIFO).Run())
+	require.NoError(t, exec.CommandContext(t.Context(), "mkfifo", continueFIFO).Run())
 
 	wrapperDir = t.TempDir()
 	script := fmt.Sprintf(`#!/bin/sh
@@ -179,7 +179,7 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 
 	enteredDone := make(chan error, 1)
 	go func() {
-		f, err := os.Open(enteredFIFO) //nolint:gosec // test FIFO under TempDir
+		f, err := os.Open(enteredFIFO) // path under t.TempDir gate FIFOs
 		if err != nil {
 			enteredDone <- err
 			return
@@ -218,7 +218,7 @@ func TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435(t *testing
 	}
 
 	close(allowFetch)
-	cont, err := os.OpenFile(continueFIFO, os.O_WRONLY, 0) //nolint:gosec // test FIFO
+	cont, err := os.OpenFile(continueFIFO, os.O_WRONLY, 0) // path under t.TempDir gate FIFOs
 	require.NoError(t, err)
 	_, err = cont.Write([]byte("go\n"))
 	require.NoError(t, err)
