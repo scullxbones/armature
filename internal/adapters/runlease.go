@@ -46,9 +46,10 @@ const (
 )
 
 // acquireStagingLock takes a blocking flock on
-// <common-git-dir>/armature-run-leases/staging.lock. Hold from staging-ref
-// allocation through fetch + delete so peer releases cannot interleave with
-// another fetch's negotiation. unlock is idempotent.
+// <common-git-dir>/armature-run-leases/staging.lock. Callers hold it only
+// around clone-local staging fetch and staging-ref delete (not BeginPerRunRef
+// allocation) so peer deletes cannot interleave with another fetch's
+// negotiation. unlock is idempotent.
 func (c *Client) acquireStagingLock() (unlock func(), err error) {
 	common, err := c.CommonGitDir()
 	if err != nil {
