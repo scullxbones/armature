@@ -105,7 +105,9 @@ func TestStagingLock_SerializesFetchAgainstPeerRelease_REQ_435(t *testing.T) {
 	require.NoError(t, fetchErr)
 	assert.False(t, peerReleasedDuringFetch.Load(),
 		"peer must not delete staging refs while victim FetchBranchToRef holds the flock")
-	assert.Equal(t, tip, runGitOutput(t, repo, "rev-parse", victimRef))
+	got, resolveErr := gated.ResolveRevision(victimRef)
+	require.NoError(t, resolveErr)
+	assert.Equal(t, tip, got)
 }
 
 // TestRestoreEvidence_StagingLockBlocksPeerReleaseMidFetch_REQ_435 is the
