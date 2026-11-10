@@ -946,11 +946,7 @@ func (c *Client) ListFilesAtCommit(sha string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git ls-tree %s: %w", sha, err)
 	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return []string{}, nil
-	}
-	return strings.Split(raw, "\n"), nil
+	return outputLines(out), nil
 }
 
 func (c *Client) ShowFileAtCommit(sha, path string) ([]byte, error) {
@@ -995,11 +991,10 @@ func (c *Client) gitLogEntries(errPrefix string, args ...string) ([]LogEntry, er
 // `git log --format=%H%x00%s%x00%ae%x00%ai%x00%P` output. The trailing %P
 // field is space-separated parent SHAs and may be empty (root commit).
 func parseLogOutput(out []byte) []LogEntry {
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
+	lines := outputLines(out)
+	if len(lines) == 0 {
 		return []LogEntry{}
 	}
-	lines := strings.Split(raw, "\n")
 	entries := make([]LogEntry, 0, len(lines))
 	for _, line := range lines {
 		parts := strings.Split(line, "\x00")
@@ -1290,6 +1285,14 @@ func splitNUL(out []byte) []string {
 	return strings.Split(raw, "\x00")
 }
 
+func outputLines(out []byte) []string {
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return []string{}
+	}
+	return strings.Split(raw, "\n")
+}
+
 // RevListReverse returns commit SHAs reachable from rev, oldest first.
 func (c *Client) RevListReverse(rev string) ([]string, error) {
 	cmd := c.cmd("rev-list", "--reverse", rev)
@@ -1297,11 +1300,7 @@ func (c *Client) RevListReverse(rev string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git rev-list --reverse %s: %w", rev, err)
 	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return []string{}, nil
-	}
-	return strings.Split(raw, "\n"), nil
+	return outputLines(out), nil
 }
 
 func (c *Client) CommitterUnix(sha string) (int64, error) {
@@ -1331,11 +1330,10 @@ func (c *Client) CommitterUnixRange(rangeSpec string) ([]int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git log committer range %s: %w", rangeSpec, err)
 	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
+	lines := outputLines(out)
+	if len(lines) == 0 {
 		return []int64{}, nil
 	}
-	lines := strings.Split(raw, "\n")
 	outUnix := make([]int64, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1724,11 +1722,7 @@ func (c *Client) FirstParentAfter(base, head string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git rev-list --first-parent %s..%s: %w", base, head, err)
 	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return []string{}, nil
-	}
-	return strings.Split(raw, "\n"), nil
+	return outputLines(out), nil
 }
 
 // DiffTwoDot is path-literal `git diff --no-renames base tip` (two-dot combined range).
@@ -1804,6 +1798,19 @@ func (c *Client) TreeEntry(rev, path string) (mode, oid string, err error) {
 	return fields[0], fields[2], nil
 }
 
+func (c *Client) initTempBare(errPrefix string) (bare string, bareClient *Client, release func(), err error) {
+	workDir, releaseWork, err := c.beginArmatureWorkDir()
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("%s: temp bare: %w", errPrefix, err)
+	}
+	bare = filepath.Join(workDir, "bare.git")
+	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
+		releaseWork()
+		return "", nil, nil, fmt.Errorf("git init --bare: %w\n%s", initErr, out)
+	}
+	return bare, New(bare).WithEnviron(c.environ), releaseWork, nil
+}
+
 // BundleCreateAdvertised writes a git bundle at outputPath that advertises
 // advertiseRef at tipSHA. Objects are pushed by tip SHA into a throwaway bare
 // repo so the working repository never grows a shared staging ref (concurrent
@@ -1823,15 +1830,11 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 		return fmt.Errorf("bundle create: mkdir: %w", err)
 	}
 
-	workDir, releaseWork, err := c.beginArmatureWorkDir()
+	bare, bareClient, releaseBare, err := c.initTempBare("bundle create")
 	if err != nil {
-		return fmt.Errorf("bundle create: temp bare: %w", err)
+		return err
 	}
-	defer releaseWork()
-	bare := filepath.Join(workDir, "bare.git")
-	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
-		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
-	}
+	defer releaseBare()
 
 	// Push tip SHA directly — no lock-free fixed refs/bundle-backup/_armature.
 	spec := tipSHA + ":" + advertiseRef
@@ -1840,7 +1843,6 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 		return fmt.Errorf("git push bare %s: %w\n%s", spec, pushErr, out)
 	}
 
-	bareClient := New(bare).WithEnviron(c.environ)
 	if out, bundleErr := bareClient.cmd("bundle", "create", absOut, advertiseRef).CombinedOutput(); bundleErr != nil {
 		return fmt.Errorf("git bundle create: %w\n%s", bundleErr, out)
 	}
@@ -1862,7 +1864,7 @@ func (c *Client) BundleListHeads(bundlePath string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git bundle list-heads: %w\n%s", err, out)
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	lines := outputLines(out)
 	refs := make([]string, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1907,16 +1909,11 @@ func (c *Client) BundleVerifyRestorable(bundlePath, wantRef string) error {
 	if err != nil {
 		return fmt.Errorf("bundle verify: abs: %w", err)
 	}
-	workDir, releaseWork, err := c.beginArmatureWorkDir()
+	_, bareClient, releaseBare, err := c.initTempBare("bundle verify")
 	if err != nil {
-		return fmt.Errorf("bundle verify: temp bare: %w", err)
+		return err
 	}
-	defer releaseWork()
-	bare := filepath.Join(workDir, "bare.git")
-	if out, initErr := c.cmd("init", "--bare", bare).CombinedOutput(); initErr != nil {
-		return fmt.Errorf("git init --bare: %w\n%s", initErr, out)
-	}
-	bareClient := New(bare).WithEnviron(c.environ)
+	defer releaseBare()
 	spec := "+" + wantRef + ":" + wantRef
 	// gitnetallow: bundle-verify-local-fetch absolute bundle file into a throwaway local bare, not a remote URL
 	if out, fetchErr := bareClient.cmd("fetch", "--no-tags", abs, spec).CombinedOutput(); fetchErr != nil {
