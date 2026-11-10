@@ -1318,8 +1318,7 @@ func (c *Client) CommitterUnix(sha string) (int64, error) {
 
 // CommitterUnixRange returns committer unix timestamps for every commit in
 // rangeSpec (e.g. "origin/_armature..HEAD") in one git process. Empty ranges
-// yield an empty slice, not an error. Order matches `git log` (newest first);
-// callers that need a minimum should scan the slice.
+// yield an empty slice, not an error. Order matches `git log` (newest first).
 func (c *Client) CommitterUnixRange(rangeSpec string) ([]int64, error) {
 	rangeSpec = strings.TrimSpace(rangeSpec)
 	if rangeSpec == "" {
@@ -1836,7 +1835,6 @@ func (c *Client) BundleCreateAdvertised(outputPath, tipSHA, advertiseRef string)
 	}
 	defer releaseBare()
 
-	// Push tip SHA directly — no lock-free fixed refs/bundle-backup/_armature.
 	spec := tipSHA + ":" + advertiseRef
 	// gitnetallow: bundle-create-local-bare-push local bare path under armature-tmp-work, not a named remote
 	if out, pushErr := c.cmd("push", bare, spec).CombinedOutput(); pushErr != nil {
