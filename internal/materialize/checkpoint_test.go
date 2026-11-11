@@ -18,7 +18,7 @@ func TestCheckpointRoundTrip(t *testing.T) {
 		ByteOffsets:   map[string]int64{"worker-a1.log": 1024, "worker-b2.log": 512},
 	}
 
-	require.NoError(t, WriteCheckpoint(path, cp))
+	require.NoError(t, writeCheckpoint(path, cp))
 
 	loaded, err := LoadCheckpoint(path)
 	require.NoError(t, err)

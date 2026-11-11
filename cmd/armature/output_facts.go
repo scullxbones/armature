@@ -49,42 +49,20 @@ func outputIssueFacts(issue *materialize.Issue) output.IssueFacts {
 }
 
 func hostRefFacts(refs []materialize.HostRef) []output.HostRefFact {
-	live := map[string]materialize.HostRef{}
-	order := make([]string, 0, len(refs))
-	for _, ref := range refs {
-		if ref.Withdrawn {
-			delete(live, ref.URL)
-			order = dropHostURL(order, ref.URL)
-			continue
-		}
-		order = dropHostURL(order, ref.URL)
-		order = append(order, ref.URL)
-		live[ref.URL] = ref
-	}
-	if len(order) == 0 {
+	live := materialize.LiveHostRefs(refs)
+	if len(live) == 0 {
 		return nil
 	}
-	currentURL := order[len(order)-1]
-	out := make([]output.HostRefFact, 0, len(order))
-	for _, url := range order {
-		ref := live[url]
+	currentURL := live[len(live)-1].URL
+	out := make([]output.HostRefFact, 0, len(live))
+	for _, ref := range live {
 		out = append(out, output.HostRefFact{
 			URL:     ref.URL,
 			Role:    ref.Role,
-			Current: url == currentURL,
+			Current: ref.URL == currentURL,
 		})
 	}
 	return out
-}
-
-func dropHostURL(order []string, url string) []string {
-	next := make([]string, 0, len(order))
-	for _, item := range order {
-		if item != url {
-			next = append(next, item)
-		}
-	}
-	return next
 }
 
 func formatHostRefLines(refs []materialize.HostRef) []string {

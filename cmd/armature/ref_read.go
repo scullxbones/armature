@@ -58,33 +58,22 @@ func newRefReadCmd() *cobra.Command {
 }
 
 func resolveLiveHostRefURL(refs []materialize.HostRef, rawURL string) (string, error) {
-	live := liveHostRefs(refs)
+	live := materialize.LiveHostRefs(refs)
 	if rawURL == "" {
-		cur, ok := materialize.CurrentHostRef(refs)
-		if !ok {
+		if len(live) == 0 {
 			return "", fmt.Errorf("issue has no current host ref")
 		}
-		return cur.URL, nil
+		return live[len(live)-1].URL, nil
 	}
 	parsed, err := externalref.ParseGitHubIssueURL(rawURL)
 	if err != nil {
 		return "", err
 	}
 	canonical := parsed.URL()
-	if _, ok := live[canonical]; !ok {
-		return "", fmt.Errorf("host ref %q is not a live name on this issue", canonical)
-	}
-	return canonical, nil
-}
-
-func liveHostRefs(refs []materialize.HostRef) map[string]materialize.HostRef {
-	live := map[string]materialize.HostRef{}
-	for _, ref := range refs {
-		if ref.Withdrawn {
-			delete(live, ref.URL)
-			continue
+	for _, ref := range live {
+		if ref.URL == canonical {
+			return canonical, nil
 		}
-		live[ref.URL] = ref
 	}
-	return live
+	return "", fmt.Errorf("host ref %q is not a live name on this issue", canonical)
 }

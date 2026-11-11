@@ -95,16 +95,12 @@ func hostRefCommandIsNoOp(refs []materialize.HostRef, url, role string, withdraw
 }
 
 func hostURLIsLive(refs []materialize.HostRef, url string) bool {
-	live := map[string]struct{}{}
-	for _, ref := range refs {
-		if ref.Withdrawn {
-			delete(live, ref.URL)
-			continue
+	for _, ref := range materialize.LiveHostRefs(refs) {
+		if ref.URL == url {
+			return true
 		}
-		live[ref.URL] = struct{}{}
 	}
-	_, ok := live[url]
-	return ok
+	return false
 }
 
 func writeRefNoOp(cmd *cobra.Command, issueID, url, role string, withdraw bool) {

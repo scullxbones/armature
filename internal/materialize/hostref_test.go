@@ -167,7 +167,7 @@ func TestApplyExternalRefWithdrawAndReadd_REQ_HOSTREF_S1_T2(t *testing.T) {
 
 func TestApplyExternalRefMissingTargetIgnored_REQ_HOSTREF_S1_T2(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, MissingTargetIgnore, opHandlers()[ops.OpExternalRef].missingTarget)
+	assert.Equal(t, onMissingIgnore, opHandlers()[ops.OpExternalRef].missingTarget)
 	err := NewState().ApplyOp(ops.Op{
 		Type: ops.OpExternalRef, TargetID: "missing-01", Timestamp: 200, WorkerID: "w1",
 		Payload: ops.Payload{ExternalRef: hostURLA},
