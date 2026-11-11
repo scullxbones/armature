@@ -4,13 +4,6 @@ import (
 	"github.com/scullxbones/armature/internal/adapters"
 )
 
-// currentStateVersion is the schema version of the issue snapshots this build
-// writes. Bump it whenever materialized state gains a field that incremental
-// replay depends on but cannot reconstruct from a snapshot written by another
-// build — a checkpoint whose version differs from this one forces a cold
-// replay instead of trusting the cached issues (see runFullPipeline). The
-// check is a mismatch, not a lower-than: a snapshot from a newer build is
-// equally untrustworthy, since this decoder drops the fields it does not know.
 const currentStateVersion = 2
 
 type Checkpoint struct {
@@ -22,9 +15,6 @@ type Checkpoint struct {
 	ByteOffsets  map[string]int64 `json:"byte_offsets"`
 }
 
-// writeCheckpoint stamps the checkpoint with currentStateVersion. Stamping here
-// rather than at each call site is what keeps the version honest: it always
-// describes the build that actually wrote the accompanying snapshots.
 func writeCheckpoint(path string, cp Checkpoint) error {
 	cp.StateVersion = currentStateVersion
 	return adapters.WriteCheckpointJSON(path, cp)
