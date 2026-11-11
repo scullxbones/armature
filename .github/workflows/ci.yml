@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.10"
+  GO_VERSION: "1.26.11"
   # Exact floor exercised by check-git-2-34 (source tarball + sha256).
   GIT_MIN_VERSION: "2.34.0"
   GIT_MIN_TARBALL_SHA256: "0ce6222bfd31938b29360150286b51c77c643fa97740b1d35b6d1ceef8b0ecd7"
