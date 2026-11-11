@@ -55,7 +55,7 @@ func TestMaterialize_IncrementalReplayNormalizesLoadedIssues(t *testing.T) {
 		"context_files": ["docs/design.md", ""]
 	}`)
 	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "task-01.json"), legacyIssue, 0644))
-	require.NoError(t, WriteCheckpoint(filepath.Join(stateDir, "checkpoint.json"), Checkpoint{
+	require.NoError(t, writeCheckpoint(filepath.Join(stateDir, "checkpoint.json"), Checkpoint{
 		ByteOffsets: map[string]int64{"worker-1.log": 123},
 	}))
 
@@ -692,7 +692,7 @@ func TestIncremental_ReplayRepairsStaleIssueState(t *testing.T) {
 	require.NoError(t, WriteIssue(issuesDir, staleIssue))
 
 	checkpointPath := filepath.Join(stateDir, "checkpoint.json")
-	require.NoError(t, WriteCheckpoint(checkpointPath, Checkpoint{
+	require.NoError(t, writeCheckpoint(checkpointPath, Checkpoint{
 		ByteOffsets: map[string]int64{"worker-a.log": 128},
 	}))
 
@@ -1062,7 +1062,7 @@ func TestMaterialize_PreVersionCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *test
 
 	cp, err := LoadCheckpoint(filepath.Join(stateDir, "checkpoint.json"))
 	require.NoError(t, err)
-	assert.Equal(t, CurrentStateVersion, cp.StateVersion,
+	assert.Equal(t, currentStateVersion, cp.StateVersion,
 		"the rewritten checkpoint must carry the current state version")
 }
 
@@ -1079,7 +1079,7 @@ func TestMaterialize_NewerCheckpointForcesFullReplay_REQ_TOPTIER_B1(t *testing.T
 		`{"id":"task-01","type":"task","status":"merged","title":"Task A","parent":"story-01"}`), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "checkpoint.json"), []byte(
 		fmt.Sprintf(`{"last_materialized_commit":"","state_version":%d,"byte_offsets":{"w1.log":128}}`,
-			CurrentStateVersion+1)), 0644))
+			currentStateVersion+1)), 0644))
 
 	allOps := []ops.Op{
 		{Type: ops.OpCreate, TargetID: "story-01", Timestamp: 100, WorkerID: "w1",
@@ -1112,7 +1112,7 @@ func TestMaterialize_FullReplayPurgesOrphanedSnapshots_REQ_TOPTIER_B1(t *testing
 		`{"id":"task-99","type":"task","status":"open","title":"Ghost"}`), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "checkpoint.json"), []byte(
 		fmt.Sprintf(`{"last_materialized_commit":"","state_version":%d,"byte_offsets":{"w1.log":128}}`,
-			CurrentStateVersion+1)), 0644))
+			currentStateVersion+1)), 0644))
 
 	allOps := []ops.Op{
 		{Type: ops.OpCreate, TargetID: "task-01", Timestamp: 100, WorkerID: "w1",

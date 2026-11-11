@@ -1,14 +1,17 @@
 package materialize
 
 func CurrentHostRef(refs []HostRef) (HostRef, bool) {
-	live, order := liveHostState(refs)
-	if len(order) == 0 {
+	live := LiveHostRefs(refs)
+	if len(live) == 0 {
 		return HostRef{}, false
 	}
-	return live[order[len(order)-1]], true
+	return live[len(live)-1], true
 }
 
-func liveHostState(refs []HostRef) (map[string]HostRef, []string) {
+// LiveHostRefs returns the live host names in the order they were recorded.
+// A later record of the same URL replaces the earlier one and moves it to the
+// end. A withdrawn URL drops out until a later record adds it again.
+func LiveHostRefs(refs []HostRef) []HostRef {
 	live := map[string]HostRef{}
 	order := []string{}
 	for _, ref := range refs {
@@ -21,7 +24,14 @@ func liveHostState(refs []HostRef) (map[string]HostRef, []string) {
 		order = append(order, ref.URL)
 		live[ref.URL] = ref
 	}
-	return live, order
+	if len(order) == 0 {
+		return nil
+	}
+	out := make([]HostRef, 0, len(order))
+	for _, url := range order {
+		out = append(out, live[url])
+	}
+	return out
 }
 
 func dropURL(order []string, url string) []string {

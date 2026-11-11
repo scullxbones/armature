@@ -23,17 +23,17 @@ func NewState() *State {
 	}
 }
 
-type MissingTarget string
+type missingTarget string
 
 const (
-	MissingTargetUnspecified MissingTarget = ""
-	MissingTargetError       MissingTarget = "Error"
-	MissingTargetIgnore      MissingTarget = "Ignore"
+	onMissingUnspecified missingTarget = ""
+	onMissingError       missingTarget = "Error"
+	onMissingIgnore      missingTarget = "Ignore"
 )
 
 type opHandler struct {
 	apply         func(*State, ops.Op) error
-	missingTarget MissingTarget
+	missingTarget missingTarget
 }
 
 type missingTargetError struct {
@@ -52,29 +52,29 @@ func (e missingTargetError) Error() string {
 
 func opHandlers() map[string]opHandler {
 	return map[string]opHandler{
-		ops.OpCreate:             {apply: (*State).applyCreate, missingTarget: MissingTargetUnspecified},
-		ops.OpClaim:              {apply: (*State).applyClaim, missingTarget: MissingTargetError},
-		ops.OpHeartbeat:          {apply: (*State).applyHeartbeat, missingTarget: MissingTargetIgnore},
-		ops.OpTransition:         {apply: (*State).applyTransition, missingTarget: MissingTargetError},
-		ops.OpNote:               {apply: (*State).applyNote, missingTarget: MissingTargetIgnore},
-		ops.OpNoteDelete:         {apply: (*State).applyNoteDelete, missingTarget: MissingTargetIgnore},
-		ops.OpLink:               {apply: (*State).applyLink, missingTarget: MissingTargetError},
-		ops.OpUnlink:             {apply: (*State).applyUnlink, missingTarget: MissingTargetError},
-		ops.OpDecision:           {apply: (*State).applyDecision, missingTarget: MissingTargetIgnore},
-		ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: MissingTargetIgnore},
-		ops.OpExternalRef:        {apply: (*State).applyExternalRef, missingTarget: MissingTargetIgnore},
-		ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: MissingTargetIgnore},
-		ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: MissingTargetIgnore},
-		ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: MissingTargetUnspecified},
-		ops.OpGateEvidence:       {apply: applyNoop, missingTarget: MissingTargetUnspecified},
-		ops.OpLogQuarantine:      {apply: applyNoop, missingTarget: MissingTargetUnspecified},
-		ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: MissingTargetIgnore},
-		ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: MissingTargetIgnore},
-		ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: MissingTargetIgnore},
-		ops.OpScopeDelete:        {apply: (*State).applyScopeDelete, missingTarget: MissingTargetIgnore},
-		ops.OpReparent:           {apply: (*State).applyReparent, missingTarget: MissingTargetIgnore},
-		ops.OpAssessmentAttested: {apply: (*State).applyAssessmentAttested, missingTarget: MissingTargetError},
-		ops.OpPromotionCheck:     {apply: applyNoop, missingTarget: MissingTargetIgnore},
+		ops.OpCreate:             {apply: (*State).applyCreate, missingTarget: onMissingUnspecified},
+		ops.OpClaim:              {apply: (*State).applyClaim, missingTarget: onMissingError},
+		ops.OpHeartbeat:          {apply: (*State).applyHeartbeat, missingTarget: onMissingIgnore},
+		ops.OpTransition:         {apply: (*State).applyTransition, missingTarget: onMissingError},
+		ops.OpNote:               {apply: (*State).applyNote, missingTarget: onMissingIgnore},
+		ops.OpNoteDelete:         {apply: (*State).applyNoteDelete, missingTarget: onMissingIgnore},
+		ops.OpLink:               {apply: (*State).applyLink, missingTarget: onMissingError},
+		ops.OpUnlink:             {apply: (*State).applyUnlink, missingTarget: onMissingError},
+		ops.OpDecision:           {apply: (*State).applyDecision, missingTarget: onMissingIgnore},
+		ops.OpAssign:             {apply: (*State).applyAssign, missingTarget: onMissingIgnore},
+		ops.OpExternalRef:        {apply: (*State).applyExternalRef, missingTarget: onMissingIgnore},
+		ops.OpAmend:              {apply: (*State).applyAmend, missingTarget: onMissingIgnore},
+		ops.OpSourceLink:         {apply: (*State).applySourceLink, missingTarget: onMissingIgnore},
+		ops.OpSourceFingerprint:  {apply: applyNoop, missingTarget: onMissingUnspecified},
+		ops.OpGateEvidence:       {apply: applyNoop, missingTarget: onMissingUnspecified},
+		ops.OpLogQuarantine:      {apply: applyNoop, missingTarget: onMissingUnspecified},
+		ops.OpCitationAccepted:   {apply: (*State).applyCitationAccepted, missingTarget: onMissingIgnore},
+		ops.OpDAGTransition:      {apply: (*State).applyDAGTransition, missingTarget: onMissingIgnore},
+		ops.OpScopeRename:        {apply: (*State).applyScopeRename, missingTarget: onMissingIgnore},
+		ops.OpScopeDelete:        {apply: (*State).applyScopeDelete, missingTarget: onMissingIgnore},
+		ops.OpReparent:           {apply: (*State).applyReparent, missingTarget: onMissingIgnore},
+		ops.OpAssessmentAttested: {apply: (*State).applyAssessmentAttested, missingTarget: onMissingError},
+		ops.OpPromotionCheck:     {apply: applyNoop, missingTarget: onMissingIgnore},
 	}
 }
 
@@ -95,9 +95,9 @@ func (s *State) ApplyOp(op ops.Op) error {
 	if !exists {
 		return fmt.Errorf("unknown op type: %s", op.Type)
 	}
-	if handler.missingTarget != MissingTargetUnspecified {
+	if handler.missingTarget != onMissingUnspecified {
 		if _, ok := s.Issues[op.TargetID]; !ok {
-			if handler.missingTarget == MissingTargetIgnore {
+			if handler.missingTarget == onMissingIgnore {
 				return nil
 			}
 			return missingTargetError{OpType: op.Type, TargetID: op.TargetID}
@@ -641,7 +641,7 @@ func (s *State) enqueueRollupParent(issue *Issue, inDegree map[string]int, queue
 func (s *State) BuildIndex() Index {
 	index := make(Index, len(s.Issues))
 	for id, issue := range s.Issues {
-		live, order := liveHostState(issue.HostRefs)
+		live := LiveHostRefs(issue.HostRefs)
 		entry := IndexEntry{
 			Status:         issue.Status,
 			Type:           issue.Type,
@@ -658,9 +658,13 @@ func (s *State) BuildIndex() Index {
 			Branch:         issue.Branch,
 			PR:             issue.PR,
 		}
-		if len(order) > 0 {
-			entry.CurrentHostURL = live[order[len(order)-1]].URL
-			entry.LiveHostURLs = append([]string(nil), order...)
+		if len(live) > 0 {
+			entry.CurrentHostURL = live[len(live)-1].URL
+			urls := make([]string, len(live))
+			for i, ref := range live {
+				urls[i] = ref.URL
+			}
+			entry.LiveHostURLs = urls
 		}
 		index[id] = entry
 	}

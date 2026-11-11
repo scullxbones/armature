@@ -133,7 +133,7 @@ func runFileConcat(stateDir string, allOps []ops.Op,
 		return nil, Result{}, err
 	}
 
-	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion != CurrentStateVersion
+	fullReplay := len(cp.ByteOffsets) == 0 || cp.StateVersion != currentStateVersion
 	state, err := loadOrNewState(issuesStateDir, fullReplay)
 	if err != nil {
 		return nil, Result{}, err
@@ -263,7 +263,7 @@ func runCommitIncremental(stateDir string, headDiskOps []ops.Op, _ map[string]in
 	if err != nil {
 		return nil, Result{}, err
 	}
-	fullReplay := cp.LastCommitSHA == "" || cp.StateVersion != CurrentStateVersion
+	fullReplay := cp.LastCommitSHA == "" || cp.StateVersion != currentStateVersion
 	if !fullReplay {
 		located, err := oporder.LocateOps(oporder.LocateInput{
 			OpsWorktree:       opts.OpsWorktree,
@@ -412,7 +412,7 @@ func persistReplayArtifacts(stateDir string, state *State, fullReplay bool, cp C
 		}
 	}
 	swallowErr(adapters.WriteFile(filepath.Join(stateDir, "ready.json"), []byte("[]"), 0644))
-	if err := WriteCheckpoint(filepath.Join(stateDir, "checkpoint.json"), cp); err != nil {
+	if err := writeCheckpoint(filepath.Join(stateDir, "checkpoint.json"), cp); err != nil {
 		return fmt.Errorf("write checkpoint: %w", err)
 	}
 	cov := traceability.Compute(coverageRefs(state.Issues))

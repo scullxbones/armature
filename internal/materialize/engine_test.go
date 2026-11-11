@@ -430,9 +430,9 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 		for opType, handler := range opHandlers() {
 			switch {
 			case mapHas(wantError, opType):
-				assert.Equal(t, MissingTargetError, handler.missingTarget, opType)
+				assert.Equal(t, onMissingError, handler.missingTarget, opType)
 			case mapHas(wantIgnore, opType):
-				assert.Equal(t, MissingTargetIgnore, handler.missingTarget, opType)
+				assert.Equal(t, onMissingIgnore, handler.missingTarget, opType)
 			case mapHas(wantUnspecified, opType):
 				assert.Empty(t, handler.missingTarget, opType)
 			default:
@@ -443,7 +443,7 @@ func TestMissingTarget_REQ_MATENC_S1_T5(t *testing.T) {
 
 	t.Run("assign missing-target stays success", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, MissingTargetIgnore, opHandlers()[ops.OpAssign].missingTarget)
+		assert.Equal(t, onMissingIgnore, opHandlers()[ops.OpAssign].missingTarget)
 		err := NewState().ApplyOp(ops.Op{
 			Type: ops.OpAssign, TargetID: "unknown-01", Timestamp: 200, WorkerID: "w1",
 			Payload: ops.Payload{AssignedTo: "worker-x"},

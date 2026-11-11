@@ -897,7 +897,7 @@
       ]
     },
     "internal/materialize": {
-      "count": 145,
+      "count": 140,
       "names": [
         "ApplyOpsSorted",
         "Checkpoint",
@@ -910,7 +910,6 @@
         "CitationAcceptance.Timestamp",
         "CitationAcceptance.WorkerID",
         "CurrentHostRef",
-        "CurrentStateVersion",
         "Decision",
         "Decision.Affects",
         "Decision.Choice",
@@ -997,15 +996,12 @@
         "Issue.Type",
         "Issue.Updated",
         "Issue.WorktreePath",
+        "LiveHostRefs",
         "LoadAllIssues",
         "LoadCheckpoint",
         "LoadIndex",
         "LoadIssue",
         "MaterializeAtSHA",
-        "MissingTarget",
-        "MissingTargetError",
-        "MissingTargetIgnore",
-        "MissingTargetUnspecified",
         "NewState",
         "Note",
         "Note.Deleted",
@@ -1041,7 +1037,6 @@
         "State.Issues",
         "State.RetractDerivedPromotions",
         "State.RunRollup",
-        "WriteCheckpoint",
         "WriteIndex",
         "WriteIssue"
       ]
