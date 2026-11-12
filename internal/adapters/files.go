@@ -456,49 +456,6 @@ func readLogLines(logPath string, offset int64, skipBlank bool) (lines [][]byte,
 	return lines, err
 }
 
-type LineWithOffset struct {
-	Line      []byte
-	EndOffset int64
-}
-
-func ReadLogLinesWithOffsets(logPath string, startOffset int64) (lines []LineWithOffset, err error) {
-	f, err := openState(logPath)
-	if err != nil {
-		return nil, fmt.Errorf("open log %s: %w", logPath, err)
-	}
-	defer func() { closeOrKeep(&err, f) }()
-
-	currentOffset := startOffset
-	if startOffset > 0 {
-		if _, err := f.Seek(startOffset, 0); err != nil {
-			return nil, fmt.Errorf("seek in log %s: %w", logPath, err)
-		}
-	}
-
-	reader := bufio.NewReaderSize(f, 1<<20)
-	for {
-		rawLine, err := reader.ReadBytes('\n')
-		if len(rawLine) > 0 {
-			currentOffset += int64(len(rawLine))
-			line := bytes.TrimRight(rawLine, "\r\n")
-			if len(line) > 0 {
-				lineCopy := append([]byte{}, line...)
-				lines = append(lines, LineWithOffset{
-					Line:      lineCopy,
-					EndOffset: currentOffset,
-				})
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	return lines, nil
-}
-
 func writeJSONFile(path string, data any, kind string) error {
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {

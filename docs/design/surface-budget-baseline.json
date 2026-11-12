@@ -1,7 +1,7 @@
 {
   "packages": {
     "internal/adapters": {
-      "count": 171,
+      "count": 167,
       "names": [
         "AppendLog",
         "AppendLog.Append",
@@ -119,9 +119,6 @@
         "HookResult.Allowed",
         "HookResult.Message",
         "IsRemoteRefMissing",
-        "LineWithOffset",
-        "LineWithOffset.EndOffset",
-        "LineWithOffset.Line",
         "ListLogFiles",
         "LoadCheckpointJSON",
         "LoadIssueJSON",
@@ -149,7 +146,6 @@
         "ReadFile",
         "ReadIssuesDir",
         "ReadLogFromOffset",
-        "ReadLogLinesWithOffsets",
         "ReadLogPhysicalLines",
         "ReadManifestFile",
         "ReadPlanFile",
