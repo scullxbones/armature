@@ -272,7 +272,7 @@ type activityEntryDetails struct {
 	HeadSHA       string
 }
 
-func validateActivityDigestAndLoadEntries(activity *Activity) (map[int]activityEntryDetails, []string) {
+func validateActivityDigestAndLoadEntries(activity *activity) (map[int]activityEntryDetails, []string) {
 	var errs []string
 
 	if activity == nil {

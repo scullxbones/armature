@@ -475,7 +475,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 				ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 				Results: []CriterionResult{
-					{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{ActivityCitation("0")}},
+					{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{activityCitation("0")}},
 				},
 			},
 		})
@@ -489,7 +489,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 		logPath := filepath.Join(t.TempDir(), "armature-activity.log")
 		original := []byte(activityLogLineJSON(t, map[string]any{"command": "make build"}) + "\n")
 		require.NoError(t, os.WriteFile(logPath, original, 0o600))
-		input := validValidateInputWithActivity(t, &Activity{
+		input := validValidateInputWithActivity(t, &activity{
 			Digest:     fingerprintActivity(original),
 			EntryCount: 1,
 			LogPath:    logPath,
@@ -505,7 +505,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 
 	t.Run("activity log missing or unreadable", func(t *testing.T) {
 		t.Parallel()
-		err := ValidateAssessment(validValidateInputWithActivity(t, &Activity{
+		err := ValidateAssessment(validValidateInputWithActivity(t, &activity{
 			Digest:     gitoid.PadSHA256("a"),
 			EntryCount: 1,
 			LogPath:    filepath.Join(t.TempDir(), "does-not-exist.log"),
@@ -517,7 +517,7 @@ func TestValidateAssessment_AttachesSuggestions_REQ_LNGHZN_S8_T1(t *testing.T) {
 	})
 }
 
-func validValidateInputWithActivity(t *testing.T, activity *Activity) RecordInput {
+func validValidateInputWithActivity(t *testing.T, activity *activity) RecordInput {
 	t.Helper()
 	bundle := &ReviewBundle{
 		SchemaVersion: SchemaVersion,
@@ -825,7 +825,7 @@ func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "test passed",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -833,7 +833,7 @@ func TestValidateActivityCitations_ValidEntryID_REQ_EXECEV_T3(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -859,7 +859,7 @@ func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "test passed",
 				Citations: []Citation{
-					ActivityCitation("10"),
+					activityCitation("10"),
 				},
 			},
 		},
@@ -867,7 +867,7 @@ func TestValidateActivityCitations_InvalidEntryID_REQ_EXECEV_T3(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -894,7 +894,7 @@ func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T)
 				Status:    Satisfied,
 				Rationale: "test passed",
 				Citations: []Citation{
-					ActivityCitation("not-a-number"),
+					activityCitation("not-a-number"),
 				},
 			},
 		},
@@ -902,7 +902,7 @@ func TestValidateActivityCitations_NonNumericEntryID_REQ_EXECEV_T3(t *testing.T)
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -929,7 +929,7 @@ func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECE
 				Status:    Satisfied,
 				Rationale: "implementation complete",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -937,7 +937,7 @@ func TestValidateActivityCitations_ActivityOnlySatisfiesImplementation_REQ_EXECE
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -964,7 +964,7 @@ func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECE
 				Status:    PartiallySatisfied,
 				Rationale: "partially implemented",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -972,7 +972,7 @@ func TestValidateActivityCitations_ActivityOnlyPartiallyImplementation_REQ_EXECE
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -999,7 +999,7 @@ func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testi
 				Status:    Satisfied,
 				Rationale: "test executed successfully",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -1007,7 +1007,7 @@ func TestValidateActivityCitations_ActivityOnlyAcceptance_REQ_EXECEV_T3(t *testi
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -1034,7 +1034,7 @@ func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
 				Rationale: "implementation complete",
 				Citations: []Citation{
 					FileCitation("main.go", 10, 0),
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -1042,7 +1042,7 @@ func TestValidateActivityCitations_MixedCitations_REQ_EXECEV_T3(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -1092,7 +1092,7 @@ func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "test passed",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -1100,7 +1100,7 @@ func TestValidateActivityCitations_HeadSHAMismatch_REQ_EXECEV_F2(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        2,
 		DeliveryHeadCount: 1,
@@ -1133,7 +1133,7 @@ func TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2(t *testing.T) {
 				Status:    Satisfied,
 				Rationale: "test passed",
 				Citations: []Citation{
-					ActivityCitation("1"),
+					activityCitation("1"),
 				},
 			},
 		},
@@ -1141,7 +1141,7 @@ func TestValidateActivityCitations_HeadSHAMatch_REQ_EXECEV_F2(t *testing.T) {
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:            "sha256:abc123",
 		EntryCount:        2,
 		DeliveryHeadCount: 1,
@@ -1171,7 +1171,7 @@ func TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV(t *tes
 				Status:    Satisfied,
 				Rationale: "test passed",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -1179,7 +1179,7 @@ func TestValidateActivityCitations_FailedExitCodeCannotSatisfy_REQ_EXECEV(t *tes
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
+	activity := &activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
 	entries := map[int]activityEntryDetails{
 		0: {EntryID: 0, Command: "make test", ExitCode: 1, ExitCodeKnown: true, HeadSHA: "head"},
 	}
@@ -1201,7 +1201,7 @@ func TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXEC
 				Status:    NotSatisfied,
 				Rationale: "test still fails",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -1209,7 +1209,7 @@ func TestValidateActivityCitations_FailedExitCodeCanSupportNotSatisfied_REQ_EXEC
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
+	activity := &activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
 	entries := map[int]activityEntryDetails{
 		0: {EntryID: 0, Command: "make test", ExitCode: 1, ExitCodeKnown: true, HeadSHA: "head"},
 	}
@@ -1229,7 +1229,7 @@ func TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXE
 				Status:    NotSatisfied,
 				Rationale: "was already broken before this commit too",
 				Citations: []Citation{
-					ActivityCitation("0"),
+					activityCitation("0"),
 				},
 			},
 		},
@@ -1237,7 +1237,7 @@ func TestValidateActivityCitations_HeadSHAMismatchAllowedForNotSatisfied_REQ_EXE
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
+	activity := &activity{Digest: "sha256:abc123", EntryCount: 1, LogPath: "armature-activity.log"}
 	entries := map[int]activityEntryDetails{
 		0: {EntryID: 0, Command: "make test", ExitCode: 1, ExitCodeKnown: true, HeadSHA: "earlier_sha"},
 	}
@@ -1257,7 +1257,7 @@ func TestValidateActivityCitations_IndexReferenceRejected_REQ_EXECEV_T3(t *testi
 				Status:    Satisfied,
 				Rationale: "test passed",
 				Citations: []Citation{
-					ActivityCitation("index:0"),
+					activityCitation("index:0"),
 				},
 			},
 		},
@@ -1265,7 +1265,7 @@ func TestValidateActivityCitations_IndexReferenceRejected_REQ_EXECEV_T3(t *testi
 		DeliveryFingerprint: "sha256:delivery123",
 	}
 
-	activity := &Activity{
+	activity := &activity{
 		Digest:     "sha256:abc123",
 		EntryCount: 5,
 		LogPath:    "armature-activity.log",
@@ -1288,7 +1288,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 				`"exit_code_known":true,"head_sha":"abc123","output_hash":"h"}` + "\n")
 		require.NoError(t, os.WriteFile(logPath, content, 0o600))
 
-		activity := &Activity{
+		activity := &activity{
 			Digest:     fingerprintActivity(content),
 			EntryCount: 1,
 			LogPath:    logPath,
@@ -1307,7 +1307,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(logPath, []byte(`2026-01-15T10:30:45Z activity: command="rm -rf /" exit_code=0 head_sha=abc123`+"\n"), 0o600))
 
-		activity := &Activity{
+		activity := &activity{
 			Digest:     recordedDigest,
 			EntryCount: 1,
 			LogPath:    logPath,
@@ -1320,7 +1320,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 
 	t.Run("missing log rejected", func(t *testing.T) {
 		t.Parallel()
-		missingActivity := &Activity{
+		missingActivity := &activity{
 			Digest:     "sha256:doesnotmatter",
 			EntryCount: 1,
 			LogPath:    filepath.Join(t.TempDir(), "does-not-exist.log"),
@@ -1357,7 +1357,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 				Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			},
-			Activity: &Activity{
+			Activity: &activity{
 				Digest:     e2eDigest,
 				EntryCount: 1,
 				LogPath:    e2eLogPath,
@@ -1378,7 +1378,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 					Citations: []Citation{
 
 						FileCitation("impl.go", 1, 0),
-						ActivityCitation("0"),
+						activityCitation("0"),
 					},
 				},
 				{
@@ -1386,7 +1386,7 @@ func TestActivityDigestMismatchRejected_REQ_EXECEV_T3(t *testing.T) {
 					Status:    Satisfied,
 					Rationale: "Feature works as designed.",
 					Citations: []Citation{
-						ActivityCitation("0"),
+						activityCitation("0"),
 					},
 				},
 			},

@@ -1693,20 +1693,11 @@
       ]
     },
     "internal/review": {
-      "count": 96,
+      "count": 77,
       "names": [
-        "Activity",
-        "Activity.DeliveryHeadCount",
-        "Activity.Digest",
-        "Activity.EarlierCount",
-        "Activity.EntryCount",
-        "Activity.LogPath",
-        "ActivityCitation",
         "AnnotateValidateError",
         "AttachGateEvidence",
         "Citation",
-        "Citation.ActivityEntryID",
-        "Citation.Column",
         "Citation.Line",
         "Citation.MarshalJSON",
         "Citation.Path",
@@ -1748,10 +1739,6 @@
         "Fingerprints",
         "Fingerprints.Contract",
         "Fingerprints.Delivery",
-        "GitAdapter",
-        "GitAdapter.DiffNameOnlyRange",
-        "GitAdapter.DiffRange",
-        "GitAdapter.ResolveRevision",
         "Indeterminate",
         "IssueData",
         "IssueData.Acceptance",
@@ -1771,9 +1758,6 @@
         "RecordInput.Bundle",
         "RecordInput.Issue",
         "RecordInput.IssueID",
-        "RecordResult",
-        "RecordResult.Attestation",
-        "RecordResult.IsDuplicate",
         "RecordWithDuplicateCheck",
         "ReviewBundle",
         "ReviewBundle.Activity",
@@ -1787,10 +1771,7 @@
         "ReviewBundle.Valid",
         "Satisfied",
         "SchemaVersion",
-        "ValidateAssessment",
-        "ValidateFix",
-        "ValidateFix.Fixable",
-        "ValidateFix.Suggestion"
+        "ValidateAssessment"
       ]
     },
     "internal/scopematch": {

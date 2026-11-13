@@ -344,7 +344,7 @@ func TestBundleID_LogPath_Excluded(t *testing.T) {
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &Activity{
+		Activity: &activity{
 			Digest:            "sha256:activity1",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
@@ -370,7 +370,7 @@ func TestBundleID_LogPath_Excluded(t *testing.T) {
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &Activity{
+		Activity: &activity{
 			Digest:            "sha256:activity1",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
@@ -405,7 +405,7 @@ func TestBundleID_Activity_Digest_Included(t *testing.T) {
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &Activity{
+		Activity: &activity{
 			Digest:            "sha256:activity1",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,
@@ -431,7 +431,7 @@ func TestBundleID_Activity_Digest_Included(t *testing.T) {
 			HeadSHA:      "def456",
 			ChangedFiles: []string{"main.go"},
 		},
-		Activity: &Activity{
+		Activity: &activity{
 			Digest:            "sha256:activity2",
 			EntryCount:        5,
 			DeliveryHeadCount: 3,

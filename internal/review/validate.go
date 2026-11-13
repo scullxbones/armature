@@ -26,7 +26,7 @@ func validateResult(assessment *ConformanceAssessment, idx *diffIndex) []string 
 		}
 
 		for _, citation := range result.Citations {
-			if citation.ActivityEntryID() != "" {
+			if citation.activityEntryID != "" {
 				continue
 			}
 
@@ -121,12 +121,12 @@ func AnnotateValidateError(err error) error {
 	return fmt.Errorf("%s", strings.Join(lines, "\n"))
 }
 
-type ValidateFix struct {
+type validateFix struct {
 	Suggestion string
 	Fixable    bool
 }
 
-func ClassifyValidateFix(message string) ValidateFix {
+func ClassifyValidateFix(message string) validateFix {
 	msg := strings.ToLower(message)
 	for _, rule := range validateFixRules() {
 		if !rule.match(msg) {
@@ -141,9 +141,9 @@ func ClassifyValidateFix(message string) ValidateFix {
 				text = fmt.Sprintf("add a criterion result with id %q", id)
 			}
 		}
-		return ValidateFix{Suggestion: text, Fixable: rule.fixable}
+		return validateFix{Suggestion: text, Fixable: rule.fixable}
 	}
-	return ValidateFix{
+	return validateFix{
 		Suggestion: "fix the assessment to satisfy this check, then re-run arm review validate",
 		Fixable:    false,
 	}
@@ -258,7 +258,7 @@ func firstQuoted(s string) string {
 
 // newAttestation records delivery BaseSHA/HeadSHA and, when activity is present,
 // carries activity.Digest into the attestation per ADR-0008.
-func newAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *Activity) *attestation.AssessmentAttestation {
+func newAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *activity) *attestation.AssessmentAttestation {
 	rating := deriveRating(assessment.Results)
 	satisfied, partiallySatisfied, notSatisfied, indeterminate := countCriteria(assessment.Results)
 
@@ -331,7 +331,7 @@ func validateResultCoverage(assessment *ConformanceAssessment, contract Contract
 func hasActivityCitations(assessment *ConformanceAssessment) bool {
 	for _, result := range assessment.Results {
 		for _, citation := range result.Citations {
-			if citation.ActivityEntryID() != "" {
+			if citation.activityEntryID != "" {
 				return true
 			}
 		}
@@ -342,7 +342,7 @@ func hasActivityCitations(assessment *ConformanceAssessment) bool {
 // validateActivityCitations enforces ADR-0008 on activity citations: upgrade-only
 // (activity cannot satisfy implementation criteria alone), HEAD-anchored entries,
 // and harness-recorded exit status. Empty return means valid.
-func validateActivityCitations(assessment *ConformanceAssessment, activity *Activity, entries map[int]activityEntryDetails, deliveryHeadSHA string) []string {
+func validateActivityCitations(assessment *ConformanceAssessment, activity *activity, entries map[int]activityEntryDetails, deliveryHeadSHA string) []string {
 	var errs []string
 	if activity == nil {
 		return errs
@@ -353,9 +353,9 @@ func validateActivityCitations(assessment *ConformanceAssessment, activity *Acti
 		hasActivityCitation := false
 		hasDiffCitation := false
 		for _, citation := range result.Citations {
-			if citation.ActivityEntryID() != "" {
+			if citation.activityEntryID != "" {
 				hasActivityCitation = true
-				more, skipPath := activityCitationErrors(result, citation.ActivityEntryID(), entries, deliveryHeadSHA)
+				more, skipPath := activityCitationErrors(result, citation.activityEntryID, entries, deliveryHeadSHA)
 				errs = append(errs, more...)
 				if skipPath {
 					continue
