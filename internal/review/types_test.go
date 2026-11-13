@@ -926,3 +926,7 @@ func TestCitationJSONRoundTripMatchesFixtures_REQ_NOCOMMENTS(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"activity_entry_id":"0"}`, string(got))
 }
+
+func activityCitation(entryID string) Citation {
+	return Citation{activityEntryID: entryID}
+}
