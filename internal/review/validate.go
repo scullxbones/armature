@@ -87,8 +87,7 @@ func suggestCriterionID(id string) string {
 	return `use "definition_of_done" or "acceptance[N]" (N is a 0-based integer)`
 }
 
-// ValidateAssessment runs the same checks as RecordWithDuplicateCheck without
-// persisting an attestation. Every failure line includes an auto-fix suggestion.
+// ValidateAssessment checks the assessment and adds an auto-fix suggestion on every failure line.
 func ValidateAssessment(input RecordInput) error {
 	_, err := record(input)
 	return AnnotateValidateError(err)
@@ -162,7 +161,6 @@ const (
 	fixCitationsReq     = "add at least one citation, or lower the status from satisfied and set missing_evidence"
 	fixInvalidStatus    = `set status to one of "satisfied", "partially_satisfied", "not_satisfied", "indeterminate"`
 	fixUnexpectedID     = `rename to "definition_of_done" or "acceptance[N]" from the contract, or remove it`
-	fixUnknownField     = "remove the unknown field or rename it to a documented schema property"
 )
 
 type validateFixRule struct {
@@ -195,7 +193,6 @@ func validateFixRules() []validateFixRule {
 	return []validateFixRule{
 		{any: []string{"review bundle:"}, text: fixPrepareBundle},
 		{any: []string{"unsupported schema version"}, fixable: true, text: "set schema_version to %d", schema: true},
-		{any: []string{"unknown field"}, fixable: true, text: fixUnknownField},
 		{any: []string{"column must be"}, fixable: true, text: "omit column or set it to a 1-based column number (>= 1)"},
 		{any: []string{"line must be"}, fixable: true, text: "omit line or set it to an integer; JSON null is not allowed"},
 		{any: []string{"citations must be"}, fixable: true, text: "set citations to an array of evidence, or [] with missing_evidence"},
@@ -256,8 +253,7 @@ func firstQuoted(s string) string {
 	return rest[:end]
 }
 
-// newAttestation records delivery BaseSHA/HeadSHA and, when activity is present,
-// carries activity.Digest into the attestation per ADR-0008.
+// newAttestation copies the activity digest onto the attestation per ADR-0008.
 func newAttestation(assessment *ConformanceAssessment, delivery Delivery, activity *activity) *attestation.AssessmentAttestation {
 	rating := deriveRating(assessment.Results)
 	satisfied, partiallySatisfied, notSatisfied, indeterminate := countCriteria(assessment.Results)
@@ -339,9 +335,7 @@ func hasActivityCitations(assessment *ConformanceAssessment) bool {
 	return false
 }
 
-// validateActivityCitations enforces ADR-0008 on activity citations: upgrade-only
-// (activity cannot satisfy implementation criteria alone), HEAD-anchored entries,
-// and harness-recorded exit status. Empty return means valid.
+// validateActivityCitations applies the activity-citation rules in ADR-0008.
 func validateActivityCitations(assessment *ConformanceAssessment, activity *activity, entries map[int]activityEntryDetails, deliveryHeadSHA string) []string {
 	var errs []string
 	if activity == nil {

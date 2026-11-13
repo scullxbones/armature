@@ -71,9 +71,6 @@ func parseCriterionStatus(s string) (CriterionStatus, error) {
 	}
 }
 
-// Citation is a closed sum of file (diff) citations and activity-log citations.
-// File citations are built with FileCitation. Activity-log citations are decoded
-// from the published assessment JSON.
 type Citation struct {
 	path                 string
 	line                 int
@@ -92,10 +89,6 @@ type citationWire struct {
 
 func FileCitation(path string, line, column int) Citation {
 	return Citation{path: path, line: line, column: column}
-}
-
-func activityCitation(entryID string) Citation {
-	return Citation{activityEntryID: entryID}
 }
 
 func (c Citation) Path() string { return c.path }
