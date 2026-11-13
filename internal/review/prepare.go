@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type GitAdapter interface {
+type gitAdapter interface {
 	ResolveRevision(rev string) (string, error)
 	DiffRange(base, head string) (string, error)
 	DiffNameOnlyRange(base, head string) ([]string, error)
@@ -83,7 +83,7 @@ func filterExcludedPaths(files []string, excludePrefixes []string) []string {
 	return filtered
 }
 
-func attachActivitySection(activityLogPath, headSHA string) (*Activity, error) {
+func attachActivitySection(activityLogPath, headSHA string) (*activity, error) {
 	if _, err := os.Stat(activityLogPath); err != nil {
 		return nil, nil
 	}
@@ -110,7 +110,7 @@ func attachActivitySection(activityLogPath, headSHA string) (*Activity, error) {
 		logAbsPath = abs
 	}
 
-	return &Activity{
+	return &activity{
 		Digest:            digest,
 		EntryCount:        len(entries),
 		DeliveryHeadCount: deliveryHeadCount,
@@ -120,7 +120,7 @@ func attachActivitySection(activityLogPath, headSHA string) (*Activity, error) {
 }
 
 func Prepare(
-	git GitAdapter,
+	git gitAdapter,
 	issueID, title, definitionOfDone, issueType, issueOutcome string,
 	scope []string, criteria []string,
 	base, head, activityLogPath string,

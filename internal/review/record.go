@@ -21,12 +21,12 @@ type RecordInput struct {
 	IssueID    string
 }
 
-type RecordResult struct {
+type recordResult struct {
 	Attestation *attestation.AssessmentAttestation
 	IsDuplicate bool
 }
 
-func record(input RecordInput) (*RecordResult, error) {
+func record(input RecordInput) (*recordResult, error) {
 	if input.Assessment == nil {
 		return nil, fmt.Errorf("assessment is required")
 	}
@@ -56,7 +56,7 @@ func record(input RecordInput) (*RecordResult, error) {
 	}
 
 	var delivery Delivery
-	var activityForAttestation *Activity
+	var activityForAttestation *activity
 	if input.Bundle != nil {
 		delivery = input.Bundle.Delivery
 		activityForAttestation = input.Bundle.Activity
@@ -67,7 +67,7 @@ func record(input RecordInput) (*RecordResult, error) {
 		return nil, err
 	}
 
-	return &RecordResult{
+	return &recordResult{
 		Attestation: attestation,
 		IsDuplicate: false,
 	}, nil
@@ -153,10 +153,10 @@ func attachValidatedActivityDetails(input RecordInput) error {
 	for i := range input.Assessment.Results {
 		for j := range input.Assessment.Results[i].Citations {
 			citation := &input.Assessment.Results[i].Citations[j]
-			if citation.ActivityEntryID() == "" {
+			if citation.activityEntryID == "" {
 				continue
 			}
-			entryID, err := strconv.Atoi(citation.ActivityEntryID())
+			entryID, err := strconv.Atoi(citation.activityEntryID)
 			if err != nil {
 				continue
 			}
@@ -189,7 +189,7 @@ func validateRecordIssueContract(input RecordInput) error {
 	return joinValidationErrors("assessment coverage validation errors:", validateResultCoverage(input.Assessment, contract))
 }
 
-func RecordWithDuplicateCheck(input RecordInput, existingAttestations []attestation.AssessmentAttestation) (*RecordResult, error) {
+func RecordWithDuplicateCheck(input RecordInput, existingAttestations []attestation.AssessmentAttestation) (*recordResult, error) {
 	result, err := record(input)
 	if err != nil {
 		return nil, err

@@ -77,6 +77,11 @@ func TestReviewExportSurfaceHidesPrepareRecordPipeline(t *testing.T) {
 		"FingerprintActivity":                  "Prepare owns activity digests",
 		"ParseCriterionStatus":                 "status is decoded via ConformanceAssessment JSON",
 		"BundleIDError":                        "bundle-id failures are ordinary validate/prepare errors",
+		"GitAdapter":                           "Prepare takes the git port; callers do not name the interface",
+		"RecordResult":                         "RecordWithDuplicateCheck returns the attestation",
+		"ValidateFix":                          "ClassifyValidateFix returns the suggestion",
+		"Activity":                             "bundle activity stays a ReviewBundle field, not a named type",
+		"ActivityCitation":                     "activity citations are decoded from assessment JSON",
 	}
 
 	entries, err := os.ReadDir(pkgDir)

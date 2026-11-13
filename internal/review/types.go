@@ -72,8 +72,8 @@ func parseCriterionStatus(s string) (CriterionStatus, error) {
 }
 
 // Citation is a closed sum of file (diff) citations and activity-log citations.
-// Construct values with FileCitation or ActivityCitation; JSON still uses the
-// published assessment object shape.
+// File citations are built with FileCitation. Activity-log citations are decoded
+// from the published assessment JSON.
 type Citation struct {
 	path                 string
 	line                 int
@@ -94,14 +94,12 @@ func FileCitation(path string, line, column int) Citation {
 	return Citation{path: path, line: line, column: column}
 }
 
-func ActivityCitation(entryID string) Citation {
+func activityCitation(entryID string) Citation {
 	return Citation{activityEntryID: entryID}
 }
 
-func (c Citation) Path() string            { return c.path }
-func (c Citation) Line() int               { return c.line }
-func (c Citation) Column() int             { return c.column }
-func (c Citation) ActivityEntryID() string { return c.activityEntryID }
+func (c Citation) Path() string { return c.path }
+func (c Citation) Line() int    { return c.line }
 
 func (c *Citation) clearActivityEntryDetails() {
 	if c == nil {
@@ -228,9 +226,9 @@ func (cr CriterionResult) Valid() error {
 		return fmt.Errorf("criterion result %s: citations or missing_evidence required for status %s", cr.ID, cr.Status)
 	}
 	for i, citation := range cr.Citations {
-		if citation.ActivityEntryID() != "" && citation.Path() != "" {
+		if citation.activityEntryID != "" && citation.Path() != "" {
 			return fmt.Errorf("criterion result %s: citation %d has both path %q and activity_entry_id %q; these are mutually exclusive",
-				cr.ID, i, citation.Path(), citation.ActivityEntryID())
+				cr.ID, i, citation.Path(), citation.activityEntryID)
 		}
 	}
 	return nil
@@ -261,7 +259,7 @@ type Fingerprints struct {
 	Delivery string `json:"delivery"`
 }
 
-type Activity struct {
+type activity struct {
 	Digest            string `json:"digest"`
 	EntryCount        int    `json:"entry_count"`
 	DeliveryHeadCount int    `json:"delivery_head_count"`
@@ -294,7 +292,7 @@ type ReviewBundle struct {
 	Contract      Contract       `json:"contract"`
 	Delivery      Delivery       `json:"delivery"`
 	Fingerprints  Fingerprints   `json:"fingerprints"`
-	Activity      *Activity      `json:"activity,omitempty"`
+	Activity      *activity      `json:"activity,omitempty"`
 	GateEvidence  []gateEvidence `json:"gate_evidence,omitempty"`
 }
 

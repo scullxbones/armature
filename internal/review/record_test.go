@@ -684,7 +684,7 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
-		Activity: &Activity{Digest: digest, EntryCount: 1, LogPath: logPath},
+		Activity: &activity{Digest: digest, EntryCount: 1, LogPath: logPath},
 	}
 	bundle.BundleID = mustComputeBundleID(t, *bundle)
 
@@ -695,7 +695,7 @@ func TestRecord_ActivityDigestPopulatedInAttestation_REQ_EXECEV(t *testing.T) {
 		DeliveryFingerprint: bundle.Fingerprints.Delivery,
 		Results: []CriterionResult{
 			{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{FileCitation("f.go", 1, 0)}},
-			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ran", Citations: []Citation{ActivityCitation("0")}},
+			{ID: "acceptance[0]", Status: Satisfied, Rationale: "ran", Citations: []Citation{activityCitation("0")}},
 		},
 	}
 
@@ -714,7 +714,7 @@ func TestRecord_RejectsActivityCitationsWithoutBundleActivity_REQ_EXECEV(t *test
 			ContractFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			DeliveryFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			Results: []CriterionResult{
-				{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{ActivityCitation("0")}},
+				{ID: "definition_of_done", Status: Satisfied, Rationale: "ok", Citations: []Citation{activityCitation("0")}},
 			},
 		}
 	}
@@ -865,7 +865,7 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
-		Activity: &Activity{
+		Activity: &activity{
 			Digest:            digest,
 			EntryCount:        1,
 			DeliveryHeadCount: 1,
@@ -890,7 +890,7 @@ func TestRecord_ActivityCitationsWithDigestValidation_TOCTOU_Fix(t *testing.T) {
 				ID:        "acceptance[0]",
 				Status:    Satisfied,
 				Rationale: "Tests pass",
-				Citations: []Citation{ActivityCitation("0")},
+				Citations: []Citation{activityCitation("0")},
 			},
 		},
 	}
@@ -926,7 +926,7 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 			`"exit_code_known":true,"head_sha":"head"}` + "\n")
 		require.NoError(t, os.WriteFile(logPath, tampered, 0o600))
 
-		activity := &Activity{Digest: recordedDigest, EntryCount: 1, LogPath: logPath}
+		activity := &activity{Digest: recordedDigest, EntryCount: 1, LogPath: logPath}
 		entries, errs := validateActivityDigestAndLoadEntries(activity)
 		require.NotEmpty(t, errs, "digest mismatch must be reported regardless of whether citations exist")
 		assert.True(t, errsContain(errs, "digest mismatch"))
@@ -936,7 +936,7 @@ func TestValidateActivityDigestAndLoadEntries_FailurePaths(t *testing.T) {
 
 	t.Run("unreadable log reports an error and returns no entries", func(t *testing.T) {
 		t.Parallel()
-		activity := &Activity{
+		activity := &activity{
 			Digest:     "sha256:doesnotmatter",
 			EntryCount: 1,
 			LogPath:    t.TempDir() + "/does-not-exist.log",
@@ -978,7 +978,7 @@ func TestRecord_RejectsDigestMismatchEvenWithoutActivityCitations(t *testing.T) 
 			Contract: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			Delivery: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
-		Activity: &Activity{
+		Activity: &activity{
 			Digest:            recordedDigest,
 			EntryCount:        1,
 			DeliveryHeadCount: 1,

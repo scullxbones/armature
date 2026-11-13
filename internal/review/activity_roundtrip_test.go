@@ -18,7 +18,7 @@ func loadActivityEntries(t *testing.T, logPath string) map[int]activityEntryDeta
 	t.Helper()
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
-	activity := &Activity{
+	activity := &activity{
 		Digest:     fingerprintActivity(content),
 		EntryCount: strings.Count(string(content), "\n"),
 		LogPath:    logPath,

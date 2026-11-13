@@ -569,7 +569,7 @@ func TestConformanceAssessment_Valid(t *testing.T) {
 func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 	t.Parallel()
 
-	activity := Activity{
+	section := activity{
 		Digest:            gitoid.PadSHA256("abc123"),
 		EntryCount:        5,
 		DeliveryHeadCount: 3,
@@ -577,17 +577,17 @@ func TestActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 		LogPath:           ".git/armature-activity.log",
 	}
 
-	data, err := json.Marshal(activity)
+	data, err := json.Marshal(section)
 	require.NoError(t, err)
 
-	var decoded Activity
+	var decoded activity
 	require.NoError(t, json.Unmarshal(data, &decoded))
 
-	assert.Equal(t, activity.Digest, decoded.Digest)
-	assert.Equal(t, activity.EntryCount, decoded.EntryCount)
-	assert.Equal(t, activity.DeliveryHeadCount, decoded.DeliveryHeadCount)
-	assert.Equal(t, activity.EarlierCount, decoded.EarlierCount)
-	assert.Equal(t, activity.LogPath, decoded.LogPath)
+	assert.Equal(t, section.Digest, decoded.Digest)
+	assert.Equal(t, section.EntryCount, decoded.EntryCount)
+	assert.Equal(t, section.DeliveryHeadCount, decoded.DeliveryHeadCount)
+	assert.Equal(t, section.EarlierCount, decoded.EarlierCount)
+	assert.Equal(t, section.LogPath, decoded.LogPath)
 }
 
 func TestReviewBundle_WithActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
@@ -615,7 +615,7 @@ func TestReviewBundle_WithActivity_JSONRoundTrip_REQ_EXECEV_T2(t *testing.T) {
 			Contract: "fp_contract",
 			Delivery: "fp_delivery",
 		},
-		Activity: &Activity{
+		Activity: &activity{
 			Digest:            "fp_activity",
 			EntryCount:        3,
 			DeliveryHeadCount: 2,
@@ -921,7 +921,7 @@ func TestCitationJSONRoundTripMatchesFixtures_REQ_NOCOMMENTS(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"path":"impl.go","line":1}`, string(got))
 
-	act := ActivityCitation("0")
+	act := activityCitation("0")
 	got, err = json.Marshal(act)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"activity_entry_id":"0"}`, string(got))
