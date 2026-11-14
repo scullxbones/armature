@@ -8,13 +8,6 @@ import (
 	"strings"
 )
 
-type ListEntry struct {
-	Issue      string `json:"issue"`
-	Title      string `json:"title"`
-	Status     string `json:"status"`
-	AssignedTo string `json:"assigned_to,omitempty"`
-}
-
 type HostRefJSON struct {
 	URL     string `json:"url"`
 	Role    string `json:"role,omitempty"`
@@ -266,52 +259,99 @@ func RenderIssue(w io.Writer, issue IssueFacts) error {
 	return ew.err
 }
 
-func RenderList(w io.Writer, entries []ListEntry) error {
-	if len(entries) == 0 {
+const (
+	listOutcomeWidth = 30
+	listDoneStatus   = "done"
+)
+
+// RenderList writes human arm list output. grouped prints status buckets and
+// wins when both flags are set. parentBoard prints the --parent column table.
+// Any other call prints the default three-column list. An empty row slice
+// writes nothing, including no column header.
+func RenderList(w io.Writer, rows []IssueFacts, grouped, parentBoard bool) error {
+	if len(rows) == 0 {
 		return nil
 	}
-
-	for _, e := range entries {
-		status := e.Status
-		if e.AssignedTo != "" {
-			status = status + " (assigned to " + e.AssignedTo + ")"
-		}
-		_, err := fmt.Fprintf(w, "  %-12s  %-14s  %s\n", e.Issue, status, e.Title)
-		if err != nil {
-			return err
-		}
+	ew := &firstErrorWriter{w: w}
+	switch {
+	case grouped:
+		renderGroupedList(ew, rows)
+	case parentBoard:
+		renderParentBoard(ew, rows)
+	default:
+		renderPlainList(ew, rows)
 	}
-	return nil
+	return ew.err
 }
 
-type BoardEntry struct {
-	Issue   string
-	Status  string
-	Claimed string
-	Outcome string
-	Title   string
+func renderPlainList(ew *firstErrorWriter, rows []IssueFacts) {
+	for _, row := range rows {
+		status := row.Status
+		if row.AssignedWorker != "" {
+			status = status + " (assigned to " + row.AssignedWorker + ")"
+		}
+		ew.printf("  %-12s  %-14s  %s\n", row.ID, status, row.Title)
+		writeListHostRefs(ew, row.HostRefs)
+	}
 }
 
-func RenderBoard(w io.Writer, entries []BoardEntry) error {
-	if len(entries) == 0 {
-		return nil
+func renderParentBoard(ew *firstErrorWriter, rows []IssueFacts) {
+	ew.printf("%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE")
+	for _, row := range rows {
+		ew.printf("%-12s %-12s %-38s %-30s %s\n", row.ID, row.Status, row.ClaimedBy, truncateListOutcome(row.Outcome), row.Title)
+		writeListHostRefs(ew, row.HostRefs)
 	}
-	_, err := fmt.Fprintf(w, "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE")
-	if err != nil {
-		return err
+}
+
+func renderGroupedList(ew *firstErrorWriter, rows []IssueFacts) {
+	byID := make(map[string]IssueFacts, len(rows))
+	facts := make(map[string]ListFacts, len(rows))
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+		byID[row.ID] = row
+		facts[row.ID] = ListFacts{Status: row.Status, Title: row.Title}
 	}
-	for _, e := range entries {
-		outcome := e.Outcome
-		const maxOutcome = 30
-		if len(outcome) > maxOutcome {
-			outcome = outcome[:27] + "..."
+	for _, g := range ListGroupsByStatus(facts, ids) {
+		label := g.Status
+		if g.Status == listDoneStatus {
+			label = "done (awaiting merge)"
 		}
-		_, err = fmt.Fprintf(w, "%-12s %-12s %-38s %-30s %s\n", e.Issue, e.Status, e.Claimed, outcome, e.Title)
-		if err != nil {
-			return err
+		ew.printf("\n=== %s ===\n", label)
+		for _, id := range g.IDs {
+			row := byID[id]
+			line := fmt.Sprintf("  %-12s  %s", id, row.Title)
+			if g.Status == listDoneStatus && row.Branch != "" {
+				line += fmt.Sprintf("  [branch: %s", row.Branch)
+				if row.PR != "" {
+					line += fmt.Sprintf(", PR: #%s", row.PR)
+				}
+				line += "]"
+			}
+			ew.printf("%s\n", line)
+			writeListHostRefs(ew, row.HostRefs)
 		}
 	}
-	return nil
+}
+
+func truncateListOutcome(outcome string) string {
+	if len(outcome) <= listOutcomeWidth {
+		return outcome
+	}
+	return outcome[:listOutcomeWidth-3] + "..."
+}
+
+func writeListHostRefs(ew *firstErrorWriter, refs []HostRefFact) {
+	for _, ref := range refs {
+		line := ref.URL
+		if ref.Role != "" {
+			line += " role=" + ref.Role
+		}
+		if ref.Current {
+			line += " current"
+		}
+		ew.printf("    %s\n", line)
+	}
 }
 
 func RenderExpiredClaims(w io.Writer, claims []ExpiredClaim) error {

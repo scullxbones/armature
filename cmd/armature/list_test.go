@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
@@ -264,7 +263,7 @@ func TestListExternalRefFiltersLiveNames_REQ_HOSTREF_S1_T9(t *testing.T) {
 	assert.NotContains(t, strings.ToLower(human), "plan text")
 }
 
-func TestFormatHostRefLinesMarksCurrent_REQ_HOSTREF_S1_T9(t *testing.T) {
+func TestHostRefFactsMarksCurrent_REQ_HOSTREF_S1_T9(t *testing.T) {
 	t.Parallel()
 	refs := []materialize.HostRef{
 		{URL: listHostURLA, Role: "engineering"},
@@ -272,14 +271,14 @@ func TestFormatHostRefLinesMarksCurrent_REQ_HOSTREF_S1_T9(t *testing.T) {
 		{URL: listHostURLA, Withdrawn: true},
 		{URL: listHostURLA, Role: "engineering"},
 	}
-	lines := formatHostRefLines(refs)
-	require.Len(t, lines, 2)
-	assert.Contains(t, lines[0], listHostURLB)
-	assert.Contains(t, lines[0], "role=support")
-	assert.NotContains(t, lines[0], "current")
-	assert.Contains(t, lines[1], listHostURLA)
-	assert.Contains(t, lines[1], "role=engineering")
-	assert.Contains(t, lines[1], "current")
+	facts := hostRefFacts(refs)
+	require.Len(t, facts, 2)
+	assert.Equal(t, listHostURLB, facts[0].URL)
+	assert.Equal(t, "support", facts[0].Role)
+	assert.False(t, facts[0].Current)
+	assert.Equal(t, listHostURLA, facts[1].URL)
+	assert.Equal(t, "engineering", facts[1].Role)
+	assert.True(t, facts[1].Current)
 }
 
 func TestListParentBoardAttachesHostRefsToOwningRow_REQ_HOSTREF_S1_T9(t *testing.T) {
@@ -310,21 +309,3 @@ func TestListParentBoardAttachesHostRefsToOwningRow_REQ_HOSTREF_S1_T9(t *testing
 	assert.Contains(t, bBlock, "role=support")
 	assert.NotContains(t, bBlock, listHostURLA, "task-child-b must not show task-01's URL")
 }
-
-func TestWriteHostRefLinesPropagatesWriterError_REQ_HOSTREF_S1_T9(t *testing.T) {
-	t.Parallel()
-	issue := &materialize.Issue{
-		ID: "task-01",
-		HostRefs: []materialize.HostRef{
-			{URL: listHostURLA, Role: "engineering"},
-		},
-	}
-	errBoom := errors.New("write failed")
-	err := writeHostRefLines(errWriter{err: errBoom}, issue)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errBoom)
-}
-
-type errWriter struct{ err error }
-
-func (e errWriter) Write([]byte) (int, error) { return 0, e.err }
