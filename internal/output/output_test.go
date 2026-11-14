@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -140,36 +141,37 @@ func TestShowPrintsHostNames_REQ_HOSTREF_S1_T7(t *testing.T) {
 func TestRenderList_Empty(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	var entries []ListEntry
-	err := RenderList(&buf, entries)
-	require.NoError(t, err)
-	output := buf.String()
-	assert.Equal(t, "", output)
+	require.NoError(t, RenderList(&buf, nil, false, false))
+	require.NoError(t, RenderList(&buf, nil, true, false))
+	require.NoError(t, RenderList(&buf, nil, false, true))
+	assert.Equal(t, "", buf.String())
 }
 
 func TestRenderList_HumanReadable(t *testing.T) {
 	t.Parallel()
-	entries := []ListEntry{
+	rows := []IssueFacts{
 		{
-			Issue:      "TASK-01",
-			Title:      "First Task",
-			Status:     "open",
-			AssignedTo: "worker-1",
+			ID:             "TASK-01",
+			Title:          "First Task",
+			Status:         "open",
+			AssignedWorker: "worker-1",
+			HostRefs: []HostRefFact{
+				{URL: "https://github.com/scullxbones/armature/issues/1", Role: "engineering", Current: true},
+			},
 		},
 		{
-			Issue:  "TASK-02",
+			ID:     "TASK-02",
 			Title:  "Second Task",
 			Status: "done",
 		},
 	}
 	var buf bytes.Buffer
-	err := RenderList(&buf, entries)
-	require.NoError(t, err)
-	output := buf.String()
-	assert.Contains(t, output, "TASK-01")
-	assert.Contains(t, output, "First Task")
-	assert.Contains(t, output, "TASK-02")
-	assert.Contains(t, output, "Second Task")
+	require.NoError(t, RenderList(&buf, rows, false, false))
+	assert.Equal(t, ""+
+		"  TASK-01       open (assigned to worker-1)  First Task\n"+
+		"    https://github.com/scullxbones/armature/issues/1 role=engineering current\n"+
+		"  TASK-02       done            Second Task\n",
+		buf.String())
 }
 
 func TestRenderReady_HumanReadable(t *testing.T) {
@@ -273,20 +275,6 @@ func TestRenderValidation_QuietSuppressesInfo(t *testing.T) {
 	output := buf.String()
 	assert.NotContains(t, output, "INFO:")
 	assert.Contains(t, output, "OK: no issues found")
-}
-
-func TestListEntry_struct(t *testing.T) {
-	t.Parallel()
-	entry := ListEntry{
-		Issue:      "TASK-01",
-		Title:      "Test",
-		Status:     "open",
-		AssignedTo: "worker-1",
-	}
-	assert.Equal(t, "TASK-01", entry.Issue)
-	assert.Equal(t, "Test", entry.Title)
-	assert.Equal(t, "open", entry.Status)
-	assert.Equal(t, "worker-1", entry.AssignedTo)
 }
 
 func TestRenderIssue_WithAllFields(t *testing.T) {
@@ -421,19 +409,18 @@ func TestRenderIssue_MinimalIssue(t *testing.T) {
 
 func TestRenderList_WithMultipleStatuses(t *testing.T) {
 	t.Parallel()
-	entries := []ListEntry{
-		{Issue: "T1", Title: "Task 1", Status: "open"},
-		{Issue: "T2", Title: "Task 2", Status: "in-progress", AssignedTo: "worker-1"},
-		{Issue: "T3", Title: "Task 3", Status: "done"},
+	rows := []IssueFacts{
+		{ID: "T1", Title: "Task 1", Status: "open"},
+		{ID: "T2", Title: "Task 2", Status: "in-progress", AssignedWorker: "worker-1"},
+		{ID: "T3", Title: "Task 3", Status: "done"},
 	}
 	var buf bytes.Buffer
-	err := RenderList(&buf, entries)
-	require.NoError(t, err)
-	output := buf.String()
-	assert.Contains(t, output, "T1")
-	assert.Contains(t, output, "T2")
-	assert.Contains(t, output, "T3")
-	assert.Contains(t, output, "assigned to worker-1")
+	require.NoError(t, RenderList(&buf, rows, false, false))
+	assert.Equal(t, ""+
+		"  T1            open            Task 1\n"+
+		"  T2            in-progress (assigned to worker-1)  Task 2\n"+
+		"  T3            done            Task 3\n",
+		buf.String())
 }
 
 func TestRenderReady_Empty(t *testing.T) {
@@ -536,57 +523,67 @@ func TestMarshalIssue_IncludesNotes(t *testing.T) {
 
 func TestRenderList_ColumnAlignment(t *testing.T) {
 	t.Parallel()
-	entries := []ListEntry{
-		{Issue: "SHORT", Status: "open", Title: "First"},
-		{Issue: "LONGER-ID", Status: "in-progress", Title: "Second"},
+	rows := []IssueFacts{
+		{ID: "SHORT", Status: "open", Title: "First"},
+		{ID: "LONGER-ID", Status: "in-progress", Title: "Second"},
 	}
 	var buf bytes.Buffer
-	err := RenderList(&buf, entries)
-	require.NoError(t, err)
-	lines := buf.String()
-
-	for _, line := range strings.Split(strings.TrimRight(lines, "\n"), "\n") {
-		if strings.Contains(line, "SHORT") {
-			assert.True(t, strings.HasPrefix(strings.TrimLeft(line, " "), "SHORT"), "ID column must start with SHORT")
-			assert.Contains(t, line, "open", "status column must contain open")
-		}
-		if strings.Contains(line, "LONGER-ID") {
-			assert.Contains(t, line, "in-progress", "status column must contain in-progress")
-		}
-	}
+	require.NoError(t, RenderList(&buf, rows, false, false))
+	assert.Equal(t, ""+
+		"  SHORT         open            First\n"+
+		"  LONGER-ID     in-progress     Second\n",
+		buf.String())
 }
 
-func TestRenderBoard_Basic(t *testing.T) {
+func TestRenderList_ParentBoard(t *testing.T) {
 	t.Parallel()
-	entries := []BoardEntry{
-		{Issue: "TASK-01", Status: "open", Claimed: "worker-a", Outcome: "Short outcome", Title: "First task"},
-		{Issue: "TASK-02", Status: "in-progress", Claimed: "", Outcome: strings.Repeat("x", 35), Title: "Long outcome task"},
+	rows := []IssueFacts{
+		{ID: "TASK-01", Status: "open", ClaimedBy: "worker-a", Outcome: "Short outcome", Title: "First task"},
+		{ID: "TASK-02", Status: "in-progress", Outcome: strings.Repeat("x", 35), Title: "Long outcome task",
+			HostRefs: []HostRefFact{{URL: "https://github.com/scullxbones/armature/issues/2", Role: "support"}}},
 	}
 	var buf bytes.Buffer
-	err := RenderBoard(&buf, entries)
-	require.NoError(t, err)
-	out := buf.String()
-
-	assert.Contains(t, out, "ID")
-	assert.Contains(t, out, "STATUS")
-	assert.Contains(t, out, "CLAIMED")
-	assert.Contains(t, out, "OUTCOME")
-	assert.Contains(t, out, "TITLE")
-
-	assert.Contains(t, out, "TASK-01")
-	assert.Contains(t, out, "worker-a")
-	assert.Contains(t, out, "Short outcome")
-
-	assert.Contains(t, out, "...", "outcome longer than 30 chars must be truncated")
-	assert.NotContains(t, out, strings.Repeat("x", 35), "full 35-char outcome must not appear verbatim")
+	require.NoError(t, RenderList(&buf, rows, false, true))
+	assert.Equal(t, ""+
+		"ID           STATUS       CLAIMED                                OUTCOME                        TITLE\n"+
+		"TASK-01      open         worker-a                               Short outcome                  First task\n"+
+		"TASK-02      in-progress                                         "+strings.Repeat("x", 27)+"... Long outcome task\n"+
+		"    https://github.com/scullxbones/armature/issues/2 role=support\n",
+		buf.String())
 }
 
-func TestRenderBoard_Empty(t *testing.T) {
+type errWriter struct{ err error }
+
+func (e errWriter) Write([]byte) (int, error) { return 0, e.err }
+
+func TestRenderList_HostRefWriterError(t *testing.T) {
 	t.Parallel()
+	errBoom := errors.New("write failed")
+	err := RenderList(errWriter{err: errBoom}, []IssueFacts{{
+		ID: "task-01", Status: "open", Title: "t",
+		HostRefs: []HostRefFact{{URL: "https://github.com/scullxbones/armature/issues/1", Role: "engineering"}},
+	}}, false, false)
+	require.ErrorIs(t, err, errBoom)
+}
+
+func TestRenderList_GroupedDoneLabel(t *testing.T) {
+	t.Parallel()
+	rows := []IssueFacts{
+		{ID: "T-OPEN", Status: "open", Title: "Still open"},
+		{ID: "T-001", Status: "done", Title: "pending merge", Branch: "feature/my-pr", PR: "9",
+			HostRefs: []HostRefFact{{URL: "https://github.com/scullxbones/armature/issues/9", Current: true}}},
+		{ID: "T-002", Status: "done", Title: "no branch"},
+	}
 	var buf bytes.Buffer
-	err := RenderBoard(&buf, []BoardEntry{})
-	require.NoError(t, err)
-	assert.Empty(t, buf.String(), "empty entries should produce no output")
+	require.NoError(t, RenderList(&buf, rows, true, true))
+	assert.Equal(t, ""+
+		"\n=== done (awaiting merge) ===\n"+
+		"  T-001         pending merge  [branch: feature/my-pr, PR: #9]\n"+
+		"    https://github.com/scullxbones/armature/issues/9 current\n"+
+		"  T-002         no branch\n"+
+		"\n=== open ===\n"+
+		"  T-OPEN        Still open\n",
+		buf.String())
 }
 
 func TestRenderIssue_WithAssessmentAttestations_Human(t *testing.T) {

@@ -65,25 +65,6 @@ func hostRefFacts(refs []materialize.HostRef) []output.HostRefFact {
 	return out
 }
 
-func formatHostRefLines(refs []materialize.HostRef) []string {
-	facts := hostRefFacts(refs)
-	if len(facts) == 0 {
-		return nil
-	}
-	lines := make([]string, 0, len(facts))
-	for _, ref := range facts {
-		line := ref.URL
-		if ref.Role != "" {
-			line += " role=" + ref.Role
-		}
-		if ref.Current {
-			line += " current"
-		}
-		lines = append(lines, line)
-	}
-	return lines
-}
-
 func outputListFacts(index materialize.Index) map[string]output.ListFacts {
 	out := make(map[string]output.ListFacts, len(index))
 	for id, e := range index {

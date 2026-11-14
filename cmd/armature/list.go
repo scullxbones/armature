@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"slices"
 	"sort"
 
@@ -80,79 +79,7 @@ func newListCmd() *cobra.Command {
 				return output.WriteListEnvelope(out, rows, groups, group, filtered)
 			}
 
-			if group {
-				for _, g := range output.ListGroupsByStatus(listFacts, ids) {
-					label := g.Status
-					if g.Status == ops.StatusDone {
-						label = "done (awaiting merge)"
-					}
-					if _, err := fmt.Fprintf(out, "\n=== %s ===\n", label); err != nil {
-						return err
-					}
-					for _, id := range g.IDs {
-						e := index[id]
-						line := fmt.Sprintf("  %-12s  %s", id, e.Title)
-						if g.Status == ops.StatusDone && e.Branch != "" {
-							line += fmt.Sprintf("  [branch: %s", e.Branch)
-							if e.PR != "" {
-								line += fmt.Sprintf(", PR: #%s", e.PR)
-							}
-							line += "]"
-						}
-						if _, err := fmt.Fprintln(out, line); err != nil {
-							return err
-						}
-						if err := writeHostRefLines(out, snap.State.Issues[id]); err != nil {
-							return err
-						}
-					}
-				}
-				return nil
-			}
-
-			if filterParent != "" {
-				if len(ids) == 0 {
-					return nil
-				}
-				if _, err := fmt.Fprintf(out, "%-12s %-12s %-38s %-30s %s\n", "ID", "STATUS", "CLAIMED", "OUTCOME", "TITLE"); err != nil {
-					return err
-				}
-				for _, id := range ids {
-					e := index[id]
-					claimed := ""
-					issue := snap.State.Issues[id]
-					if issue != nil {
-						claimed = issue.ClaimedBy
-					}
-					outcome := e.Outcome
-					const maxOutcome = 30
-					if len(outcome) > maxOutcome {
-						outcome = outcome[:27] + "..."
-					}
-					if _, err := fmt.Fprintf(out, "%-12s %-12s %-38s %-30s %s\n", id, e.Status, claimed, outcome, e.Title); err != nil {
-						return err
-					}
-					if err := writeHostRefLines(out, issue); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
-
-			for _, id := range ids {
-				e := index[id]
-				status := e.Status
-				if e.AssignedWorker != "" {
-					status = status + " (assigned to " + e.AssignedWorker + ")"
-				}
-				if _, err := fmt.Fprintf(out, "  %-12s  %-14s  %s\n", id, status, e.Title); err != nil {
-					return err
-				}
-				if err := writeHostRefLines(out, snap.State.Issues[id]); err != nil {
-					return err
-				}
-			}
-			return nil
+			return output.RenderList(out, listHumanRows(index, snap.State.Issues, ids), group, filterParent != "")
 		},
 	}
 
@@ -166,14 +93,24 @@ func newListCmd() *cobra.Command {
 	return cmd
 }
 
-func writeHostRefLines(w io.Writer, issue *materialize.Issue) error {
-	if issue == nil || len(issue.HostRefs) == 0 {
-		return nil
-	}
-	for _, line := range formatHostRefLines(issue.HostRefs) {
-		if _, err := fmt.Fprintf(w, "    %s\n", line); err != nil {
-			return err
+func listHumanRows(index materialize.Index, issues map[string]*materialize.Issue, ids []string) []output.IssueFacts {
+	rows := make([]output.IssueFacts, 0, len(ids))
+	for _, id := range ids {
+		e := index[id]
+		row := output.IssueFacts{
+			ID:             id,
+			Status:         e.Status,
+			Title:          e.Title,
+			AssignedWorker: e.AssignedWorker,
+			Outcome:        e.Outcome,
+			Branch:         e.Branch,
+			PR:             e.PR,
 		}
+		if issue := issues[id]; issue != nil {
+			row.ClaimedBy = issue.ClaimedBy
+			row.HostRefs = hostRefFacts(issue.HostRefs)
+		}
+		rows = append(rows, row)
 	}
-	return nil
+	return rows
 }
