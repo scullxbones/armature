@@ -118,11 +118,8 @@ func (c Citation) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON rejects schema-invalid citation coordinates. JSON null unmarshals
-// into int as a no-op (leaving 0), which citation validation treats as an omitted
-// path-level coordinate; the published assessment schema allows an integer or
-// omission, not null. An explicit column below 1 is also rejected. Omitted
-// line/column remain valid.
+// JSON null unmarshals into int as a no-op (leaving 0). The published assessment
+// schema allows an integer or omission, not null.
 func (c *Citation) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
