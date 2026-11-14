@@ -118,8 +118,9 @@ func (c Citation) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// JSON null unmarshals into int as a no-op (leaving 0). The published assessment
-// schema allows an integer or omission, not null.
+// JSON null unmarshals into int as a no-op (leaving 0), which citation
+// validation treats as an omitted path-level coordinate. The published
+// assessment schema allows an integer or omission, not null.
 func (c *Citation) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
