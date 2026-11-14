@@ -87,7 +87,6 @@ func suggestCriterionID(id string) string {
 	return `use "definition_of_done" or "acceptance[N]" (N is a 0-based integer)`
 }
 
-// ValidateAssessment checks the assessment and adds an auto-fix suggestion on every failure line.
 func ValidateAssessment(input RecordInput) error {
 	_, err := record(input)
 	return AnnotateValidateError(err)

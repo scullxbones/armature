@@ -264,10 +264,6 @@ const (
 	listDoneStatus   = "done"
 )
 
-// RenderList writes human arm list output. grouped prints status buckets and
-// wins when both flags are set. parentBoard prints the --parent column table.
-// Any other call prints the default three-column list. An empty row slice
-// writes nothing, including no column header.
 func RenderList(w io.Writer, rows []IssueFacts, grouped, parentBoard bool) error {
 	if len(rows) == 0 {
 		return nil
